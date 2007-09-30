@@ -1,0 +1,104 @@
+AMQP client for Erlang
+==============
+This code implements a client for AMQP in the Erlang programming language.
+
+This client offers both a networked version that uses standard TCP-based
+AMQP framing and a direct client that uses native Erlang message passing
+to a RabbitMQ broker.
+
+The API exposed to the user is common to both clients, so each version can
+be used interchangeably without having to modify any client code.
+
+The TCP networked client has been tested with RabbitMQ server 1.2.0, but
+should theoretically work with any 0-8 compliant AMQP server.
+
+The direct client is bound to an 0-8 compliant broker using native Erlang
+message passing, which in the absence of an alternative Erlang AMQP
+implementation means that it only works with RabbitMQ.
+
+It does however provide a level of abstraction above the internal server
+API of RabbitMQ, meaning that you can write client code in Erlang and still
+remain isolated from any API changes in the underlying broker.
+
+It also provides a client-orientated API into RabbitMQ, allowing the user
+to reuse AMQP knowledge gained by using AMQP clients in other languages.
+
+The advantage of the direct client is that it eliminates the network overhead
+as well as the marshaling to and from the AMQP wire format, so that neither
+side has to decode or encode any AMQP frames.
+
+Prerequisites
+-------------
+In order to compile/run this code you must have the following
+installed:
+
+- Erlang/OTP
+- Eunit installed in the standard OTP library path (to run the tests)
+- The source of RabbitMQ server 1.2.0
+
+Patch & Install RabbitMQ to OTP Libs Dir
+----------------------------------------
+1. Apply the patch file called rabbit.patch to the erlang source directory
+within the RabbitMQ tree.
+
+2. Build RabbitMQ by running 'make'.
+
+3. Create a soft link in the libs dir of your OTP distribution to the directory
+that you built RabbitMQ from.
+
+(Note that when that when some functions get exported from the rabbit tree,
+this process will be unnecessary).
+
+Compile the Erlang client
+-------------------------
+Go to the base directory of the AMQP client directory and run 'make'.
+
+Running the Network Client
+-------------------------
+In order to run the network client, you need to run the the RabbitMQ server in
+a separate Erlang process.
+
+This assumes that the RabbitMQ server is installed in the standard OTP library path.
+
+To do this, run the following command from the shell:
+
+$ erl -mnesia dir $MNESIA_DIR -boot start_sasl -s rabbit
+
+After you have done this, you can start an Erlang shell in order to run the unit tests:
+
+$ erl -pa $PATH_TO_AMQPCLIENT_EBIN_DIR
+Erlang (BEAM) emulator version 5.5.4 [source] [async-threads:0] [kernel-poll:false]
+
+Eshell V5.5.4  (abort with ^G)
+1> amqp_network_client_test:test().
+  All 4 tests successful.
+ok
+2>
+
+To get more examples of the API, look at the functions in the amqp_test_util module.
+
+Running the Direct Client
+-------------------------
+The direct client has to be run in the same Erlang VM instance as the RabbitMQ server.
+
+Assuming that the patched version RabbitMQ is installed in the OTP libs directory,
+boot RabbitMQ in a shell adding the path to the AMQP client ebin directory:
+
+$ erl -pa $PATH_TO_AMQPCLIENT_EBIN_DIR -mnesia dir $MNESIA_DIR -boot start_sasl -s rabbit
+
+=PROGRESS REPORT==== 30-Sep-2007::22:40:51 ===
+         application: rabbit
+          started_at: nonode@nohost
+
+1> amqp_direct_client_test:test().
+debug:: Internal rollback <0.163.0>
+  - 0 acks uncommitted, 0 messages unacked, 0 publishes uncommitted
+debug:: Internal rollback <0.170.0>
+  - 0 acks uncommitted, 0 messages unacked, 0 publishes uncommitted
+debug:: Internal rollback <0.175.0>
+  - 0 acks uncommitted, 0 messages unacked, 0 publishes uncommitted
+debug:: Internal rollback <0.181.0>
+  - 0 acks uncommitted, 0 messages unacked, 0 publishes uncommitted
+  All 4 tests successful.
+ok
+2>

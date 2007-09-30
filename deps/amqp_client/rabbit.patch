@@ -1,0 +1,24 @@
+diff -r adadd82441ea src/rabbit_framing_channel.erl
+--- a/src/rabbit_framing_channel.erl	Sun Sep 30 13:50:41 2007 +0100
++++ b/src/rabbit_framing_channel.erl	Sun Sep 30 21:11:27 2007 +0100
+@@ -14,9 +14,9 @@
+ %%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+ %%
+ %%   Portions created by LShift Ltd., Cohesive Financial
+-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
+-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
+-%%   Technologies Ltd.; 
++%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
++%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
++%%   Technologies Ltd.;
+ %%
+ %%   All Rights Reserved.
+ %%
+@@ -30,6 +30,7 @@
+ -export([start/4, unexpected_message/1]).
+ -export([read_method/0, read_method/1]).
+ -export([collect_content/1]).
++-export([finish_reading_method/2]).
+ -define(CLOSING_TIMEOUT, 10).
+ 
+ %%--------------------------------------------------------------------
