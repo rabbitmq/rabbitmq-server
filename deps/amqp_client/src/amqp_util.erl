@@ -1,7 +1,7 @@
 -module(amqp_util).
 
--include("rabbit.hrl").
--include("rabbit_framing.hrl").
+-include_lib("rabbit/include/rabbit.hrl").
+-include_lib("rabbit/include/rabbit_framing.hrl").
 
 -export([message_payload/1]).
 -export([binary/1]).
@@ -24,21 +24,11 @@ message_payload(Message) ->
     (Message#basic_message.content)#content.payload_fragments_rev.
 
 decode_method(Method, Content) ->
-    case rabbit_framing:method_has_content(Method) of
-        true ->
-            Decoded = #content{class_id = ClassId,
-                               properties = Properties,
-                               properties_bin = PropertiesBin,
-                               payload_fragments_rev = Payload }
-        = rabbit_framing_channel:collect_content(Method),
-                    CollectedContent =
-                            Decoded#content{properties_bin
-        = rabbit_framing:decode_properties(ClassId, PropertiesBin)},
-                    DecodedMethod = rabbit_framing:decode_method_fields(Method, Content),
-                    {DecodedMethod, CollectedContent};
-        _ ->
-            rabbit_framing:decode_method_fields(Method, Content)
-        end.
-
-
-
+    Reply =
+    case rabbit_framing_channel:finish_reading_method(Method,Content) of
+        {ok, _Method, none} ->
+            _Method;
+        {ok, _Method, _Content} ->
+            {_Method,_Content}
+    end,
+    Reply.

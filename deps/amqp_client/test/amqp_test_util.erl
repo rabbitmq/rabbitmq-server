@@ -1,7 +1,7 @@
 -module(amqp_test_util).
 
--include("rabbit.hrl").
--include("rabbit_framing.hrl").
+-include_lib("rabbit/include/rabbit.hrl").
+-include_lib("rabbit/include/rabbit_framing.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile([export_all]).

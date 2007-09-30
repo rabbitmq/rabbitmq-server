@@ -1,7 +1,7 @@
 -module(rabbit_direct_channel).
 
--include("rabbit_framing.hrl").
--include("rabbit.hrl").
+-include_lib("rabbit/include/rabbit.hrl").
+-include_lib("rabbit/include/rabbit_framing.hrl").
 
 -export([start/3]).
 

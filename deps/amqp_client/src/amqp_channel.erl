@@ -1,7 +1,7 @@
 -module(amqp_channel).
 
--include("rabbit.hrl").
--include("rabbit_framing.hrl").
+-include_lib("rabbit/include/rabbit.hrl").
+-include_lib("rabbit/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -behaviour(gen_server).
@@ -87,8 +87,10 @@ rpc_bottom_half(Reply, State = #channel_state{pending_rpc = From}) ->
     NewState = State#channel_state{pending_rpc = <<>>},
     {noreply, NewState}.
 
+resolve_consumer(ConsumerTag, #channel_state{consumers = []}) ->
+    exit(no_consumers_registered);
+
 resolve_consumer(ConsumerTag, #channel_state{consumers = Consumers}) ->
-    %% TODO Handle cache miss
     dict:fetch(ConsumerTag, Consumers).
 
 register_consumer(ConsumerTag, Consumer, State = #channel_state{consumers = Consumers0}) ->
@@ -99,10 +101,16 @@ unregister_consumer(ConsumerTag, State = #channel_state{consumers = Consumers0})
     Consumers1 = dict:erase(ConsumerTag, Consumers0),
     State#channel_state{consumers = Consumers1}.
 
+channel_cleanup(State = #channel_state{consumers = []}) ->
+    State;
+
 channel_cleanup(State = #channel_state{consumers = Consumers}) ->
     Terminator = fun(ConsumerTag, Consumer) -> Consumer ! shutdown end,
     dict:map(Terminator, Consumers),
-    State#channel_state{closing = true, consumers = <<>>}.
+    State#channel_state{closing = true, consumers = []}.
+
+acknowledge_reader(ReaderPid) ->
+    ReaderPid ! ack.
 
 %% Saves a sucessful consumer regsitration into the channel state
 %% using the pending_consumer field of the channel_state record.
@@ -170,29 +178,34 @@ handle_cast({register_direct_peer, Peer}, State) ->
 %---------------------------------------------------------------------------
 
 %% Saves a sucessful consumer regsitration from the network channel into the channel state
-handle_info({frame, Channel, {method, 'basic.consume_ok', BinaryContent} }, State) ->
+handle_info({frame, Channel, {method, 'basic.consume_ok', BinaryContent}, ReaderPid }, State) ->
+    acknowledge_reader(ReaderPid),
     BasicConsumeOk = amqp_util:decode_method('basic.consume_ok', BinaryContent),
     handle_basic_consume_ok(BasicConsumeOk, State);
 
 %% Handles the delivery of a message from the network channel
-handle_info({frame, Channel, {method, 'basic.deliver', BinaryContent} }, State) ->
+handle_info({frame, Channel, {method, 'basic.deliver', BinaryContent}, ReaderPid }, State) ->
+    acknowledge_reader(ReaderPid),
     {BasicDeliver, Content} = amqp_util:decode_method('basic.deliver', BinaryContent),
     #'basic.deliver'{consumer_tag = ConsumerTag} = BasicDeliver,
     handle_basic_deliver(ConsumerTag, Content, State);
 
 %% Upon the cancellation of a consumer from the network channel,
 %% this function deregisters the consumer in the channel state
-handle_info({frame, Channel, {method, 'basic.cancel_ok', BinaryContent} }, State) ->
+handle_info({frame, Channel, {method, 'basic.cancel_ok', BinaryContent}, ReaderPid }, State) ->
+    acknowledge_reader(ReaderPid),
     BasicCancelOk = amqp_util:decode_method('basic.cancel_ok', BinaryContent),
     handle_basic_cancel_ok(BasicCancelOk, State);
 
 %% This deals with channel close request from a network channel
-handle_info({frame, Channel, {method, 'channel.close_ok', BinaryContent} }, State) ->
+handle_info({frame, Channel, {method, 'channel.close_ok', BinaryContent}, ReaderPid }, State) ->
+    acknowledge_reader(ReaderPid),
     ChannelCloseOk = amqp_util:decode_method('channel.close_ok', BinaryContent),
     handle_channel_close_ok(ChannelCloseOk, State);
 
 %% Standard rpc bottom half handling in the network case
-handle_info({frame, Channel, {method, Method, Content} }, State) ->
+handle_info({frame, Channel, {method, Method, Content}, ReaderPid }, State) ->
+    acknowledge_reader(ReaderPid),
     Reply = amqp_util:decode_method(Method, Content),
     rpc_bottom_half(Reply, State);
 
@@ -223,6 +236,12 @@ handle_info( {send_command, Method}, State) ->
 handle_info( {send_command, Method, Content}, State) ->
     rpc_bottom_half( {Method, Content} , State);
 
+%% Handles the rpc bottom half and shuts down the channel
+handle_info( {send_command_and_shutdown, Method}, State) ->
+    NewState = channel_cleanup(State),
+    rpc_bottom_half(Method, NewState),
+    {stop, shutdown, NewState};
+
 %% Handles the delivery of a message from a direct channel
 handle_info( {deliver, ConsumerTag, AckRequired, QName, QPid, Message}, State) ->
     #basic_message{content = Content} = Message,
@@ -239,15 +258,6 @@ handle_info( {get_ok, MessageCount, AckRequired, QName, QPid, Message}, State) -
                     routing_key = RoutingKey,
                     message_count = MessageCount},
     rpc_bottom_half( {Method, Content} , State);
-
-handle_info( {pause, ReplyPid}, State ) ->
-    Cookie = make_ref(),
-    ReplyPid ! {paused, Cookie},
-    receive
-        {unpause, C} when C == Cookie -> % "C is for Cookie..."
-            ok
-    end,
-    {noreply,State};
 
 handle_info(shutdown, State ) ->
     NewState = channel_cleanup(State),

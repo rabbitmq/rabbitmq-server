@@ -17,3 +17,5 @@
                         pending_consumer,
                         closing = false,
                         consumers = dict:new()} ).
+
+-record(rpc_client, {channel_pid, ticket, exchange, routing_key, queue, consumer_tag}).

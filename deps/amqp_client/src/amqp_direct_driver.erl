@@ -1,6 +1,6 @@
 -module(amqp_direct_driver).
 
--include("rabbit.hrl").
+-include_lib("rabbit/include/rabbit.hrl").
 -include("amqp_client.hrl").
 
 -export([handshake/2, open_channel/3, close_connection/3]).

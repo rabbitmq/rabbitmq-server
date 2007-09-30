@@ -2,7 +2,7 @@
 
 -behaviour(gen_event).
 
--include("rabbit_framing.hrl").
+-include_lib("rabbit/include/rabbit_framing.hrl").
 
 -export([init/1, handle_info/2, terminate/2]).
 

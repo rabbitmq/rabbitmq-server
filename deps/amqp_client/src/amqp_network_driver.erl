@@ -1,6 +1,6 @@
 -module(amqp_network_driver).
 
--include("rabbit_framing.hrl").
+-include_lib("rabbit/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -export([handshake/2, open_channel/3, close_connection/3]).
@@ -36,7 +36,7 @@ open_channel({ChannelNumber, OutOfBand}, ChannelPid,
 close_connection(Close = #'connection.close'{}, From, #connection_state{writer_pid = Writer}) ->
     Writer ! {self(), Close},
     receive
-        {frame, Channel, {method,'connection.close_ok',<<>>} } ->
+        {frame, Channel, {method,'connection.close_ok',<<>>}, ReaderPid } ->
             gen_server:reply(From, #'connection.close_ok'{}),
             Writer ! stop
             %% Don't need to stop the reader because it stops itself by magic
@@ -54,9 +54,14 @@ close_connection(Close = #'connection.close'{}, From, #connection_state{writer_p
 send(Method, #connection_state{writer_pid = Writer}) ->
     Writer ! { self(), Method }.
 
+send_frame(Channel, Method) ->
+    ChPid = resolve_receiver(Channel),
+    ChPid ! {frame, Channel, Method, self() }.
+
 recv() ->
     receive
-        {frame, Channel, {method, Method, Content} } ->
+        {frame, Channel, {method, Method, Content}, ReaderPid } ->
+            ReaderPid ! ack,
             amqp_util:decode_method(Method, Content )
     end.
 
@@ -169,13 +174,18 @@ handle_frame(Type, Channel, Payload) ->
     %% This terminates the reading process but still passes on the response to the user
     %% To understand the other half, look at close_connection/3
     {method,'connection.close_ok',<<>>} ->
-        ChPid = resolve_receiver(Channel),
-        ChPid ! {frame, Channel, {method,'connection.close_ok',<<>>} },
+        send_frame(Channel, {method,'connection.close_ok',<<>>}),
         io:format("Socket Reader exiting normally ~n"),
         exit(normal);
     AnalyzedFrame ->
-        ChPid = resolve_receiver(Channel),
-        ChPid ! {frame, Channel, AnalyzedFrame}
+        send_frame(Channel, AnalyzedFrame),
+        %% We need the ack for flow control. See bug 16944.
+        receive
+            ack ->
+                ok;
+            {'EXIT', Pid, Reason} ->
+                exit(Reason)
+        end
     end.
 
 resolve_receiver(Channel) ->
