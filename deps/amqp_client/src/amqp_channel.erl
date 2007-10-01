@@ -7,7 +7,7 @@
 -behaviour(gen_server).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
--export([rpc/2, rpc/3, send/2, send/3]).
+-export([call/2, call/3, cast/2, cast/3]).
 -export([register_direct_peer/2]).
 
 %% This diagram shows the interaction between the different component processes
@@ -40,20 +40,20 @@
 %---------------------------------------------------------------------------
 
 %% Generic AMQP RPC mechanism that expects a pseudo synchronous response
-rpc(Channel, Method) ->
-    gen_server:call(Channel, {rpc, Method}).
+call(Channel, Method) ->
+    gen_server:call(Channel, {call, Method}).
 
 %% Allows a consumer to be registered with the channel when invoking a BasicConsume
-rpc(Channel, Method = #'basic.consume'{}, Consumer) ->
+call(Channel, Method = #'basic.consume'{}, Consumer) ->
     gen_server:call(Channel, {basic_consume, Method, Consumer}).
 
 %% Generic AMQP send mechansim that doesn't expect a response
-send(Channel, Method) ->
-    gen_server:cast(Channel, {send, Method}).
+cast(Channel, Method) ->
+    gen_server:cast(Channel, {cast, Method}).
 
 %% Generic AMQP send mechansim that doesn't expect a response
-send(Channel, Method, Content) ->
-    gen_server:cast(Channel, {send, Method, Content}).
+cast(Channel, Method, Content) ->
+    gen_server:cast(Channel, {cast, Method, Content}).
 
 %---------------------------------------------------------------------------
 % Direct peer registration
@@ -145,9 +145,9 @@ handle_channel_close_ok(ChannelCloseOk = #'channel.close_ok'{}, State) ->
 init([InitialState]) ->
     {ok, InitialState}.
 
-%% Standard implementation of top half of the rpc/2 command
+%% Standard implementation of top half of the call/2 command
 %% Do not accept any further RPCs when the channel is about to close
-handle_call({rpc, Method}, From, State = #channel_state{closing = false}) ->
+handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
     rpc_top_half(Method, From, State);
 
 %% Top half of the basic consume process.
@@ -156,13 +156,13 @@ handle_call({basic_consume, Method, Consumer}, From, State) ->
     NewState = State#channel_state{pending_consumer = Consumer},
     rpc_top_half(Method, From, NewState).
 
-%% Standard implementation of the send/2 command
-handle_cast({send, Method}, State = #channel_state{writer_pid = Writer}) ->
+%% Standard implementation of the cast/2 command
+handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer}) ->
     Writer ! { self(), Method },
     {noreply, State};
 
-%% Standard implementation of the send/3 command
-handle_cast({send, Method, Content}, State = #channel_state{writer_pid = Writer}) ->
+%% Standard implementation of the cast/3 command
+handle_cast({cast, Method, Content}, State = #channel_state{writer_pid = Writer}) ->
     Writer ! { self(), Method, Content },
     {noreply, State};
 

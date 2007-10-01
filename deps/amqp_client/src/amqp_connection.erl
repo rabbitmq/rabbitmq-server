@@ -60,7 +60,7 @@ close( {ConnectionPid, Mode}, Close) ->
 handle_start({ChannelNumber, OutOfBand}, Driver, State) ->
     {ChannelPid, Number,  NewState} = start_channel(ChannelNumber, State),
     Driver({Number, OutOfBand}, ChannelPid, NewState),
-    #'channel.open_ok'{} = amqp_channel:rpc(ChannelPid, #'channel.open'{out_of_band = OutOfBand}),
+    #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{out_of_band = OutOfBand}),
     {reply, ChannelPid, NewState}.
 
 %% Creates a new channel process

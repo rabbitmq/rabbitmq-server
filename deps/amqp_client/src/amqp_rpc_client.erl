@@ -28,7 +28,7 @@ setup_reply_queue(State = #rpc_client{channel_pid = ChannelPid, ticket = Ticket}
     #'queue.declare_ok'{queue = Q,
                         message_count = MessageCount,
                         consumer_count = ConsumerCount}
-                        = amqp_channel:rpc(ChannelPid, QueueDeclare),
+                        = amqp_channel:call(ChannelPid, QueueDeclare),
     State#rpc_client{queue = Q}.
 
 % Sets up a consumer to handle rpc responses
@@ -52,7 +52,7 @@ terminate(Reason, State) ->
     amqp_aux:close_connection(State).
 
 handle_call(manage, From, State = #rpc_client{channel_pid = ChannelPid}) ->
-    Reply = amqp_channel:rpc(ChannelPid, []),
+    Reply = amqp_channel:call(ChannelPid, []),
     {reply, Reply, State}.
 
 handle_cast(Msg, State) ->
