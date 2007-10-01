@@ -55,14 +55,9 @@ Go to the base directory of the AMQP client directory and run 'make'.
 
 Running the Network Client
 -------------------------
-In order to run the network client, you need to run the the RabbitMQ server in
-a separate Erlang process.
-
-This assumes that the RabbitMQ server is installed in the standard OTP library path.
-
-To do this, run the following command from the shell:
-
-$ erl -mnesia dir $MNESIA_DIR -boot start_sasl -s rabbit
+In order to run the network client, you need to run the RabbitMQ server in
+a separate Erlang process (or use any other AMQP server). Start your server
+as usual.
 
 After you have done this, you can start an Erlang shell in order to run the unit tests:
 
@@ -81,10 +76,12 @@ Running the Direct Client
 -------------------------
 The direct client has to be run in the same Erlang VM instance as the RabbitMQ server.
 
-Assuming that the patched version RabbitMQ is installed in the OTP libs directory,
-boot RabbitMQ in a shell adding the path to the AMQP client ebin directory:
+You will probably want to modify rabbitmq-server (or rabbitmq-server.bat) such that the
+command line to invoke the server contains:
 
-$ erl -pa $PATH_TO_AMQPCLIENT_EBIN_DIR -mnesia dir $MNESIA_DIR -boot start_sasl -s rabbit
+-pa $PATH_TO_AMQPCLIENT_EBIN_DIR
+
+To test the direct client, also remove "-noinput" from the command line:
 
 =PROGRESS REPORT==== 30-Sep-2007::22:40:51 ===
          application: rabbit
