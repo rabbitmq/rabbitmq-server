@@ -1,7 +1,7 @@
 -module(amqp_method_util).
 
 -include("amqp_client.hrl").
--include_lib("rabbit/include/rabbit_framing.hrl").
+-include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 
 -export([register_consumer/2]).
 

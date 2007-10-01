@@ -1,6 +1,6 @@
 -module(amqp_network_driver).
 
--include_lib("rabbit/include/rabbit_framing.hrl").
+-include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -export([handshake/2, open_channel/3, close_connection/3]).
