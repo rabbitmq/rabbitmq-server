@@ -1,13 +1,11 @@
 -module(amqp_rpc_client).
 
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
--include_lib("rabbitmq_server/include/rabbit.hrl").
 -include("amqp_client.hrl").
 
 -behaviour(gen_server).
 
 -export([start/1]).
--export([call/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
 %---------------------------------------------------------------------------
@@ -15,19 +13,15 @@
 %---------------------------------------------------------------------------
 
 start(BrokerConfig) ->
-    {ok, RpcClientPid} = gen_server:start(?MODULE, [BrokerConfig], []),
-    RpcClientPid.
-
-call(RpcClientPid, Payload) ->
-    gen_server:call(RpcClientPid, Payload).
+    gen_server:start(?MODULE, [BrokerConfig], []).
 
 %---------------------------------------------------------------------------
 % Plumbing
 %---------------------------------------------------------------------------
 
 % Sets up a reply queue for this client to listen on
-setup_reply_queue(State = #rpc_client_state{channel_pid = ChannelPid, ticket = Ticket}) ->
-    QueueDeclare = #'queue.declare'{ticket = Ticket, queue = <<>>,
+setup_reply_queue(State = #rpc_client{channel_pid = ChannelPid, ticket = Ticket}) ->
+    QueueDeclare = #'queue.declare'{ticket = Ticket, queue = [],
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
                                     nowait = false, arguments = []},
@@ -35,62 +29,36 @@ setup_reply_queue(State = #rpc_client_state{channel_pid = ChannelPid, ticket = T
                         message_count = MessageCount,
                         consumer_count = ConsumerCount}
                         = amqp_channel:call(ChannelPid, QueueDeclare),
-    State#rpc_client_state{queue = Q}.
+    State#rpc_client{queue = Q}.
 
 % Sets up a consumer to handle rpc responses
 setup_consumer(State) ->
-    ConsumerTag = amqp_rpc_util:register_consumer(State, self()),
-    State#rpc_client_state{consumer_tag = ConsumerTag}.
-
-% Publishes to the broker, stores the From address against
-% the correlation id and increments the correlationid for
-% the next request
-publish(Payload, From,
-        State = #rpc_client_state{channel_pid = ChannelPid, ticket = Ticket,
-                            exchange = X, routing_key = RoutingKey,
-                            queue = Q, correlation_id = CorrelationId,
-                            continuations = Continuations}) ->
-    BasicPublish = #'basic.publish'{ticket = Ticket, exchange = X,
-                                    routing_key = RoutingKey,
-                                    mandatory = false, immediate = false},
-    Props = #'P_basic'{correlation_id = list_to_binary(integer_to_list(CorrelationId)), reply_to = Q},
-    Content = #content{class_id = 60, %% TODO HARDCODED VALUE
-                       properties = Props, properties_bin = 'none',
-                       payload_fragments_rev = [Payload]},
-    io:format("RPC publish 1 q -> ~p~n",[CorrelationId]),
-    amqp_channel:cast(ChannelPid, BasicPublish, Content),
-    NewContinuations = dict:store(CorrelationId, From , Continuations),
-    State#rpc_client_state{correlation_id = CorrelationId + 1, continuations = NewContinuations}.
+    ConsumerTag = amqp_method_util:register_consumer(State, self()),
+    State#rpc_client{consumer_tag = ConsumerTag}.
 
 %---------------------------------------------------------------------------
 % gen_server callbacks
 %---------------------------------------------------------------------------
 
-% Sets up a reply queue and consumer within an existing channel
-init([BrokerConfig = #rpc_client_state{channel_pid = ChannelPid, ticket = Ticket}]) ->
+% Starts a new connection to the broker and opens up a new channel
+init([BrokerConfig = #rpc_client{channel_pid = ChannelPid, ticket = Ticket}]) ->
     State = setup_reply_queue(BrokerConfig),
     NewState = setup_consumer(State),
     {ok, NewState}.
 
+% Closes the channel and the broker connection
 terminate(Reason, State) ->
-    ok.
+    amqp_aux:close_channel(State),
+    amqp_aux:close_connection(State).
 
-handle_call(Payload, From, State) ->
-    NewState = publish(Payload, From, State),
-    {noreply, NewState}.
+handle_call(manage, From, State = #rpc_client{channel_pid = ChannelPid}) ->
+    Reply = amqp_channel:call(ChannelPid, []),
+    {reply, Reply, State}.
 
 handle_cast(Msg, State) ->
     {noreply, State}.
 
-handle_info(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State) ->
-    {noreply, State};
-
-handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
-    {noreply, State};
-
-handle_info({content, ClassId, Properties, PropertiesBin, Payload}, State) ->
-    io:format("RPC bottom half: ~p~n",[Properties]),
-    io:format("RPC bottom half: ~p~n",[PropertiesBin]),
+handle_info(Msg, State) ->
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->

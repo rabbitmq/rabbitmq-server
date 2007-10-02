@@ -18,11 +18,4 @@
                         closing = false,
                         consumers = dict:new()} ).
 
--record(rpc_client_state, {channel_pid,
-                           ticket,
-                           exchange,
-                           routing_key,
-                           queue,
-                           consumer_tag,
-                           continuations = dict:new(),
-                           correlation_id = 0}).
+-record(rpc_client, {channel_pid, ticket, exchange, routing_key, queue, consumer_tag}).
