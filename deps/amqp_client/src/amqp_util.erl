@@ -24,11 +24,7 @@ message_payload(Message) ->
     (Message#basic_message.content)#content.payload_fragments_rev.
 
 decode_method(Method, Content) ->
-    Reply =
     case rabbit_framing_channel:finish_reading_method(Method,Content) of
-        {ok, _Method, none} ->
-            _Method;
-        {ok, _Method, _Content} ->
-            {_Method,_Content}
-    end,
-    Reply.
+        {ok, Method2, none}     -> Method2;
+        {ok, Method2, Content2} -> {Method2, Content2}
+    end.
