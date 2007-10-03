@@ -33,7 +33,7 @@ In order to compile/run this code you must have the following
 installed:
 
 - Erlang/OTP
-- Eunit installed in the standard OTP library path (to run the tests)
+- Eunit (from SVN) installed in the standard OTP library path (to run the tests)
 - The source of RabbitMQ server 1.2.0
 
 Patch & Install RabbitMQ to OTP Libs Dir
@@ -59,16 +59,9 @@ In order to run the network client, you need to run the RabbitMQ server in
 a separate Erlang process (or use any other AMQP server). Start your server
 as usual.
 
-After you have done this, you can start an Erlang shell in order to run the unit tests:
+After you have done this, you can run the unit tests:
 
-$ erl -pa $PATH_TO_AMQPCLIENT_EBIN_DIR
-Erlang (BEAM) emulator version 5.5.4 [source] [async-threads:0] [kernel-poll:false]
-
-Eshell V5.5.4  (abort with ^G)
-1> amqp_network_client_test:test().
-  All 4 tests successful.
-ok
-2>
+$ make test
 
 To get more examples of the API, look at the functions in the amqp_test_util module.
 
