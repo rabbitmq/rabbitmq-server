@@ -3,6 +3,7 @@
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include("amqp_client.hrl").
 
 -compile([export_all]).
 
@@ -102,6 +103,29 @@ basic_consume_test(Connection) ->
         gen_event:stop(Consumer)
     end,
     teardown(Connection, Channel).
+
+rpc_client_test(Connection) ->
+    Realm = <<"/data">>,
+    Q = <<"a.b.c">>,
+    X = <<"x">>,
+    BindKey = <<"a.b.c.*">>,
+    RoutingKey = <<"a.b.c.d">>,
+    {ChannelPid, Ticket} = setup_channel(Connection, Realm),
+    {ok, Consumer} = gen_event:start_link(),
+    gen_event:add_handler(Consumer, amqp_rpc_handler , [] ),
+    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
+                                    consumer_tag = <<"">>,
+                                    no_local = false, no_ack = true, exclusive = false, nowait = false},
+    #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(ChannelPid, BasicConsume, Consumer),
+    RpcClientState = #rpc_client_state{channel_pid = ChannelPid, ticket = Ticket,
+                                       exchange = X, routing_key = RoutingKey,
+                                       queue = Q},
+    io:format("Before rpc client start~n"),
+    RpcClientPid = amqp_rpc_client:start(RpcClientState),
+    io:format("Before rpc client call~n"),
+    Reply = amqp_rpc_client:call(RpcClientPid, <<"foo">>),
+    io:format("Reply from RPC was ~p~n", [Reply]),
+    teardown(Connection, ChannelPid).
 
 setup_publish(Connection) ->
     Realm = <<"/data">>,

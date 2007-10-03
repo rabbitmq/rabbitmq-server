@@ -17,3 +17,7 @@ lifecycle_test() ->
 basic_ack_test() ->
     Connection = amqp_connection:start("guest", "guest", "localhost"),
     amqp_test_util:basic_ack_test(Connection).
+
+rpc_client_test() ->
+    Connection = amqp_connection:start("guest", "guest", "localhost"),
+    amqp_test_util:rpc_client_test(Connection).

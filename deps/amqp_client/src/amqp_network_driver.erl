@@ -153,6 +153,8 @@ writer_loop(Sock) ->
     {Sender, Method, Content} when is_pid(Sender) ->
         Channel = resolve_channel(Sender),
         FrameMax = 131072, %% set to zero once QPid fix their negotiation
+        io:format("1. Trying to send ~p~n",[Method]),
+        io:format("2. Trying to send ~p~n",[Content]),
         rabbit_writer:internal_send_command(Sock, Channel, Method, Content, FrameMax),
         writer_loop(Sock);
     Other ->
