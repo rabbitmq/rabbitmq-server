@@ -53,13 +53,14 @@ publish(Payload, From,
     BasicPublish = #'basic.publish'{ticket = Ticket, exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = false, immediate = false},
-    Props = #'P_basic'{correlation_id = list_to_binary(integer_to_list(CorrelationId)), reply_to = Q},
+    _CorrelationId = integer_to_list(CorrelationId),
+    Props = #'P_basic'{correlation_id = list_to_binary(_CorrelationId),
+                       reply_to = Q, content_type = <<"x/foo">>},
     Content = #content{class_id = 60, %% TODO HARDCODED VALUE
                        properties = Props, properties_bin = 'none',
                        payload_fragments_rev = [Payload]},
-    io:format("RPC publish 1 q -> ~p~n",[CorrelationId]),
     amqp_channel:cast(ChannelPid, BasicPublish, Content),
-    NewContinuations = dict:store(CorrelationId, From , Continuations),
+    NewContinuations = dict:store(_CorrelationId, From , Continuations),
     State#rpc_client_state{correlation_id = CorrelationId + 1, continuations = NewContinuations}.
 
 %---------------------------------------------------------------------------
@@ -88,10 +89,14 @@ handle_info(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State) ->
 handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
     {noreply, State};
 
-handle_info({content, ClassId, Properties, PropertiesBin, Payload}, State) ->
-    io:format("RPC bottom half: ~p~n",[Properties]),
-    io:format("RPC bottom half: ~p~n",[PropertiesBin]),
-    {noreply, State}.
+handle_info({content, ClassId, Properties, PropertiesBin, Payload},
+            State = #rpc_client_state{continuations = Continuations}) ->
+    #'P_basic'{correlation_id = CorrelationId} = rabbit_framing:decode_properties(ClassId, PropertiesBin),
+    _CorrelationId = binary_to_list(CorrelationId),
+    From = dict:fetch(_CorrelationId, Continuations),
+    gen_server:reply(From, Payload),
+    NewContinuations = dict:erase(_CorrelationId, Continuations),
+    {noreply, State#rpc_client_state{continuations = NewContinuations}}.
 
 code_change(_OldVsn, State, _Extra) ->
     State.

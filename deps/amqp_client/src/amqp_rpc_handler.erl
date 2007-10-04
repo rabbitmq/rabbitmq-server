@@ -25,20 +25,20 @@ handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
 
 handle_info({content, ClassId, Properties, PropertiesBin, Payload},
             State = #rpc_client_state{channel_pid = ChannelPid, ticket = Ticket,
-                            exchange = X}) ->
-    Props = #'P_basic'{correlation_id = CorrelationId, reply_to = Q}
+                                      exchange = X}) ->
+    Props = #'P_basic'{correlation_id = CorrelationId,
+                       reply_to = Q,
+                       content_type = ContentType}
     = rabbit_framing:decode_properties(ClassId, PropertiesBin),
-    io:format("------>RPC handler corr id: ~p~n", [CorrelationId]),
-
-    BasicPublish = #'basic.publish'{ticket = Ticket, exchange = X,
+    Reply = amqp_rpc_util:invoke(Payload, ContentType, nothing),
+    BasicPublish = #'basic.publish'{ticket = Ticket, exchange = <<"">>,
                                     routing_key = Q,
                                     mandatory = false, immediate = false},
     ReplyProps = #'P_basic'{correlation_id = CorrelationId},
     Content = #content{class_id = 60, %% TODO HARDCODED VALUE
                        properties = ReplyProps, properties_bin = 'none',
-                       payload_fragments_rev = [<<"f00bar">>]},
+                       payload_fragments_rev = [Reply]},
     amqp_channel:cast(ChannelPid, BasicPublish, Content),
-
     {ok, State}.
 
 terminate(Args, State) ->
