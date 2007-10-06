@@ -8,9 +8,14 @@
 -define(CLOSING_TIMEOUT, 10).
 
 start(ChannelPid, ChannelNumber, Connection) ->
-    {ok, _, _} = read_method(), %% 'channel.open'
+    {ok, _, _} = read_method(),
     rabbit_writer:send_command(ChannelPid, #'channel.open_ok'{}),
     Tx0 = rabbit_transaction:start(),
+    %% Don't know if this right, basically I want to pass the transaction
+    %% to a direct channel so for when it handles get_ok and deliver messages,
+    %% without making a specific Mod:Fun call, which would tie this module
+    %% into that module
+    ChannelPid ! {transaction, Tx0},
     Tx1 = rabbit_transaction:set_writer_pid(Tx0, ChannelPid),
     mainloop(#ch{ channel = ChannelNumber,
                   tx = Tx1,

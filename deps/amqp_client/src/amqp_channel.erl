@@ -244,25 +244,44 @@ handle_info( {send_command_and_shutdown, Method}, State) ->
     {stop, shutdown, NewState};
 
 %% Handles the delivery of a message from a direct channel
-handle_info( {deliver, ConsumerTag, AckRequired, QName, QPid, Message}, State) ->
-    #basic_message{content = Content} = Message,
-    handle_basic_deliver(ConsumerTag, Content, State);
+handle_info( {deliver, ConsumerTag, AckRequired, QName, QPid, Message},
+             State = #channel_state{next_delivery_tag = DeliveryTag, tx = Tx}) ->
+    #basic_message{content = Content,
+                   persistent_key = PersistentKey} = Message,
+    amqp_direct_driver:acquire_lock(AckRequired, {Tx, DeliveryTag, ConsumerTag, QName, QPid, Message}),
+    {noreply, _NewState} = handle_basic_deliver(ConsumerTag,Content, State),
+    amqp_direct_driver:release_lock(AckRequired, {QName, QPid, PersistentKey}),
+    NewState = _NewState#channel_state{next_delivery_tag = DeliveryTag + 1},
+    {noreply, NewState};
 
-handle_info( {get_ok, MessageCount, AckRequired, QName, QPid, Message}, State) ->
+handle_info( {get_ok, MessageCount, AckRequired, QName, QPid, Message},
+             State = #channel_state{next_delivery_tag = DeliveryTag, tx = Tx}) ->
     #basic_message{content = Content,
                    exchange_name = X,
                    routing_key = RoutingKey,
+                   persistent_key = PersistentKey,
                    redelivered = Redelivered}  = Message,
-    Method = #'basic.get_ok'{ %% WHAT ABOUT THIS FIELD delivery_tag = DeliveryTag ?
-                    redelivered = Redelivered,
-                    exchange = X,
-                    routing_key = RoutingKey,
-                    message_count = MessageCount},
-    rpc_bottom_half( {Method, Content} , State);
+    Method = #'basic.get_ok'{delivery_tag = DeliveryTag,
+                             redelivered = Redelivered,
+                             exchange = X,
+                             routing_key = RoutingKey,
+                             message_count = MessageCount},
+    amqp_direct_driver:acquire_lock(AckRequired, {Tx, DeliveryTag, none, QName, QPid, Message}),
+    {noreply, _NewState} = rpc_bottom_half( {Method, Content}, State),
+    amqp_direct_driver:release_lock(AckRequired, {QName, QPid, PersistentKey}),
+    NewState = State#channel_state{next_delivery_tag = DeliveryTag + 1},
+    {noreply, NewState};
 
 handle_info(shutdown, State ) ->
     NewState = channel_cleanup(State),
     {stop, shutdown, NewState};
+%---------------------------------------------------------------------------
+% This allows the direct channel to pass a transaction into this channel
+% This might become part of the writer API, depends on how it gets refactored
+%---------------------------------------------------------------------------
+handle_info({transaction, Tx}, State) ->
+    NewState = State#channel_state{tx = Tx},
+    {noreply, NewState};
 
 %---------------------------------------------------------------------------
 % This is for a race condition between a close.close_ok and a subsequent channel.open

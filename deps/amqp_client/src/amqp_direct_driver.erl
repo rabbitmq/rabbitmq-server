@@ -4,6 +4,7 @@
 -include("amqp_client.hrl").
 
 -export([handshake/2, open_channel/3, close_connection/3]).
+-export([acquire_lock/2, release_lock/2]).
 
 %---------------------------------------------------------------------------
 % Driver API Methods
@@ -29,3 +30,10 @@ open_channel({Number,OutOfBand}, ChannelPid, State = #connection_state{username 
 
 close_connection(Close, From, State) ->
     ok.
+
+acquire_lock(AckRequired, {Tx, DeliveryTag, ConsumerTag,QName, QPid, Message}) ->
+    rabbit_writer:maybe_lock_message(AckRequired,{Tx, DeliveryTag, ConsumerTag,QName, QPid, Message}).
+
+release_lock(AckRequired, {QName, QPid, PersistentKey}) ->
+    rabbit_amqqueue:notify_sent(QPid),
+    ok = rabbit_writer:auto_acknowledge(AckRequired, QName, PersistentKey).

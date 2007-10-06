@@ -16,7 +16,9 @@
                         pending_rpc,
                         pending_consumer,
                         closing = false,
-                        consumers = dict:new()} ).
+                        consumers = dict:new(),
+                        next_delivery_tag = 0,
+                        tx} ).
 
 -record(rpc_client_state, {channel_pid,
                            ticket,
