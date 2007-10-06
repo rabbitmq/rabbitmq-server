@@ -33,7 +33,10 @@ In order to compile/run this code you must have the following
 installed:
 
 - Erlang/OTP
-- Eunit (from SVN) installed in the standard OTP library path (to run the tests)
+- Eunit installed in the standard OTP library path (to run the tests).
+  (The unit tests depend on the 20070405 snapshot version of eunit,
+  rather than the released 1.1 version - the former has an 'include' dir
+  whereas the latter has 'inc'.)
 - The source of RabbitMQ server 1.2.0
 
 Patch & Install RabbitMQ to OTP Libs Dir
