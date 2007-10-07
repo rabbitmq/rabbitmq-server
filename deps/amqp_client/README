@@ -37,20 +37,14 @@ installed:
   (The unit tests depend on the 20070405 snapshot version of eunit,
   rather than the released 1.1 version - the former has an 'include' dir
   whereas the latter has 'inc'.)
-- The source of RabbitMQ server 1.2.0
+- The source of RabbitMQ server (200710071940 snapshot or later)
 
-Patch & Install RabbitMQ to OTP Libs Dir
+Install RabbitMQ to OTP Libs Dir
 ----------------------------------------
-1. Apply the patch file called rabbit.patch to the erlang source directory
-within the RabbitMQ tree.
+1. Build RabbitMQ by running 'make'.
 
-2. Build RabbitMQ by running 'make'.
-
-3. Create a soft link in the libs dir of your OTP distribution to the directory
+2. Create a soft link in the libs dir of your OTP distribution to the directory
 that you built RabbitMQ from.
-
-(Note that when that when some functions get exported from the rabbit tree,
-this process will be unnecessary).
 
 Compile the Erlang client
 -------------------------
