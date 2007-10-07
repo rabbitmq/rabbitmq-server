@@ -26,7 +26,8 @@ call(RpcClientPid, Payload) ->
 %---------------------------------------------------------------------------
 
 % Sets up a reply queue for this client to listen on
-setup_reply_queue(State = #rpc_client_state{channel_pid = ChannelPid, ticket = Ticket}) ->
+setup_reply_queue(State = #rpc_client_state{broker_config = BrokerConfig}) ->
+    #broker_config{channel_pid = ChannelPid, ticket = Ticket} = BrokerConfig,
     QueueDeclare = #'queue.declare'{ticket = Ticket, queue = <<>>,
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
@@ -35,7 +36,8 @@ setup_reply_queue(State = #rpc_client_state{channel_pid = ChannelPid, ticket = T
                         message_count = MessageCount,
                         consumer_count = ConsumerCount}
                         = amqp_channel:call(ChannelPid, QueueDeclare),
-    State#rpc_client_state{queue = Q}.
+    NewBrokerConfig = BrokerConfig#broker_config{queue = Q},
+    State#rpc_client_state{broker_config = NewBrokerConfig}.
 
 % Sets up a consumer to handle rpc responses
 setup_consumer(State) ->
@@ -45,17 +47,18 @@ setup_consumer(State) ->
 % Publishes to the broker, stores the From address against
 % the correlation id and increments the correlationid for
 % the next request
-publish(Payload, From,
-        State = #rpc_client_state{channel_pid = ChannelPid, ticket = Ticket,
-                            exchange = X, routing_key = RoutingKey,
-                            queue = Q, correlation_id = CorrelationId,
-                            continuations = Continuations}) ->
+publish(Payload, From, State = #rpc_client_state{broker_config = BrokerConfig,
+                                                 correlation_id = CorrelationId,
+                                                 continuations = Continuations}) ->
+    #broker_config{channel_pid = ChannelPid, ticket = Ticket,
+                   content_type = ContentType, queue = Q,
+                   exchange = X, routing_key = RoutingKey} = BrokerConfig,
     BasicPublish = #'basic.publish'{ticket = Ticket, exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = false, immediate = false},
     _CorrelationId = integer_to_list(CorrelationId),
     Props = #'P_basic'{correlation_id = list_to_binary(_CorrelationId),
-                       reply_to = Q, content_type = <<"x/foo">>},
+                       reply_to = Q, content_type = ContentType},
     Content = #content{class_id = 60, %% TODO HARDCODED VALUE
                        properties = Props, properties_bin = 'none',
                        payload_fragments_rev = [Payload]},
@@ -68,8 +71,9 @@ publish(Payload, From,
 %---------------------------------------------------------------------------
 
 % Sets up a reply queue and consumer within an existing channel
-init([BrokerConfig = #rpc_client_state{channel_pid = ChannelPid, ticket = Ticket}]) ->
-    State = setup_reply_queue(BrokerConfig),
+init([BrokerConfig]) ->
+    InitialState = #rpc_client_state{broker_config = BrokerConfig},
+    State = setup_reply_queue(InitialState),
     NewState = setup_consumer(State),
     {ok, NewState}.
 

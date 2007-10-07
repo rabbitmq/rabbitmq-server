@@ -20,11 +20,17 @@
                         next_delivery_tag = 0,
                         tx} ).
 
--record(rpc_client_state, {channel_pid,
-                           ticket,
-                           exchange,
-                           routing_key,
-                           queue,
+-record(rpc_client_state, {broker_config,
                            consumer_tag,
                            continuations = dict:new(),
                            correlation_id = 0}).
+
+-record(rpc_handler_state, {broker_config,
+                            server_name}).
+
+-record(broker_config, {channel_pid,
+                       ticket,
+                       exchange,
+                       routing_key,
+                       content_type,
+                       queue}).
