@@ -1,4 +1,4 @@
--module(amqp_direct_client_test).
+-module(direct_client_test).
 
 -export([test_coverage/0]).
 
@@ -6,19 +6,19 @@
 
 basic_get_test() ->
     Connection = amqp_connection:start("guest", "guest"),
-    amqp_test_util:basic_get_test(Connection).
+    test_util:basic_get_test(Connection).
 
 basic_consume_test() ->
     Connection = amqp_connection:start("guest", "guest"),
-    amqp_test_util:basic_consume_test(Connection).
+    test_util:basic_consume_test(Connection).
 
 lifecycle_test() ->
     Connection = amqp_connection:start("guest", "guest"),
-    amqp_test_util:lifecycle_test(Connection).
+    test_util:lifecycle_test(Connection).
 
 basic_ack_test() ->
     Connection = amqp_connection:start("guest", "guest"),
-    amqp_test_util:basic_ack_test(Connection).
+    test_util:basic_ack_test(Connection).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

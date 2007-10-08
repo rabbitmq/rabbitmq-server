@@ -1,4 +1,4 @@
--module(amqp_test_util).
+-module(test_util).
 
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
@@ -118,7 +118,7 @@ rpc_client_test(Connection) ->
                                        queue = Q,
                                        content_type = <<"application/x-hessian">>},
     RpcHandlerState = #rpc_handler_state{broker_config = BrokerConfig,
-                                         server_name = amqp_test_util},
+                                         server_name = test_util},
     {ok, Consumer} = gen_event:start_link(),
     gen_event:add_handler(Consumer, amqp_rpc_handler , [RpcHandlerState] ),
     BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,

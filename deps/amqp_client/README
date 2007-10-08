@@ -60,7 +60,7 @@ After you have done this, you can run the unit tests:
 
 $ make test
 
-To get more examples of the API, look at the functions in the amqp_test_util module.
+To get more examples of the API, look at the functions in the test_util module.
 
 Running the Direct Client
 -------------------------
