@@ -20,10 +20,6 @@ basic_ack_test() ->
     Connection = amqp_connection:start("guest", "guest", "localhost"),
     test_util:basic_ack_test(Connection).
 
-rpc_client_test() ->
-    Connection = amqp_connection:start("guest", "guest", "localhost"),
-    test_util:rpc_client_test(Connection).
-
 test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),

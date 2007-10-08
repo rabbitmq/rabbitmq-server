@@ -104,32 +104,6 @@ basic_consume_test(Connection) ->
     end,
     teardown(Connection, Channel).
 
-rpc_client_test(Connection) ->
-    X = <<"x">>,
-    BindKey = <<"a.b.c.*">>,
-    RoutingKey = <<"a.b.c.d">>,
-    Realm = <<"/data">>,
-    BindKey = <<"a.b.c.*">>,
-    RoutingKey = <<"a.b.c.d">>,
-    Q = <<"a.b.c">>,
-    {ChannelPid, Ticket} = setup_channel(Connection, Realm),
-    BrokerConfig = #broker_config{channel_pid = ChannelPid, ticket = Ticket,
-                                       exchange = X, routing_key = RoutingKey,
-                                       queue = Q,
-                                       content_type = <<"application/x-hessian">>},
-    RpcHandlerState = #rpc_handler_state{broker_config = BrokerConfig,
-                                         server_name = test_util},
-    {ok, Consumer} = gen_event:start_link(),
-    gen_event:add_handler(Consumer, amqp_rpc_handler , [RpcHandlerState] ),
-    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
-                                    consumer_tag = <<"">>,
-                                    no_local = false, no_ack = true, exclusive = false, nowait = false},
-    #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(ChannelPid, BasicConsume, Consumer),
-    RpcClientPid = amqp_rpc_client:start(BrokerConfig),
-    Reply = amqp_rpc_client:call(RpcClientPid, <<"foo">>),
-    io:format("Reply from RPC was ~p~n", [Reply]),
-    teardown(Connection, ChannelPid).
-
 setup_publish(Connection) ->
     Realm = <<"/data">>,
     Q = <<"a.b.c">>,
