@@ -4,7 +4,6 @@
 -include("amqp_client.hrl").
 
 -export([register_consumer/2]).
--export([encode/3,decode/2]).
 
 % Registers a consumer in this channel
 register_consumer(RpcClientState = #rpc_client_state{broker_config = BrokerConfig}, Consumer) ->
@@ -15,16 +14,3 @@ register_consumer(RpcClientState = #rpc_client_state{broker_config = BrokerConfi
                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(ChannelPid, BasicConsume, Consumer),
     RpcClientState#rpc_client_state{consumer_tag = ConsumerTag}.
-
-%---------------------------------------------------------------------------
-% Encoding and decoding
-%---------------------------------------------------------------------------
-
-decode(?Hessian, [H|T]) ->
-    hessian:decode(H).
-
-encode(reply, ?Hessian, Payload) ->
-    hessian:encode(reply, Payload);
-
-encode(call, ?Hessian, [Function|Args]) ->
-    hessian:encode(call, Function, Args).

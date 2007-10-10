@@ -26,13 +26,11 @@
                            correlation_id = 0}).
 
 -record(rpc_handler_state, {broker_config,
-                            server_pid,
                             server_name}).
 
 -record(broker_config, {channel_pid,
-                        ticket,
-                        exchange,
-                        routing_key,
-                        queue}).
-
--define(Hessian, <<"application/x-hessian">>).
+                       ticket,
+                       exchange,
+                       routing_key,
+                       content_type,
+                       queue}).

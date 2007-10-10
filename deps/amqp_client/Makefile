@@ -10,10 +10,10 @@ compile:
 all: compile
 
 test: compile
-	erl -pa ebin -noshell -eval 'network_client_test:test(),halt().'
+	erl -pa ebin -noshell -eval 'amqp_network_client_test:test(),halt().'
 
 test_coverage: compile
-	erl -pa ebin -noshell -eval 'network_client_test:test_coverage(),halt().'
+	erl -pa ebin -noshell -eval 'amqp_network_client_test:test_coverage(),halt().'
 
 clean:
 	rm $(EBIN_DIR)/*.beam

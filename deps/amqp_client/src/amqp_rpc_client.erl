@@ -7,7 +7,7 @@
 -behaviour(gen_server).
 
 -export([start/1]).
--export([call/4]).
+-export([call/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
 %---------------------------------------------------------------------------
@@ -18,8 +18,8 @@ start(BrokerConfig) ->
     {ok, RpcClientPid} = gen_server:start(?MODULE, [BrokerConfig], []),
     RpcClientPid.
 
-call(RpcClientPid, ContentType, Function, Args) ->
-    gen_server:call(RpcClientPid, {ContentType, [Function|Args]} ).
+call(RpcClientPid, Payload) ->
+    gen_server:call(RpcClientPid, Payload).
 
 %---------------------------------------------------------------------------
 % Plumbing
@@ -47,13 +47,11 @@ setup_consumer(State) ->
 % Publishes to the broker, stores the From address against
 % the correlation id and increments the correlationid for
 % the next request
-publish({ContentType, [Function|Args] }, From,
-        State = #rpc_client_state{broker_config = BrokerConfig,
-                                  correlation_id = CorrelationId,
-                                  continuations = Continuations}) ->
-    Payload = amqp_rpc_util:encode(call, ContentType, [Function|Args] ),
-    io:format("Payload ~p~n",[Payload]),
-    #broker_config{channel_pid = ChannelPid, ticket = Ticket, queue = Q,
+publish(Payload, From, State = #rpc_client_state{broker_config = BrokerConfig,
+                                                 correlation_id = CorrelationId,
+                                                 continuations = Continuations}) ->
+    #broker_config{channel_pid = ChannelPid, ticket = Ticket,
+                   content_type = ContentType, queue = Q,
                    exchange = X, routing_key = RoutingKey} = BrokerConfig,
     BasicPublish = #'basic.publish'{ticket = Ticket, exchange = X,
                                     routing_key = RoutingKey,
@@ -82,8 +80,7 @@ init([BrokerConfig]) ->
 terminate(Reason, State) ->
     ok.
 
-handle_call( Payload = {ContentType, [Function|Args] }, From, State) ->
-
+handle_call(Payload, From, State) ->
     NewState = publish(Payload, From, State),
     {noreply, NewState}.
 
@@ -98,12 +95,10 @@ handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
 
 handle_info({content, ClassId, Properties, PropertiesBin, Payload},
             State = #rpc_client_state{continuations = Continuations}) ->
-    #'P_basic'{correlation_id = CorrelationId,
-               content_type = ContentType} = rabbit_framing:decode_properties(ClassId, PropertiesBin),
+    #'P_basic'{correlation_id = CorrelationId} = rabbit_framing:decode_properties(ClassId, PropertiesBin),
     _CorrelationId = binary_to_list(CorrelationId),
     From = dict:fetch(_CorrelationId, Continuations),
-    Reply = amqp_rpc_util:decode(ContentType, Payload),
-    gen_server:reply(From, Reply),
+    gen_server:reply(From, Payload),
     NewContinuations = dict:erase(_CorrelationId, Continuations),
     {noreply, State#rpc_client_state{continuations = NewContinuations}}.
 
