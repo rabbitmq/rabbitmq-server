@@ -68,8 +68,8 @@ RabbitMQ server.
 
 The included Makefile will do this if the RabbitMQ server has been installed
 such that the script rabbitmq-server is in the path (note that /usr/sbin may
-not be in your path)
-.
+not be in your path).
+
 After you have checked this, you can run the unit tests:
 
 $ make test_direct
@@ -87,4 +87,4 @@ To run this test end to end, you will need to install the Erlang module
 for hessian into to the default OTP library path.
 
 The Hessian library can be downloaded from http://cotton.sourceforge.net/,
-version 0.1.2 or later is required. 
+version 0.1.2 or later is required.
