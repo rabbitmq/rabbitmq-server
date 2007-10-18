@@ -56,7 +56,7 @@ server). Start your server as usual.
 
 After you have done this, you can run the unit tests:
 
-$ make test
+$ make test_network
 
 To get more examples of the API, look at the functions in the
 test_util module.
@@ -66,26 +66,13 @@ Running the direct client
 The direct client has to be run in the same Erlang VM instance as the
 RabbitMQ server.
 
-You will probably want to modify rabbitmq-server (or
-rabbitmq-server.bat) such that the command line to invoke the server
-contains:
+The included Makefile will do this if the RabbitMQ server has been installed
+such that the script rabbitmq-server is in the path (note that /usr/sbin may
+not be in your path)
+.
+After you have checked this, you can run the unit tests:
 
--pa ${PATH_TO_AMQP_ERLANG_CLIENT_EBIN_DIR}
-
-To test the direct client, also remove "-noinput" from the command
-line. Then start the server and at the prompt type:
-
-1> amqp_direct_client_test:test().
-debug:: Internal rollback <0.163.0>
-  - 0 acks uncommitted, 0 messages unacked, 0 publishes uncommitted
-debug:: Internal rollback <0.170.0>
-  - 0 acks uncommitted, 0 messages unacked, 0 publishes uncommitted
-debug:: Internal rollback <0.175.0>
-  - 0 acks uncommitted, 0 messages unacked, 0 publishes uncommitted
-debug:: Internal rollback <0.181.0>
-  - 0 acks uncommitted, 0 messages unacked, 0 publishes uncommitted
-  All 4 tests successful.
-ok
+$ make test_direct
 
 Running the Integration Scenarios
 ---------------------------------
