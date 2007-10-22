@@ -71,7 +71,6 @@ basic_get_test(Connection) ->
     ?assertMatch([<<"foobar">>], PayloadFragments),
     {Method2, Content2} = amqp_channel:call(Channel, BasicGet),
     ?assertMatch(<<>>, Content2),
-    io:format("Expecting get empty: ~p / ~p~n",[Method2, Content2]),
     teardown(Connection, Channel).
 
 basic_ack_test(Connection) ->

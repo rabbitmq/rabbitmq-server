@@ -43,5 +43,6 @@ acquire_lock(AckRequired, {Tx, DeliveryTag, ConsumerTag,QName, QPid, Message}) -
     rabbit_writer:maybe_lock_message(AckRequired,{Tx, DeliveryTag, ConsumerTag,QName, QPid, Message}).
 
 release_lock(AckRequired, {QName, QPid, PersistentKey}) ->
-    rabbit_amqqueue:notify_sent(QPid),
+    rabbit_amqqueue:notify_sent(self()),
     ok = rabbit_writer:auto_acknowledge(AckRequired, QName, PersistentKey).
+

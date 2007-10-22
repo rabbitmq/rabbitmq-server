@@ -177,7 +177,11 @@ handle_cast({cast, Method, Content}, State = #channel_state{writer_pid = Writer}
 %% Registers the direct channel peer when using the direct client
 handle_cast({register_direct_peer, Peer}, State) ->
     NewState = State#channel_state{writer_pid = Peer},
-    {noreply, NewState}.
+    {noreply, NewState};
+
+handle_cast({notify_sent, Peer}, State) ->
+    %% TODO What should we do here?
+    {noreply, State}.
 
 %---------------------------------------------------------------------------
 % Network Writer methods (gen_server callbacks).
