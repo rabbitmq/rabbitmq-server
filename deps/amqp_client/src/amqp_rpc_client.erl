@@ -52,7 +52,6 @@ publish({ContentType, [Function|Args] }, From,
                                   correlation_id = CorrelationId,
                                   continuations = Continuations}) ->
     Payload = amqp_rpc_util:encode(call, ContentType, [Function|Args] ),
-    io:format("Payload ~p~n",[Payload]),
     #broker_config{channel_pid = ChannelPid, ticket = Ticket, queue = Q,
                    exchange = X, routing_key = RoutingKey} = BrokerConfig,
     BasicPublish = #'basic.publish'{ticket = Ticket, exchange = X,
@@ -83,7 +82,6 @@ terminate(Reason, State) ->
     ok.
 
 handle_call( Payload = {ContentType, [Function|Args] }, From, State) ->
-
     NewState = publish(Payload, From, State),
     {noreply, NewState}.
 

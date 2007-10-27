@@ -5,3 +5,7 @@
 rpc_client_test() ->
     Connection = amqp_connection:start("guest", "guest", "localhost"),
     integration_test_util:rpc_client_test(Connection).
+
+rabbit_management_test() ->
+    Connection = amqp_connection:start("guest", "guest", "localhost"),
+    integration_test_util:rabbit_management_test(Connection).

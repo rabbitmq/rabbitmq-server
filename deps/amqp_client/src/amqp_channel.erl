@@ -277,9 +277,7 @@ handle_info( {get_ok, MessageCount, AckRequired, QName, QPid, Message},
                              exchange = X,
                              routing_key = RoutingKey,
                              message_count = MessageCount},
-    amqp_direct_driver:acquire_lock(AckRequired, {Tx, DeliveryTag, none, QName, QPid, Message}),
     {noreply, _NewState} = rpc_bottom_half( {Method, Content}, State),
-    amqp_direct_driver:release_lock(AckRequired, {QName, QPid, PersistentKey}),
     NewState = State#channel_state{next_delivery_tag = DeliveryTag + 1},
     {noreply, NewState};
 
