@@ -80,11 +80,11 @@ Running the Integration Scenarios
 The network_integration_test module demonstrates how the base API can be
 extended to implement an Rpc client over AMQP.
 
-This client does a full Rpc end to end by combining the AMQP transport 
+This client does a full Rpc end to end by combining the AMQP transport
 with the Hessian data binding protocol.
 
 To run this test end to end, you will need to install the Erlang module
 for hessian into to the default OTP library path.
 
 The Hessian library can be downloaded from http://cotton.sourceforge.net/,
-version 0.1.2 or later is required.
+version 0.1.3 or later is required.
