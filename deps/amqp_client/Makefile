@@ -2,6 +2,7 @@ EBIN_DIR=ebin
 SOURCE_DIR=src
 INCLUDE_DIR=include
 ERLC_FLAGS=-W0
+DIST_DIR=rabbitmq-erlang-client
 
 compile:
 	mkdir -p $(EBIN_DIR)
@@ -23,3 +24,9 @@ test_direct_coverage: compile
 
 clean:
 	rm $(EBIN_DIR)/*.beam
+
+source-tarball:
+	mkdir -p dist/$(DIST_DIR)
+	cp -a README Makefile src include dist/$(DIST_DIR)
+	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
+
