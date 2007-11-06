@@ -14,9 +14,9 @@
 %%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
 %%
 %%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-%%   Technologies Ltd.; 
+%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
+%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
+%%   Technologies Ltd.;
 %%
 %%   All Rights Reserved.
 %%
@@ -48,16 +48,7 @@ terminate(Reason, State) ->
 
 handle_call([Function|Arguments], From, State) ->
     io:format("Calling management function ~p with args ~p~n",[Function,Arguments]),
-    case catch apply(rabbit_access_control, Function, Arguments) of
-        {error, Reason} ->
-            exit(do_something_about_this, Reason);
-        {ok, Response} ->
-            io:format("Return from management function -  ~p~n",[Response]),
-            {reply, Response, State};
-        ok ->
-            {reply, ok, State}
-    end.
-
+    {reply, catch apply(rabbit_access_control, Function, Arguments), State}.
 
 handle_cast(Msg, State) ->
     {noreply, State}.

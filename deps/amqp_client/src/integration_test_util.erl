@@ -14,9 +14,9 @@
 %%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
 %%
 %%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-%%   Technologies Ltd.; 
+%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
+%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
+%%   Technologies Ltd.;
 %%
 %%   All Rights Reserved.
 %%
@@ -25,6 +25,7 @@
 
 -module(integration_test_util).
 
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
@@ -46,10 +47,13 @@ rabbit_management_test(Connection) ->
     {ChannelPid,BrokerConfig} = setup_broker(Connection),
     RpcClientPid = amqp_rpc_client:start(BrokerConfig),
     ok = rpc(RpcClientPid, add_user, [Username, Password]),
+    {error, user_already_exists} = rpc(RpcClientPid, add_user, [Username, Password]),
     Users1 = rpc(RpcClientPid, list_users, []),
     ok = rpc(RpcClientPid, delete_user, [Username]),
     Users2 = rpc(RpcClientPid, list_users, []),
-    test_util:teardown(Connection, ChannelPid).
+    test_util:teardown(Connection, ChannelPid),
+    ?assert( lists:member(Username,Users1) ),
+    ?assert( not lists:member(Username,Users2) ).
 
 start_rabbit_management(Connection) ->
     {ChannelPid,BrokerConfig} = setup_broker(Connection),
