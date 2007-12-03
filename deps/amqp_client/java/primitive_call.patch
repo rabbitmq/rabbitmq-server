@@ -1,0 +1,44 @@
+diff -r 094e53e9d118 src/com/rabbitmq/client/RpcClient.java
+--- a/src/com/rabbitmq/client/RpcClient.java	Sat Nov 17 16:34:31 2007 +0000
++++ b/src/com/rabbitmq/client/RpcClient.java	Mon Dec 03 10:39:08 2007 +0000
+@@ -161,6 +161,11 @@ public class RpcClient {
+         _channel.basicPublish(_ticket, _exchange, _routingKey, props, message);
+     }
+ 
++    public byte[] primitiveCall(byte[] message)
++        throws IOException, ShutdownSignalException {
++        return primitiveCall(null, message);
++    }
++
+     /**
+      * Perform a simple byte-array-based RPC roundtrip.
+      * @param message the byte array request message to send
+@@ -168,19 +173,24 @@ public class RpcClient {
+      * @throws ShutdownSignalException if the connection dies during our wait
+      * @throws IOException if an error is encountered
+      */
+-    public byte[] primitiveCall(byte[] message)
++    public byte[] primitiveCall(AMQP.BasicProperties props, byte[] message)
+         throws IOException, ShutdownSignalException
+     {
+         checkConsumer();
+         BlockingCell<Object> k = new BlockingCell<Object>();
+-        AMQP.BasicProperties props;
+         synchronized (_continuationMap) {
+             _correlationId++;
+             String replyId = "" + _correlationId;
+-            props = new AMQP.BasicProperties(null, null, null, null,
++            if (props != null) {
++                props.correlationId = replyId;
++                props.replyTo = _replyQueue;
++            }
++            else {
++                props = new AMQP.BasicProperties(null, null, null, null,
+                                              null, replyId,
+-                    _replyQueue, null, null, null,
++                                             _replyQueue, null, null, null,
+                                              null, null, null, null);
++            }
+             _continuationMap.put(replyId, k);
+         }
+         publish(props, message);

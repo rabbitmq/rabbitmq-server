@@ -88,3 +88,5 @@ for hessian into to the default OTP library path.
 
 The Hessian library can be downloaded from http://code.google.com/p/cotton/,
 version 0.2.1 or later is required.
+
+You will also need to patch the Rabbit java client (using snapshot version rabbitmq-200710291145) with the patch file called primitive_call.patch. The resulting binary from this will need to be put on the classpath of the Java project.
