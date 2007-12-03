@@ -14,9 +14,9 @@
 %%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
 %%
 %%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-%%   Technologies Ltd.; 
+%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
+%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
+%%   Technologies Ltd.;
 %%
 %%   All Rights Reserved.
 %%
@@ -31,7 +31,7 @@
 
 -behaviour(gen_server).
 
--export([start/1]).
+-export([start/2]).
 -export([call/4]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
@@ -39,8 +39,8 @@
 % API
 %---------------------------------------------------------------------------
 
-start(BrokerConfig) ->
-    {ok, RpcClientPid} = gen_server:start(?MODULE, [BrokerConfig], []),
+start(BrokerConfig, TypeMapping) ->
+    {ok, RpcClientPid} = gen_server:start(?MODULE, [BrokerConfig, TypeMapping], []),
     RpcClientPid.
 
 call(RpcClientPid, ContentType, Function, Args) ->
@@ -75,8 +75,9 @@ setup_consumer(State) ->
 publish({ContentType, [Function|Args] }, From,
         State = #rpc_client_state{broker_config = BrokerConfig,
                                   correlation_id = CorrelationId,
-                                  continuations = Continuations}) ->
-    Payload = amqp_rpc_util:encode(call, ContentType, [Function|Args] ),
+                                  continuations = Continuations,
+                                  type_mapping = TypeMapping}) ->
+    Payload = amqp_rpc_util:encode(call, ContentType, [Function|Args], TypeMapping ),
     #broker_config{channel_pid = ChannelPid, ticket = Ticket, queue = Q,
                    exchange = X, routing_key = RoutingKey} = BrokerConfig,
     BasicPublish = #'basic.publish'{ticket = Ticket, exchange = X,
@@ -97,8 +98,9 @@ publish({ContentType, [Function|Args] }, From,
 %---------------------------------------------------------------------------
 
 % Sets up a reply queue and consumer within an existing channel
-init([BrokerConfig]) ->
-    InitialState = #rpc_client_state{broker_config = BrokerConfig},
+init([BrokerConfig, TypeMapping]) ->
+    InitialState = #rpc_client_state{broker_config = BrokerConfig,
+                                     type_mapping = TypeMapping},
     State = setup_reply_queue(InitialState),
     NewState = setup_consumer(State),
     {ok, NewState}.
@@ -120,12 +122,13 @@ handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
     {noreply, State};
 
 handle_info({content, ClassId, Properties, PropertiesBin, Payload},
-            State = #rpc_client_state{continuations = Continuations}) ->
+            State = #rpc_client_state{continuations = Continuations,
+                                      type_mapping = TypeMapping}) ->
     #'P_basic'{correlation_id = CorrelationId,
                content_type = ContentType} = rabbit_framing:decode_properties(ClassId, PropertiesBin),
     _CorrelationId = binary_to_list(CorrelationId),
     From = dict:fetch(_CorrelationId, Continuations),
-    Reply = amqp_rpc_util:decode(ContentType, Payload),
+    Reply = amqp_rpc_util:decode(ContentType, Payload, TypeMapping),
     gen_server:reply(From, Reply),
     NewContinuations = dict:erase(_CorrelationId, Continuations),
     {noreply, State#rpc_client_state{continuations = NewContinuations}}.

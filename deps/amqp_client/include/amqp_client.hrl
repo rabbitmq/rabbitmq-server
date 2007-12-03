@@ -14,14 +14,16 @@
 %%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
 %%
 %%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-%%   Technologies Ltd.; 
+%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
+%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
+%%   Technologies Ltd.;
 %%
 %%   All Rights Reserved.
 %%
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
+-ifndef(Hessian).
+-define(Hessian, <<"application/x-hessian">>).
 
 -record(connection_state, {username,
                            password,
@@ -48,11 +50,14 @@
 -record(rpc_client_state, {broker_config,
                            consumer_tag,
                            continuations = dict:new(),
-                           correlation_id = 0}).
+                           correlation_id = 0,
+                           type_mapping}).
 
 -record(rpc_handler_state, {broker_config,
                             server_pid,
-                            server_name}).
+                            server_name,
+                            type_mapping
+                            }).
 
 -record(broker_config, {channel_pid,
                         ticket,
@@ -60,4 +65,5 @@
                         routing_key,
                         queue}).
 
--define(Hessian, <<"application/x-hessian">>).
+
+-endif.

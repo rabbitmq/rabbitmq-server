@@ -27,6 +27,9 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
+-include_lib("rabbitmq_server/include/rabbit.hrl").
+-include_lib("hessian/include/hessian.hrl").
+-include("amqp_client.hrl").
 -include("amqp_client.hrl").
 
 -export([rpc_client_test/1]).
@@ -45,7 +48,7 @@ rabbit_management_test(Connection) ->
     {X,Y,Username} = now(),
     Password = <<"password">>,
     {ChannelPid,BrokerConfig} = setup_broker(Connection),
-    RpcClientPid = amqp_rpc_client:start(BrokerConfig),
+    RpcClientPid = amqp_rpc_client:start(BrokerConfig, encoding_state()),
     ok = rpc(RpcClientPid, add_user, [Username, Password]),
     {error, user_already_exists} = rpc(RpcClientPid, add_user, [Username, Password]),
     Users1 = rpc(RpcClientPid, list_users, []),
@@ -67,7 +70,8 @@ start_rpc_handler(Module, BrokerConfig = #broker_config{ticket = Ticket,
                                                         queue = Q,
                                                         channel_pid = ChannelPid}) ->
     RpcHandlerState = #rpc_handler_state{broker_config = BrokerConfig,
-                                         server_name = Module},
+                                         server_name = Module,
+                                         type_mapping = encoding_state()},
     {ok, Consumer} = gen_event:start_link(),
     gen_event:add_handler(Consumer, amqp_rpc_handler , [RpcHandlerState] ),
     BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
@@ -75,10 +79,17 @@ start_rpc_handler(Module, BrokerConfig = #broker_config{ticket = Ticket,
                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(ChannelPid, BasicConsume, Consumer).
 
+encoding_state() ->
+    TypeDef = #type_def{foreign_type = <<"com.rabbitmq.management.User">>,
+                        native_type = user,
+                        fieldnames = record_info(fields, user)},
+    {_,State} = hessian:register_type_def(TypeDef),
+    State.
+
 rpc_util(Connection, Module, Function, Args) ->
     {ChannelPid,BrokerConfig} = setup_broker(Connection),
     start_rpc_handler(Module, BrokerConfig),
-    RpcClientPid = amqp_rpc_client:start(BrokerConfig),
+    RpcClientPid = amqp_rpc_client:start(BrokerConfig, encoding_state()),
     Reply = rpc(RpcClientPid, Function, Args),
     test_util:teardown(Connection, ChannelPid),
     Reply.

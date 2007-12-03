@@ -14,9 +14,9 @@
 %%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
 %%
 %%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-%%   Technologies Ltd.; 
+%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
+%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
+%%   Technologies Ltd.;
 %%
 %%   All Rights Reserved.
 %%
@@ -29,7 +29,7 @@
 -include("amqp_client.hrl").
 
 -export([register_consumer/2]).
--export([encode/3,decode/2]).
+-export([encode/3,encode/4,decode/3]).
 
 % Registers a consumer in this channel
 register_consumer(RpcClientState = #rpc_client_state{broker_config = BrokerConfig}, Consumer) ->
@@ -45,11 +45,18 @@ register_consumer(RpcClientState = #rpc_client_state{broker_config = BrokerConfi
 % Encoding and decoding
 %---------------------------------------------------------------------------
 
-decode(?Hessian, [H|T]) ->
-    hessian:decode(H).
+decode(?Hessian, [H|T], State) ->
+    hessian:decode(H, State).
 
-encode(reply, ?Hessian, Payload) ->
-    hessian:encode(reply, Payload);
+encode(fault, ?Hessian, Reason) ->
+    hessian:encode(fault, internal_rpc_error , Reason , []).
 
-encode(call, ?Hessian, [Function|Args]) ->
-    hessian:encode(call, Function, Args).
+encode(call, ?Hessian, [Function|Args], State) ->
+    hessian:encode(call, Function, Args, State);
+
+encode(reply, ?Hessian, Payload, State) when is_tuple(Payload) ->
+    hessian:encode(reply, Payload, State);
+
+encode(reply, ?Hessian, Payload, State) ->
+    hessian:encode(reply, Payload, State).
+

@@ -86,5 +86,5 @@ with the Hessian data binding protocol.
 To run this test end to end, you will need to install the Erlang module
 for hessian into to the default OTP library path.
 
-The Hessian library can be downloaded from http://cotton.sourceforge.net/,
-version 0.1.5 or later is required.
+The Hessian library can be downloaded from http://code.google.com/p/cotton/,
+version 0.2.1 or later is required.

@@ -14,9 +14,9 @@
 %%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
 %%
 %%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-%%   Technologies Ltd.; 
+%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
+%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
+%%   Technologies Ltd.;
 %%
 %%   All Rights Reserved.
 %%
@@ -52,17 +52,27 @@ handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
     {ok, State};
 
 handle_info({content, ClassId, Properties, PropertiesBin, Payload},
-            State = #rpc_handler_state{broker_config = BrokerConfig, server_pid = ServerPid}) ->
+            State = #rpc_handler_state{broker_config = BrokerConfig,
+                                       server_pid = ServerPid,
+                                       type_mapping = TypeMapping}) ->
     #broker_config{channel_pid = ChannelPid, ticket = Ticket, exchange = X} = BrokerConfig,
     Props = #'P_basic'{correlation_id = CorrelationId,
                        reply_to = Q,
                        content_type = ContentType}
     = rabbit_framing:decode_properties(ClassId, PropertiesBin),
-    [Function,Arguments] = amqp_rpc_util:decode(ContentType, Payload),
-    %% This doesn't seem to be the right way to do this dispatch
-    FunctionName = list_to_atom(binary_to_list(Function)),
-    _Reply = gen_server:call(ServerPid, [FunctionName|Arguments]),
-    Reply = amqp_rpc_util:encode(reply, ContentType, _Reply),
+    Response = case amqp_rpc_util:decode(ContentType, Payload, TypeMapping) of
+                   {error, Encoded} ->
+                        Encoded;
+                   [Function,Arguments] ->
+                        %% This doesn't seem to be the right way to do this dispatch
+                        FunctionName = list_to_atom(binary_to_list(Function)),
+                        case gen_server:call(ServerPid, [FunctionName|Arguments]) of
+                            {'EXIT', Reason} ->
+                                amqp_rpc_util:encode(fault, ContentType, Reason);
+                            Reply ->
+                                amqp_rpc_util:encode(reply, ContentType, Reply, TypeMapping)
+                        end
+               end,
     BasicPublish = #'basic.publish'{ticket = Ticket, exchange = <<"">>,
                                     routing_key = Q,
                                     mandatory = false, immediate = false},
@@ -70,7 +80,7 @@ handle_info({content, ClassId, Properties, PropertiesBin, Payload},
                             content_type = ContentType},
     Content = #content{class_id = 60, %% TODO HARDCODED VALUE
                        properties = ReplyProps, properties_bin = 'none',
-                       payload_fragments_rev = [Reply]},
+                       payload_fragments_rev = [Response]},
     amqp_channel:cast(ChannelPid, BasicPublish, Content),
     {ok, State}.
 
