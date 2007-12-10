@@ -63,7 +63,9 @@
                         ticket,
                         exchange,
                         routing_key,
-                        queue}).
+                        bind_key,
+                        queue,
+                        realm}).
 
 
 -endif.

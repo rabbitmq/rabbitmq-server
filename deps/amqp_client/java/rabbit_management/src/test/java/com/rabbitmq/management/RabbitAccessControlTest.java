@@ -85,5 +85,22 @@ public class RabbitAccessControlTest extends TestCase {
         assertNotNull(user);
         assertEquals(testPassword, user.getPassword());
     }
+
+    public void testVhost() {
+        List vhosts = rabbitAccessControl.list_vhosts();
+        assertNotNull(vhosts);
+        assertTrue(vhosts.contains(virtualHost));
+
+    }
+
+    public void _testMap() {
+        rabbitAccessControl.add_user(testUsername, testPassword);
+        Ticket ticket = new Ticket();
+        Resource resource = new Resource();
+        resource.setVirtual_host(virtualHost);
+        ticket.setRealm_name(resource);
+        
+        rabbitAccessControl.map_user_realm(testUsername,ticket);
+    }
 }
     

@@ -14,9 +14,9 @@
 %%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
 %%
 %%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-%%   Technologies Ltd.; 
+%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
+%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
+%%   Technologies Ltd.;
 %%
 %%   All Rights Reserved.
 %%
@@ -27,7 +27,7 @@
 
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
--include_lib("mnesia/include/mnemosyne.hrl").
+-include_lib("stdlib/include/qlc.hrl").
 -include("amqp_client.hrl").
 
 -behaviour(gen_server).

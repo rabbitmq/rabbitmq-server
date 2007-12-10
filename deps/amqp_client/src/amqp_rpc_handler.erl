@@ -30,11 +30,36 @@
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
+
+-export([start/6]).
 -export([init/1, handle_info/2, terminate/2]).
+
+start(EventHandlerName, ServerName, TypeMapping, Username, Password, BrokerConfig) ->
+    case gen_event:start_link({local, EventHandlerName}) of
+        Ret = {ok, Pid} ->
+            gen_event:add_handler(EventHandlerName,
+                                  ?MODULE,
+                                  [ServerName, TypeMapping, Username, Password, BrokerConfig]),
+            Ret;
+        Other ->
+            Other
+    end.
 
 %---------------------------------------------------------------------------
 % gen_event callbacks
 %---------------------------------------------------------------------------
+init([ServerName, TypeMapping, Username, Password,
+      BC = #broker_config{exchange = X, routing_key = RoutingKey,
+                          queue = Q, realm = Realm, bind_key = BindKey}]) ->
+    Connection = amqp_connection:start(Username, Password),
+    {ChannelPid, Ticket} = test_util:setup_channel(Connection, Realm),
+    ok = test_util:setup_exchange(ChannelPid, Ticket, Q, X, BindKey),
+    BrokerConfig = BC#broker_config{channel_pid = ChannelPid,
+                                    ticket = Ticket},
+    State = #rpc_handler_state{server_name = ServerName,
+                               type_mapping = TypeMapping,
+                               broker_config = BrokerConfig},
+    init([State]);
 
 init([State = #rpc_handler_state{server_name = ServerName}]) ->
     %% TODO Think about registering gen_servers and linking them to this....

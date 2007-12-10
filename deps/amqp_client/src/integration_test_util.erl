@@ -36,6 +36,7 @@
 -export([rabbit_management_test/1]).
 -export([start_rpc_handler/2]).
 -export([start_rabbit_management/1, stop_rabbit_management/2]).
+-export([encoding_state/0]).
 
 rpc_client_test(Connection) ->
     Module = transport_agnostic_server,
@@ -80,11 +81,19 @@ start_rpc_handler(Module, BrokerConfig = #broker_config{ticket = Ticket,
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(ChannelPid, BasicConsume, Consumer).
 
 encoding_state() ->
-    TypeDef = #type_def{foreign_type = <<"com.rabbitmq.management.User">>,
-                        native_type = user,
-                        fieldnames = record_info(fields, user)},
-    {_,State} = hessian:register_type_def(TypeDef),
-    State.
+    User = #type_def{foreign_type = <<"com.rabbitmq.management.User">>,
+                     native_type = user,
+                     fieldnames = record_info(fields, user)},
+    Resource = #type_def{foreign_type = <<"com.rabbitmq.management.Resource">>,
+                         native_type = resource,
+                         fieldnames = record_info(fields, resource)},
+    Ticket = #type_def{foreign_type = <<"com.rabbitmq.management.Ticket">>,
+                       native_type = ticket,
+                       fieldnames = record_info(fields, ticket)},
+    {_,State0} = type_mapping:register_type_def(User),
+    {_,State1} = type_mapping:register_type_def(Resource, State0),
+    {_,State2} = type_mapping:register_type_def(Ticket, State1),
+    State2.
 
 rpc_util(Connection, Module, Function, Args) ->
     {ChannelPid,BrokerConfig} = setup_broker(Connection),
