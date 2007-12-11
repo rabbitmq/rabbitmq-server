@@ -18,6 +18,8 @@ public class ProxyFactory {
 
     static Logger log = Logger.getLogger(ProxyFactory.class);
 
+    private static final int TIME_OUT = 2000;
+
     public static Object createProxy(final Class clazz, final RpcClient client) {        
 
         InvocationHandler handler = new InvocationHandler() {
@@ -30,7 +32,7 @@ public class ProxyFactory {
                 output.flush();
                 AMQP.BasicProperties properties = new AMQP.BasicProperties();
                 properties.contentType = "application/x-hessian";
-                byte[] result = client.primitiveCall(properties, os.toByteArray());
+                byte[] result = client.primitiveCall(properties, os.toByteArray(), TIME_OUT);
 
                 //log.info("Result size : " + result.length);
 
@@ -39,6 +41,11 @@ public class ProxyFactory {
 //                    System.err.print((int)b + ",");
 //                }
 //                System.err.println("");
+
+                if (null == result) {
+                    throw new RuntimeException("RPC call did not yield a result");
+                }
+
 
                 Hessian2Input input = new Hessian2Input(new ByteArrayInputStream(result));
 

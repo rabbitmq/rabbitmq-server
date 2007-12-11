@@ -59,6 +59,10 @@ init([ServerName, TypeMapping, Username, Password,
     State = #rpc_handler_state{server_name = ServerName,
                                type_mapping = TypeMapping,
                                broker_config = BrokerConfig},
+    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
+                                    consumer_tag = <<"">>,
+                                    no_local = false, no_ack = true, exclusive = false, nowait = false},
+    #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(ChannelPid, BasicConsume, self()),
     init([State]);
 
 init([State = #rpc_handler_state{server_name = ServerName}]) ->
