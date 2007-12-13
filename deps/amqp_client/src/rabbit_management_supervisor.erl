@@ -29,14 +29,14 @@ init(_) ->
                                   queue = Q,
                                   realm = Realm,
                                   bind_key = BindKey},
+    Args = [ServerName,
+            TypeMapping,
+            Username,
+            Password,
+            BrokerConfig],
     RabbitManagement
-      = {rabbit_management,
-                {amqp_rpc_handler, start, [EventHandlerName,
-                                           ServerName,
-                                           TypeMapping,
-                                           Username,
-                                           Password,
-                                           BrokerConfig]},
-                 permanent, 2000, worker, [amqp_rpc_handler] },
+        = {rabbit_management,
+            {gen_server, start_link, [amqp_rpc_handler, Args, []]},
+             permanent, brutal_kill, worker, [amqp_rpc_handler]},
 
     {ok, { {one_for_one, 10, 1}, [RabbitManagement]}}.

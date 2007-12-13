@@ -25,28 +25,16 @@
 
 -module(amqp_rpc_handler).
 
--behaviour(gen_event).
+-behaviour(gen_server).
 
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
--export([start/6]).
--export([init/1, handle_info/2, terminate/2]).
-
-start(EventHandlerName, ServerName, TypeMapping, Username, Password, BrokerConfig) ->
-    case gen_event:start_link({local, EventHandlerName}) of
-        Ret = {ok, Pid} ->
-            gen_event:add_handler(EventHandlerName,
-                                  ?MODULE,
-                                  [ServerName, TypeMapping, Username, Password, BrokerConfig]),
-            Ret;
-        Other ->
-            Other
-    end.
+-export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
 %---------------------------------------------------------------------------
-% gen_event callbacks
+% gen_server callbacks
 %---------------------------------------------------------------------------
 init([ServerName, TypeMapping, Username, Password,
       BC = #broker_config{exchange = X, routing_key = RoutingKey,
@@ -72,13 +60,13 @@ init([State = #rpc_handler_state{server_name = ServerName}]) ->
     {ok, State#rpc_handler_state{server_pid = Pid}}.
 
 handle_info(shutdown, State) ->
-    {remove_handler, State};
+    terminate(shutdown, State);
 
 handle_info(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State) ->
-    {ok, State};
+    {noreply, State};
 
 handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
-    {ok, State};
+    {noreply, State};
 
 handle_info({content, ClassId, Properties, PropertiesBin, Payload},
             State = #rpc_handler_state{broker_config = BrokerConfig,
@@ -111,7 +99,20 @@ handle_info({content, ClassId, Properties, PropertiesBin, Payload},
                        properties = ReplyProps, properties_bin = 'none',
                        payload_fragments_rev = [Response]},
     amqp_channel:cast(ChannelPid, BasicPublish, Content),
-    {ok, State}.
+    {noreply, State}.
 
-terminate(Args, State) ->
+%---------------------------------------------------------------------------
+% Rest of the gen_server callbacks
+%---------------------------------------------------------------------------
+
+handle_call(Message, From, State) ->
+    {noreply, State}.
+
+handle_cast(Message, State) ->
+    {noreply, State}.
+
+terminate(Reason, State) ->
     ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    State.
