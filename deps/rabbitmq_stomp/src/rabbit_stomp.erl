@@ -254,16 +254,16 @@ process_frame(Command, Frame, State) ->
     end.
 
 send_method(Method, State = #state{channel = ChPid}) ->
-    rabbit_channel:do(ChPid, Method),
+    ok = rabbit_channel:do(ChPid, Method),
     State.
 
 send_method(Method, Properties, Body, State = #state{channel = ChPid}) ->
-    rabbit_channel:do(ChPid,
-		      Method,
-		      #content{class_id = 60, %% basic
-			       properties = Properties,
-			       properties_bin = none,
-			       payload_fragments_rev = [list_to_binary(Body)]}),
+    ok = rabbit_channel:do(ChPid,
+			   Method,
+			   #content{class_id = 60, %% basic
+				    properties = Properties,
+				    properties_bin = none,
+				    payload_fragments_rev = [list_to_binary(Body)]}),
     State.
 
 do_login({ok, Login}, {ok, Passcode}, VirtualHost, Realm, State) ->
