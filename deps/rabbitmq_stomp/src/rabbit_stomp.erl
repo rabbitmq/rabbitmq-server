@@ -9,7 +9,7 @@
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 -include("stomp_frame.hrl").
 
--record(state, {socket, session_id, channel, parse_state}).
+-record(state, {socket, session_id, channel, parse_state, ticket}).
 
 kickstart() ->
     {ok, StompListeners} = application:get_env(stomp_listeners),
@@ -72,12 +72,8 @@ init(_Parent) ->
 
 mainloop(State) ->
     receive
-	{'EXIT', _Pid, {amqp, Code, Method}} ->
-	    explain_amqp_death(Code, Method, State),
-	    done;
-	{'EXIT', Pid, Reason} ->
-	    send_error("Error", "Process ~p exited with reason:~n~p~n", [Pid, Reason], State),
-	    done;
+	E = {'EXIT', _Pid, _Reason} ->
+	    handle_exit(E, State);
 	{tcp, _Sock, Bytes} ->
 	    process_received_bytes(Bytes, State);
 	{tcp_closed, _Sock} ->
@@ -91,15 +87,28 @@ mainloop(State) ->
 	{send_command_and_shutdown, Command} ->
 	    send_reply(Command, State),
 	    done;
-	{channel_close, _ChannelNumber} ->
-	    State#state.channel ! handshake,
-	    ?MODULE:mainloop(State);
 	shutdown ->
 	    done;
 	Data ->
 	    io:format("Unknown STOMP Data: ~p~n", [Data]),
 	    ?MODULE:mainloop(State)
     end.
+
+simple_method_sync_rpc(Method, State0) ->
+    State = send_method(Method, State0),
+    receive
+	E = {'EXIT', _Pid, _Reason} ->
+	    handle_exit(E, State);
+	{send_command, Reply} ->
+	    {ok, Reply, State}
+    end.
+
+handle_exit({'EXIT', _Pid, {amqp, Code, Method}}, State) ->
+    explain_amqp_death(Code, Method, State),
+    done;
+handle_exit({'EXIT', Pid, Reason}, State) ->
+    send_error("Error", "Process ~p exited with reason:~n~p~n", [Pid, Reason], State),
+    done.
 
 process_received_bytes([], State) ->
     ?MODULE:mainloop(State);
@@ -129,9 +138,6 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
 explain_amqp_death(Code, Method, State) ->
     send_error(atom_to_list(Code), "Method was ~p~n", [Method], State).
 
-send_reply(#'channel.open_ok'{}, State) ->
-    SessionId = rabbit_gensym:gensym("session"),
-    send_frame("CONNECTED", [{"session", SessionId}], "", State#state{session_id = SessionId});
 send_reply(#'channel.close_ok'{}, State) ->
     State;
 send_reply(Command, State) ->
@@ -196,6 +202,7 @@ process_frame("CONNECT", Frame, State = #state{channel = none}) ->
     do_login(stomp_frame:header(Frame, "login"),
 	     stomp_frame:header(Frame, "passcode"),
 	     stomp_frame:header(Frame, "virtual-host", binary_to_list(DefaultVHost)),
+	     stomp_frame:header(Frame, "realm", "/data"),
 	     State);
 process_frame("DISCONNECT", _Frame, _State = #state{channel = none}) ->
     stop;
@@ -227,14 +234,29 @@ send_method(Method, Properties, Body, State = #state{channel = ChPid}) ->
 				      payload_fragments_rev = [list_to_binary(Body)]}},
     State.
 
-do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
+do_login({ok, Login}, {ok, Passcode}, VirtualHost, Realm, State) ->
     {ok, U} = rabbit_access_control:user_pass_login(list_to_binary(Login),
 						    list_to_binary(Passcode)),
     ok = rabbit_access_control:check_vhost_access(U, list_to_binary(VirtualHost)),
     ChPid = 
 	rabbit_channel:start_link(1, self(), self(), U#user.username, list_to_binary(VirtualHost)),
-    {ok, send_method(#'channel.open'{out_of_band = <<"">>}, State#state{channel = ChPid})};
-do_login(_, _, _, State) ->
+    {ok, #'channel.open_ok'{}, State1} =
+	simple_method_sync_rpc(#'channel.open'{out_of_band = <<"">>},
+			       State#state{channel = ChPid}),
+    SessionId = rabbit_gensym:gensym("session"),
+    {ok, #'access.request_ok'{ticket = Ticket}, State2} =
+	simple_method_sync_rpc(#'access.request'{realm = list_to_binary(Realm),
+						 exclusive = false,
+						 passive = true,
+						 active = true,
+						 write = true,
+						 read = true},
+			       send_frame("CONNECTED",
+					  [{"session", SessionId}],
+					  "",
+					  State1#state{session_id = SessionId})),
+    {ok, State2#state{ticket = Ticket}};
+do_login(_, _, _, _, State) ->
     {ok, send_error("Bad CONNECT", "Missing login or passcode header(s)\n", State)}.
 
 send_header_key("destination") -> true;
@@ -261,7 +283,9 @@ make_string_table(KeyFilter, [{K, V} | Rest]) ->
 	    [{list_to_binary(K), longstr, list_to_binary(V)} | make_string_table(KeyFilter, Rest)]
     end.
 
-process_command("SEND", Frame = #stomp_frame{headers = Headers, body = Body}, State) ->
+process_command("SEND",
+		Frame = #stomp_frame{headers = Headers, body = Body},
+		State = #state{ticket = Ticket}) ->
     case stomp_frame:header(Frame, "destination") of
 	{ok, RoutingKeyStr} ->
 	    ExchangeStr = stomp_frame:header(Frame, "exchange", ""),
@@ -274,7 +298,7 @@ process_command("SEND", Frame = #stomp_frame{headers = Headers, body = Body}, St
 	      reply_to = stomp_frame:binary_header(Frame, "reply-to", undefined),
 	      message_id = stomp_frame:binary_header(Frame, "message-id", undefined)
 	     },
-	    {ok, send_method(#'basic.publish'{ticket = 0,
+	    {ok, send_method(#'basic.publish'{ticket = Ticket,
 					      exchange = list_to_binary(ExchangeStr),
 					      routing_key = list_to_binary(RoutingKeyStr),
 					      mandatory = false,
@@ -305,7 +329,9 @@ process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
 			    "ACK must include a 'message-id' header\n",
 			    State)}
     end;
-process_command("SUBSCRIBE", Frame = #stomp_frame{headers = Headers}, State) ->
+process_command("SUBSCRIBE",
+		Frame = #stomp_frame{headers = Headers},
+		State = #state{ticket = Ticket}) ->
     AckMode = case stomp_frame:header(Frame, "ack", "auto") of
 		  "auto" -> auto;
 		  "client" -> client
@@ -319,14 +345,14 @@ process_command("SUBSCRIBE", Frame = #stomp_frame{headers = Headers}, State) ->
 				  list_to_binary("Q_" ++ QueueStr)
 			  end,
 	    Queue = list_to_binary(QueueStr),
-	    {ok, send_method(#'basic.consume'{ticket = 0,
+	    {ok, send_method(#'basic.consume'{ticket = Ticket,
 					      queue = Queue,
 					      consumer_tag = ConsumerTag,
 					      no_local = false,
 					      no_ack = (AckMode == auto),
 					      exclusive = false,
 					      nowait = true},
-			     send_method(#'queue.declare'{ticket = 0,
+			     send_method(#'queue.declare'{ticket = Ticket,
 							  queue = Queue,
 							  passive = false,
 							  durable = false,
