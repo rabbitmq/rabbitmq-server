@@ -197,6 +197,8 @@ process_frame("CONNECT", Frame, State = #state{channel = none}) ->
 	     stomp_frame:header(Frame, "passcode"),
 	     stomp_frame:header(Frame, "virtual-host", binary_to_list(DefaultVHost)),
 	     State);
+process_frame("DISCONNECT", _Frame, _State = #state{channel = none}) ->
+    stop;
 process_frame(_Command, _Frame, State = #state{channel = none}) ->
     {ok, send_error("Illegal command",
 		    "You must log in using CONNECT first\n",
