@@ -304,6 +304,69 @@ make_string_table(KeyFilter, [{K, V} | Rest]) ->
 	     | make_string_table(KeyFilter, Rest)]
     end.
 
+transactional(Frame) ->
+    case stomp_frame:header(Frame, "transaction") of
+	{ok, Transaction} ->
+	    {yes, Transaction};
+	not_found ->
+	    no
+    end.
+
+transactional_action(Frame, Name, Fun, State) ->
+    case transactional(Frame) of
+	{yes, Transaction} ->
+	    Fun(Transaction, State);
+	no ->
+	    {ok, send_error("Missing transaction",
+			    Name ++ " must include a 'transaction' header\n",
+			    State)}
+    end.
+
+with_transaction(Transaction, State, Fun) ->
+    case get({transaction, Transaction}) of
+	undefined ->
+	    {ok, send_error("Bad transaction",
+			    "Invalid transaction identifier: ~p~n", [Transaction],
+			    State)};
+	Actions ->
+	    Fun(Actions, State)
+    end.
+
+begin_transaction(Transaction, State) ->
+    put({transaction, Transaction}, []),
+    {ok, State}.
+
+extend_transaction(Transaction, Action, State0) ->
+    with_transaction(Transaction, State0,
+		     fun (Actions, State) ->
+			     put({transaction, Transaction}, [Action | Actions]),
+			     {ok, State}
+		     end).
+
+commit_transaction(Transaction, State0) ->
+    with_transaction(Transaction, State0,
+		     fun (Actions, State) ->
+			     FinalState = lists:foldr(fun perform_transaction_action/2,
+						      State,
+						      Actions),
+			     erase({transaction, Transaction}),
+			     {ok, FinalState}
+		     end).
+
+abort_transaction(Transaction, State0) ->
+    with_transaction(Transaction, State0,
+		     fun (_Actions, State) ->
+			     erase({transaction, Transaction}),
+			     {ok, State}
+		     end).
+
+perform_transaction_action({Method}, State) ->
+    send_method(Method, State);
+perform_transaction_action({Method, Props, Body}, State) ->
+    send_method(Method, Props, Body, State).
+
+process_command("BEGIN", Frame, State) ->
+    transactional_action(Frame, "BEGIN", fun begin_transaction/2, State);
 process_command("SEND",
 		Frame = #stomp_frame{headers = Headers, body = Body},
 		State = #state{ticket = Ticket}) ->
@@ -319,14 +382,17 @@ process_command("SEND",
 	      reply_to = stomp_frame:binary_header(Frame, "reply-to", undefined),
 	      message_id = stomp_frame:binary_header(Frame, "message-id", undefined)
 	     },
-	    {ok, send_method(#'basic.publish'{ticket = Ticket,
-					      exchange = list_to_binary(ExchangeStr),
-					      routing_key = list_to_binary(RoutingKeyStr),
-					      mandatory = false,
-					      immediate = false},
-			     Props,
-			     Body,
-			     State)};
+	    Method = #'basic.publish'{ticket = Ticket,
+				      exchange = list_to_binary(ExchangeStr),
+				      routing_key = list_to_binary(RoutingKeyStr),
+				      mandatory = false,
+				      immediate = false},
+	    case transactional(Frame) of
+		{yes, Transaction} ->
+		    extend_transaction(Transaction, {Method, Props, Body}, State);
+		no ->
+		    {ok, send_method(Method, Props, Body, State)}
+	    end;
 	not_found ->
 	    {ok, send_error("Missing destination",
 			    "SEND must include a 'destination', and optional 'exchange' header\n",
@@ -339,9 +405,14 @@ process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
 	    case string:substr(IdStr, 1, length(IdPrefix)) of
 		IdPrefix ->
 		    DeliveryTag = list_to_integer(string:substr(IdStr, length(IdPrefix) + 1)),
-		    {ok, send_method(#'basic.ack'{delivery_tag = DeliveryTag,
-						  multiple = false},
-				     State)};
+		    Method = #'basic.ack'{delivery_tag = DeliveryTag,
+					  multiple = false},
+		    case transactional(Frame) of
+			{yes, Transaction} ->
+			    extend_transaction(Transaction, {Method}, State);
+			no ->
+			    {ok, send_method(Method, State)}
+		    end;
 		_ ->
 		    rabbit_misc:die(command_invalid, 'basic.ack')
 	    end;
@@ -350,6 +421,10 @@ process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
 			    "ACK must include a 'message-id' header\n",
 			    State)}
     end;
+process_command("COMMIT", Frame, State) ->
+    transactional_action(Frame, "COMMIT", fun commit_transaction/2, State);
+process_command("ABORT", Frame, State) ->
+    transactional_action(Frame, "ABORT", fun abort_transaction/2, State);
 process_command("SUBSCRIBE",
 		Frame = #stomp_frame{headers = Headers},
 		State = #state{ticket = Ticket}) ->
