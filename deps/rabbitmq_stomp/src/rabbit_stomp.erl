@@ -205,9 +205,9 @@ send_reply(Command, Content, State) ->
 adhoc_convert_headers([]) ->
     [];
 adhoc_convert_headers([{K, longstr, V} | Rest]) ->
-    [{binary_to_list(K), binary_to_list(V)} | adhoc_convert_headers(Rest)];
+    [{"X-" ++ binary_to_list(K), binary_to_list(V)} | adhoc_convert_headers(Rest)];
 adhoc_convert_headers([{K, signedint, V} | Rest]) ->
-    [{binary_to_list(K), integer_to_list(V)} | adhoc_convert_headers(Rest)];
+    [{"X-" ++ binary_to_list(K), integer_to_list(V)} | adhoc_convert_headers(Rest)];
 adhoc_convert_headers([_ | Rest]) ->
     adhoc_convert_headers(Rest).
 
@@ -291,28 +291,17 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, Realm, State) ->
 do_login(_, _, _, _, State) ->
     {ok, send_error("Bad CONNECT", "Missing login or passcode header(s)\n", State)}.
 
-send_header_key("destination") -> true;
-send_header_key("exchange") -> true;
-send_header_key("content-type") -> true;
-send_header_key("delivery-mode") -> true;
-send_header_key("priority") -> true;
-send_header_key("correlation-id") -> true;
-send_header_key("reply-to") -> true;
-send_header_key("message-id") -> true;
-send_header_key(_) -> false.
-
-sub_header_key("destination") -> true;
-sub_header_key("ack") -> true;
-sub_header_key("id") -> true;
-sub_header_key(_) -> false.
+user_header_key("X-" ++ UserKey) -> UserKey;
+user_header_key(_) -> false.
 
 make_string_table(_KeyFilter, []) -> [];
 make_string_table(KeyFilter, [{K, V} | Rest]) ->
     case KeyFilter(K) of
-	true ->
-	    make_string_table(KeyFilter, Rest);
 	false ->
-	    [{list_to_binary(K), longstr, list_to_binary(V)} | make_string_table(KeyFilter, Rest)]
+	    make_string_table(KeyFilter, Rest);
+	NewK ->
+	    [{list_to_binary(NewK), longstr, list_to_binary(V)}
+	     | make_string_table(KeyFilter, Rest)]
     end.
 
 process_command("SEND",
@@ -323,7 +312,7 @@ process_command("SEND",
 	    ExchangeStr = stomp_frame:header(Frame, "exchange", ""),
 	    Props = #'P_basic'{
 	      content_type = stomp_frame:binary_header(Frame, "content-type", <<"text/plain">>),
-	      headers = make_string_table(fun send_header_key/1, Headers),
+	      headers = make_string_table(fun user_header_key/1, Headers),
 	      delivery_mode = stomp_frame:integer_header(Frame, "delivery-mode", undefined),
 	      priority = stomp_frame:integer_header(Frame, "priority", undefined),
 	      correlation_id = stomp_frame:binary_header(Frame, "correlation-id", undefined),
@@ -392,7 +381,7 @@ process_command("SUBSCRIBE",
 							  auto_delete = true,
 							  nowait = true,
 							  arguments =
-							    make_string_table(fun sub_header_key/1,
+							    make_string_table(fun user_header_key/1,
 									      Headers)},
 					 State))};
 	not_found ->
