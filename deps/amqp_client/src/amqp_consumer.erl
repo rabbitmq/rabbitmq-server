@@ -14,9 +14,9 @@
 %%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
 %%
 %%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-%%   Technologies Ltd.; 
+%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
+%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
+%%   Technologies Ltd.;
 %%
 %%   All Rights Reserved.
 %%

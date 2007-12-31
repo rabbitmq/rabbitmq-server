@@ -4,15 +4,15 @@ import java.io.Serializable;
 
 public class Ticket implements Serializable {
 
-    private Resource realm_name;
+    private String realm_name;
     
     private boolean passive_flag, active_flag, write_flag, read_flag;
 
-    public Resource getRealm_name() {
+    public String getRealm_name() {
         return realm_name;
     }
 
-    public void setRealm_name(Resource realm_name) {
+    public void setRealm_name(String realm_name) {
         this.realm_name = realm_name;
     }
 

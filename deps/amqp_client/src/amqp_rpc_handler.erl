@@ -77,6 +77,11 @@ handle_info({content, ClassId, Properties, PropertiesBin, Payload},
                        reply_to = Q,
                        content_type = ContentType}
     = rabbit_framing:decode_properties(ClassId, PropertiesBin),
+
+    io:format("ABOUT 2---------> ~p / ~p ~n",[Payload,TypeMapping]),
+    T = amqp_rpc_util:decode(ContentType, Payload, TypeMapping),
+    io:format("---------> ~p~n",[T]),
+
     Response = case amqp_rpc_util:decode(ContentType, Payload, TypeMapping) of
                    {error, Encoded} ->
                         Encoded;

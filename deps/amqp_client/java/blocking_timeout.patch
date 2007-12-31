@@ -1,0 +1,115 @@
+diff -r 9cef1aaf0c99 src/com/rabbitmq/client/RpcClient.java
+--- a/src/com/rabbitmq/client/RpcClient.java	Mon Dec 03 10:38:20 2007 +0000
++++ b/src/com/rabbitmq/client/RpcClient.java	Thu Dec 27 14:41:02 2007 +0000
+@@ -63,6 +63,11 @@ public class RpcClient {
+     private String _replyQueue;
+     /** Consumer attached to our reply queue */
+     private DefaultConsumer _consumer;
++
++    /**
++     * Default timeout length in milliseconds for an RPC to timeout
++     */
++    private static final int RPC_TIMEOUT = 10000;
+ 
+     /**
+      * Construct a new RpcClient that will communicate on the given
+@@ -162,8 +167,8 @@ public class RpcClient {
+     }
+ 
+     public byte[] primitiveCall(byte[] message)
+-        throws IOException, ShutdownSignalException {
+-        return primitiveCall(null, message);
++            throws IOException, ShutdownSignalException, InterruptedException {
++        return primitiveCall(null, message, RPC_TIMEOUT);
+     }
+ 
+     /**
+@@ -173,9 +178,8 @@ public class RpcClient {
+      * @throws ShutdownSignalException if the connection dies during our wait
+      * @throws IOException if an error is encountered
+      */
+-    public byte[] primitiveCall(AMQP.BasicProperties props, byte[] message)
+-        throws IOException, ShutdownSignalException
+-    {
++    public byte[] primitiveCall(AMQP.BasicProperties props, byte[] message, int timeout)
++            throws IOException, ShutdownSignalException, InterruptedException {
+         checkConsumer();
+         BlockingCell<Object> k = new BlockingCell<Object>();
+         synchronized (_continuationMap) {
+@@ -194,7 +198,7 @@ public class RpcClient {
+             _continuationMap.put(replyId, k);
+         }
+         publish(props, message);
+-        Object reply = k.uninterruptibleGet();
++        Object reply = k.get(timeout);
+         if (reply instanceof ShutdownSignalException) {
+             ShutdownSignalException sig = (ShutdownSignalException) reply;
+             ShutdownSignalException wrapper =
+@@ -216,8 +220,7 @@ public class RpcClient {
+      * @throws ShutdownSignalException if the connection dies during our wait
+      */
+     public String stringCall(String message)
+-        throws IOException, ShutdownSignalException
+-    {
++            throws IOException, ShutdownSignalException, InterruptedException {
+         return new String(primitiveCall(message.getBytes()));
+     }
+ 
+@@ -234,8 +237,7 @@ public class RpcClient {
+      * @throws IOException if an error is encountered
+      */
+     public Map<String, Object> mapCall(Map<String, Object> message)
+-        throws IOException, ShutdownSignalException
+-    {
++            throws IOException, ShutdownSignalException, InterruptedException {
+         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+         MethodArgumentWriter writer = new MethodArgumentWriter(new DataOutputStream(buffer));
+         writer.writeTable(message);
+@@ -259,8 +261,7 @@ public class RpcClient {
+      * @throws IOException if an error is encountered
+      */
+     public Map<String, Object> mapCall(Object[] keyValuePairs)
+-        throws IOException, ShutdownSignalException
+-    {
++            throws IOException, ShutdownSignalException, InterruptedException {
+         Map<String, Object> message = new HashMap<String, Object>();
+         for (int i = 0; i < keyValuePairs.length; i += 2) {
+             message.put((String) keyValuePairs[i], keyValuePairs[i + 1]);
+diff -r 9cef1aaf0c99 src/com/rabbitmq/tools/jsonrpc/JsonRpcClient.java
+--- a/src/com/rabbitmq/tools/jsonrpc/JsonRpcClient.java	Mon Dec 03 10:38:20 2007 +0000
++++ b/src/com/rabbitmq/tools/jsonrpc/JsonRpcClient.java	Thu Dec 27 14:41:02 2007 +0000
+@@ -123,8 +123,10 @@ public class JsonRpcClient extends RpcCl
+             replyStr = this.stringCall(requestStr);
+         } catch(ShutdownSignalException ex) {
+             throw new IOException(ex.getMessage()); // wrap, re-throw
++        } catch (InterruptedException e) {
++            throw new RuntimeException(e);
+         }
+-        
++
+         //System.out.println(requestStr + " --->\n---> " + replyStr);
+ 	Map<String, Object> map = (Map) (new JSONReader().read(replyStr));
+ 	return checkReply(map);
+diff -r 9cef1aaf0c99 src/com/rabbitmq/utility/BlockingCell.java
+--- a/src/com/rabbitmq/utility/BlockingCell.java	Mon Dec 03 10:38:20 2007 +0000
++++ b/src/com/rabbitmq/utility/BlockingCell.java	Thu Dec 27 14:41:02 2007 +0000
+@@ -57,6 +57,19 @@ public class BlockingCell<T> {
+     }
+ 
+     /**
++     * Same as the get
++     * @param timeout
++     * @return
++     * @throws InterruptedException
++     */
++    public synchronized T get(int timeout) throws InterruptedException {
++        if (!_filled) {
++            wait(timeout);
++        }
++        return _value;
++    }
++
++    /**
+      * As get(), but catches and ignores InterruptedException, retrying until a value appears.
+      * @return the waited-for value
+      */

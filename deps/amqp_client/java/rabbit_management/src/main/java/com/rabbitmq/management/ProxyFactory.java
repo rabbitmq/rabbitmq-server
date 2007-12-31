@@ -1,15 +1,13 @@
 package com.rabbitmq.management;
 
-import com.caucho.hessian.io.Hessian2Input;
-import com.caucho.hessian.io.Hessian2Output;
-import com.caucho.hessian.io.HessianInput;
-import com.caucho.hessian.io.HessianServiceException;
+import com.caucho.hessian.io.*;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.RpcClient;
 import org.apache.log4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.PrintWriter;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -34,13 +32,20 @@ public class ProxyFactory {
                 properties.contentType = "application/x-hessian";
                 byte[] result = client.primitiveCall(properties, os.toByteArray(), TIME_OUT);
 
-                //log.info("Result size : " + result.length);
 
-//                System.err.println("-------------------");
-//                for(byte b : result) {
-//                    System.err.print((int)b + ",");
-//                }
-//                System.err.println("");
+                ByteArrayInputStream is = new ByteArrayInputStream(os.toByteArray());
+                HessianDebugInputStream dis = new HessianDebugInputStream(is, new PrintWriter(System.err));
+
+                int ch;
+                while ((ch = dis.read()) >= 0) {}
+
+                byte[] b2 = os.toByteArray();
+                for (byte b : b2) {
+                    System.err.print((b & 0xff) + ",");
+                }
+
+                System.err.println();
+                System.err.println("-------------");
 
                 if (null == result) {
                     throw new RuntimeException("RPC call did not yield a result");

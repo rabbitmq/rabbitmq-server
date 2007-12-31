@@ -96,10 +96,7 @@ public class RabbitAccessControlTest extends TestCase {
     public void _testMap() {
         rabbitAccessControl.add_user(testUsername, testPassword);
         Ticket ticket = new Ticket();
-        Resource resource = new Resource();
-        resource.setVirtual_host(virtualHost);
-        ticket.setRealm_name(resource);
-        
+        ticket.setRealm_name(realm);        
         rabbitAccessControl.map_user_realm(testUsername,ticket);
     }
 }

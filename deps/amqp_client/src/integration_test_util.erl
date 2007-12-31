@@ -30,7 +30,6 @@
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include_lib("hessian/include/hessian.hrl").
 -include("amqp_client.hrl").
--include("amqp_client.hrl").
 
 -export([rpc_client_test/1]).
 -export([rabbit_management_test/1]).
