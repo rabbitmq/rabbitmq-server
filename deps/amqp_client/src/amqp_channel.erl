@@ -90,6 +90,9 @@ cast(Channel, Method, Content) ->
 %% because the pid of this amqp_channel needs to be passed into the
 %% initialization of that direct channel process, hence the resulting
 %% direct channel pid can only be post-registered.
+
+%% Have another look at this: This is also being used to register a writer
+%% pid in the network case as well.........code reuse ;-)
 register_direct_peer(Channel, Peer) ->
     gen_server:cast(Channel, {register_direct_peer, Peer} ).
 
@@ -97,7 +100,9 @@ register_direct_peer(Channel, Peer) ->
 % Internal plumbing
 %---------------------------------------------------------------------------
 
-rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer, pending_rpc = PendingRpc}) ->
+rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
+                                                  pending_rpc = PendingRpc,
+                                                  do2 = Do2}) ->
     if
         is_pid(PendingRpc) ->
             exit(illegal_pending_rpc);
@@ -105,7 +110,8 @@ rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer, pending_r
             ok
     end,
     NewState = State#channel_state{pending_rpc = From},
-    Writer ! { self(), Method },
+    %%-- Writer ! { self(), Method },
+    Do2(Writer,Method),
     {noreply, NewState}.
 
 rpc_bottom_half(Reply, State = #channel_state{pending_rpc = From}) ->
@@ -190,13 +196,15 @@ handle_call({basic_consume, Method, Consumer}, From, State) ->
     rpc_top_half(Method, From, NewState).
 
 %% Standard implementation of the cast/2 command
-handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer}) ->
-    Writer ! { self(), Method },
+handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer, do2 = Do2}) ->
+    %%-- Writer ! { self(), Method },
+    Do2(Writer, Method),
     {noreply, State};
 
 %% Standard implementation of the cast/3 command
-handle_cast({cast, Method, Content}, State = #channel_state{writer_pid = Writer}) ->
-    Writer ! { self(), Method, Content },
+handle_cast({cast, Method, Content}, State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
+    %%-- Writer ! { self(), Method, Content },
+    Do3(Writer, Method, Content),
     {noreply, State};
 
 %% Registers the direct channel peer when using the direct client
@@ -279,32 +287,40 @@ handle_info( {send_command_and_shutdown, Method}, State) ->
     rpc_bottom_half(Method, NewState),
     {stop, shutdown, NewState};
 
+%% NEW API
 %% Handles the delivery of a message from a direct channel
-handle_info( {deliver, ConsumerTag, AckRequired, QName, QPid, Message},
-             State = #channel_state{next_delivery_tag = DeliveryTag, tx = Tx}) ->
-    #basic_message{content = Content,
-                   persistent_key = PersistentKey} = Message,
-    amqp_direct_driver:acquire_lock(AckRequired, {Tx, DeliveryTag, ConsumerTag, QName, QPid, Message}),
-    {noreply, _NewState} = handle_basic_deliver(ConsumerTag,Content, State),
-    amqp_direct_driver:release_lock(AckRequired, {QName, QPid, PersistentKey}),
-    NewState = _NewState#channel_state{next_delivery_tag = DeliveryTag + 1},
-    {noreply, NewState};
+handle_info( {send_command_and_notify, Q, ChPid, MethodRecord, Content}, State) ->
+    io:format("Got new send_command_and_notify~n"),
+    {noreply, State};
 
-handle_info( {get_ok, MessageCount, AckRequired, QName, QPid, Message},
-             State = #channel_state{next_delivery_tag = DeliveryTag, tx = Tx}) ->
-    #basic_message{content = Content,
-                   exchange_name = X,
-                   routing_key = RoutingKey,
-                   persistent_key = PersistentKey,
-                   redelivered = Redelivered}  = Message,
-    Method = #'basic.get_ok'{delivery_tag = DeliveryTag,
-                             redelivered = Redelivered,
-                             exchange = X,
-                             routing_key = RoutingKey,
-                             message_count = MessageCount},
-    {noreply, _NewState} = rpc_bottom_half( {Method, Content}, State),
-    NewState = State#channel_state{next_delivery_tag = DeliveryTag + 1},
-    {noreply, NewState};
+%% OLD API
+
+%% Handles the delivery of a message from a direct channel
+%% handle_info( {deliver, ConsumerTag, AckRequired, QName, QPid, Message},
+%%              State = #channel_state{next_delivery_tag = DeliveryTag, tx = Tx}) ->
+%%     #basic_message{content = Content,
+%%                    persistent_key = PersistentKey} = Message,
+%%     amqp_direct_driver:acquire_lock(AckRequired, {Tx, DeliveryTag, ConsumerTag, QName, QPid, Message}),
+%%     {noreply, _NewState} = handle_basic_deliver(ConsumerTag,Content, State),
+%%     amqp_direct_driver:release_lock(AckRequired, {QName, QPid, PersistentKey}),
+%%     NewState = _NewState#channel_state{next_delivery_tag = DeliveryTag + 1},
+%%     {noreply, NewState};
+%%
+%% handle_info( {get_ok, MessageCount, AckRequired, QName, QPid, Message},
+%%              State = #channel_state{next_delivery_tag = DeliveryTag, tx = Tx}) ->
+%%     #basic_message{content = Content,
+%%                    exchange_name = X,
+%%                    routing_key = RoutingKey,
+%%                    persistent_key = PersistentKey,
+%%                    redelivered = Redelivered}  = Message,
+%%     Method = #'basic.get_ok'{delivery_tag = DeliveryTag,
+%%                              redelivered = Redelivered,
+%%                              exchange = X,
+%%                              routing_key = RoutingKey,
+%%                              message_count = MessageCount},
+%%     {noreply, _NewState} = rpc_bottom_half( {Method, Content}, State),
+%%     NewState = State#channel_state{next_delivery_tag = DeliveryTag + 1},
+%%     {noreply, NewState};
 
 handle_info(shutdown, State ) ->
     NewState = channel_cleanup(State),

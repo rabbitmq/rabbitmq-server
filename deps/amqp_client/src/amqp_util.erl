@@ -49,7 +49,66 @@ message_payload(Message) ->
     (Message#basic_message.content)#content.payload_fragments_rev.
 
 decode_method(Method, Content) ->
-    case rabbit_framing_channel:finish_reading_method(Method,Content) of
+    case finish_reading_method(Method,Content) of
         {ok, Method2, none}     -> Method2;
         {ok, Method2, Content2} -> {Method2, Content2}
     end.
+
+finish_reading_method(MethodName, FieldsBin) ->
+    {ok,
+     rabbit_framing:decode_method_fields(MethodName, FieldsBin),
+     case rabbit_framing:method_has_content(MethodName) of
+         true ->
+             case catch collect_content(MethodName) of
+                 {'EXIT', Reason} ->
+                     rabbit_log:info("Syntax error collecting method content: ~p~n", [Reason]),
+                     rabbit_misc:die(syntax_error, MethodName);
+                 Result -> Result
+             end;
+         false ->
+             none
+     end}.
+
+%%--------------------------------------------------------------------
+
+read_frame() ->
+    receive
+        terminate ->
+            %% doing this, rather than terminating normally, ensures
+            %% that our linked processes exit too
+            exit(terminating);
+        {force_termination, Channel} ->
+            rabbit_log:warning("forcing termination of channel ~p~n",
+                               [Channel]),
+            exit(normal);
+        {frame, _Channel, Frame, AckPid} ->
+            AckPid ! ack,
+            Frame;
+        Other -> unexpected_message(Other)
+    end.
+
+collect_content(MethodName) ->
+    {ClassId, _MethodId} = rabbit_framing:method_id(MethodName),
+    case read_frame() of
+        {content_header, HeaderClassId, 0, BodySize, PropertiesBin}
+        when HeaderClassId == ClassId ->
+            #content{class_id = ClassId,
+                     properties = none,
+                     properties_bin = PropertiesBin,
+                     payload_fragments_rev = collect_content_payload(BodySize, [])};
+        _ -> rabbit_misc:die(frame_error)
+    end.
+
+collect_content_payload(0, Acc) ->
+    Acc;
+collect_content_payload(RemainingByteCount, Acc) ->
+    case read_frame() of
+        {content_body, FragmentBin} ->
+            collect_content_payload(RemainingByteCount - size(FragmentBin), [FragmentBin | Acc]);
+        _ -> rabbit_misc:die(frame_error)
+    end.
+
+unexpected_message(Msg) ->
+    rabbit_log:error("Channel received unexpected message: ~p~n", [Msg]),
+    exit({unexpected_channel_message, Msg}).
+
