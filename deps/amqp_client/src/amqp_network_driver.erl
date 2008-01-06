@@ -42,18 +42,14 @@ handshake(ConnectionPid, ConnectionState = #connection_state{serverhost = Host})
         {ok, Sock} ->
             ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
             ReaderPid = spawn_link(?MODULE, start_reader, [Sock, ConnectionPid]),
-            %%WriterPid = spawn_link(?MODULE, start_writer, [Sock, ConnectionPid]),
-            Connection = #connection{frame_max = ?FRAME_MIN_SIZE},
-            WriterPid = rabbit_writer:start(Sock, 0, Connection),
+            WriterPid = start_writer(Sock, 0),
             ConnectionState1 = ConnectionState#connection_state{writer_pid = WriterPid,
                                                                 reader_pid = ReaderPid,
                                                                 sock = Sock},
             ConnectionState2 = network_handshake(WriterPid, ConnectionState1),
 
             #connection_state{heartbeat = Heartbeat} = ConnectionState2,
-            %rabbit_channel0:start_heartbeat_sender(Sock, Heartbeat),
             rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
-            io:format("2-AFTER NET SHAKE~n"),
             ConnectionState2;
         {error, Reason} ->
             io:format("Could not start the network driver: ~p~n",[Reason]),
@@ -66,15 +62,12 @@ handshake(ConnectionPid, ConnectionState = #connection_state{serverhost = Host})
 %% process messages for a particular channel
 open_channel({ChannelNumber, OutOfBand}, ChannelPid,
              State = #connection_state{reader_pid = ReaderPid,
-                                       %writer_pid = WriterPid,
                                        sock = Sock}) ->
     ReaderPid ! {ChannelPid, ChannelNumber},
     WriterPid = start_writer(Sock, ChannelNumber),
     amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
-    %WriterPid ! {ChannelPid, ChannelNumber}.
 
 close_connection(Close = #'connection.close'{}, From, #connection_state{writer_pid = Writer}) ->
-    %% Writer ! {self(), Close},
     rabbit_writer:send_command_and_shutdown(Writer, Close),
     receive
         {frame, Channel, {method,'connection.close_ok',<<>>}, ReaderPid } ->
@@ -88,24 +81,14 @@ close_connection(Close = #'connection.close'{}, From, #connection_state{writer_p
             exit(timeout_on_exit)
     end.
 
-do(Writer, Method) ->
-    io:format("Sending method: ~p~n",[Method]),
-    rabbit_writer:send_command(Writer, Method).
-
-do(Writer, Method, Content) ->
-    io:format("Sending method: ~p with cotent ~p~n",[Method,Content]),
-    rabbit_writer:send_command(Writer, Method, Content).
+do(Writer, Method) -> rabbit_writer:send_command(Writer, Method).
+do(Writer, Method, Content) -> rabbit_writer:send_command(Writer, Method, Content).
 
 %---------------------------------------------------------------------------
 % AMQP message sending and receiving
 %---------------------------------------------------------------------------
 
-%% send(Method, #connection_state{writer_pid = Writer}) ->
-%%     %%Writer ! { self(), Method }.
-%%     rabbit_channel:do(Writer, Method).
-
 send_frame(Channel, Method) ->
-    io:format("Got frame ~p for channel ~p~n",[Method,Channel]),
     ChPid = resolve_receiver(Channel),
     ChPid ! {frame, Channel, Method, self() }.
 
@@ -126,24 +109,22 @@ network_handshake(Writer, State = #connection_state{ vhostpath = VHostPath }) ->
                         server_properties = Properties,
                         mechanisms = Mechansims,
                         locales = Locales } = recv(),
-    %send(start_ok(State), State),
-    rabbit_writer:send_command(Writer, start_ok(State) ),
+    do(Writer, start_ok(State)),
     #'connection.tune'{channel_max = ChannelMax,
                        frame_max = FrameMax,
                        heartbeat = Heartbeat} = recv(),
     TuneOk = #'connection.tune_ok'{channel_max = ChannelMax,
                                    frame_max = FrameMax,
                                    heartbeat = Heartbeat},
-    rabbit_writer:send_command(Writer, TuneOk),
-    %send(TuneOk, State),
+    do(Writer, TuneOk),
+
     %% This is something where I don't understand the protocol,
     %% What happens if the following command reaches the server before the tune ok?
     %% Or doesn't get sent at all?
     ConnectionOpen = #'connection.open'{virtual_host = VHostPath,
                                         capabilities = <<"">>,
                                         insist = false },
-    rabbit_writer:send_command(Writer, ConnectionOpen),
-    %send(ConnectionOpen, State),
+    do(Writer, ConnectionOpen),
     #'connection.open_ok'{known_hosts = KnownHosts} = recv(),
     %% TODO What should I do with the KnownHosts?
     State#connection_state{channel_max = ChannelMax, heartbeat = Heartbeat}.
@@ -169,10 +150,6 @@ start_writer(Sock, Channel) ->
     Connection = #connection{frame_max = ?FRAME_MIN_SIZE},
     rabbit_writer:start(Sock, Channel, Connection).
 
-%% start_writer(Sock, ConnectionPid) ->
-%%     put({chpid, ConnectionPid}, {channel, 0}),
-%%     writer_loop(Sock).
-
 reader_loop(Sock, Length) ->
     case gen_tcp:recv(Sock, Length, -1) of
     {ok, <<Type:8,Channel:16,PayloadSize:32>>} ->
@@ -188,35 +165,6 @@ reader_loop(Sock, Length) ->
         exit(R)
     end,
     gen_tcp:close(Sock).
-
-%% writer_loop(Sock) ->
-%%     receive
-%%     stop ->
-%%         exit(normal);
-%%     {Sender, Channel} when is_integer(Channel) ->
-%%         %% TODO Think about not using the process dictionary
-%%         writer_loop(Sock);
-%%     {Sender, Method} when is_pid(Sender) ->
-%%         Channel = resolve_channel(Sender),
-%%         rabbit_writer:internal_send_command(Sock, Channel, Method),
-%%         writer_loop(Sock);
-%%     %% This captures the consumer pid of a basic.consume method,
-%%     %% probably a bit of a hack to do this at this level,
-%%     %% maybe better off in higher level code
-%%     {Sender, Method, Content} when is_pid(Sender) and is_pid(Content) ->
-%%         Channel = resolve_channel(Sender),
-%%         rabbit_writer:internal_send_command(Sock, Channel, Method),
-%%         writer_loop(Sock);
-%%     {Sender, Method, Content} when is_pid(Sender) ->
-%%         Channel = resolve_channel(Sender),
-%%         FrameMax = 131072, %% set to zero once QPid fix their negotiation
-%%         rabbit_writer:internal_send_command(Sock, Channel, Method, Content, FrameMax),
-%%         writer_loop(Sock);
-%%     Other ->
-%%         %% TODO This should get deleted
-%%         io:format("Deal with this old chap ~p~n",[Other]),
-%%         writer_loop(Sock)
-%%     end.
 
 handle_frame(Type, Channel, Payload) ->
     case rabbit_reader:analyze_frame(Type, Payload) of
@@ -258,13 +206,4 @@ resolve_receiver(Channel) ->
                io:format("Could not resolve receiver from channel ~p~n",[Channel]),
                exit(unknown_channel)
             end
-   end.
-
-resolve_channel(Sender) ->
-    case get({chpid, Sender}) of
-       {channel, Channel} ->
-           Channel;
-       undefined ->
-            io:format("Could not resolve channel from sender ~p~n",[Sender]),
-            exit(unknown_sender)
    end.

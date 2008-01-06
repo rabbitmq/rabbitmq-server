@@ -110,7 +110,6 @@ rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
             ok
     end,
     NewState = State#channel_state{pending_rpc = From},
-    %%-- Writer ! { self(), Method },
     Do2(Writer,Method),
     {noreply, NewState}.
 
@@ -197,13 +196,11 @@ handle_call({basic_consume, Method, Consumer}, From, State) ->
 
 %% Standard implementation of the cast/2 command
 handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer, do2 = Do2}) ->
-    %%-- Writer ! { self(), Method },
     Do2(Writer, Method),
     {noreply, State};
 
 %% Standard implementation of the cast/3 command
 handle_cast({cast, Method, Content}, State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
-    %%-- Writer ! { self(), Method, Content },
     Do3(Writer, Method, Content),
     {noreply, State};
 
@@ -213,7 +210,6 @@ handle_cast({register_direct_peer, Peer}, State) ->
     {noreply, NewState};
 
 handle_cast({notify_sent, Peer}, State) ->
-    %% TODO What should we do here?
     {noreply, State}.
 
 %---------------------------------------------------------------------------
@@ -290,37 +286,9 @@ handle_info( {send_command_and_shutdown, Method}, State) ->
 %% NEW API
 %% Handles the delivery of a message from a direct channel
 handle_info( {send_command_and_notify, Q, ChPid, MethodRecord, Content}, State) ->
-    io:format("Got new send_command_and_notify~n"),
+    %% TODO what happens here???
+    io:format("Got new send_command_and_notify, don't know what to do here ~n"),
     {noreply, State};
-
-%% OLD API
-
-%% Handles the delivery of a message from a direct channel
-%% handle_info( {deliver, ConsumerTag, AckRequired, QName, QPid, Message},
-%%              State = #channel_state{next_delivery_tag = DeliveryTag, tx = Tx}) ->
-%%     #basic_message{content = Content,
-%%                    persistent_key = PersistentKey} = Message,
-%%     amqp_direct_driver:acquire_lock(AckRequired, {Tx, DeliveryTag, ConsumerTag, QName, QPid, Message}),
-%%     {noreply, _NewState} = handle_basic_deliver(ConsumerTag,Content, State),
-%%     amqp_direct_driver:release_lock(AckRequired, {QName, QPid, PersistentKey}),
-%%     NewState = _NewState#channel_state{next_delivery_tag = DeliveryTag + 1},
-%%     {noreply, NewState};
-%%
-%% handle_info( {get_ok, MessageCount, AckRequired, QName, QPid, Message},
-%%              State = #channel_state{next_delivery_tag = DeliveryTag, tx = Tx}) ->
-%%     #basic_message{content = Content,
-%%                    exchange_name = X,
-%%                    routing_key = RoutingKey,
-%%                    persistent_key = PersistentKey,
-%%                    redelivered = Redelivered}  = Message,
-%%     Method = #'basic.get_ok'{delivery_tag = DeliveryTag,
-%%                              redelivered = Redelivered,
-%%                              exchange = X,
-%%                              routing_key = RoutingKey,
-%%                              message_count = MessageCount},
-%%     {noreply, _NewState} = rpc_bottom_half( {Method, Content}, State),
-%%     NewState = State#channel_state{next_delivery_tag = DeliveryTag + 1},
-%%     {noreply, NewState};
 
 handle_info(shutdown, State ) ->
     NewState = channel_cleanup(State),

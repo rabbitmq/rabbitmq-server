@@ -62,8 +62,7 @@ start(User, Password, Host) ->
 %% Opens a channel without having to specify a channel number.
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
-open_channel( {Pid, Mode} ) ->
-    open_channel( {Pid, Mode}, <<>>, "").
+open_channel( {Pid, Mode} ) -> open_channel( {Pid, Mode}, <<>>, "").
 
 %% Opens a channel with a specific channel number.
 %% This function assumes that an AMQP connection (networked or direct)

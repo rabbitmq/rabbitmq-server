@@ -30,7 +30,6 @@
 
 -export([handshake/2, open_channel/3, close_connection/3]).
 -export([do/2,do/3]).
-%%-export([acquire_lock/2, release_lock/2]).
 
 %---------------------------------------------------------------------------
 % Driver API Methods
@@ -51,28 +50,11 @@ open_channel({Channel,OutOfBand}, ChannelPid, State = #connection_state{username
     %% I think this is because of the binary guard on rabbit_realm:access_request/3
     UserBin = amqp_util:binary(User),
     ReaderPid = WriterPid = ChannelPid,
-    %Peer = spawn_link(rabbit_channel, start, [Channel, ReaderPid, WriterPid, UserBin, VHost, fun read_method/0]),
     Peer = rabbit_channel:start_link(ReaderPid, WriterPid, UserBin, VHost),
     amqp_channel:register_direct_peer(ChannelPid, Peer),
     State.
-
-%% read_method() ->
-%%     receive
-%%         {Sender, Method} ->
-%%             {ok, Method, <<>>};
-%%         {Sender, Method, Content} ->
-%%             {ok, Method, Content}
-%%     end.
 
 close_connection(Close, From, State) -> ok.
 
 do(Writer, Method) -> rabbit_channel:do(Writer, Method).
 do(Writer, Method, Content) -> rabbit_channel:do(Writer, Method, Content).
-
-%% acquire_lock(AckRequired, {Tx, DeliveryTag, ConsumerTag,QName, QPid, Message}) ->
-%%     rabbit_writer:maybe_lock_message(AckRequired,{Tx, DeliveryTag, ConsumerTag,QName, QPid, Message}).
-%%
-%% release_lock(AckRequired, {QName, QPid, PersistentKey}) ->
-%%     rabbit_amqqueue:notify_sent(QPid),
-%%     ok = rabbit_writer:auto_acknowledge(AckRequired, QName, PersistentKey).
-
