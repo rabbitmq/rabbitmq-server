@@ -46,8 +46,7 @@
                         pending_consumer,
                         closing = false,
                         consumers = dict:new(),
-                        next_delivery_tag = 0,
-                        tx} ).
+                        next_delivery_tag = 0 }).
 
 -record(rpc_client_state, {broker_config,
                            consumer_tag,

@@ -176,13 +176,6 @@ handle_channel_close_ok(ChannelCloseOk = #'channel.close_ok'{}, State) ->
 init([InitialState]) ->
     {ok, InitialState}.
 
-%% This allows the direct channel to pass a transaction into this channel
-%% This should only happen during initialization, so therefore there shouldn't
-%% be a pending RPC and hence doesn't use the rpc_bottom_half mechansim.
-handle_call({set_transaction, Tx}, From, State) ->
-    gen_server:reply(From, ok),
-    {noreply, State#channel_state{tx = Tx}};
-
 %% Standard implementation of top half of the call/2 command
 %% Do not accept any further RPCs when the channel is about to close
 handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
