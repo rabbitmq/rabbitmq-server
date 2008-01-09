@@ -174,6 +174,11 @@ handle_method(#'basic.deliver'{consumer_tag = ConsumerTag}, Content, State) ->
 handle_method('basic.consume_ok', ConsumerTag, State) ->
     handle_method(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State);
 
+handle_method(BasicReturn = #'basic.return'{}, Content, State) ->
+    %% TODO This is unimplemented because I don't know how to
+    %% resolve the originator of the message
+    {noreply, State};
+
 handle_method(Method, Content, State) ->
     rpc_bottom_half( {Method, Content} , State).
 

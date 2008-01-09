@@ -36,6 +36,10 @@ basic_get_test() ->
     Connection = amqp_connection:start("guest", "guest"),
     test_util:basic_get_test(Connection).
 
+basic_return_test() ->
+    Connection = amqp_connection:start("guest", "guest"),
+    test_util:basic_return_test(Connection).
+
 basic_consume_test() ->
     Connection = amqp_connection:start("guest", "guest"),
     test_util:basic_consume_test(Connection).

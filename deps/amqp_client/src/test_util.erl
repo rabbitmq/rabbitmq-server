@@ -32,6 +32,9 @@
 
 -compile([export_all]).
 
+-record(publish,{q, x, routing_key, bind_key, payload,
+                 mandatory = false, immediate = false}).
+
 %%%%
 %
 % This is an example of how the client interaction should work
@@ -98,6 +101,21 @@ basic_get_test(Connection) ->
     ?assertMatch(<<>>, Content2),
     teardown(Connection, Channel).
 
+basic_return_test(Connection) ->
+    Realm = <<"/data">>,
+    Publish = #publish{routing_key = <<"x.b.c.d">>,
+                       q = <<"a.b.c">>,
+                       x = <<"x">>,
+                       bind_key = <<"a.b.c.*">>,
+                       payload = <<"qwerty">>,
+                       mandatory = true},
+    {Channel, Ticket} = setup_channel(Connection, Realm),
+    setup_publish(Channel, Ticket, Publish),
+    receive
+        nothing -> ok
+    after 2000 -> ok
+    end.
+
 basic_ack_test(Connection) ->
     {Channel, Ticket, Q} = setup_publish(Connection),
     BasicGet = #'basic.get'{ticket = Ticket, queue = Q, no_ack = false},
@@ -130,16 +148,25 @@ basic_consume_test(Connection) ->
 
 setup_publish(Connection) ->
     Realm = <<"/data">>,
-    Q = <<"a.b.c">>,
-    X = <<"x">>,
-    BindKey = <<"a.b.c.*">>,
-    RoutingKey = <<"a.b.c.d">>,
-    Payload = <<"foobar">>,
+    Publish = #publish{routing_key = <<"a.b.c.d">>,
+                       q = <<"a.b.c">>,
+                       x = <<"x">>,
+                       bind_key = <<"a.b.c.*">>,
+                       payload = <<"foobar">>
+                       },
     {Channel, Ticket} = setup_channel(Connection, Realm),
+    setup_publish(Channel, Ticket, Publish).
+
+setup_publish(Channel, Ticket, #publish{routing_key = RoutingKey,
+                                        q = Q, x = X,
+                                        bind_key = BindKey, payload = Payload,
+                                        mandatory = Mandatory,
+                                        immediate = Immediate}) ->
     ok = setup_exchange(Channel, Ticket, Q, X, BindKey),
     BasicPublish = #'basic.publish'{ticket = Ticket, exchange = X,
                                     routing_key = RoutingKey,
-                                    mandatory = false, immediate = false},
+                                    mandatory = Mandatory,
+                                    immediate = Immediate},
     Content = #content{class_id = 60, %% TODO HARDCODED VALUE
          properties = amqp_util:basic_properties(), %% either 'none', or a decoded record/tuple
          properties_bin = 'none', %% either 'none', or an encoded properties amqp_util:binary
