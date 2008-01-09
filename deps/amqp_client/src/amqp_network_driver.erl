@@ -183,14 +183,7 @@ handle_frame(Type, Channel, Payload) ->
         io:format("Socket Reader exiting normally ~n"),
         exit(normal);
     AnalyzedFrame ->
-        send_frame(Channel, AnalyzedFrame),
-        %% We need the ack for flow control. See bug 16944.
-        receive
-            ack ->
-                ok;
-            {'EXIT', Pid, Reason} ->
-                exit(Reason)
-        end
+        send_frame(Channel, AnalyzedFrame)
     end.
 
 resolve_receiver(Channel) ->
