@@ -45,6 +45,7 @@
                         pending_rpc,
                         pending_consumer,
                         closing = false,
+                        return_handler_pid,
                         consumers = dict:new()}).
 
 -record(rpc_client_state, {broker_config,

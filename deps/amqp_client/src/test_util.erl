@@ -107,13 +107,36 @@ basic_return_test(Connection) ->
                        q = <<"a.b.c">>,
                        x = <<"x">>,
                        bind_key = <<"a.b.c.*">>,
-                       payload = <<"qwerty">>,
+                       payload = ExpectedPayload = <<"qwerty">>,
                        mandatory = true},
     {Channel, Ticket} = setup_channel(Connection, Realm),
     setup_publish(Channel, Ticket, Publish),
+    sleep(2000),
+    amqp_channel:register_return_handler(Channel, self()),
+    setup_publish(Channel, Ticket, Publish),
+    receive
+        {BasicReturn = #'basic.return'{}, Content} ->
+            #'basic.return'{reply_code = ReplyCode,
+                            reply_text = ReplyText,
+                            exchange = X,
+                            routing_key = RoutingKey} = BasicReturn,
+            ?assertMatch(<<"unroutable">>, ReplyText),
+            #content{class_id = ClassId,
+                     properties = Props,
+                     properties_bin = PropsBin,
+                     payload_fragments_rev = Payload} = Content,
+            ?assertMatch([<<"qwerty">>], Payload);
+        {Whats, This} ->
+            %% TODO investigate where this comes from
+            io:format(">>>Rec'd ~p/~p~n",[Whats, This])
+    after 2000 ->
+        exit(no_return_received)
+    end.
+
+sleep(Millis) ->
     receive
         nothing -> ok
-    after 2000 -> ok
+    after Millis -> ok
     end.
 
 basic_ack_test(Connection) ->

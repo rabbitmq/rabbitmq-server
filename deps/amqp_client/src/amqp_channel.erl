@@ -35,6 +35,7 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
 -export([register_direct_peer/2]).
+-export([register_return_handler/2]).
 
 %% This diagram shows the interaction between the different component processes
 %% in an AMQP client scenario.
@@ -96,6 +97,10 @@ cast(Channel, Method, Content) ->
 register_direct_peer(Channel, Peer) ->
     gen_server:cast(Channel, {register_direct_peer, Peer} ).
 
+%% Registers a handler to deal with returned messages
+register_return_handler(Channel, ReturnHandler) ->
+    gen_server:cast(Channel, {register_return_handler, ReturnHandler} ).
+
 %---------------------------------------------------------------------------
 % Internal plumbing
 %---------------------------------------------------------------------------
@@ -140,6 +145,15 @@ channel_cleanup(State = #channel_state{consumers = Consumers}) ->
     dict:map(Terminator, Consumers),
     State#channel_state{closing = true, consumers = []}.
 
+return_handler(State = #channel_state{return_handler_pid = undefined}) ->
+    %% TODO what about trapping exits??
+    {ok, ReturnHandler} = gen_event:start_link(),
+    gen_event:add_handler(ReturnHandler, amqp_return_handler , [] ),
+    {ReturnHandler, State#channel_state{return_handler_pid = ReturnHandler}};
+
+return_handler(State = #channel_state{return_handler_pid = ReturnHandler}) ->
+    {ReturnHandler, State}.
+
 %% Saves a sucessful consumer regsitration into the channel state
 %% using the pending_consumer field of the channel_state record.
 %% This then executes the bottom half of the RPC and finally
@@ -177,7 +191,9 @@ handle_method('basic.consume_ok', ConsumerTag, State) ->
 handle_method(BasicReturn = #'basic.return'{}, Content, State) ->
     %% TODO This is unimplemented because I don't know how to
     %% resolve the originator of the message
-    {noreply, State};
+    {ReturnHandler, NewState} = return_handler(State),
+    ReturnHandler ! {BasicReturn, Content},
+    {noreply, NewState};
 
 handle_method(Method, Content, State) ->
     rpc_bottom_half( {Method, Content} , State).
@@ -213,6 +229,11 @@ handle_cast({cast, Method, Content}, State = #channel_state{writer_pid = Writer,
 %% Registers the direct channel peer when using the direct client
 handle_cast({register_direct_peer, Peer}, State) ->
     NewState = State#channel_state{writer_pid = Peer},
+    {noreply, NewState};
+
+%% Registers a handler to process return messages
+handle_cast({register_return_handler, ReturnHandler}, State) ->
+    NewState = State#channel_state{return_handler_pid = ReturnHandler},
     {noreply, NewState};
 
 handle_cast({notify_sent, Peer}, State) ->
