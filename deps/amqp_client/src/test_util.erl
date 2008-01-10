@@ -170,6 +170,30 @@ basic_consume_test(Connection) ->
     end,
     teardown(Connection, Channel).
 
+basic_reject_test(Connection) ->
+    {Channel, Ticket, Q} = setup_publish(Connection),
+    Tag = <<"">>,
+    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
+                                    consumer_tag = Tag,
+                                    no_local = false, no_ack = true, exclusive = false, nowait = false},
+    #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, self()),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, Content} ->
+            BasicReject = #'basic.reject'{delivery_tag = DeliveryTag,
+                                          requeue = false},
+            amqp_channel:cast(Channel, BasicReject),
+            BasicCancel = #'basic.cancel'{consumer_tag = ConsumerTag, nowait = false},
+            #'basic.cancel_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicCancel)
+    after 2000 ->
+        exit(did_not_receive_message)
+    end,
+    receive
+        Msg ->
+            exit(should_not_receive_any_more_messages, Msg)
+    after 2000 ->
+        ok
+    end.
+
 setup_publish(Connection) ->
     Realm = <<"/data">>,
     Publish = #publish{routing_key = <<"a.b.c.d">>,

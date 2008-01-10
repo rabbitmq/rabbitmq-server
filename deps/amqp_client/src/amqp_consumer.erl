@@ -56,7 +56,9 @@ handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
     io:format("---------------------------~n"),
     {ok, State};
 
-handle_info({content, ClassId, Properties, PropertiesBin, Payload}, State) ->
+handle_info({#'basic.deliver'{consumer_tag = ConsumerTag},
+              {content, ClassId, Properties, PropertiesBin, Payload}},
+              State) ->
      io:format("---------------------------~n"),
      io:format("AMQP Consumer, rec'd: ~p~n", [ Payload ] ),
      io:format("---------------------------~n"),

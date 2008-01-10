@@ -178,9 +178,10 @@ handle_method(ChannelCloseOk = #'channel.close_ok'{}, State) ->
 handle_method(Method, State) ->
     rpc_bottom_half(Method, State).
 
-handle_method(#'basic.deliver'{consumer_tag = ConsumerTag}, Content, State) ->
+handle_method(BasicDeliver = #'basic.deliver'{consumer_tag = ConsumerTag}, Content, State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
-    Consumer ! Content,
+    io:format("Sending 999 : ~p~n",[BasicDeliver]),
+    Consumer ! {BasicDeliver, Content},
     {noreply, State};
 
 %% Why is the consumer a handle_method/3 call with the network driver,
