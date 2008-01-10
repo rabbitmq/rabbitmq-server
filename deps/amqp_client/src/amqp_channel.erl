@@ -180,7 +180,6 @@ handle_method(Method, State) ->
 
 handle_method(BasicDeliver = #'basic.deliver'{consumer_tag = ConsumerTag}, Content, State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
-    io:format("Sending 999 : ~p~n",[BasicDeliver]),
     Consumer ! {BasicDeliver, Content},
     {noreply, State};
 
