@@ -97,7 +97,8 @@ basic_get_test(Connection) ->
              properties_bin = PropertiesBin,
              payload_fragments_rev = PayloadFragments} = Content,
     ?assertMatch([<<"foobar">>], PayloadFragments),
-    {Method2, Content2} = amqp_channel:call(Channel, BasicGet),
+    {BasicGetEmpty, Content2} = amqp_channel:call(Channel, BasicGet),
+    ?assertMatch('basic.get_empty', BasicGetEmpty),
     ?assertMatch(<<>>, Content2),
     teardown(Connection, Channel).
 
