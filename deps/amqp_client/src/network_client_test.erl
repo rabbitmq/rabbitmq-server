@@ -29,25 +29,21 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-basic_get_test() ->
-    Connection = amqp_connection:start("guest", "guest", "localhost"),
-    test_util:basic_get_test(Connection).
+basic_get_test() -> test_util:basic_get_test(new_connection()).
 
-basic_return_test() ->
-    Connection = amqp_connection:start("guest", "guest", "localhost"),
-    test_util:basic_return_test(Connection).
+basic_return_test() ->test_util:basic_return_test(new_connection()).
 
-basic_consume_test() ->
-    Connection = amqp_connection:start("guest", "guest", "localhost"),
-    test_util:basic_consume_test(Connection).
+basic_qos_test() -> test_util:basic_qos_test(new_connection()).
 
-lifecycle_test() ->
-    Connection = amqp_connection:start("guest", "guest", "localhost"),
-    test_util:lifecycle_test(Connection).
+basic_recover_test() -> test_util:basic_recover_test(new_connection()).
 
-basic_ack_test() ->
-    Connection = amqp_connection:start("guest", "guest", "localhost"),
-    test_util:basic_ack_test(Connection).
+basic_consume_test() -> test_util:basic_consume_test(new_connection()).
+
+lifecycle_test() -> test_util:lifecycle_test(new_connection()).
+
+basic_ack_test() -> test_util:basic_ack_test(new_connection()).
+
+new_connection() -> amqp_connection:start("guest", "guest", "localhost").
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

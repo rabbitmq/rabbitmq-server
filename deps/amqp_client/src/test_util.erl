@@ -170,6 +170,40 @@ basic_consume_test(Connection) ->
     end,
     teardown(Connection, Channel).
 
+basic_recover_test(Connection) ->
+    {Channel, Ticket, Q} = setup_publish(Connection),
+    Tag = <<"">>,
+    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
+                                    consumer_tag = Tag,
+                                    no_local = false, no_ack = false, exclusive = false, nowait = false},
+    #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, self()),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, Content} ->
+            %% no_ack set to false, but don't send ack
+            ok
+    after 2000 ->
+        exit(did_not_receive_message)
+    end,
+    BasicRecover = #'basic.recover'{requeue = true},
+    amqp_channel:cast(Channel,BasicRecover),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag2}, Content2} ->
+            BasicAck = #'basic.ack'{delivery_tag = DeliveryTag2, multiple = false},
+            ok = amqp_channel:cast(Channel, BasicAck)
+    after 2000 ->
+        exit(did_not_receive_message)
+    end,
+    teardown(Connection, Channel).
+
+basic_qos_test(Connection) ->
+    Realm = <<"/data">>,
+    {Channel, Ticket} = setup_channel(Connection, Realm),
+    BasicQos = #'basic.qos'{prefetch_size = 8,
+                            prefetch_count = 1,
+                            global = true},
+    #'basic.qos_ok'{} = amqp_channel:call(Channel, BasicQos),
+    teardown(Connection, Channel).
+
 basic_reject_test(Connection) ->
     {Channel, Ticket, Q} = setup_publish(Connection),
     Tag = <<"">>,
