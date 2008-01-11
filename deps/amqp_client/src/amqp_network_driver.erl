@@ -41,13 +41,15 @@ handshake(ConnectionPid, ConnectionState = #connection_state{serverhost = Host})
     case gen_tcp:connect(Host, 5672, [binary, {packet, 0},{active,false}]) of
         {ok, Sock} ->
             ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
-            ReaderPid = spawn_link(?MODULE, start_reader, [Sock, ConnectionPid]),
+            %% TODO The connectionPid IS self()
+            Self = self(),
+            FramingPid = spawn_link(fun() -> rabbit_framing_channel:mainloop(Self) end),
+            ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
             WriterPid = start_writer(Sock, 0),
             ConnectionState1 = ConnectionState#connection_state{writer_pid = WriterPid,
                                                                 reader_pid = ReaderPid,
                                                                 sock = Sock},
             ConnectionState2 = network_handshake(WriterPid, ConnectionState1),
-
             #connection_state{heartbeat = Heartbeat} = ConnectionState2,
             rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
             ConnectionState2;
@@ -63,15 +65,27 @@ handshake(ConnectionPid, ConnectionState = #connection_state{serverhost = Host})
 open_channel({ChannelNumber, OutOfBand}, ChannelPid,
              State = #connection_state{reader_pid = ReaderPid,
                                        sock = Sock}) ->
-    ReaderPid ! {ChannelPid, ChannelNumber},
+    FramingPid =
+        spawn(
+              fun () ->
+                  %% Do some funky link creation, don't know whether this
+                  %% indirection is correct - basically we want to link the
+                  %% channel process with this newly spawned process and not
+                  %% with the calling process
+                  link(ChannelPid),
+                  process_flag(trap_exit, true),
+                  rabbit_framing_channel:mainloop(ChannelPid)
+              end),
+    ReaderPid ! {FramingPid, ChannelNumber},
     WriterPid = start_writer(Sock, ChannelNumber),
     amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
 
 close_connection(Close = #'connection.close'{}, From, #connection_state{writer_pid = Writer}) ->
     rabbit_writer:send_command_and_shutdown(Writer, Close),
     receive
-        {frame, Channel, {method,'connection.close_ok',<<>>}, ReaderPid } ->
+        {method, {'connection.close_ok'}, none } ->
             gen_server:reply(From, #'connection.close_ok'{}),
+            %% TODO does this stop message get received by anybody???
             Writer ! stop
             %% Don't need to stop the reader because it stops itself by magic
             %% This is because it is looping over a socket read and it would
@@ -88,15 +102,18 @@ do(Writer, Method, Content) -> rabbit_writer:send_command(Writer, Method, Conten
 % AMQP message sending and receiving
 %---------------------------------------------------------------------------
 
-send_frame(Channel, Method) ->
+send_final_frame(Channel, Method) ->
     ChPid = resolve_receiver(Channel),
-    ChPid ! {frame, Channel, Method, self() }.
+    ChPid ! {frame, Method}.
+
+send_frame(Channel, Frame) ->
+    ChPid = resolve_receiver(Channel),
+    rabbit_framing_channel:process(ChPid, Frame).
 
 recv() ->
     receive
-        {frame, Channel, {method, Method, Content}, ReaderPid } ->
-            ReaderPid ! ack,
-            amqp_util:decode_method(Method, Content )
+        {method, Method, Content} ->
+            Method
     end.
 
 %---------------------------------------------------------------------------
@@ -179,8 +196,8 @@ handle_frame(Type, Channel, Payload) ->
     %% This terminates the reading process but still passes on the response to the user
     %% To understand the other half, look at close_connection/3
     {method,'connection.close_ok',<<>>} ->
-        send_frame(Channel, {method,'connection.close_ok',<<>>}),
-        io:format("Socket Reader exiting normally ~n"),
+        send_final_frame(Channel, {method,'connection.close_ok',<<>>}),
+        io:format("Socket Reader exiting normally ~p~n",[Channel]),
         exit(normal);
     AnalyzedFrame ->
         send_frame(Channel, AnalyzedFrame)

@@ -86,7 +86,7 @@ cast(Channel, Method, Content) ->
 % Direct peer registration
 %---------------------------------------------------------------------------
 
-%% Regsiters the direct channel peer with the state of this channel.
+%% Registers the direct channel peer with the state of this channel.
 %% This registration occurs after the amqp_channel gen_server instance
 %% because the pid of this amqp_channel needs to be passed into the
 %% initialization of that direct channel process, hence the resulting
@@ -189,8 +189,6 @@ handle_method('basic.consume_ok', ConsumerTag, State) ->
     handle_method(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State);
 
 handle_method(BasicReturn = #'basic.return'{}, Content, State) ->
-    %% TODO This is unimplemented because I don't know how to
-    %% resolve the originator of the message
     {ReturnHandler, NewState} = return_handler(State),
     ReturnHandler ! {BasicReturn, Content},
     {noreply, NewState};
@@ -240,29 +238,23 @@ handle_cast({notify_sent, Peer}, State) ->
     {noreply, State}.
 
 %---------------------------------------------------------------------------
+% Rabbit Writer API methods (gen_server callbacks).
+% These callbacks are invoked when a direct channel sends messages
+% to this gen_server instance.
+%----------------------------------------------------------------------------
+
+handle_info( {send_command, Method}, State) -> handle_method(Method, State);
+handle_info( {send_command, Method, Content}, State) -> handle_method(Method, Content, State);
+
+%---------------------------------------------------------------------------
 % Network Writer methods (gen_server callbacks).
 % These callbacks are invoked when a network channel sends messages
 % to this gen_server instance.
 %---------------------------------------------------------------------------
 
-%% Handles the delivery of a message from the network channel
-handle_info({frame, Channel, {method, Method, BinaryContent}, ReaderPid }, State) ->
-    case amqp_util:decode_method(Method, BinaryContent) of
-        {DecodedMethod, DecodedContent} ->
-            handle_method(DecodedMethod, DecodedContent, State);
-        DecodedMethod ->
-            handle_method(DecodedMethod, State)
-    end;
+handle_info( {method, Method, none}, State) -> handle_method(Method, State);
+handle_info( {method, Method, Content}, State) -> handle_method(Method, Content, State);
 
-%---------------------------------------------------------------------------
-% Rabbit Writer API methods (gen_server callbacks).
-% These callbacks are invoked when a direct channel sends messages
-% to this gen_server instance.
-%------------------------------------------ ---------------------------------
-
-%% Standard method handling in the direct case
-handle_info( {send_command, Method}, State) -> handle_method(Method, State);
-handle_info( {send_command, Method, Content}, State) -> handle_method(Method, Content, State);
 
 %% Handles the rpc bottom half and shuts down the channel
 handle_info( {send_command_and_shutdown, Method}, State) ->
@@ -286,6 +278,7 @@ handle_info(shutdown, State ) ->
 
 handle_info( {channel_close, Peer}, State ) ->
     NewState = channel_cleanup(State),
+    %% TODO Do we still need this??
     Peer ! handshake,
     {noreply, NewState};
 
