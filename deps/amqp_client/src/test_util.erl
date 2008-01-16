@@ -162,6 +162,7 @@ basic_consume_test(Connection) ->
                                     consumer_tag = Tag,
                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, Consumer),
+
     receive
     after 2000 ->
         BasicCancel = #'basic.cancel'{consumer_tag = ConsumerTag, nowait = false},
@@ -180,6 +181,7 @@ basic_recover_test(Connection) ->
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, Content} ->
             %% no_ack set to false, but don't send ack
+            io:format("got msg ~p~n",[Content]),
             ok
     after 2000 ->
         exit(did_not_receive_message)

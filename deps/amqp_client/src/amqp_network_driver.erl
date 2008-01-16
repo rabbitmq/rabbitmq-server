@@ -43,7 +43,7 @@ handshake(ConnectionPid, ConnectionState = #connection_state{serverhost = Host})
             ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
             %% TODO The connectionPid IS self()
             Self = self(),
-            FramingPid = spawn_link(fun() -> rabbit_framing_channel:mainloop(Self) end),
+            FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Self]),
             ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
             WriterPid = start_writer(Sock, 0),
             ConnectionState1 = ConnectionState#connection_state{writer_pid = WriterPid,
@@ -65,31 +65,27 @@ handshake(ConnectionPid, ConnectionState = #connection_state{serverhost = Host})
 open_channel({ChannelNumber, OutOfBand}, ChannelPid,
              State = #connection_state{reader_pid = ReaderPid,
                                        sock = Sock}) ->
-    FramingPid =
-        spawn(
-              fun () ->
-                  %% Do some funky link creation, don't know whether this
-                  %% indirection is correct - basically we want to link the
-                  %% channel process with this newly spawned process and not
-                  %% with the calling process
-                  link(ChannelPid),
-                  process_flag(trap_exit, true),
-                  rabbit_framing_channel:mainloop(ChannelPid)
-              end),
-    ReaderPid ! {FramingPid, ChannelNumber},
+    ReaderPid ! {ChannelPid, ChannelNumber},
     WriterPid = start_writer(Sock, ChannelNumber),
     amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
 
 close_connection(Close = #'connection.close'{}, From, #connection_state{writer_pid = Writer}) ->
     rabbit_writer:send_command_and_shutdown(Writer, Close),
     receive
+        %% TODO refactor this
         {method, {'connection.close_ok'}, none } ->
             gen_server:reply(From, #'connection.close_ok'{}),
             %% TODO does this stop message get received by anybody???
-            Writer ! stop
+            Writer ! stop;
             %% Don't need to stop the reader because it stops itself by magic
             %% This is because it is looping over a socket read and it would
             %% be difficult to slip it a poison pill from this process to get it to stop
+        {'EXIT', Pid, Reason} ->
+            receive
+                {method, {'connection.close_ok'}, none } ->
+                    gen_server:reply(From, #'connection.close_ok'{})
+            after 5000 -> exit(timeout_on_exit)
+            end
     after
         5000 ->
             exit(timeout_on_exit)
@@ -161,27 +157,36 @@ start_ok(#connection_state{username = Username, password = Password}) ->
 
 start_reader(Sock, ConnectionPid) ->
     put({channel, 0},{chpid, ConnectionPid}),
-    reader_loop(Sock, 7).
+    {ok, Ref} = prim_inet:async_recv(Sock, 7, -1),
+    reader_loop(Sock, undefined, undefined, undefined).
 
 start_writer(Sock, Channel) ->
     Connection = #connection{frame_max = ?FRAME_MIN_SIZE},
     rabbit_writer:start(Sock, Channel, Connection).
 
-reader_loop(Sock, Length) ->
-    case gen_tcp:recv(Sock, Length, -1) of
-    {ok, <<Type:8,Channel:16,PayloadSize:32>>} ->
-        case gen_tcp:recv(Sock, PayloadSize + 1, -1) of
-            {ok, <<Payload:PayloadSize/binary, ?FRAME_END>>} ->
-                handle_frame(Type, Channel, Payload),
-                reader_loop(Sock, 7);
-            %% TODO This needs better handling
-            R -> exit(R)
-        end;
-    R ->
-        %% TODO This needs better handling
-        exit(R)
+reader_loop(Sock, Type, Channel, Length) ->
+    receive
+        {inet_async, Sock, _, {ok, <<Payload:Length/binary,?FRAME_END>>} } ->
+            handle_frame(Type, Channel, Payload),
+            {ok, Ref} = prim_inet:async_recv(Sock, 7, -1),
+            reader_loop(Sock, undefined, undefined, undefined);
+        {inet_async, Sock, _, {ok, <<_Type:8,_Channel:16,PayloadSize:32>>}} ->
+            {ok, Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
+            reader_loop(Sock, _Type, _Channel, PayloadSize);
+        {ChannelPid, ChannelNumber} ->
+            start_framing_channel(ChannelPid, ChannelNumber),
+            reader_loop(Sock, Type, Channel, Length);
+        {'EXIT', _Pid, Reason} ->
+            io:format("TRAPPED EXIT ~n"),
+            gen_tcp:close(Sock);
+        Other ->
+            io:format("Other ~p~n",[Other])
     end,
     gen_tcp:close(Sock).
+
+start_framing_channel(ChannelPid, ChannelNumber) ->
+    FramingPid = rabbit_framing_channel:start_link(fun(X) -> link(X), X end, [ChannelPid]),
+    put({channel, ChannelNumber},{chpid, FramingPid}).
 
 handle_frame(Type, Channel, Payload) ->
     case rabbit_reader:analyze_frame(Type, Payload) of
@@ -208,12 +213,5 @@ resolve_receiver(Channel) ->
        {chpid, ChPid} ->
            ChPid;
        undefined ->
-            receive
-                {Sender,Channel} ->
-                    put({channel, Channel},{chpid, Sender}),
-                    Sender
-            after 1000 ->
-               io:format("Could not resolve receiver from channel ~p~n",[Channel]),
-               exit(unknown_channel)
-            end
+            exit(unknown_channel)
    end.

@@ -173,7 +173,7 @@ handle_method(BasicCancelOk = #'basic.cancel_ok'{consumer_tag = ConsumerTag}, St
 
 handle_method(ChannelCloseOk = #'channel.close_ok'{}, State) ->
     {noreply, NewState} = rpc_bottom_half(ChannelCloseOk, State),
-    {stop, shutdown, NewState};
+    {stop, normal, NewState};
 
 handle_method(Method, State) ->
     rpc_bottom_half(Method, State).
