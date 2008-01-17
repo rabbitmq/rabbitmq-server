@@ -42,7 +42,7 @@
 %% Starts a direct connection to the Rabbit AMQP server, assuming that
 %% the server is running in the same process space.
 start(User, Password) ->
-    Handshake = fun amqp_direct_driver:handshake/2,
+    Handshake = fun amqp_direct_driver:handshake/1,
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      vhostpath = <<"/">>},
@@ -51,7 +51,7 @@ start(User, Password) ->
 
 %% Starts a networked conection to a remote AMQP server.
 start(User, Password, Host) ->
-    Handshake = fun amqp_network_driver:handshake/2,
+    Handshake = fun amqp_network_driver:handshake/1,
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      serverhost = Host,
@@ -154,7 +154,7 @@ allocate_channel_number(State = #connection_state{channels = Channels0,
 %---------------------------------------------------------------------------
 
 init([InitialState, Handshake]) ->
-    State = Handshake(self(), InitialState),
+    State = Handshake(InitialState),
     {ok, State}.
 
 %% Starts a new network channel.

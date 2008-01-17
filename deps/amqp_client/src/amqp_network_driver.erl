@@ -29,7 +29,7 @@
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include("amqp_client.hrl").
 
--export([handshake/2, open_channel/3, close_connection/3]).
+-export([handshake/1, open_channel/3, close_connection/3]).
 -export([start_reader/2, start_writer/2]).
 -export([do/2,do/3]).
 
@@ -37,11 +37,10 @@
 % Driver API Methods
 %---------------------------------------------------------------------------
 
-handshake(ConnectionPid, ConnectionState = #connection_state{serverhost = Host}) ->
+handshake(ConnectionState = #connection_state{serverhost = Host}) ->
     case gen_tcp:connect(Host, 5672, [binary, {packet, 0},{active,false}]) of
         {ok, Sock} ->
             ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
-            %% TODO The connectionPid IS self()
             Self = self(),
             FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Self]),
             ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),

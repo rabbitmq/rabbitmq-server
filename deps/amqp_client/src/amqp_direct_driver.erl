@@ -28,16 +28,16 @@
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include("amqp_client.hrl").
 
--export([handshake/2, open_channel/3, close_connection/3]).
+-export([handshake/1, open_channel/3, close_connection/3]).
 -export([do/2,do/3]).
 
 %---------------------------------------------------------------------------
 % Driver API Methods
 %---------------------------------------------------------------------------
 
-handshake(ConnectionPid, ConnectionState = #connection_state{username = User,
-                                                             password = Pass,
-                                                             vhostpath = VHostPath}) ->
+handshake(ConnectionState = #connection_state{username = User,
+                                              password = Pass,
+                                              vhostpath = VHostPath}) ->
     UserBin = amqp_util:binary(User),
     PassBin = amqp_util:binary(Pass),
     rabbit_access_control:user_pass_login(UserBin, PassBin),
