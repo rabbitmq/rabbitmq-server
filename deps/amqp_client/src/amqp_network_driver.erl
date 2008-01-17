@@ -155,6 +155,7 @@ start_ok(#connection_state{username = Username, password = Password}) ->
            locale = <<"en_US">>}.
 
 start_reader(Sock, ConnectionPid) ->
+    process_flag(trap_exit, true),
     put({channel, 0},{chpid, ConnectionPid}),
     {ok, Ref} = prim_inet:async_recv(Sock, 7, -1),
     reader_loop(Sock, undefined, undefined, undefined).
@@ -175,9 +176,10 @@ reader_loop(Sock, Type, Channel, Length) ->
         {ChannelPid, ChannelNumber} ->
             start_framing_channel(ChannelPid, ChannelNumber),
             reader_loop(Sock, Type, Channel, Length);
-        {'EXIT', _Pid, Reason} ->
-            io:format("TRAPPED EXIT ~n"),
-            gen_tcp:close(Sock);
+        {'EXIT', Pid, Reason} ->
+            [H|T] = get_keys({chpid,Pid}),
+            erase(H),
+            reader_loop(Sock, Type, Channel, Length);
         Other ->
             io:format("Other ~p~n",[Other])
     end,
