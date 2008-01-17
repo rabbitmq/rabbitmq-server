@@ -43,6 +43,8 @@ lifecycle_test() -> test_util:lifecycle_test(new_connection()).
 
 basic_ack_test() -> test_util:basic_ack_test(new_connection()).
 
+channel_lifecycle_test() -> test_util:channel_lifecycle_test(new_connection()).
+
 new_connection() -> amqp_connection:start("guest", "guest", "localhost").
 
 test_coverage() ->

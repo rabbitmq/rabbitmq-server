@@ -62,7 +62,7 @@ start(User, Password, Host) ->
 %% Opens a channel without having to specify a channel number.
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
-open_channel( {Pid, Mode} ) -> open_channel( {Pid, Mode}, <<>>, "").
+open_channel( {Pid, Mode} ) -> open_channel( {Pid, Mode}, none, "").
 
 %% Opens a channel with a specific channel number.
 %% This function assumes that an AMQP connection (networked or direct)
@@ -89,8 +89,8 @@ handle_start({ChannelNumber, OutOfBand}, Driver, Do2, Do3, State) ->
 
 %% Creates a new channel process
 start_channel(ChannelNumber, Do2, Do3, State = #connection_state{reader_pid = ReaderPid,
-                                                       writer_pid = WriterPid}) ->
-    Number = assign_channnel_number(ChannelNumber, State),
+                                                                 writer_pid = WriterPid}) ->
+    Number = assign_channel_number(ChannelNumber, State),
     InitialState = #channel_state{parent_connection = self(),
                                   number = Number,
                                   do2 = Do2, do3 = Do3,
@@ -98,17 +98,14 @@ start_channel(ChannelNumber, Do2, Do3, State = #connection_state{reader_pid = Re
                                   writer_pid = WriterPid},
     process_flag(trap_exit, true),
     {ok, ChannelPid} = gen_server:start_link(amqp_channel, [InitialState], []),
-    NewState = register_channel(ChannelNumber, ChannelPid, State),
+    NewState = register_channel(Number, ChannelPid, State),
     {ChannelPid, Number, NewState}.
 
-assign_channnel_number(ChannelNumber, State) ->
-    case ChannelNumber of
-        <<>> ->
-            allocate_channel_number(State);
-        _ ->
-            %% TODO bug: check whether this is already taken
-            ChannelNumber
-    end.
+assign_channel_number(none, #connection_state{channels = Channels, channel_max = Max}) ->
+    allocate_channel_number(dict:fetch_keys(Channels), Max);
+assign_channel_number(ChannelNumber, State) ->
+    %% TODO bug: check whether this is already taken
+    ChannelNumber.
 
 register_channel(ChannelNumber, ChannelPid, State = #connection_state{channels = Channels0}) ->
     Channels1 =
@@ -126,8 +123,14 @@ register_channel(ChannelNumber, ChannelPid, State = #connection_state{channels =
 unregister_channel(ChannelPid, State = #connection_state{channels = Channels0}) when is_pid(ChannelPid)->
     ReverseMapping = fun(Number, Pid) -> Pid == ChannelPid end,
     Projection = dict:filter(ReverseMapping, Channels0),
-    [ChannelNumber|T] = dict:fetch_keys(Projection),
-    Channels1 = dict:erase(ChannelNumber, Channels0),
+    %% TODO This differentiation is only necessary for the direct channel,
+    %% look into preventing the invocation of this method
+    Channels1 = case dict:fetch_keys(Projection) of
+                    [] ->
+                        Channels0;
+                    [ChannelNumber|T] ->
+                        dict:erase(ChannelNumber, Channels0)
+                end,
     State#connection_state{channels = Channels1};
 
 %% This will be called when a channel process exits and needs to be deregistered
@@ -135,19 +138,12 @@ unregister_channel(ChannelNumber, State = #connection_state{channels = Channels0
     Channels1 = dict:erase(ChannelNumber, Channels0),
     State#connection_state{channels = Channels1}.
 
-allocate_channel_number(State = #connection_state{channels = Channels0,
-                                                  channel_max = ChannelMax}) ->
-    List = dict:fetch_keys(Channels0),
-    ChannelNumber =
-        case length(List) of
-            0 ->
-                1;
-            _ ->
-                MaxChannel = lists:max(List),
-                %% TODO check channel max and reallocate appropriately
-                MaxChannel + 1
-        end,
-    ChannelNumber.
+allocate_channel_number([], Max)-> 1;
+
+allocate_channel_number(Channels, Max) ->
+    MaxChannel = lists:max(Channels),
+    %% TODO check channel max and reallocate appropriately
+    MaxChannel + 1.
 
 %---------------------------------------------------------------------------
 % gen_server callbacks
@@ -190,19 +186,9 @@ handle_cast(Message, State) ->
 % Trap exits
 %---------------------------------------------------------------------------
 
-%% Just the rabbit channel exiting, ignore this for now
-handle_info( {'EXIT', Pid, normal}, State) ->
-    {noreply, State};
-
 %% Just the amqp channel shutting down, so unregister this channel
-handle_info( {'EXIT', Pid, shutdown}, State) ->
+handle_info( {'EXIT', Pid, Reason}, State) ->
     NewState = unregister_channel(Pid, State),
-    {noreply, NewState};
-
-%% TODO Don't know what's going on here, check it out
-handle_info( {'EXIT', CrashedPid, Reason}, State) ->
-    io:format("REAL TRAPPED EXIT.......... ~p /~p~n",[CrashedPid, Reason]),
-    NewState = unregister_channel(CrashedPid, State),
     {noreply, NewState}.
 
 %---------------------------------------------------------------------------

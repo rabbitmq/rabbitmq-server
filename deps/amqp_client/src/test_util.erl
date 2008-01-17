@@ -83,6 +83,15 @@ lifecycle_test(Connection) ->
     #'exchange.delete_ok'{} = amqp_channel:call(Channel, ExchangeDelete),
     teardown(Connection, Channel).
 
+channel_lifecycle_test(Connection) ->
+    Realm = <<"/data">>,
+    {Channel1, Ticket1} = setup_channel(Connection, Realm),
+    ChannelClose = #'channel.close'{reply_code = 200, reply_text = <<"Goodbye">>,
+                                          class_id = 0, method_id = 0},
+    #'channel.close_ok'{} = amqp_channel:call(Channel1, ChannelClose),
+    {Channel2, Ticket2} = setup_channel(Connection, Realm),
+    teardown(Connection, Channel2).
+
 basic_get_test(Connection) ->
     {Channel, Ticket, Q} = setup_publish(Connection),
     BasicGet = #'basic.get'{ticket = Ticket, queue = Q, no_ack = true},
