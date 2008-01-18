@@ -85,10 +85,6 @@ do(Writer, Method, Content) -> rabbit_writer:send_command(Writer, Method, Conten
 % AMQP message sending and receiving
 %---------------------------------------------------------------------------
 
-send_final_frame(Channel, Method) ->
-    ChPid = resolve_receiver(Channel),
-    ChPid ! {frame, Method}.
-
 send_frame(Channel, Frame) ->
     ChPid = resolve_receiver(Channel),
     rabbit_framing_channel:process(ChPid, Frame).
