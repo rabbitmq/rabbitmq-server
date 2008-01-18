@@ -68,7 +68,10 @@ open_channel({ChannelNumber, OutOfBand}, ChannelPid,
     WriterPid = start_writer(Sock, ChannelNumber),
     amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
 
-close_connection(Close = #'connection.close'{}, From, #connection_state{writer_pid = Writer}) ->
+%% This closes the writer down, waits for the confirmation from the
+%% the channel and then returns the ack to the user
+close_connection(Close = #'connection.close'{}, From,
+                 #connection_state{writer_pid = Writer}) ->
     rabbit_writer:send_command_and_shutdown(Writer, Close),
     receive
         {method, {'connection.close_ok'}, none } ->
@@ -151,15 +154,18 @@ start_writer(Sock, Channel) ->
 reader_loop(Sock, Type, Channel, Length) ->
     receive
         {inet_async, Sock, _, {ok, <<Payload:Length/binary,?FRAME_END>>} } ->
-            handle_frame(Type, Channel, Payload),
-            {ok, Ref} = prim_inet:async_recv(Sock, 7, -1),
-            reader_loop(Sock, undefined, undefined, undefined);
+            case handle_frame(Type, Channel, Payload) of
+                closed_ok ->
+                    ok;
+                _ ->
+                    {ok, Ref} = prim_inet:async_recv(Sock, 7, -1),
+                    reader_loop(Sock, undefined, undefined, undefined)
+            end;
         {inet_async, Sock, _, {ok, <<_Type:8,_Channel:16,PayloadSize:32>>}} ->
             {ok, Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
             reader_loop(Sock, _Type, _Channel, PayloadSize);
-        {inet_async, Sock, Ref, {error,closed}} ->
-            %% TODO why does this happen
-            io:format("Have a look into this one~n");
+        {inet_async, Sock, Ref, {error, Reason}} ->
+            io:format("Have a look into this one: ~p~n",[Reason]);
         {heartbeat, Heartbeat} ->
             rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
             reader_loop(Sock, Type, Channel, Length);
@@ -183,16 +189,19 @@ start_framing_channel(ChannelPid, ChannelNumber) ->
 
 handle_frame(Type, Channel, Payload) ->
     case rabbit_reader:analyze_frame(Type, Payload) of
-    heartbeat when Channel /= 0 ->
-       rabbit_misc:die(frame_error);
-    heartbeat ->
-       heartbeat;
-    trace when Channel /= 0 ->
-       rabbit_misc:die(frame_error);
-    trace ->
-       trace;
-    AnalyzedFrame ->
-        send_frame(Channel, AnalyzedFrame)
+        heartbeat when Channel /= 0 ->
+            rabbit_misc:die(frame_error);
+        heartbeat ->
+            heartbeat;
+        trace when Channel /= 0 ->
+            rabbit_misc:die(frame_error);
+        trace ->
+            trace;
+        {method,'connection.close_ok',Content} ->
+            send_frame(Channel, {method,'connection.close_ok',Content}),
+            closed_ok;
+        AnalyzedFrame ->
+            send_frame(Channel, AnalyzedFrame)
     end.
 
 resolve_receiver(Channel) ->

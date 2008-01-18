@@ -145,6 +145,11 @@ allocate_channel_number(Channels, Max) ->
     %% TODO check channel max and reallocate appropriately
     MaxChannel + 1.
 
+close_connection(direct, Close, From, State) ->
+    amqp_direct_driver:close_connection(Close, From, State);
+close_connection(network, Close, From, State) ->
+    amqp_network_driver:close_connection(Close, From, State).
+
 %---------------------------------------------------------------------------
 % gen_server callbacks
 %---------------------------------------------------------------------------
@@ -170,8 +175,8 @@ handle_call({direct, ChannelNumber, OutOfBand}, From, State) ->
                  State);
 
 %% Shuts the AMQP connection down
-handle_call({_, Close = #'connection.close'{}}, From, State) ->
-    amqp_direct_driver:close_connection(Close, From, State),
+handle_call({Mode, Close = #'connection.close'{}}, From, State) ->
+    close_connection(Mode, Close, From, State),
     {stop, normal, #'connection.close_ok'{}, State}.
 
 handle_cast(Message, State) ->
