@@ -41,8 +41,8 @@ handshake(ConnectionState = #connection_state{serverhost = Host}) ->
     case gen_tcp:connect(Host, 5672, [binary, {packet, 0},{active,false}]) of
         {ok, Sock} ->
             ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
-            Self = self(),
-            FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Self]),
+            Parent = self(),
+            FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
             ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
             WriterPid = start_writer(Sock, 0),
             ConnectionState1 = ConnectionState#connection_state{writer_pid = WriterPid,
@@ -50,7 +50,7 @@ handshake(ConnectionState = #connection_state{serverhost = Host}) ->
                                                                 sock = Sock},
             ConnectionState2 = network_handshake(WriterPid, ConnectionState1),
             #connection_state{heartbeat = Heartbeat} = ConnectionState2,
-            rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
+            ReaderPid ! {heartbeat, Heartbeat},
             ConnectionState2;
         {error, Reason} ->
             io:format("Could not start the network driver: ~p~n",[Reason]),
@@ -154,9 +154,9 @@ start_ok(#connection_state{username = Username, password = Password}) ->
            response = rabbit_binary_generator:generate_table(LoginTable),
            locale = <<"en_US">>}.
 
-start_reader(Sock, ConnectionPid) ->
+start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
-    put({channel, 0},{chpid, ConnectionPid}),
+    put({channel, 0},{chpid, FramingPid}),
     {ok, Ref} = prim_inet:async_recv(Sock, 7, -1),
     reader_loop(Sock, undefined, undefined, undefined).
 
@@ -173,9 +173,14 @@ reader_loop(Sock, Type, Channel, Length) ->
         {inet_async, Sock, _, {ok, <<_Type:8,_Channel:16,PayloadSize:32>>}} ->
             {ok, Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
             reader_loop(Sock, _Type, _Channel, PayloadSize);
+        {heartbeat, Heartbeat} ->
+            rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
+            reader_loop(Sock, Type, Channel, Length);
         {ChannelPid, ChannelNumber} ->
             start_framing_channel(ChannelPid, ChannelNumber),
             reader_loop(Sock, Type, Channel, Length);
+        timeout ->
+            io:format("Reader (~p) received timeout from heartbeat, exiting ~n");
         {'EXIT', Pid, Reason} ->
             [H|T] = get_keys({chpid,Pid}),
             erase(H),
