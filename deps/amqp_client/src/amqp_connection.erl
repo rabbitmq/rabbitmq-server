@@ -169,13 +169,8 @@ handle_call({direct, ChannelNumber, OutOfBand}, From, State) ->
                  fun amqp_direct_driver:do/3,
                  State);
 
-%% Shuts the AMQP connection down in the network case
-handle_call({network, Close = #'connection.close'{}}, From, State = #connection_state{writer_pid = Writer}) ->
-    amqp_network_driver:close_connection(Close, From, State),
-    {stop, normal, #'connection.close_ok'{}, State};
-
-%% Shuts the AMQP connection down in the direct case
-handle_call({direct, Close = #'connection.close'{}}, From, State) ->
+%% Shuts the AMQP connection down
+handle_call({_, Close = #'connection.close'{}}, From, State) ->
     amqp_direct_driver:close_connection(Close, From, State),
     {stop, normal, #'connection.close_ok'{}, State}.
 

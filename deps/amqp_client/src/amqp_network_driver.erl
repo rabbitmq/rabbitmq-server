@@ -71,20 +71,8 @@ open_channel({ChannelNumber, OutOfBand}, ChannelPid,
 close_connection(Close = #'connection.close'{}, From, #connection_state{writer_pid = Writer}) ->
     rabbit_writer:send_command_and_shutdown(Writer, Close),
     receive
-        %% TODO refactor this
         {method, {'connection.close_ok'}, none } ->
-            gen_server:reply(From, #'connection.close_ok'{}),
-            %% TODO does this stop message get received by anybody???
-            Writer ! stop;
-            %% Don't need to stop the reader because it stops itself by magic
-            %% This is because it is looping over a socket read and it would
-            %% be difficult to slip it a poison pill from this process to get it to stop
-        {'EXIT', Pid, Reason} ->
-            receive
-                {method, {'connection.close_ok'}, none } ->
-                    gen_server:reply(From, #'connection.close_ok'{})
-            after 5000 -> exit(timeout_on_exit)
-            end
+            gen_server:reply(From, #'connection.close_ok'{})
     after
         5000 ->
             exit(timeout_on_exit)
@@ -173,6 +161,9 @@ reader_loop(Sock, Type, Channel, Length) ->
         {inet_async, Sock, _, {ok, <<_Type:8,_Channel:16,PayloadSize:32>>}} ->
             {ok, Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
             reader_loop(Sock, _Type, _Channel, PayloadSize);
+        {inet_async, Sock, Ref, {error,closed}} ->
+            %% TODO why does this happen
+            io:format("Have a look into this one~n");
         {heartbeat, Heartbeat} ->
             rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
             reader_loop(Sock, Type, Channel, Length);
@@ -204,12 +195,6 @@ handle_frame(Type, Channel, Payload) ->
        rabbit_misc:die(frame_error);
     trace ->
        trace;
-    %% This terminates the reading process but still passes on the response to the user
-    %% To understand the other half, look at close_connection/3
-    {method,'connection.close_ok',<<>>} ->
-        send_final_frame(Channel, {method,'connection.close_ok',<<>>}),
-        io:format("Socket Reader exiting normally ~p~n",[Channel]),
-        exit(normal);
     AnalyzedFrame ->
         send_frame(Channel, AnalyzedFrame)
     end.
