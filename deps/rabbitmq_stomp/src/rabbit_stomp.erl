@@ -120,7 +120,7 @@ mainloop(State) ->
 	shutdown ->
 	    done;
 	Data ->
-	    io:format("Unknown STOMP Data: ~p~n", [Data]),
+	    error_logger:error_msg("Internal error: unknown STOMP Data: ~p~n", [Data]),
 	    ?MODULE:mainloop(State)
     end.
 
@@ -147,6 +147,7 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
 	{more, ParseState1} ->
 	    ?MODULE:mainloop(State#state{parse_state = ParseState1});
 	{ok, Frame = #stomp_frame{command = Command}, Rest} ->
+	    %% io:format("Frame: ~p~n", [Frame]),
 	    case catch process_frame(Command, Frame,
 				     State#state{parse_state = stomp_frame:initial_state()}) of
 		{'EXIT', {amqp, Code, Method}} ->
@@ -171,7 +172,7 @@ explain_amqp_death(Code, Method, State) ->
 send_reply(#'channel.close_ok'{}, State) ->
     State;
 send_reply(Command, State) ->
-    io:format("Reply command unhandled: ~p~n", [Command]),
+    error_logger:error_msg("STOMP Reply command unhandled: ~p~n", [Command]),
     State.
 
 send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
@@ -199,7 +200,7 @@ send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
 						    BodyFragmentsRev))),
 	       State);
 send_reply(Command, Content, State) ->
-    io:format("Reply command unhandled: ~p~n~p~n", [Command, Content]),
+    error_logger:error_msg("STOMP Reply command unhandled: ~p~n~p~n", [Command, Content]),
     State.
 
 adhoc_convert_headers([]) ->
@@ -212,6 +213,7 @@ adhoc_convert_headers([_ | Rest]) ->
     adhoc_convert_headers(Rest).
 
 send_frame(Frame, State = #state{socket = Sock}) ->
+    %% io:format("Sending ~p~n", [Frame]),
     ok = gen_tcp:send(Sock, stomp_frame:serialize(Frame)),
     State.
 
@@ -222,6 +224,8 @@ send_frame(Command, Headers, Body, State) ->
 	       State).
 
 send_error(Message, Detail, State) ->
+    error_logger:error_msg("STOMP error frame sent:~nMessage: ~p~nDetail: ~p~n",
+			   [Message, Detail]),
     send_frame("ERROR", [{"message", Message}], Detail, State).
 
 send_error(Message, Format, Args, State) ->
