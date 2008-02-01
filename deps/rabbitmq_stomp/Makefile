@@ -1,10 +1,14 @@
+RABBIT_SOURCE_ROOT=../AMQ
+RABBIT_SERVER_SOURCE_ROOT=$(RABBIT_SOURCE_ROOT)/erlang/rabbit
+RABBIT_SERVER_INCLUDE_DIR=$(RABBIT_SERVER_SOURCE_ROOT)/include
+
 SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall +debug_info # +native -v
+ERLC_OPTS=-I $(RABBIT_SERVER_INCLUDE_DIR) -I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall +debug_info # +native -v
 
 all: $(EBIN_DIR) $(TARGETS)
 
@@ -19,7 +23,6 @@ clean:
 
 run: all start_server
 
-RABBIT_SOURCE_ROOT=../AMQ
 start_server:
 	make -C $(RABBIT_SOURCE_ROOT)/erlang/rabbit run \
 		RABBIT_ARGS='-pa '"$$(pwd)/$(EBIN_DIR)"' -rabbit \
