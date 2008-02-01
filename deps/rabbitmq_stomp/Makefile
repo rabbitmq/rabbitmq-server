@@ -6,7 +6,10 @@ SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall +debug_info # +native -v
 
-all: $(TARGETS)
+all: $(EBIN_DIR) $(TARGETS)
+
+$(EBIN_DIR):
+	mkdir -p $@
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES)
 	erlc $(ERLC_OPTS) $<
