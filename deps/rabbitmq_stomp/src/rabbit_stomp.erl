@@ -25,8 +25,6 @@
 
 %% rabbit_stomp implements STOMP messaging semantics, as per protocol
 %% "version 1.0", at http://stomp.codehaus.org/Protocol
-%%
-%% Implemented: everything but transactions.
 
 -module(rabbit_stomp).
 
