@@ -29,6 +29,17 @@ INCLUDE_DIR=include
 ERLC_FLAGS=-W0
 DIST_DIR=rabbitmq-erlang-client
 
+NODENAME=rabbit-test-direct
+NODENAME2=rabbit-test-direct-coverage
+MNESIA_DIR=/tmp/rabbitmq-$(NODENAME)-mnesia
+MNESIA_DIR2=/tmp/rabbitmq-$(NODENAME)-mnesia
+LOG_BASE=/tmp
+
+
+ERL_CALL=erl_call -sname $(NODENAME) -e
+ERL_CALL2=erl_call -sname $(NODENAME2) -e
+
+
 compile:
 	mkdir -p $(EBIN_DIR)
 	erlc +debug_info -I $(INCLUDE_DIR) -o $(EBIN_DIR) $(ERLC_FLAGS) $(SOURCE_DIR)/*.erl
@@ -36,16 +47,22 @@ compile:
 all: compile
 
 test_network: compile
-		erl -pa ebin -noshell -eval 'network_client_test:basic_get_test(), network_client_test:basic_return_test(), network_client_test:basic_qos_test(), network_client_test:basic_recover_test(), network_client_test:basic_consume_test(), network_client_test:basic_ack_test(), network_client_test:lifecycle_test(), network_client_test:channel_lifecycle_test(), network_client_test:test_coverage(),halt().'
+	erl -pa ebin -noshell -eval 'network_client_test:test(),halt().'
 
 test_network_coverage: compile
 	erl -pa ebin -noshell -eval 'network_client_test:test_coverage(),halt().'
 
+# because halt/0 behaves the way it does, you may have to run twice either of
+# test_direct* to run it effectively.
 test_direct: compile
-	echo 'direct_client_test:test_wrapper("rabbit-test"),halt().' | SKIP_HEART=true SKIP_LOG_ARGS=true MNESIA_DIR=/tmp/rabbitmq-test-mnesia RABBIT_ARGS="-s rabbit -pa ./ebin" NODENAME=rabbit-test rabbitmq-server
+	LOG_BASE=/tmp SKIP_HEART=true SKIP_LOG_ARGS=true MNESIA_DIR=/tmp/rabbitmq-test-direct-mnesia RABBIT_ARGS="-detached -pa ./ebin" NODENAME=rabbit-test-direct rabbitmq-server
+	echo 'direct_client_test:test_wrapper("rabbit-test-direct").' | $(ERL_CALL)
+	@echo 'rabbit:stop_and_halt().' | $(ERL_CALL)
 
 test_direct_coverage: compile
-	echo 'direct_client_test:test_coverage("rabbit-test"),halt().' | SKIP_HEART=true SKIP_LOG_ARGS=true MNESIA_DIR=/tmp/rabbitmq-test-mnesia RABBIT_ARGS="-s rabbit -pa ./ebin" NODENAME=rabbit-test rabbitmq-server
+	LOG_BASE=/tmp SKIP_HEART=true SKIP_LOG_ARGS=true MNESIA_DIR=/tmp/rabbitmq-test-direct-coverage-mnesia RABBIT_ARGS="-detached -pa ./ebin" NODENAME=rabbit-test-direct-coverage rabbitmq-server
+	echo 'direct_client_test:test_coverage("rabbit-test-direct-coverage").' | $(ERL_CALL2)
+	@echo 'rabbit:stop_and_halt().' | $(ERL_CALL2)
 
 clean:
 	rm $(EBIN_DIR)/*.beam
