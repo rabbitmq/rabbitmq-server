@@ -72,7 +72,8 @@ open_channel({ChannelNumber, OutOfBand}, ChannelPid,
 %% the channel and then returns the ack to the user
 close_connection(Close = #'connection.close'{}, From,
                  #connection_state{writer_pid = Writer}) ->
-    rabbit_writer:send_command_and_shutdown(Writer, Close),
+    rabbit_writer:send_command(Writer, Close),
+    rabbit_writer:shutdown(Writer),
     receive
         {method, {'connection.close_ok'}, none } ->
             gen_server:reply(From, #'connection.close_ok'{})
@@ -148,8 +149,7 @@ start_reader(Sock, FramingPid) ->
     reader_loop(Sock, undefined, undefined, undefined).
 
 start_writer(Sock, Channel) ->
-    Connection = #connection{frame_max = ?FRAME_MIN_SIZE},
-    rabbit_writer:start(Sock, Channel, Connection).
+    rabbit_writer:start(Sock, Channel, ?FRAME_MIN_SIZE).
 
 reader_loop(Sock, Type, Channel, Length) ->
     receive

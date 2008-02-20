@@ -256,12 +256,6 @@ handle_info( {method, Method, none}, State) -> handle_method(Method, State);
 handle_info( {method, Method, Content}, State) -> handle_method(Method, Content, State);
 
 
-%% Handles the rpc bottom half and shuts down the channel
-handle_info( {send_command_and_shutdown, Method}, State) ->
-    NewState = channel_cleanup(State),
-    rpc_bottom_half(Method, NewState),
-    {stop, shutdown, NewState};
-
 %% Handles the delivery of a message from a direct channel
 handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     handle_method(Method, Content, State),

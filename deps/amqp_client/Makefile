@@ -36,7 +36,7 @@ compile:
 all: compile
 
 test_network: compile
-	erl -pa ebin -noshell -eval 'network_client_test:test(),halt().'
+		erl -pa ebin -noshell -eval 'network_client_test:basic_get_test(), network_client_test:basic_return_test(), network_client_test:basic_qos_test(), network_client_test:basic_recover_test(), network_client_test:basic_consume_test(), network_client_test:basic_ack_test(), network_client_test:lifecycle_test(), network_client_test:channel_lifecycle_test(), network_client_test:test_coverage(),halt().'
 
 test_network_coverage: compile
 	erl -pa ebin -noshell -eval 'network_client_test:test_coverage(),halt().'
