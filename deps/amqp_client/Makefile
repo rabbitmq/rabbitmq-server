@@ -52,8 +52,8 @@ test_network: compile
 test_network_coverage: compile
 	erl -pa ebin -noshell -eval 'network_client_test:test_coverage(),halt().'
 
-# because halt/0 behaves the way it does, you may have to run twice either of
-# test_direct* to run it effectively.
+# You may have to run twice either of test_direct* to run it effectively
+# (because of logging/restoring I guess)
 test_direct: compile
 	LOG_BASE=/tmp SKIP_HEART=true SKIP_LOG_ARGS=true MNESIA_DIR=/tmp/rabbitmq-test-direct-mnesia RABBIT_ARGS="-detached -pa ./ebin" NODENAME=rabbit-test-direct rabbitmq-server
 	echo 'direct_client_test:test_wrapper("rabbit-test-direct").' | $(ERL_CALL)
