@@ -29,15 +29,12 @@ INCLUDE_DIR=include
 ERLC_FLAGS=-W0
 DIST_DIR=rabbitmq-erlang-client
 
-NODENAME=rabbit-test-direct
-NODENAME2=rabbit-test-direct-coverage
-MNESIA_DIR=/tmp/rabbitmq-$(NODENAME)-mnesia
-MNESIA_DIR2=/tmp/rabbitmq-$(NODENAME)-mnesia
+NODENAME=rabbit_test_direct
+MNESIA_DIR=/tmp/rabbitmq_$(NODENAME)_mnesia
 LOG_BASE=/tmp
 
 
 ERL_CALL=erl_call -sname $(NODENAME) -e
-ERL_CALL2=erl_call -sname $(NODENAME2) -e
 
 
 compile:
@@ -46,23 +43,32 @@ compile:
 
 all: compile
 
-test_network: compile
+
+run_node: compile
+	LOG_BASE=/tmp SKIP_HEART=true SKIP_LOG_ARGS=true MNESIA_DIR=$(MNESIA_DIR) RABBIT_ARGS="-detached -pa ./ebin" NODENAME=$(NODENAME) rabbitmq-server
+	sleep 2 # so that the node is initialized when the tests are run
+
+all_tests: test_network test_network_coverage test_direct test_direct_coverage
+	echo 'rabbit:stop_and_halt().' | $(ERL_CALL)
+
+tests_network: test_network test_network_coverage
+	echo 'rabbit:stop_and_halt().' | $(ERL_CALL)
+
+test_network: run_node
 	erl -pa ebin -noshell -eval 'network_client_test:test(),halt().'
 
-test_network_coverage: compile
+test_network_coverage: run_node
 	erl -pa ebin -noshell -eval 'network_client_test:test_coverage(),halt().'
 
-# You may have to run twice either of test_direct* to run it effectively
-# (because of logging/restoring I guess)
-test_direct: compile
-	LOG_BASE=/tmp SKIP_HEART=true SKIP_LOG_ARGS=true MNESIA_DIR=/tmp/rabbitmq-test-direct-mnesia RABBIT_ARGS="-detached -pa ./ebin" NODENAME=rabbit-test-direct rabbitmq-server
-	echo 'direct_client_test:test_wrapper("rabbit-test-direct").' | $(ERL_CALL)
-	@echo 'rabbit:stop_and_halt().' | $(ERL_CALL)
+tests_direct: test_direct test_direct_coverage
+	echo 'rabbit:stop_and_halt().' | $(ERL_CALL)
+	rm -rf $(MNESIA_DIR)
 
-test_direct_coverage: compile
-	LOG_BASE=/tmp SKIP_HEART=true SKIP_LOG_ARGS=true MNESIA_DIR=/tmp/rabbitmq-test-direct-coverage-mnesia RABBIT_ARGS="-detached -pa ./ebin" NODENAME=rabbit-test-direct-coverage rabbitmq-server
-	echo 'direct_client_test:test_coverage("rabbit-test-direct-coverage").' | $(ERL_CALL2)
-	@echo 'rabbit:stop_and_halt().' | $(ERL_CALL2)
+test_direct: run_node
+	echo 'direct_client_test:test_wrapper("$(NODENAME)").' | $(ERL_CALL)
+
+test_direct_coverage: run_node
+	echo 'direct_client_test:test_coverage("$(NODENAME)").' | $(ERL_CALL)
 
 clean:
 	rm $(EBIN_DIR)/*.beam
