@@ -49,10 +49,10 @@ run_node: compile
 	sleep 2 # so that the node is initialized when the tests are run
 
 all_tests: test_network test_network_coverage test_direct test_direct_coverage
-	echo 'rabbit:stop_and_halt().' | $(ERL_CALL)
+	$(ERL_CALL) -q
 
 tests_network: test_network test_network_coverage
-	echo 'rabbit:stop_and_halt().' | $(ERL_CALL)
+	$(ERL_CALL) -q
 
 test_network: run_node
 	erl -pa ebin -noshell -eval 'network_client_test:test(),halt().'
@@ -61,7 +61,7 @@ test_network_coverage: run_node
 	erl -pa ebin -noshell -eval 'network_client_test:test_coverage(),halt().'
 
 tests_direct: test_direct test_direct_coverage
-	echo 'rabbit:stop_and_halt().' | $(ERL_CALL)
+	$(ERL_CALL) -q
 	rm -rf $(MNESIA_DIR)
 
 test_direct: run_node
