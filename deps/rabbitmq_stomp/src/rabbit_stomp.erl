@@ -277,7 +277,7 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, Realm, State) ->
     {ok, #'channel.open_ok'{}, State1} =
 	simple_method_sync_rpc(#'channel.open'{out_of_band = <<"">>},
 			       State#state{channel = ChPid}),
-    SessionId = rabbit_gensym:gensym("session"),
+    SessionId = binary_to_list(rabbit_misc:binstring_guid("session")),
     {ok, #'access.request_ok'{ticket = Ticket}, State2} =
 	simple_method_sync_rpc(#'access.request'{realm = list_to_binary(Realm),
 						 exclusive = false,
