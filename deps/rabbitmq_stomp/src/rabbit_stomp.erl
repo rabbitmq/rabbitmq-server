@@ -105,7 +105,13 @@ mainloop(State) ->
 	{tcp, _Sock, Bytes} ->
 	    process_received_bytes(Bytes, State);
 	{tcp_closed, _Sock} ->
-	    done;
+	    case State#state.channel of
+		none ->
+		    done;
+		ChPid ->
+		    rabbit_channel:shutdown(ChPid),
+		    ?MODULE:mainloop(State)
+	    end;
 	{send_command, Command} ->
 	    ?MODULE:mainloop(send_reply(Command, State));
 	{send_command_and_notify, QPid, TxPid, Method, Content} ->
