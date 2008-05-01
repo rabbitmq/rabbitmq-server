@@ -24,7 +24,7 @@ clean:
 run: all start_server
 
 start_server:
-	$(MAKE) -C $(RABBIT_SOURCE_ROOT)/erlang/rabbit run \
+	$(MAKE) -C $(RABBIT_SERVER_SOURCE_ROOT) run \
 		RABBIT_ARGS='-pa '"$$(pwd)/$(EBIN_DIR)"' -rabbit \
 			stomp_listeners [{\"0.0.0.0\",61613}] \
 			extra_startup_steps [{\"STOMP-listeners\",rabbit_stomp,kickstart,[]}]'
