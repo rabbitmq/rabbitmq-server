@@ -1,0 +1,118 @@
+---------------------------------------------------------------------------
+Introduction
+---------------------------------------------------------------------------
+
+This is a STOMP transport plugin for use with RabbitMQ.
+
+ - http://stomp.codehaus.org/
+ - http://www.rabbitmq.com/
+
+You can get the code by checking it out from our repository with
+
+hg clone http://hg.opensource.lshift.net/rabbitmq-stomp/
+
+Announcements regarding the transport are periodically made on the
+RabbitMQ mailing list, and on LShift's blog.
+
+ - http://lists.rabbitmq.com/cgi-bin/mailman/listinfo/rabbitmq-discuss
+ - http://www.lshift.net/blog/
+ - http://www.lshift.net/blog/category/lshift-sw/rabbitmq/
+
+
+---------------------------------------------------------------------------
+Compiling
+---------------------------------------------------------------------------
+
+To build the plugin, you should have the RabbitMQ broker source code
+compiled in "../rabbitmq". If you have a different path to the code,
+supply it as a command-line argument to make as
+RABBIT_SOURCE_ROOT=/some/other/path/to/rabbitmq.
+
+To compile the plugin and start the server with the plugin:
+
+      make run
+or    make RABBIT_SOURCE_ROOT=/some/other/path/to/rabbitmq run
+
+If this is successful, you should end up with "starting
+STOMP-listeners ...done" and "broker running" in your terminal.
+
+
+---------------------------------------------------------------------------
+Configuring the broker on Debian to start the plugin automatically
+---------------------------------------------------------------------------
+
+If you've installed the rabbitmq-server package on debian or ubuntu,
+the broker will pick up extra configuration from
+/etc/default/rabbitmq. To tell the server to start your plugin, first
+make sure it is compiled, and then add the following text to
+/etc/default/rabbitmq:
+
+RABBIT_ARGS='
+  -pa /path/to/rabbitmq-stomp/ebin 
+  -rabbit
+     stomp_listeners [{"0.0.0.0",61613}]
+     extra_startup_steps [{"STOMP-listeners",rabbit_stomp,kickstart,[]}]'
+
+making sure to update the "/path/to/rabbitmq-stomp/ebin" appropriately
+for your system. Then restart the broker with
+
+sudo /etc/init.d/rabbitmq-server restart
+
+You should then be able to connect to port 61613 using a STOMP client
+of your choice.
+
+
+---------------------------------------------------------------------------
+Running the Ruby examples
+---------------------------------------------------------------------------
+
+At this point you can try out the service - for instance, you can run
+the Ruby examples if you have Ruby and rubygems handy:
+
+sudo apt-get install ruby
+sudo apt-get install rubygems
+sudo gem install stomp
+ruby examples/ruby/cb-receiver.rb
+
+and in another window
+
+ruby examples/ruby/cb-sender.rb
+
+It will transfer 10,000 short messages, and end up displaying
+
+...
+Test Message number 9998
+Test Message number 9999
+All Done!
+
+in the receiver-side terminal.
+
+
+---------------------------------------------------------------------------
+Running the Perl examples
+---------------------------------------------------------------------------
+
+$ sudo cpan -i Net::Stomp
+
+The examples are those from the Net::Stomp documentation - run perldoc
+Net::Stomp to read the originals.
+
+Run the receiver before the sender to make sure the queue exists at
+the moment the send takes place. In one terminal window, start the
+receiver:
+
+$ perl examples/perl/rabbitmq_stomp_recv.pl
+
+In another terminal window, run the sender:
+
+$ perl examples/perl/rabbitmq_stomp_send.pl
+$ perl examples/perl/rabbitmq_stomp_send.pl "hello world"
+$ perl examples/perl/rabbitmq_stomp_send.pl QUIT
+
+The receiver's window should contain the received messages:
+
+$ perl examples/perl/rabbitmq_stomp_recv.pl 
+test message
+hello
+QUIT
+$
