@@ -33,7 +33,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 -export([open_channel/1, open_channel/3]).
--export([start/2, start/3, close/2]).
+-export([start/2, start/3, start/4, close/2]).
 
 %---------------------------------------------------------------------------
 % AMQP Connection API Methods
@@ -50,12 +50,13 @@ start(User, Password) ->
     {Pid, direct}.
 
 %% Starts a networked conection to a remote AMQP server.
-start(User, Password, Host) ->
+start(User, Password, Host) -> start(User, Password, Host, <<"/">>).
+start(User, Password, Host, VHost) ->
     Handshake = fun amqp_network_driver:handshake/1,
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      serverhost = Host,
-                                     vhostpath = <<"/">>},
+                                     vhostpath = VHost},
     {ok, Pid} = gen_server:start_link(?MODULE, [InitialState, Handshake], []),
     {Pid, network}.
 

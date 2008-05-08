@@ -108,12 +108,13 @@ register_return_handler(Channel, ReturnHandler) ->
 rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
                                                   pending_rpc = PendingRpc,
                                                   do2 = Do2}) ->
-    if
-        is_pid(PendingRpc) ->
+	% Check whether there is an outstanding RPC request
+	case PendingRpc of
+		{Pid,Ref} ->
             exit(illegal_pending_rpc);
-        true ->
-            ok
-    end,
+		Other ->
+			ok
+	end,		
     NewState = State#channel_state{pending_rpc = From},
     Do2(Writer,Method),
     {noreply, NewState}.
