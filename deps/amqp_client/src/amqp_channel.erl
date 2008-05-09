@@ -106,22 +106,18 @@ register_return_handler(Channel, ReturnHandler) ->
 %---------------------------------------------------------------------------
 
 rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
-                                                  pending_rpc = PendingRpc,
-                                                  do2 = Do2}) ->
-	% Check whether there is an outstanding RPC request
-	case PendingRpc of
-		{Pid,Ref} ->
-            exit(illegal_pending_rpc);
-		Other ->
-			ok
-	end,		
-    NewState = State#channel_state{pending_rpc = From},
+                                                  rpc_requests = RequestQueue,
+                                                  do2 = Do2}) ->	
+	% Enqueue the incoming RPC request to serialize RPC dispatching
+	NewRequestQueue = queue:in(From, RequestQueue),
+    NewState = State#channel_state{rpc_requests = NewRequestQueue},
     Do2(Writer,Method),
     {noreply, NewState}.
 
-rpc_bottom_half(Reply, State = #channel_state{pending_rpc = From}) ->
+rpc_bottom_half(Reply, State = #channel_state{rpc_requests = RequestQueue}) ->
+	{{value, From}, NewRequestQueue} = queue:out(RequestQueue),
     gen_server:reply(From, Reply),
-    NewState = State#channel_state{pending_rpc = <<>>},
+    NewState = State#channel_state{rpc_requests = NewRequestQueue},
     {noreply, NewState}.
 
 resolve_consumer(ConsumerTag, #channel_state{consumers = []}) ->

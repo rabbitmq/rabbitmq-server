@@ -42,7 +42,7 @@
                         reader_pid,
                         writer_pid,
                         do2, do3,
-                        pending_rpc,
+                        rpc_requests = queue:new(),
                         pending_consumer,
                         closing = false,
                         return_handler_pid,
