@@ -111,14 +111,27 @@ rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
                                                   rpc_requests = RequestQueue,
                                                   do2 = Do2}) ->	
 	% Enqueue the incoming RPC request to serialize RPC dispatching
-	NewRequestQueue = queue:in(From, RequestQueue),
+	NewRequestQueue = queue:in({From,Method}, RequestQueue),
     NewState = State#channel_state{rpc_requests = NewRequestQueue},
-    Do2(Writer,Method),
+	case queue:len(NewRequestQueue) of
+		1 ->
+			Do2(Writer,Method);
+		Other ->
+			ok
+	end,
     {noreply, NewState}.
 
-rpc_bottom_half(Reply, State = #channel_state{rpc_requests = RequestQueue}) ->
-	{{value, From}, NewRequestQueue} = queue:out(RequestQueue),
+rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
+											  rpc_requests = RequestQueue,
+											  do2 = Do2}) ->
+	{{value, {From,_}}, NewRequestQueue} = queue:out(RequestQueue),
     gen_server:reply(From, Reply),
+	catch case queue:head(NewRequestQueue) of
+		empty ->
+			ok;
+		{NewFrom,Method} ->
+			Do2(Writer,Method)
+	end,
     NewState = State#channel_state{rpc_requests = NewRequestQueue},
     {noreply, NewState}.
 
