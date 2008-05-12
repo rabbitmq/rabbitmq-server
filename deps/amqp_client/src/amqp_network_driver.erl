@@ -151,7 +151,8 @@ start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
     put({channel, 0},{chpid, FramingPid}),
     {ok, Ref} = prim_inet:async_recv(Sock, 7, -1),
-    reader_loop(Sock, undefined, undefined, undefined).
+    reader_loop(Sock, undefined, undefined, undefined),
+	gen_tcp:close(Sock).
 
 start_writer(Sock, Channel) ->
     rabbit_writer:start(Sock, Channel, ?FRAME_MIN_SIZE).
@@ -187,8 +188,7 @@ reader_loop(Sock, Type, Channel, Length) ->
             reader_loop(Sock, Type, Channel, Length);
         Other ->
             io:format("Other ~p~n",[Other])
-    end,
-    gen_tcp:close(Sock).
+    end.
 
 start_framing_channel(ChannelPid, ChannelNumber) ->
     FramingPid = rabbit_framing_channel:start_link(fun(X) -> link(X), X end, [ChannelPid]),
