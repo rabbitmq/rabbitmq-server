@@ -40,10 +40,10 @@
                         reader_pid,
                         writer_pid,
                         do2, do3,
-						close_fun,
+                        close_fun,
                         rpc_requests = queue:new(),
                         anon_sub_requests = queue:new(),
-						tagged_sub_requests = dict:new(),
+                        tagged_sub_requests = dict:new(),
                         closing = false,
                         return_handler_pid,
                         consumers = dict:new()}).

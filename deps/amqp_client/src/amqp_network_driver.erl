@@ -69,8 +69,8 @@ open_channel({ChannelNumber, OutOfBand}, ChannelPid,
     amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
 
 close_channel(WriterPid) ->
-	%io:format("Shutting the channel writer ~p down~n",[WriterPid]),
-	rabbit_writer:shutdown(WriterPid).
+    %io:format("Shutting the channel writer ~p down~n",[WriterPid]),
+    rabbit_writer:shutdown(WriterPid).
 
 %% This closes the writer down, waits for the confirmation from the
 %% the channel and then returns the ack to the user
@@ -85,7 +85,7 @@ close_connection(Close = #'connection.close'{}, From,
         5000 ->
             exit(timeout_on_exit)
     end,
-	Reader ! close.
+    Reader ! close.
 
 do(Writer, Method) -> rabbit_writer:send_command(Writer, Method).
 do(Writer, Method, Content) -> rabbit_writer:send_command(Writer, Method, Content).
@@ -152,7 +152,7 @@ start_reader(Sock, FramingPid) ->
     put({channel, 0},{chpid, FramingPid}),
     {ok, Ref} = prim_inet:async_recv(Sock, 7, -1),
     reader_loop(Sock, undefined, undefined, undefined),
-	gen_tcp:close(Sock).
+    gen_tcp:close(Sock).
 
 start_writer(Sock, Channel) ->
     rabbit_writer:start(Sock, Channel, ?FRAME_MIN_SIZE).
@@ -180,8 +180,8 @@ reader_loop(Sock, Type, Channel, Length) ->
             reader_loop(Sock, Type, Channel, Length);
         timeout ->
             io:format("Reader (~p) received timeout from heartbeat, exiting ~n",[self()]);
-		close ->
-	        io:format("Reader (~p) received close command, exiting ~n",[self()]);	
+        close ->
+            io:format("Reader (~p) received close command, exiting ~n",[self()]);
         {'EXIT', Pid, Reason} ->
             [H|T] = get_keys({chpid,Pid}),
             erase(H),

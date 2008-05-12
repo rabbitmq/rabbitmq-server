@@ -93,7 +93,7 @@ start_channel(ChannelNumber,CloseFun,Do2,Do3,State = #connection_state{reader_pi
     Number = assign_channel_number(ChannelNumber, State),
     InitialState = #channel_state{parent_connection = self(),
                                   number = Number,
-								  close_fun = CloseFun,
+                                  close_fun = CloseFun,
                                   do2 = Do2, do3 = Do3,
                                   reader_pid = ReaderPid,
                                   writer_pid = WriterPid},
@@ -163,7 +163,7 @@ init([InitialState, Handshake]) ->
 handle_call({network, ChannelNumber, OutOfBand}, From, State) ->
     handle_start({ChannelNumber, OutOfBand},
                  fun amqp_network_driver:open_channel/3,
-				 fun amqp_network_driver:close_channel/1,
+                 fun amqp_network_driver:close_channel/1,
                  fun amqp_network_driver:do/2,
                  fun amqp_network_driver:do/3,
                  State);
@@ -172,7 +172,7 @@ handle_call({network, ChannelNumber, OutOfBand}, From, State) ->
 handle_call({direct, ChannelNumber, OutOfBand}, From, State) ->
     handle_start({ChannelNumber, OutOfBand},
                  fun amqp_direct_driver:open_channel/3,
-				 fun amqp_direct_driver:close_channel/1,
+                 fun amqp_direct_driver:close_channel/1,
                  fun amqp_direct_driver:do/2,
                  fun amqp_direct_driver:do/3,
                  State);

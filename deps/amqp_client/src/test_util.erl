@@ -50,35 +50,35 @@
 %   amqp_channel:call(Channel, ChannelClose),
 %   ConnectionClose = #'connection.close'{ %% set the appropriate fields },
 %   amqp_connection:close(Connection, ConnectionClose).
-%	
+%
 
 lifecycle_test(Connection) ->
-	Realm = <<"/data">>,
-	X = <<"x">>,
+    Realm = <<"/data">>,
+    X = <<"x">>,
     {Channel, Ticket} = setup_channel(Connection, Realm),
-	ExchangeDeclare = #'exchange.declare'{ticket = Ticket, exchange = X, type = <<"topic">>,
+    ExchangeDeclare = #'exchange.declare'{ticket = Ticket, exchange = X, type = <<"topic">>,
                                           passive = false, durable = false, auto_delete = false, internal = false,
                                           nowait = false, arguments = []},
     #'exchange.declare_ok'{} = amqp_channel:call(Channel, ExchangeDeclare),
-	Parent = self(),
+    Parent = self(),
     [spawn(fun() -> queue_exchange_binding(Channel,Ticket,X,Parent,Tag) end) || Tag <- lists:seq(1,?Latch)],
-	latch_loop(?Latch),
-	ExchangeDelete = #'exchange.delete'{ticket = Ticket, exchange = X,
+    latch_loop(?Latch),
+    ExchangeDelete = #'exchange.delete'{ticket = Ticket, exchange = X,
                                         if_unused = false, nowait = false},
     #'exchange.delete_ok'{} = amqp_channel:call(Channel, ExchangeDelete),
     teardown(Connection, Channel).
 
 queue_exchange_binding(Channel,Ticket,X,Parent,Tag) ->
-	receive
-		nothing -> ok
-	after (?Latch - Tag rem 7) * 10 ->
-		ok
-	end,
+    receive
+        nothing -> ok
+    after (?Latch - Tag rem 7) * 10 ->
+        ok
+    end,
     Q = <<"a.b.c",Tag:32>>,
     BindKey = <<"a.b.c.*">>,
     RoutingKey = <<"a.b.c.d">>,
     Payload = <<"foobar">>,
-	QueueDeclare = #'queue.declare'{ticket = Ticket, queue = Q,
+    QueueDeclare = #'queue.declare'{ticket = Ticket, queue = Q,
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
                                     nowait = false, arguments = []},
@@ -94,7 +94,7 @@ queue_exchange_binding(Channel,Ticket,X,Parent,Tag) ->
                                   if_unused = true, if_empty = true, nowait = false},
     #'queue.delete_ok'{message_count = MessageCount2} = amqp_channel:call(Channel, QueueDelete),
     ?assertMatch(MessageCount, MessageCount2),
-	Parent ! finished.
+    Parent ! finished.
 
 channel_lifecycle_test(Connection) ->
     Realm = <<"/data">>,
@@ -177,16 +177,16 @@ basic_ack_test(Connection) ->
 
 basic_consume_test(Connection) ->
     {Channel, Ticket, Q} = setup_publish(Connection),
-	Parent = self(),
+    Parent = self(),
     [spawn(fun() -> consume_loop(Channel,Ticket,Q,Parent,<<Tag:32>>) end) || Tag <- lists:seq(1,?Latch)],
-	latch_loop(?Latch),
+    latch_loop(?Latch),
     teardown(Connection, Channel).
 
 consume_loop(Channel,Ticket,Q,Parent,Tag) ->
-	{ok, Consumer} = gen_event:start_link(),
+    {ok, Consumer} = gen_event:start_link(),
     gen_event:add_handler(Consumer, amqp_consumer , [] ),
     BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
-									consumer_tag = Tag,
+                                    consumer_tag = Tag,
                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, Consumer),
 
@@ -292,7 +292,7 @@ teardown({ConnectionPid, Mode}, Channel) ->
     ConnectionClose = #'connection.close'{reply_code = 200, reply_text = <<"Goodbye">>,
                                           class_id = 0, method_id = 0},
     #'connection.close_ok'{} = amqp_connection:close({ConnectionPid, Mode}, ConnectionClose),
-	
+
     ?assertMatch(false, is_process_alive(Channel)),
     ?assertMatch(false, is_process_alive(ConnectionPid)).
 
@@ -325,12 +325,12 @@ setup_channel(Connection, Realm) ->
     #'access.request_ok'{ticket = Ticket} = amqp_channel:call(Channel, Access),
     {Channel, Ticket}.
 
-latch_loop(0) -> ok;             
-latch_loop(Latch) ->             
-	receive                          
-		finished ->                  
-		latch_loop(Latch - 1)    
-	after ?Latch * 200 ->            
-		exit(waited_too_long)	        
-	end.		                     
+latch_loop(0) -> ok;
+latch_loop(Latch) ->
+    receive
+        finished ->
+            latch_loop(Latch - 1)
+    after ?Latch * 200 ->
+        exit(waited_too_long)
+    end.
 
