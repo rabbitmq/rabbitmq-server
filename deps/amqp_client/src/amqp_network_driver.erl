@@ -29,7 +29,7 @@
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include("amqp_client.hrl").
 
--export([handshake/1, open_channel/3, close_connection/3]).
+-export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
 -export([start_reader/2, start_writer/2]).
 -export([do/2,do/3]).
 
@@ -45,7 +45,7 @@ handshake(ConnectionState = #connection_state{serverhost = Host}) ->
             FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
             ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
             WriterPid = start_writer(Sock, 0),
-            ConnectionState1 = ConnectionState#connection_state{writer_pid = WriterPid,
+            ConnectionState1 = ConnectionState#connection_state{channel0_writer_pid = WriterPid,
                                                                 reader_pid = ReaderPid,
                                                                 sock = Sock},
             ConnectionState2 = network_handshake(WriterPid, ConnectionState1),
@@ -68,10 +68,14 @@ open_channel({ChannelNumber, OutOfBand}, ChannelPid,
     WriterPid = start_writer(Sock, ChannelNumber),
     amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
 
+close_channel(WriterPid) ->
+	%io:format("Shutting the channel writer ~p down~n",[WriterPid]),
+	rabbit_writer:shutdown(WriterPid).
+
 %% This closes the writer down, waits for the confirmation from the
 %% the channel and then returns the ack to the user
 close_connection(Close = #'connection.close'{}, From,
-                 #connection_state{writer_pid = Writer}) ->
+                 #connection_state{channel0_writer_pid = Writer, reader_pid = Reader}) ->
     rabbit_writer:send_command(Writer, Close),
     rabbit_writer:shutdown(Writer),
     receive
@@ -80,7 +84,8 @@ close_connection(Close = #'connection.close'{}, From,
     after
         5000 ->
             exit(timeout_on_exit)
-    end.
+    end,
+	Reader ! close.
 
 do(Writer, Method) -> rabbit_writer:send_command(Writer, Method).
 do(Writer, Method, Content) -> rabbit_writer:send_command(Writer, Method, Content).
@@ -173,7 +178,9 @@ reader_loop(Sock, Type, Channel, Length) ->
             start_framing_channel(ChannelPid, ChannelNumber),
             reader_loop(Sock, Type, Channel, Length);
         timeout ->
-            io:format("Reader (~p) received timeout from heartbeat, exiting ~n");
+            io:format("Reader (~p) received timeout from heartbeat, exiting ~n",[self()]);
+		close ->
+	        io:format("Reader (~p) received close command, exiting ~n",[self()]);	
         {'EXIT', Pid, Reason} ->
             [H|T] = get_keys({chpid,Pid}),
             erase(H),

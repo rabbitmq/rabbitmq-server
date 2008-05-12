@@ -140,13 +140,18 @@ unregister_consumer(ConsumerTag, State = #channel_state{consumers = Consumers0})
     Consumers1 = dict:erase(ConsumerTag, Consumers0),
     State#channel_state{consumers = Consumers1}.
 
+shutdown_writer(State = #channel_state{close_fun = CloseFun, writer_pid = WriterPid}) ->
+	CloseFun(WriterPid),
+	State.
+
 channel_cleanup(State = #channel_state{consumers = []}) ->
-    State;
+    shutdown_writer(State);
 
 channel_cleanup(State = #channel_state{consumers = Consumers}) ->
     Terminator = fun(ConsumerTag, Consumer) -> Consumer ! shutdown end,
     dict:map(Terminator, Consumers),
-    State#channel_state{closing = true, consumers = []}.
+    NewState = State#channel_state{closing = true, consumers = []},
+	shutdown_writer(NewState).
 
 return_handler(State = #channel_state{return_handler_pid = undefined}) ->
     %% TODO what about trapping exits??
@@ -320,6 +325,7 @@ handle_info( {channel_exception, Channel, Reason}, State) ->
 %---------------------------------------------------------------------------
 
 terminate(Reason, State) ->
+	channel_cleanup(State),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

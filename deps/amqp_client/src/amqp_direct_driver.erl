@@ -26,9 +26,10 @@
 -module(amqp_direct_driver).
 
 -include_lib("rabbitmq_server/include/rabbit.hrl").
+-include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
--export([handshake/1, open_channel/3, close_connection/3]).
+-export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
 -export([do/2,do/3]).
 
 %---------------------------------------------------------------------------
@@ -54,7 +55,9 @@ open_channel({Channel,OutOfBand}, ChannelPid, State = #connection_state{username
     amqp_channel:register_direct_peer(ChannelPid, Peer),
     State.
 
-close_connection(Close, From, State) -> ok.
+close_channel(WriterPid) -> ok.
+
+close_connection(Close, From, State) -> gen_server:reply(From, #'connection.close_ok'{}).
 
 do(Writer, Method) -> rabbit_channel:do(Writer, Method).
 do(Writer, Method, Content) -> rabbit_channel:do(Writer, Method, Content).

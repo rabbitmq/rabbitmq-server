@@ -292,6 +292,7 @@ teardown({ConnectionPid, Mode}, Channel) ->
     ConnectionClose = #'connection.close'{reply_code = 200, reply_text = <<"Goodbye">>,
                                           class_id = 0, method_id = 0},
     #'connection.close_ok'{} = amqp_connection:close({ConnectionPid, Mode}, ConnectionClose),
+	
     ?assertMatch(false, is_process_alive(Channel)),
     ?assertMatch(false, is_process_alive(ConnectionPid)).
 

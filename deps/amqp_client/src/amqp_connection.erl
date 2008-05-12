@@ -72,8 +72,7 @@ open_channel( {ConnectionPid, Mode}, ChannelNumber, OutOfBand) ->
     gen_server:call(ConnectionPid, {Mode, ChannelNumber, amqp_util:binary(OutOfBand)}).
 
 %% Closes the AMQP connection
-close( {ConnectionPid, Mode}, Close) ->
-    gen_server:call(ConnectionPid, {Mode, Close} ).
+close( {ConnectionPid, Mode}, Close) -> gen_server:call(ConnectionPid, {Mode, Close} ).
 
 %---------------------------------------------------------------------------
 % Internal plumbing
@@ -82,18 +81,19 @@ close( {ConnectionPid, Mode}, Close) ->
 %% Starts a new channel process, invokes the correct driver (network or direct)
 %% to perform any environment specific channel setup and starts the
 %% AMQP ChannelOpen handshake.
-handle_start({ChannelNumber, OutOfBand}, Driver, Do2, Do3, State) ->
-    {ChannelPid, Number,  State0} = start_channel(ChannelNumber, Do2, Do3, State),
-    Driver({Number, OutOfBand}, ChannelPid, State0),
+handle_start({ChannelNumber, OutOfBand},OpenFun,CloseFun,Do2,Do3,State) ->
+    {ChannelPid, Number,  State0} = start_channel(ChannelNumber,CloseFun,Do2,Do3,State),
+    OpenFun({Number, OutOfBand}, ChannelPid, State0),
     #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{out_of_band = OutOfBand}),
     {reply, ChannelPid, State0}.
 
 %% Creates a new channel process
-start_channel(ChannelNumber, Do2, Do3, State = #connection_state{reader_pid = ReaderPid,
-                                                                 writer_pid = WriterPid}) ->
+start_channel(ChannelNumber,CloseFun,Do2,Do3,State = #connection_state{reader_pid = ReaderPid,
+                                                                 channel0_writer_pid = WriterPid}) ->
     Number = assign_channel_number(ChannelNumber, State),
     InitialState = #channel_state{parent_connection = self(),
                                   number = Number,
+								  close_fun = CloseFun,
                                   do2 = Do2, do3 = Do3,
                                   reader_pid = ReaderPid,
                                   writer_pid = WriterPid},
@@ -163,6 +163,7 @@ init([InitialState, Handshake]) ->
 handle_call({network, ChannelNumber, OutOfBand}, From, State) ->
     handle_start({ChannelNumber, OutOfBand},
                  fun amqp_network_driver:open_channel/3,
+				 fun amqp_network_driver:close_channel/1,
                  fun amqp_network_driver:do/2,
                  fun amqp_network_driver:do/3,
                  State);
@@ -171,6 +172,7 @@ handle_call({network, ChannelNumber, OutOfBand}, From, State) ->
 handle_call({direct, ChannelNumber, OutOfBand}, From, State) ->
     handle_start({ChannelNumber, OutOfBand},
                  fun amqp_direct_driver:open_channel/3,
+				 fun amqp_direct_driver:close_channel/1,
                  fun amqp_direct_driver:do/2,
                  fun amqp_direct_driver:do/3,
                  State);
@@ -178,7 +180,7 @@ handle_call({direct, ChannelNumber, OutOfBand}, From, State) ->
 %% Shuts the AMQP connection down
 handle_call({Mode, Close = #'connection.close'{}}, From, State) ->
     close_connection(Mode, Close, From, State),
-    {stop, normal, #'connection.close_ok'{}, State}.
+    {stop,normal,State}.
 
 handle_cast(Message, State) ->
     {noreply, State}.
