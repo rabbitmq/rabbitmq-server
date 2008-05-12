@@ -177,11 +177,16 @@ basic_ack_test(Connection) ->
 
 basic_consume_test(Connection) ->
     {Channel, Ticket, Q} = setup_publish(Connection),
-    {ok, Consumer} = gen_event:start_link(),
+	Parent = self(),
+    [spawn(fun() -> consume_loop(Channel,Ticket,Q,Parent,<<Tag:32>>) end) || Tag <- lists:seq(1,?Latch)],
+	latch_loop(?Latch),
+    teardown(Connection, Channel).
+
+consume_loop(Channel,Ticket,Q,Parent,Tag) ->
+	{ok, Consumer} = gen_event:start_link(),
     gen_event:add_handler(Consumer, amqp_consumer , [] ),
-    Tag = <<"">>,
     BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
-                                    consumer_tag = Tag,
+									consumer_tag = Tag,
                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, Consumer),
 
@@ -191,13 +196,11 @@ basic_consume_test(Connection) ->
         #'basic.cancel_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicCancel),
         gen_event:stop(Consumer)
     end,
-    teardown(Connection, Channel).
+	Parent ! finished.
 
 basic_recover_test(Connection) ->
     {Channel, Ticket, Q} = setup_publish(Connection),
-    Tag = <<"">>,
     BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
-                                    consumer_tag = Tag,
                                     no_local = false, no_ack = false, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, self()),
     receive
@@ -230,9 +233,7 @@ basic_qos_test(Connection) ->
 
 basic_reject_test(Connection) ->
     {Channel, Ticket, Q} = setup_publish(Connection),
-    Tag = <<"">>,
     BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
-                                    consumer_tag = Tag,
                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, self()),
     receive

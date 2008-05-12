@@ -25,6 +25,10 @@
 
 -module(amqp_rpc_util).
 
+-ifndef(Hessian).
+-define(Hessian, <<"application/x-hessian">>).
+-endif.
+
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 

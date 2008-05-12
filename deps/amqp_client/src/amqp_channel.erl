@@ -72,6 +72,8 @@ call(Channel, Method) ->
 
 %% Allows a consumer to be registered with the channel when invoking a BasicConsume
 call(Channel, Method = #'basic.consume'{}, Consumer) ->
+	%% TODO This requires refactoring, because the handle_call callback
+	%% can perform the differentiation between tuples
     gen_server:call(Channel, {basic_consume, Method, Consumer}).
 
 %% Generic AMQP send mechansim that doesn't expect a response
@@ -120,6 +122,10 @@ rpc_bottom_half(Reply, State = #channel_state{rpc_requests = RequestQueue}) ->
     NewState = State#channel_state{rpc_requests = NewRequestQueue},
     {noreply, NewState}.
 
+subscription_top_half(Method, From, State = #channel_state{writer_pid = Writer, do2 = Do2}) ->
+	Do2(Writer,Method),
+    {noreply, State}.
+
 resolve_consumer(ConsumerTag, #channel_state{consumers = []}) ->
     exit(no_consumers_registered);
 
@@ -156,11 +162,25 @@ return_handler(State = #channel_state{return_handler_pid = ReturnHandler}) ->
 %% This then executes the bottom half of the RPC and finally
 %% nulls out the pending_consumer pid field that has been saved
 handle_method(BasicConsumeOk = #'basic.consume_ok'{consumer_tag = ConsumerTag},
-                        State = #channel_state{pending_consumer = Consumer}) ->
+                        State = #channel_state{anon_sub_requests = Anon,
+											   tagged_sub_requests = Tagged}) ->
+	{From, Consumer, State0} = 
+		case dict:find(ConsumerTag,Tagged) of
+			{ok, {F,C}} ->
+				NewTagged = dict:erase(ConsumerTag,Tagged),
+				{F,C,State#channel_state{tagged_sub_requests = NewTagged}};
+			error ->
+				case queue:out(Anon) of
+					{empty,X} ->
+						exit(anonymous_queue_empty, ConsumerTag);
+					{{value, {F,C}}, NewAnon} ->
+						{F,C,State#channel_state{anon_sub_requests = NewAnon}}
+				end		
+			end,
     Consumer ! BasicConsumeOk,
-    NewState = register_consumer(ConsumerTag, Consumer, State),
-    {noreply, NewState2} = rpc_bottom_half(BasicConsumeOk, NewState),
-    {noreply, NewState2#channel_state{pending_consumer = <<>>} };
+    State1 = register_consumer(ConsumerTag, Consumer, State0),
+	gen_server:reply(From, BasicConsumeOk),
+    {noreply, State1};
 
 handle_method(BasicCancelOk = #'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
@@ -207,9 +227,22 @@ handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
 
 %% Top half of the basic consume process.
 %% Sets up the consumer for registration in the bottom half of this RPC.
-handle_call({basic_consume, Method, Consumer}, From, State) ->
-    NewState = State#channel_state{pending_consumer = Consumer},
-    rpc_top_half(Method, From, NewState).
+handle_call({basic_consume, Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
+			From, State = #channel_state{anon_sub_requests = Subs}) 
+			when Tag =:= undefined ; size(Tag) == 0 ->
+	NewSubs = queue:in({From,Consumer}, Subs),
+	NewState = State#channel_state{anon_sub_requests = NewSubs},
+	NewMethod =  Method#'basic.consume'{consumer_tag = <<"">>},
+    subscription_top_half(NewMethod, From, NewState);
+
+handle_call({basic_consume, Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
+			From, State = #channel_state{tagged_sub_requests = Subs})
+			when is_binary(Tag) ->
+	% TODO test whether this tag already exists, either in the pending tagged
+	% request map or in general as already subscribed consumer		
+	NewSubs = dict:store(Tag,{From,Consumer},Subs),
+	NewState = State#channel_state{tagged_sub_requests = NewSubs},
+    subscription_top_half(Method, From, NewState).
 
 %% Standard implementation of the cast/2 command
 handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer, do2 = Do2}) ->

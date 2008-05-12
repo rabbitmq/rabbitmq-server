@@ -22,8 +22,6 @@
 %%
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
--ifndef(Hessian).
--define(Hessian, <<"application/x-hessian">>).
 
 -record(connection_state, {username,
                            password,
@@ -43,7 +41,8 @@
                         writer_pid,
                         do2, do3,
                         rpc_requests = queue:new(),
-                        pending_consumer,
+                        anon_sub_requests = queue:new(),
+						tagged_sub_requests = dict:new(),
                         closing = false,
                         return_handler_pid,
                         consumers = dict:new()}).
@@ -68,5 +67,3 @@
                         queue,
                         realm}).
 
-
--endif.
