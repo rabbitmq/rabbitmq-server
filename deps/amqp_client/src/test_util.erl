@@ -191,7 +191,7 @@ consume_loop(Channel,Ticket,Q,Parent,Tag) ->
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, Consumer),
 
     receive
-    after 2000 ->
+    after 100 ->
         BasicCancel = #'basic.cancel'{consumer_tag = ConsumerTag, nowait = false},
         #'basic.cancel_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicCancel),
         gen_event:stop(Consumer)

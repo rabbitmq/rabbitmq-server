@@ -175,10 +175,6 @@ return_handler(State = #channel_state{return_handler_pid = undefined}) ->
 return_handler(State = #channel_state{return_handler_pid = ReturnHandler}) ->
     {ReturnHandler, State}.
 
-%% Saves a sucessful consumer regsitration into the channel state
-%% using the pending_consumer field of the channel_state record.
-%% This then executes the bottom half of the RPC and finally
-%% nulls out the pending_consumer pid field that has been saved
 handle_method(BasicConsumeOk = #'basic.consume_ok'{consumer_tag = ConsumerTag},
                         State = #channel_state{anon_sub_requests = Anon,
                                                tagged_sub_requests = Tagged}) ->
@@ -197,8 +193,7 @@ handle_method(BasicConsumeOk = #'basic.consume_ok'{consumer_tag = ConsumerTag},
         end,
     Consumer ! BasicConsumeOk,
     State1 = register_consumer(ConsumerTag, Consumer, State0),
-    gen_server:reply(From, BasicConsumeOk),
-    {noreply, State1};
+    rpc_bottom_half(BasicConsumeOk,State1);
 
 handle_method(BasicCancelOk = #'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
@@ -251,7 +246,7 @@ handle_call({basic_consume, Method = #'basic.consume'{consumer_tag = Tag}, Consu
     NewSubs = queue:in({From,Consumer}, Subs),
     NewState = State#channel_state{anon_sub_requests = NewSubs},
     NewMethod =  Method#'basic.consume'{consumer_tag = <<"">>},
-    subscription_top_half(NewMethod, From, NewState);
+    rpc_top_half(NewMethod, From, NewState);
 
 handle_call({basic_consume, Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
             From, State = #channel_state{tagged_sub_requests = Subs})
@@ -260,7 +255,7 @@ handle_call({basic_consume, Method = #'basic.consume'{consumer_tag = Tag}, Consu
     % request map or in general as already subscribed consumer
     NewSubs = dict:store(Tag,{From,Consumer},Subs),
     NewState = State#channel_state{tagged_sub_requests = NewSubs},
-    subscription_top_half(Method, From, NewState).
+    rpc_top_half(Method, From, NewState).
 
 %% Standard implementation of the cast/2 command
 handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer, do2 = Do2}) ->
