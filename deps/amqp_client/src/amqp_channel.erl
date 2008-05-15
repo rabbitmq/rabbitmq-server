@@ -274,6 +274,7 @@ handle_cast({cast, Method, Content}, State = #channel_state{writer_pid = Writer,
 
 %% Registers the direct channel peer when using the direct client
 handle_cast({register_direct_peer, Peer}, State) ->
+    link(Peer),
     NewState = State#channel_state{writer_pid = Peer},
     {noreply, NewState};
 
