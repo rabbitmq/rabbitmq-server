@@ -93,9 +93,18 @@ init(_Parent) ->
         {go, Sock} ->
 	    ok = inet:setopts(Sock, [{active, true}]),
 	    process_flag(trap_exit, true),
+
+	    {ok, {PeerAddress, PeerPort}} = inet:peername(Sock),
+	    PeerAddressS = inet_parse:ntoa(PeerAddress),
+	    error_logger:info_msg("starting STOMP connection ~p from ~s:~p~n",
+				  [self(), PeerAddressS, PeerPort]),
+
 	    ?MODULE:mainloop(#state{socket = Sock,
 				    channel = none,
-				    parse_state = stomp_frame:initial_state()})
+				    parse_state = stomp_frame:initial_state()}),
+
+	    error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
+				  [self(), PeerAddressS, PeerPort])
     end.
 
 mainloop(State) ->
@@ -122,7 +131,10 @@ mainloop(State) ->
 	    send_reply(Command, State),
 	    done;
 	shutdown ->
-	    done;
+	    %% This is the channel telling the writer to shut down. We
+	    %% ignore this, as the channel will exit itself shortly,
+	    %% which event we do respond to.
+	    ?MODULE:mainloop(State);
 	Data ->
 	    error_logger:error_msg("Internal error: unknown STOMP Data: ~p~n", [Data]),
 	    ?MODULE:mainloop(State)
@@ -137,6 +149,13 @@ simple_method_sync_rpc(Method, State0) ->
 	    {ok, Reply, State}
     end.
 
+handle_exit({'EXIT', _Pid, normal}, State) ->
+    %% Normal exits (it'll be the channel, which we receive because
+    %% we're the writer and the writer is linked to the channel, or
+    %% the channel's buffering_proxy, which we receive because we're
+    %% the reader and the reader is linked to the buffering_proxy) are
+    %% fine
+    done;
 handle_exit({'EXIT', _Pid, {amqp, Code, Method}}, State) ->
     explain_amqp_death(Code, Method, State),
     done;
