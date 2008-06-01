@@ -33,7 +33,7 @@
 -export([parse_headers/2, initial_headers_state/0]).
 -export([parse_body/2, initial_body_state/1]).
 -export([parse/2, initial_state/0]).
--export([header/2, header/3, integer_header/2, integer_header/3, binary_header/2, binary_header/3]).
+-export([header/2, header/3, boolean_header/2, boolean_header/3, integer_header/2, integer_header/3, binary_header/2, binary_header/3]).
 -export([serialize/1]).
 
 -record(hstate, {state, acc, key, command, headers}).
@@ -92,6 +92,26 @@ header(#stomp_frame{headers = Headers}, Key, DefaultValue) ->
 	    Str;
 	_ ->
 	    DefaultValue
+    end.
+
+boolean_header(#stomp_frame{headers = Headers}, Key) ->
+    boolean_header(Headers, Key);
+boolean_header(Headers, Key) ->
+    case lists:keysearch(Key, 1, Headers) of
+	{value, {_, "true"}} ->
+	    {ok, true};
+	{value, {_, "false"}} ->
+	    {ok, false};
+	_ ->
+	    not_found
+    end.
+
+boolean_header(H, Key, D) ->
+    case boolean_header(H, Key) of
+	{ok, V} ->
+	    V;
+	not_found ->
+	    D
     end.
 
 integer_header(#stomp_frame{headers = Headers}, Key) ->
@@ -195,3 +215,5 @@ serialize_header({K, V}) when is_integer(V) ->
     [K, $:, integer_to_list(V), $\n];
 serialize_header({K, V}) when is_list(V) ->
     [K, $:, V, $\n].
+
+%% vi:noet:ts=8:sts=4:sw=4:cindent

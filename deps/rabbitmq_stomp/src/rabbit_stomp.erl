@@ -458,10 +458,10 @@ process_command("SUBSCRIBE",
 					      nowait = true},
 			     send_method(#'queue.declare'{ticket = Ticket,
 							  queue = Queue,
-							  passive = false,
-							  durable = false,
-							  exclusive = falxse,
-							  auto_delete = true,
+							  passive = stomp_frame:boolean_header(Frame, "passive", false),
+							  durable = stomp_frame:boolean_header(Frame, "durable", false),
+							  exclusive = stomp_frame:boolean_header(Frame, "exclusive", false),
+							  auto_delete = stomp_frame:boolean_header(Frame, "auto-delete", true),
 							  nowait = true,
 							  arguments =
 							    make_string_table(fun user_header_key/1,
@@ -501,3 +501,5 @@ process_command(Command, _Frame, State) ->
     {ok, send_error("Bad command",
 		    "Could not interpret command " ++ Command ++ "\n",
 		    State)}.
+
+%% vi:noet:ts=8:sts=4:sw=4:cindent
