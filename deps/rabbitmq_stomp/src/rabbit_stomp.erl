@@ -149,7 +149,7 @@ simple_method_sync_rpc(Method, State0) ->
 	    {ok, Reply, State}
     end.
 
-handle_exit({'EXIT', _Pid, normal}, State) ->
+handle_exit({'EXIT', _Pid, normal}, _State) ->
     %% Normal exits (it'll be the channel, which we receive because
     %% we're the writer and the writer is linked to the channel, or
     %% the channel's buffering_proxy, which we receive because we're
@@ -321,6 +321,12 @@ do_login(_, _, _, _, State) ->
 user_header_key("X-" ++ UserKey) -> UserKey;
 user_header_key(_) -> false.
 
+user_queue_header_key("X-Q-" ++ UserKey) -> UserKey;
+user_queue_header_key(_) -> false.
+
+user_binding_header_key("X-B-" ++ UserKey) -> UserKey;
+user_binding_header_key(_) -> false.
+
 make_string_table(_KeyFilter, []) -> [];
 make_string_table(KeyFilter, [{K, V} | Rest]) ->
     case KeyFilter(K) of
@@ -468,24 +474,43 @@ process_command("SUBSCRIBE",
 				  list_to_binary("Q_" ++ QueueStr)
 			  end,
 	    Queue = list_to_binary(QueueStr),
-	    {ok, send_method(#'basic.consume'{ticket = Ticket,
-					      queue = Queue,
-					      consumer_tag = ConsumerTag,
-					      no_local = false,
-					      no_ack = (AckMode == auto),
-					      exclusive = false,
-					      nowait = true},
-			     send_method(#'queue.declare'{ticket = Ticket,
-							  queue = Queue,
-							  passive = stomp_frame:boolean_header(Frame, "passive", false),
-							  durable = stomp_frame:boolean_header(Frame, "durable", false),
-							  exclusive = stomp_frame:boolean_header(Frame, "exclusive", false),
-							  auto_delete = stomp_frame:boolean_header(Frame, "auto-delete", true),
-							  nowait = true,
-							  arguments =
-							    make_string_table(fun user_header_key/1,
-									      Headers)},
-					 State))};
+	    State1 = send_method(#'queue.declare'{ticket = Ticket,
+						  queue = Queue,
+						  passive = stomp_frame:boolean_header(Frame, "passive", false),
+						  durable = stomp_frame:boolean_header(Frame, "durable", false),
+						  exclusive = stomp_frame:boolean_header(Frame, "exclusive", false),
+						  auto_delete = stomp_frame:boolean_header(Frame, "auto-delete", true),
+						  nowait = true,
+						  arguments =
+						    make_string_table(fun user_queue_header_key/1,
+								      Headers)},
+				 State),
+	    State2 = case stomp_frame:header(Frame, "exchange") of
+			 {ok, ExchangeStr } ->
+			     Exchange = list_to_binary(ExchangeStr),
+			     RoutingKeyStr = stomp_frame:header(Frame, "routing_key", ""),
+			     RoutingKey = list_to_binary(RoutingKeyStr),
+			     send_method(#'queue.bind'{ticket = Ticket,
+						       queue = Queue,
+						       exchange = Exchange,
+						       routing_key = RoutingKey,
+						       nowait = true,
+						       arguments =
+						         make_string_table(
+							   fun user_binding_header_key/1,
+							   Headers)},
+					 State1);
+			 not_found -> State1
+		     end,
+	    State3 = send_method(#'basic.consume'{ticket = Ticket,
+						  queue = Queue,
+						  consumer_tag = ConsumerTag,
+						  no_local = false,
+						  no_ack = (AckMode == auto),
+						  exclusive = false,
+						  nowait = true},
+				 State2),
+	    {ok, State3};
 	not_found ->
 	    {ok, send_error("Missing destination",
 			    "SUBSCRIBE must include a 'destination' header\n",
