@@ -112,7 +112,7 @@ register_channel(ChannelNumber, ChannelPid, State = #connection_state{channels =
     Channels1 =
             case dict:is_key(ChannelNumber, Channels0) of
                 true ->
-                    exit(channel_already_registered, ChannelNumber);
+                    exit({channel_already_registered, ChannelNumber});
                 false ->
                     dict:store(ChannelNumber, ChannelPid , Channels0)
             end,
