@@ -46,6 +46,15 @@ lifecycle_test() -> test_util:lifecycle_test(new_connection()).
 
 basic_ack_test() ->test_util:basic_ack_test(new_connection()).
 
+%----------------------------------------------------------------------------
+% Negative Tests
+
+non_existent_exchange_test() -> 
+    negative_test_util:non_existent_exchange_test(new_connection()).
+
+%----------------------------------------------------------------------------
+%% Common Functions
+
 new_connection() -> amqp_connection:start("guest", "guest").
 
 test_wrapper(NodeName) ->

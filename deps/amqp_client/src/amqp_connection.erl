@@ -34,6 +34,7 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 -export([open_channel/1, open_channel/3]).
 -export([start/2, start/3, start/4, close/2]).
+-export([start_link/2, start_link/3, start_link/4]).
 
 %---------------------------------------------------------------------------
 % AMQP Connection API Methods
@@ -41,24 +42,38 @@
 
 %% Starts a direct connection to the Rabbit AMQP server, assuming that
 %% the server is running in the same process space.
-start(User, Password) ->
+start(User,Password) -> start(User,Password,false).
+start(User,Password,ProcLink) when is_boolean(ProcLink) ->
     Handshake = fun amqp_direct_driver:handshake/1,
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      vhostpath = <<"/">>},
-    {ok, Pid} = gen_server:start_link(?MODULE, [InitialState, Handshake], []),
-    {Pid, direct}.
+    {ok, Pid} = start_internal(InitialState, Handshake,ProcLink),
+    {Pid, direct};
 
 %% Starts a networked conection to a remote AMQP server.
-start(User, Password, Host) -> start(User, Password, Host, <<"/">>).
-start(User, Password, Host, VHost) ->
+start(User,Password,Host) -> start(User,Password,Host,<<"/">>,false).
+start(User,Password,Host,VHost) -> start(User,Password,Host,VHost,false).
+start(User,Password,Host,VHost,ProcLink) ->
     Handshake = fun amqp_network_driver:handshake/1,
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      serverhost = Host,
                                      vhostpath = VHost},
-    {ok, Pid} = gen_server:start_link(?MODULE, [InitialState, Handshake], []),
+    {ok, Pid} = start_internal(InitialState, Handshake,ProcLink),
     {Pid, network}.
+    
+start_link(User,Password) -> start(User,Password,true).
+start_link(User,Password,Host) -> start(User,Password,Host,<<"/">>,true).
+start_link(User,Password,Host,VHost) -> start(User,Password,Host,VHost,true).
+
+start_internal(InitialState, Handshake,ProcLink) ->
+    case ProcLink of
+        true ->                                 
+            gen_server:start_link(?MODULE, [InitialState, Handshake], []);
+        false ->
+            gen_server:start(?MODULE, [InitialState, Handshake], [])
+    end.
 
 %% Opens a channel without having to specify a channel number.
 %% This function assumes that an AMQP connection (networked or direct)
@@ -189,8 +204,14 @@ handle_cast(Message, State) ->
 % Trap exits
 %---------------------------------------------------------------------------
 
+handle_info( {'EXIT', Pid, {amqp,Reason,Msg,Context}}, State) ->
+    io:format("Channel Peer ~p sent this message: ~p -> ~p~n",[Pid,Msg,Context]),
+    io:format("Just trapping this exit and proceding to trap an exit from the client channel process~n"),
+    {noreply, State};
+
 %% Just the amqp channel shutting down, so unregister this channel
 handle_info( {'EXIT', Pid, Reason}, State) ->
+    io:format("Connection: Handling exit from ~p --> ~p~n",[Pid,Reason]),
     NewState = unregister_channel(Pid, State),
     {noreply, NewState}.
 
@@ -198,8 +219,7 @@ handle_info( {'EXIT', Pid, Reason}, State) ->
 % Rest of the gen_server callbacks
 %---------------------------------------------------------------------------
 
-terminate(Reason, State) ->
-    ok.
+terminate(Reason, State) -> ok.
 
 code_change(_OldVsn, State, _Extra) ->
     State.

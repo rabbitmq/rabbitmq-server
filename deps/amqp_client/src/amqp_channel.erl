@@ -270,6 +270,7 @@ handle_cast({cast, Method, Content}, State = #channel_state{writer_pid = Writer,
 %% Registers the direct channel peer when using the direct client
 handle_cast({register_direct_peer, Peer}, State) ->
     link(Peer),
+    process_flag(trap_exit,true),
     NewState = State#channel_state{writer_pid = Peer},
     {noreply, NewState};
 
@@ -306,9 +307,9 @@ handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     rabbit_amqqueue:notify_sent(Q, ChPid),
     {noreply, State};
 
-handle_info(shutdown, State ) ->
+handle_info(shutdown, State) ->
     NewState = channel_cleanup(State),
-    {stop, shutdown, NewState};
+    {stop, normal, NewState};
 
 %---------------------------------------------------------------------------
 % This is for a race condition between a close.close_ok and a subsequent channel.open
@@ -332,7 +333,7 @@ handle_info( {channel_exception, Channel, Reason}, State) ->
 %---------------------------------------------------------------------------
 % Rest of the gen_server callbacks
 %---------------------------------------------------------------------------
-
+terminate(normal, State) -> ok;
 terminate(Reason, State) ->
     channel_cleanup(State),
     ok.
