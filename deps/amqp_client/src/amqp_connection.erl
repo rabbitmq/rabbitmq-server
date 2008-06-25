@@ -206,8 +206,15 @@ handle_cast(Message, State) ->
 
 handle_info( {'EXIT', Pid, {amqp,Reason,Msg,Context}}, State) ->
     io:format("Channel Peer ~p sent this message: ~p -> ~p~n",[Pid,Msg,Context]),
-    io:format("Just trapping this exit and proceding to trap an exit from the client channel process~n"),
-    {noreply, State};
+    {HardError, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
+    case HardError of
+        false ->
+            io:format("Just trapping this exit and proceding to trap an exit from the client channel process~n"),
+            {noreply, State};
+        true ->
+            io:format("A hard error has occurred, this forces the connection to end~n"),
+            {stop,normal,State}
+    end;            
 
 %% Just the amqp channel shutting down, so unregister this channel
 handle_info( {'EXIT', Pid, normal}, State) ->
