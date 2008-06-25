@@ -120,10 +120,16 @@ rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
             ok
         end,
     {noreply, NewState}.
-
+    
+rpc_bottom_half(#'channel.close'{reply_code = ReplyCode, 
+                                 reply_text = ReplyText},State) ->
+    io:format("Channel received close from peer, code: ~p , message: ~p~n",[ReplyCode,ReplyText]),
+    NewState = channel_cleanup(State),
+    {stop, normal, NewState};
+    
 rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                                               rpc_requests = RequestQueue,
-                                              do2 = Do2}) ->
+                                              do2 = Do2}) ->                                              
     {{value, {From,_}}, NewRequestQueue} = queue:out(RequestQueue),
     gen_server:reply(From, Reply),
     catch case queue:head(NewRequestQueue) of

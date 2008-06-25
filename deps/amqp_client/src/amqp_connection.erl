@@ -210,6 +210,9 @@ handle_info( {'EXIT', Pid, {amqp,Reason,Msg,Context}}, State) ->
     {noreply, State};
 
 %% Just the amqp channel shutting down, so unregister this channel
+handle_info( {'EXIT', Pid, normal}, State) ->
+    NewState = unregister_channel(Pid, State),
+    {noreply, NewState};
 handle_info( {'EXIT', Pid, Reason}, State) ->
     io:format("Connection: Handling exit from ~p --> ~p~n",[Pid,Reason]),
     NewState = unregister_channel(Pid, State),

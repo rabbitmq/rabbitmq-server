@@ -53,6 +53,15 @@ basic_ack_test() ->
 channel_lifecycle_test() ->
   test_util:channel_lifecycle_test(new_connection()).
 
+%----------------------------------------------------------------------------
+% Negative Tests
+
+non_existent_exchange_test() -> 
+  negative_test_util:non_existent_exchange_test(new_connection()).
+
+%----------------------------------------------------------------------------
+%% Common Functions  
+
 new_connection() ->
   amqp_connection:start("guest", "guest", "localhost").
 
