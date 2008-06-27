@@ -41,7 +41,7 @@ publish(Channel,Ticket,X,RoutingKey,Payload) ->
                    properties = amqp_util:basic_properties(), 
                    properties_bin = none,
                    payload_fragments_rev = [Payload]},
-    amqp_channel:cast(Channel, BasicPublish, Content).
+    amqp_channel:cast(Channel, BasicPublish, Content).    
     
 teardown(Connection,Channel) ->
     ChannelClose = #'channel.close'{reply_code = 200, reply_text = <<"Goodbye">>,
@@ -49,4 +49,36 @@ teardown(Connection,Channel) ->
     amqp_channel:call(Channel, ChannelClose),
     ConnectionClose = #'connection.close'{reply_code = 200, reply_text = <<"Goodbye">>,
                                               class_id = 0, method_id = 0},
-    amqp_connection:close(Connection, ConnectionClose).    
+    amqp_connection:close(Connection, ConnectionClose).
+    
+    
+subscribe(Channel,Ticket,Q,Consumer) ->
+    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
+                                    no_local = false, no_ack = true,
+                                    exclusive = false, nowait = false},
+    #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, Consumer),
+    ConsumerTag.
+
+unsubscribe(Channel,Ticket,Tag) ->
+    BasicCancel = #'basic.cancel'{consumer_tag = Tag, nowait = false},
+    #'basic.cancel_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicCancel),
+    ok.
+
+declare_queue(Channel,Ticket,Q) ->
+    QueueDeclare = #'queue.declare'{ticket = Ticket, queue = Q,
+                                    passive = false, durable = false,
+                                    exclusive = false, auto_delete = false,
+                                    nowait = false, arguments = []},
+    #'queue.declare_ok'{} = amqp_channel:call(Channel, QueueDeclare).
+
+delete_queue(Channel,Ticket,Q) ->
+    QueueDelete = #'queue.delete'{ticket = Ticket, queue = Q,
+                                  if_unused = false,
+                                  if_empty = false,
+                                  nowait = true},
+    #'queue.delete_ok'{} = amqp_channel:call(Channel, QueueDelete).
+
+bind_queue(Channel,Ticket,X,Q,Binding) ->
+    QueueBind = #'queue.bind'{ticket = Ticket, queue = Q, exchange = X,
+                              routing_key = Binding, nowait = false, arguments = []},
+    #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind).       
