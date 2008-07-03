@@ -271,6 +271,14 @@ def genHrl(spec):
 
     def fieldNameList(fields):
         return ', '.join([erlangize(f.name) for f in fields])
+
+    def fieldNameListDefaults(fields):
+        def fillField(field):
+            result = erlangize(f.name)
+            if field.defaultvalue != None:
+                result += ' = ' + field.defaultvalue
+            return result
+        return ', '.join([fillField(f) for f in fields])
     
     methods = spec.allMethods()
 
@@ -283,23 +291,18 @@ def genHrl(spec):
 
     print "%% Method field records."
     for m in methods:
-        print "-record(%s, {%s})." % (m.erlangName(), fieldNameList(m.arguments))
+        print "-record(%s, {%s})." % (m.erlangName(), fieldNameListDefaults(m.arguments))
 
     print "%% Class property records."
     for c in spec.allClasses():
         print "-record('P_%s', {%s})." % (erlangize(c.name), fieldNameList(c.fields))
-
-#---------------------------------------------------------------------------
 
 def generateErl(specPath):
     genErl(AmqpSpec(specPath))
 
 def generateHrl(specPath):
     genHrl(AmqpSpec(specPath))
-
+    
 if __name__ == "__main__":
     do_main(generateHrl, generateErl)
-
-
-
 
