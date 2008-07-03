@@ -1,0 +1,18 @@
+#!/usr/bin/make -f
+
+include /usr/share/cdbs/1/rules/debhelper.mk
+include /usr/share/cdbs/1/class/makefile.mk
+
+RABBIT_LIB=$(DEB_DESTDIR)usr/lib/erlang/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSION)
+
+DEB_MAKE_INSTALL_TARGET := install TARGET_DIR=$(RABBIT_LIB)/ SBIN_DIR=$(DEB_DESTDIR)usr/sbin
+
+DOCDIR=$(DEB_DESTDIR)usr/share/doc/rabbitmq-server/
+
+install/rabbitmq-server::
+	mkdir -p $(DOCDIR)
+	rm $(RABBIT_LIB)/LICENSE*
+	mv $(DEB_DESTDIR)usr/sbin/rabbitmqctl $(DEB_DESTDIR)usr/sbin/rabbitmqctl_real
+	cp debian/rabbitmqctl_wrapper $(DEB_DESTDIR)usr/sbin/rabbitmqctl
+	chmod a+x $(DEB_DESTDIR)usr/sbin/rabbitmqctl
+	echo "Tag: usr-lib-in-arch-all" > $(DEB_DESTDIR)usr/share/linda/overrides/rabbitmq-server

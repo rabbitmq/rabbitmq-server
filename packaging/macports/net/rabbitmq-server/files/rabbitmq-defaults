@@ -1,0 +1,7 @@
+#!/bin/sh
+# defaults file for rabbitmq-server
+#
+
+PIDS_FILE=@PREFIX@/var/lib/rabbitmq/pids
+LOG_BASE=@PREFIX@/var/log/rabbitmq
+MNESIA_BASE=@PREFIX@/var/lib/rabbitmq/mnesia

@@ -1,0 +1,42 @@
+rabbitmq-server (1.3.0-1) testing; urgency=low
+
+  * New Upstream Release
+
+ -- Adrien Pierard <adrien@lshift.net>  Mon, 03 Mar 2008 15:34:38 +0000
+
+rabbitmq-server (1.2.0-2) testing; urgency=low
+
+  * Fixed rabbitmqctl wrapper script
+
+ -- Simon MacMullen <simon@lshift.net>  Fri, 05 Oct 2007 11:55:00 +0100
+
+rabbitmq-server (1.2.0-1) testing; urgency=low
+
+  * New upstream release
+
+ -- Simon MacMullen <simon@lshift.net>  Wed, 26 Sep 2007 11:49:26 +0100
+
+rabbitmq-server (1.1.1-1) testing; urgency=low
+
+  * New upstream release
+
+ -- Simon MacMullen <simon@lshift.net>  Wed, 29 Aug 2007 12:03:15 +0100
+
+rabbitmq-server (1.1.0-alpha-2) testing; urgency=low
+
+  * Fixed erlang-nox dependency
+
+ -- Simon MacMullen <simon@lshift.net>  Thu, 02 Aug 2007 11:27:13 +0100
+
+rabbitmq-server (1.1.0-alpha-1) testing; urgency=low
+
+  * New upstream release
+
+ -- Simon MacMullen <simon@lshift.net>  Fri, 20 Jul 2007 18:17:33 +0100
+
+rabbitmq-server (1.0.0-alpha-1) unstable; urgency=low
+
+  * Initial release
+
+ -- Tony Garnock-Jones <tonyg@shortstop.lshift.net>  Wed, 31 Jan 2007 19:06:33 +0000
+

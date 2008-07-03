@@ -1,0 +1,13 @@
+#!/bin/bash
+# Escape spaces and quotes, because shell is revolting.
+for arg in "$@" ; do
+	# Escape quotes in parameters, so that they're passed through cleanly.
+	arg=$(sed -e 's/"/\\"/' <<-END
+		$arg
+		END
+	)
+	CMDLINE="${CMDLINE} \"${arg}\""
+done
+
+cd /
+exec su rabbitmq -c "@PREFIX@/sbin/rabbitmqctl_real ${CMDLINE}"

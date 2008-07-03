@@ -1,0 +1,7 @@
+Origin: RabbitMQ
+Label: RabbitMQ Repository for Debian / Ubuntu etc
+Suite: testing
+Codename: kitten
+Architectures: arm hppa ia64 mips mipsel s390 sparc i386 amd64 powerpc source
+Components: main
+Description: RabbitMQ Repository for Debian / Ubuntu etc

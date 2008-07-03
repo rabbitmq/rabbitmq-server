@@ -1,0 +1,7 @@
+{release, {"rabbit", "1.1.0-alpha"}, {erts, "1.14.2"},
+ [{rabbit, "1.1.0-alpha"},
+  {mnesia, "4.3.4"},
+  {os_mon, "2.1.2"},
+  {sasl,   "2.1.5"},
+  {stdlib, "1.14.4"},
+  {kernel, "2.11.4"}]}.
