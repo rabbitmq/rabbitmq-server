@@ -133,6 +133,11 @@ class AmqpField(AmqpEntity):
             self.domain = self.element['type']
         else:
             self.domain = self.element['domain']
+            
+        if self.element.has_key('default-value'):
+            self.defaultvalue = self.element['default-value']
+        else:
+            self.defaultvalue = None
 
     def __repr__(self):
         return 'AmqpField("' + self.name + '")'
