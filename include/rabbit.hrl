@@ -29,7 +29,9 @@
 -record(vhost, {virtual_host, dummy}).
 -record(vhost_realm, {virtual_host, realm}).
 
--record(realm, {name, exchanges, queues}).
+-record(realm, {name,ignore}).
+-record(realm_resource, {realm, resource}).
+
 -record(user_realm, {username, realm, ticket_pattern}).
 
 -record(realm_visitor, {realm, pid}).
