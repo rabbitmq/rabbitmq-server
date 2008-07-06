@@ -109,25 +109,21 @@ list_vhost_realms(VHostPath) ->
                 VHostPath,
                 fun () -> mnesia:read({vhost_realm, VHostPath}) end))].
         
-add(Name = #resource{kind = realm}, R = #resource{name = Resource}) ->
-    Table = realm_table_for_resource(R),
-    Fun = fun() -> mnesia:write({Table,Name,Resource}) end,
-    manage_link(Fun,Name).
+add(Realm = #resource{kind = realm}, Resource = #resource{}) ->
+    manage_link(fun mnesia:write/1, Realm, Resource).
 
-delete(Name = #resource{kind = realm}, R = #resource{name = Resource}) ->
-    Table = realm_table_for_resource(R),
-    Fun = fun() -> mnesia:delete_object({Table,Name,Resource}) end,
-    manage_link(Fun,Name).
+delete(Realm = #resource{kind = realm}, Resource = #resource{}) ->
+    manage_link(fun mnesia:delete_object/1, Realm, Resource).
     
 % This links or unlinks a resource to a realm
-manage_link(Action, Realm) ->
+manage_link(Action, Realm = #resource{kind = realm, name = RealmName}, 
+                    Resource = #resource{name = ResourceName}) ->
+    Table = realm_table_for_resource(Resource),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:read({realm, Realm}) of
-                  [] ->
-                      mnesia:abort(not_found);
-                  [_] ->
-                      apply(Action,[])
+                  [] -> mnesia:abort(not_found);
+                  [_] -> Action({Table, RealmName, ResourceName})
               end
       end).
       
