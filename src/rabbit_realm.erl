@@ -110,23 +110,24 @@ list_vhost_realms(VHostPath) ->
                 fun () -> mnesia:read({vhost_realm, VHostPath}) end))].
         
 add(Name = #resource{kind = realm}, R = #resource{name = Resource}) ->
-    manage_link(link,realm_table_for_resource(R),Name,Resource).
+    Table = realm_table_for_resource(R),
+    Fun = fun() -> mnesia:write({Table,Name,Resource}) end,
+    manage_link(Fun,Name).
 
 delete(Name = #resource{kind = realm}, R = #resource{name = Resource}) ->
-    manage_link(unlink,realm_table_for_resource(R),Name,Resource).
+    Table = realm_table_for_resource(R),
+    Fun = fun() -> mnesia:delete_object({Table,Name,Resource}) end,
+    manage_link(Fun,Name).
     
 % This links or unlinks a resource to a realm
-manage_link(Action,LinkTable,Realm,Resource) ->
+manage_link(Action, Realm) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:read({realm, Realm}) of
                   [] ->
                       mnesia:abort(not_found);
                   [_] ->
-                      case Action of
-                          link -> mnesia:write({LinkTable,Realm,Resource});
-                          unlink -> mnesia:delete_object({LinkTable,Realm,Resource})
-                      end
+                      apply(Action,[])
               end
       end).
       
@@ -137,9 +138,7 @@ parent_table_for_resource(#resource{kind = queue}) -> amqqueue.
 
 
 check(#resource{kind = realm, name = Realm}, Resource = #resource{}) ->
-    F = qlc:e(qlc:q([R || R <- mnesia:table(realm_table_for_resource(Resource)),
-                          R#realm_resource.realm == Realm,
-                          R#realm_resource.resource == Resource#resource.name])),
+    F = mnesia:match_object(#realm_resource{resource = Resource#resource.name, realm = Realm}),
     case mnesia:async_dirty(F) of
         {atomic,[]} -> false;
         {atomic,_} -> true;

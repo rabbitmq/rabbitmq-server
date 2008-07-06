@@ -97,23 +97,23 @@ maybe_relax_checks(TicketNumber, Username, VHostPath) ->
 check_ticket(TicketNumber, FieldIndex,
              Name = #resource{virtual_host = VHostPath}, Username) ->
     #ticket{realm_name = RealmName} =
-        lookup_ticket(TicketNumber, FieldIndex, Username, VHostPath).
-    % case resource_in_realm(RealmName, Name) of
-    %         false ->
-    %             case rabbit_misc:strict_ticket_checking() of
-    %                 true ->
-    %                     rabbit_misc:protocol_error(
-    %                       access_refused,
-    %                       "insufficient permissions in ticket ~w to access ~s in ~s",
-    %                       [TicketNumber, rabbit_misc:rs(Name),
-    %                        rabbit_misc:rs(RealmName)]);
-    %                 false ->
-    %                     rabbit_log:warning("Lax ticket check mode: ignoring cross-realm access for ticket ~p~n", [TicketNumber]),
-    %                     ok
-    %             end;
-    %         true ->
-    %             ok
-    %     end.
+        lookup_ticket(TicketNumber, FieldIndex, Username, VHostPath),
+    case resource_in_realm(RealmName, Name) of
+                false ->
+                    case rabbit_misc:strict_ticket_checking() of
+                        true ->
+                            rabbit_misc:protocol_error(
+                              access_refused,
+                              "insufficient permissions in ticket ~w to access ~s in ~s",
+                              [TicketNumber, rabbit_misc:rs(Name),
+                               rabbit_misc:rs(RealmName)]);
+                        false ->
+                            rabbit_log:warning("Lax ticket check mode: ignoring cross-realm access for ticket ~p~n", [TicketNumber]),
+                            ok
+                    end;
+                true ->
+                    ok
+            end.
 
 resource_in_realm(RealmName, ResourceName = #resource{kind = Kind}) ->
     CacheKey = {resource_cache, RealmName, Kind},
