@@ -1,0 +1,5 @@
+syntax: glob
+*.pyc
+*~
+
+syntax: regexp
