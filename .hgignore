@@ -1,3 +1,9 @@
+syntax: glob
+*.beam
+*~
+erl_crash.dump
+
+syntax: regexp
 ^cover/
 ^dist/
 ^include/rabbit_framing.hrl$
