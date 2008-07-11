@@ -30,7 +30,7 @@
 -record(vhost_realm, {virtual_host, realm}).
 
 -record(realm, {name,ignore}).
--record(realm_resource, {realm, resource, durable}).
+-record(realm_resource, {realm, resource}).
 
 -record(user_realm, {username, realm, ticket_pattern}).
 

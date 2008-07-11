@@ -25,9 +25,7 @@
 
 -module(rabbit_tests).
 
--include("rabbit.hrl").
-
--export([all_tests/0, test_parsing/0,preening_test/0]).
+-export([all_tests/0, test_parsing/0]).
 
 -import(lists).
 
@@ -48,25 +46,6 @@ all_tests() ->
 test_parsing() ->
     passed = test_content_properties(),
     passed.
-    
-preening_test() ->
-    Realm = #resource{virtual_host = <<"/">>,kind = realm, name = <<"/data">>},
-    loop(Realm,1),
-    rabbit_realm:recover().
-    
-loop(_,0) -> ok;
-loop(Realm,N) ->
-    declare(Realm,true),
-    declare(Realm,false),
-    loop(Realm,N-1).
-    
-declare(Realm,Durable) ->
-    X = rabbit_misc:binstring_guid("x"),
-    Q = rabbit_misc:binstring_guid("amq.gen"),
-    AutoDelete = false,
-    rabbit_exchange:declare(Realm,X, <<"direct">>, Durable, AutoDelete, undefined),
-    rabbit_amqqueue:declare(Realm, Q, Durable, AutoDelete, undefined).
-    
 
 test_content_properties() ->
     test_content_prop_roundtrip([], <<0, 0>>),

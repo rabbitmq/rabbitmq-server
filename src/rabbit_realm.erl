@@ -27,7 +27,7 @@
 
 -export([recover/0]).
 -export([add_realm/1, delete_realm/1, list_vhost_realms/1]).
--export([add/3, check/2, delete_from_all/1]).
+-export([add/2, delete/2, check/2, delete_from_all/1]).
 -export([access_request/3, enter_realm/3, leave_realms/1]).
 -export([on_node_down/1]).
 
@@ -44,8 +44,8 @@
 -spec(add_realm/1 :: (realm_name()) -> 'ok').
 -spec(delete_realm/1 :: (realm_name()) -> 'ok').
 -spec(list_vhost_realms/1 :: (vhost()) -> [name()]).
-% -spec(add/3 :: (realm_name(), r(e_or_q())) ->  'ok').
-% -spec(delete/3 :: (realm_name(), r(e_or_q())) -> 'ok').
+-spec(add/2 :: (realm_name(), r(e_or_q())) ->  'ok').
+-spec(delete/2 :: (realm_name(), r(e_or_q())) -> 'ok').
 -spec(check/2 :: (realm_name(), r(e_or_q())) -> bool() | not_found()).
 -spec(delete_from_all/1 :: (r(e_or_q())) -> 'ok').
 -spec(access_request/3 :: (username(), bool(), ticket()) ->
@@ -109,18 +109,21 @@ list_vhost_realms(VHostPath) ->
                 VHostPath,
                 fun () -> mnesia:read({vhost_realm, VHostPath}) end))].
         
-add(Realm = #resource{kind = realm}, Resource = #resource{}, Durable) ->
-    manage_link(fun mnesia:write/1, Realm, Resource, Durable).
+add(Realm = #resource{kind = realm}, Resource = #resource{}) ->
+    manage_link(fun mnesia:write/1, Realm, Resource).
+
+delete(Realm = #resource{kind = realm}, Resource = #resource{}) ->
+    manage_link(fun mnesia:delete_object/1, Realm, Resource).
     
 % This links or unlinks a resource to a realm
 manage_link(Action, Realm = #resource{kind = realm, name = RealmName}, 
-                    Resource = #resource{name = ResourceName}, Durable) ->
+                    Resource = #resource{name = ResourceName}) ->
     Table = realm_table_for_resource(Resource),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:read({realm, Realm}) of
                   [] -> mnesia:abort(not_found);
-                  [_] -> Action({Table, RealmName, ResourceName, Durable})
+                  [_] -> Action({Table, RealmName, ResourceName})
               end
       end).
       
@@ -128,6 +131,7 @@ realm_table_for_resource(#resource{kind = exchange}) -> realm_exchange;
 realm_table_for_resource(#resource{kind = queue}) -> realm_queue.
 parent_table_for_resource(#resource{kind = exchange}) -> exchange;
 parent_table_for_resource(#resource{kind = queue}) -> amqqueue.
+
 
 check(#resource{kind = realm, name = Realm}, Resource = #resource{}) ->
     F = mnesia:match_object(#realm_resource{resource = Resource#resource.name, realm = Realm}),
@@ -232,14 +236,14 @@ preen_realm(Resource = #resource{}) ->
     LinkType = realm_table_for_resource(Resource),
     Q = qlc:q([L#realm_resource.resource || L <- mnesia:table(LinkType)]),
     Cursor = qlc:cursor(Q),
-    preen_next(Cursor, LinkType, parent_table_for_resource(Resource)),
+    preen_next(Cursor,LinkType,parent_table_for_resource(Resource)),
     qlc:delete_cursor(Cursor).
-    
-preen_next(Cursor, LinkType, ParentTable) ->
+
+preen_next(Cursor,LinkType,ParentTable) ->
     case qlc:next_answers(Cursor,1) of 
         [] -> ok;
         [ResourceKey] ->
-            case mnesia:match_object({ParentTable,ResourceKey,'_'}) of
+            case mnesia:read({ParentTable,ResourceKey}) of
                 [] ->
                     mnesia:delete_object({LinkType,'_',ResourceKey});
                 _ -> ok

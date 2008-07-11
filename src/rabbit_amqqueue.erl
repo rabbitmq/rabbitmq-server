@@ -142,7 +142,7 @@ declare(RealmName, NameBin, Durable, AutoDelete, Args) ->
            fun () ->
                    case mnesia:wread({amqqueue, QName}) of
                        [] -> ok = recover_queue(Q),
-                             ok = rabbit_realm:add(RealmName, QName, Durable),
+                             ok = rabbit_realm:add(RealmName, QName),
                              Q;
                        [ExistingQ] -> ExistingQ
                    end

@@ -106,7 +106,7 @@ declare(RealmName, NameBin, Type, Durable, AutoDelete, Args) ->
                                        durable_exchanges, Exchange, write);
                            true -> ok
                         end,
-                        ok = rabbit_realm:add(RealmName, XName, Durable),
+                        ok = rabbit_realm:add(RealmName, XName),
                         Exchange;
                   [ExistingX] -> ExistingX
               end
