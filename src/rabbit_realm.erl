@@ -27,7 +27,7 @@
 
 -export([recover/0]).
 -export([add_realm/1, delete_realm/1, list_vhost_realms/1]).
--export([add/2, delete/2, check/2, delete_from_all/1]).
+-export([add/3, check/2, delete_from_all/1]).
 -export([access_request/3, enter_realm/3, leave_realms/1]).
 -export([on_node_down/1]).
 
@@ -44,8 +44,8 @@
 -spec(add_realm/1 :: (realm_name()) -> 'ok').
 -spec(delete_realm/1 :: (realm_name()) -> 'ok').
 -spec(list_vhost_realms/1 :: (vhost()) -> [name()]).
--spec(add/2 :: (realm_name(), r(e_or_q())) ->  'ok').
--spec(delete/2 :: (realm_name(), r(e_or_q())) -> 'ok').
+% -spec(add/3 :: (realm_name(), r(e_or_q())) ->  'ok').
+% -spec(delete/3 :: (realm_name(), r(e_or_q())) -> 'ok').
 -spec(check/2 :: (realm_name(), r(e_or_q())) -> bool() | not_found()).
 -spec(delete_from_all/1 :: (r(e_or_q())) -> 'ok').
 -spec(access_request/3 :: (username(), bool(), ticket()) ->
@@ -63,12 +63,7 @@
 
 recover() ->
     %% preens resource lists, limiting them to currently-extant resources
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              Realms = mnesia:foldl(fun preen_realm/2, [], realm),
-              lists:foreach(fun mnesia:write/1, Realms),
-              ok
-      end).
+    rabbit_misc:execute_mnesia_transaction(fun preen_realms/0).
 
 add_realm(Name = #resource{virtual_host = VHostPath, kind = realm}) ->
     rabbit_misc:execute_mnesia_transaction(
@@ -77,9 +72,7 @@ add_realm(Name = #resource{virtual_host = VHostPath, kind = realm}) ->
         fun () ->
                 case mnesia:read({realm, Name}) of
                     [] ->
-                        NewRealm = #realm{name = Name,
-                                          exchanges = ordsets:new(),
-                                          queues = ordsets:new()},
+                        NewRealm = #realm{name = Name},
                         ok = mnesia:write(NewRealm),
                         ok = mnesia:write(
                                #vhost_realm{virtual_host = VHostPath,
@@ -116,45 +109,37 @@ list_vhost_realms(VHostPath) ->
                 VHostPath,
                 fun () -> mnesia:read({vhost_realm, VHostPath}) end))].
         
-add(Name = #resource{kind = realm}, Resource) ->
-    internal_update_realm_byname(Name, Resource, fun ordsets:add_element/2).
+add(Realm = #resource{kind = realm}, Resource = #resource{}, Durable) ->
+    manage_link(fun mnesia:write/1, Realm, Resource, Durable).
+    
+% This links or unlinks a resource to a realm
+manage_link(Action, Realm = #resource{kind = realm, name = RealmName}, 
+                    Resource = #resource{name = ResourceName}, Durable) ->
+    Table = realm_table_for_resource(Resource),
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:read({realm, Realm}) of
+                  [] -> mnesia:abort(not_found);
+                  [_] -> Action({Table, RealmName, ResourceName, Durable})
+              end
+      end).
+      
+realm_table_for_resource(#resource{kind = exchange}) -> realm_exchange;
+realm_table_for_resource(#resource{kind = queue}) -> realm_queue.
+parent_table_for_resource(#resource{kind = exchange}) -> exchange;
+parent_table_for_resource(#resource{kind = queue}) -> amqqueue.
 
-delete(Name = #resource{kind = realm}, Resource) ->
-    internal_update_realm_byname(Name, Resource, fun ordsets:del_element/2).
-
-check(Name = #resource{kind = realm}, Resource = #resource{kind = Kind}) ->
-    case rabbit_misc:dirty_read({realm, Name}) of
-        {ok, R} ->
-            case Kind of
-                exchange -> ordsets:is_element(Resource, R#realm.exchanges);
-                queue -> ordsets:is_element(Resource, R#realm.queues)
-            end;
-        Other -> Other
+check(#resource{kind = realm, name = Realm}, Resource = #resource{}) ->
+    F = mnesia:match_object(#realm_resource{resource = Resource#resource.name, realm = Realm}),
+    case mnesia:async_dirty(F) of
+        {atomic,[]} -> false;
+        {atomic,_} -> true;
+        _ -> false
     end.
 
 % Requires a mnesia transaction.
-delete_from_all(Resource = #resource{kind = Kind}) ->
-    Realms = mnesia:foldl
-               (fun (Realm = #realm{exchanges = E0,
-                                    queues = Q0},
-                     Acc) ->
-                        IsMember = lists:member(Resource,
-                                                case Kind of
-                                                    exchange -> E0;
-                                                    queue -> Q0
-                                                end),
-                        if
-                            IsMember ->
-                                [internal_update_realm_record(
-                                   Realm, Resource,
-                                   fun ordsets:del_element/2)
-                                 | Acc];
-                            true ->
-                                Acc
-                        end
-                end, [], realm),
-    lists:foreach(fun mnesia:write/1, Realms),
-    ok.
+delete_from_all(Resource = #resource{name = Name}) ->
+    mnesia:delete_object({realm_table_for_resource(Resource),'_',Name}).
 
 access_request(Username, Exclusive, Ticket = #ticket{realm_name = RealmName})
   when is_binary(Username) ->
@@ -237,41 +222,30 @@ on_node_down(Node) ->
 
 %%--------------------------------------------------------------------
 
-preen_realm(Realm = #realm{name = #resource{kind = realm},
-                           exchanges = E0,
-                           queues = Q0},
-            Realms) ->
-    [Realm#realm{exchanges = filter_out_missing(E0, exchange),
-                 queues = filter_out_missing(Q0, amqqueue)}
-     | Realms].
-
-filter_out_missing(Items, TableName) ->
-    ordsets:filter(fun (Item) ->
-                           case mnesia:read({TableName, Item}) of
-                               [] -> false;
-                               _ -> true
-                           end
-                   end, Items).
-
-internal_update_realm_byname(Name, Resource, SetUpdater) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:read({realm, Name}) of
-                  [] ->
-                      mnesia:abort(not_found);
-                  [R] ->
-                      ok = mnesia:write(internal_update_realm_record
-                                        (R, Resource, SetUpdater))
-              end
-      end).
-
-internal_update_realm_record(R = #realm{exchanges = E0, queues = Q0},
-                             Resource = #resource{kind = Kind},
-                             SetUpdater) ->
-    case Kind of
-        exchange -> R#realm{exchanges = SetUpdater(Resource, E0)};
-        queue -> R#realm{queues = SetUpdater(Resource, Q0)}
-    end.
+%% This iterates through the realm_exchange and realm_queue link tables
+%% and deletes rows that have no underlying exchange or queue record.
+preen_realms() ->
+    Resources = [#resource{kind = exchange},#resource{kind = queue}],
+    [preen_realm(Resource) || Resource <- Resources ],
+    ok.
+preen_realm(Resource = #resource{}) ->
+    LinkType = realm_table_for_resource(Resource),
+    Q = qlc:q([L#realm_resource.resource || L <- mnesia:table(LinkType)]),
+    Cursor = qlc:cursor(Q),
+    preen_next(Cursor, LinkType, parent_table_for_resource(Resource)),
+    qlc:delete_cursor(Cursor).
+    
+preen_next(Cursor, LinkType, ParentTable) ->
+    case qlc:next_answers(Cursor,1) of 
+        [] -> ok;
+        [ResourceKey] ->
+            case mnesia:match_object({ParentTable,ResourceKey,'_'}) of
+                [] ->
+                    mnesia:delete_object({LinkType,'_',ResourceKey});
+                _ -> ok
+            end,
+            preen_next(Cursor,LinkType,ParentTable)
+    end.    
 
 check_and_lookup(RealmName = #resource{kind = realm,
                                        name = <<"/data", _/binary>>}) ->
