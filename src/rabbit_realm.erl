@@ -110,20 +110,22 @@ list_vhost_realms(VHostPath) ->
                 fun () -> mnesia:read({vhost_realm, VHostPath}) end))].
         
 add(Realm = #resource{kind = realm}, Resource = #resource{}) ->
-    manage_link(fun mnesia:write/1, Realm, Resource).
+    manage_link(fun mnesia:write/3, Realm, Resource).
 
 delete(Realm = #resource{kind = realm}, Resource = #resource{}) ->
-    manage_link(fun mnesia:delete_object/1, Realm, Resource).
+    manage_link(fun mnesia:delete_object/3, Realm, Resource).
     
 % This links or unlinks a resource to a realm
 manage_link(Action, Realm = #resource{kind = realm, name = RealmName}, 
             R = #resource{name = Name}) ->
-    Table = realm_table_for_resource(R),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:read({realm, Realm}) of
-                  [] -> mnesia:abort(not_found);
-                  [_] -> Action({Table, RealmName, Name})
+                  []  -> mnesia:abort(not_found);
+                  [_] -> Action(realm_table_for_resource(R),
+                                #realm_resource{realm = RealmName,
+                                                resource = Name},
+                                write)
               end
       end).
       
@@ -134,15 +136,18 @@ parent_table_for_resource(#resource{kind = queue})    -> amqqueue.
 
 
 check(#resource{kind = realm, name = Realm}, R = #resource{name = Name}) ->
-    case mnesia:dirty_match_object(
-           {realm_table_for_resource(R), Realm, Name}) of
+    case mnesia:dirty_match_object(realm_table_for_resource(R),
+                                   #realm_resource{realm = Realm,
+                                                   resource = Name}) of
         [] -> false;
         _  -> true
     end.
 
 % Requires a mnesia transaction.
 delete_from_all(R = #resource{name = Name}) ->
-    mnesia:delete_object({realm_table_for_resource(R), '_', Name}).
+    mnesia:delete_object(realm_table_for_resource(R),
+                         #realm_resource{realm = '_', resource = Name},
+                         write).
 
 access_request(Username, Exclusive, Ticket = #ticket{realm_name = RealmName})
   when is_binary(Username) ->
@@ -233,22 +238,25 @@ preen_realms() ->
 
 preen_realm(Kind) ->
     R = #resource{kind = Kind},
-    LinkType = realm_table_for_resource(R),
+    Table = realm_table_for_resource(R),
     Cursor = qlc:cursor(
                qlc:q([L#realm_resource.resource ||
-                         L <- mnesia:table(LinkType)])),
-    preen_next(Cursor, LinkType, parent_table_for_resource(R)),
+                         L <- mnesia:table(Table)])),
+    preen_next(Cursor, Table, parent_table_for_resource(R)),
     qlc:delete_cursor(Cursor).
 
-preen_next(Cursor, LinkType, ParentTable) ->
+preen_next(Cursor, Table, ParentTable) ->
     case qlc:next_answers(Cursor, 1) of 
         [] -> ok;
         [Name] ->
             case mnesia:read({ParentTable, Name}) of
-                [] -> mnesia:delete_object({LinkType, '_', Name});
+                [] -> mnesia:delete_object(
+                        Table,
+                        #realm_resource{realm = '_', resource = Name},
+                        write);
                 _  -> ok
             end,
-            preen_next(Cursor, LinkType, ParentTable)
+            preen_next(Cursor, Table, ParentTable)
     end.    
 
 check_and_lookup(RealmName = #resource{kind = realm,
