@@ -133,12 +133,11 @@ parent_table_for_resource(#resource{kind = exchange}) -> exchange;
 parent_table_for_resource(#resource{kind = queue})    -> amqqueue.
 
 
-check(#resource{kind = realm, name = Realm}, Resource = #resource{}) ->
-    F = mnesia:match_object(#realm_resource{resource = Resource#resource.name, realm = Realm}),
-    case mnesia:async_dirty(F) of
-        {atomic,[]} -> false;
-        {atomic,_} -> true;
-        _ -> false
+check(#resource{kind = realm, name = Realm}, R = #resource{name = Name}) ->
+    case mnesia:dirty_match_object(
+           {realm_table_for_resource(R), Realm, Name}) of
+        [] -> false;
+        _  -> true
     end.
 
 % Requires a mnesia transaction.
