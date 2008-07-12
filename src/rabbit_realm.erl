@@ -117,13 +117,13 @@ delete(Realm = #resource{kind = realm}, Resource = #resource{}) ->
     
 % This links or unlinks a resource to a realm
 manage_link(Action, Realm = #resource{kind = realm, name = RealmName}, 
-                    Resource = #resource{name = ResourceName}) ->
-    Table = realm_table_for_resource(Resource),
+            R = #resource{name = Name}) ->
+    Table = realm_table_for_resource(R),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:read({realm, Realm}) of
                   [] -> mnesia:abort(not_found);
-                  [_] -> Action({Table, RealmName, ResourceName})
+                  [_] -> Action({Table, RealmName, Name})
               end
       end).
       
@@ -142,8 +142,8 @@ check(#resource{kind = realm, name = Realm}, Resource = #resource{}) ->
     end.
 
 % Requires a mnesia transaction.
-delete_from_all(Resource = #resource{name = Name}) ->
-    mnesia:delete_object({realm_table_for_resource(Resource), '_', Name}).
+delete_from_all(R = #resource{name = Name}) ->
+    mnesia:delete_object({realm_table_for_resource(R), '_', Name}).
 
 access_request(Username, Exclusive, Ticket = #ticket{realm_name = RealmName})
   when is_binary(Username) ->
@@ -232,21 +232,21 @@ preen_realms() ->
     Resources = [#resource{kind = exchange},#resource{kind = queue}],
     [preen_realm(Resource) || Resource <- Resources ],
     ok.
-preen_realm(Resource = #resource{}) ->
-    LinkType = realm_table_for_resource(Resource),
+preen_realm(R = #resource{}) ->
+    LinkType = realm_table_for_resource(R),
     Cursor = qlc:cursor(
                qlc:q([L#realm_resource.resource ||
                          L <- mnesia:table(LinkType)])),
-    preen_next(Cursor, LinkType, parent_table_for_resource(Resource)),
+    preen_next(Cursor, LinkType, parent_table_for_resource(R)),
     qlc:delete_cursor(Cursor).
 
 preen_next(Cursor, LinkType, ParentTable) ->
     case qlc:next_answers(Cursor, 1) of 
         [] -> ok;
-        [ResourceName] ->
-            case mnesia:read({ParentTable, ResourceName}) of
+        [Name] ->
+            case mnesia:read({ParentTable, Name}) of
                 [] ->
-                    mnesia:delete_object({LinkType, '_', ResourceName});
+                    mnesia:delete_object({LinkType, '_', Name});
                 _ -> ok
             end,
             preen_next(Cursor, LinkType, ParentTable)
