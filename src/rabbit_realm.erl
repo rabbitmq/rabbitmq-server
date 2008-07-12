@@ -228,10 +228,11 @@ on_node_down(Node) ->
 %% This iterates through the realm_exchange and realm_queue link tables
 %% and deletes rows that have no underlying exchange or queue record.
 preen_realms() ->
-    Resources = [#resource{kind = exchange},#resource{kind = queue}],
-    [preen_realm(Resource) || Resource <- Resources ],
+    lists:foreach(fun preen_realm/1, [exchange, queue]),
     ok.
-preen_realm(R = #resource{}) ->
+
+preen_realm(Kind) ->
+    R = #resource{kind = Kind},
     LinkType = realm_table_for_resource(R),
     Cursor = qlc:cursor(
                qlc:q([L#realm_resource.resource ||
@@ -244,9 +245,8 @@ preen_next(Cursor, LinkType, ParentTable) ->
         [] -> ok;
         [Name] ->
             case mnesia:read({ParentTable, Name}) of
-                [] ->
-                    mnesia:delete_object({LinkType, '_', Name});
-                _ -> ok
+                [] -> mnesia:delete_object({LinkType, '_', Name});
+                _  -> ok
             end,
             preen_next(Cursor, LinkType, ParentTable)
     end.    
