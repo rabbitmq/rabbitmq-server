@@ -128,9 +128,9 @@ manage_link(Action, Realm = #resource{kind = realm, name = RealmName},
       end).
       
 realm_table_for_resource(#resource{kind = exchange}) -> realm_exchange;
-realm_table_for_resource(#resource{kind = queue}) -> realm_queue.
+realm_table_for_resource(#resource{kind = queue})    -> realm_queue.
 parent_table_for_resource(#resource{kind = exchange}) -> exchange;
-parent_table_for_resource(#resource{kind = queue}) -> amqqueue.
+parent_table_for_resource(#resource{kind = queue})    -> amqqueue.
 
 
 check(#resource{kind = realm, name = Realm}, Resource = #resource{}) ->
@@ -143,7 +143,7 @@ check(#resource{kind = realm, name = Realm}, Resource = #resource{}) ->
 
 % Requires a mnesia transaction.
 delete_from_all(Resource = #resource{name = Name}) ->
-    mnesia:delete_object({realm_table_for_resource(Resource),'_',Name}).
+    mnesia:delete_object({realm_table_for_resource(Resource), '_', Name}).
 
 access_request(Username, Exclusive, Ticket = #ticket{realm_name = RealmName})
   when is_binary(Username) ->
@@ -234,21 +234,22 @@ preen_realms() ->
     ok.
 preen_realm(Resource = #resource{}) ->
     LinkType = realm_table_for_resource(Resource),
-    Q = qlc:q([L#realm_resource.resource || L <- mnesia:table(LinkType)]),
-    Cursor = qlc:cursor(Q),
-    preen_next(Cursor,LinkType,parent_table_for_resource(Resource)),
+    Cursor = qlc:cursor(
+               qlc:q([L#realm_resource.resource ||
+                         L <- mnesia:table(LinkType)])),
+    preen_next(Cursor, LinkType, parent_table_for_resource(Resource)),
     qlc:delete_cursor(Cursor).
 
-preen_next(Cursor,LinkType,ParentTable) ->
-    case qlc:next_answers(Cursor,1) of 
+preen_next(Cursor, LinkType, ParentTable) ->
+    case qlc:next_answers(Cursor, 1) of 
         [] -> ok;
-        [ResourceKey] ->
-            case mnesia:read({ParentTable,ResourceKey}) of
+        [ResourceName] ->
+            case mnesia:read({ParentTable, ResourceName}) of
                 [] ->
-                    mnesia:delete_object({LinkType,'_',ResourceKey});
+                    mnesia:delete_object({LinkType, '_', ResourceName});
                 _ -> ok
             end,
-            preen_next(Cursor,LinkType,ParentTable)
+            preen_next(Cursor, LinkType, ParentTable)
     end.    
 
 check_and_lookup(RealmName = #resource{kind = realm,
