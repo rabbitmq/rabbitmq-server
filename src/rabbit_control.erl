@@ -198,19 +198,19 @@ action(list_realms, Node, Args = [_VHostPath]) ->
     io:format("Listing realms for vhost ~p ...", Args),
     display_list(call(Node, {rabbit_realm, list_vhost_realms, Args}));
 
-action(set_permissions, Node,
-       [Username, VHostPath, RealmName | Permissions]) ->
-    io:format("Setting permissions for user ~p, vhost ~p, realm ~p ...",
-              [Username, VHostPath, RealmName]),
-    CheckedPermissions = check_permissions(Permissions),
-    Ticket = #ticket{
-      realm_name   = realm_rsrc(VHostPath, RealmName),
-      passive_flag = lists:member(passive, CheckedPermissions),
-      active_flag  = lists:member(active,  CheckedPermissions),
-      write_flag   = lists:member(write,   CheckedPermissions),
-      read_flag    = lists:member(read,    CheckedPermissions)},
-    rpc_call(Node, rabbit_access_control, map_user_realm,
-             [list_to_binary(Username), Ticket]);
+% action(set_permissions, Node,
+%        [Username, VHostPath, RealmName | Permissions]) ->
+%     io:format("Setting permissions for user ~p, vhost ~p, realm ~p ...",
+%               [Username, VHostPath, RealmName]),
+%     CheckedPermissions = check_permissions(Permissions),
+%     Ticket = #ticket{
+%       realm_name   = realm_rsrc(VHostPath, RealmName),
+%       passive_flag = lists:member(passive, CheckedPermissions),
+%       active_flag  = lists:member(active,  CheckedPermissions),
+%       write_flag   = lists:member(write,   CheckedPermissions),
+%       read_flag    = lists:member(read,    CheckedPermissions)},
+%     rpc_call(Node, rabbit_access_control, map_user_realm,
+%              [list_to_binary(Username), Ticket]);
 
 action(list_permissions, Node, Args = [_Username, _VHostPath]) ->
     io:format("Listing permissions for user ~p in vhost ~p ...", Args),

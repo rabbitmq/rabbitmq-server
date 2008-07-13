@@ -28,7 +28,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, declare/6, lookup/1, lookup_or_die/1,
+-export([recover/0, declare/5, lookup/1, lookup_or_die/1,
          list_vhost_exchanges/1, list_exchange_bindings/1,
          simple_publish/6, simple_publish/3,
          route/2]).
@@ -50,7 +50,7 @@
       not_found() | {'error', 'unroutable' | 'not_delivered'}).
 
 -spec(recover/0 :: () -> 'ok').
--spec(declare/6 :: (realm_name(), name(), exchange_type(), bool(), bool(),
+-spec(declare/5 :: (name(), exchange_type(), bool(), bool(),
                     amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
 -spec(assert_type/2 :: (exchange(), atom()) -> 'ok'). 
@@ -90,23 +90,21 @@ recover_durable_exchanges() ->
                            end, ok, durable_exchanges)
       end).
 
-declare(RealmName, NameBin, Type, Durable, AutoDelete, Args) ->
-    XName = rabbit_misc:r(RealmName, exchange, NameBin),
-    Exchange = #exchange{name = XName,
+declare(NameBin, Type, Durable, AutoDelete, Args) ->
+    Exchange = #exchange{name = NameBin,
                          type = Type,
                          durable = Durable,
                          auto_delete = AutoDelete,
                          arguments = Args},
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:wread({exchange, XName}) of
+              case mnesia:wread({exchange, NameBin}) of
                   [] -> ok = mnesia:write(Exchange),
                         if Durable ->
                                 ok = mnesia:write(
                                        durable_exchanges, Exchange, write);
                            true -> ok
                         end,
-                        ok = rabbit_realm:add(RealmName, XName),
                         Exchange;
                   [ExistingX] -> ExistingX
               end
@@ -217,6 +215,7 @@ delivery_key_for_type(fanout, Name, _RoutingKey) ->
 delivery_key_for_type(_Type, Name, RoutingKey) ->
     {Name, RoutingKey}.
 
+call_with_exchange(#resource{name = Name}, Fun) -> call_with_exchange(Name, Fun);
 call_with_exchange(Name, Fun) ->
     case mnesia:wread({exchange, Name}) of
         [] -> {error, not_found};
@@ -290,7 +289,7 @@ add_handler_to_binding(BindingKey, Handler) ->
                  ok = mnesia:write(
                         B#binding{handlers = extend_handlers(H, Handler)})
          end.
-
+         
 %% Must run within a transaction.
 remove_handler_from_binding(BindingKey, Handler) ->
     case mnesia:wread({binding, BindingKey}) of
@@ -334,6 +333,7 @@ last_topic_match(P, R, []) ->
 last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
     topic_matches1(P, R) or last_topic_match(P, [BacktrackNext | R], BacktrackList).
 
+delete(#resource{name = ExchangeName}, IfUnused) -> delete(ExchangeName, IfUnused);
 delete(ExchangeName, IfUnused) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () -> internal_delete(ExchangeName, IfUnused) end).
@@ -375,6 +375,5 @@ do_internal_delete(ExchangeName, Bindings) ->
                                   ok = mnesia:delete({binding, K})
                           end, Bindings),
             ok = mnesia:delete({durable_exchanges, ExchangeName}),
-            ok = mnesia:delete({exchange, ExchangeName}),
-            ok = rabbit_realm:delete_from_all(ExchangeName)
+            ok = mnesia:delete({exchange, ExchangeName})
     end.

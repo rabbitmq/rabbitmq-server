@@ -25,7 +25,6 @@
              rabbit_node_monitor,
              rabbit_persister,
              rabbit_reader,
-             rabbit_realm,
              rabbit_router,
              rabbit_sup,
              rabbit_tests,

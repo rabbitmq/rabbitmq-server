@@ -34,9 +34,6 @@
 
 init([DefaultVHost]) ->
     #exchange{} = rabbit_exchange:declare(
-                    #resource{virtual_host = DefaultVHost,
-                              kind = realm,
-                              name = <<"/admin">>},
                     ?LOG_EXCH_NAME,
                     topic, true, false, []),
     {ok, #resource{virtual_host = DefaultVHost,

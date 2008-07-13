@@ -150,10 +150,8 @@ start(normal, []) ->
        {"recovery",
         fun () ->
                 ok = maybe_insert_default_data(),
-                
                 ok = rabbit_exchange:recover(),
-                ok = rabbit_amqqueue:recover(),
-                ok = rabbit_realm:recover()
+                ok = rabbit_amqqueue:recover()
         end},
        {"persister",
         fun () -> 
@@ -222,18 +220,8 @@ insert_default_data() ->
 insert_default_user(Username, Password, VHostSpecs) ->
     ok = rabbit_access_control:add_user(Username, Password),
     lists:foreach(
-      fun ({VHostPath, Realms}) ->
-              ok = rabbit_access_control:map_user_vhost(
-                     Username, VHostPath),
-              lists:foreach(
-                fun (Realm) ->
-                        RealmFullName = 
-                            rabbit_misc:r(VHostPath, realm, Realm),
-                        ok = rabbit_access_control:map_user_realm(
-                               Username,
-                               rabbit_access_control:full_ticket(
-                                 RealmFullName))
-                end, Realms)
+      fun (VHostPath) ->
+              ok = rabbit_access_control:map_user_vhost(Username, VHostPath)
       end, VHostSpecs),
     ok.
 

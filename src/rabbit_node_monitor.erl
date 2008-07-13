@@ -60,7 +60,6 @@ handle_info({nodedown, Node}, State) ->
     %% lots of nodes.  We really only need to execute this code on
     %% *one* node, rather than all of them.
     ok = rabbit_networking:on_node_down(Node),
-    ok = rabbit_realm:on_node_down(Node),
     ok = rabbit_amqqueue:on_node_down(Node),
     {noreply, State};
 handle_info(_Info, State) ->

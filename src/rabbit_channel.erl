@@ -37,7 +37,7 @@
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host,
-             most_recently_declared_queue, consumer_mapping, next_ticket}).
+             most_recently_declared_queue, consumer_mapping}).
 
 %%----------------------------------------------------------------------------
 
@@ -94,8 +94,7 @@ init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
         username                = Username,
         virtual_host            = VHost,
         most_recently_declared_queue = <<>>,
-        consumer_mapping        = dict:new(),
-        next_ticket             = 101}.
+        consumer_mapping        = dict:new()}.
 
 handle_message({method, Method, Content}, State) ->
     case (catch handle_method(Method, Content, State)) of
@@ -140,7 +139,6 @@ handle_message(Other, State) ->
 
 terminate(Reason, State = #ch{writer_pid = WriterPid}) ->
     Res = notify_queues(internal_rollback(State)),
-    ok = rabbit_realm:leave_realms(self()),
     case Reason of
         normal -> ok = Res;
         _      -> ok
@@ -155,8 +153,7 @@ ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
 return_queue_declare_ok(State, NoWait, Q) ->
-    NewState = State#ch{most_recently_declared_queue =
-                        (Q#amqqueue.name)#resource.name},
+    NewState = State#ch{most_recently_declared_queue = Q#amqqueue.name},
     case NoWait of
         true  -> {noreply, NewState};
         false ->
@@ -164,7 +161,7 @@ return_queue_declare_ok(State, NoWait, Q) ->
                 rabbit_misc:with_exit_handler(
                   fun () -> {ok, Q#amqqueue.name, 0, 0} end,
                   fun () -> rabbit_amqqueue:stat(Q) end),
-            Reply = #'queue.declare_ok'{queue = ActualName#resource.name,
+            Reply = #'queue.declare_ok'{queue = ActualName,
                                         message_count = MessageCount,
                                         consumer_count = ConsumerCount},
             {reply, Reply, NewState}
@@ -194,14 +191,6 @@ die_precondition_failed(Fmt, Params) ->
     %% move to AMQP spec >=8.1
     rabbit_misc:protocol_error({false, 406, <<"PRECONDITION_FAILED">>},
                                Fmt, Params).
-
-check_ticket(TicketNumber, FieldIndex, Name, #ch{ username = Username}) ->
-    rabbit_ticket:check_ticket(TicketNumber, FieldIndex, Name, Username).
-
-lookup_ticket(TicketNumber, FieldIndex,
-              #ch{ username = Username, virtual_host = VHostPath }) ->
-    rabbit_ticket:lookup_ticket(TicketNumber, FieldIndex,
-                                Username, VHostPath).
 
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
@@ -235,7 +224,6 @@ handle_method(_Method, _, #ch{state = starting}) ->
 
 handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = notify_queues(internal_rollback(State)),
-    ok = rabbit_realm:leave_realms(self()),
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
     ok = rabbit_writer:shutdown(WriterPid),
     stop;
@@ -245,38 +233,8 @@ handle_method(#'access.request'{realm = RealmNameBin,
                                 passive = Passive,
                                 active = Active,
                                 write = Write,
-                                read = Read},
-              _, State = #ch{username = Username,
-                             virtual_host = VHostPath,
-                             next_ticket = NextTicket}) ->
-    RealmName = rabbit_misc:r(VHostPath, realm, RealmNameBin),
-    Ticket = #ticket{realm_name = RealmName,
-                     passive_flag = Passive,
-                     active_flag = Active,
-                     write_flag = Write,
-                     read_flag = Read},
-    case rabbit_realm:access_request(Username, Exclusive, Ticket) of
-        ok ->
-            rabbit_ticket:record_ticket(NextTicket, Ticket),
-            NewState = State#ch{next_ticket = NextTicket + 1},
-            {reply, #'access.request_ok'{ticket = NextTicket}, NewState};
-        {error, not_found} ->
-            rabbit_misc:protocol_error(
-              invalid_path, "no ~s", [rabbit_misc:rs(RealmName)]);
-        {error, bad_realm_path} ->
-            %% FIXME: spec bug? access_refused is a soft error, spec requires it to be hard
-            rabbit_misc:protocol_error(
-              access_refused, "bad path for ~s", [rabbit_misc:rs(RealmName)]);
-        {error, resource_locked} ->
-            rabbit_misc:protocol_error(
-              resource_locked, "~s is locked", [rabbit_misc:rs(RealmName)]);
-        {error, access_refused} ->
-            rabbit_misc:protocol_error(
-              access_refused,
-              "~w permissions denied for user '~s' attempting to access ~s",
-              [rabbit_misc:permission_list(Ticket),
-               Username, rabbit_misc:rs(RealmName)])
-    end;
+                                read = Read},_, State) ->
+    {reply, #'access.request_ok'{ticket = 1}, State};
 
 handle_method(#'basic.publish'{ticket = TicketNumber,
                                exchange = ExchangeNameBin,
@@ -285,7 +243,6 @@ handle_method(#'basic.publish'{ticket = TicketNumber,
                                immediate = Immediate},
               Content, State = #ch{ virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_ticket(TicketNumber, #ticket.write_flag, ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
@@ -329,7 +286,6 @@ handle_method(#'basic.get'{ticket = TicketNumber,
               _, State = #ch{ proxy_pid = ProxyPid, writer_pid = WriterPid,
                               next_tag = DeliveryTag }) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_ticket(TicketNumber, #ticket.read_flag, QueueName, State),
     case rabbit_amqqueue:with_or_die(
            QueueName,
            fun (Q) -> rabbit_amqqueue:basic_get(Q, ProxyPid, NoAck) end) of
@@ -365,7 +321,6 @@ handle_method(#'basic.consume'{ticket = TicketNumber,
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
             QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-            check_ticket(TicketNumber, #ticket.read_flag, QueueName, State),
             ActualConsumerTag =
                 case ConsumerTag of
                     <<>>  -> rabbit_misc:binstring_guid("amq.ctag");
@@ -505,8 +460,6 @@ handle_method(#'exchange.declare'{ticket = TicketNumber,
                                   nowait = NoWait,
                                   arguments = Args},
               _, State = #ch{ virtual_host = VHostPath }) ->
-    #ticket{realm_name = RealmName} =
-        lookup_ticket(TicketNumber, #ticket.active_flag, State),
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     %% FIXME: clarify spec as per declare wrt differing realms
     X = case rabbit_exchange:lookup(
@@ -514,8 +467,7 @@ handle_method(#'exchange.declare'{ticket = TicketNumber,
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
                 ActualNameBin = check_name('exchange', ExchangeNameBin),
-                rabbit_exchange:declare(RealmName,
-                                        ActualNameBin,
+                rabbit_exchange:declare(ActualNameBin,
                                         CheckedType,
                                         Durable,
                                         AutoDelete,
@@ -530,8 +482,6 @@ handle_method(#'exchange.declare'{ticket = TicketNumber,
                                   passive = true,
                                   nowait = NoWait},
               _, State = #ch{ virtual_host = VHostPath }) ->
-    %% FIXME: spec issue: permit active_flag here as well as passive_flag?
-    #ticket{} = lookup_ticket(TicketNumber, #ticket.passive_flag, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     X = rabbit_exchange:lookup_or_die(ExchangeName),
     ok = rabbit_exchange:assert_type(X, rabbit_exchange:check_type(TypeNameBin)),
@@ -543,7 +493,6 @@ handle_method(#'exchange.delete'{ticket = TicketNumber,
                                  nowait = NoWait},
               _, State = #ch { virtual_host = VHostPath }) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_ticket(TicketNumber, #ticket.active_flag, ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
@@ -565,8 +514,6 @@ handle_method(#'queue.declare'{ticket = TicketNumber,
                                arguments = Args},
               _, State = #ch { virtual_host = VHostPath,
                                reader_pid = ReaderPid }) ->
-    #ticket{realm_name = RealmName} =
-        lookup_ticket(TicketNumber, #ticket.active_flag, State),
     %% FIXME: atomic create&claim
     Finish =
         fun (Q) ->
@@ -597,8 +544,7 @@ handle_method(#'queue.declare'{ticket = TicketNumber,
                         <<>>  -> rabbit_misc:binstring_guid("amq.gen");
                         Other -> check_name('queue', Other)
                     end,
-                Finish(rabbit_amqqueue:declare(RealmName,
-                                               ActualNameBin,
+                Finish(rabbit_amqqueue:declare(ActualNameBin,
                                                Durable,
                                                AutoDelete,
                                                Args));
@@ -611,7 +557,6 @@ handle_method(#'queue.declare'{ticket = TicketNumber,
                                passive = true,
                                nowait = NoWait},
               _, State = #ch{ virtual_host = VHostPath }) ->
-    #ticket{} = lookup_ticket(TicketNumber, #ticket.passive_flag, State),
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
     Q = rabbit_amqqueue:with_or_die(QueueName, fun (Q) -> Q end),
     return_queue_declare_ok(State, NoWait, Q);
@@ -624,7 +569,6 @@ handle_method(#'queue.delete'{ticket = TicketNumber,
                              },
               _, State) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_ticket(TicketNumber, #ticket.active_flag, QueueName, State),
     case rabbit_amqqueue:with_or_die(
            QueueName,
            fun (Q) -> rabbit_amqqueue:delete(Q, IfUnused, IfEmpty) end) of
@@ -652,14 +596,13 @@ handle_method(#'queue.bind'{ticket = TicketNumber,
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     ActualRoutingKey = expand_routing_key_shortcut(QueueNameBin, RoutingKey,
                                                    State),
-    check_ticket(TicketNumber, #ticket.active_flag, QueueName, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     case rabbit_amqqueue:add_binding(QueueName, ExchangeName,
                                      ActualRoutingKey, Arguments) of
-        {error, queue_not_found} -> 
+        {error, queue_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s", [rabbit_misc:rs(QueueName)]);
-        {error, exchange_not_found} -> 
+        {error, exchange_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s", [rabbit_misc:rs(ExchangeName)]);
         {error, durability_settings_incompatible} ->
@@ -675,7 +618,6 @@ handle_method(#'queue.purge'{ticket = TicketNumber,
                              nowait = NoWait},
               _, State) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_ticket(TicketNumber, #ticket.read_flag, QueueName, State),
     {ok, PurgedMessageCount} = rabbit_amqqueue:with_or_die(
                                  QueueName,
                                  fun (Q) -> rabbit_amqqueue:purge(Q) end),
