@@ -28,7 +28,6 @@
              rabbit_router,
              rabbit_sup,
              rabbit_tests,
-             rabbit_ticket,
              rabbit_tracer,
              rabbit_writer,
              tcp_acceptor,
