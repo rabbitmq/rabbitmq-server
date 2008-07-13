@@ -131,12 +131,13 @@ assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
 lookup(Name) ->
     rabbit_misc:dirty_read({exchange, Name}).
 
+lookup_or_die(#resource{name = Name}) -> lookup_or_die(Name);
 lookup_or_die(Name) ->
     case lookup(Name) of
         {ok, X} -> X;
         {error, not_found} ->
             rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(Name)])
+              not_found, "no ~s", [rabbit_misc:rs(#resource{virtual_host = <<"/">>, kind = exchange, name = Name})])
     end.
 
 list_vhost_exchanges(VHostPath) ->
