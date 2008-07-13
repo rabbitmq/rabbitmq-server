@@ -43,6 +43,8 @@
 %
 %   {ok, Connection} = amqp_connection:start(User, Password, Host),
 %   Channel = amqp_connection:open_channel(Connection),
+%   AccessRequest = #'access.request'{ %% set the appropriate fields },
+%   #'access.request_ok'{ticket = Ticket} = amqp_channel:call(Channel, AccessRequest)
 %   %%...do something useful
 %   ChannelClose = #'channel.close'{ %% set the appropriate fields },
 %   amqp_channel:call(Channel, ChannelClose),
@@ -53,19 +55,20 @@
 lifecycle_test(Connection) ->
     Realm = <<"/data">>,
     X = <<"x">>,
-    Channel = setup_channel(Connection, Realm),
-    ExchangeDeclare = #'exchange.declare'{exchange = X, type = <<"topic">>,
+    {Channel, Ticket} = setup_channel(Connection, Realm),
+    ExchangeDeclare = #'exchange.declare'{ticket = Ticket, exchange = X, type = <<"topic">>,
                                           passive = false, durable = false, auto_delete = false, internal = false,
                                           nowait = false, arguments = []},
     #'exchange.declare_ok'{} = amqp_channel:call(Channel, ExchangeDeclare),
     Parent = self(),
-    [spawn(fun() -> queue_exchange_binding(Channel,X,Parent,Tag) end) || Tag <- lists:seq(1,?Latch)],
+    [spawn(fun() -> queue_exchange_binding(Channel,Ticket,X,Parent,Tag) end) || Tag <- lists:seq(1,?Latch)],
     latch_loop(?Latch),
-    ExchangeDelete = #'exchange.delete'{exchange = X,if_unused = false, nowait = false},
+    ExchangeDelete = #'exchange.delete'{ticket = Ticket, exchange = X,
+                                        if_unused = false, nowait = false},
     #'exchange.delete_ok'{} = amqp_channel:call(Channel, ExchangeDelete),
     teardown(Connection, Channel).
 
-queue_exchange_binding(Channel,X,Parent,Tag) ->
+queue_exchange_binding(Channel,Ticket,X,Parent,Tag) ->
     receive
         nothing -> ok
     after (?Latch - Tag rem 7) * 10 ->
@@ -75,7 +78,7 @@ queue_exchange_binding(Channel,X,Parent,Tag) ->
     BindKey = <<"a.b.c.*">>,
     RoutingKey = <<"a.b.c.d">>,
     Payload = <<"foobar">>,
-    QueueDeclare = #'queue.declare'{queue = Q,
+    QueueDeclare = #'queue.declare'{ticket = Ticket, queue = Q,
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
                                     nowait = false, arguments = []},
@@ -84,26 +87,27 @@ queue_exchange_binding(Channel,X,Parent,Tag) ->
                         consumer_count = ConsumerCount}
                        = amqp_channel:call(Channel,QueueDeclare),
     ?assertMatch(Q, Q1),
-    QueueBind = #'queue.bind'{queue = Q, exchange = X,
+    QueueBind = #'queue.bind'{ticket = Ticket, queue = Q, exchange = X,
                               routing_key = BindKey, nowait = false, arguments = []},
     #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind),
-    QueueDelete = #'queue.delete'{queue = Q,if_unused = true, if_empty = true, nowait = false},
+    QueueDelete = #'queue.delete'{ticket = Ticket, queue = Q,
+                                  if_unused = true, if_empty = true, nowait = false},
     #'queue.delete_ok'{message_count = MessageCount2} = amqp_channel:call(Channel, QueueDelete),
     ?assertMatch(MessageCount, MessageCount2),
     Parent ! finished.
 
 channel_lifecycle_test(Connection) ->
     Realm = <<"/data">>,
-    Channel1 = setup_channel(Connection, Realm),
+    {Channel1, Ticket1} = setup_channel(Connection, Realm),
     ChannelClose = #'channel.close'{reply_code = 200, reply_text = <<"Goodbye">>,
                                           class_id = 0, method_id = 0},
     #'channel.close_ok'{} = amqp_channel:call(Channel1, ChannelClose),
-    Channel2 = setup_channel(Connection, Realm),
+    {Channel2, Ticket2} = setup_channel(Connection, Realm),
     teardown(Connection, Channel2).
 
 basic_get_test(Connection) ->
-    {Channel, Q} = setup_publish(Connection),
-    BasicGet = #'basic.get'{queue = Q, no_ack = true},
+    {Channel, Ticket, Q} = setup_publish(Connection),
+    BasicGet = #'basic.get'{ticket = Ticket, queue = Q, no_ack = true},
     {Method, Content} = amqp_channel:call(Channel, BasicGet),
     #'basic.get_ok'{delivery_tag = DeliveryTag,
                     redelivered = Redelivered,
@@ -128,11 +132,11 @@ basic_return_test(Connection) ->
                        bind_key = <<"a.b.c.*">>,
                        payload = ExpectedPayload = <<"qwerty">>,
                        mandatory = true},
-    Channel = setup_channel(Connection, Realm),
-    setup_publish(Channel, Publish),
+    {Channel, Ticket} = setup_channel(Connection, Realm),
+    setup_publish(Channel, Ticket, Publish),
     sleep(2000),
     amqp_channel:register_return_handler(Channel, self()),
-    setup_publish(Channel, Publish),
+    setup_publish(Channel, Ticket, Publish),
     receive
         {BasicReturn = #'basic.return'{}, Content} ->
             #'basic.return'{reply_code = ReplyCode,
@@ -159,8 +163,8 @@ sleep(Millis) ->
     end.
 
 basic_ack_test(Connection) ->
-    {Channel, Q} = setup_publish(Connection),
-    BasicGet = #'basic.get'{queue = Q, no_ack = false},
+    {Channel, Ticket, Q} = setup_publish(Connection),
+    BasicGet = #'basic.get'{ticket = Ticket, queue = Q, no_ack = false},
     {Method, Content} = amqp_channel:call(Channel, BasicGet),
     #'basic.get_ok'{delivery_tag = DeliveryTag,
                     redelivered = Redelivered,
@@ -172,16 +176,16 @@ basic_ack_test(Connection) ->
     teardown(Connection, Channel).
 
 basic_consume_test(Connection) ->
-    {Channel, Q} = setup_publish(Connection),
+    {Channel, Ticket, Q} = setup_publish(Connection),
     Parent = self(),
-    [spawn(fun() -> consume_loop(Channel,Q,Parent,<<Tag:32>>) end) || Tag <- lists:seq(1,?Latch)],
+    [spawn(fun() -> consume_loop(Channel,Ticket,Q,Parent,<<Tag:32>>) end) || Tag <- lists:seq(1,?Latch)],
     latch_loop(?Latch),
     teardown(Connection, Channel).
 
-consume_loop(Channel,Q,Parent,Tag) ->
+consume_loop(Channel,Ticket,Q,Parent,Tag) ->
     {ok, Consumer} = gen_event:start_link(),
     gen_event:add_handler(Consumer, amqp_consumer , [] ),
-    BasicConsume = #'basic.consume'{queue = Q,
+    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
                                     consumer_tag = Tag,
                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, Consumer),
@@ -195,8 +199,8 @@ consume_loop(Channel,Q,Parent,Tag) ->
 	Parent ! finished.
 
 basic_recover_test(Connection) ->
-    {Channel,Q} = setup_publish(Connection),
-    BasicConsume = #'basic.consume'{queue = Q,
+    {Channel, Ticket, Q} = setup_publish(Connection),
+    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
                                     no_local = false, no_ack = false, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, self()),
     receive
@@ -220,7 +224,7 @@ basic_recover_test(Connection) ->
 
 basic_qos_test(Connection) ->
     Realm = <<"/data">>,
-    Channel = setup_channel(Connection, Realm),
+    {Channel, Ticket} = setup_channel(Connection, Realm),
     BasicQos = #'basic.qos'{prefetch_size = 8,
                             prefetch_count = 1,
                             global = true},
@@ -228,8 +232,8 @@ basic_qos_test(Connection) ->
     teardown(Connection, Channel).
 
 basic_reject_test(Connection) ->
-    {Channel, Q} = setup_publish(Connection),
-    BasicConsume = #'basic.consume'{queue = Q,
+    {Channel, Ticket, Q} = setup_publish(Connection),
+    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, self()),
     receive
@@ -257,16 +261,16 @@ setup_publish(Connection) ->
                        bind_key = <<"a.b.c.*">>,
                        payload = <<"foobar">>
                        },
-    Channel = setup_channel(Connection, Realm),
-    setup_publish(Channel, Publish).
+    {Channel, Ticket} = setup_channel(Connection, Realm),
+    setup_publish(Channel, Ticket, Publish).
 
-setup_publish(Channel, #publish{routing_key = RoutingKey,
+setup_publish(Channel, Ticket, #publish{routing_key = RoutingKey,
                                         q = Q, x = X,
                                         bind_key = BindKey, payload = Payload,
                                         mandatory = Mandatory,
                                         immediate = Immediate}) ->
-    ok = setup_exchange(Channel, Q, X, BindKey),
-    BasicPublish = #'basic.publish'{exchange = X,
+    ok = setup_exchange(Channel, Ticket, Q, X, BindKey),
+    BasicPublish = #'basic.publish'{ticket = Ticket, exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = Mandatory,
                                     immediate = Immediate},
@@ -277,7 +281,7 @@ setup_publish(Channel, #publish{routing_key = RoutingKey,
          payload_fragments_rev = [Payload] %% list of binaries, in reverse order (!)
         },
     amqp_channel:cast(Channel, BasicPublish, Content),
-    {Channel,Q}.
+    {Channel,Ticket,Q}.
 
 teardown({ConnectionPid, Mode}, Channel) ->
     ?assertMatch(true, is_process_alive(Channel)),
@@ -292,8 +296,8 @@ teardown({ConnectionPid, Mode}, Channel) ->
     ?assertMatch(false, is_process_alive(Channel)),
     ?assertMatch(false, is_process_alive(ConnectionPid)).
 
-setup_exchange(Channel, Q, X, BindKey) ->
-    QueueDeclare = #'queue.declare'{queue = Q,
+setup_exchange(Channel, Ticket, Q, X, BindKey) ->
+    QueueDeclare = #'queue.declare'{ticket = Ticket, queue = Q,
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
                                     nowait = false, arguments = []},
@@ -301,11 +305,11 @@ setup_exchange(Channel, Q, X, BindKey) ->
                         message_count = MessageCount,
                         consumer_count = ConsumerCount}
                         = amqp_channel:call(Channel, QueueDeclare),
-    ExchangeDeclare = #'exchange.declare'{exchange = X, type = <<"topic">>,
+    ExchangeDeclare = #'exchange.declare'{ticket = Ticket, exchange = X, type = <<"topic">>,
                                           passive = false, durable = false, auto_delete = false, internal = false,
                                           nowait = false, arguments = []},
     #'exchange.declare_ok'{} = amqp_channel:call(Channel, ExchangeDeclare),
-    QueueBind = #'queue.bind'{queue = Q, exchange = X,
+    QueueBind = #'queue.bind'{ticket = Ticket, queue = Q, exchange = X,
                               routing_key = BindKey, nowait = false, arguments = []},
     #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind),
     ok.
@@ -319,8 +323,7 @@ setup_channel(Connection, Realm) ->
                                write = true,
                                read = true},
     #'access.request_ok'{ticket = Ticket} = amqp_channel:call(Channel, Access),
-    ?assertMatch(1,Ticket),
-    Channel.
+    {Channel, Ticket}.
 
 latch_loop(0) -> ok;
 latch_loop(Latch) ->
