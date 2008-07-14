@@ -28,7 +28,7 @@
 -define(RPC_TIMEOUT, 10000).
 -define(RPC_SLEEP, 500).
 
--export([test_wrapper/1, test_coverage/1]).
+-export([test_coverage/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -57,14 +57,7 @@ non_existent_exchange_test() ->
 
 new_connection() -> amqp_connection:start("guest", "guest").
 
-test_wrapper(NodeName) ->
-    Node = rabbit_misc:localnode(list_to_atom(NodeName)),
-    rabbit_multi:get_pid(Node, 0),
-    test().
-
-test_coverage(NodeName) ->
-    Node = rabbit_misc:localnode(list_to_atom(NodeName)),
-    rabbit_multi:get_pid(Node, 0),
+test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().

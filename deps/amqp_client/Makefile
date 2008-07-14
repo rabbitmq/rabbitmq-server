@@ -43,11 +43,6 @@ compile:
 
 all: compile
 
-
-run_node: compile
-	LOG_BASE=/tmp SKIP_HEART=true SKIP_LOG_ARGS=true MNESIA_DIR=$(MNESIA_DIR) RABBIT_ARGS="-detached -pa ./ebin" NODENAME=$(NODENAME) rabbitmq-server
-	sleep 2 # so that the node is initialized when the tests are run
-
 all_tests: test_network test_network_coverage test_direct test_direct_coverage
 	$(ERL_CALL) -q
 
@@ -64,11 +59,13 @@ tests_direct: test_direct test_direct_coverage
 	$(ERL_CALL) -q
 	rm -rf $(MNESIA_DIR)
 
-test_direct: run_node
-	echo 'direct_client_test:test_wrapper("$(NODENAME)").' | $(ERL_CALL)
+test_direct:
+	erl -pa ebin -mnesia dir tmp -boot start_sasl -s rabbit -noshell -eval \
+	'direct_client_test:test(),halt().'
 
-test_direct_coverage: run_node
-	echo 'direct_client_test:test_coverage("$(NODENAME)").' | $(ERL_CALL)
+test_direct_coverage:
+	erl -pa ebin -mnesia dir tmp -boot start_sasl -s rabbit -noshell -eval \
+	'direct_client_test:test_coverage(),halt().'
 
 clean:
 	rm $(EBIN_DIR)/*.beam
