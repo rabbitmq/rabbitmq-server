@@ -284,7 +284,7 @@ execute_mnesia_transaction(TxFun) ->
     %% Making this a sync_transaction allows us to use dirty_read
     %% elsewhere and get a consistent result even when that read
     %% executes on a different node.
-    case mnesia:transaction(TxFun) of
+    case mnesia:sync_transaction(TxFun) of
         {atomic,  Result} -> Result;
         {aborted, Reason} -> throw({error, Reason})
     end.
