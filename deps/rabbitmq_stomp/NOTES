@@ -1,0 +1,28 @@
+Comments from Sean Treadway, 2 June 2008, on the rabbitmq-discuss list:
+
+ - On naming, extensibility, and headers:
+
+   "STOMP looked like it was MQ agnostic and extensible while keeping
+    the core headers well defined (ack=client, message_id, etc...),
+    but my application was not MQ agnostic.  Plus I saw some of the
+    ActiveMQ headers weren't available or necessary in RabbitMQ.
+
+   "Keeping the AMQP naming is the best way to piggy back on the AMQP
+    documentation.  For those that need simple, transient queues, the
+    existing STOMP documentation would be sufficient."
+
+   ...
+
+   "I only have experience with RabbitMQ, so I'm fine with exposing
+    AMQP rather than try to come to some agreement over the extension
+    names of standard STOMP headers."
+
+ - On queue deletion over STOMP:
+
+   "Here, I would stick with the verbs defined in STOMP and extend the
+    verbs with headers.  One possibility is to use UNSUBSCRIBE
+    messages to change the queue properties before sending the
+    'basic.cancel' method.  Another possibility is to change queue
+    properties on a SUBSCRIBE message. Neither seem nice to me.  Third
+    option is to do nothing, and delete the queues outside of the
+    STOMP protocol"
