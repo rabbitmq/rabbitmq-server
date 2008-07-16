@@ -6,7 +6,6 @@ conn.subscribe('/queue/durable', :'auto-delete' => false, :durable => true)
 
 puts "Waiting for messages..."
 
-while true
-  mesg = conn.receive
-  puts mesg.body if mesg
+while mesg = conn.receive
+  puts mesg.body
 end
