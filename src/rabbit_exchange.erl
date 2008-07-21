@@ -151,7 +151,6 @@ list_exchange_bindings(Name) ->
 		 queue = QueueName} <- Handlers].
 
 bindings_for_exchange(Name) ->
-    Q1 = qlc:e(qlc:q([B1 || B1 = #binding{} <- mnesia:table(binding)])),
     qlc:e(qlc:q([B || 
                     B = #binding{key = K} <- mnesia:table(binding),
                     element(1, K) == Name])).
