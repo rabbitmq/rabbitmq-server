@@ -161,7 +161,8 @@ return_queue_declare_ok(State, NoWait, Q) ->
                 rabbit_misc:with_exit_handler(
                   fun () -> {ok, Q#amqqueue.name, 0, 0} end,
                   fun () -> rabbit_amqqueue:stat(Q) end),
-            Reply = #'queue.declare_ok'{queue = ActualName,
+            QueueName = ActualName#resource.name,
+            Reply = #'queue.declare_ok'{queue = QueueName,
                                         message_count = MessageCount,
                                         consumer_count = ConsumerCount},
             {reply, Reply, NewState}
@@ -462,12 +463,12 @@ handle_method(#'exchange.declare'{ticket = TicketNumber,
               _, State = #ch{ virtual_host = VHostPath }) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     %% FIXME: clarify spec as per declare wrt differing realms
-    X = case rabbit_exchange:lookup(
-               rabbit_misc:r(VHostPath, exchange, ExchangeNameBin)) of
+    ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
                 ActualNameBin = check_name('exchange', ExchangeNameBin),
-                rabbit_exchange:declare(ActualNameBin,
+                rabbit_exchange:declare(ExchangeName,
                                         CheckedType,
                                         Durable,
                                         AutoDelete,
@@ -544,7 +545,7 @@ handle_method(#'queue.declare'{ticket = TicketNumber,
                         <<>>  -> rabbit_misc:binstring_guid("amq.gen");
                         Other -> check_name('queue', Other)
                     end,
-                Finish(rabbit_amqqueue:declare(ActualNameBin,
+                Finish(rabbit_amqqueue:declare(rabbit_misc:r(VHostPath, queue, ActualNameBin),
                                                Durable,
                                                AutoDelete,
                                                Args));
@@ -567,7 +568,7 @@ handle_method(#'queue.delete'{ticket = TicketNumber,
                               if_empty = IfEmpty,
                               nowait = NoWait
                              },
-              _, State) ->
+              _, State = #ch{ virtual_host = VHostPath }) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     case rabbit_amqqueue:with_or_die(
            QueueName,

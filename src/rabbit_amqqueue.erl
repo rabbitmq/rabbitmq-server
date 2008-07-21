@@ -130,8 +130,8 @@ recover_durable_queues() ->
               ok
       end).
 
-declare(NameBin, Durable, AutoDelete, Args) ->
-    Q = start_queue_process(#amqqueue{name = NameBin,
+declare(Resource = #resource{name = Name}, Durable, AutoDelete, Args) ->
+    Q = start_queue_process(#amqqueue{name = Resource,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
                                       arguments = Args,
@@ -139,7 +139,7 @@ declare(NameBin, Durable, AutoDelete, Args) ->
                                       pid = none}),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   case mnesia:wread({amqqueue, NameBin}) of
+                   case mnesia:wread({amqqueue, Resource}) of
                        [] -> ok = recover_queue(Q),
                              Q;
                        [ExistingQ] -> ExistingQ
@@ -172,20 +172,22 @@ default_binding_spec(Name) ->
                   routing_key = Name,
                   arguments = []}.
 
-recover_bindings(Q = #amqqueue{name = QueueName, binding_specs = Specs}) ->
-    ok = rabbit_exchange:add_binding(default_binding_spec(QueueName), Q),
+recover_bindings(Q = #amqqueue{name = #resource{name = QueueName},
+                binding_specs = Specs}) ->
+    % TODO I don't this should be commented out
+    %ok = rabbit_exchange:add_binding(default_binding_spec(QueueName), Q),
     lists:foreach(fun (B) ->
                           ok = rabbit_exchange:add_binding(B, Q)
                   end, Specs),
     ok.
 
-modify_bindings(#resource{name = QueueName}, ExchangeName, RoutingKey, Arguments,
+modify_bindings(Queue = #resource{name = QueueName}, X = #resource{name = ExchangeName}, RoutingKey, Arguments,
                 SpecPresentFun, SpecAbsentFun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:wread({amqqueue, QueueName}) of
+              case mnesia:wread({amqqueue, Queue}) of
                   [Q = #amqqueue{binding_specs = Specs0}] ->
-                      Spec = #binding_spec{exchange_name = ExchangeName,
+                      Spec = #binding_spec{exchange_name = X,
                                            routing_key = RoutingKey,
                                            arguments = Arguments},
                       case (case lists:member(Spec, Specs0) of
@@ -242,7 +244,6 @@ delete_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
 lookup(Name) ->
     rabbit_misc:dirty_read({amqqueue, Name}).
 
-with(#resource{name = Name}, F, E) -> with(Name, F, E);
 with(Name, F, E) ->
     case lookup(Name) of
         {ok, Q} -> rabbit_misc:with_exit_handler(E, fun () -> F(Q) end);

@@ -90,15 +90,15 @@ recover_durable_exchanges() ->
                            end, ok, durable_exchanges)
       end).
 
-declare(NameBin, Type, Durable, AutoDelete, Args) ->
-    Exchange = #exchange{name = NameBin,
+declare(Resource = #resource{name = Name}, Type, Durable, AutoDelete, Args) ->
+    Exchange = #exchange{name = Resource,
                          type = Type,
                          durable = Durable,
                          auto_delete = AutoDelete,
                          arguments = Args},
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:wread({exchange, NameBin}) of
+              case mnesia:wread({exchange, Resource}) of
                   [] -> ok = mnesia:write(Exchange),
                         if Durable ->
                                 ok = mnesia:write(
@@ -131,9 +131,8 @@ assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
 lookup(Name) ->
     rabbit_misc:dirty_read({exchange, Name}).
 
-lookup_or_die(#resource{name = Name}) -> lookup_or_die(Name);
-lookup_or_die(Name) ->
-    case lookup(Name) of
+lookup_or_die(Resource = #resource{name = Name}) ->
+    case lookup(Resource) of
         {ok, X} -> X;
         {error, not_found} ->
             rabbit_misc:protocol_error(
@@ -152,6 +151,7 @@ list_exchange_bindings(Name) ->
 		 queue = QueueName} <- Handlers].
 
 bindings_for_exchange(Name) ->
+    Q1 = qlc:e(qlc:q([B1 || B1 = #binding{} <- mnesia:table(binding)])),
     qlc:e(qlc:q([B || 
                     B = #binding{key = K} <- mnesia:table(binding),
                     element(1, K) == Name])).
@@ -216,7 +216,7 @@ delivery_key_for_type(fanout, Name, _RoutingKey) ->
 delivery_key_for_type(_Type, Name, RoutingKey) ->
     {Name, RoutingKey}.
 
-call_with_exchange(#resource{name = Name}, Fun) -> call_with_exchange(Name, Fun);
+%call_with_exchange(R = #resource{name = Name}, Fun) -> call_with_exchange(R, Fun);
 call_with_exchange(Name, Fun) ->
     case mnesia:wread({exchange, Name}) of
         [] -> {error, not_found};
@@ -334,7 +334,6 @@ last_topic_match(P, R, []) ->
 last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
     topic_matches1(P, R) or last_topic_match(P, [BacktrackNext | R], BacktrackList).
 
-delete(#resource{name = ExchangeName}, IfUnused) -> delete(ExchangeName, IfUnused);
 delete(ExchangeName, IfUnused) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () -> internal_delete(ExchangeName, IfUnused) end).

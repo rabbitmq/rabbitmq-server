@@ -213,16 +213,12 @@ insert_default_data() ->
     {ok, DefaultPass} = application:get_env(default_pass),
     {ok, DefaultVHost} = application:get_env(default_vhost),
     ok = rabbit_access_control:add_vhost(DefaultVHost),
-    ok = insert_default_user(DefaultUser, DefaultPass,
-                             [{DefaultVHost, [<<"/data">>, <<"/admin">>]}]),
+    ok = insert_default_user(DefaultUser, DefaultPass,DefaultVHost),
     ok.
 
-insert_default_user(Username, Password, VHostSpecs) ->
+insert_default_user(Username, Password, VHostPath) ->
     ok = rabbit_access_control:add_user(Username, Password),
-    lists:foreach(
-      fun (VHostPath) ->
-              ok = rabbit_access_control:map_user_vhost(Username, VHostPath)
-      end, VHostSpecs),
+    ok = rabbit_access_control:map_user_vhost(Username, VHostPath),
     ok.
 
 start_builtin_amq_applications() ->
