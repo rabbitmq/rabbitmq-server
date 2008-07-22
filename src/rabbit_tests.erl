@@ -284,31 +284,12 @@ test_user_management() ->
         control_action(unmap_user_vhost, ["foo", "/"]),
     {error, {no_such_user, _}} =
         control_action(list_user_vhosts, ["foo"]),
-    {error, {no_such_user, _}} =
-        control_action(set_permissions, ["foo", "/", "/data"]),
-    {error, {no_such_user, _}} =
-        control_action(list_permissions, ["foo", "/"]),
     {error, {no_such_vhost, _}} =
         control_action(map_user_vhost, ["guest", "/testhost"]),
     {error, {no_such_vhost, _}} =
         control_action(unmap_user_vhost, ["guest", "/testhost"]),
     {error, {no_such_vhost, _}} =
         control_action(list_vhost_users, ["/testhost"]),
-    {error, {no_such_vhost, _}} =
-        control_action(set_permissions, ["guest", "/testhost", "/data"]),
-    {error, {no_such_vhost, _}} =
-        control_action(list_permissions, ["guest", "/testhost"]),
-    {error, {no_such_vhost, _}} =
-        control_action(add_realm, ["/testhost", "/data/test"]),
-    {error, {no_such_vhost, _}} =
-        control_action(delete_realm, ["/testhost", "/data/test"]),
-    {error, {no_such_vhost, _}} =
-        control_action(list_realms, ["/testhost"]),
-    {error, {no_such_realm, _}} =
-        control_action(set_permissions, ["guest", "/", "/data/test"]),
-    {error, {no_such_realm, _}} =
-        control_action(delete_realm, ["/", "/data/test"]),
-
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
     {error, {user_already_exists, _}} =
@@ -327,32 +308,6 @@ test_user_management() ->
     ok = control_action(map_user_vhost, ["foo", "/testhost"]),
     ok = control_action(list_user_vhosts, ["foo"]),
 
-    %% realm creation
-    ok = control_action(add_realm, ["/testhost", "/data/test"]),
-    {error, {realm_already_exists, _}} =
-        control_action(add_realm, ["/testhost", "/data/test"]),
-    ok = control_action(list_realms, ["/testhost"]),
-
-    %% user permissions
-    ok = control_action(set_permissions,
-                        ["foo", "/testhost", "/data/test",
-                         "passive", "active", "write", "read"]),
-    ok = control_action(list_permissions, ["foo", "/testhost"]),
-    ok = control_action(set_permissions,
-                        ["foo", "/testhost", "/data/test", "all"]),
-    ok = control_action(set_permissions,
-                        ["foo", "/testhost", "/data/test"]),
-    {error, not_mapped_to_vhost} =
-        control_action(set_permissions,
-                       ["guest", "/testhost", "/data/test"]),
-    {error, not_mapped_to_vhost} =
-        control_action(list_permissions, ["guest", "/testhost"]),
-
-    %% realm deletion
-    ok = control_action(delete_realm, ["/testhost", "/data/test"]),
-    {error, {no_such_realm, _}} =
-        control_action(delete_realm, ["/testhost", "/data/test"]),
-
     %% user/vhost unmapping
     ok = control_action(unmap_user_vhost, ["foo", "/testhost"]),
     ok = control_action(unmap_user_vhost, ["foo", "/testhost"]),
@@ -364,13 +319,7 @@ test_user_management() ->
 
     %% deleting a populated vhost
     ok = control_action(add_vhost, ["/testhost"]),
-    ok = control_action(add_realm, ["/testhost", "/data/test"]),
     ok = control_action(map_user_vhost, ["foo", "/testhost"]),
-    ok = control_action(set_permissions,
-                        ["foo", "/testhost", "/data/test", "all"]),
-    _ = rabbit_amqqueue:declare(
-          rabbit_misc:r(<<"/testhost">>, realm, <<"/data/test">>),
-          <<"bar">>, true, false, []),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion
