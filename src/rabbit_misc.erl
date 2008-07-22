@@ -121,21 +121,6 @@ protocol_error(Error, Explanation, Params, Method) ->
     CompleteExplanation = lists:flatten(io_lib:format(Explanation, Params)),
     exit({amqp, Error, CompleteExplanation, Method}).
 
-boolean_config_param(Name, TrueValue, FalseValue, DefaultValue) ->
-    ActualValue = get_config(Name, DefaultValue),
-    if
-        ActualValue == TrueValue ->
-            true;
-        ActualValue == FalseValue ->
-            false;
-        true ->
-            rabbit_log:error(
-              "Bad setting for config param '~w': ~p~n" ++
-              "legal values are '~w', '~w'; using default value '~w'",
-              [Name, ActualValue, TrueValue, FalseValue, DefaultValue]),
-            DefaultValue == TrueValue
-    end.
-
 get_config(Key) ->
     case dirty_read({rabbit_config, Key}) of
         {ok, {rabbit_config, Key, V}} -> {ok, V};

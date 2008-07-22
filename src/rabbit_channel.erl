@@ -229,16 +229,9 @@ handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:shutdown(WriterPid),
     stop;
 
-handle_method(#'access.request'{realm = RealmNameBin,
-                                exclusive = Exclusive,
-                                passive = Passive,
-                                active = Active,
-                                write = Write,
-                                read = Read},_, State) ->
-    {reply, #'access.request_ok'{ticket = 1}, State};
+handle_method(#'access.request'{},_, State) -> {reply, #'access.request_ok'{ticket = 1}, State};
 
-handle_method(#'basic.publish'{ticket = TicketNumber,
-                               exchange = ExchangeNameBin,
+handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                                routing_key = RoutingKey,
                                mandatory = Mandatory,
                                immediate = Immediate},
@@ -281,8 +274,7 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                                      uncommitted_ack_q = NewUAQ})
               end};
 
-handle_method(#'basic.get'{ticket = TicketNumber,
-                           queue = QueueNameBin,
+handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
               _, State = #ch{ proxy_pid = ProxyPid, writer_pid = WriterPid,
                               next_tag = DeliveryTag }) ->
@@ -309,8 +301,7 @@ handle_method(#'basic.get'{ticket = TicketNumber,
             {reply, #'basic.get_empty'{cluster_id = <<>>}, State}
     end;
 
-handle_method(#'basic.consume'{ticket = TicketNumber,
-                               queue = QueueNameBin,
+handle_method(#'basic.consume'{queue = QueueNameBin,
                                consumer_tag = ConsumerTag,
                                no_local = _, % FIXME: implement
                                no_ack = NoAck,
@@ -451,8 +442,7 @@ handle_method(#'basic.recover'{}, _, _State) ->
     rabbit_misc:protocol_error(
       not_allowed, "attempt to recover a transactional channel",[]);
 
-handle_method(#'exchange.declare'{ticket = TicketNumber,
-                                  exchange = ExchangeNameBin,
+handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
                                   durable = Durable,
@@ -467,7 +457,7 @@ handle_method(#'exchange.declare'{ticket = TicketNumber,
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
-                ActualNameBin = check_name('exchange', ExchangeNameBin),
+                check_name('exchange', ExchangeNameBin),
                 rabbit_exchange:declare(ExchangeName,
                                         CheckedType,
                                         Durable,
@@ -477,8 +467,7 @@ handle_method(#'exchange.declare'{ticket = TicketNumber,
     ok = rabbit_exchange:assert_type(X, CheckedType),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
-handle_method(#'exchange.declare'{ticket = TicketNumber,
-                                  exchange = ExchangeNameBin,
+handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = true,
                                   nowait = NoWait},
@@ -488,8 +477,7 @@ handle_method(#'exchange.declare'{ticket = TicketNumber,
     ok = rabbit_exchange:assert_type(X, rabbit_exchange:check_type(TypeNameBin)),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
-handle_method(#'exchange.delete'{ticket = TicketNumber,
-                                 exchange = ExchangeNameBin,
+handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
                                  if_unused = IfUnused,
                                  nowait = NoWait},
               _, State = #ch { virtual_host = VHostPath }) ->
@@ -505,8 +493,7 @@ handle_method(#'exchange.delete'{ticket = TicketNumber,
             return_ok(State, NoWait,  #'exchange.delete_ok'{})
     end;
 
-handle_method(#'queue.declare'{ticket = TicketNumber,
-                               queue = QueueNameBin,
+handle_method(#'queue.declare'{queue = QueueNameBin,
                                passive = false,
                                durable = Durable,
                                exclusive = ExclusiveDeclare,
@@ -553,8 +540,7 @@ handle_method(#'queue.declare'{ticket = TicketNumber,
         end,
     return_queue_declare_ok(State, NoWait, Q);
 
-handle_method(#'queue.declare'{ticket = TicketNumber,
-                               queue = QueueNameBin,
+handle_method(#'queue.declare'{queue = QueueNameBin,
                                passive = true,
                                nowait = NoWait},
               _, State = #ch{ virtual_host = VHostPath }) ->
@@ -562,13 +548,11 @@ handle_method(#'queue.declare'{ticket = TicketNumber,
     Q = rabbit_amqqueue:with_or_die(QueueName, fun (Q) -> Q end),
     return_queue_declare_ok(State, NoWait, Q);
 
-handle_method(#'queue.delete'{ticket = TicketNumber,
-                              queue = QueueNameBin,
+handle_method(#'queue.delete'{queue = QueueNameBin,
                               if_unused = IfUnused,
                               if_empty = IfEmpty,
                               nowait = NoWait
-                             },
-              _, State = #ch{ virtual_host = VHostPath }) ->
+                             },_, State) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     case rabbit_amqqueue:with_or_die(
            QueueName,
@@ -585,8 +569,7 @@ handle_method(#'queue.delete'{ticket = TicketNumber,
                                message_count = PurgedMessageCount})
     end;
 
-handle_method(#'queue.bind'{ticket = TicketNumber,
-                            queue = QueueNameBin,
+handle_method(#'queue.bind'{queue = QueueNameBin,
                             exchange = ExchangeNameBin,
                             routing_key = RoutingKey,
                             nowait = NoWait,
@@ -614,8 +597,7 @@ handle_method(#'queue.bind'{ticket = TicketNumber,
             return_ok(State, NoWait, #'queue.bind_ok'{})
     end;
 
-handle_method(#'queue.purge'{ticket = TicketNumber,
-                             queue = QueueNameBin,
+handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},
               _, State) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),

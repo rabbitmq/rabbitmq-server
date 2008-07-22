@@ -90,7 +90,7 @@ recover_durable_exchanges() ->
                            end, ok, durable_exchanges)
       end).
 
-declare(Resource = #resource{name = Name}, Type, Durable, AutoDelete, Args) ->
+declare(Resource = #resource{}, Type, Durable, AutoDelete, Args) ->
     Exchange = #exchange{name = Resource,
                          type = Type,
                          durable = Durable,

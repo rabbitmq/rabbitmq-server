@@ -130,7 +130,7 @@ recover_durable_queues() ->
               ok
       end).
 
-declare(Resource = #resource{name = Name}, Durable, AutoDelete, Args) ->
+declare(Resource = #resource{}, Durable, AutoDelete, Args) ->
     Q = start_queue_process(#amqqueue{name = Resource,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
@@ -179,7 +179,7 @@ recover_bindings(Q = #amqqueue{name = QueueName, binding_specs = Specs}) ->
                   end, Specs),
     ok.
 
-modify_bindings(Queue = #resource{name = QueueName}, X = #resource{name = ExchangeName}, RoutingKey, Arguments,
+modify_bindings(Queue = #resource{}, X = #resource{}, RoutingKey, Arguments,
                 SpecPresentFun, SpecAbsentFun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
@@ -349,7 +349,7 @@ delete_temp(Q = #amqqueue{name = QueueName}) ->
     ok = mnesia:delete({amqqueue, QueueName}),
     ok.
 
-delete_queue(Q = #amqqueue{name = QueueName, durable = Durable}) ->
+delete_queue(Q = #amqqueue{}) ->
     ok = delete_temp(Q).
     
 on_node_down(Node) ->                      
