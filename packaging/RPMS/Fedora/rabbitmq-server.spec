@@ -119,6 +119,9 @@ fi
 rm -rf $RPM_BUILD_ROOT
 
 %changelog
+* Wed Jul 9 2008 Tony Garnock-Jones <tonyg@lshift.net> 1.4.0
+- New upstream release
+
 * Mon Mar 3 2008 Adrien Pierard <adrian@lshift.net> 1.3.0
 - New upstream release
 
