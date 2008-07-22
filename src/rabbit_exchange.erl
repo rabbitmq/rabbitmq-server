@@ -145,10 +145,10 @@ list_vhost_exchanges(VHostPath) ->
 
 list_exchange_bindings(Name) ->
     [{QueueName, RoutingKey, Arguments} ||
-	#binding{handlers = Handlers} <- bindings_for_exchange(Name),
-	#handler{binding_spec = #binding_spec{routing_key = RoutingKey,
-					      arguments = Arguments},
-		 queue = QueueName} <- Handlers].
+    #binding{handlers = Handlers} <- bindings_for_exchange(Name),
+    #handler{binding_spec = #binding_spec{routing_key = RoutingKey,
+                          arguments = Arguments},
+         queue = QueueName} <- Handlers].
 
 bindings_for_exchange(Name) ->
     qlc:e(qlc:q([B || 
