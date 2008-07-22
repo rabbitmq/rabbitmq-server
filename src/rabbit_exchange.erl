@@ -151,9 +151,8 @@ list_exchange_bindings(Name) ->
          queue = QueueName} <- Handlers].
 
 bindings_for_exchange(Name) ->
-    qlc:e(qlc:q([B || 
-                    B = #binding{key = K} <- mnesia:table(binding),
-                    element(1, K) == Name])).
+    qlc:e(qlc:q([B || B = #binding{key = K} <- mnesia:table(binding),
+                      element(1, K) == Name])).
 
 empty_handlers() ->
     [].
@@ -215,7 +214,6 @@ delivery_key_for_type(fanout, Name, _RoutingKey) ->
 delivery_key_for_type(_Type, Name, RoutingKey) ->
     {Name, RoutingKey}.
 
-%call_with_exchange(R = #resource{name = Name}, Fun) -> call_with_exchange(R, Fun);
 call_with_exchange(Name, Fun) ->
     case mnesia:wread({exchange, Name}) of
         [] -> {error, not_found};

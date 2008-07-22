@@ -167,15 +167,13 @@ recover_queue(Q) ->
     ok = recover_bindings(Q),
     ok.
 
-default_binding_spec(Name) ->
-    #binding_spec{exchange_name = <<>>,
+default_binding_spec(#resource{virtual_host = VHostPath, name = Name}) ->
+    #binding_spec{exchange_name = rabbit_misc:r(VHostPath,exchange,<<"">>),
                   routing_key = Name,
                   arguments = []}.
 
-recover_bindings(Q = #amqqueue{name = #resource{name = QueueName},
-                binding_specs = Specs}) ->
-    % TODO I don't this should be commented out
-    %ok = rabbit_exchange:add_binding(default_binding_spec(QueueName), Q),
+recover_bindings(Q = #amqqueue{name = QueueName, binding_specs = Specs}) ->
+    ok = rabbit_exchange:add_binding(default_binding_spec(QueueName), Q),
     lists:foreach(fun (B) ->
                           ok = rabbit_exchange:add_binding(B, Q)
                   end, Specs),
