@@ -171,9 +171,7 @@ return_queue_declare_ok(State, NoWait, Q) ->
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
       not_allowed, "no previously declared queue", []);
-expand_queue_name_shortcut(<<>>, #ch{ virtual_host = VHostPath,
-                                      most_recently_declared_queue = MRDQ }) ->
-    rabbit_misc:r(VHostPath, queue, MRDQ);
+expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = MRDQ }) -> MRDQ;
 expand_queue_name_shortcut(QueueNameBin, #ch{ virtual_host = VHostPath }) ->
     rabbit_misc:r(VHostPath, queue, QueueNameBin).
 
