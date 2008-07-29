@@ -36,7 +36,7 @@ SCRIPT_HOME=$(dirname $0)
 export NODENAME NODE_IP_ADDRESS NODE_PORT SCRIPT_HOME PIDS_FILE
 
 exec erl \
-    -pa ../ebin \
+    -pa "`dirname $0`/../ebin" \
     -noinput \
     -hidden \
     ${ERL_ARGS} \

@@ -51,7 +51,7 @@ else
 fi
 
 erl \
-    -pa $(dirname $0)/../ebin \
+    -pa "`dirname $0`/../ebin" \
     ${START_RABBIT} \
     -sname ${NODENAME} \
     -boot start_sasl \
