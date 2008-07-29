@@ -59,5 +59,5 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
     exit /B
 )
 
-"%ERLANG_HOME%\bin\erl.exe" -pa ../ebin -noinput -hidden -sname rabbitmq_multi -s rabbit_multi %START_ARGS% -extra %*
+"%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden -sname rabbitmq_multi -s rabbit_multi %START_ARGS% -extra %*
 
