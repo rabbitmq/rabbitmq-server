@@ -41,11 +41,14 @@
 
 -record(exchange, {name, type, durable, auto_delete, arguments}).
 
--record(amqqueue, {name, durable, auto_delete, arguments, binding_specs, pid}).
--record(binding_spec, {exchange_name, routing_key, arguments}).
+-record(amqqueue, {name, durable, auto_delete, arguments, pid}).
+%% This constant field seems to be required because the underlying storage is
+%% ets, which stores key value pairs
 
--record(binding, {key, handlers}).
--record(handler, {binding_spec, queue, qpid}).
+%% The spec field is made up of an {Exchange, Binding, Queue}
+-record(forwards_binding, {spec, value = const}).
+%% The spec field is made up of an {Queue, Binding, Exchange}
+-record(reverse_binding, {spec, value = const}).
 
 -record(listener, {node, protocol, host, port}).
 
@@ -76,16 +79,11 @@
       #user{username :: username(),
             password :: password()}).
 -type(permission() :: 'passive' | 'active' | 'write' | 'read').      
--type(binding_spec() ::
-      #binding_spec{exchange_name :: exchange_name(),
-                    routing_key   :: routing_key(),
-                    arguments     :: amqp_table()}).
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
                 durable       :: bool(),
                 auto_delete   :: bool(),
                 arguments     :: amqp_table(),
-                binding_specs :: [binding_spec()],
                 pid           :: maybe(pid())}).
 -type(exchange() ::
       #exchange{name        :: exchange_name(),
