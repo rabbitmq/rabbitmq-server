@@ -41,10 +41,8 @@
 %
 % This is an example of how the client interaction should work
 %
-%   {ok, Connection} = amqp_connection:start(User, Password, Host),
+%   Connection = amqp_connection:start(User, Password, Host),
 %   Channel = amqp_connection:open_channel(Connection),
-%   AccessRequest = #'access.request'{ %% set the appropriate fields },
-%   #'access.request_ok'{ticket = Ticket} = amqp_channel:call(Channel, AccessRequest)
 %   %%...do something useful
 %   ChannelClose = #'channel.close'{ %% set the appropriate fields },
 %   amqp_channel:call(Channel, ChannelClose),
