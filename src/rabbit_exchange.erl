@@ -32,7 +32,7 @@
          list_vhost_exchanges/1, list_exchange_bindings/1,
          simple_publish/6, simple_publish/3,
          route/2]).
--export([add_binding/2, delete_binding/2]).
+-export([add_binding/1, delete_binding/2]).
 -export([delete/2]).
 -export([check_type/1, assert_type/2, topic_matches/2]).
 
@@ -218,29 +218,34 @@ delivery_key_for_type(fanout, Name, _RoutingKey) ->
 delivery_key_for_type(_Type, Name, RoutingKey) ->
     {Name, RoutingKey}.
 
-call_with_exchange(Name, Fun) ->
-    case mnesia:wread({exchange, Name}) of
-        [] -> {error, not_found};
-        [X] -> Fun(X)
+% Don't really like this double lookup
+% It seems very clunky
+% Can this get refactored to to avoid the duplication of the lookup/1 function?
+call_with_exchange_and_queue(Exchange, Queue, Fun) ->
+    case mnesia:wread({exchange, Exchange}) of
+        [] -> {error, exchange_not_found};
+        [X] -> 
+            case mnesia:wread({amqqueue, Queue}) of
+                [] -> {error, queue_not_found};
+                [Q] -> 
+                    Fun(X,Q)
+            end
     end.
+
 
 make_handler(BindingSpec, #amqqueue{name = QueueName, pid = QPid}) ->
     exit(make_handler).
     %#handler{binding_spec = BindingSpec, queue = QueueName, qpid = QPid}.
 
-add_binding(BindingSpec %= #binding_spec{exchange_name = ExchangeName,
-                        %                routing_key = RoutingKey}, 
-                        ,Q) ->
-    exit(add_binding).
-    % call_with_exchange(
-    %       ExchangeName,
-    %       fun (X) -> if Q#amqqueue.durable and not(X#exchange.durable) ->
-    %                          {error, durability_settings_incompatible};
-    %                     true ->
-    %                          internal_add_binding(
-    %                            X, RoutingKey, make_handler(BindingSpec, Q))
-    %                  end
-    %       end).
+add_binding(#binding{exchange = Exchange, key = Key, queue = Queue}) ->
+    call_with_exchange_and_queue(
+              Exchange, Queue,
+              fun (X,Q) -> if Q#amqqueue.durable and not(X#exchange.durable) ->
+                                 {error, durability_settings_incompatible};
+                            true ->
+                                 internal_add_binding(X, Key, Q)
+                         end
+              end).
 
 delete_binding(BindingSpec %= #binding_spec{exchange_name = ExchangeName,
                            %               routing_key = RoutingKey}, 
@@ -275,9 +280,10 @@ handler_qpids(Handlers) ->
 
 %% Must run within a transaction.
 internal_add_binding(#exchange{name = ExchangeName, type = Type},
-                     RoutingKey, Handler) ->
-    BindingKey = delivery_key_for_type(Type, ExchangeName, RoutingKey),
-    ok = add_handler_to_binding(BindingKey, Handler).
+                     RoutingKey, Queue) ->
+    ok.
+    %BindingKey = delivery_key_for_type(Type, ExchangeName, RoutingKey),
+    %ok = add_handler_to_binding(BindingKey, Handler).
 
 %% Must run within a transaction.
 internal_delete_binding(#exchange{name = ExchangeName, type = Type}, RoutingKey, Handler) ->

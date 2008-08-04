@@ -50,6 +50,8 @@
 %% The spec field is made up of an {Queue, Binding, Exchange}
 -record(reverse_binding, {spec, value = const}).
 
+-record(binding, {exchange, key, queue}).
+
 -record(listener, {node, protocol, host, port}).
 
 -record(basic_message, {exchange_name, routing_key, content, persistent_key}).
