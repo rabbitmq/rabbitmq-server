@@ -93,7 +93,7 @@ init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
         unacked_message_q       = queue:new(),
         username                = Username,
         virtual_host            = VHost,
-        most_recently_declared_queue = <<>>,
+        most_recently_declared_queue = none,
         consumer_mapping        = dict:new()}.
 
 handle_message({method, Method, Content}, State) ->
@@ -168,7 +168,7 @@ return_queue_declare_ok(State, NoWait, Q) ->
             {reply, Reply, NewState}
     end.
 
-expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
+expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = none }) ->
     rabbit_misc:protocol_error(
       not_allowed, "no previously declared queue", []);
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = MRDQ }) -> MRDQ;
@@ -176,7 +176,7 @@ expand_queue_name_shortcut(QueueNameBin, #ch{ virtual_host = VHostPath }) ->
     rabbit_misc:r(VHostPath, queue, QueueNameBin).
 
 expand_routing_key_shortcut(<<>>, <<>>,
-                            #ch{ most_recently_declared_queue = <<>> }) ->
+                            #ch{ most_recently_declared_queue = none }) ->
     rabbit_misc:protocol_error(
       not_allowed, "no previously declared queue", []);
 expand_routing_key_shortcut(<<>>, <<>>,
@@ -336,7 +336,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                                                   ConsumerMapping)}};
                 {error, queue_owned_by_another_connection} ->
                     %% The spec is silent on which exception to use
-                    %% here. This seems reasonable? 
+                    %% here. This seems reasonable?
                     %% FIXME: check this
 
                     rabbit_misc:protocol_error(
@@ -450,7 +450,6 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   arguments = Args},
               _, State = #ch{ virtual_host = VHostPath }) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
-    %% FIXME: clarify spec as per declare wrt differing realms
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
@@ -520,7 +519,6 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                 end,
                 Q
         end,
-    %% FIXME: clarify spec as per declare wrt differing realms
     Q = case rabbit_amqqueue:with(
                rabbit_misc:r(VHostPath, queue, QueueNameBin),
                Finish) of
