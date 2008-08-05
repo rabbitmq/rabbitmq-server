@@ -168,7 +168,7 @@ recover_queue(Q) ->
     ok.
 
 default_binding_spec(#resource{virtual_host = VHostPath, name = Name}) ->
-    #binding_spec{exchange_name = rabbit_misc:r(VHostPath,exchange,<<"">>),
+    #binding_spec{exchange_name = rabbit_misc:r(VHostPath, exchange, <<"">>),
                   routing_key = Name,
                   arguments = []}.
 

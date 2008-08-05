@@ -82,7 +82,7 @@ check_login(<<"AMQPLAIN">>, Response) ->
               [LoginTable])
     end;
 
-check_login(Mechanism, _Response) ->     
+check_login(Mechanism, _Response) ->
     rabbit_misc:protocol_error(
       access_refused, "unsupported authentication mechanism '~s'",
       [Mechanism]).
@@ -173,10 +173,10 @@ add_vhost(VHostPath) ->
                   case mnesia:read({vhost, VHostPath}) of
                       [] ->
                           ok = mnesia:write(#vhost{virtual_host = VHostPath}),
-                          #exchange{} = rabbit_exchange:declare(rabbit_misc:r(VHostPath,exchange,<<"">>), direct, true, false, []),
-                          #exchange{} = rabbit_exchange:declare(rabbit_misc:r(VHostPath,exchange,<<"amq.direct">>), direct, true, false, []),
-                          #exchange{} = rabbit_exchange:declare(rabbit_misc:r(VHostPath,exchange,<<"amq.topic">>), topic, true, false, []),
-                          #exchange{} = rabbit_exchange:declare(rabbit_misc:r(VHostPath,exchange,<<"amq.fanout">>), fanout, true, false, []),
+                          #exchange{} = rabbit_exchange:declare(rabbit_misc:r(VHostPath, exchange, <<"">>), direct, true, false, []),
+                          #exchange{} = rabbit_exchange:declare(rabbit_misc:r(VHostPath, exchange, <<"amq.direct">>), direct, true, false, []),
+                          #exchange{} = rabbit_exchange:declare(rabbit_misc:r(VHostPath, exchange, <<"amq.topic">>), topic, true, false, []),
+                          #exchange{} = rabbit_exchange:declare(rabbit_misc:r(VHostPath, exchange, <<"amq.fanout">>), fanout, true, false, []),
                           ok;
                       [_] ->
                           mnesia:abort({vhost_already_exists, VHostPath})
