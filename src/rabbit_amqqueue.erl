@@ -55,7 +55,7 @@
       {'error', 'queue_not_found' | 'exchange_not_found'}).
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
--spec(declare/4 :: (name(), bool(), bool(), amqp_table()) ->
+-spec(declare/4 :: (r(amqqueue), bool(), bool(), amqp_table()) ->
              amqqueue()).
 -spec(add_binding/4 ::
       (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
@@ -249,7 +249,7 @@ with(Name, F, E) ->
     end.
 
 with(Name, F) ->
-    with(Name, F, fun () -> {error, not_found} end). 
+    with(Name, F, fun () -> {error, not_found} end).
 with_or_die(Name, F) ->
     with(Name, F, fun () -> rabbit_misc:protocol_error(
                               not_found, "no ~s", [rabbit_misc:rs(Name)])
@@ -351,8 +351,8 @@ delete_temp(Q = #amqqueue{name = QueueName}) ->
 
 delete_queue(Q = #amqqueue{}) ->
     ok = delete_temp(Q).
-    
-on_node_down(Node) ->                      
+
+on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               qlc:fold(

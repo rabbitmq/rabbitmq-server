@@ -50,21 +50,21 @@
       not_found() | {'error', 'unroutable' | 'not_delivered'}).
 
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 :: (name(), exchange_type(), bool(), bool(),
+-spec(declare/5 :: (r(exchange), exchange_type(), bool(), bool(),
                     amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
--spec(assert_type/2 :: (exchange(), atom()) -> 'ok'). 
+-spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
 -spec(list_vhost_exchanges/1 :: (vhost()) -> [exchange()]).
--spec(list_exchange_bindings/1 :: (exchange_name()) -> 
+-spec(list_exchange_bindings/1 :: (exchange_name()) ->
              [{queue_name(), routing_key(), amqp_table()}]).
 -spec(simple_publish/6 ::
       (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
              publish_res()).
 -spec(simple_publish/3 :: (bool(), bool(), message()) -> publish_res()).
 -spec(route/2 :: (exchange(), routing_key()) -> [pid()]).
--spec(add_binding/2 :: (binding_spec(), amqqueue()) -> 
+-spec(add_binding/2 :: (binding_spec(), amqqueue()) ->
              'ok' | not_found() |
                  {'error', 'durability_settings_incompatible'}).
 -spec(delete_binding/2 :: (binding_spec(), amqqueue()) ->
@@ -184,7 +184,7 @@ simple_publish(Mandatory, Immediate,
 
 %% return the list of qpids to which a message with a given routing
 %% key, sent to a particular exchange, should be delivered.
-%% 
+%%
 %% The function ensures that a qpid appears in the return list exactly
 %% as many times as a message should be delivered to it. With the
 %% current exchange types that is at most once.
@@ -194,7 +194,7 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
         mnesia:activity(
           async_dirty,
           fun () ->
-                  qlc:e(qlc:q([handler_qpids(H) || 
+                  qlc:e(qlc:q([handler_qpids(H) ||
                                   #binding{key = {Name1, PatternKey},
                                            handlers = H}
                                       <- mnesia:table(binding),
@@ -287,7 +287,7 @@ add_handler_to_binding(BindingKey, Handler) ->
                  ok = mnesia:write(
                         B#binding{handlers = extend_handlers(H, Handler)})
          end.
-         
+
 %% Must run within a transaction.
 remove_handler_from_binding(BindingKey, Handler) ->
     case mnesia:wread({binding, BindingKey}) of
