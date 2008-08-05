@@ -5,7 +5,6 @@ EBIN_DIR=ebin
 INCLUDE_DIR=include
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
-PLT=rabbit.plt
 WEB_URL=http://stage.rabbitmq.com/
 
 ifndef USE_SPECS
@@ -47,16 +46,13 @@ $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $
 $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.rel $(TARGETS)
 	erl -noshell -eval 'systools:make_script("ebin/rabbit", [{path, ["ebin"]}]), halt().'
 
-$(PLT): $(TARGETS)
-	dialyzer -c $? --output_plt $@ $(shell if [ -f $@ ] ; then echo "--plt $@"; fi)
-
-dialyze: $(PLT)
+dialyze: $(TARGETS)
+	dialyzer -c $?
 
 clean: cleandb
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
-	rm -f $(PLT)
 
 cleandb: stop-node
 	erl -mnesia dir '"$(MNESIA_DIR)"' -noshell -eval 'lists:foreach(fun file:delete/1, filelib:wildcard(mnesia:system_info(directory) ++ "/*")), halt().'
