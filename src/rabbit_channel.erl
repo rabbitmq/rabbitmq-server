@@ -181,7 +181,7 @@ expand_routing_key_shortcut(<<>>, <<>>,
       not_allowed, "no previously declared queue", []);
 expand_routing_key_shortcut(<<>>, <<>>,
                             #ch{ most_recently_declared_queue = MRDQ }) ->
-    MRDQ;
+    MRDQ#resource.name;
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
