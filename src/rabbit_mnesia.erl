@@ -105,8 +105,8 @@ table_definitions() ->
      {rabbit_config, [{disc_copies, [node()]}]},
      {listener, [{type, bag},
                  {attributes, record_info(fields, listener)}]},
-     {forwards_binding, [{type,ordered_set},{attributes, record_info(fields, forwards_binding)}]},
-     {reverse_binding, [{type,ordered_set},{attributes, record_info(fields, reverse_binding)}]},
+     {route, [{type,ordered_set},{attributes, record_info(fields, route)}]},
+     {reverse_route, [{type,ordered_set},{attributes, record_info(fields, reverse_route)}]},
      {durable_exchanges, [{disc_copies, [node()]},
                           {record_name, exchange},
                           {attributes, record_info(fields, exchange)}]},
@@ -257,7 +257,7 @@ init_db(ClusterNodes) ->
     end.
 
 create_schema() ->
-    mnesia:stop(), 
+    mnesia:stop(),
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
                           cannot_create_schema),
     rabbit_misc:ensure_ok(mnesia:start(),
@@ -324,7 +324,7 @@ create_local_table_copy(Tab, Type) ->
         end,
     ok.
 
-wait_for_tables() -> 
+wait_for_tables() ->
     case mnesia:wait_for_tables(table_names(), 30000) of
         ok -> ok;
         {timeout, BadTabs} ->

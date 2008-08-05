@@ -31,11 +31,11 @@
 -record(connection, {user, timeout_sec, frame_max, vhost}).
 
 -record(content, {class_id,
-		  properties, %% either 'none', or a decoded record/tuple
-		  properties_bin, %% either 'none', or an encoded properties binary
-		  %% Note: at most one of properties and properties_bin can be 'none' at once.
-		  payload_fragments_rev %% list of binaries, in reverse order (!)
-		 }).
+          properties, %% either 'none', or a decoded record/tuple
+          properties_bin, %% either 'none', or an encoded properties binary
+          %% Note: at most one of properties and properties_bin can be 'none' at once.
+          payload_fragments_rev %% list of binaries, in reverse order (!)
+         }).
 
 -record(resource, {virtual_host, kind, name}).
 
@@ -46,11 +46,12 @@
 %% ets, which stores key value pairs
 
 %% The binding field is made up of an {Exchange, Binding, Queue}
--record(forwards_binding, {binding, value = const}).
-%% The binding field is made up of an {Queue, Binding, Exchange}
--record(reverse_binding, {binding, value = const}).
+-record(route, {binding, value = const}).
+%% The reverse_binding field is made up of an {Queue, Binding, Exchange}
+-record(reverse_route, {reverse_binding, value = const}).
 
--record(binding, {virtual_host, exchange_name, key, queue_name}).
+-record(binding, {exchange_name, key, queue_name}).
+-record(reverse_binding, {queue_name, key, exchange_name}).
 
 -record(listener, {node, protocol, host, port}).
 
@@ -80,7 +81,7 @@
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
--type(permission() :: 'passive' | 'active' | 'write' | 'read').      
+-type(permission() :: 'passive' | 'active' | 'write' | 'read').
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
                 durable       :: bool(),

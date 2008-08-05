@@ -53,18 +53,18 @@
 -spec(declare/5 :: (name(), exchange_type(), bool(), bool(),
                     amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
--spec(assert_type/2 :: (exchange(), atom()) -> 'ok'). 
+-spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
 -spec(list_vhost_exchanges/1 :: (vhost()) -> [exchange()]).
--spec(list_exchange_bindings/1 :: (exchange_name()) -> 
+-spec(list_exchange_bindings/1 :: (exchange_name()) ->
              [{queue_name(), routing_key(), amqp_table()}]).
 -spec(simple_publish/6 ::
       (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
              publish_res()).
 -spec(simple_publish/3 :: (bool(), bool(), message()) -> publish_res()).
 -spec(route/2 :: (exchange(), routing_key()) -> [pid()]).
-% -spec(add_binding/2 :: (binding_spec(), amqqueue()) -> 
+% -spec(add_binding/2 :: (binding_spec(), amqqueue()) ->
 %              'ok' | not_found() |
 %                  {'error', 'durability_settings_incompatible'}).
 % -spec(delete_binding/2 :: (binding_spec(), amqqueue()) ->
@@ -150,7 +150,7 @@ list_exchange_bindings(Name) ->
     %     #handler{binding_spec = #binding_spec{routing_key = RoutingKey,
     %                           arguments = Arguments},
     %          queue = QueueName} <- Handlers].
-    
+
 bindings_for_exchange(Name) ->
     exit(bindings_for_exchange).
     % qlc:e(qlc:q([B || B = #binding{key = K} <- mnesia:table(binding),
@@ -186,7 +186,7 @@ simple_publish(Mandatory, Immediate,
 
 %% return the list of qpids to which a message with a given routing
 %% key, sent to a particular exchange, should be delivered.
-%% 
+%%
 %% The function ensures that a qpid appears in the return list exactly
 %% as many times as a message should be delivered to it. With the
 %% current exchange types that is at most once.
@@ -197,7 +197,7 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
     %         mnesia:activity(
     %           async_dirty,
     %           fun () ->
-    %                   qlc:e(qlc:q([handler_qpids(H) || 
+    %                   qlc:e(qlc:q([handler_qpids(H) ||
     %                                   #binding{key = {Name1, PatternKey},
     %                                            handlers = H}
     %                                       <- mnesia:table(binding),
@@ -221,15 +221,15 @@ delivery_key_for_type(_Type, Name, RoutingKey) ->
 % Don't really like this double lookup
 % It seems very clunky
 % Can this get refactored to to avoid the duplication of the lookup/1 function?
-call_with_exchange_and_queue(#binding{virtual_host = VHost, exchange_name = Exchange, 
+call_with_exchange_and_queue(#binding{exchange_name = Exchange,
                                       queue_name = Queue}, Fun) ->
     io:format("Reading (~p) and (~p) ~n",[Exchange,Queue]),
-    case mnesia:wread({exchange, rabbit_misc:r(VHost, exchange, Exchange)}) of
+    case mnesia:wread({exchange, Exchange}) of
         [] -> {error, exchange_not_found};
-        [X] -> 
-            case mnesia:wread({amqqueue, rabbit_misc:r(VHost, amqqueue, Queue)}) of
+        [X] ->
+            case mnesia:wread({amqqueue, Queue}) of
                 [] -> {error, queue_not_found};
-                [Q] -> 
+                [Q] ->
                     Fun(X,Q)
             end
     end.
@@ -250,7 +250,7 @@ add_binding(Binding) ->
               end).
 
 delete_binding(BindingSpec %= #binding_spec{exchange_name = ExchangeName,
-                           %               routing_key = RoutingKey}, 
+                           %               routing_key = RoutingKey},
                            ,Q) ->
     exit(delete_binding).
     % call_with_exchange(
@@ -280,17 +280,16 @@ handler_qpids(Handlers) ->
     exit(handler_qpids).
     %sets:from_list([QPid || #handler{qpid = QPid} <- Handlers]).
 
-reverse_binding(#binding{virtual_host = VHost, exchange_name = Exchange, 
-                         key = Key, queue_name = Queue}) ->
-    {binding, VHost, Queue, Key, Exchange}.
+reverse_binding(#binding{exchange_name = Exchange, key = Key, queue_name = Queue}) ->
+    #reverse_binding{exchange_name = Exchange, key = Key, queue_name = Queue}.
 
 %% Must run within a transaction.
 internal_add_binding(Binding) ->
-    Forwards = #forwards_binding{ binding = Binding },
-    Reverse = #reverse_binding{ binding = reverse_binding(Binding) },
+    Forwards = #route{ binding = Binding },
+    Reverse = #reverse_route{ reverse_binding = reverse_binding(Binding) },
     ok = mnesia:write(Forwards),
     ok = mnesia:write(Reverse).
-    
+
 %% Must run within a transaction.
 internal_delete_binding(#exchange{name = ExchangeName, type = Type}, RoutingKey, Handler) ->
     BindingKey = delivery_key_for_type(Type, ExchangeName, RoutingKey),
@@ -310,7 +309,7 @@ add_handler_to_binding(BindingKey, Handler) ->
     %                  ok = mnesia:write(
     %                         B#binding{handlers = extend_handlers(H, Handler)})
     %          end.
-         
+
 %% Must run within a transaction.
 remove_handler_from_binding(BindingKey, Handler) ->
     exit(remove_handler_from_binding).

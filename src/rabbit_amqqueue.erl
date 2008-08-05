@@ -138,7 +138,7 @@ declare(Resource = #resource{}, Durable, AutoDelete, Args) ->
                                       pid = none}),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   case mnesia:wread({amqqueue, Resource}) of                       
+                   case mnesia:wread({amqqueue, Resource}) of
                        [] -> ok = recover_queue(Q),
                              Q;
                        [ExistingQ] -> ExistingQ
@@ -169,8 +169,7 @@ recover_queue(Q) ->
 default_binding_spec(#resource{virtual_host = VHostPath, name = Name}) ->
     #binding{exchange_name = <<"">>,
              key = Name,
-             queue_name = Name,
-             virtual_host = VHostPath}.
+             queue_name = Name}.
     % #binding_spec{exchange_name = rabbit_misc:r(VHostPath,exchange,<<"">>),
     %                   routing_key = Name,
     %                   arguments = []}.
