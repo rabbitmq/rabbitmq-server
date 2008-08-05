@@ -45,12 +45,12 @@
 %% This constant field seems to be required because the underlying storage is
 %% ets, which stores key value pairs
 
-%% The spec field is made up of an {Exchange, Binding, Queue}
--record(forwards_binding, {spec, value = const}).
-%% The spec field is made up of an {Queue, Binding, Exchange}
--record(reverse_binding, {spec, value = const}).
+%% The binding field is made up of an {Exchange, Binding, Queue}
+-record(forwards_binding, {binding, value = const}).
+%% The binding field is made up of an {Queue, Binding, Exchange}
+-record(reverse_binding, {binding, value = const}).
 
--record(binding, {exchange, key, queue}).
+-record(binding, {virtual_host, exchange_name, key, queue_name}).
 
 -record(listener, {node, protocol, host, port}).
 

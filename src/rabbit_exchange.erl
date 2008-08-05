@@ -221,11 +221,13 @@ delivery_key_for_type(_Type, Name, RoutingKey) ->
 % Don't really like this double lookup
 % It seems very clunky
 % Can this get refactored to to avoid the duplication of the lookup/1 function?
-call_with_exchange_and_queue(Exchange, Queue, Fun) ->
-    case mnesia:wread({exchange, Exchange}) of
+call_with_exchange_and_queue(#binding{virtual_host = VHost, exchange_name = Exchange, 
+                                      queue_name = Queue}, Fun) ->
+    io:format("Reading (~p) and (~p) ~n",[Exchange,Queue]),
+    case mnesia:wread({exchange, rabbit_misc:r(VHost, exchange, Exchange)}) of
         [] -> {error, exchange_not_found};
         [X] -> 
-            case mnesia:wread({amqqueue, Queue}) of
+            case mnesia:wread({amqqueue, rabbit_misc:r(VHost, amqqueue, Queue)}) of
                 [] -> {error, queue_not_found};
                 [Q] -> 
                     Fun(X,Q)
@@ -237,13 +239,13 @@ make_handler(BindingSpec, #amqqueue{name = QueueName, pid = QPid}) ->
     exit(make_handler).
     %#handler{binding_spec = BindingSpec, queue = QueueName, qpid = QPid}.
 
-add_binding(#binding{exchange = Exchange, key = Key, queue = Queue}) ->
+add_binding(Binding) ->
     call_with_exchange_and_queue(
-              Exchange, Queue,
+              Binding,
               fun (X,Q) -> if Q#amqqueue.durable and not(X#exchange.durable) ->
                                  {error, durability_settings_incompatible};
                             true ->
-                                 internal_add_binding(X, Key, Q)
+                                 internal_add_binding(Binding)
                          end
               end).
 
@@ -278,13 +280,17 @@ handler_qpids(Handlers) ->
     exit(handler_qpids).
     %sets:from_list([QPid || #handler{qpid = QPid} <- Handlers]).
 
-%% Must run within a transaction.
-internal_add_binding(#exchange{name = ExchangeName, type = Type},
-                     RoutingKey, Queue) ->
-    ok.
-    %BindingKey = delivery_key_for_type(Type, ExchangeName, RoutingKey),
-    %ok = add_handler_to_binding(BindingKey, Handler).
+reverse_binding(#binding{virtual_host = VHost, exchange_name = Exchange, 
+                         key = Key, queue_name = Queue}) ->
+    {binding, VHost, Queue, Key, Exchange}.
 
+%% Must run within a transaction.
+internal_add_binding(Binding) ->
+    Forwards = #forwards_binding{ binding = Binding },
+    Reverse = #reverse_binding{ binding = reverse_binding(Binding) },
+    ok = mnesia:write(Forwards),
+    ok = mnesia:write(Reverse).
+    
 %% Must run within a transaction.
 internal_delete_binding(#exchange{name = ExchangeName, type = Type}, RoutingKey, Handler) ->
     BindingKey = delivery_key_for_type(Type, ExchangeName, RoutingKey),
