@@ -15,4 +15,3 @@ install/rabbitmq-server::
 	mv $(DEB_DESTDIR)usr/sbin/rabbitmqctl $(DEB_DESTDIR)usr/sbin/rabbitmqctl_real
 	cp debian/rabbitmqctl_wrapper $(DEB_DESTDIR)usr/sbin/rabbitmqctl
 	chmod a+x $(DEB_DESTDIR)usr/sbin/rabbitmqctl
-	echo "Tag: usr-lib-in-arch-all" > $(DEB_DESTDIR)usr/share/linda/overrides/rabbitmq-server
