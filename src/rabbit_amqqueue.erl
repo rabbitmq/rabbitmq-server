@@ -163,20 +163,20 @@ start_queue_process(Q) ->
 
 recover_queue(Q) ->
     ok = store_queue(Q),
-    ok = recover_bindings(Q),
+    %ok = recover_bindings(Q),
     ok.
 
-default_binding_spec(#resource{virtual_host = VHostPath, name = Name}) ->
-    #binding{exchange_name = <<"">>,
-             key = Name,
-             queue_name = Name}.
+% default_binding_spec(#resource{virtual_host = VHostPath, name = Name}) ->
+%     #binding{exchange_name = <<"">>,
+%              key = Name,
+%              queue_name = Name}.
     % #binding_spec{exchange_name = rabbit_misc:r(VHostPath,exchange,<<"">>),
     %                   routing_key = Name,
     %                   arguments = []}.
 
-recover_bindings(Q = #amqqueue{name = QueueName}) ->
-    io:format("Q was ~p~n",[Q]),
-    ok = rabbit_exchange:add_binding(default_binding_spec(QueueName)).
+% recover_bindings(Q = #amqqueue{name = QueueName}) ->
+%     io:format("Q was ~p~n",[Q]),
+%     ok = rabbit_exchange:add_binding(default_binding_spec(QueueName)).
     %     lists:foreach(fun (B) ->
     %                           ok = rabbit_exchange:add_binding(B, Q)
     %                   end, Specs),
@@ -351,8 +351,8 @@ internal_delete(QueueName) ->
 
 delete_temp(Q = #amqqueue{name = QueueName}) ->
     ok = delete_bindings(Q),
-    ok = rabbit_exchange:delete_binding(
-           default_binding_spec(QueueName), Q),
+    %ok = rabbit_exchange:delete_binding(
+    %       default_binding_spec(QueueName), Q),
     ok = mnesia:delete({amqqueue, QueueName}),
     ok.
 

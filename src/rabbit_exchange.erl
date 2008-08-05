@@ -78,8 +78,13 @@
 %%----------------------------------------------------------------------------
 
 recover() ->
+    ok = recover_default_exchange(),
     ok = recover_durable_exchanges(),
     ok.
+
+recover_default_exchange() ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun () -> mnesia:write(#exchange{name = <<"">>}) end).
 
 recover_durable_exchanges() ->
     rabbit_misc:execute_mnesia_transaction(
