@@ -228,7 +228,6 @@ delivery_key_for_type(_Type, Name, RoutingKey) ->
 % Can this get refactored to to avoid the duplication of the lookup/1 function?
 call_with_exchange_and_queue(#binding{exchange_name = Exchange,
                                       queue_name = Queue}, Fun) ->
-    io:format("Reading (~p) and (~p) ~n",[Exchange,Queue]),
     case mnesia:wread({exchange, Exchange}) of
         [] -> {error, exchange_not_found};
         [X] ->

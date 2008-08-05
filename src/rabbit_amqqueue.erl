@@ -215,16 +215,23 @@ update_bindings(Q = #amqqueue{}, Spec,
     %                  {ok, Q1};
     %         Other -> Other
     %     end.
-
+    
 add_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
-    modify_bindings(
-      QueueName, ExchangeName, RoutingKey, Arguments,
-      fun (Q, _Spec) -> {ok, Q} end,
-      fun (Q, Spec) -> update_bindings(
-                         Q, Spec,
-                         fun (S, Specs) -> [S | Specs] end,
-                         fun rabbit_exchange:add_binding/2)
-      end).
+    % Since this calls straight through to rabbit_exchange,
+    % can this exported function be deleted from this module?
+    F = fun() ->
+        rabbit_exchange:add_binding(#binding{exchange_name = ExchangeName,
+                                        key = RoutingKey,
+                                        queue_name = QueueName}) end,
+    rabbit_misc:execute_mnesia_transaction(F).
+    % modify_bindings(
+    %       QueueName, ExchangeName, RoutingKey, Arguments,
+    %       fun (Q, _Spec) -> {ok, Q} end,
+    %       fun (Q, Spec) -> update_bindings(
+    %                          Q, Spec,
+    %                          fun (S, Specs) -> [S | Specs] end,
+    %                          fun rabbit_exchange:add_binding/2)
+    %       end).
 
 delete_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
     modify_bindings(

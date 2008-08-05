@@ -591,7 +591,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
             rabbit_misc:protocol_error(
               not_allowed, "durability settings of ~s incompatible with ~s",
               [rabbit_misc:rs(QueueName), rabbit_misc:rs(ExchangeName)]);
-        {ok, _BindingCount} ->
+        ok ->
             return_ok(State, NoWait, #'queue.bind_ok'{})
     end;
 
