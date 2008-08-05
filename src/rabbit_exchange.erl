@@ -50,7 +50,7 @@
       not_found() | {'error', 'unroutable' | 'not_delivered'}).
 
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 :: (r(exchange), exchange_type(), bool(), bool(),
+-spec(declare/5 :: (exchange_name(), exchange_type(), bool(), bool(),
                     amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
 -spec(assert_type/2 :: (exchange(), atom()) -> 'ok').

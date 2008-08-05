@@ -55,7 +55,7 @@
       {'error', 'queue_not_found' | 'exchange_not_found'}).
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
--spec(declare/4 :: (r(amqqueue), bool(), bool(), amqp_table()) ->
+-spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
              amqqueue()).
 -spec(add_binding/4 ::
       (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
