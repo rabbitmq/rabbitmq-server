@@ -130,8 +130,8 @@ recover_durable_queues() ->
               ok
       end).
 
-declare(Resource = #resource{}, Durable, AutoDelete, Args) ->
-    Q = start_queue_process(#amqqueue{name = Resource,
+declare(QueueName = #resource{}, Durable, AutoDelete, Args) ->
+    Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
                                       arguments = Args,
@@ -139,7 +139,7 @@ declare(Resource = #resource{}, Durable, AutoDelete, Args) ->
                                       pid = none}),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   case mnesia:wread({amqqueue, Resource}) of
+                   case mnesia:wread({amqqueue, QueueName}) of
                        [] -> ok = recover_queue(Q),
                              Q;
                        [ExistingQ] -> ExistingQ
@@ -167,8 +167,8 @@ recover_queue(Q) ->
     ok = recover_bindings(Q),
     ok.
 
-default_binding_spec(#resource{virtual_host = VHostPath, name = Name}) ->
-    #binding_spec{exchange_name = rabbit_misc:r(VHostPath, exchange, <<"">>),
+default_binding_spec(#resource{virtual_host = VHost, name = Name}) ->
+    #binding_spec{exchange_name = rabbit_misc:r(VHost, exchange, <<>>),
                   routing_key = Name,
                   arguments = []}.
 
@@ -179,13 +179,13 @@ recover_bindings(Q = #amqqueue{name = QueueName, binding_specs = Specs}) ->
                   end, Specs),
     ok.
 
-modify_bindings(Queue = #resource{}, X = #resource{}, RoutingKey, Arguments,
+modify_bindings(QueueName, ExchangeName, RoutingKey, Arguments,
                 SpecPresentFun, SpecAbsentFun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:wread({amqqueue, Queue}) of
+              case mnesia:wread({amqqueue, QueueName}) of
                   [Q = #amqqueue{binding_specs = Specs0}] ->
-                      Spec = #binding_spec{exchange_name = X,
+                      Spec = #binding_spec{exchange_name = ExchangeName,
                                            routing_key = RoutingKey,
                                            arguments = Arguments},
                       case (case lists:member(Spec, Specs0) of
@@ -336,21 +336,18 @@ internal_delete(QueueName) ->
               case mnesia:wread({amqqueue, QueueName}) of
                   [] -> {error, not_found};
                   [Q] ->
-                      ok = delete_temp(Q),
+                      ok = delete_queue(Q),
                       ok = mnesia:delete({durable_queues, QueueName}),
                       ok
               end
       end).
 
-delete_temp(Q = #amqqueue{name = QueueName}) ->
+delete_queue(Q = #amqqueue{name = QueueName}) ->
     ok = delete_bindings(Q),
     ok = rabbit_exchange:delete_binding(
            default_binding_spec(QueueName), Q),
     ok = mnesia:delete({amqqueue, QueueName}),
     ok.
-
-delete_queue(Q = #amqqueue{}) ->
-    ok = delete_temp(Q).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(
