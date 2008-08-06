@@ -196,27 +196,22 @@ simple_publish(Mandatory, Immediate,
 %% as many times as a message should be delivered to it. With the
 %% current exchange types that is at most once.
 route(#exchange{name = Name, type = topic}, RoutingKey) ->
-    exit(route);
-    % sets:to_list(
-    %       sets:union(
-    %         mnesia:activity(
-    %           async_dirty,
-    %           fun () ->
-    %                   qlc:e(qlc:q([handler_qpids(H) ||
-    %                                   #binding{key = {Name1, PatternKey},
-    %                                            handlers = H}
-    %                                       <- mnesia:table(binding),
-    %                                   Name == Name1,
-    %                                   topic_matches(PatternKey, RoutingKey)]))
-    %           end)));
+    route_internal(Name, RoutingKey, fun topic_matches/2);
 
 route(#exchange{name = Name, type = Type}, RoutingKey) ->
-    exit(route).
-    % BindingKey = delivery_key_for_type(Type, Name, RoutingKey),
-    %     case rabbit_misc:dirty_read({binding, BindingKey}) of
-    %         {ok, #binding{handlers = H}} -> sets:to_list(handler_qpids(H));
-    %         {error, not_found} -> []
-    %     end.
+    route_internal(Name, RoutingKey, fun(X,Y) -> X == Y end).
+
+% This returns a list of QPids to route to.
+% Maybe this should be handled by a cursor instead.
+route_internal(Exchange, RoutingKey, MatchFun) ->
+    Query = qlc:q([QPid || #route{binding = #binding{exchange_name = ExchangeName,
+                                                     queue_name = QueueName,
+                                                     key = BindingKey}} <- mnesia:table(route),
+                           #amqqueue{name = Queue, pid = QPid} <- mnesia:table(amqqueue),
+                           ExchangeName == Exchange,
+                           QueueName == Queue,
+                           MatchFun(BindingKey, RoutingKey)]),
+    mnesia:activity(async_dirty, fun() -> qlc:e(Query) end).
 
 delivery_key_for_type(fanout, Name, _RoutingKey) ->
     {Name, fanout};
