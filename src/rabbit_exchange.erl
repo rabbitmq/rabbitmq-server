@@ -233,11 +233,6 @@ call_with_exchange_and_queue(#binding{exchange_name = Exchange,
             end
     end.
 
-
-make_handler(BindingSpec, #amqqueue{name = QueueName, pid = QPid}) ->
-    exit(make_handler).
-    %#handler{binding_spec = BindingSpec, queue = QueueName, qpid = QPid}.
-
 add_binding(Binding) ->
     call_with_exchange_and_queue(
         Binding,
@@ -276,60 +271,23 @@ extend_handlers(Handlers, Handler) -> [Handler | Handlers].
 
 delete_handler(Handlers, Handler) -> lists:delete(Handler, Handlers).
 
-handler_qpids(Handlers) ->
-    exit(handler_qpids).
-    %sets:from_list([QPid || #handler{qpid = QPid} <- Handlers]).
-
 reverse_binding(#binding{exchange_name = Exchange, key = Key, queue_name = Queue}) ->
     #reverse_binding{exchange_name = Exchange, key = Key, queue_name = Queue}.
 
 %% Must run within a transaction.
 internal_add_binding(Binding) ->
-    Forwards = #route{ binding = Binding },
-    Reverse = #reverse_route{ reverse_binding = reverse_binding(Binding) },
-    ok = mnesia:write(Forwards),
-    ok = mnesia:write(Reverse).
+    [ok,ok] = [mnesia:write(R) || R <- route_with_reverse(Binding)],
+    ok.
 
 %% Must run within a transaction.
 internal_delete_binding(Binding) ->
-    % This is copy and paste from the function above
-    Forwards = #route{ binding = Binding },
-    Reverse = #reverse_route{ reverse_binding = reverse_binding(Binding) },
-    ok = mnesia:delete_object(Forwards),
-    ok = mnesia:delete_object(Reverse).
+    [ok,ok] = [mnesia:delete_object(R) || R <- route_with_reverse(Binding)],
+    ok.
 
-
-
-%% Must run within a transaction.
-add_handler_to_binding(BindingKey, Handler) ->
-    exit(add_handler_to_binding).
-    % ok = case mnesia:wread({binding, BindingKey}) of
-    %              [] ->
-    %                  ok = mnesia:write(
-    %                         #binding{key = BindingKey,
-    %                                  handlers = extend_handlers(
-    %                                               empty_handlers(), Handler)});
-    %              [B = #binding{handlers = H}] ->
-    %                  ok = mnesia:write(
-    %                         B#binding{handlers = extend_handlers(H, Handler)})
-    %          end.
-
-%% Must run within a transaction.
-remove_handler_from_binding(BindingKey, Handler) ->
-    exit(remove_handler_from_binding).
-    % case mnesia:wread({binding, BindingKey}) of
-    %         [] -> empty;
-    %         [B = #binding{handlers = H}] ->
-    %             H1 = delete_handler(H, Handler),
-    %             case handlers_isempty(H1) of
-    %                 true ->
-    %                     ok = mnesia:delete({binding, BindingKey}),
-    %                     empty;
-    %                 _ ->
-    %                     ok,% = mnesia:write(B#binding{handlers = H1}),
-    %                     not_empty
-    %             end
-    %     end.
+route_with_reverse(Binding) ->
+    Route = #route{ binding = Binding },
+    ReverseRoute = #reverse_route{ reverse_binding = reverse_binding(Binding) },
+    [Route, ReverseRoute].
 
 split_topic_key(Key) ->
     {ok, KeySplit} = regexp:split(binary_to_list(Key), "\\."),
