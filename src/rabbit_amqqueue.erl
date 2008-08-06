@@ -363,8 +363,8 @@ on_node_down(Node) ->
                             node(Pid) == Node]))
       end).
 
-pseudo_queue(NameBin, Pid) ->
-    #amqqueue{name = NameBin,
+pseudo_queue(Resource = #resource{}, Pid) ->
+    #amqqueue{name = Resource,
               durable = false,
               auto_delete = false,
               arguments = [],
