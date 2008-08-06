@@ -90,15 +90,15 @@ recover_durable_exchanges() ->
                            end, ok, durable_exchanges)
       end).
 
-declare(Resource = #resource{}, Type, Durable, AutoDelete, Args) ->
-    Exchange = #exchange{name = Resource,
+declare(ExchangeName = #resource{}, Type, Durable, AutoDelete, Args) ->
+    Exchange = #exchange{name = ExchangeName,
                          type = Type,
                          durable = Durable,
                          auto_delete = AutoDelete,
                          arguments = Args},
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:wread({exchange, Resource}) of
+              case mnesia:wread({exchange, ExchangeName}) of
                   [] -> ok = mnesia:write(Exchange),
                         if Durable ->
                                 ok = mnesia:write(
