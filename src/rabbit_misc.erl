@@ -35,7 +35,7 @@
 -export([enable_cover/0, report_cover/0]).
 -export([with_exit_handler/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
--export([execute_mnesia_transaction/1]).
+-export([execute_mnesia_transaction/1, execute_mnesia_transaction/2]).
 -export([ensure_ok/2]).
 -export([localnode/1, tcp_name/3]).
 -export([intersperse/2, upmap/2, map_in_order/2]).
@@ -223,11 +223,18 @@ with_vhost(VHostPath, Thunk) ->
 with_user_and_vhost(Username, VHostPath, Thunk) ->
     with_user(Username, with_vhost(VHostPath, Thunk)).
 
+
+%% Making this a sync_transaction allows us to use dirty_read
+%% elsewhere and get a consistent result even when that read
+%% executes on a different node.
 execute_mnesia_transaction(TxFun) ->
-    %% Making this a sync_transaction allows us to use dirty_read
-    %% elsewhere and get a consistent result even when that read
-    %% executes on a different node.
     case mnesia:sync_transaction(TxFun) of
+        {atomic,  Result} -> Result;
+        {aborted, Reason} -> throw({error, Reason})
+    end.
+    
+execute_mnesia_transaction(TxFun, Args) ->
+    case mnesia:sync_transaction(TxFun, Args) of
         {atomic,  Result} -> Result;
         {aborted, Reason} -> throw({error, Reason})
     end.

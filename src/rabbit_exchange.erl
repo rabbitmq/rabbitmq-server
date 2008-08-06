@@ -32,7 +32,7 @@
          list_vhost_exchanges/1, list_exchange_bindings/1,
          simple_publish/6, simple_publish/3,
          route/2]).
--export([add_binding/1, delete_binding/2]).
+-export([add_binding/1, delete_binding/1]).
 -export([delete/2]).
 -export([check_type/1, assert_type/2, topic_matches/2]).
 
@@ -156,10 +156,10 @@ list_exchange_bindings(Name) ->
     %                           arguments = Arguments},
     %          queue = QueueName} <- Handlers].
 
+% Maybe this named wrongly - it returns a route
 bindings_for_exchange(Name) ->
-    exit(bindings_for_exchange).
-    % qlc:e(qlc:q([B || B = #binding{key = K} <- mnesia:table(binding),
-    %                       element(1, K) == Name])).
+    qlc:e(qlc:q([R || R = #route{binding = #binding{exchange_name = N}} <- mnesia:table(route),
+                      N == Name])).
 
 empty_handlers() ->
     [].
@@ -245,18 +245,19 @@ make_handler(BindingSpec, #amqqueue{name = QueueName, pid = QPid}) ->
 
 add_binding(Binding) ->
     call_with_exchange_and_queue(
-              Binding,
-              fun (X,Q) -> if Q#amqqueue.durable and not(X#exchange.durable) ->
-                                 {error, durability_settings_incompatible};
-                            true ->
-                                 internal_add_binding(Binding)
-                         end
-              end).
+        Binding,
+        fun (X,Q) -> if Q#amqqueue.durable and not(X#exchange.durable) ->
+                            {error, durability_settings_incompatible};
+                         true ->
+                             internal_add_binding(Binding)
+                     end
+        end).
 
-delete_binding(BindingSpec %= #binding_spec{exchange_name = ExchangeName,
-                           %               routing_key = RoutingKey},
-                           ,Q) ->
-    exit(delete_binding).
+delete_binding(Binding) ->
+    call_with_exchange_and_queue(
+         Binding,
+         fun (X,Q) -> ok = internal_delete_binding(Binding)
+         end).
     % call_with_exchange(
     %   ExchangeName,
     %   fun (X) -> ok = internal_delete_binding(
@@ -295,10 +296,14 @@ internal_add_binding(Binding) ->
     ok = mnesia:write(Reverse).
 
 %% Must run within a transaction.
-internal_delete_binding(#exchange{name = ExchangeName, type = Type}, RoutingKey, Handler) ->
-    BindingKey = delivery_key_for_type(Type, ExchangeName, RoutingKey),
-    remove_handler_from_binding(BindingKey, Handler),
-    ok.
+internal_delete_binding(Binding) ->
+    % This is copy and paste from the function above
+    Forwards = #route{ binding = Binding },
+    Reverse = #reverse_route{ reverse_binding = reverse_binding(Binding) },
+    ok = mnesia:delete_object(Forwards),
+    ok = mnesia:delete_object(Reverse).
+
+
 
 %% Must run within a transaction.
 add_handler_to_binding(BindingKey, Handler) ->
@@ -383,24 +388,13 @@ internal_delete(ExchangeName, _IfUnused = true) ->
 internal_delete(ExchangeName, false) ->
     do_internal_delete(ExchangeName, bindings_for_exchange(ExchangeName)).
 
-forcibly_remove_handlers(Handlers) ->
-    exit(forcibly_remove_handlers).
-    % lists:foreach(
-    %       fun (#handler{binding_spec = BindingSpec, queue = QueueName}) ->
-    %               ok = rabbit_amqqueue:binding_forcibly_removed(
-    %                      BindingSpec, QueueName)
-    %       end, Handlers),
-    %     ok.
-
+% Don't know if iterating over a list in process memory is cool
+% Maybe we should iterate over the DB cursor?
 do_internal_delete(ExchangeName, Bindings) ->
-    exit(do_internal_delete).
-    % case mnesia:wread({exchange, ExchangeName}) of
-    %         [] -> {error, not_found};
-    %         _ ->
-    %             lists:foreach(fun (#binding{key = K, handlers = H}) ->
-    %                                   ok = forcibly_remove_handlers(H),
-    %                                   ok = mnesia:delete({binding, K})
-    %                           end, Bindings),
-    %             ok = mnesia:delete({durable_exchanges, ExchangeName}),
-    %             ok = mnesia:delete({exchange, ExchangeName})
-    %     end.
+    case mnesia:wread({exchange, ExchangeName}) of
+            [] -> {error, not_found};
+            _ ->
+                lists:foreach(fun (B) -> ok = mnesia:delete_object(B) end, Bindings),
+                ok = mnesia:delete({durable_exchanges, ExchangeName}),
+                ok = mnesia:delete({exchange, ExchangeName})
+    end.
