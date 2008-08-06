@@ -447,8 +447,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
 handle_method(#'basic.qos'{global = true}, _, State) ->
     rabbit_misc:protocol_error(not_implemented,
 			       "Basic.Qos global (per-connection) setting not implemented",
-			       [],
-			       'basic.qos');
+			       []);
 
 handle_method(#'basic.qos'{}, _, State) ->
     %% FIXME: Need to implement QOS
