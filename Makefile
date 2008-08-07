@@ -147,7 +147,7 @@ install: all
 	for manpage in docs/*.pod ; do \
 		pod2man -c "RabbitMQ AMQP Server" -d "" -r "" \
 		$$manpage | gzip --best > \
-		$(MAN_DIR)/man1/`echo $$manpage | sed -e 's:docs/\(.*\)\.pod:\1\.gz:g'`; \
+		$(MAN_DIR)/man1/`echo $$manpage | sed -e 's:docs/\(.*\)\.pod:\1\.1\.gz:g'`; \
 	done
 	 
 	rm -f $(TARGET_DIR)/BUILD
