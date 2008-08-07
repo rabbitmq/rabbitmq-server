@@ -1,0 +1,141 @@
+=head1 NAME
+
+rabbitmqctl_real - command line tool for managing a RabbitMQ broker
+
+=head1 SYNOPSIS
+
+rabbitmqctl_real [-n I<node>] I<<command>> [command options]
+
+=head1 DESCRIPTION
+
+RabbitMQ is an implementation of AMQP, the emerging standard for high
+performance enterprise messaging. The RabbitMQ server is a robust and
+scalable implementation of an AMQP broker.
+
+rabbitmqctl_real is a command line tool for managing a RabbitMQ broker.
+It performs all actions by connecting to one of the broker's node.
+rabbitmqctl_real is called by the rabbitmqctl(1) wrapper to be
+correctly executed with I<rabbitmq> user permissions.
+
+
+=head1 OPTIONS
+
+B<-n> I<node>
+    default node is C<rabbit@server>, where server is the local host.
+    On a host named C<server.example.com>, the node name of the RabbitMQ
+    Erlang node will usually be rabbit@server (unless NODENAME has been
+    set to some non-default value at broker startup time).
+    The output of hostname -s is usually the correct suffix to use
+    after the "@" sign. See rabbitmq-server(1) for details of configur-
+    ing the RabbitMQ broker.
+   
+
+=head1 COMMANDS
+
+=head2 APPLICATION AND CLUSTER MANAGEMENT
+
+stop
+    stop the Erlang node on which RabbitMQ broker is running.
+
+stop_app
+    stop the RabbitMQ application, leaving the Erlang node running.
+    This command is typically run prior to performing other management
+    actions that require the RabbitMQ application to be stopped,
+    e.g. I<reset>.
+    
+start_app
+    start the RabbitMQ application.
+    This command is typically run prior to performing other management
+    actions that require the RabbitMQ application to be stopped,
+    e.g. I<reset>.
+    
+status
+    display various information about the RabbitMQ broker, such as
+    whether the RabbitMQ application on the current node, its version
+    number, what nodes are part of the broker, which of these are
+    running.
+    
+force
+    return a RabbitMQ node to its virgin state.
+    Removes the node from any cluster it belongs to, removes all data
+    from the management database, such as configured users, vhosts and
+    realms, and deletes all persistent messages.
+    
+force_reset
+    the same as I<force> command, but resets the node unconditionally,
+    regardless of the current management database state and cluster
+    configuration.
+    It should only be used as a last resort if the database or cluster
+    configuration has been corrupted.
+    
+cluster I<clusternode> ...
+    instruct the node to become member of a cluster with the specified
+    nodes determined by I<clusternode> option(s).
+    See http://www.rabbitmq.com/clustering.html for more information
+    about clustering.
+    
+=head2 USER MANAGEMENT
+    
+add_user I<username> I<password>
+    create a user named I<username> with (initial) password I<password>.
+    
+change_password I<username> I<newpassword>
+    change the password for the user named I<username> to I<newpassword>.
+
+list_users
+    list all users.
+    
+=head2 ACCESS CONTROL
+
+add_vhost I<vhostpath>
+    create a new virtual host called I<vhostpath>.
+    
+delete_vhost I<vhostpath>
+    delete a virtual host I<vhostpath>.
+    That command deletes also all its exchanges, queues and user mappings.
+    
+list_vhosts
+    list all virtual hosts.
+    
+map_user_vhost I<username> I<vhostpath>
+    grant the user named I<username> access to the virtual host called
+    I<vhostpath>.
+    
+unmap_user_vhost I<username> I<vhostpath>
+    deny the user named I<username> access to the virtual host called
+    I<vhostpath>.
+
+list_user_vhost I<username> 
+    list all the virtual hosts to which the user named I<username> has
+    been granted access.
+    
+=head1 EXAMPLES
+
+Create a user named foo with (initial) password bar at the Erlang node
+rabbit@test:
+
+    rabbitmqctl -n rabbit@test add_user foo bar
+    
+Grant user named foo access to the virtual host called test at the
+default Erlang node:
+
+    rabbitmqctl map_user_vhost foo test
+
+=head1 SEE ALSO
+
+rabbitmq-server(1), rabbitmqctl(1), rabbitmqctl_real(1)
+
+=head1 AUTHOR
+
+Originally written by The RabbitMQ Team <info@lshift.net>
+
+=head1 COPYRIGHT
+
+This package, the RabbitMQ server is licensed under the MPL.
+
+If you have any questions regarding licensing, please contact us at 
+info@rabbitmq.com.
+
+=head1 REFERENCES
+
+RabbitMQ Web Site: http://www.rabbitmq.com

@@ -119,6 +119,7 @@ srcdist: distclean
 	cp codegen.py Makefile dist/$(TARBALL_NAME)
 
 	cp -r scripts dist/$(TARBALL_NAME)
+	cp -r docs dist/$(TARBALL_NAME)
 	chmod 0755 dist/$(TARBALL_NAME)/scripts/*
 
 	(cd dist; tar -zcf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
@@ -133,12 +134,20 @@ distclean: clean
 install: all
 	@[ -n "$(TARGET_DIR)" ] || (echo "Please set TARGET_DIR."; false)
 	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
+	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
 
 	$(MAKE) VERSION=$(VERSION) GENERIC_STAGE_DIR=$(TARGET_DIR) generic_stage
 
 	chmod 0755 scripts/*
 	mkdir -p $(SBIN_DIR)
+	mkdir -p $(MAN_DIR)/man1
 	cp scripts/rabbitmq-server $(SBIN_DIR)
 	cp scripts/rabbitmqctl $(SBIN_DIR)
 	cp scripts/rabbitmq-multi $(SBIN_DIR)
+	for manpage in docs/*.pod ; do \
+		pod2man -c "RabbitMQ AMQP Server" -d "" -r "" \
+		$$manpage | gzip --best > \
+		$(MAN_DIR)/man1/`echo $$manpage | sed -e 's:docs/\(.*\)\.pod:\1\.gz:g'`; \
+	done
+	 
 	rm -f $(TARGET_DIR)/BUILD

@@ -5,7 +5,7 @@ include /usr/share/cdbs/1/class/makefile.mk
 
 RABBIT_LIB=$(DEB_DESTDIR)usr/lib/erlang/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSION)
 
-DEB_MAKE_INSTALL_TARGET := install TARGET_DIR=$(RABBIT_LIB)/ SBIN_DIR=$(DEB_DESTDIR)usr/sbin
+DEB_MAKE_INSTALL_TARGET := install TARGET_DIR=$(RABBIT_LIB)/ SBIN_DIR=$(DEB_DESTDIR)usr/sbin MAN_DIR=$(DEB_DESTDIR)usr/share/man
 
 DOCDIR=$(DEB_DESTDIR)usr/share/doc/rabbitmq-server/
 
