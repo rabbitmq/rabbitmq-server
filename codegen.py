@@ -45,6 +45,13 @@ erlangTypeMap = {
     'timestamp': 'timestamp',
 }
 
+erlangDefaultValueTypeConvMap = {
+    bool : lambda x: str(x).lower(),
+    str : lambda x: "<<" + x + ">>",
+    int : lambda x: str(x),
+    float : lambda x: str(x)
+}
+
 def erlangize(s):
     s = s.replace('-', '_')
     s = s.replace(' ', '_')
@@ -276,7 +283,8 @@ def genHrl(spec):
         def fillField(field):
             result = erlangize(f.name)
             if field.defaultvalue != None:
-                result += ' = ' + field.defaultvalue
+                conv_fn = erlangDefaultValueTypeConvMap[type(field.defaultvalue)]
+                result += ' = ' + conv_fn(field.defaultvalue)
             return result
         return ', '.join([fillField(f) for f in fields])
     
