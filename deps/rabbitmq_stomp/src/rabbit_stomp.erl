@@ -198,17 +198,28 @@ send_reply(Command, State) ->
     error_logger:error_msg("STOMP Reply command unhandled: ~p~n", [Command]),
     State.
 
+maybe_binary_to_header(_Key, undefined) ->
+    [];
+maybe_binary_to_header(Key, Value) when is_binary(Value) ->
+    [{Key, binary_to_list(Value)}].
+
 send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
 			    delivery_tag = DeliveryTag,
 			    exchange = Exchange,
 			    routing_key = RoutingKey},
-	   #content{properties = #'P_basic'{headers = Headers},
+	   #content{properties = #'P_basic'{headers = Headers,
+					    content_type = ContentType,
+					    content_encoding = ContentEncoding},
 		    payload_fragments_rev = BodyFragmentsRev},
 	   State = #state{session_id = SessionId}) ->
     send_frame("MESSAGE",
 	       [{"destination", binary_to_list(RoutingKey)},
 		{"exchange", binary_to_list(Exchange)},
+		%% TODO append ContentEncoding as ContentType; charset=ContentEncoding?
+		%% The STOMP SEND handle could also parse "content-type" to split it, perhaps?
 		{"message-id", SessionId ++ "_" ++ integer_to_list(DeliveryTag)}]
+	       ++ maybe_binary_to_header("content-type", ContentType)
+	       ++ maybe_binary_to_header("content-encoding", ContentEncoding)
 	       ++ case ConsumerTag of
 		      <<"Q_", _/binary>> ->
 			  [];
@@ -408,6 +419,7 @@ process_command("SEND",
 	    ExchangeStr = stomp_frame:header(Frame, "exchange", ""),
 	    Props = #'P_basic'{
 	      content_type = stomp_frame:binary_header(Frame, "content-type", <<"text/plain">>),
+	      content_encoding = stomp_frame:binary_header(Frame, "content-encoding", undefined),
 	      headers = make_string_table(fun user_header_key/1, Headers),
 	      delivery_mode = stomp_frame:integer_header(Frame, "delivery-mode", undefined),
 	      priority = stomp_frame:integer_header(Frame, "priority", undefined),
