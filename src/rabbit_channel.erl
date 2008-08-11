@@ -93,7 +93,7 @@ init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
         unacked_message_q       = queue:new(),
         username                = Username,
         virtual_host            = VHost,
-        most_recently_declared_queue = none,
+        most_recently_declared_queue = <<>>,
         consumer_mapping        = dict:new()}.
 
 handle_message({method, Method, Content}, State) ->
@@ -153,7 +153,8 @@ ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
 return_queue_declare_ok(State, NoWait, Q) ->
-    NewState = State#ch{most_recently_declared_queue = Q#amqqueue.name},
+    NewState = State#ch{most_recently_declared_queue =
+                        (Q#amqqueue.name)#resource.name},
     case NoWait of
         true  -> {noreply, NewState};
         false ->
@@ -161,27 +162,28 @@ return_queue_declare_ok(State, NoWait, Q) ->
                 rabbit_misc:with_exit_handler(
                   fun () -> {ok, Q#amqqueue.name, 0, 0} end,
                   fun () -> rabbit_amqqueue:stat(Q) end),
-            QueueName = ActualName#resource.name,
-            Reply = #'queue.declare_ok'{queue = QueueName,
+            Reply = #'queue.declare_ok'{queue = ActualName#resource.name,
                                         message_count = MessageCount,
                                         consumer_count = ConsumerCount},
             {reply, Reply, NewState}
     end.
 
-expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = none }) ->
+expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
       not_allowed, "no previously declared queue", []);
-expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = MRDQ }) -> MRDQ;
+expand_queue_name_shortcut(<<>>, #ch{ virtual_host = VHostPath,
+                                      most_recently_declared_queue = MRDQ }) ->
+    rabbit_misc:r(VHostPath, queue, MRDQ);
 expand_queue_name_shortcut(QueueNameBin, #ch{ virtual_host = VHostPath }) ->
     rabbit_misc:r(VHostPath, queue, QueueNameBin).
 
 expand_routing_key_shortcut(<<>>, <<>>,
-                            #ch{ most_recently_declared_queue = none }) ->
+                            #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
       not_allowed, "no previously declared queue", []);
 expand_routing_key_shortcut(<<>>, <<>>,
                             #ch{ most_recently_declared_queue = MRDQ }) ->
-    MRDQ#resource.name;
+    MRDQ;
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
@@ -529,10 +531,8 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                         <<>>  -> rabbit_misc:binstring_guid("amq.gen");
                         Other -> check_name('queue', Other)
                     end,
-                Finish(rabbit_amqqueue:declare(rabbit_misc:r(VHostPath, queue, ActualNameBin),
-                                               Durable,
-                                               AutoDelete,
-                                               Args));
+		QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
+                Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete, Args));
             Other -> Other
         end,
     return_queue_declare_ok(State, NoWait, Q);
