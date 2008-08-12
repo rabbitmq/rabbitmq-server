@@ -58,6 +58,8 @@ mv %{buildroot}/usr/sbin/rabbitmqctl %{buildroot}/usr/sbin/rabbitmqctl_real
 cp ../rabbitmqctl_wrapper %{buildroot}/usr/sbin/rabbitmqctl
 chmod 0755 %{buildroot}/usr/sbin/rabbitmqctl
 
+cp %{buildroot}%{_mandir}/man1/rabbitmqctl.1.gz %{buildroot}%{_mandir}/man1/rabbitmqctl_real.1.gz
+
 %post
 # create rabbitmq group
 if ! getent group rabbitmq >/dev/null; then
