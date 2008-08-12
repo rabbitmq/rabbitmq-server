@@ -1,10 +1,10 @@
 =head1 NAME
 
-rabbitmqctl_real - command line tool for managing a RabbitMQ broker
+rabbitmqctl - command line tool for managing a RabbitMQ broker
 
 =head1 SYNOPSIS
 
-rabbitmqctl_real [-n I<node>] I<<command>> [command options]
+rabbitmqctl [-n I<node>] I<<command>> [command options]
 
 =head1 DESCRIPTION
 
@@ -12,10 +12,8 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
-rabbitmqctl_real is a command line tool for managing a RabbitMQ broker.
-It performs all actions by connecting to one of the broker's node.
-rabbitmqctl_real is called by the rabbitmqctl(1) wrapper to be
-correctly executed with I<rabbitmq> user permissions.
+rabbitmqctl is a command line tool for managing a RabbitMQ broker.
+It performs all actions by connecting to one of the broker's nodes.
 
 
 =head1 OPTIONS
@@ -59,7 +57,7 @@ force
     return a RabbitMQ node to its virgin state.
     Removes the node from any cluster it belongs to, removes all data
     from the management database, such as configured users, vhosts and
-    realms, and deletes all persistent messages.
+    deletes all persistent messages.
     
 force_reset
     the same as I<force> command, but resets the node unconditionally,
@@ -123,7 +121,7 @@ default Erlang node:
 
 =head1 SEE ALSO
 
-rabbitmq-server(1), rabbitmqctl(1), rabbitmqctl_real(1)
+rabbitmq-multi(1), rabbitmq-server(1)
 
 =head1 AUTHOR
 

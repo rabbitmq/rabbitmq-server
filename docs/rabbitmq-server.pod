@@ -62,7 +62,7 @@ Run RabbitMQ AMQP server in the background:
 
 =head1 SEE ALSO
 
-rabbitmq-multi(1), rabbitmqctl(1), rabbitmqctl_real(1)
+rabbitmq-multi(1), rabbitmqctl(1)
 
 =head1 AUTHOR
 
