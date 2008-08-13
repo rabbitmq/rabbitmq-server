@@ -1,0 +1,19 @@
+/var/log/rabbitmq/*.log {
+        size=2M
+        missingok
+        rotate 10
+        compress
+        delaycompress
+        notifempty
+        create 644 rabbitmq rabbitmq
+}
+
+/var/log/rabbitmq/*.log.back /var/log/rabbitmq/*.err {
+        weekly
+        missingok
+        rotate 10
+        compress
+        delaycompress
+        notifempty
+        create 644 rabbitmq rabbitmq
+}
