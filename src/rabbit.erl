@@ -27,7 +27,7 @@
 
 -behaviour(application).
 
--export([start/0, stop/0, stop_and_halt/0, status/0]).
+-export([start/0, stop/0, stop_and_halt/0, status/0, reopen_logs/0]).
 
 -export([start/2, stop/1]).
 
@@ -49,6 +49,7 @@
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
+-spec(reopen_logs/0 :: () -> 'ok').
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
               {nodes, [node()]} |
@@ -84,6 +85,10 @@ stop_and_halt() ->
 status() ->
     [{running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
+
+reopen_logs() ->
+    ok = reopen_main_logs(),
+    ok = reopen_sasl_logs().
 
 %%--------------------------------------------------------------------
 
@@ -279,4 +284,24 @@ sasl_log_location() ->
         {ok, tty}          -> tty;
         {ok, Bad}          -> throw({error, {cannot_log_to_file, Bad}});
         _                  -> undefined
+    end.
+
+reopen_main_logs() ->
+    case error_log_location() of
+        tty                -> ok;
+        File               -> error_logger:swap_handler({logfile, File})
+    end.
+
+reopen_sasl_logs() ->
+    try
+        case sasl_log_location() of
+            undefined    -> ok;
+            tty          -> ok;
+            {file, File} -> gen_event:swap_handler(error_logger,
+                                                   {sasl_error_logger, swap},
+                                                   {sasl_report_file_h, File});
+            _            -> ok
+        end
+    catch
+        _ -> ok
     end.

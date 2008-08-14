@@ -73,6 +73,7 @@ Available commands:
   force_reset
   cluster <ClusterNode> ...
   status
+  reopen_logs 
 
   add_user        <UserName> <Password>
   delete_user     <UserName>
@@ -123,6 +124,10 @@ action(start_app, Node, []) ->
 action(reset, Node, []) ->
     io:format("Resetting node ~p ...", [Node]),
     call(Node, {rabbit_mnesia, reset, []});
+
+action(reopen_logs, Node, []) ->
+    io:format("Reopening logs for node ~p ...", [Node]),
+    call(Node, {rabbit, reopen_logs, []});
 
 action(force_reset, Node, []) ->
     io:format("Forcefully resetting node ~p ...", [Node]),
