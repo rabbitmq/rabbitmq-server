@@ -92,7 +92,7 @@ set CLUSTER_CONFIG=-rabbit cluster_config \""%CLUSTER_CONFIG_FILE:\=/%"\"
 set MNESIA_DIR=%MNESIA_BASE%/%NODENAME%-mnesia
 
 "%ERLANG_HOME%\bin\erl.exe" ^
--pa ..\ebin ^
+-pa "%~dp0..\ebin" ^
 -noinput ^
 -boot start_sasl ^
 -sname %NODENAME% ^
