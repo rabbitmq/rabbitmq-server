@@ -1,6 +1,5 @@
 usr/lib/erlang/lib
 usr/sbin
-usr/share/linda/overrides
 var/lib/rabbitmq/mnesia
 var/log/rabbitmq
 
