@@ -30,11 +30,13 @@
 
 -record(connection, {user, timeout_sec, frame_max, vhost}).
 
--record(content, {class_id,
-          properties, %% either 'none', or a decoded record/tuple
-          properties_bin, %% either 'none', or an encoded properties binary
-          %% Note: at most one of properties and properties_bin can be 'none' at once.
-          payload_fragments_rev %% list of binaries, in reverse order (!)
+-record(content,
+        {class_id,
+         properties, %% either 'none', or a decoded record/tuple
+         properties_bin, %% either 'none', or an encoded properties binary
+         %% Note: at most one of properties and properties_bin can be
+         %% 'none' at once.
+         payload_fragments_rev %% list of binaries, in reverse order (!)
          }).
 
 -record(resource, {virtual_host, kind, name}).

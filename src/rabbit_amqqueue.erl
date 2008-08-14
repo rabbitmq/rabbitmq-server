@@ -130,7 +130,7 @@ recover_durable_queues() ->
               ok
       end).
 
-declare(QueueName = #resource{}, Durable, AutoDelete, Args) ->
+declare(QueueName, Durable, AutoDelete, Args) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
@@ -360,8 +360,8 @@ on_node_down(Node) ->
                             node(Pid) == Node]))
       end).
 
-pseudo_queue(Resource = #resource{}, Pid) ->
-    #amqqueue{name = Resource,
+pseudo_queue(QueueName, Pid) ->
+    #amqqueue{name = QueueName,
               durable = false,
               auto_delete = false,
               arguments = [],

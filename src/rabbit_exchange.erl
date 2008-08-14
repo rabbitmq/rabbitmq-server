@@ -90,7 +90,7 @@ recover_durable_exchanges() ->
                            end, ok, durable_exchanges)
       end).
 
-declare(ExchangeName = #resource{}, Type, Durable, AutoDelete, Args) ->
+declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
     Exchange = #exchange{name = ExchangeName,
                          type = Type,
                          durable = Durable,
@@ -145,10 +145,10 @@ list_vhost_exchanges(VHostPath) ->
 
 list_exchange_bindings(Name) ->
     [{QueueName, RoutingKey, Arguments} ||
-    #binding{handlers = Handlers} <- bindings_for_exchange(Name),
-    #handler{binding_spec = #binding_spec{routing_key = RoutingKey,
-                          arguments = Arguments},
-         queue = QueueName} <- Handlers].
+        #binding{handlers = Handlers} <- bindings_for_exchange(Name),
+        #handler{binding_spec = #binding_spec{routing_key = RoutingKey,
+                                              arguments = Arguments},
+                 queue = QueueName} <- Handlers].
 
 bindings_for_exchange(Name) ->
     qlc:e(qlc:q([B || B = #binding{key = K} <- mnesia:table(binding),

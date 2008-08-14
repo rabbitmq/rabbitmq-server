@@ -532,7 +532,8 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                         Other -> check_name('queue', Other)
                     end,
 		QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
-                Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete, Args));
+                Finish(rabbit_amqqueue:declare(QueueName,
+                                               Durable, AutoDelete, Args));
             Other -> Other
         end,
     return_queue_declare_ok(State, NoWait, Q);
@@ -549,7 +550,8 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
                               if_unused = IfUnused,
                               if_empty = IfEmpty,
                               nowait = NoWait
-                             },_, State) ->
+                             },
+              _, State) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     case rabbit_amqqueue:with_or_die(
            QueueName,

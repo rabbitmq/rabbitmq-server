@@ -173,8 +173,14 @@ add_vhost(VHostPath) ->
                   case mnesia:read({vhost, VHostPath}) of
                       [] ->
                           ok = mnesia:write(#vhost{virtual_host = VHostPath}),
-                          [ rabbit_exchange:declare(rabbit_misc:r(VHostPath, exchange, Name), Type, true, false, []) || {Name,Type}
-                            <- [{<<"">>, direct}, { <<"amq.direct">>, direct}, {<<"amq.topic">>, topic}, {<<"amq.fanout">>, fanout}]],
+                          [rabbit_exchange:declare(
+                             rabbit_misc:r(VHostPath, exchange, Name),
+                             Type, true, false, []) ||
+                              {Name,Type} <-
+                                  [{<<"">>,           direct},
+                                   {<<"amq.direct">>, direct},
+                                   {<<"amq.topic">>,  topic},
+                                   {<<"amq.fanout">>, fanout}]],
                           ok;
                       [_] ->
                           mnesia:abort({vhost_already_exists, VHostPath})

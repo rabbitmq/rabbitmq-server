@@ -128,9 +128,9 @@ start(normal, []) ->
               io:format("starting ~-20s ...", [Msg]),
               Thunk(),
               io:format("done~n");
-      ({Msg, M, F, A}) ->
+          ({Msg, M, F, A}) ->
               io:format("starting ~-20s ...", [Msg]),
-          apply(M, F, A),
+              apply(M, F, A),
               io:format("done~n")
       end,
       [{"database",
