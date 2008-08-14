@@ -28,12 +28,11 @@
 -include("rabbit.hrl").
 
 -export([check_login/2, user_pass_login/2,
-         check_vhost_access/2, lookup_realm_access/2]).
+         check_vhost_access/2]).
 -export([add_user/2, delete_user/1, change_password/2, list_users/0,
          lookup_user/1]).
 -export([add_vhost/1, delete_vhost/1, list_vhosts/0, list_vhost_users/1]).
 -export([list_user_vhosts/1, map_user_vhost/2, unmap_user_vhost/2]).
--export([list_user_realms/2, map_user_realm/2, full_ticket/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -42,7 +41,6 @@
 -spec(check_login/2 :: (binary(), binary()) -> user()).
 -spec(user_pass_login/2 :: (username(), password()) -> user()).
 -spec(check_vhost_access/2 :: (user(), vhost()) -> 'ok').
--spec(lookup_realm_access/2 :: (user(), realm_name()) -> maybe(ticket())).
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
@@ -55,9 +53,6 @@
 -spec(list_user_vhosts/1 :: (username()) -> [vhost()]).
 -spec(map_user_vhost/2 :: (username(), vhost()) -> 'ok').
 -spec(unmap_user_vhost/2 :: (username(), vhost()) -> 'ok').
--spec(map_user_realm/2 :: (username(), ticket()) -> 'ok').
--spec(list_user_realms/2 :: (username(), vhost()) -> [{name(), ticket()}]).
--spec(full_ticket/1 :: (realm_name()) -> ticket()). 
 
 -endif.
 
@@ -87,7 +82,7 @@ check_login(<<"AMQPLAIN">>, Response) ->
               [LoginTable])
     end;
 
-check_login(Mechanism, _Response) ->     
+check_login(Mechanism, _Response) ->
     rabbit_misc:protocol_error(
       access_refused, "unsupported authentication mechanism '~s'",
       [Mechanism]).
@@ -130,18 +125,6 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
               [VHostPath, Username])
     end.
 
-lookup_realm_access(#user{username = Username}, RealmName = #resource{kind = realm}) ->
-    %% TODO: use dirty ops instead
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case user_realms(Username, RealmName) of
-                  [] ->
-                      none;
-                  [#user_realm{ticket_pattern = TicketPattern}] ->
-                      TicketPattern
-              end
-      end).
-
 add_user(Username, Password) ->
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
@@ -162,8 +145,7 @@ delete_user(Username) ->
             Username,
             fun () ->
                     ok = mnesia:delete({user, Username}),
-                    ok = mnesia:delete({user_vhost, Username}),
-                    ok = mnesia:delete({user_realm, Username})
+                    ok = mnesia:delete({user_vhost, Username})
             end)),
     rabbit_log:info("Deleted user ~p~n", [Username]),
     R.
@@ -191,24 +173,14 @@ add_vhost(VHostPath) ->
                   case mnesia:read({vhost, VHostPath}) of
                       [] ->
                           ok = mnesia:write(#vhost{virtual_host = VHostPath}),
-                          DataRealm =
-                              rabbit_misc:r(VHostPath, realm, <<"/data">>),
-                          AdminRealm =
-                              rabbit_misc:r(VHostPath, realm, <<"/admin">>),
-                          ok = rabbit_realm:add_realm(DataRealm),
-                          ok = rabbit_realm:add_realm(AdminRealm),
-                          #exchange{} = rabbit_exchange:declare(
-                                          DataRealm, <<"">>,
-                                          direct, true, false, []),
-                          #exchange{} = rabbit_exchange:declare(
-                                          DataRealm, <<"amq.direct">>,
-                                          direct, true, false, []),
-                          #exchange{} = rabbit_exchange:declare(
-                                          DataRealm, <<"amq.topic">>,
-                                          topic, true, false, []),
-                          #exchange{} = rabbit_exchange:declare(
-                                          DataRealm, <<"amq.fanout">>,
-                                          fanout, true, false, []),
+                          [rabbit_exchange:declare(
+                             rabbit_misc:r(VHostPath, exchange, Name),
+                             Type, true, false, []) ||
+                              {Name,Type} <-
+                                  [{<<"">>,           direct},
+                                   {<<"amq.direct">>, direct},
+                                   {<<"amq.topic">>,  topic},
+                                   {<<"amq.fanout">>, fanout}]],
                           ok;
                       [_] ->
                           mnesia:abort({vhost_already_exists, VHostPath})
@@ -240,11 +212,6 @@ internal_delete_vhost(VHostPath) ->
                           ok = rabbit_exchange:delete(Name, false)
                   end,
                   rabbit_exchange:list_vhost_exchanges(VHostPath)),
-    lists:foreach(fun (RealmName) ->
-                          ok = rabbit_realm:delete_realm(
-                                 rabbit_misc:r(VHostPath, realm, RealmName))
-                  end,
-                  rabbit_realm:list_vhost_realms(VHostPath)),
     lists:foreach(fun (Username) ->
                           ok = unmap_user_vhost(Username, VHostPath)
                   end,
@@ -290,77 +257,8 @@ unmap_user_vhost(Username, VHostPath) ->
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath,
         fun () ->
-                lists:foreach(fun mnesia:delete_object/1,
-                              user_realms(Username,
-                                          rabbit_misc:r(VHostPath, realm))),
                 ok = mnesia:delete_object(
                        #user_vhost{username = Username,
                                    virtual_host = VHostPath})
         end)).
 
-map_user_realm(Username,
-               Ticket = #ticket{realm_name = RealmName =
-                                #resource{virtual_host = VHostPath,
-                                          kind = realm}}) ->
-    rabbit_misc:execute_mnesia_transaction(
-      rabbit_misc:with_user_and_vhost(
-        Username, VHostPath,
-        rabbit_misc:with_realm(
-          RealmName,
-          fun () ->
-                  lists:foreach(fun mnesia:delete_object/1,
-                                user_realms(Username, RealmName)),
-                  case internal_lookup_vhost_access(Username, VHostPath) of
-                      {ok, _R} ->
-                          case ticket_liveness(Ticket) of
-                              alive ->
-                                  ok = mnesia:write(
-                                         #user_realm{username = Username,
-                                                     realm = RealmName,
-                                                     ticket_pattern = Ticket});
-                              dead ->
-                                  ok
-                          end;
-                      not_found ->
-                          mnesia:abort(not_mapped_to_vhost)
-                  end
-          end))).
-
-list_user_realms(Username, VHostPath) ->
-    [{Name, Pattern} ||
-        #user_realm{realm = #resource{name = Name},
-                    ticket_pattern = Pattern} <-
-            %% TODO: use dirty ops instead
-            rabbit_misc:execute_mnesia_transaction(
-              rabbit_misc:with_user_and_vhost(
-                Username, VHostPath,
-                fun () ->
-                        case internal_lookup_vhost_access(
-                               Username, VHostPath) of
-                            {ok, _R} ->
-                                user_realms(Username,
-                                            rabbit_misc:r(VHostPath, realm));
-                            not_found ->
-                                mnesia:abort(not_mapped_to_vhost)
-                        end
-                end))].
-
-ticket_liveness(#ticket{passive_flag = false,
-                        active_flag = false,
-                        write_flag = false,
-                        read_flag = false}) ->
-    dead;
-ticket_liveness(_) ->
-    alive.
-
-full_ticket(RealmName) ->
-    #ticket{realm_name = RealmName,
-            passive_flag = true,
-            active_flag = true,
-            write_flag = true,
-            read_flag = true}.
-
-user_realms(Username, RealmName) ->
-    mnesia:match_object(#user_realm{username = Username,
-                                    realm = RealmName,
-                                    _ = '_'}).
