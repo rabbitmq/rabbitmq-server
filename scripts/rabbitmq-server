@@ -39,10 +39,6 @@ CLUSTER_CONFIG_FILE=/etc/default/rabbitmq_cluster.config
 ## Log rotation
 LOGS="${LOG_BASE}/${NODENAME}.log"
 SASL_LOGS="${LOG_BASE}/${NODENAME}-sasl.log"
-BACKUP_EXTENSION=".bak"
-
-[ -f  "${LOGS}" ] && cat "${LOGS}" >> "${LOGS}${BACKUP_EXTENSION}"
-[ -f  "${SASL_LOGS}" ] && cat "${SASL_LOGS}" >> "${SASL_LOGS}${BACKUP_EXTENSION}"
 
 if [ -f "$CLUSTER_CONFIG_FILE" ]; then
     CLUSTER_CONFIG="-rabbit cluster_config \"$CLUSTER_CONFIG_FILE\""
