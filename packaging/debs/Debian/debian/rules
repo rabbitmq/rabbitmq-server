@@ -17,4 +17,3 @@ install/rabbitmq-server::
 	cp debian/rabbitmq-server.logrotate $(DEB_DESTDIR)etc/logrotate.d/rabbitmq-server
 	cp $(DEB_DESTDIR)usr/share/man/man1/rabbitmqctl.1.gz $(DEB_DESTDIR)usr/share/man/man1/rabbitmqctl_real.1.gz
 	chmod a+x $(DEB_DESTDIR)usr/sbin/rabbitmqctl
-	echo "Tag: usr-lib-in-arch-all" > $(DEB_DESTDIR)usr/share/linda/overrides/rabbitmq-server

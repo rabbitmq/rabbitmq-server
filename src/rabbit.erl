@@ -27,7 +27,7 @@
 
 -behaviour(application).
 
--export([start/0, stop/0, stop_and_halt/0, status/0]).
+-export([start/0, stop/0, stop_and_halt/0, status/0, reopen_logs/0]).
 
 -export([start/2, stop/1]).
 
@@ -49,6 +49,7 @@
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
+-spec(reopen_logs/0 :: () -> 'ok').
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
               {nodes, [node()]} |
@@ -85,6 +86,10 @@ status() ->
     [{running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
 
+reopen_logs() ->
+    ok = reopen_main_logs(),
+    ok = reopen_sasl_logs().
+
 %%--------------------------------------------------------------------
 
 manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
@@ -98,7 +103,7 @@ manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
                     end
             end, [], Apps),
     ok.
-    
+
 start_applications(Apps) ->
     manage_applications(fun lists:foldl/3,
                         fun application:start/1,
@@ -128,9 +133,9 @@ start(normal, []) ->
               io:format("starting ~-20s ...", [Msg]),
               Thunk(),
               io:format("done~n");
-	  ({Msg, M, F, A}) ->
+          ({Msg, M, F, A}) ->
               io:format("starting ~-20s ...", [Msg]),
-	      apply(M, F, A),
+              apply(M, F, A),
               io:format("done~n")
       end,
       [{"database",
@@ -150,14 +155,12 @@ start(normal, []) ->
        {"recovery",
         fun () ->
                 ok = maybe_insert_default_data(),
-                
                 ok = rabbit_exchange:recover(),
-                ok = rabbit_amqqueue:recover(),
-                ok = rabbit_realm:recover()
+                ok = rabbit_amqqueue:recover()
         end},
        {"persister",
-        fun () -> 
-                ok = start_child(rabbit_persister) 
+        fun () ->
+                ok = start_child(rabbit_persister)
         end},
        {"builtin applications",
         fun () ->
@@ -215,26 +218,8 @@ insert_default_data() ->
     {ok, DefaultPass} = application:get_env(default_pass),
     {ok, DefaultVHost} = application:get_env(default_vhost),
     ok = rabbit_access_control:add_vhost(DefaultVHost),
-    ok = insert_default_user(DefaultUser, DefaultPass,
-                             [{DefaultVHost, [<<"/data">>, <<"/admin">>]}]),
-    ok.
-
-insert_default_user(Username, Password, VHostSpecs) ->
-    ok = rabbit_access_control:add_user(Username, Password),
-    lists:foreach(
-      fun ({VHostPath, Realms}) ->
-              ok = rabbit_access_control:map_user_vhost(
-                     Username, VHostPath),
-              lists:foreach(
-                fun (Realm) ->
-                        RealmFullName = 
-                            rabbit_misc:r(VHostPath, realm, Realm),
-                        ok = rabbit_access_control:map_user_realm(
-                               Username,
-                               rabbit_access_control:full_ticket(
-                                 RealmFullName))
-                end, Realms)
-      end, VHostSpecs),
+    ok = rabbit_access_control:add_user(DefaultUser, DefaultPass),
+    ok = rabbit_access_control:map_user_vhost(DefaultUser, DefaultVHost),
     ok.
 
 start_builtin_amq_applications() ->
@@ -273,10 +258,30 @@ error_log_location() ->
     end.
 
 sasl_log_location() ->
-    case application:get_env(sasl, sasl_error_logger) of 
+    case application:get_env(sasl, sasl_error_logger) of
         {ok, {file, File}} -> File;
         {ok, false}        -> undefined;
         {ok, tty}          -> tty;
         {ok, Bad}          -> throw({error, {cannot_log_to_file, Bad}});
         _                  -> undefined
+    end.
+
+reopen_main_logs() ->
+    case error_log_location() of
+        tty                -> ok;
+        File               -> error_logger:swap_handler({logfile, File})
+    end.
+
+reopen_sasl_logs() ->
+    try
+        case sasl_log_location() of
+            undefined    -> ok;
+            tty          -> ok;
+            {file, File} -> gen_event:swap_handler(error_logger,
+                                                   {sasl_error_logger, swap},
+                                                   {sasl_report_file_h, File});
+            _            -> ok
+        end
+    catch
+        _ -> ok
     end.

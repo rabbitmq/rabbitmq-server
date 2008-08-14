@@ -1,7 +1,6 @@
 usr/lib/erlang/lib
 usr/sbin
 usr/share/man
-usr/share/linda/overrides
 var/lib/rabbitmq/mnesia
 var/log/rabbitmq
 etc/logrotate.d

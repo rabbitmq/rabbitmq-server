@@ -66,6 +66,11 @@ force_reset
     It should only be used as a last resort if the database or cluster
     configuration has been corrupted.
     
+reopen_logs
+    instruct the RabbitMQ node to close and reopen the log files.
+    This command might be helpful when you are e.g. writing your own
+    logrotate script and you do not want to restart the RabbitMQ node.
+    
 cluster I<clusternode> ...
     instruct the node to become member of a cluster with the specified
     nodes determined by I<clusternode> option(s).

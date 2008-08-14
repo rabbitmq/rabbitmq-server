@@ -28,7 +28,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, declare/6, lookup/1, lookup_or_die/1,
+-export([recover/0, declare/5, lookup/1, lookup_or_die/1,
          list_vhost_exchanges/1, list_exchange_bindings/1,
          simple_publish/6, simple_publish/3,
          route/2]).
@@ -50,21 +50,21 @@
       not_found() | {'error', 'unroutable' | 'not_delivered'}).
 
 -spec(recover/0 :: () -> 'ok').
--spec(declare/6 :: (realm_name(), name(), exchange_type(), bool(), bool(),
+-spec(declare/5 :: (exchange_name(), exchange_type(), bool(), bool(),
                     amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
--spec(assert_type/2 :: (exchange(), atom()) -> 'ok'). 
+-spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
 -spec(list_vhost_exchanges/1 :: (vhost()) -> [exchange()]).
--spec(list_exchange_bindings/1 :: (exchange_name()) -> 
+-spec(list_exchange_bindings/1 :: (exchange_name()) ->
              [{queue_name(), routing_key(), amqp_table()}]).
 -spec(simple_publish/6 ::
       (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
              publish_res()).
 -spec(simple_publish/3 :: (bool(), bool(), message()) -> publish_res()).
 -spec(route/2 :: (exchange(), routing_key()) -> [pid()]).
--spec(add_binding/2 :: (binding_spec(), amqqueue()) -> 
+-spec(add_binding/2 :: (binding_spec(), amqqueue()) ->
              'ok' | not_found() |
                  {'error', 'durability_settings_incompatible'}).
 -spec(delete_binding/2 :: (binding_spec(), amqqueue()) ->
@@ -90,23 +90,21 @@ recover_durable_exchanges() ->
                            end, ok, durable_exchanges)
       end).
 
-declare(RealmName, NameBin, Type, Durable, AutoDelete, Args) ->
-    XName = rabbit_misc:r(RealmName, exchange, NameBin),
-    Exchange = #exchange{name = XName,
+declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
+    Exchange = #exchange{name = ExchangeName,
                          type = Type,
                          durable = Durable,
                          auto_delete = AutoDelete,
                          arguments = Args},
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:wread({exchange, XName}) of
+              case mnesia:wread({exchange, ExchangeName}) of
                   [] -> ok = mnesia:write(Exchange),
                         if Durable ->
                                 ok = mnesia:write(
                                        durable_exchanges, Exchange, write);
                            true -> ok
                         end,
-                        ok = rabbit_realm:add(RealmName, XName),
                         Exchange;
                   [ExistingX] -> ExistingX
               end
@@ -147,15 +145,14 @@ list_vhost_exchanges(VHostPath) ->
 
 list_exchange_bindings(Name) ->
     [{QueueName, RoutingKey, Arguments} ||
-	#binding{handlers = Handlers} <- bindings_for_exchange(Name),
-	#handler{binding_spec = #binding_spec{routing_key = RoutingKey,
-					      arguments = Arguments},
-		 queue = QueueName} <- Handlers].
+        #binding{handlers = Handlers} <- bindings_for_exchange(Name),
+        #handler{binding_spec = #binding_spec{routing_key = RoutingKey,
+                                              arguments = Arguments},
+                 queue = QueueName} <- Handlers].
 
 bindings_for_exchange(Name) ->
-    qlc:e(qlc:q([B || 
-                    B = #binding{key = K} <- mnesia:table(binding),
-                    element(1, K) == Name])).
+    qlc:e(qlc:q([B || B = #binding{key = K} <- mnesia:table(binding),
+                      element(1, K) == Name])).
 
 empty_handlers() ->
     [].
@@ -187,7 +184,7 @@ simple_publish(Mandatory, Immediate,
 
 %% return the list of qpids to which a message with a given routing
 %% key, sent to a particular exchange, should be delivered.
-%% 
+%%
 %% The function ensures that a qpid appears in the return list exactly
 %% as many times as a message should be delivered to it. With the
 %% current exchange types that is at most once.
@@ -197,7 +194,7 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
         mnesia:activity(
           async_dirty,
           fun () ->
-                  qlc:e(qlc:q([handler_qpids(H) || 
+                  qlc:e(qlc:q([handler_qpids(H) ||
                                   #binding{key = {Name1, PatternKey},
                                            handlers = H}
                                       <- mnesia:table(binding),
@@ -375,6 +372,5 @@ do_internal_delete(ExchangeName, Bindings) ->
                                   ok = mnesia:delete({binding, K})
                           end, Bindings),
             ok = mnesia:delete({durable_exchanges, ExchangeName}),
-            ok = mnesia:delete({exchange, ExchangeName}),
-            ok = rabbit_realm:delete_from_all(ExchangeName)
+            ok = mnesia:delete({exchange, ExchangeName})
     end.
