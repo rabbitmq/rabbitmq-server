@@ -5,7 +5,7 @@ include /usr/share/cdbs/1/class/makefile.mk
 
 RABBIT_LIB=$(DEB_DESTDIR)usr/lib/erlang/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSION)
 
-DEB_MAKE_INSTALL_TARGET := install TARGET_DIR=$(RABBIT_LIB)/ SBIN_DIR=$(DEB_DESTDIR)usr/sbin
+DEB_MAKE_INSTALL_TARGET := install TARGET_DIR=$(RABBIT_LIB)/ SBIN_DIR=$(DEB_DESTDIR)usr/sbin MAN_DIR=$(DEB_DESTDIR)usr/share/man
 
 DOCDIR=$(DEB_DESTDIR)usr/share/doc/rabbitmq-server/
 
@@ -14,4 +14,5 @@ install/rabbitmq-server::
 	rm $(RABBIT_LIB)/LICENSE*
 	mv $(DEB_DESTDIR)usr/sbin/rabbitmqctl $(DEB_DESTDIR)usr/sbin/rabbitmqctl_real
 	cp debian/rabbitmqctl_wrapper $(DEB_DESTDIR)usr/sbin/rabbitmqctl
+	cp $(DEB_DESTDIR)usr/share/man/man1/rabbitmqctl.1.gz $(DEB_DESTDIR)usr/share/man/man1/rabbitmqctl_real.1.gz
 	chmod a+x $(DEB_DESTDIR)usr/sbin/rabbitmqctl

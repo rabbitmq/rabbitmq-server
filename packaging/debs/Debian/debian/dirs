@@ -1,5 +1,6 @@
 usr/lib/erlang/lib
 usr/sbin
+usr/share/man
 var/lib/rabbitmq/mnesia
 var/log/rabbitmq
 
