@@ -314,14 +314,7 @@ setup_exchange(Channel, Ticket, Q, X, BindKey) ->
 
 setup_channel(Connection, Realm) ->
     Channel = amqp_connection:open_channel(Connection),
-    Access = #'access.request'{realm = Realm,
-                               exclusive = false,
-                               passive = true,
-                               active = true,
-                               write = true,
-                               read = true},
-    #'access.request_ok'{ticket = Ticket} = amqp_channel:call(Channel, Access),
-    {Channel, Ticket}.
+    {Channel, 1}.
 
 latch_loop(0) -> ok;
 latch_loop(Latch) ->
