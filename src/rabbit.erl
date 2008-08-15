@@ -278,5 +278,5 @@ reopen_sasl_logs() ->
         tty       -> ok;
         File      -> gen_event:swap_handler(error_logger,
                                             {sasl_error_logger, swap},
-                                            {sasl_report_file_h, File});
+                                            {sasl_report_file_h, File})
     end.
