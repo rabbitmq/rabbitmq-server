@@ -268,20 +268,15 @@ sasl_log_location() ->
 
 reopen_main_logs() ->
     case error_log_location() of
-        tty                -> ok;
-        File               -> error_logger:swap_handler({logfile, File})
+        tty  -> ok;
+        File -> error_logger:swap_handler({logfile, File})
     end.
 
 reopen_sasl_logs() ->
-    try
-        case sasl_log_location() of
-            undefined    -> ok;
-            tty          -> ok;
-            {file, File} -> gen_event:swap_handler(error_logger,
-                                                   {sasl_error_logger, swap},
-                                                   {sasl_report_file_h, File});
-            _            -> ok
-        end
-    catch
-        _ -> ok
+    case sasl_log_location() of
+        undefined -> ok;
+        tty       -> ok;
+        File      -> gen_event:swap_handler(error_logger,
+                                            {sasl_error_logger, swap},
+                                            {sasl_report_file_h, File});
     end.

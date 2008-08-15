@@ -114,10 +114,6 @@ action(reset, Node, []) ->
     io:format("Resetting node ~p ...", [Node]),
     call(Node, {rabbit_mnesia, reset, []});
 
-action(reopen_logs, Node, []) ->
-    io:format("Reopening logs for node ~p ...", [Node]),
-    call(Node, {rabbit, reopen_logs, []});
-
 action(force_reset, Node, []) ->
     io:format("Forcefully resetting node ~p ...", [Node]),
     call(Node, {rabbit_mnesia, force_reset, []});
@@ -133,6 +129,10 @@ action(status, Node, []) ->
     Res = call(Node, {rabbit, status, []}),
     io:format("~n~p~n", [Res]),
     ok;
+
+action(reopen_logs, Node, []) ->
+    io:format("Reopening logs for node ~p ...", [Node]),
+    call(Node, {rabbit, reopen_logs, []});
 
 action(add_user, Node, Args = [Username, _Password]) ->
     io:format("Creating user ~p ...", [Username]),
