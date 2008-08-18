@@ -66,8 +66,12 @@ force_reset
     It should only be used as a last resort if the database or cluster
     configuration has been corrupted.
     
-reopen_logs
+reopen_logs [suffix]
     instruct the RabbitMQ node to close and reopen the log files.
+    When I<suffix> value is provided, the RabbitMQ broker will attempt
+    to rename the current log file to the file with appended suffix.
+    If file with the original name and suffix already exists, then
+    file renaming operation is aborted.
     This command might be helpful when you are e.g. writing your own
     logrotate script and you do not want to restart the RabbitMQ node.
     

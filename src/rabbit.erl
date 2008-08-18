@@ -27,7 +27,7 @@
 
 -behaviour(application).
 
--export([start/0, stop/0, stop_and_halt/0, status/0, reopen_logs/0]).
+-export([start/0, stop/0, stop_and_halt/0, status/0, reopen_logs/0, reopen_logs/1]).
 
 -export([start/2, stop/1]).
 
@@ -39,6 +39,7 @@
 
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -define(APPS, [os_mon, mnesia, rabbit]).
 
@@ -50,6 +51,7 @@
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
 -spec(reopen_logs/0 :: () -> 'ok').
+-spec(reopen_logs/1 :: name() -> 'ok').
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
               {nodes, [node()]} |
@@ -87,8 +89,13 @@ status() ->
         rabbit_mnesia:status().
 
 reopen_logs() ->
-    ok = reopen_main_logs(),
-    ok = reopen_sasl_logs().
+    ok = reopen_main_logs([]),
+    ok = reopen_sasl_logs([]).
+
+reopen_logs(Suffix) ->
+    LSuffix = binary_to_list(Suffix),
+    ok = reopen_main_logs(LSuffix),
+    ok = reopen_sasl_logs(LSuffix).
 
 %%--------------------------------------------------------------------
 
@@ -266,17 +273,46 @@ sasl_log_location() ->
         _                  -> undefined
     end.
 
-reopen_main_logs() ->
-    case error_log_location() of
-        tty  -> ok;
-        File -> error_logger:swap_handler({logfile, File})
+sasl_error_logger_type() ->
+    case application:get_env(sasl, errlog_type) of
+	{ok, error} -> error;
+	{ok, progress} -> progress;
+	{ok, all} -> all;
+	{ok, Bad} -> throw({error, {wrong_errlog_type, Bad}});
+	_ -> all
     end.
 
-reopen_sasl_logs() ->
+reopen_main_logs(Suffix) ->
+    case error_log_location() of
+        tty  -> ok;
+        File -> error_logger:delete_report_handler(error_logger_file_h),
+		rotate_log_file(File, Suffix),
+		error_logger:add_report_handler(error_logger_file_h,File)
+    end.
+
+reopen_sasl_logs(Suffix) ->
     case sasl_log_location() of
         undefined -> ok;
         tty       -> ok;
-        File      -> gen_event:swap_handler(error_logger,
-                                            {sasl_error_logger, swap},
-                                            {sasl_report_file_h, File})
+        File      -> error_logger:delete_report_handler(sasl_report_file_h),
+		     rotate_log_file(File,Suffix),
+		     error_logger:add_report_handler(sasl_report_file_h,
+						     {File, sasl_error_logger_type()})
+    end.
+
+rotate_log_file(File, Suffix) ->
+    case file:read_file_info(File) of
+	{ok, FInfo} -> rename_log_file(File, FInfo#file_info.size, Suffix);
+	{error, _} -> ok
+    end.
+
+rename_log_file(_, 0, _) ->
+    ok;
+rename_log_file(_, _, []) ->
+    ok;
+rename_log_file(File, _, Suffix) ->
+    case file:read_file_info([File,Suffix]) of
+	{ok, _}         -> ok;
+	{error, enoent} -> file:rename(File, [File, Suffix]);
+	{error, _}  -> ok
     end.
