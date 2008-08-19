@@ -68,10 +68,10 @@ force_reset
     
 reopen_logs [suffix]
     instruct the RabbitMQ node to close and reopen the log files.
-    When I<suffix> value is provided, the RabbitMQ broker will attempt
-    to rename the current log file to the file with appended suffix.
-    If file with the original name and suffix already exists, then
-    file renaming operation is aborted.
+    When the I<suffix> value is provided, the RabbitMQ broker will
+    attempt to append the current contents of the log file to the file
+    with name composed of the original name and the suffix. It will
+    create a new file if such a file does not already exist.
     This command might be helpful when you are e.g. writing your own
     logrotate script and you do not want to restart the RabbitMQ node.
     
@@ -127,6 +127,11 @@ Grant user named foo access to the virtual host called test at the
 default Erlang node:
 
     rabbitmqctl map_user_vhost foo test
+    
+Append current logs' content to the files with ".1" suffix and reopen
+them:
+
+    rabbitmqctl reopen_logs .1
 
 =head1 SEE ALSO
 
