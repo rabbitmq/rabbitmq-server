@@ -65,7 +65,7 @@ set LOG_BASE=%RABBITMQ_BASE_UNIX%/log
 rem We save the previous logs in their respective backup
 rem Log management (rotation, filtering based of size...) is left as an exercice for the user.
 
-set BACKUP_EXTENSION=.bak
+set BACKUP_EXTENSION=.1
 
 set LOGS="%RABBITMQ_BASE%\log\%NODENAME%.log"
 set SASL_LOGS="%RABBITMQ_BASE%\log\%NODENAME%-sasl.log"
