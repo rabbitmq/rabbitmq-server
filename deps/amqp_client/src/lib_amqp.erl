@@ -13,72 +13,122 @@ start_connection(Host) ->
     amqp_connection:start("guest", "guest", Host).    
 
 start_channel(Connection) ->
-    Realm = <<"/data">>,
-    Channel = amqp_connection:open_channel(Connection),
-    Access = #'access.request'{realm = Realm,
-                               exclusive = false,
-                               passive = true,
-                               active = true,
-                               write = true,
-                               read = true},
-    #'access.request_ok'{ticket = Ticket} = amqp_channel:call(Channel, Access),
-    {Channel,Ticket}.
-    
-declare_exchange(Channel,Ticket,X) ->
-    ExchangeDeclare = #'exchange.declare'{ticket = Ticket, exchange = X,
-                                          type = <<"direct">>,
+    amqp_connection:open_channel(Connection).
+
+declare_exchange(Channel, X) ->
+	declare_exchange(Channel, X, <<"direct">>).
+
+declare_exchange(Channel, X, Type) ->
+    ExchangeDeclare = #'exchange.declare'{ticket = 1, exchange = X,
+                                          type = Type,
                                           passive = false, durable = false, 
                                           auto_delete = false, internal = false,
                                           nowait = false, arguments = []},
     amqp_channel:call(Channel, ExchangeDeclare).
+
+delete_exchange(Channel, X) ->
+	ExchangeDelete = #'exchange.delete'{ticket = 1, exchange = X,
+                                        if_unused = false, nowait = false},
+    #'exchange.delete_ok'{} = amqp_channel:call(Channel, ExchangeDelete).
     
-publish(Channel,Ticket,X,RoutingKey,Payload) ->
-    BasicPublish = #'basic.publish'{ticket = Ticket,
+publish(Channel, X, RoutingKey, Payload) ->
+	publish(Channel, X, RoutingKey, Payload, false).
+
+publish(Channel, X, RoutingKey, Payload, Mandatory) ->
+    BasicPublish = #'basic.publish'{ticket = 1,
                                     exchange = X,
                                     routing_key = RoutingKey,
-                                    mandatory = false,immediate = false},
-    Content = #content{class_id = 60,
+                                    mandatory = Mandatory, immediate = false},
+	{ClassId, MethodId} = rabbit_framing:method_id('basic.publish'),
+    Content = #content{class_id = ClassId,
                    properties = amqp_util:basic_properties(), 
                    properties_bin = none,
                    payload_fragments_rev = [Payload]},
     amqp_channel:cast(Channel, BasicPublish, Content).    
     
-teardown(Connection,Channel) ->
-    ChannelClose = #'channel.close'{reply_code = 200, reply_text = <<"Goodbye">>,
+close_channel(Channel) ->
+	ChannelClose = #'channel.close'{reply_code = 200, reply_text = <<"Goodbye">>,
                                     class_id = 0, method_id = 0},
-    amqp_channel:call(Channel, ChannelClose),
+    #'channel.close_ok'{} = amqp_channel:call(Channel, ChannelClose),
+	ok.
+
+teardown(Connection, Channel) ->
+    close_channel(Channel),
     ConnectionClose = #'connection.close'{reply_code = 200, reply_text = <<"Goodbye">>,
                                               class_id = 0, method_id = 0},
-    amqp_connection:close(Connection, ConnectionClose).
+    #'connection.close_ok'{} = amqp_connection:close(Connection, ConnectionClose),
+	ok.
     
-    
-subscribe(Channel,Ticket,Q,Consumer) ->
-    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
-                                    no_local = false, no_ack = true,
+get(Channel, Q) -> get(Channel, Q, true).
+	
+get(Channel, Q, NoAck) ->	
+	BasicGet = #'basic.get'{ticket = 1, queue = Q, no_ack = NoAck},
+    {Method, Content} = amqp_channel:call(Channel, BasicGet),
+	case Method of 
+		'basic.get_empty' ->
+			'basic.get_empty';
+		Other ->
+    		#'basic.get_ok'{delivery_tag = DeliveryTag,
+                    		redelivered = Redelivered,
+                    		exchange = X,
+                    		routing_key = RoutingKey,
+                    		message_count = MessageCount} = Method,
+    		#content{class_id = ClassId,
+             		 properties = Properties,
+             		 properties_bin = PropertiesBin,
+             		 payload_fragments_rev = PayloadFragments} = Content,
+			case NoAck of
+				true -> Content;
+				false -> {DeliveryTag, Content}
+			end
+	end.
+
+ack(Channel, DeliveryTag) ->
+	BasicAck = #'basic.ack'{delivery_tag = DeliveryTag, multiple = false},
+    ok = amqp_channel:cast(Channel, BasicAck).
+
+subscribe(Channel, Q, Consumer) -> 
+	subscribe(Channel, Q, Consumer, <<>>, true).     
+
+subscribe(Channel, Q, Consumer, NoAck) when is_boolean(NoAck) -> 
+	subscribe(Channel, Q, Consumer, <<>>, NoAck);
+	
+subscribe(Channel, Q, Consumer, Tag) ->
+	subscribe(Channel, Q, Consumer, Tag, true).
+	
+subscribe(Channel, Q, Consumer, Tag, NoAck) ->
+    BasicConsume = #'basic.consume'{ticket = 1, queue = Q,
+									consumer_tag = Tag,
+                                    no_local = false, no_ack = NoAck,
                                     exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, Consumer),
     ConsumerTag.
 
-unsubscribe(Channel,Ticket,Tag) ->
+unsubscribe(Channel, Tag) ->
     BasicCancel = #'basic.cancel'{consumer_tag = Tag, nowait = false},
     #'basic.cancel_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicCancel),
     ok.
 
-declare_queue(Channel,Ticket,Q) ->
-    QueueDeclare = #'queue.declare'{ticket = Ticket, queue = Q,
+declare_queue(Channel, Q) ->
+    QueueDeclare = #'queue.declare'{ticket = 1, queue = Q,
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
                                     nowait = false, arguments = []},
-    #'queue.declare_ok'{} = amqp_channel:call(Channel, QueueDeclare).
+ 	#'queue.declare_ok'{queue = Q1,
+    					message_count = MessageCount,
+    					consumer_count = ConsumerCount} 
+						= amqp_channel:call(Channel, QueueDeclare),
+	Q1.
 
-delete_queue(Channel,Ticket,Q) ->
-    QueueDelete = #'queue.delete'{ticket = Ticket, queue = Q,
+delete_queue(Channel, Q) ->
+    QueueDelete = #'queue.delete'{ticket = 1, queue = Q,
                                   if_unused = false,
                                   if_empty = false,
-                                  nowait = true},
+                                  nowait = false},
     #'queue.delete_ok'{} = amqp_channel:call(Channel, QueueDelete).
 
-bind_queue(Channel,Ticket,X,Q,Binding) ->
-    QueueBind = #'queue.bind'{ticket = Ticket, queue = Q, exchange = X,
+bind_queue(Channel, X, Q, Binding) ->
+    QueueBind = #'queue.bind'{ticket = 1, queue = Q, exchange = X,
                               routing_key = Binding, nowait = false, arguments = []},
-    #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind).       
+    #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind).
+       
