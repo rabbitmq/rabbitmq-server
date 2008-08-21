@@ -41,6 +41,7 @@
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
+-export([escape_routing_key/1, emit_presence/2]).
 
 -import(mnesia).
 -import(lists).
@@ -333,3 +334,26 @@ dirty_dump_log1(LH, {K, Terms}) ->
 dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
+
+escape_routing_key(K) when is_binary(K) ->
+    list_to_binary(escape_routing_key1(binary_to_list(K))).
+
+escape_routing_key1([]) ->
+    [];
+escape_routing_key1([Ch | Rest]) ->
+    Tail = escape_routing_key1(Rest),
+    case Ch of
+	$# -> "%23" ++ Tail;
+	$% -> "%25" ++ Tail;
+	$* -> "%2a" ++ Tail;
+	$. -> "%2e" ++ Tail;
+	_ -> [Ch | Tail]
+    end.
+
+emit_presence(#resource{virtual_host = VHostBin, kind = KindAtom, name = InstanceBin}, EventBin) ->
+    ClassBin = list_to_binary(atom_to_list(KindAtom)),
+    XName = #resource{virtual_host = VHostBin, kind = exchange, name = <<"amq.rabbitmq.presence">>},
+    RK = list_to_binary(["presence.", ClassBin, ".", escape_routing_key(InstanceBin),
+			 ".", EventBin]),
+    _Ignored = rabbit_exchange:simple_publish(false, false, XName, RK, undefined, <<>>),
+    ok.

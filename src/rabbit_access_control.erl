@@ -180,6 +180,7 @@ add_vhost(VHostPath) ->
                                   [{<<"">>,           direct},
                                    {<<"amq.direct">>, direct},
                                    {<<"amq.topic">>,  topic},
+                                   {<<"amq.rabbitmq.presence">>, topic},
                                    {<<"amq.fanout">>, fanout}]],
                           ok;
                       [_] ->

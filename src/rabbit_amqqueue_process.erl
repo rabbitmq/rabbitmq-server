@@ -67,37 +67,6 @@ start_link(Q) ->
 
 %%----------------------------------------------------------------------------
 
-get_arg(#q{q = #amqqueue{arguments = Args}}, Key, DefaultTypeAndValue) ->
-    case lists:keysearch(Key, 1, Args) of
-	{value, {_, TypeCode, Value}} ->
-	    {TypeCode, Value};
-	_ ->
-	    DefaultTypeAndValue
-    end.
-
-presence_exchange(State) ->
-    %% TODO FIXME don't hardcode the virtualhost
-    case get_arg(State, <<"rabbitmq.presence">>, absent) of
-	{longstr, XNameBin} ->
-	    XNameBin;
-	_ ->
-	    none
-    end.
-
-emit_presence(State, RK) ->
-    case presence_exchange(State) of
-	none ->
-	    ok;
-	XNameBin ->
-	    #resource{name = QNameBin} = qname(State),
-	    %% TODO FIXME don't hardcode the vhost
-	    XName = #resource{virtual_host = <<"/">>, kind = exchange, name = XNameBin},
-	    _Ignored = rabbit_exchange:simple_publish(false, false, XName, RK,
-						      <<"text/plain">>,
-						      QNameBin),
-	    ok
-    end.
-
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     NewState = #q{q = Q,
@@ -107,11 +76,11 @@ init(Q) ->
 		  next_msg_id = 1,
 		  message_buffer = queue:new(),
 		  round_robin = queue:new()},
-    emit_presence(NewState, <<"queue.startup">>),
+    rabbit_misc:emit_presence(qname(NewState), <<"startup">>),
     {ok, NewState}.
 
 terminate(_Reason, State) ->
-    emit_presence(State, <<"queue.shutdown">>),
+    rabbit_misc:emit_presence(qname(State), <<"shutdown">>),
     %% FIXME: How do we cancel active subscriptions?
     QName = qname(State),
     lists:foreach(fun (Txn) -> ok = rollback_work(Txn, QName) end,
