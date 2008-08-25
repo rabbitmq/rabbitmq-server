@@ -231,7 +231,7 @@ delete_binding(Binding) ->
     call_with_exchange_and_queue(
          Binding,
          fun (X,Q) -> ok = internal_delete_binding(Binding),
-                      ok = maybe_auto_delete(X)
+                      maybe_auto_delete(X)
          end).
 
 %% Must run within a transaction.
@@ -240,7 +240,7 @@ maybe_auto_delete(#exchange{auto_delete = false}) ->
 maybe_auto_delete(#exchange{name = ExchangeName, auto_delete = true}) ->
     case internal_delete(ExchangeName, true) of
         {error, in_use} -> ok;
-        ok -> ok
+        Other -> Other
     end.
 
 handlers_isempty([])    -> true;

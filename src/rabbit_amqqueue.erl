@@ -30,7 +30,7 @@
 -export([lookup/1, with/2, with_or_die/2, list_vhost_queues/1,
          stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4,
          commit/2, rollback/2]).
--export([add_binding/4, delete_binding/4, binding_forcibly_removed/2]).
+-export([add_binding/4, delete_binding/4]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, notify_down/2]).
@@ -84,7 +84,6 @@
 -spec(commit/2 :: (pid(), txn()) -> 'ok').
 -spec(rollback/2 :: (pid(), txn()) -> 'ok').
 -spec(notify_down/2 :: (amqqueue(), pid()) -> 'ok').
-%-spec(binding_forcibly_removed/2 :: (binding_spec(), queue_name()) -> 'ok').
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), bool()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
@@ -311,18 +310,6 @@ rollback(QPid, Txn) ->
 notify_down(#amqqueue{ pid = QPid }, ChPid) ->
     gen_server:call(QPid, {notify_down, ChPid}).
 
-binding_forcibly_removed(BindingSpec, QueueName) ->
-    exit(binding_forcibly_removed).
-    % rabbit_misc:execute_mnesia_transaction(
-    %       fun () ->
-    %               case mnesia:wread({amqqueue, QueueName}) of
-    %                   [] -> ok;
-    %                   [Q = #amqqueue{binding_specs = Specs}] ->
-    %                       store_queue(Q#amqqueue{binding_specs =
-    %                                              lists:delete(BindingSpec, Specs)})
-    %               end
-    %       end).
-
 claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
     gen_server:call(QPid, {claim_queue, ReaderPid}).
 
@@ -340,12 +327,9 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
 notify_sent(QPid, ChPid) ->
     gen_server:cast(QPid, {notify_sent, ChPid}).
 
-delete_bindings(Q = #amqqueue{}) ->
-    exit(delete_bindings).
-    % lists:foreach(fun (BindingSpec) ->
-    %                           ok = rabbit_exchange:delete_binding(
-    %                                  BindingSpec, Q)
-    %                   end, Specs).
+delete_routes(Q = #amqqueue{name = Name}) ->
+    Route = #route{binding = #binding{queue_name = Name, exchange_name = '_', key = '_'}},
+    ok = mnesia:delete_object(Route).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
@@ -360,9 +344,7 @@ internal_delete(QueueName) ->
       end).
 
 delete_temp(Q = #amqqueue{name = QueueName}) ->
-    ok = delete_bindings(Q),
-    %ok = rabbit_exchange:delete_binding(
-    %       default_binding_spec(QueueName), Q),
+    ok = delete_routes(Q),
     ok = mnesia:delete({amqqueue, QueueName}),
     ok.
 
