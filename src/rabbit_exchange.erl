@@ -29,7 +29,7 @@
 -include("rabbit_framing.hrl").
 
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
-         list_vhost_exchanges/1, list_exchange_bindings/1,
+         list_vhost_exchanges/1,
          simple_publish/6, simple_publish/3,
          route/2]).
 -export([add_binding/1, delete_binding/1]).
@@ -57,18 +57,14 @@
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
 -spec(list_vhost_exchanges/1 :: (vhost()) -> [exchange()]).
--spec(list_exchange_bindings/1 :: (exchange_name()) ->
-             [{queue_name(), routing_key(), amqp_table()}]).
 -spec(simple_publish/6 ::
       (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
              publish_res()).
 -spec(simple_publish/3 :: (bool(), bool(), message()) -> publish_res()).
 -spec(route/2 :: (exchange(), routing_key()) -> [pid()]).
-% -spec(add_binding/2 :: (binding_spec(), amqqueue()) ->
-%              'ok' | not_found() |
-%                  {'error', 'durability_settings_incompatible'}).
-% -spec(delete_binding/2 :: (binding_spec(), amqqueue()) ->
-%              'ok' | not_found()).
+-spec(add_binding/1 :: (binding()) -> 'ok' | not_found() |
+                                     {'error', 'durability_settings_incompatible'}).
+-spec(delete_binding/1 :: (binding()) -> 'ok' | not_found()).
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
              'ok' | not_found() | {'error', 'in_use'}).
@@ -148,21 +144,9 @@ list_vhost_exchanges(VHostPath) ->
     mnesia:dirty_match_object(
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
 
-list_exchange_bindings(Name) ->
-    exit(list_exchange_bindings).
-    % [{QueueName, RoutingKey, Arguments} ||
-    %     #binding{handlers = Handlers} <- bindings_for_exchange(Name),
-    %     #handler{binding_spec = #binding_spec{routing_key = RoutingKey,
-    %                           arguments = Arguments},
-    %          queue = QueueName} <- Handlers].
-
-% Maybe this named wrongly - it returns a route
-bindings_for_exchange(Name) ->
+routes_for_exchange(Name) ->
     qlc:e(qlc:q([R || R = #route{binding = #binding{exchange_name = N}} <- mnesia:table(route),
                       N == Name])).
-
-empty_handlers() ->
-    [].
 
 %% Usable by Erlang code that wants to publish messages.
 simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin) ->
@@ -246,14 +230,9 @@ add_binding(Binding) ->
 delete_binding(Binding) ->
     call_with_exchange_and_queue(
          Binding,
-         fun (X,Q) -> ok = internal_delete_binding(Binding)
+         fun (X,Q) -> ok = internal_delete_binding(Binding),
+                      ok = maybe_auto_delete(X)
          end).
-    % call_with_exchange(
-    %   ExchangeName,
-    %   fun (X) -> ok = internal_delete_binding(
-    %                     X, RoutingKey, make_handler(BindingSpec, Q)),
-    %              maybe_auto_delete(X)
-    %   end).
 
 %% Must run within a transaction.
 maybe_auto_delete(#exchange{auto_delete = false}) ->
@@ -321,33 +300,22 @@ delete(ExchangeName, IfUnused) ->
       fun () -> internal_delete(ExchangeName, IfUnused) end).
 
 internal_delete(ExchangeName, _IfUnused = true) ->
-    exit(internal_delete);
-    % Bindings = bindings_for_exchange(ExchangeName),
-    %     case Bindings of
-    %         [] -> do_internal_delete(ExchangeName, Bindings);
-    %         _ ->
-    %             case lists:all(fun (#binding{handlers = H}) -> handlers_isempty(H) end,
-    %                            Bindings) of
-    %                 true ->
-    %                     %% There are no handlers anywhere in any of the
-    %                     %% bindings for this exchange.
-    %                     do_internal_delete(ExchangeName, Bindings);
-    %                 false ->
-    %                     %% There was at least one real handler
-    %                     %% present. It's still in use.
-    %                     {error, in_use}
-    %             end
-    %     end;
+    Routes = routes_for_exchange(ExchangeName),
+    case Routes of
+        [] -> do_internal_delete(ExchangeName, Routes);
+        _ -> {error, in_use}
+    end;
+    
 internal_delete(ExchangeName, false) ->
-    do_internal_delete(ExchangeName, bindings_for_exchange(ExchangeName)).
+    do_internal_delete(ExchangeName, routes_for_exchange(ExchangeName)).
 
 % Don't know if iterating over a list in process memory is cool
 % Maybe we should iterate over the DB cursor?
-do_internal_delete(ExchangeName, Bindings) ->
+do_internal_delete(ExchangeName, Routes) ->
     case mnesia:wread({exchange, ExchangeName}) of
             [] -> {error, not_found};
             _ ->
-                lists:foreach(fun (B) -> ok = mnesia:delete_object(B) end, Bindings),
+                lists:foreach(fun (R) -> ok = mnesia:delete_object(R) end, Routes),
                 ok = mnesia:delete({durable_exchanges, ExchangeName}),
                 ok = mnesia:delete({exchange, ExchangeName})
     end.

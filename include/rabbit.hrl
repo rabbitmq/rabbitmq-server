@@ -78,6 +78,7 @@
                 name         :: name()}).
 -type(queue_name() :: r('queue')).
 -type(exchange_name() :: r('exchange')).
+-type(key() :: binary()).
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
@@ -94,6 +95,10 @@
                 durable     :: bool(),
                 auto_delete :: bool(),
                 arguments   :: amqp_table()}).
+-type(binding() ::
+      #binding{exchange_name    :: exchange_name(),
+               queue_name       :: queue_name(),
+               key              :: key()}).
 %% TODO: make this more precise by tying specific class_ids to
 %% specific properties
 -type(undecoded_content() ::
