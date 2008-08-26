@@ -27,7 +27,7 @@
 
 -behaviour(application).
 
--export([start/0, stop/0, stop_and_halt/0, status/0, reopen_logs/0, reopen_logs/1]).
+-export([start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/0, rotate_logs/1]).
 
 -export([start/2, stop/1]).
 
@@ -50,8 +50,8 @@
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
--spec(reopen_logs/0 :: () -> 'ok').
--spec(reopen_logs/1 :: name() -> 'ok' | {'error', 'cannot_append_logfile'}).
+-spec(rotate_logs/0 :: () -> 'ok').
+-spec(rotate_logs/1 :: name() -> 'ok' | {'error', 'cannot_append_logfile'}).
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
               {nodes, [node()]} |
@@ -88,14 +88,14 @@ status() ->
     [{running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
 
-reopen_logs() ->
-    ok = reopen_logs(error_log_location(), [], main_log),
-    ok = reopen_logs(sasl_log_location(), [], sasl_log).
+rotate_logs() ->
+    ok = rotate_logs(error_log_location(wrapper), [], main_log),
+    ok = rotate_logs(sasl_log_location(), [], sasl_log).
 
-reopen_logs(Suffix) ->
+rotate_logs(Suffix) ->
     LSuffix = binary_to_list(Suffix),
-    case reopen_logs(error_log_location(), LSuffix, main_log) of
-        ok    -> reopen_logs(sasl_log_location(), LSuffix, sasl_log);
+    case rotate_logs(error_log_location(wrapper), LSuffix, main_log) of
+        ok    -> rotate_logs(sasl_log_location(), LSuffix, sasl_log);
         Error -> Error
     end.
 
@@ -176,7 +176,11 @@ start(normal, []) ->
                 {ok, DefaultVHost} = application:get_env(default_vhost),
                 ok = error_logger:add_report_handler(
                        rabbit_error_logger, [DefaultVHost]),
-                ok = start_builtin_amq_applications()
+                ok = start_builtin_amq_applications(),
+                ok = swap_handler(error_logger_file_h, rabbit_error_logger_file_h,
+                                  error_log_location(default)),
+                ok = swap_handler(sasl_report_file_h, rabbit_sasl_report_file_h,
+                                  sasl_log_location())
         end},
        {"TCP listeners",
         fun () ->
@@ -208,7 +212,7 @@ print_banner() ->
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     io:format("Logging to ~p~nSASL logging to ~p~n~n",
-              [error_log_location(), sasl_log_location()]).
+              [error_log_location(default), sasl_log_location()]).
 
 start_child(Mod) ->
     {ok,_} = supervisor:start_child(rabbit_sup,
@@ -260,8 +264,13 @@ ensure_working_log_config() ->
         _Filename -> ok
     end.
 
-error_log_location() ->
+error_log_location(default) ->
     case error_logger:logfile(filename) of
+        {error,no_log_file} -> tty;
+        File                -> File
+    end;
+error_log_location(wrapper) ->
+    case gen_event:call(error_logger, rabbit_error_logger_file_h, filename) of
         {error,no_log_file} -> tty;
         File                -> File
     end.
@@ -275,28 +284,24 @@ sasl_log_location() ->
         _                  -> undefined
     end.
 
-reopen_logs(File, Suffix,Swap) ->
+rotate_logs(File, Suffix, main_log) ->
+    rotate_logs(File, Suffix, rabbit_error_logger_file_h, rabbit_error_logger_file_h);
+rotate_logs(File, Suffix, sasl_log) ->
+    rotate_logs(File, Suffix, rabbit_sasl_report_file_h, rabbit_sasl_report_file_h).
+
+rotate_logs(File, Suffix, OldHandler, NewHandler) ->
     case File of
         undefined -> ok;
         tty       -> ok;
         _         -> case append_to_log_file(File, Suffix) of
-                         omit  -> swap_handler(Swap, File);
-                         ok    -> swap_handler(Swap, File);
+                         omit  -> swap_handler(OldHandler, NewHandler, File);
+                         ok    -> swap_handler(OldHandler, NewHandler, File);
                          Error -> Error
                      end
     end.
 
-swap_handler(main_log, File) ->
-    error_logger:swap_handler({logfile, File}),
-    error_logger:delete_report_handler(error_logger_file_h),
-    ok;
-swap_handler(sasl_log, File ) ->
-    gen_event:swap_handler(error_logger,
-                           {error_logger, swap},
-                           {sasl_report_file_h, File}),
-    gen_event:add_handler(error_logger, error_logger, []),
-    error_logger:delete_report_handler(sasl_report_file_h),
-    ok.
+swap_handler(Old, New, File) ->
+    gen_event:swap_handler(error_logger, {Old, swap}, {New, File}).
 
 append_to_log_file(File, Suffix) ->
     case file:read_file_info(File) of
