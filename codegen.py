@@ -47,7 +47,7 @@ erlangTypeMap = {
 
 erlangDefaultValueTypeConvMap = {
     bool : lambda x: str(x).lower(),
-    str : lambda x: "<<" + x + ">>",
+    str : lambda x: "<<\"" + x + "\">>",
     int : lambda x: str(x),
     float : lambda x: str(x)
 }
