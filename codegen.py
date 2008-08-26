@@ -45,11 +45,20 @@ erlangTypeMap = {
     'timestamp': 'timestamp',
 }
 
+# Coming up with a proper encoding of AMQP tables in JSON is too much
+# hassle at this stage. Given that the only default value we are
+# interested in is for the empty table, we only support that.
+def convertTable(d):
+    if len(d) == 0:
+        return "[]"
+    else: raise 'Non-empty table defaults not supported', d
+
 erlangDefaultValueTypeConvMap = {
     bool : lambda x: str(x).lower(),
     str : lambda x: "<<\"" + x + "\">>",
     int : lambda x: str(x),
-    float : lambda x: str(x)
+    float : lambda x: str(x),
+    dict: convertTable
 }
 
 def erlangize(s):
