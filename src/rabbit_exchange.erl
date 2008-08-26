@@ -182,8 +182,24 @@ simple_publish(Mandatory, Immediate,
 route(#exchange{name = Name, type = topic}, RoutingKey) ->
     route_internal(Name, RoutingKey, fun topic_matches/2);
 
+% This matches for the direct exchanges and tries to short-cut the routing table
+% for the default queue if that is what the user supplied
+route(#exchange{name = Name = #resource{name = <<>>}, type = direct}, RoutingKey) ->
+    case route_internal(Name, RoutingKey) of
+        [] -> route_internal(Name, RoutingKey, fun(X,Y) -> X == Y end);
+        Other -> Other
+    end;
+
 route(#exchange{name = Name, type = Type}, RoutingKey) ->
     route_internal(Name, RoutingKey, fun(X,Y) -> X == Y end).
+
+% This returns a list of QPids to route to.
+% Maybe this should be handled by a cursor instead.
+% This routes directly to queues, avoiding any lookup of routes
+route_internal(#resource{name = <<>>, virtual_host = VHostPath}, RoutingKey) ->
+    Query = qlc:q([QPid || #amqqueue{name = Queue, pid = QPid} <- mnesia:table(amqqueue),
+                           Queue == rabbit_misc:r(VHostPath, queue, RoutingKey)]),
+    mnesia:activity(async_dirty, fun() -> qlc:e(Query) end).
 
 % This returns a list of QPids to route to.
 % Maybe this should be handled by a cursor instead.
