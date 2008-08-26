@@ -137,7 +137,7 @@
 			{"id": 40,
 			 "arguments": [{"type": "shortstr", "name": "virtual-host", "default-value": "/"},
 				       {"type": "shortstr", "name": "capabilities", "default-value": ""},
-				       {"type": "bit", "name": "insist", "default-value": 0}],
+				       {"type": "bit", "name": "insist", "default-value": false}],
 			 "name": "open"},
 			{"id": 41,
 			 "arguments": [{"type": "shortstr", "name": "known-hosts", "default-value": ""}],
