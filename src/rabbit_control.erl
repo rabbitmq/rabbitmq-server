@@ -132,7 +132,7 @@ action(status, Node, []) ->
 
 action(rotate_logs, Node, []) ->
     io:format("Reopening logs for node ~p ...", [Node]),
-    call(Node, {rabbit, rotate_logs, []});
+    call(Node, {rabbit, rotate_logs, [""]});
 action(rotate_logs, Node, Args = [Suffix]) ->
     io:format("Rotating logs to files with suffix ~p ...", [Suffix]),
     call(Node, {rabbit, rotate_logs, Args});

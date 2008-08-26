@@ -26,6 +26,7 @@
 -module(rabbit_misc).
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, protocol_error/3, protocol_error/4]).
@@ -41,6 +42,7 @@
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
+-export([append_file/2]).
 
 -import(mnesia).
 -import(lists).
@@ -92,6 +94,7 @@
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
+-spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
 
 -endif.
 
@@ -333,3 +336,21 @@ dirty_dump_log1(LH, {K, Terms}) ->
 dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
+
+
+append_file(File, Suffix) ->
+    case catch file:read_file_info(File) of
+        {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
+        {error, enoent} -> ok;
+        {error, Error}  -> {error, {cannot_read_logfile, Error}}
+    end.
+
+append_file(_, 0, _) ->
+    ok;
+append_file(_, _, "") ->
+    ok;
+append_file(File, _, Suffix) ->
+    case catch file:read_file(File) of
+        {ok, Data}     -> file:write_file([File, Suffix], Data, [append]);
+        {error, Error} -> {error, {cannot_append_logfile, Error}}
+    end.

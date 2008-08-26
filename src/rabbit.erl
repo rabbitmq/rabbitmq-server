@@ -27,7 +27,7 @@
 
 -behaviour(application).
 
--export([start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/0, rotate_logs/1]).
+-export([start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
 
 -export([start/2, stop/1]).
 
@@ -39,7 +39,6 @@
 
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
--include_lib("kernel/include/file.hrl").
 
 -define(APPS, [os_mon, mnesia, rabbit]).
 
@@ -50,8 +49,7 @@
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
--spec(rotate_logs/0 :: () -> 'ok').
--spec(rotate_logs/1 :: name() -> 'ok' | {'error', 'cannot_append_logfile'}).
+-spec(rotate_logs/1 :: name() -> 'ok' | {'error', any()}).
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
               {nodes, [node()]} |
@@ -88,16 +86,11 @@ status() ->
     [{running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
 
-rotate_logs() ->
-    ok = rotate_logs(error_log_location(wrapper), [], main_log),
-    ok = rotate_logs(sasl_log_location(), [], sasl_log).
-
-rotate_logs(Suffix) ->
-    LSuffix = binary_to_list(Suffix),
-    case rotate_logs(error_log_location(wrapper), LSuffix, main_log) of
-        ok    -> rotate_logs(sasl_log_location(), LSuffix, sasl_log);
-        Error -> Error
-    end.
+rotate_logs(BinarySuffix) ->
+    Suffix = binary_to_list(BinarySuffix),
+    log_rotation_result(
+      rotate_logs(error_log_location(wrapper), Suffix, rabbit_error_logger_file_h),
+      rotate_logs(sasl_log_location(), Suffix, rabbit_sasl_report_file_h)).
 
 %%--------------------------------------------------------------------
 
@@ -177,10 +170,14 @@ start(normal, []) ->
                 ok = error_logger:add_report_handler(
                        rabbit_error_logger, [DefaultVHost]),
                 ok = start_builtin_amq_applications(),
-                ok = swap_handler(error_logger_file_h, rabbit_error_logger_file_h,
-                                  error_log_location(default)),
-                ok = swap_handler(sasl_report_file_h, rabbit_sasl_report_file_h,
-                                  sasl_log_location())
+                %% Swap default handlers with rabbit wrappers
+                %% to simplify swapping of log handlers later
+                ok = rotate_logs(error_log_location(default), "",
+                                 error_logger_file_h,
+                                 rabbit_error_logger_file_h),
+                ok = rotate_logs(sasl_log_location(), "",
+                                 sasl_report_file_h,
+                                 rabbit_sasl_report_file_h)
         end},
        {"TCP listeners",
         fun () ->
@@ -284,37 +281,25 @@ sasl_log_location() ->
         _                  -> undefined
     end.
 
-rotate_logs(File, Suffix, main_log) ->
-    rotate_logs(File, Suffix, rabbit_error_logger_file_h, rabbit_error_logger_file_h);
-rotate_logs(File, Suffix, sasl_log) ->
-    rotate_logs(File, Suffix, rabbit_sasl_report_file_h, rabbit_sasl_report_file_h).
+rotate_logs(File, Suffix, Handler) ->
+    rotate_logs(File, Suffix, Handler, Handler).
 
 rotate_logs(File, Suffix, OldHandler, NewHandler) ->
     case File of
         undefined -> ok;
         tty       -> ok;
-        _         -> case append_to_log_file(File, Suffix) of
-                         omit  -> swap_handler(OldHandler, NewHandler, File);
-                         ok    -> swap_handler(OldHandler, NewHandler, File);
-                         Error -> Error
-                     end
+        _         -> gen_event:swap_handler(
+                       error_logger,
+                       {OldHandler, swap},
+                       {NewHandler, {File, Suffix}})
     end.
 
-swap_handler(Old, New, File) ->
-    gen_event:swap_handler(error_logger, {Old, swap}, {New, File}).
-
-append_to_log_file(File, Suffix) ->
-    case file:read_file_info(File) of
-        {ok, FInfo} -> append_file(File, FInfo#file_info.size, Suffix);
-        {error, _}  -> ok
-    end.
-
-append_file(_, 0, _) ->
-    omit;
-append_file(_, _, []) ->
-    omit;
-append_file(File, _, Suffix) ->
-    case file:read_file(File) of
-        {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
-        {error, _} -> {error, cannot_append_logfile}
-    end.
+log_rotation_result({error, MainLogError}, {error, SaslLogError}) ->
+    {error, {{cannot_rotate_main_logs, MainLogError},
+	     {cannot_rotate_sasl_logs, SaslLogError}}};
+log_rotation_result({error, MainLogError}, ok) ->
+    {error, {cannot_rotate_main_logs, MainLogError}};
+log_rotation_result(ok, {error, SaslLogError}) ->
+    {error, {cannot_rotate_sasl_logs, SaslLogError}};
+log_rotation_result(ok, ok) ->
+    ok.

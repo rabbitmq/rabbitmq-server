@@ -132,7 +132,7 @@ default Erlang node:
 Append current logs' content to the files with ".1" suffix and reopen
 them:
 
-    rabbitmqctl reopen_logs .1
+    rabbitmqctl rotate_logs .1
 
 =head1 SEE ALSO
 
