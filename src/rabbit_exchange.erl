@@ -259,13 +259,6 @@ maybe_auto_delete(#exchange{name = ExchangeName, auto_delete = true}) ->
         Other -> Other
     end.
 
-handlers_isempty([])    -> true;
-handlers_isempty([_|_]) -> false.
-
-extend_handlers(Handlers, Handler) -> [Handler | Handlers].
-
-delete_handler(Handlers, Handler) -> lists:delete(Handler, Handlers).
-
 reverse_binding(#binding{exchange_name = Exchange, key = Key, queue_name = Queue}) ->
     #reverse_binding{exchange_name = Exchange, key = Key, queue_name = Queue}.
 
