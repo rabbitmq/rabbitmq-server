@@ -29,11 +29,11 @@
 
 -export([init/1, handle_event/2, handle_call/2, handle_info/2, terminate/2, code_change/3]).
 
-%% rabbit_error_logger_file_h is a wrapper around error_logger_file_h
+%% rabbit_error_logger_file_h is a wrapper around the error_logger_file_h
 %% module because the original's init/1 does not match properly
 %% with the result of closing the old handler when swapping handlers.
 %% The first init/1 additionally allows for simple log rotation
-%% when suffix is not ""
+%% when the suffix is not the empty string.
 
 %% Used only when swapping handlers in log rotation
 init({{File, Suffix}, []}) ->

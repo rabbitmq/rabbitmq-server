@@ -171,7 +171,7 @@ start(normal, []) ->
                        rabbit_error_logger, [DefaultVHost]),
                 ok = start_builtin_amq_applications(),
                 %% Swap default handlers with rabbit wrappers
-                %% to simplify swapping of log handlers later
+                %% to simplify the swapping of log handlers later
                 ok = rotate_logs(error_log_location(default), "",
                                  error_logger_file_h,
                                  rabbit_error_logger_file_h),
