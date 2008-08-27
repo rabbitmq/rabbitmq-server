@@ -20,6 +20,7 @@ scalable implementation of an AMQP broker.
 
 %define _libdir /usr/lib/erlang
 %define _docdir /usr/share/doc
+%define _mandir /usr/share/man
 %define _maindir $RPM_BUILD_ROOT%{_libdir}/lib/rabbitmq_server-%{main_version}
 %define package_name rabbitmq-server-dist
 
@@ -36,8 +37,10 @@ fi
 %build
 mkdir %{package_name}
 mkdir %{package_name}/sbin
+mkdir %{package_name}/man
 make install TARGET_DIR=`pwd`/%{package_name} \
              SBIN_DIR=`pwd`/%{package_name}/sbin \
+             MAN_DIR=`pwd`/%{package_name}/man
              VERSION=%{main_version}
 
 %install
@@ -45,6 +48,7 @@ mkdir -p %{_maindir}
 mkdir -p $RPM_BUILD_ROOT%{_docdir}/rabbitmq-server
 mkdir -p $RPM_BUILD_ROOT/etc/init.d
 mkdir -p $RPM_BUILD_ROOT/usr/sbin
+mkdir -p $RPM_BUILD_ROOT%{_mandir}
 
 mkdir -p $RPM_BUILD_ROOT/var/lib/rabbitmq/mnesia
 mkdir -p $RPM_BUILD_ROOT/var/log/rabbitmq
@@ -55,6 +59,7 @@ cp -r %{package_name}/src %{_maindir}
 cp -r %{package_name}/include %{_maindir}
 chmod 755  %{package_name}/sbin/*
 cp %{package_name}/sbin/* $RPM_BUILD_ROOT/usr/sbin/
+cp -r %{package_name}/man/* $RPM_BUILD_ROOT%{_mandir}/
 
 cp ../init.d $RPM_BUILD_ROOT/etc/init.d/rabbitmq-server
 chmod 775 $RPM_BUILD_ROOT/etc/init.d/rabbitmq-server
@@ -62,6 +67,8 @@ chmod 775 $RPM_BUILD_ROOT/etc/init.d/rabbitmq-server
 mv $RPM_BUILD_ROOT/usr/sbin/rabbitmqctl $RPM_BUILD_ROOT/usr/sbin/rabbitmqctl_real
 cp ../rabbitmqctl_wrapper $RPM_BUILD_ROOT/usr/sbin/rabbitmqctl
 chmod 755 $RPM_BUILD_ROOT/usr/sbin/rabbitmqctl
+
+cp %{buildroot}%{_mandir}/man1/rabbitmqctl.1.gz %{buildroot}%{_mandir}/man1/rabbitmqctl_real.1.gz
 
 %post
 # create rabbitmq group
@@ -107,10 +114,8 @@ fi
 %defattr(-,root,root)
 %{_libdir}/lib/rabbitmq_server-%{main_version}/
 %{_docdir}/rabbitmq-server/
-/usr/sbin/rabbitmq-server
-/usr/sbin/rabbitmq-multi
-/usr/sbin/rabbitmqctl
-/usr/sbin/rabbitmqctl_real
+%{_mandir}
+/usr/sbin
 /var/lib/rabbitmq
 /var/log/rabbitmq
 /etc/init.d/rabbitmq-server
@@ -119,7 +124,7 @@ fi
 rm -rf $RPM_BUILD_ROOT
 
 %changelog
-* Wed Jul 9 2008 Tony Garnock-Jones <tonyg@lshift.net> 1.4.0
+* Thu Jul 24 2008 Tony Garnock-Jones <tonyg@lshift.net> 1.4.0
 - New upstream release
 
 * Mon Mar 3 2008 Adrien Pierard <adrian@lshift.net> 1.3.0

@@ -15,6 +15,7 @@ dist:
 	rm -rf $(SOURCE_DIR)/scripts
 	rm -rf $(SOURCE_DIR)/codegen* $(SOURCE_DIR)/Makefile
 	rm -f $(SOURCE_DIR)/BUILD
+	rm -rf $(SOURCE_DIR)/docs
 
 	mv $(SOURCE_DIR) $(TARGET_DIR)
 	zip -r $(TARGET_ZIP).zip $(TARGET_DIR)

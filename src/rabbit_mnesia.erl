@@ -241,7 +241,6 @@ init_db(ClusterNodes) ->
                                    ClusterNodes}})
             end;
         {ok, [_|_]} ->
-            ok = ensure_schema_integrity(),
             ok = wait_for_tables(),
             ok = create_local_table_copies(
                    case IsDiskNode of
@@ -324,7 +323,8 @@ create_local_table_copy(Tab, Type) ->
         end,
     ok.
 
-wait_for_tables() ->
+wait_for_tables() -> 
+    ok = ensure_schema_integrity(),
     case mnesia:wait_for_tables(table_names(), 30000) of
         ok -> ok;
         {timeout, BadTabs} ->

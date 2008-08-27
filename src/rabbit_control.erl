@@ -88,13 +88,6 @@ Available commands:
   list_user_vhosts <UserName>
   list_vhost_users <VHostPath>
 
-  set_permissions  <UserName> <VHostPath> <RealmName> [<Permission> ...]
-      Permissions management. The available permissions are 'passive',
-      'active', 'write' and 'read', corresponding to the permissions
-      referred to in AMQP's \"access.request\" message, or 'all' as an
-      abbreviation for all defined permission flags.
-  list_permissions <UserName> <VHostPath>
-
 <node> should be the name of the master node of the RabbitMQ cluster. It
 defaults to the node named \"rabbit\" on the local host. On a host named
 \"server.example.com\", the master node will usually be rabbit@server (unless

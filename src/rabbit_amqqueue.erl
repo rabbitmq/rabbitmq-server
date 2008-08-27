@@ -55,7 +55,7 @@
       {'error', 'queue_not_found' | 'exchange_not_found'}).
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
--spec(declare/4 :: (name(), bool(), bool(), amqp_table()) ->
+-spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
              amqqueue()).
 -spec(add_binding/4 ::
       (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
@@ -129,15 +129,15 @@ recover_durable_queues() ->
               ok
       end).
 
-declare(Resource = #resource{}, Durable, AutoDelete, Args) ->
-    Q = start_queue_process(#amqqueue{name = Resource,
+declare(QueueName, Durable, AutoDelete, Args) ->
+    Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
                                       arguments = Args,
                                       pid = none}),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   case mnesia:wread({amqqueue, Resource}) of
+                   case mnesia:wread({amqqueue, QueueName}) of
                        [] -> ok = recover_queue(Q),
                              Q;
                        [ExistingQ] -> ExistingQ
@@ -164,47 +164,7 @@ recover_queue(Q) ->
     ok = store_queue(Q),
     %ok = recover_bindings(Q),
     ok.
-
-% default_binding_spec(#resource{virtual_host = VHostPath, name = Name}) ->
-%     #binding{exchange_name = <<"">>,
-%              key = Name,
-%              queue_name = Name}.
-    % #binding_spec{exchange_name = rabbit_misc:r(VHostPath,exchange,<<"">>),
-    %                   routing_key = Name,
-    %                   arguments = []}.
-
-% recover_bindings(Q = #amqqueue{name = QueueName}) ->
-%     io:format("Q was ~p~n",[Q]),
-%     ok = rabbit_exchange:add_binding(default_binding_spec(QueueName)).
-    %     lists:foreach(fun (B) ->
-    %                           ok = rabbit_exchange:add_binding(B, Q)
-    %                   end, Specs),
-    %     ok.
-
-modify_bindings(Queue = #resource{}, X = #resource{}, RoutingKey, Arguments,
-                SpecPresentFun, SpecAbsentFun) ->
-    exit(modify_bindings).
-    % rabbit_misc:execute_mnesia_transaction(
-    %       fun () ->
-    %               case mnesia:wread({amqqueue, Queue}) of
-    %                   [Q = #amqqueue{binding_specs = Specs0}] ->
-    %                       Spec = #binding_spec{exchange_name = X,
-    %                                            routing_key = RoutingKey,
-    %                                            arguments = Arguments},
-    %                       case (case lists:member(Spec, Specs0) of
-    %                                 true  -> SpecPresentFun;
-    %                                 false -> SpecAbsentFun
-    %                             end)(Q, Spec) of
-    %                           {ok, #amqqueue{binding_specs = Specs}} ->
-    %                               {ok, length(Specs)};
-    %                           {error, not_found} ->
-    %                               {error, exchange_not_found};
-    %                           Other -> Other
-    %                       end;
-    %                   [] -> {error, queue_not_found}
-    %               end
-    %       end).
-
+    
 update_bindings(Q = #amqqueue{}, Spec,
                 UpdateSpecFun, UpdateExchangeFun) ->
     exit(update_bindings).
@@ -337,7 +297,7 @@ internal_delete(QueueName) ->
               case mnesia:wread({amqqueue, QueueName}) of
                   [] -> {error, not_found};
                   [Q] ->
-                      ok = delete_temp(Q),
+                      ok = delete_queue(Q),
                       ok = mnesia:delete({durable_queues, QueueName}),
                       ok
               end
@@ -362,8 +322,8 @@ on_node_down(Node) ->
                             node(Pid) == Node]))
       end).
 
-pseudo_queue(NameBin, Pid) ->
-    #amqqueue{name = NameBin,
+pseudo_queue(QueueName, Pid) ->
+    #amqqueue{name = QueueName,
               durable = false,
               auto_delete = false,
               arguments = [],

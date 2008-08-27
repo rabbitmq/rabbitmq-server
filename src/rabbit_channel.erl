@@ -153,7 +153,8 @@ ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
 return_queue_declare_ok(State, NoWait, Q) ->
-    NewState = State#ch{most_recently_declared_queue = Q#amqqueue.name},
+    NewState = State#ch{most_recently_declared_queue =
+                        (Q#amqqueue.name)#resource.name},
     case NoWait of
         true  -> {noreply, NewState};
         false ->
@@ -161,8 +162,7 @@ return_queue_declare_ok(State, NoWait, Q) ->
                 rabbit_misc:with_exit_handler(
                   fun () -> {ok, Q#amqqueue.name, 0, 0} end,
                   fun () -> rabbit_amqqueue:stat(Q) end),
-            QueueName = ActualName#resource.name,
-            Reply = #'queue.declare_ok'{queue = QueueName,
+            Reply = #'queue.declare_ok'{queue = ActualName#resource.name,
                                         message_count = MessageCount,
                                         consumer_count = ConsumerCount},
             {reply, Reply, NewState}
@@ -171,7 +171,9 @@ return_queue_declare_ok(State, NoWait, Q) ->
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
       not_allowed, "no previously declared queue", []);
-expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = MRDQ }) -> MRDQ;
+expand_queue_name_shortcut(<<>>, #ch{ virtual_host = VHostPath,
+                                      most_recently_declared_queue = MRDQ }) ->
+    rabbit_misc:r(VHostPath, queue, MRDQ);
 expand_queue_name_shortcut(QueueNameBin, #ch{ virtual_host = VHostPath }) ->
     rabbit_misc:r(VHostPath, queue, QueueNameBin).
 
@@ -227,7 +229,8 @@ handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:shutdown(WriterPid),
     stop;
 
-handle_method(#'access.request'{},_, State) -> {reply, #'access.request_ok'{ticket = 1}, State};
+handle_method(#'access.request'{},_, State) ->
+    {reply, #'access.request_ok'{ticket = 1}, State};
 
 handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                                routing_key = RoutingKey,
@@ -336,7 +339,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                                                   ConsumerMapping)}};
                 {error, queue_owned_by_another_connection} ->
                     %% The spec is silent on which exception to use
-                    %% here. This seems reasonable? 
+                    %% here. This seems reasonable?
                     %% FIXME: check this
 
                     rabbit_misc:protocol_error(
@@ -450,7 +453,6 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   arguments = Args},
               _, State = #ch{ virtual_host = VHostPath }) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
-    %% FIXME: clarify spec as per declare wrt differing realms
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
@@ -520,7 +522,6 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                 end,
                 Q
         end,
-    %% FIXME: clarify spec as per declare wrt differing realms
     Q = case rabbit_amqqueue:with(
                rabbit_misc:r(VHostPath, queue, QueueNameBin),
                Finish) of
@@ -530,10 +531,9 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                         <<>>  -> rabbit_misc:binstring_guid("amq.gen");
                         Other -> check_name('queue', Other)
                     end,
-                Finish(rabbit_amqqueue:declare(rabbit_misc:r(VHostPath, queue, ActualNameBin),
-                                               Durable,
-                                               AutoDelete,
-                                               Args));
+		QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
+                Finish(rabbit_amqqueue:declare(QueueName,
+                                               Durable, AutoDelete, Args));
             Other -> Other
         end,
     return_queue_declare_ok(State, NoWait, Q);
@@ -550,7 +550,8 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
                               if_unused = IfUnused,
                               if_empty = IfEmpty,
                               nowait = NoWait
-                             },_, State) ->
+                             },
+              _, State) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     case rabbit_amqqueue:with_or_die(
            QueueName,

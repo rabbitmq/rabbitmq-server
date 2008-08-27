@@ -50,7 +50,7 @@
       not_found() | {'error', 'unroutable' | 'not_delivered'}).
 
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 :: (name(), exchange_type(), bool(), bool(),
+-spec(declare/5 :: (exchange_name(), exchange_type(), bool(), bool(),
                     amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
 -spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
@@ -91,15 +91,15 @@ recover_durable_exchanges() ->
                            end, ok, durable_exchanges)
       end).
 
-declare(Resource = #resource{}, Type, Durable, AutoDelete, Args) ->
-    Exchange = #exchange{name = Resource,
+declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
+    Exchange = #exchange{name = ExchangeName,
                          type = Type,
                          durable = Durable,
                          auto_delete = AutoDelete,
                          arguments = Args},
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:wread({exchange, Resource}) of
+              case mnesia:wread({exchange, ExchangeName}) of
                   [] -> ok = mnesia:write(Exchange),
                         if Durable ->
                                 ok = mnesia:write(
@@ -132,12 +132,12 @@ assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
 lookup(Name) ->
     rabbit_misc:dirty_read({exchange, Name}).
 
-lookup_or_die(Resource = #resource{name = Name}) ->
-    case lookup(Resource) of
+lookup_or_die(Name) ->
+    case lookup(Name) of
         {ok, X} -> X;
         {error, not_found} ->
             rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(#resource{virtual_host = <<"/">>, kind = exchange, name = Name})])
+              not_found, "no ~s", [rabbit_misc:rs(Name)])
     end.
 
 list_vhost_exchanges(VHostPath) ->
