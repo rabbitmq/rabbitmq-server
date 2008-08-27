@@ -1,13 +1,12 @@
-/var/log/rabbitmq/*.log /var/log/rabbitmq/*.err {
+/var/log/rabbitmq/*.log {
         weekly
         missingok
-        rotate 10
+        rotate 20
         compress
         delaycompress
         notifempty
-        create 644 rabbitmq rabbitmq
         sharedscripts
         postrotate
-            /usr/sbin/rabbitmqctl reopen_logs
+            /usr/sbin/rabbitmq-multi rotate_logs_all > /dev/null 2>&1
         endscript
 }

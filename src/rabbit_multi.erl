@@ -69,8 +69,9 @@ usage() ->
 
 Available commands:
 
-  start_all <NodeCount> - start a local cluster of RabbitMQ nodes.
-  stop_all              - stops all local RabbitMQ nodes.
+  start_all <NodeCount>    - start a local cluster of RabbitMQ nodes.
+  stop_all                 - stops all local RabbitMQ nodes.
+  rotate_logs_all [Suffix] - rotate logs for all local RabbitMQ nodes.
 "),
     halt(3).
 
@@ -89,11 +90,19 @@ action(start_all, [NodeCount], RpcTimeout) ->
 
 action(stop_all, [], RpcTimeout) ->
     io:format("Stopping all nodes...~n", []),
-    case read_pids_file() of
-        []       -> throw(no_nodes_running);
-        NodePids -> stop_nodes(NodePids, RpcTimeout),
-                    delete_pids_file()
-    end.
+    call_all_nodes(fun(NodePids) ->
+                           stop_nodes(NodePids, RpcTimeout),
+                           delete_pids_file() end);
+
+action(rotate_logs_all, [], RpcTimeout) ->
+    action(rotate_logs_all, [""], RpcTimeout);
+
+action(rotate_logs_all, [Suffix], RpcTimeout) ->
+    io:format("Rotating logs for all nodes...~n", []),
+    call_all_nodes(fun(NodePids) ->
+                           rotate_logs(NodePids,
+                                       list_to_binary(Suffix),
+                                       RpcTimeout) end).
 
 %% PNodePid is the list of PIDs
 %% Running is a boolean exhibiting success at some moment
@@ -271,6 +280,21 @@ is_dead(Pid) ->
                                  _             -> true
                              end
                      end}]).
+
+rotate_logs([], _, _) -> ok;
+rotate_logs([{Node, _} | Rest], BinarySuffix, RpcTimeout) ->
+    io:format("Rotating logs for node ~p~n", [Node]),
+    case rpc:call(Node, rabbit, rotate_logs, [BinarySuffix], RpcTimeout) of
+        {badrpc, _} -> io:format("timeout"),
+                      throw(rotate_logs_failed);
+        ok          -> rotate_logs(Rest, BinarySuffix, RpcTimeout)
+    end.
+
+call_all_nodes(Func) ->
+    case read_pids_file() of
+        []       -> throw(no_nodes_running);
+        NodePids -> Func(NodePids)
+    end.
 
 getenv(Var) ->
     case os:getenv(Var) of
