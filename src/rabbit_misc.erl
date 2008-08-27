@@ -342,7 +342,7 @@ append_file(File, Suffix) ->
     case catch file:read_file_info(File) of
         {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
         {error, enoent} -> ok;
-        {error, Error}  -> {error, {cannot_read_logfile, Error}}
+        Error           -> Error
     end.
 
 append_file(_, 0, _) ->
@@ -350,7 +350,7 @@ append_file(_, 0, _) ->
 append_file(_, _, "") ->
     ok;
 append_file(File, _, Suffix) ->
-    case catch file:read_file(File) of
-        {ok, Data}     -> file:write_file([File, Suffix], Data, [append]);
-        {error, Error} -> {error, {cannot_append_logfile, Error}}
+    case file:read_file(File) of
+        {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
+        Error      -> Error
     end.

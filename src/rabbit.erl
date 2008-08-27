@@ -261,15 +261,13 @@ ensure_working_log_config() ->
         _Filename -> ok
     end.
 
-error_log_location(default) ->
-    case error_logger:logfile(filename) of
-        {error,no_log_file} -> tty;
-        File                -> File
-    end;
-error_log_location(wrapper) ->
-    case gen_event:call(error_logger, rabbit_error_logger_file_h, filename) of
-        {error,no_log_file} -> tty;
-        File                -> File
+error_log_location(Type) ->
+    case case Type of
+             default -> error_logger:logfile(filename);
+             wrapper -> gen_event:call(error_logger, rabbit_error_logger_file_h, filename)
+         end of 
+        {error, no_log_file} -> tty;
+        File                 -> File
     end.
 
 sasl_log_location() ->
