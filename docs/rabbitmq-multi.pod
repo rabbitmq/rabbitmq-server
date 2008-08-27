@@ -26,6 +26,9 @@ start_all I<count>
 stop_all
     stop all local RabbitMQ nodes
 
+rotate_logs_all
+    rotate log files for all local RabbitMQ nodes
+
 =head1 EXAMPLES
 
 Start 3 local RabbitMQ nodes with unique, sequential port numbers:
