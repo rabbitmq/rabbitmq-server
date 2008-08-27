@@ -66,12 +66,13 @@ force_reset
     It should only be used as a last resort if the database or cluster
     configuration has been corrupted.
     
-reopen_logs [suffix]
-    instruct the RabbitMQ node to close and reopen the log files.
-    When the I<suffix> value is provided, the RabbitMQ broker will
-    attempt to append the current contents of the log file to the file
-    with name composed of the original name and the suffix. It will
-    create a new file if such a file does not already exist.
+rotate_logs [suffix]
+    instruct the RabbitMQ node to rotate the log files. The RabbitMQ
+    broker will attempt to append the current contents of the log file
+    to the file with name composed of the original name and the suffix.
+    It will create a new file if such a file does not already exist.
+    When no I<suffix> is specified, the log file is simply reopened;
+    no rotation takes place. 
     This command might be helpful when you are e.g. writing your own
     logrotate script and you do not want to restart the RabbitMQ node.
     
@@ -131,7 +132,7 @@ default Erlang node:
 Append current logs' content to the files with ".1" suffix and reopen
 them:
 
-    rabbitmqctl reopen_logs .1
+    rabbitmqctl rotate_logs .1
 
 =head1 SEE ALSO
 
