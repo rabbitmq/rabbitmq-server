@@ -210,7 +210,10 @@ route_internal(Exchange, RoutingKey, MatchFun) ->
                            #amqqueue{name = Queue, pid = QPid} <- mnesia:table(amqqueue),
                            ExchangeName == Exchange,
                            QueueName == Queue,
-                           MatchFun(BindingKey, RoutingKey)]),
+                           MatchFun(BindingKey, RoutingKey)],
+                           % This is put in as a quick and dirty way to preventing double routing
+                           % but it is probably very expensive to maintain
+                           {unique, true}),
     mnesia:activity(async_dirty, fun() -> qlc:e(Query) end).
 
 delivery_key_for_type(fanout, Name, _RoutingKey) ->
