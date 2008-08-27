@@ -15,6 +15,7 @@ NAME=rabbitmq-server
 DESC=rabbitmq-server
 USER=rabbitmq
 NODE_COUNT=1
+ROTATE_SUFFIX=
 
 test -x $DAEMON || exit 0
 
@@ -51,6 +52,14 @@ stop_rabbitmq () {
     set -e
 }
 
+rotate_logs_rabbitmq() {
+    set +e
+    su $USER -s /bin/sh -c "$DAEMON rotate_logs_all ${ROTATE_SUFFIX}" 2>&1
+    RETVAL=$?
+    set -e
+
+}
+
 case "$1" in
   start)
 	echo -n "Starting $DESC: "
@@ -62,6 +71,10 @@ case "$1" in
 	stop_rabbitmq
 	echo "$NAME."
 	;;
+  rotate-logs)
+    echo -n "Rotating log files for $DESC: "
+    rotate_logs_rabbitmq
+    ;;
   force-reload|restart)
 	echo -n "Restarting $DESC: "
 	stop_rabbitmq
@@ -69,7 +82,7 @@ case "$1" in
 	echo "$NAME."
 	;;
   *)
-	echo "Usage: $0 {start|stop|restart|force-reload}" >&2
+	echo "Usage: $0 {start|stop|rotate-logs|restart|force-reload}" >&2
 	exit 1
 	;;
 esac

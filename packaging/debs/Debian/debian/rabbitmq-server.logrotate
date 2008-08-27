@@ -7,6 +7,6 @@
         notifempty
         sharedscripts
         postrotate
-            /usr/sbin/rabbitmq-multi rotate_logs_all > /dev/null 2>&1
+            /etc/init.d/rabbitmq-server rotate-logs
         endscript
 }
