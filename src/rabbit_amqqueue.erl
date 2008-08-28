@@ -287,9 +287,16 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
 notify_sent(QPid, ChPid) ->
     gen_server:cast(QPid, {notify_sent, ChPid}).
 
+% Should all of the route and binding management not be refactored to it's own module
+% Especially seeing as unbind will have to be implemented for 0.91 ?
+% This kind of forward/reverse tuple management could be re-used
 delete_routes(Q = #amqqueue{name = Name}) ->
     Route = #route{binding = #binding{queue_name = Name, exchange_name = '_', key = '_'}},
-    ok = mnesia:delete_object(Route).
+    ReverseRoute = #reverse_route{reverse_binding = #reverse_binding{queue_name = Name, 
+                                                                     exchange_name = '_', 
+                                                                     key = '_'}},
+    ok = mnesia:delete_object(Route),
+    ok = mnesia:delete_object(ReverseRoute).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
