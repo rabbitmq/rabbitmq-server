@@ -78,6 +78,7 @@ recover() ->
     ok = recover_durable_exchanges(),
     ok.
 
+% NOTE to myself - this should be unnecessary because the default exhange should be durable anyway
 recover_default_exchange() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () -> mnesia:write(#exchange{name = <<"">>}) end).
