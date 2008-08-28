@@ -34,6 +34,7 @@
          route/2]).
 -export([add_binding/1, delete_binding/1]).
 -export([delete/2]).
+-export([delete_bindings/1]).
 -export([check_type/1, assert_type/2, topic_matches/2]).
 
 -import(mnesia).
@@ -65,6 +66,7 @@
 -spec(add_binding/1 :: (binding()) -> 'ok' | not_found() |
                                      {'error', 'durability_settings_incompatible'}).
 -spec(delete_binding/1 :: (binding()) -> 'ok' | not_found()).
+-spec(delete_bindings/1 :: (amqqueue()) -> 'ok' | not_found()).
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
              'ok' | not_found() | {'error', 'in_use'}).
@@ -216,6 +218,15 @@ route_internal(Exchange, RoutingKey, MatchFun) ->
                            % but it is probably very expensive to maintain
                            {unique, true}),
     mnesia:activity(async_dirty, fun() -> qlc:e(Query) end).
+    
+    
+% Should all of the route and binding management not be refactored to it's own module
+% Especially seeing as unbind will have to be implemented for 0.91 ?
+delete_routes(Q = #amqqueue{name = Name}) ->
+    Binding = #binding{queue_name = Name, exchange_name = '_', key = '_'},
+    {Route, ReverseRoute} = route_with_reverse(Binding),
+    ok = mnesia:delete_object(Route),
+    ok = mnesia:delete_object(ReverseRoute).
 
 delivery_key_for_type(fanout, Name, _RoutingKey) ->
     {Name, fanout};
@@ -254,6 +265,9 @@ delete_binding(Binding) ->
                       maybe_auto_delete(X)
          end).
 
+delete_bindings(Q = #amqqueue{}) ->
+    delete_routes(Q).
+
 %% Must run within a transaction.
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     ok;
@@ -268,18 +282,18 @@ reverse_binding(#binding{exchange_name = Exchange, key = Key, queue_name = Queue
 
 %% Must run within a transaction.
 internal_add_binding(Binding) ->
-    [ok,ok] = [mnesia:write(R) || R <- route_with_reverse(Binding)],
+    [ok,ok] = [mnesia:write(R) || R <- tuple_to_list(route_with_reverse(Binding))],
     ok.
 
 %% Must run within a transaction.
 internal_delete_binding(Binding) ->
-    [ok,ok] = [mnesia:delete_object(R) || R <- route_with_reverse(Binding)],
+    [ok,ok] = [mnesia:delete_object(R) || R <- tuple_to_list(route_with_reverse(Binding))],
     ok.
 
 route_with_reverse(Binding) ->
     Route = #route{ binding = Binding },
     ReverseRoute = #reverse_route{ reverse_binding = reverse_binding(Binding) },
-    [Route, ReverseRoute].
+    {Route, ReverseRoute}.
 
 split_topic_key(Key) ->
     {ok, KeySplit} = regexp:split(binary_to_list(Key), "\\."),
