@@ -71,8 +71,11 @@ rotate_logs [suffix]
     broker will attempt to append the current contents of the log file
     to the file with the name composed of the original name and the
     suffix. It will create a new file if such a file does not already
-    exist. When no I<suffix> is specified, the log file is simply
-    reopened; no rotation takes place. 
+    exist. When no I<suffix> is specified, the empty log file is
+    simply created at the original location; no rotation takes place.
+    When an error occurs while appending the contents of the old log
+    file, operation behaves in the same way as if no I<suffix> was
+    specified.
     This command might be helpful when you are e.g. writing your own
     logrotate script and you do not want to restart the RabbitMQ node.
     
