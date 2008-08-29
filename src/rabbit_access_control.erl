@@ -180,8 +180,8 @@ add_vhost(VHostPath) ->
                                   [{<<"">>,           direct},
                                    {<<"amq.direct">>, direct},
                                    {<<"amq.topic">>,  topic},
-                                   {<<"amq.rabbitmq.presence">>, topic},
-                                   {<<"amq.fanout">>, fanout}]],
+                                   {<<"amq.fanout">>, fanout},
+                                   {<<"amq.rabbitmq.presence">>, topic}]],
                           ok;
                       [_] ->
                           mnesia:abort({vhost_already_exists, VHostPath})

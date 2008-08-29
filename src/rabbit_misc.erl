@@ -350,10 +350,13 @@ escape_routing_key1([Ch | Rest]) ->
 	_ -> [Ch | Tail]
     end.
 
-emit_presence(#resource{virtual_host = VHostBin, kind = KindAtom, name = InstanceBin}, EventBin) ->
+emit_presence(Resource = #resource{kind = KindAtom, name = InstanceBin},
+              EventBin) ->
     ClassBin = list_to_binary(atom_to_list(KindAtom)),
-    XName = #resource{virtual_host = VHostBin, kind = exchange, name = <<"amq.rabbitmq.presence">>},
-    RK = list_to_binary(["presence.", ClassBin, ".", escape_routing_key(InstanceBin),
+    XName = r(Resource, exchange, <<"amq.rabbitmq.presence">>),
+    RK = list_to_binary(["presence.", ClassBin,
+                         ".", escape_routing_key(InstanceBin),
 			 ".", EventBin]),
-    _Ignored = rabbit_exchange:simple_publish(false, false, XName, RK, undefined, <<>>),
+    _Ignored = rabbit_exchange:simple_publish(
+                 false, false, XName, RK, undefined, <<>>),
     ok.
