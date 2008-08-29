@@ -233,7 +233,7 @@ stop_node({Node, Pid}, RpcTimeout) ->
     rpc:call(Node, rabbit, stop_and_halt, []),
     case kill_wait(Pid, RpcTimeout, false) of
         false -> kill_wait(Pid, RpcTimeout, true);
-    	true  -> ok
+        true  -> ok
     end,
     io:format("OK~n", []).
 
