@@ -74,7 +74,7 @@ rotate_logs [suffix]
     exist. When no I<suffix> is specified, the empty log file is
     simply created at the original location; no rotation takes place.
     When an error occurs while appending the contents of the old log
-    file, operation behaves in the same way as if no I<suffix> was
+    file, the operation behaves in the same way as if no I<suffix> was
     specified.
     This command might be helpful when you are e.g. writing your own
     logrotate script and you do not want to restart the RabbitMQ node.
