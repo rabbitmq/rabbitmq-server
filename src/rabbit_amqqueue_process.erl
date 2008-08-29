@@ -70,12 +70,12 @@ start_link(Q) ->
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     NewState = #q{q = Q,
-		  owner = none,
-		  exclusive_consumer = none,
-		  has_had_consumers = false,
-		  next_msg_id = 1,
-		  message_buffer = queue:new(),
-		  round_robin = queue:new()},
+                  owner = none,
+                  exclusive_consumer = none,
+                  has_had_consumers = false,
+                  next_msg_id = 1,
+                  message_buffer = queue:new(),
+                  round_robin = queue:new()},
     rabbit_misc:emit_presence(qname(NewState), <<"startup">>),
     {ok, NewState}.
 

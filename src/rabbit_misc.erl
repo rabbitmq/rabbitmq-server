@@ -343,11 +343,11 @@ escape_routing_key1([]) ->
 escape_routing_key1([Ch | Rest]) ->
     Tail = escape_routing_key1(Rest),
     case Ch of
-	$# -> "%23" ++ Tail;
-	$% -> "%25" ++ Tail;
-	$* -> "%2a" ++ Tail;
-	$. -> "%2e" ++ Tail;
-	_ -> [Ch | Tail]
+        $# -> "%23" ++ Tail;
+        $% -> "%25" ++ Tail;
+        $* -> "%2a" ++ Tail;
+        $. -> "%2e" ++ Tail;
+        _ -> [Ch | Tail]
     end.
 
 emit_presence(Resource = #resource{kind = KindAtom, name = InstanceBin},
@@ -356,7 +356,7 @@ emit_presence(Resource = #resource{kind = KindAtom, name = InstanceBin},
     XName = r(Resource, exchange, <<"amq.rabbitmq.presence">>),
     RK = list_to_binary(["presence.", ClassBin,
                          ".", escape_routing_key(InstanceBin),
-			 ".", EventBin]),
+                         ".", EventBin]),
     _Ignored = rabbit_exchange:simple_publish(
                  false, false, XName, RK, undefined, <<>>),
     ok.
