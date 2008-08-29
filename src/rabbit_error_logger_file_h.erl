@@ -42,9 +42,9 @@ init({{File, Suffix}, []}) ->
         Error ->
             case init(File) of 
                 {ok, FInfo} ->
-                    error_logger:error_msg("Error occured while appending " ++
-                                           "~p log file to \"~s\":~n~p~n",
-                                           [File, [File, Suffix], Error]),
+                    rabbit_log:error("Error occured while appending " ++
+                                     "~p log file to \"~s\":~n~p~n",
+                                     [File, [File, Suffix], Error]),
                     io:format("~nOrignal log file could not be appended to " ++
                               "\"~s\"~n", [[File, Suffix]]),
                     {ok, FInfo};
