@@ -39,13 +39,23 @@
 %% log rotation
 init({{File, Suffix}, []}) ->
     case rabbit_misc:append_file(File, Suffix) of
-        ok -> sasl_report_file_h:init({File, sasl_error_logger_type()});
-        Error -> Error
+        ok -> init(File);
+        Error ->
+            case init(File) of 
+                {ok, FInfo} ->
+                    error_logger:error_msg("Error occured while appending " ++
+                                           "~p sasl log file to \"~s\":~n~p~n",
+                                           [File, [File, Suffix], Error]),
+                    io:format("~nOrignal sasl log file could not be appended "
+                              "to \"~s\"~n", [[File, Suffix]]),
+                    {ok, FInfo};
+                CriticalError -> CriticalError
+            end
     end;
 %% Used only when swapping handlers without
 %% doing any log rotation
 init({File, []}) ->
-    sasl_report_file_h:init({File, sasl_error_logger_type()});
+    init(File);
 init({_File, _Type} = FileInfo) ->
     sasl_report_file_h:init(FileInfo);
 init(File) ->

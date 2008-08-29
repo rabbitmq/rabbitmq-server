@@ -267,6 +267,7 @@ error_log_location(Type) ->
              wrapper -> gen_event:call(error_logger, rabbit_error_logger_file_h, filename)
          end of 
         {error, no_log_file} -> tty;
+        {error, _}           -> undefined;
         File                 -> File
     end.
 
