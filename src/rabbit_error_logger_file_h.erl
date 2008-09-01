@@ -38,19 +38,12 @@
 %% Used only when swapping handlers in log rotation
 init({{File, Suffix}, []}) ->
     case rabbit_misc:append_file(File, Suffix) of
-        ok -> init(File);
-        Error ->
-            case init(File) of 
-                {ok, FInfo} ->
-                    rabbit_log:error("Error occured while appending " ++
-                                     "~p log file to \"~s\":~n~p~n",
-                                     [File, [File, Suffix], Error]),
-                    io:format("~nOrignal log file could not be appended to " ++
-                              "\"~s\"~n", [[File, Suffix]]),
-                    {ok, FInfo};
-                CriticalError -> CriticalError
-            end
-    end;
+        ok    -> ok;
+        Error -> rabbit_log:error("Failed to append contents of " ++
+                                  "log file '~s' to '~s':~n~p~n",
+                                  [File, [File, Suffix], Error])
+    end,
+    init(File);
 %% Used only when swapping handlers without performing
 %% log rotation 
 init({File, []}) ->
