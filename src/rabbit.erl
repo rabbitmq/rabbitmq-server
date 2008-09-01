@@ -88,9 +88,12 @@ status() ->
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
-    log_rotation_result(
-      rotate_logs(error_log_location(wrapper), Suffix, rabbit_error_logger_file_h),
-      rotate_logs(sasl_log_location(), Suffix, rabbit_sasl_report_file_h)).
+    log_rotation_result(rotate_logs(error_log_location(wrapper),
+                                    Suffix,
+                                    rabbit_error_logger_file_h),
+                        rotate_logs(sasl_log_location(),
+                                    Suffix,
+                                    rabbit_sasl_report_file_h)).
 
 %%--------------------------------------------------------------------
 
