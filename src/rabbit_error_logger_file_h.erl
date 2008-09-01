@@ -38,10 +38,11 @@
 %% Used only when swapping handlers in log rotation
 init({{File, Suffix}, []}) ->
     case rabbit_misc:append_file(File, Suffix) of
-        ok    -> ok;
-        Error -> rabbit_log:error("Failed to append contents of " ++
-                                  "log file '~s' to '~s':~n~p~n",
-                                  [File, [File, Suffix], Error])
+        ok  -> ok;
+        {error, Error} ->
+            rabbit_log:error("Failed to append contents of " ++
+                             "log file '~s' to '~s':~n~p~n",
+                             [File, [File, Suffix], Error])
     end,
     init(File);
 %% Used only when swapping handlers without performing
