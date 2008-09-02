@@ -31,6 +31,8 @@
 
 -export([start/2, stop/1]).
 
+-export([error_log_location/1, sasl_log_location/0]).
+
 -import(application).
 -import(mnesia).
 -import(lists).
@@ -46,6 +48,8 @@
 
 -ifdef(use_specs).
 
+-type(log_location() :: 'tty' | 'undefined' | string()).
+
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
@@ -54,6 +58,8 @@
              [{running_applications, [{atom(), string(), string()}]} |
               {nodes, [node()]} |
               {running_nodes, [node()]}]).
+-spec(error_log_location/1 :: ('default' | 'wrapper') -> log_location()).
+-spec(sasl_log_location/0 :: () -> log_location()).
 
 -endif.
 
@@ -61,7 +67,6 @@
 
 start() ->
     try
-        ok = ensure_working_log_config(),
         ok = rabbit_mnesia:ensure_mnesia_dir(),
         ok = start_applications(?APPS)
     after
@@ -143,7 +148,9 @@ start(normal, []) ->
               apply(M, F, A),
               io:format("done~n")
       end,
-      [{"database",
+      [{"log configuration",
+        fun () -> ok = maybe_swap_log_handlers() end},
+       {"database",
         fun () -> ok = rabbit_mnesia:init() end},
        {"core processes",
         fun () ->
@@ -172,15 +179,7 @@ start(normal, []) ->
                 {ok, DefaultVHost} = application:get_env(default_vhost),
                 ok = error_logger:add_report_handler(
                        rabbit_error_logger, [DefaultVHost]),
-                ok = start_builtin_amq_applications(),
-                %% Swap default handlers with rabbit wrappers
-                %% to simplify the swapping of log handlers later
-                ok = rotate_logs(error_log_location(default), "",
-                                 error_logger_file_h,
-                                 rabbit_error_logger_file_h),
-                ok = rotate_logs(sasl_log_location(), "",
-                                 sasl_report_file_h,
-                                 rabbit_sasl_report_file_h)
+                ok = start_builtin_amq_applications()
         end},
        {"TCP listeners",
         fun () ->
@@ -204,66 +203,6 @@ stop(_State) ->
 
 %---------------------------------------------------------------------------
 
-print_banner() ->
-    {ok, Product} = application:get_key(id),
-    {ok, Version} = application:get_key(vsn),
-    io:format("~s ~s (AMQP ~p-~p)~n~s~n~s~n~n",
-              [Product, Version,
-               ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
-               ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
-    io:format("Logging to ~p~nSASL logging to ~p~n~n",
-              [error_log_location(default), sasl_log_location()]).
-
-start_child(Mod) ->
-    {ok,_} = supervisor:start_child(rabbit_sup,
-                                    {Mod, {Mod, start_link, []},
-                                     transient, 100, worker, [Mod]}),
-    ok.
-
-maybe_insert_default_data() ->
-    case rabbit_mnesia:is_db_empty() of
-        true -> insert_default_data();
-        false -> ok
-    end.
-
-insert_default_data() ->
-    {ok, DefaultUser} = application:get_env(default_user),
-    {ok, DefaultPass} = application:get_env(default_pass),
-    {ok, DefaultVHost} = application:get_env(default_vhost),
-    ok = rabbit_access_control:add_vhost(DefaultVHost),
-    ok = rabbit_access_control:add_user(DefaultUser, DefaultPass),
-    ok = rabbit_access_control:map_user_vhost(DefaultUser, DefaultVHost),
-    ok.
-
-start_builtin_amq_applications() ->
-    %%TODO: we may want to create a separate supervisor for these so
-    %%they don't bring down the entire app when they die and fail to
-    %%restart
-    ok.
-
-ensure_working_log_config() ->
-    case error_logger:logfile(filename) of
-        {error, no_log_file} ->
-            %% either no log file was configured or opening it failed.
-            case application:get_env(kernel, error_logger) of
-                {ok, {file, Filename}} ->
-                    case filelib:ensure_dir(Filename) of
-                        ok -> ok;
-                        {error, Reason1} ->
-                            throw({error, {cannot_log_to_file,
-                                           Filename, Reason1}})
-                    end,
-                    case error_logger:logfile({open, Filename}) of
-                        ok -> ok;
-                        {error, Reason2} ->
-                            throw({error, {cannot_log_to_file,
-                                           Filename, Reason2}})
-                    end;
-                _ -> ok
-            end;
-        _Filename -> ok
-    end.
-
 error_log_location(Type) ->
     case case Type of
              default -> error_logger:logfile(filename);
@@ -284,6 +223,64 @@ sasl_log_location() ->
         {ok, Bad}          -> throw({error, {cannot_log_to_file, Bad}});
         _                  -> undefined
     end.
+
+%---------------------------------------------------------------------------
+
+print_banner() ->
+    {ok, Product} = application:get_key(id),
+    {ok, Version} = application:get_key(vsn),
+    io:format("~s ~s (AMQP ~p-~p)~n~s~n~s~n~n",
+              [Product, Version,
+               ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
+               ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
+    io:format("Logging to ~p~nSASL logging to ~p~n~n",
+              [error_log_location(default), sasl_log_location()]).
+
+start_child(Mod) ->
+    {ok,_} = supervisor:start_child(rabbit_sup,
+                                    {Mod, {Mod, start_link, []},
+                                     transient, 100, worker, [Mod]}),
+    ok.
+
+maybe_swap_log_handlers() ->
+    Handlers = gen_event:which_handlers(error_logger),
+    ok = maybe_swap_log_handlers(error_logger_file_h,
+                                 rabbit_error_logger_file_h,
+                                 error_log_location(default),
+                                 Handlers),
+    ok = maybe_swap_log_handlers(sasl_report_file_h,
+                                 rabbit_sasl_report_file_h,
+                                 sasl_log_location(),
+                                 Handlers),
+    ok.
+
+maybe_swap_log_handlers(Old, New, LogLocation, Handlers) ->
+    case lists:member(Old, Handlers)
+	   and not(lists:member(New, Handlers)) of
+        true -> rotate_logs(LogLocation, "", Old, New);
+        false -> ok
+    end.
+   
+maybe_insert_default_data() ->
+    case rabbit_mnesia:is_db_empty() of
+        true -> insert_default_data();
+        false -> ok
+    end.
+
+insert_default_data() ->
+    {ok, DefaultUser} = application:get_env(default_user),
+    {ok, DefaultPass} = application:get_env(default_pass),
+    {ok, DefaultVHost} = application:get_env(default_vhost),
+    ok = rabbit_access_control:add_vhost(DefaultVHost),
+    ok = rabbit_access_control:add_user(DefaultUser, DefaultPass),
+    ok = rabbit_access_control:map_user_vhost(DefaultUser, DefaultVHost),
+    ok.
+
+start_builtin_amq_applications() ->
+    %%TODO: we may want to create a separate supervisor for these so
+    %%they don't bring down the entire app when they die and fail to
+    %%restart
+    ok.
 
 rotate_logs(File, Suffix, Handler) ->
     rotate_logs(File, Suffix, Handler, Handler).

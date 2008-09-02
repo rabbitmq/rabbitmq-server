@@ -1,3 +1,4 @@
+
 %%   The contents of this file are subject to the Mozilla Public License
 %%   Version 1.1 (the "License"); you may not use this file except in
 %%   compliance with the License. You may obtain a copy of the License at
@@ -29,6 +30,9 @@
 
 -import(lists).
 
+-include("rabbit.hrl").
+-include_lib("kernel/include/file.hrl").
+
 test_content_prop_roundtrip(Datum, Binary) ->
     Types =  [element(1, E) || E <- Datum],
     Values = [element(2, E) || E <- Datum],
@@ -38,6 +42,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 all_tests() ->
     passed = test_parsing(),
     passed = test_topic_matching(),
+    passed = test_log_management(),
     passed = test_app_management(),
     passed = test_cluster_management(),
     passed = test_user_management(),
@@ -134,6 +139,57 @@ test_app_management() ->
     ok = control_action(start_app, []),
     ok = control_action(start_app, []),
     ok = control_action(status, []),
+    passed.
+
+test_log_management() ->
+    MainLog = rabbit:error_log_location(wrapper),
+    SaslLog = rabbit:sasl_log_location(),
+    Suffix = ".1",
+
+    %% prepare basic logs
+    file:delete([MainLog, Suffix]),
+    file:delete([SaslLog, Suffix]),
+    ok = test_logs_working(MainLog, SaslLog),
+
+    %% simple logs reopening
+    ok = control_action(rotate_logs, []),
+    true = empty_file(MainLog),
+    true = empty_file(SaslLog),
+    ok = test_logs_working(MainLog, SaslLog),
+
+    %% simple log rotation
+    ok = control_action(rotate_logs, [Suffix]),
+    true = non_empty_file([MainLog, Suffix]),
+    true = non_empty_file([SaslLog, Suffix]),
+    true = empty_file(MainLog),
+    true = empty_file(MainLog),
+    ok = test_logs_working(MainLog, SaslLog),
+
+    %% reopening logs with log rotation performed first
+    clean_logs([MainLog, SaslLog], Suffix),
+    ok = control_action(rotate_logs, []),
+    ok = file:rename(MainLog, [MainLog, Suffix]),
+    ok = file:rename(SaslLog, [SaslLog, Suffix]),
+    ok = test_logs_working([MainLog, Suffix], [SaslLog, Suffix]),
+    ok = control_action(rotate_logs, []),
+    ok = test_logs_working(MainLog, SaslLog),
+
+    %% logs with suffix are not writable
+    non_writable_file([MainLog, Suffix]),
+    non_writable_file([SaslLog, Suffix]),
+    ok = control_action(rotate_logs, [Suffix]),
+    ok = test_logs_working(MainLog, SaslLog),
+
+    %% original log files are not writable
+    non_writable_file(MainLog),
+    non_writable_file(SaslLog),
+    {error, _} = control_action(rotate_logs, []),
+    %% cleanup, add handlers removed by last command
+    clean_logs([MainLog, SaslLog], Suffix),
+    ok = error_logger:add_report_handler(rabbit_error_logger_file_h,
+					 MainLog),
+    ok = error_logger:add_report_handler(rabbit_sasl_report_file_h,
+					 SaslLog),
     passed.
 
 test_cluster_management() ->
@@ -329,6 +385,8 @@ test_user_management() ->
 
     passed.
 
+%---------------------------------------------------------------------
+
 control_action(Command, Args) -> control_action(Command, node(), Args).
 
 control_action(Command, Node, Args) ->
@@ -340,3 +398,34 @@ control_action(Command, Node, Args) ->
             io:format("failed.~n"),
             Other
     end.
+
+empty_file(File) ->
+    case file:read_file_info(File) of
+        {ok, FInfo} -> FInfo#file_info.size == 0;
+        Error       -> Error
+    end.
+
+non_empty_file(File) ->
+    case empty_file(File) of
+        {error, Reason} -> {error, Reason};
+        Result          -> not(Result)
+    end.
+
+test_logs_working(MainLogFile, SaslLogFile) ->
+    ok = rabbit_log:error("foo bar"),
+    ok = error_logger:error_report(crash_report, [foo, bar]),
+    %% give the error loggers some time to catch up
+    timer:sleep(50),
+    true = non_empty_file(MainLogFile),
+    true = non_empty_file(SaslLogFile),
+    ok.
+
+clean_logs(Files, Suffix) ->
+    lists:map(fun(File) ->
+                      file:delete(File),
+                      file:delete([File, Suffix])
+              end, Files),
+    ok.
+
+non_writable_file(File) ->
+    ok = file:write_file_info(File, #file_info{mode=0}).
