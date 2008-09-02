@@ -30,7 +30,6 @@
 
 -import(lists).
 
--include("rabbit.hrl").
 -include_lib("kernel/include/file.hrl").
 
 test_content_prop_roundtrip(Datum, Binary) ->
