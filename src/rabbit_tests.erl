@@ -153,16 +153,13 @@ test_log_management() ->
 
     %% simple logs reopening
     ok = control_action(rotate_logs, []),
-    true = empty_file(MainLog),
-    true = empty_file(SaslLog),
+    [true, true] = empty_files([MainLog, SaslLog]),
     ok = test_logs_working(MainLog, SaslLog),
 
     %% simple log rotation
     ok = control_action(rotate_logs, [Suffix]),
-    true = non_empty_file([MainLog, Suffix]),
-    true = non_empty_file([SaslLog, Suffix]),
-    true = empty_file(MainLog),
-    true = empty_file(MainLog),
+    [true, true] = non_empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
+    [true, true] = empty_files([MainLog, SaslLog]),
     ok = test_logs_working(MainLog, SaslLog),
 
     %% reopening logs with log rotation performed first
@@ -175,14 +172,12 @@ test_log_management() ->
     ok = test_logs_working(MainLog, SaslLog),
 
     %% logs with suffix are not writable
-    non_writable_file([MainLog, Suffix]),
-    non_writable_file([SaslLog, Suffix]),
+    non_writable_files([[MainLog, Suffix], [SaslLog, Suffix]]),
     ok = control_action(rotate_logs, [Suffix]),
     ok = test_logs_working(MainLog, SaslLog),
 
     %% original log files are not writable
-    non_writable_file(MainLog),
-    non_writable_file(SaslLog),
+    non_writable_files([MainLog, SaslLog]),
     {error, _} = control_action(rotate_logs, []),
     %% cleanup, add handlers removed by last command
     clean_logs([MainLog, SaslLog], Suffix),
@@ -399,25 +394,29 @@ control_action(Command, Node, Args) ->
             Other
     end.
 
-empty_file(File) ->
-    case file:read_file_info(File) of
-        {ok, FInfo} -> FInfo#file_info.size == 0;
-        Error       -> Error
-    end.
+empty_files(Files) ->
+    lists:map(fun(File) ->
+                      case file:read_file_info(File) of
+                          {ok, FInfo} -> FInfo#file_info.size == 0;
+                          Error       -> Error
+                      end
+              end, Files).
 
-non_empty_file(File) ->
-    case empty_file(File) of
-        {error, Reason} -> {error, Reason};
-        Result          -> not(Result)
-    end.
+non_empty_files(Files) ->
+    Results = empty_files(Files),
+    lists:map(fun(EmptyFile) ->
+                      case EmptyFile of
+                          {error, Reason} -> {error, Reason};
+                          _               -> not(EmptyFile)
+                      end
+              end, Results).
 
 test_logs_working(MainLogFile, SaslLogFile) ->
     ok = rabbit_log:error("foo bar"),
     ok = error_logger:error_report(crash_report, [foo, bar]),
     %% give the error loggers some time to catch up
     timer:sleep(50),
-    true = non_empty_file(MainLogFile),
-    true = non_empty_file(SaslLogFile),
+    [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
     ok.
 
 clean_logs(Files, Suffix) ->
@@ -427,5 +426,7 @@ clean_logs(Files, Suffix) ->
               end, Files),
     ok.
 
-non_writable_file(File) ->
-    ok = file:write_file_info(File, #file_info{mode=0}).
+non_writable_files(Files) ->
+    lists:map(fun(File) -> 
+                      ok = file:write_file_info(File, #file_info{mode=0})
+              end, Files).
