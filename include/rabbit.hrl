@@ -71,7 +71,7 @@
 -type(r(Kind) ::
       #resource{virtual_host :: vhost(),
                 kind         :: Kind,
-                name         :: binary_name()}).
+                name         :: resource_name()}).
 -type(queue_name() :: r('queue')).
 -type(exchange_name() :: r('exchange')).
 -type(user() ::
