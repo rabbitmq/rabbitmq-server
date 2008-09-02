@@ -148,7 +148,6 @@ test_log_management() ->
     %% prepare basic logs
     file:delete([MainLog, Suffix]),
     file:delete([SaslLog, Suffix]),
-    ok = test_logs_working(MainLog, SaslLog),
 
     %% simple logs reopening
     ok = control_action(rotate_logs, []),
@@ -170,16 +169,45 @@ test_log_management() ->
     ok = control_action(rotate_logs, []),
     ok = test_logs_working(MainLog, SaslLog),
 
+    %% log rotation on empty file
+    ok = clean_logs([MainLog, SaslLog], Suffix),
+    ok = control_action(rotate_logs, []),
+    ok = control_action(rotate_logs, [Suffix]),
+    [true, true] = empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
+
+    %% original main log file is not writable
+    ok = make_files_non_writable([MainLog]),
+    {error, {cannot_rotate_main_logs, _}} = control_action(rotate_logs, []),
+    ok = clean_logs([MainLog], Suffix),
+    ok = error_logger:add_report_handler(rabbit_error_logger_file_h,
+					 MainLog),
+
+    %% original sasl log file is not writable
+    ok = make_files_non_writable([SaslLog]),
+    {error, {cannot_rotate_sasl_logs, _}} = control_action(rotate_logs, []),
+    ok = clean_logs([SaslLog], Suffix),
+    ok = error_logger:add_report_handler(rabbit_sasl_report_file_h,
+					 SaslLog),
+
     %% logs with suffix are not writable
+    ok = control_action(rotate_logs, [Suffix]),
     ok = make_files_non_writable([[MainLog, Suffix], [SaslLog, Suffix]]),
     ok = control_action(rotate_logs, [Suffix]),
     ok = test_logs_working(MainLog, SaslLog),
 
     %% original log files are not writable
     ok = make_files_non_writable([MainLog, SaslLog]),
-    {error, _} = control_action(rotate_logs, []),
-    %% cleanup, add handlers removed by last command
+    {error, {{cannot_rotate_main_logs, _},
+	     {cannot_rotate_sasl_logs, _}}} = control_action(rotate_logs, []),
+
+    %% logging directed to tty (handlers were removed in last test)
     ok = clean_logs([MainLog, SaslLog], Suffix),
+    ok = application:set_env(sasl, sasl_error_logger, tty),
+    ok = control_action(rotate_logs, []),
+    [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
+    
+    %% cleanup
+    ok = application:set_env(sasl, sasl_error_logger, {file, SaslLog}),
     ok = error_logger:add_report_handler(rabbit_error_logger_file_h,
 					 MainLog),
     ok = error_logger:add_report_handler(rabbit_sasl_report_file_h,
@@ -253,7 +281,6 @@ test_cluster_management() ->
     end,
 
     ok = control_action(start_app, []),
-
     passed.
 
 test_cluster_management2(SecondaryNode) ->
@@ -415,10 +442,17 @@ test_logs_working(MainLogFile, SaslLogFile) ->
 
 clean_logs(Files, Suffix) ->
     [begin
-         ok = file:delete(File),
-         ok = file:delete([File, Suffix])
+         ok = delete_file(File),
+         ok = delete_file([File, Suffix])
      end || File <- Files],
     ok.
+
+delete_file(File) ->
+    case file:delete(File) of
+        ok              -> ok;
+        {error, enoent} -> ok;
+        Error           -> Error
+    end.
 
 make_files_non_writable(Files) ->
     [ok = file:write_file_info(File, #file_info{mode=0}) ||
