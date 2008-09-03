@@ -42,6 +42,7 @@ all_tests() ->
     passed = test_topic_matching(),
     passed = test_log_management(),
     passed = test_app_management(),
+    passed = test_log_management_during_startup(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed.
@@ -140,8 +141,8 @@ test_app_management() ->
     passed.
 
 test_log_management() ->
-    MainLog = rabbit:logs_location(kernel),
-    SaslLog = rabbit:logs_location(sasl),
+    MainLog = rabbit:log_location(kernel),
+    SaslLog = rabbit:log_location(sasl),
     Suffix = ".1",
 
     %% prepare basic logs
@@ -178,15 +179,13 @@ test_log_management() ->
     ok = make_files_non_writable([MainLog]),
     {error, {cannot_rotate_main_logs, _}} = control_action(rotate_logs, []),
     ok = clean_logs([MainLog], Suffix),
-    ok = error_logger:add_report_handler(rabbit_error_logger_file_h,
-					 MainLog),
+    ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog}]),
 
     %% original sasl log file is not writable
     ok = make_files_non_writable([SaslLog]),
     {error, {cannot_rotate_sasl_logs, _}} = control_action(rotate_logs, []),
     ok = clean_logs([SaslLog], Suffix),
-    ok = error_logger:add_report_handler(rabbit_sasl_report_file_h,
-					 SaslLog),
+    ok = add_log_handlers([{rabbit_sasl_report_file_h, SaslLog}]),
 
     %% logs with suffix are not writable
     ok = control_action(rotate_logs, [Suffix]),
@@ -215,10 +214,52 @@ test_log_management() ->
     %% cleanup
     ok = application:set_env(sasl, sasl_error_logger, {file, SaslLog}),
     ok = application:set_env(kernel, error_logger, {file, MainLog}),
-    ok = error_logger:add_report_handler(rabbit_error_logger_file_h,
-					 MainLog),
-    ok = error_logger:add_report_handler(rabbit_sasl_report_file_h,
-					 SaslLog),
+    ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog},
+			   {rabbit_sasl_report_file_h, SaslLog}]),
+    passed.
+
+test_log_management_during_startup() ->
+    MainLog = rabbit:log_location(kernel),
+    SaslLog = rabbit:log_location(sasl),
+
+    %% start application with simple tty logging
+    ok = control_action(stop_app, []),
+    ok = application:set_env(kernel, error_logger, tty),
+    ok = application:set_env(sasl, sasl_error_logger, tty),
+    ok = add_log_handlers([{error_logger_tty_h, []},
+                           {sasl_report_tty_h, []}]),
+    ok = control_action(start_app, []),
+
+    %% start application with tty logging and 
+    %% proper handlers not installed
+    ok = control_action(stop_app, []),
+    ok = error_logger:tty(false),
+    ok = delete_log_handlers([sasl_report_tty_h]),
+    ok = case catch control_action(start_app, []) of
+        ok -> exit(got_success_but_expected_failure);
+        {error, {cannot_start_application, rabbit, _}} -> ok
+    end,
+
+    %% fix sasl logging
+    ok = application:set_env(sasl, sasl_error_logger,
+                             {file, SaslLog}),
+
+    %% start application with logging to invalid directory
+    TmpLog = "/tmp/rabbit-tests/test.log",
+    file:delete(TmpLog),
+    ok = application:set_env(kernel, error_logger, {file, TmpLog}),
+
+    ok = delete_log_handlers([rabbit_error_logger_file_h]),
+    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    ok = case catch control_action(start_app, []) of
+        ok -> exit(got_success_but_expected_failure);
+        {error, {cannot_start_application, rabbit, _}} -> ok
+    end,
+
+    %% cleanup
+    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    ok = application:set_env(kernel, error_logger, {file, MainLog}),
+    ok = control_action(start_app, []),
     passed.
 
 test_cluster_management() ->
@@ -464,4 +505,14 @@ delete_file(File) ->
 make_files_non_writable(Files) ->
     [ok = file:write_file_info(File, #file_info{mode=0}) ||
         File <- Files],
+    ok.
+
+add_log_handlers(Handlers) ->
+    [ok = error_logger:add_report_handler(Handler, Args) ||
+        {Handler, Args} <- Handlers],
+    ok.
+
+delete_log_handlers(Handlers) ->
+    [[] = error_logger:delete_report_handler(Handler) ||
+        Handler <- Handlers],
     ok.

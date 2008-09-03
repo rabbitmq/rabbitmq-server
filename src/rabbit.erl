@@ -31,7 +31,7 @@
 
 -export([start/2, stop/1]).
 
--export([logs_location/1]).
+-export([log_location/1]).
 
 -import(application).
 -import(mnesia).
@@ -59,7 +59,7 @@
              [{running_applications, [{atom(), string(), string()}]} |
               {nodes, [node()]} |
               {running_nodes, [node()]}]).
--spec(logs_location/1 :: ('sasl' | 'kernel') -> log_location()).
+-spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -endif.
 
@@ -93,10 +93,10 @@ status() ->
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
-    log_rotation_result(rotate_logs(logs_location(kernel),
+    log_rotation_result(rotate_logs(log_location(kernel),
                                     Suffix,
                                     rabbit_error_logger_file_h),
-                        rotate_logs(logs_location(sasl),
+                        rotate_logs(log_location(sasl),
                                     Suffix,
                                     rabbit_sasl_report_file_h)).
 
@@ -203,7 +203,7 @@ stop(_State) ->
 
 %---------------------------------------------------------------------------
 
-logs_location(Type) ->
+log_location(Type) ->
     case application:get_env(Type, case Type of 
                                        kernel -> error_logger;
                                        sasl   -> sasl_error_logger
@@ -226,7 +226,7 @@ print_banner() ->
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     io:format("Logging to ~p~nSASL logging to ~p~n~n",
-              [logs_location(kernel), logs_location(sasl)]).
+              [log_location(kernel), log_location(sasl)]).
 
 
 
@@ -241,13 +241,13 @@ ensure_working_log_handlers() ->
     ok = ensure_working_log_handler(error_logger_file_h,
                                     rabbit_error_logger_file_h,
                                     error_logger_tty_h,
-                                    logs_location(kernel),
+                                    log_location(kernel),
                                     Handlers),
 
     ok = ensure_working_log_handler(sasl_report_file_h,
                                     rabbit_sasl_report_file_h,
                                     sasl_report_tty_h,
-                                    logs_location(sasl),
+                                    log_location(sasl),
                                     Handlers),
     ok.
 
