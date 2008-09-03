@@ -1,4 +1,3 @@
-
 %%   The contents of this file are subject to the Mozilla Public License
 %%   Version 1.1 (the "License"); you may not use this file except in
 %%   compliance with the License. You may obtain a copy of the License at
@@ -141,8 +140,8 @@ test_app_management() ->
     passed.
 
 test_log_management() ->
-    MainLog = rabbit:error_log_location(wrapper),
-    SaslLog = rabbit:sasl_log_location(),
+    MainLog = rabbit:logs_location(kernel),
+    SaslLog = rabbit:logs_location(sasl),
     Suffix = ".1",
 
     %% prepare basic logs
@@ -203,11 +202,19 @@ test_log_management() ->
     %% logging directed to tty (handlers were removed in last test)
     ok = clean_logs([MainLog, SaslLog], Suffix),
     ok = application:set_env(sasl, sasl_error_logger, tty),
+    ok = application:set_env(kernel, error_logger, tty),
     ok = control_action(rotate_logs, []),
     [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
-    
+
+    %% rotate logs when logging is turned off
+    ok = application:set_env(sasl, sasl_error_logger, false),
+    ok = application:set_env(kernel, error_logger, silent),
+    ok = control_action(rotate_logs, []),
+    [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),    
+
     %% cleanup
     ok = application:set_env(sasl, sasl_error_logger, {file, SaslLog}),
+    ok = application:set_env(kernel, error_logger, {file, MainLog}),
     ok = error_logger:add_report_handler(rabbit_error_logger_file_h,
 					 MainLog),
     ok = error_logger:add_report_handler(rabbit_sasl_report_file_h,

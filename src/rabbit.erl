@@ -31,7 +31,7 @@
 
 -export([start/2, stop/1]).
 
--export([error_log_location/1, sasl_log_location/0]).
+-export([logs_location/1]).
 
 -import(application).
 -import(mnesia).
@@ -59,8 +59,7 @@
              [{running_applications, [{atom(), string(), string()}]} |
               {nodes, [node()]} |
               {running_nodes, [node()]}]).
--spec(error_log_location/1 :: ('default' | 'wrapper') -> log_location()).
--spec(sasl_log_location/0 :: () -> log_location()).
+-spec(logs_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -endif.
 
@@ -94,10 +93,10 @@ status() ->
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
-    log_rotation_result(rotate_logs(error_log_location(wrapper),
+    log_rotation_result(rotate_logs(logs_location(kernel),
                                     Suffix,
                                     rabbit_error_logger_file_h),
-                        rotate_logs(sasl_log_location(),
+                        rotate_logs(logs_location(sasl),
                                     Suffix,
                                     rabbit_sasl_report_file_h)).
 
@@ -149,8 +148,8 @@ start(normal, []) ->
               apply(M, F, A),
               io:format("done~n")
       end,
-      [{"log configuration",
-        fun () -> ok = maybe_swap_log_handlers() end},
+       [{"log configuration",
+        fun () -> ok = ensure_working_log_handlers() end},
        {"database",
         fun () -> ok = rabbit_mnesia:init() end},
        {"core processes",
@@ -204,23 +203,15 @@ stop(_State) ->
 
 %---------------------------------------------------------------------------
 
-error_log_location(Type) ->
-    case case Type of
-             default -> error_logger:logfile(filename);
-             wrapper -> gen_event:call(error_logger,
-                                       rabbit_error_logger_file_h,
-                                       filename)
-         end of 
-        {error, no_log_file} -> tty;
-        {error, _}           -> undefined;
-        File                 -> File
-    end.
-
-sasl_log_location() ->
-    case application:get_env(sasl, sasl_error_logger) of
+logs_location(Type) ->
+    case application:get_env(Type, case Type of 
+                                       kernel -> error_logger;
+                                       sasl   -> sasl_error_logger
+                                   end) of
         {ok, {file, File}} -> File;
         {ok, false}        -> undefined;
         {ok, tty}          -> tty;
+        {ok, silent}       -> undefined;
         {ok, Bad}          -> throw({error, {cannot_log_to_file, Bad}});
         _                  -> undefined
     end.
@@ -235,7 +226,9 @@ print_banner() ->
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     io:format("Logging to ~p~nSASL logging to ~p~n~n",
-              [error_log_location(default), sasl_log_location()]).
+              [logs_location(kernel), logs_location(sasl)]).
+
+
 
 start_child(Mod) ->
     {ok,_} = supervisor:start_child(rabbit_sup,
@@ -243,23 +236,31 @@ start_child(Mod) ->
                                      transient, 100, worker, [Mod]}),
     ok.
 
-maybe_swap_log_handlers() ->
+ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),
-    ok = maybe_swap_log_handlers(error_logger_file_h,
-                                 rabbit_error_logger_file_h,
-                                 error_log_location(default),
-                                 Handlers),
-    ok = maybe_swap_log_handlers(sasl_report_file_h,
-                                 rabbit_sasl_report_file_h,
-                                 sasl_log_location(),
-                                 Handlers),
+    ok = ensure_working_log_handler(error_logger_file_h,
+                                    rabbit_error_logger_file_h,
+                                    error_logger_tty_h,
+                                    logs_location(kernel),
+                                    Handlers),
+
+    ok = ensure_working_log_handler(sasl_report_file_h,
+                                    rabbit_sasl_report_file_h,
+                                    sasl_report_tty_h,
+                                    logs_location(sasl),
+                                    Handlers),
     ok.
 
-maybe_swap_log_handlers(Old, New, LogLocation, Handlers) ->
-    case lists:member(Old, Handlers)
-	   and not(lists:member(New, Handlers)) of
-        true -> rotate_logs(LogLocation, "", Old, New);
-        false -> ok
+ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
+                           LogLocation, Handlers) ->
+    case LogLocation of 
+        undefined -> ok;
+        tty       -> true = lists:member(TTYHandler, Handlers), ok;
+        _         -> case lists:member(NewFHandler, Handlers) of 
+                         true  -> ok;
+                         false -> rotate_logs(LogLocation, "",
+                                              OldFHandler, NewFHandler)
+                     end
     end.
    
 maybe_insert_default_data() ->
