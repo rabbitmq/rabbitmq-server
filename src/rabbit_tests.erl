@@ -209,7 +209,7 @@ test_log_management() ->
     ok = application:set_env(sasl, sasl_error_logger, false),
     ok = application:set_env(kernel, error_logger, silent),
     ok = control_action(rotate_logs, []),
-    [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),    
+    [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
 
     %% cleanup
     ok = application:set_env(sasl, sasl_error_logger, {file, SaslLog}),
@@ -256,9 +256,15 @@ test_log_management_during_startup() ->
         {error, {cannot_log_to_file, _, _}} -> ok
     end,
 
-    %% cleanup
-    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    %% start application with standard error_logger_file_h
+    %% handler not installed 
     ok = application:set_env(kernel, error_logger, {file, MainLog}),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+
+    %% start application with standard sasl handler not installed
+    %% and rabbit main log handler installed correctly
+    ok = delete_log_handlers([rabbit_sasl_report_file_h]),
     ok = control_action(start_app, []),
     passed.
 
