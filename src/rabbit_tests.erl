@@ -237,7 +237,7 @@ test_log_management_during_startup() ->
     ok = delete_log_handlers([sasl_report_tty_h]),
     ok = case catch control_action(start_app, []) of
         ok -> exit(got_success_but_expected_failure);
-        {error, {cannot_start_application, rabbit, _}} -> ok
+        {error, {cannot_log_to_tty, _, _}} -> ok
     end,
 
     %% fix sasl logging
@@ -253,7 +253,7 @@ test_log_management_during_startup() ->
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
     ok = case catch control_action(start_app, []) of
         ok -> exit(got_success_but_expected_failure);
-        {error, {cannot_start_application, rabbit, _}} -> ok
+        {error, {cannot_log_to_file, _, _}} -> ok
     end,
 
     %% cleanup

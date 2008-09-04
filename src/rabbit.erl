@@ -67,6 +67,7 @@
 
 start() ->
     try
+        ok = ensure_working_log_handlers(),
         ok = rabbit_mnesia:ensure_mnesia_dir(),
         ok = start_applications(?APPS)
     after
@@ -148,9 +149,7 @@ start(normal, []) ->
               apply(M, F, A),
               io:format("done~n")
       end,
-       [{"log configuration",
-        fun () -> ok = ensure_working_log_handlers() end},
-       {"database",
+       [{"database",
         fun () -> ok = rabbit_mnesia:init() end},
        {"core processes",
         fun () ->
@@ -253,16 +252,26 @@ ensure_working_log_handlers() ->
 
 ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
                            LogLocation, Handlers) ->
-    case LogLocation of 
+    case LogLocation of
         undefined -> ok;
-        tty       -> true = lists:member(TTYHandler, Handlers), ok;
+        tty       -> case lists:member(TTYHandler, Handlers) of
+                         true  -> ok;
+                         false ->
+                             throw({error, {cannot_log_to_tty,
+                                            TTYHandler, not_installed}})
+                     end;
         _         -> case lists:member(NewFHandler, Handlers) of 
                          true  -> ok;
-                         false -> rotate_logs(LogLocation, "",
-                                              OldFHandler, NewFHandler)
+                         false -> case rotate_logs(LogLocation, "",
+                                                   OldFHandler, NewFHandler) of
+                                      ok -> ok;
+                                      {error, Reason} ->
+                                          throw({error, {cannot_log_to_file,
+                                                         LogLocation, Reason}})
+                                  end
                      end
     end.
-   
+
 maybe_insert_default_data() ->
     case rabbit_mnesia:is_db_empty() of
         true -> insert_default_data();
