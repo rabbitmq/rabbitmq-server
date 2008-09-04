@@ -45,6 +45,10 @@ init({{File, Suffix}, []}) ->
                              [File, [File, Suffix], Error])
     end,
     init(File);
+%% Used only when swapping handlers and the original handler
+%% failed to terminate or was never installed
+init({{File, _}, error}) ->
+    init(File);
 %% Used only when swapping handlers without performing
 %% log rotation 
 init({File, []}) ->
