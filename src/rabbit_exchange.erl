@@ -195,7 +195,6 @@ route_internal(#resource{name = Name, virtual_host = VHostPath}, RoutingKey) ->
     MatchHead = #route{binding = #binding{exchange_name = '$1',
                                       queue_name = '$2',
                                       key = '$3'}},
-    %MatchHead = #person{name='$1', sex=male, age='$2', _='_'},
     Guards = [{'==', '$1', Name}, {'==', '$3', RoutingKey}],
     lookup_qpids(
         mnesia:activity(async_dirty,

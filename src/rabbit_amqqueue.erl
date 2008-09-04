@@ -163,18 +163,9 @@ start_queue_process(Q) ->
 recover_queue(Q) ->
     ok = store_queue(Q),
     %ok = recover_bindings(Q),
+    % This is where the default binding should be added
     ok.
-    
-update_bindings(Q = #amqqueue{}, Spec,
-                UpdateSpecFun, UpdateExchangeFun) ->
-    exit(update_bindings).
-    % Q1 = Q#amqqueue{binding_specs = UpdateSpecFun(Spec, Specs0)},
-    %     case UpdateExchangeFun(Spec, Q1) of
-    %         ok    -> store_queue(Q1),
-    %                  {ok, Q1};
-    %         Other -> Other
-    %     end.
-    
+
 add_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
     % Since this calls straight through to rabbit_exchange,
     % can this exported function be deleted from this module?
