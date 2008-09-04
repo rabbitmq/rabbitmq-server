@@ -99,11 +99,11 @@ generic_stage:
 
 	if [ -f INSTALL.in ]; then \
 		cp INSTALL.in $(GENERIC_STAGE_DIR)/INSTALL; \
-#		elinks -dump -no-references -no-numbering $(WEB_URL)install.html \
-#			>> $(GENERIC_STAGE_DIR)/INSTALL; \
+		elinks -dump -no-references -no-numbering $(WEB_URL)install.html \
+			>> $(GENERIC_STAGE_DIR)/INSTALL; \
 		cp BUILD.in $(GENERIC_STAGE_DIR)/BUILD; \
-#		elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
-#			>> $(GENERIC_STAGE_DIR)/BUILD; \
+		elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
+			>> $(GENERIC_STAGE_DIR)/BUILD; \
 	else \
 		cp INSTALL $(GENERIC_STAGE_DIR); \
 		cp BUILD $(GENERIC_STAGE_DIR); \
