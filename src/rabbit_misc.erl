@@ -68,7 +68,7 @@
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (vhost(), K, name()) -> r(K) when is_subtype(K, atom())).
+-spec(r/3 :: (vhost(), K, resource_name()) -> r(K) when is_subtype(K, atom())).
 -spec(r/2 :: (vhost(), K) -> #resource{virtual_host :: vhost(),
                                        kind         :: K,
                                        name         :: '_'}
@@ -339,16 +339,19 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
 
 
 append_file(File, Suffix) ->
-    case catch file:read_file_info(File) of
+    case file:read_file_info(File) of
         {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
-        {error, enoent} -> ok;
+        {error, enoent} -> append_file(File, 0, Suffix);
         Error           -> Error
     end.
 
-append_file(_, 0, _) ->
-    ok;
 append_file(_, _, "") ->
     ok;
+append_file(File, 0, Suffix) ->
+    case file:open([File, Suffix], [append]) of
+        {ok, Fd} -> file:close(Fd);
+        Error    -> Error
+    end;
 append_file(File, _, Suffix) ->
     case file:read_file(File) of
         {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
