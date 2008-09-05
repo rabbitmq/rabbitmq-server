@@ -149,7 +149,7 @@ start(normal, []) ->
               apply(M, F, A),
               io:format("done~n")
       end,
-       [{"database",
+      [{"database",
         fun () -> ok = rabbit_mnesia:init() end},
        {"core processes",
         fun () ->

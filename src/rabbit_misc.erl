@@ -339,7 +339,7 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
 
 
 append_file(File, Suffix) ->
-    case catch file:read_file_info(File) of
+    case file:read_file_info(File) of
         {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
         {error, enoent} -> append_file(File, 0, Suffix);
         Error           -> Error
