@@ -76,14 +76,8 @@
 %%----------------------------------------------------------------------------
 
 recover() ->
-    ok = recover_default_exchange(),
     ok = recover_durable_exchanges(),
     ok.
-
-% NOTE to myself - this should be unnecessary because the default exhange should be durable anyway
-recover_default_exchange() ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> mnesia:write(#exchange{name = <<"">>}) end).
 
 recover_durable_exchanges() ->
     rabbit_misc:execute_mnesia_transaction(
@@ -187,19 +181,26 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
 
 route(#exchange{name = Name, type = Type}, RoutingKey) ->
     route_internal(Name, RoutingKey).
-
+    
 % This returns a list of QPids to route to.
 % Maybe this should be handled by a cursor instead.
 % This routes directly to queues, avoiding any lookup of routes
 route_internal(#resource{name = Name, virtual_host = VHostPath}, RoutingKey) ->
-    MatchHead = #route{binding = #binding{exchange_name = '$1',
-                                      queue_name = '$2',
-                                      key = '$3'}},
-    Guards = [{'==', '$1', Name}, {'==', '$3', RoutingKey}],
-    lookup_qpids(
-        mnesia:activity(async_dirty,
-                        fun() -> mnesia:select(route,[{MatchHead, Guards, ['$2']}])
-                        end)).
+    Exchange = #resource{kind = exchange, name ='$1',virtual_host = '$2'},
+    MatchHead = #route{binding = #binding{exchange_name = Exchange,
+                                          queue_name = '$3',
+                                          key = '$4'}},
+    Guards = [{'==', '$1', Name}, {'==', '$2', VHost}, {'==', '$4', RoutingKey}],
+    
+    {Time, X} = timer:tc(mnesia,activity,[async_dirty,
+                    fun() -> mnesia:select(route,[{MatchHead, Guards, ['$3']}])
+                    end]),
+    %io:format("First read = ~p~n",[Time]),
+    lookup_qpids(X).
+    % lookup_qpids(
+    %         mnesia:activity(async_dirty,
+    %                         fun() -> mnesia:select(route,[{MatchHead, Guards, ['$3']}])
+    %                         end)).
     
 % This returns a list of QPids to route to.
 % Maybe this should be handled by a cursor instead.
@@ -219,7 +220,10 @@ lookup_qpids(Queues) ->
                 fun(Key, Acc) -> [#amqqueue{pid = QPid}] = mnesia:read({amqqueue, Key}),                                 
                                  [QPid] ++ Acc end, 
                 [], Set) end,
-    mnesia:activity(async_dirty,Fun).
+    %mnesia:activity(async_dirty,Fun).
+    {Time, X} = timer:tc(mnesia,activity,[async_dirty,Fun]),
+    %io:format("Second read = ~p~n",[Time]),
+    X.
         
 % Should all of the route and binding management not be refactored to it's own module
 % Especially seeing as unbind will have to be implemented for 0.91 ?
@@ -283,7 +287,7 @@ reverse_binding(#binding{exchange_name = Exchange, key = Key, queue_name = Queue
 
 %% Must run within a transaction.
 internal_add_binding(Binding) ->
-    [ok,ok] = [mnesia:write(R) || R <- tuple_to_list(route_with_reverse(Binding))],
+    [ok, ok] = [mnesia:write(R) || R <- tuple_to_list(route_with_reverse(Binding))],
     ok.
 
 %% Must run within a transaction.
