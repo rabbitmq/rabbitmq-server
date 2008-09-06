@@ -190,7 +190,7 @@ route_internal(#resource{name = Name, virtual_host = VHostPath}, RoutingKey) ->
     MatchHead = #route{binding = #binding{exchange_name = Exchange,
                                           queue_name = '$3',
                                           key = '$4'}},
-    Guards = [{'==', '$1', Name}, {'==', '$2', VHost}, {'==', '$4', RoutingKey}],
+    Guards = [{'==', '$1', Name}, {'==', '$2', VHostPath}, {'==', '$4', RoutingKey}],
     
     {Time, X} = timer:tc(mnesia,activity,[async_dirty,
                     fun() -> mnesia:select(route,[{MatchHead, Guards, ['$3']}])
