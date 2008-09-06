@@ -179,7 +179,7 @@ simple_publish(Mandatory, Immediate,
 route(#exchange{name = Name, type = topic}, RoutingKey) ->
     route_internal(Name, RoutingKey, fun topic_matches/2);
 
-route(#exchange{name = Name, type = Type}, RoutingKey) ->
+route(#exchange{name = Name}, RoutingKey) ->
     route_internal(Name, RoutingKey).
     
 % This returns a list of QPids to route to.
@@ -191,16 +191,9 @@ route_internal(#resource{name = Name, virtual_host = VHostPath}, RoutingKey) ->
                                           queue_name = '$3',
                                           key = '$4'}},
     Guards = [{'==', '$1', Name}, {'==', '$2', VHostPath}, {'==', '$4', RoutingKey}],
-    
-    {Time, X} = timer:tc(mnesia,activity,[async_dirty,
+    lookup_qpids(mnesia:activity(async_dirty,
                     fun() -> mnesia:select(route,[{MatchHead, Guards, ['$3']}])
-                    end]),
-    %io:format("First read = ~p~n",[Time]),
-    lookup_qpids(X).
-    % lookup_qpids(
-    %         mnesia:activity(async_dirty,
-    %                         fun() -> mnesia:select(route,[{MatchHead, Guards, ['$3']}])
-    %                         end)).
+                    end)).
     
 % This returns a list of QPids to route to.
 % Maybe this should be handled by a cursor instead.
@@ -220,23 +213,15 @@ lookup_qpids(Queues) ->
                 fun(Key, Acc) -> [#amqqueue{pid = QPid}] = mnesia:read({amqqueue, Key}),                                 
                                  [QPid] ++ Acc end, 
                 [], Set) end,
-    %mnesia:activity(async_dirty,Fun).
-    {Time, X} = timer:tc(mnesia,activity,[async_dirty,Fun]),
-    %io:format("Second read = ~p~n",[Time]),
-    X.
+    mnesia:activity(async_dirty,Fun).
         
 % Should all of the route and binding management not be refactored to it's own module
 % Especially seeing as unbind will have to be implemented for 0.91 ?
-delete_routes(Q = #amqqueue{name = Name}) ->
+delete_routes(#amqqueue{name = Name}) ->
     Binding = #binding{queue_name = Name, exchange_name = '_', key = '_'},
     {Route, ReverseRoute} = route_with_reverse(Binding),
     ok = mnesia:delete_object(Route),
     ok = mnesia:delete_object(ReverseRoute).
-
-delivery_key_for_type(fanout, Name, _RoutingKey) ->
-    {Name, fanout};
-delivery_key_for_type(_Type, Name, RoutingKey) ->
-    {Name, RoutingKey}.
 
 % Don't really like this double lookup
 % It seems very clunky

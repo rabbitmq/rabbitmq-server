@@ -172,42 +172,16 @@ add_default_binding(#amqqueue{name = QueueName}) ->
     ok.
     
 add_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
-    % Since this calls straight through to rabbit_exchange,
-    % can this exported function be deleted from this module?
     Binding = #binding{exchange_name = ExchangeName,
                        key = RoutingKey,
                        queue_name = QueueName},
     rabbit_misc:execute_mnesia_transaction(fun rabbit_exchange:add_binding/1, [Binding]).
-    % modify_bindings(
-    %       QueueName, ExchangeName, RoutingKey, Arguments,
-    %       fun (Q, _Spec) -> {ok, Q} end,
-    %       fun (Q, Spec) -> update_bindings(
-    %                          Q, Spec,
-    %                          fun (S, Specs) -> [S | Specs] end,
-    %                          fun rabbit_exchange:add_binding/2)
-    %       end).
 
 delete_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
     Binding = #binding{exchange_name = ExchangeName,
                        key = RoutingKey,
                        queue_name = QueueName},
     rabbit_misc:execute_mnesia_transaction(fun rabbit_exchange:delete_binding/1, [Binding]).
-    % modify_bindings(
-    %       QueueName, ExchangeName, RoutingKey, Arguments,
-    %       fun (Q, Spec) -> update_bindings(
-    %                          Q, Spec,
-    %                          fun lists:delete/2,
-    %                          fun rabbit_exchange:delete_binding/2)
-    %       end,
-    %       fun (Q, Spec) ->
-    %               %% the following is essentially a no-op, though crucially
-    %               %% it produces {error, not_found} when the exchange does
-    %               %% not exist.
-    %               case rabbit_exchange:delete_binding(Spec, Q) of
-    %                   ok    -> {error, binding_not_found};
-    %                   Other -> Other
-    %               end
-    %       end).
     
 lookup(Name) ->
     rabbit_misc:dirty_read({amqqueue, Name}).
