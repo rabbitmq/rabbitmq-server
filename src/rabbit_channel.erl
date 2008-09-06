@@ -531,7 +531,7 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                         <<>>  -> rabbit_misc:binstring_guid("amq.gen");
                         Other -> check_name('queue', Other)
                     end,
-		QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
+                QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
                 Finish(rabbit_amqqueue:declare(QueueName,
                                                Durable, AutoDelete, Args));
             Other -> Other
