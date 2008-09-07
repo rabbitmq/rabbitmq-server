@@ -289,7 +289,7 @@
 			 "arguments": [],
 			 "name": "qos-ok"},
 			{"id": 20,
-			 "arguments": [{"domain": "access-ticket", "name": "ticket"},
+			 "arguments": [{"domain": "access-ticket", "name": "ticket", "default-value": 1},
 				       {"domain": "queue-name", "name": "queue"},
 				       {"type": "shortstr", "name": "consumer-tag"},
 				       {"type": "bit", "name": "no-local", "default-value": false},
