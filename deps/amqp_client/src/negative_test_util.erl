@@ -43,5 +43,4 @@ non_existent_exchange_test(Connection) ->
     end,
     ?assertNot(is_process_alive(Channel)),
     {Pid,_} = Connection,
-    ?assert(is_process_alive(Pid)),
-    lib_amqp:close_connection(Connection).
+    ?assert(is_process_alive(Pid)).
