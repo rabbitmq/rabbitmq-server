@@ -182,35 +182,9 @@ basic_recover_test(Connection) ->
 
 % QOS is not yet implemented in RabbitMQ
 basic_qos_test(Connection) -> ok.
-    % {Channel, Ticket} = setup_channel(Connection, Realm),
-    %     BasicQos = #'basic.qos'{prefetch_size = 8,
-    %                             prefetch_count = 1,
-    %                             global = true},
-    %     #'basic.qos_ok'{} = amqp_channel:call(Channel, BasicQos),
-    %     teardown(Connection, Channel).
 
 % Reject is not yet implemented in RabbitMQ
 basic_reject_test(Connection) -> ok.
-    % {Channel, Ticket, Q} = setup_publish(Connection),
-    %     BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
-    %                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
-    %     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, self()),
-    %     receive
-    %         {#'basic.deliver'{delivery_tag = DeliveryTag}, Content} ->
-    %             BasicReject = #'basic.reject'{delivery_tag = DeliveryTag,
-    %                                           requeue = false},
-    %             amqp_channel:cast(Channel, BasicReject),
-    %             BasicCancel = #'basic.cancel'{consumer_tag = ConsumerTag, nowait = false},
-    %             #'basic.cancel_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicCancel)
-    %     after 2000 ->
-    %         exit(did_not_receive_message)
-    %     end,
-    %     receive
-    %         Msg ->
-    %             exit(should_not_receive_any_more_messages, Msg)
-    %     after 2000 ->
-    %         ok
-    %     end.
 
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,

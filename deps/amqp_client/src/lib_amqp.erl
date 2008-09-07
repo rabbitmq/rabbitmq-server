@@ -19,7 +19,7 @@ declare_exchange(Channel, X) ->
     declare_exchange(Channel, X, <<"direct">>).
 
 declare_exchange(Channel, X, Type) ->
-    ExchangeDeclare = #'exchange.declare'{ticket = 1, exchange = X,
+    ExchangeDeclare = #'exchange.declare'{exchange = X,
                                           type = Type,
                                           passive = false, durable = false,
                                           auto_delete = false, internal = false,
@@ -27,7 +27,7 @@ declare_exchange(Channel, X, Type) ->
     amqp_channel:call(Channel, ExchangeDeclare).
 
 delete_exchange(Channel, X) ->
-    ExchangeDelete = #'exchange.delete'{ticket = 1, exchange = X,
+    ExchangeDelete = #'exchange.delete'{exchange = X,
                                         if_unused = false, nowait = false},
     #'exchange.delete_ok'{} = amqp_channel:call(Channel, ExchangeDelete).
 
@@ -35,8 +35,7 @@ publish(Channel, X, RoutingKey, Payload) ->
     publish(Channel, X, RoutingKey, Payload, false).
 
 publish(Channel, X, RoutingKey, Payload, Mandatory) ->
-    BasicPublish = #'basic.publish'{ticket = 1,
-                                    exchange = X,
+    BasicPublish = #'basic.publish'{exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = Mandatory, immediate = false},
     {ClassId, MethodId} = rabbit_framing:method_id('basic.publish'),
@@ -62,7 +61,7 @@ teardown(Connection, Channel) ->
 get(Channel, Q) -> get(Channel, Q, true).
 
 get(Channel, Q, NoAck) ->
-    BasicGet = #'basic.get'{ticket = 1, queue = Q, no_ack = NoAck},
+    BasicGet = #'basic.get'{queue = Q, no_ack = NoAck},
     {Method, Content} = amqp_channel:call(Channel, BasicGet),
     case Method of
         'basic.get_empty' ->
@@ -97,7 +96,7 @@ subscribe(Channel, Q, Consumer, Tag) ->
     subscribe(Channel, Q, Consumer, Tag, true).
 
 subscribe(Channel, Q, Consumer, Tag, NoAck) ->
-    BasicConsume = #'basic.consume'{ticket = 1, queue = Q,
+    BasicConsume = #'basic.consume'{queue = Q,
                                     consumer_tag = Tag,
                                     no_local = false, no_ack = NoAck,
                                     exclusive = false, nowait = false},
@@ -110,7 +109,7 @@ unsubscribe(Channel, Tag) ->
     ok.
 
 declare_queue(Channel, Q) ->
-    QueueDeclare = #'queue.declare'{ticket = 1, queue = Q,
+    QueueDeclare = #'queue.declare'{queue = Q,
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
                                     nowait = false, arguments = []},
@@ -121,13 +120,13 @@ declare_queue(Channel, Q) ->
     Q1.
 
 delete_queue(Channel, Q) ->
-    QueueDelete = #'queue.delete'{ticket = 1, queue = Q,
+    QueueDelete = #'queue.delete'{queue = Q,
                                   if_unused = false,
                                   if_empty = false,
                                   nowait = false},
     #'queue.delete_ok'{} = amqp_channel:call(Channel, QueueDelete).
 
 bind_queue(Channel, X, Q, Binding) ->
-    QueueBind = #'queue.bind'{ticket = 1, queue = Q, exchange = X,
+    QueueBind = #'queue.bind'{queue = Q, exchange = X,
                               routing_key = Binding, nowait = false, arguments = []},
     #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind).
