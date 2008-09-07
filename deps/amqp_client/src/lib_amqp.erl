@@ -31,16 +31,23 @@ delete_exchange(Channel, X) ->
                                         if_unused = false, nowait = false},
     #'exchange.delete_ok'{} = amqp_channel:call(Channel, ExchangeDelete).
 
+% TODO This whole section of optional properties and mandatory flags may have to be re-thought
 publish(Channel, X, RoutingKey, Payload) ->
     publish(Channel, X, RoutingKey, Payload, false).
 
-publish(Channel, X, RoutingKey, Payload, Mandatory) ->
+publish(Channel, X, RoutingKey, Payload, Mandatory) when is_boolean(Mandatory)->
+    publish(Channel, X, RoutingKey, Payload, Mandatory, amqp_util:basic_properties());
+    
+publish(Channel, X, RoutingKey, Payload, Properties) ->
+    publish(Channel, X, RoutingKey, Payload, Properties, false).
+    
+publish(Channel, X, RoutingKey, Payload, Mandatory, Properties) ->
     BasicPublish = #'basic.publish'{exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = Mandatory, immediate = false},
     {ClassId, MethodId} = rabbit_framing:method_id('basic.publish'),
     Content = #content{class_id = ClassId,
-                   properties = amqp_util:basic_properties(),
+                   properties = Properties,
                    properties_bin = none,
                    payload_fragments_rev = [Payload]},
     amqp_channel:cast(Channel, BasicPublish, Content).
