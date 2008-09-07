@@ -35,7 +35,7 @@
 -record(publish,{q, x, routing_key, bind_key, payload,
                  mandatory = false, immediate = false}).
 
--define(Latch, 1).
+-define(Latch, 100).
 -define(Wait, 200).
 
 %%%%
@@ -126,7 +126,8 @@ basic_return_test(Connection) ->
             io:format(">>>Rec'd ~p/~p~n",[WhatsThis])
     after 2000 ->
         exit(no_return_received)
-    end.
+    end,
+    lib_amqp:teardown(Connection, Channel).
 
 basic_ack_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
@@ -181,10 +182,12 @@ basic_recover_test(Connection) ->
     lib_amqp:teardown(Connection, Channel).
 
 % QOS is not yet implemented in RabbitMQ
-basic_qos_test(Connection) -> ok.
+basic_qos_test(Connection) ->
+    lib_amqp:close_connection(Connection).
 
 % Reject is not yet implemented in RabbitMQ
-basic_reject_test(Connection) -> ok.
+basic_reject_test(Connection) ->
+    lib_amqp:close_connection(Connection).
 
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,
