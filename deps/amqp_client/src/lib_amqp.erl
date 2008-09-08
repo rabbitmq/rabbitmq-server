@@ -123,7 +123,7 @@ delete_queue(Channel, Q) ->
     QueueDelete = #'queue.delete'{queue = Q,
                                   if_unused = false,
                                   if_empty = false,
-                                  nowait = false},
+                                  nowait = true},
     #'queue.delete_ok'{} = amqp_channel:call(Channel, QueueDelete).
 
 bind_queue(Channel, X, Q, Binding) ->
