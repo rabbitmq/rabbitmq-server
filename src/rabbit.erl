@@ -27,9 +27,11 @@
 
 -behaviour(application).
 
--export([start/0, stop/0, stop_and_halt/0, status/0]).
+-export([start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
 
 -export([start/2, stop/1]).
+
+-export([log_location/1]).
 
 -import(application).
 -import(mnesia).
@@ -46,13 +48,18 @@
 
 -ifdef(use_specs).
 
+-type(log_location() :: 'tty' | 'undefined' | string()).
+-type(file_suffix() :: binary()).
+
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
+-spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
               {nodes, [node()]} |
               {running_nodes, [node()]}]).
+-spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -endif.
 
@@ -60,7 +67,7 @@
 
 start() ->
     try
-        ok = ensure_working_log_config(),
+        ok = ensure_working_log_handlers(),
         ok = rabbit_mnesia:ensure_mnesia_dir(),
         ok = start_applications(?APPS)
     after
@@ -84,6 +91,15 @@ stop_and_halt() ->
 status() ->
     [{running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
+
+rotate_logs(BinarySuffix) ->
+    Suffix = binary_to_list(BinarySuffix),
+    log_rotation_result(rotate_logs(log_location(kernel),
+                                    Suffix,
+                                    rabbit_error_logger_file_h),
+                        rotate_logs(log_location(sasl),
+                                    Suffix,
+                                    rabbit_sasl_report_file_h)).
 
 %%--------------------------------------------------------------------
 
@@ -186,6 +202,21 @@ stop(_State) ->
 
 %---------------------------------------------------------------------------
 
+log_location(Type) ->
+    case application:get_env(Type, case Type of 
+                                       kernel -> error_logger;
+                                       sasl   -> sasl_error_logger
+                                   end) of
+        {ok, {file, File}} -> File;
+        {ok, false}        -> undefined;
+        {ok, tty}          -> tty;
+        {ok, silent}       -> undefined;
+        {ok, Bad}          -> throw({error, {cannot_log_to_file, Bad}});
+        _                  -> undefined
+    end.
+
+%---------------------------------------------------------------------------
+
 print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
@@ -194,13 +225,52 @@ print_banner() ->
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     io:format("Logging to ~p~nSASL logging to ~p~n~n",
-              [error_log_location(), sasl_log_location()]).
+              [log_location(kernel), log_location(sasl)]).
+
+
 
 start_child(Mod) ->
     {ok,_} = supervisor:start_child(rabbit_sup,
                                     {Mod, {Mod, start_link, []},
                                      transient, 100, worker, [Mod]}),
     ok.
+
+ensure_working_log_handlers() ->
+    Handlers = gen_event:which_handlers(error_logger),
+    ok = ensure_working_log_handler(error_logger_file_h,
+                                    rabbit_error_logger_file_h,
+                                    error_logger_tty_h,
+                                    log_location(kernel),
+                                    Handlers),
+
+    ok = ensure_working_log_handler(sasl_report_file_h,
+                                    rabbit_sasl_report_file_h,
+                                    sasl_report_tty_h,
+                                    log_location(sasl),
+                                    Handlers),
+    ok.
+
+ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
+                           LogLocation, Handlers) ->
+    case LogLocation of
+        undefined -> ok;
+        tty       -> case lists:member(TTYHandler, Handlers) of
+                         true  -> ok;
+                         false ->
+                             throw({error, {cannot_log_to_tty,
+                                            TTYHandler, not_installed}})
+                     end;
+        _         -> case lists:member(NewFHandler, Handlers) of 
+                         true  -> ok;
+                         false -> case rotate_logs(LogLocation, "",
+                                                   OldFHandler, NewFHandler) of
+                                      ok -> ok;
+                                      {error, Reason} ->
+                                          throw({error, {cannot_log_to_file,
+                                                         LogLocation, Reason}})
+                                  end
+                     end
+    end.
 
 maybe_insert_default_data() ->
     case rabbit_mnesia:is_db_empty() of
@@ -223,40 +293,25 @@ start_builtin_amq_applications() ->
     %%restart
     ok.
 
-ensure_working_log_config() ->
-    case error_logger:logfile(filename) of
-        {error, no_log_file} ->
-            %% either no log file was configured or opening it failed.
-            case application:get_env(kernel, error_logger) of
-                {ok, {file, Filename}} ->
-                    case filelib:ensure_dir(Filename) of
-                        ok -> ok;
-                        {error, Reason1} ->
-                            throw({error, {cannot_log_to_file,
-                                           Filename, Reason1}})
-                    end,
-                    case error_logger:logfile({open, Filename}) of
-                        ok -> ok;
-                        {error, Reason2} ->
-                            throw({error, {cannot_log_to_file,
-                                           Filename, Reason2}})
-                    end;
-                _ -> ok
-            end;
-        _Filename -> ok
+rotate_logs(File, Suffix, Handler) ->
+    rotate_logs(File, Suffix, Handler, Handler).
+
+rotate_logs(File, Suffix, OldHandler, NewHandler) ->
+    case File of
+        undefined -> ok;
+        tty       -> ok;
+        _         -> gen_event:swap_handler(
+                       error_logger,
+                       {OldHandler, swap},
+                       {NewHandler, {File, Suffix}})
     end.
 
-error_log_location() ->
-    case error_logger:logfile(filename) of
-        {error,no_log_file} -> tty;
-        File                -> File
-    end.
-
-sasl_log_location() ->
-    case application:get_env(sasl, sasl_error_logger) of
-        {ok, {file, File}} -> File;
-        {ok, false}        -> undefined;
-        {ok, tty}          -> tty;
-        {ok, Bad}          -> throw({error, {cannot_log_to_file, Bad}});
-        _                  -> undefined
-    end.
+log_rotation_result({error, MainLogError}, {error, SaslLogError}) ->
+    {error, {{cannot_rotate_main_logs, MainLogError},
+	     {cannot_rotate_sasl_logs, SaslLogError}}};
+log_rotation_result({error, MainLogError}, ok) ->
+    {error, {cannot_rotate_main_logs, MainLogError}};
+log_rotation_result(ok, {error, SaslLogError}) ->
+    {error, {cannot_rotate_sasl_logs, SaslLogError}};
+log_rotation_result(ok, ok) ->
+    ok.
