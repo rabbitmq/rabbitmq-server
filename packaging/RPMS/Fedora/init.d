@@ -85,8 +85,7 @@ restart_rabbitmq () {
 
 rotate_logs_rabbitmq() {
     set +e
-    su $USER -s /bin/sh -c "$DAEMON rotate_logs_all ${ROTATE_SUFFIX}" 2>&1
-    RETVAL=$?
+    su $USER -s /bin/sh -c "$DAEMON rotate_logs ${ROTATE_SUFFIX}" 2>&1
     set -e
 }
 

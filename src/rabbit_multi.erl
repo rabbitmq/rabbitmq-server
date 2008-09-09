@@ -94,10 +94,10 @@ action(stop_all, [], RpcTimeout) ->
                            stop_nodes(NodePids, RpcTimeout),
                            delete_pids_file() end);
 
-action(rotate_logs_all, [], RpcTimeout) ->
-    action(rotate_logs_all, [""], RpcTimeout);
+action(rotate_logs, [], RpcTimeout) ->
+    action(rotate_logs, [""], RpcTimeout);
 
-action(rotate_logs_all, [Suffix], RpcTimeout) ->
+action(rotate_logs, [Suffix], RpcTimeout) ->
     io:format("Rotating logs for all nodes...~n", []),
     call_all_nodes(fun(NodePids) ->
                            rotate_logs(NodePids,
@@ -283,11 +283,12 @@ is_dead(Pid) ->
 
 rotate_logs([], _, _) -> ok;
 rotate_logs([{Node, _} | Rest], BinarySuffix, RpcTimeout) ->
-    io:format("Rotating logs for node ~p~n", [Node]),
+    io:format("Rotating logs for node ~p", [Node]),
     case rpc:call(Node, rabbit, rotate_logs, [BinarySuffix], RpcTimeout) of
-        {badrpc, _} -> io:format("timeout"),
-                      throw(rotate_logs_failed);
-        ok          -> rotate_logs(Rest, BinarySuffix, RpcTimeout)
+        {badrpc, Error} -> io:format(": ~p.~n", [Error]),
+                           throw(rotate_logs_failed);
+        ok              -> io:format(": ok.~n", []),
+                           rotate_logs(Rest, BinarySuffix, RpcTimeout)
     end.
 
 call_all_nodes(Func) ->
