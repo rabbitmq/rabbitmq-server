@@ -285,11 +285,10 @@ rotate_logs([], _, _) -> ok;
 rotate_logs([{Node, _} | Rest], BinarySuffix, RpcTimeout) ->
     io:format("Rotating logs for node ~p", [Node]),
     case rpc:call(Node, rabbit, rotate_logs, [BinarySuffix], RpcTimeout) of
-        {badrpc, Error} -> io:format(": ~p.~n", [Error]),
-                           throw(rotate_logs_failed);
-        ok              -> io:format(": ok.~n", []),
-                           rotate_logs(Rest, BinarySuffix, RpcTimeout)
-    end.
+        {badrpc, Error} -> io:format(": ~p.~n", [Error]);
+        ok              -> io:format(": ok.~n", [])
+    end,
+    rotate_logs(Rest, BinarySuffix, RpcTimeout).
 
 call_all_nodes(Func) ->
     case read_pids_file() of
