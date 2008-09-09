@@ -43,16 +43,16 @@ cd /
 
 start_rabbitmq () {
     set +e
-    su $USER -s /bin/sh -c "$DAEMON start_all ${NODE_COUNT}" > /var/log/rabbitmq/startup.log 2> /var/log/rabbitmq/startup.err
+    su $USER -s /bin/sh -c "$DAEMON start_all ${NODE_COUNT}" > /var/log/rabbitmq/startup_log 2> /var/log/rabbitmq/startup_err
     case "$?" in
       0)
         echo SUCCESS && touch $LOCK_FILE
         ;;
       1)
-        echo TIMEOUT - check /var/log/rabbitmq/startup.\{log,err\}
+        echo TIMEOUT - check /var/log/rabbitmq/startup_\{log,err\}
         ;;
       *)
-        echo FAILED - check /var/log/rabbitmq/startup.log, .err
+        echo FAILED - check /var/log/rabbitmq/startup_log, _err
         RETVAL=1;;
     esac 
     set -e
@@ -60,10 +60,10 @@ start_rabbitmq () {
 
 stop_rabbitmq () {
     set +e
-    su $USER -s /bin/sh -c "$DAEMON stop_all" > /var/log/rabbitmq/shutdown.log 2> /var/log/rabbitmq/shutdown.err
+    su $USER -s /bin/sh -c "$DAEMON stop_all" > /var/log/rabbitmq/shutdown_log 2> /var/log/rabbitmq/shutdown_err
 
     if [ $? != 0 ] ; then
-        echo FAILED - check /var/log/rabbitmq/shutdown.log, .err
+        echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
         RETVAL=$?
     else
         rm -rf $LOCK_FILE
