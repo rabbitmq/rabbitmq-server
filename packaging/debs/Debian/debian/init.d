@@ -5,7 +5,8 @@
 # Required-Stop:     $remote_fs $network
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: Enable AMQP service provided by RabbitMQ.
+# Description:       RabbitMQ broker
+# Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
@@ -27,7 +28,7 @@ cd /
 
 start_rabbitmq () {
       set +e
-      su rabbitmq -s /bin/sh -c "$DAEMON start_all ${NODE_COUNT}" > /var/log/rabbitmq/startup.log 2> /var/log/rabbitmq/startup.err
+      su $USER -s /bin/sh -c "$DAEMON start_all ${NODE_COUNT}" > /var/log/rabbitmq/startup.log 2> /var/log/rabbitmq/startup.err
       case "$?" in
         0)
           echo SUCCESS;;
@@ -42,7 +43,7 @@ start_rabbitmq () {
 
 stop_rabbitmq () {
     set +e
-    su rabbitmq -s /bin/sh -c "$DAEMON stop_all" > /var/log/rabbitmq/shutdown.log 2> /var/log/rabbitmq/shutdown.err
+    su $USER -s /bin/sh -c "$DAEMON stop_all" > /var/log/rabbitmq/shutdown.log 2> /var/log/rabbitmq/shutdown.err
     if [ $? != 0 ] ; then
         echo FAILED - check /var/log/rabbitmq/shutdown.log, .err
         exit 0
@@ -68,8 +69,7 @@ case "$1" in
 	echo "$NAME."
 	;;
   *)
-	N=/etc/init.d/$NAME
-	echo "Usage: $N {start|stop|restart|force-reload}" >&2
+	echo "Usage: $0 {start|stop|restart|force-reload}" >&2
 	exit 1
 	;;
 esac
