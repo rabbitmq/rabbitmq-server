@@ -5,7 +5,7 @@ It was downloaded from http://www.rabbitmq.com/
 
 Upstream Author: The RabbitMQ team <info@rabbitmq.com>
 
-Copyright: 2006-2008 LShift Ltd.
+Copyright: 2006-2008 Rabbit Technologies Ltd.
 
 License:
 The RabbitMQ server is licensed under the MPL.
@@ -485,7 +485,7 @@ EXHIBIT A -Mozilla Public License.
 If you have any questions regarding licensing, please contact us at 
 info@rabbitmq.com.
 
-The Debian packaging is (C) 2007, Tony Garnock-Jones <tonyg@rabbitmq.com> and
-is licensed under the GPL, see `/usr/share/common-licenses/GPL'.
+The Debian packaging is (C) 2007-2008, Rabbit Technologies Ltd. <info@rabbitmq.com>
+and is licensed under the MPL 1.1, see above.
 
 
