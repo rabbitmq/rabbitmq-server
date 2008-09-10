@@ -71,6 +71,7 @@ Available commands:
 
   start_all <NodeCount> - start a local cluster of RabbitMQ nodes.
   stop_all              - stops all local RabbitMQ nodes.
+  rotate_logs [Suffix]  - rotate logs for all local and running RabbitMQ nodes.
 "),
     halt(3).
 
@@ -89,11 +90,32 @@ action(start_all, [NodeCount], RpcTimeout) ->
 
 action(stop_all, [], RpcTimeout) ->
     io:format("Stopping all nodes...~n", []),
-    case read_pids_file() of
-        []       -> throw(no_nodes_running);
-        NodePids -> stop_nodes(NodePids, RpcTimeout),
-                    delete_pids_file()
-    end.
+    call_all_nodes(fun({Node, Pid}) ->
+                           io:format("Stopping node ~p~n", [Node]),
+                           rpc:call(Node, rabbit, stop_and_halt, []),
+                           case kill_wait(Pid, RpcTimeout, false) of
+                               false -> kill_wait(Pid, RpcTimeout, true);
+                               true  -> ok
+                           end,
+                           io:format("OK~n", [])
+                   end),
+    delete_pids_file();
+
+action(rotate_logs, [], RpcTimeout) ->
+    action(rotate_logs, [""], RpcTimeout);
+
+action(rotate_logs, [Suffix], RpcTimeout) ->
+    io:format("Rotating logs for all nodes...~n", []),
+    BinarySuffix = list_to_binary(Suffix),
+    call_all_nodes(
+      fun ({Node, _}) ->
+              io:format("Rotating logs for node ~p", [Node]),
+              case rpc:call(Node, rabbit, rotate_logs,
+                            [BinarySuffix], RpcTimeout) of
+                  {badrpc, Error} -> io:format(": ~p.~n", [Error]);
+                  ok              -> io:format(": ok.~n", [])
+              end
+      end).
 
 %% PNodePid is the list of PIDs
 %% Running is a boolean exhibiting success at some moment
@@ -222,21 +244,6 @@ read_pids_file() ->
                                           FileName, Reason}})
     end.
 
-stop_nodes([],_) -> ok;
-
-stop_nodes([NodePid | Rest], RpcTimeout) ->
-    stop_node(NodePid, RpcTimeout),
-    stop_nodes(Rest, RpcTimeout).
-
-stop_node({Node, Pid}, RpcTimeout) ->
-    io:format("Stopping node ~p~n", [Node]),
-    rpc:call(Node, rabbit, stop_and_halt, []),
-    case kill_wait(Pid, RpcTimeout, false) of
-        false -> kill_wait(Pid, RpcTimeout, true);
-        true  -> ok
-    end,
-    io:format("OK~n", []).
-
 kill_wait(Pid, TimeLeft, Forceful) when TimeLeft < 0 ->
     Cmd = with_os([{unix, fun () -> if Forceful -> "kill -9";
                                        true     -> "kill"
@@ -271,6 +278,12 @@ is_dead(Pid) ->
                                  _             -> true
                              end
                      end}]).
+
+call_all_nodes(Func) ->
+    case read_pids_file() of
+        []       -> throw(no_nodes_running);
+        NodePids -> lists:foreach(Func, NodePids)
+    end.
 
 getenv(Var) ->
     case os:getenv(Var) of

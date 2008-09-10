@@ -6,7 +6,7 @@ Group: Development/Libraries
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{main_version}/%{name}-%{main_version}.tar.gz
 URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
-Requires: erlang
+Requires: erlang, logrotate
 Packager: Hubert Plociniczak <hubert@lshift.net>
 BuildRoot: %{_tmppath}/%{name}-%{main_version}-%{release}-root
 Summary: The RabbitMQ server
@@ -60,6 +60,9 @@ chmod 0755 %{buildroot}/usr/sbin/rabbitmqctl
 
 cp %{buildroot}%{_mandir}/man1/rabbitmqctl.1.gz %{buildroot}%{_mandir}/man1/rabbitmqctl_real.1.gz
 
+mkdir -p %{buildroot}/etc/logrotate.d
+cp ../rabbitmq-server.logrotate %{buildroot}/etc/logrotate.d/rabbitmq-server
+
 %post
 # create rabbitmq group
 if ! getent group rabbitmq >/dev/null; then
@@ -102,6 +105,7 @@ fi
 /var/lib/rabbitmq/
 /var/log/rabbitmq/
 /etc/rc.d/init.d/rabbitmq-server
+%config(noreplace) /etc/logrotate.d/rabbitmq-server
 
 %clean
 rm -rf %{buildroot}
