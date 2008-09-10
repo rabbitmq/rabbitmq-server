@@ -21,7 +21,14 @@
 %%   All Rights Reserved.
 %%
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
-%%
+
+
+%%   ************************************************************************
+%%   ***** WARNING: Heavily modified by Edwin Fine as an experiment to try to
+%%   ***** eliminate compile-time dependencies on the drivers. This is NOT
+%%   ***** officially supported by Rabbit, Ben, Matthias, Tony, and so on.
+%%   ***** It's my hack - Edwin Fine 2008-09-07
+%%   ************************************************************************
 
 -module(amqp_connection).
 
@@ -31,9 +38,12 @@
 
 -behaviour(gen_server).
 
+-record(state, {conn_state, drv_module, type}).
+
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 -export([open_channel/1, open_channel/3]).
--export([start/2, start/3, start/4, close/2]).
+%-export([start/2, start/3, start/4, close/2]).
+-export([start/3, start/4, close/2]).
 -export([start_link/2, start_link/3, start_link/4]).
 
 %---------------------------------------------------------------------------
@@ -44,35 +54,45 @@
 %% the server is running in the same process space.
 start(User,Password) -> start(User,Password,false).
 start(User,Password,ProcLink) when is_boolean(ProcLink) ->
-    Handshake = fun amqp_direct_driver:handshake/1,
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      vhostpath = <<"/">>},
-    {ok, Pid} = start_internal(InitialState, Handshake,ProcLink),
+    {ok, Pid} = start_internal(InitialState, direct, ProcLink),
     {Pid, direct};
 
 %% Starts a networked conection to a remote AMQP server.
 start(User,Password,Host) -> start(User,Password,Host,<<"/">>,false).
 start(User,Password,Host,VHost) -> start(User,Password,Host,VHost,false).
 start(User,Password,Host,VHost,ProcLink) ->
-    Handshake = fun amqp_network_driver:handshake/1,
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      serverhost = Host,
                                      vhostpath = VHost},
-    {ok, Pid} = start_internal(InitialState, Handshake,ProcLink),
+    {ok, Pid} = start_internal(InitialState, network, ProcLink),
     {Pid, network}.
     
 start_link(User,Password) -> start(User,Password,true).
 start_link(User,Password,Host) -> start(User,Password,Host,<<"/">>,true).
 start_link(User,Password,Host,VHost) -> start(User,Password,Host,VHost,true).
 
-start_internal(InitialState, Handshake,ProcLink) ->
+l2a(L) ->
+    case catch list_to_existing_atom(L) of
+        A when is_atom(A) ->
+            A;
+        _ ->
+            list_to_atom(L)
+    end.
+
+build_driver_spec(DriverType) when is_list(DriverType) ->
+    l2a("amqp_" ++ DriverType ++ "_driver").
+
+start_internal(InitialState, DriverType, ProcLink) when is_atom(DriverType) ->
+    DriverSpec = build_driver_spec(atom_to_list(DriverType)),
     case ProcLink of
         true ->                                 
-            gen_server:start_link(?MODULE, [InitialState, Handshake], []);
+            gen_server:start_link(?MODULE, [InitialState, DriverSpec, DriverType], []);
         false ->
-            gen_server:start(?MODULE, [InitialState, Handshake], [])
+            gen_server:start(?MODULE, [InitialState, DriverSpec, DriverType], [])
     end.
 
 %% Opens a channel without having to specify a channel number.
@@ -96,16 +116,17 @@ close( {ConnectionPid, Mode}, Close) -> gen_server:call(ConnectionPid, {Mode, Cl
 %% Starts a new channel process, invokes the correct driver (network or direct)
 %% to perform any environment specific channel setup and starts the
 %% AMQP ChannelOpen handshake.
-handle_start({ChannelNumber, OutOfBand},OpenFun,CloseFun,Do2,Do3,State) ->
-    {ChannelPid, Number,  State0} = start_channel(ChannelNumber,CloseFun,Do2,Do3,State),
-    OpenFun({Number, OutOfBand}, ChannelPid, State0),
+handle_start({ChannelNumber, OutOfBand},OpenFun,CloseFun,Do2,Do3,#state{conn_state = CS} = State) ->
+    {ChannelPid, Number, CS0} = start_channel(ChannelNumber,CloseFun,Do2,Do3,CS),
+    OpenFun({Number, OutOfBand}, ChannelPid, CS0),
     #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{out_of_band = OutOfBand}),
-    {reply, ChannelPid, State0}.
+    {reply, ChannelPid, State#state{conn_state = CS0}}.
 
 %% Creates a new channel process
-start_channel(ChannelNumber,CloseFun,Do2,Do3,State = #connection_state{reader_pid = ReaderPid,
-                                                                 channel0_writer_pid = WriterPid}) ->
-    Number = assign_channel_number(ChannelNumber, State),
+start_channel(ChannelNumber,CloseFun,Do2,Do3, CS) ->
+    ReaderPid = CS#connection_state.reader_pid,                                                             
+    WriterPid = CS#connection_state.channel0_writer_pid,                                                             
+    Number = assign_channel_number(ChannelNumber, CS),
     InitialState = #channel_state{parent_connection = self(),
                                   number = Number,
                                   close_fun = CloseFun,
@@ -114,45 +135,55 @@ start_channel(ChannelNumber,CloseFun,Do2,Do3,State = #connection_state{reader_pi
                                   writer_pid = WriterPid},
     process_flag(trap_exit, true),
     {ok, ChannelPid} = gen_server:start_link(amqp_channel, [InitialState], []),
-    NewState = register_channel(Number, ChannelPid, State),
-    {ChannelPid, Number, NewState}.
+    NewCS = register_channel(Number, ChannelPid, CS),
+    {ChannelPid, Number, NewCS}.
 
-assign_channel_number(none, #connection_state{channels = Channels, channel_max = Max}) ->
+assign_channel_number(none, CS) ->
+    Channels = CS#connection_state.channels,
+    Max = CS#connection_state.channel_max,
     allocate_channel_number(dict:fetch_keys(Channels), Max);
-assign_channel_number(ChannelNumber, State) ->
+assign_channel_number(ChannelNumber, _State) ->
     %% TODO bug: check whether this is already taken
     ChannelNumber.
 
-register_channel(ChannelNumber, ChannelPid, State = #connection_state{channels = Channels0}) ->
+register_channel(ChannelNumber, ChannelPid, CS) ->
+    Channels0 = CS#connection_state.channels,
     Channels1 =
-            case dict:is_key(ChannelNumber, Channels0) of
-                true ->
-                    exit({channel_already_registered, ChannelNumber});
-                false ->
-                    dict:store(ChannelNumber, ChannelPid , Channels0)
-            end,
-    State#connection_state{channels = Channels1}.
+    case dict:is_key(ChannelNumber, Channels0) of
+        true ->
+            exit({channel_already_registered, ChannelNumber});
+        false ->
+            dict:store(ChannelNumber, ChannelPid, Channels0)
+    end,
+    CS#connection_state{channels = Channels1}.
 
 %% This will be called when a channel process exits and needs to be deregistered
 %% This peforms the reverse mapping so that you can lookup a channel pid
 %% Let's hope that this lookup doesn't get too expensive .......
-unregister_channel(ChannelPid, State = #connection_state{channels = Channels0}) when is_pid(ChannelPid)->
+unregister_channel(ChannelPid, DrvType, CS) when is_pid(ChannelPid)->
+    Channels0 = CS#connection_state.channels,
     ReverseMapping = fun(Number, Pid) -> Pid == ChannelPid end,
     Projection = dict:filter(ReverseMapping, Channels0),
-    %% TODO This differentiation is only necessary for the direct channel,
-    %% look into preventing the invocation of this method
-    Channels1 = case dict:fetch_keys(Projection) of
-                    [] ->
-                        Channels0;
-                    [ChannelNumber|T] ->
-                        dict:erase(ChannelNumber, Channels0)
-                end,
-    State#connection_state{channels = Channels1};
+    Channels1 = unregister_direct(Projection, Channels0, DrvType),
+    CS#connection_state{channels = Channels1};
 
 %% This will be called when a channel process exits and needs to be deregistered
-unregister_channel(ChannelNumber, State = #connection_state{channels = Channels0}) ->
+unregister_channel(ChannelNumber, _DrvType, CS) ->
+    Channels0 = CS#connection_state.channels,
     Channels1 = dict:erase(ChannelNumber, Channels0),
-    State#connection_state{channels = Channels1}.
+    CS#connection_state{channels = Channels1}.
+
+%% TODO This differentiation is only necessary for the direct channel,
+%% look into refactoring
+unregister_direct(Projection, Channels0, direct) ->
+    case dict:fetch_keys(Projection) of
+        [] ->
+            Channels0;
+        [ChannelNumber|T] ->
+            dict:erase(ChannelNumber, Channels0)
+    end;
+unregister_direct(_Projection, Channels0, _Type) ->
+    Channels0.
 
 allocate_channel_number([], Max)-> 1;
 
@@ -161,50 +192,41 @@ allocate_channel_number(Channels, Max) ->
     %% TODO check channel max and reallocate appropriately
     MaxChannel + 1.
 
-close_connection(direct, Close, From, State) ->
-    amqp_direct_driver:close_connection(Close, From, State);
-close_connection(network, Close, From, State) ->
-    amqp_network_driver:close_connection(Close, From, State).
+close_connection(Close, From, #state{drv_module = Mod, conn_state = CS}) ->
+    Mod:close_connection(Close, From, CS).
 
 %---------------------------------------------------------------------------
 % gen_server callbacks
 %---------------------------------------------------------------------------
 
-init([InitialState, Handshake]) ->
-    State = Handshake(InitialState),
-    {ok, State}.
+init([InitialState, DrvMod, DrvType]) when is_atom(DrvMod), is_atom(DrvType) ->
+    CS = DrvMod:handshake(InitialState), % Connection state
+    {ok, #state{conn_state = CS, drv_module = DrvMod, type = DrvType}}.
 
-%% Starts a new network channel.
-handle_call({network, ChannelNumber, OutOfBand}, From, State) ->
-    handle_start({ChannelNumber, OutOfBand},
-                 fun amqp_network_driver:open_channel/3,
-                 fun amqp_network_driver:close_channel/1,
-                 fun amqp_network_driver:do/2,
-                 fun amqp_network_driver:do/3,
-                 State);
-
-%% Starts a new direct channel.
-handle_call({direct, ChannelNumber, OutOfBand}, From, State) ->
-    handle_start({ChannelNumber, OutOfBand},
-                 fun amqp_direct_driver:open_channel/3,
-                 fun amqp_direct_driver:close_channel/1,
-                 fun amqp_direct_driver:do/2,
-                 fun amqp_direct_driver:do/3,
-                 State);
+%% Starts a new channel
+handle_call({_Whatever, ChannelNumber, OutOfBand}, From, #state{drv_module = Module} = State) ->
+    handle_start(
+        {ChannelNumber, OutOfBand},
+        fun(X, Y, Z) -> Module:open_channel(X, Y, Z) end,
+        fun(X)       -> Module:close_channel(X) end,
+        fun(X, Y)    -> Module:do(X, Y) end,
+        fun(X, Y, Z) -> Module:do(X, Y, Z) end,
+        State
+    );
 
 %% Shuts the AMQP connection down
-handle_call({Mode, Close = #'connection.close'{}}, From, State) ->
-    close_connection(Mode, Close, From, State),
+handle_call({_Mode, Close = #'connection.close'{}}, From, #state{} = State) ->
+    close_connection(Close, From, State),
     {stop,normal,State}.
 
-handle_cast(Message, State) ->
+handle_cast(Message, #state{} = State) ->
     {noreply, State}.
 
 %---------------------------------------------------------------------------
 % Trap exits
 %---------------------------------------------------------------------------
 
-handle_info( {'EXIT', Pid, {amqp,Reason,Msg,Context}}, State) ->
+handle_info( {'EXIT', Pid, {amqp,Reason,Msg,Context}}, #state{} = State) ->
     io:format("Channel Peer ~p sent this message: ~p -> ~p~n",[Pid,Msg,Context]),
     {HardError, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
     case HardError of
@@ -217,19 +239,20 @@ handle_info( {'EXIT', Pid, {amqp,Reason,Msg,Context}}, State) ->
     end;            
 
 %% Just the amqp channel shutting down, so unregister this channel
-handle_info( {'EXIT', Pid, normal}, State) ->
-    NewState = unregister_channel(Pid, State),
-    {noreply, NewState};
-handle_info( {'EXIT', Pid, Reason}, State) ->
+handle_info( {'EXIT', Pid, normal}, #state{conn_state = CS, type = Type} = State) ->
+    NewCS = unregister_channel(Pid, Type, CS),
+    {noreply, State#state{conn_state = NewCS}};
+handle_info( {'EXIT', Pid, Reason}, #state{conn_state = CS, type = Type} = State) ->
     io:format("Connection: Handling exit from ~p --> ~p~n",[Pid,Reason]),
-    NewState = unregister_channel(Pid, State),
-    {noreply, NewState}.
+    NewCS = unregister_channel(Pid, Type, CS),
+    {noreply, State#state{conn_state = NewCS}}.
 
 %---------------------------------------------------------------------------
 % Rest of the gen_server callbacks
 %---------------------------------------------------------------------------
 
-terminate(Reason, State) -> ok.
+terminate(Reason, #state{}) -> ok.
 
-code_change(_OldVsn, State, _Extra) ->
+code_change(_OldVsn, #state{} = State, _Extra) ->
     State.
+
