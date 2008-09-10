@@ -31,7 +31,7 @@ ERL_ARGS=
 MNESIA_DIR=${MNESIA_BASE}/${NODENAME}
 
 exec erl \
-    -pa ../ebin \
+    -pa "`dirname $0`/../ebin" \
     -noinput \
     -hidden \
     ${ERL_ARGS} \
