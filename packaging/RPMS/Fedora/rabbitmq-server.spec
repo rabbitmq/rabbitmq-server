@@ -83,7 +83,7 @@ chown -R rabbitmq:rabbitmq /var/log/rabbitmq
 %preun
 if [ $1 = 0 ]; then
   #Complete uninstall
-  /sbin/service rabbitmq-server stop > /dev/null 2>&1
+  /sbin/service rabbitmq-server stop
   /sbin/chkconfig --del rabbitmq-server
   
   # We do not remove /var/log and /var/lib directories

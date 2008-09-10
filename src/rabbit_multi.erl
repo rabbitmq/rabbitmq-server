@@ -69,9 +69,9 @@ usage() ->
 
 Available commands:
 
-  start_all <NodeCount>    - start a local cluster of RabbitMQ nodes.
-  stop_all                 - stops all local RabbitMQ nodes.
-  rotate_logs_all [Suffix] - rotate logs for all local RabbitMQ nodes.
+  start_all <NodeCount> - start a local cluster of RabbitMQ nodes.
+  stop_all              - stops all local RabbitMQ nodes.
+  rotate_logs [Suffix]  - rotate logs for all local and running RabbitMQ nodes.
 "),
     halt(3).
 
@@ -99,10 +99,18 @@ action(rotate_logs, [], RpcTimeout) ->
 
 action(rotate_logs, [Suffix], RpcTimeout) ->
     io:format("Rotating logs for all nodes...~n", []),
-    call_all_nodes(fun(NodePids) ->
-                           rotate_logs(NodePids,
-                                       list_to_binary(Suffix),
-                                       RpcTimeout) end).
+    BinarySuffix = list_to_binary(Suffix),
+    call_all_nodes(
+      fun(NodePids) ->
+              lists:foreach(fun ({Node, _}) ->
+                                    io:format("Rotating logs for node ~p", [Node]),
+                                    case rpc:call(Node, rabbit, rotate_logs,
+                                                  [BinarySuffix], RpcTimeout) of
+                                        {badrpc, Error} -> io:format(": ~p.~n", [Error]);
+                                        ok              -> io:format(": ok.~n", [])
+                                    end
+                            end, NodePids)
+      end).
 
 %% PNodePid is the list of PIDs
 %% Running is a boolean exhibiting success at some moment
@@ -280,15 +288,6 @@ is_dead(Pid) ->
                                  _             -> true
                              end
                      end}]).
-
-rotate_logs([], _, _) -> ok;
-rotate_logs([{Node, _} | Rest], BinarySuffix, RpcTimeout) ->
-    io:format("Rotating logs for node ~p", [Node]),
-    case rpc:call(Node, rabbit, rotate_logs, [BinarySuffix], RpcTimeout) of
-        {badrpc, Error} -> io:format(": ~p.~n", [Error]);
-        ok              -> io:format(": ok.~n", [])
-    end,
-    rotate_logs(Rest, BinarySuffix, RpcTimeout).
 
 call_all_nodes(Func) ->
     case read_pids_file() of
