@@ -90,9 +90,16 @@ action(start_all, [NodeCount], RpcTimeout) ->
 
 action(stop_all, [], RpcTimeout) ->
     io:format("Stopping all nodes...~n", []),
-    call_all_nodes(fun(NodePids) ->
-                           stop_nodes(NodePids, RpcTimeout),
-                           delete_pids_file() end);
+    call_all_nodes(fun({Node, Pid}) ->
+                           io:format("Stopping node ~p~n", [Node]),
+                           rpc:call(Node, rabbit, stop_and_halt, []),
+                           case kill_wait(Pid, RpcTimeout, false) of
+                               false -> kill_wait(Pid, RpcTimeout, true);
+                               true  -> ok
+                           end,
+                           io:format("OK~n", [])
+                   end),
+    delete_pids_file();
 
 action(rotate_logs, [], RpcTimeout) ->
     action(rotate_logs, [""], RpcTimeout);
@@ -101,15 +108,13 @@ action(rotate_logs, [Suffix], RpcTimeout) ->
     io:format("Rotating logs for all nodes...~n", []),
     BinarySuffix = list_to_binary(Suffix),
     call_all_nodes(
-      fun(NodePids) ->
-              lists:foreach(fun ({Node, _}) ->
-                                    io:format("Rotating logs for node ~p", [Node]),
-                                    case rpc:call(Node, rabbit, rotate_logs,
-                                                  [BinarySuffix], RpcTimeout) of
-                                        {badrpc, Error} -> io:format(": ~p.~n", [Error]);
-                                        ok              -> io:format(": ok.~n", [])
-                                    end
-                            end, NodePids)
+      fun ({Node, _}) ->
+              io:format("Rotating logs for node ~p", [Node]),
+              case rpc:call(Node, rabbit, rotate_logs,
+                            [BinarySuffix], RpcTimeout) of
+                  {badrpc, Error} -> io:format(": ~p.~n", [Error]);
+                  ok              -> io:format(": ok.~n", [])
+              end
       end).
 
 %% PNodePid is the list of PIDs
@@ -239,21 +244,6 @@ read_pids_file() ->
                                           FileName, Reason}})
     end.
 
-stop_nodes([],_) -> ok;
-
-stop_nodes([NodePid | Rest], RpcTimeout) ->
-    stop_node(NodePid, RpcTimeout),
-    stop_nodes(Rest, RpcTimeout).
-
-stop_node({Node, Pid}, RpcTimeout) ->
-    io:format("Stopping node ~p~n", [Node]),
-    rpc:call(Node, rabbit, stop_and_halt, []),
-    case kill_wait(Pid, RpcTimeout, false) of
-        false -> kill_wait(Pid, RpcTimeout, true);
-    	true  -> ok
-    end,
-    io:format("OK~n", []).
-
 kill_wait(Pid, TimeLeft, Forceful) when TimeLeft < 0 ->
     Cmd = with_os([{unix, fun () -> if Forceful -> "kill -9";
                                        true     -> "kill"
@@ -292,7 +282,7 @@ is_dead(Pid) ->
 call_all_nodes(Func) ->
     case read_pids_file() of
         []       -> throw(no_nodes_running);
-        NodePids -> Func(NodePids)
+        NodePids -> lists:foreach(Func, NodePids)
     end.
 
 getenv(Var) ->
