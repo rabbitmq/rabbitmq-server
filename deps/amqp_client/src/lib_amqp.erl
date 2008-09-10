@@ -75,10 +75,11 @@ delete_queue(Channel,Ticket,Q) ->
     QueueDelete = #'queue.delete'{ticket = Ticket, queue = Q,
                                   if_unused = false,
                                   if_empty = false,
-                                  nowait = true},
+                                  nowait = false},
     #'queue.delete_ok'{} = amqp_channel:call(Channel, QueueDelete).
 
 bind_queue(Channel,Ticket,X,Q,Binding) ->
     QueueBind = #'queue.bind'{ticket = Ticket, queue = Q, exchange = X,
                               routing_key = Binding, nowait = false, arguments = []},
     #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind).       
+
