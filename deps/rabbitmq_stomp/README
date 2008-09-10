@@ -6,10 +6,11 @@ This is a STOMP transport plugin for use with RabbitMQ.
 
  - http://stomp.codehaus.org/
  - http://www.rabbitmq.com/
+ - https://dev.rabbitmq.com/wiki/StompGateway
 
 You can get the code by checking it out from our repository with
 
-hg clone http://hg.opensource.lshift.net/rabbitmq-stomp/
+  hg clone http://hg.rabbitmq.com/rabbitmq-stomp/
 
 Announcements regarding the transport are periodically made on the
 RabbitMQ mailing list, and on LShift's blog.
@@ -47,11 +48,12 @@ the broker will pick up extra configuration from
 make sure it is compiled, and then add the following text to
 /etc/default/rabbitmq:
 
-RABBIT_ARGS='
-  -pa /path/to/rabbitmq-stomp/ebin 
-  -rabbit
-     stomp_listeners [{"0.0.0.0",61613}]
-     extra_startup_steps [{"STOMP-listeners",rabbit_stomp,kickstart,[]}]'
+  RABBIT_ARGS='
+    -pa /path/to/rabbitmq-stomp/ebin 
+    -rabbit
+       stomp_listeners [{"0.0.0.0",61613}]
+       extra_startup_steps [{"STOMP-listeners",rabbit_stomp,kickstart,[]}]'
+  export RABBIT_ARGS
 
 making sure to update the "/path/to/rabbitmq-stomp/ebin" appropriately
 for your system. Then restart the broker with
