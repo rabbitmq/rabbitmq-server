@@ -29,26 +29,50 @@ set -e
 cd /
 
 start_rabbitmq () {
-      set +e
-      su $USER -s /bin/sh -c "$DAEMON start_all ${NODE_COUNT}" > /var/log/rabbitmq/startup_log 2> /var/log/rabbitmq/startup_err
-      case "$?" in
-        0)
-          echo SUCCESS;;
-        1)
-          echo TIMEOUT - check /var/log/rabbitmq/startup_\{log,err\};;
-        *)
-          echo FAILED - check /var/log/rabbitmq/startup_log, _err
-          exit 1;;
-      esac 
-      set -e
+    set +e
+    su $USER -s /bin/sh -c "$DAEMON start_all ${NODE_COUNT}" > /var/log/rabbitmq/startup_log 2> /var/log/rabbitmq/startup_err
+    case "$?" in
+      0)
+        echo SUCCESS
+        RETVAL=0
+        ;;
+      1)
+        echo TIMEOUT - check /var/log/rabbitmq/startup_\{log,err\}
+        RETVAL=1
+        ;;
+      *)
+        echo FAILED - check /var/log/rabbitmq/startup_log, _err
+        RETVAL=1
+        ;;
+    esac
+    set -e
 }
 
 stop_rabbitmq () {
     set +e
-    su $USER -s /bin/sh -c "$DAEMON stop_all" > /var/log/rabbitmq/shutdown_log 2> /var/log/rabbitmq/shutdown_err
+    status_rabbitmq quiet
+    if [ $RETVAL == 0 ] ; then
+        su $USER -s /bin/sh -c "$DAEMON stop_all" > /var/log/rabbitmq/shutdown_log 2> /var/log/rabbitmq/shutdown_err
+        RETVAL=$?
+        if [ $RETVAL != 0 ] ; then
+            echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
+        fi
+    else
+        echo No nodes running 
+        RETVAL=0
+    fi
+    set -e
+}
+
+status_rabbitmq() {
+    set +e
+    if [ "$1" != "quiet" ] ; then
+        su $USER -s /bin/sh -c "$DAEMON status" 2>&1
+    else
+        su $USER -s /bin/sh -c "$DAEMON status" > /dev/null 2>&1
+    fi
     if [ $? != 0 ] ; then
-        echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
-        exit 0
+        RETVAL=1
     fi
     set -e
 }
@@ -57,34 +81,40 @@ rotate_logs_rabbitmq() {
     set +e
     su $USER -s /bin/sh -c "$DAEMON rotate_logs ${ROTATE_SUFFIX}" 2>&1
     set -e
+}
 
+restart_rabbitmq() {
+    stop_rabbitmq	    
+    start_rabbitmq
 }
 
 case "$1" in
-  start)
-	echo -n "Starting $DESC: "
-	start_rabbitmq
-	echo "$NAME."
-	;;
-  stop)
-	echo -n "Stopping $DESC: "
-	stop_rabbitmq
-	echo "$NAME."
-	;;
-  rotate-logs)
-    echo -n "Rotating log files for $DESC: "
-    rotate_logs_rabbitmq
-    ;;
-  force-reload|restart)
-	echo -n "Restarting $DESC: "
-	stop_rabbitmq
-	start_rabbitmq
-	echo "$NAME."
-	;;
-  *)
-	echo "Usage: $0 {start|stop|rotate-logs|restart|force-reload}" >&2
-	RETVAL=1
-	;;
+    start)
+        echo -n "Starting $DESC: "
+        start_rabbitmq
+        echo "$NAME."
+        ;;
+    stop)
+        echo -n "Stopping $DESC: "
+        stop_rabbitmq
+        echo "$NAME."
+        ;;
+    status)
+        status_rabbitmq
+        ;;
+    rotate-logs)
+        echo -n "Rotating log files for $DESC: "
+        rotate_logs_rabbitmq
+        ;;
+    force-reload|restart)
+        echo -n "Restarting $DESC: "
+        restart_rabbitmq
+        echo "$NAME."
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|status|rotate-logs|restart|force-reload}" >&2
+        RETVAL=1
+        ;;
 esac
 
 exit $RETVAL
