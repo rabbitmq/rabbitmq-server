@@ -52,8 +52,8 @@ call(RpcClientPid, ContentType, Function, Args) ->
 
 % Sets up a reply queue for this client to listen on
 setup_reply_queue(State = #rpc_client_state{broker_config = BrokerConfig}) ->
-    #broker_config{channel_pid = ChannelPid, ticket = Ticket} = BrokerConfig,
-    QueueDeclare = #'queue.declare'{ticket = Ticket, queue = <<>>,
+    #broker_config{channel_pid = ChannelPid} = BrokerConfig,
+    QueueDeclare = #'queue.declare'{queue = <<>>,
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
                                     nowait = false, arguments = []},
@@ -78,9 +78,9 @@ publish({ContentType, [Function|Args] }, From,
                                   continuations = Continuations,
                                   type_mapping = TypeMapping}) ->
     Payload = amqp_rpc_util:encode(call, ContentType, [Function|Args], TypeMapping ),
-    #broker_config{channel_pid = ChannelPid, ticket = Ticket, queue = Q,
+    #broker_config{channel_pid = ChannelPid, queue = Q,
                    exchange = X, routing_key = RoutingKey} = BrokerConfig,
-    BasicPublish = #'basic.publish'{ticket = Ticket, exchange = X,
+    BasicPublish = #'basic.publish'{exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = false, immediate = false},
     _CorrelationId = integer_to_list(CorrelationId),

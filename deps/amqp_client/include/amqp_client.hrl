@@ -61,7 +61,6 @@
                             }).
 
 -record(broker_config, {channel_pid,
-                        ticket,
                         exchange,
                         routing_key,
                         bind_key,
