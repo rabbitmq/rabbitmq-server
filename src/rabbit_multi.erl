@@ -94,9 +94,10 @@ action(status, [], RpcTimeout) ->
     call_all_nodes(
       fun({Node, Pid}) ->
               io:format("Node '~p' with Pid ~p: ", [Node, Pid]),
-              case rpc:call(Node, rabbit, status, [], RpcTimeout) of
-                  {badrpc, Error} -> io:format("~p~n", [Error]);
-                  [{running_applications, Apps} | _] -> io:format("~p~n", [Apps])
+              case parse_status(
+                     rpc:call(Node, rabbit, status, [], RpcTimeout)) of
+                  false -> io:format("~p~n", ["not running"]);
+                  true  -> io:format("~p~n", ["running"])
               end
       end);
 
