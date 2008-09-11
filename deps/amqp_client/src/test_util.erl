@@ -51,9 +51,8 @@
 %
 
 lifecycle_test(Connection) ->
-    Realm = <<"/data">>,
     X = <<"x">>,
-    Channel = setup_channel(Connection, Realm),
+    Channel = setup_channel(Connection),
     ExchangeDeclare = #'exchange.declare'{exchange = X, type = <<"topic">>,
                                           passive = false, durable = false, auto_delete = false, internal = false,
                                           nowait = false, arguments = []},
@@ -95,12 +94,11 @@ queue_exchange_binding(Channel,X,Parent,Tag) ->
     Parent ! finished.
 
 channel_lifecycle_test(Connection) ->
-    Realm = <<"/data">>,
-    Channel1 = setup_channel(Connection, Realm),
+    Channel1 = setup_channel(Connection),
     ChannelClose = #'channel.close'{reply_code = 200, reply_text = <<"Goodbye">>,
                                     class_id = 0, method_id = 0},
     #'channel.close_ok'{} = amqp_channel:call(Channel1, ChannelClose),
-    Channel2 = setup_channel(Connection, Realm),
+    Channel2 = setup_channel(Connection),
     teardown(Connection, Channel2).
 
 basic_get_test(Connection) ->
@@ -123,14 +121,13 @@ basic_get_test(Connection) ->
     teardown(Connection, Channel).
 
 basic_return_test(Connection) ->
-    Realm = <<"/data">>,
     Publish = #publish{routing_key = <<"x.b.c.d">>,
                        q = <<"a.b.c">>,
                        x = <<"x">>,
                        bind_key = <<"a.b.c.*">>,
                        payload = ExpectedPayload = <<"qwerty">>,
                        mandatory = true},
-    Channel = setup_channel(Connection, Realm),
+    Channel = setup_channel(Connection),
     setup_publish(Channel,  Publish),
     sleep(2000),
     amqp_channel:register_return_handler(Channel, self()),
@@ -221,8 +218,7 @@ basic_recover_test(Connection) ->
     teardown(Connection, Channel).
 
 basic_qos_test(Connection) ->
-    Realm = <<"/data">>,
-    Channel = setup_channel(Connection, Realm),
+    Channel = setup_channel(Connection),
     BasicQos = #'basic.qos'{prefetch_size = 8,
                             prefetch_count = 1,
                             global = true},
@@ -252,14 +248,13 @@ basic_reject_test(Connection) ->
     end.
 
 setup_publish(Connection) ->
-    Realm = <<"/data">>,
     Publish = #publish{routing_key = <<"a.b.c.d">>,
                        q = <<"a.b.c">>,
                        x = <<"x">>,
                        bind_key = <<"a.b.c.*">>,
                        payload = <<"foobar">>
                        },
-    Channel = setup_channel(Connection, Realm),
+    Channel = setup_channel(Connection),
     setup_publish(Channel,  Publish).
 
 setup_publish(Channel, #publish{routing_key = RoutingKey,
@@ -312,7 +307,7 @@ setup_exchange(Channel,  Q, X, BindKey) ->
     #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind),
     ok.
 
-setup_channel(Connection, Realm) ->
+setup_channel(Connection) ->
     amqp_connection:open_channel(Connection).
 
 latch_loop(0) -> ok;

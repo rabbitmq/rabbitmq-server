@@ -65,6 +65,5 @@
                         exchange,
                         routing_key,
                         bind_key,
-                        queue,
-                        realm}).
+                        queue}).
 

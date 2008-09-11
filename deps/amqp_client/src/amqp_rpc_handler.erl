@@ -38,9 +38,9 @@
 %---------------------------------------------------------------------------
 init([ServerName, TypeMapping, Username, Password,
       BC = #broker_config{exchange = X, routing_key = RoutingKey,
-                          queue = Q, realm = Realm, bind_key = BindKey}]) ->
+                          queue = Q, bind_key = BindKey}]) ->
     Connection = amqp_connection:start(Username, Password),
-    {ChannelPid, Ticket} = test_util:setup_channel(Connection, Realm),
+    {ChannelPid, Ticket} = test_util:setup_channel(Connection),
     ok = test_util:setup_exchange(ChannelPid, Ticket, Q, X, BindKey),
     BrokerConfig = BC#broker_config{channel_pid = ChannelPid,
                                     ticket = Ticket},
