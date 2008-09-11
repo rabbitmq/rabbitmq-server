@@ -47,40 +47,49 @@ start_rabbitmq () {
     case "$?" in
       0)
         echo SUCCESS && touch $LOCK_FILE
+        RETVAL=0
         ;;
       1)
         echo TIMEOUT - check /var/log/rabbitmq/startup_\{log,err\}
+        RETVAL=1
         ;;
       *)
         echo FAILED - check /var/log/rabbitmq/startup_log, _err
-        RETVAL=1;;
+        RETVAL=1
+        ;;
     esac 
     set -e
 }
 
 stop_rabbitmq () {
     set +e
-    su $USER -s /bin/sh -c "$DAEMON stop_all" > /var/log/rabbitmq/shutdown_log 2> /var/log/rabbitmq/shutdown_err
-
-    if [ $? != 0 ] ; then
-        echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
+    status_rabbitmq quiet
+    if [ $RETVAL == 0 ] ; then
+        su $USER -s /bin/sh -c "$DAEMON stop_all" > /var/log/rabbitmq/shutdown_log 2> /var/log/rabbitmq/shutdown_err
         RETVAL=$?
+        if [ $RETVAL != 0 ] ; then
+            echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
+        else
+            rm -rf $LOCK_FILE
+        fi
     else
-        rm -rf $LOCK_FILE
+        echo No nodes running 
         RETVAL=0
     fi
     set -e
 }
 
-status_rabbitmq () {
-    status $NAME
-}
-
-restart_rabbitmq () {
-    echo -n "Restarting $DESC: "
-    stop_rabbitmq
-    start_rabbitmq
-    echo "$NAME."
+status_rabbitmq() {
+    set +e
+    if [ "$1" != "quiet" ] ; then
+        su $USER -s /bin/sh -c "$DAEMON status" 2>&1
+    else
+        su $USER -s /bin/sh -c "$DAEMON status" > /dev/null 2>&1
+    fi
+    if [ $? != 0 ] ; then
+        RETVAL=1
+    fi
+    set -e
 }
 
 rotate_logs_rabbitmq() {
@@ -89,37 +98,43 @@ rotate_logs_rabbitmq() {
     set -e
 }
 
+restart_rabbitmq() {
+    stop_rabbitmq	    
+    start_rabbitmq
+}
+
 case "$1" in
-  start)
-	echo -n "Starting $DESC: "
-	start_rabbitmq
-	echo "$NAME."
-	;;
-  stop)
-	echo -n "Stopping $DESC: "
-	stop_rabbitmq
-	echo "$NAME."
-	;;
-  rotate-logs)
-	echo -n "Rotating log files for $DESC: "
-	rotate_logs_rabbitmq
-	;;
-  force-reload|reload|restart)
-        restart_rabbitmq
-	;;
-  status)
-	echo "Status of $DESC: "
-	status_rabbitmq
-	RETVAL=$?
-	;;
-  condrestart|try-restart)
-        status_rabbitmq >/dev/null 2>&1 || exit 0
-        restart_rabbitmq
+    start)
+        echo -n "Starting $DESC: "
+        start_rabbitmq
+        echo "$NAME."
         ;;
-  *)
-	echo "Usage: $0 {start|stop|rotate-logs|status|restart|condrestart|try-restart|reload|force-reload}" >&2
-	RETVAL=1
-	;;
+    stop)
+        echo -n "Stopping $DESC: "
+        stop_rabbitmq
+        echo "$NAME."
+        ;;
+    status)
+        status_rabbitmq
+        ;;
+    rotate-logs)
+        echo -n "Rotating log files for $DESC: "
+        rotate_logs_rabbitmq
+        ;;
+    force-reload|reload|restart)
+        echo -n "Restarting $DESC: "
+        restart_rabbitmq
+        echo "$NAME."
+        ;;
+    condrestart|try-restart)
+        echo -n "Restarting $DESC: "
+        restart_rabbitmq
+        echo "$NAME."
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|status|rotate-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
+        RETVAL=1
+        ;;
 esac
 
 exit $RETVAL

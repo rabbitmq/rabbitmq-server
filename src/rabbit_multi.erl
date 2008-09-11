@@ -70,6 +70,7 @@ usage() ->
 Available commands:
 
   start_all <NodeCount> - start a local cluster of RabbitMQ nodes.
+  status                - print status of all running nodes
   stop_all              - stops all local RabbitMQ nodes.
   rotate_logs [Suffix]  - rotate logs for all local and running RabbitMQ nodes.
 "),
@@ -87,6 +88,18 @@ action(start_all, [NodeCount], RpcTimeout) ->
         true  -> ok;
         false -> timeout
     end;
+
+action(status, [], RpcTimeout) ->
+    io:format("Status of all running nodes...~n", []),
+    call_all_nodes(
+      fun({Node, Pid}) ->
+              Status = rpc:call(Node, rabbit, status, [], RpcTimeout),
+              io:format("Node '~p' with Pid ~p: ~p~n",
+                        [Node, Pid, case parse_status(Status) of
+                                        false -> not_running;
+                                        true  -> running
+                                    end])
+      end);
 
 action(stop_all, [], RpcTimeout) ->
     io:format("Stopping all nodes...~n", []),
