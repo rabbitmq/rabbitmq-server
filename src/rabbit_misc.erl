@@ -26,6 +26,7 @@
 -module(rabbit_misc).
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, protocol_error/3, protocol_error/4]).
@@ -42,6 +43,7 @@
 -export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([escape_routing_key/1, emit_presence/2]).
+-export([append_file/2]).
 
 -import(mnesia).
 -import(lists).
@@ -67,7 +69,7 @@
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (vhost(), K, name()) -> r(K) when is_subtype(K, atom())).
+-spec(r/3 :: (vhost(), K, resource_name()) -> r(K) when is_subtype(K, atom())).
 -spec(r/2 :: (vhost(), K) -> #resource{virtual_host :: vhost(),
                                        kind         :: K,
                                        name         :: '_'}
@@ -93,6 +95,7 @@
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
+-spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
 
 -endif.
 
@@ -360,3 +363,23 @@ emit_presence(Resource = #resource{kind = KindAtom, name = InstanceBin},
     _Ignored = rabbit_exchange:simple_publish(
                  false, false, XName, RK, undefined, <<>>),
     ok.
+
+append_file(File, Suffix) ->
+    case file:read_file_info(File) of
+        {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
+        {error, enoent} -> append_file(File, 0, Suffix);
+        Error           -> Error
+    end.
+
+append_file(_, _, "") ->
+    ok;
+append_file(File, 0, Suffix) ->
+    case file:open([File, Suffix], [append]) of
+        {ok, Fd} -> file:close(Fd);
+        Error    -> Error
+    end;
+append_file(File, _, Suffix) ->
+    case file:read_file(File) of
+        {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
+        Error      -> Error
+    end.

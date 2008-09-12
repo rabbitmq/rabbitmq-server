@@ -115,7 +115,7 @@ srcdist: distclean
 	$(MAKE) VERSION=$(VERSION) GENERIC_STAGE_DIR=dist/$(TARBALL_NAME) generic_stage
 
 	mkdir -p dist/$(TARBALL_NAME)/codegen
-	cp -r $(AMQP_CODEGEN_DIR)/* dist/$(TARBALL_NAME)/codegen/.
+	cp -r $(AMQP_CODEGEN_DIR)/* dist/$(TARBALL_NAME)/codegen/
 	cp codegen.py Makefile dist/$(TARBALL_NAME)
 
 	cp -r scripts dist/$(TARBALL_NAME)
