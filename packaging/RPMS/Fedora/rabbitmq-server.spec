@@ -51,17 +51,17 @@ mkdir -p %{buildroot}/var/log/rabbitmq
 mkdir -p %{buildroot}/etc/rc.d/init.d/
 
 #Copy all necessary lib files etc.
-cp ../init.d %{buildroot}/etc/rc.d/init.d/rabbitmq-server
+cp rpm/init.d %{buildroot}/etc/rc.d/init.d/rabbitmq-server
 chmod 0755 %{buildroot}/etc/rc.d/init.d/rabbitmq-server
 
 mv %{buildroot}/usr/sbin/rabbitmqctl %{buildroot}/usr/sbin/rabbitmqctl_real
-cp ../rabbitmqctl_wrapper %{buildroot}/usr/sbin/rabbitmqctl
+cp rpm/rabbitmqctl_wrapper %{buildroot}/usr/sbin/rabbitmqctl
 chmod 0755 %{buildroot}/usr/sbin/rabbitmqctl
 
 cp %{buildroot}%{_mandir}/man1/rabbitmqctl.1.gz %{buildroot}%{_mandir}/man1/rabbitmqctl_real.1.gz
 
 mkdir -p %{buildroot}/etc/logrotate.d
-cp ../rabbitmq-server.logrotate %{buildroot}/etc/logrotate.d/rabbitmq-server
+cp rpm/rabbitmq-server.logrotate %{buildroot}/etc/logrotate.d/rabbitmq-server
 
 %post
 # create rabbitmq group

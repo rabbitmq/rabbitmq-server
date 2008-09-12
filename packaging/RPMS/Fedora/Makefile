@@ -6,30 +6,39 @@ TARBALL=$(SOURCE_TARBALL_DIR)/rabbitmq-server-$(VERSION).tar.gz
 TOP_DIR=$(shell pwd)
 RPM_VERSION=$(shell echo $(VERSION) | tr - _)
 DEFINES=--define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp' --define 'main_version $(VERSION)' --define 'rpm_version $(RPM_VERSION)'
+RPM_SOURCE_DIR=rabbitmq-server-$(VERSION)/rpm
 
 rpms:   clean server
 
 #Create proper environment for making rpms
 prepare:
-	mkdir -p $(TOP_DIR)/BUILD
-	mkdir -p $(TOP_DIR)/SOURCES
-	mkdir -p $(TOP_DIR)/SPECS
-	mkdir -p $(TOP_DIR)/SRPMS
-	mkdir -p $(TOP_DIR)/RPMS
-	mkdir -p $(TOP_DIR)/tmp
-	cp $(TOP_DIR)/$(TARBALL) $(TOP_DIR)/SOURCES
-	cp $(TOP_DIR)/rabbitmq-server.spec $(TOP_DIR)/SPECS
-	cp $(TOP_DIR)/init.d $(TOP_DIR)/BUILD
-	cp $(TOP_DIR)/rabbitmqctl_wrapper $(TOP_DIR)/BUILD
-	cp $(TOP_DIR)/rabbitmq-server.logrotate $(TOP_DIR)/BUILD
+	mkdir -p BUILD
+	mkdir -p SOURCES
+	mkdir -p SPECS
+	mkdir -p SRPMS
+	mkdir -p RPMS
+	mkdir -p tmp
+	cp $(TOP_DIR)/$(TARBALL) SOURCES
+	cp rabbitmq-server.spec SPECS
+	
+	mkdir -p tmp/$(RPM_SOURCE_DIR)
+	cp init.d tmp/$(RPM_SOURCE_DIR)
+	cp rabbitmqctl_wrapper tmp/$(RPM_SOURCE_DIR)
+	cp rabbitmq-server.logrotate tmp/$(RPM_SOURCE_DIR)
+	
+	gunzip SOURCES/rabbitmq-server-$(VERSION).tar.gz
+	tar -C tmp -rf  $(TOP_DIR)/SOURCES/rabbitmq-server-$(VERSION).tar \
+		$(RPM_SOURCE_DIR)/
+	gzip SOURCES/rabbitmq-server-$(VERSION).tar
+	rm -rf tmp/rabbitmq-server*
 
 server: prepare
-	rpmbuild -ba $(TOP_DIR)/SPECS/rabbitmq-server.spec $(DEFINES) --target noarch
+	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --target noarch
 
 clean:	
-	rm -rf $(TOP_DIR)/SOURCES/
-	rm -rf $(TOP_DIR)/SPECS/
-	rm -rf $(TOP_DIR)/RPMS/
-	rm -rf $(TOP_DIR)/SRPMS/
-	rm -rf $(TOP_DIR)/BUILD/
-	rm -rf $(TOP_DIR)/tmp/
+	rm -rf SOURCES
+	rm -rf SPECS
+	rm -rf RPMS
+	rm -rf SRPMS
+	rm -rf BUILD
+	rm -rf tmp
