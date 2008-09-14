@@ -166,7 +166,7 @@ recover_queue(Q) ->
     ok.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
-    Exchange = rabbit_misc:r(<<"/">>, exchange, <<>>),
+    Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
     RoutingKey = QueueName#resource.name,
     add_binding(QueueName, Exchange, RoutingKey, []),
     ok.
