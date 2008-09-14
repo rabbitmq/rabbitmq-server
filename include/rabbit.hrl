@@ -81,7 +81,6 @@
                 name         :: name()}).
 -type(queue_name() :: r('queue')).
 -type(exchange_name() :: r('exchange')).
--type(key() :: binary()).
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
@@ -100,7 +99,7 @@
 -type(binding() ::
       #binding{exchange_name    :: exchange_name(),
                queue_name       :: queue_name(),
-               key              :: key()}).
+               key              :: binding_key()}).
 %% TODO: make this more precise by tying specific class_ids to
 %% specific properties
 -type(undecoded_content() ::
