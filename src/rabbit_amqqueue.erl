@@ -30,7 +30,6 @@
 -export([lookup/1, with/2, with_or_die/2, list_vhost_queues/1,
          stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4,
          commit/2, rollback/2]).
--export([add_binding/4, delete_binding/4]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, notify_down/2]).
@@ -51,18 +50,10 @@
 -type(qstats() :: {'ok', queue_name(), non_neg_integer(), non_neg_integer()}).
 -type(qlen() :: {'ok', non_neg_integer()}).
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
--type(bind_res() :: 'ok' |
-      {'error', 'queue_not_found' | 'exchange_not_found'}).
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
              amqqueue()).
--spec(add_binding/4 ::
-      (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
-            bind_res() | {'error', 'durability_settings_incompatible'}).
--spec(delete_binding/4 ::
-      (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
-             bind_res() | {'error', 'binding_not_found'}).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
@@ -168,21 +159,9 @@ recover_queue(Q) ->
 add_default_binding(#amqqueue{name = QueueName}) ->
     Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
     RoutingKey = QueueName#resource.name,
-    add_binding(QueueName, Exchange, RoutingKey, []),
+    rabbit_exchange:add_binding(QueueName, Exchange, RoutingKey, []),
     ok.
-    
-add_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
-    Binding = #binding{exchange_name = ExchangeName,
-                       key = RoutingKey,
-                       queue_name = QueueName},
-    rabbit_misc:execute_mnesia_transaction(fun rabbit_exchange:add_binding/1, [Binding]).
 
-delete_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
-    Binding = #binding{exchange_name = ExchangeName,
-                       key = RoutingKey,
-                       queue_name = QueueName},
-    rabbit_misc:execute_mnesia_transaction(fun rabbit_exchange:delete_binding/1, [Binding]).
-    
 lookup(Name) ->
     rabbit_misc:dirty_read({amqqueue, Name}).
 
