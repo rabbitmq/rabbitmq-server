@@ -269,13 +269,10 @@ internal_delete(QueueName) ->
               end
       end).
 
-delete_temp(Q = #amqqueue{name = QueueName}) ->
+delete_queue(Q = #amqqueue{name = QueueName}) ->
     ok = rabbit_exchange:delete_bindings(Q),
     ok = mnesia:delete({amqqueue, QueueName}),
     ok.
-
-delete_queue(Q = #amqqueue{}) ->
-    ok = delete_temp(Q).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(
