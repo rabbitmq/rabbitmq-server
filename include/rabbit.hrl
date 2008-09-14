@@ -44,9 +44,10 @@
 -record(exchange, {name, type, durable, auto_delete, arguments}).
 
 -record(amqqueue, {name, durable, auto_delete, arguments, pid}).
-%% This constant field seems to be required because the underlying storage is
-%% ets, which stores key value pairs
 
+%% In the route and reverse route record definitions,
+%% theconstant field seems to be required because the
+%% underlying storage is ets, which stores key value pairs.
 %% The binding field is made up of an {Exchange, Binding, Queue}
 -record(route, {binding, value = const}).
 %% The reverse_binding field is made up of an {Queue, Binding, Exchange}
