@@ -571,8 +571,7 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
 handle_method(#'queue.bind'{queue = QueueNameBin,
                             exchange = ExchangeNameBin,
                             routing_key = RoutingKey,
-                            nowait = NoWait,
-                            arguments = Arguments},
+                            nowait = NoWait},
               _, State = #ch{ virtual_host = VHostPath }) ->
     %% FIXME: connection exception (!) on failure?? (see rule named "failure" in spec-XML)
     %% FIXME: don't allow binding to internal exchanges - including the one named "" !
@@ -581,7 +580,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     case rabbit_exchange:add_binding(QueueName, ExchangeName,
-                                     ActualRoutingKey, Arguments) of
+                                     ActualRoutingKey) of
         {error, queue_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s", [rabbit_misc:rs(QueueName)]);
