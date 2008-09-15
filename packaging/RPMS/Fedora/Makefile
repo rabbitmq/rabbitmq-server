@@ -12,12 +12,7 @@ rpms:   clean server
 
 #Create proper environment for making rpms
 prepare:
-	mkdir -p BUILD
-	mkdir -p SOURCES
-	mkdir -p SPECS
-	mkdir -p SRPMS
-	mkdir -p RPMS
-	mkdir -p tmp
+	mkdir -p BUILD SOURCES SPECS SRPMS RPMS tmp
 	cp $(TOP_DIR)/$(TARBALL) SOURCES
 	cp rabbitmq-server.spec SPECS
 	
@@ -27,8 +22,7 @@ prepare:
 	cp rabbitmq-server.logrotate tmp/$(RPM_SOURCE_DIR)
 	
 	gunzip SOURCES/rabbitmq-server-$(VERSION).tar.gz
-	tar -C tmp -rf  $(TOP_DIR)/SOURCES/rabbitmq-server-$(VERSION).tar \
-		$(RPM_SOURCE_DIR)/
+	(cd tmp; tar -rf  ../SOURCES/rabbitmq-server-$(VERSION).tar $(RPM_SOURCE_DIR)/)
 	gzip SOURCES/rabbitmq-server-$(VERSION).tar
 	rm -rf tmp/rabbitmq-server*
 
@@ -36,9 +30,4 @@ server: prepare
 	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --target noarch
 
 clean:	
-	rm -rf SOURCES
-	rm -rf SPECS
-	rm -rf RPMS
-	rm -rf SRPMS
-	rm -rf BUILD
-	rm -rf tmp
+	rm -rf SOURCES SPECS RPMS SRPMS BUILD tmp
