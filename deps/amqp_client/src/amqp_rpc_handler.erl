@@ -38,16 +38,15 @@
 %---------------------------------------------------------------------------
 init([ServerName, TypeMapping, Username, Password,
       BC = #broker_config{exchange = X, routing_key = RoutingKey,
-                          queue = Q, realm = Realm, bind_key = BindKey}]) ->
+                          queue = Q, bind_key = BindKey}]) ->
     Connection = amqp_connection:start(Username, Password),
-    {ChannelPid, Ticket} = test_util:setup_channel(Connection, Realm),
-    ok = test_util:setup_exchange(ChannelPid, Ticket, Q, X, BindKey),
-    BrokerConfig = BC#broker_config{channel_pid = ChannelPid,
-                                    ticket = Ticket},
+    ChannelPid = test_util:setup_channel(Connection),
+    ok = test_util:setup_exchange(ChannelPid, Q, X, BindKey),
+    BrokerConfig = BC#broker_config{channel_pid = ChannelPid},
     State = #rpc_handler_state{server_name = ServerName,
                                type_mapping = TypeMapping,
                                broker_config = BrokerConfig},
-    BasicConsume = #'basic.consume'{ticket = Ticket, queue = Q,
+    BasicConsume = #'basic.consume'{queue = Q,
                                     consumer_tag = <<"">>,
                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(ChannelPid, BasicConsume, self()),
@@ -72,7 +71,7 @@ handle_info({content, ClassId, Properties, PropertiesBin, Payload},
             State = #rpc_handler_state{broker_config = BrokerConfig,
                                        server_pid = ServerPid,
                                        type_mapping = TypeMapping}) ->
-    #broker_config{channel_pid = ChannelPid, ticket = Ticket, exchange = X} = BrokerConfig,
+    #broker_config{channel_pid = ChannelPid, exchange = X} = BrokerConfig,
     Props = #'P_basic'{correlation_id = CorrelationId,
                        reply_to = Q,
                        content_type = ContentType}
@@ -95,7 +94,7 @@ handle_info({content, ClassId, Properties, PropertiesBin, Payload},
                                 amqp_rpc_util:encode(reply, ContentType, Reply, TypeMapping)
                         end
                end,
-    BasicPublish = #'basic.publish'{ticket = Ticket, exchange = <<"">>,
+    BasicPublish = #'basic.publish'{exchange = <<"">>,
                                     routing_key = Q,
                                     mandatory = false, immediate = false},
     ReplyProps = #'P_basic'{correlation_id = CorrelationId,

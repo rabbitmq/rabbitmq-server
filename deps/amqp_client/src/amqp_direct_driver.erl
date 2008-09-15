@@ -47,8 +47,6 @@ handshake(ConnectionState = #connection_state{username = User,
 
 open_channel({Channel,OutOfBand}, ChannelPid, State = #connection_state{username = User,
                                                                        vhostpath = VHost}) ->
-    %% Why must only the username be binary?
-    %% I think this is because of the binary guard on rabbit_realm:access_request/3
     UserBin = amqp_util:binary(User),
     ReaderPid = WriterPid = ChannelPid,
     Peer = rabbit_channel:start_link(ReaderPid, WriterPid, UserBin, VHost),
