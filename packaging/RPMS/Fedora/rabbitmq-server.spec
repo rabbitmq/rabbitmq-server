@@ -8,6 +8,7 @@ URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
 Requires: erlang, logrotate
 Packager: Hubert Plociniczak <hubert@lshift.net>
+Patch0: rpm.patch
 BuildRoot: %{_tmppath}/%{name}-%{main_version}-%{release}-root
 Summary: The RabbitMQ server
 Requires(post): chkconfig
@@ -34,6 +35,7 @@ fi
 
 %prep
 %setup -n %{name}-%{main_version}
+%patch -p1
 
 %build
 make
