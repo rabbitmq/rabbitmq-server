@@ -8,7 +8,10 @@ Group: Development/Libraries
 Source: http://www.rabbitmq.com/releases/%{source_name}-%{main_version}.tar.gz
 URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
+%if 0%{?debian}
+%else
 BuildRequires: python, python-json
+%endif
 Requires: erlang
 Packager: Hubert Plociniczak <hubert@lshift.net>
 BuildRoot: %{_tmppath}/%{name}-%{main_version}-%{release}-root
