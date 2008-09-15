@@ -36,7 +36,7 @@ non_existent_exchange_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
     lib_amqp:declare_exchange(Channel, X),
     % Deliberately mix up the routingkey and exchange arguments
-    lib_amqp:publish(Channel,RoutingKey,X,Payload),
+    lib_amqp:publish(Channel, RoutingKey, X, Payload),
     receive
         X -> ok
     after 1000 -> ok
