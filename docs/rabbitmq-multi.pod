@@ -23,8 +23,14 @@ start_all I<count>
     start count nodes with unique names, listening on all IP addresses
     and on sequential ports starting from 5672.
 
+status
+    print the status of all running RabbitMQ nodes
+
 stop_all
     stop all local RabbitMQ nodes
+
+rotate_logs
+    rotate log files for all local and running RabbitMQ nodes
 
 =head1 EXAMPLES
 
