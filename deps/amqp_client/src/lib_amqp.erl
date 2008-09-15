@@ -130,3 +130,4 @@ bind_queue(Channel, X, Q, Binding) ->
     QueueBind = #'queue.bind'{queue = Q, exchange = X,
                               routing_key = Binding, nowait = false, arguments = []},
     #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind).
+
