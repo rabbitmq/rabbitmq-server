@@ -40,7 +40,7 @@
 -record(bstate, {acc, remaining}).
 
 %% States:
-%%  command . u(H) . key . value . (H + 0)
+%%  command . u(H) . key . eatspace . value . (H + 0)
 
 initial_headers_state() ->
     #hstate{state = command, acc = [], headers = []}.
@@ -48,7 +48,7 @@ initial_headers_state() ->
 parse_headers([], ParseState) ->
     {more, ParseState};
 parse_headers([$\r | Rest], ParseState = #hstate{state = State})
-  when State == command orelse State == key orelse State == value ->
+  when State == command orelse State == key orelse State == eatspace orelse State == value ->
     parse_headers(Rest, ParseState);
 parse_headers([$\n | Rest], ParseState = #hstate{state = command, acc = []}) ->
     parse_headers(Rest, ParseState);
@@ -64,7 +64,11 @@ parse_headers([$\n | Rest], _ParseState = #hstate{state = key, acc = Acc,
 	    {error, {bad_header_key, lists:reverse(Acc)}}
     end;
 parse_headers([$: | Rest], ParseState = #hstate{state = key, acc = Acc}) ->
-    parse_headers(Rest, ParseState#hstate{state = value, acc = [], key = lists:reverse(Acc)});
+    parse_headers(Rest, ParseState#hstate{state = eatspace, acc = [], key = lists:reverse(Acc)});
+parse_headers([$  | Rest], ParseState = #hstate{state = eatspace}) ->
+    parse_headers(Rest, ParseState);
+parse_headers(Input, ParseState = #hstate{state = eatspace}) ->
+    parse_headers(Input, ParseState#hstate{state = value});
 parse_headers([$\n | Rest], ParseState = #hstate{state = value, acc = Acc, key = Key,
 						 headers = Headers}) ->
     parse_headers(Rest, ParseState#hstate{state = key, acc = [],
