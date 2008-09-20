@@ -33,7 +33,7 @@
          simple_publish/6, simple_publish/3,
          route/2]).
 -export([add_binding/1, delete_binding/1]).
--export([add_binding/3, delete_binding/3]).
+-export([add_binding/4, delete_binding/4]).
 -export([delete/2]).
 -export([delete_bindings/1]).
 -export([check_type/1, assert_type/2, topic_matches/2]).
@@ -69,11 +69,11 @@
 -spec(add_binding/1 :: (binding()) -> 'ok' | not_found() |
                                      {'error', 'durability_settings_incompatible'}).
 -spec(delete_binding/1 :: (binding()) -> 'ok' | not_found()).
--spec(add_binding/3 ::
-      (queue_name(), exchange_name(), routing_key()) ->
+-spec(add_binding/4 ::
+      (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
             bind_res() | {'error', 'durability_settings_incompatible'}).
--spec(delete_binding/3 ::
-      (queue_name(), exchange_name(), routing_key()) ->
+-spec(delete_binding/4 ::
+      (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'binding_not_found'}).
 -spec(delete_bindings/1 :: (amqqueue()) -> 'ok' | not_found()).
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
@@ -248,13 +248,13 @@ call_with_exchange_and_queue(#binding{exchange_name = Exchange,
     end.
 
 
-add_binding(QueueName, ExchangeName, RoutingKey) ->
+add_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
     Binding = #binding{exchange_name = ExchangeName,
                        key = RoutingKey,
                        queue_name = QueueName},
     rabbit_misc:execute_mnesia_transaction(fun add_binding/1, [Binding]).
 
-delete_binding(QueueName, ExchangeName, RoutingKey) ->
+delete_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
     Binding = #binding{exchange_name = ExchangeName,
                        key = RoutingKey,
                        queue_name = QueueName},
