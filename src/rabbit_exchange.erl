@@ -248,13 +248,13 @@ call_with_exchange_and_queue(#binding{exchange_name = Exchange,
     end.
 
 
-add_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
+add_binding(QueueName, ExchangeName, RoutingKey, _Arguments) ->
     Binding = #binding{exchange_name = ExchangeName,
                        key = RoutingKey,
                        queue_name = QueueName},
     rabbit_misc:execute_mnesia_transaction(fun add_binding/1, [Binding]).
 
-delete_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
+delete_binding(QueueName, ExchangeName, RoutingKey, _Arguments) ->
     Binding = #binding{exchange_name = ExchangeName,
                        key = RoutingKey,
                        queue_name = QueueName},
@@ -275,7 +275,7 @@ add_binding(Binding) ->
 delete_binding(Binding) ->
     call_with_exchange_and_queue(
          Binding,
-         fun (X,Q) -> ok = internal_delete_binding(Binding),
+         fun (X, _Q) -> ok = internal_delete_binding(Binding),
                       maybe_auto_delete(X)
          end).
 
