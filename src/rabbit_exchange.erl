@@ -237,7 +237,7 @@ lookup_qpids(Queues) ->
     Fun = fun() ->
             sets:fold(
                 fun(Key, Acc) -> [#amqqueue{pid = QPid}] = mnesia:read({amqqueue, Key}),                                 
-                                 [QPid] ++ Acc end, 
+                                 [QPid | Acc] end, 
                 [], Set) end,
     mnesia:activity(async_dirty,Fun).
         
