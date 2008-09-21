@@ -75,7 +75,7 @@
 -spec(delete_binding/4 ::
       (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'binding_not_found'}).
--spec(delete_bindings/1 :: (amqqueue()) -> 'ok' | not_found()).
+-spec(delete_bindings/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
              'ok' | not_found() | {'error', 'in_use'}).
@@ -239,8 +239,8 @@ lookup_qpids(Queues) ->
         
 % TODO: Should all of the route and binding management not be refactored to it's own module
 % Especially seeing as unbind will have to be implemented for 0.91 ?
-delete_routes(#amqqueue{name = Name}) ->
-    Binding = #binding{queue_name = Name, exchange_name = '_', key = '_'},
+delete_routes(QueueName) ->
+    Binding = #binding{queue_name = QueueName, exchange_name = '_', key = '_'},
     {Route, ReverseRoute} = route_with_reverse(Binding),
     ok = mnesia:delete_object(Route),
     ok = mnesia:delete_object(ReverseRoute),
@@ -293,8 +293,9 @@ delete_binding(Binding) ->
                        maybe_auto_delete(X)
          end).
 
-delete_bindings(Q = #amqqueue{}) ->
-    delete_routes(Q).
+% TODO: Should the exported function not get renamed to delete_routes instead of this indirection?
+delete_bindings(QueueName) ->
+    delete_routes(QueueName).
 
 %% Must run within a transaction.
 maybe_auto_delete(#exchange{auto_delete = false}) ->
