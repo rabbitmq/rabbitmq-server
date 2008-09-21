@@ -229,10 +229,7 @@ with_user_and_vhost(Username, VHostPath, Thunk) ->
 %% elsewhere and get a consistent result even when that read
 %% executes on a different node.
 execute_mnesia_transaction(TxFun) ->
-    case mnesia:sync_transaction(TxFun) of
-        {atomic,  Result} -> Result;
-        {aborted, Reason} -> throw({error, Reason})
-    end.
+    execute_mnesia_transaction(TxFun, []).
     
 execute_mnesia_transaction(TxFun, Args) ->
     case mnesia:sync_transaction(TxFun, Args) of
