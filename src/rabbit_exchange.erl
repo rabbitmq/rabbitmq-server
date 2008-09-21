@@ -250,9 +250,7 @@ delete_routes(QueueName) ->
     ok = mnesia:delete_object(ReverseRoute),
     ok = mnesia:delete_object(durable_routes, Route, write).
 
-% TODO: Don't really like this double lookup
-% It seems very clunky
-% Can this get refactored to to avoid the duplication of the lookup/1 function?
+% TODO: Don't really like this double lookup, it *seems* very clunky
 call_with_exchange_and_queue(#binding{exchange_name = Exchange,
                                       queue_name = Queue}, Fun) ->
     case mnesia:wread({exchange, Exchange}) of
