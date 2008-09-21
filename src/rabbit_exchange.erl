@@ -207,7 +207,8 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
                                                       queue_name = QName,
                                                       key = BindingKey}} <- mnesia:table(route),
                             ExchangeName == Name,
-                            % TODO: This causes a full table scan (see bug 19336)
+                            % TODO: This causes a full scan for each entry
+                            % with the same exchange  (see bug 19336)
                             topic_matches(BindingKey, RoutingKey)]),
     lookup_qpids(mnesia:activity(async_dirty, fun() -> qlc:e(Query) end));
 
