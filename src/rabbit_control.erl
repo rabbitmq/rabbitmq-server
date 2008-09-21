@@ -73,6 +73,7 @@ Available commands:
   force_reset
   cluster <ClusterNode> ...
   status
+  rotate_logs [Suffix]
 
   add_user        <UserName> <Password>
   delete_user     <UserName>
@@ -128,6 +129,13 @@ action(status, Node, []) ->
     Res = call(Node, {rabbit, status, []}),
     io:format("~n~p~n", [Res]),
     ok;
+
+action(rotate_logs, Node, []) ->
+    io:format("Reopening logs for node ~p ...", [Node]),
+    call(Node, {rabbit, rotate_logs, [""]});
+action(rotate_logs, Node, Args = [Suffix]) ->
+    io:format("Rotating logs to files with suffix ~p ...", [Suffix]),
+    call(Node, {rabbit, rotate_logs, Args});
 
 action(add_user, Node, Args = [Username, _Password]) ->
     io:format("Creating user ~p ...", [Username]),
