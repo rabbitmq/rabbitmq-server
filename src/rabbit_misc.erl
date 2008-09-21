@@ -79,6 +79,7 @@
 -spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
+-spec(execute_mnesia_transaction/2 :: (thunk(A), any()) -> A).
 -spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
 -spec(localnode/1 :: (atom()) -> node()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
