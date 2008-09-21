@@ -198,16 +198,20 @@ simple_publish(Mandatory, Immediate,
 %% The function ensures that a qpid appears in the return list exactly
 %% as many times as a message should be delivered to it. With the
 %% current exchange types that is at most once.
-route(#exchange{name = Name, type = topic}, RoutingKey) ->
-    route_internal(Name, RoutingKey, fun topic_matches/2);
-
-route(#exchange{name = Name}, RoutingKey) ->
-    route_internal(Name, RoutingKey).
-    
+%
 % TODO: This returns a list of QPids to route to.
 % Maybe this should be handled by a cursor instead.
 % This routes directly to queues, avoiding any lookup of routes
-route_internal(#resource{name = Name, virtual_host = VHostPath}, RoutingKey) ->
+route(#exchange{name = Name, type = topic}, RoutingKey) ->
+    Query = qlc:q([QName || #route{binding = #binding{exchange_name = ExchangeName,
+                                                      queue_name = QName,
+                                                      key = BindingKey}} <- mnesia:table(route),
+                            ExchangeName == Name,
+                            % TODO: This causes a full table scan (see bug 19336)
+                            topic_matches(BindingKey, RoutingKey)]),
+    lookup_qpids(mnesia:activity(async_dirty, fun() -> qlc:e(Query) end));
+
+route(#exchange{name = #resource{name = Name, virtual_host = VHostPath}}, RoutingKey) ->
     Exchange = #resource{kind = exchange, name ='$1',virtual_host = '$2'},
     MatchHead = #route{binding = #binding{exchange_name = Exchange,
                                           queue_name = '$3',
@@ -216,17 +220,6 @@ route_internal(#resource{name = Name, virtual_host = VHostPath}, RoutingKey) ->
     lookup_qpids(mnesia:activity(async_dirty,
                     fun() -> mnesia:select(route,[{MatchHead, Guards, ['$3']}])
                     end)).
-    
-% TODO: This returns a list of QPids to route to.
-% Maybe this should be handled by a cursor instead.
-route_internal(Exchange, RoutingKey, MatchFun) ->
-    Query = qlc:q([QName || #route{binding = #binding{exchange_name = ExchangeName,
-                                                      queue_name = QName,
-                                                      key = BindingKey}} <- mnesia:table(route),
-                            ExchangeName == Exchange,
-                            % TODO: This causes a full table scan (see bug 19336)
-                            MatchFun(BindingKey, RoutingKey)]),
-    lookup_qpids(mnesia:activity(async_dirty, fun() -> qlc:e(Query) end)).
 
 lookup_qpids(Queues) ->
     Set = sets:from_list(Queues),
