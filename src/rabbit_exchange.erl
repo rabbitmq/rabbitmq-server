@@ -281,8 +281,7 @@ add_binding(Binding) ->
         fun (X, Q) -> if Q#amqqueue.durable and not(X#exchange.durable) ->
                             {error, durability_settings_incompatible};
                          true ->
-                             ok = sync_binding(Binding, Q#amqqueue.durable,
-                                               fun mnesia:write/1, fun mnesia:write/3)
+                             ok = sync_binding(Binding, Q#amqqueue.durable, fun mnesia:write/3)
                      end
         end).
 
@@ -290,8 +289,7 @@ add_binding(Binding) ->
 delete_binding(Binding) ->
     call_with_exchange_and_queue(
          Binding,
-         fun (X, Q) -> ok = sync_binding(Binding, Q#amqqueue.durable,
-                                         fun mnesia:delete/1, fun mnesia:delete/3),
+         fun (X, Q) -> ok = sync_binding(Binding, Q#amqqueue.durable, fun mnesia:delete_object/3),
                        maybe_auto_delete(X)
          end).
 
@@ -311,12 +309,12 @@ reverse_binding(#binding{exchange_name = Exchange, key = Key, queue_name = Queue
     #reverse_binding{exchange_name = Exchange, key = Key, queue_name = Queue}.
 
 %% Must run within a transaction.
-sync_binding(Binding, Durable, RouteSyncFun, DurableRouteSyncFun) ->
+sync_binding(Binding, Durable, Fun) ->
     ok = case Durable of
-        true -> DurableRouteSyncFun(durable_routes, #route{binding = Binding}, write);
+        true -> Fun(durable_routes, #route{binding = Binding}, write);
         false -> ok
     end,
-    [ok, ok] = [RouteSyncFun(R) || R <- tuple_to_list(route_with_reverse(Binding))],
+    [ok, ok] = [Fun(element(1, R), R, write) || R <- tuple_to_list(route_with_reverse(Binding))],
     ok.
 
 route_with_reverse(#route{binding = Binding}) ->
