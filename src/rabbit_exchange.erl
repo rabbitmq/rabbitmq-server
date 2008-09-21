@@ -223,13 +223,13 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
 % Guards = [{'==', '$1', Name}, {'==', '$2', RoutingKey}],
 % ...
 route(#exchange{name = #resource{name = Name, virtual_host = VHostPath}}, RoutingKey) ->
-    Exchange = #resource{kind = exchange, name ='$1',virtual_host = '$2'},
+    Exchange = #resource{kind = exchange, name ='$1', virtual_host = '$2'},
     MatchHead = #route{binding = #binding{exchange_name = Exchange,
                                           queue_name = '$3',
                                           key = '$4'}},
     Guards = [{'==', '$1', Name}, {'==', '$2', VHostPath}, {'==', '$4', RoutingKey}],
     lookup_qpids(mnesia:activity(async_dirty,
-                    fun() -> mnesia:select(route,[{MatchHead, Guards, ['$3']}])
+                    fun() -> mnesia:select(route, [{MatchHead, Guards, ['$3']}])
                     end)).
 
 lookup_qpids(Queues) ->
@@ -239,7 +239,7 @@ lookup_qpids(Queues) ->
                 fun(Key, Acc) -> [#amqqueue{pid = QPid}] = mnesia:read({amqqueue, Key}),                                 
                                  [QPid | Acc] end, 
                 [], Set) end,
-    mnesia:activity(async_dirty,Fun).
+    mnesia:activity(async_dirty, Fun).
         
 % TODO: Should all of the route and binding management not be refactored to it's own module
 % Especially seeing as unbind will have to be implemented for 0.91 ?
@@ -259,7 +259,7 @@ call_with_exchange_and_queue(#binding{exchange_name = Exchange,
             case mnesia:wread({amqqueue, Queue}) of
                 [] -> {error, queue_not_found};
                 [Q] ->
-                    Fun(X,Q)
+                    Fun(X, Q)
             end
     end.
 
