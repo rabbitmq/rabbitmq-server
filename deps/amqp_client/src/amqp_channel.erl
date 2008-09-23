@@ -130,10 +130,15 @@ rpc_bottom_half(#'channel.close'{reply_code = ReplyCode,
 rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                                               rpc_requests = RequestQueue,
                                               do2 = Do2}) ->                                              
-    {{value, {From,_}}, NewRequestQueue} = queue:out(RequestQueue),
+    {From, NewRequestQueue} = case queue:out(RequestQueue) of
+        {{value, {_From, _}}, _NewRequestQueue} ->
+            {_From, _NewRequestQueue};
+        {empty,{[],[]}} ->
+            exit(empty_rpc_bottom_half)
+    end,
     gen_server:reply(From, Reply),
-    catch case queue:head(NewRequestQueue) of
-        empty ->
+    case catch queue:head(NewRequestQueue) of
+        {'EXIT', {empty, _} } ->
             ok;
         {NewFrom,Method} ->
             Do2(Writer,Method)
