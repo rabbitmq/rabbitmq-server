@@ -222,15 +222,18 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
 %                                       key = '$2'}},
 % Guards = [{'==', '$1', Name}, {'==', '$2', RoutingKey}],
 % ...
-route(#exchange{name = #resource{name = Name, virtual_host = VHostPath}}, RoutingKey) ->
+route(X = #exchange{name = #resource{name = Name, virtual_host = VHostPath}}, RoutingKey) ->
     Exchange = #resource{kind = exchange, name ='$1', virtual_host = '$2'},
     MatchHead = #route{binding = #binding{exchange_name = Exchange,
                                           queue_name = '$3',
                                           key = '$4'}},
     Guards = [{'==', '$1', Name}, {'==', '$2', VHostPath}, {'==', '$4', RoutingKey}],
-    lookup_qpids(mnesia:activity(async_dirty,
-                    fun() -> mnesia:select(route, [{MatchHead, Guards, ['$3']}])
-                    end)).
+    Predicate = [{MatchHead, Guards, ['$3']}],
+    rabbit_cache:read_through({X, RoutingKey},
+                              fun() -> lookup_qpids(
+                                            mnesia:activity(async_dirty,
+                                                fun() -> mnesia:select(route, Predicate) end))
+                              end).
 
 lookup_qpids(Queues) ->
     Set = sets:from_list(Queues),
