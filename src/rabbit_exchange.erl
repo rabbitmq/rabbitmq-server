@@ -212,25 +212,14 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
                             topic_matches(BindingKey, RoutingKey)]),
     lookup_qpids(mnesia:activity(async_dirty, fun() -> qlc:e(Query) end));
 
-% This mnesia:select is complicated because the exchange component of the 
-% match head cannot be matched against a tuple. Hence I had to decompose
-% a tuple match for an exchange into individual matches for its constituent 
-% parts. For reference, the code that does not seem to work is this:
-% ...
-% MatchHead = #route{binding = #binding{exchange_name = $1,
-%                                       queue_name = '$3',
-%                                       key = '$2'}},
-% Guards = [{'==', '$1', Name}, {'==', '$2', RoutingKey}],
-% ...
-route(#exchange{name = #resource{name = Name, virtual_host = VHostPath}}, RoutingKey) ->
-    Exchange = #resource{kind = exchange, name ='$1', virtual_host = '$2'},
-    MatchHead = #route{binding = #binding{exchange_name = Exchange,
-                                          queue_name = '$3',
-                                          key = '$4'}},
-    Guards = [{'==', '$1', Name}, {'==', '$2', VHostPath}, {'==', '$4', RoutingKey}],
-    lookup_qpids(mnesia:activity(async_dirty,
-                    fun() -> mnesia:select(route, [{MatchHead, Guards, ['$3']}])
-                    end)).
+route(#exchange{name = Name}, RoutingKey) ->
+    MatchHead = #route{binding = #binding{exchange_name = Name,
+                                          key = RoutingKey,
+                                          queue_name = '$1'}},
+    lookup_qpids(
+      mnesia:activity(
+        async_dirty,
+        fun() -> mnesia:select(route, [{MatchHead, [], ['$1']}]) end)).
 
 lookup_qpids(Queues) ->
     Set = sets:from_list(Queues),
