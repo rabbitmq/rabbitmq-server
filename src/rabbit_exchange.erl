@@ -210,25 +210,21 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
                             % TODO: This causes a full scan for each entry
                             % with the same exchange  (see bug 19336)
                             topic_matches(BindingKey, RoutingKey)]),
-    lookup_qpids(mnesia:activity(async_dirty, fun() -> qlc:e(Query) end));
+    lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query]));
 
 route(#exchange{name = Name}, RoutingKey) ->
     MatchHead = #route{binding = #binding{exchange_name = Name,
                                           key = RoutingKey,
                                           queue_name = '$1'}},
-    lookup_qpids(
-      mnesia:activity(
-        async_dirty,
-        fun() -> mnesia:select(route, [{MatchHead, [], ['$1']}]) end)).
+    lookup_qpids(mnesia:dirty_select(route, [{MatchHead, [], ['$1']}])).
 
 lookup_qpids(Queues) ->
-    Set = sets:from_list(Queues),
-    Fun = fun() ->
-            sets:fold(
-                fun(Key, Acc) -> [#amqqueue{pid = QPid}] = mnesia:read({amqqueue, Key}),                                 
-                                 [QPid | Acc] end, 
-                [], Set) end,
-    mnesia:activity(async_dirty, Fun).
+    mnesia:async_dirty(
+      fun sets:fold/3,
+      [fun(Key, Acc) ->
+               [#amqqueue{pid = QPid}] = mnesia:read({amqqueue, Key}),
+               [QPid | Acc]
+       end, [], sets:from_list(Queues)]).
         
 % TODO: Should all of the route and binding management not be refactored to it's own module
 % Especially seeing as unbind will have to be implemented for 0.91 ?
