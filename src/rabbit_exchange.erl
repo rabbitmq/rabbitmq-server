@@ -201,15 +201,16 @@ simple_publish(Mandatory, Immediate,
 %
 % TODO: This returns a list of QPids to route to.
 % Maybe this should be handled by a cursor instead.
-% This routes directly to queues, avoiding any lookup of routes
 route(#exchange{name = Name, type = topic}, RoutingKey) ->
-    Query = qlc:q([QName || #route{binding = #binding{exchange_name = ExchangeName,
-                                                      queue_name = QName,
-                                                      key = BindingKey}} <- mnesia:table(route),
-                            ExchangeName == Name,
-                            % TODO: This causes a full scan for each entry
-                            % with the same exchange  (see bug 19336)
-                            topic_matches(BindingKey, RoutingKey)]),
+    Query = qlc:q([QName ||
+                      #route{binding = #binding{
+                               exchange_name = ExchangeName,
+                               queue_name = QName,
+                               key = BindingKey}} <- mnesia:table(route),
+                      ExchangeName == Name,
+                      %% TODO: This causes a full scan for each entry
+                      %% with the same exchange  (see bug 19336)
+                      topic_matches(BindingKey, RoutingKey)]),
     lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query]));
 
 route(#exchange{name = Name}, RoutingKey) ->
@@ -219,12 +220,11 @@ route(#exchange{name = Name}, RoutingKey) ->
     lookup_qpids(mnesia:dirty_select(route, [{MatchHead, [], ['$1']}])).
 
 lookup_qpids(Queues) ->
-    mnesia:async_dirty(
-      fun sets:fold/3,
-      [fun(Key, Acc) ->
-               [#amqqueue{pid = QPid}] = mnesia:read({amqqueue, Key}),
-               [QPid | Acc]
-       end, [], sets:from_list(Queues)]).
+    sets:fold(
+      fun(Key, Acc) ->
+              [#amqqueue{pid = QPid}] = mnesia:dirty_read({amqqueue, Key}),
+              [QPid | Acc]
+      end, [], sets:from_list(Queues)).
         
 % TODO: Should all of the route and binding management not be refactored to it's own module
 % Especially seeing as unbind will have to be implemented for 0.91 ?
