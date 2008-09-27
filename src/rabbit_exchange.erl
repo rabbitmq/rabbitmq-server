@@ -201,48 +201,32 @@ simple_publish(Mandatory, Immediate,
 %
 % TODO: This returns a list of QPids to route to.
 % Maybe this should be handled by a cursor instead.
-% This routes directly to queues, avoiding any lookup of routes
 route(#exchange{name = Name, type = topic}, RoutingKey) ->
-    Query = qlc:q([QName || #route{binding = #binding{exchange_name = ExchangeName,
-                                                      queue_name = QName,
-                                                      key = BindingKey}} <- mnesia:table(route),
-                            ExchangeName == Name,
-                            % TODO: This causes a full scan for each entry
-                            % with the same exchange  (see bug 19336)
-                            topic_matches(BindingKey, RoutingKey)]),
-    lookup_qpids(mnesia:activity(async_dirty, fun() -> qlc:e(Query) end));
+    Query = qlc:q([QName ||
+                      #route{binding = #binding{
+                               exchange_name = ExchangeName,
+                               queue_name = QName,
+                               key = BindingKey}} <- mnesia:table(route),
+                      ExchangeName == Name,
+                      %% TODO: This causes a full scan for each entry
+                      %% with the same exchange  (see bug 19336)
+                      topic_matches(BindingKey, RoutingKey)]),
+    lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query]));
 
-% This mnesia:select is complicated because the exchange component of the 
-% match head cannot be matched against a tuple. Hence I had to decompose
-% a tuple match for an exchange into individual matches for its constituent 
-% parts. For reference, the code that does not seem to work is this:
-% ...
-% MatchHead = #route{binding = #binding{exchange_name = $1,
-%                                       queue_name = '$3',
-%                                       key = '$2'}},
-% Guards = [{'==', '$1', Name}, {'==', '$2', RoutingKey}],
-% ...
-route(X = #exchange{name = #resource{name = Name, virtual_host = VHostPath}}, RoutingKey) ->
-    Exchange = #resource{kind = exchange, name ='$1', virtual_host = '$2'},
-    MatchHead = #route{binding = #binding{exchange_name = Exchange,
-                                          queue_name = '$3',
-                                          key = '$4'}},
-    Guards = [{'==', '$1', Name}, {'==', '$2', VHostPath}, {'==', '$4', RoutingKey}],
-    Predicate = [{MatchHead, Guards, ['$3']}],
+route(X = #exchange{name = Name}, RoutingKey) ->
+    MatchHead = #route{binding = #binding{exchange_name = Name,
+                                          key = RoutingKey,
+                                          queue_name = '$1'}},
     rabbit_cache:read_through({X, RoutingKey},
-                              fun() -> lookup_qpids(
-                                            mnesia:activity(async_dirty,
-                                                fun() -> mnesia:select(route, Predicate) end))
-                              end).
+        fun() -> lookup_qpids(mnesia:dirty_select(route, [{MatchHead, [], ['$1']}])) end).
+
 
 lookup_qpids(Queues) ->
-    Set = sets:from_list(Queues),
-    Fun = fun() ->
-            sets:fold(
-                fun(Key, Acc) -> [#amqqueue{pid = QPid}] = mnesia:read({amqqueue, Key}),                                 
-                                 [QPid | Acc] end, 
-                [], Set) end,
-    mnesia:activity(async_dirty, Fun).
+    sets:fold(
+      fun(Key, Acc) ->
+              [#amqqueue{pid = QPid}] = mnesia:dirty_read({amqqueue, Key}),
+              [QPid | Acc]
+      end, [], sets:from_list(Queues)).
         
 % TODO: Should all of the route and binding management not be refactored to it's own module
 % Especially seeing as unbind will have to be implemented for 0.91 ?
