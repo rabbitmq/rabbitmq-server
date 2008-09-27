@@ -213,7 +213,13 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
                       topic_matches(BindingKey, RoutingKey)]),
     lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query]));
 
-route(#exchange{name = Name}, RoutingKey) ->
+route(X = #exchange{type = fanout}, _) ->
+    route_internal(X, '_');
+
+route(X, RoutingKey) ->
+    route_internal(X, RoutingKey).
+
+route_internal(#exchange{name = Name}, RoutingKey) ->
     MatchHead = #route{binding = #binding{exchange_name = Name,
                                           key = RoutingKey,
                                           queue_name = '$1'}},
