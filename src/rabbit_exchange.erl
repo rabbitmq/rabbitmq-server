@@ -216,7 +216,7 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
 route(X = #exchange{type = fanout}, _) ->
     route_internal(X, '_');
 
-route(X, RoutingKey) ->
+route(X = #exchange{type = direct}, RoutingKey) ->
     route_internal(X, RoutingKey).
 
 route_internal(#exchange{name = Name}, RoutingKey) ->
