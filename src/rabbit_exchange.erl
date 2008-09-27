@@ -32,7 +32,6 @@
          list_vhost_exchanges/1,
          simple_publish/6, simple_publish/3,
          route/2]).
--export([add_binding/1, delete_binding/1]).
 -export([add_binding/4, delete_binding/4]).
 -export([delete/2]).
 -export([delete_bindings/1]).
