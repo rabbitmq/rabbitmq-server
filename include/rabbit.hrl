@@ -84,10 +84,6 @@
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
--type(resource() ::
-      #resource{virtual_host :: vhost(),
-                kind         :: 'queue' | 'exchange',
-                name         :: resource_name()}).
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
                 durable       :: bool(),
