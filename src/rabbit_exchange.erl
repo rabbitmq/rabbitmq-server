@@ -70,10 +70,10 @@
                                      {'error', 'durability_settings_incompatible'}).
 -spec(delete_binding/1 :: (binding()) -> 'ok' | not_found()).
 -spec(add_binding/4 ::
-      (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
+      (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
             bind_res() | {'error', 'durability_settings_incompatible'}).
 -spec(delete_binding/4 ::
-      (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
+      (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'binding_not_found'}).
 -spec(delete_bindings/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
@@ -255,13 +255,13 @@ call_with_exchange_and_queue(#binding{exchange_name = Exchange,
     end.
 
 
-add_binding(QueueName, ExchangeName, RoutingKey, _Arguments) ->
+add_binding(ExchangeName, QueueName, RoutingKey, _Arguments) ->
     Binding = #binding{exchange_name = ExchangeName,
                        key = RoutingKey,
                        queue_name = QueueName},
     rabbit_misc:execute_mnesia_transaction(fun add_binding/1, [Binding]).
 
-delete_binding(QueueName, ExchangeName, RoutingKey, _Arguments) ->
+delete_binding(ExchangeName, QueueName, RoutingKey, _Arguments) ->
     Binding = #binding{exchange_name = ExchangeName,
                        key = RoutingKey,
                        queue_name = QueueName},

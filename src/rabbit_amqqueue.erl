@@ -159,7 +159,7 @@ recover_queue(Q) ->
 add_default_binding(#amqqueue{name = QueueName}) ->
     Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
     RoutingKey = QueueName#resource.name,
-    rabbit_exchange:add_binding(QueueName, Exchange, RoutingKey, []),
+    rabbit_exchange:add_binding(Exchange, QueueName, RoutingKey, []),
     ok.
 
 lookup(Name) ->
