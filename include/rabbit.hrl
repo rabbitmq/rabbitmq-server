@@ -70,6 +70,7 @@
 -type(node() :: atom()).
 -type(socket() :: port()).
 -type(thunk(T) :: fun(() -> T)).
+-type(function(T) :: fun((T) -> T)).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: any()).
@@ -84,6 +85,10 @@
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
+-type(resource() ::
+    #resource{virtual_host :: vhost(),
+                kind         :: 'queue' | 'exchange',
+                name         :: resource_name()}).
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
                 durable       :: bool(),

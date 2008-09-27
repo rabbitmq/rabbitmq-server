@@ -68,7 +68,7 @@
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (vhost(), K, resource_name()) -> r(K) when is_subtype(K, atom())).
+-spec(r/3 :: (vhost() | resource(), K, resource_name()) -> r(K) when is_subtype(K, atom())).
 -spec(r/2 :: (vhost(), K) -> #resource{virtual_host :: vhost(),
                                        kind         :: K,
                                        name         :: '_'}
@@ -80,8 +80,8 @@
 -spec(with_user/2 :: (username(), thunk(A)) -> A).
 -spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
--spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
--spec(execute_mnesia_transaction/2 :: (thunk(A), list()) -> A).
+-spec(execute_mnesia_transaction/1 :: (thunk(A) | function(A)) -> A).
+-spec(execute_mnesia_transaction/2 :: (thunk(A) | function(A), list()) -> A).
 -spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
 -spec(localnode/1 :: (atom()) -> node()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
