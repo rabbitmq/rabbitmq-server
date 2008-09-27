@@ -70,7 +70,6 @@
 -type(node() :: atom()).
 -type(socket() :: port()).
 -type(thunk(T) :: fun(() -> T)).
--type(function(T) :: fun((T) -> T)).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: any()).

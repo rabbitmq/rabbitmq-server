@@ -36,7 +36,7 @@
 -export([enable_cover/0, report_cover/0]).
 -export([with_exit_handler/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
--export([execute_mnesia_transaction/1, execute_mnesia_transaction/2]).
+-export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
 -export([localnode/1, tcp_name/3]).
 -export([intersperse/2, upmap/2, map_in_order/2]).
@@ -81,8 +81,7 @@
 -spec(with_user/2 :: (username(), thunk(A)) -> A).
 -spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
--spec(execute_mnesia_transaction/1 :: (thunk(A) | function(A)) -> A).
--spec(execute_mnesia_transaction/2 :: (thunk(A) | function(A), list()) -> A).
+-spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
 -spec(localnode/1 :: (atom()) -> node()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
@@ -234,10 +233,7 @@ with_user_and_vhost(Username, VHostPath, Thunk) ->
 %% elsewhere and get a consistent result even when that read
 %% executes on a different node.
 execute_mnesia_transaction(TxFun) ->
-    execute_mnesia_transaction(TxFun, []).
-    
-execute_mnesia_transaction(TxFun, Args) ->
-    case mnesia:sync_transaction(TxFun, Args) of
+    case mnesia:sync_transaction(TxFun) of
         {atomic,  Result} -> Result;
         {aborted, Reason} -> throw({error, Reason})
     end.
