@@ -67,7 +67,7 @@
 -spec(simple_publish/3 :: (bool(), bool(), message()) -> publish_res()).
 -spec(route/2 :: (exchange(), routing_key()) -> [pid()]).
 -spec(add_binding/1 :: (binding()) -> 'ok' | not_found() |
-                                     {'error', 'durability_settings_incompatible'}).
+                       {'error', 'durability_settings_incompatible'}).
 -spec(delete_binding/1 :: (binding()) -> 'ok' | not_found()).
 -spec(add_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
@@ -85,7 +85,8 @@
 %%----------------------------------------------------------------------------
 
 recover() ->
-    % TODO: These two functions share commonalities - maybe a refactoring target
+    % TODO: These two functions share commonalities, hence
+    % maybe a refactoring target
     ok = recover_durable_exchanges(),
     ok = recover_durable_routes(),
     ok.
@@ -164,7 +165,8 @@ list_vhost_exchanges(VHostPath) ->
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
 
 routes_for_exchange(Name) ->
-    qlc:e(qlc:q([R || R = #route{binding = #binding{exchange_name = N}} <- mnesia:table(route),
+    qlc:e(qlc:q([R || R = #route{binding = #binding{exchange_name = N}} 
+                      <- mnesia:table(route),
                       N == Name])).
 
 %% Usable by Erlang code that wants to publish messages.
@@ -232,10 +234,12 @@ lookup_qpids(Queues) ->
               [QPid | Acc]
       end, [], sets:from_list(Queues)).
         
-% TODO: Should all of the route and binding management not be refactored to it's own module
-% Especially seeing as unbind will have to be implemented for 0.91 ?
+% TODO: Should all of the route and binding management not be refactored to 
+% it's own module, especially seeing as unbind will have to be implemented 
+% for 0.91 ?
 delete_routes(QueueName) ->
-    Binding = #binding{queue_name = QueueName, exchange_name = '_', key = '_'},
+    Binding = #binding{queue_name = QueueName, 
+                       exchange_name = '_', key = '_'},
     {Route, ReverseRoute} = route_with_reverse(Binding),
     ok = mnesia:delete_object(Route),
     ok = mnesia:delete_object(ReverseRoute),
@@ -274,7 +278,8 @@ add_binding(Binding) ->
         fun (X, Q) -> if Q#amqqueue.durable and not(X#exchange.durable) ->
                             {error, durability_settings_incompatible};
                          true ->
-                             ok = sync_binding(Binding, Q#amqqueue.durable, fun mnesia:write/3)
+                             ok = sync_binding(Binding, Q#amqqueue.durable, 
+                                               fun mnesia:write/3)
                      end
         end).
 
@@ -282,11 +287,13 @@ add_binding(Binding) ->
 delete_binding(Binding) ->
     call_with_exchange_and_queue(
          Binding,
-         fun (X, Q) -> ok = sync_binding(Binding, Q#amqqueue.durable, fun mnesia:delete_object/3),
+         fun (X, Q) -> ok = sync_binding(Binding, Q#amqqueue.durable,
+                                         fun mnesia:delete_object/3),
                        maybe_auto_delete(X)
          end).
 
-% TODO: Should the exported function not get renamed to delete_routes instead of this indirection?
+% TODO: Should the exported function not get renamed to delete_routes 
+% instead of this indirection?
 delete_bindings(QueueName) ->
     delete_routes(QueueName).
 
@@ -299,7 +306,8 @@ maybe_auto_delete(#exchange{name = ExchangeName, auto_delete = true}) ->
         Other -> Other
     end.
 
-reverse_binding(#binding{exchange_name = Exchange, key = Key, queue_name = Queue}) ->
+reverse_binding(#binding{exchange_name = Exchange, key = Key, 
+                         queue_name = Queue}) ->
     #reverse_binding{exchange_name = Exchange, key = Key, queue_name = Queue}.
 
 %% Must run within a transaction.
@@ -308,14 +316,15 @@ sync_binding(Binding, Durable, Fun) ->
         true -> Fun(durable_routes, #route{binding = Binding}, write);
         false -> ok
     end,
-    [ok, ok] = [Fun(element(1, R), R, write) || R <- tuple_to_list(route_with_reverse(Binding))],
+    [ok, ok] = [Fun(element(1, R), R, write) || R 
+                <- tuple_to_list(route_with_reverse(Binding))],
     ok.
 
 route_with_reverse(#route{binding = Binding}) ->
     route_with_reverse(Binding);
 route_with_reverse(Binding = #binding{}) ->
-    Route = #route{ binding = Binding },
-    ReverseRoute = #reverse_route{ reverse_binding = reverse_binding(Binding) },
+    Route = #route{binding = Binding},
+    ReverseRoute = #reverse_route{reverse_binding = reverse_binding(Binding)},
     {Route, ReverseRoute}.
 
 split_topic_key(Key) ->
@@ -365,7 +374,8 @@ do_internal_delete(ExchangeName, Routes) ->
     case mnesia:wread({exchange, ExchangeName}) of
             [] -> {error, not_found};
             _ ->
-                lists:foreach(fun (R) -> ok = mnesia:delete_object(R) end, Routes),
+                lists:foreach(fun (R) -> ok = mnesia:delete_object(R) end, 
+                              Routes),
                 ok = mnesia:delete({durable_exchanges, ExchangeName}),
                 ok = mnesia:delete({exchange, ExchangeName})
     end.
