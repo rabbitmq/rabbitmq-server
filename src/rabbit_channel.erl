@@ -580,7 +580,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
     ActualRoutingKey = expand_routing_key_shortcut(QueueNameBin, RoutingKey,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    case rabbit_exchange:add_binding(QueueName, ExchangeName,
+    case rabbit_exchange:add_binding(ExchangeName, QueueName,
                                      ActualRoutingKey, Arguments) of
         {error, queue_not_found} ->
             rabbit_misc:protocol_error(
