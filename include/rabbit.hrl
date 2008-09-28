@@ -45,12 +45,8 @@
 
 -record(amqqueue, {name, durable, auto_delete, arguments, pid}).
 
-%% In the route and reverse route record definitions,
-%% theconstant field seems to be required because the
-%% underlying storage is ets, which stores key value pairs.
-%% The binding field is made up of an {Exchange, Binding, Queue}
+%% mnesia doesn't like unary records, so we add a dummy 'value' field
 -record(route, {binding, value = const}).
-%% The reverse_binding field is made up of an {Queue, Binding, Exchange}
 -record(reverse_route, {reverse_binding, value = const}).
 
 -record(binding, {exchange_name, key, queue_name}).
