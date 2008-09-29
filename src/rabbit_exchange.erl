@@ -224,6 +224,12 @@ lookup_qpids(Queues) ->
 %% TODO: Should all of the route and binding management not be
 %% refactored to its own module, especially seeing as unbind will have
 %% to be implemented for 0.91 ?
+delete_bindings(Binding = #binding{}) ->
+    {Route, ReverseRoute} = route_with_reverse(Binding),
+    ok = mnesia:delete_object(Route),
+    ok = mnesia:delete_object(ReverseRoute),
+    ok = mnesia:delete_object(durable_routes, Route, write);
+    
 delete_bindings(QueueName) ->
     % TODO: The head of this list *SHOULD* always be the default exchange
     % what if somebody nukes it?
@@ -234,13 +240,9 @@ delete_bindings(QueueName) ->
                                             arguments = '_'},
                        ok = mnesia:delete_object(Exchange) end, Exchanges),
     % TODO: What about auto_delete on durable exchanges?
-    Binding = #binding{exchange_name = '_',
-                       queue_name = QueueName, 
-                       key = '_'},
-    {Route, ReverseRoute} = route_with_reverse(Binding),
-    ok = mnesia:delete_object(Route),
-    ok = mnesia:delete_object(ReverseRoute),
-    ok = mnesia:delete_object(durable_routes, Route, write).
+    delete_bindings(#binding{exchange_name = '_',
+                             queue_name = QueueName, 
+                             key = '_'}).
     
 exchanges_for_queue(QueueName) ->
     MatchHead = #route{binding = #binding{exchange_name = '$1',
@@ -357,29 +359,22 @@ delete(ExchangeName, IfUnused) ->
 internal_delete(ExchangeName, _IfUnused = true) ->
     Routes = routes_for_exchange(ExchangeName),
     case Routes of
-        [] -> do_internal_delete(ExchangeName, Routes);
+        [] -> do_internal_delete(ExchangeName);
         _ -> {error, in_use}
     end;
     
 internal_delete(ExchangeName, false) ->
-    do_internal_delete(ExchangeName, routes_for_exchange(ExchangeName)).
+    do_internal_delete(ExchangeName).
 
 %% TODO: Don't know if iterating over a list in process memory is cool
 %% Maybe we should iterate over the DB cursor?
-do_internal_delete(ExchangeName, Routes) ->
+do_internal_delete(ExchangeName) ->
     case mnesia:wread({exchange, ExchangeName}) of
             [] -> {error, not_found};
             _ ->
-                lists:foreach(fun (R) -> ok = mnesia:delete_object(R) end, 
-                              Routes),
-                lists:foreach(fun (R) -> 
-                            ok = mnesia:delete_object(reverse_route(R)) end,
-                            Routes),
-                lists:foreach(fun (R) -> 
-                                ok = mnesia:delete_object(durable_routes,
-                                                          R, write) 
-                              end,
-                              Routes),
+                delete_bindings(#binding{exchange_name = ExchangeName,
+                                         queue_name = '_',
+                                         key = '_'}),
                 ok = mnesia:delete({durable_exchanges, ExchangeName}),
                 ok = mnesia:delete({exchange, ExchangeName})
     end.
