@@ -225,6 +225,15 @@ lookup_qpids(Queues) ->
 %% refactored to its own module, especially seeing as unbind will have
 %% to be implemented for 0.91 ?
 delete_bindings(QueueName) ->
+    % TODO: The head of this list *SHOULD* always be the default exchange
+    % what if somebody nukes it?
+    [_|Exchanges] = exchanges_for_queue(QueueName),
+    lists:foreach(fun (Name) ->
+                       Exchange = #exchange{name = Name, auto_delete = true,
+                                            type = '_', durable = '_',
+                                            arguments = '_'},
+                       ok = mnesia:delete_object(Exchange) end, Exchanges),
+    % TODO: What about auto_delete on durable exchanges?
     Binding = #binding{exchange_name = '_',
                        queue_name = QueueName, 
                        key = '_'},
@@ -232,6 +241,12 @@ delete_bindings(QueueName) ->
     ok = mnesia:delete_object(Route),
     ok = mnesia:delete_object(ReverseRoute),
     ok = mnesia:delete_object(durable_routes, Route, write).
+    
+exchanges_for_queue(QueueName) ->
+    MatchHead = #route{binding = #binding{exchange_name = '$1',
+                                          queue_name = QueueName,
+                                          key = '_'}},
+    mnesia:dirty_select(route, [{MatchHead, [], ['$1']}]).
 
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
