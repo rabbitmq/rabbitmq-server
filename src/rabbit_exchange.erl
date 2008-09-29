@@ -296,8 +296,10 @@ route_with_reverse(#route{binding = Binding}) ->
     route_with_reverse(Binding);
 route_with_reverse(Binding = #binding{}) ->
     Route = #route{binding = Binding},
-    ReverseRoute = #reverse_route{reverse_binding = reverse_binding(Binding)},
-    {Route, ReverseRoute}.
+    {Route, reverse_route(Route)}.
+
+reverse_route(#route{binding = Binding}) ->
+    #reverse_route{reverse_binding = reverse_binding(Binding)}.
 
 reverse_binding(#binding{exchange_name = Exchange,
                          queue_name = Queue,
@@ -354,6 +356,14 @@ do_internal_delete(ExchangeName, Routes) ->
             [] -> {error, not_found};
             _ ->
                 lists:foreach(fun (R) -> ok = mnesia:delete_object(R) end, 
+                              Routes),
+                lists:foreach(fun (R) -> 
+                            ok = mnesia:delete_object(reverse_route(R)) end,
+                            Routes),
+                lists:foreach(fun (R) -> 
+                                ok = mnesia:delete_object(durable_routes,
+                                                          R, write) 
+                              end,
                               Routes),
                 ok = mnesia:delete({durable_exchanges, ExchangeName}),
                 ok = mnesia:delete({exchange, ExchangeName})
