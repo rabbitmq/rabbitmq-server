@@ -151,11 +151,6 @@ list_vhost_exchanges(VHostPath) ->
     mnesia:dirty_match_object(
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
 
-routes_for_exchange(Name) ->
-    qlc:e(qlc:q([R || R = #route{binding = #binding{exchange_name = N}}
-                          <- mnesia:table(route),
-                      N == Name])).
-
 %% Usable by Erlang code that wants to publish messages.
 simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
                ContentTypeBin, BodyBin) ->
@@ -248,6 +243,12 @@ exchanges_for_queue(QueueName) ->
     MatchHead = #route{binding = #binding{exchange_name = '$1',
                                           queue_name = QueueName,
                                           key = '_'}},
+    mnesia:dirty_select(route, [{MatchHead, [], ['$1']}]).
+
+routes_for_exchange(ExchangeName) ->
+    MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
+                                          queue_name = '_',
+                                          key = '$1'}},
     mnesia:dirty_select(route, [{MatchHead, [], ['$1']}]).
 
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
@@ -357,8 +358,7 @@ delete(ExchangeName, IfUnused) ->
       fun () -> internal_delete(ExchangeName, IfUnused) end).
 
 internal_delete(ExchangeName, _IfUnused = true) ->
-    Routes = routes_for_exchange(ExchangeName),
-    case Routes of
+    case routes_for_exchange(ExchangeName) of
         [] -> do_internal_delete(ExchangeName);
         _ -> {error, in_use}
     end;
@@ -366,8 +366,6 @@ internal_delete(ExchangeName, _IfUnused = true) ->
 internal_delete(ExchangeName, false) ->
     do_internal_delete(ExchangeName).
 
-%% TODO: Don't know if iterating over a list in process memory is cool
-%% Maybe we should iterate over the DB cursor?
 do_internal_delete(ExchangeName) ->
     case mnesia:wread({exchange, ExchangeName}) of
             [] -> {error, not_found};
