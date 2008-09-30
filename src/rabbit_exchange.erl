@@ -233,7 +233,11 @@ delete_bindings(QueueName) ->
                        Exchange = #exchange{name = Name, auto_delete = true,
                                             type = '_', durable = '_',
                                             arguments = '_'},
-                       ok = mnesia:delete_object(Exchange) end, Exchanges),
+                       ok = mnesia:delete_object(Exchange),
+                       ok = mnesia:delete_object(durable_exchanges, 
+                                                 Exchange, write)
+                   end, Exchanges),
+    
     % TODO: What about auto_delete on durable exchanges?
     delete_bindings(#binding{exchange_name = '_',
                              queue_name = QueueName, 
