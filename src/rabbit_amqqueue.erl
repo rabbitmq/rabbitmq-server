@@ -88,7 +88,7 @@
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
 -spec(commit_all/2 :: ([pid()], txn()) -> ok_or_errors()).
 -spec(rollback_all/2 :: ([pid()], txn()) -> ok_or_errors()).
--spec(notify_down_all/2 :: ([amqqueue()], pid()) -> ok_or_errors()).
+-spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(binding_forcibly_removed/2 :: (binding_spec(), queue_name()) -> 'ok').
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), bool()) ->
