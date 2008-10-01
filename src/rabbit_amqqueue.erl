@@ -389,13 +389,13 @@ pseudo_queue(QueueName, Pid) ->
               pid = Pid}.
 
 safe_pmap_ok(F, L) ->
-    case lists:filter(fun (R) -> R =/= ok end,
-                      rabbit_misc:upmap(
-                        fun (V) ->
-                                try F(V)
-                                catch Class:Reason -> {Class, Reason}
-                                end
-                        end, L)) of
+    case [R || R <- rabbit_misc:upmap(
+                      fun (V) ->
+                              try F(V)
+                              catch Class:Reason -> {Class, Reason}
+                              end
+                      end, L),
+               R =/= ok] of
         []     -> ok;
         Errors -> {error, Errors}
     end.
