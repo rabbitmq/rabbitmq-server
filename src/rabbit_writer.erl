@@ -153,10 +153,15 @@ internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax) ->
 %% when these are full. So the fact that we process the result
 %% asynchronously does not impact flow control.
 internal_send_command_async(Sock, Channel, MethodRecord) ->
-    true = erlang:port_command(Sock, assemble_frames(Channel, MethodRecord)),
+    true = port_cmd(Sock, assemble_frames(Channel, MethodRecord)),
     ok.
 
 internal_send_command_async(Sock, Channel, MethodRecord, Content, FrameMax) ->
-    true = erlang:port_command(Sock, assemble_frames(Channel, MethodRecord,
-                                                     Content, FrameMax)),
+    true = port_cmd(Sock, assemble_frames(Channel, MethodRecord,
+                                              Content, FrameMax)),
     ok.
+
+port_cmd(Sock, Data) ->
+    try erlang:port_command(Sock, Data)
+    catch error:Error -> exit({writer, send_failed, Error})
+    end.
