@@ -90,6 +90,11 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+conserve_memory(Conserve, State) ->
+    %% TODO
+    rabbit_log:info("~p conserving memory: ~p~n", [self(), Conserve]),
+    State.
+
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
         undefined -> not_found;
@@ -455,6 +460,9 @@ purge_message_buffer(QName, MessageBuffer) ->
 
 %---------------------------------------------------------------------------
 
+handle_call({conserve_memory, Conserve}, _From, State) ->
+    {reply, ok, conserve_memory(Conserve, State)};
+
 handle_call({deliver_immediately, Txn, Message}, _From, State) ->
     %% Synchronous, "immediate" delivery mode
     %%
@@ -613,6 +621,9 @@ handle_call({claim_queue, ReaderPid}, _From, State = #q{owner = Owner,
         _ ->
             {reply, locked, State}
     end.
+
+handle_cast({conserve_memory, Conserve}, State) ->
+    {noreply, conserve_memory(Conserve, State)};
 
 handle_cast({deliver, Txn, Message}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.

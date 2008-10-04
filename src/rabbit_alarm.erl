@@ -27,12 +27,14 @@
 
 -behaviour(gen_event).
 
--export([start/0, stop/0]).
+-export([start/0, stop/0, maybe_conserve_memory/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -define(MEMSUP_CHECK_INTERVAL, 1000).
+
+-record(alarms, {system_memory_high_watermark = false}).
 
 %%----------------------------------------------------------------------------
 
@@ -40,6 +42,7 @@
 
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
+-spec(maybe_conserve_memory/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -61,15 +64,30 @@ start() ->
 stop() ->
     ok = alarm_handler:delete_alarm_handler(?MODULE).
 
+maybe_conserve_memory(QPid) ->
+    gen_event:call(alarm_handler, ?MODULE, {maybe_conserve_memory, QPid}).
+
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, none}.
+    {ok, #alarms{}}.
+
+handle_call({maybe_conserve_memory, QPid},
+            State = #alarms{system_memory_high_watermark = Conserve}) ->
+    {ok, rabbit_amqqueue:conserve_memory(QPid, Conserve), State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event(Event, State) ->
+handle_event({set_alarm,{system_memory_high_watermark,[]}}, State) ->
+    rabbit_amqqueue:conserve_memory(true),
+    {ok, State#alarms{system_memory_high_watermark = true}};
+
+handle_event({clear_alarm,{system_memory_high_watermark,[]}}, State) ->
+    rabbit_amqqueue:conserve_memory(false),
+    {ok, State#alarms{system_memory_high_watermark = false}};
+
+handle_event(_Event, State) ->
     {ok, State}.
 
 handle_info(_Info, State) ->
