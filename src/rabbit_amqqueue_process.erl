@@ -69,15 +69,18 @@ start_link(Q) ->
 
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    {ok, #q{q = Q,
-            owner = none,
-            exclusive_consumer = none,
-            has_had_consumers = false,
-            next_msg_id = 1,
-            message_buffer = queue:new(),
-            round_robin = queue:new()}}.
+    NewState = #q{q = Q,
+                  owner = none,
+                  exclusive_consumer = none,
+                  has_had_consumers = false,
+                  next_msg_id = 1,
+                  message_buffer = queue:new(),
+                  round_robin = queue:new()},
+    rabbit_misc:emit_presence(qname(NewState), <<"startup">>),
+    {ok, NewState}.
 
 terminate(_Reason, State) ->
+    rabbit_misc:emit_presence(qname(State), <<"shutdown">>),
     %% FIXME: How do we cancel active subscriptions?
     QName = qname(State),
     lists:foreach(fun (Txn) -> ok = rollback_work(Txn, QName) end,
