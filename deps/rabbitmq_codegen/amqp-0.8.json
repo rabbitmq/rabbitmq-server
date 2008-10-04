@@ -275,7 +275,18 @@
 			 "name": "delete"},
 			{"id": 41,
 			 "arguments": [{"type": "long", "name": "message-count"}],
-			 "name": "delete-ok"}],
+			 "name": "delete-ok"},
+			{"id": 50,
+			 "arguments": [{"type": "short", "name": "ticket", "default-value": 1},
+				       {"type": "shortstr", "name": "queue"},
+				       {"type": "shortstr", "name": "exchange"},
+				       {"type": "shortstr", "name": "routing-key"},
+				       {"type": "table", "name": "arguments"}],
+			 "name": "unbind"},
+			{"id": 51,
+			 "arguments": [],
+			 "name": "unbind-ok"}
+			],
 	    "name": "queue"
 	},
 	{
