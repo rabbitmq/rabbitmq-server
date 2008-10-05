@@ -88,7 +88,7 @@ handle_event({set_alarm,{system_memory_high_watermark,[]}}, State) ->
     rabbit_amqqueue:conserve_memory(true),
     {ok, State#alarms{system_memory_high_watermark = true}};
 
-handle_event({clear_alarm,{system_memory_high_watermark,[]}}, State) ->
+handle_event({clear_alarm,{system_memory_high_watermark}}, State) ->
     rabbit_amqqueue:conserve_memory(false),
     {ok, State#alarms{system_memory_high_watermark = false}};
 
