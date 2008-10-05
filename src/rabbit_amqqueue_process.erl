@@ -52,7 +52,8 @@
 
 -record(consumer, {tag, ack_required}).
 
--record(tx, {ch_pid, is_persistent, pending_messages, pending_acks}).
+-record(tx, {ch_pid, is_persistent, fail_reason,
+             pending_messages, pending_acks}).
 
 %% These are held in our process dictionary
 -record(cr, {consumers,
@@ -237,10 +238,13 @@ attempt_delivery(none, Message, State = #q{conserve_memory = Conserve}) ->
         {not_offered, State1} ->
             {false, State1}
     end;
-attempt_delivery(Txn, Message, State) ->
+attempt_delivery(Txn, Message, State = #q{conserve_memory = false}) ->
     persist_message(Txn, qname(State), Message),
     record_pending_message(Txn, Message),
-    {true, State}.
+    {true, State};
+attempt_delivery(Txn, _Message, State = #q{conserve_memory = true}) ->
+    mark_tx_failed(Txn, dropped_messages_to_conserve_memory),
+    {false, increment_dropped_message_count(State)}.
 
 deliver_or_enqueue(Txn, Message, State) ->
     case attempt_delivery(Txn, Message, State) of
@@ -455,6 +459,7 @@ lookup_tx(Txn) ->
     case get({txn, Txn}) of
         undefined -> #tx{ch_pid = none,
                          is_persistent = false,
+                         fail_reason = none,
                          pending_messages = [],
                          pending_acks = []};
         V -> V
@@ -477,6 +482,14 @@ is_tx_persistent(Txn) ->
     #tx{is_persistent = Res} = lookup_tx(Txn),
     Res.
 
+mark_tx_failed(Txn, Reason) -> 
+    Tx = lookup_tx(Txn),
+    store_tx(Txn, Tx#tx{fail_reason = Reason}).
+
+tx_fail_reason(Txn) ->
+    #tx{fail_reason = Res} = lookup_tx(Txn),
+    Res.
+    
 record_pending_message(Txn, Message) ->
     Tx = #tx{pending_messages = Pending} = lookup_tx(Txn),
     store_tx(Txn, Tx#tx{pending_messages = [{Message, false} | Pending]}).
@@ -545,10 +558,17 @@ handle_call({deliver, Txn, Message}, _From, State) ->
     {reply, Delivered, NewState};
 
 handle_call({commit, Txn}, From, State) ->
-    ok = commit_work(Txn, qname(State)),
-    %% optimisation: we reply straight away so the sender can continue
-    gen_server:reply(From, ok),
-    NewState = process_pending(Txn, State),
+    NewState =
+        case tx_fail_reason(Txn) of
+            none   -> ok = commit_work(Txn, qname(State)),
+                      %% optimisation: we reply straight away so the
+                      %% sender can continue
+                      gen_server:reply(From, ok),
+                      process_pending(Txn, State);
+            Reason -> ok = rollback_work(Txn, qname(State)),
+                      gen_server:reply(From, {error, Reason}),
+                      State
+        end,
     erase_tx(Txn),
     {noreply, NewState};
 

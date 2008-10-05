@@ -83,8 +83,8 @@
 -spec(redeliver/2 :: (pid(), [{message(), bool()}]) -> 'ok').
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
--spec(commit/2 :: (pid(), txn()) -> 'ok').
--spec(rollback/2 :: (pid(), txn()) -> 'ok').
+-spec(commit/2 :: (pid(), txn()) -> 'ok' | {'error', any()}).
+-spec(rollback/2 :: (pid(), txn()) -> 'ok' | {'error', any()}).
 -spec(notify_down/2 :: (amqqueue(), pid()) -> 'ok').
 -spec(binding_forcibly_removed/2 :: (binding_spec(), queue_name()) -> 'ok').
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
