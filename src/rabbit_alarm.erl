@@ -56,6 +56,11 @@ start() ->
     %% a granularity of minutes. So we have to peel off one layer of
     %% the API to get to the underlying layer which operates at the
     %% granularity of milliseconds.
+    %%
+    %% Note that the new setting will only take effect after the first
+    %% check has completed, i.e. after one minute. So if rabbit eats
+    %% all the memory within the first minute after startup then we
+    %% are out of luck.
     ok = os_mon:call(memsup, {set_check_interval, ?MEMSUP_CHECK_INTERVAL},
                      infinity),
 
