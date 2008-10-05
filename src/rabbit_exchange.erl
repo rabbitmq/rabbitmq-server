@@ -262,22 +262,16 @@ has_bindings(ExchangeName, Predicate) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
                                           queue_name = '$1',
                                           key = '_'}},
-    case mnesia:select(route, 
-                       [{MatchHead, [], ['$1']}], ?CHUNK_SIZE, write) of
-        '$end_of_table' -> ok;
-        {Routes, Continuation} ->
-            case lists:dropwhile(Predicate, Routes) of
-                [] -> continue(Continuation, Predicate);
-                _  -> true
-            end
-    end.
+    continue(fun() -> mnesia:select(route,
+                                [{MatchHead, [], ['$1']}], ?CHUNK_SIZE, write)
+             end, Predicate).
 
-continue(Continuation, Predicate) ->
-    case mnesia:select(Continuation) of
+continue(Fun, Predicate) ->
+    case Fun() of
         '$end_of_table' -> false;
         {Routes, Cont} ->
             case lists:dropwhile(Predicate, Routes) of
-                [] -> continue(Cont, Predicate);
+                [] -> continue(fun() -> mnesia:select(Cont) end, Predicate);
                 _  -> true
             end
     end.
