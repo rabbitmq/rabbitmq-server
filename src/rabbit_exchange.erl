@@ -218,7 +218,7 @@ lookup_qpids(Queues) ->
               [QPid | Acc]
       end, [], sets:from_list(Queues)).
 
-delete_forwards_route(ExchangeName, QueueName) ->
+delete_forward_routes(ExchangeName, QueueName) ->
     Route = #route{binding = #binding{exchange_name = ExchangeName,
                                       queue_name = QueueName,
                                       key = '_'}},
@@ -247,7 +247,7 @@ delete_bindings(Binding = #binding{exchange_name = X,
                         end;
                         true -> ok
                     end,
-                    delete_forwards_route(ExchangeName, QueueName)
+                    delete_forward_routes(ExchangeName, QueueName)
                 end)
         end, exchanges_for_queue(QueueName)),
     ok = mnesia:delete_object(reverse_route(#route{binding = Binding}));
@@ -258,10 +258,12 @@ delete_bindings(Binding = #binding{exchange_name = ExchangeName,
                                    when QueueName == '_' 
                                    andalso ExchangeName /= '_' ->
     % This uses the forward routes as the primary index
-    {Route, ReverseRoute} = route_with_reverse(Binding),
-    ok = mnesia:delete_object(Route),
-    ok = mnesia:delete_object(ReverseRoute),
-    ok = mnesia:delete_object(durable_routes, Route, write);
+    RouteMatch = #route{binding = Binding},
+    lists:foreach(fun(Route) -> 
+                            ok = mnesia:delete_object(reverse_route(Route))
+                  end, mnesia:match_object(RouteMatch)),
+    ok = mnesia:delete_object(RouteMatch),
+    ok = mnesia:delete_object(durable_routes, RouteMatch, write);
 
 
 % Must be called in a transaction
