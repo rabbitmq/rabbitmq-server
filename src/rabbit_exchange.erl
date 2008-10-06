@@ -43,7 +43,7 @@
 -import(qlc).
 -import(regexp).
 
--define(CHUNK_SIZE, 10).
+-define(CHUNK_SIZE, 1).
 
 %%----------------------------------------------------------------------------
 
@@ -230,8 +230,7 @@ delete_bindings(Binding = #binding{exchange_name = X,
             call_with_exchange(ExchangeName,
                 fun(Exchange) ->
                     if Exchange#exchange.auto_delete ->
-                        Predicate = fun(E) -> E == QueueName end,
-                        case has_bindings(ExchangeName, Predicate) of
+                        case has_bindings(ExchangeName, QueueName) of
                             true -> ok;
                             false ->
                                 unchecked_internal_delete(ExchangeName)
@@ -273,27 +272,21 @@ exchanges_for_queue(QueueName) ->
                                      queue_name = QueueName,
                                      key = '_'}},
     sets:to_list(sets:from_list(
-        mnesia:dirty_select(reverse_route, [{MatchHead, [], ['$1']}]))).
+        mnesia:select(reverse_route, [{MatchHead, [], ['$1']}]))).
 
 has_bindings(ExchangeName) ->
-    has_bindings(ExchangeName, fun(_) -> false end).
+    has_bindings_helper(ExchangeName, []).
 
-has_bindings(ExchangeName, Predicate) ->
+has_bindings(ExchangeName, QueueName) ->
+    has_bindings_helper(ExchangeName, [{'=/=', '$1', {QueueName}}]).
+ 
+has_bindings_helper(ExchangeName, Condition) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
                                           queue_name = '$1',
                                           key = '_'}},
-    continue(fun() -> mnesia:select(route,
-                                [{MatchHead, [], ['$1']}], ?CHUNK_SIZE, write)
-             end, Predicate).
-
-continue(Fun, Predicate) ->
-    case Fun() of
+    case mnesia:select(route, [{MatchHead, Condition, ['$1']}], ?CHUNK_SIZE, write) of
         '$end_of_table' -> false;
-        {Routes, Cont} ->
-            case lists:dropwhile(Predicate, Routes) of
-                [] -> continue(fun() -> mnesia:select(Cont) end, Predicate);
-                _  -> true
-            end
+        _               -> true
     end.
 
 call_with_exchange(Exchange, Fun) ->
