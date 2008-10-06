@@ -218,13 +218,6 @@ lookup_qpids(Queues) ->
               [QPid | Acc]
       end, [], sets:from_list(Queues)).
 
-delete_forward_routes(ExchangeName, QueueName) ->
-    Route = #route{binding = #binding{exchange_name = ExchangeName,
-                                      queue_name = QueueName,
-                                      key = '_'}},
-    ok = mnesia:delete_object(Route),
-    ok = mnesia:delete_object(durable_routes, Route, write).
-
 %% TODO: Should all of the route and binding management not be
 %% refactored to its own module, especially seeing as unbind will have
 %% to be implemented for 0.91 ?
@@ -246,12 +239,20 @@ delete_bindings(Binding = #binding{exchange_name = X,
                                 do_internal_delete(ExchangeName)
                         end;
                         true -> ok
-                    end,
-                    delete_forward_routes(ExchangeName, QueueName)
+                    end
                 end)
         end, exchanges_for_queue(QueueName)),
-    ok = mnesia:delete_object(reverse_route(#route{binding = Binding}));
-
+    %TODO: Refactor this because it is the mirror image of the code below
+    RouteMatch = reverse_route(#route{binding = Binding}),
+    lists:foreach(fun(Route) ->
+                            B = Route#reverse_route.reverse_binding,
+                            R = #route{binding = #binding{exchange_name = B#reverse_binding.exchange_name,
+                                                          queue_name = B#reverse_binding.queue_name,
+                                                          key = B#reverse_binding.key}},
+                            ok = mnesia:delete_object(R),
+                            ok = mnesia:delete_object(durable_routes, R, write)
+                  end, mnesia:match_object(RouteMatch)),
+    ok = mnesia:delete_object(RouteMatch);
 
 delete_bindings(Binding = #binding{exchange_name = ExchangeName,
                                    queue_name = QueueName}) 
