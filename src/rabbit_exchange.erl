@@ -43,8 +43,6 @@
 -import(qlc).
 -import(regexp).
 
--define(CHUNK_SIZE, 1).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -221,7 +219,11 @@ lookup_qpids(Queues) ->
 %% TODO: Should all of the route and binding management not be
 %% refactored to its own module, especially seeing as unbind will have
 %% to be implemented for 0.91 ?
-%% This uses the reverse routes as the primary index
+
+%% This function looks crazy because when you delete stuff within an mnesia
+%% transaction, the effects of which are not visible to subsequent reads
+%% within the same transaction.
+%% This uses the reverse routes as the primary index.
 delete_bindings(Binding = #binding{exchange_name = X,
                                    queue_name = QueueName}) 
                                    when QueueName /= '_' andalso X == '_' ->
@@ -242,7 +244,7 @@ delete_bindings(Binding = #binding{exchange_name = X,
     indexed_delete(reverse_route(#route{binding = Binding}), 
                    fun mnesia:delete_object/1, fun delete_forward_routes/1);
 
-%% This uses the forward routes as the primary index
+%% This uses the forward routes as the primary index.
 delete_bindings(Binding = #binding{exchange_name = ExchangeName,
                                    queue_name = QueueName}) 
                                    when QueueName == '_' 
@@ -284,7 +286,7 @@ has_bindings_helper(ExchangeName, Condition) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
                                           queue_name = '$1',
                                           key = '_'}},
-    case mnesia:select(route, [{MatchHead, Condition, ['$1']}], ?CHUNK_SIZE, write) of
+    case mnesia:select(route, [{MatchHead, Condition, ['$1']}], 1, read) of
         '$end_of_table' -> false;
         _               -> true
     end.
