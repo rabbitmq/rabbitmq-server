@@ -51,7 +51,6 @@
       not_found() | {'error', 'unroutable' | 'not_delivered'}).
 -type(bind_res() :: 'ok' |
       {'error', 'queue_not_found' | 'exchange_not_found'}).
-
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/5 :: (exchange_name(), exchange_type(), bool(), bool(),
                     amqp_table()) -> exchange()).

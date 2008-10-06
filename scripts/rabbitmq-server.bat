@@ -99,7 +99,8 @@ set MNESIA_DIR=%MNESIA_BASE%/%NODENAME%-mnesia
 -s rabbit ^
 +W w ^
 +A30 ^
--kernel inet_default_listen_options "[{sndbuf, 16384}, {recbuf, 4096}]" ^
+-kernel inet_default_listen_options "[{nodelay, true}, {sndbuf, 16384}, {recbuf, 4096}]" ^
+-kernel inet_default_connect_options "[{nodelay, true}]" ^
 -rabbit tcp_listeners "[{\"%NODE_IP_ADDRESS%\", %NODE_PORT%}]" ^
 -kernel error_logger {file,\""%LOG_BASE%/%NODENAME%.log"\"} ^
 -sasl errlog_type error ^

@@ -28,11 +28,11 @@
 -export([start/0, recover/0, declare/4, delete/3, purge/1, internal_delete/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, list_vhost_queues/1,
-         stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4,
-         commit/2, rollback/2]).
+         stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
--export([notify_sent/2, notify_down/2]).
+-export([notify_sent/2]).
+-export([commit_all/2, rollback_all/2, notify_down_all/2]).
 -export([on_node_down/1]).
 
 -import(mnesia).
@@ -43,6 +43,8 @@
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
+-define(CALL_TIMEOUT, 5000).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -50,6 +52,8 @@
 -type(qstats() :: {'ok', queue_name(), non_neg_integer(), non_neg_integer()}).
 -type(qlen() :: {'ok', non_neg_integer()}).
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
+-type(ok_or_errors() ::
+      'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
@@ -72,9 +76,9 @@
 -spec(redeliver/2 :: (pid(), [{message(), bool()}]) -> 'ok').
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
--spec(commit/2 :: (pid(), txn()) -> 'ok').
--spec(rollback/2 :: (pid(), txn()) -> 'ok').
--spec(notify_down/2 :: (amqqueue(), pid()) -> 'ok').
+-spec(commit_all/2 :: ([pid()], txn()) -> ok_or_errors()).
+-spec(rollback_all/2 :: ([pid()], txn()) -> ok_or_errors()).
+-spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), bool()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
@@ -210,14 +214,29 @@ requeue(QPid, MsgIds, ChPid) ->
 ack(QPid, Txn, MsgIds, ChPid) ->
     gen_server:cast(QPid, {ack, Txn, MsgIds, ChPid}).
 
-commit(QPid, Txn) ->
-    gen_server:call(QPid, {commit, Txn}).
+commit_all(QPids, Txn) ->
+    Timeout = length(QPids) * ?CALL_TIMEOUT,
+    safe_pmap_ok(
+      fun (QPid) -> gen_server:call(QPid, {commit, Txn}, Timeout) end,
+      QPids).
 
-rollback(QPid, Txn) ->
-    gen_server:cast(QPid, {rollback, Txn}).
+rollback_all(QPids, Txn) ->
+    safe_pmap_ok(
+      fun (QPid) -> gen_server:cast(QPid, {rollback, Txn}) end,
+      QPids).
 
-notify_down(#amqqueue{ pid = QPid }, ChPid) ->
-    gen_server:call(QPid, {notify_down, ChPid}).
+notify_down_all(QPids, ChPid) ->
+    Timeout = length(QPids) * ?CALL_TIMEOUT,
+    safe_pmap_ok(
+      fun (QPid) ->
+              rabbit_misc:with_exit_handler(
+                %% we don't care if the queue process has terminated
+                %% in the meantime
+                fun () -> ok end,
+                fun () -> gen_server:call(QPid, {notify_down, ChPid},
+                                          Timeout) end)
+      end,
+      QPids).
 
 claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
     gen_server:call(QPid, {claim_queue, ReaderPid}).
@@ -270,3 +289,16 @@ pseudo_queue(QueueName, Pid) ->
               auto_delete = false,
               arguments = [],
               pid = Pid}.
+
+safe_pmap_ok(F, L) ->
+    case [R || R <- rabbit_misc:upmap(
+                      fun (V) ->
+                              try F(V)
+                              catch Class:Reason -> {Class, Reason}
+                              end
+                      end, L),
+               R =/= ok] of
+        []     -> ok;
+        Errors -> {error, Errors}
+    end.
+
