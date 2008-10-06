@@ -268,7 +268,7 @@ internal_delete(QueueName) ->
       end).
 
 delete_queue(#amqqueue{name = QueueName}) ->
-    ok = rabbit_exchange:delete_bindings(QueueName),
+    ok = rabbit_exchange:delete_bindings_for_queue(QueueName),
     ok = mnesia:delete({amqqueue, QueueName}),
     ok.
 

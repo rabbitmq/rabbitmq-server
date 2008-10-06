@@ -34,7 +34,7 @@
          route/2]).
 -export([add_binding/4, delete_binding/4]).
 -export([delete/2]).
--export([delete_bindings/1]).
+-export([delete_bindings_for_queue/1]).
 -export([check_type/1, assert_type/2, topic_matches/2]).
 
 -import(mnesia).
@@ -70,7 +70,7 @@
 -spec(delete_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'binding_not_found'}).
--spec(delete_bindings/1 :: (queue_name()) -> 'ok' | not_found()).
+-spec(delete_bindings_for_queue/1 :: (queue_name()) -> 'ok').
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
              'ok' | not_found() | {'error', 'in_use'}).
@@ -249,10 +249,10 @@ delete_bindings(Binding = #binding{exchange_name = ExchangeName,
                                    when QueueName == '_' 
                                    andalso ExchangeName /= '_' ->
     indexed_delete(#route{binding = Binding}, 
-                   fun delete_forward_routes/1, fun mnesia:delete_object/1);
+                   fun delete_forward_routes/1, fun mnesia:delete_object/1).
 
 % Must be called in a transaction
-delete_bindings(QueueName) ->
+delete_bindings_for_queue(QueueName) ->
     delete_bindings(#binding{exchange_name = '_',
                              queue_name = QueueName, 
                              key = '_'}).
