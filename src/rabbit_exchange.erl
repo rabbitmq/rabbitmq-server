@@ -234,9 +234,7 @@ delete_bindings(Binding = #binding{exchange_name = X,
                         case has_bindings(ExchangeName, Predicate) of
                             true -> ok;
                             false ->
-                                % TODO: This re-enters the delete_bindings
-                                % function unecessessarily
-                                do_internal_delete(ExchangeName)
+                                unchecked_internal_delete(ExchangeName)
                         end;
                         true -> ok
                     end
@@ -427,9 +425,6 @@ internal_delete(ExchangeName, _IfUnused = true) ->
 internal_delete(ExchangeName, false) ->
     do_internal_delete(ExchangeName).
 
-% TODO: Think about an optional do_internal_delete that takes an Exchange
-% instead of an Exchange, i.e. something that has already done the lookup
-% already, e.g. delete_bindings/1
 do_internal_delete(ExchangeName) ->
     case mnesia:wread({exchange, ExchangeName}) of
             [] -> {error, not_found};
@@ -437,6 +432,10 @@ do_internal_delete(ExchangeName) ->
                 delete_bindings(#binding{exchange_name = ExchangeName,
                                          queue_name = '_',
                                          key = '_'}),
-                ok = mnesia:delete({durable_exchanges, ExchangeName}),
-                ok = mnesia:delete({exchange, ExchangeName})
+                unchecked_internal_delete(ExchangeName)
     end.
+
+unchecked_internal_delete(ExchangeName) ->
+    ok = mnesia:delete({durable_exchanges, ExchangeName}),
+    ok = mnesia:delete({exchange, ExchangeName}).
+
