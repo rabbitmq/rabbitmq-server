@@ -221,10 +221,10 @@ lookup_qpids(Queues) ->
 %% TODO: Should all of the route and binding management not be
 %% refactored to its own module, especially seeing as unbind will have
 %% to be implemented for 0.91 ?
+%% This uses the reverse routes as the primary index
 delete_bindings(Binding = #binding{exchange_name = X,
                                    queue_name = QueueName}) 
                                    when QueueName /= '_' andalso X == '_' ->
-    % This uses the reverse routes as the primary index
     lists:foreach(
         fun(ExchangeName) ->
             call_with_exchange(ExchangeName,
@@ -243,11 +243,11 @@ delete_bindings(Binding = #binding{exchange_name = X,
     indexed_delete(reverse_route(#route{binding = Binding}), 
                    fun mnesia:delete_object/1, fun delete_forward_routes/1);
 
+%% This uses the forward routes as the primary index
 delete_bindings(Binding = #binding{exchange_name = ExchangeName,
                                    queue_name = QueueName}) 
                                    when QueueName == '_' 
                                    andalso ExchangeName /= '_' ->
-    % This uses the forward routes as the primary index
     indexed_delete(#route{binding = Binding}, 
                    fun delete_forward_routes/1, fun mnesia:delete_object/1);
 
@@ -306,19 +306,13 @@ call_with_exchange(Exchange, Fun) ->
       end).
 
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
-    % TODO Refactor to avoid duplication with call_with_exchange/2
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:wread({exchange, Exchange}) of
-                  [] -> {error, exchange_not_found};
-                  [X] ->
-                      case mnesia:wread({amqqueue, Queue}) of
-                          [] -> {error, queue_not_found};
-                          [Q] ->
-                              Fun(X, Q)
-                      end
-              end
-      end).
+    call_with_exchange(Exchange, 
+                       fun(X) ->
+                           case mnesia:wread({amqqueue, Queue}) of
+                               [] -> {error, queue_not_found};
+                               [Q] -> Fun(X, Q)
+                           end
+                       end).
 
 add_binding(ExchangeName, QueueName, RoutingKey, _Arguments) ->
     call_with_exchange_and_queue(
