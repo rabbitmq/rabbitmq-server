@@ -240,36 +240,32 @@ delete_bindings(Binding = #binding{exchange_name = X,
                     end
                 end)
         end, exchanges_for_queue(QueueName)),
-    %TODO: Refactor this because it is the mirror image of the code below
-    RouteMatch = reverse_route(#route{binding = Binding}),
-    lists:foreach(fun(Route) ->
-                            B = Route#reverse_route.reverse_binding,
-                            R = #route{binding = #binding{exchange_name = B#reverse_binding.exchange_name,
-                                                          queue_name = B#reverse_binding.queue_name,
-                                                          key = B#reverse_binding.key}},
-                            ok = mnesia:delete_object(R),
-                            ok = mnesia:delete_object(durable_routes, R, write)
-                  end, mnesia:match_object(RouteMatch)),
-    ok = mnesia:delete_object(RouteMatch);
+    indexed_delete(reverse_route(#route{binding = Binding}), 
+                   fun mnesia:delete_object/1, fun delete_forward_routes/1);
 
 delete_bindings(Binding = #binding{exchange_name = ExchangeName,
                                    queue_name = QueueName}) 
                                    when QueueName == '_' 
                                    andalso ExchangeName /= '_' ->
     % This uses the forward routes as the primary index
-    RouteMatch = #route{binding = Binding},
-    lists:foreach(fun(Route) -> 
-                            ok = mnesia:delete_object(reverse_route(Route))
-                  end, mnesia:match_object(RouteMatch)),
-    ok = mnesia:delete_object(RouteMatch),
-    ok = mnesia:delete_object(durable_routes, RouteMatch, write);
-
+    indexed_delete(#route{binding = Binding}, 
+                   fun delete_forward_routes/1, fun mnesia:delete_object/1);
 
 % Must be called in a transaction
 delete_bindings(QueueName) ->
     delete_bindings(#binding{exchange_name = '_',
                              queue_name = QueueName, 
                              key = '_'}).
+
+indexed_delete(Match, ForwardsDeleteFun, ReverseDeleteFun) ->    
+    lists:foreach(fun(Route) -> 
+                            ok = ReverseDeleteFun(reverse_route(Route))
+                  end, mnesia:match_object(Match)),
+    ForwardsDeleteFun(Match).
+
+delete_forward_routes(Match) ->
+    ok = mnesia:delete_object(Match),
+    ok = mnesia:delete_object(durable_routes, Match, write).
 
 exchanges_for_queue(QueueName) ->
     MatchHead = #reverse_route{reverse_binding = 
@@ -376,7 +372,17 @@ route_with_reverse(Binding = #binding{}) ->
     {Route, reverse_route(Route)}.
 
 reverse_route(#route{binding = Binding}) ->
-    #reverse_route{reverse_binding = reverse_binding(Binding)}.
+    #reverse_route{reverse_binding = reverse_binding(Binding)};
+
+reverse_route(#reverse_route{reverse_binding = Binding}) ->
+    #route{binding = reverse_binding(Binding)}.
+
+reverse_binding(#reverse_binding{exchange_name = Exchange,
+                         queue_name = Queue,
+                         key = Key}) ->
+    #binding{exchange_name = Exchange,
+                     queue_name = Queue,
+                     key = Key};
 
 reverse_binding(#binding{exchange_name = Exchange,
                          queue_name = Queue,
