@@ -259,13 +259,13 @@ delete_bindings_for_queue(QueueName) ->
 
 indexed_delete(Match, ForwardsDeleteFun, ReverseDeleteFun) ->    
     lists:foreach(fun(Route) -> 
-                            ok = ReverseDeleteFun(reverse_route(Route))
-                  end, mnesia:match_object(Match)),
-    ForwardsDeleteFun(Match).
+                            ok = ReverseDeleteFun(reverse_route(Route)),
+                            ok = ForwardsDeleteFun(Route)
+                  end, mnesia:match_object(Match)).
 
-delete_forward_routes(Match) ->
-    ok = mnesia:delete_object(Match),
-    ok = mnesia:delete_object(durable_routes, Match, write).
+delete_forward_routes(Route) ->
+    ok = mnesia:delete_object(Route),
+    ok = mnesia:delete_object(durable_routes, Route, write).
 
 exchanges_for_queue(QueueName) ->
     MatchHead = #reverse_route{reverse_binding = 
