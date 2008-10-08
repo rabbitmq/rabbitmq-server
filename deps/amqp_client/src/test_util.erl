@@ -35,7 +35,7 @@
 -record(publish,{q, x, routing_key, bind_key, payload,
                  mandatory = false, immediate = false}).
 
--define(Latch, 1).
+-define(Latch, 100).
 -define(Wait, 200).
 
 %%%%
@@ -84,6 +84,20 @@ channel_lifecycle_test(Connection) ->
     Channel2 = lib_amqp:start_channel(Connection),
     lib_amqp:teardown(Connection, Channel2),
     ok.
+
+% This is designed to exercize the internal queuing mechanism
+% to ensure that commands are properly serialized
+command_serialization_test(Connection) ->
+    Channel = lib_amqp:start_channel(Connection),
+    Parent = self(),
+    [spawn(fun() -> 
+                Q = uuid(),
+                Q1 = lib_amqp:declare_queue(Channel, Q),
+                ?assertMatch(Q, Q1),     
+                Parent ! finished
+           end) || Tag <- lists:seq(1,?Latch)],
+    latch_loop(?Latch),
+    lib_amqp:teardown(Connection, Channel).
 
 basic_get_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
