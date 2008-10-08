@@ -226,22 +226,21 @@ lookup_qpids(Queues) ->
 delete_bindings(Binding = #binding{exchange_name = X,
                                    queue_name = QueueName}) 
                                    when QueueName /= '_' andalso X == '_' ->
+    Exchanges = exchanges_for_queue(QueueName),
+    indexed_delete(reverse_route(#route{binding = Binding}), 
+                   fun mnesia:delete_object/1, fun delete_forward_routes/1),
     lists:foreach(
         fun(ExchangeName) ->
             call_with_exchange(ExchangeName,
                 fun(Exchange) ->
                     if Exchange#exchange.auto_delete ->
-                        case has_bindings(ExchangeName, QueueName) of
+                        case has_bindings(ExchangeName) of
                             true -> ok;
-                            false ->
-                                unchecked_internal_delete(ExchangeName)
+                            false -> unchecked_internal_delete(ExchangeName)
                         end;
-                        true -> ok
-                    end
-                end)
-        end, exchanges_for_queue(QueueName)),
-    indexed_delete(reverse_route(#route{binding = Binding}), 
-                   fun mnesia:delete_object/1, fun delete_forward_routes/1);
+                    true -> ok
+                end
+            end) end, Exchanges);
 
 %% This uses the forward routes as the primary index.
 delete_bindings(Binding = #binding{exchange_name = ExchangeName,
@@ -276,17 +275,12 @@ exchanges_for_queue(QueueName) ->
         mnesia:select(reverse_route, [{MatchHead, [], ['$1']}]))).
 
 has_bindings(ExchangeName) ->
-    has_bindings_helper(ExchangeName, []).
-
-has_bindings(ExchangeName, QueueName) ->
-    has_bindings_helper(ExchangeName, [{'=/=', '$1', {QueueName}}]).
- 
-has_bindings_helper(ExchangeName, Condition) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
                                           queue_name = '$1',
                                           key = '_'}},
-    case mnesia:select(route, [{MatchHead, Condition, ['$1']}], 1, read) of
+    case mnesia:select(route, [{MatchHead, [], ['$1']}], 2, read) of
         '$end_of_table' -> false;
+         {[], _}        -> false;
         _               -> true
     end.
 
