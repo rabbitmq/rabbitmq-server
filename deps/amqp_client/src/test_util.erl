@@ -35,7 +35,12 @@
 -record(publish,{q, x, routing_key, bind_key, payload,
                  mandatory = false, immediate = false}).
 
+% The latch constant defines how many processes are spawned in order
+% to run certain functionality in parallel. It follows the standard
+% countdown latch pattern.
 -define(Latch, 100).
+% The wait constant defines how long a consumer waits before it
+% unsubscribes
 -define(Wait, 200).
 
 %%%%

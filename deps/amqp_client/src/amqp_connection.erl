@@ -212,8 +212,8 @@ handle_info( {'EXIT', Pid, {amqp,Reason,Msg,Context}}, State) ->
             io:format("Just trapping this exit and proceding to trap an exit from the client channel process~n"),
             {noreply, State};
         true ->
-            io:format("A hard error has occurred, this forces the connection to end~n"),
-            {stop, shutdown, State}
+            io:format("Hard error: (Code = ~p, Text = ~p)~n", [Code, Text]),
+            {stop, {hard_error, {Code, Text}}, State}
     end;            
 
 %% Just the amqp channel shutting down, so unregister this channel
@@ -222,8 +222,8 @@ handle_info( {'EXIT', Pid, normal}, State) ->
     {noreply, NewState};
     
 % This is a special case for abruptly closed socket connections
-handle_info( {'EXIT', Pid, socket_error}, State) ->
-    {stop, shutdown, State};
+handle_info( {'EXIT', Pid, {socket_error, Reason}}, State) ->
+    {stop, {socket_error, Reason}, State};
     
 handle_info( {'EXIT', Pid, Reason}, State) ->
     io:format("Connection: Handling exit from ~p --> ~p~n",[Pid,Reason]),

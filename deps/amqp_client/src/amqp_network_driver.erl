@@ -172,7 +172,7 @@ reader_loop(Sock, Type, Channel, Length) ->
             reader_loop(Sock, _Type, _Channel, PayloadSize);
         {inet_async, Sock, Ref, {error, Reason}} ->
             io:format("Socket error: ~p~n", [Reason]),
-            exit(socket_error);
+            exit({socket_error, Reason});
         {heartbeat, Heartbeat} ->
             rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
             reader_loop(Sock, Type, Channel, Length);
@@ -186,7 +186,10 @@ reader_loop(Sock, Type, Channel, Length) ->
         {'EXIT', Pid, Reason} ->
             [H|T] = get_keys({chpid,Pid}),
             erase(H),
-            reader_loop(Sock, Type, Channel, Length)
+            reader_loop(Sock, Type, Channel, Length);
+        Other ->
+            io:format("Unknown message type: ~p~n", [Other]),
+            exit({unknown_message_type, Other})
     end.
 
 start_framing_channel(ChannelPid, ChannelNumber) ->
