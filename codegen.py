@@ -45,6 +45,22 @@ erlangTypeMap = {
     'timestamp': 'timestamp',
 }
 
+# Coming up with a proper encoding of AMQP tables in JSON is too much
+# hassle at this stage. Given that the only default value we are
+# interested in is for the empty table, we only support that.
+def convertTable(d):
+    if len(d) == 0:
+        return "[]"
+    else: raise 'Non-empty table defaults not supported', d
+
+erlangDefaultValueTypeConvMap = {
+    bool : lambda x: str(x).lower(),
+    str : lambda x: "<<\"" + x + "\">>",
+    int : lambda x: str(x),
+    float : lambda x: str(x),
+    dict: convertTable
+}
+
 def erlangize(s):
     s = s.replace('-', '_')
     s = s.replace(' ', '_')
@@ -271,6 +287,15 @@ def genHrl(spec):
 
     def fieldNameList(fields):
         return ', '.join([erlangize(f.name) for f in fields])
+
+    def fieldNameListDefaults(fields):
+        def fillField(field):
+            result = erlangize(f.name)
+            if field.defaultvalue != None:
+                conv_fn = erlangDefaultValueTypeConvMap[type(field.defaultvalue)]
+                result += ' = ' + conv_fn(field.defaultvalue)
+            return result
+        return ', '.join([fillField(f) for f in fields])
     
     methods = spec.allMethods()
 
@@ -283,23 +308,18 @@ def genHrl(spec):
 
     print "%% Method field records."
     for m in methods:
-        print "-record(%s, {%s})." % (m.erlangName(), fieldNameList(m.arguments))
+        print "-record(%s, {%s})." % (m.erlangName(), fieldNameListDefaults(m.arguments))
 
     print "%% Class property records."
     for c in spec.allClasses():
         print "-record('P_%s', {%s})." % (erlangize(c.name), fieldNameList(c.fields))
-
-#---------------------------------------------------------------------------
 
 def generateErl(specPath):
     genErl(AmqpSpec(specPath))
 
 def generateHrl(specPath):
     genHrl(AmqpSpec(specPath))
-
+    
 if __name__ == "__main__":
     do_main(generateHrl, generateErl)
-
-
-
 

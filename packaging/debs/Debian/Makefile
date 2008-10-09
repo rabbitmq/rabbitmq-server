@@ -18,9 +18,9 @@ package: clean
 	make -C ../.. check_tools
 	tar -zxvf $(TARBALL_DIR)/$(TARBALL)
 	cp -r debian $(UNPACKED_DIR)
-	chmod -R a+x $(UNPACKED_DIR)/debian
+	chmod a+x $(UNPACKED_DIR)/debian/rules
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
-	cd $(UNPACKED_DIR); dpkg-buildpackage -rfakeroot $(SIGNING)
+	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -rfakeroot $(SIGNING)
 	rm -rf $(UNPACKED_DIR)
 
 clean:

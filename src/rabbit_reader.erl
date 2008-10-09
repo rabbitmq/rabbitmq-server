@@ -59,6 +59,7 @@
 %% all states, unless specified otherwise:
 %%   socket error -> *exit*
 %%   socket close -> *throw*
+%%   writer send failure -> *throw*
 %%   forced termination -> *exit*
 %%   handshake_timeout -> *throw*
 %% pre-init:
@@ -230,6 +231,8 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             %% since this termination is initiated by our parent it is
             %% probably more important to exit quickly.
             exit(Reason);
+        {'EXIT', _Pid, E = {writer, send_failed, _Error}} ->
+            throw(E);
         {'EXIT', Pid, Reason} ->
             mainloop(Parent, Deb, handle_dependent_exit(Pid, Reason, State));
         {terminate_channel, Channel, Ref1} ->

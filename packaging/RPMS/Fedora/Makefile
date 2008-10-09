@@ -21,6 +21,7 @@ prepare:
 	cp $(TOP_DIR)/rabbitmq-server.spec $(TOP_DIR)/SPECS
 	cp $(TOP_DIR)/init.d $(TOP_DIR)/BUILD
 	cp $(TOP_DIR)/rabbitmqctl_wrapper $(TOP_DIR)/BUILD
+	cp $(TOP_DIR)/rabbitmq-server.logrotate $(TOP_DIR)/BUILD
 
 server: prepare
 	rpmbuild -ba $(TOP_DIR)/SPECS/rabbitmq-server.spec $(DEFINES) --target noarch

@@ -28,7 +28,10 @@
 [ "x" = "x$NODE_IP_ADDRESS" ] && NODE_IP_ADDRESS=0.0.0.0
 [ "x" = "x$NODE_PORT" ] && NODE_PORT=5672
 
-ERL_ARGS="+K true +A30 -kernel inet_default_listen_options [{sndbuf,16384},{recbuf,4096}]"
+ERL_ARGS="+K true +A30 \
+-kernel inet_default_listen_options [{nodelay,true},{sndbuf,16384},{recbuf,4096}] \
+-kernel inet_default_connect_options [{nodelay,true}]"
+
 CLUSTER_CONFIG_FILE=/etc/default/rabbitmq_cluster.config
 
 [ "x" = "x$LOG_BASE" ] && LOG_BASE=/var/log/rabbitmq
@@ -39,7 +42,7 @@ CLUSTER_CONFIG_FILE=/etc/default/rabbitmq_cluster.config
 ## Log rotation
 LOGS="${LOG_BASE}/${NODENAME}.log"
 SASL_LOGS="${LOG_BASE}/${NODENAME}-sasl.log"
-BACKUP_EXTENSION=".bak"
+BACKUP_EXTENSION=".1"
 
 [ -f  "${LOGS}" ] && cat "${LOGS}" >> "${LOGS}${BACKUP_EXTENSION}"
 [ -f  "${SASL_LOGS}" ] && cat "${SASL_LOGS}" >> "${SASL_LOGS}${BACKUP_EXTENSION}"
@@ -51,7 +54,7 @@ else
 fi
 
 erl \
-    -pa $(dirname $0)/../ebin \
+    -pa "`dirname $0`/../ebin" \
     ${START_RABBIT} \
     -sname ${NODENAME} \
     -boot start_sasl \

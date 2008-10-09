@@ -65,7 +65,7 @@ set LOG_BASE=%RABBITMQ_BASE_UNIX%/log
 rem We save the previous logs in their respective backup
 rem Log management (rotation, filtering based of size...) is left as an exercice for the user.
 
-set BACKUP_EXTENSION=.bak
+set BACKUP_EXTENSION=.1
 
 set LOGS="%RABBITMQ_BASE%\log\%NODENAME%.log"
 set SASL_LOGS="%RABBITMQ_BASE%\log\%NODENAME%-sasl.log"
@@ -92,14 +92,15 @@ set CLUSTER_CONFIG=-rabbit cluster_config \""%CLUSTER_CONFIG_FILE:\=/%"\"
 set MNESIA_DIR=%MNESIA_BASE%/%NODENAME%-mnesia
 
 "%ERLANG_HOME%\bin\erl.exe" ^
--pa ..\ebin ^
+-pa "%~dp0..\ebin" ^
 -noinput ^
 -boot start_sasl ^
 -sname %NODENAME% ^
 -s rabbit ^
 +W w ^
 +A30 ^
--kernel inet_default_listen_options "[{sndbuf, 16384}, {recbuf, 4096}]" ^
+-kernel inet_default_listen_options "[{nodelay, true}, {sndbuf, 16384}, {recbuf, 4096}]" ^
+-kernel inet_default_connect_options "[{nodelay, true}]" ^
 -rabbit tcp_listeners "[{\"%NODE_IP_ADDRESS%\", %NODE_PORT%}]" ^
 -kernel error_logger {file,\""%LOG_BASE%/%NODENAME%.log"\"} ^
 -sasl errlog_type error ^
