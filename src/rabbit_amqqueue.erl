@@ -120,7 +120,7 @@ recover_durable_queues() ->
     Queues = lists:map(fun start_queue_process/1, R),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              lists:foreach(fun recover_queue/1, Queues),
+              lists:foreach(fun store_queue/1, Queues),
               ok
       end).
 
@@ -133,7 +133,8 @@ declare(QueueName, Durable, AutoDelete, Args) ->
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    case mnesia:wread({amqqueue, QueueName}) of
-                       [] -> ok = recover_queue(Q),
+                       [] -> ok = store_queue(Q),
+                             ok = add_default_binding(Q),
                              Q;
                        [ExistingQ] -> ExistingQ
                    end
@@ -154,11 +155,6 @@ store_queue(Q = #amqqueue{durable = false}) ->
 start_queue_process(Q) ->
     {ok, Pid} = supervisor:start_child(rabbit_amqqueue_sup, [Q]),
     Q#amqqueue{pid = Pid}.
-
-recover_queue(Q) ->
-    ok = store_queue(Q),
-    ok = add_default_binding(Q),
-    ok.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
     Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
