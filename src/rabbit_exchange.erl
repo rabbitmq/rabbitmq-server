@@ -37,6 +37,9 @@
 -export([delete_bindings_for_queue/1]).
 -export([check_type/1, assert_type/2, topic_matches/2]).
 
+% EXTENDED API
+-export([list_exchange_bindings/1]).
+
 -import(mnesia).
 -import(sets).
 -import(lists).
@@ -388,7 +391,7 @@ last_topic_match(P, R, []) ->
 last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
     topic_matches1(P, R) or last_topic_match(P, [BacktrackNext | R], BacktrackList).
     
-%-----------------------------------------------------------------------------
+%----------------------------------------------------------------------------
 % These functions deal with removing exchanges and any bindings attached to
 % them depending on whether if-unused flag is set.
 delete(ExchangeName, _IfUnused = true) ->
@@ -396,7 +399,7 @@ delete(ExchangeName, _IfUnused = true) ->
 delete(ExchangeName, _IfUnused = false) ->
     call_with_exchange_in_tx(ExchangeName, fun unconditional_delete/1).
 
-%-----------------------------------------------------------------------------
+%----------------------------------------------------------------------------
 % The following functions must run within a transaction and assume that the
 % exchange record for which they are performed actually exists.
 maybe_auto_delete(#exchange{auto_delete = false}) ->
@@ -420,3 +423,19 @@ unconditional_delete(#exchange{name = ExchangeName}) ->
                              key = '_'}),
     ok = mnesia:delete({durable_exchanges, ExchangeName}),
     ok = mnesia:delete({exchange, ExchangeName}).
+    
+%----------------------------------------------------------------------------
+% EXTENDED API
+% These are API calls that are not used by the server internally,
+% they are exported for embedded clients to use
+
+% This is currently used in mod_rabbit.erl (XMPP) and expects this to return
+% {QueueName, RoutingKey, Arguments} tuples
+list_exchange_bindings(ExchangeName) ->
+    Route = #route{binding = #binding{exchange_name = ExchangeName,
+                                      queue_name = '_',
+                                      key = '_'}},
+    [{QueueName, RoutingKey, []} ||
+            #route{binding = #binding{queue_name = QueueName,
+                                      key = RoutingKey}} 
+                                      <- mnesia:dirty_match_object(Route)].
