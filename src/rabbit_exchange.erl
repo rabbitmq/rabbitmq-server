@@ -231,16 +231,8 @@ delete_bindings(Binding = #binding{exchange_name = X,
                    fun mnesia:delete_object/1, fun delete_forward_routes/1),
     lists:foreach(
         fun(ExchangeName) ->
-            call_with_exchange(ExchangeName,
-                fun(Exchange) ->
-                    if Exchange#exchange.auto_delete ->
-                        case has_bindings(ExchangeName) of
-                            true -> ok;
-                            false -> unchecked_internal_delete(ExchangeName)
-                        end;
-                    true -> ok
-                end
-            end) end, Exchanges);
+            call_with_exchange(ExchangeName, fun maybe_auto_delete/1) 
+        end, Exchanges);
 
 %% This uses the forward routes as the primary index.
 delete_bindings(Binding = #binding{exchange_name = ExchangeName,
@@ -285,45 +277,45 @@ has_bindings(ExchangeName) ->
     end.
 
 call_with_exchange(Exchange, Fun) ->
+    case mnesia:wread({exchange, Exchange}) of
+        [] -> {error, exchange_not_found};
+        [X] -> Fun(X)
+    end.
+
+call_with_exchange_in_tx(Exchange, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:wread({exchange, Exchange}) of
-                  [] -> {error, exchange_not_found};
-                  [X] -> Fun(X)
-              end
-      end).
+        fun() -> call_with_exchange(Exchange, Fun) end).
 
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
-    call_with_exchange(Exchange, 
-                       fun(X) ->
-                           case mnesia:wread({amqqueue, Queue}) of
-                               [] -> {error, queue_not_found};
-                               [Q] -> Fun(X, Q)
-                           end
-                       end).
+    call_with_exchange_in_tx(Exchange, 
+        fun(X) -> 
+            case mnesia:wread({amqqueue, Queue}) of
+                [] -> {error, queue_not_found};
+                [Q] -> Fun(X, Q)
+            end
+        end).
 
 add_binding(ExchangeName, QueueName, RoutingKey, _Arguments) ->
     call_with_exchange_and_queue(
-      ExchangeName, QueueName,
-      fun (X, Q) ->
-              if Q#amqqueue.durable and not(X#exchange.durable) ->
-                      {error, durability_settings_incompatible};
-                 true ->
-                      ok = sync_binding(
+        ExchangeName, QueueName,
+        fun (X, Q) ->
+            if Q#amqqueue.durable and not(X#exchange.durable) ->
+                {error, durability_settings_incompatible};
+            true -> ok = sync_binding(
                              ExchangeName, QueueName, RoutingKey,
                              Q#amqqueue.durable, fun mnesia:write/3)
-              end
-      end).
+        end
+    end).
 
 delete_binding(ExchangeName, QueueName, RoutingKey, _Arguments) ->
     call_with_exchange_and_queue(
-      ExchangeName, QueueName,
-      fun (X, Q) ->
-              ok = sync_binding(
-                     ExchangeName, QueueName, RoutingKey,
-                     Q#amqqueue.durable, fun mnesia:delete_object/3),
-              maybe_auto_delete(X)
-      end).
+        ExchangeName, QueueName,
+            fun (X, Q) ->
+                ok = sync_binding(
+                         ExchangeName, QueueName, RoutingKey,
+                         Q#amqqueue.durable, fun mnesia:delete_object/3),
+                         maybe_auto_delete(X)
+            end).
 
 %% Must run within a transaction.
 sync_binding(ExchangeName, QueueName, RoutingKey, Durable, Fun) ->
@@ -337,15 +329,6 @@ sync_binding(ExchangeName, QueueName, RoutingKey, Durable, Fun) ->
     [ok, ok] = [Fun(element(1, R), R, write) || R 
                 <- tuple_to_list(route_with_reverse(Binding))],
     ok.
-
-%% Must run within a transaction.
-maybe_auto_delete(#exchange{auto_delete = false}) ->
-    ok;
-maybe_auto_delete(#exchange{name = ExchangeName, auto_delete = true}) ->
-    case internal_delete(ExchangeName, true) of
-        {error, in_use} -> ok;
-        Other -> Other
-    end.
 
 route_with_reverse(#route{binding = Binding}) ->
     route_with_reverse(Binding);
@@ -399,31 +382,36 @@ last_topic_match(P, R, []) ->
     topic_matches1(P, R);
 last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
     topic_matches1(P, R) or last_topic_match(P, [BacktrackNext | R], BacktrackList).
-
-delete(ExchangeName, IfUnused) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> internal_delete(ExchangeName, IfUnused) end).
-
-internal_delete(ExchangeName, _IfUnused = true) ->
-    case has_bindings(ExchangeName) of
-        false  -> do_internal_delete(ExchangeName);
-        true -> {error, in_use}
-    end;
     
-internal_delete(ExchangeName, false) ->
-    do_internal_delete(ExchangeName).
+%-----------------------------------------------------------------------------
+% These functions deal with removing exchanges and any bindings attached to
+% them depending on whether if-unused flag is set.
+delete(ExchangeName, _IfUnused = true) ->
+    call_with_exchange_in_tx(ExchangeName, fun conditional_delete/1);
+delete(ExchangeName, _IfUnused = false) ->
+    call_with_exchange_in_tx(ExchangeName, fun unconditional_delete/1).
 
-do_internal_delete(ExchangeName) ->
-    case mnesia:wread({exchange, ExchangeName}) of
-            [] -> {error, not_found};
-            _ ->
-                delete_bindings(#binding{exchange_name = ExchangeName,
-                                         queue_name = '_',
-                                         key = '_'}),
-                unchecked_internal_delete(ExchangeName)
+%-----------------------------------------------------------------------------
+% The following functions must run within a transaction and assume that the
+% exchange record for which they are performed actually exists.
+maybe_auto_delete(#exchange{auto_delete = false}) ->
+    ok;
+maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
+    conditional_delete(Exchange).
+        
+% This will only delete the exchange if and only if there is
+% no route bound to it
+conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
+    case has_bindings(ExchangeName) of
+        false  -> unconditional_delete(Exchange);
+        true -> {error, in_use}
     end.
 
-unchecked_internal_delete(ExchangeName) ->
+% This will unconditionally delete an exchange together with any route
+% that may have been bound to it
+unconditional_delete(#exchange{name = ExchangeName}) ->
+    delete_bindings(#binding{exchange_name = ExchangeName,
+                             queue_name = '_',
+                             key = '_'}),
     ok = mnesia:delete({durable_exchanges, ExchangeName}),
     ok = mnesia:delete({exchange, ExchangeName}).
-
