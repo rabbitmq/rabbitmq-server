@@ -2,6 +2,7 @@ VERSION=0.0.0
 SOURCE_DIR=rabbitmq-server-$(VERSION)
 TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_ZIP=rabbitmq-server-windows-$(VERSION)
+TOP_DIR=$(shell pwd)
 
 dist:
 	make -C ../.. VERSION=$(VERSION) srcdist
@@ -19,6 +20,8 @@ dist:
 	rm -rf $(SOURCE_DIR)/docs
 
 	mv $(SOURCE_DIR) $(TARGET_DIR)
+	pod2text --loose $(TOP_DIR)/rabbitmq-service.pod $(TARGET_DIR)/readme-service.txt
+	unix2dos $(TARGET_DIR)/rabbitmq-service.txt
 	zip -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(TARGET_DIR)
 
