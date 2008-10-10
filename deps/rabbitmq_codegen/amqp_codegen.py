@@ -24,8 +24,19 @@
 ##
 
 from __future__ import nested_scopes
-import json
 import re
+import sys
+
+try:
+    import json
+except ImportError:
+    print >> sys.stderr , " You don't appear to have json.py installed"
+    print >> sys.stderr , " (an implementation of a JSON reader and writer in Python)."
+    print >> sys.stderr , " You can install it:"
+    print >> sys.stderr , "   - by running 'apt-get install python-json' on Debian-based systems,"
+    print >> sys.stderr , "   - by running 'yum install python-json' on Fedora/Red Hat system,"
+    print >> sys.stderr , "   - from sources from 'http://sourceforge.net/projects/json-py'"
+    sys.exit(1)
 
 def insert_base_types(d):
     for t in ['octet', 'shortstr', 'longstr', 'short', 'long',
@@ -142,8 +153,6 @@ class AmqpField(AmqpEntity):
     def __repr__(self):
         return 'AmqpField("' + self.name + '")'
 
-import sys
-
 def do_main(header_fn,body_fn):
     def usage():
         print >> sys.stderr , "Usage:"
@@ -159,3 +168,4 @@ def do_main(header_fn,body_fn):
             body_fn(sys.argv[2])
         else:
             usage()
+            sys.exit(1)
