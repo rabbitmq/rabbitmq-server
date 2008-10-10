@@ -270,10 +270,15 @@ has_bindings(ExchangeName) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
                                           queue_name = '$1',
                                           key = '_'}},
-    case mnesia:select(route, [{MatchHead, [], ['$1']}], 2, read) of
+    continue(fun() ->
+                mnesia:select(route, [{MatchHead, [], ['$1']}], 1, read)
+             end).
+
+continue(Fun) ->
+    case Fun() of
         '$end_of_table' -> false;
-         {[], _}        -> false;
-        _               -> true
+         {[], Cont}     -> continue(fun() -> mnesia:select(Cont) end);
+         _              -> true
     end.
 
 call_with_exchange(Exchange, Fun) ->
