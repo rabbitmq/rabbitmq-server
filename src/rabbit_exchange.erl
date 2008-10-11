@@ -222,9 +222,6 @@ lookup_qpids(Queues) ->
 %% refactored to its own module, especially seeing as unbind will have
 %% to be implemented for 0.91 ?
 
-%% This function looks crazy because when you delete stuff within an mnesia
-%% transaction, the effects of which are not visible to subsequent reads
-%% within the same transaction.
 %% This uses the reverse routes as the primary index.
 delete_bindings(Binding = #binding{exchange_name = X,
                                    queue_name = QueueName}) 
