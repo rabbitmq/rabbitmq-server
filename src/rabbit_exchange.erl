@@ -278,7 +278,7 @@ continue(_) ->
 call_with_exchange(Exchange, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun() -> case mnesia:read({exchange, Exchange}) of
-                   [] -> {error, exchange_not_found};
+                   []  -> {error, exchange_not_found};
                    [X] -> Fun(X)
                end
       end).
@@ -287,7 +287,7 @@ call_with_exchange_and_queue(Exchange, Queue, Fun) ->
     call_with_exchange(
       Exchange, 
       fun(X) -> case mnesia:read({amqqueue, Queue}) of
-                    [] -> {error, queue_not_found};
+                    []  -> {error, queue_not_found};
                     [Q] -> Fun(X, Q)
                 end
       end).
@@ -319,7 +319,7 @@ sync_binding(ExchangeName, QueueName, RoutingKey, Durable, Fun) ->
                        queue_name = QueueName,
                        key = RoutingKey},
     ok = case Durable of
-             true -> Fun(durable_routes, #route{binding = Binding}, write);
+             true  -> Fun(durable_routes, #route{binding = Binding}, write);
              false -> ok
          end,
     [ok, ok] = [Fun(element(1, R), R, write) ||
@@ -392,7 +392,7 @@ maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     case has_bindings(ExchangeName) of
         false  -> unconditional_delete(Exchange);
-        true -> {error, in_use}
+        true   -> {error, in_use}
     end.
 
 unconditional_delete(#exchange{name = ExchangeName}) ->
