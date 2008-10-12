@@ -384,7 +384,8 @@ delete(ExchangeName, _IfUnused = false) ->
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     ok;
 maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
-    conditional_delete(Exchange).
+    conditional_delete(Exchange),
+    ok.
 
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     case has_bindings(ExchangeName) of
