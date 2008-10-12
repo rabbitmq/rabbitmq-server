@@ -222,38 +222,32 @@ lookup_qpids(Queues) ->
 %% refactored to its own module, especially seeing as unbind will have
 %% to be implemented for 0.91 ?
 
-%% This uses the reverse routes as the primary index.
-delete_bindings(Binding = #binding{exchange_name = X,
-                                   queue_name = QueueName}) 
-                                   when QueueName /= '_' andalso X == '_' ->
-    Exchanges = exchanges_for_queue(QueueName),
-    indexed_delete(reverse_route(#route{binding = Binding}), 
-                   fun mnesia:delete_object/1, fun delete_forward_routes/1),
-    [begin
-         [Exchange] = mnesia:read({exchange, ExchangeName}),
-         ok = maybe_auto_delete(Exchange)
-     end || ExchangeName <- Exchanges],
-    ok;
+delete_bindings_for_exchange(ExchangeName) ->
+    indexed_delete(
+      #route{binding = #binding{exchange_name = ExchangeName,
+                                queue_name = '_',
+                                key = '_'}}, 
+      fun delete_forward_routes/1, fun mnesia:delete_object/1).
 
-%% This uses the forward routes as the primary index.
-delete_bindings(Binding = #binding{exchange_name = ExchangeName,
-                                   queue_name = QueueName}) 
-                                   when QueueName == '_' 
-                                   andalso ExchangeName /= '_' ->
-    indexed_delete(#route{binding = Binding}, 
-                   fun delete_forward_routes/1, fun mnesia:delete_object/1).
-
-% Must be called in a transaction
 delete_bindings_for_queue(QueueName) ->
-    delete_bindings(#binding{exchange_name = '_',
-                             queue_name = QueueName, 
-                             key = '_'}).
+    Exchanges = exchanges_for_queue(QueueName),
+    indexed_delete(
+      reverse_route(#route{binding = #binding{exchange_name = '_',
+                                              queue_name = QueueName, 
+                                              key = '_'}}),
+      fun mnesia:delete_object/1, fun delete_forward_routes/1),
+    [begin
+         [X] = mnesia:read({exchange, ExchangeName}),
+         ok = maybe_auto_delete(X)
+     end || ExchangeName <- Exchanges],
+    ok.
 
 indexed_delete(Match, ForwardsDeleteFun, ReverseDeleteFun) ->    
-    lists:foreach(fun(Route) -> 
-                            ok = ReverseDeleteFun(reverse_route(Route)),
-                            ok = ForwardsDeleteFun(Route)
-                  end, mnesia:match_object(Match)).
+    [begin
+         ok = ReverseDeleteFun(reverse_route(Route)),
+         ok = ForwardsDeleteFun(Route)
+     end || Route <- mnesia:match_object(Match)],
+    ok.
 
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(Route),
@@ -412,9 +406,7 @@ conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
 % This will unconditionally delete an exchange together with any route
 % that may have been bound to it
 unconditional_delete(#exchange{name = ExchangeName}) ->
-    delete_bindings(#binding{exchange_name = ExchangeName,
-                             queue_name = '_',
-                             key = '_'}),
+    ok = delete_bindings_for_exchange(ExchangeName),
     ok = mnesia:delete({durable_exchanges, ExchangeName}),
     ok = mnesia:delete({exchange, ExchangeName}).
     
