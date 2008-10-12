@@ -229,10 +229,11 @@ delete_bindings(Binding = #binding{exchange_name = X,
     Exchanges = exchanges_for_queue(QueueName),
     indexed_delete(reverse_route(#route{binding = Binding}), 
                    fun mnesia:delete_object/1, fun delete_forward_routes/1),
-    lists:foreach(
-        fun(ExchangeName) ->
-            call_with_exchange(ExchangeName, fun maybe_auto_delete/1) 
-        end, Exchanges);
+    [begin
+         [Exchange] = mnesia:read({exchange, ExchangeName}),
+         ok = maybe_auto_delete(Exchange)
+     end || ExchangeName <- Exchanges],
+    ok;
 
 %% This uses the forward routes as the primary index.
 delete_bindings(Binding = #binding{exchange_name = ExchangeName,
@@ -280,19 +281,17 @@ continue(_) ->
     true.
 
 call_with_exchange(Exchange, Fun) ->
-    case mnesia:wread({exchange, Exchange}) of
-        [] -> {error, exchange_not_found};
-        [X] -> Fun(X)
-    end.
-
-call_with_exchange_in_tx(Exchange, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
-        fun() -> call_with_exchange(Exchange, Fun) end).
+        fun() -> case mnesia:read({exchange, Exchange}) of
+                     [] -> {error, exchange_not_found};
+                     [X] -> Fun(X)
+                 end
+        end).
 
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
-    call_with_exchange_in_tx(Exchange, 
+    call_with_exchange(Exchange, 
         fun(X) -> 
-            case mnesia:wread({amqqueue, Queue}) of
+            case mnesia:read({amqqueue, Queue}) of
                 [] -> {error, queue_not_found};
                 [Q] -> Fun(X, Q)
             end
@@ -390,9 +389,9 @@ last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
 % These functions deal with removing exchanges and any bindings attached to
 % them depending on whether if-unused flag is set.
 delete(ExchangeName, _IfUnused = true) ->
-    call_with_exchange_in_tx(ExchangeName, fun conditional_delete/1);
+    call_with_exchange(ExchangeName, fun conditional_delete/1);
 delete(ExchangeName, _IfUnused = false) ->
-    call_with_exchange_in_tx(ExchangeName, fun unconditional_delete/1).
+    call_with_exchange(ExchangeName, fun unconditional_delete/1).
 
 %----------------------------------------------------------------------------
 % The following functions must run within a transaction and assume that the
