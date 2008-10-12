@@ -254,12 +254,13 @@ delete_forward_routes(Route) ->
     ok = mnesia:delete_object(durable_routes, Route, write).
 
 exchanges_for_queue(QueueName) ->
-    MatchHead = #reverse_route{reverse_binding = 
-                               #reverse_binding{exchange_name = '$1',
-                                                queue_name = QueueName,
-                                                key = '_'}},
-    sets:to_list(sets:from_list(
-                   mnesia:select(reverse_route, [{MatchHead, [], ['$1']}]))).
+    MatchHead = reverse_route(
+                  #route{binding = #binding{exchange_name = '$1',
+                                            queue_name = QueueName,
+                                            key = '_'}}),
+    sets:to_list(
+      sets:from_list(
+        mnesia:select(reverse_route, [{MatchHead, [], ['$1']}]))).
 
 has_bindings(ExchangeName) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
