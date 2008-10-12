@@ -2,8 +2,5 @@ This package, the RabbitMQ code generation library and associated
 files, is licensed under the MPL. For the MPL, please see
 LICENSE-MPL-RabbitMQ.
 
-This library makes use of the json.py library, which is distributed
-under the LGPL v2.1 - see LICENSE-LGPL21 for details.
-
 If you have any questions regarding licensing, please contact us at 
 info@rabbitmq.com.
