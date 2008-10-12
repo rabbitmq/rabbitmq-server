@@ -268,12 +268,9 @@ has_bindings(ExchangeName) ->
                                           key = '_'}},
     continue(mnesia:select(route, [{MatchHead, [], ['$1']}], 1, read)).
 
-continue('$end_of_table') ->
-    false;
-continue({[], Continuation}) ->
-    continue(mnesia:select(Continuation));
-continue(_) ->
-    true.
+continue('$end_of_table')    -> false;
+continue({[_|_], _})         -> true;
+continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
 call_with_exchange(Exchange, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
