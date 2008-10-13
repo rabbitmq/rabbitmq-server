@@ -208,7 +208,8 @@ route(X = #exchange{type = direct}, RoutingKey) ->
 route_internal(#exchange{name = Name}, RoutingKey) ->
     MatchHead = #route{binding = #binding{exchange_name = Name,
                                           queue_name = '$1',
-                                          key = RoutingKey}},
+                                          key = RoutingKey,
+                                          args = '_'}},
     lookup_qpids(mnesia:dirty_select(route, [{MatchHead, [], ['$1']}])).
 
 lookup_qpids(Queues) ->
@@ -226,7 +227,8 @@ delete_bindings_for_exchange(ExchangeName) ->
     indexed_delete(
       #route{binding = #binding{exchange_name = ExchangeName,
                                 queue_name = '_',
-                                key = '_'}}, 
+                                key = '_',
+                                args = '_'}}, 
       fun delete_forward_routes/1, fun mnesia:delete_object/1).
 
 delete_bindings_for_queue(QueueName) ->
@@ -234,7 +236,8 @@ delete_bindings_for_queue(QueueName) ->
     indexed_delete(
       reverse_route(#route{binding = #binding{exchange_name = '_',
                                               queue_name = QueueName, 
-                                              key = '_'}}),
+                                              key = '_',
+                                              args = '_'}}),
       fun mnesia:delete_object/1, fun delete_forward_routes/1),
     [begin
          [X] = mnesia:read({exchange, ExchangeName}),
@@ -257,7 +260,8 @@ exchanges_for_queue(QueueName) ->
     MatchHead = reverse_route(
                   #route{binding = #binding{exchange_name = '$1',
                                             queue_name = QueueName,
-                                            key = '_'}}),
+                                            key = '_',
+                                            args = '_'}}),
     sets:to_list(
       sets:from_list(
         mnesia:select(reverse_route, [{MatchHead, [], ['$1']}]))).
@@ -265,7 +269,8 @@ exchanges_for_queue(QueueName) ->
 has_bindings(ExchangeName) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
                                           queue_name = '$1',
-                                          key = '_'}},
+                                          key = '_',
+                                          args = '_'}},
     continue(mnesia:select(route, [{MatchHead, [], ['$1']}], 1, read)).
 
 continue('$end_of_table')    -> false;
@@ -338,17 +343,21 @@ reverse_route(#reverse_route{reverse_binding = Binding}) ->
 
 reverse_binding(#reverse_binding{exchange_name = Exchange,
                                  queue_name = Queue,
-                                 key = Key}) ->
+                                 key = Key,
+                                 args = Args}) ->
     #binding{exchange_name = Exchange,
              queue_name = Queue,
-             key = Key};
+             key = Key,
+             args = Args};
 
 reverse_binding(#binding{exchange_name = Exchange,
                          queue_name = Queue,
-                         key = Key}) ->
+                         key = Key,
+                         args = Args}) ->
     #reverse_binding{exchange_name = Exchange,
                      queue_name = Queue,
-                     key = Key}.
+                     key = Key,
+                     args = Args}.
 
 split_topic_key(Key) ->
     {ok, KeySplit} = regexp:split(binary_to_list(Key), "\\."),
@@ -409,9 +418,10 @@ unconditional_delete(#exchange{name = ExchangeName}) ->
 list_exchange_bindings(ExchangeName) ->
     Route = #route{binding = #binding{exchange_name = ExchangeName,
                                       queue_name = '_',
-                                      key = '_'}},
-    [{QueueName, RoutingKey, Args} ||
+                                      key = '_',
+                                      args = '_'}},
+    [{QueueName, RoutingKey, Arguments} ||
         #route{binding = #binding{queue_name = QueueName,
                                   key = RoutingKey,
-                                  args = Args}} 
+                                  args = Arguments}} 
             <- mnesia:dirty_match_object(Route)].
