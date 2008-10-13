@@ -106,7 +106,6 @@ table_definitions() ->
      {listener, [{type, bag},
                  {attributes, record_info(fields, listener)}]},
      {durable_routes, [{disc_copies, [node()]},
-                       {type, set},
                        {record_name, route},
                        {attributes, record_info(fields, route)}]},
      {route, [{type, ordered_set},
