@@ -289,32 +289,33 @@ call_with_exchange_and_queue(Exchange, Queue, Fun) ->
                 end
       end).
 
-add_binding(ExchangeName, QueueName, RoutingKey, _Arguments) ->
+add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
     call_with_exchange_and_queue(
       ExchangeName, QueueName,
       fun (X, Q) ->
               if Q#amqqueue.durable and not(X#exchange.durable) ->
                       {error, durability_settings_incompatible};
                  true -> ok = sync_binding(
-                                ExchangeName, QueueName, RoutingKey,
-                                Q#amqqueue.durable, fun mnesia:write/3)
+                            ExchangeName, QueueName, RoutingKey, Arguments,
+                            Q#amqqueue.durable, fun mnesia:write/3)
               end
       end).
 
-delete_binding(ExchangeName, QueueName, RoutingKey, _Arguments) ->
+delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
     call_with_exchange_and_queue(
       ExchangeName, QueueName,
       fun (X, Q) ->
               ok = sync_binding(
-                     ExchangeName, QueueName, RoutingKey,
+                     ExchangeName, QueueName, RoutingKey, Arguments,
                      Q#amqqueue.durable, fun mnesia:delete_object/3),
               maybe_auto_delete(X)
       end).
 
-sync_binding(ExchangeName, QueueName, RoutingKey, Durable, Fun) ->
+sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
     Binding = #binding{exchange_name = ExchangeName,
                        queue_name = QueueName,
-                       key = RoutingKey},
+                       key = RoutingKey,
+                       args = Arguments},
     ok = case Durable of
              true  -> Fun(durable_routes, #route{binding = Binding}, write);
              false -> ok
@@ -409,7 +410,8 @@ list_exchange_bindings(ExchangeName) ->
     Route = #route{binding = #binding{exchange_name = ExchangeName,
                                       queue_name = '_',
                                       key = '_'}},
-    [{QueueName, RoutingKey, []} ||
+    [{QueueName, RoutingKey, Args} ||
         #route{binding = #binding{queue_name = QueueName,
-                                  key = RoutingKey}} 
+                                  key = RoutingKey,
+                                  args = Args}} 
             <- mnesia:dirty_match_object(Route)].
