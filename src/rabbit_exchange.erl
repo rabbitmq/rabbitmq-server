@@ -232,7 +232,7 @@ delete_bindings_for_exchange(ExchangeName) ->
 delete_bindings_for_queue(QueueName) ->
     Exchanges = exchanges_for_queue(QueueName),
     indexed_delete(
-      reverse_route(#route{binding = #binding{ queue_name = QueueName, 
+      reverse_route(#route{binding = #binding{queue_name = QueueName, 
                                               _ = '_'}}),
       fun mnesia:delete_object/1, fun delete_forward_routes/1),
     [begin
