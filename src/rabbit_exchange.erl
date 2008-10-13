@@ -39,6 +39,7 @@
 
 %% EXTENDED API
 -export([list_exchange_bindings/1]).
+-export([list_queue_bindings/1]).
 
 -import(mnesia).
 -import(sets).
@@ -77,6 +78,10 @@
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
              'ok' | not_found() | {'error', 'in_use'}).
+-spec(list_queue_bindings/1 :: (queue_name()) -> 
+              [{exchange_name(), routing_key(), amqp_table()}]).
+-spec(list_exchange_bindings/1 :: (exchange_name()) -> 
+              [{queue_name(), routing_key(), amqp_table()}]).
 
 -endif.
 
@@ -414,6 +419,16 @@ list_exchange_bindings(ExchangeName) ->
                                       _ = '_'}},
     [{QueueName, RoutingKey, Arguments} ||
         #route{binding = #binding{queue_name = QueueName,
+                                  key = RoutingKey,
+                                  args = Arguments}} 
+            <- mnesia:dirty_match_object(Route)].
+
+% Refactoring is left as an exercise for the reader
+list_queue_bindings(QueueName) ->
+    Route = #route{binding = #binding{queue_name = QueueName,
+                                      _ = '_'}},
+    [{ExchangeName, RoutingKey, Arguments} ||
+        #route{binding = #binding{exchange_name = ExchangeName,
                                   key = RoutingKey,
                                   args = Arguments}} 
             <- mnesia:dirty_match_object(Route)].
