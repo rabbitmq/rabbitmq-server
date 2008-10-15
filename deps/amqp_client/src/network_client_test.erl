@@ -53,6 +53,9 @@ basic_ack_test() ->
 channel_lifecycle_test() ->
   test_util:channel_lifecycle_test(new_connection()).
 
+command_serialization_test() ->
+  test_util:command_serialization_test(new_connection()).
+
 %----------------------------------------------------------------------------
 % Negative Tests
 
