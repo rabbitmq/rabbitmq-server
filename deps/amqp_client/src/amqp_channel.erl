@@ -132,19 +132,16 @@ rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                                               do2 = Do2}) ->
     NewRequestQueue =
         case queue:out(RequestQueue) of
-            {empty, {[],[]}}         -> exit(empty_rpc_bottom_half);
-            {{value, {From, _}}, Q}  -> 
-                gen_server:reply(From, Reply),
-                Q
+            {empty, {[],[]}}        -> exit(empty_rpc_bottom_half);
+            {{value, {From, _}}, Q} -> gen_server:reply(From, Reply),
+                                       Q
         end,
     case queue:is_empty(NewRequestQueue) of
-        true -> ok;
-        false ->
-            {NewFrom, Method} = queue:head(NewRequestQueue),
-            Do2(Writer, Method)
+        true  -> ok;
+        false -> {_NewFrom, Method} = queue:head(NewRequestQueue),
+                 Do2(Writer, Method)
     end,
-    NewState = State#channel_state{rpc_requests = NewRequestQueue},
-    {noreply, NewState}.
+    {noreply, State#channel_state{rpc_requests = NewRequestQueue}}.
 
 subscription_top_half(Method, From, State = #channel_state{writer_pid = Writer, do2 = Do2}) ->
     Do2(Writer,Method),
