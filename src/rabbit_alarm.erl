@@ -27,14 +27,14 @@
 
 -behaviour(gen_event).
 
--export([start/0, stop/0]).
+-export([start/0, stop/0, register/2]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -define(MEMSUP_CHECK_INTERVAL, 1000).
 
--record(alarms, {system_memory_high_watermark = false}).
+-record(alarms, {alertees, system_memory_high_watermark = false}).
 
 %%----------------------------------------------------------------------------
 
@@ -42,7 +42,8 @@
 
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
-
+-spec(register/2 :: (pid(), mfa()) -> 'ok').
+             
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -68,22 +69,43 @@ start() ->
 stop() ->
     ok = alarm_handler:delete_alarm_handler(?MODULE).
 
+register(Pid, HighMemMFA) ->
+    ok = gen_event:call(alarm_handler, ?MODULE,
+                        {register, Pid, HighMemMFA}).
+
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #alarms{}}.
+    {ok, #alarms{alertees = dict:new()}}.
 
+handle_call({register, Pid, HighMemMFA},
+            State = #alarms{alertees = Alertess}) ->
+    _MRef = erlang:monitor(process, Pid),
+    case State#alarms.system_memory_high_watermark of
+        true  -> {M, F, A} = HighMemMFA,
+                 ok = erlang:apply(M, F, A ++ [Pid, true]);
+        false -> ok
+    end,
+    NewAlertees = dict:store(Pid, HighMemMFA, Alertess),
+    {ok, ok, State#alarms{alertees = NewAlertees}};
+    
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, {system_memory_high_watermark, []}}, State) ->
+    ok = alert(true, State#alarms.alertees),
     {ok, State#alarms{system_memory_high_watermark = true}};
 
 handle_event({clear_alarm, system_memory_high_watermark}, State) ->
+    ok = alert(false, State#alarms.alertees),
     {ok, State#alarms{system_memory_high_watermark = false}};
 
 handle_event(_Event, State) ->
     {ok, State}.
+
+handle_info({'DOWN', _MRef, process, Pid, _Reason},
+            State = #alarms{alertees = Alertess}) ->
+    {ok, State#alarms{alertees = dict:erase(Pid, Alertess)}};
 
 handle_info(_Info, State) ->
     {ok, State}.
@@ -93,3 +115,11 @@ terminate(_Arg, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%----------------------------------------------------------------------------
+    
+alert(Alert, Alertees) ->
+    dict:fold(fun (Pid, {M, F, A}, Acc) ->
+                      ok = erlang:apply(M, F, A ++ [Pid, Alert]),
+                      Acc
+              end, ok, Alertees).
