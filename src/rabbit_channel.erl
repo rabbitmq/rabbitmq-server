@@ -644,6 +644,9 @@ handle_method(#'channel.flow'{active = _}, _, State) ->
     {reply, #'channel.flow_ok'{active = true}, State};
 
 handle_method(#'channel.flow_ok'{active = _}, _, State) ->
+    %% TODO: We may want to correlate this to channel.flow messages we
+    %% have sent, and complain if we get an unsolicited
+    %% channel.flow_ok, or the client refuses our flow request.
     {noreply, State};
 
 handle_method(_MethodRecord, _Content, _State) ->
