@@ -731,21 +731,6 @@ ack(ProxyPid, TxnKey, UAQ) ->
 
 make_tx_id() -> rabbit_misc:guid().
 
-safe_pmap_set_ok(F, S) ->
-    case lists:filter(fun (R) -> R =/= ok end,
-                      rabbit_misc:upmap(
-                        fun (V) ->
-                                try F(V)
-                                catch Class:Reason -> {Class, Reason}
-                                end
-                        end, sets:to_list(S))) of
-        []     -> ok;
-        Errors -> {error, Errors}
-    end.
-
-notify_participants(F, TxnKey, Participants) ->
-    safe_pmap_set_ok(fun (QPid) -> F(QPid, TxnKey) end, Participants).
-
 new_tx(State) ->
     State#ch{transaction_id    = make_tx_id(),
              tx_participants   = sets:new(),
@@ -753,8 +738,8 @@ new_tx(State) ->
 
 internal_commit(State = #ch{transaction_id = TxnKey,
                             tx_participants = Participants}) ->
-    case notify_participants(fun rabbit_amqqueue:commit/2,
-                             TxnKey, Participants) of
+    case rabbit_amqqueue:commit_all(sets:to_list(Participants),
+                                    TxnKey) of
         ok              -> new_tx(State);
         {error, Errors} -> exit({commit_failed, Errors})
     end.
@@ -767,8 +752,8 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
               [self(),
                queue:len(UAQ),
                queue:len(UAMQ)]),
-    case notify_participants(fun rabbit_amqqueue:rollback/2,
-                             TxnKey, Participants) of
+    case rabbit_amqqueue:rollback_all(sets:to_list(Participants),
+                                      TxnKey) of
         ok              -> NewUAMQ = queue:join(UAQ, UAMQ),
                            new_tx(State#ch{unacked_message_q = NewUAMQ});
         {error, Errors} -> exit({rollback_failed, Errors})
@@ -791,23 +776,18 @@ fold_per_queue(F, Acc0, UAQ) ->
               Acc0, D).
 
 notify_queues(#ch{proxy_pid = ProxyPid, consumer_mapping = Consumers}) ->
-    safe_pmap_set_ok(
-      fun (QueueName) ->
-              case rabbit_amqqueue:with(
-                     QueueName,
-                     fun (Q) ->
-                             rabbit_amqqueue:notify_down(Q, ProxyPid)
-                     end) of
-                  ok ->
-                      ok;
-                  {error, not_found} ->
-                      %% queue has been deleted in the meantime
-                      ok
-              end
-      end,
-      dict:fold(fun (_ConsumerTag, QueueName, S) ->
-                        sets:add_element(QueueName, S)
-                end, sets:new(), Consumers)).
+    rabbit_amqqueue:notify_down_all(
+      [QPid || QueueName <- 
+                   sets:to_list(
+                     dict:fold(fun (_ConsumerTag, QueueName, S) ->
+                                       sets:add_element(QueueName, S)
+                               end, sets:new(), Consumers)),
+               case rabbit_amqqueue:lookup(QueueName) of
+                   {ok, Q} -> QPid = Q#amqqueue.pid, true;
+                   %% queue has been deleted in the meantime
+                   {error, not_found} -> QPid = none, false
+               end],
+      ProxyPid).
 
 is_message_persistent(#content{properties = #'P_basic'{
                                  delivery_mode = Mode}}) ->
