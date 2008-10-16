@@ -34,6 +34,8 @@
 
 -define(MEMSUP_CHECK_INTERVAL, 1000).
 
+-record(alarms, {system_memory_high_watermark = false}).
+ 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -53,6 +55,11 @@ start() ->
     %% a granularity of minutes. So we have to peel off one layer of
     %% the API to get to the underlying layer which operates at the
     %% granularity of milliseconds.
+    %%
+    %% Note that the new setting will only take effect after the first
+    %% check has completed, i.e. after one minute. So if rabbit eats
+    %% all the memory within the first minute after startup then we
+    %% are out of luck.
     ok = os_mon:call(memsup, {set_check_interval, ?MEMSUP_CHECK_INTERVAL},
                      infinity),
 
@@ -64,12 +71,18 @@ stop() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, none}.
+    {ok, #alarms{}}.
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event(Event, State) ->
+handle_event({set_alarm, {system_memory_high_watermark, []}}, State) ->
+    {ok, State#alarms{system_memory_high_watermark = true}};
+
+handle_event({clear_alarm, system_memory_high_watermark}, State) ->
+    {ok, State#alarms{system_memory_high_watermark = false}};
+
+handle_event(_Event, State) ->
     {ok, State}.
 
 handle_info(_Info, State) ->
