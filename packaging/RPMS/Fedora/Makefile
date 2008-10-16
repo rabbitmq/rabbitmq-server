@@ -2,11 +2,9 @@
 
 VERSION=0.0.0
 SOURCE_TARBALL_DIR=../../../dist
-PACKAGE_VERSION_NAME=rabbitmq-server-$(VERSION)
-TARBALL=$(SOURCE_TARBALL_DIR)/$(PACKAGE_VERSION_NAME).tar.gz
+TARBALL=$(SOURCE_TARBALL_DIR)/rabbitmq-server-$(VERSION).tar.gz
 TOP_DIR=$(shell pwd)
 DEFINES=--define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp'
-RPM_SOURCE_DIR=$(PACKAGE_VERSION_NAME)/rpm
 
 rpms:   clean server
 
