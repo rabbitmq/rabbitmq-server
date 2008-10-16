@@ -28,7 +28,10 @@
 [ "x" = "x$NODE_IP_ADDRESS" ] && NODE_IP_ADDRESS=0.0.0.0
 [ "x" = "x$NODE_PORT" ] && NODE_PORT=5672
 
-ERL_ARGS="+K true +A30 -kernel inet_default_listen_options [{sndbuf,16384},{recbuf,4096}]"
+ERL_ARGS="+K true +A30 \
+-kernel inet_default_listen_options [{nodelay,true},{sndbuf,16384},{recbuf,4096}] \
+-kernel inet_default_connect_options [{nodelay,true}]"
+
 CLUSTER_CONFIG_FILE=/etc/default/rabbitmq_cluster.config
 
 [ "x" = "x$LOG_BASE" ] && LOG_BASE=/var/log/rabbitmq

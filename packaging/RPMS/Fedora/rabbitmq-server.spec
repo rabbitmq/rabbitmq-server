@@ -9,6 +9,10 @@ Source2: rabbitmq-server.wrapper
 Source3: rabbitmq-server.logrotate
 URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
+%if 0%{?debian}
+%else
+BuildRequires: python, python-json
+%endif
 Requires: erlang, logrotate
 Packager: Hubert Plociniczak <hubert@lshift.net>
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root

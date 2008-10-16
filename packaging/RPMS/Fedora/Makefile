@@ -4,7 +4,7 @@ VERSION=0.0.0
 SOURCE_TARBALL_DIR=../../../dist
 TARBALL=$(SOURCE_TARBALL_DIR)/rabbitmq-server-$(VERSION).tar.gz
 TOP_DIR=$(shell pwd)
-DEFINES=--define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp'
+DEFINES=--define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp' --define 'debian 1'
 
 rpms:   clean server
 
