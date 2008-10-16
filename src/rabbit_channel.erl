@@ -582,8 +582,8 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
     binding_action(fun rabbit_amqqueue:delete_binding/4, ExchangeNameBin, 
-                   QueueNameBin, RoutingKey, Arguments, 
-                   #'queue.unbind_ok'{}, State);
+                   QueueNameBin, RoutingKey, Arguments, #'queue.unbind_ok'{},
+                   false, State);
 
 handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},
@@ -626,11 +626,6 @@ handle_method(_MethodRecord, _Content, _State) ->
 %%----------------------------------------------------------------------------
 
 binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
-               ReturnMethod, State) ->
-    binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
-                   ReturnMethod, false, State).
-                   
-binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                ReturnMethod, NoWait, State = #ch{virtual_host = VHostPath}) ->
     %% FIXME: connection exception (!) on failure?? 
     %% (see rule named "failure" in spec-XML)
@@ -649,7 +644,7 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
               not_found, "no ~s", [rabbit_misc:rs(ExchangeName)]);
         {error, binding_not_found} ->
             rabbit_misc:protocol_error(
-              not_found, "no binding ~s between exhange ~s and queue ~s",
+              not_found, "no binding ~s between ~s and ~s",
               [RoutingKey, rabbit_misc:rs(ExchangeName),
                rabbit_misc:rs(QueueName)]);
         {error, durability_settings_incompatible} ->
