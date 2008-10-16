@@ -35,7 +35,7 @@
 -define(MEMSUP_CHECK_INTERVAL, 1000).
 
 -record(alarms, {system_memory_high_watermark = false}).
- 
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
