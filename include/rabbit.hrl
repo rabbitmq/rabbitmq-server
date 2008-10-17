@@ -27,25 +27,19 @@
 -record(user_vhost, {username, virtual_host}).
 
 -record(vhost, {virtual_host, dummy}).
--record(vhost_realm, {virtual_host, realm}).
-
--record(realm, {name, exchanges, queues}).
--record(user_realm, {username, realm, ticket_pattern}).
-
--record(realm_visitor, {realm, pid}).
 
 -record(connection, {user, timeout_sec, frame_max, vhost}).
 
--record(content, {class_id,
-		  properties, %% either 'none', or a decoded record/tuple
-		  properties_bin, %% either 'none', or an encoded properties binary
-		  %% Note: at most one of properties and properties_bin can be 'none' at once.
-		  payload_fragments_rev %% list of binaries, in reverse order (!)
-		 }).
+-record(content,
+        {class_id,
+         properties, %% either 'none', or a decoded record/tuple
+         properties_bin, %% either 'none', or an encoded properties binary
+         %% Note: at most one of properties and properties_bin can be
+         %% 'none' at once.
+         payload_fragments_rev %% list of binaries, in reverse order (!)
+         }).
 
 -record(resource, {virtual_host, kind, name}).
-
--record(ticket, {realm_name, passive_flag, active_flag, write_flag, read_flag}).
 
 -record(exchange, {name, type, durable, auto_delete, arguments}).
 
@@ -77,20 +71,12 @@
 -type(r(Kind) ::
       #resource{virtual_host :: vhost(),
                 kind         :: Kind,
-                name         :: name()}).
--type(realm_name() :: r('realm')).
+                name         :: resource_name()}).
 -type(queue_name() :: r('queue')).
 -type(exchange_name() :: r('exchange')).
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
--type(ticket() ::
-      #ticket{realm_name   :: realm_name(),
-              passive_flag :: bool(),
-              active_flag  :: bool(),
-              write_flag   :: bool(),
-              read_flag    :: bool()}).
--type(permission() :: 'passive' | 'active' | 'write' | 'read').      
 -type(binding_spec() ::
       #binding_spec{exchange_name :: exchange_name(),
                     routing_key   :: routing_key(),

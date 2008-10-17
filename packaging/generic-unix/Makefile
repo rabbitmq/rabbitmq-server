@@ -7,11 +7,10 @@ dist:
 	make -C ../.. VERSION=$(VERSION) srcdist
 	tar -zxvf ../../dist/$(SOURCE_DIR).tar.gz
 
-	mkdir $(TARGET_DIR)
-	mkdir $(TARGET_DIR)/sbin
 	make -C $(SOURCE_DIR) \
 		TARGET_DIR=`pwd`/$(TARGET_DIR) \
 		SBIN_DIR=`pwd`/$(TARGET_DIR)/sbin \
+		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
 			install
 
 	tar -zcf $(TARGET_TARBALL).tar.gz $(TARGET_DIR)

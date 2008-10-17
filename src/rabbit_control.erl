@@ -73,6 +73,7 @@ Available commands:
   force_reset
   cluster <ClusterNode> ...
   status
+  rotate_logs [Suffix]
 
   add_user        <UserName> <Password>
   delete_user     <UserName>
@@ -87,17 +88,6 @@ Available commands:
   unmap_user_vhost <UserName> <VHostPath>
   list_user_vhosts <UserName>
   list_vhost_users <VHostPath>
-
-  add_realm    <VHostPath> <RealmName>
-  delete_realm <VHostPath> <RealmName>
-  list_realms  <VHostPath>
-
-  set_permissions  <UserName> <VHostPath> <RealmName> [<Permission> ...]
-      Permissions management. The available permissions are 'passive',
-      'active', 'write' and 'read', corresponding to the permissions
-      referred to in AMQP's \"access.request\" message, or 'all' as an
-      abbreviation for all defined permission flags.
-  list_permissions <UserName> <VHostPath>
 
 <node> should be the name of the master node of the RabbitMQ cluster. It
 defaults to the node named \"rabbit\" on the local host. On a host named
@@ -139,6 +129,13 @@ action(status, Node, []) ->
     Res = call(Node, {rabbit, status, []}),
     io:format("~n~p~n", [Res]),
     ok;
+
+action(rotate_logs, Node, []) ->
+    io:format("Reopening logs for node ~p ...", [Node]),
+    call(Node, {rabbit, rotate_logs, [""]});
+action(rotate_logs, Node, Args = [Suffix]) ->
+    io:format("Rotating logs to files with suffix ~p ...", [Suffix]),
+    call(Node, {rabbit, rotate_logs, Args});
 
 action(add_user, Node, Args = [Username, _Password]) ->
     io:format("Creating user ~p ...", [Username]),
@@ -182,68 +179,7 @@ action(list_user_vhosts, Node, Args = [_Username]) ->
 
 action(list_vhost_users, Node, Args = [_VHostPath]) ->
     io:format("Listing users for vhosts ~p...", Args),
-    display_list(call(Node, {rabbit_access_control, list_vhost_users, Args}));
-
-action(add_realm, Node, [VHostPath, RealmName]) ->
-    io:format("Adding realm ~p to vhost ~p ...", [RealmName, VHostPath]),
-    rpc_call(Node, rabbit_realm, add_realm,
-             [realm_rsrc(VHostPath, RealmName)]);
-
-action(delete_realm, Node, [VHostPath, RealmName]) ->
-    io:format("Deleting realm ~p from vhost ~p ...", [RealmName, VHostPath]),
-    rpc_call(Node, rabbit_realm, delete_realm,
-             [realm_rsrc(VHostPath, RealmName)]);
-
-action(list_realms, Node, Args = [_VHostPath]) ->
-    io:format("Listing realms for vhost ~p ...", Args),
-    display_list(call(Node, {rabbit_realm, list_vhost_realms, Args}));
-
-action(set_permissions, Node,
-       [Username, VHostPath, RealmName | Permissions]) ->
-    io:format("Setting permissions for user ~p, vhost ~p, realm ~p ...",
-              [Username, VHostPath, RealmName]),
-    CheckedPermissions = check_permissions(Permissions),
-    Ticket = #ticket{
-      realm_name   = realm_rsrc(VHostPath, RealmName),
-      passive_flag = lists:member(passive, CheckedPermissions),
-      active_flag  = lists:member(active,  CheckedPermissions),
-      write_flag   = lists:member(write,   CheckedPermissions),
-      read_flag    = lists:member(read,    CheckedPermissions)},
-    rpc_call(Node, rabbit_access_control, map_user_realm,
-             [list_to_binary(Username), Ticket]);
-
-action(list_permissions, Node, Args = [_Username, _VHostPath]) ->
-    io:format("Listing permissions for user ~p in vhost ~p ...", Args),
-    Perms = call(Node, {rabbit_access_control, list_user_realms, Args}),
-    if is_list(Perms) ->
-            lists:foreach(
-              fun ({RealmName, Pattern}) ->
-                      io:format("~n~s: ~p",
-                                [binary_to_list(RealmName),
-                                 rabbit_misc:permission_list(Pattern)])
-              end,
-              lists:sort(Perms)),
-            io:nl(),
-            ok;
-       true -> Perms
-    end.
-
-check_permissions([]) -> [];
-check_permissions(["all" | R]) ->
-    [passive, active, write, read | check_permissions(R)];
-check_permissions([P | R]) when (P == "passive") or
-                                (P == "active")  or
-                                (P == "write")   or
-                                (P == "read") ->
-    [list_to_atom(P) | check_permissions(R)];
-check_permissions([P | _R]) ->
-    io:format("~nError: invalid permission flag ~p~n", [P]),
-    usage().
-
-realm_rsrc(VHostPath, RealmName) ->
-    rabbit_misc:r(list_to_binary(VHostPath),
-                  realm,
-                  list_to_binary(RealmName)).
+    display_list(call(Node, {rabbit_access_control, list_vhost_users, Args})).
 
 display_list(L) when is_list(L) ->
     lists:foreach(fun (I) ->

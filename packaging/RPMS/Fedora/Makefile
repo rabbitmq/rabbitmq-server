@@ -5,7 +5,7 @@ SOURCE_TARBALL_DIR=../../../dist
 TARBALL=$(SOURCE_TARBALL_DIR)/rabbitmq-server-$(VERSION).tar.gz
 TOP_DIR=$(shell pwd)
 RPM_VERSION=$(shell echo $(VERSION) | tr - _)
-DEFINES=--define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp' --define 'main_version $(VERSION)' --define 'rpm_version $(RPM_VERSION)'
+DEFINES=--define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp' --define 'main_version $(VERSION)' --define 'rpm_version $(RPM_VERSION)' --define 'debian 1'
 
 rpms:   clean server
 
@@ -21,6 +21,7 @@ prepare:
 	cp $(TOP_DIR)/rabbitmq-server.spec $(TOP_DIR)/SPECS
 	cp $(TOP_DIR)/init.d $(TOP_DIR)/BUILD
 	cp $(TOP_DIR)/rabbitmqctl_wrapper $(TOP_DIR)/BUILD
+	cp $(TOP_DIR)/rabbitmq-server.logrotate $(TOP_DIR)/BUILD
 
 server: prepare
 	rpmbuild -ba $(TOP_DIR)/SPECS/rabbitmq-server.spec $(DEFINES) --target noarch

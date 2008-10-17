@@ -29,6 +29,8 @@
 
 -import(lists).
 
+-include_lib("kernel/include/file.hrl").
+
 test_content_prop_roundtrip(Datum, Binary) ->
     Types =  [element(1, E) || E <- Datum],
     Values = [element(2, E) || E <- Datum],
@@ -38,7 +40,9 @@ test_content_prop_roundtrip(Datum, Binary) ->
 all_tests() ->
     passed = test_parsing(),
     passed = test_topic_matching(),
+    passed = test_log_management(),
     passed = test_app_management(),
+    passed = test_log_management_during_startup(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed.
@@ -136,6 +140,134 @@ test_app_management() ->
     ok = control_action(status, []),
     passed.
 
+test_log_management() ->
+    MainLog = rabbit:log_location(kernel),
+    SaslLog = rabbit:log_location(sasl),
+    Suffix = ".1",
+
+    %% prepare basic logs
+    file:delete([MainLog, Suffix]),
+    file:delete([SaslLog, Suffix]),
+
+    %% simple logs reopening
+    ok = control_action(rotate_logs, []),
+    [true, true] = empty_files([MainLog, SaslLog]),
+    ok = test_logs_working(MainLog, SaslLog),
+
+    %% simple log rotation
+    ok = control_action(rotate_logs, [Suffix]),
+    [true, true] = non_empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
+    [true, true] = empty_files([MainLog, SaslLog]),
+    ok = test_logs_working(MainLog, SaslLog),
+
+    %% reopening logs with log rotation performed first
+    ok = clean_logs([MainLog, SaslLog], Suffix),
+    ok = control_action(rotate_logs, []),
+    ok = file:rename(MainLog, [MainLog, Suffix]),
+    ok = file:rename(SaslLog, [SaslLog, Suffix]),
+    ok = test_logs_working([MainLog, Suffix], [SaslLog, Suffix]),
+    ok = control_action(rotate_logs, []),
+    ok = test_logs_working(MainLog, SaslLog),
+
+    %% log rotation on empty file
+    ok = clean_logs([MainLog, SaslLog], Suffix),
+    ok = control_action(rotate_logs, []),
+    ok = control_action(rotate_logs, [Suffix]),
+    [true, true] = empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
+
+    %% original main log file is not writable
+    ok = make_files_non_writable([MainLog]),
+    {error, {cannot_rotate_main_logs, _}} = control_action(rotate_logs, []),
+    ok = clean_logs([MainLog], Suffix),
+    ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog}]),
+
+    %% original sasl log file is not writable
+    ok = make_files_non_writable([SaslLog]),
+    {error, {cannot_rotate_sasl_logs, _}} = control_action(rotate_logs, []),
+    ok = clean_logs([SaslLog], Suffix),
+    ok = add_log_handlers([{rabbit_sasl_report_file_h, SaslLog}]),
+
+    %% logs with suffix are not writable
+    ok = control_action(rotate_logs, [Suffix]),
+    ok = make_files_non_writable([[MainLog, Suffix], [SaslLog, Suffix]]),
+    ok = control_action(rotate_logs, [Suffix]),
+    ok = test_logs_working(MainLog, SaslLog),
+
+    %% original log files are not writable
+    ok = make_files_non_writable([MainLog, SaslLog]),
+    {error, {{cannot_rotate_main_logs, _},
+	     {cannot_rotate_sasl_logs, _}}} = control_action(rotate_logs, []),
+
+    %% logging directed to tty (handlers were removed in last test)
+    ok = clean_logs([MainLog, SaslLog], Suffix),
+    ok = application:set_env(sasl, sasl_error_logger, tty),
+    ok = application:set_env(kernel, error_logger, tty),
+    ok = control_action(rotate_logs, []),
+    [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
+
+    %% rotate logs when logging is turned off
+    ok = application:set_env(sasl, sasl_error_logger, false),
+    ok = application:set_env(kernel, error_logger, silent),
+    ok = control_action(rotate_logs, []),
+    [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
+
+    %% cleanup
+    ok = application:set_env(sasl, sasl_error_logger, {file, SaslLog}),
+    ok = application:set_env(kernel, error_logger, {file, MainLog}),
+    ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog},
+			   {rabbit_sasl_report_file_h, SaslLog}]),
+    passed.
+
+test_log_management_during_startup() ->
+    MainLog = rabbit:log_location(kernel),
+    SaslLog = rabbit:log_location(sasl),
+
+    %% start application with simple tty logging
+    ok = control_action(stop_app, []),
+    ok = application:set_env(kernel, error_logger, tty),
+    ok = application:set_env(sasl, sasl_error_logger, tty),
+    ok = add_log_handlers([{error_logger_tty_h, []},
+                           {sasl_report_tty_h, []}]),
+    ok = control_action(start_app, []),
+
+    %% start application with tty logging and 
+    %% proper handlers not installed
+    ok = control_action(stop_app, []),
+    ok = error_logger:tty(false),
+    ok = delete_log_handlers([sasl_report_tty_h]),
+    ok = case catch control_action(start_app, []) of
+        ok -> exit(got_success_but_expected_failure);
+        {error, {cannot_log_to_tty, _, _}} -> ok
+    end,
+
+    %% fix sasl logging
+    ok = application:set_env(sasl, sasl_error_logger,
+                             {file, SaslLog}),
+
+    %% start application with logging to invalid directory
+    TmpLog = "/tmp/rabbit-tests/test.log",
+    file:delete(TmpLog),
+    ok = application:set_env(kernel, error_logger, {file, TmpLog}),
+
+    ok = delete_log_handlers([rabbit_error_logger_file_h]),
+    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    ok = case catch control_action(start_app, []) of
+        ok -> exit(got_success_but_expected_failure);
+        {error, {cannot_log_to_file, _, _}} -> ok
+    end,
+
+    %% start application with standard error_logger_file_h
+    %% handler not installed 
+    ok = application:set_env(kernel, error_logger, {file, MainLog}),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+
+    %% start application with standard sasl handler not installed
+    %% and rabbit main log handler installed correctly
+    ok = delete_log_handlers([rabbit_sasl_report_file_h]),
+    ok = control_action(start_app, []),
+    passed.
+
 test_cluster_management() ->
 
     %% 'cluster' and 'reset' should only work if the app is stopped
@@ -203,7 +335,6 @@ test_cluster_management() ->
     end,
 
     ok = control_action(start_app, []),
-
     passed.
 
 test_cluster_management2(SecondaryNode) ->
@@ -284,31 +415,12 @@ test_user_management() ->
         control_action(unmap_user_vhost, ["foo", "/"]),
     {error, {no_such_user, _}} =
         control_action(list_user_vhosts, ["foo"]),
-    {error, {no_such_user, _}} =
-        control_action(set_permissions, ["foo", "/", "/data"]),
-    {error, {no_such_user, _}} =
-        control_action(list_permissions, ["foo", "/"]),
     {error, {no_such_vhost, _}} =
         control_action(map_user_vhost, ["guest", "/testhost"]),
     {error, {no_such_vhost, _}} =
         control_action(unmap_user_vhost, ["guest", "/testhost"]),
     {error, {no_such_vhost, _}} =
         control_action(list_vhost_users, ["/testhost"]),
-    {error, {no_such_vhost, _}} =
-        control_action(set_permissions, ["guest", "/testhost", "/data"]),
-    {error, {no_such_vhost, _}} =
-        control_action(list_permissions, ["guest", "/testhost"]),
-    {error, {no_such_vhost, _}} =
-        control_action(add_realm, ["/testhost", "/data/test"]),
-    {error, {no_such_vhost, _}} =
-        control_action(delete_realm, ["/testhost", "/data/test"]),
-    {error, {no_such_vhost, _}} =
-        control_action(list_realms, ["/testhost"]),
-    {error, {no_such_realm, _}} =
-        control_action(set_permissions, ["guest", "/", "/data/test"]),
-    {error, {no_such_realm, _}} =
-        control_action(delete_realm, ["/", "/data/test"]),
-
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
     {error, {user_already_exists, _}} =
@@ -327,32 +439,6 @@ test_user_management() ->
     ok = control_action(map_user_vhost, ["foo", "/testhost"]),
     ok = control_action(list_user_vhosts, ["foo"]),
 
-    %% realm creation
-    ok = control_action(add_realm, ["/testhost", "/data/test"]),
-    {error, {realm_already_exists, _}} =
-        control_action(add_realm, ["/testhost", "/data/test"]),
-    ok = control_action(list_realms, ["/testhost"]),
-
-    %% user permissions
-    ok = control_action(set_permissions,
-                        ["foo", "/testhost", "/data/test",
-                         "passive", "active", "write", "read"]),
-    ok = control_action(list_permissions, ["foo", "/testhost"]),
-    ok = control_action(set_permissions,
-                        ["foo", "/testhost", "/data/test", "all"]),
-    ok = control_action(set_permissions,
-                        ["foo", "/testhost", "/data/test"]),
-    {error, not_mapped_to_vhost} =
-        control_action(set_permissions,
-                       ["guest", "/testhost", "/data/test"]),
-    {error, not_mapped_to_vhost} =
-        control_action(list_permissions, ["guest", "/testhost"]),
-
-    %% realm deletion
-    ok = control_action(delete_realm, ["/testhost", "/data/test"]),
-    {error, {no_such_realm, _}} =
-        control_action(delete_realm, ["/testhost", "/data/test"]),
-
     %% user/vhost unmapping
     ok = control_action(unmap_user_vhost, ["foo", "/testhost"]),
     ok = control_action(unmap_user_vhost, ["foo", "/testhost"]),
@@ -364,13 +450,7 @@ test_user_management() ->
 
     %% deleting a populated vhost
     ok = control_action(add_vhost, ["/testhost"]),
-    ok = control_action(add_realm, ["/testhost", "/data/test"]),
     ok = control_action(map_user_vhost, ["foo", "/testhost"]),
-    ok = control_action(set_permissions,
-                        ["foo", "/testhost", "/data/test", "all"]),
-    _ = rabbit_amqqueue:declare(
-          rabbit_misc:r(<<"/testhost">>, realm, <<"/data/test">>),
-          <<"bar">>, true, false, []),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion
@@ -379,6 +459,8 @@ test_user_management() ->
         control_action(delete_user, ["foo"]),
 
     passed.
+
+%---------------------------------------------------------------------
 
 control_action(Command, Args) -> control_action(Command, node(), Args).
 
@@ -391,3 +473,52 @@ control_action(Command, Node, Args) ->
             io:format("failed.~n"),
             Other
     end.
+
+empty_files(Files) ->
+    [case file:read_file_info(File) of
+         {ok, FInfo} -> FInfo#file_info.size == 0;
+         Error       -> Error
+     end || File <- Files].
+
+non_empty_files(Files) ->
+    [case EmptyFile of
+         {error, Reason} -> {error, Reason};
+         _               -> not(EmptyFile)
+     end || EmptyFile <- empty_files(Files)].
+
+test_logs_working(MainLogFile, SaslLogFile) ->
+    ok = rabbit_log:error("foo bar"),
+    ok = error_logger:error_report(crash_report, [foo, bar]),
+    %% give the error loggers some time to catch up
+    timer:sleep(50),
+    [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
+    ok.
+
+clean_logs(Files, Suffix) ->
+    [begin
+         ok = delete_file(File),
+         ok = delete_file([File, Suffix])
+     end || File <- Files],
+    ok.
+
+delete_file(File) ->
+    case file:delete(File) of
+        ok              -> ok;
+        {error, enoent} -> ok;
+        Error           -> Error
+    end.
+
+make_files_non_writable(Files) ->
+    [ok = file:write_file_info(File, #file_info{mode=0}) ||
+        File <- Files],
+    ok.
+
+add_log_handlers(Handlers) ->
+    [ok = error_logger:add_report_handler(Handler, Args) ||
+        {Handler, Args} <- Handlers],
+    ok.
+
+delete_log_handlers(Handlers) ->
+    [[] = error_logger:delete_report_handler(Handler) ||
+        Handler <- Handlers],
+    ok.

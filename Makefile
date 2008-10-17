@@ -5,7 +5,6 @@ EBIN_DIR=ebin
 INCLUDE_DIR=include
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
-PLT=rabbit.plt
 WEB_URL=http://stage.rabbitmq.com/
 
 ifndef USE_SPECS
@@ -47,16 +46,13 @@ $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $
 $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.rel $(TARGETS)
 	erl -noshell -eval 'systools:make_script("ebin/rabbit", [{path, ["ebin"]}]), halt().'
 
-$(PLT): $(TARGETS)
-	dialyzer -c $? --output_plt $@ $(shell if [ -f $@ ] ; then echo "--plt $@"; fi)
-
-dialyze: $(PLT)
+dialyze: $(TARGETS)
+	dialyzer -c $?
 
 clean: cleandb
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
-	rm -f $(PLT)
 
 cleandb: stop-node
 	erl -mnesia dir '"$(MNESIA_DIR)"' -noshell -eval 'lists:foreach(fun file:delete/1, filelib:wildcard(mnesia:system_info(directory) ++ "/*")), halt().'
@@ -106,7 +102,7 @@ generic_stage:
 		elinks -dump -no-references -no-numbering $(WEB_URL)install.html \
 			>> $(GENERIC_STAGE_DIR)/INSTALL; \
 		cp BUILD.in $(GENERIC_STAGE_DIR)/BUILD; \
-		elinks -dump -no-references -no-numbering $(WEB_URL)build.html \
+		elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
 			>> $(GENERIC_STAGE_DIR)/BUILD; \
 	else \
 		cp INSTALL $(GENERIC_STAGE_DIR); \
@@ -118,10 +114,12 @@ generic_stage:
 srcdist: distclean
 	$(MAKE) VERSION=$(VERSION) GENERIC_STAGE_DIR=dist/$(TARBALL_NAME) generic_stage
 
-	cp -r $(AMQP_CODEGEN_DIR) dist/$(TARBALL_NAME)/codegen
+	mkdir -p dist/$(TARBALL_NAME)/codegen
+	cp -r $(AMQP_CODEGEN_DIR)/* dist/$(TARBALL_NAME)/codegen/
 	cp codegen.py Makefile dist/$(TARBALL_NAME)
 
 	cp -r scripts dist/$(TARBALL_NAME)
+	cp -r docs dist/$(TARBALL_NAME)
 	chmod 0755 dist/$(TARBALL_NAME)/scripts/*
 
 	(cd dist; tar -zcf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
@@ -136,12 +134,20 @@ distclean: clean
 install: all
 	@[ -n "$(TARGET_DIR)" ] || (echo "Please set TARGET_DIR."; false)
 	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
+	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
 
 	$(MAKE) VERSION=$(VERSION) GENERIC_STAGE_DIR=$(TARGET_DIR) generic_stage
 
 	chmod 0755 scripts/*
 	mkdir -p $(SBIN_DIR)
+	mkdir -p $(MAN_DIR)/man1
 	cp scripts/rabbitmq-server $(SBIN_DIR)
 	cp scripts/rabbitmqctl $(SBIN_DIR)
 	cp scripts/rabbitmq-multi $(SBIN_DIR)
+	for manpage in docs/*.pod ; do \
+		pod2man -c "RabbitMQ AMQP Server" -d "" -r "" \
+		$$manpage | gzip --best > \
+		$(MAN_DIR)/man1/`echo $$manpage | sed -e 's:docs/\(.*\)\.pod:\1\.1\.gz:g'`; \
+	done
+	 
 	rm -f $(TARGET_DIR)/BUILD

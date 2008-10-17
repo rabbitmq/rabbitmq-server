@@ -25,15 +25,15 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, recover/0, declare/5, delete/3, purge/1, internal_delete/1]).
--export([pseudo_queue/3]).
+-export([start/0, recover/0, declare/4, delete/3, purge/1, internal_delete/1]).
+-export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, list_vhost_queues/1,
-         stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4,
-         commit/2, rollback/2]).
+         stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4]).
 -export([add_binding/4, delete_binding/4, binding_forcibly_removed/2]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
--export([notify_sent/2, notify_down/2]).
+-export([notify_sent/2]).
+-export([commit_all/2, rollback_all/2, notify_down_all/2]).
 -export([on_node_down/1]).
 
 -import(mnesia).
@@ -44,6 +44,8 @@
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
+-define(CALL_TIMEOUT, 5000).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -53,9 +55,12 @@
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
 -type(bind_res() :: {'ok', non_neg_integer()} |
       {'error', 'queue_not_found' | 'exchange_not_found'}).
+-type(ok_or_errors() ::
+      'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
+
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 :: (realm_name(), name(), bool(), bool(), amqp_table()) ->
+-spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
              amqqueue()).
 -spec(add_binding/4 ::
       (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
@@ -81,9 +86,9 @@
 -spec(redeliver/2 :: (pid(), [{message(), bool()}]) -> 'ok').
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
--spec(commit/2 :: (pid(), txn()) -> 'ok').
--spec(rollback/2 :: (pid(), txn()) -> 'ok').
--spec(notify_down/2 :: (amqqueue(), pid()) -> 'ok').
+-spec(commit_all/2 :: ([pid()], txn()) -> ok_or_errors()).
+-spec(rollback_all/2 :: ([pid()], txn()) -> ok_or_errors()).
+-spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(binding_forcibly_removed/2 :: (binding_spec(), queue_name()) -> 'ok').
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), bool()) ->
@@ -96,7 +101,7 @@
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (node()) -> 'ok').
--spec(pseudo_queue/3 :: (realm_name(), binary(), pid()) -> amqqueue()).
+-spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
 
 -endif.
 
@@ -130,9 +135,8 @@ recover_durable_queues() ->
               ok
       end).
 
-declare(RealmName, NameBin, Durable, AutoDelete, Args) ->
-    QName = rabbit_misc:r(RealmName, queue, NameBin),
-    Q = start_queue_process(#amqqueue{name = QName,
+declare(QueueName, Durable, AutoDelete, Args) ->
+    Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
                                       arguments = Args,
@@ -140,9 +144,8 @@ declare(RealmName, NameBin, Durable, AutoDelete, Args) ->
                                       pid = none}),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   case mnesia:wread({amqqueue, QName}) of
+                   case mnesia:wread({amqqueue, QueueName}) of
                        [] -> ok = recover_queue(Q),
-                             ok = rabbit_realm:add(RealmName, QName),
                              Q;
                        [ExistingQ] -> ExistingQ
                    end
@@ -251,7 +254,7 @@ with(Name, F, E) ->
     end.
 
 with(Name, F) ->
-    with(Name, F, fun () -> {error, not_found} end). 
+    with(Name, F, fun () -> {error, not_found} end).
 with_or_die(Name, F) ->
     with(Name, F, fun () -> rabbit_misc:protocol_error(
                               not_found, "no ~s", [rabbit_misc:rs(Name)])
@@ -289,14 +292,29 @@ requeue(QPid, MsgIds, ChPid) ->
 ack(QPid, Txn, MsgIds, ChPid) ->
     gen_server:cast(QPid, {ack, Txn, MsgIds, ChPid}).
 
-commit(QPid, Txn) ->
-    gen_server:call(QPid, {commit, Txn}).
+commit_all(QPids, Txn) ->
+    Timeout = length(QPids) * ?CALL_TIMEOUT,
+    safe_pmap_ok(
+      fun (QPid) -> gen_server:call(QPid, {commit, Txn}, Timeout) end,
+      QPids).
 
-rollback(QPid, Txn) ->
-    gen_server:cast(QPid, {rollback, Txn}).
+rollback_all(QPids, Txn) ->
+    safe_pmap_ok(
+      fun (QPid) -> gen_server:cast(QPid, {rollback, Txn}) end,
+      QPids).
 
-notify_down(#amqqueue{ pid = QPid }, ChPid) ->
-    gen_server:call(QPid, {notify_down, ChPid}).
+notify_down_all(QPids, ChPid) ->
+    Timeout = length(QPids) * ?CALL_TIMEOUT,
+    safe_pmap_ok(
+      fun (QPid) ->
+              rabbit_misc:with_exit_handler(
+                %% we don't care if the queue process has terminated
+                %% in the meantime
+                fun () -> ok end,
+                fun () -> gen_server:call(QPid, {notify_down, ChPid},
+                                          Timeout) end)
+      end,
+      QPids).
 
 binding_forcibly_removed(BindingSpec, QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
@@ -338,28 +356,20 @@ internal_delete(QueueName) ->
               case mnesia:wread({amqqueue, QueueName}) of
                   [] -> {error, not_found};
                   [Q] ->
-                      ok = delete_temp(Q),
+                      ok = delete_queue(Q),
                       ok = mnesia:delete({durable_queues, QueueName}),
-                      ok = rabbit_realm:delete_from_all(QueueName),
                       ok
               end
       end).
 
-delete_temp(Q = #amqqueue{name = QueueName}) ->
+delete_queue(Q = #amqqueue{name = QueueName}) ->
     ok = delete_bindings(Q),
     ok = rabbit_exchange:delete_binding(
            default_binding_spec(QueueName), Q),
     ok = mnesia:delete({amqqueue, QueueName}),
     ok.
 
-delete_queue(Q = #amqqueue{name = QueueName, durable = Durable}) ->
-    ok = delete_temp(Q),
-    if
-        Durable -> ok;
-        true -> ok = rabbit_realm:delete_from_all(QueueName)
-    end.
-
-on_node_down(Node) ->                      
+on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               qlc:fold(
@@ -370,10 +380,23 @@ on_node_down(Node) ->
                             node(Pid) == Node]))
       end).
 
-pseudo_queue(RealmName, NameBin, Pid) ->
-    #amqqueue{name = rabbit_misc:r(RealmName, queue, NameBin),
+pseudo_queue(QueueName, Pid) ->
+    #amqqueue{name = QueueName,
               durable = false,
               auto_delete = false,
               arguments = [],
               binding_specs = [],
               pid = Pid}.
+
+safe_pmap_ok(F, L) ->
+    case [R || R <- rabbit_misc:upmap(
+                      fun (V) ->
+                              try F(V)
+                              catch Class:Reason -> {Class, Reason}
+                              end
+                      end, L),
+               R =/= ok] of
+        []     -> ok;
+        Errors -> {error, Errors}
+    end.
+

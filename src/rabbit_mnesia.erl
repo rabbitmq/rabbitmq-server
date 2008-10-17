@@ -102,23 +102,6 @@ table_definitions() ->
                    {index, [virtual_host]}]},
      {vhost, [{disc_copies, [node()]},
               {attributes, record_info(fields, vhost)}]},
-     {vhost_realm, [{type, bag},
-                    {disc_copies, [node()]},
-                    {attributes, record_info(fields, vhost_realm)},
-                    {index, [realm]}]},
-     {realm, [{disc_copies, [node()]},
-              {attributes, record_info(fields, realm)}]},
-     {user_realm, [{type, bag},
-                   {disc_copies, [node()]},
-                   {attributes, record_info(fields, user_realm)},
-                   {index, [realm]}]},
-     {exclusive_realm_visitor,
-      [{record_name, realm_visitor},
-       {attributes, record_info(fields, realm_visitor)},
-       {index, [pid]}]},
-     {realm_visitor, [{type, bag},
-                      {attributes, record_info(fields, realm_visitor)},
-                      {index, [pid]}]},
      {rabbit_config, [{disc_copies, [node()]}]},
      {listener, [{type, bag},
                  {attributes, record_info(fields, listener)}]},
@@ -257,7 +240,6 @@ init_db(ClusterNodes) ->
                                    ClusterNodes}})
             end;
         {ok, [_|_]} ->
-            ok = ensure_schema_integrity(),
             ok = wait_for_tables(),
             ok = create_local_table_copies(
                    case IsDiskNode of
@@ -341,6 +323,7 @@ create_local_table_copy(Tab, Type) ->
     ok.
 
 wait_for_tables() -> 
+    ok = ensure_schema_integrity(),
     case mnesia:wait_for_tables(table_names(), 30000) of
         ok -> ok;
         {timeout, BadTabs} ->

@@ -26,23 +26,23 @@
 -module(rabbit_misc).
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, protocol_error/3, protocol_error/4]).
--export([strict_ticket_checking/0]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
 -export([r/3, r/2, rs/1]).
--export([permission_list/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([throw_on_error/2, with_exit_handler/2]).
--export([with_user/2, with_vhost/2, with_realm/2, with_user_and_vhost/3]).
+-export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
 -export([localnode/1, tcp_name/3]).
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
+-export([append_file/2]).
 
 -import(mnesia).
 -import(lists).
@@ -64,34 +64,30 @@
       (atom() | amqp_error(), string(), [any()]) -> no_return()).
 -spec(protocol_error/4 ::
       (atom() | amqp_error(), string(), [any()], atom()) -> no_return()).
--spec(strict_ticket_checking/0 :: () -> bool()).
 -spec(get_config/1 :: (atom()) -> {'ok', any()} | not_found()).
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (realm_name() | vhost(), K, name()) ->
-             r(K) when is_subtype(K, atom())).
+-spec(r/3 :: (vhost(), K, resource_name()) -> r(K) when is_subtype(K, atom())).
 -spec(r/2 :: (vhost(), K) -> #resource{virtual_host :: vhost(),
                                        kind         :: K,
                                        name         :: '_'}
                                  when is_subtype(K, atom())).
--spec(rs/1 :: (r(atom())) -> string()). 
--spec(permission_list/1 :: (ticket()) -> [permission()]).
+-spec(rs/1 :: (r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> 'ok' | {'error', any()}).
 -spec(report_cover/0 :: () -> 'ok').
 -spec(throw_on_error/2 ::
       (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
--spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A). 
--spec(with_user/2 :: (username(), thunk(A)) -> A). 
+-spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
+-spec(with_user/2 :: (username(), thunk(A)) -> A).
 -spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
--spec(with_realm/2 :: (realm_name(), thunk(A)) -> A).
--spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A). 
+-spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
--spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok'). 
+-spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
 -spec(localnode/1 :: (atom()) -> node()).
--spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()). 
+-spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
--spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]). 
+-spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(guid/0 :: () -> guid()).
 -spec(string_guid/1 :: (any()) -> string()).
@@ -100,6 +96,7 @@
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
+-spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
 
 -endif.
 
@@ -129,24 +126,6 @@ protocol_error(Error, Explanation, Params) ->
 protocol_error(Error, Explanation, Params, Method) ->
     CompleteExplanation = lists:flatten(io_lib:format(Explanation, Params)),
     exit({amqp, Error, CompleteExplanation, Method}).
-
-boolean_config_param(Name, TrueValue, FalseValue, DefaultValue) ->
-    ActualValue = get_config(Name, DefaultValue),
-    if
-        ActualValue == TrueValue ->
-            true;
-        ActualValue == FalseValue ->
-            false;
-        true ->
-            rabbit_log:error(
-              "Bad setting for config param '~w': ~p~n" ++
-              "legal values are '~w', '~w'; using default value '~w'",
-              [Name, ActualValue, TrueValue, FalseValue, DefaultValue]),
-            DefaultValue == TrueValue
-    end.
-
-strict_ticket_checking() ->
-    boolean_config_param(strict_ticket_checking, enabled, disabled, disabled).
 
 get_config(Key) ->
     case dirty_read({rabbit_config, Key}) of
@@ -181,19 +160,6 @@ r(VHostPath, Kind) when is_binary(VHostPath) ->
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
                                 [Kind, Name, VHostPath])).
-
-permission_list(Ticket = #ticket{}) ->
-    lists:foldr(fun ({Field, Label}, L) ->
-                       case element(Field, Ticket) of
-                           true -> [Label | L];
-                           false -> L
-                       end
-                end,
-                [],
-                [{#ticket.passive_flag, passive},
-                 {#ticket.active_flag,  active},
-                 {#ticket.write_flag,   write},
-                 {#ticket.read_flag,    read}]).
 
 enable_cover() ->
     case cover:compile_beam_directory("ebin") of
@@ -260,29 +226,10 @@ with_user(Username, Thunk) ->
 with_vhost(VHostPath, Thunk) ->
     fun () ->
             case mnesia:read({vhost, VHostPath}) of
-                [] -> 
+                [] ->
                     mnesia:abort({no_such_vhost, VHostPath});
                 [_V] ->
                     Thunk()
-            end
-    end.
-
-with_realm(Name = #resource{virtual_host = VHostPath, kind = realm},
-           Thunk) ->
-    fun () ->
-            case mnesia:read({realm, Name}) of
-                [] ->
-                    mnesia:abort({no_such_realm, Name});
-                [_R] ->
-                    case mnesia:match_object(
-                           #vhost_realm{virtual_host = VHostPath,
-                                        realm = Name}) of
-                        [] ->
-                            %% This should never happen
-                            mnesia:abort({no_such_realm, Name});
-                        [_VR] ->
-                            Thunk()
-                    end
             end
     end.
 
@@ -398,3 +345,24 @@ dirty_dump_log1(LH, {K, Terms}) ->
 dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
+
+
+append_file(File, Suffix) ->
+    case file:read_file_info(File) of
+        {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
+        {error, enoent} -> append_file(File, 0, Suffix);
+        Error           -> Error
+    end.
+
+append_file(_, _, "") ->
+    ok;
+append_file(File, 0, Suffix) ->
+    case file:open([File, Suffix], [append]) of
+        {ok, Fd} -> file:close(Fd);
+        Error    -> Error
+    end;
+append_file(File, _, Suffix) ->
+    case file:read_file(File) of
+        {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
+        Error      -> Error
+    end.
