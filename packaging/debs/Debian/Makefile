@@ -16,7 +16,6 @@ all:
 	@echo 'Please choose a target from the Makefile.'
 
 package: clean
-	make -C ../.. check_tools
 	cp $(TARBALL_DIR)/$(TARBALL) $(DEBIAN_ORIG_TARBALL)
 	tar -zxvf $(DEBIAN_ORIG_TARBALL)
 	cp -r debian $(UNPACKED_DIR)
