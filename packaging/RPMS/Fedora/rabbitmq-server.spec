@@ -6,6 +6,10 @@ Group: Development/Libraries
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{main_version}/%{name}-%{main_version}.tar.gz
 URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
+%if 0%{?debian}
+%else
+BuildRequires: python, python-json
+%endif
 Requires: erlang, logrotate
 Packager: Hubert Plociniczak <hubert@lshift.net>
 BuildRoot: %{_tmppath}/%{name}-%{main_version}-%{release}-root
@@ -18,12 +22,10 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
-
 %define _mandir /usr/share/man
 %define _sbindir /usr/sbin
 %define _libdir %(erl -noshell -eval "io:format('~s~n', [code:lib_dir()]), halt().")
 %define _maindir %{buildroot}%{_libdir}/rabbitmq_server-%{main_version}
-
 
 %pre
 if [ $1 -gt 1 ]; then

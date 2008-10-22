@@ -94,10 +94,18 @@
 %%   terminate_channel timeout -> remove 'closing' mark, *closing*
 %%   handshake_timeout -> ignore, *closing*
 %%   heartbeat timeout -> *throw*
-%%   channel exit ->
-%%     if abnormal exit then log error
-%%     if last channel to exit then send connection.close_ok, start
-%%        terminate_connection timer, *closing*
+%%   channel exit with hard error
+%%   -> log error, wait for channels to terminate forcefully, start
+%%      terminate_connection timer, send close, *closed*
+%%   channel exit with soft error
+%%   -> log error, start terminate_channel timer, mark channel as
+%%      closing
+%%      if last channel to exit then send connection.close_ok,
+%%         start terminate_connection timer, *closed*
+%%      else *closing*
+%%   channel exits normally
+%%   -> if last channel to exit then send connection.close_ok,
+%%      start terminate_connection timer, *closed*
 %% closed:
 %%   socket close -> *terminate*
 %%   receive connection.close_ok -> self() ! terminate_connection,
@@ -291,24 +299,13 @@ terminate_channel(Channel, Ref, State) ->
     end,
     State.
 
-handle_dependent_exit(Pid, Reason,
-                      State = #v1{connection_state = closing}) ->
-    case channel_cleanup(Pid) of
-        undefined -> exit({abnormal_dependent_exit, Pid, Reason});
-        Channel ->
-            case Reason of
-                normal -> ok;
-                _      -> log_channel_error(closing, Channel, Reason)
-            end,
-            maybe_close(State)
-    end;
 handle_dependent_exit(Pid, normal, State) ->
     channel_cleanup(Pid),
-    State;
+    maybe_close(State);
 handle_dependent_exit(Pid, Reason, State) ->
     case channel_cleanup(Pid) of
         undefined -> exit({abnormal_dependent_exit, Pid, Reason});
-        Channel   -> handle_exception(State, Channel, Reason)
+        Channel   -> maybe_close(handle_exception(State, Channel, Reason))
     end.
 
 channel_cleanup(Pid) ->
@@ -365,13 +362,15 @@ wait_for_channel_termination(N, TimerRef) ->
             exit(channel_termination_timeout)
     end.
 
-maybe_close(State) ->
+maybe_close(State = #v1{connection_state = closing}) ->
     case all_channels() of
         [] -> ok = send_on_channel0(
                      State#v1.sock, #'connection.close_ok'{}),
               close_connection(State);
         _  -> State
-    end.
+    end;
+maybe_close(State) ->
+    State.
 
 handle_frame(Type, 0, Payload, State = #v1{connection_state = CS})
   when CS =:= closing; CS =:= closed ->
