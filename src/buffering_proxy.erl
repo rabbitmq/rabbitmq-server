@@ -40,7 +40,8 @@ start_link(M, A) ->
                 ProxyPid = self(),
                 Ref = make_ref(),
                 Pid = spawn_link(
-                        fun () -> mainloop(ProxyPid, Ref, M,
+                        fun () -> ProxyPid ! Ref,
+                                  mainloop(ProxyPid, Ref, M,
                                            M:init(ProxyPid, A)) end),
                 proxy_loop(Ref, Pid, empty)
       end).
@@ -48,13 +49,15 @@ start_link(M, A) ->
 %%----------------------------------------------------------------------------
 
 mainloop(ProxyPid, Ref, M, State) ->
-    ProxyPid ! Ref,
     NewState =
         receive
             {Ref, Messages} ->
-                lists:foldl(fun (Msg, S) -> 
-                                    drain(M, M:handle_message(Msg, S))
-                            end, State, lists:reverse(Messages));
+                NewSt = 
+                    lists:foldl(fun (Msg, S) -> 
+                                        drain(M, M:handle_message(Msg, S))
+                                end, State, lists:reverse(Messages)),
+                ProxyPid ! Ref,
+                NewSt;
             Msg -> M:handle_message(Msg, State)
         end,
     ?MODULE:mainloop(ProxyPid, Ref, M, NewState).
