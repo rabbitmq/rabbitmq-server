@@ -717,7 +717,8 @@ internal_commit(State = #ch{transaction_id = TxnKey,
     case rabbit_amqqueue:commit_all(sets:to_list(Participants),
                                     TxnKey) of
         ok              -> new_tx(State);
-        {error, Errors} -> exit({commit_failed, Errors})
+        {error, Errors} -> rabbit_misc:protocol_error(
+                             internal_error, "commit failed: ~w", [Errors])
     end.
 
 internal_rollback(State = #ch{transaction_id = TxnKey,
@@ -732,7 +733,8 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
                                       TxnKey) of
         ok              -> NewUAMQ = queue:join(UAQ, UAMQ),
                            new_tx(State#ch{unacked_message_q = NewUAMQ});
-        {error, Errors} -> exit({rollback_failed, Errors})
+        {error, Errors} -> rabbit_misc:protocol_error(
+                             internal_error, "rollback failed: ~w", [Errors])
     end.
 
 fold_per_queue(F, Acc0, UAQ) ->

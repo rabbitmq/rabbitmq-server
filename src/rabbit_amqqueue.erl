@@ -295,25 +295,23 @@ ack(QPid, Txn, MsgIds, ChPid) ->
 commit_all(QPids, Txn) ->
     Timeout = length(QPids) * ?CALL_TIMEOUT,
     safe_pmap_ok(
+      fun (QPid) -> exit({queue_disappeared, QPid}) end,
       fun (QPid) -> gen_server:call(QPid, {commit, Txn}, Timeout) end,
       QPids).
 
 rollback_all(QPids, Txn) ->
     safe_pmap_ok(
+      fun (QPid) -> exit({queue_disappeared, QPid}) end,
       fun (QPid) -> gen_server:cast(QPid, {rollback, Txn}) end,
       QPids).
 
 notify_down_all(QPids, ChPid) ->
     Timeout = length(QPids) * ?CALL_TIMEOUT,
     safe_pmap_ok(
-      fun (QPid) ->
-              rabbit_misc:with_exit_handler(
-                %% we don't care if the queue process has terminated
-                %% in the meantime
-                fun () -> ok end,
-                fun () -> gen_server:call(QPid, {notify_down, ChPid},
-                                          Timeout) end)
-      end,
+      %% we don't care if the queue process has terminated in the
+      %% meantime
+      fun (_)    -> ok end,
+      fun (QPid) -> gen_server:call(QPid, {notify_down, ChPid}, Timeout) end,
       QPids).
 
 binding_forcibly_removed(BindingSpec, QueueName) ->
@@ -388,10 +386,13 @@ pseudo_queue(QueueName, Pid) ->
               binding_specs = [],
               pid = Pid}.
 
-safe_pmap_ok(F, L) ->
+safe_pmap_ok(H, F, L) ->
     case [R || R <- rabbit_misc:upmap(
                       fun (V) ->
-                              try F(V)
+                              try
+                                  rabbit_misc:with_exit_handler(
+                                    fun () -> H(V) end,
+                                    fun () -> F(V) end)
                               catch Class:Reason -> {Class, Reason}
                               end
                       end, L),
@@ -399,4 +400,3 @@ safe_pmap_ok(F, L) ->
         []     -> ok;
         Errors -> {error, Errors}
     end.
-
