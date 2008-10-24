@@ -97,4 +97,6 @@ proxy_loop(Ref, Pid, State) ->
                    waiting  -> Pid ! {Ref, [Msg]}, empty;
                    Messages -> [Msg | Messages]
                end)
+    after ?HIBERNATE_AFTER ->
+            erlang:hibernate(?MODULE, proxy_loop, [Ref, Pid, State])
     end.
