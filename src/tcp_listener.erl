@@ -58,9 +58,9 @@ init({IPAddress, Port, SocketOpts,
                                                   AcceptorSup, [LSock])
                           end,
                           lists:duplicate(ConcurrentAcceptorCount, dummy)),
-            error_logger:info_msg(
-              "started TCP listener on ~s:~p~n",
-              [inet_parse:ntoa(IPAddress), Port]),
+            {ok, {LIPAddress, LPort}} = inet:sockname(LSock),
+            error_logger:info_msg("started TCP listener on ~s:~p~n",
+                                  [inet_parse:ntoa(LIPAddress), LPort]),
             apply(M, F, A ++ [IPAddress, Port]),
             {ok, #state{sock=LSock,
                         on_startup = OnStartup, on_shutdown = OnShutdown}};
