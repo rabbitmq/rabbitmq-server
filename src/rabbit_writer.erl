@@ -36,6 +36,8 @@
 
 -record(wstate, {sock, channel, frame_max}).
 
+-define(HIBERNATE_AFTER, 5000).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -63,6 +65,8 @@ start(Sock, Channel, FrameMax) ->
 mainloop(State) ->
     receive
         Message -> ?MODULE:mainloop(handle_message(Message, State))
+    after ?HIBERNATE_AFTER ->
+            erlang:hibernate(?MODULE, mainloop, [State])
     end.
 
 handle_message({send_command, MethodRecord},
