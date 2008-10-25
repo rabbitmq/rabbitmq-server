@@ -2,7 +2,7 @@ Source: rabbitmq-server
 Section: net
 Priority: extra
 Maintainer: Tony Garnock-Jones <tonyg@rabbitmq.com>
-Build-Depends: cdbs, debhelper (>= 5), erlang-base | erlang-base-hipe, erlang-nox, erlang-dev, python, python-json
+Build-Depends: cdbs, debhelper (>= 5), erlang-nox, erlang-dev, python-json
 Standards-Version: 3.7.2
 
 Package: rabbitmq-server
