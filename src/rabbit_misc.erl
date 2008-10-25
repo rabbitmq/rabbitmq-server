@@ -201,7 +201,8 @@ with_exit_handler(Handler, Thunk) ->
     try
         Thunk()
     catch
-        exit:{R, _} when R =:= noproc; R =:= normal -> Handler()
+        exit:{R, _} when R =:= noproc; R =:= normal; R =:= shutdown ->
+            Handler()
     end.
 
 with_user(Username, Thunk) ->
