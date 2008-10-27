@@ -33,6 +33,7 @@
                            direct,
                            channel_max,
                            heartbeat,
+                           on_close_handler,
                            channels = dict:new() }).
 
 -record(channel_state, {number,

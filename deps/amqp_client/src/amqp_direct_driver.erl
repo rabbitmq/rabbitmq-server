@@ -31,6 +31,7 @@
 
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
 -export([do/2,do/3]).
+-export([handle_broker_close/1]).
 
 %---------------------------------------------------------------------------
 % Driver API Methods
@@ -59,3 +60,5 @@ close_connection(Close, From, State) -> gen_server:reply(From, #'connection.clos
 
 do(Writer, Method) -> rabbit_channel:do(Writer, Method).
 do(Writer, Method, Content) -> rabbit_channel:do(Writer, Method, Content).
+
+handle_broker_close(State) -> ok.

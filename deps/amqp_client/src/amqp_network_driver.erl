@@ -32,6 +32,7 @@
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
 -export([start_reader/2, start_writer/2]).
 -export([do/2,do/3]).
+-export([handle_broker_close/1]).
 
 %---------------------------------------------------------------------------
 % Driver API Methods
@@ -89,6 +90,12 @@ close_connection(Close = #'connection.close'{}, From,
 
 do(Writer, Method) -> rabbit_writer:send_command(Writer, Method).
 do(Writer, Method, Content) -> rabbit_writer:send_command(Writer, Method, Content).
+
+handle_broker_close(#connection_state{channel0_writer_pid = Writer, reader_pid = Reader}) ->
+    CloseOk = #'connection.close_ok'{},
+    rabbit_writer:send_command(Writer, CloseOk),
+    rabbit_writer:shutdown(Writer),
+    Reader ! close.
 
 %---------------------------------------------------------------------------
 % AMQP message sending and receiving
