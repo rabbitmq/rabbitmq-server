@@ -201,6 +201,16 @@ handle_cast(Message, State) ->
     {noreply, State}.
 
 %---------------------------------------------------------------------------
+% Handle forced close from the broker
+%---------------------------------------------------------------------------
+
+handle_info({method, #'connection.close'{reply_code = Code,
+                                         reply_text = Text},
+             _Content}, State) ->
+    io:format("Broker forced connection: ~p -> ~p~n", [Code, Text]),
+    {stop, normal, State};
+
+%---------------------------------------------------------------------------
 % Trap exits
 %---------------------------------------------------------------------------
 
