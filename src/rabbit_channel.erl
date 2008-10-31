@@ -580,10 +580,11 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
 handle_method(#'queue.unbind'{queue = QueueNameBin,
                               exchange = ExchangeNameBin,
                               routing_key = RoutingKey,
-                              arguments = Arguments}, _, State) ->
+                              arguments = Arguments,
+			      nowait = NoWait}, _, State) ->
     binding_action(fun rabbit_amqqueue:delete_binding/4, ExchangeNameBin, 
                    QueueNameBin, RoutingKey, Arguments, #'queue.unbind_ok'{},
-                   false, State);
+                   NoWait, State);
 
 handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},
