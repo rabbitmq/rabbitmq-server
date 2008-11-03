@@ -28,7 +28,7 @@
 -include("rabbit.hrl").
 
 -export([start_link/4, do/2, do/3, shutdown/1]).
--export([send_command/2, deliver/4]).
+-export([send_command/2, deliver/4, conserve_memory/2]).
 
 %% callbacks
 -export([init/2, handle_message/2]).
@@ -49,6 +49,7 @@
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
 -spec(deliver/4 :: (pid(), ctag(), bool(), msg()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
 
 -endif.
 
@@ -77,11 +78,18 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     Pid ! {deliver, ConsumerTag, AckRequired, Msg},
     ok.
 
+conserve_memory(Pid, Conserve) ->
+    Pid ! {conserve_memory, Conserve},
+    ok.
+
 %%---------------------------------------------------------------------------
 
 init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
+    %% this is bypassing the proxy so alarms can "jump the queue" and
+    %% be handled promptly
+    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
     #ch{state                   = starting,
         proxy_pid               = ProxyPid,
         reader_pid              = ReaderPid,
@@ -128,6 +136,11 @@ handle_message({deliver, ConsumerTag, AckRequired, Msg},
     ok = internal_deliver(WriterPid, ProxyPid,
                           true, ConsumerTag, DeliveryTag, Msg),
     State1#ch{next_tag = DeliveryTag + 1};
+
+handle_message({conserve_memory, Conserve}, State) ->
+    ok = rabbit_writer:send_command(
+           State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
+    State;
 
 handle_message({'EXIT', _Pid, Reason}, State) ->
     terminate(Reason, State);
@@ -618,6 +631,12 @@ handle_method(#'tx.rollback'{}, _, State) ->
 handle_method(#'channel.flow'{active = _}, _, State) ->
     %% FIXME: implement
     {reply, #'channel.flow_ok'{active = true}, State};
+
+handle_method(#'channel.flow_ok'{active = _}, _, State) ->
+    %% TODO: We may want to correlate this to channel.flow messages we
+    %% have sent, and complain if we get an unsolicited
+    %% channel.flow_ok, or the client refuses our flow request.
+    {noreply, State};
 
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(

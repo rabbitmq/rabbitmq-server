@@ -32,6 +32,8 @@
 -export([mainloop/4, drain/2]).
 -export([proxy_loop/3]).
 
+-define(HIBERNATE_AFTER, 5000).
+
 %%----------------------------------------------------------------------------
 
 start_link(M, A) ->
@@ -59,6 +61,9 @@ mainloop(ProxyPid, Ref, M, State) ->
                 ProxyPid ! Ref,
                 NewSt;
             Msg -> M:handle_message(Msg, State)
+        after ?HIBERNATE_AFTER ->
+                erlang:hibernate(?MODULE, mainloop,
+                                 [ProxyPid, Ref, M, State])
         end,
     ?MODULE:mainloop(ProxyPid, Ref, M, NewState).
 
@@ -92,4 +97,6 @@ proxy_loop(Ref, Pid, State) ->
                    waiting  -> Pid ! {Ref, [Msg]}, empty;
                    Messages -> [Msg | Messages]
                end)
+    after ?HIBERNATE_AFTER ->
+            erlang:hibernate(?MODULE, proxy_loop, [Ref, Pid, State])
     end.
