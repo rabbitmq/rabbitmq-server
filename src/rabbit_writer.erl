@@ -131,12 +131,16 @@ assemble_frames(Channel, MethodRecord, Content, FrameMax) ->
                       Channel, Content, FrameMax),
     [MethodFrame | ContentFrames].
 
+tcp_send(Sock, Data) ->
+    rabbit_misc:throw_on_error(inet_error,
+                               fun () -> gen_tcp:send(Sock, Data) end).
+
 internal_send_command(Sock, Channel, MethodRecord) ->
-    ok = gen_tcp:send(Sock, assemble_frames(Channel, MethodRecord)).
+    ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord)).
 
 internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax) ->
-    ok = gen_tcp:send(Sock, assemble_frames(Channel, MethodRecord,
-                                            Content, FrameMax)).
+    ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord,
+                                        Content, FrameMax)).
 
 %% gen_tcp:send/2 does a selective receive of {inet_reply, Sock,
 %% Status} to obtain the result. That is bad when it is called from

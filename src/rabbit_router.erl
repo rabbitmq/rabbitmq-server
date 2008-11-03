@@ -150,11 +150,9 @@ run_bindings(QPids, IsMandatory, IsImmediate, Txn, Message) ->
       fun (QPid, {Routed, Handled}) ->
               case catch rabbit_amqqueue:deliver(IsMandatory, IsImmediate,
                                                  Txn, Message, QPid) of
-                  true             -> {true, [QPid | Handled]};
-                  false            -> {true, Handled};
-                  {'EXIT', Reason} -> rabbit_log:warning("delivery to ~p failed:~n~p~n",
-                                                         [QPid, Reason]),
-                                      {Routed, Handled}
+                  true              -> {true, [QPid | Handled]};
+                  false             -> {true, Handled};
+                  {'EXIT', _Reason} -> {Routed, Handled}
               end
       end,
       {false, []},
