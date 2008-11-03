@@ -26,7 +26,7 @@
 -module(rabbit_amqqueue).
 
 -export([start/0, recover/0, declare/4, delete/3, purge/1, internal_delete/1]).
--export([pseudo_queue/2]).
+-export([conserve_memory/1, conserve_memory/2, pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, list_vhost_queues/1,
          stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4,
          commit/2, rollback/2]).
@@ -55,6 +55,8 @@
       {'error', 'queue_not_found' | 'exchange_not_found'}).
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
+-spec(conserve_memory/1 :: (bool()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
 -spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
              amqqueue()).
 -spec(add_binding/4 ::
@@ -81,8 +83,8 @@
 -spec(redeliver/2 :: (pid(), [{message(), bool()}]) -> 'ok').
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
--spec(commit/2 :: (pid(), txn()) -> 'ok').
--spec(rollback/2 :: (pid(), txn()) -> 'ok').
+-spec(commit/2 :: (pid(), txn()) -> 'ok' | {'error', any()}).
+-spec(rollback/2 :: (pid(), txn()) -> 'ok' | {'error', any()}).
 -spec(notify_down/2 :: (amqqueue(), pid()) -> 'ok').
 -spec(binding_forcibly_removed/2 :: (binding_spec(), queue_name()) -> 'ok').
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
@@ -130,6 +132,19 @@ recover_durable_queues() ->
               ok
       end).
 
+conserve_memory(Conserve) ->
+    [ok = gen_server:cast(QPid, {conserve_memory, Conserve}) ||
+        {_, QPid, worker, _} <-
+            supervisor:which_children(rabbit_amqqueue_sup)],
+    ok.
+
+conserve_memory(QPid, Conserve) ->
+    %% This needs to be synchronous. It is called during queue
+    %% creation and we need to make sure that the memory conservation
+    %% status of the queue has been set before it becomes reachable in
+    %% message routing.
+    gen_server:call(QPid, {conserve_memory, Conserve}).
+
 declare(QueueName, Durable, AutoDelete, Args) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
@@ -160,6 +175,7 @@ store_queue(Q = #amqqueue{durable = false}) ->
 
 start_queue_process(Q) ->
     {ok, Pid} = supervisor:start_child(rabbit_amqqueue_sup, [Q]),
+    ok = rabbit_alarm:maybe_conserve_memory(Pid),
     Q#amqqueue{pid = Pid}.
 
 recover_queue(Q) ->

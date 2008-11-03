@@ -107,8 +107,9 @@ set MNESIA_DIR=%MNESIA_BASE%/%NODENAME%-mnesia
 -sasl sasl_error_logger {file,\""%LOG_BASE%/%NODENAME%-sasl.log"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
--os_mon start_memsup false ^
+-os_mon start_memsup true ^
 -os_mon start_os_sup false ^
+-os_mon memsup_system_only true ^
 -mnesia dir \""%MNESIA_DIR%"\" ^
 %CLUSTER_CONFIG% ^
 %RABBIT_ARGS% ^

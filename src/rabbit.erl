@@ -157,6 +157,8 @@ start(normal, []) ->
 
                 ok = rabbit_amqqueue:start(),
 
+                ok = rabbit_alarm:start(),
+
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
 
@@ -198,6 +200,7 @@ start(normal, []) ->
 
 stop(_State) ->
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
+    ok = rabbit_alarm:stop(),
     ok.
 
 %---------------------------------------------------------------------------
