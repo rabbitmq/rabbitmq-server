@@ -40,9 +40,10 @@
 
 -ifdef(use_specs).
 
+-type(mfa_tuple() :: {atom(), atom(), list()}).
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(register/2 :: (pid(), mfa()) -> 'ok').
+-spec(register/2 :: (pid(), mfa_tuple()) -> 'ok').
              
 -endif.
 
