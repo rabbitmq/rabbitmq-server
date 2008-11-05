@@ -2,7 +2,7 @@
 
 -behaviour(gen_server).
 
--export([new/0, destroy/1,
+-export([new/1, destroy/1,
 	 dequeue/1, pushback/2, enqueue/2, enqueue_list/2,
 	 foreach/2, foldl/3,
 	 clear/1,
@@ -14,8 +14,8 @@
 
 -export([test/0]).
 
-new() ->
-    {ok, Pid} = gen_server:start_link(?MODULE, [], [{debug, [trace]}]),
+new(_Options) ->
+    {ok, Pid} = gen_server:start_link(?MODULE, [], []),
     Pid.
 
 destroy(P) -> gen_server:call(P, destroy). 
@@ -95,7 +95,7 @@ test_remove_upto(Pid, Lo, Hi) ->
     test_remove_upto(Pid, Lo + 1, Hi).
 
 test() ->
-    Pid = ?MODULE:new(),
+    Pid = ?MODULE:new([]),
     Max = 11,
     Mid = trunc(Max / 2),
     ok = test_insert_upto(Pid, 0, Max),
