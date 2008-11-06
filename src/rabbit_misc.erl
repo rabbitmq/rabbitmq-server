@@ -68,7 +68,8 @@
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (vhost(), K, resource_name()) -> r(K) when is_subtype(K, atom())).
+-spec(r/3 :: (vhost() | r(atom()), K, resource_name()) -> r(K) 
+              when is_subtype(K, atom())).
 -spec(r/2 :: (vhost(), K) -> #resource{virtual_host :: vhost(),
                                        kind         :: K,
                                        name         :: '_'}
@@ -236,6 +237,7 @@ with_vhost(VHostPath, Thunk) ->
 
 with_user_and_vhost(Username, VHostPath, Thunk) ->
     with_user(Username, with_vhost(VHostPath, Thunk)).
+
 
 execute_mnesia_transaction(TxFun) ->
     %% Making this a sync_transaction allows us to use dirty_read

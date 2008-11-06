@@ -53,3 +53,4 @@
 -type(vhost() :: binary()).
 -type(ctag() :: binary()).
 -type(exchange_type() :: 'direct' | 'topic' | 'fanout').
+-type(binding_key() :: binary()).

@@ -586,7 +586,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             routing_key = RoutingKey,
                             nowait = NoWait,
                             arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_amqqueue:add_binding/4, ExchangeNameBin, 
+    binding_action(fun rabbit_exchange:add_binding/4, ExchangeNameBin,
                    QueueNameBin, RoutingKey, Arguments, #'queue.bind_ok'{},
                    NoWait, State);
 
@@ -594,7 +594,7 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
                               exchange = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_amqqueue:delete_binding/4, ExchangeNameBin, 
+    binding_action(fun rabbit_exchange:delete_binding/4, ExchangeNameBin,
                    QueueNameBin, RoutingKey, Arguments, #'queue.unbind_ok'{},
                    false, State);
 
@@ -654,7 +654,7 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     ActualRoutingKey = expand_routing_key_shortcut(QueueNameBin, RoutingKey,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    case Fun(QueueName, ExchangeName, ActualRoutingKey, Arguments) of
+    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments) of
         {error, queue_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s", [rabbit_misc:rs(QueueName)]);
@@ -670,8 +670,7 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
             rabbit_misc:protocol_error(
               not_allowed, "durability settings of ~s incompatible with ~s",
               [rabbit_misc:rs(QueueName), rabbit_misc:rs(ExchangeName)]);
-        {ok, _BindingCount} ->
-            return_ok(State, NoWait, ReturnMethod)
+        ok -> return_ok(State, NoWait, ReturnMethod)
     end.
 
 publish(Mandatory, Immediate, Message, QPids,

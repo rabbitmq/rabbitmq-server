@@ -105,7 +105,13 @@ table_definitions() ->
      {rabbit_config, [{disc_copies, [node()]}]},
      {listener, [{type, bag},
                  {attributes, record_info(fields, listener)}]},
-     {binding, [{attributes, record_info(fields, binding)}]},
+     {durable_routes, [{disc_copies, [node()]},
+                       {record_name, route},
+                       {attributes, record_info(fields, route)}]},
+     {route, [{type, ordered_set},
+              {attributes, record_info(fields, route)}]},
+     {reverse_route, [{type, ordered_set}, 
+                      {attributes, record_info(fields, reverse_route)}]},
      {durable_exchanges, [{disc_copies, [node()]},
                           {record_name, exchange},
                           {attributes, record_info(fields, exchange)}]},
@@ -255,7 +261,7 @@ init_db(ClusterNodes) ->
     end.
 
 create_schema() ->
-    mnesia:stop(), 
+    mnesia:stop(),
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
                           cannot_create_schema),
     rabbit_misc:ensure_ok(mnesia:start(),
