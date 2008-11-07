@@ -94,7 +94,11 @@ stop-cover: all
 
 generic_stage:
 	mkdir -p $(GENERIC_STAGE_DIR)
-	cp -r ebin include src $(GENERIC_STAGE_DIR)
+	cp -r ebin include $(GENERIC_STAGE_DIR)
+ifneq "$(NO_SRC)" "true"
+	cp -r src $(GENERIC_STAGE_DIR)
+endif
+
 	cp LICENSE LICENSE-MPL-RabbitMQ $(GENERIC_STAGE_DIR)
 
 	if [ -f INSTALL.in ]; then \
@@ -136,7 +140,7 @@ install: all
 	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
 	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
 
-	$(MAKE) VERSION=$(VERSION) GENERIC_STAGE_DIR=$(TARGET_DIR) generic_stage
+	$(MAKE) VERSION=$(VERSION) GENERIC_STAGE_DIR=$(TARGET_DIR) NO_SRC=true generic_stage
 
 	chmod 0755 scripts/*
 	mkdir -p $(SBIN_DIR)
