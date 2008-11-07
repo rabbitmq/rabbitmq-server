@@ -29,7 +29,7 @@
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, list/0, list_vhost_queues/1,
          stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4]).
--export([info/1, info/2]).
+-export([info/1, info/2, info_all/0, info_all/1]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2]).
@@ -71,6 +71,10 @@
 -spec(info/2 ::
       (amqqueue(), info_key()) -> info();
       (amqqueue(), [info_key()]) -> [info()]).
+-spec(info_all/0 :: () -> [{amqqueue(), [info()]}]).
+-spec(info_all/1 ::
+      (info_key()) -> [{amqqueue(), info()}];
+      ([info_key()]) -> [{amqqueue(), [info()]}]).
 -spec(stat/1 :: (amqqueue()) -> qstats()).
 -spec(stat_all/0 :: () -> [qstats()]).
 -spec(delete/3 ::
@@ -189,6 +193,15 @@ with_or_die(Name, F) ->
 
 list() -> rabbit_misc:dirty_read_all(amqqueue).
 
+map(F) ->
+    %% TODO: there is scope for optimisation here, e.g. using a
+    %% cursor, parallelising the function invocation
+    Ref = make_ref(),
+    lists:filter(fun (R) -> R =/= Ref end,
+                 [rabbit_misc:with_exit_handler(
+                    fun () -> Ref end,
+                    fun () -> F(Q) end) || Q <- list()]).
+
 list_vhost_queues(VHostPath) ->
     mnesia:dirty_match_object(
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
@@ -201,6 +214,10 @@ info(#amqqueue{ pid = QPid }, ItemOrItems) ->
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
+
+info_all() -> map(fun (Q) -> {Q, info(Q)} end).
+
+info_all(ItemOrItems) -> map(fun (Q) -> {Q, info(Q, ItemOrItems)} end).
 
 stat(#amqqueue{pid = QPid}) -> gen_server:call(QPid, stat).
 
