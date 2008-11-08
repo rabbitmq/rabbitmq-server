@@ -48,6 +48,13 @@ if "%ERLANG_SERVICE_MANAGER_PATH%"=="" (
     set ERLANG_SERVICE_MANAGER_PATH=C:\Program Files\erl5.5.5\erts-5.5.5\bin
 )
 
+set CONSOLE_FLAG=
+set CONSOLE_LOG_VALID=
+for %%i in (new reuse) do if "%%i" == "%CONSOLE_LOG%" set CONSOLE_LOG_VALID=TRUE
+if "%CONSOLE_LOG_VALID%" == "TRUE" (
+    set CONSOLE_FLAG=-debugtype %CONSOLE_LOG%
+)
+
 rem *** End of configuration ***
 
 if not exist "%ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe" (
@@ -59,7 +66,7 @@ if not exist "%ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe" (
     echo %ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe not found!
     echo Please set ERLANG_SERVICE_MANAGER_PATH to the folder containing "erlsrv.exe".
     echo.
-    exit /B
+    exit /B 1
 )
 
 rem erlang prefers forwardslash as separator in paths
@@ -71,7 +78,7 @@ set LOG_BASE=%RABBITMQ_BASE_UNIX%/log
 rem We save the previous logs in their respective backup
 rem Log management (rotation, filtering based on size...) is left as an exercise for the user.
 
-set BACKUP_EXTENSION=.bak
+set BACKUP_EXTENSION=.1
 
 set LOGS="%RABBITMQ_BASE%\log\%NODENAME%.log"
 set SASL_LOGS="%RABBITMQ_BASE%\log\%NODENAME%-sasl.log"
@@ -99,12 +106,7 @@ set MNESIA_DIR=%MNESIA_BASE%/%NODENAME%-mnesia
 
 
 if "%1" == "install" goto INSTALL_SERVICE
-if "%1" == "start" goto MODIFY_SERVICE 
-if "%1" == "stop" goto MODIFY_SERVICE 
-if "%1" == "disable" goto MODIFY_SERVICE 
-if "%1" == "enable" goto MODIFY_SERVICE 
-if "%1" == "list" goto MODIFY_SERVICE 
-if "%1" == "remove" goto MODIFY_SERVICE 
+for %%i in (start stop disable enable list remove) do if "%%i" == "%1" goto MODIFY_SERVICE 
 
 echo.
 echo *********************
@@ -123,9 +125,7 @@ echo %~n0 stop    - Stop the %SERVICENAME% service
 echo %~n0 disable - Disable the %SERVICENAME% service
 echo %~n0 enable  - Enable the %SERVICENAME% service
 echo.
-if "%1" == "" pause
 exit /B
-goto END
 
 
 :INSTALL_SERVICE
@@ -141,8 +141,8 @@ if errorlevel 1 (
     echo %SERVICENAME% service is already present - only updating service parameters
 )
 
-set RABBIT_EBIN=%~dp0%
-set RABBIT_EBIN=%RABBIT_LIB:\=/%../ebin
+set RABBIT_EBIN_TMP=%~dp0%
+set RABBIT_EBIN=%RABBIT_EBIN_TMP:\=/%../ebin
 
 set ERLANG_SERVICE_ARGUMENTS= ^
 -pa "%RABBIT_EBIN%" ^
@@ -150,7 +150,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -s rabbit ^
 +W w ^
 +A30 ^
--kernel inet_default_listen_options "[{sndbuf,16384},{recbuf,4096}]" ^
+-kernel inet_default_listen_options "[{nodelay,true},{sndbuf,16384},{recbuf,4096}]" ^
 -kernel inet_default_connect_options "[{nodelay,true}]" ^
 -rabbit tcp_listeners "[{\"%NODE_IP_ADDRESS%\",%NODE_PORT%}]" ^
 -kernel error_logger {file,\""%LOG_BASE%/%NODENAME%.log"\"} ^
@@ -158,8 +158,10 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -sasl sasl_error_logger {file,\""%LOG_BASE%/%NODENAME%-sasl.log"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
--os_mon start_memsup false ^
+-os_mon start_memsup true ^
 -os_mon start_os_sup false ^
+-os_mon memsup_system_only true ^
+-os_mon system_memory_high_watermark 0.95 ^
 -mnesia dir \""%MNESIA_DIR%"\" ^
 %CLUSTER_CONFIG% ^
 %RABBIT_ARGS% ^
@@ -174,7 +176,7 @@ set ERLANG_SERVICE_ARGUMENTS=%ERLANG_SERVICE_ARGUMENTS:"=\"%
 -workdir "%RABBITMQ_BASE%" ^
 -stopaction "rabbit:stop_and_halt()." ^
 -sname %NODENAME% ^
--debugtype reuse ^
+%CONSOLE_FLAG% ^
 -args "%ERLANG_SERVICE_ARGUMENTS%" > NUL
 goto END
 
