@@ -108,6 +108,9 @@ unsubscribe(Channel, Tag) ->
     #'basic.cancel_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicCancel),
     ok.
 
+declare_queue(Channel) ->
+    declare_queue(Channel, <<>>).
+    
 declare_queue(Channel, Q) ->
     QueueDeclare = #'queue.declare'{queue = Q,
                                     passive = false, durable = false,

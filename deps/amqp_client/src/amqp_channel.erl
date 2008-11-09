@@ -36,6 +36,7 @@
 -export([call/2, call/3, cast/2, cast/3]).
 -export([register_direct_peer/2]).
 -export([register_return_handler/2]).
+-export([register_flow_handler/2]).
 
 %% This diagram shows the interaction between the different component processes
 %% in an AMQP client scenario.
@@ -102,6 +103,10 @@ register_direct_peer(Channel, Peer) ->
 %% Registers a handler to deal with returned messages
 register_return_handler(Channel, ReturnHandler) ->
     gen_server:cast(Channel, {register_return_handler, ReturnHandler} ).
+
+%% Registers a handler to deal with flow control
+register_flow_handler(Channel, FlowHandler) ->
+    gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
 %---------------------------------------------------------------------------
 % Internal plumbing
@@ -213,6 +218,19 @@ handle_method(ChannelCloseOk = #'channel.close_ok'{}, State) ->
     {noreply, NewState} = rpc_bottom_half(ChannelCloseOk, State),
     {stop, normal, NewState};
 
+handle_method(#'channel.flow'{active = Active},
+              State = #channel_state{writer_pid = Writer, do2 = Do2,
+                                     flow_handler_pid = FlowHandler}) ->
+    case FlowHandler of
+        undefined -> ok;
+        _ -> case Active of
+                true  -> FlowHandler ! resume;
+                false -> FlowHandler ! pause
+            end
+    end,
+    Do2(Writer, #'channel.flow_ok'{active = Active}),
+    {noreply, State#channel_state{flow_control = not(Active)}};    
+    
 handle_method(Method, State) ->
     rpc_bottom_half(Method, State).
 
@@ -270,8 +288,17 @@ handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer, do2 = Do
     Do2(Writer, Method),
     {noreply, State};
 
+%% This discards any message submitted to the channel when flow control is
+%% active
+handle_cast({cast, Method, Content}, 
+            State = #channel_state{writer_pid = Writer, do3 = Do3,
+                                   flow_control = true}) ->
+    % Silently discard the message
+    {noreply, State};
+    
 %% Standard implementation of the cast/3 command
-handle_cast({cast, Method, Content}, State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
+handle_cast({cast, Method, Content}, 
+            State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
     Do3(Writer, Method, Content),
     {noreply, State};
 
@@ -285,6 +312,11 @@ handle_cast({register_direct_peer, Peer}, State) ->
 %% Registers a handler to process return messages
 handle_cast({register_return_handler, ReturnHandler}, State) ->
     NewState = State#channel_state{return_handler_pid = ReturnHandler},
+    {noreply, NewState};
+
+%% Registers a handler to process flow control messages
+handle_cast({register_flow_handler, FlowHandler}, State) ->
+    NewState = State#channel_state{flow_handler_pid = FlowHandler},
     {noreply, NewState};
 
 handle_cast({notify_sent, Peer}, State) ->

@@ -200,6 +200,53 @@ basic_qos_test(Connection) -> ok.
 % Reject is not yet implemented in RabbitMQ
 basic_reject_test(Connection) -> ok.
 
+% This is a test, albeit not a unit test, to see if the client
+% handles the channel.flow command.
+start_channel_flow(Connection) ->
+    crypto:start(),
+    X = <<"amq.direct">>,
+    Key = uuid(),
+    Producer = spawn_link(fun() ->
+                            Channel = lib_amqp:start_channel(Connection),
+                            amqp_channel:register_flow_handler(Channel,
+                                                               self()),
+                            cf_producer_loop(Channel, X, Key)
+                          end),
+    Consumer = spawn_link(fun() ->
+                            Channel = lib_amqp:start_channel(Connection),
+                            Q = lib_amqp:declare_queue(Channel),
+                            lib_amqp:bind_queue(Channel, X, Q, Key),
+                            Tag = lib_amqp:subscribe(Channel, Q, self()),
+                            cf_consumer_loop(Channel, Tag)
+                          end),
+    {Producer, Consumer}.
+
+cf_consumer_loop(Channel, Tag) ->
+    receive
+        #'basic.consume_ok'{} -> cf_consumer_loop(Channel, Tag);
+        #'basic.cancel_ok'{} -> ok;
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, Content} ->
+             lib_amqp:ack(Channel, DeliveryTag),
+             cf_consumer_loop(Channel, Tag);
+        stop ->
+             lib_amqp:unsubscribe(Channel, Tag),
+             ok
+    end.
+
+cf_producer_loop(Channel, X, Key) ->
+    receive
+        resume ->
+            cf_producer_loop(Channel, X, Key);
+        pause ->
+            receive
+                resume -> cf_producer_loop(Channel, X, Key)
+            end;
+        stop -> ok
+    after 5 ->
+        lib_amqp:publish(Channel, X, Key, crypto:rand_bytes(10000)),
+        cf_producer_loop(Channel, X, Key)
+    end.
+
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,
                        q = <<"a.b.c">>,
