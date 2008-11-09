@@ -27,13 +27,15 @@
 
 -export([start/0, recover/0, declare/4, delete/3, purge/1, internal_delete/1]).
 -export([pseudo_queue/2]).
--export([lookup/1, with/2, with_or_die/2, list_vhost_queues/1,
+-export([lookup/1, with/2, with_or_die/2, list/0, list_vhost_queues/1,
          stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4]).
+-export([info/1, info/2, info_all/0, info_all/1]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2]).
 -export([on_node_down/1]).
+-export([info_queue_sorted/1, info_queue_sorted/2]).
 
 -import(mnesia).
 -import(gen_server).
@@ -54,6 +56,9 @@
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
+-type(info_key() :: atom()).
+-type(info() :: {info_key(), any()}).
+
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
@@ -61,7 +66,16 @@
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
+-spec(list/0 :: () -> [amqqueue()]).
 -spec(list_vhost_queues/1 :: (vhost()) -> [amqqueue()]).
+-spec(info/1 :: (amqqueue()) -> [info()]).
+-spec(info/2 ::
+      (amqqueue(), info_key()) -> info();
+      (amqqueue(), [info_key()]) -> [info()]).
+-spec(info_all/0 :: () -> [{amqqueue(), [info()]}]).
+-spec(info_all/1 ::
+      (info_key()) -> [{amqqueue(), info()}];
+      ([info_key()]) -> [{amqqueue(), [info()]}]).
 -spec(stat/1 :: (amqqueue()) -> qstats()).
 -spec(stat_all/0 :: () -> [qstats()]).
 -spec(delete/3 ::
@@ -91,6 +105,8 @@
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
+-spec(info_queue_sorted/2 :: (info_key(), non_neg_integer()) -> [{amqqueue(), info()}]).
+-spec(info_queue_sorted/1 :: (info_key()) -> [{amqqueue(), info()}]).
 
 -endif.
 
@@ -178,9 +194,33 @@ with_or_die(Name, F) ->
                               not_found, "no ~s", [rabbit_misc:rs(Name)])
                   end).
 
+list() -> rabbit_misc:dirty_read_all(amqqueue).
+
+map(F) ->
+    %% TODO: there is scope for optimisation here, e.g. using a
+    %% cursor, parallelising the function invocation
+    Ref = make_ref(),
+    lists:filter(fun (R) -> R =/= Ref end,
+                 [rabbit_misc:with_exit_handler(
+                    fun () -> Ref end,
+                    fun () -> F(Q) end) || Q <- list()]).
+
 list_vhost_queues(VHostPath) ->
     mnesia:dirty_match_object(
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
+
+info(#amqqueue{ pid = QPid }) ->
+    gen_server:call(QPid, info).
+
+info(#amqqueue{ pid = QPid }, ItemOrItems) ->
+    case gen_server:call(QPid, {info, ItemOrItems}) of
+        {ok, Res}      -> Res;
+        {error, Error} -> throw(Error)
+    end.
+
+info_all() -> map(fun (Q) -> {Q, info(Q)} end).
+
+info_all(ItemOrItems) -> map(fun (Q) -> {Q, info(Q, ItemOrItems)} end).
 
 stat(#amqqueue{pid = QPid}) -> gen_server:call(QPid, stat).
 
@@ -298,3 +338,18 @@ safe_pmap_ok(H, F, L) ->
         []     -> ok;
         Errors -> {error, Errors}
     end.
+
+
+info_lookup({#amqqueue{}, InfoTupleList}, InfoKey) ->
+    case lists:keysearch(InfoKey, 1, InfoTupleList) of
+        false -> {error, not_found};
+        {value, {InfoKey, InfoValue}} -> InfoValue
+    end.
+
+%% TODO: avoid sorting if Length is much less than the number of queues
+info_queue_sorted(InfoKey) ->
+    lists:sort(fun(A, B) -> info_lookup(A, InfoKey) > info_lookup(B, InfoKey) end,
+        rabbit_amqqueue:info_all()).
+info_queue_sorted(InfoKey, Length) ->
+    lists:sublist(info_queue_sorted(InfoKey), Length).
+
