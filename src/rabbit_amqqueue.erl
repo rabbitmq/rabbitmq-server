@@ -68,13 +68,9 @@
 -spec(list/0 :: () -> [amqqueue()]).
 -spec(list_vhost_queues/1 :: (vhost()) -> [amqqueue()]).
 -spec(info/1 :: (amqqueue()) -> [info()]).
--spec(info/2 ::
-      (amqqueue(), info_key()) -> info();
-      (amqqueue(), [info_key()]) -> [info()]).
--spec(info_all/0 :: () -> [{amqqueue(), [info()]}]).
--spec(info_all/1 ::
-      (info_key()) -> [{amqqueue(), info()}];
-      ([info_key()]) -> [{amqqueue(), [info()]}]).
+-spec(info/2 :: (amqqueue(), [info_key()]) -> [info()]).
+-spec(info_all/0 :: () -> [[info()]]).
+-spec(info_all/1 :: ([info_key()]) -> [[info()]]).
 -spec(stat/1 :: (amqqueue()) -> qstats()).
 -spec(stat_all/0 :: () -> [qstats()]).
 -spec(delete/3 ::
@@ -209,15 +205,15 @@ list_vhost_queues(VHostPath) ->
 info(#amqqueue{ pid = QPid }) ->
     gen_server:call(QPid, info).
 
-info(#amqqueue{ pid = QPid }, ItemOrItems) ->
-    case gen_server:call(QPid, {info, ItemOrItems}) of
+info(#amqqueue{ pid = QPid }, Items) ->
+    case gen_server:call(QPid, {info, Items}) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
 
-info_all() -> map(fun (Q) -> {Q, info(Q)} end).
+info_all() -> map(fun (Q) -> info(Q) end).
 
-info_all(ItemOrItems) -> map(fun (Q) -> {Q, info(Q, ItemOrItems)} end).
+info_all(Items) -> map(fun (Q) -> info(Q, Items) end).
 
 stat(#amqqueue{pid = QPid}) -> gen_server:call(QPid, stat).
 

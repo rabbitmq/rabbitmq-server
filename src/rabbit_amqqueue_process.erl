@@ -62,7 +62,12 @@
              unsent_message_count}).
 
 -define(INFO_KEYS,
-        [messages_ready,
+        [name,
+         durable,
+         auto_delete,
+         arguments,
+         pid,
+         messages_ready,
          messages_unacknowledged,
          messages_uncommitted,
          messages,
@@ -473,6 +478,16 @@ purge_message_buffer(QName, MessageBuffer) ->
 
 infos(Items, State) -> [{Item, info(Item, State)} || Item <- Items].
 
+info(name, #q{q = #amqqueue{name = Name}}) ->
+    Name;
+info(durable, #q{q = #amqqueue{durable = Durable}}) ->
+    Durable;
+info(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) ->
+    AutoDelete;
+info(arguments, #q{q = #amqqueue{arguments = Arguments}}) ->
+    Arguments;
+info(pid, #q{q = #amqqueue{pid = Pid}}) ->
+    Pid;
 info(messages_ready, #q{message_buffer = MessageBuffer}) ->
     queue:len(MessageBuffer);
 info(messages_unacknowledged, _) ->
@@ -504,13 +519,7 @@ info(Item, _) ->
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
 
-handle_call({info, Item}, _From, State) when is_atom(Item) ->
-    try
-        reply({ok, {Item, info(Item, State)}}, State)
-    catch Error -> reply({error, Error}, State)
-    end;
-
-handle_call({info, Items}, _From, State) when is_list(Items) ->
+handle_call({info, Items}, _From, State) ->
     try
         reply({ok, infos(Items, State)}, State)
     catch Error -> reply({error, Error}, State)
