@@ -89,17 +89,19 @@ Available commands:
   list_user_vhosts <UserName>
   list_vhost_users <VHostPath>
 
-  set_memory_threshold    <Percentage>
-  get_memory_consumption 
+  list_queues [-l <ResultSize>] <InfoItem> [<InfoItem> ...]
 
-  list_queues
-  list_deepest_queues
 
 <node> should be the name of the master node of the RabbitMQ cluster. It
 defaults to the node named \"rabbit\" on the local host. On a host named
 \"server.example.com\", the master node will usually be rabbit@server (unless
 NODENAME has been set to some non-default value at broker startup time). The
 output of hostname -s is usually the correct suffix to use after the \"@\" sign.
+
+<InfoItem> must be a member of the list [messages_ready, 
+messages_unacknowledged, messages_uncommitted, messages, acks_uncommitted, 
+consumers, transactions, memory]. At most <ResultSize> queues will be listed, 
+in descending order of the first <InfoItem>.
 
 "),
     halt(1).
@@ -187,25 +189,18 @@ action(list_vhost_users, Node, Args = [_VHostPath]) ->
     io:format("Listing users for vhosts ~p...", Args),
     display_list(call(Node, {rabbit_access_control, list_vhost_users, Args}));
 
-action(set_memory_threshold, Node, Args) ->
-    io:format("% Setting memory threshold to ~p ...~n", Args),
-    rpc_call(Node, rabbit_misc, set_memory_threshold, Args);
-
-action(get_memory_consumption, Node, []) ->
-    io:format("% Getting memory consumption ...~n", []),
-    Res = rpc_call(Node, rabbit_misc, get_memory_consumption, []),
-    io:format("~p~n", [Res]);
-
-action(list_queues, Node, []) ->
-    io:format("Listing all queues ..."),
-    Res = rpc_call(Node, rabbit_amqqueue, info_all, []),
-    io:format("~p~n", [Res]),
-    ok;
-
-action(list_deepest_queues, Node, Args = [Depth]) ->
-    io:format("Listing ~p deepest queues ...~n", Args),
-    Res = rpc_call(Node, rabbit_amqqueue, info_queue_sorted, [messages, list_to_integer(Depth)]),
-    io:format("~p~n", [Res]),
+action(list_queues, Node, Args) ->
+    io:format("Listing queues ...~n"),
+    Res = 
+        case Args of 
+            ["-l",  Length | InfoItems] -> 
+                rpc_call(Node, rabbit_amqqueue, info_queue_sorted,
+                    [list_to_integer(Length), [list_to_atom(X) || X <- InfoItems]]);
+            InfoItems -> 
+                rpc_call(Node, rabbit_amqqueue, info_queue_sorted,
+                    [[list_to_atom(X) || X <- InfoItems]])
+        end,
+    io:format("~n~p~n", [Res]),
     ok.
 
 display_list(L) when is_list(L) ->

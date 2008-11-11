@@ -43,7 +43,6 @@
 -export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([append_file/2]).
--export([set_memory_threshold/1, get_memory_consumption/0]).
 
 -import(mnesia).
 -import(lists).
@@ -100,8 +99,6 @@
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
 
--spec(get_memory_consumption/0 :: () -> ({non_neg_integer(), non_neg_integer()})).
--spec(set_memory_threshold/1 :: (string()) -> 'ok' | {'error', any()}).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -372,15 +369,4 @@ append_file(File, _, Suffix) ->
         {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
         Error      -> Error
     end.
-
-set_memory_threshold(Level) ->
-    case Res = string:to_float(Level) of
-        {error, _} -> Res;
-        {_Percentage, [_]} -> {error, unexpected_suffix};
-        {Percentage, _} -> memsup:set_sysmem_high_watermark(Percentage)
-    end.
-
-get_memory_consumption() ->
-        {Total, Allocated, _Worst} = memsup:get_memory_data(),
-        {Total, Allocated}.
 

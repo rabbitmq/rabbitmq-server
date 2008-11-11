@@ -105,8 +105,8 @@
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
--spec(info_queue_sorted/2 :: (info_key(), non_neg_integer()) -> [{amqqueue(), info()}]).
--spec(info_queue_sorted/1 :: (info_key()) -> [{amqqueue(), info()}]).
+-spec(info_queue_sorted/1 :: ([info_key()]) -> [{amqqueue(), [info()]}]).
+-spec(info_queue_sorted/2 :: (non_neg_integer(), [info_key()]) -> [{amqqueue(), [info()]}]).
 
 -endif.
 
@@ -339,17 +339,17 @@ safe_pmap_ok(H, F, L) ->
         Errors -> {error, Errors}
     end.
 
-
 info_lookup({#amqqueue{}, InfoTupleList}, InfoKey) ->
     case lists:keysearch(InfoKey, 1, InfoTupleList) of
-        false -> {error, not_found};
+        false -> throw({bad_argument, InfoKey});
         {value, {InfoKey, InfoValue}} -> InfoValue
     end.
 
 %% TODO: avoid sorting if Length is much less than the number of queues
-info_queue_sorted(InfoKey) ->
-    lists:sort(fun(A, B) -> info_lookup(A, InfoKey) > info_lookup(B, InfoKey) end,
-        rabbit_amqqueue:info_all()).
-info_queue_sorted(InfoKey, Length) ->
-    lists:sublist(info_queue_sorted(InfoKey), Length).
+info_queue_sorted(InfoItems = [SortItem | _]) ->
+    lists:sort(fun(A, B) -> info_lookup(A, SortItem) > info_lookup(B, SortItem) end,
+        rabbit_amqqueue:info_all(InfoItems)).
+
+info_queue_sorted(Length, InfoItems) ->
+    lists:sublist(info_queue_sorted(InfoItems), Length).
 
