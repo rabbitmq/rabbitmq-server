@@ -61,6 +61,9 @@ test_channel_flow() ->
 non_existent_exchange_test() -> 
     negative_test_util:non_existent_exchange_test(new_connection()).
 
+queue_unbind_test() ->
+    test_util:queue_unbind_test(new_connection()).
+
 %----------------------------------------------------------------------------
 %% Common Functions
 
