@@ -55,8 +55,6 @@
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
--type(info_key() :: atom()).
--type(info() :: {info_key(), any()}).
 
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
