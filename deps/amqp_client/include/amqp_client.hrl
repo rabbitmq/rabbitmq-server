@@ -48,6 +48,7 @@
                         return_handler_pid,
                         flow_control = false,
                         flow_handler_pid,
+                        publish_queue = queue:new(),
                         consumers = dict:new()}).
 
 -record(rpc_client_state, {broker_config,

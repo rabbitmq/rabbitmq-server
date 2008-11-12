@@ -202,7 +202,14 @@ basic_reject_test(Connection) -> ok.
 
 % This is a test, albeit not a unit test, to see if the client
 % handles the channel.flow command.
-start_channel_flow(Connection) ->
+
+channel_flow_sync(Connection) ->
+    start_channel_flow(Connection, fun lib_amqp:publish/4).
+
+channel_flow_async(Connection) ->
+    start_channel_flow(Connection, fun lib_amqp:async_publish/4).
+
+start_channel_flow(Connection, PublishFun) ->
     crypto:start(),
     X = <<"amq.direct">>,
     Key = uuid(),
@@ -210,7 +217,7 @@ start_channel_flow(Connection) ->
                             Channel = lib_amqp:start_channel(Connection),
                             amqp_channel:register_flow_handler(Channel,
                                                                self()),
-                            cf_producer_loop(Channel, X, Key)
+                            cf_producer_loop(Channel, X, Key, PublishFun)
                           end),
     Consumer = spawn_link(fun() ->
                             Channel = lib_amqp:start_channel(Connection),
@@ -233,18 +240,19 @@ cf_consumer_loop(Channel, Tag) ->
              ok
     end.
 
-cf_producer_loop(Channel, X, Key) ->
+cf_producer_loop(Channel, X, Key, PublishFun) ->
     receive
-        resume ->
-            cf_producer_loop(Channel, X, Key);
-        pause ->
+        #'channel.flow'{active = false} ->
+            cf_producer_loop(Channel, X, Key, PublishFun);
+        #'channel.flow'{active = true} ->
             receive
-                resume -> cf_producer_loop(Channel, X, Key)
+                #'channel.flow'{active = false} ->
+                    cf_producer_loop(Channel, X, Key, PublishFun)
             end;
         stop -> ok
     after 5 ->
-        lib_amqp:publish(Channel, X, Key, crypto:rand_bytes(10000)),
-        cf_producer_loop(Channel, X, Key)
+        PublishFun(Channel, X, Key, crypto:rand_bytes(10000)),
+        cf_producer_loop(Channel, X, Key, PublishFun)
     end.
 
 setup_publish(Channel) ->

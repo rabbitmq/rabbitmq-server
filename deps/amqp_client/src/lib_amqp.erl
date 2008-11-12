@@ -35,6 +35,17 @@ publish(Channel, X, RoutingKey, Payload) ->
     publish(Channel, X, RoutingKey, Payload, false).
 
 publish(Channel, X, RoutingKey, Payload, Mandatory) ->
+    publish_internal(fun amqp_channel:call/3,
+                     Channel, X, RoutingKey, Payload, Mandatory).
+
+async_publish(Channel, X, RoutingKey, Payload) ->
+    async_publish(Channel, X, RoutingKey, Payload, false).
+
+async_publish(Channel, X, RoutingKey, Payload, Mandatory) ->
+    publish_internal(fun amqp_channel:cast/3,
+                     Channel, X, RoutingKey, Payload, Mandatory).
+
+publish_internal(Fun, Channel, X, RoutingKey, Payload, Mandatory) ->
     BasicPublish = #'basic.publish'{exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = Mandatory, immediate = false},
@@ -43,7 +54,7 @@ publish(Channel, X, RoutingKey, Payload, Mandatory) ->
                    properties = amqp_util:basic_properties(),
                    properties_bin = none,
                    payload_fragments_rev = [Payload]},
-    amqp_channel:cast(Channel, BasicPublish, Content).
+    Fun(Channel, BasicPublish, Content).
 
 close_channel(Channel) ->
     ChannelClose = #'channel.close'{reply_code = 200, reply_text = <<"Goodbye">>,
@@ -110,7 +121,7 @@ unsubscribe(Channel, Tag) ->
 
 declare_queue(Channel) ->
     declare_queue(Channel, <<>>).
-    
+
 declare_queue(Channel, Q) ->
     QueueDeclare = #'queue.declare'{queue = Q,
                                     passive = false, durable = false,
@@ -119,7 +130,7 @@ declare_queue(Channel, Q) ->
     #'queue.declare_ok'{queue = Q1,
                         message_count = MessageCount,
                         consumer_count = ConsumerCount}
-                        = amqp_channel:call(Channel, QueueDeclare),
+	                    = amqp_channel:call(Channel, QueueDeclare),
     Q1.
 
 delete_queue(Channel, Q) ->

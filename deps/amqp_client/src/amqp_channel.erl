@@ -75,7 +75,11 @@ call(Channel, Method) ->
 call(Channel, Method = #'basic.consume'{}, Consumer) ->
     %% TODO This requires refactoring, because the handle_call callback
     %% can perform the differentiation between tuples
-    gen_server:call(Channel, {basic_consume, Method, Consumer}).
+    gen_server:call(Channel, {basic_consume, Method, Consumer});
+
+%% Generic AMQP send mechansim with content
+call(Channel, Method, Content) ->
+    gen_server:call(Channel, {call, Method, Content}).
 
 %% Generic AMQP send mechansim that doesn't expect a response
 cast(Channel, Method) ->
@@ -125,13 +129,13 @@ rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
             ok
         end,
     {noreply, NewState}.
-    
+
 rpc_bottom_half(#'channel.close'{reply_code = ReplyCode, 
                                  reply_text = ReplyText},State) ->
     io:format("Channel received close from peer, code: ~p , message: ~p~n",[ReplyCode,ReplyText]),
     NewState = channel_cleanup(State),
     {stop, normal, NewState};
-    
+
 rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                                               rpc_requests = RequestQueue,
                                               do2 = Do2}) ->
@@ -147,6 +151,27 @@ rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                  Do2(Writer, Method)
     end,
     {noreply, State#channel_state{rpc_requests = NewRequestQueue}}.
+
+drain_publish_queue(Flow = #'channel.flow'{active = false}, State) ->
+    State;
+
+drain_publish_queue(Flow = #'channel.flow'{active = true},
+                    State = #channel_state{publish_queue = {[],[]}}) ->
+    State;
+
+drain_publish_queue(Flow = #'channel.flow'{active = true},
+                    State = #channel_state{publish_queue = PublishQueue,
+                                           writer_pid = Writer,
+                                           do3 = Do3}) ->
+    NewPublishQueue =
+        case queue:out(PublishQueue) of
+            {empty, EmptyQ = {[],[]}}             -> EmptyQ;
+            {{value, {From, Method, Content}}, Q} ->
+                Do3(Writer, Method, Content),
+                gen_server:reply(From, ok),
+                Q
+        end,
+    drain_publish_queue(Flow, State#channel_state{publish_queue = NewPublishQueue}).
 
 subscription_top_half(Method, From, State = #channel_state{writer_pid = Writer, do2 = Do2}) ->
     Do2(Writer,Method),
@@ -218,19 +243,22 @@ handle_method(ChannelCloseOk = #'channel.close_ok'{}, State) ->
     {noreply, NewState} = rpc_bottom_half(ChannelCloseOk, State),
     {stop, normal, NewState};
 
-handle_method(#'channel.flow'{active = Active},
+%% This handles the flow control flag that the broker initiates
+%% If defined, it informs the flow control handler to suspend submitting
+%% andy content bearing methods,
+%% If the application is using call/3 instead iof cast/3 to submit messages,
+%% this will drain all queued up messages to be dispatched to the broker
+handle_method(Flow = #'channel.flow'{active = Active},
               State = #channel_state{writer_pid = Writer, do2 = Do2,
                                      flow_handler_pid = FlowHandler}) ->
     case FlowHandler of
         undefined -> ok;
-        _ -> case Active of
-                true  -> FlowHandler ! resume;
-                false -> FlowHandler ! pause
-            end
+        _ -> FlowHandler ! Flow
     end,
     Do2(Writer, #'channel.flow_ok'{active = Active}),
-    {noreply, State#channel_state{flow_control = not(Active)}};    
-    
+    NewState = drain_publish_queue(Flow, State),
+    {noreply, NewState#channel_state{flow_control = not(Active)}};
+
 handle_method(Method, State) ->
     rpc_bottom_half(Method, State).
 
@@ -264,6 +292,18 @@ init([InitialState]) ->
 handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
     rpc_top_half(Method, From, State);
 
+handle_call({call, Method, Content}, From,
+            State = #channel_state{flow_control = true,
+                                   publish_queue = PublishQueue}) ->
+    % Queue messages up until the flow control is turned off
+    NewPublishQueue = queue:in({From, Method, Content}, PublishQueue),
+    {noreply, State#channel_state{publish_queue = NewPublishQueue}};
+
+handle_call({call, Method, Content}, From,
+            State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
+    Do3(Writer, Method, Content),
+    {reply, ok, State};
+
 %% Top half of the basic consume process.
 %% Sets up the consumer for registration in the bottom half of this RPC.
 handle_call({basic_consume, Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
@@ -290,14 +330,15 @@ handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer, do2 = Do
 
 %% This discards any message submitted to the channel when flow control is
 %% active
-handle_cast({cast, Method, Content}, 
+handle_cast({cast, Method, Content},
             State = #channel_state{writer_pid = Writer, do3 = Do3,
                                    flow_control = true}) ->
-    % Silently discard the message
+    % Discard the message and log it
+    io:format("Discarding content bearing method (~p) ~n", [Method]),
     {noreply, State};
-    
+
 %% Standard implementation of the cast/3 command
-handle_cast({cast, Method, Content}, 
+handle_cast({cast, Method, Content},
             State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
     Do3(Writer, Method, Content),
     {noreply, State};
