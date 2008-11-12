@@ -246,7 +246,7 @@ handle_method(ChannelCloseOk = #'channel.close_ok'{}, State) ->
 %% This handles the flow control flag that the broker initiates
 %% If defined, it informs the flow control handler to suspend submitting
 %% andy content bearing methods,
-%% If the application is using call/3 instead iof cast/3 to submit messages,
+%% If the application is using call/3 instead of cast/3 to submit messages,
 %% this will drain all queued up messages to be dispatched to the broker
 handle_method(Flow = #'channel.flow'{active = Active},
               State = #channel_state{writer_pid = Writer, do2 = Do2,
@@ -330,9 +330,8 @@ handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer, do2 = Do
 
 %% This discards any message submitted to the channel when flow control is
 %% active
-handle_cast({cast, Method, Content},
-            State = #channel_state{writer_pid = Writer, do3 = Do3,
-                                   flow_control = true}) ->
+handle_cast({cast, Method, _Content},
+            State = #channel_state{flow_control = true}) ->
     % Discard the message and log it
     io:format("Discarding content bearing method (~p) ~n", [Method]),
     {noreply, State};
