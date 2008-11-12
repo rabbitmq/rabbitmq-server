@@ -152,27 +152,6 @@ rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
     end,
     {noreply, State#channel_state{rpc_requests = NewRequestQueue}}.
 
-drain_publish_queue(Flow = #'channel.flow'{active = false}, State) ->
-    State;
-
-drain_publish_queue(Flow = #'channel.flow'{active = true},
-                    State = #channel_state{publish_queue = {[],[]}}) ->
-    State;
-
-drain_publish_queue(Flow = #'channel.flow'{active = true},
-                    State = #channel_state{publish_queue = PublishQueue,
-                                           writer_pid = Writer,
-                                           do3 = Do3}) ->
-    NewPublishQueue =
-        case queue:out(PublishQueue) of
-            {empty, EmptyQ = {[],[]}}             -> EmptyQ;
-            {{value, {From, Method, Content}}, Q} ->
-                Do3(Writer, Method, Content),
-                gen_server:reply(From, ok),
-                Q
-        end,
-    drain_publish_queue(Flow, State#channel_state{publish_queue = NewPublishQueue}).
-
 subscription_top_half(Method, From, State = #channel_state{writer_pid = Writer, do2 = Do2}) ->
     Do2(Writer,Method),
     {noreply, State}.
@@ -243,11 +222,9 @@ handle_method(ChannelCloseOk = #'channel.close_ok'{}, State) ->
     {noreply, NewState} = rpc_bottom_half(ChannelCloseOk, State),
     {stop, normal, NewState};
 
-%% This handles the flow control flag that the broker initiates
+%% This handles the flow control flag that the broker initiates.
 %% If defined, it informs the flow control handler to suspend submitting
-%% andy content bearing methods,
-%% If the application is using call/3 instead of cast/3 to submit messages,
-%% this will drain all queued up messages to be dispatched to the broker
+%% any content bearing methods
 handle_method(Flow = #'channel.flow'{active = Active},
               State = #channel_state{writer_pid = Writer, do2 = Do2,
                                      flow_handler_pid = FlowHandler}) ->
@@ -256,8 +233,7 @@ handle_method(Flow = #'channel.flow'{active = Active},
         _ -> FlowHandler ! Flow
     end,
     Do2(Writer, #'channel.flow_ok'{active = Active}),
-    NewState = drain_publish_queue(Flow, State),
-    {noreply, NewState#channel_state{flow_control = not(Active)}};
+    {noreply, State#channel_state{flow_control = not(Active)}};
 
 handle_method(Method, State) ->
     rpc_bottom_half(Method, State).
@@ -293,11 +269,8 @@ handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
     rpc_top_half(Method, From, State);
 
 handle_call({call, Method, Content}, From,
-            State = #channel_state{flow_control = true,
-                                   publish_queue = PublishQueue}) ->
-    % Queue messages up until the flow control is turned off
-    NewPublishQueue = queue:in({From, Method, Content}, PublishQueue),
-    {noreply, State#channel_state{publish_queue = NewPublishQueue}};
+            State = #channel_state{flow_control = true}) ->
+    {reply, blocked, State};
 
 handle_call({call, Method, Content}, From,
             State = #channel_state{writer_pid = Writer, do3 = Do3}) ->

@@ -215,6 +215,8 @@ basic_reject_test(Connection) -> ok.
 %    to a high value in order to get the broker to send the resume command
 % 7. Allow 5 secs to receive the pause and resume, otherwise timeout and fail
 channel_flow_test(Connection) ->
+    X = <<"amq.direct">>,
+    K = Payload = <<"x">>,
     memsup:set_sysmem_high_watermark(0.99),
     timer:sleep(1000),
     Channel = lib_amqp:start_channel(Connection),
@@ -222,6 +224,8 @@ channel_flow_test(Connection) ->
     Child = spawn_link(fun() ->
                     receive
                         #'channel.flow'{active = false} ->
+                            blocked = lib_amqp:publish(Channel, 
+                                                       X, K, Payload),
                             memsup:set_sysmem_high_watermark(0.99),
                             receive
                                 #'channel.flow'{active = true} ->
