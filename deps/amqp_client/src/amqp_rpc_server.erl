@@ -36,7 +36,7 @@
 %---------------------------------------------------------------------------
 % gen_server callbacks
 %---------------------------------------------------------------------------
-init([Connection, QueueName, ServerPid]) ->                              
+init([Connection, QueueName, ServerPid]) ->
     Channel = lib_amqp:start_channel(Connection),
     lib_amqp:declare_queue(Channel, QueueName),
     Tag = lib_amqp:subscribe(Channel, QueueName, self()),
@@ -60,15 +60,16 @@ handle_info({content, ClassId, Properties, PropertiesBin, Payload},
             State = #rpc_server_state{server_pid = ServerPid,
                                        channel = Channel}) ->
     Props = #'P_basic'{correlation_id = CorrelationId,
-                       reply_to = Q} = rabbit_framing:decode_properties(ClassId, PropertiesBin),
+                       reply_to = Q} =
+               rabbit_framing:decode_properties(ClassId, PropertiesBin),
     Response = case gen_server:call(ServerPid, Payload) of
                     {'EXIT', Reason} ->
                         term_to_binary(Reason);
                     Other ->
                         Other
                end,
-    Properties = #'P_basic'{correlation_id = CorrelationId},           
-    lib_amqp:publish(Channel, <<"">>, Q, Response, Properties),
+    Properties = #'P_basic'{correlation_id = CorrelationId},
+    lib_amqp:publish(Channel, <<>>, Q, Response, Properties),
     {noreply, State}.
 
 %---------------------------------------------------------------------------
@@ -86,3 +87,4 @@ terminate(Reason, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     State.
+

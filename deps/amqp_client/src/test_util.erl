@@ -85,9 +85,51 @@ channel_lifecycle_test(Connection) ->
     lib_amqp:teardown(Connection, Channel2),
     ok.
 
+% This is designed to exercize the internal queuing mechanism
+% to ensure that commands are properly serialized
+command_serialization_test(Connection) ->
+    Channel = lib_amqp:start_channel(Connection),
+    Parent = self(),
+    [spawn(fun() -> 
+                Q = uuid(),
+                Q1 = lib_amqp:declare_queue(Channel, Q),
+                ?assertMatch(Q, Q1),     
+                Parent ! finished
+           end) || Tag <- lists:seq(1,?Latch)],
+    latch_loop(?Latch),
+    lib_amqp:teardown(Connection, Channel).
+
+queue_unbind_test(Connection) ->
+    X = <<"eggs">>, Q = <<"foobar">>, Key = <<"quay">>,
+    Payload = <<"foobar">>,
+    Channel = lib_amqp:start_channel(Connection),
+    lib_amqp:declare_exchange(Channel, X),
+    lib_amqp:declare_queue(Channel, Q),
+    lib_amqp:bind_queue(Channel, X, Q, Key),
+    lib_amqp:publish(Channel, X, Key, Payload),
+    get_and_assert_equals(Channel, Q, Payload),
+    lib_amqp:unbind_queue(Channel, X, Q, Key),
+    lib_amqp:publish(Channel, X, Key, Payload),
+    get_and_assert_empty(Channel, Q),
+    lib_amqp:teardown(Connection, Channel).
+
+get_and_assert_empty(Channel, Q) ->
+    BasicGetEmpty = lib_amqp:get(Channel, Q, false),
+    ?assertMatch('basic.get_empty', BasicGetEmpty).
+    
+get_and_assert_equals(Channel, Q, Payload) ->
+    Content = lib_amqp:get(Channel, Q),
+    #content{class_id = ClassId,
+             properties = Properties,
+             properties_bin = PropertiesBin,
+             payload_fragments_rev = PayloadFragments} = Content,
+    ?assertMatch([Payload], PayloadFragments).
+
 basic_get_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
     {ok, Q} = setup_publish(Channel),
+    % TODO: This could be refactored to use get_and_assert_equals,
+    % get_and_assert_empty .... would require another bug though :-)
     Content = lib_amqp:get(Channel, Q),
     #content{class_id = ClassId,
              properties = Properties,
@@ -126,8 +168,7 @@ basic_return_test(Connection) ->
             io:format(">>>Rec'd ~p/~p~n",[WhatsThis])
     after 2000 ->
         exit(no_return_received)
-    end,
-    lib_amqp:teardown(Connection, Channel).
+    end.
 
 basic_ack_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
@@ -182,12 +223,10 @@ basic_recover_test(Connection) ->
     lib_amqp:teardown(Connection, Channel).
 
 % QOS is not yet implemented in RabbitMQ
-basic_qos_test(Connection) ->
-    lib_amqp:close_connection(Connection).
+basic_qos_test(Connection) -> ok.
 
 % Reject is not yet implemented in RabbitMQ
-basic_reject_test(Connection) ->
-    lib_amqp:close_connection(Connection).
+basic_reject_test(Connection) -> ok.
 
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,

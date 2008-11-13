@@ -123,3 +123,4 @@ handle_info({content, ClassId, Properties, PropertiesBin, Payload},
 
 code_change(_OldVsn, State, _Extra) ->
     State.
+
