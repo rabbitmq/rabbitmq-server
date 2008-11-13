@@ -77,7 +77,9 @@ register(Pid, HighMemMFA) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #alarms{alertees = dict:new()}}.
+    HWM = system_memory_high_watermark(),
+    {ok, #alarms{alertees = dict:new(),
+                 system_memory_high_watermark = HWM}}.
 
 handle_call({register, Pid, HighMemMFA},
             State = #alarms{alertees = Alertess}) ->
@@ -118,7 +120,20 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
-    
+
+system_memory_high_watermark() ->
+    %% When we register our alarm_handler, the
+    %% system_memory_high_watermark alarm may already have gone
+    %% off. How do we find out about that? Calling
+    %% alarm_handler:get_alarms() would deadlock. So instead we ask
+    %% memsup. Unfortunately that doesn't expose a suitable API, so we
+    %% have to reach quite deeply into its internals.
+    {dictionary, D} = process_info(whereis(memsup), dictionary),
+    case lists:keysearch(system_memory_high_watermark, 1, D) of
+        {value, {_, set}} -> true;
+        _Other            -> false
+    end.
+
 alert(Alert, Alertees) ->
     dict:fold(fun (Pid, {M, F, A}, Acc) ->
                       ok = erlang:apply(M, F, A ++ [Pid, Alert]),
