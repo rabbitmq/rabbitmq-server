@@ -34,7 +34,7 @@ INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
 
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -W0 -v +debug_info
+ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info
 
 BROKER_DIR=../rabbitmq-server
 BROKER_SYMLINK=rabbitmq_server
