@@ -39,7 +39,7 @@ publish(Channel, X, RoutingKey, Payload, Mandatory) when is_boolean(Mandatory)->
     publish(Channel, X, RoutingKey, Payload, Mandatory, amqp_util:basic_properties());
     
 publish(Channel, X, RoutingKey, Payload, Properties) ->
-    publish(Channel, X, RoutingKey, Payload, Properties, false).
+    publish(Channel, X, RoutingKey, Payload, false, Properties).
     
 publish(Channel, X, RoutingKey, Payload, Mandatory, Properties) ->
     BasicPublish = #'basic.publish'{exchange = X,

@@ -31,20 +31,26 @@
 
 -behaviour(gen_server).
 
--export([start/2, start/3]).
+-export([start/2, start/3, stop/1]).
 -export([call/2]).
--export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
+-export([init/1, terminate/2, code_change/3, handle_call/3,
+         handle_cast/2, handle_info/2]).
 
 %---------------------------------------------------------------------------
 % API
 %---------------------------------------------------------------------------
 
-start(Channel, Exchange) ->
-    start(Channel, Exchange, <<>>).
+start(Connection, Queue) ->
+    start(Connection, <<>>, Queue).
 
-start(Channel, Exchange, RoutingKey) ->
-    {ok, RpcClientPid} = gen_server:start(?MODULE, [Channel, Exchange, RoutingKey], []),
-    RpcClientPid.
+start(Connection, Exchange, RoutingKey) ->
+    Channel = lib_amqp:start_channel(Connection),
+    {ok, Pid} = gen_server:start(?MODULE,
+                                 [Channel, Exchange, RoutingKey], []),
+    Pid.
+
+stop(Pid) ->
+    gen_server:call(Pid, stop).
 
 call(RpcClientPid, Payload) ->
     gen_server:call(RpcClientPid, Payload).
@@ -55,27 +61,32 @@ call(RpcClientPid, Payload) ->
 
 % Sets up a reply queue for this client to listen on
 setup_reply_queue(State = #rpc_client_state{channel = Channel}) ->
-    Q = lib_amqp:declare_queue(Channel, <<"">>),
+    Q = lib_amqp:declare_queue(Channel, <<>>),
     State#rpc_client_state{reply_queue = Q}.
 
 % Registers this RPC client instance as a consumer to handle rpc responses
-setup_consumer(State = #rpc_client_state{channel = Channel, reply_queue = Q}) ->
+setup_consumer(State = #rpc_client_state{channel = Channel,
+                                         reply_queue = Q}) ->
     ConsumerTag = lib_amqp:subscribe(Channel, Q, self()),
     State#rpc_client_state{consumer_tag = ConsumerTag}.
 
 % Publishes to the broker, stores the From address against
 % the correlation id and increments the correlationid for
 % the next request
-publish(Payload, From, State = #rpc_client_state{channel = Channel,
-                                                 reply_queue = Q,
-                                                 exchange = X,
-                                                 routing_key = RoutingKey,
-                                                 correlation_id = CorrelationId,
-                                                 continuations = Continuations}) ->
-    Props = #'P_basic'{correlation_id = <<CorrelationId:64>>, reply_to = Q},
+publish(Payload, From,
+        State = #rpc_client_state{channel = Channel,
+                                  reply_queue = Q,
+                                  exchange = X,
+                                  routing_key = RoutingKey,
+                                  correlation_id = CorrelationId,
+                                  continuations = Continuations}) ->
+    Props = #'P_basic'{correlation_id = <<CorrelationId:64>>,
+                       content_type = <<"application/octet-stream">>,
+                       reply_to = Q},
     lib_amqp:publish(Channel, X, RoutingKey, Payload, Props),
     State#rpc_client_state{correlation_id = CorrelationId + 1,
-                           continuations = dict:store(CorrelationId, From, Continuations)}.
+                           continuations 
+                           = dict:store(CorrelationId, From, Continuations)}.
 
 %---------------------------------------------------------------------------
 % gen_server callbacks
@@ -90,36 +101,42 @@ init([Channel, Exchange, RoutingKey]) ->
     NewState = setup_consumer(State),
     {ok, NewState}.
 
-terminate(Reason, State) ->
+% Closes the channel this gen_server instance started
+terminate(_Reason, #rpc_client_state{channel = Channel}) ->
+    lib_amqp:close_channel(Channel),
     ok.
 
-handle_call(stop, From, State = #rpc_client_state{channel = Channel,
+% Handle the application initiated stop by unsubscribing from the
+% reply queue - let handle_info/2 process the server's response
+% in order to actually terminate this gen_server instance
+handle_call(stop, _From, State = #rpc_client_state{channel = Channel,
                                                   consumer_tag = Tag}) ->
-    Reply = lib_amqp:unsubscribe(Channel, Tag),
-    {noreply, Reply, State};
+    lib_amqp:unsubscribe(Channel, Tag),
+    {reply, ok, State};
 
 handle_call(Payload, From, State) ->
     NewState = publish(Payload, From, State),
     {noreply, NewState}.
 
-handle_cast(Msg, State) ->
+handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State) ->
     NewState = State#rpc_client_state{consumer_tag = ConsumerTag},
     {noreply, NewState};
 
-handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
+handle_info(#'basic.cancel_ok'{}, State) ->
     {stop, normal, State};
 
-handle_info({content, ClassId, Properties, PropertiesBin, Payload},
-            State = #rpc_client_state{continuations = Continuations}) ->
-    #'P_basic'{correlation_id = CorrelationId,
-               content_type = ContentType} = rabbit_framing:decode_properties(ClassId, PropertiesBin),
-    <<_CorrelationId:64>> = CorrelationId,
-    From = dict:fetch(_CorrelationId, Continuations),
+handle_info({#'basic.deliver'{},
+            {content, ClassId, _Props, PropertiesBin, [Payload] }},
+            State = #rpc_client_state{continuations = Conts}) ->
+    #'P_basic'{correlation_id = CorrelationId}
+               = rabbit_framing:decode_properties(ClassId, PropertiesBin),
+    <<Id:64>> = CorrelationId,
+    From = dict:fetch(Id, Conts),
     gen_server:reply(From, Payload),
-    {noreply, State#rpc_client_state{continuations = dict:erase(_CorrelationId, Continuations) }}.
+    {noreply, State#rpc_client_state{continuations = dict:erase(Id, Conts) }}.
 
 code_change(_OldVsn, State, _Extra) ->
     State.

@@ -23,7 +23,7 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
--module(amqp_rpc_handler).
+-module(amqp_rpc_server).
 
 -behaviour(gen_server).
 
@@ -31,11 +31,28 @@
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
--export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
+-export([init/1, terminate/2, code_change/3, handle_call/3,
+         handle_cast/2, handle_info/2]).
+-export([start/3]).
+-export([stop/1]).
+
+
+%---------------------------------------------------------------------------
+% API
+%---------------------------------------------------------------------------
+
+start(Connection, QueueName, ServerPid) ->
+    {ok, Pid} = gen_server:start(?MODULE,
+                                 [Connection, QueueName, ServerPid], []),
+    Pid.
+
+stop(Pid) ->
+    gen_server:call(Pid, stop).
 
 %---------------------------------------------------------------------------
 % gen_server callbacks
 %---------------------------------------------------------------------------
+
 init([Connection, QueueName, ServerPid]) ->
     Channel = lib_amqp:start_channel(Connection),
     lib_amqp:declare_queue(Channel, QueueName),
@@ -50,17 +67,18 @@ handle_info(shutdown, State = #rpc_server_state{channel = Channel,
     Reply = lib_amqp:unsubscribe(Channel, Tag),
     {noreply, Reply, State};
 
-handle_info(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State) ->
+handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
-handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
+handle_info(#'basic.cancel_ok'{}, State) ->
     {stop, normal, State};
 
-handle_info({content, ClassId, Properties, PropertiesBin, Payload},
+handle_info({#'basic.deliver'{},
+            {content, ClassId, _Props, PropertiesBin, [Payload] }},
             State = #rpc_server_state{server_pid = ServerPid,
-                                       channel = Channel}) ->
-    Props = #'P_basic'{correlation_id = CorrelationId,
-                       reply_to = Q} =
+                                      channel = Channel}) ->
+    #'P_basic'{correlation_id = CorrelationId,
+               reply_to = Q} =
                rabbit_framing:decode_properties(ClassId, PropertiesBin),
     Response = case gen_server:call(ServerPid, Payload) of
                     {'EXIT', Reason} ->
@@ -72,17 +90,17 @@ handle_info({content, ClassId, Properties, PropertiesBin, Payload},
     lib_amqp:publish(Channel, <<>>, Q, Response, Properties),
     {noreply, State}.
 
+handle_call(stop, _From, State) ->
+    {stop, normal, ok, State}.
+
 %---------------------------------------------------------------------------
 % Rest of the gen_server callbacks
 %---------------------------------------------------------------------------
 
-handle_call(Message, From, State) ->
+handle_cast(_Message, State) ->
     {noreply, State}.
 
-handle_cast(Message, State) ->
-    {noreply, State}.
-
-terminate(Reason, State) ->
+terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
