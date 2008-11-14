@@ -29,7 +29,8 @@
 -include("rabbit_framing.hrl").
 
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
-         list_vhost_exchanges/1,
+         list/0, list_vhost_exchanges/1,
+         info/1, info/2, info_all/0, info_all/1,
          simple_publish/6, simple_publish/3,
          route/2]).
 -export([add_binding/4, delete_binding/4]).
@@ -62,7 +63,12 @@
 -spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
+-spec(list/0 :: () -> [exchange()]).
 -spec(list_vhost_exchanges/1 :: (vhost()) -> [exchange()]).
+-spec(info/1 :: (exchange()) -> [info()]).
+-spec(info/2 :: (exchange(), [info_key()]) -> [info()]).
+-spec(info_all/0 :: () -> [[info()]]).
+-spec(info_all/1 :: ([info_key()]) -> [[info()]]).
 -spec(simple_publish/6 ::
       (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
              publish_res()).
@@ -86,6 +92,8 @@
 -endif.
 
 %%----------------------------------------------------------------------------
+
+-define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
 
 recover() ->
     rabbit_misc:execute_mnesia_transaction(
@@ -154,9 +162,33 @@ lookup_or_die(Name) ->
               not_found, "no ~s", [rabbit_misc:rs(Name)])
     end.
 
+list() -> rabbit_misc:dirty_read_all(exchange).
+
+map(F) ->
+    %% TODO: there is scope for optimisation here, e.g. using a
+    %% cursor, parallelising the function invocation
+    lists:map(F, list()).
+
 list_vhost_exchanges(VHostPath) ->
     mnesia:dirty_match_object(
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
+
+infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
+
+i(name,        #exchange{name        = Name})       -> Name;
+i(type,        #exchange{type        = Type})       -> Type;
+i(durable,     #exchange{durable     = Durable})    -> Durable;
+i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
+i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
+i(Item, _) -> throw({bad_argument, Item}).
+
+info(X = #exchange{}) -> infos(?INFO_KEYS, X).
+
+info(X = #exchange{}, Items) -> infos(Items, X).
+
+info_all() -> map(fun (X) -> info(X) end).
+
+info_all(Items) -> map(fun (X) -> info(X, Items) end).
 
 %% Usable by Erlang code that wants to publish messages.
 simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,

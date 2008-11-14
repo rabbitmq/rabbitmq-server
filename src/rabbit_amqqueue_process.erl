@@ -62,7 +62,12 @@
              unsent_message_count}).
 
 -define(INFO_KEYS,
-        [messages_ready,
+        [name,
+         durable,
+         auto_delete,
+         arguments,
+         pid,
+         messages_ready,
          messages_unacknowledged,
          messages_uncommitted,
          messages,
@@ -471,32 +476,37 @@ purge_message_buffer(QName, MessageBuffer) ->
     %% artifically ack them.
     persist_acks(none, QName, lists:append(Messages)).
 
-infos(Items, State) -> [{Item, info(Item, State)} || Item <- Items].
+infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-info(messages_ready, #q{message_buffer = MessageBuffer}) ->
+i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
+i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
+i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
+i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
+i(pid,         #q{q = #amqqueue{pid         = Pid}})        -> Pid;
+i(messages_ready, #q{message_buffer = MessageBuffer}) ->
     queue:len(MessageBuffer);
-info(messages_unacknowledged, _) ->
+i(messages_unacknowledged, _) ->
     lists:sum([dict:size(UAM) ||
                   #cr{unacked_messages = UAM} <- all_ch_record()]);
-info(messages_uncommitted, _) ->
+i(messages_uncommitted, _) ->
     lists:sum([length(Pending) ||
                   #tx{pending_messages = Pending} <- all_tx_record()]);
-info(messages, State) ->
-    lists:sum([info(Item, State) || Item <- [messages_ready,
+i(messages, State) ->
+    lists:sum([i(Item, State) || Item <- [messages_ready,
                                              messages_unacknowledged,
                                              messages_uncommitted]]);
-info(acks_uncommitted, _) ->
+i(acks_uncommitted, _) ->
     lists:sum([length(Pending) ||
                   #tx{pending_acks = Pending} <- all_tx_record()]);
-info(consumers, _) ->
+i(consumers, _) ->
     lists:sum([length(Consumers) ||
                   #cr{consumers = Consumers} <- all_ch_record()]);
-info(transactions, _) ->
+i(transactions, _) ->
     length(all_tx_record());
-info(memory, _) ->
+i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
-info(Item, _) ->
+i(Item, _) ->
     throw({bad_argument, Item}).
 
 %---------------------------------------------------------------------------
@@ -504,13 +514,7 @@ info(Item, _) ->
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
 
-handle_call({info, Item}, _From, State) when is_atom(Item) ->
-    try
-        reply({ok, {Item, info(Item, State)}}, State)
-    catch Error -> reply({error, Error}, State)
-    end;
-
-handle_call({info, Items}, _From, State) when is_list(Items) ->
+handle_call({info, Items}, _From, State) ->
     try
         reply({ok, infos(Items, State)}, State)
     catch Error -> reply({error, Error}, State)

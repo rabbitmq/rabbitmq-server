@@ -89,8 +89,7 @@ Available commands:
   list_user_vhosts <UserName>
   list_vhost_users <VHostPath>
 
-  list_queues [-l <ResultSize>] <InfoItem> [<InfoItem> ...]
-
+  list_queues <InfoItem> [<InfoItem> ...]
 
 <node> should be the name of the master node of the RabbitMQ cluster. It
 defaults to the node named \"rabbit\" on the local host. On a host named
@@ -98,10 +97,9 @@ defaults to the node named \"rabbit\" on the local host. On a host named
 NODENAME has been set to some non-default value at broker startup time). The
 output of hostname -s is usually the correct suffix to use after the \"@\" sign.
 
-<InfoItem> must be a member of the list [messages_ready, 
-messages_unacknowledged, messages_uncommitted, messages, acks_uncommitted, 
-consumers, transactions, memory]. At most <ResultSize> queues will be listed, 
-in descending order of the first <InfoItem>.
+<InfoItem> must be a member of the list [name, durable, auto_delete, arguments,
+pid, messages_ready, messages_unacknowledged, messages_uncommitted, messages,
+acks_uncommitted, consumers, transactions, memory].
 
 "),
     halt(1).
@@ -191,16 +189,21 @@ action(list_vhost_users, Node, Args = [_VHostPath]) ->
 
 action(list_queues, Node, Args) ->
     io:format("Listing queues ...~n"),
-    Res = 
-        case Args of 
-            ["-l",  Length | InfoItems] -> 
-                rpc_call(Node, rabbit_amqqueue, info_queue_sorted,
-                    [list_to_integer(Length), [list_to_atom(X) || X <- InfoItems]]);
-            InfoItems -> 
-                rpc_call(Node, rabbit_amqqueue, info_queue_sorted,
-                    [[list_to_atom(X) || X <- InfoItems]])
+    lists:map(
+        fun (ResultRow) ->
+            lists:map(
+                fun(ResultColumn) -> 
+                    case ResultColumn of
+                        {name, #resource{virtual_host = VHostPath, kind = queue, name = Name}} ->
+                            io:format("~s@~s ", [Name, VHostPath]);
+                        {_, Res} -> 
+                            io:format("~w ", [Res])
+                    end 
+                end, 
+                ResultRow),
+            io:nl()
         end,
-    io:format("~n~p~n", [Res]),
+        rpc_call(Node, rabbit_amqqueue, info_all, [[list_to_atom(X) || X <- Args]])),
     ok.
 
 display_list(L) when is_list(L) ->

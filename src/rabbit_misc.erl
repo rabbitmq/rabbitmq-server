@@ -369,4 +369,3 @@ append_file(File, _, Suffix) ->
         {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
         Error      -> Error
     end.
-

@@ -35,7 +35,6 @@
 -export([notify_sent/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2]).
 -export([on_node_down/1]).
--export([info_queue_sorted/1, info_queue_sorted/2]).
 
 -import(mnesia).
 -import(gen_server).
@@ -56,8 +55,6 @@
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
--type(info_key() :: atom()).
--type(info() :: {info_key(), any()}).
 
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
@@ -69,13 +66,9 @@
 -spec(list/0 :: () -> [amqqueue()]).
 -spec(list_vhost_queues/1 :: (vhost()) -> [amqqueue()]).
 -spec(info/1 :: (amqqueue()) -> [info()]).
--spec(info/2 ::
-      (amqqueue(), info_key()) -> info();
-      (amqqueue(), [info_key()]) -> [info()]).
--spec(info_all/0 :: () -> [{amqqueue(), [info()]}]).
--spec(info_all/1 ::
-      (info_key()) -> [{amqqueue(), info()}];
-      ([info_key()]) -> [{amqqueue(), [info()]}]).
+-spec(info/2 :: (amqqueue(), [info_key()]) -> [info()]).
+-spec(info_all/0 :: () -> [[info()]]).
+-spec(info_all/1 :: ([info_key()]) -> [[info()]]).
 -spec(stat/1 :: (amqqueue()) -> qstats()).
 -spec(stat_all/0 :: () -> [qstats()]).
 -spec(delete/3 ::
@@ -105,8 +98,6 @@
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
--spec(info_queue_sorted/1 :: ([info_key()]) -> [{amqqueue(), [info()]}]).
--spec(info_queue_sorted/2 :: (non_neg_integer(), [info_key()]) -> [{amqqueue(), [info()]}]).
 
 -endif.
 
@@ -212,15 +203,15 @@ list_vhost_queues(VHostPath) ->
 info(#amqqueue{ pid = QPid }) ->
     gen_server:call(QPid, info).
 
-info(#amqqueue{ pid = QPid }, ItemOrItems) ->
-    case gen_server:call(QPid, {info, ItemOrItems}) of
+info(#amqqueue{ pid = QPid }, Items) ->
+    case gen_server:call(QPid, {info, Items}) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
 
-info_all() -> map(fun (Q) -> {Q, info(Q)} end).
+info_all() -> map(fun (Q) -> info(Q) end).
 
-info_all(ItemOrItems) -> map(fun (Q) -> {Q, info(Q, ItemOrItems)} end).
+info_all(Items) -> map(fun (Q) -> info(Q, Items) end).
 
 stat(#amqqueue{pid = QPid}) -> gen_server:call(QPid, stat).
 
@@ -338,18 +329,3 @@ safe_pmap_ok(H, F, L) ->
         []     -> ok;
         Errors -> {error, Errors}
     end.
-
-info_lookup({#amqqueue{}, InfoTupleList}, InfoKey) ->
-    case lists:keysearch(InfoKey, 1, InfoTupleList) of
-        false -> throw({bad_argument, InfoKey});
-        {value, {InfoKey, InfoValue}} -> InfoValue
-    end.
-
-%% TODO: avoid sorting if Length is much less than the number of queues
-info_queue_sorted(InfoItems = [SortItem | _]) ->
-    lists:sort(fun(A, B) -> info_lookup(A, SortItem) > info_lookup(B, SortItem) end,
-        rabbit_amqqueue:info_all(InfoItems)).
-
-info_queue_sorted(Length, InfoItems) ->
-    lists:sublist(info_queue_sorted(InfoItems), Length).
-
