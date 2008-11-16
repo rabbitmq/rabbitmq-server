@@ -89,7 +89,9 @@ Available commands:
   list_user_vhosts <UserName>
   list_vhost_users <VHostPath>
 
-  list_queues <InfoItem> [<InfoItem> ...]
+  list_queues <QueueInfoItem> [<QueueInfoItem> ...]
+  list_exchanges <ExchangeInfoItem> [<ExchangeInfoItem> ...]
+  list_bindings
 
 <node> should be the name of the master node of the RabbitMQ cluster. It
 defaults to the node named \"rabbit\" on the local host. On a host named
@@ -97,9 +99,12 @@ defaults to the node named \"rabbit\" on the local host. On a host named
 NODENAME has been set to some non-default value at broker startup time). The
 output of hostname -s is usually the correct suffix to use after the \"@\" sign.
 
-<InfoItem> must be a member of the list [name, durable, auto_delete, arguments,
-pid, messages_ready, messages_unacknowledged, messages_uncommitted, messages,
-acks_uncommitted, consumers, transactions, memory].
+<QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
+arguments, pid, messages_ready, messages_unacknowledged, messages_uncommitted, 
+messages, acks_uncommitted, consumers, transactions, memory].
+
+<ExchangeInfoItem> must be a member of the list [name, type, durable, 
+auto_delete, arguments].
 
 "),
     halt(1).
@@ -189,12 +194,24 @@ action(list_vhost_users, Node, Args = [_VHostPath]) ->
 
 action(list_queues, Node, Args) ->
     io:format("Listing queues ...~n"),
+    display_info_list(rpc_call(Node, rabbit_amqqueue, info_all, [[list_to_atom(X) || X <- Args]]));
+
+action(list_exchanges, Node, Args) ->
+    io:format("Listing exchanges ...~n"),
+    display_info_list(rpc_call(Node, rabbit_exchange, info_all, [[list_to_atom(X) || X <- Args]]));
+
+action(list_bindings, _, []) ->
+    io:format("Listing bindings ...~n"),
+    io:format("Not implemented~n"),
+    ok.
+
+display_info_list(L) ->
     lists:map(
         fun (ResultRow) ->
             lists:map(
                 fun(ResultColumn) -> 
                     case ResultColumn of
-                        {name, #resource{virtual_host = VHostPath, kind = queue, name = Name}} ->
+                        {name, #resource{virtual_host = VHostPath, name = Name}} ->
                             io:format("~s@~s ", [Name, VHostPath]);
                         {_, Res} -> 
                             io:format("~w ", [Res])
@@ -203,7 +220,7 @@ action(list_queues, Node, Args) ->
                 ResultRow),
             io:nl()
         end,
-        rpc_call(Node, rabbit_amqqueue, info_all, [[list_to_atom(X) || X <- Args]])),
+        L),
     ok.
 
 display_list(L) when is_list(L) ->
