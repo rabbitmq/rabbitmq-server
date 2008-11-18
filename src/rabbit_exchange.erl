@@ -33,7 +33,7 @@
          info/1, info/2, info_all/0, info_all/1,
          simple_publish/6, simple_publish/3,
          route/2]).
--export([add_binding/4, delete_binding/4]).
+-export([add_binding/4, delete_binding/4, list_bindings/0]).
 -export([delete/2]).
 -export([delete_bindings_for_queue/1]).
 -export([check_type/1, assert_type/2, topic_matches/2]).
@@ -80,6 +80,8 @@
 -spec(delete_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'binding_not_found'}).
+-spec(list_bindings/0 :: () -> 
+             [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
 -spec(delete_bindings_for_queue/1 :: (queue_name()) -> 'ok').
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
@@ -359,6 +361,15 @@ sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
     [ok, ok] = [Fun(element(1, R), R, write) ||
                    R <- tuple_to_list(route_with_reverse(Binding))],
     ok.
+
+list_bindings() ->
+    [{ExchangeName, QueueName, RoutingKey, Arguments} ||
+        #route{binding = #binding{
+                 exchange_name = ExchangeName,
+                 key           = RoutingKey, 
+                 queue_name    = QueueName,
+                 args          = Arguments}}
+            <- rabbit_misc:dirty_read_all(route)].
 
 route_with_reverse(#route{binding = Binding}) ->
     route_with_reverse(Binding);
