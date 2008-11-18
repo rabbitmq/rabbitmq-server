@@ -223,7 +223,46 @@ basic_recover_test(Connection) ->
     lib_amqp:teardown(Connection, Channel).
 
 % QOS is not yet implemented in RabbitMQ
-basic_qos_test(Connection) -> ok.
+basic_qos_test(Connection) -> 
+    % TODO - this is code duplication
+    % Also, lib_amqp has an declare_queue function that returns
+    % an auto-created name, but that is in a branch that is awaiting
+    % QA
+    Messages = 50,
+    Workers = 5,
+    Q = uuid(),
+    Parent = self(),
+    lib_amqp:declare_queue(lib_amqp:start_channel(Connection), Q),
+    %Channel = lib_amqp:start_channel(Connection),
+    Consumers = [spawn(fun() -> Channel = lib_amqp:start_channel(Connection),
+                                lib_amqp:subscribe(Channel, Q, self(), false),
+                                sleeping_consumer(Channel, Sleep, Parent) end)
+                                || Sleep <- lists:seq(1, Workers)],
+    latch_loop(Workers),
+    producer_loop(lib_amqp:start_channel(Connection), Q, Messages),
+    latch_loop(Messages),
+    ok.
+
+sleeping_consumer(Channel, Sleep, Parent) ->
+    receive
+        #'basic.consume_ok'{} -> 
+            Parent ! finished,
+            sleeping_consumer(Channel, Sleep, Parent);
+        #'basic.cancel_ok'{}  -> ok;
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, _Content} ->
+            io:format("Sleeper ~p got a msg~n",[Sleep]),
+            timer:sleep(Sleep * 1000),
+            lib_amqp:ack(Channel, DeliveryTag),
+            Parent ! finished,
+            sleeping_consumer(Channel, Sleep, Parent)
+    end.
+
+producer_loop(Channel, RoutingKey, 0) ->
+    ok;
+
+producer_loop(Channel, RoutingKey, N) ->
+    lib_amqp:publish(Channel, <<>>, RoutingKey, <<"foobar">>),
+    producer_loop(Channel, RoutingKey, N - 1).
 
 % Reject is not yet implemented in RabbitMQ
 basic_reject_test(Connection) -> ok.
