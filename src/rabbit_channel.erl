@@ -36,7 +36,7 @@
 -record(ch, {state, proxy_pid, reader_pid, writer_pid,
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
-             username, virtual_host,
+             username, virtual_host, limiter,
              most_recently_declared_queue, consumer_mapping}).
 
 %%----------------------------------------------------------------------------
@@ -102,6 +102,8 @@ init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
         username                = Username,
         virtual_host            = VHost,
         most_recently_declared_queue = <<>>,
+        % TODO See point 3.1.1 of the design - start the limiter lazily
+        limiter                 = rabbit_limiter:start_link(),
         consumer_mapping        = dict:new()}.
 
 handle_message({method, Method, Content}, State) ->
@@ -323,6 +325,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                                nowait = NoWait},
               _, State = #ch{ proxy_pid = ProxyPid,
                               reader_pid = ReaderPid,
+                              limiter = LimiterPid,
                               consumer_mapping = ConsumerMapping }) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
@@ -340,7 +343,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                    QueueName,
                    fun (Q) ->
                            rabbit_amqqueue:basic_consume(
-                             Q, NoAck, ReaderPid, ProxyPid,
+                             Q, NoAck, ReaderPid, ProxyPid, LimiterPid,
                              ActualConsumerTag, ExclusiveConsume,
                              ok_msg(NoWait, #'basic.consume_ok'{
                                       consumer_tag = ActualConsumerTag}))
@@ -405,8 +408,9 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
             end
     end;
 
-handle_method(#'basic.qos'{}, _, State) ->
-    %% FIXME: Need to implement QOS
+handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
+              _, State = #ch{limiter = Limiter}) ->
+    Limiter ! {prefetch_count, PrefetchCount},
     {reply, #'basic.qos_ok'{}, State};
 
 handle_method(#'basic.recover'{requeue = true},

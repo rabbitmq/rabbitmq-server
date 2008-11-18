@@ -43,6 +43,7 @@
 % Queue's state
 -record(q, {q,
             owner,
+            limiter_mapping,
             exclusive_consumer,
             has_had_consumers,
             next_msg_id,
@@ -75,6 +76,7 @@ init(Q) ->
             exclusive_consumer = none,
             has_had_consumers = false,
             next_msg_id = 1,
+            limiter_mapping = dict:new(),
             message_buffer = queue:new(),
             round_robin = queue:new()}, ?HIBERNATE_AFTER}.
 
@@ -141,33 +143,60 @@ update_store_and_maybe_block_ch(
 deliver_immediately(Message, Delivered,
                     State = #q{q = #amqqueue{name = QName},
                                round_robin = RoundRobin,
+                               limiter_mapping = LimiterMapping,
                                next_msg_id = NextId}) ->
     ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Message]),
     case queue:out(RoundRobin) of
-        {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
-                                            ack_required = AckRequired}}},
+        {{value, QEntry = {ChPid,
+                           #consumer{tag = ConsumerTag,
+                                     ack_required = AckRequired = true}}},
          RoundRobinTail} ->
-            rabbit_channel:deliver(
-              ChPid, ConsumerTag, AckRequired,
-              {QName, self(), NextId, Delivered, Message}),
-            C = #cr{unsent_message_count = Count,
-                    unacked_messages = UAM} = ch_record(ChPid),
-            NewUAM = case AckRequired of
-                         true  -> dict:store(NextId, Message, UAM);
-                         false -> UAM
-                     end,
-            NewConsumers =
-                case update_store_and_maybe_block_ch(
-                       C#cr{unsent_message_count = Count + 1,
-                            unacked_messages = NewUAM}) of
-                    ok       -> queue:in(QEntry, RoundRobinTail);
-                    block_ch -> block_consumers(ChPid, RoundRobinTail)
-                end,
-            {offered, AckRequired, State#q{round_robin = NewConsumers,
-                                           next_msg_id = NextId +1}};
+            % Use Qos Limits if an ack is required
+            % Query the limiter to find out if a limit has been breached
+            LimiterPid = dict:fetch(ChPid, LimiterMapping),
+            case rabbit_limiter:can_send(LimiterPid, self()) of
+                true ->
+                    really_deliver(AckRequired, ChPid, ConsumerTag,
+                                   Delivered, Message, NextId, QName,
+                                   QEntry, RoundRobinTail, State);
+                false ->
+                    % Have another go by cycling through the consumer
+                    % queue
+                    NewConsumers = block_consumers(ChPid, RoundRobinTail),
+                    deliver_immediately(Message, Delivered,
+                                        State#q{round_robin = NewConsumers})
+            end;
+        {{value, QEntry = {ChPid,
+                           #consumer{tag = ConsumerTag,
+                                     ack_required = AckRequired = false}}},
+         RoundRobinTail} ->
+            really_deliver(AckRequired, ChPid, ConsumerTag,
+                           Delivered, Message, NextId, QName,
+                           QEntry, RoundRobinTail, State);
         {empty, _} ->
             not_offered
     end.
+
+% TODO The arity of this function seems a bit large :-(
+really_deliver(AckRequired, ChPid, ConsumerTag, Delivered, Message, NextId,
+               QName, QEntry, RoundRobinTail, State) ->
+    rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
+              {QName, self(), NextId, Delivered, Message}),
+    C = #cr{unsent_message_count = Count,
+            unacked_messages = UAM} = ch_record(ChPid),
+    NewUAM = case AckRequired of
+                true  -> dict:store(NextId, Message, UAM);
+                false -> UAM
+             end,
+    NewConsumers =
+        case update_store_and_maybe_block_ch(
+                       C#cr{unsent_message_count = Count + 1,
+                            unacked_messages = NewUAM}) of
+            ok       -> queue:in(QEntry, RoundRobinTail);
+            block_ch -> block_consumers(ChPid, RoundRobinTail)
+        end,
+    {offered, AckRequired, State#q{round_robin = NewConsumers,
+                                   next_msg_id = NextId +1}}.
 
 attempt_delivery(none, Message, State) ->
     case deliver_immediately(Message, false, State) of
@@ -519,11 +548,14 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             reply(empty, State)
     end;
 
-handle_call({basic_consume, NoAck, ReaderPid, ChPid, ConsumerTag,
-             ExclusiveConsume, OkMsg},
-            _From, State = #q{owner = Owner,
-                              exclusive_consumer = ExistingHolder,
-                              round_robin = RoundRobin}) ->
+handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
+             ConsumerTag, ExclusiveConsume, OkMsg},
+            _From, _State = #q{owner = Owner,
+                               limiter_mapping = Mapping,
+                               exclusive_consumer = ExistingHolder,
+                               round_robin = RoundRobin}) ->
+    % TODO Remove the underscore in front of the first State variable
+    State = _State#q{limiter_mapping = dict:store(ChPid, LimiterPid, Mapping)},
     case check_queue_owner(Owner, ReaderPid) of
         mismatch ->
             reply({error, queue_owned_by_another_connection}, State);

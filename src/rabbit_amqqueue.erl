@@ -30,7 +30,7 @@
 -export([lookup/1, with/2, with_or_die/2, list_vhost_queues/1,
          stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4]).
 -export([claim_queue/2]).
--export([basic_get/3, basic_consume/7, basic_cancel/4]).
+-export([basic_get/3, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2]).
 -export([on_node_down/1]).
@@ -82,8 +82,8 @@
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), bool()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
--spec(basic_consume/7 ::
-      (amqqueue(), bool(), pid(), pid(), ctag(), bool(), any()) ->
+-spec(basic_consume/8 ::
+        (amqqueue(), bool(), pid(), pid(), pid(), ctag(), bool(), any()) ->
              'ok' | {'error', 'queue_owned_by_another_connection' |
                      'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
@@ -238,10 +238,10 @@ claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
     gen_server:call(QPid, {basic_get, ChPid, NoAck}).
 
-basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid,
+basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid, LimiterPid,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
-    gen_server:call(QPid, {basic_consume, NoAck, ReaderPid, ChPid,
-                           ConsumerTag, ExclusiveConsume, OkMsg}).
+    gen_server:call(QPid, {basic_consume, NoAck, ReaderPid, ChPid, 
+                           LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     ok = gen_server:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
