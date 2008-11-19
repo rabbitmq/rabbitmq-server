@@ -187,14 +187,7 @@ with_or_die(Name, F) ->
 
 list() -> rabbit_misc:dirty_read_all(amqqueue).
 
-map(F) ->
-    %% TODO: there is scope for optimisation here, e.g. using a
-    %% cursor, parallelising the function invocation
-    Ref = make_ref(),
-    lists:filter(fun (R) -> R =/= Ref end,
-                 [rabbit_misc:with_exit_handler(
-                    fun () -> Ref end,
-                    fun () -> F(Q) end) || Q <- list()]).
+map(F) -> rabbit_misc:filter_exit_map(F, list()).
 
 list_vhost_queues(VHostPath) ->
     mnesia:dirty_match_object(

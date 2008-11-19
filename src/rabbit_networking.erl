@@ -168,9 +168,4 @@ tcp_host(IPAddress) ->
         {error, _Reason} -> inet_parse:ntoa(IPAddress)
     end.
 
-cmap(F) ->
-    Ref = make_ref(),
-    lists:filter(fun (R) -> R =/= Ref end,
-                 [rabbit_misc:with_exit_handler(
-                    fun () -> Ref end,
-                    fun () -> F(Q) end) || Q <- connections()]).
+cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
