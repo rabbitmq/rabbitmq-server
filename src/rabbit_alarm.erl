@@ -34,16 +34,17 @@
 
 -define(MEMSUP_CHECK_INTERVAL, 1000).
 
--record(alarms, {system_memory_high_watermark = false}).
+-record(alarms, {alertees, system_memory_high_watermark = false}).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
+-type(mfa_tuple() :: {atom(), atom(), list()}).
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(maybe_conserve_memory/1 :: (pid()) -> 'ok').
-
+             
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -71,15 +72,23 @@ stop() ->
 
 maybe_conserve_memory(QPid) ->
     gen_event:call(alarm_handler, ?MODULE, {maybe_conserve_memory, QPid}).
+                        {register, Pid, HighMemMFA}).
 
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #alarms{}}.
+    {ok, #alarms{alertees = dict:new()}}.
 
 handle_call({maybe_conserve_memory, QPid},
             State = #alarms{system_memory_high_watermark = Conserve}) ->
     {ok, rabbit_amqqueue:conserve_memory(QPid, Conserve), State};
+    case State#alarms.system_memory_high_watermark of
+        true  -> {M, F, A} = HighMemMFA,
+                 ok = erlang:apply(M, F, A ++ [Pid, true]);
+        false -> ok
+    end,
+    NewAlertees = dict:store(Pid, HighMemMFA, Alertess),
+    {ok, ok, State#alarms{alertees = NewAlertees}};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
@@ -95,6 +104,10 @@ handle_event({clear_alarm, system_memory_high_watermark}, State) ->
 handle_event(_Event, State) ->
     {ok, State}.
 
+handle_info({'DOWN', _MRef, process, Pid, _Reason},
+            State = #alarms{alertees = Alertess}) ->
+    {ok, State#alarms{alertees = dict:erase(Pid, Alertess)}};
+
 handle_info(_Info, State) ->
     {ok, State}.
 
@@ -103,3 +116,11 @@ terminate(_Arg, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%----------------------------------------------------------------------------
+    
+alert(Alert, Alertees) ->
+    dict:fold(fun (Pid, {M, F, A}, Acc) ->
+                      ok = erlang:apply(M, F, A ++ [Pid, Alert]),
+                      Acc
+              end, ok, Alertees).

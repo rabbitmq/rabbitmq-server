@@ -28,7 +28,7 @@
 -include("rabbit.hrl").
 
 -export([start_link/4, do/2, do/3, shutdown/1]).
--export([send_command/2, deliver/4]).
+-export([send_command/2, deliver/4, conserve_memory/2]).
 
 %% callbacks
 -export([init/2, handle_message/2]).
@@ -49,6 +49,7 @@
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
 -spec(deliver/4 :: (pid(), ctag(), bool(), msg()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
 
 -endif.
 
@@ -77,11 +78,18 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     Pid ! {deliver, ConsumerTag, AckRequired, Msg},
     ok.
 
+conserve_memory(Pid, Conserve) ->
+    Pid ! {conserve_memory, Conserve},
+    ok.
+
 %%---------------------------------------------------------------------------
 
 init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
+    %% this is bypassing the proxy so alarms can "jump the queue" and
+    %% be handled promptly
+    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
     #ch{state                   = starting,
         proxy_pid               = ProxyPid,
         reader_pid              = ReaderPid,
@@ -128,6 +136,11 @@ handle_message({deliver, ConsumerTag, AckRequired, Msg},
     ok = internal_deliver(WriterPid, ProxyPid,
                           true, ConsumerTag, DeliveryTag, Msg),
     State1#ch{next_tag = DeliveryTag + 1};
+
+handle_message({conserve_memory, Conserve}, State) ->
+    ok = rabbit_writer:send_command(
+           State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
+    State;
 
 handle_message({'EXIT', _Pid, Reason}, State) ->
     terminate(Reason, State);
@@ -572,29 +585,18 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             exchange = ExchangeNameBin,
                             routing_key = RoutingKey,
                             nowait = NoWait,
-                            arguments = Arguments},
-              _, State = #ch{ virtual_host = VHostPath }) ->
-    %% FIXME: connection exception (!) on failure?? (see rule named "failure" in spec-XML)
-    %% FIXME: don't allow binding to internal exchanges - including the one named "" !
-    QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    ActualRoutingKey = expand_routing_key_shortcut(QueueNameBin, RoutingKey,
-                                                   State),
-    ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    case rabbit_amqqueue:add_binding(QueueName, ExchangeName,
-                                     ActualRoutingKey, Arguments) of
-        {error, queue_not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(QueueName)]);
-        {error, exchange_not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(ExchangeName)]);
-        {error, durability_settings_incompatible} ->
-            rabbit_misc:protocol_error(
-              not_allowed, "durability settings of ~s incompatible with ~s",
-              [rabbit_misc:rs(QueueName), rabbit_misc:rs(ExchangeName)]);
-        {ok, _BindingCount} ->
-            return_ok(State, NoWait, #'queue.bind_ok'{})
-    end;
+                            arguments = Arguments}, _, State) ->
+    binding_action(fun rabbit_exchange:add_binding/4, ExchangeNameBin,
+                   QueueNameBin, RoutingKey, Arguments, #'queue.bind_ok'{},
+                   NoWait, State);
+
+handle_method(#'queue.unbind'{queue = QueueNameBin,
+                              exchange = ExchangeNameBin,
+                              routing_key = RoutingKey,
+                              arguments = Arguments}, _, State) ->
+    binding_action(fun rabbit_exchange:delete_binding/4, ExchangeNameBin,
+                   QueueNameBin, RoutingKey, Arguments, #'queue.unbind_ok'{},
+                   false, State);
 
 handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},
@@ -630,11 +632,46 @@ handle_method(#'channel.flow'{active = _}, _, State) ->
     %% FIXME: implement
     {reply, #'channel.flow_ok'{active = true}, State};
 
+handle_method(#'channel.flow_ok'{active = _}, _, State) ->
+    %% TODO: We may want to correlate this to channel.flow messages we
+    %% have sent, and complain if we get an unsolicited
+    %% channel.flow_ok, or the client refuses our flow request.
+    {noreply, State};
+
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
       command_invalid, "unimplemented method", []).
 
 %%----------------------------------------------------------------------------
+
+binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
+               ReturnMethod, NoWait, State = #ch{virtual_host = VHostPath}) ->
+    %% FIXME: connection exception (!) on failure?? 
+    %% (see rule named "failure" in spec-XML)
+    %% FIXME: don't allow binding to internal exchanges - 
+    %% including the one named "" !
+    QueueName = expand_queue_name_shortcut(QueueNameBin, State),
+    ActualRoutingKey = expand_routing_key_shortcut(QueueNameBin, RoutingKey,
+                                                   State),
+    ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments) of
+        {error, queue_not_found} ->
+            rabbit_misc:protocol_error(
+              not_found, "no ~s", [rabbit_misc:rs(QueueName)]);
+        {error, exchange_not_found} ->
+            rabbit_misc:protocol_error(
+              not_found, "no ~s", [rabbit_misc:rs(ExchangeName)]);
+        {error, binding_not_found} ->
+            rabbit_misc:protocol_error(
+              not_found, "no binding ~s between ~s and ~s",
+              [RoutingKey, rabbit_misc:rs(ExchangeName),
+               rabbit_misc:rs(QueueName)]);
+        {error, durability_settings_incompatible} ->
+            rabbit_misc:protocol_error(
+              not_allowed, "durability settings of ~s incompatible with ~s",
+              [rabbit_misc:rs(QueueName), rabbit_misc:rs(ExchangeName)]);
+        ok -> return_ok(State, NoWait, ReturnMethod)
+    end.
 
 publish(Mandatory, Immediate, Message, QPids,
         State = #ch{transaction_id = TxnKey, writer_pid = WriterPid}) ->
@@ -707,21 +744,6 @@ ack(ProxyPid, TxnKey, UAQ) ->
 
 make_tx_id() -> rabbit_misc:guid().
 
-safe_pmap_set_ok(F, S) ->
-    case lists:filter(fun (R) -> R =/= ok end,
-                      rabbit_misc:upmap(
-                        fun (V) ->
-                                try F(V)
-                                catch Class:Reason -> {Class, Reason}
-                                end
-                        end, sets:to_list(S))) of
-        []     -> ok;
-        Errors -> {error, Errors}
-    end.
-
-notify_participants(F, TxnKey, Participants) ->
-    safe_pmap_set_ok(fun (QPid) -> F(QPid, TxnKey) end, Participants).
-
 new_tx(State) ->
     State#ch{transaction_id    = make_tx_id(),
              tx_participants   = sets:new(),
@@ -729,10 +751,11 @@ new_tx(State) ->
 
 internal_commit(State = #ch{transaction_id = TxnKey,
                             tx_participants = Participants}) ->
-    case notify_participants(fun rabbit_amqqueue:commit/2,
-                             TxnKey, Participants) of
+    case rabbit_amqqueue:commit_all(sets:to_list(Participants),
+                                    TxnKey) of
         ok              -> new_tx(State);
-        {error, Errors} -> exit({commit_failed, Errors})
+        {error, Errors} -> rabbit_misc:protocol_error(
+                             internal_error, "commit failed: ~w", [Errors])
     end.
 
 internal_rollback(State = #ch{transaction_id = TxnKey,
@@ -743,11 +766,12 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
               [self(),
                queue:len(UAQ),
                queue:len(UAMQ)]),
-    case notify_participants(fun rabbit_amqqueue:rollback/2,
-                             TxnKey, Participants) of
+    case rabbit_amqqueue:rollback_all(sets:to_list(Participants),
+                                      TxnKey) of
         ok              -> NewUAMQ = queue:join(UAQ, UAMQ),
                            new_tx(State#ch{unacked_message_q = NewUAMQ});
-        {error, Errors} -> exit({rollback_failed, Errors})
+        {error, Errors} -> rabbit_misc:protocol_error(
+                             internal_error, "rollback failed: ~w", [Errors])
     end.
 
 fold_per_queue(F, Acc0, UAQ) ->
@@ -767,23 +791,18 @@ fold_per_queue(F, Acc0, UAQ) ->
               Acc0, D).
 
 notify_queues(#ch{proxy_pid = ProxyPid, consumer_mapping = Consumers}) ->
-    safe_pmap_set_ok(
-      fun (QueueName) ->
-              case rabbit_amqqueue:with(
-                     QueueName,
-                     fun (Q) ->
-                             rabbit_amqqueue:notify_down(Q, ProxyPid)
-                     end) of
-                  ok ->
-                      ok;
-                  {error, not_found} ->
-                      %% queue has been deleted in the meantime
-                      ok
-              end
-      end,
-      dict:fold(fun (_ConsumerTag, QueueName, S) ->
-                        sets:add_element(QueueName, S)
-                end, sets:new(), Consumers)).
+    rabbit_amqqueue:notify_down_all(
+      [QPid || QueueName <- 
+                   sets:to_list(
+                     dict:fold(fun (_ConsumerTag, QueueName, S) ->
+                                       sets:add_element(QueueName, S)
+                               end, sets:new(), Consumers)),
+               case rabbit_amqqueue:lookup(QueueName) of
+                   {ok, Q} -> QPid = Q#amqqueue.pid, true;
+                   %% queue has been deleted in the meantime
+                   {error, not_found} -> QPid = none, false
+               end],
+      ProxyPid).
 
 is_message_persistent(#content{properties = #'P_basic'{
                                  delivery_mode = Mode}}) ->

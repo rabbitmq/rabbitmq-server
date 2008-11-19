@@ -43,11 +43,14 @@
 
 -record(exchange, {name, type, durable, auto_delete, arguments}).
 
--record(amqqueue, {name, durable, auto_delete, arguments, binding_specs, pid}).
--record(binding_spec, {exchange_name, routing_key, arguments}).
+-record(amqqueue, {name, durable, auto_delete, arguments, pid}).
 
--record(binding, {key, handlers}).
--record(handler, {binding_spec, queue, qpid}).
+%% mnesia doesn't like unary records, so we add a dummy 'value' field
+-record(route, {binding, value = const}).
+-record(reverse_route, {reverse_binding, value = const}).
+
+-record(binding, {exchange_name, key, queue_name, args = []}).
+-record(reverse_binding, {queue_name, key, exchange_name, args = []}).
 
 -record(listener, {node, protocol, host, port}).
 
@@ -77,16 +80,11 @@
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
--type(binding_spec() ::
-      #binding_spec{exchange_name :: exchange_name(),
-                    routing_key   :: routing_key(),
-                    arguments     :: amqp_table()}).
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
                 durable       :: bool(),
                 auto_delete   :: bool(),
                 arguments     :: amqp_table(),
-                binding_specs :: [binding_spec()],
                 pid           :: maybe(pid())}).
 -type(exchange() ::
       #exchange{name        :: exchange_name(),
@@ -94,6 +92,10 @@
                 durable     :: bool(),
                 auto_delete :: bool(),
                 arguments   :: amqp_table()}).
+-type(binding() ::
+      #binding{exchange_name    :: exchange_name(),
+               queue_name       :: queue_name(),
+               key              :: binding_key()}).
 %% TODO: make this more precise by tying specific class_ids to
 %% specific properties
 -type(undecoded_content() ::
