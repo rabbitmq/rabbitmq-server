@@ -171,7 +171,8 @@ reader_loop(Sock, Type, Channel, Length) ->
             {ok, Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
             reader_loop(Sock, _Type, _Channel, PayloadSize);
         {inet_async, Sock, Ref, {error, Reason}} ->
-            io:format("Have a look into this one: ~p~n",[Reason]);
+            io:format("Socket error: ~p~n", [Reason]),
+            exit({socket_error, Reason});
         {heartbeat, Heartbeat} ->
             rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
             reader_loop(Sock, Type, Channel, Length);
@@ -187,7 +188,8 @@ reader_loop(Sock, Type, Channel, Length) ->
             erase(H),
             reader_loop(Sock, Type, Channel, Length);
         Other ->
-            io:format("Other ~p~n",[Other])
+            io:format("Unknown message type: ~p~n", [Other]),
+            exit({unknown_message_type, Other})
     end.
 
 start_framing_channel(ChannelPid, ChannelNumber) ->
