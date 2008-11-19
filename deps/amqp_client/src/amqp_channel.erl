@@ -320,7 +320,7 @@ handle_info(shutdown, State) ->
     {stop, normal, NewState};
 
 %% Handle a trapped exit, e.g. from the direct peer
-%% In the direct case this is the lcoal channel
+%% In the direct case this is the local channel
 %% In the network case this is the process that writes to the socket
 %% on a per channel basis
 handle_info({'EXIT', Pid, Reason},
