@@ -43,7 +43,6 @@
 % Queue's state
 -record(q, {q,
             owner,
-            limiter_mapping,
             exclusive_consumer,
             has_had_consumers,
             next_msg_id,
@@ -57,6 +56,7 @@
 %% These are held in our process dictionary
 -record(cr, {consumers,
              ch_pid,
+             limiter_pid,
              monitor_ref,
              unacked_messages,
              is_overload_protection_active,
@@ -76,7 +76,6 @@ init(Q) ->
             exclusive_consumer = none,
             has_had_consumers = false,
             next_msg_id = 1,
-            limiter_mapping = dict:new(),
             message_buffer = queue:new(),
             round_robin = queue:new()}, ?HIBERNATE_AFTER}.
 
@@ -143,7 +142,6 @@ update_store_and_maybe_block_ch(
 deliver_immediately(Message, Delivered,
                     State = #q{q = #amqqueue{name = QName},
                                round_robin = RoundRobin,
-                               limiter_mapping = LimiterMapping,
                                next_msg_id = NextId}) ->
     ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Message]),
     case queue:out(RoundRobin) of
@@ -153,7 +151,7 @@ deliver_immediately(Message, Delivered,
          RoundRobinTail} ->
             % Use Qos Limits if an ack is required
             % Query the limiter to find out if a limit has been breached
-            LimiterPid = dict:fetch(ChPid, LimiterMapping),
+            #cr{limiter_pid = LimiterPid} = ch_record(ChPid),
             case rabbit_limiter:can_send(LimiterPid, self()) of
                 true ->
                     really_deliver(AckRequired, ChPid, ConsumerTag,
@@ -550,12 +548,9 @@ handle_call({basic_get, ChPid, NoAck}, _From,
 
 handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
              ConsumerTag, ExclusiveConsume, OkMsg},
-            _From, _State = #q{owner = Owner,
-                               limiter_mapping = Mapping,
-                               exclusive_consumer = ExistingHolder,
-                               round_robin = RoundRobin}) ->
-    % TODO Remove the underscore in front of the first State variable
-    State = _State#q{limiter_mapping = dict:store(ChPid, LimiterPid, Mapping)},
+            _From, State = #q{owner = Owner,
+                              exclusive_consumer = ExistingHolder,
+                              round_robin = RoundRobin}) ->
     case check_queue_owner(Owner, ReaderPid) of
         mismatch ->
             reply({error, queue_owned_by_another_connection}, State);
@@ -566,7 +561,8 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                 ok ->
                     C = #cr{consumers = Consumers} = ch_record(ChPid),
                     Consumer = #consumer{tag = ConsumerTag, ack_required = not(NoAck)},
-                    C1 = C#cr{consumers = [Consumer | Consumers]},
+                    C1 = C#cr{consumers = [Consumer | Consumers],
+                              limiter_pid = LimiterPid},
                     store_ch_record(C1),
                     State1 = State#q{has_had_consumers = true,
                                      exclusive_consumer =
