@@ -268,9 +268,17 @@ exchanges_for_queue(QueueName) ->
 
 has_bindings(ExchangeName) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
-                                          queue_name = '$1',
                                           _ = '_'}},
-    continue(mnesia:select(route, [{MatchHead, [], ['$1']}], 1, read)).
+    try
+        continue(mnesia:select(route, [{MatchHead, [], ['$_']}], 1, read))
+    catch exit:{aborted, {badarg, _}} ->
+            %% work around OTP-7025, which was fixed in R12B-1, by
+            %% falling back on a less efficient method
+            case mnesia:match_object(MatchHead) of
+                []    -> false;
+                [_|_] -> true
+            end
+    end.
 
 continue('$end_of_table')    -> false;
 continue({[_|_], _})         -> true;
