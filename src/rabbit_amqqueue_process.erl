@@ -307,7 +307,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
                     {stop, normal, NewState}
             end
     end.
-                
+
 cancel_holder(ChPid, ConsumerTag, {ChPid, ConsumerTag}) ->
     none;
 cancel_holder(_ChPid, _ConsumerTag, Holder) ->
@@ -658,7 +658,8 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             noreply(State);
-        C = #cr{unacked_messages = UAM} ->
+        C = #cr{unacked_messages = UAM, limiter_pid = LimiterPid} ->
+            rabbit_limiter:decrement_capacity(LimiterPid, qname(State)),
             {Acked, Remaining} = collect_messages(MsgIds, UAM),
             persist_acks(Txn, qname(State), Acked),
             case Txn of
