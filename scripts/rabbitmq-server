@@ -53,7 +53,7 @@ else
     CLUSTER_CONFIG=""
 fi
 
-erl \
+exec erl \
     -pa "`dirname $0`/../ebin" \
     ${START_RABBIT} \
     -sname ${NODENAME} \
