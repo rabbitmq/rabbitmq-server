@@ -319,6 +319,16 @@ handle_info(shutdown, State) ->
     NewState = channel_cleanup(State),
     {stop, normal, NewState};
 
+%% Handle a trapped exit, e.g. from the direct peer
+%% In the direct case this is the local channel
+%% In the network case this is the process that writes to the socket
+%% on a per channel basis
+handle_info({'EXIT', Pid, Reason},
+            State = #channel_state{number = Number}) ->
+    io:format("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
+    NewState = channel_cleanup(State),
+    {stop, normal, NewState};
+
 %---------------------------------------------------------------------------
 % This is for a race condition between a close.close_ok and a subsequent channel.open
 %---------------------------------------------------------------------------
@@ -348,3 +358,4 @@ terminate(Reason, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     State.
+
