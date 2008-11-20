@@ -26,7 +26,8 @@
 -module(rabbit_networking).
 
 -export([start/0, start_tcp_listener/2, stop_tcp_listener/2,
-         on_node_down/1, active_listeners/0, node_listeners/1]).
+         on_node_down/1, active_listeners/0, node_listeners/1,
+         connections/0]).
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/3]).
 
@@ -46,6 +47,7 @@
 -spec(stop_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [listener()]).
 -spec(node_listeners/1 :: (node()) -> [listener()]).
+-spec(connections/0 :: () -> [pid()]).
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(check_tcp_listener_address/3 :: (atom(), host(), ip_port()) ->
              {ip_address(), atom()}).
@@ -135,6 +137,10 @@ start_client(Sock) ->
     ok = gen_tcp:controlling_process(Sock, Child),
     Child ! {go, Sock},
     Child.
+
+connections() ->
+    [Pid || {_, Pid, _, _} <- supervisor:which_children(
+                                rabbit_tcp_client_sup)].
 
 %%--------------------------------------------------------------------
 
