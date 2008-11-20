@@ -51,9 +51,9 @@ handle_call({can_send, QPid}, _From, State) ->
 % a queue. This allows the limiter to update the the in-use-by-that queue
 % capacity infromation.
 handle_cast({decrement_capacity, QPid}, State) ->
-    NewState = decrement_in_use(QPid, State),
-    maybe_notify_queues(NewState),
-    {noreply, NewState}.
+    State1 = decrement_in_use(QPid, State),
+    State2 = maybe_notify_queues(State1),
+    {noreply, State2}.
 
 % When the prefetch count has not been set,
 % e.g. when the channel has not yet been issued a basic.qos
@@ -84,10 +84,10 @@ code_change(_, State, _) ->
 % Internal plumbing
 %---------------------------------------------------------------------------
 
+% Reduces the in-use-count of the queue by one
 decrement_in_use(QPid, State = #lim{in_use = InUse}) ->
     case dict:find(QPid, InUse) of
         {ok, Capacity} ->
-            io:format("capacity ~p~n",[Capacity]),
             if
                 % Is there a lower bound on capacity?
                 % i.e. what is the zero mark, how much is unlimited?
@@ -96,26 +96,35 @@ decrement_in_use(QPid, State = #lim{in_use = InUse}) ->
                     State#lim{in_use = NewInUse};
                 true ->
                     % TODO How should this be handled?
+                    rabbit_log:warning(
+                        "Ignoring decrement for zero capacity: ~p~n",
+                        [QPid]),
                     State
             end;
         error ->
             % TODO How should this case be handled?
+            rabbit_log:warning("Ignoring decrement for unknown queue: ~p~n",
+                               [QPid]),
             State
     end.
 
+% Works out whether any queues should be notified
+% If any notification is required, it propagates a transition
+% of the blocked state
 maybe_notify_queues(State = #lim{ch_pid = ChPid, in_use = InUse}) ->
-    Capacity = current_capcity(State),
+    Capacity = current_capacity(State),
     case should_notify(Capacity, State) of
         true  ->
             dict:map(fun(Q,_) -> 
-                        rabbit_amqqueue:notify_sent(Q, ChPid)
+                        rabbit_amqqueue:unblock(Q, ChPid)
                      end, InUse),
             State#lim{blocked = false};
         false ->
-            ok
+            State
     end.
 
-current_capcity(#lim{in_use = InUse}) ->
+% Computes the current aggregrate capacity of all of the in-use queues
+current_capacity(#lim{in_use = InUse}) ->
     % TODO This *seems* expensive to compute this on the fly
     dict:fold(fun(_, PerQ, Acc) -> PerQ + Acc end, 0, InUse).
 
@@ -135,8 +144,7 @@ maybe_can_send(_, State = #lim{blocked = true}) ->
 maybe_can_send(QPid, State = #lim{prefetch_count = Limit,
                                    in_use = InUse,
                                    blocked = false}) ->
-    Capacity = current_capcity(State),
-    io:format("Limit was ~p, capacity ~p~n",[Limit, Capacity]),
+    Capacity = current_capacity(State),
     if
         Capacity < Limit ->
             NewInUse = update_in_use_capacity(QPid, InUse),

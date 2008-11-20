@@ -32,6 +32,7 @@
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2]).
+-export([unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2]).
 -export([on_node_down/1]).
 
@@ -88,6 +89,7 @@
                      'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
+-spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
@@ -248,6 +250,9 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
 
 notify_sent(QPid, ChPid) ->
     gen_server:cast(QPid, {notify_sent, ChPid}).
+
+unblock(QPid, ChPid) ->
+    gen_server:cast(QPid, {unblock, ChPid}).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(

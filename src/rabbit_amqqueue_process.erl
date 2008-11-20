@@ -59,6 +59,7 @@
              limiter_pid,
              monitor_ref,
              unacked_messages,
+             is_limit_active,
              is_overload_protection_active,
              unsent_message_count}).
 
@@ -125,18 +126,22 @@ all_ch_record() ->
     [C || {{ch, _}, C} <- get()].
 
 update_store_and_maybe_block_ch(
-  C = #cr{is_overload_protection_active = Active,
+  C = #cr{is_overload_protection_active = Overloaded,
+          is_limit_active = Limited,
           unsent_message_count = Count}) ->
-    {Result, NewActive} =
+    {Result, NewOverloaded, NewLimited} =
         if
-            not(Active) and (Count > ?UNSENT_MESSAGE_LIMIT) ->
-                {block_ch, true};
-            Active and (Count == 0) ->
-                {unblock_ch, false};
+            not(Overloaded) and (Count > ?UNSENT_MESSAGE_LIMIT) ->
+                {block_ch, true, Limited};
+            Overloaded and (Count == 0) ->
+                {unblock_ch, false, Limited};
+            Limited and (Count < ?UNSENT_MESSAGE_LIMIT) ->
+                {unblock_ch, Overloaded, false};
             true ->
-                {ok, Active}
+                {ok, Overloaded, Limited}
         end,
-    store_ch_record(C#cr{is_overload_protection_active = NewActive}),
+    store_ch_record(C#cr{is_overload_protection_active = NewOverloaded,
+                         is_limit_active = NewLimited}),
     Result.
 
 deliver_immediately(Message, Delivered,
@@ -160,6 +165,8 @@ deliver_immediately(Message, Delivered,
                 false ->
                     % Have another go by cycling through the consumer
                     % queue
+                    C = ch_record(ChPid),
+                    store_ch_record(C#cr{is_limit_active = true}),
                     NewConsumers = block_consumers(ChPid, RoundRobinTail),
                     deliver_immediately(Message, Delivered,
                                         State#q{round_robin = NewConsumers})
@@ -659,7 +666,7 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
         not_found ->
             noreply(State);
         C = #cr{unacked_messages = UAM, limiter_pid = LimiterPid} ->
-            rabbit_limiter:decrement_capacity(LimiterPid, qname(State)),
+            rabbit_limiter:decrement_capacity(LimiterPid, self()),
             {Acked, Remaining} = collect_messages(MsgIds, UAM),
             persist_acks(Txn, qname(State), Acked),
             case Txn of
@@ -690,6 +697,20 @@ handle_cast({requeue, MsgIds, ChPid}, State) ->
             store_ch_record(C#cr{unacked_messages = NewUAM}),
             noreply(deliver_or_enqueue_n(
                       [{Message, true} || Message <- Messages], State))
+    end;
+
+handle_cast({unblock, ChPid}, State) ->
+    % TODO Refactor the code duplication
+    % between this an the notify_sent cast handler
+    case lookup_ch(ChPid) of
+        not_found ->
+            noreply(State);
+        C = #cr{is_limit_active = true} ->
+            noreply(possibly_unblock(C, State));
+        C ->
+            rabbit_log:warning("Ignoring unblock for an active ch: ~p~n",
+                               [C]),
+            noreply(State)
     end;
 
 handle_cast({notify_sent, ChPid}, State) ->

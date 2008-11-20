@@ -103,7 +103,7 @@ init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
         virtual_host            = VHost,
         most_recently_declared_queue = <<>>,
         % TODO See point 3.1.1 of the design - start the limiter lazily
-        limiter                 = rabbit_limiter:start_link(self()),
+        limiter                 = rabbit_limiter:start_link(ProxyPid),
         consumer_mapping        = dict:new()}.
 
 handle_message({method, Method, Content}, State) ->
