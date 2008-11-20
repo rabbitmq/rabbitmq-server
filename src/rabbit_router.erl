@@ -52,6 +52,12 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 deliver(QPids, Mandatory, Immediate, Txn, Message) ->
+    %% cross-node routing optimisation is disabled because of bug 19758.
+    fun deliver_optimised/5, %% prevents "function ... unused" warnings
+    check_delivery(Mandatory, Immediate,
+                   run_bindings(QPids, Mandatory, Immediate, Txn, Message)).
+
+deliver_optimised(QPids, Mandatory, Immediate, Txn, Message) ->
     %% we reduce inter-node traffic by grouping the qpids by node and
     %% only delivering one copy of the message to each node involved,
     %% which then in turn delivers it to its queues.
