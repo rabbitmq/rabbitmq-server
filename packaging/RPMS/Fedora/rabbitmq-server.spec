@@ -11,7 +11,7 @@ URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
 %if 0%{?debian}
 %else
-BuildRequires: python, python-json
+BuildRequires: erlang, python-json
 %endif
 Requires: erlang, logrotate
 Packager: Hubert Plociniczak <hubert@lshift.net>
