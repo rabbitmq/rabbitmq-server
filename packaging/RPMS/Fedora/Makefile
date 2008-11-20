@@ -20,7 +20,8 @@ prepare:
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare
-	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --target noarch
+	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --target i386
+	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --target x86_64
 
 clean:	
 	rm -rf SOURCES SPECS RPMS SRPMS BUILD tmp

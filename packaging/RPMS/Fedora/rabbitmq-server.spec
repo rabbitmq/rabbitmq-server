@@ -15,7 +15,7 @@ BuildRequires: erlang, python-json
 %endif
 Requires: erlang, logrotate
 Packager: Hubert Plociniczak <hubert@lshift.net>
-BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 Requires(post): chkconfig
 Requires(pre): chkconfig initscripts
@@ -25,8 +25,12 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
+%ifarch x86_64
+  %define _erllibdir /usr/lib64/erlang/lib
+%else
+  %define _erllibdir /usr/lib/erlang/lib
+%endif
 
-%define _erllibdir %(erl -noshell -eval "io:format('~s~n', [code:lib_dir()]), halt().")
 %define _maindir %{buildroot}%{_erllibdir}/rabbitmq_server-%{version}
 
 
