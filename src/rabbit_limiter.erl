@@ -27,7 +27,7 @@ start_link(ChPid) ->
     Pid.
 
 set_prefetch_count(LimiterPid, PrefetchCount) ->
-    gen_server:call(LimiterPid, {prefetch_count, PrefetchCount}).
+    gen_server:cast(LimiterPid, {prefetch_count, PrefetchCount}).
 
 % Queries the limiter to ask whether the queue can deliver a message
 % without breaching a limit
@@ -55,20 +55,20 @@ handle_call({can_send, QPid}, _From, State = #lim{in_use = InUse,
         false ->
             NewQueues = sets:add_element(QPid, Queues),
             {reply, true, State#lim{in_use = InUse + 1, queues = NewQueues}}
-    end;
+    end.
 
 % When the new limit is larger than the existing limit,
 % notify all queues and forget about queues with an in-use
 % capcity of zero
-handle_call({prefetch_count, PrefetchCount}, _From,
+handle_cast({prefetch_count, PrefetchCount},
             State = #lim{prefetch_count = CurrentLimit})
             when PrefetchCount > CurrentLimit ->
     % TODO implement this requirement
-    {reply, ok, State#lim{prefetch_count = PrefetchCount}};
+    {noreply, State#lim{prefetch_count = PrefetchCount}};
 
 % Default setter of the prefetch count
-handle_call({prefetch_count, PrefetchCount}, _From, State) ->
-    {reply, ok, State#lim{prefetch_count = PrefetchCount}}.
+handle_cast({prefetch_count, PrefetchCount}, State) ->
+    {noreply, State#lim{prefetch_count = PrefetchCount}};
 
 % This is an asynchronous ack from a queue that it has received an ack from
 % a queue. This allows the limiter to update the the in-use-by-that queue
