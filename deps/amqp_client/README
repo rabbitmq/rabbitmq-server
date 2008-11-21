@@ -37,6 +37,36 @@ installed:
 
 - Erlang/OTP, R11B-5 or later, http://www.erlang.org/download.html
 - The RabbitMQ server, 93cc2ca0ba62 or later
+- Eunit, the Erlang unit testing framework - currently the whole build process
+  depends on eunit because all of the modules are compiled together.
+  A future version of the build process could remove this dependency when you
+  only want to compile the core libraries.
+
+Getting Eunit
+-------------
+The test suite uses eunit which is either available bundled with OTP from
+release R12B-5 onwards or as a separate download that you will to build
+yourself if you are using an older version of Erlang.
+
+* If you are using R12B-5 or newer:
+
+Just skip to the next section.
+
+* If uou are using R12B-4 or older:
+
+Check out eunit from their Subversion repository and build it:
+
+    $ svn co http://svn.process-one.net/contribs/trunk/eunit eunit
+    $ cd eunit
+    $ make
+
+After this has sucessfully been built, you will need to create a symlink to
+the eunit directory in your OTP installation directory:
+
+    $ cd $OTP_HOME/lib/erlang/lib
+    $ ln -sf PATH_TO_EUNIT eunit
+
+where $OTP_HOME is the location of your Erlang/OTP installation.
 
 Compiling the Erlang client
 -------------------------
@@ -63,32 +93,6 @@ If the source tree for the server is not in the sibling directory, you will
 need to specify the path to this directory:
 
     $ make BROKER_DIR=PATH_TO_THE_SERVER
-
-Running the tests
------------------
-The test suite uses eunit which is either available bundled with OTP from
-release R12B-5 onwards or as a separate download if you are using an older
-version of Erlang.
-
-* If you are using R12B-5 or newer:
-
-Just skip to the next section.
-
-* If uou are using R12B-4 or older:
-
-Check out eunit from their Subversion repository and build it:
-
-    $ svn co http://svn.process-one.net/contribs/trunk/eunit eunit
-    $ cd eunit
-    $ make
-
-After this has sucessfully been built, you will need to create a symlink to
-the eunit directory in your OTP installation directory:
-
-    $ cd $OTP_HOME/lib/erlang/lib
-    $ ln -sf PATH_TO_EUNIT eunit
-
-where $OTP_HOME is the location of your Erlang/OTP installation.
 
 Running the network client tests
 --------------------------------
