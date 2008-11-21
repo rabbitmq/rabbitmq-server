@@ -45,14 +45,14 @@ installed:
 Getting Eunit
 -------------
 The test suite uses eunit which is either available bundled with OTP from
-release R12B-5 onwards or as a separate download that you will to build
+release R12B-5 onwards or as a separate download that you will need to build
 yourself if you are using an older version of Erlang.
 
 * If you are using R12B-5 or newer:
 
 Just skip to the next section.
 
-* If uou are using R12B-4 or older:
+* If you are using R12B-4 or older:
 
 Check out eunit from their Subversion repository and build it:
 
