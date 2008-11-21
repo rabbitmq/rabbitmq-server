@@ -410,7 +410,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
               _, State = #ch{limiter = Limiter}) ->
-    Limiter ! {prefetch_count, PrefetchCount},
+    rabbit_limiter:set_prefetch_count(Limiter, PrefetchCount),
     {reply, #'basic.qos_ok'{}, State};
 
 handle_method(#'basic.recover'{requeue = true},

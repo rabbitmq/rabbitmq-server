@@ -10,7 +10,7 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([start_link/1]).
--export([can_send/2, decrement_capacity/2]).
+-export([set_prefetch_count/2, can_send/2, decrement_capacity/2]).
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
@@ -24,6 +24,9 @@
 start_link(ChPid) ->
     {ok, Pid} = gen_server:start_link(?MODULE, [ChPid], []),
     Pid.
+
+set_prefetch_count(LimiterPid, PrefetchCount) ->
+    gen_server:call(LimiterPid, {prefetch_count, PrefetchCount}).
 
 % Queries the limiter to ask whether the queue can deliver a message
 % without breaching a limit
@@ -48,7 +51,20 @@ handle_call({can_send, QPid}, _From, State) ->
     case limit_reached(State) of
         true  -> {reply, false, State};
         false -> {reply, true, update_in_use_capacity(QPid, State)}
-    end.
+    end;
+
+% When the new limit is larger than the existing limit,
+% notify all queues and forget about queues with an in-use
+% capcity of zero
+handle_call({prefetch_count, PrefetchCount}, _From,
+            State = #lim{prefetch_count = CurrentLimit})
+            when PrefetchCount > CurrentLimit ->
+    % TODO implement this requirement
+    {reply, ok, State#lim{prefetch_count = PrefetchCount}};
+
+% Default setter of the prefetch count
+handle_call({prefetch_count, PrefetchCount}, _From, State) ->
+    {reply, ok, State#lim{prefetch_count = PrefetchCount}}.
 
 % This is an asynchronous ack from a queue that it has received an ack from
 % a queue. This allows the limiter to update the the in-use-by-that queue
@@ -62,18 +78,8 @@ handle_cast({decrement_capacity, QPid}, State) ->
     end,
     {noreply, NewState}.
 
-% When the new limit is larger than the existing limit,
-% notify all queues and forget about queues with an in-use
-% capcity of zero
-handle_info({prefetch_count, PrefetchCount},
-            State = #lim{prefetch_count = CurrentLimit})
-            when PrefetchCount > CurrentLimit ->
-    % TODO implement this requirement
-    {noreply, State#lim{prefetch_count = PrefetchCount}};
-
-% Default setter of the prefetch count
-handle_info({prefetch_count, PrefetchCount}, State) ->
-    {noreply, State#lim{prefetch_count = PrefetchCount}}.
+handle_info(_, State) ->
+    {noreply, State}.
 
 terminate(_, _) ->
     ok.
