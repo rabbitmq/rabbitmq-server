@@ -5,7 +5,7 @@
 
 % I'm starting out with a gen_server because of the synchronous query
 % that the queue process makes
--behviour(gen_server).
+-behaviour(gen_server).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -55,9 +55,9 @@ handle_call({can_send, QPid}, _From, State) ->
 % capacity infromation.
 handle_cast({decrement_capacity, QPid}, State) ->
     NewState = decrement_in_use(QPid, State),
-    ShouldNotify = limit_reached(State) and not(limit_reached(State)),
+    ShouldNotify = limit_reached(State) and not(limit_reached(NewState)),
     if
-        ShouldNotify -> notify_queues(NewState);
+        ShouldNotify -> notify_queues(State);
         true         -> ok
     end,
     {noreply, NewState}.
