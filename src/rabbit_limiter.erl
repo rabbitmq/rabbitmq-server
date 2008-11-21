@@ -50,11 +50,11 @@ init([ChPid]) ->
 % breaching a limit for this queue process
 handle_call({can_send, QPid}, _From, State = #lim{in_use = InUse,
                                                   queues = Queues}) ->
-    case limit_reached(State) of
-        true  -> {reply, false, State};
+    NewState = State#lim{queues = sets:add_element(QPid, Queues)},
+    case limit_reached(NewState) of
+        true  -> {reply, false, NewState};
         false ->
-            NewQueues = sets:add_element(QPid, Queues),
-            {reply, true, State#lim{in_use = InUse + 1, queues = NewQueues}}
+                {reply, true, NewState#lim{in_use = InUse + 1}}
     end.
 
 % When the new limit is larger than the existing limit,
@@ -63,8 +63,10 @@ handle_call({can_send, QPid}, _From, State = #lim{in_use = InUse,
 handle_cast({prefetch_count, PrefetchCount},
             State = #lim{prefetch_count = CurrentLimit})
             when PrefetchCount > CurrentLimit ->
-    % TODO implement this requirement
-    {noreply, State#lim{prefetch_count = PrefetchCount}};
+    notify_queues(State),
+    {noreply, State#lim{prefetch_count = PrefetchCount,
+                        queues = sets:new(),
+                        in_use = 0}};
 
 % Default setter of the prefetch count
 handle_cast({prefetch_count, PrefetchCount}, State) ->
@@ -73,14 +75,16 @@ handle_cast({prefetch_count, PrefetchCount}, State) ->
 % This is an asynchronous ack from a queue that it has received an ack from
 % a queue. This allows the limiter to update the the in-use-by-that queue
 % capacity infromation.
-handle_cast(decrement_capacity, State) ->
+handle_cast(decrement_capacity, State = #lim{in_use = InUse}) ->
     NewState = decrement_in_use(State),
     ShouldNotify = limit_reached(State) and not(limit_reached(NewState)),
     if
-        ShouldNotify -> notify_queues(State);
-        true         -> ok
-    end,
-    {noreply, NewState}.
+        ShouldNotify ->
+            notify_queues(State),
+            {noreply, State#lim{queues = sets:new(), in_use = InUse - 1}};
+        true ->
+            {noreply, NewState}
+    end.
 
 handle_info(_, State) ->
     {noreply, State}.
