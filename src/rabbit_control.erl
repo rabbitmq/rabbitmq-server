@@ -92,6 +92,7 @@ Available commands:
   list_queues <QueueInfoItem> [<QueueInfoItem> ...]
   list_exchanges <ExchangeInfoItem> [<ExchangeInfoItem> ...]
   list_bindings
+  list_connections <ConnectionInfoItem> [<ConnectionInfoItem> ...]
 
 <node> should be the name of the master node of the RabbitMQ cluster. It
 defaults to the node named \"rabbit\" on the local host. On a host named
@@ -101,11 +102,19 @@ output of hostname -s is usually the correct suffix to use after the \"@\" sign.
 
 <QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
 arguments, pid, messages_ready, messages_unacknowledged, messages_uncommitted, 
-messages, acks_uncommitted, consumers, transactions, memory]. (Default is 
-[name, messages].)
+messages, acks_uncommitted, consumers, transactions, memory]. The default is 
+ to display name and (number of) messages.
 
 <ExchangeInfoItem> must be a member of the list [name, type, durable, 
-auto_delete, arguments]. (Default is [name, type].)
+auto_delete, arguments]. The default is to display name and type.
+
+The output format for \"list_bindings\" is a list of rows containing 
+virtual host, exchange name, routing key, queue name and arguments, in that 
+order.
+
+<ConnectioInfoItem> must be a member of the list [pid, address, port, 
+peer_address, peer_port, state, channels, user, vhost, timeout, frame_max].
+The default is to display user, peer_address and peer_port.
 
 "),
     halt(1).
@@ -203,10 +212,22 @@ action(list_exchanges, Node, Args) ->
     ArgAtoms = [list_to_atom(X) || X <- default_if_empty(Args, ["name", "type"])],
     display_info_list(rpc_call(Node, rabbit_exchange, info_all, [ArgAtoms]), ArgAtoms);
 
-action(list_bindings, _, []) ->
+action(list_bindings, Node, []) ->
     io:format("Listing bindings ...~n"),
-    io:format("Not implemented~n"),
-    ok.
+    lists:map(
+        fun({#resource{name = ExchangeName, virtual_host = VirtualHost}, 
+             #resource{name = QueueName, virtual_host = VirtualHost},
+             RoutingKey, Arguments}) ->
+            io:format("~s ~s ~s ~s ~w~n", 
+                [VirtualHost, ExchangeName, RoutingKey, QueueName, Arguments])
+        end, 
+        rpc_call(Node, rabbit_exchange, list_bindings, [])),
+    ok;
+
+action(list_connections, Node, Args) ->
+    io:format("Listing connections ...~n"),
+    ArgAtoms = [list_to_atom(X) || X <- default_if_empty(Args, ["user", "peer_address", "peer_port"])],
+    display_info_list(rpc_call(Node, rabbit_networking, connection_info_all, [ArgAtoms]), ArgAtoms).
 
 default_if_empty(List, Default) when is_list(List) ->
     case List of
@@ -219,12 +240,18 @@ display_info_list(Results, InfoItemArgs) when is_list(Results) ->
         fun (ResultRow) ->
             lists:foreach(
                 fun(InfoItemName) -> 
-                    {value, {InfoItemName, Res}} = lists:keysearch(InfoItemName, 1, ResultRow),
-                    case Res of
-                        #resource{virtual_host = VHostPath, name = Name} ->
+                    {value, Info = {InfoItemName, Data}} = lists:keysearch(InfoItemName, 1, ResultRow),
+                    case Info of
+                        {_, #resource{virtual_host = VHostPath, name = Name}} ->
                             io:format("~s@~s ", [Name, VHostPath]);
+                        {address, {A,B,C,D}} when is_integer(A), is_integer(B), is_integer(C), is_integer(D) -> 
+                            io:format("~w.~w.~w.~w ", [A, B, C, D]);
+                        {peer_address, {A,B,C,D}} when is_integer(A), is_integer(B), is_integer(C), is_integer(D) -> 
+                            io:format("~w.~w.~w.~w ", [A, B, C, D]);
+                        _ when is_binary(Data) -> 
+                            io:format("~s ", [Data]);
                         _ -> 
-                            io:format("~w ", [Res])
+                            io:format("~w ", [Data])
                     end 
                 end,
                 InfoItemArgs),
