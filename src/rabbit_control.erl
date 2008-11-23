@@ -101,10 +101,11 @@ output of hostname -s is usually the correct suffix to use after the \"@\" sign.
 
 <QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
 arguments, pid, messages_ready, messages_unacknowledged, messages_uncommitted, 
-messages, acks_uncommitted, consumers, transactions, memory].
+messages, acks_uncommitted, consumers, transactions, memory]. (Default is 
+[name, messages].)
 
 <ExchangeInfoItem> must be a member of the list [name, type, durable, 
-auto_delete, arguments].
+auto_delete, arguments]. (Default is [name, type].)
 
 "),
     halt(1).
@@ -194,33 +195,42 @@ action(list_vhost_users, Node, Args = [_VHostPath]) ->
 
 action(list_queues, Node, Args) ->
     io:format("Listing queues ...~n"),
-    display_info_list(rpc_call(Node, rabbit_amqqueue, info_all, [[list_to_atom(X) || X <- Args]]));
+    ArgAtoms = [list_to_atom(X) || X <- default_if_empty(Args, ["name", "messages"])],
+    display_info_list(rpc_call(Node, rabbit_amqqueue, info_all, [ArgAtoms]), ArgAtoms);
 
 action(list_exchanges, Node, Args) ->
     io:format("Listing exchanges ...~n"),
-    display_info_list(rpc_call(Node, rabbit_exchange, info_all, [[list_to_atom(X) || X <- Args]]));
+    ArgAtoms = [list_to_atom(X) || X <- default_if_empty(Args, ["name", "type"])],
+    display_info_list(rpc_call(Node, rabbit_exchange, info_all, [ArgAtoms]), ArgAtoms);
 
 action(list_bindings, _, []) ->
     io:format("Listing bindings ...~n"),
     io:format("Not implemented~n"),
     ok.
 
-display_info_list(L) ->
+default_if_empty(List, Default) when is_list(List) ->
+    case List of
+        [] -> Default;
+        _ -> List
+    end.
+
+display_info_list(Results, InfoItemArgs) when is_list(Results) ->
     lists:map(
         fun (ResultRow) ->
-            lists:map(
-                fun(ResultColumn) -> 
-                    case ResultColumn of
-                        {name, #resource{virtual_host = VHostPath, name = Name}} ->
+            lists:foreach(
+                fun(InfoItemName) -> 
+                    {value, {InfoItemName, Res}} = lists:keysearch(InfoItemName, 1, ResultRow),
+                    case Res of
+                        #resource{virtual_host = VHostPath, name = Name} ->
                             io:format("~s@~s ", [Name, VHostPath]);
-                        {_, Res} -> 
+                        _ -> 
                             io:format("~w ", [Res])
                     end 
-                end, 
-                ResultRow),
+                end,
+                InfoItemArgs),
             io:nl()
         end,
-        L),
+        Results),
     ok.
 
 display_list(L) when is_list(L) ->
