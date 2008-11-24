@@ -281,7 +281,19 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
     end,
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     % CC the limiter on the number of acks that have been received
-    rabbit_limiter:decrement_capacity(Limiter, queue:len(Acked)),
+    % but don't include any acks from a basic.get bottom half
+    % (hence the differentiation between tags set to none and other tags)
+    % TODO - this is quite crude and is probably more expensive than it should
+    % be - according to the OTP documentation, len/1 runs in O(n), probably
+    % not so cool for a queuing system
+    NotBasicGet = queue:filter(
+        fun({_CurrentDeliveryTag, ConsumerTag, _Msg}) ->
+            case ConsumerTag of
+                none -> false;
+                _    -> true
+            end
+        end, Acked),
+    rabbit_limiter:decrement_capacity(Limiter, queue:len(NotBasicGet)),
     Participants = ack(State#ch.proxy_pid, TxnKey, Acked),
     {noreply, case TxnKey of
                   none -> State#ch{unacked_message_q = Remaining};
