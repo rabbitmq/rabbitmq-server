@@ -10,7 +10,7 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([start_link/1]).
--export([set_prefetch_count/2, can_send/2, decrement_capacity/1]).
+-export([set_prefetch_count/2, can_send/2, decrement_capacity/2]).
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
@@ -36,8 +36,8 @@ can_send(LimiterPid, QPid) ->
 
 % Lets the limiter know that a queue has received an ack from a consumer
 % and hence can reduce the in-use-by-that queue capcity information
-decrement_capacity(LimiterPid) ->
-    gen_server:cast(LimiterPid, decrement_capacity).
+decrement_capacity(LimiterPid, Magnitude) ->
+    gen_server:cast(LimiterPid, {decrement_capacity, Magnitude}).
 
 %---------------------------------------------------------------------------
 % gen_server callbacks
@@ -75,8 +75,8 @@ handle_cast({prefetch_count, PrefetchCount}, State) ->
 % This is an asynchronous ack from a queue that it has received an ack from
 % a queue. This allows the limiter to update the the in-use-by-that queue
 % capacity infromation.
-handle_cast(decrement_capacity, State = #lim{in_use = InUse}) ->
-    NewState = decrement_in_use(State),
+handle_cast({decrement_capacity, Magnitude}, State = #lim{in_use = InUse}) ->
+    NewState = decrement_in_use(Magnitude, State),
     ShouldNotify = limit_reached(State) and not(limit_reached(NewState)),
     if
         ShouldNotify ->
@@ -99,12 +99,12 @@ code_change(_, State, _) ->
 % Internal plumbing
 %---------------------------------------------------------------------------
 
-% Reduces the in-use-count of the queue by one
-decrement_in_use(State = #lim{in_use = 0}) ->
+% Reduces the in-use-count of the queue by a specific magnitude
+decrement_in_use(_, State = #lim{in_use = 0}) ->
     State#lim{in_use = 0};
 
-decrement_in_use(State = #lim{in_use = InUse}) ->
-    State#lim{in_use = InUse - 1}.
+decrement_in_use(Magnitude, State = #lim{in_use = InUse}) ->
+    State#lim{in_use = InUse - Magnitude}.
 
 % Unblocks every queue that this limiter knows about
 notify_queues(#lim{ch_pid = ChPid, queues = Queues}) ->

@@ -666,7 +666,6 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
         not_found ->
             noreply(State);
         C = #cr{unacked_messages = UAM, limiter_pid = LimiterPid} ->
-            rabbit_limiter:decrement_capacity(LimiterPid),
             {Acked, Remaining} = collect_messages(MsgIds, UAM),
             persist_acks(Txn, qname(State), Acked),
             case Txn of

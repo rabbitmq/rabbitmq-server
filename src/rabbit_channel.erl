@@ -271,6 +271,7 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
               _, State = #ch{transaction_id = TxnKey,
+                             limiter = Limiter,
                              next_tag = NextDeliveryTag,
                              unacked_message_q = UAMQ}) ->
     if DeliveryTag >= NextDeliveryTag ->
@@ -279,6 +280,8 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
        true -> ok
     end,
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
+    % CC the limiter on the number of acks that have been received
+    rabbit_limiter:decrement_capacity(Limiter, queue:len(Acked)),
     Participants = ack(State#ch.proxy_pid, TxnKey, Acked),
     {noreply, case TxnKey of
                   none -> State#ch{unacked_message_q = Remaining};
