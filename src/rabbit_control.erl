@@ -113,8 +113,9 @@ virtual host, exchange name, routing key, queue name and arguments, in that
 order.
 
 <ConnectioInfoItem> must be a member of the list [pid, address, port, 
-peer_address, peer_port, state, channels, user, vhost, timeout, frame_max].
-The default is to display user, peer_address and peer_port.
+peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
+recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
+user, peer_address and peer_port.
 
 "),
     halt(1).
@@ -218,8 +219,8 @@ action(list_bindings, Node, []) ->
         fun({#resource{name = ExchangeName, virtual_host = VirtualHost}, 
              #resource{name = QueueName, virtual_host = VirtualHost},
              RoutingKey, Arguments}) ->
-            io:format("~s ~s ~s ~s ~w~n", 
-                [VirtualHost, ExchangeName, RoutingKey, QueueName, Arguments])
+            io:format("~s@~s ~s ~s@~s ~w~n", 
+                [ExchangeName, VirtualHost, RoutingKey, QueueName, VirtualHost, Arguments])
         end, 
         rpc_call(Node, rabbit_exchange, list_bindings, [])),
     ok;
@@ -244,10 +245,8 @@ display_info_list(Results, InfoItemArgs) when is_list(Results) ->
                     case Info of
                         {_, #resource{virtual_host = VHostPath, name = Name}} ->
                             io:format("~s@~s ", [Name, VHostPath]);
-                        {address, {A,B,C,D}} when is_integer(A), is_integer(B), is_integer(C), is_integer(D) -> 
-                            io:format("~w.~w.~w.~w ", [A, B, C, D]);
-                        {peer_address, {A,B,C,D}} when is_integer(A), is_integer(B), is_integer(C), is_integer(D) -> 
-                            io:format("~w.~w.~w.~w ", [A, B, C, D]);
+                        {Key, IpAddress} when Key =:= address; Key =:= peer_address andalso is_tuple(IpAddress) ->
+                            io:format("~s ", [inet_parse:ntoa(IpAddress)]);
                         _ when is_binary(Data) -> 
                             io:format("~s ", [Data]);
                         _ -> 

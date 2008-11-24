@@ -37,7 +37,7 @@ CLUSTER_CONFIG_FILE=/etc/default/rabbitmq_cluster.config
 [ "x" = "x$LOG_BASE" ] && LOG_BASE=/var/log/rabbitmq
 [ "x" = "x$MNESIA_BASE" ] && MNESIA_BASE=/var/lib/rabbitmq/mnesia
 [ "x" = "x$MNESIA_DIR" ] && MNESIA_DIR=${MNESIA_BASE}/${NODENAME}
-[ "x" = "x$NODE_ONLY" ] && START_RABBIT='-s rabbit'
+[ "x" = "x$NODE_ONLY" ] && START_RABBIT='-noinput -s rabbit'
 
 ## Log rotation
 LOGS="${LOG_BASE}/${NODENAME}.log"

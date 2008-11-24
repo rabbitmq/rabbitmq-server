@@ -52,6 +52,7 @@
 
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
+         recv_oct, recv_cnt, send_oct, send_cnt, send_pend,
          state, channels, user, vhost, timeout, frame_max]).
 
 %% connection lifecycle
@@ -663,6 +664,16 @@ i(peer_address, #v1{sock = Sock}) ->
 i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = inet:peername(Sock),
     P;
+i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
+                                   SockStat =:= recv_cnt; 
+                                   SockStat =:= send_oct;
+                                   SockStat =:= send_cnt;
+                                   SockStat =:= send_pend ->
+    case inet:getstat(Sock, [SockStat]) of
+        {ok, [{SockStat, StatVal}]} -> StatVal;
+        {error, einval}             -> undefined;
+        {error, Error}              -> throw({cannot_get_socket_stats, Error})
+    end;
 i(state, #v1{connection_state = S}) ->
     S;
 i(channels, #v1{}) ->
