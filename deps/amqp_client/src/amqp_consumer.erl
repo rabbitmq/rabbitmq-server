@@ -30,12 +30,13 @@
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 
 -export([init/1, handle_info/2, terminate/2]).
+-export([code_change/3, handle_call/2, handle_event/2]).
 
 %---------------------------------------------------------------------------
 % gen_event callbacks
 %---------------------------------------------------------------------------
 
-init(Args) ->
+init(_Args) ->
     {ok, []}.
 
 handle_info(shutdown, State) ->
@@ -56,13 +57,19 @@ handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
     io:format("---------------------------~n"),
     {ok, State};
 
-handle_info({#'basic.deliver'{consumer_tag = ConsumerTag},
-              {content, ClassId, Properties, PropertiesBin, Payload}},
+handle_info({#'basic.deliver'{},
+              {content, _ClassId, _Properties, _PropertiesBin, Payload}},
               State) ->
      io:format("---------------------------~n"),
      io:format("AMQP Consumer, rec'd: ~p~n", [ Payload ] ),
      io:format("---------------------------~n"),
      {ok, State}.
+     
+% Just put these 3 calls to stop warning
+% This whole event handler will be deleted in 19344 
+handle_call(_, _) -> ok.
+handle_event(_, _) -> ok.
+code_change(_, _, _) -> ok.
 
-terminate(Args, State) ->
+terminate(_Args, _State) ->
     ok.
