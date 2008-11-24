@@ -10,7 +10,7 @@ message passing to a RabbitMQ broker.
 The API exposed to the user is common to both clients, so each version
 can be used interchangeably without having to modify any client code.
 
-The TCP networked client has been tested with RabbitMQ server 1.2.0,
+The TCP networked client has been tested with RabbitMQ server 1.4.0,
 but should theoretically work with any 0-8 compliant AMQP server.
 
 The direct client is bound to an 0-8 compliant broker using native
@@ -35,8 +35,38 @@ Prerequisites
 In order to compile/run this code you must have the following
 installed:
 
-- Erlang/OTP, R12B-5 or later, http://www.erlang.org/download.html
+- Erlang/OTP, R11B-5 or later, http://www.erlang.org/download.html
 - The RabbitMQ server, 93cc2ca0ba62 or later
+- Eunit, the Erlang unit testing framework - currently the whole build process
+  depends on eunit because all of the modules are compiled together.
+  A future version of the build process could remove this dependency when you
+  only want to compile the core libraries.
+
+Getting Eunit
+-------------
+The test suite uses eunit which is either available bundled with OTP from
+release R12B-5 onwards or as a separate download that you will need to build
+yourself if you are using an older version of Erlang.
+
+* If you are using R12B-5 or newer:
+
+Just skip to the next section.
+
+* If you are using R12B-4 or older:
+
+Check out eunit from their Subversion repository and build it:
+
+    $ svn co http://svn.process-one.net/contribs/trunk/eunit eunit
+    $ cd eunit
+    $ make
+
+After this has sucessfully been built, you will need to create a symlink to
+the eunit directory in your OTP installation directory:
+
+    $ cd $OTP_HOME/lib/erlang/lib
+    $ ln -sf PATH_TO_EUNIT eunit
+
+where $OTP_HOME is the location of your Erlang/OTP installation.
 
 Compiling the Erlang client
 -------------------------
@@ -46,37 +76,45 @@ Go to the base directory of the AMQP Erlang client directory and run
 * If you have "installed" the RabbitMQ server:
 
 You will have a symlink to the rabbitmq-server directory in your OTP
-directory, so when running the make, you will want to unset the $BROKER_DIR
-variable:
+directory, so all you have to do is to run make:
 
-    $ make -BROKER_DIR=
+    $ make
 
 * If you don't have the RabbitMQ server installed:
 
 You will need to get a copy of the server in order to be able to use it's
 header files and runtime libraries. A good place to put this is in the sibling
-directory to the Erlang client, which is the default that Makefile expects. If
-it is not, then you need to specify the path to this directory:
+directory to the Erlang client, which is the default that Makefile expects.
+In this case, you can just run make:
 
-    $ make -BROKER_DIR=WHEREEVER_YOU_PUT_THIS
+    $ make
 
-Running the network client
---------------------------
+If the source tree for the server is not in the sibling directory, you will
+need to specify the path to this directory:
+
+    $ make BROKER_DIR=PATH_TO_THE_SERVER
+
+Running the network client tests
+--------------------------------
 In order to run the network client, you need to run the RabbitMQ
-server in a separate Erlang process (or use any other AMQP
+server in a separate Erlang process (or use any other compliant AMQP
 server). Start your server as usual.
 
 After you have done this, you can run the unit tests:
 
-$ make test_network
+    $ make test_network
 
 To get more examples of the API, look at the functions in the
 test_util module.
 
-Running the direct client
--------------------------
+Running the direct client tests
+-------------------------------
 The direct client has to be run in the same Erlang VM instance as the
-RabbitMQ server.
+RabbitMQ server. In order to use the makefile to run the direct client tests,
+you will need to shutdown any other running instance of RabbitMQ that you may
+have on your machine. This is because the Makefile target for running the
+direct tests boots its own instance of RabbitMQ. To run these tests, use the
+following target.
 
-$ make test_direct
+    $ make test_direct
 

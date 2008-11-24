@@ -243,6 +243,8 @@ basic_qos_test(Connection) ->
     %Channel = lib_amqp:start_channel(Connection),
     Consumers = [spawn(fun() -> Channel = lib_amqp:start_channel(Connection),
                                 lib_amqp:subscribe(Channel, Q, self(), false),
+                                amqp_channel:call(Channel,
+                                    #'basic.qos'{prefetch_count = 1}),
                                 sleeping_consumer(Channel, Sleep, Parent) end)
                                 || Sleep <- lists:seq(1, Workers)],
     latch_loop(Workers),
@@ -258,7 +260,7 @@ sleeping_consumer(Channel, Sleep, Parent) ->
         #'basic.cancel_ok'{}  -> ok;
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _Content} ->
             io:format("Sleeper ~p got a msg~n",[Sleep]),
-            timer:sleep(Sleep * 1000),
+            timer:sleep(Sleep * 100),
             lib_amqp:ack(Channel, DeliveryTag),
             Parent ! finished,
             sleeping_consumer(Channel, Sleep, Parent)
