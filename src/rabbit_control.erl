@@ -60,16 +60,16 @@ parse_args(["-n", NodeS | Args], Params) ->
     parse_args(Args, Params#params{node = Node});
 parse_args(["-q" | Args], Params) ->
     parse_args(Args, Params#params{quiet = true});
-parse_args([], _) ->
-    usage();
 parse_args([Command | Args], Params) ->
-    Params#params{command = list_to_atom(Command), args = Args}.
+    Params#params{command = list_to_atom(Command), args = Args};
+parse_args([], _) ->
+    usage().
 
 stop() ->
     ok.
 
 usage() ->
-    io:format("Usage: rabbitmqctl [-q] [-n <node>] [-q] <command> [<arg> ...]
+    io:format("Usage: rabbitmqctl [-q] [-n <node>] <command> [<arg> ...]
 
 Available commands:
 
@@ -137,7 +137,7 @@ action(cluster, Node, ClusterNodeSs, Inform) ->
 action(status, Node, [], Inform) ->
     Inform("Status of node ~p ...~n", [Node]),
     Res = call(Node, {rabbit, status, []}),
-    io:format("~n~p~n", [Res]),
+    io:format("~p~n", [Res]),
     ok;
 
 action(rotate_logs, Node, [], Inform) ->
