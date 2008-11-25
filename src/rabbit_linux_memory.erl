@@ -35,14 +35,16 @@
 -define(SERVER, ?MODULE).
 
 -define(MEMORY_CHECK_INTERVAL, 1000).
--define(MEMORY_CHECK_FRACTION, 0.95).
+
+-record(state, {memory_fraction, alarm}).             
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
 init(_Args) -> 
-    {ok, no_alarm, ?MEMORY_CHECK_INTERVAL}.
+    Fraction = os_mon:get_env(memsup, system_memory_high_watermark),
+    {ok, #state{alarm = no_alarm, memory_fraction = Fraction}, ?MEMORY_CHECK_INTERVAL}.
 
 
 handle_call(_Request, _From, State) -> 
@@ -63,12 +65,12 @@ handle_info(_Info, State) ->
             - dict:fetch("Buffers", Dict)
             - dict:fetch("Cached", Dict),
     if 
-        MemUsed / MemTotal > ?MEMORY_CHECK_FRACTION ->
-            NewState = alarm;
+        MemUsed / MemTotal > State#state.memory_fraction ->
+            NewState = State#state{alarm = alarm};
         true ->
-            NewState = no_alarm
+            NewState = State#state{alarm = no_alarm}
     end,
-    case {State, NewState} of
+    case {State#state.alarm, NewState#state.alarm} of
         {no_alarm, alarm} ->
             alarm_handler:set_alarm({system_memory_high_watermark, []}),
             ok;
