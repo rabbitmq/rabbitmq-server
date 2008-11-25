@@ -61,6 +61,13 @@ start() ->
             rabbit:start_child(rabbit_linux_memory),
             ok;
         _ ->
+            %% Start memsup programmatically rather than via the rabbitmq-server
+            %% script. This is not quite the right thing to do as os_mon checks
+            %% to see if memsup is available before starting it, but as memsup
+            %% is available everywhere (even on VXWorks) it should be ok.
+            supervisor:start_child(os_mon_sup, {memsup, {memsup, start_link, []},
+                                  permanent, 2000, worker, [memsup]}),
+
             %% The default memsup check interval is 1 minute, which is way too
             %% long - rabbit can gobble up all memory in a matter of
             %% seconds. Unfortunately the memory_check_interval configuration
@@ -73,13 +80,6 @@ start() ->
             %% check has completed, i.e. after one minute. So if rabbit eats
             %% all the memory within the first minute after startup then we
             %% are out of luck.
-            
-            %% Start memsup programmatically rather than via the rabbitmq-server
-            %% script. This is not quite the right thing to do as os_mon checks
-            %% to see if memsup is available before starting it, but as memsup
-            %% is available everywhere (even on VXWorks) it should be ok.
-            supervisor:start_child(os_mon_sup, {memsup, {memsup, start_link, []},
-                                  permanent, 2000, worker, [memsup]}),
             ok = os_mon:call(memsup, {set_check_interval, ?MEMSUP_CHECK_INTERVAL},
                              infinity)
     end.
@@ -94,7 +94,9 @@ register(Pid, HighMemMFA) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #alarms{alertees = dict:new()}}.
+    HWM = system_memory_high_watermark(),
+    {ok, #alarms{alertees = dict:new(),
+                 system_memory_high_watermark = HWM}}.
 
 handle_call({register, Pid, HighMemMFA},
             State = #alarms{alertees = Alertess}) ->
@@ -135,7 +137,20 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
-    
+
+system_memory_high_watermark() ->
+    %% When we register our alarm_handler, the
+    %% system_memory_high_watermark alarm may already have gone
+    %% off. How do we find out about that? Calling
+    %% alarm_handler:get_alarms() would deadlock. So instead we ask
+    %% memsup. Unfortunately that doesn't expose a suitable API, so we
+    %% have to reach quite deeply into its internals.
+    {dictionary, D} = process_info(whereis(memsup), dictionary),
+    case lists:keysearch(system_memory_high_watermark, 1, D) of
+        {value, {_, set}} -> true;
+        _Other            -> false
+    end.
+
 alert(Alert, Alertees) ->
     dict:fold(fun (Pid, {M, F, A}, Acc) ->
                       ok = erlang:apply(M, F, A ++ [Pid, Alert]),
