@@ -50,21 +50,35 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    %% The default memsup check interval is 1 minute, which is way too
-    %% long - rabbit can gobble up all memory in a matter of
-    %% seconds. Unfortunately the memory_check_interval configuration
-    %% parameter and memsup:set_check_interval/1 function only provide
-    %% a granularity of minutes. So we have to peel off one layer of
-    %% the API to get to the underlying layer which operates at the
-    %% granularity of milliseconds.
-    %%
-    %% Note that the new setting will only take effect after the first
-    %% check has completed, i.e. after one minute. So if rabbit eats
-    %% all the memory within the first minute after startup then we
-    %% are out of luck.
-    ok = os_mon:call(memsup, {set_check_interval, ?MEMSUP_CHECK_INTERVAL},
-                     infinity),
-
+    case os:type() of 
+        {unix, linux} ->
+            %% memsup doesn't take account of buffers or cache when considering
+            %% "free" memory - therefore on Linux we can get memory alarms 
+            %% very easily without any pressure existing on memory at all.
+            %% Therefore we need to use our own simple memory monitor
+            
+            supervisor:terminate_child(os_mon_sup, memsup),
+            supervisor:delete_child(os_mon_sup, memsup),
+            rabbit:start_child(rabbit_linux_memory),
+            
+            ok;
+        _ ->
+            %% The default memsup check interval is 1 minute, which is way too
+            %% long - rabbit can gobble up all memory in a matter of
+            %% seconds. Unfortunately the memory_check_interval configuration
+            %% parameter and memsup:set_check_interval/1 function only provide
+            %% a granularity of minutes. So we have to peel off one layer of
+            %% the API to get to the underlying layer which operates at the
+            %% granularity of milliseconds.
+            %%
+            %% Note that the new setting will only take effect after the first
+            %% check has completed, i.e. after one minute. So if rabbit eats
+            %% all the memory within the first minute after startup then we
+            %% are out of luck.
+           
+            ok = os_mon:call(memsup, {set_check_interval, ?MEMSUP_CHECK_INTERVAL},
+                             infinity)
+    end,
     ok = alarm_handler:add_alarm_handler(?MODULE).
 
 stop() ->
