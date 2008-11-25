@@ -10,7 +10,7 @@
 ### END INIT INFO
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DAEMON=/usr/sbin/rabbitmq-multi
+DAEMON=/usr/lib/rabbitmq/bin/rabbitmq-multi
 NAME=rabbitmq-server
 DESC=rabbitmq-server
 USER=rabbitmq
