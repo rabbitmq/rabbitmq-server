@@ -82,11 +82,9 @@ handle_cast(update, State = #state{alarmed = Alarmed,
     NewAlarmed = MemUsed / MemTotal > MemoryFraction,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
-            alarm_handler:set_alarm({system_memory_high_watermark, []}),
-            ok;
+            alarm_handler:set_alarm({system_memory_high_watermark, []});
         {true, false} ->
-            alarm_handler:clear_alarm(system_memory_high_watermark),
-            ok;
+            alarm_handler:clear_alarm(system_memory_high_watermark);
         _ ->
             ok
     end,
