@@ -40,21 +40,26 @@
 
 -record(state, {memory_fraction, alarmed}).             
 
+%%----------------------------------------------------------------------------
+
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
+update() ->
+    gen_server:cast(?SERVER, update).
+
+%%----------------------------------------------------------------------------
+
 init(_Args) -> 
     Fraction = os_mon:get_env(memsup, system_memory_high_watermark),
-    {ok, _Tref} = timer:apply_interval(?MEMORY_CHECK_INTERVAL, ?MODULE, update, []),
-    {ok, #state{alarmed = false, memory_fraction = Fraction}, ?MEMORY_CHECK_INTERVAL}.
+    {ok, _Tref} = timer:apply_interval(?MEMORY_CHECK_INTERVAL,
+                                       ?MODULE, update, []),
+    {ok, #state{alarmed = false, memory_fraction = Fraction}}.
 
-update() ->
-    gen_server:cast(?SERVER, do_update).
-
-%% Export the same API as the real memsup. Note that get_sysmem_high_watermark
-%% gives an int in the range 0 - 100, while set_sysmem_high_watermark 
-%% takes a float in the range 0.0 - 1.0.
+%% Export the same API as the real memsup. Note that
+%% get_sysmem_high_watermark gives an int in the range 0 - 100, while
+%% set_sysmem_high_watermark takes a float in the range 0.0 - 1.0.
 handle_call(get_sysmem_high_watermark, _From, State) ->
     {reply, trunc(100 * State#state.memory_fraction), State};
 
@@ -64,16 +69,16 @@ handle_call({set_sysmem_high_watermark, Float}, _From, State) ->
 handle_call(_Request, _From, State) -> 
     {noreply, State}.
 
-
-handle_cast(do_update, State = #state{alarmed = Alarmed, memory_fraction = MemoryFraction}) -> 
+handle_cast(update, State = #state{alarmed = Alarmed,
+                                   memory_fraction = MemoryFraction}) -> 
     File = read_proc_file("/proc/meminfo"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line/1, Lines)),
     MemTotal = dict:fetch('MemTotal', Dict),
-    MemUsed = MemTotal 
-            - dict:fetch('MemFree', Dict)
-            - dict:fetch('Buffers', Dict)
-            - dict:fetch('Cached', Dict),
+    MemUsed = MemTotal
+        - dict:fetch('MemFree', Dict)
+        - dict:fetch('Buffers', Dict)
+        - dict:fetch('Cached', Dict),
     NewAlarmed = MemUsed / MemTotal > MemoryFraction,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
@@ -93,35 +98,31 @@ handle_cast(_Request, State) ->
 handle_info(_Info, State) -> 
     {noreply, State}.
 
+terminate(_Reason, _State) -> 
+    ok.
+
+code_change(_OldVsn, State, _Extra) -> 
+    {ok, State}.
+
+%%----------------------------------------------------------------------------
 
 -define(BUFFER_SIZE, 1024).
 
-%% file:read_file does not work on files in /proc as it seems to get the size
-%% of the file first and then read that many bytes. But files in /proc always
-%% have length 0, we just have to read until we get eof.
+%% file:read_file does not work on files in /proc as it seems to get
+%% the size of the file first and then read that many bytes. But files
+%% in /proc always have length 0, we just have to read until we get
+%% eof.
 read_proc_file(File) ->
     {ok, IoDevice} = file:open(File, [read, raw]),
     read_proc_file(IoDevice, []).
     
 read_proc_file(IoDevice, Acc) ->
     case file:read(IoDevice, ?BUFFER_SIZE) of
-        {ok, Res} ->
-            read_proc_file(IoDevice, Acc ++ Res);
-        eof ->
-            Acc
+        {ok, Res} -> read_proc_file(IoDevice, Acc ++ Res);
+        eof       -> Acc
     end.
 
 %% A line looks like "FooBar: 123456 kB"
 parse_line(Line) ->
-    [NameS, ValueS | _] = string:tokens(Line, ": "),   
-    Name = list_to_atom(NameS),
-    Value = list_to_integer(string:sub_word(ValueS, 1)),
-    {Name, Value}.
-
-
-terminate(_Reason, _State) -> 
-    ok.
-
-
-code_change(_OldVsn, State, _Extra) -> 
-    {ok, State}.
+    [Name, Value | _] = string:tokens(Line, ": "),   
+    {list_to_atom(Name), list_to_integer(Value)}.
