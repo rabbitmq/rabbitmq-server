@@ -17,6 +17,8 @@ install/rabbitmq-server::
 	mv $(DEB_DESTDIR)usr/sbin/rabbitmqctl $(RABBIT_BIN)rabbitmqctl
 	mv $(DEB_DESTDIR)usr/sbin/rabbitmq-server $(RABBIT_BIN)rabbitmq-server
 	mv $(DEB_DESTDIR)usr/sbin/rabbitmq-multi $(RABBIT_BIN)rabbitmq-multi
+	rm $(DEB_DESTDIR)usr/share/man/man1/rabbitmq-multi.1.gz
+	rm $(DEB_DESTDIR)usr/share/man/man1/rabbitmq-server.1.gz
 	cp debian/rabbitmqctl_wrapper $(DEB_DESTDIR)usr/sbin/rabbitmqctl
 	cp debian/rabbitmq-server.logrotate $(DEB_DESTDIR)etc/logrotate.d/rabbitmq-server
 	chmod a+x $(DEB_DESTDIR)usr/sbin/rabbitmqctl
