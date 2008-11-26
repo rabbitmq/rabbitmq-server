@@ -34,7 +34,7 @@
 
 -export([update/0]).
 
--define(SERVER, ?MODULE).
+-define(SERVER, memsup). %% must be the same as the standard memsup
 
 -define(MEMORY_CHECK_INTERVAL, 1000).
 
