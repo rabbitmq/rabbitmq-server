@@ -61,12 +61,19 @@ start() ->
             rabbit:start_child(rabbit_linux_memory),
             ok;
         _ ->
-            %% Start memsup programmatically rather than via the rabbitmq-server
-            %% script. This is not quite the right thing to do as os_mon checks
-            %% to see if memsup is available before starting it, but as memsup
-            %% is available everywhere (even on VXWorks) it should be ok.
-            supervisor:start_child(os_mon_sup, {memsup, {memsup, start_link, []},
-                                  permanent, 2000, worker, [memsup]}),
+            MemsupRunning = lists:any(fun ({Id, _, _, _}) -> Id == memsup end, 
+                                        supervisor:which_children(os_mon_sup)),
+            case MemsupRunning of
+                false ->
+                    %% Start memsup programmatically rather than via the rabbitmq-server
+                    %% script. This is not quite the right thing to do as os_mon checks
+                    %% to see if memsup is available before starting it, but as memsup
+                    %% is available everywhere (even on VXWorks) it should be ok.
+                    supervisor:start_child(os_mon_sup, {memsup, {memsup, start_link, []},
+                                          permanent, 2000, worker, [memsup]});
+                _ ->
+                    ok
+            end,
 
             %% The default memsup check interval is 1 minute, which is way too
             %% long - rabbit can gobble up all memory in a matter of
