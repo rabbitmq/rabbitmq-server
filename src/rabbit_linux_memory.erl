@@ -77,13 +77,22 @@ handle_info(_Info, State) ->
     end,
     {noreply,  State#state{alarmed = NewAlarmed}, ?MEMORY_CHECK_INTERVAL}.
 
+-define(BUFFER_SIZE, 1024).
+
 %% file:read_file does not work on files in /proc as it seems to get the size
 %% of the file first and then read that many bytes. But files in /proc always
 %% have length 0, we just have to read until we get eof.
 read_proc_file(File) ->
     {ok, IoDevice} = file:open(File, [read, raw]),
-    {ok, Res} = file:read(IoDevice, 1000000),
-    Res.
+    read_proc_file(IoDevice, []).
+    
+read_proc_file(IoDevice, Acc) ->
+    case file:read(IoDevice, ?BUFFER_SIZE) of
+        {ok, Res} ->
+            read_proc_file(IoDevice, Acc ++ Res);
+        eof ->
+            Acc
+    end.
 
 %% A line looks like "FooBar: 123456 kB"
 parse_line(Line) ->
