@@ -36,7 +36,7 @@
 
 -define(MEMORY_CHECK_INTERVAL, 1000).
 
--record(state, {memory_fraction, alarm}).             
+-record(state, {memory_fraction, alarmed}).             
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
@@ -44,7 +44,7 @@ start_link() ->
 
 init(_Args) -> 
     Fraction = os_mon:get_env(memsup, system_memory_high_watermark),
-    {ok, #state{alarm = no_alarm, memory_fraction = Fraction}, ?MEMORY_CHECK_INTERVAL}.
+    {ok, #state{alarmed = false, memory_fraction = Fraction}, ?MEMORY_CHECK_INTERVAL}.
 
 
 handle_call(_Request, _From, State) -> 
@@ -58,29 +58,24 @@ handle_cast(_Request, State) ->
 handle_info(_Info, State) -> 
     File = read_proc_file("/proc/meminfo"),
     Lines = string:tokens(File, "\n"),
-    Dict = dict:from_list(split_and_parse_lines(Lines, [])),
-    MemTotal = dict:fetch("MemTotal", Dict),
+    Dict = dict:from_list(lists:map(fun parse_line/1, Lines)),
+    MemTotal = dict:fetch('MemTotal', Dict),
     MemUsed = MemTotal 
-            - dict:fetch("MemFree", Dict)
-            - dict:fetch("Buffers", Dict)
-            - dict:fetch("Cached", Dict),
-    if 
-        MemUsed / MemTotal > State#state.memory_fraction ->
-            NewState = State#state{alarm = alarm};
-        true ->
-            NewState = State#state{alarm = no_alarm}
-    end,
-    case {State#state.alarm, NewState#state.alarm} of
-        {no_alarm, alarm} ->
+            - dict:fetch('MemFree', Dict)
+            - dict:fetch('Buffers', Dict)
+            - dict:fetch('Cached', Dict),
+    NewAlarmed = MemUsed / MemTotal > State#state.memory_fraction,
+    case {State#state.alarmed, NewAlarmed} of
+        {false, true} ->
             alarm_handler:set_alarm({system_memory_high_watermark, []}),
             ok;
-        {alarm, no_alarm} ->
+        {true, false} ->
             alarm_handler:clear_alarm(system_memory_high_watermark),
             ok;
         _ ->
             ok
     end,
-    {noreply, NewState, ?MEMORY_CHECK_INTERVAL}.
+    {noreply,  State#state{alarmed = NewAlarmed}, ?MEMORY_CHECK_INTERVAL}.
 
 %% file:read_file does not work on files in /proc as it seems to get the size
 %% of the file first and then read that many bytes. But files in /proc always
@@ -91,15 +86,11 @@ read_proc_file(File) ->
     Res.
 
 %% A line looks like "FooBar: 123456 kB"
-split_and_parse_lines([], Acc) -> Acc;
-split_and_parse_lines([Line | Rest], Acc) ->
-    Name = line_element(Line, 1),
-    ValueString = line_element(Line, 2),
-    Value = list_to_integer(string:sub_word(ValueString, 1)),
-    split_and_parse_lines(Rest, [{Name, Value} | Acc]).
-
-line_element(Line, Count) ->
-    string:strip(string:sub_word(Line, Count, $:)).
+parse_line(Line) ->
+    [NameS, ValueS | _] = string:tokens(Line, ": "),   
+    Name = list_to_atom(NameS),
+    Value = list_to_integer(string:sub_word(ValueS, 1)),
+    {Name, Value}.
 
 
 terminate(_Reason, _State) -> 
