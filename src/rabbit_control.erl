@@ -193,10 +193,10 @@ action(list_vhost_users, Node, Args = [_VHostPath], Inform) ->
 
 display_list(L) when is_list(L) ->
     lists:foreach(fun (I) ->
-                          io:format("~s", [binary_to_list(I)])
+                          io:format("~s~n", [binary_to_list(I)])
                   end,
                   lists:sort(L)),
-    io:nl();
+    ok;
 display_list(Other) -> Other.
 
 call(Node, {Mod, Fun, Args}) ->
