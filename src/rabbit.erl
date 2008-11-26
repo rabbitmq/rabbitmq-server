@@ -29,7 +29,7 @@
 
 -export([start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
 
--export([start/2, stop/1, start_child/1]).
+-export([start/2, stop/1]).
 
 -export([log_location/1]).
 

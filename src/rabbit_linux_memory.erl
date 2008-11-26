@@ -52,6 +52,15 @@ init(_Args) ->
 update() ->
     gen_server:cast(?SERVER, do_update).
 
+%% Export the same API as the real memsup. Note that get_sysmem_high_watermark
+%% gives an int in the range 0 - 100, while set_sysmem_high_watermark 
+%% takes a float in the range 0.0 - 1.0.
+handle_call(get_sysmem_high_watermark, _From, State) ->
+    {reply, trunc(100 * State#state.memory_fraction), State};
+
+handle_call({set_sysmem_high_watermark, Float}, _From, State) ->
+    {reply, ok, State#state{memory_fraction=Float}};
+
 handle_call(_Request, _From, State) -> 
     {noreply, State}.
 
