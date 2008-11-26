@@ -55,7 +55,7 @@ handle_cast(_Request, State) ->
     {noreply, State, ?MEMORY_CHECK_INTERVAL}.
 
 
-handle_info(_Info, State) -> 
+handle_info(_Info, State = #state{alarmed = Alarmed, memory_fraction = MemoryFraction}) -> 
     File = read_proc_file("/proc/meminfo"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line/1, Lines)),
@@ -64,8 +64,8 @@ handle_info(_Info, State) ->
             - dict:fetch('MemFree', Dict)
             - dict:fetch('Buffers', Dict)
             - dict:fetch('Cached', Dict),
-    NewAlarmed = MemUsed / MemTotal > State#state.memory_fraction,
-    case {State#state.alarmed, NewAlarmed} of
+    NewAlarmed = MemUsed / MemTotal > MemoryFraction,
+    case {Alarmed, NewAlarmed} of
         {false, true} ->
             alarm_handler:set_alarm({system_memory_high_watermark, []}),
             ok;
