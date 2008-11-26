@@ -61,10 +61,8 @@ start() ->
             rabbit:start_child(rabbit_linux_memory),
             ok;
         _ ->
-            MemsupRunning = lists:any(fun ({Id, _, _, _}) -> Id == memsup end, 
-                                        supervisor:which_children(os_mon_sup)),
-            case MemsupRunning of
-                false ->
+            case whereis(memsup) of
+                undefined ->
                     %% Start memsup programmatically rather than via the rabbitmq-server
                     %% script. This is not quite the right thing to do as os_mon checks
                     %% to see if memsup is available before starting it, but as memsup
