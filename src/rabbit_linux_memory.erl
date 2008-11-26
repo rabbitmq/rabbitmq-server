@@ -32,6 +32,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-export([update/0]).
+
 -define(SERVER, ?MODULE).
 
 -define(MEMORY_CHECK_INTERVAL, 1000).
@@ -44,18 +46,17 @@ start_link() ->
 
 init(_Args) -> 
     Fraction = os_mon:get_env(memsup, system_memory_high_watermark),
+    {ok, _Tref} = timer:apply_interval(?MEMORY_CHECK_INTERVAL, ?MODULE, update, []),
     {ok, #state{alarmed = false, memory_fraction = Fraction}, ?MEMORY_CHECK_INTERVAL}.
 
+update() ->
+    gen_server:cast(?SERVER, do_update).
 
 handle_call(_Request, _From, State) -> 
-    {noreply, State, ?MEMORY_CHECK_INTERVAL}.
+    {noreply, State}.
 
 
-handle_cast(_Request, State) -> 
-    {noreply, State, ?MEMORY_CHECK_INTERVAL}.
-
-
-handle_info(_Info, State = #state{alarmed = Alarmed, memory_fraction = MemoryFraction}) -> 
+handle_cast(do_update, State = #state{alarmed = Alarmed, memory_fraction = MemoryFraction}) -> 
     File = read_proc_file("/proc/meminfo"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line/1, Lines)),
@@ -75,7 +76,14 @@ handle_info(_Info, State = #state{alarmed = Alarmed, memory_fraction = MemoryFra
         _ ->
             ok
     end,
-    {noreply,  State#state{alarmed = NewAlarmed}, ?MEMORY_CHECK_INTERVAL}.
+    {noreply,  State#state{alarmed = NewAlarmed}};
+
+handle_cast(_Request, State) -> 
+    {noreply, State}.
+
+handle_info(_Info, State) -> 
+    {noreply, State}.
+
 
 -define(BUFFER_SIZE, 1024).
 
