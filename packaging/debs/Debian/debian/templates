@@ -1,0 +1,19 @@
+Template: rabbitmq-server/mnesia-dir-note
+Type: note
+Description: Mnesia schema changed
+ The Mnesia schema has changed. Under most circumstances it is safe to remove
+ the Mnesia directory and start again. However, if you ... or ... you would
+ need to ...
+
+Template: rabbitmq-server/do-what-with-mnesia-dir
+Type: select
+Choices: Delete it, Move it elsewhere, Keep it in place (WILL BREAK)
+Default: Delete it
+Description: Delete the Mnesia directory?
+
+Template: rabbitmq-server/move-mnesia-dir-where
+Type: string
+Default: /var/lib/rabbitmq/mnesia-old/
+Description: New location for Mnesia directory?
+ Where do you want to move it?
+

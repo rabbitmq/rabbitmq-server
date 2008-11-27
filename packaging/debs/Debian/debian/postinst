@@ -34,6 +34,28 @@ chown -R rabbitmq:rabbitmq /var/log/rabbitmq
 
 case "$1" in
     configure)
+        . /usr/share/debconf/confmodule
+
+        if su rabbitmq -s /bin/sh -c /usr/lib/rabbitmq/bin/rabbitmq-mnesia-update-needed ; then
+            db_beginblock
+            db_input high rabbitmq-server/mnesia-dir-note || true
+            db_input high rabbitmq-server/do-what-with-mnesia-dir || true
+            db_endblock
+            db_go
+
+            db_get rabbitmq-server/do-what-with-mnesia-dir
+            if [ "$RET" = "Delete it" ]; then
+                rm -r /var/lib/rabbitmq/mnesia/
+            elif [ "$RET" = "Move it elsewhere" ]; then
+                db_input high rabbitmq-server/move-mnesia-dir-where || true
+                db_go
+
+                db_get rabbitmq-server/move-mnesia-dir-where
+
+                mkdir -p "`dirname $RET`"
+                mv /var/lib/rabbitmq/mnesia "$RET"
+            fi
+        fi
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
