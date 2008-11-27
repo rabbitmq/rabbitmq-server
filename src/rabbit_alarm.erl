@@ -61,7 +61,7 @@ start() ->
                     %% without any pressure existing on memory at all.
                     %% Therefore we need to use our own simple memory
                     %% monitor
-                    {ok, _} = start_memsup(rabbit_linux_memory);
+                    {ok, _} = start_memsup(rabbit_memsup_linux);
                 _ ->
                     %% Start memsup programmatically rather than via
                     %% the rabbitmq-server script. This is not quite

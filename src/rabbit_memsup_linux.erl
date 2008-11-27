@@ -23,7 +23,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_linux_memory).
+-module(rabbit_memsup_linux).
 
 -behaviour(gen_server).
 
