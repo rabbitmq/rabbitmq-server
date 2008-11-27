@@ -70,6 +70,7 @@ debug(Fmt, Args) when is_list(Args) ->
 message(Direction, Channel, MethodRecord, Content) ->
     gen_server:cast(?SERVER,
 		    {message, Direction, Channel, MethodRecord, Content}).
+
 info(Fmt) ->
     gen_server:cast(?SERVER, {info, Fmt}).
 
