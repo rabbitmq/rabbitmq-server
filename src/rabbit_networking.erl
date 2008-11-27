@@ -45,8 +45,8 @@
 -spec(start_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
 -spec(stop_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [listener()]).
--spec(node_listeners/1 :: (node()) -> [listener()]).
--spec(on_node_down/1 :: (node()) -> 'ok').
+-spec(node_listeners/1 :: (erlang_node()) -> [listener()]).
+-spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(check_tcp_listener_address/3 :: (atom(), host(), ip_port()) ->
              {ip_address(), atom()}).
 
