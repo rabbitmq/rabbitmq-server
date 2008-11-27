@@ -30,6 +30,9 @@
 
 -export([table_names/0]).
 
+%% Called by rabbit-mnesia-update-needed script
+-export([update_needed/0]).
+
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
 -export([create_tables/0]).
@@ -48,6 +51,7 @@
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
+-spec(update_needed/0 :: () -> 'halt').
 
 -endif.
 
@@ -90,6 +94,20 @@ cluster(ClusterNodes) ->
 %% persisted messages
 reset()       -> reset(false).
 force_reset() -> reset(true).
+
+%% This is invoked by rabbitmq-mnesia-update-needed. It will halt with an error 
+%% code if an update is needed, and halt without one otherwise.
+update_needed() ->
+    application:start(mnesia),
+    ok = ensure_mnesia_running(),
+    ok = ensure_mnesia_dir(),
+    ok = init_db(read_cluster_nodes_config()),
+    try ensure_schema_integrity() 
+    catch
+        {error, {schema_integrity_check_failed, _Reason}} ->
+            halt(1)
+    end,
+    halt().
 
 %%--------------------------------------------------------------------
 

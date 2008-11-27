@@ -63,6 +63,9 @@ cleandb: stop-node
 run: all
 	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) NODE_ONLY=true LOG_BASE=$(LOG_BASE)  RABBIT_ARGS="$(RABBIT_ARGS) -s rabbit" MNESIA_DIR=$(MNESIA_DIR) ./scripts/rabbitmq-server
 
+test_mnesia: all
+	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) LOG_BASE=$(LOG_BASE) MNESIA_DIR=$(MNESIA_DIR) ./scripts/rabbitmq-mnesia-update-needed
+
 run-node: all
 	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) NODE_ONLY=true LOG_BASE=$(LOG_BASE)  RABBIT_ARGS="$(RABBIT_ARGS)" MNESIA_DIR=$(MNESIA_DIR) ./scripts/rabbitmq-server
 
