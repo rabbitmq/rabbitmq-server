@@ -33,7 +33,6 @@ scalable implementation of an AMQP broker.
 
 %define _maindir %{buildroot}%{_erllibdir}/rabbitmq_server-%{version}
 
-
 %pre
 if [ $1 -gt 1 ]; then
   #Upgrade - stop and remove previous instance of rabbitmq-server init.d script
@@ -70,6 +69,8 @@ cp %{buildroot}%{_mandir}/man1/rabbitmqctl.1.gz %{buildroot}%{_mandir}/man1/rabb
 
 mkdir -p %{buildroot}/etc/logrotate.d
 install %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
+
+rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
 %post
 # create rabbitmq group
@@ -114,6 +115,7 @@ fi
 /var/log/rabbitmq/
 /etc/rc.d/init.d/rabbitmq-server
 %config(noreplace) /etc/logrotate.d/rabbitmq-server
+%doc LICENSE LICENSE-MPL-RabbitMQ INSTALL
 
 %clean
 rm -rf %{buildroot}
