@@ -127,8 +127,9 @@ code_change(_OldVsn, State, _Extra) ->
 %% eof.
 read_proc_file(File) ->
     {ok, IoDevice} = file:open(File, [read, raw]),
-    read_proc_file(IoDevice, []),
-    file:close(IoDevice).
+    Res = read_proc_file(IoDevice, []),
+    file:close(IoDevice),
+    Res.
     
 read_proc_file(IoDevice, Acc) ->
     case file:read(IoDevice, ?BUFFER_SIZE) of
