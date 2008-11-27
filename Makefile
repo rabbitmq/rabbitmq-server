@@ -137,6 +137,7 @@ install: all
 	cp scripts/rabbitmq-server $(SBIN_DIR)
 	cp scripts/rabbitmqctl $(SBIN_DIR)
 	cp scripts/rabbitmq-multi $(SBIN_DIR)
+	cp scripts/rabbitmq-mnesia-update-needed $(SBIN_DIR)
 	for manpage in docs/*.pod ; do \
 		pod2man -c "RabbitMQ AMQP Server" -d "" -r "" \
 		$$manpage | gzip --best > \
