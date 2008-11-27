@@ -141,8 +141,7 @@ if errorlevel 1 (
     echo %SERVICENAME% service is already present - only updating service parameters
 )
 
-set RABBIT_EBIN_TMP=%~dp0%
-set RABBIT_EBIN=%RABBIT_EBIN_TMP:\=/%../ebin
+set RABBIT_EBIN=%~dp0..\ebin
 
 set ERLANG_SERVICE_ARGUMENTS= ^
 -pa "%RABBIT_EBIN%" ^

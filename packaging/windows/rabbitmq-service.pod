@@ -21,7 +21,7 @@ By default the service will run in the authentication context of the
 local system account. It is therefore necessary to synchronise Erlang
 cookies between the local system account (typically 
 C<C:\WINDOWS\.erlang.cookie> and the account that will be used to
-run B<rabbitctl>.
+run B<rabbitmqctl>.
 
 =head1 COMMANDS
 
