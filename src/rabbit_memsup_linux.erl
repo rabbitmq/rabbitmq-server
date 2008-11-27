@@ -36,9 +36,9 @@
 
 -define(SERVER, memsup). %% must be the same as the standard memsup
 
--define(MEMORY_CHECK_INTERVAL, 1000).
+-define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
 
--record(state, {memory_fraction, alarmed}).             
+-record(state, {memory_fraction, alarmed, timeout, timer}).             
 
 %%----------------------------------------------------------------------------
 
@@ -53,9 +53,15 @@ update() ->
 
 init(_Args) -> 
     Fraction = os_mon:get_env(memsup, system_memory_high_watermark),
-    {ok, _Tref} = timer:apply_interval(?MEMORY_CHECK_INTERVAL,
-                                       ?MODULE, update, []),
-    {ok, #state{alarmed = false, memory_fraction = Fraction}}.
+    TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
+    {ok, #state{alarmed = false, 
+                memory_fraction = Fraction, 
+                timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
+                timer = TRef}}.
+
+start_timer(Timeout) ->
+    {ok, TRef} = timer:apply_interval(Timeout, ?MODULE, update, []),
+    TRef.
 
 %% Export the same API as the real memsup. Note that
 %% get_sysmem_high_watermark gives an int in the range 0 - 100, while
@@ -65,6 +71,15 @@ handle_call(get_sysmem_high_watermark, _From, State) ->
 
 handle_call({set_sysmem_high_watermark, Float}, _From, State) ->
     {reply, ok, State#state{memory_fraction=Float}};
+
+handle_call(get_check_interval, _From, State) ->
+    {reply, State#state.timeout, State};
+
+handle_call({set_check_interval, Timeout}, _From, State = #state{timer = OldTRef}) ->
+    {ok, cancel} = timer:cancel(OldTRef),
+    NewTRef = start_timer(Timeout),
+    {reply, ok, State#state{timeout = Timeout,
+                            timer = NewTRef}};
 
 handle_call(_Request, _From, State) -> 
     {noreply, State}.
