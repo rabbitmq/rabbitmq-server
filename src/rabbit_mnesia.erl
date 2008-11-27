@@ -51,7 +51,7 @@
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
--spec(update_needed/0 :: () -> 'halt').
+-spec(update_needed/0 :: () -> bool()).
 
 -endif.
 
@@ -102,12 +102,13 @@ update_needed() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config()),
-    try ensure_schema_integrity() 
+    try 
+        ensure_schema_integrity(),
+        false
     catch
         {error, {schema_integrity_check_failed, _Reason}} ->
-            halt(1)
-    end,
-    halt().
+            true
+    end.
 
 %%--------------------------------------------------------------------
 

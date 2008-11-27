@@ -43,7 +43,7 @@ fi
 exec erl \
     -pa "`dirname $0`/../ebin" \
     -noshell \
-    -eval 'rabbit_mnesia:update_needed()' \
+    -eval 'halt(case rabbit_mnesia:update_needed() of true -> 1; false -> 0 end).' \
     -mnesia dir "\"${MNESIA_DIR}\"" \
     -kernel error_logger '{file,"'/dev/null'"}' \
-    ${CLUSTER_CONFIG} \
+    ${CLUSTER_CONFIG}
