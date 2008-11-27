@@ -38,7 +38,16 @@
 
 -define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
 
--record(state, {memory_fraction, alarmed, timeout, timer}).             
+-record(state, {memory_fraction, alarmed, timeout, timer}).   
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(update/0 :: () -> 'ok').
+     
+-endif.
 
 %%----------------------------------------------------------------------------
 
