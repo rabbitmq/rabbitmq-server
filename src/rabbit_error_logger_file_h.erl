@@ -53,9 +53,11 @@ init({{File, _}, error}) ->
 %% log rotation 
 init({File, []}) ->
     init(File);
-init({_File, _Type} = FileInfo) ->
+init({File, _Type} = FileInfo) ->
+    rabbit_misc:ensure_directory_exists(File),
     error_logger_file_h:init(FileInfo);
 init(File) ->
+    rabbit_misc:ensure_directory_exists(File),
     error_logger_file_h:init(File).
 
 handle_event(Event, State) ->
