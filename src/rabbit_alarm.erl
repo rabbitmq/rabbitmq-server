@@ -53,15 +53,13 @@ start() ->
     ok = alarm_handler:add_alarm_handler(?MODULE),
     case whereis(memsup) of
         undefined ->
-            {ok, _} =
-                start_memsup(
-                  case os:type() of 
+            Mod = case os:type() of 
                       %% memsup doesn't take account of buffers or
-                      %% cache %% when considering "free" memory -
-                      %% therefore on %% Linux we can get memory
-                      %% alarms very easily %% without any pressure
-                      %% existing on memory at all.  %% Therefore we
-                      %% need to use our own simple memory %% monitor
+                      %% cache when considering "free" memory -
+                      %% therefore on Linux we can get memory alarms
+                      %% very easily without any pressure existing on
+                      %% memory at all. Therefore we need to use our
+                      %% own simple memory monitor.
                       %%
                       {unix, linux} -> rabbit_memsup_linux;
 
@@ -78,7 +76,12 @@ start() ->
                       %% notice memory alarms that go off on startup.
                       %%
                       _             -> memsup
-                  end),
+                  end,
+            %% This is based on os_mon:childspec(memsup, true)
+            {ok, _} = supervisor:start_child(
+                        os_mon_sup,
+                        {memsup, {Mod, start_link, []},
+                         permanent, 2000, worker, [Mod]}),
             ok;
         _ ->
             ok
@@ -150,12 +153,6 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
-
-start_memsup(Module) ->
-    %% This is based on os_mon:childspec(memsup, true)
-    supervisor:start_child(os_mon_sup,
-                           {memsup, {Module, start_link, []},
-                            permanent, 2000, worker, [Module]}).
 
 alert(Alert, Alertees) ->
     dict:fold(fun (Pid, {M, F, A}, Acc) ->
