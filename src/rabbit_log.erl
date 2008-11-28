@@ -32,7 +32,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([debug/1, debug/2, info/1, info/2,
+-export([debug/1, debug/2, message/4, info/1, info/2,
          warning/1, warning/2, error/1, error/2]).
 
 -import(io).
@@ -67,6 +67,10 @@ debug(Fmt) ->
 debug(Fmt, Args) when is_list(Args) ->
     gen_server:cast(?SERVER, {debug, Fmt, Args}).
 
+message(Direction, Channel, MethodRecord, Content) ->
+    gen_server:cast(?SERVER,
+		    {message, Direction, Channel, MethodRecord, Content}).
+
 info(Fmt) ->
     gen_server:cast(?SERVER, {info, Fmt}).
 
@@ -99,6 +103,14 @@ handle_cast({debug, Fmt}, State) ->
 handle_cast({debug, Fmt, Args}, State) ->
     io:format("debug:: "), io:format(Fmt, Args),
     error_logger:info_msg("debug:: " ++ Fmt, Args),
+    {noreply, State};
+handle_cast({message, Direction, Channel, MethodRecord, Content}, State) ->
+    io:format("~s ch~p ~p~n",
+	      [case Direction of
+		   in -> "-->";
+		   out -> "<--" end,
+	       Channel,
+	       {MethodRecord, Content}]),
     {noreply, State};
 handle_cast({info, Fmt}, State) ->
     error_logger:info_msg(Fmt),
