@@ -50,22 +50,57 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    ok = alarm_handler:add_alarm_handler(?MODULE),
+    case whereis(memsup) of
+        undefined ->
+            Mod = case os:type() of 
+                      %% memsup doesn't take account of buffers or
+                      %% cache when considering "free" memory -
+                      %% therefore on Linux we can get memory alarms
+                      %% very easily without any pressure existing on
+                      %% memory at all. Therefore we need to use our
+                      %% own simple memory monitor.
+                      %%
+                      {unix, linux} -> rabbit_memsup_linux;
+
+                      %% Start memsup programmatically rather than via
+                      %% the rabbitmq-server script. This is not quite
+                      %% the right thing to do as os_mon checks to see
+                      %% if memsup is available before starting it,
+                      %% but as memsup is available everywhere (even
+                      %% on VXWorks) it should be ok.
+                      %%
+                      %% One benefit of the programmatic startup is
+                      %% that we can add our alarm_handler before
+                      %% memsup is running, thus ensuring that we
+                      %% notice memory alarms that go off on startup.
+                      %%
+                      _             -> memsup
+                  end,
+            %% This is based on os_mon:childspec(memsup, true)
+            {ok, _} = supervisor:start_child(
+                        os_mon_sup,
+                        {memsup, {Mod, start_link, []},
+                         permanent, 2000, worker, [Mod]}),
+            ok;
+        _ ->
+            ok
+    end,
     %% The default memsup check interval is 1 minute, which is way too
-    %% long - rabbit can gobble up all memory in a matter of
-    %% seconds. Unfortunately the memory_check_interval configuration
-    %% parameter and memsup:set_check_interval/1 function only provide
-    %% a granularity of minutes. So we have to peel off one layer of
-    %% the API to get to the underlying layer which operates at the
+    %% long - rabbit can gobble up all memory in a matter of seconds.
+    %% Unfortunately the memory_check_interval configuration parameter
+    %% and memsup:set_check_interval/1 function only provide a
+    %% granularity of minutes. So we have to peel off one layer of the
+    %% API to get to the underlying layer which operates at the
     %% granularity of milliseconds.
     %%
     %% Note that the new setting will only take effect after the first
     %% check has completed, i.e. after one minute. So if rabbit eats
     %% all the memory within the first minute after startup then we
     %% are out of luck.
-    ok = os_mon:call(memsup, {set_check_interval, ?MEMSUP_CHECK_INTERVAL},
-                     infinity),
-
-    ok = alarm_handler:add_alarm_handler(?MODULE).
+    ok = os_mon:call(memsup,
+                     {set_check_interval, ?MEMSUP_CHECK_INTERVAL},
+                     infinity).
 
 stop() ->
     ok = alarm_handler:delete_alarm_handler(?MODULE).
@@ -77,9 +112,7 @@ register(Pid, HighMemMFA) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    HWM = system_memory_high_watermark(),
-    {ok, #alarms{alertees = dict:new(),
-                 system_memory_high_watermark = HWM}}.
+    {ok, #alarms{alertees = dict:new()}}.
 
 handle_call({register, Pid, HighMemMFA},
             State = #alarms{alertees = Alertess}) ->
@@ -120,19 +153,6 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
-
-system_memory_high_watermark() ->
-    %% When we register our alarm_handler, the
-    %% system_memory_high_watermark alarm may already have gone
-    %% off. How do we find out about that? Calling
-    %% alarm_handler:get_alarms() would deadlock. So instead we ask
-    %% memsup. Unfortunately that doesn't expose a suitable API, so we
-    %% have to reach quite deeply into its internals.
-    {dictionary, D} = process_info(whereis(memsup), dictionary),
-    case lists:keysearch(system_memory_high_watermark, 1, D) of
-        {value, {_, set}} -> true;
-        _Other            -> false
-    end.
 
 alert(Alert, Alertees) ->
     dict:fold(fun (Pid, {M, F, A}, Acc) ->
