@@ -53,53 +53,51 @@ start() ->
     ok = alarm_handler:add_alarm_handler(?MODULE),
     case whereis(memsup) of
         undefined ->
-            case os:type() of 
-                {unix, linux} ->
-                    %% memsup doesn't take account of buffers or cache
-                    %% when considering "free" memory - therefore on
-                    %% Linux we can get memory alarms very easily
-                    %% without any pressure existing on memory at all.
-                    %% Therefore we need to use our own simple memory
-                    %% monitor
-                    {ok, _} = start_memsup(rabbit_memsup_linux);
-                _ ->
-                    %% Start memsup programmatically rather than via
-                    %% the rabbitmq-server script. This is not quite
-                    %% the right thing to do as os_mon checks to see
-                    %% if memsup is available before starting it, but
-                    %% as memsup is available everywhere (even on
-                    %% VXWorks) it should be ok.
-                    %%
-                    %% One benefit of the programmatic startup is that
-                    %% we can add our alarm_handler before memsup is
-                    %% running, thus ensuring that we notice memory
-                    %% alarms that go off on startup.
-                    {ok, _} = start_memsup(memsup)
-            end,
+            {ok, _} =
+                start_memsup(
+                  case os:type() of 
+                      %% memsup doesn't take account of buffers or
+                      %% cache %% when considering "free" memory -
+                      %% therefore on %% Linux we can get memory
+                      %% alarms very easily %% without any pressure
+                      %% existing on memory at all.  %% Therefore we
+                      %% need to use our own simple memory %% monitor
+                      %%
+                      {unix, linux} -> rabbit_memsup_linux;
+
+                      %% Start memsup programmatically rather than via
+                      %% the rabbitmq-server script. This is not quite
+                      %% the right thing to do as os_mon checks to see
+                      %% if memsup is available before starting it,
+                      %% but as memsup is available everywhere (even
+                      %% on VXWorks) it should be ok.
+                      %%
+                      %% One benefit of the programmatic startup is
+                      %% that we can add our alarm_handler before
+                      %% memsup is running, thus ensuring that we
+                      %% notice memory alarms that go off on startup.
+                      %%
+                      _             -> memsup
+                  end),
             ok;
         _ ->
             ok
     end,
-    %% The default memsup check interval is 1 minute,
-    %% which is way too long - rabbit can gobble up
-    %% all memory in a matter of seconds.
-    %% Unfortunately the memory_check_interval
-    %% configuration parameter and
-    %% memsup:set_check_interval/1 function only
-    %% provide a granularity of minutes. So we have to
-    %% peel off one layer of the API to get to the
-    %% underlying layer which operates at the
+    %% The default memsup check interval is 1 minute, which is way too
+    %% long - rabbit can gobble up all memory in a matter of seconds.
+    %% Unfortunately the memory_check_interval configuration parameter
+    %% and memsup:set_check_interval/1 function only provide a
+    %% granularity of minutes. So we have to peel off one layer of the
+    %% API to get to the underlying layer which operates at the
     %% granularity of milliseconds.
     %%
-    %% Note that the new setting will only take effect
-    %% after the first check has completed, i.e. after
-    %% one minute. So if rabbit eats all the memory
-    %% within the first minute after startup then we
+    %% Note that the new setting will only take effect after the first
+    %% check has completed, i.e. after one minute. So if rabbit eats
+    %% all the memory within the first minute after startup then we
     %% are out of luck.
-    ok = os_mon:call(
-           memsup,
-           {set_check_interval, ?MEMSUP_CHECK_INTERVAL},
-           infinity).
+    ok = os_mon:call(memsup,
+                     {set_check_interval, ?MEMSUP_CHECK_INTERVAL},
+                     infinity).
 
 stop() ->
     ok = alarm_handler:delete_alarm_handler(?MODULE).

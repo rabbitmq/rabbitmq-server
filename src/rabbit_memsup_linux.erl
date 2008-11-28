@@ -79,16 +79,14 @@ handle_call(get_sysmem_high_watermark, _From, State) ->
     {reply, trunc(100 * State#state.memory_fraction), State};
 
 handle_call({set_sysmem_high_watermark, Float}, _From, State) ->
-    {reply, ok, State#state{memory_fraction=Float}};
+    {reply, ok, State#state{memory_fraction = Float}};
 
 handle_call(get_check_interval, _From, State) ->
     {reply, State#state.timeout, State};
 
-handle_call({set_check_interval, Timeout}, _From, State = #state{timer = OldTRef}) ->
-    {ok, cancel} = timer:cancel(OldTRef),
-    NewTRef = start_timer(Timeout),
-    {reply, ok, State#state{timeout = Timeout,
-                            timer = NewTRef}};
+handle_call({set_check_interval, Timeout}, _From, State) ->
+    {ok, cancel} = timer:cancel(State#state.timer),
+    {reply, ok, State#state{timeout = Timeout, timer = start_timer(Timeout)}};
 
 handle_call(_Request, _From, State) -> 
     {noreply, State}.
