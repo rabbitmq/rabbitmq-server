@@ -54,10 +54,10 @@ init({{File, _}, error}) ->
 init({File, []}) ->
     init(File);
 init({File, _Type} = FileInfo) ->
-    rabbit_misc:ensure_directory_exists(File),
+    rabbit_misc:ensure_parent_dirs_exist(File),
     error_logger_file_h:init(FileInfo);
 init(File) ->
-    rabbit_misc:ensure_directory_exists(File),
+    rabbit_misc:ensure_parent_dirs_exist(File),
     error_logger_file_h:init(File).
 
 handle_event(Event, State) ->

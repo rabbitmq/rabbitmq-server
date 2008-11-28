@@ -42,7 +42,7 @@
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([append_file/2, ensure_directory_exists/1]).
+-export([append_file/2, ensure_parent_dirs_exist/1]).
 
 -import(mnesia).
 -import(lists).
@@ -98,7 +98,7 @@
              'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
--spec(ensure_directory_exists/1 :: (string()) -> 'ok').
+-spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 
 -endif.
 
@@ -371,9 +371,9 @@ append_file(File, _, Suffix) ->
         Error      -> Error
     end.
 
-ensure_directory_exists(Filename) ->
+ensure_parent_dirs_exist(Filename) ->
     case filelib:ensure_dir(Filename) of
         ok              -> ok;
         {error, Reason} -> 
-            throw({error, {cannot_create_directory, Filename, Reason}})
+            throw({error, {cannot_create_parent_dirs, Filename, Reason}})
     end.

@@ -55,10 +55,10 @@ init({{File, _}, error}) ->
 init({File, []}) ->
     init(File);
 init({File, _Type} = FileInfo) ->
-    rabbit_misc:ensure_directory_exists(File),
+    rabbit_misc:ensure_parent_dirs_exist(File),
     sasl_report_file_h:init(FileInfo);
 init(File) ->
-    rabbit_misc:ensure_directory_exists(File),
+    rabbit_misc:ensure_parent_dirs_exist(File),
     sasl_report_file_h:init({File, sasl_error_logger_type()}).
 
 handle_event(Event, State) ->
