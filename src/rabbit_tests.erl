@@ -263,8 +263,8 @@ test_log_management_during_startup() ->
              ok -> exit(got_success_but_expected_failure);
              {error, {cannot_log_to_file, _, _}} -> ok
          end,
-    ok = set_permissions(TmpDir, 8#00400 + 8#00200 + 8#00100),
-    ok = set_permissions(TmpLog, 8#00400 + 8#00200),
+    ok = set_permissions(TmpDir, 8#00700),
+    ok = set_permissions(TmpLog, 8#00600),
     ok = delete_file(TmpLog),
     ok = file:del_dir(TmpDir),
 
