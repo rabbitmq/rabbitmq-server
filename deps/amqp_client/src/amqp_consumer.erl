@@ -39,6 +39,12 @@
 init(_Args) ->
     {ok, []}.
 
+handle_call(_Request, State) ->
+    {ok, not_understood, State}.
+
+handle_event(_Event, State) ->
+    {ok, State}.
+
 handle_info(shutdown, State) ->
     io:format("---------------------------~n"),
     io:format("AMQP Consumer SHUTDOWN~n"),
@@ -65,11 +71,8 @@ handle_info({#'basic.deliver'{},
      io:format("---------------------------~n"),
      {ok, State}.
      
-% Just put these 3 calls to stop warning
-% This whole event handler will be deleted in 19344 
-handle_call(_, _) -> ok.
-handle_event(_, _) -> ok.
-code_change(_, _, _) -> ok.
-
 terminate(_Args, _State) ->
     ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
