@@ -29,30 +29,29 @@
 
 -behaviour(gen_server).
 
--export([start/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
 %---------------------------------------------------------------------------
 % gen_server callbacks
 %---------------------------------------------------------------------------
 
-start(Args) ->
+start(_) ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),
     Pid.
 
-init(Args) ->
+init(_) ->
     {ok, []}.
 
-terminate(Reason, State) ->
+terminate(_, _) ->
     ok.
 
-handle_call(Payload, From, State) ->
+handle_call(_, _, State) ->
     {reply, something, State}.
 
-handle_cast(Msg, State) ->
+handle_cast(_, State) ->
     {noreply, State}.
 
-handle_info(Msg, State) ->
+handle_info(_, State) ->
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->
