@@ -35,22 +35,34 @@
 start() ->
     FullCommand = init:get_plain_arguments(),
     #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
-        parse_args(FullCommand, #params{quiet = false, node = rabbit_misc:localnode(rabbit)}),
+        parse_args(FullCommand, #params{quiet = false,
+                                        node = rabbit_misc:localnode(rabbit)}),
     Inform = case Quiet of   
                 true -> fun(_Format, _Data) -> ok end;
                 false -> fun io:format/2
              end,
+    %% The reason we don't use a try/catch here is that rpc:call turns
+    %% thrown errors into normal return values
     case catch action(Command, Node, Args, Inform) of
         ok ->
             Inform("done.~n", []),
             init:stop();
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            io:format("Error~nInvalid command ~p~n", [FullCommand]),
+            error("invalid command '~s'",
+                  [lists:flatten(
+                     rabbit_misc:intersperse(
+                       " ", [atom_to_list(Command) | Args]))]),
             usage();
+        {error, Reason} ->
+            error("~p", [Reason]),
+            halt(2);
         Other ->
-            io:format("Error~nrabbit_control action ~p failed:~n~p~n", [Command, Other]),
+            error("~p", [Other]),
             halt(2)
     end.
+
+error(Format, Args) ->
+    io:format("Error: " ++ Format ++"~n", Args).
 
 parse_args(["-n", NodeS | Args], Params) ->
     Node = case lists:member($@, NodeS) of
