@@ -67,7 +67,7 @@ start() ->
     end.
 
 error(Format, Args) ->
-    io:format("Error: " ++ Format ++"~n", Args).
+    rabbit_misc:format_stderr("Error: " ++ Format ++"~n", Args).
 
 parse_args(["-n", NodeS | Args], Params) ->
     Node = case lists:member($@, NodeS) of
