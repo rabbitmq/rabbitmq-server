@@ -37,10 +37,10 @@ start() ->
     #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
         parse_args(FullCommand, #params{quiet = false,
                                         node = rabbit_misc:localnode(rabbit)}),
-    Inform = case Quiet of   
-                true  -> fun(_Format, _Args) -> ok end;
-                false -> fun(Format, Args) ->
-                                 io:format(Format ++ " ...~n", Args)
+    Inform = case Quiet of
+                 true  -> fun(_Format, _Args1) -> ok end;
+                 false -> fun(Format, Args1) ->
+                                  io:format(Format ++ " ...~n", Args1)
                          end
              end,
     %% The reason we don't use a try/catch here is that rpc:call turns
