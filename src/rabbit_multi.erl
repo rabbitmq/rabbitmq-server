@@ -46,17 +46,21 @@ start() ->
                     io:format("done.~n"),
                     init:stop();
                 {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-                    io:format("Invalid command ~p~n", [FullCommand]),
+                    error("invalid command '~s'",
+                          [lists:flatten(
+                             rabbit_misc:intersperse(" ", FullCommand))]),
                     usage();
                 timeout ->
-                    io:format("timeout starting some nodes.~n"),
+                    error("timeout starting some nodes.", []),
                     halt(1);
                 Other ->
-                    io:format("~nrabbit_multi action ~p failed:~n~p~n",
-                              [Command, Other]),
+                    error("~p", [Other]),
                     halt(2)
             end
     end.
+
+error(Format, Args) ->
+    io:format("Error: " ++ Format ++"~n", Args).
 
 parse_args([Command | Args]) ->
     {list_to_atom(Command), Args}.
