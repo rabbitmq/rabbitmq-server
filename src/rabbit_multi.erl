@@ -46,17 +46,21 @@ start() ->
                     io:format("done.~n"),
                     init:stop();
                 {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-                    io:format("Invalid command ~p~n", [FullCommand]),
+                    error("invalid command '~s'",
+                          [lists:flatten(
+                             rabbit_misc:intersperse(" ", FullCommand))]),
                     usage();
                 timeout ->
-                    io:format("timeout starting some nodes.~n"),
+                    error("timeout starting some nodes.", []),
                     halt(1);
                 Other ->
-                    io:format("~nrabbit_multi action ~p failed:~n~p~n",
-                              [Command, Other]),
+                    error("~p", [Other]),
                     halt(2)
             end
     end.
+
+error(Format, Args) ->
+    io:format("Error: " ++ Format ++"~n", Args).
 
 parse_args([Command | Args]) ->
     {list_to_atom(Command), Args}.
@@ -223,8 +227,7 @@ write_pids_file(Pids) ->
                  {ok, Device} ->
                      Device;
                  {error, Reason} ->
-                     throw({error, {cannot_create_pids_file,
-                                    FileName, Reason}})
+                     throw({cannot_create_pids_file, FileName, Reason})
              end,
     try
         ok = io:write(Handle, Pids),
@@ -233,8 +236,7 @@ write_pids_file(Pids) ->
         case file:close(Handle) of
             ok -> ok;
             {error, Reason1} ->
-                throw({error, {cannot_create_pids_file,
-                               FileName, Reason1}})
+                throw({cannot_create_pids_file, FileName, Reason1})
         end
     end,
     ok.
@@ -244,8 +246,7 @@ delete_pids_file() ->
     case file:delete(FileName) of
         ok              -> ok;
         {error, enoent} -> ok;
-        {error, Reason} -> throw({error, {cannot_delete_pids_file,
-                                          FileName, Reason}})
+        {error, Reason} -> throw({cannot_delete_pids_file, FileName, Reason})
     end.
 
 read_pids_file() ->
@@ -253,8 +254,7 @@ read_pids_file() ->
     case file:consult(FileName) of
         {ok, [Pids]}    -> Pids;
         {error, enoent} -> [];
-        {error, Reason} -> throw({error, {cannot_read_pids_file,
-                                          FileName, Reason}})
+        {error, Reason} -> throw({cannot_read_pids_file, FileName, Reason})
     end.
 
 kill_wait(Pid, TimeLeft, Forceful) when TimeLeft < 0 ->
