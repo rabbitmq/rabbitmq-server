@@ -99,6 +99,7 @@
              'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
+-spec(format_stderr/2 :: (string(), [any()]) -> 'true').
 
 -endif.
 
