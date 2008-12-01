@@ -71,8 +71,9 @@ handle_call(Event, State) ->
 terminate(Reason, State) ->
     sasl_report_file_h:terminate(Reason, State).
 
-code_change(OldVsn, State, Extra) ->
-    sasl_report_file_h:code_change(OldVsn, State, Extra).
+code_change(_OldVsn, State, _Extra) ->
+    %% There is no sasl_report_file_h:code_change/3
+    {ok, State}.
 
 %%----------------------------------------------------------------------
 

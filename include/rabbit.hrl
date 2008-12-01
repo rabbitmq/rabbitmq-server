@@ -63,7 +63,7 @@
 -include("rabbit_framing_spec.hrl").
 
 -type(maybe(T) :: T | 'none').
--type(node() :: atom()).
+-type(erlang_node() :: atom()).
 -type(socket() :: port()).
 -type(thunk(T) :: fun(() -> T)).
 
@@ -123,7 +123,7 @@
 -type(msg_id() :: non_neg_integer()).
 -type(msg() :: {queue_name(), pid(), msg_id(), bool(), message()}).
 -type(listener() ::
-      #listener{node     :: node(),
+      #listener{node     :: erlang_node(),
                 protocol :: atom(),
                 host     :: string() | atom(),
                 port     :: non_neg_integer()}).

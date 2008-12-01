@@ -15,7 +15,7 @@ BuildRequires: erlang, python-json
 %endif
 Requires: erlang, logrotate
 Packager: Hubert Plociniczak <hubert@lshift.net>
-BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 Requires(post): chkconfig
 Requires(pre): chkconfig initscripts
@@ -25,10 +25,13 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
+%ifarch x86_64
+  %define _erllibdir /usr/lib64/erlang/lib
+%else
+  %define _erllibdir /usr/lib/erlang/lib
+%endif
 
-%define _erllibdir %(erl -noshell -eval "io:format('~s~n', [code:lib_dir()]), halt().")
 %define _maindir %{buildroot}%{_erllibdir}/rabbitmq_server-%{version}
-
 
 %pre
 if [ $1 -gt 1 ]; then
@@ -66,6 +69,8 @@ cp %{buildroot}%{_mandir}/man1/rabbitmqctl.1.gz %{buildroot}%{_mandir}/man1/rabb
 
 mkdir -p %{buildroot}/etc/logrotate.d
 install %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
+
+rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
 %post
 # create rabbitmq group
@@ -110,6 +115,7 @@ fi
 /var/log/rabbitmq/
 /etc/rc.d/init.d/rabbitmq-server
 %config(noreplace) /etc/logrotate.d/rabbitmq-server
+%doc LICENSE LICENSE-MPL-RabbitMQ INSTALL
 
 %clean
 rm -rf %{buildroot}

@@ -85,7 +85,7 @@
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
--spec(localnode/1 :: (atom()) -> node()).
+-spec(localnode/1 :: (atom()) -> erlang_node()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).

@@ -43,11 +43,11 @@
 
 -ifdef(use_specs).
 
--spec(status/0 :: () -> [{'nodes' | 'running_nodes', [node()]}]).
+-spec(status/0 :: () -> [{'nodes' | 'running_nodes', [erlang_node()]}]).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(is_db_empty/0 :: () -> bool()).
--spec(cluster/1 :: ([node()]) -> 'ok').
+-spec(cluster/1 :: ([erlang_node()]) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
