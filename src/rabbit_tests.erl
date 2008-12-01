@@ -465,7 +465,7 @@ test_user_management() ->
 control_action(Command, Args) -> control_action(Command, node(), Args).
 
 control_action(Command, Node, Args) ->
-    case catch rabbit_control:action(Command, Node, Args) of
+    case catch rabbit_control:action(Command, Node, Args, fun io:format/2) of
         ok ->
             io:format("done.~n"),
             ok;

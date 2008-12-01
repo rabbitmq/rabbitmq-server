@@ -26,43 +26,67 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/3]).
+-export([start/0, stop/0, action/4]).
+
+-record(params, {quiet, node, command, args}).
 
 -define(RPC_TIMEOUT, 30000).
 
 start() ->
-    case init:get_plain_arguments() of
-        [] ->
+    FullCommand = init:get_plain_arguments(),
+    #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
+        parse_args(FullCommand, #params{quiet = false,
+                                        node = rabbit_misc:localnode(rabbit)}),
+    Inform = case Quiet of
+                 true  -> fun(_Format, _Args1) -> ok end;
+                 false -> fun(Format, Args1) ->
+                                  io:format(Format ++ " ...~n", Args1)
+                         end
+             end,
+    %% The reason we don't use a try/catch here is that rpc:call turns
+    %% thrown errors into normal return values
+    case catch action(Command, Node, Args, Inform) of
+        ok ->
+            case Quiet of
+                true  -> ok;
+                false -> io:format("...done.~n")
+            end,
+            init:stop();
+        {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
+            error("invalid command '~s'",
+                  [lists:flatten(
+                     rabbit_misc:intersperse(
+                       " ", [atom_to_list(Command) | Args]))]),
             usage();
-        FullCommand ->
-            {Node, Command, Args} = parse_args(FullCommand),
-            case catch action(Command, Node, Args) of
-                ok ->
-                    io:format("done.~n"),
-                    init:stop();
-                {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-                    io:format("Invalid command ~p~n", [FullCommand]),
-                    usage();
-                Other ->
-                    io:format("~nrabbit_control action ~p failed:~n~p~n", [Command, Other]),
-                    halt(2)
-            end
+        {error, Reason} ->
+            error("~p", [Reason]),
+            halt(2);
+        Other ->
+            error("~p", [Other]),
+            halt(2)
     end.
 
-parse_args(["-n", NodeS, Command | Args]) ->
+error(Format, Args) ->
+    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
+
+parse_args(["-n", NodeS | Args], Params) ->
     Node = case lists:member($@, NodeS) of
                true  -> list_to_atom(NodeS);
                false -> rabbit_misc:localnode(list_to_atom(NodeS))
            end,
-    {Node, list_to_atom(Command), Args};
-parse_args([Command | Args]) ->
-    {rabbit_misc:localnode(rabbit), list_to_atom(Command), Args}.
+    parse_args(Args, Params#params{node = Node});
+parse_args(["-q" | Args], Params) ->
+    parse_args(Args, Params#params{quiet = true});
+parse_args([Command | Args], Params) ->
+    Params#params{command = list_to_atom(Command), args = Args};
+parse_args([], _) ->
+    usage().
 
 stop() ->
     ok.
 
 usage() ->
-    io:format("Usage: rabbitmqctl [-n <node>] <command> [<arg> ...]
+    io:format("Usage: rabbitmqctl [-q] [-n <node>] <command> [<arg> ...]
 
 Available commands:
 
@@ -94,6 +118,9 @@ Available commands:
   list_bindings
   list_connections <ConnectionInfoItem> [<ConnectionInfoItem> ...]
 
+Quiet output mode is selected with the \"-q\" flag. Informational messages
+are suppressed when quiet mode is in effect.
+
 <node> should be the name of the master node of the RabbitMQ cluster. It
 defaults to the node named \"rabbit\" on the local host. On a host named
 \"server.example.com\", the master node will usually be rabbit@server (unless
@@ -120,101 +147,101 @@ user, peer_address and peer_port.
 "),
     halt(1).
 
-action(stop, Node, []) ->
-    io:format("Stopping and halting node ~p ...", [Node]),
+action(stop, Node, [], Inform) ->
+    Inform("Stopping and halting node ~p", [Node]),
     call(Node, {rabbit, stop_and_halt, []});
 
-action(stop_app, Node, []) ->
-    io:format("Stopping node ~p ...", [Node]),
+action(stop_app, Node, [], Inform) ->
+    Inform("Stopping node ~p", [Node]),
     call(Node, {rabbit, stop, []});
 
-action(start_app, Node, []) ->
-    io:format("Starting node ~p ...", [Node]),
+action(start_app, Node, [], Inform) ->
+    Inform("Starting node ~p", [Node]),
     call(Node, {rabbit, start, []});
 
-action(reset, Node, []) ->
-    io:format("Resetting node ~p ...", [Node]),
+action(reset, Node, [], Inform) ->
+    Inform("Resetting node ~p", [Node]),
     call(Node, {rabbit_mnesia, reset, []});
 
-action(force_reset, Node, []) ->
-    io:format("Forcefully resetting node ~p ...", [Node]),
+action(force_reset, Node, [], Inform) ->
+    Inform("Forcefully resetting node ~p", [Node]),
     call(Node, {rabbit_mnesia, force_reset, []});
 
-action(cluster, Node, ClusterNodeSs) ->
+action(cluster, Node, ClusterNodeSs, Inform) ->
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
-    io:format("Clustering node ~p with ~p ...",
+    Inform("Clustering node ~p with ~p",
               [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
 
-action(status, Node, []) ->
-    io:format("Status of node ~p ...", [Node]),
+action(status, Node, [], Inform) ->
+    Inform("Status of node ~p", [Node]),
     Res = call(Node, {rabbit, status, []}),
-    io:format("~n~p~n", [Res]),
+    io:format("~p~n", [Res]),
     ok;
 
-action(rotate_logs, Node, []) ->
-    io:format("Reopening logs for node ~p ...", [Node]),
+action(rotate_logs, Node, [], Inform) ->
+    Inform("Reopening logs for node ~p", [Node]),
     call(Node, {rabbit, rotate_logs, [""]});
-action(rotate_logs, Node, Args = [Suffix]) ->
-    io:format("Rotating logs to files with suffix ~p ...", [Suffix]),
+action(rotate_logs, Node, Args = [Suffix], Inform) ->
+    Inform("Rotating logs to files with suffix ~p", [Suffix]),
     call(Node, {rabbit, rotate_logs, Args});
 
-action(add_user, Node, Args = [Username, _Password]) ->
-    io:format("Creating user ~p ...", [Username]),
+action(add_user, Node, Args = [Username, _Password], Inform) ->
+    Inform("Creating user ~p", [Username]),
     call(Node, {rabbit_access_control, add_user, Args});
 
-action(delete_user, Node, Args = [_Username]) ->
-    io:format("Deleting user ~p ...", Args),
+action(delete_user, Node, Args = [_Username], Inform) ->
+    Inform("Deleting user ~p", Args),
     call(Node, {rabbit_access_control, delete_user, Args});
 
-action(change_password, Node, Args = [Username, _Newpassword]) ->
-    io:format("Changing password for user ~p ...", [Username]),
+action(change_password, Node, Args = [Username, _Newpassword], Inform) ->
+    Inform("Changing password for user ~p", [Username]),
     call(Node, {rabbit_access_control, change_password, Args});
 
-action(list_users, Node, []) ->
-    io:format("Listing users ..."),
+action(list_users, Node, [], Inform) ->
+    Inform("Listing users", []),
     display_list(call(Node, {rabbit_access_control, list_users, []}));
 
-action(add_vhost, Node, Args = [_VHostPath]) ->
-    io:format("Creating vhost ~p ...", Args),
+action(add_vhost, Node, Args = [_VHostPath], Inform) ->
+    Inform("Creating vhost ~p", Args),
     call(Node, {rabbit_access_control, add_vhost, Args});
 
-action(delete_vhost, Node, Args = [_VHostPath]) ->
-    io:format("Deleting vhost ~p ...", Args),
+action(delete_vhost, Node, Args = [_VHostPath], Inform) ->
+    Inform("Deleting vhost ~p", Args),
     call(Node, {rabbit_access_control, delete_vhost, Args});
 
-action(list_vhosts, Node, []) ->
-    io:format("Listing vhosts ..."),
+action(list_vhosts, Node, [], Inform) ->
+    Inform("Listing vhosts", []),
     display_list(call(Node, {rabbit_access_control, list_vhosts, []}));
 
-action(map_user_vhost, Node, Args = [_Username, _VHostPath]) ->
-    io:format("Mapping user ~p to vhost ~p ...", Args),
+action(map_user_vhost, Node, Args = [_Username, _VHostPath], Inform) ->
+    Inform("Mapping user ~p to vhost ~p", Args),
     call(Node, {rabbit_access_control, map_user_vhost, Args});
 
-action(unmap_user_vhost, Node, Args = [_Username, _VHostPath]) ->
-    io:format("Unmapping user ~p from vhost ~p ...", Args),
+action(unmap_user_vhost, Node, Args = [_Username, _VHostPath], Inform) ->
+    Inform("Unmapping user ~p from vhost ~p", Args),
     call(Node, {rabbit_access_control, unmap_user_vhost, Args});
 
-action(list_user_vhosts, Node, Args = [_Username]) ->
-    io:format("Listing vhosts for user ~p...", Args),
+action(list_user_vhosts, Node, Args = [_Username], Inform) ->
+    Inform("Listing vhosts for user ~p", Args),
     display_list(call(Node, {rabbit_access_control, list_user_vhosts, Args}));
 
-action(list_vhost_users, Node, Args = [_VHostPath]) ->
-    io:format("Listing users for vhosts ~p...", Args),
+action(list_vhost_users, Node, Args = [_VHostPath], Inform) ->
+    Inform("Listing users for vhosts ~p", Args),
     display_list(call(Node, {rabbit_access_control, list_vhost_users, Args}));
 
-action(list_queues, Node, Args) ->
-    io:format("Listing queues ...~n"),
+action(list_queues, Node, Args, Inform) ->
+    Inform("Listing queues", []),
     ArgAtoms = [list_to_atom(X) || X <- default_if_empty(Args, ["name", "messages"])],
     display_info_list(rpc_call(Node, rabbit_amqqueue, info_all, [ArgAtoms]), ArgAtoms);
 
-action(list_exchanges, Node, Args) ->
-    io:format("Listing exchanges ...~n"),
+action(list_exchanges, Node, Args, Inform) ->
+    Inform("Listing exchanges", []),
     ArgAtoms = [list_to_atom(X) || X <- default_if_empty(Args, ["name", "type"])],
     display_info_list(rpc_call(Node, rabbit_exchange, info_all, [ArgAtoms]), ArgAtoms);
 
-action(list_bindings, Node, []) ->
-    io:format("Listing bindings ...~n"),
+action(list_bindings, Node, [], Inform) ->
+    Inform("Listing bindings", []),
     lists:map(
         fun({#resource{name = ExchangeName, virtual_host = VirtualHost}, 
              #resource{name = QueueName, virtual_host = VirtualHost},
@@ -225,8 +252,8 @@ action(list_bindings, Node, []) ->
         rpc_call(Node, rabbit_exchange, list_bindings, [])),
     ok;
 
-action(list_connections, Node, Args) ->
-    io:format("Listing connections ...~n"),
+action(list_connections, Node, Args, Inform) ->
+    Inform("Listing connections", []),
     ArgAtoms = [list_to_atom(X) || X <- default_if_empty(Args, ["user", "peer_address", "peer_port"])],
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all, [ArgAtoms]), ArgAtoms).
 
@@ -261,10 +288,10 @@ display_info_list(Results, InfoItemArgs) when is_list(Results) ->
 
 display_list(L) when is_list(L) ->
     lists:foreach(fun (I) ->
-                          io:format("~n~s", [binary_to_list(I)])
+                          io:format("~s~n", [binary_to_list(I)])
                   end,
                   lists:sort(L)),
-    io:nl();
+    ok;
 display_list(Other) -> Other.
 
 call(Node, {Mod, Fun, Args}) ->

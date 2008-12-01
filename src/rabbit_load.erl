@@ -34,11 +34,11 @@
 
 -ifdef(use_specs).
 
--type(node() :: atom()).
--type(load() :: {{non_neg_integer(), float()}, node()}).
+-type(erlang_node() :: atom()).
+-type(load() :: {{non_neg_integer(), float()}, erlang_node()}).
 -spec(local_load/0 :: () -> load()).
 -spec(remote_loads/0 :: () -> [load()]).
--spec(pick/0 :: () -> node()).
+-spec(pick/0 :: () -> erlang_node()).
 
 -endif.
 

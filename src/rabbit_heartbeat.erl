@@ -67,7 +67,7 @@ heartbeater(Sock, TimeoutMillisec, StatName, Threshold, Handler, MonitorRef) ->
                             {'DOWN', MonitorRef, process, _Object, _Info} -> ok;
                             Other -> exit({unexpected_message, Other})
                         after TimeoutMillisec ->
-                                case prim_inet:getstat(Sock, [StatName]) of
+                                case inet:getstat(Sock, [StatName]) of
                                     {ok, [{StatName, NewStatVal}]} ->
                                         if NewStatVal =/= StatVal ->
                                                 F({NewStatVal, 0});

@@ -43,6 +43,7 @@
 -export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([append_file/2]).
+-export([format_stderr/2]).
 
 -import(mnesia).
 -import(lists).
@@ -86,7 +87,7 @@
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
--spec(localnode/1 :: (atom()) -> node()).
+-spec(localnode/1 :: (atom()) -> erlang_node()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
@@ -99,6 +100,7 @@
              'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
+-spec(format_stderr/2 :: (string(), [any()]) -> 'true').
 
 -endif.
 
@@ -377,3 +379,8 @@ append_file(File, _, Suffix) ->
         {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
         Error      -> Error
     end.
+
+format_stderr(Fmt, Args) ->
+    Port = open_port({fd, 0, 2}, [out]),
+    port_command(Port, io_lib:format(Fmt, Args)),
+    port_close(Port).

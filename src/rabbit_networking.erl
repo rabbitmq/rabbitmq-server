@@ -48,13 +48,13 @@
 -spec(start_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
 -spec(stop_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [listener()]).
--spec(node_listeners/1 :: (node()) -> [listener()]).
+-spec(node_listeners/1 :: (erlang_node()) -> [listener()]).
 -spec(connections/0 :: () -> [connection()]).
 -spec(connection_info/1 :: (connection()) -> [info()]).
 -spec(connection_info/2 :: (connection(), [info_key()]) -> [info()]).
 -spec(connection_info_all/0 :: () -> [[info()]]).
 -spec(connection_info_all/1 :: ([info_key()]) -> [[info()]]).
--spec(on_node_down/1 :: (node()) -> 'ok').
+-spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(check_tcp_listener_address/3 :: (atom(), host(), ip_port()) ->
              {ip_address(), atom()}).
 
