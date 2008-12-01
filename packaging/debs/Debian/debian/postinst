@@ -36,7 +36,7 @@ case "$1" in
     configure)
         . /usr/share/debconf/confmodule
 
-        if su rabbitmq -s /bin/sh -c /usr/lib/rabbitmq/bin/rabbitmq-mnesia-update-needed ; then
+        if ! su rabbitmq -s /bin/sh -c /usr/lib/rabbitmq/bin/rabbitmq-mnesia-current ; then
             db_beginblock
             db_input high rabbitmq-server/mnesia-dir-note || true
             db_input high rabbitmq-server/do-what-with-mnesia-dir || true
