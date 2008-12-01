@@ -1,9 +1,8 @@
 Template: rabbitmq-server/mnesia-dir-note
 Type: note
-Description: Mnesia schema changed
- The Mnesia schema has changed. Under most circumstances it is safe to remove
- the Mnesia directory and start again. However, if you ... or ... you would
- need to ...
+Description: Schema changed
+ The RabbitMQ database schema has changed. If your RabbitMQ database contains important data, such as user accounts, durable exchanges and queues, or persistent messages, then we recommend you contact support@rabbitmq.com for assistance with the upgrade. If you want to experiment with the new version in the meantime, simply move the database directory to a safe place. In all other cases just remove the directory.
+
 
 Template: rabbitmq-server/do-what-with-mnesia-dir
 Type: select
