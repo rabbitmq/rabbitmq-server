@@ -60,7 +60,7 @@ start() ->
     end.
 
 error(Format, Args) ->
-    io:format("Error: " ++ Format ++ "~n", Args).
+    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
 
 parse_args([Command | Args]) ->
     {list_to_atom(Command), Args}.
