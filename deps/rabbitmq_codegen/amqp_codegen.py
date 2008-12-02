@@ -28,14 +28,21 @@ import re
 import sys
 
 try:
-    import json
+    try:
+        import simplejson as json
+    except ImportError, e:
+        if sys.hexversion >= 0x20600f0:
+            import json
+        else:
+            raise e
 except ImportError:
-    print >> sys.stderr , " You don't appear to have json.py installed"
+    print >> sys.stderr , " You don't appear to have simplejson.py installed"
     print >> sys.stderr , " (an implementation of a JSON reader and writer in Python)."
     print >> sys.stderr , " You can install it:"
-    print >> sys.stderr , "   - by running 'apt-get install python-json' on Debian-based systems,"
-    print >> sys.stderr , "   - by running 'yum install python-json' on Fedora/Red Hat system,"
-    print >> sys.stderr , "   - from sources from 'http://sourceforge.net/projects/json-py'"
+    print >> sys.stderr , "   - by running 'apt-get install python-simplejson' on Debian-based systems,"
+    print >> sys.stderr , "   - by running 'yum install python-simplejson' on Fedora/Red Hat system,"
+    print >> sys.stderr , "   - from sources from 'http://pypi.python.org/pypi/simplejson'"
+    print >> sys.stderr , "   - simplejson is a standard json library in the Python core since 2.6"
     sys.exit(1)
 
 def insert_base_types(d):
@@ -45,7 +52,7 @@ def insert_base_types(d):
         
 class AmqpSpec:
     def __init__(self, filename):
-        self.spec = json.read(file(filename).read())
+        self.spec = json.load(file(filename))
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
