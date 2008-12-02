@@ -3,35 +3,35 @@
     "major-version": 8,
     "minor-version": 0,
     "port": 5672,
-    "copyright":"
-        Copyright (c) 2008 John Leuner
-        
-        Permission is hereby granted, free of charge, to any person
-        obtaining a copy of this file (the \"Software\"), to deal in the
-        Software without restriction, including without limitation the 
-        rights to use, copy, modify, merge, publish, distribute, 
-        sublicense, and/or sell copies of the Software, and to permit 
-        persons to whom the Software is furnished to do so, subject to 
-        the following conditions:
-
-        The above copyright notice and this permission notice shall be
-        included in all copies or substantial portions of the Software.
-
-        THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,
-        EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-        OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-        NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-        HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-        WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-        FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-        OTHER DEALINGS IN THE SOFTWARE.
-
-        Class information entered from amqp_xml0-8.pdf and domain types from amqp-xml-doc0-9.pdf
-
-        b3cb053f15e7b98808c0ccc67f23cb3e  amqp_xml0-8.pdf
-        http://www.twiststandards.org/index.php?option=com_docman&task=cat_view&gid=28&&Itemid=90
-        8444db91e2949dbecfb2585e9eef6d64  amqp-xml-doc0-9.pdf
-        https://jira.amqp.org/confluence/download/attachments/720900/amqp-xml-doc0-9.pdf?version=1",
+    "copyright": [
+        "Copyright (c) 2008 John Leuner\n",
+        "\n",
+        "Permission is hereby granted, free of charge, to any person\n",
+        "obtaining a copy of this file (the \"Software\"), to deal in the\n",
+        "Software without restriction, including without limitation the \n",
+        "rights to use, copy, modify, merge, publish, distribute, \n",
+        "sublicense, and/or sell copies of the Software, and to permit \n",
+        "persons to whom the Software is furnished to do so, subject to \n",
+        "the following conditions:\n",
+	"\n",
+	"The above copyright notice and this permission notice shall be\n",
+        "included in all copies or substantial portions of the Software.\n",
+	"\n",
+	"THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\n",
+        "EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES\n",
+        "OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\n",
+        "NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT\n",
+        "HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\n",
+        "WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n",
+        "FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR\n",
+        "OTHER DEALINGS IN THE SOFTWARE.\n",
+	"\n",
+	"Class information entered from amqp_xml0-8.pdf and domain types from amqp-xml-doc0-9.pdf\n",
+	"\n",
+	"b3cb053f15e7b98808c0ccc67f23cb3e  amqp_xml0-8.pdf\n",
+        "http://www.twiststandards.org/index.php?option=com_docman&task=cat_view&gid=28&&Itemid=90\n",
+        "8444db91e2949dbecfb2585e9eef6d64  amqp-xml-doc0-9.pdf\n",
+        "https://jira.amqp.org/confluence/download/attachments/720900/amqp-xml-doc0-9.pdf?version=1\n"],
 
     "domains": [
 	["access-ticket", "short"],
