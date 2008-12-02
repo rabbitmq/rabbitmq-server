@@ -131,6 +131,8 @@ test_topic_matching() ->
     passed.
 
 test_app_management() ->
+    true = rabbit_mnesia:schema_current(),
+
     %% starting, stopping, status
     ok = control_action(stop_app, []),
     ok = control_action(stop_app, []),
