@@ -30,7 +30,7 @@
 
 -export([table_names/0]).
 
-%% Called by rabbit-mnesia-current script
+%% Called by rabbitmq-mnesia-current script
 -export([schema_current/0]).
 
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
