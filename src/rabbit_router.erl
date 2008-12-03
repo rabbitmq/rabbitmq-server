@@ -36,6 +36,9 @@
 
 -define(SERVER, ?MODULE).
 
+%% cross-node routing optimisation is disabled because of bug 19758.
+-define(BUG19758, true).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -50,6 +53,14 @@
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+-ifdef(BUG19758).
+
+deliver(QPids, Mandatory, Immediate, Txn, Message) ->
+    check_delivery(Mandatory, Immediate,
+                   run_bindings(QPids, Mandatory, Immediate, Txn, Message)).
+
+-else.
 
 deliver(QPids, Mandatory, Immediate, Txn, Message) ->
     %% we reduce inter-node traffic by grouping the qpids by node and
@@ -113,6 +124,8 @@ deliver_per_node(NodeQPids, Mandatory, Immediate,
                     {false, []},
                     R),
     check_delivery(Mandatory, Immediate, {Routed, lists:append(Handled)}).
+
+-endif.
 
 %%--------------------------------------------------------------------
 
