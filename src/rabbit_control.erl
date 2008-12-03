@@ -113,9 +113,9 @@ Available commands:
   list_user_vhosts <UserName>
   list_vhost_users <VHostPath>
 
-  list_queues <QueueInfoItem> [<QueueInfoItem> ...]
-  list_exchanges <ExchangeInfoItem> [<ExchangeInfoItem> ...]
-  list_bindings
+  list_queues    [-p <VHostPath>] <QueueInfoItem> [<QueueInfoItem> ...]
+  list_exchanges [-p <VHostPath>] <ExchangeInfoItem> [<ExchangeInfoItem> ...]
+  list_bindings  [-p <VHostPath>] 
   list_connections <ConnectionInfoItem> [<ConnectionInfoItem> ...]
 
 Quiet output mode is selected with the \"-q\" flag. Informational messages
@@ -232,55 +232,66 @@ action(list_vhost_users, Node, Args = [_VHostPath], Inform) ->
 
 action(list_queues, Node, Args, Inform) ->
     Inform("Listing queues", []),
-    ArgAtoms = [list_to_atom(X) || X <- default_if_empty(Args, ["name", "messages"])],
+    {_VHostArg, RemainingArgs} = parse_vhost_flag(Args),
+    ArgAtoms = default_if_empty(RemainingArgs, [name, messages]),
     display_info_list(rpc_call(Node, rabbit_amqqueue, info_all, [ArgAtoms]), ArgAtoms);
 
 action(list_exchanges, Node, Args, Inform) ->
     Inform("Listing exchanges", []),
-    ArgAtoms = [list_to_atom(X) || X <- default_if_empty(Args, ["name", "type"])],
+    {_VHostArg, RemainingArgs} = parse_vhost_flag(Args),
+    ArgAtoms = default_if_empty(RemainingArgs, [name, type]),
     display_info_list(rpc_call(Node, rabbit_exchange, info_all, [ArgAtoms]), ArgAtoms);
 
-action(list_bindings, Node, [], Inform) ->
+action(list_bindings, Node, Args, Inform) ->
     Inform("Listing bindings", []),
+    {_VHostArg, _} = parse_vhost_flag(Args),
     lists:map(
-        fun({#resource{name = ExchangeName, virtual_host = VirtualHost}, 
-             #resource{name = QueueName, virtual_host = VirtualHost},
-             RoutingKey, Arguments}) ->
-            io:format("~s@~s ~s ~s@~s ~w~n", 
-                [ExchangeName, VirtualHost, RoutingKey, QueueName, VirtualHost, Arguments])
+        fun({#resource{name = ExchangeName, virtual_host = _VirtualHost}, 
+             #resource{name = QueueName, virtual_host = _VirtualHost},
+             RoutingKey, 
+             Arguments}) ->
+            io:format("~s\t~s\t~s\t~w~n", 
+                [url_encode(ExchangeName), RoutingKey, url_encode(QueueName), Arguments])
         end, 
         rpc_call(Node, rabbit_exchange, list_bindings, [])),
     ok;
 
 action(list_connections, Node, Args, Inform) ->
     Inform("Listing connections", []),
-    ArgAtoms = [list_to_atom(X) || X <- default_if_empty(Args, ["user", "peer_address", "peer_port"])],
+    ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port]),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all, [ArgAtoms]), ArgAtoms).
 
+parse_vhost_flag(Args) when is_list(Args) ->
+        case Args of 
+            ["-p", VHost | RemainingArgs] -> {VHost, RemainingArgs};  
+            RemainingArgs                 -> {"/", RemainingArgs}
+        end.
+
 default_if_empty(List, Default) when is_list(List) ->
-    case List of
-        [] -> Default;
-        _ -> List
+    if List == [] -> 
+        Default; 
+       true -> 
+        [list_to_atom(X) || X <- List]
     end.
 
 display_info_list(Results, InfoItemArgs) when is_list(Results) ->
     lists:map(
         fun (ResultRow) ->
-            lists:foreach(
+            RenderInfoItem = 
                 fun(InfoItemName) -> 
-                    {value, Info = {InfoItemName, Data}} = lists:keysearch(InfoItemName, 1, ResultRow),
+                    {value, Info = {InfoItemName, InfoItemValue}} = lists:keysearch(InfoItemName, 1, ResultRow),
                     case Info of
-                        {_, #resource{virtual_host = VHostPath, name = Name}} ->
-                            io:format("~s@~s ", [Name, VHostPath]);
+                        {_, #resource{name = Name}} ->
+                            url_encode(Name);
                         {Key, IpAddress} when Key =:= address; Key =:= peer_address andalso is_tuple(IpAddress) ->
-                            io:format("~s ", [inet_parse:ntoa(IpAddress)]);
-                        _ when is_binary(Data) -> 
-                            io:format("~s ", [Data]);
+                            inet_parse:ntoa(IpAddress);
+                        _ when is_binary(InfoItemValue) -> 
+                            url_encode(InfoItemValue);
                         _ -> 
-                            io:format("~w ", [Data])
+                            io_lib:format("~w", [InfoItemValue])
                     end 
                 end,
-                InfoItemArgs),
+            io:fwrite(string:join([RenderInfoItem(X) || X <- InfoItemArgs], "\t")),
             io:nl()
         end,
         Results),
@@ -299,3 +310,30 @@ call(Node, {Mod, Fun, Args}) ->
 
 rpc_call(Node, Mod, Fun, Args) ->
     rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
+
+%% url_encode is lifted from ibrowse, modified to preserve some characters
+url_encode(Bin) when binary(Bin) ->
+    url_encode_char(lists:reverse(binary_to_list(Bin)), []).
+
+url_encode_char([X | T], Acc) when X >= $a, X =< $z ->
+    url_encode_char(T, [X | Acc]);
+url_encode_char([X | T], Acc) when X >= $A, X =< $Z ->
+    url_encode_char(T, [X | Acc]);
+url_encode_char([X | T], Acc) when X >= $0, X =< $9 ->
+    url_encode_char(T, [X | Acc]);
+url_encode_char([X | T], Acc)
+  when X == $-; X == $_; X == $.; X == $~;
+       X == $!; X == $*; X == $'; X == $(;
+       X == $); X == $;; X == $:; X == $@;
+       X == $&; X == $=; X == $+; X == $$;
+       X == $,; X == $/; X == $?; X == $%;
+       X == $#; X == $[; X == $] ->
+    url_encode_char(T, [X | Acc]);
+url_encode_char([X | T], Acc) ->
+    url_encode_char(T, [$%, d2h(X bsr 4), d2h(X band 16#0f) | Acc]);
+url_encode_char([], Acc) ->
+    Acc.
+
+d2h(N) when N<10 -> N+$0;
+d2h(N) -> N+$a-10.
+
