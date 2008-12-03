@@ -27,9 +27,9 @@
 
 -export([start/0, recover/0, declare/4, delete/3, purge/1, internal_delete/1]).
 -export([pseudo_queue/2]).
--export([lookup/1, with/2, with_or_die/2,
+-export([lookup/1, with/2, with_or_die/2, list/0, list_vhost_queues/1,
          stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4]).
--export([list/1, info/1, info/2, info_all/1, info_all/2]).
+-export([info/1, info/2, info_all/0, info_all/1]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2]).
@@ -63,11 +63,12 @@
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
--spec(list/1 :: (vhost()) -> [amqqueue()]).
+-spec(list/0 :: () -> [amqqueue()]).
+-spec(list_vhost_queues/1 :: (vhost()) -> [amqqueue()]).
 -spec(info/1 :: (amqqueue()) -> [info()]).
 -spec(info/2 :: (amqqueue(), [info_key()]) -> [info()]).
--spec(info_all/1 :: (vhost()) -> [[info()]]).
--spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
+-spec(info_all/0 :: () -> [[info()]]).
+-spec(info_all/1 :: ([info_key()]) -> [[info()]]).
 -spec(stat/1 :: (amqqueue()) -> qstats()).
 -spec(stat_all/0 :: () -> [qstats()]).
 -spec(delete/3 ::
@@ -184,11 +185,13 @@ with_or_die(Name, F) ->
                               not_found, "no ~s", [rabbit_misc:rs(Name)])
                   end).
 
-list(VHostPath) ->
+list() -> rabbit_misc:dirty_read_all(amqqueue).
+
+map(F) -> rabbit_misc:filter_exit_map(F, list()).
+
+list_vhost_queues(VHostPath) ->
     mnesia:dirty_match_object(
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
-
-map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
 info(#amqqueue{ pid = QPid }) ->
     gen_server:call(QPid, info).
@@ -199,9 +202,9 @@ info(#amqqueue{ pid = QPid }, Items) ->
         {error, Error} -> throw(Error)
     end.
 
-info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
+info_all() -> map(fun (Q) -> info(Q) end).
 
-info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
+info_all(Items) -> map(fun (Q) -> info(Q, Items) end).
 
 stat(#amqqueue{pid = QPid}) -> gen_server:call(QPid, stat).
 
