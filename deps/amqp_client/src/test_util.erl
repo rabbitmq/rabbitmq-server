@@ -242,6 +242,8 @@ basic_qos_test(Connection) ->
     lib_amqp:declare_queue(lib_amqp:start_channel(Connection), Q),
     %Channel = lib_amqp:start_channel(Connection),
     Consumers = [spawn(fun() -> Channel = lib_amqp:start_channel(Connection),
+                                amqp_channel:call(Channel,
+                                        #'basic.qos'{prefetch_count = 1}),
                                 lib_amqp:subscribe(Channel, Q, self(), false),
                                 amqp_channel:call(Channel,
                                     #'basic.qos'{prefetch_count = 1}),
