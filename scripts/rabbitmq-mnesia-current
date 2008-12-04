@@ -43,6 +43,7 @@ fi
 exec erl \
     -pa "`dirname $0`/../ebin" \
     -noshell \
+    -sname ${NODENAME} \
     -eval 'halt(case rabbit_mnesia:schema_current() of true -> 0; false -> 1 end).' \
     -mnesia dir "\"${MNESIA_DIR}\"" \
     -kernel error_logger '{file,"'/dev/null'"}' \
