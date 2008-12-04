@@ -127,6 +127,9 @@ defaults to the node named \"rabbit\" on the local host. On a host named
 NODENAME has been set to some non-default value at broker startup time). The
 output of hostname -s is usually the correct suffix to use after the \"@\" sign.
 
+The list_queues, list_exchanges and list_bindings commands accept an optional
+virtual host parameter for which to display results. The default value is \"/\".
+
 <QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
 arguments, pid, messages_ready, messages_unacknowledged, messages_uncommitted, 
 messages, acks_uncommitted, consumers, transactions, memory]. The default is 
@@ -136,8 +139,7 @@ messages, acks_uncommitted, consumers, transactions, memory]. The default is
 auto_delete, arguments]. The default is to display name and type.
 
 The output format for \"list_bindings\" is a list of rows containing 
-virtual host, exchange name, routing key, queue name and arguments, in that 
-order.
+exchange name, routing key, queue name and arguments, in that order.
 
 <ConnectioInfoItem> must be a member of the list [pid, address, port, 
 peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
@@ -232,19 +234,19 @@ action(list_vhost_users, Node, Args = [_VHostPath], Inform) ->
 
 action(list_queues, Node, Args, Inform) ->
     Inform("Listing queues", []),
-    {_VHostArg, RemainingArgs} = parse_vhost_flag(Args),
+    {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
     ArgAtoms = default_if_empty(RemainingArgs, [name, messages]),
-    display_info_list(rpc_call(Node, rabbit_amqqueue, info_all, [ArgAtoms]), ArgAtoms);
+    display_info_list(rpc_call(Node, rabbit_amqqueue, info_all, [VHostArg, ArgAtoms]), ArgAtoms);
 
 action(list_exchanges, Node, Args, Inform) ->
     Inform("Listing exchanges", []),
-    {_VHostArg, RemainingArgs} = parse_vhost_flag(Args),
+    {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
     ArgAtoms = default_if_empty(RemainingArgs, [name, type]),
-    display_info_list(rpc_call(Node, rabbit_exchange, info_all, [ArgAtoms]), ArgAtoms);
+    display_info_list(rpc_call(Node, rabbit_exchange, info_all, [VHostArg, ArgAtoms]), ArgAtoms);
 
 action(list_bindings, Node, Args, Inform) ->
     Inform("Listing bindings", []),
-    {_VHostArg, _} = parse_vhost_flag(Args),
+    {VHostArg, _} = parse_vhost_flag(Args),
     lists:map(
         fun({#resource{name = ExchangeName, virtual_host = _VirtualHost}, 
              #resource{name = QueueName, virtual_host = _VirtualHost},
@@ -253,7 +255,7 @@ action(list_bindings, Node, Args, Inform) ->
             io:format("~s\t~s\t~s\t~w~n", 
                 [url_encode(ExchangeName), RoutingKey, url_encode(QueueName), Arguments])
         end, 
-        rpc_call(Node, rabbit_exchange, list_bindings, [])),
+        rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])),
     ok;
 
 action(list_connections, Node, Args, Inform) ->
@@ -263,8 +265,8 @@ action(list_connections, Node, Args, Inform) ->
 
 parse_vhost_flag(Args) when is_list(Args) ->
         case Args of 
-            ["-p", VHost | RemainingArgs] -> {VHost, RemainingArgs};  
-            RemainingArgs                 -> {"/", RemainingArgs}
+            ["-p", VHost | RemainingArgs] -> {list_to_binary(VHost), RemainingArgs};  
+            RemainingArgs                 -> {<<"/">>, RemainingArgs}
         end.
 
 default_if_empty(List, Default) when is_list(List) ->
