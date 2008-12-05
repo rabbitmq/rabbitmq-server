@@ -18,6 +18,7 @@ prepare:
 	cp init.d SOURCES/rabbitmq-server.init
 	cp rabbitmqctl_wrapper SOURCES/rabbitmq-server.wrapper
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
+	cp rabbitmq-server.conf SOURCES/rabbitmq-server.conf
 
 server: prepare
 	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --target i386
