@@ -43,6 +43,7 @@
 -export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
+-export([format_stderr/2]).
 
 -import(mnesia).
 -import(lists).
@@ -99,6 +100,7 @@
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
+-spec(format_stderr/2 :: (string(), [any()]) -> 'true').
 
 -endif.
 
@@ -377,3 +379,8 @@ ensure_parent_dirs_exist(Filename) ->
         {error, Reason} -> 
             throw({error, {cannot_create_parent_dirs, Filename, Reason}})
     end.
+
+format_stderr(Fmt, Args) ->
+    Port = open_port({fd, 0, 2}, [out]),
+    port_command(Port, io_lib:format(Fmt, Args)),
+    port_close(Port).

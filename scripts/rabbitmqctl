@@ -24,17 +24,10 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-[ "x" = "x$NODENAME" ] && NODENAME=rabbit
-MNESIA_BASE=/var/lib/rabbitmq/mnesia
-LOG_BASE=/var/log/rabbitmq
-ERL_ARGS=
-MNESIA_DIR=${MNESIA_BASE}/${NODENAME}
-
 exec erl \
     -pa "`dirname $0`/../ebin" \
     -noinput \
     -hidden \
-    ${ERL_ARGS} \
     -sname rabbitmqctl$$ \
     -s rabbit_control \
     -extra "$@"
