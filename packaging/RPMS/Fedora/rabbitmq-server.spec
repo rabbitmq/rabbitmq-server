@@ -7,6 +7,7 @@ Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{v
 Source1: rabbitmq-server.init
 Source2: rabbitmq-server.wrapper
 Source3: rabbitmq-server.logrotate
+Source4: rabbitmq-server-preserve-db.sh
 URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
 %if 0%{?debian}
@@ -86,6 +87,11 @@ fi
 
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
 chown -R rabbitmq:rabbitmq /var/log/rabbitmq
+
+su rabbitmq -s /bin/sh -c %{_rabbitbindir}/rabbitmq-mnesia-current
+if [ $? = 1 ]; then
+	/bin/sh %SOURCE4 /var/lib/rabbitmq/mnesia
+fi
 
 /sbin/chkconfig --add %{name}
 /sbin/service rabbitmq-server start
