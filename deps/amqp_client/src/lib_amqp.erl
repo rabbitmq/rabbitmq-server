@@ -49,7 +49,7 @@ publish_internal(Fun, Channel, X, RoutingKey, Payload, Mandatory) ->
     BasicPublish = #'basic.publish'{exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = Mandatory, immediate = false},
-    {ClassId, MethodId} = rabbit_framing:method_id('basic.publish'),
+    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
     Content = #content{class_id = ClassId,
                    properties = amqp_util:basic_properties(),
                    properties_bin = none,
@@ -62,12 +62,16 @@ close_channel(Channel) ->
     #'channel.close_ok'{} = amqp_channel:call(Channel, ChannelClose),
     ok.
 
-teardown(Connection, Channel) ->
-    close_channel(Channel),
+close_connection(Connection) ->
     ConnectionClose = #'connection.close'{reply_code = 200, reply_text = <<"Goodbye">>,
                                               class_id = 0, method_id = 0},
     #'connection.close_ok'{} = amqp_connection:close(Connection, ConnectionClose),
     ok.
+
+teardown(Connection, Channel) ->
+    close_channel(Channel),
+    close_connection(Connection).
+
 
 get(Channel, Q) -> get(Channel, Q, true).
 
@@ -75,18 +79,9 @@ get(Channel, Q, NoAck) ->
     BasicGet = #'basic.get'{queue = Q, no_ack = NoAck},
     {Method, Content} = amqp_channel:call(Channel, BasicGet),
     case Method of
-        'basic.get_empty' ->
-            'basic.get_empty';
-        Other ->
-            #'basic.get_ok'{delivery_tag = DeliveryTag,
-                            redelivered = Redelivered,
-                            exchange = X,
-                            routing_key = RoutingKey,
-                            message_count = MessageCount} = Method,
-            #content{class_id = ClassId,
-                     properties = Properties,
-                     properties_bin = PropertiesBin,
-                     payload_fragments_rev = PayloadFragments} = Content,
+        'basic.get_empty' -> 'basic.get_empty';
+        _ ->
+            #'basic.get_ok'{delivery_tag = DeliveryTag} = Method,
             case NoAck of
                 true -> Content;
                 false -> {DeliveryTag, Content}
@@ -116,7 +111,7 @@ subscribe(Channel, Q, Consumer, Tag, NoAck) ->
 
 unsubscribe(Channel, Tag) ->
     BasicCancel = #'basic.cancel'{consumer_tag = Tag, nowait = false},
-    #'basic.cancel_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicCancel),
+    #'basic.cancel_ok'{} = amqp_channel:call(Channel,BasicCancel),
     ok.
 
 declare_queue(Channel) ->
@@ -127,10 +122,8 @@ declare_queue(Channel, Q) ->
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
                                     nowait = false, arguments = []},
-    #'queue.declare_ok'{queue = Q1,
-                        message_count = MessageCount,
-                        consumer_count = ConsumerCount}
-	                    = amqp_channel:call(Channel, QueueDeclare),
+    #'queue.declare_ok'{queue = Q1}
+                        = amqp_channel:call(Channel, QueueDeclare),
     Q1.
 
 delete_queue(Channel, Q) ->

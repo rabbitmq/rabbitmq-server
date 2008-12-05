@@ -125,7 +125,7 @@ rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
     case queue:len(NewRequestQueue) of
         1 ->
             Do2(Writer,Method);
-        Other ->
+        _ ->
             ok
         end,
     {noreply, NewState}.
@@ -152,11 +152,8 @@ rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
     end,
     {noreply, State#channel_state{rpc_requests = NewRequestQueue}}.
 
-subscription_top_half(Method, From, State = #channel_state{writer_pid = Writer, do2 = Do2}) ->
-    Do2(Writer,Method),
-    {noreply, State}.
 
-resolve_consumer(ConsumerTag, #channel_state{consumers = []}) ->
+resolve_consumer(_ConsumerTag, #channel_state{consumers = []}) ->
     exit(no_consumers_registered);
 
 resolve_consumer(ConsumerTag, #channel_state{consumers = Consumers}) ->
@@ -178,7 +175,7 @@ channel_cleanup(State = #channel_state{consumers = []}) ->
     shutdown_writer(State);
 
 channel_cleanup(State = #channel_state{consumers = Consumers}) ->
-    Terminator = fun(ConsumerTag, Consumer) -> Consumer ! shutdown end,
+    Terminator = fun(_ConsumerTag, Consumer) -> Consumer ! shutdown end,
     dict:map(Terminator, Consumers),
     NewState = State#channel_state{closing = true, consumers = []},
     shutdown_writer(NewState).
@@ -195,14 +192,14 @@ return_handler(State = #channel_state{return_handler_pid = ReturnHandler}) ->
 handle_method(BasicConsumeOk = #'basic.consume_ok'{consumer_tag = ConsumerTag},
                         State = #channel_state{anon_sub_requests = Anon,
                                                tagged_sub_requests = Tagged}) ->
-    {From, Consumer, State0} =
+    {_From, Consumer, State0} =
         case dict:find(ConsumerTag,Tagged) of
             {ok, {F,C}} ->
                 NewTagged = dict:erase(ConsumerTag,Tagged),
                 {F,C,State#channel_state{tagged_sub_requests = NewTagged}};
             error ->
                 case queue:out(Anon) of
-                    {empty,X} ->
+                    {empty,_} ->
                         exit(anonymous_queue_empty, ConsumerTag);
                     {{value, {F,C}}, NewAnon} ->
                         {F,C,State#channel_state{anon_sub_requests = NewAnon}}
@@ -332,7 +329,7 @@ handle_cast({register_flow_handler, FlowHandler}, State) ->
     NewState = State#channel_state{flow_handler_pid = FlowHandler},
     {noreply, NewState};
 
-handle_cast({notify_sent, Peer}, State) ->
+handle_cast({notify_sent, _Peer}, State) ->
     {noreply, State}.
 
 %---------------------------------------------------------------------------
@@ -364,6 +361,16 @@ handle_info(shutdown, State) ->
     NewState = channel_cleanup(State),
     {stop, normal, NewState};
 
+%% Handle a trapped exit, e.g. from the direct peer
+%% In the direct case this is the local channel
+%% In the network case this is the process that writes to the socket
+%% on a per channel basis
+handle_info({'EXIT', _Pid, Reason},
+            State = #channel_state{number = Number}) ->
+    io:format("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
+    NewState = channel_cleanup(State),
+    {stop, normal, NewState};
+
 %---------------------------------------------------------------------------
 % This is for a race condition between a close.close_ok and a subsequent channel.open
 %---------------------------------------------------------------------------
@@ -386,10 +393,13 @@ handle_info( {channel_exception, Channel, Reason}, State) ->
 %---------------------------------------------------------------------------
 % Rest of the gen_server callbacks
 %---------------------------------------------------------------------------
-terminate(normal, State) -> ok;
-terminate(Reason, State) ->
+terminate(normal, _State) ->
+    ok;
+
+terminate(_Reason, State) ->
     channel_cleanup(State),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     State.
+
