@@ -300,7 +300,7 @@ cf_consumer_loop(Channel, Tag) ->
     receive
         #'basic.consume_ok'{} -> cf_consumer_loop(Channel, Tag);
         #'basic.cancel_ok'{} -> ok;
-        {#'basic.deliver'{delivery_tag = DeliveryTag}, Content} ->
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, _Content} ->
              lib_amqp:ack(Channel, DeliveryTag),
              cf_consumer_loop(Channel, Tag);
         stop ->

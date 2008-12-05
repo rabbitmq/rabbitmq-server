@@ -265,11 +265,11 @@ init([InitialState]) ->
 handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
     rpc_top_half(Method, From, State);
 
-handle_call({call, Method, Content}, From,
+handle_call({call, _Method, _Content}, _From,
             State = #channel_state{flow_control = true}) ->
     {reply, blocked, State};
 
-handle_call({call, Method, Content}, From,
+handle_call({call, Method, Content}, _From,
             State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
     Do3(Writer, Method, Content),
     {reply, ok, State};
