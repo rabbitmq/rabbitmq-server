@@ -10,5 +10,5 @@ for arg in "$@" ; do
 done
 
 cd /
-su rabbitmq -s /bin/sh -c "/usr/sbin/rabbitmqctl_real ${CMDLINE}"
+su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/rabbitmqctl ${CMDLINE}"
 
