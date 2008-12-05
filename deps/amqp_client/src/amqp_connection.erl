@@ -119,7 +119,7 @@ start_channel(ChannelNumber,CloseFun,Do2,Do3,State = #connection_state{reader_pi
 
 assign_channel_number(none, #connection_state{channels = Channels, channel_max = Max}) ->
     allocate_channel_number(dict:fetch_keys(Channels), Max);
-assign_channel_number(ChannelNumber, State) ->
+assign_channel_number(ChannelNumber, _State) ->
     %% TODO bug: check whether this is already taken
     ChannelNumber.
 
@@ -137,14 +137,14 @@ register_channel(ChannelNumber, ChannelPid, State = #connection_state{channels =
 %% This peforms the reverse mapping so that you can lookup a channel pid
 %% Let's hope that this lookup doesn't get too expensive .......
 unregister_channel(ChannelPid, State = #connection_state{channels = Channels0}) when is_pid(ChannelPid)->
-    ReverseMapping = fun(Number, Pid) -> Pid == ChannelPid end,
+    ReverseMapping = fun(_Number, Pid) -> Pid == ChannelPid end,
     Projection = dict:filter(ReverseMapping, Channels0),
     %% TODO This differentiation is only necessary for the direct channel,
     %% look into preventing the invocation of this method
     Channels1 = case dict:fetch_keys(Projection) of
                     [] ->
                         Channels0;
-                    [ChannelNumber|T] ->
+                    [ChannelNumber|_] ->
                         dict:erase(ChannelNumber, Channels0)
                 end,
     State#connection_state{channels = Channels1};
@@ -154,9 +154,9 @@ unregister_channel(ChannelNumber, State = #connection_state{channels = Channels0
     Channels1 = dict:erase(ChannelNumber, Channels0),
     State#connection_state{channels = Channels1}.
 
-allocate_channel_number([], Max)-> 1;
+allocate_channel_number([], _Max)-> 1;
 
-allocate_channel_number(Channels, Max) ->
+allocate_channel_number(Channels, _Max) ->
     MaxChannel = lists:max(Channels),
     %% TODO check channel max and reallocate appropriately
     MaxChannel + 1.
@@ -175,7 +175,7 @@ init([InitialState, Handshake]) ->
     {ok, State}.
 
 %% Starts a new network channel.
-handle_call({network, ChannelNumber, OutOfBand}, From, State) ->
+handle_call({network, ChannelNumber, OutOfBand}, _From, State) ->
     handle_start({ChannelNumber, OutOfBand},
                  fun amqp_network_driver:open_channel/3,
                  fun amqp_network_driver:close_channel/1,
@@ -184,7 +184,7 @@ handle_call({network, ChannelNumber, OutOfBand}, From, State) ->
                  State);
 
 %% Starts a new direct channel.
-handle_call({direct, ChannelNumber, OutOfBand}, From, State) ->
+handle_call({direct, ChannelNumber, OutOfBand}, _From, State) ->
     handle_start({ChannelNumber, OutOfBand},
                  fun amqp_direct_driver:open_channel/3,
                  fun amqp_direct_driver:close_channel/1,
@@ -197,7 +197,7 @@ handle_call({Mode, Close = #'connection.close'{}}, From, State) ->
     close_connection(Mode, Close, From, State),
     {stop,normal,State}.
 
-handle_cast(Message, State) ->
+handle_cast(_Message, State) ->
     {noreply, State}.
 
 %---------------------------------------------------------------------------
@@ -212,14 +212,19 @@ handle_info( {'EXIT', Pid, {amqp,Reason,Msg,Context}}, State) ->
             io:format("Just trapping this exit and proceding to trap an exit from the client channel process~n"),
             {noreply, State};
         true ->
-            io:format("A hard error has occurred, this forces the connection to end~n"),
-            {stop,normal,State}
+            io:format("Hard error: (Code = ~p, Text = ~p)~n", [Code, Text]),
+            {stop, {hard_error, {Code, Text}}, State}
     end;            
 
 %% Just the amqp channel shutting down, so unregister this channel
 handle_info( {'EXIT', Pid, normal}, State) ->
     NewState = unregister_channel(Pid, State),
     {noreply, NewState};
+    
+% This is a special case for abruptly closed socket connections
+handle_info( {'EXIT', _Pid, {socket_error, Reason}}, State) ->
+    {stop, {socket_error, Reason}, State};
+    
 handle_info( {'EXIT', Pid, Reason}, State) ->
     io:format("Connection: Handling exit from ~p --> ~p~n",[Pid,Reason]),
     NewState = unregister_channel(Pid, State),
@@ -229,7 +234,7 @@ handle_info( {'EXIT', Pid, Reason}, State) ->
 % Rest of the gen_server callbacks
 %---------------------------------------------------------------------------
 
-terminate(Reason, State) -> ok.
+terminate(_Reason, _State) -> ok.
 
 code_change(_OldVsn, State, _Extra) ->
     State.

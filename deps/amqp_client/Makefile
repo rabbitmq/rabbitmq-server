@@ -79,12 +79,16 @@ tests_direct: test_direct test_direct_coverage
 	rm -rf $(MNESIA_DIR)
 
 test_direct: $(TARGETS)
-	erl -pa $(LOAD_PATH) -mnesia dir tmp -boot start_sasl -s rabbit -noshell -eval \
-	'direct_client_test:test(),halt().'
+	erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl -s rabbit -noshell \
+	-sasl sasl_error_logger '{file, "'${LOG_BASE}'/rabbit-sasl.log"}' \
+	-kernel error_logger '{file, "'${LOG_BASE}'/rabbit.log"}' \
+	-eval 'direct_client_test:test(),halt().'
 
 test_direct_coverage: $(TARGETS)
-	erl -pa $(LOAD_PATH) -mnesia dir tmp -boot start_sasl -s rabbit -noshell -eval \
-	'direct_client_test:test_coverage(),halt().'
+	erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl -s rabbit -noshell \
+	-sasl sasl_error_logger '{file, "'${LOG_BASE}'/rabbit-sasl.log"}' \
+	-kernel error_logger '{file, "'${LOG_BASE}'/rabbit.log"}' \
+	-eval 'direct_client_test:test_coverage(),halt().'
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam

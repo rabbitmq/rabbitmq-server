@@ -35,7 +35,13 @@
 -record(publish,{q, x, routing_key, bind_key, payload,
                  mandatory = false, immediate = false}).
 
+% The latch constant defines how many processes are spawned in order
+% to run certain functionality in parallel. It follows the standard
+% countdown latch pattern.
 -define(Latch, 100).
+
+% The wait constant defines how long a consumer waits before it
+% unsubscribes
 -define(Wait, 200).
 
 % This test is a gen_server in order to test the rpc components
@@ -76,8 +82,6 @@ queue_exchange_binding(Channel, X, Parent, Tag) ->
     end,
     Q = <<"a.b.c",Tag:32>>,
     Binding = <<"a.b.c.*">>,
-    RoutingKey = <<"a.b.c.d">>,
-    Payload = <<"foobar">>,
     Q1 = lib_amqp:declare_queue(Channel, Q),
     ?assertMatch(Q, Q1),
     lib_amqp:bind_queue(Channel, X, Q, Binding),
@@ -101,7 +105,7 @@ command_serialization_test(Connection) ->
                 Q1 = lib_amqp:declare_queue(Channel, Q),
                 ?assertMatch(Q, Q1),     
                 Parent ! finished
-           end) || Tag <- lists:seq(1,?Latch)],
+           end) || _ <- lists:seq(1,?Latch)],
     latch_loop(?Latch),
     lib_amqp:teardown(Connection, Channel).
 
@@ -125,10 +129,7 @@ get_and_assert_empty(Channel, Q) ->
     
 get_and_assert_equals(Channel, Q, Payload) ->
     Content = lib_amqp:get(Channel, Q),
-    #content{class_id = ClassId,
-             properties = Properties,
-             properties_bin = PropertiesBin,
-             payload_fragments_rev = PayloadFragments} = Content,
+    #content{payload_fragments_rev = PayloadFragments} = Content,
     ?assertMatch([Payload], PayloadFragments).
 
 basic_get_test(Connection) ->
@@ -137,10 +138,7 @@ basic_get_test(Connection) ->
     % TODO: This could be refactored to use get_and_assert_equals,
     % get_and_assert_empty .... would require another bug though :-)
     Content = lib_amqp:get(Channel, Q),
-    #content{class_id = ClassId,
-             properties = Properties,
-             properties_bin = PropertiesBin,
-             payload_fragments_rev = PayloadFragments} = Content,
+    #content{payload_fragments_rev = PayloadFragments} = Content,
     ?assertMatch([<<"foobar">>], PayloadFragments),
     BasicGetEmpty = lib_amqp:get(Channel, Q, false),
     ?assertMatch('basic.get_empty', BasicGetEmpty),
@@ -159,27 +157,23 @@ basic_return_test(Connection) ->
     timer:sleep(200),
     receive
         {BasicReturn = #'basic.return'{}, Content} ->
-            #'basic.return'{reply_code = ReplyCode,
-                            reply_text = ReplyText,
-                            exchange = X,
-                            routing_key = RoutingKey} = BasicReturn,
+            #'basic.return'{reply_text = ReplyText,
+                            exchange = X} = BasicReturn,
             ?assertMatch(<<"unroutable">>, ReplyText),
-            #content{class_id = ClassId,
-                     properties = Props,
-                     properties_bin = PropsBin,
-                     payload_fragments_rev = Payload2} = Content,
+            #content{payload_fragments_rev = Payload2} = Content,
             ?assertMatch([Payload], Payload2);
         WhatsThis ->
             %% TODO investigate where this comes from
-            io:format(">>>Rec'd ~p/~p~n",[WhatsThis])
+            io:format("Spurious message ~p~n",[WhatsThis])
     after 2000 ->
         exit(no_return_received)
-    end.
+    end,
+    lib_amqp:teardown(Connection, Channel).
 
 basic_ack_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
     {ok, Q} = setup_publish(Channel),
-    {DeliveryTag, Content} = lib_amqp:get(Channel, Q, false),
+    {DeliveryTag, _} = lib_amqp:get(Channel, Q, false),
     lib_amqp:ack(Channel, DeliveryTag),
     lib_amqp:teardown(Connection, Channel).
 
@@ -212,7 +206,7 @@ basic_recover_test(Connection) ->
     end,
     lib_amqp:publish(Channel, <<>>, Q, <<"foobar">>),
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag}, Content} ->
+        {#'basic.deliver'{}, _} ->
             %% no_ack set to false, but don't send ack
             ok
     after 2000 ->
@@ -221,7 +215,7 @@ basic_recover_test(Connection) ->
     BasicRecover = #'basic.recover'{requeue = true},
     amqp_channel:cast(Channel,BasicRecover),
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag2}, Content2} ->
+        {#'basic.deliver'{delivery_tag = DeliveryTag2}, _} ->
             lib_amqp:ack(Channel, DeliveryTag2)
     after 2000 ->
         exit(did_not_receive_second_message)
@@ -229,10 +223,12 @@ basic_recover_test(Connection) ->
     lib_amqp:teardown(Connection, Channel).
 
 % QOS is not yet implemented in RabbitMQ
-basic_qos_test(Connection) -> ok.
+basic_qos_test(Connection) ->
+    lib_amqp:close_connection(Connection).
 
 % Reject is not yet implemented in RabbitMQ
-basic_reject_test(Connection) -> ok.
+basic_reject_test(Connection) ->
+    lib_amqp:close_connection(Connection).
 
 
 
@@ -304,14 +300,13 @@ setup_publish(Channel) ->
 
 setup_publish(Channel, #publish{routing_key = RoutingKey,
                                 q = Q, x = X,
-                                bind_key = BindKey, payload = Payload,
-                                mandatory = Mandatory,
-                                immediate = Immediate}) ->
+                                bind_key = BindKey,
+                                payload = Payload}) ->
     ok = setup_exchange(Channel, Q, X, BindKey),
     lib_amqp:publish(Channel, X, RoutingKey, Payload),
     {ok, Q}.
 
-teardown_test(Connection = {ConnectionPid, Mode}) ->
+teardown_test(Connection = {ConnectionPid, _Mode}) ->
     Channel = lib_amqp:start_channel(Connection),
     ?assertMatch(true, is_process_alive(Channel)),
     ?assertMatch(true, is_process_alive(ConnectionPid)),

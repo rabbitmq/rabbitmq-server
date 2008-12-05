@@ -121,6 +121,7 @@ handle_call(Payload, From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+
 handle_info(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State) ->
     NewState = State#rpc_client_state{consumer_tag = ConsumerTag},
     {noreply, NewState};
