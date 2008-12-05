@@ -7,7 +7,7 @@ Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{v
 Source1: rabbitmq-server.init
 Source2: rabbitmq-server.wrapper
 Source3: rabbitmq-server.logrotate
-Source4: rabbitmq-server.conf
+Source4: rabbitmq-server-preserve-db.sh
 URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
 %if 0%{?debian}
