@@ -106,7 +106,8 @@ subscribe(Channel, Q, Consumer, Tag, NoAck) ->
                                     consumer_tag = Tag,
                                     no_local = false, no_ack = NoAck,
                                     exclusive = false, nowait = false},
-    #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, Consumer),
+    #'basic.consume_ok'{consumer_tag = ConsumerTag} = 
+        amqp_channel:subscribe(Channel,BasicConsume, Consumer),
     ConsumerTag.
 
 unsubscribe(Channel, Tag) ->
