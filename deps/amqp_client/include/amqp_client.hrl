@@ -30,7 +30,6 @@
                            vhostpath,
                            reader_pid,
                            channel0_writer_pid,
-                           direct,
                            channel_max,
                            heartbeat,
                            driver,
