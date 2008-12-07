@@ -62,4 +62,4 @@ close_connection(_Close, From, _State) ->
 do(Writer, Method) -> rabbit_channel:do(Writer, Method).
 do(Writer, Method, Content) -> rabbit_channel:do(Writer, Method, Content).
 
-handle_broker_close(State) -> ok.
+handle_broker_close(_State) -> ok.
