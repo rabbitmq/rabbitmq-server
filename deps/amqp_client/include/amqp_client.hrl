@@ -46,6 +46,8 @@
                         tagged_sub_requests = dict:new(),
                         closing = false,
                         return_handler_pid,
+                        flow_control = false,
+                        flow_handler_pid,
                         consumers = dict:new()}).
 
 -record(rpc_client_state, {channel,
