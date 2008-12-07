@@ -109,7 +109,7 @@ start_channel(ChannelNumber,
         #channel_state{
             parent_connection = self(),
             number = Number  = assign_channel_number(ChannelNumber, State),
-            close_fun        = fun(X) -> Driver:close_channel(X) end,
+            close_fun        = fun(X)       -> Driver:close_channel(X) end,
             do2              = fun(X, Y)    -> Driver:do(X, Y) end,
             do3              = fun(X, Y, Z) -> Driver:do(X, Y, Z) end,
             reader_pid = ReaderPid,
