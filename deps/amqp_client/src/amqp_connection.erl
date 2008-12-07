@@ -46,7 +46,7 @@ start(User,Password,ProcLink) when is_boolean(ProcLink) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      vhostpath = <<"/">>},
-    {ok, Pid} = start_internal(InitialState, direct, ProcLink),
+    {ok, Pid} = start_internal(InitialState, amqp_direct_driver, ProcLink),
     Pid;
 
 %% Starts a networked conection to a remote AMQP server.
@@ -57,32 +57,18 @@ start(User,Password,Host,VHost,ProcLink) ->
                                      password = Password,
                                      serverhost = Host,
                                      vhostpath = VHost},
-    {ok, Pid} = start_internal(InitialState, network, ProcLink),
+    {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
 
 start_link(User,Password) -> start(User,Password,true).
 start_link(User,Password,Host) -> start(User,Password,Host,<<"/">>,true).
 start_link(User,Password,Host,VHost) -> start(User,Password,Host,VHost,true).
 
-l2a(L) ->
-    case catch list_to_existing_atom(L) of
-        A when is_atom(A) ->
-            A;
-        _ ->
-            list_to_atom(L)
-    end.
-
-build_driver_spec(DriverType) when is_list(DriverType) ->
-    l2a("amqp_" ++ DriverType ++ "_driver").
-
-start_internal(InitialState, DriverType, ProcLink) when is_atom(DriverType) ->
-    DriverSpec = build_driver_spec(atom_to_list(DriverType)),
-    case ProcLink of
-        true ->                                 
-            gen_server:start_link(?MODULE, [InitialState, DriverSpec], []);
-        false ->
-            gen_server:start(?MODULE, [InitialState, DriverSpec], [])
-    end.
+start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
+    gen_server:start_link(?MODULE, [InitialState, Driver], []);
+    
+start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
+    gen_server:start(?MODULE, [InitialState, Driver], []).
 
 %% Opens a channel without having to specify a channel number.
 %% This function assumes that an AMQP connection (networked or direct)
