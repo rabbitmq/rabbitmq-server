@@ -237,7 +237,7 @@ basic_reject_test(Connection) ->
 % 5. Set the threshold to the lowest possible value
 % 6. When the flow handler receives the pause command, it sets the watermark
 %    to a high value in order to get the broker to send the resume command
-% 7. Allow 5 secs to receive the pause and resume, otherwise timeout and fail
+% 7. Allow 10 secs to receive the pause and resume, otherwise timeout and fail
 channel_flow_test(Connection) ->
     X = <<"amq.direct">>,
     K = Payload = <<"x">>,
