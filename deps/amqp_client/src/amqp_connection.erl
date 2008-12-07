@@ -80,7 +80,8 @@ open_channel(ConnectionPid) -> open_channel(ConnectionPid, none, "").
 %% has already been successfully established.
 open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
     gen_server:call(ConnectionPid,
-                    {ChannelNumber, amqp_util:binary(OutOfBand)}).
+                    {open_channel, ChannelNumber, 
+                     amqp_util:binary(OutOfBand)}).
 
 %% Closes the AMQP connection
 close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close).
@@ -92,8 +93,8 @@ close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close).
 %% Starts a new channel process, invokes the correct driver (network or direct)
 %% to perform any environment specific channel setup and starts the
 %% AMQP ChannelOpen handshake.
-handle_start({ChannelNumber, OutOfBand},
-             #connection_state{driver = Driver} = State) ->
+handle_open_channel({ChannelNumber, OutOfBand},
+                    #connection_state{driver = Driver} = State) ->
     {ChannelPid, Number, NewState} = start_channel(ChannelNumber, State),
     Driver:open_channel({Number, OutOfBand}, ChannelPid, NewState),
     #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
@@ -183,10 +184,8 @@ init([InitialState, Driver]) when is_atom(Driver) ->
     {ok, State#connection_state{driver = Driver} }.
 
 %% Starts a new channel
-%% TODO This is very leaky gen_server callback - could get tagged properly
-%% to avoid ambiguous calls
-handle_call({ChannelNumber, OutOfBand}, _From, State) ->
-    handle_start({ChannelNumber, OutOfBand}, State);
+handle_call({open_channel, ChannelNumber, OutOfBand}, _From, State) ->
+    handle_open_channel({ChannelNumber, OutOfBand}, State);
 
 %% Shuts the AMQP connection down
 handle_call(Close = #'connection.close'{}, From, State) ->
