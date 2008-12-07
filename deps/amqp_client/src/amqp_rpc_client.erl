@@ -57,9 +57,7 @@ setup_reply_queue(State = #rpc_client_state{broker_config = BrokerConfig}) ->
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
                                     nowait = false, arguments = []},
-    #'queue.declare_ok'{queue = Q,
-                        message_count = MessageCount,
-                        consumer_count = ConsumerCount}
+    #'queue.declare_ok'{queue = Q}
                         = amqp_channel:call(ChannelPid, QueueDeclare),
     NewBrokerConfig = BrokerConfig#broker_config{queue = Q},
     State#rpc_client_state{broker_config = NewBrokerConfig}.
@@ -105,23 +103,23 @@ init([BrokerConfig, TypeMapping]) ->
     NewState = setup_consumer(State),
     {ok, NewState}.
 
-terminate(Reason, State) ->
+terminate(_Reason, _State) ->
     ok.
 
-handle_call( Payload = {ContentType, [Function|Args] }, From, State) ->
+handle_call( Payload = {_ContentType, [_Function|_Args] }, From, State) ->
     NewState = publish(Payload, From, State),
     {noreply, NewState}.
 
-handle_cast(Msg, State) ->
+handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State) ->
+handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
-handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
+handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State};
 
-handle_info({content, ClassId, Properties, PropertiesBin, Payload},
+handle_info({content, ClassId, _Properties, PropertiesBin, Payload},
             State = #rpc_client_state{continuations = Continuations,
                                       type_mapping = TypeMapping}) ->
     #'P_basic'{correlation_id = CorrelationId,

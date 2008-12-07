@@ -49,7 +49,7 @@ register_consumer(RpcClientState = #rpc_client_state{broker_config = BrokerConfi
 % Encoding and decoding
 %---------------------------------------------------------------------------
 
-decode(?Hessian, [H|T], State) ->
+decode(?Hessian, [H|_], State) ->
     hessian:decode(H, State).
 
 encode(fault, ?Hessian, Reason) ->

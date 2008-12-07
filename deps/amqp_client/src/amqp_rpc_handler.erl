@@ -37,7 +37,7 @@
 % gen_server callbacks
 %---------------------------------------------------------------------------
 init([ServerName, TypeMapping, Username, Password,
-      BC = #broker_config{exchange = X, routing_key = RoutingKey,
+      BC = #broker_config{exchange = X,
                           queue = Q, bind_key = BindKey}]) ->
     Connection = amqp_connection:start(Username, Password),
     ChannelPid = test_util:setup_channel(Connection),
@@ -49,7 +49,7 @@ init([ServerName, TypeMapping, Username, Password,
     BasicConsume = #'basic.consume'{queue = Q,
                                     consumer_tag = <<"">>,
                                     no_local = false, no_ack = true, exclusive = false, nowait = false},
-    #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(ChannelPid, BasicConsume, self()),
+    #'basic.consume_ok'{} = amqp_channel:call(ChannelPid, BasicConsume, self()),
     init([State]);
 
 init([State = #rpc_handler_state{server_name = ServerName}]) ->
@@ -61,20 +61,20 @@ init([State = #rpc_handler_state{server_name = ServerName}]) ->
 handle_info(shutdown, State) ->
     terminate(shutdown, State);
 
-handle_info(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State) ->
+handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
-handle_info(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
+handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State};
 
-handle_info({content, ClassId, Properties, PropertiesBin, Payload},
+handle_info({content, ClassId, _Properties, PropertiesBin, Payload},
             State = #rpc_handler_state{broker_config = BrokerConfig,
                                        server_pid = ServerPid,
                                        type_mapping = TypeMapping}) ->
-    #broker_config{channel_pid = ChannelPid, exchange = X} = BrokerConfig,
-    Props = #'P_basic'{correlation_id = CorrelationId,
-                       reply_to = Q,
-                       content_type = ContentType}
+    #broker_config{channel_pid = ChannelPid} = BrokerConfig,
+    #'P_basic'{correlation_id = CorrelationId,
+               reply_to = Q,
+               content_type = ContentType}
     = rabbit_framing:decode_properties(ClassId, PropertiesBin),
 
     io:format("ABOUT 2---------> ~p / ~p ~n",[Payload,TypeMapping]),
@@ -109,13 +109,13 @@ handle_info({content, ClassId, Properties, PropertiesBin, Payload},
 % Rest of the gen_server callbacks
 %---------------------------------------------------------------------------
 
-handle_call(Message, From, State) ->
+handle_call(_Message, _From, State) ->
     {noreply, State}.
 
-handle_cast(Message, State) ->
+handle_cast(_Message, State) ->
     {noreply, State}.
 
-terminate(Reason, State) ->
+terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
