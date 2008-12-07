@@ -41,9 +41,8 @@
 % API
 %---------------------------------------------------------------------------
 
-start(Connection, QueueName, ServerPid) ->
-    {ok, Pid} = gen_server:start(?MODULE,
-                                 [Connection, QueueName, ServerPid], []),
+start(Connection, Queue, Fun) ->
+    {ok, Pid} = gen_server:start(?MODULE, [Connection, Queue, Fun], []),
     Pid.
 
 stop(Pid) ->
@@ -53,17 +52,17 @@ stop(Pid) ->
 % gen_server callbacks
 %---------------------------------------------------------------------------
 
-init([Connection, QueueName, ServerPid]) ->
+init([Connection, Queue, Fun]) ->
     Channel = lib_amqp:start_channel(Connection),
-    lib_amqp:declare_queue(Channel, QueueName),
-    Tag = lib_amqp:subscribe(Channel, QueueName, self()),
+    lib_amqp:declare_queue(Channel, Queue),
+    Tag = lib_amqp:subscribe(Channel, Queue, self()),
     State = #rpc_server_state{channel = Channel,
                               consumer_tag = Tag,
-                              server_pid = ServerPid},
+                              handler = Fun},
     {ok, State}.
 
 handle_info(shutdown, State = #rpc_server_state{channel = Channel,
-                                                 consumer_tag = Tag}) ->
+                                                consumer_tag = Tag}) ->
     Reply = lib_amqp:unsubscribe(Channel, Tag),
     {noreply, Reply, State};
 
@@ -75,17 +74,11 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 
 handle_info({#'basic.deliver'{},
             {content, ClassId, _Props, PropertiesBin, [Payload] }},
-            State = #rpc_server_state{server_pid = ServerPid,
-                                      channel = Channel}) ->
+            State = #rpc_server_state{handler = Fun, channel = Channel}) ->
     #'P_basic'{correlation_id = CorrelationId,
                reply_to = Q} =
                rabbit_framing:decode_properties(ClassId, PropertiesBin),
-    Response = case gen_server:call(ServerPid, Payload) of
-                    {'EXIT', Reason} ->
-                        term_to_binary(Reason);
-                    Other ->
-                        Other
-               end,
+    Response = Fun(Payload),
     Properties = #'P_basic'{correlation_id = CorrelationId},
     lib_amqp:publish(Channel, <<>>, Q, Response, Properties),
     {noreply, State}.

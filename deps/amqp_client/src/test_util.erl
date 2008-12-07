@@ -44,12 +44,6 @@
 % unsubscribes
 -define(Wait, 200).
 
-% This test is a gen_server in order to test the rpc components
--behaviour(gen_server).
-
--export([init/1, terminate/2, code_change/3, handle_call/3,
-         handle_cast/2, handle_info/2]).
-
 %%%%
 %
 % This is an example of how the client interaction should work
@@ -353,51 +347,18 @@ cf_handler_loop(Producer) ->
 % same argument against the same underlying gen_server instance.
 rpc_test(Connection) ->
     Q = uuid(),
-    {ok, Handler} = gen_server:start(?MODULE, [], []),
-    Server = amqp_rpc_server:start(Connection, Q, Handler),
+    Fun = fun(X) -> X + 1 end,
+    RPCHandler = fun(X) -> term_to_binary(Fun(binary_to_term(X))) end,
+    Server = amqp_rpc_server:start(Connection, Q, RPCHandler),
     Client = amqp_rpc_client:start(Connection, Q),
     Input = 1,
     Reply = amqp_rpc_client:call(Client, term_to_binary(Input)),
-    Expected = gen_server:call(Handler, Input),
+    Expected = Fun(Input),
     DecodedReply = binary_to_term(Reply),
     ?assertMatch(Expected, DecodedReply),
     amqp_rpc_client:stop(Client),
     amqp_rpc_server:stop(Server),
-    gen_server:call(Handler, stop),
     ok.
-
-increment(A) ->
-    A + 1.
-
-%---------------------------------------------------------------------------
-% gen_server callbacks
-%---------------------------------------------------------------------------
-
-init(Args) ->
-    {ok, Args}.
-
-handle_info(_Msg, State) ->
-    {noreply, State}.
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
-
-handle_call(stop, _From, State) ->
-    {stop, normal, ok, State};
-
-handle_call(Msg, _From, State) when is_binary(Msg) ->
-    Arg = binary_to_term(Msg),
-    Reply = term_to_binary(increment(Arg)),
-    {reply, Reply, State};
-
-handle_call(Msg, _From, State) when is_integer(Msg) ->
-    {reply, increment(Msg), State}.
-
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    State.
 
 %---------------------------------------------------------------------------
 

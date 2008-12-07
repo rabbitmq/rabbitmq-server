@@ -60,5 +60,5 @@
 
 -record(rpc_server_state, {channel,
                            consumer_tag,
-                           server_pid}).
+                           handler}).
 
