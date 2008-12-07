@@ -31,7 +31,7 @@
 
 -behaviour(gen_server).
 
--export([start/2, start/3, stop/1]).
+-export([start/2, stop/1]).
 -export([call/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3,
          handle_cast/2, handle_info/2]).
@@ -41,19 +41,15 @@
 %---------------------------------------------------------------------------
 
 start(Connection, Queue) ->
-    start(Connection, <<>>, Queue).
-
-start(Connection, Exchange, RoutingKey) ->
     Channel = lib_amqp:start_channel(Connection),
-    {ok, Pid} = gen_server:start(?MODULE,
-                                 [Channel, Exchange, RoutingKey], []),
+    {ok, Pid} = gen_server:start(?MODULE, [Channel, Queue], []),
     Pid.
 
 stop(Pid) ->
     gen_server:call(Pid, stop).
 
 call(RpcClientPid, Payload) ->
-    gen_server:call(RpcClientPid, Payload).
+    gen_server:call(RpcClientPid, {call, Payload}).
 
 %---------------------------------------------------------------------------
 % Plumbing
@@ -93,9 +89,9 @@ publish(Payload, From,
 %---------------------------------------------------------------------------
 
 % Sets up a reply queue and consumer within an existing channel
-init([Channel, Exchange, RoutingKey]) ->
+init([Channel, RoutingKey]) ->
     InitialState = #rpc_client_state{channel = Channel,
-                                     exchange = Exchange,
+                                     exchange = <<>>,
                                      routing_key = RoutingKey},
     State = setup_reply_queue(InitialState),
     NewState = setup_consumer(State),
@@ -114,7 +110,7 @@ handle_call(stop, _From, State = #rpc_client_state{channel = Channel,
     lib_amqp:unsubscribe(Channel, Tag),
     {reply, ok, State};
 
-handle_call(Payload, From, State) ->
+handle_call({call, Payload}, From, State) ->
     NewState = publish(Payload, From, State),
     {noreply, NewState}.
 
