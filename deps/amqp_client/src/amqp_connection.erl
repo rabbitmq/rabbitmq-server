@@ -47,7 +47,7 @@ start(User,Password,ProcLink) when is_boolean(ProcLink) ->
                                      password = Password,
                                      vhostpath = <<"/">>},
     {ok, Pid} = start_internal(InitialState, direct, ProcLink),
-    {Pid, direct};
+    Pid;
 
 %% Starts a networked conection to a remote AMQP server.
 start(User,Password,Host) -> start(User,Password,Host,<<"/">>,false).
@@ -58,7 +58,7 @@ start(User,Password,Host,VHost,ProcLink) ->
                                      serverhost = Host,
                                      vhostpath = VHost},
     {ok, Pid} = start_internal(InitialState, network, ProcLink),
-    {Pid, network}.
+    Pid.
 
 start_link(User,Password) -> start(User,Password,true).
 start_link(User,Password,Host) -> start(User,Password,Host,<<"/">>,true).
@@ -87,16 +87,17 @@ start_internal(InitialState, DriverType, ProcLink) when is_atom(DriverType) ->
 %% Opens a channel without having to specify a channel number.
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
-open_channel( {Pid, Mode} ) -> open_channel( {Pid, Mode}, none, "").
+open_channel(ConnectionPid) -> open_channel(ConnectionPid, none, "").
 
 %% Opens a channel with a specific channel number.
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
-open_channel( {ConnectionPid, Mode}, ChannelNumber, OutOfBand) ->
-    gen_server:call(ConnectionPid, {Mode, ChannelNumber, amqp_util:binary(OutOfBand)}).
+open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
+    gen_server:call(ConnectionPid,
+                    {ChannelNumber, amqp_util:binary(OutOfBand)}).
 
 %% Closes the AMQP connection
-close( {ConnectionPid, Mode}, Close) -> gen_server:call(ConnectionPid, {Mode, Close} ).
+close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close).
 
 %---------------------------------------------------------------------------
 % Internal plumbing
@@ -198,18 +199,11 @@ init([InitialState, Driver]) when is_atom(Driver) ->
 %% Starts a new channel
 %% TODO This is very leaky gen_server callback - could get tagged properly
 %% to avoid ambiguous calls
-handle_call({_Whatever, ChannelNumber, OutOfBand}, _From, State) ->
-    handle_start(
-        {ChannelNumber, OutOfBand},
-        % fun(X, Y, Z) -> Module:open_channel(X, Y, Z) end,
-        % fun(X)       -> Module:close_channel(X) end,
-        % fun(X, Y)    -> Module:do(X, Y) end,
-        % fun(X, Y, Z) -> Module:do(X, Y, Z) end,
-        State
-    );
+handle_call({ChannelNumber, OutOfBand}, _From, State) ->
+    handle_start({ChannelNumber, OutOfBand}, State);
 
 %% Shuts the AMQP connection down
-handle_call({_Mode, Close = #'connection.close'{}}, From, State) ->
+handle_call(Close = #'connection.close'{}, From, State) ->
     close_connection(Close, From, State),
     {stop,normal,State}.
 
