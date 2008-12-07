@@ -424,14 +424,15 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
             end
     end;
 
-handle_method(#'basic.qos'{global = true}, _, _State) ->
+handle_method(#'basic.qos'{global = Flag = true}, _, _State) ->
     rabbit_misc:protocol_error(not_implemented, 
-                              "Global flag for basic.qos not implementented");
+                "Global flag (~s) for basic.qos not implementented", [Flag]);
 
 handle_method(#'basic.qos'{prefetch_size = Size},
               _, _State) when Size /= 0 ->
     rabbit_misc:protocol_error(not_implemented, 
-                           "Pre-fetch size for basic.qos not implementented");
+                "Pre-fetch size (~s) for basic.qos not implementented",
+                [Size]);
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
               _, State = #ch{limiter = Limiter}) ->

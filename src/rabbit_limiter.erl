@@ -2,9 +2,6 @@
 %% bailed.
 -module(rabbit_limiter).
 
-
-% I'm starting out with a gen_server because of the synchronous query
-% that the queue process makes
 -behaviour(gen_server).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -12,6 +9,19 @@
 -export([start_link/1]).
 -export([set_prefetch_count/2, can_send/2, decrement_capacity/2]).
 -export([unregister_queue/2]).
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(set_prefetch_count/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(can_send/2 :: (pid(), pid()) -> bool()).
+-spec(decrement_capacity/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(unregister_queue/2 :: (pid(), pid()) -> 'ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
