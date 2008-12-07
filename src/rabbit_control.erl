@@ -113,10 +113,10 @@ Available commands:
   list_user_vhosts <UserName>
   list_vhost_users <VHostPath>
 
-  list_queues    [-p <VHostPath>] <QueueInfoItem> [<QueueInfoItem> ...]
-  list_exchanges [-p <VHostPath>] <ExchangeInfoItem> [<ExchangeInfoItem> ...]
+  list_queues    [-p <VHostPath>] [<QueueInfoItem> ...]
+  list_exchanges [-p <VHostPath>] [<ExchangeInfoItem> ...]
   list_bindings  [-p <VHostPath>] 
-  list_connections <ConnectionInfoItem> [<ConnectionInfoItem> ...]
+  list_connections [<ConnectionInfoItem> ...]
 
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
@@ -247,15 +247,19 @@ action(list_exchanges, Node, Args, Inform) ->
 action(list_bindings, Node, Args, Inform) ->
     Inform("Listing bindings", []),
     {VHostArg, _} = parse_vhost_flag(Args),
-    lists:map(
-        fun({#resource{name = ExchangeName, virtual_host = _VirtualHost}, 
-             #resource{name = QueueName, virtual_host = _VirtualHost},
-             RoutingKey, 
-             Arguments}) ->
-            io:format("~s\t~s\t~s\t~w~n", 
-                [url_encode(ExchangeName), RoutingKey, url_encode(QueueName), Arguments])
-        end, 
-        rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])),
+    display_info_list(
+            lists:map(
+                fun({#resource{name = ExchangeName, virtual_host = _VirtualHost}, 
+                     #resource{name = QueueName, virtual_host = _VirtualHost},
+                     RoutingKey, 
+                     Arguments}) ->
+                    [{exchange_name, ExchangeName},
+                     {routing_key, RoutingKey},
+                     {queue_name, QueueName},
+                     {args, Arguments}]
+                end, 
+                rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])),
+            [exchange_name, routing_key, queue_name, args]),
     ok;
 
 action(list_connections, Node, Args, Inform) ->
@@ -293,7 +297,7 @@ display_info_list(Results, InfoItemArgs) when is_list(Results) ->
                             io_lib:format("~w", [InfoItemValue])
                     end 
                 end,
-            io:fwrite(string:join([RenderInfoItem(X) || X <- InfoItemArgs], "\t")),
+            io:fwrite(lists:flatten(rabbit_misc:intersperse("\t", [RenderInfoItem(X) || X <- InfoItemArgs]))),
             io:nl()
         end,
         Results),
