@@ -58,7 +58,8 @@ erlangDefaultValueTypeConvMap = {
     str : lambda x: "<<\"" + x + "\">>",
     int : lambda x: str(x),
     float : lambda x: str(x),
-    dict: convertTable
+    dict: convertTable,
+    unicode: lambda x: "<<\"" + x.encode("utf-8") + "\">>"
 }
 
 def erlangize(s):

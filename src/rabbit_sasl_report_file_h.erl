@@ -54,9 +54,11 @@ init({{File, _}, error}) ->
 %% doing any log rotation
 init({File, []}) ->
     init(File);
-init({_File, _Type} = FileInfo) ->
+init({File, _Type} = FileInfo) ->
+    rabbit_misc:ensure_parent_dirs_exist(File),
     sasl_report_file_h:init(FileInfo);
 init(File) ->
+    rabbit_misc:ensure_parent_dirs_exist(File),
     sasl_report_file_h:init({File, sasl_error_logger_type()}).
 
 handle_event(Event, State) ->
@@ -71,8 +73,9 @@ handle_call(Event, State) ->
 terminate(Reason, State) ->
     sasl_report_file_h:terminate(Reason, State).
 
-code_change(OldVsn, State, Extra) ->
-    sasl_report_file_h:code_change(OldVsn, State, Extra).
+code_change(_OldVsn, State, _Extra) ->
+    %% There is no sasl_report_file_h:code_change/3
+    {ok, State}.
 
 %%----------------------------------------------------------------------
 

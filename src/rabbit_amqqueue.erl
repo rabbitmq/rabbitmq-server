@@ -91,7 +91,7 @@
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
--spec(on_node_down/1 :: (node()) -> 'ok').
+-spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
 
 -endif.
