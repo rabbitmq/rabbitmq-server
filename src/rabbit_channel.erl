@@ -293,6 +293,7 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                 _    -> true
             end
         end, Acked),
+    % TODO Optimization: Probably don't need to send this if len = 0
     rabbit_limiter:decrement_capacity(Limiter, queue:len(NotBasicGet)),
     Participants = ack(State#ch.proxy_pid, TxnKey, Acked),
     {noreply, case TxnKey of

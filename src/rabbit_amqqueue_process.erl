@@ -81,6 +81,9 @@ init(Q) ->
             round_robin = queue:new()}, ?HIBERNATE_AFTER}.
 
 terminate(_Reason, State) ->
+    %% Inform all limiters that we're dying
+    [ rabbit_limiter:unregister_queue(LimiterPid, self()) 
+      || #cr{limiter_pid = LimiterPid} <- all_ch_record()],
     %% FIXME: How do we cancel active subscriptions?
     QName = qname(State),
     lists:foreach(fun (Txn) -> ok = rollback_work(Txn, QName) end,
@@ -665,7 +668,7 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             noreply(State);
-        C = #cr{unacked_messages = UAM, limiter_pid = LimiterPid} ->
+        C = #cr{unacked_messages = UAM} ->
             {Acked, Remaining} = collect_messages(MsgIds, UAM),
             persist_acks(Txn, qname(State), Acked),
             case Txn of

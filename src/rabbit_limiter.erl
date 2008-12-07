@@ -11,6 +11,7 @@
          handle_info/2]).
 -export([start_link/1]).
 -export([set_prefetch_count/2, can_send/2, decrement_capacity/2]).
+-export([unregister_queue/2]).
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
@@ -38,6 +39,11 @@ can_send(LimiterPid, QPid) ->
 % and hence can reduce the in-use-by-that queue capcity information
 decrement_capacity(LimiterPid, Magnitude) ->
     gen_server:cast(LimiterPid, {decrement_capacity, Magnitude}).
+    
+% This is called to tell the limiter that the queue is probably dead and
+% it should be forgotten about
+unregister_queue(LimiterPid, QPid) ->
+    gen_server:cast(LimiterPid, {unregister_queue, QPid}).
 
 %---------------------------------------------------------------------------
 % gen_server callbacks
@@ -67,6 +73,11 @@ handle_cast({prefetch_count, PrefetchCount},
     {noreply, State#lim{prefetch_count = PrefetchCount,
                         queues = sets:new(),
                         in_use = 0}};
+
+% Removes the queue process from the set of monitored queues
+handle_cast({unregister_queue, QPid}, State= #lim{queues = Queues}) ->
+    NewState = decrement_in_use(1, State),
+    {noreply, NewState#lim{queues = sets:del_element(QPid, Queues)}};
 
 % Default setter of the prefetch count
 handle_cast({prefetch_count, PrefetchCount}, State) ->
