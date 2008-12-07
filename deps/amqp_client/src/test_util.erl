@@ -35,7 +35,13 @@
 -record(publish,{q, x, routing_key, bind_key, payload,
                  mandatory = false, immediate = false}).
 
+% The latch constant defines how many processes are spawned in order
+% to run certain functionality in parallel. It follows the standard
+% countdown latch pattern.
 -define(Latch, 100).
+
+% The wait constant defines how long a consumer waits before it
+% unsubscribes
 -define(Wait, 200).
 
 %%%%
@@ -70,8 +76,6 @@ queue_exchange_binding(Channel, X, Parent, Tag) ->
     end,
     Q = <<"a.b.c",Tag:32>>,
     Binding = <<"a.b.c.*">>,
-    RoutingKey = <<"a.b.c.d">>,
-    Payload = <<"foobar">>,
     Q1 = lib_amqp:declare_queue(Channel, Q),
     ?assertMatch(Q, Q1),
     lib_amqp:bind_queue(Channel, X, Q, Binding),
@@ -95,18 +99,40 @@ command_serialization_test(Connection) ->
                 Q1 = lib_amqp:declare_queue(Channel, Q),
                 ?assertMatch(Q, Q1),     
                 Parent ! finished
-           end) || Tag <- lists:seq(1,?Latch)],
+           end) || _ <- lists:seq(1,?Latch)],
     latch_loop(?Latch),
     lib_amqp:teardown(Connection, Channel).
+
+queue_unbind_test(Connection) ->
+    X = <<"eggs">>, Q = <<"foobar">>, Key = <<"quay">>,
+    Payload = <<"foobar">>,
+    Channel = lib_amqp:start_channel(Connection),
+    lib_amqp:declare_exchange(Channel, X),
+    lib_amqp:declare_queue(Channel, Q),
+    lib_amqp:bind_queue(Channel, X, Q, Key),
+    lib_amqp:publish(Channel, X, Key, Payload),
+    get_and_assert_equals(Channel, Q, Payload),
+    lib_amqp:unbind_queue(Channel, X, Q, Key),
+    lib_amqp:publish(Channel, X, Key, Payload),
+    get_and_assert_empty(Channel, Q),
+    lib_amqp:teardown(Connection, Channel).
+
+get_and_assert_empty(Channel, Q) ->
+    BasicGetEmpty = lib_amqp:get(Channel, Q, false),
+    ?assertMatch('basic.get_empty', BasicGetEmpty).
+    
+get_and_assert_equals(Channel, Q, Payload) ->
+    Content = lib_amqp:get(Channel, Q),
+    #content{payload_fragments_rev = PayloadFragments} = Content,
+    ?assertMatch([Payload], PayloadFragments).
 
 basic_get_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
     {ok, Q} = setup_publish(Channel),
+    % TODO: This could be refactored to use get_and_assert_equals,
+    % get_and_assert_empty .... would require another bug though :-)
     Content = lib_amqp:get(Channel, Q),
-    #content{class_id = ClassId,
-             properties = Properties,
-             properties_bin = PropertiesBin,
-             payload_fragments_rev = PayloadFragments} = Content,
+    #content{payload_fragments_rev = PayloadFragments} = Content,
     ?assertMatch([<<"foobar">>], PayloadFragments),
     BasicGetEmpty = lib_amqp:get(Channel, Q, false),
     ?assertMatch('basic.get_empty', BasicGetEmpty),
@@ -125,27 +151,23 @@ basic_return_test(Connection) ->
     timer:sleep(200),
     receive
         {BasicReturn = #'basic.return'{}, Content} ->
-            #'basic.return'{reply_code = ReplyCode,
-                            reply_text = ReplyText,
-                            exchange = X,
-                            routing_key = RoutingKey} = BasicReturn,
+            #'basic.return'{reply_text = ReplyText,
+                            exchange = X} = BasicReturn,
             ?assertMatch(<<"unroutable">>, ReplyText),
-            #content{class_id = ClassId,
-                     properties = Props,
-                     properties_bin = PropsBin,
-                     payload_fragments_rev = Payload2} = Content,
+            #content{payload_fragments_rev = Payload2} = Content,
             ?assertMatch([Payload], Payload2);
         WhatsThis ->
             %% TODO investigate where this comes from
-            io:format(">>>Rec'd ~p/~p~n",[WhatsThis])
+            io:format("Spurious message ~p~n",[WhatsThis])
     after 2000 ->
         exit(no_return_received)
-    end.
+    end,
+    lib_amqp:teardown(Connection, Channel).
 
 basic_ack_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
     {ok, Q} = setup_publish(Channel),
-    {DeliveryTag, Content} = lib_amqp:get(Channel, Q, false),
+    {DeliveryTag, _} = lib_amqp:get(Channel, Q, false),
     lib_amqp:ack(Channel, DeliveryTag),
     lib_amqp:teardown(Connection, Channel).
 
@@ -178,7 +200,7 @@ basic_recover_test(Connection) ->
     end,
     lib_amqp:publish(Channel, <<>>, Q, <<"foobar">>),
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag}, Content} ->
+        {#'basic.deliver'{}, _} ->
             %% no_ack set to false, but don't send ack
             ok
     after 2000 ->
@@ -187,7 +209,7 @@ basic_recover_test(Connection) ->
     BasicRecover = #'basic.recover'{requeue = true},
     amqp_channel:cast(Channel,BasicRecover),
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag2}, Content2} ->
+        {#'basic.deliver'{delivery_tag = DeliveryTag2}, _} ->
             lib_amqp:ack(Channel, DeliveryTag2)
     after 2000 ->
         exit(did_not_receive_second_message)
@@ -195,10 +217,150 @@ basic_recover_test(Connection) ->
     lib_amqp:teardown(Connection, Channel).
 
 % QOS is not yet implemented in RabbitMQ
-basic_qos_test(Connection) -> ok.
+basic_qos_test(Connection) ->
+    lib_amqp:close_connection(Connection).
 
 % Reject is not yet implemented in RabbitMQ
-basic_reject_test(Connection) -> ok.
+basic_reject_test(Connection) ->
+    lib_amqp:close_connection(Connection).
+
+%----------------------------------------------------------------------------
+% Unit test for the direct client
+% This just relies on the fact that a fresh Rabbit VM must consume more than
+% 0.1 pc of the system memory:
+% 0. Wait 1 minute to let memsup do stuff
+% 1. Make sure that the high watermark is set high
+% 2. Start a process to receive the pause and resume commands from the broker
+% 3. Register this as flow control notification handler
+% 4. Let the system settle for a little bit
+% 5. Set the threshold to the lowest possible value
+% 6. When the flow handler receives the pause command, it sets the watermark
+%    to a high value in order to get the broker to send the resume command
+% 7. Allow 10 secs to receive the pause and resume, otherwise timeout and fail
+channel_flow_test(Connection) ->
+    X = <<"amq.direct">>,
+    K = Payload = <<"x">>,
+    memsup:set_sysmem_high_watermark(0.99),
+    timer:sleep(1000),
+    Channel = lib_amqp:start_channel(Connection),
+    Parent = self(),
+    Child = spawn_link(fun() ->
+                    receive
+                        #'channel.flow'{active = false} ->
+                            blocked = lib_amqp:publish(Channel, 
+                                                       X, K, Payload),
+                            memsup:set_sysmem_high_watermark(0.99),
+                            receive
+                                #'channel.flow'{active = true} ->
+                                    Parent ! ok
+                            end
+                    end
+                  end),
+    amqp_channel:register_flow_handler(Channel, Child),
+    timer:sleep(1000),
+    memsup:set_sysmem_high_watermark(0.001),
+    receive
+        ok -> ok
+    after 10000 ->
+        io:format("Are you sure that you have waited 1 minute?~n"),
+        exit(did_not_receive_channel_flow)
+    end.
+
+%----------------------------------------------------------------------------
+% This is a test, albeit not a unit test, to see if the producer
+% handles the effect of being throttled.
+
+channel_flow_sync(Connection) ->
+    start_channel_flow(Connection, fun lib_amqp:publish/4).
+
+channel_flow_async(Connection) ->
+    start_channel_flow(Connection, fun lib_amqp:async_publish/4).
+
+start_channel_flow(Connection, PublishFun) ->
+    crypto:start(),
+    X = <<"amq.direct">>,
+    Key = uuid(),
+    Producer = spawn_link(
+        fun() ->
+            Channel = lib_amqp:start_channel(Connection),
+            Parent = self(),
+            FlowHandler = spawn_link(fun() -> cf_handler_loop(Parent) end),
+            amqp_channel:register_flow_handler(Channel, FlowHandler),
+            cf_producer_loop(Channel, X, Key, PublishFun, 0)
+        end),
+    Consumer = spawn_link(
+        fun() ->
+            Channel = lib_amqp:start_channel(Connection),
+            Q = lib_amqp:declare_queue(Channel),
+            lib_amqp:bind_queue(Channel, X, Q, Key),
+            Tag = lib_amqp:subscribe(Channel, Q, self()),
+            cf_consumer_loop(Channel, Tag)
+        end),
+    {Producer, Consumer}.
+
+cf_consumer_loop(Channel, Tag) ->
+    receive
+        #'basic.consume_ok'{} -> cf_consumer_loop(Channel, Tag);
+        #'basic.cancel_ok'{} -> ok;
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, _Content} ->
+             lib_amqp:ack(Channel, DeliveryTag),
+             cf_consumer_loop(Channel, Tag);
+        stop ->
+             lib_amqp:unsubscribe(Channel, Tag),
+             ok
+    end.
+
+cf_producer_loop(Channel, X, Key, PublishFun, N) when N rem 5000 =:= 0 ->
+    io:format("Producer (~p) has sent about ~p messages since it started~n",
+              [self(), N]),
+    cf_producer_loop(Channel, X, Key, PublishFun, N + 1);
+
+cf_producer_loop(Channel, X, Key, PublishFun, N) ->
+    case PublishFun(Channel, X, Key, crypto:rand_bytes(10000)) of 
+        blocked ->
+            io:format("Producer (~p) is blocked, will go to sleep.....ZZZ~n",
+                      [self()]),
+            receive
+                resume ->
+                    io:format("Producer (~p) has woken up :-)~n", [self()]),
+                    cf_producer_loop(Channel, X, Key, PublishFun, N + 1)
+            end;
+        _ ->
+            cf_producer_loop(Channel, X, Key, PublishFun, N + 1)
+    end.
+
+cf_handler_loop(Producer) ->
+    receive
+        #'channel.flow'{active = false} ->
+            io:format("Producer throttling ON~n"),
+            cf_handler_loop(Producer);
+        #'channel.flow'{active = true} ->
+            io:format("Producer throttling OFF, waking up producer (~p)~n",
+                      [Producer]),
+            Producer ! resume,
+            cf_handler_loop(Producer);
+        stop -> ok
+    end.
+
+%---------------------------------------------------------------------------
+% This tests whether RPC over AMQP produces the same result as invoking the
+% same argument against the same underlying gen_server instance.
+rpc_test(Connection) ->
+    Q = uuid(),
+    Fun = fun(X) -> X + 1 end,
+    RPCHandler = fun(X) -> term_to_binary(Fun(binary_to_term(X))) end,
+    Server = amqp_rpc_server:start(Connection, Q, RPCHandler),
+    Client = amqp_rpc_client:start(Connection, Q),
+    Input = 1,
+    Reply = amqp_rpc_client:call(Client, term_to_binary(Input)),
+    Expected = Fun(Input),
+    DecodedReply = binary_to_term(Reply),
+    ?assertMatch(Expected, DecodedReply),
+    amqp_rpc_client:stop(Client),
+    amqp_rpc_server:stop(Server),
+    ok.
+
+%---------------------------------------------------------------------------
 
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,
@@ -211,14 +373,13 @@ setup_publish(Channel) ->
 
 setup_publish(Channel, #publish{routing_key = RoutingKey,
                                 q = Q, x = X,
-                                bind_key = BindKey, payload = Payload,
-                                mandatory = Mandatory,
-                                immediate = Immediate}) ->
+                                bind_key = BindKey,
+                                payload = Payload}) ->
     ok = setup_exchange(Channel, Q, X, BindKey),
     lib_amqp:publish(Channel, X, RoutingKey, Payload),
     {ok, Q}.
 
-teardown_test(Connection = {ConnectionPid, Mode}) ->
+teardown_test(Connection = {ConnectionPid, _Mode}) ->
     Channel = lib_amqp:start_channel(Connection),
     ?assertMatch(true, is_process_alive(Channel)),
     ?assertMatch(true, is_process_alive(ConnectionPid)),

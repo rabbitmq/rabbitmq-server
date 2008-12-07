@@ -29,6 +29,7 @@
 -define(RPC_SLEEP, 500).
 
 -export([test_coverage/0]).
+-export([test_channel_flow/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -47,11 +48,21 @@ lifecycle_test() -> test_util:lifecycle_test(new_connection()).
 basic_ack_test() ->test_util:basic_ack_test(new_connection()).
 
 command_serialization_test() -> test_util:command_serialization_test(new_connection()).
+
+%----------------------------------------------------------------------------
+% This must be kicked off manually because it can only be run after Rabbit
+% has been running for 1 minute
+test_channel_flow() ->
+    test_util:channel_flow_test(new_connection()).
+
 %----------------------------------------------------------------------------
 % Negative Tests
 
 non_existent_exchange_test() -> 
     negative_test_util:non_existent_exchange_test(new_connection()).
+
+queue_unbind_test() ->
+    test_util:queue_unbind_test(new_connection()).
 
 %----------------------------------------------------------------------------
 %% Common Functions

@@ -62,9 +62,9 @@ handshake(ConnectionState = #connection_state{serverhost = Host}) ->
 %% because this will be parsed out of the frames received off the socket.
 %% Hence, you have tell the singelton reader which Pids are intended to
 %% process messages for a particular channel
-open_channel({ChannelNumber, OutOfBand}, ChannelPid,
-             State = #connection_state{reader_pid = ReaderPid,
-                                       sock = Sock}) ->
+open_channel({ChannelNumber, _OutOfBand}, ChannelPid,
+             #connection_state{reader_pid = ReaderPid,
+                               sock = Sock}) ->
     ReaderPid ! {ChannelPid, ChannelNumber},
     WriterPid = start_writer(Sock, ChannelNumber),
     amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
@@ -107,7 +107,7 @@ send_frame(Channel, Frame) ->
 
 recv() ->
     receive
-        {method, Method, Content} ->
+        {method, Method, _Content} ->
             Method
     end.
 
@@ -116,11 +116,7 @@ recv() ->
 %---------------------------------------------------------------------------
 
 network_handshake(Writer, State = #connection_state{ vhostpath = VHostPath }) ->
-    #'connection.start'{version_major = MajorVersion,
-                        version_minor = MinorVersion,
-                        server_properties = Properties,
-                        mechanisms = Mechansims,
-                        locales = Locales } = recv(),
+    #'connection.start'{} = recv(),
     do(Writer, start_ok(State)),
     #'connection.tune'{channel_max = ChannelMax,
                        frame_max = FrameMax,
@@ -137,7 +133,7 @@ network_handshake(Writer, State = #connection_state{ vhostpath = VHostPath }) ->
                                         capabilities = <<"">>,
                                         insist = false },
     do(Writer, ConnectionOpen),
-    #'connection.open_ok'{known_hosts = KnownHosts} = recv(),
+    #'connection.open_ok'{} = recv(),
     %% TODO What should I do with the KnownHosts?
     State#connection_state{channel_max = ChannelMax, heartbeat = Heartbeat}.
 
@@ -157,7 +153,7 @@ start_ok(#connection_state{username = Username, password = Password}) ->
 start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
     put({channel, 0},{chpid, FramingPid}),
-    {ok, Ref} = prim_inet:async_recv(Sock, 7, -1),
+    {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
     reader_loop(Sock, undefined, undefined, undefined),
     gen_tcp:close(Sock).
 
@@ -171,14 +167,15 @@ reader_loop(Sock, Type, Channel, Length) ->
                 closed_ok ->
                     ok;
                 _ ->
-                    {ok, Ref} = prim_inet:async_recv(Sock, 7, -1),
+                    {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
                     reader_loop(Sock, undefined, undefined, undefined)
             end;
         {inet_async, Sock, _, {ok, <<_Type:8,_Channel:16,PayloadSize:32>>}} ->
-            {ok, Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
+            {ok, _Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
             reader_loop(Sock, _Type, _Channel, PayloadSize);
-        {inet_async, Sock, Ref, {error, Reason}} ->
-            io:format("Have a look into this one: ~p~n",[Reason]);
+        {inet_async, Sock, _Ref, {error, Reason}} ->
+            io:format("Socket error: ~p~n", [Reason]),
+            exit({socket_error, Reason});
         {heartbeat, Heartbeat} ->
             rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
             reader_loop(Sock, Type, Channel, Length);
@@ -189,12 +186,13 @@ reader_loop(Sock, Type, Channel, Length) ->
             io:format("Reader (~p) received timeout from heartbeat, exiting ~n",[self()]);
         close ->
             io:format("Reader (~p) received close command, exiting ~n",[self()]);
-        {'EXIT', Pid, Reason} ->
-            [H|T] = get_keys({chpid,Pid}),
+        {'EXIT', Pid, _Reason} ->
+            [H|_] = get_keys({chpid,Pid}),
             erase(H),
             reader_loop(Sock, Type, Channel, Length);
         Other ->
-            io:format("Other ~p~n",[Other])
+            io:format("Unknown message type: ~p~n", [Other]),
+            exit({unknown_message_type, Other})
     end.
 
 start_framing_channel(ChannelPid, ChannelNumber) ->
