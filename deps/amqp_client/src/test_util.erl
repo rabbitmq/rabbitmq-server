@@ -268,8 +268,8 @@ channel_flow_test(Connection) ->
     end.
 
 %----------------------------------------------------------------------------
-% This is a test, albeit not a unit test, to see if the client
-% handles the channel.flow command.
+% This is a test, albeit not a unit test, to see if the producer
+% handles the effect of being throttled.
 
 channel_flow_sync(Connection) ->
     start_channel_flow(Connection, fun lib_amqp:publish/4).
@@ -281,19 +281,22 @@ start_channel_flow(Connection, PublishFun) ->
     crypto:start(),
     X = <<"amq.direct">>,
     Key = uuid(),
-    Producer = spawn_link(fun() ->
-                            Channel = lib_amqp:start_channel(Connection),
-                            amqp_channel:register_flow_handler(Channel,
-                                                               self()),
-                            cf_producer_loop(Channel, X, Key, PublishFun)
-                          end),
-    Consumer = spawn_link(fun() ->
-                            Channel = lib_amqp:start_channel(Connection),
-                            Q = lib_amqp:declare_queue(Channel),
-                            lib_amqp:bind_queue(Channel, X, Q, Key),
-                            Tag = lib_amqp:subscribe(Channel, Q, self()),
-                            cf_consumer_loop(Channel, Tag)
-                          end),
+    Producer = spawn_link(
+        fun() ->
+            Channel = lib_amqp:start_channel(Connection),
+            Parent = self(),
+            FlowHandler = spawn_link(fun() -> cf_handler_loop(Parent) end),
+            amqp_channel:register_flow_handler(Channel, FlowHandler),
+            cf_producer_loop(Channel, X, Key, PublishFun, 0)
+        end),
+    Consumer = spawn_link(
+        fun() ->
+            Channel = lib_amqp:start_channel(Connection),
+            Q = lib_amqp:declare_queue(Channel),
+            lib_amqp:bind_queue(Channel, X, Q, Key),
+            Tag = lib_amqp:subscribe(Channel, Q, self()),
+            cf_consumer_loop(Channel, Tag)
+        end),
     {Producer, Consumer}.
 
 cf_consumer_loop(Channel, Tag) ->
@@ -308,19 +311,36 @@ cf_consumer_loop(Channel, Tag) ->
              ok
     end.
 
-cf_producer_loop(Channel, X, Key, PublishFun) ->
+cf_producer_loop(Channel, X, Key, PublishFun, N) when N rem 5000 =:= 0 ->
+    io:format("Producer (~p) has sent about ~p messages since it started~n",
+              [self(), N]),
+    cf_producer_loop(Channel, X, Key, PublishFun, N + 1);
+
+cf_producer_loop(Channel, X, Key, PublishFun, N) ->
+    case PublishFun(Channel, X, Key, crypto:rand_bytes(10000)) of 
+        blocked ->
+            io:format("Producer (~p) is blocked, will go to sleep.....ZZZ~n",
+                      [self()]),
+            receive
+                resume ->
+                    io:format("Producer (~p) has woken up :-)~n", [self()]),
+                    cf_producer_loop(Channel, X, Key, PublishFun, N + 1)
+            end;
+        _ ->
+            cf_producer_loop(Channel, X, Key, PublishFun, N + 1)
+    end.
+    
+cf_handler_loop(Producer) ->
     receive
         #'channel.flow'{active = false} ->
-            cf_producer_loop(Channel, X, Key, PublishFun);
+            io:format("Producer throttling ON~n"),
+            cf_handler_loop(Producer);
         #'channel.flow'{active = true} ->
-            receive
-                #'channel.flow'{active = false} ->
-                    cf_producer_loop(Channel, X, Key, PublishFun)
-            end;
+            io:format("Producer throttling OFF, waking up producer (~p)~n",
+                      [Producer]),
+            Producer ! resume,
+            cf_handler_loop(Producer);
         stop -> ok
-    after 5 ->
-        PublishFun(Channel, X, Key, crypto:rand_bytes(10000)),
-        cf_producer_loop(Channel, X, Key, PublishFun)
     end.
 %----------------------------------------------------------------------------
 
