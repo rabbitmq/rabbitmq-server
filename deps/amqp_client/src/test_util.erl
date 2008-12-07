@@ -228,14 +228,14 @@ basic_qos_test(Connection) ->
     Parent = self(),
     lib_amqp:declare_queue(lib_amqp:start_channel(Connection), Q),
     %Channel = lib_amqp:start_channel(Connection),
-    Consumers = [spawn(fun() -> Channel = lib_amqp:start_channel(Connection),
-                                amqp_channel:call(Channel,
-                                        #'basic.qos'{prefetch_count = 1}),
-                                lib_amqp:subscribe(Channel, Q, self(), false),
-                                amqp_channel:call(Channel,
-                                    #'basic.qos'{prefetch_count = 1}),
-                                sleeping_consumer(Channel, Sleep, Parent) end)
-                                || Sleep <- lists:seq(1, Workers)],
+    [spawn(fun() -> Channel = lib_amqp:start_channel(Connection),
+                    amqp_channel:call(Channel,
+                                      #'basic.qos'{prefetch_count = 1}),
+                    lib_amqp:subscribe(Channel, Q, self(), false),
+                    amqp_channel:call(Channel,
+                                      #'basic.qos'{prefetch_count = 1}),
+                    sleeping_consumer(Channel, Sleep, Parent) end)
+                    || Sleep <- lists:seq(1, Workers)],
     latch_loop(Workers),
     producer_loop(lib_amqp:start_channel(Connection), Q, Messages),
     latch_loop(Messages),
@@ -255,7 +255,7 @@ sleeping_consumer(Channel, Sleep, Parent) ->
             sleeping_consumer(Channel, Sleep, Parent)
     end.
 
-producer_loop(Channel, RoutingKey, 0) ->
+producer_loop(_Channel, _RoutingKey, 0) ->
     ok;
 
 producer_loop(Channel, RoutingKey, N) ->
