@@ -22,14 +22,6 @@
 %%
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 
-
-%%   ************************************************************************
-%%   ***** WARNING: Heavily modified by Edwin Fine as an experiment to try to
-%%   ***** eliminate compile-time dependencies on the drivers. This is NOT
-%%   ***** officially supported by Rabbit, Ben, Matthias, Tony, and so on.
-%%   ***** It's my hack - Edwin Fine 2008-09-07
-%%   ************************************************************************
-
 -module(amqp_connection).
 
 -include_lib("rabbitmq_server/include/rabbit.hrl").
@@ -69,7 +61,7 @@ start(User,Password,Host,VHost,ProcLink) ->
                                      vhostpath = VHost},
     {ok, Pid} = start_internal(InitialState, network, ProcLink),
     {Pid, network}.
-    
+
 start_link(User,Password) -> start(User,Password,true).
 start_link(User,Password,Host) -> start(User,Password,Host,<<"/">>,true).
 start_link(User,Password,Host,VHost) -> start(User,Password,Host,VHost,true).
@@ -161,12 +153,13 @@ register_channel(ChannelNumber, ChannelPid, CS) ->
 %% Let's hope that this lookup doesn't get too expensive .......
 unregister_channel(ChannelPid, DrvType, CS) when is_pid(ChannelPid)->
     Channels0 = CS#connection_state.channels,
-    ReverseMapping = fun(Number, Pid) -> Pid == ChannelPid end,
+    ReverseMapping = fun(_Number, Pid) -> Pid == ChannelPid end,
     Projection = dict:filter(ReverseMapping, Channels0),
     Channels1 = unregister_direct(Projection, Channels0, DrvType),
     CS#connection_state{channels = Channels1};
 
-%% This will be called when a channel process exits and needs to be deregistered
+%% This will be called when a channel process exits and needs to be 
+%% deregistered
 unregister_channel(ChannelNumber, _DrvType, CS) ->
     Channels0 = CS#connection_state.channels,
     Channels1 = dict:erase(ChannelNumber, Channels0),
@@ -178,15 +171,15 @@ unregister_direct(Projection, Channels0, direct) ->
     case dict:fetch_keys(Projection) of
         [] ->
             Channels0;
-        [ChannelNumber|T] ->
+        [ChannelNumber|_] ->
             dict:erase(ChannelNumber, Channels0)
     end;
 unregister_direct(_Projection, Channels0, _Type) ->
     Channels0.
 
-allocate_channel_number([], Max)-> 1;
+allocate_channel_number([], _Max)-> 1;
 
-allocate_channel_number(Channels, Max) ->
+allocate_channel_number(Channels, _Max) ->
     MaxChannel = lists:max(Channels),
     %% TODO check channel max and reallocate appropriately
     MaxChannel + 1.
@@ -198,12 +191,14 @@ close_connection(Close, From, #state{drv_module = Mod, conn_state = CS}) ->
 % gen_server callbacks
 %---------------------------------------------------------------------------
 
-init([InitialState, DrvMod, DrvType]) when is_atom(DrvMod), is_atom(DrvType) ->
+init([InitialState, DrvMod, DrvType]) 
+        when is_atom(DrvMod), is_atom(DrvType) ->
     CS = DrvMod:handshake(InitialState), % Connection state
     {ok, #state{conn_state = CS, drv_module = DrvMod, type = DrvType}}.
 
 %% Starts a new channel
-handle_call({_Whatever, ChannelNumber, OutOfBand}, From, #state{drv_module = Module} = State) ->
+handle_call({_Whatever, ChannelNumber, OutOfBand}, _From, 
+            #state{drv_module = Module} = State) ->
     handle_start(
         {ChannelNumber, OutOfBand},
         fun(X, Y, Z) -> Module:open_channel(X, Y, Z) end,
@@ -218,8 +213,20 @@ handle_call({_Mode, Close = #'connection.close'{}}, From, #state{} = State) ->
     close_connection(Close, From, State),
     {stop,normal,State}.
 
-handle_cast(Message, #state{} = State) ->
+handle_cast(_Message, State) ->
     {noreply, State}.
+
+%---------------------------------------------------------------------------
+% Handle forced close from the broker
+%---------------------------------------------------------------------------
+
+handle_info({method, #'connection.close'{reply_code = Code,
+                                         reply_text = Text},
+                                 _Content}, 
+            State = #connection_state{on_close_handler = OnCloseHandler}) ->
+    io:format("Broker forced connection: ~p -> ~p~n", [Code, Text]),
+    OnCloseHandler(State),
+    {stop, normal, State};
 
 %---------------------------------------------------------------------------
 % Trap exits
@@ -233,15 +240,22 @@ handle_info( {'EXIT', Pid, {amqp,Reason,Msg,Context}}, #state{} = State) ->
             io:format("Just trapping this exit and proceding to trap an exit from the client channel process~n"),
             {noreply, State};
         true ->
-            io:format("A hard error has occurred, this forces the connection to end~n"),
-            {stop,normal,State}
+            io:format("Hard error: (Code = ~p, Text = ~p)~n", [Code, Text]),
+            {stop, {hard_error, {Code, Text}}, State}
     end;            
 
 %% Just the amqp channel shutting down, so unregister this channel
-handle_info( {'EXIT', Pid, normal}, #state{conn_state = CS, type = Type} = State) ->
+handle_info( {'EXIT', Pid, normal}, #state{conn_state = CS, 
+                                           type = Type} = State) ->
     NewCS = unregister_channel(Pid, Type, CS),
     {noreply, State#state{conn_state = NewCS}};
-handle_info( {'EXIT', Pid, Reason}, #state{conn_state = CS, type = Type} = State) ->
+    
+% This is a special case for abruptly closed socket connections
+handle_info( {'EXIT', _Pid, {socket_error, Reason}}, State) ->
+    {stop, {socket_error, Reason}, State};
+
+handle_info( {'EXIT', Pid, Reason}, #state{conn_state = CS,
+                                           type = Type} = State) ->
     io:format("Connection: Handling exit from ~p --> ~p~n",[Pid,Reason]),
     NewCS = unregister_channel(Pid, Type, CS),
     {noreply, State#state{conn_state = NewCS}}.
@@ -250,7 +264,8 @@ handle_info( {'EXIT', Pid, Reason}, #state{conn_state = CS, type = Type} = State
 % Rest of the gen_server callbacks
 %---------------------------------------------------------------------------
 
-terminate(Reason, #state{}) -> ok.
+terminate(_Reason, _State) ->
+    ok.
 
 code_change(_OldVsn, #state{} = State, _Extra) ->
     State.

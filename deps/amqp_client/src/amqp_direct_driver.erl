@@ -31,6 +31,7 @@
 
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
 -export([do/2,do/3]).
+-export([handle_broker_close/1]).
 
 %---------------------------------------------------------------------------
 % Driver API Methods
@@ -45,19 +46,20 @@ handshake(ConnectionState = #connection_state{username = User,
     rabbit_access_control:check_vhost_access(#user{username = UserBin}, VHostPath),
     ConnectionState.
 
-open_channel({Channel,OutOfBand}, ChannelPid, State = #connection_state{username = User,
-                                                                       vhostpath = VHost}) ->
-    %% Why must only the username be binary?
-    %% I think this is because of the binary guard on rabbit_realm:access_request/3
+open_channel({_Channel, _OutOfBand}, ChannelPid,
+             State = #connection_state{username = User, vhostpath = VHost}) ->
     UserBin = amqp_util:binary(User),
     ReaderPid = WriterPid = ChannelPid,
     Peer = rabbit_channel:start_link(ReaderPid, WriterPid, UserBin, VHost),
     amqp_channel:register_direct_peer(ChannelPid, Peer),
     State.
 
-close_channel(WriterPid) -> ok.
+close_channel(_WriterPid) -> ok.
 
-close_connection(Close, From, State) -> gen_server:reply(From, #'connection.close_ok'{}).
+close_connection(_Close, From, _State) ->
+    gen_server:reply(From, #'connection.close_ok'{}).
 
 do(Writer, Method) -> rabbit_channel:do(Writer, Method).
 do(Writer, Method, Content) -> rabbit_channel:do(Writer, Method, Content).
+
+handle_broker_close(_State) -> ok.
