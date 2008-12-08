@@ -45,6 +45,7 @@ all_tests() ->
     passed = test_log_management_during_startup(),
     passed = test_cluster_management(),
     passed = test_user_management(),
+    passed = test_server_status(),
     passed.
 
 test_parsing() ->
@@ -461,6 +462,34 @@ test_user_management() ->
         control_action(delete_user, ["foo"]),
 
     passed.
+
+test_server_status() ->
+
+    % list queues
+    ok = control_action(list_queues, []),
+    ok = control_action(list_queues, ["name", "durable", "auto_delete",
+            "arguments", "pid", "messages_ready", "messages_unacknowledged", 
+            "messages_uncommitted", "messages", "acks_uncommitted", "consumers", 
+            "transactions", "memory"]),
+
+    % list exchanges
+    ok = control_action(list_exchanges, []),
+    ok = control_action(list_exchanges, ["name", "type", "durable", "auto_delete", 
+            "arguments"]),
+
+    % list bindings
+    ok = control_action(list_bindings, []),
+
+    % list connections
+    ok = control_action(list_connections, []),
+    ok = control_action(list_connections, ["pid", "address", "port", "peer_address", 
+            "peer_port", "state", "channels", "user", "vhost", "timeout", 
+            "frame_max", "recv_oct", "recv_cnt", "send_oct", "send_cnt", 
+            "send_pend passed"]),
+
+    passed.
+
+%---------------------------------------------------------------------
 
 %---------------------------------------------------------------------
 

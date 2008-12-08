@@ -247,19 +247,10 @@ action(list_exchanges, Node, Args, Inform) ->
 action(list_bindings, Node, Args, Inform) ->
     Inform("Listing bindings", []),
     {VHostArg, _} = parse_vhost_flag(Args),
+    InfoKeys = [exchange_name, routing_key, queue_name, args],
     display_info_list(
-            lists:map(
-                fun({#resource{name = ExchangeName, virtual_host = _VirtualHost}, 
-                     #resource{name = QueueName, virtual_host = _VirtualHost},
-                     RoutingKey, 
-                     Arguments}) ->
-                    [{exchange_name, ExchangeName},
-                     {routing_key, RoutingKey},
-                     {queue_name, QueueName},
-                     {args, Arguments}]
-                end, 
-                rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])),
-            [exchange_name, routing_key, queue_name, args]),
+        [lists:zip(InfoKeys, tuple_to_list(X)) || X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])], 
+        InfoKeys),
     ok;
 
 action(list_connections, Node, Args, Inform) ->
