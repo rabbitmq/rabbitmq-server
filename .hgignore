@@ -15,3 +15,5 @@ syntax: regexp
 ^packaging/debs/apt-repository/debian$
 ^packaging/generic-unix/rabbitmq-server-generic-unix-.*\.tar\.gz$
 ^packaging/windows/rabbitmq-server-windows-.*\.zip$
+
+^docs/.*\.[15]\.gz$

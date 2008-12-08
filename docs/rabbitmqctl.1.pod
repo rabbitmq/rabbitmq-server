@@ -20,13 +20,12 @@ It performs all actions by connecting to one of the broker's nodes.
 
 B<-n> I<node>
     default node is C<rabbit@server>, where server is the local host.
-    On a host named C<server.example.com>, the node name of the RabbitMQ
-    Erlang node will usually be rabbit@server (unless NODENAME has been
-    set to some non-default value at broker startup time).
-    The output of hostname -s is usually the correct suffix to use
-    after the "@" sign. See rabbitmq-server(1) for details of configur-
-    ing the RabbitMQ broker.
-   
+    On a host named C<server.example.com>, the node name of the
+    RabbitMQ Erlang node will usually be rabbit@server (unless
+    RABBITMQ_NODENAME has been set to some non-default value at broker
+    startup time).  The output of hostname -s is usually the correct
+    suffix to use after the "@" sign. See rabbitmq-server(1) for
+    details of configur- ing the RabbitMQ broker.
 
 =head1 COMMANDS
 

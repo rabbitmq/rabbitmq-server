@@ -6,6 +6,7 @@ INCLUDE_DIR=include
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
 WEB_URL=http://stage.rabbitmq.com/
+MANPAGES=$(patsubst %.pod, %.gz, $(wildcard docs/*.[0-9].pod))
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
@@ -54,6 +55,7 @@ clean: cleandb
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
+	rm -f docs/*.[0-9].gz
 
 cleandb: stop-node
 	erl -mnesia dir '"$(MNESIA_DIR)"' -noshell -eval 'lists:foreach(fun file:delete/1, filelib:wildcard(mnesia:system_info(directory) ++ "/*")), halt().'
@@ -123,7 +125,12 @@ distclean: clean
 	rm -rf dist
 	find . -name '*~' -exec rm {} \;
 
-install: all
+%.gz: %.pod
+	pod2man -c "RabbitMQ AMQP Server" -d "" -r "" $< | gzip --best > $@
+
+docs_all: $(MANPAGES)
+
+install: all docs_all
 	@[ -n "$(TARGET_DIR)" ] || (echo "Please set TARGET_DIR."; false)
 	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
 	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
@@ -133,13 +140,13 @@ install: all
 
 	chmod 0755 scripts/*
 	mkdir -p $(SBIN_DIR)
-	mkdir -p $(MAN_DIR)/man1
 	cp scripts/rabbitmq-server $(SBIN_DIR)
 	cp scripts/rabbitmqctl $(SBIN_DIR)
 	cp scripts/rabbitmq-multi $(SBIN_DIR)
 	cp scripts/rabbitmq-mnesia-current $(SBIN_DIR)
-	for manpage in docs/*.pod ; do \
-		pod2man -c "RabbitMQ AMQP Server" -d "" -r "" \
-		$$manpage | gzip --best > \
-		$(MAN_DIR)/man1/`echo $$manpage | sed -e 's:docs/\(.*\)\.pod:\1\.1\.gz:g'`; \
+	for section in 1 5; do \
+		mkdir -p $(MAN_DIR)/man$$section; \
+		for manpage in docs/*.$$section.pod; do \
+			cp $$manpage $(MAN_DIR)/man$$section; \
+		done; \
 	done
