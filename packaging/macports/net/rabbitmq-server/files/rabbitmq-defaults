@@ -2,6 +2,6 @@
 # defaults file for rabbitmq-server
 #
 
-PIDS_FILE=@PREFIX@/var/lib/rabbitmq/pids
-LOG_BASE=@PREFIX@/var/log/rabbitmq
-MNESIA_BASE=@PREFIX@/var/lib/rabbitmq/mnesia
+RABBITMQ_PIDS_FILE=@PREFIX@/var/lib/rabbitmq/pids
+RABBITMQ_LOG_BASE=@PREFIX@/var/log/rabbitmq
+RABBITMQ_MNESIA_BASE=@PREFIX@/var/lib/rabbitmq/mnesia

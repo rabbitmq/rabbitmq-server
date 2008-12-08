@@ -24,24 +24,36 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-[ "x" = "x$NODENAME" ] && NODENAME=rabbit
-[ "x" = "x$NODE_IP_ADDRESS" ] && NODE_IP_ADDRESS=0.0.0.0
-[ "x" = "x$NODE_PORT" ] && NODE_PORT=5672
+. /etc/default/rabbitmq
 
-ERL_ARGS=
-SCRIPT_HOME=$(dirname $0)
+[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
+[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=rabbit
+[ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=${NODE_IP_ADDRESS}
+[ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
+[ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=${NODE_PORT}
+[ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=5672
+[ "x" = "x$RABBITMQ_SCRIPT_HOME" ] && RABBITMQ_SCRIPT_HOME=${SCRIPT_HOME}
+[ "x" = "x$RABBITMQ_SCRIPT_HOME" ] && RABBITMQ_SCRIPT_HOME=$(dirname $0)
+[ "x" = "x$RABBITMQ_PIDS_FILE" ] && RABBITMQ_PIDS_FILE=${PIDS_FILE}
+[ "x" = "x$RABBITMQ_PIDS_FILE" ] && RABBITMQ_PIDS_FILE=/var/lib/rabbitmq/pids
+[ "x" = "x$RABBITMQ_MULTI_ERL_ARGS" ] && RABBITMQ_MULTI_ERL_ARGS=${MULTI_ERL_ARGS}
+[ "x" = "x$RABBITMQ_MULTI_ERL_ARGS" ] && RABBITMQ_MULTI_ERL_ARGS=
+[ "x" = "x$RABBITMQ_MULTI_START_ARGS" ] && RABBITMQ_MULTI_START_ARGS=${MULTI_START_ARGS}
+[ "x" = "x$RABBITMQ_MULTI_START_ARGS" ] && RABBITMQ_MULTI_START_ARGS=
 
-[ "x" = "x$PIDS_FILE" ] && PIDS_FILE=/var/lib/rabbitmq/pids
-
-export NODENAME NODE_IP_ADDRESS NODE_PORT SCRIPT_HOME PIDS_FILE
+export \
+    RABBITMQ_NODENAME \
+    RABBITMQ_NODE_IP_ADDRESS \
+    RABBITMQ_NODE_PORT \
+    RABBITMQ_SCRIPT_HOME \
+    RABBITMQ_PIDS_FILE
 
 exec erl \
     -pa "`dirname $0`/../ebin" \
     -noinput \
     -hidden \
-    ${ERL_ARGS} \
+    ${RABBITMQ_MULTI_ERL_ARGS} \
     -sname rabbitmq_multi$$ \
     -s rabbit_multi \
-    ${START_ARGS} \
+    ${RABBITMQ_MULTI_START_ARGS} \
     -extra "$@"
-

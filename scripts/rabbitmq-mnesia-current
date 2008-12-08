@@ -24,27 +24,34 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-[ "x" = "x$NODENAME" ] && NODENAME=rabbit
-[ "x" = "x$NODE_IP_ADDRESS" ] && NODE_IP_ADDRESS=0.0.0.0
-[ "x" = "x$NODE_PORT" ] && NODE_PORT=5672
+. /etc/default/rabbitmq
 
-CLUSTER_CONFIG_FILE=/etc/default/rabbitmq_cluster.config
+[ "x" = "x$RABBITMQ_CLUSTER_CONFIG_FILE" ] && RABBITMQ_CLUSTER_CONFIG_FILE=${CLUSTER_CONFIG_FILE}
+[ "x" = "x$RABBITMQ_CLUSTER_CONFIG_FILE" ] && RABBITMQ_CLUSTER_CONFIG_FILE=/etc/default/rabbitmq_cluster.config
+[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
+[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=rabbit
+[ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=${NODE_IP_ADDRESS}
+[ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
+[ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=${NODE_PORT}
+[ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=5672
+[ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
+[ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=/var/log/rabbitmq
+[ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
+[ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=/var/lib/rabbitmq/mnesia
+[ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${MNESIA_DIR}
+[ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}
 
-[ "x" = "x$LOG_BASE" ] && LOG_BASE=/var/log/rabbitmq
-[ "x" = "x$MNESIA_BASE" ] && MNESIA_BASE=/var/lib/rabbitmq/mnesia
-[ "x" = "x$MNESIA_DIR" ] && MNESIA_DIR=${MNESIA_BASE}/${NODENAME}
-
-if [ -f "$CLUSTER_CONFIG_FILE" ]; then
-    CLUSTER_CONFIG="-rabbit cluster_config \"$CLUSTER_CONFIG_FILE\""
+if [ -f "$RABBITMQ_CLUSTER_CONFIG_FILE" ]; then
+    RABBITMQ_CLUSTER_CONFIG_OPTION="-rabbit cluster_config \"$RABBITMQ_CLUSTER_CONFIG_FILE\""
 else
-    CLUSTER_CONFIG=""
+    RABBITMQ_CLUSTER_CONFIG_OPTION=""
 fi
 
 exec erl \
     -pa "`dirname $0`/../ebin" \
     -noshell \
-    -sname ${NODENAME} \
+    -sname ${RABBITMQ_NODENAME} \
     -eval 'halt(case rabbit_mnesia:schema_current() of true -> 0; false -> 1 end).' \
-    -mnesia dir "\"${MNESIA_DIR}\"" \
+    -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
     -kernel error_logger '{file,"'/dev/null'"}' \
-    ${CLUSTER_CONFIG}
+    ${RABBITMQ_CLUSTER_CONFIG_OPTION}
