@@ -106,7 +106,7 @@ srcdist: distclean
 	elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
 		>> $(TARGET_SRC_DIR)/BUILD
 	sed -i 's/%%VERSION%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit.app
-	
+
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
 	cp codegen.py Makefile $(TARGET_SRC_DIR)
 
@@ -127,7 +127,7 @@ install: all
 	@[ -n "$(TARGET_DIR)" ] || (echo "Please set TARGET_DIR."; false)
 	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
 	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
-	
+
 	mkdir -p $(TARGET_DIR)
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
