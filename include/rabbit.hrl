@@ -72,6 +72,8 @@
 -type(erlang_node() :: atom()).
 -type(socket() :: port()).
 -type(thunk(T) :: fun(() -> T)).
+-type(info_key() :: atom()).
+-type(info() :: {info_key(), any()}).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: any()).

@@ -35,10 +35,10 @@
 -include("rabbit_framing.hrl").
 
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
-         list_vhost_exchanges/1,
+         list/1, info/1, info/2, info_all/1, info_all/2,
          simple_publish/6, simple_publish/3,
          route/2]).
--export([add_binding/4, delete_binding/4]).
+-export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
 -export([delete_bindings_for_queue/1]).
 -export([check_type/1, assert_type/2, topic_matches/2]).
@@ -68,7 +68,11 @@
 -spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
--spec(list_vhost_exchanges/1 :: (vhost()) -> [exchange()]).
+-spec(list/1 :: (vhost()) -> [exchange()]).
+-spec(info/1 :: (exchange()) -> [info()]).
+-spec(info/2 :: (exchange(), [info_key()]) -> [info()]).
+-spec(info_all/1 :: (vhost()) -> [[info()]]).
+-spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
 -spec(simple_publish/6 ::
       (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
              publish_res()).
@@ -80,6 +84,8 @@
 -spec(delete_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'binding_not_found'}).
+-spec(list_bindings/1 :: (vhost()) -> 
+             [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
 -spec(delete_bindings_for_queue/1 :: (queue_name()) -> 'ok').
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
@@ -92,6 +98,8 @@
 -endif.
 
 %%----------------------------------------------------------------------------
+
+-define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
 
 recover() ->
     rabbit_misc:execute_mnesia_transaction(
@@ -160,9 +168,31 @@ lookup_or_die(Name) ->
               not_found, "no ~s", [rabbit_misc:rs(Name)])
     end.
 
-list_vhost_exchanges(VHostPath) ->
+list(VHostPath) ->
     mnesia:dirty_match_object(
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
+
+map(VHostPath, F) ->
+    %% TODO: there is scope for optimisation here, e.g. using a
+    %% cursor, parallelising the function invocation
+    lists:map(F, list(VHostPath)).
+
+infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
+
+i(name,        #exchange{name        = Name})       -> Name;
+i(type,        #exchange{type        = Type})       -> Type;
+i(durable,     #exchange{durable     = Durable})    -> Durable;
+i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
+i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
+i(Item, _) -> throw({bad_argument, Item}).
+
+info(X = #exchange{}) -> infos(?INFO_KEYS, X).
+
+info(X = #exchange{}, Items) -> infos(Items, X).
+
+info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
+
+info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
 %% Usable by Erlang code that wants to publish messages.
 simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
@@ -341,6 +371,19 @@ sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
     [ok, ok] = [Fun(element(1, R), R, write) ||
                    R <- tuple_to_list(route_with_reverse(Binding))],
     ok.
+
+list_bindings(VHostPath) ->
+    [{ExchangeName, QueueName, RoutingKey, Arguments} ||
+        #route{binding = #binding{
+                 exchange_name = ExchangeName,
+                 key           = RoutingKey, 
+                 queue_name    = QueueName,
+                 args          = Arguments}}
+            <- mnesia:dirty_match_object(
+                 #route{binding = #binding{
+                          exchange_name = rabbit_misc:r(VHostPath, exchange),
+                          _ = '_'},
+                        _ = '_'})].
 
 route_with_reverse(#route{binding = Binding}) ->
     route_with_reverse(Binding);

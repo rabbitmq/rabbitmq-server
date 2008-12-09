@@ -32,7 +32,9 @@
 -module(rabbit_networking).
 
 -export([start/0, start_tcp_listener/2, stop_tcp_listener/2,
-         on_node_down/1, active_listeners/0, node_listeners/1]).
+         on_node_down/1, active_listeners/0, node_listeners/1,
+         connections/0, connection_info/1, connection_info/2,
+         connection_info_all/0, connection_info_all/1]).
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/3]).
 
@@ -46,12 +48,18 @@
 -ifdef(use_specs).
 
 -type(host() :: ip_address() | string() | atom()).
+-type(connection() :: pid()).
 
 -spec(start/0 :: () -> 'ok').
 -spec(start_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
 -spec(stop_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [listener()]).
 -spec(node_listeners/1 :: (erlang_node()) -> [listener()]).
+-spec(connections/0 :: () -> [connection()]).
+-spec(connection_info/1 :: (connection()) -> [info()]).
+-spec(connection_info/2 :: (connection(), [info_key()]) -> [info()]).
+-spec(connection_info_all/0 :: () -> [[info()]]).
+-spec(connection_info_all/1 :: ([info_key()]) -> [[info()]]).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(check_tcp_listener_address/3 :: (atom(), host(), ip_port()) ->
              {ip_address(), atom()}).
@@ -142,6 +150,16 @@ start_client(Sock) ->
     Child ! {go, Sock},
     Child.
 
+connections() ->
+    [Pid || {_, Pid, _, _} <- supervisor:which_children(
+                                rabbit_tcp_client_sup)].
+
+connection_info(Pid) -> rabbit_reader:info(Pid).
+connection_info(Pid, Items) -> rabbit_reader:info(Pid, Items).
+
+connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
+connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
+
 %%--------------------------------------------------------------------
 
 tcp_host({0,0,0,0}) ->
@@ -155,3 +173,5 @@ tcp_host(IPAddress) ->
         {ok, #hostent{h_name = Name}} -> Name;
         {error, _Reason} -> inet_parse:ntoa(IPAddress)
     end.
+
+cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).

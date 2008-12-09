@@ -40,7 +40,7 @@
 -export([dirty_read/1]).
 -export([r/3, r/2, rs/1]).
 -export([enable_cover/0, report_cover/0]).
--export([throw_on_error/2, with_exit_handler/2]).
+-export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
@@ -87,6 +87,7 @@
 -spec(throw_on_error/2 ::
       (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
+-spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (username(), thunk(A)) -> A).
 -spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
@@ -223,6 +224,13 @@ with_exit_handler(Handler, Thunk) ->
         exit:{R, _} when R =:= noproc; R =:= normal; R =:= shutdown ->
             Handler()
     end.
+
+filter_exit_map(F, L) ->
+    Ref = make_ref(),
+    lists:filter(fun (R) -> R =/= Ref end,
+                 [with_exit_handler(
+                    fun () -> Ref end,
+                    fun () -> F(I) end) || I <- L]).
 
 with_user(Username, Thunk) ->
     fun () ->

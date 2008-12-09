@@ -203,7 +203,7 @@ delete_vhost(VHostPath) ->
     lists:foreach(fun (Q) ->
                           {ok,_} = rabbit_amqqueue:delete(Q, false, false)
                   end,
-                  rabbit_amqqueue:list_vhost_queues(VHostPath)),
+                  rabbit_amqqueue:list(VHostPath)),
     R = rabbit_misc:execute_mnesia_transaction(
           rabbit_misc:with_vhost(
             VHostPath,
@@ -217,7 +217,7 @@ internal_delete_vhost(VHostPath) ->
     lists:foreach(fun (#exchange{name=Name}) ->
                           ok = rabbit_exchange:delete(Name, false)
                   end,
-                  rabbit_exchange:list_vhost_exchanges(VHostPath)),
+                  rabbit_exchange:list(VHostPath)),
     lists:foreach(fun (Username) ->
                           ok = unmap_user_vhost(Username, VHostPath)
                   end,
