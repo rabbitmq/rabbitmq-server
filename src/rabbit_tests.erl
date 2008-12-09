@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -131,6 +137,8 @@ test_topic_matching() ->
     passed.
 
 test_app_management() ->
+    true = rabbit_mnesia:schema_current(),
+
     %% starting, stopping, status
     ok = control_action(stop_app, []),
     ok = control_action(stop_app, []),
@@ -236,25 +244,51 @@ test_log_management_during_startup() ->
     ok = error_logger:tty(false),
     ok = delete_log_handlers([sasl_report_tty_h]),
     ok = case catch control_action(start_app, []) of
-        ok -> exit(got_success_but_expected_failure);
-        {error, {cannot_log_to_tty, _, _}} -> ok
-    end,
+             ok -> exit({got_success_but_expected_failure,
+                        log_rotation_tty_no_handlers_test});
+             {error, {cannot_log_to_tty, _, _}} -> ok
+         end,
 
     %% fix sasl logging
     ok = application:set_env(sasl, sasl_error_logger,
                              {file, SaslLog}),
 
-    %% start application with logging to invalid directory
+    %% start application with logging to non-existing directory
     TmpLog = "/tmp/rabbit-tests/test.log",
-    file:delete(TmpLog),
+    delete_file(TmpLog),
     ok = application:set_env(kernel, error_logger, {file, TmpLog}),
 
     ok = delete_log_handlers([rabbit_error_logger_file_h]),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
-    ok = case catch control_action(start_app, []) of
-        ok -> exit(got_success_but_expected_failure);
-        {error, {cannot_log_to_file, _, _}} -> ok
-    end,
+    ok = control_action(start_app, []),
+
+    %% start application with logging to directory with no
+    %% write permissions
+    TmpDir = "/tmp/rabbit-tests",
+    ok = set_permissions(TmpDir, 8#00400),
+    ok = delete_log_handlers([rabbit_error_logger_file_h]),
+    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    ok = case control_action(start_app, []) of
+             ok -> exit({got_success_but_expected_failure,
+                        log_rotation_no_write_permission_dir_test}); 
+            {error, {cannot_log_to_file, _, _}} -> ok
+         end,
+
+    %% start application with logging to a subdirectory which
+    %% parent directory has no write permissions
+    TmpTestDir = "/tmp/rabbit-tests/no-permission/test/log",
+    ok = application:set_env(kernel, error_logger, {file, TmpTestDir}),
+    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    ok = case control_action(start_app, []) of
+             ok -> exit({got_success_but_expected_failure,
+                        log_rotatation_parent_dirs_test});
+             {error, {cannot_log_to_file, _,
+               {error, {cannot_create_parent_dirs, _, eacces}}}} -> ok
+         end,
+    ok = set_permissions(TmpDir, 8#00700),
+    ok = set_permissions(TmpLog, 8#00600),
+    ok = delete_file(TmpLog),
+    ok = file:del_dir(TmpDir),
 
     %% start application with standard error_logger_file_h
     %% handler not installed 
@@ -465,7 +499,7 @@ test_user_management() ->
 control_action(Command, Args) -> control_action(Command, node(), Args).
 
 control_action(Command, Node, Args) ->
-    case catch rabbit_control:action(Command, Node, Args) of
+    case catch rabbit_control:action(Command, Node, Args, fun io:format/2) of
         ok ->
             io:format("done.~n"),
             ok;
@@ -493,6 +527,14 @@ test_logs_working(MainLogFile, SaslLogFile) ->
     timer:sleep(50),
     [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
     ok.
+
+set_permissions(Path, Mode) ->
+    case file:read_file_info(Path) of
+        {ok, FInfo} -> file:write_file_info(
+                         Path,
+                         FInfo#file_info{mode=Mode});
+        Error       -> Error
+    end.
 
 clean_logs(Files, Suffix) ->
     [begin

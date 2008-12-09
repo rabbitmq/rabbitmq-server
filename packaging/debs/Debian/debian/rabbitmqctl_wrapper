@@ -10,5 +10,12 @@ for arg in "$@" ; do
 done
 
 cd /
-su rabbitmq -s /bin/sh -c "/usr/sbin/rabbitmqctl_real ${CMDLINE}"
+
+if [ `id -u` = 0 ] ; then
+    su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/rabbitmqctl ${CMDLINE}"
+else
+    /usr/lib/rabbitmq/bin/rabbitmqctl
+    echo -e "\nOnly root should run rabbitmqctl\n"
+    exit 1
+fi
 

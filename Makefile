@@ -23,6 +23,7 @@ LOG_BASE=/tmp
 
 VERSION=0.0.0
 TARBALL_NAME=rabbitmq-server-$(VERSION)
+TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
 SIBLING_CODEGEN_DIR=../rabbitmq-codegen/
 AMQP_CODEGEN_DIR=$(shell [ -d $(SIBLING_CODEGEN_DIR) ] && echo $(SIBLING_CODEGEN_DIR) || echo codegen)
@@ -62,6 +63,9 @@ cleandb: stop-node
 run: all
 	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) NODE_ONLY=true LOG_BASE=$(LOG_BASE)  RABBIT_ARGS="$(RABBIT_ARGS) -s rabbit" MNESIA_DIR=$(MNESIA_DIR) ./scripts/rabbitmq-server
 
+check-mnesia-schema: all
+	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) LOG_BASE=$(LOG_BASE) MNESIA_DIR=$(MNESIA_DIR) ./scripts/rabbitmq-mnesia-current
+
 run-node: all
 	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) NODE_ONLY=true LOG_BASE=$(LOG_BASE)  RABBIT_ARGS="$(RABBIT_ARGS)" MNESIA_DIR=$(MNESIA_DIR) ./scripts/rabbitmq-server
 
@@ -92,39 +96,27 @@ stop-cover: all
 
 ########################################################################
 
-generic_stage:
-	mkdir -p $(GENERIC_STAGE_DIR)
-	cp -r ebin include src $(GENERIC_STAGE_DIR)
-	cp LICENSE LICENSE-MPL-RabbitMQ $(GENERIC_STAGE_DIR)
-
-	if [ -f INSTALL.in ]; then \
-		cp INSTALL.in $(GENERIC_STAGE_DIR)/INSTALL; \
-		elinks -dump -no-references -no-numbering $(WEB_URL)install.html \
-			>> $(GENERIC_STAGE_DIR)/INSTALL; \
-		cp BUILD.in $(GENERIC_STAGE_DIR)/BUILD; \
-		elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
-			>> $(GENERIC_STAGE_DIR)/BUILD; \
-	else \
-		cp INSTALL $(GENERIC_STAGE_DIR); \
-		cp BUILD $(GENERIC_STAGE_DIR); \
-	fi
-
-	sed -i 's/%%VERSION%%/$(VERSION)/' $(GENERIC_STAGE_DIR)/ebin/rabbit.app
-
 srcdist: distclean
-	$(MAKE) VERSION=$(VERSION) GENERIC_STAGE_DIR=dist/$(TARBALL_NAME) generic_stage
+	mkdir -p $(TARGET_SRC_DIR)/codegen
+	cp -r ebin src include LICENSE LICENSE-MPL-RabbitMQ $(TARGET_SRC_DIR)
+	cp INSTALL.in $(TARGET_SRC_DIR)/INSTALL
+	elinks -dump -no-references -no-numbering $(WEB_URL)install.html \
+		>> $(TARGET_SRC_DIR)/INSTALL
+	cp BUILD.in $(TARGET_SRC_DIR)/BUILD
+	elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
+		>> $(TARGET_SRC_DIR)/BUILD
+	sed -i 's/%%VERSION%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit.app
+	
+	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
+	cp codegen.py Makefile $(TARGET_SRC_DIR)
 
-	mkdir -p dist/$(TARBALL_NAME)/codegen
-	cp -r $(AMQP_CODEGEN_DIR)/* dist/$(TARBALL_NAME)/codegen/
-	cp codegen.py Makefile dist/$(TARBALL_NAME)
-
-	cp -r scripts dist/$(TARBALL_NAME)
-	cp -r docs dist/$(TARBALL_NAME)
-	chmod 0755 dist/$(TARBALL_NAME)/scripts/*
+	cp -r scripts $(TARGET_SRC_DIR)
+	cp -r docs $(TARGET_SRC_DIR)
+	chmod 0755 $(TARGET_SRC_DIR)/scripts/*
 
 	(cd dist; tar -zcf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
 	(cd dist; zip -r $(TARBALL_NAME).zip $(TARBALL_NAME))
-	rm -rf dist/$(TARBALL_NAME)
+	rm -rf $(TARGET_SRC_DIR)
 
 distclean: clean
 	make -C $(AMQP_CODEGEN_DIR) clean
@@ -135,8 +127,9 @@ install: all
 	@[ -n "$(TARGET_DIR)" ] || (echo "Please set TARGET_DIR."; false)
 	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
 	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
-
-	$(MAKE) VERSION=$(VERSION) GENERIC_STAGE_DIR=$(TARGET_DIR) generic_stage
+	
+	mkdir -p $(TARGET_DIR)
+	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
 	mkdir -p $(SBIN_DIR)
@@ -144,10 +137,9 @@ install: all
 	cp scripts/rabbitmq-server $(SBIN_DIR)
 	cp scripts/rabbitmqctl $(SBIN_DIR)
 	cp scripts/rabbitmq-multi $(SBIN_DIR)
+	cp scripts/rabbitmq-mnesia-current $(SBIN_DIR)
 	for manpage in docs/*.pod ; do \
 		pod2man -c "RabbitMQ AMQP Server" -d "" -r "" \
 		$$manpage | gzip --best > \
 		$(MAN_DIR)/man1/`echo $$manpage | sed -e 's:docs/\(.*\)\.pod:\1\.1\.gz:g'`; \
 	done
-	 
-	rm -f $(TARGET_DIR)/BUILD

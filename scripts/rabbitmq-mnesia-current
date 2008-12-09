@@ -34,20 +34,23 @@
 [ "x" = "x$NODE_IP_ADDRESS" ] && NODE_IP_ADDRESS=0.0.0.0
 [ "x" = "x$NODE_PORT" ] && NODE_PORT=5672
 
-ERL_ARGS=
-SCRIPT_HOME=$(dirname $0)
+CLUSTER_CONFIG_FILE=/etc/default/rabbitmq_cluster.config
 
-[ "x" = "x$PIDS_FILE" ] && PIDS_FILE=/var/lib/rabbitmq/pids
+[ "x" = "x$LOG_BASE" ] && LOG_BASE=/var/log/rabbitmq
+[ "x" = "x$MNESIA_BASE" ] && MNESIA_BASE=/var/lib/rabbitmq/mnesia
+[ "x" = "x$MNESIA_DIR" ] && MNESIA_DIR=${MNESIA_BASE}/${NODENAME}
 
-export NODENAME NODE_IP_ADDRESS NODE_PORT SCRIPT_HOME PIDS_FILE
+if [ -f "$CLUSTER_CONFIG_FILE" ]; then
+    CLUSTER_CONFIG="-rabbit cluster_config \"$CLUSTER_CONFIG_FILE\""
+else
+    CLUSTER_CONFIG=""
+fi
 
 exec erl \
     -pa "`dirname $0`/../ebin" \
-    -noinput \
-    -hidden \
-    ${ERL_ARGS} \
-    -sname rabbitmq_multi$$ \
-    -s rabbit_multi \
-    ${START_ARGS} \
-    -extra "$@"
-
+    -noshell \
+    -sname ${NODENAME} \
+    -eval 'halt(case rabbit_mnesia:schema_current() of true -> 0; false -> 1 end).' \
+    -mnesia dir "\"${MNESIA_DIR}\"" \
+    -kernel error_logger '{file,"'/dev/null'"}' \
+    ${CLUSTER_CONFIG}

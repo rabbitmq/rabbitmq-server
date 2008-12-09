@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -48,13 +54,13 @@
 -spec(start_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
 -spec(stop_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [listener()]).
--spec(node_listeners/1 :: (node()) -> [listener()]).
+-spec(node_listeners/1 :: (erlang_node()) -> [listener()]).
 -spec(connections/0 :: () -> [connection()]).
 -spec(connection_info/1 :: (connection()) -> [info()]).
 -spec(connection_info/2 :: (connection(), [info_key()]) -> [info()]).
 -spec(connection_info_all/0 :: () -> [[info()]]).
 -spec(connection_info_all/1 :: ([info_key()]) -> [[info()]]).
--spec(on_node_down/1 :: (node()) -> 'ok').
+-spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(check_tcp_listener_address/3 :: (atom(), host(), ip_port()) ->
              {ip_address(), atom()}).
 

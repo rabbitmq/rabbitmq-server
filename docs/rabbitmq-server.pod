@@ -66,14 +66,7 @@ rabbitmq-multi(1), rabbitmqctl(1)
 
 =head1 AUTHOR
 
-Originally written by The RabbitMQ Team <info@lshift.net>
-
-=head1 COPYRIGHT
-
-This package, the RabbitMQ server is licensed under the MPL.
-
-If you have any questions regarding licensing, please contact us at 
-info@rabbitmq.com.
+The RabbitMQ Team <info@rabbitmq.com>
 
 =head1 REFERENCES
 

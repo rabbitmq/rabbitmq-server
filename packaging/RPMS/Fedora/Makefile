@@ -18,9 +18,11 @@ prepare:
 	cp init.d SOURCES/rabbitmq-server.init
 	cp rabbitmqctl_wrapper SOURCES/rabbitmq-server.wrapper
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
+	cp rabbitmq-server-preserve-db.sh SOURCES
 
 server: prepare
-	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --target noarch
+	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --target i386
+	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --target x86_64
 
 clean:	
 	rm -rf SOURCES SPECS RPMS SRPMS BUILD tmp
