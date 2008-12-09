@@ -58,8 +58,12 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
 
 set RABBITMQ_BASE_UNIX=%RABBITMQ_BASE:\=/%
 
-set MNESIA_BASE=%RABBITMQ_BASE_UNIX%/db
-set LOG_BASE=%RABBITMQ_BASE_UNIX%/log
+if "%RABBITMQ_MNESIA_BASE%"=="" (
+    set RABBITMQ_MNESIA_BASE=%RABBITMQ_BASE_UNIX%/db
+)
+if "%RABBITMQ_LOG_BASE%"=="" (
+    set RABBITMQ_LOG_BASE=%RABBITMQ_BASE_UNIX%/log
+)
 
 
 rem We save the previous logs in their respective backup
@@ -89,7 +93,9 @@ if not exist "%CLUSTER_CONFIG_FILE%" GOTO L1
 set CLUSTER_CONFIG=-rabbit cluster_config \""%CLUSTER_CONFIG_FILE:\=/%"\"
 :L1
 
-set MNESIA_DIR=%MNESIA_BASE%/%RABBITMQ_NODENAME%-mnesia
+if "%RABBITMQ_MNESIA_DIR%"=="" (
+    set RABBITMQ_MNESIA_DIR=%RABBITMQ_MNESIA_BASE%/%RABBITMQ_NODENAME%-mnesia
+)
 
 "%ERLANG_HOME%\bin\erl.exe" ^
 -pa "%~dp0..\ebin" ^
@@ -102,16 +108,16 @@ set MNESIA_DIR=%MNESIA_BASE%/%RABBITMQ_NODENAME%-mnesia
 -kernel inet_default_listen_options "[{nodelay, true}, {sndbuf, 16384}, {recbuf, 4096}]" ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 -rabbit tcp_listeners "[{\"%RABBITMQ_NODE_IP_ADDRESS%\", %RABBITMQ_NODE_PORT%}]" ^
--kernel error_logger {file,\""%LOG_BASE%/%RABBITMQ_NODENAME%.log"\"} ^
+-kernel error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%.log"\"} ^
 -sasl errlog_type error ^
--sasl sasl_error_logger {file,\""%LOG_BASE%/%RABBITMQ_NODENAME%-sasl.log"\"} ^
+-sasl sasl_error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%-sasl.log"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
 -os_mon start_os_sup false ^
 -os_mon memsup_system_only true ^
 -os_mon system_memory_high_watermark 0.95 ^
--mnesia dir \""%MNESIA_DIR%"\" ^
+-mnesia dir \""%RABBITMQ_MNESIA_DIR%"\" ^
 %CLUSTER_CONFIG% ^
 %RABBITMQ_SERVER_START_ARGS% ^
 %*
