@@ -13,10 +13,13 @@
 ##   The Initial Developers of the Original Code are LShift Ltd.,
 ##   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
 ##
-##   Portions created by LShift Ltd., Cohesive Financial Technologies
-##   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-##   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-##   Technologies Ltd.;
+##   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd.,
+##   Cohesive Financial Technologies LLC., and Rabbit Technologies
+##   Ltd. are Copyright (C) 2007-2008 LShift Ltd., Cohesive Financial
+##   Technologies LLC., and Rabbit Technologies Ltd.;
+##
+##   Portions created at or after 22-Nov-2008 00:00:00 GMT are
+##   copyrighted by their respective authors.
 ##
 ##   All Rights Reserved.
 ##
