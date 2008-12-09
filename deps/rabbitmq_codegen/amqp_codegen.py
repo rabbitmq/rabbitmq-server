@@ -10,8 +10,8 @@
 ##
 ##   The Original Code is RabbitMQ.
 ##
-##   The Initial Developers of the Original Code are LShift Ltd.,
-##   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+##   The Initial Developers of the Original Code are LShift Ltd,
+##   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 ##
 ##   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
 ##   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
