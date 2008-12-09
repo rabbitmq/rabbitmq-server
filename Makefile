@@ -1,5 +1,8 @@
-NODENAME=rabbit
-RABBIT_ARGS=
+RABBITMQ_NODENAME=rabbit
+RABBITMQ_SERVER_START_ARGS=
+RABBITMQ_MNESIA_DIR=/tmp/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
+RABBITMQ_LOG_BASE=/tmp
+
 SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
@@ -18,9 +21,6 @@ endif
 
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
-
-MNESIA_DIR=/tmp/rabbitmq-$(NODENAME)-mnesia
-LOG_BASE=/tmp
 
 VERSION=0.0.0
 TARBALL_NAME=rabbitmq-server-$(VERSION)
@@ -62,20 +62,36 @@ cleandb: stop-node
 
 ############ various tasks to interact with RabbitMQ ###################
 
+BASIC_SCRIPT_ENVIRONMENT_SETTINGS=\
+	RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
+	RABBITMQ_NODE_PORT="$(RABBITMQ_NODE_PORT)" \
+	RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
+	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)"
+
 run: all
-	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) NODE_ONLY=true LOG_BASE=$(LOG_BASE)  RABBIT_ARGS="$(RABBIT_ARGS) -s rabbit" MNESIA_DIR=$(MNESIA_DIR) ./scripts/rabbitmq-server
+	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
+		RABBITMQ_NODE_ONLY=true \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -s rabbit" \
+		./scripts/rabbitmq-server
 
 check-mnesia-schema: all
-	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) LOG_BASE=$(LOG_BASE) MNESIA_DIR=$(MNESIA_DIR) ./scripts/rabbitmq-mnesia-current
+	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
+		./scripts/rabbitmq-mnesia-current
 
 run-node: all
-	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) NODE_ONLY=true LOG_BASE=$(LOG_BASE)  RABBIT_ARGS="$(RABBIT_ARGS)" MNESIA_DIR=$(MNESIA_DIR) ./scripts/rabbitmq-server
+	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
+		RABBITMQ_NODE_ONLY=true \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+		./scripts/rabbitmq-server
 
 run-tests: all
 	echo "rabbit_tests:all_tests()." | $(ERL_CALL)
 
 start-background-node: stop-node
-	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) NODE_ONLY=true LOG_BASE=$(LOG_BASE) RABBIT_ARGS="$(RABBIT_ARGS) -detached" MNESIA_DIR=$(MNESIA_DIR) ./scripts/rabbitmq-server ; sleep 1
+	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
+		RABBITMQ_NODE_ONLY=true \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached" \
+		./scripts/rabbitmq-server ; sleep 1
 
 start-rabbit-on-node: all
 	echo "rabbit:start()." | $(ERL_CALL)
