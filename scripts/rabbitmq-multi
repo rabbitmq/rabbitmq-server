@@ -24,7 +24,7 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-. /etc/default/rabbitmq
+[ -f /etc/default/rabbitmq ] && . /etc/default/rabbitmq
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=rabbit

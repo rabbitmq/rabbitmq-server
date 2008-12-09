@@ -24,7 +24,7 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-. /etc/default/rabbitmq
+[ -f /etc/default/rabbitmq ] && . /etc/default/rabbitmq
 
 [ "x" = "x$RABBITMQ_CLUSTER_CONFIG_FILE" ] && RABBITMQ_CLUSTER_CONFIG_FILE=${CLUSTER_CONFIG_FILE}
 [ "x" = "x$RABBITMQ_CLUSTER_CONFIG_FILE" ] && RABBITMQ_CLUSTER_CONFIG_FILE=/etc/default/rabbitmq_cluster.config
