@@ -30,7 +30,7 @@ SIBLING_CODEGEN_DIR=../rabbitmq-codegen/
 AMQP_CODEGEN_DIR=$(shell [ -d $(SIBLING_CODEGEN_DIR) ] && echo $(SIBLING_CODEGEN_DIR) || echo codegen)
 AMQP_SPEC_JSON_PATH=$(AMQP_CODEGEN_DIR)/amqp-0.8.json
 
-ERL_CALL=erl_call -sname $(NODENAME) -e
+ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
 # for the moment we don't use boot files because they introduce a
 # dependency on particular versions of OTP applications
@@ -58,7 +58,7 @@ clean: cleandb
 	rm -f docs/*.[0-9].gz
 
 cleandb: stop-node
-	erl -mnesia dir '"$(MNESIA_DIR)"' -noshell -eval 'lists:foreach(fun file:delete/1, filelib:wildcard(mnesia:system_info(directory) ++ "/*")), halt().'
+	erl -mnesia dir '"$(RABBITMQ_MNESIA_DIR)"' -noshell -eval 'lists:foreach(fun file:delete/1, filelib:wildcard(mnesia:system_info(directory) ++ "/*")), halt().'
 
 ############ various tasks to interact with RabbitMQ ###################
 
