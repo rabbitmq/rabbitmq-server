@@ -28,16 +28,16 @@ if "%RABBITMQ_BASE%"=="" (
     set RABBITMQ_BASE=%APPDATA%\RabbitMQ
 )
 
-if "%NODENAME%"=="" (
-    set NODENAME=rabbit
+if "%RABBITMQ_NODENAME%"=="" (
+    set RABBITMQ_NODENAME=rabbit
 )
 
-if "%NODE_IP_ADDRESS%"=="" (
-    set NODE_IP_ADDRESS=0.0.0.0
+if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
+    set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
 )
 
-if "%NODE_PORT%"=="" (
-    set NODE_PORT=5672
+if "%RABBITMQ_NODE_PORT%"=="" (
+    set RABBITMQ_NODE_PORT=5672
 )
 
 if "%ERLANG_HOME%"=="" (
@@ -67,11 +67,11 @@ rem Log management (rotation, filtering based of size...) is left as an exercice
 
 set BACKUP_EXTENSION=.1
 
-set LOGS="%RABBITMQ_BASE%\log\%NODENAME%.log"
-set SASL_LOGS="%RABBITMQ_BASE%\log\%NODENAME%-sasl.log"
+set LOGS="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log"
+set SASL_LOGS="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log"
 
-set LOGS_BACKUP="%RABBITMQ_BASE%\log\%NODENAME%.log%BACKUP_EXTENSION%"
-set SASL_LOGS_BAKCUP="%RABBITMQ_BASE%\log\%NODENAME%-sasl.log%BACKUP_EXTENSION%"
+set LOGS_BACKUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log%BACKUP_EXTENSION%"
+set SASL_LOGS_BAKCUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXTENSION%"
 
 if exist %LOGS% (
 	type %LOGS% >> %LOGS_BACKUP%
@@ -89,22 +89,22 @@ if not exist "%CLUSTER_CONFIG_FILE%" GOTO L1
 set CLUSTER_CONFIG=-rabbit cluster_config \""%CLUSTER_CONFIG_FILE:\=/%"\"
 :L1
 
-set MNESIA_DIR=%MNESIA_BASE%/%NODENAME%-mnesia
+set MNESIA_DIR=%MNESIA_BASE%/%RABBITMQ_NODENAME%-mnesia
 
 "%ERLANG_HOME%\bin\erl.exe" ^
 -pa "%~dp0..\ebin" ^
 -noinput ^
 -boot start_sasl ^
--sname %NODENAME% ^
+-sname %RABBITMQ_NODENAME% ^
 -s rabbit ^
 +W w ^
 +A30 ^
 -kernel inet_default_listen_options "[{nodelay, true}, {sndbuf, 16384}, {recbuf, 4096}]" ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
--rabbit tcp_listeners "[{\"%NODE_IP_ADDRESS%\", %NODE_PORT%}]" ^
--kernel error_logger {file,\""%LOG_BASE%/%NODENAME%.log"\"} ^
+-rabbit tcp_listeners "[{\"%RABBITMQ_NODE_IP_ADDRESS%\", %RABBITMQ_NODE_PORT%}]" ^
+-kernel error_logger {file,\""%LOG_BASE%/%RABBITMQ_NODENAME%.log"\"} ^
 -sasl errlog_type error ^
--sasl sasl_error_logger {file,\""%LOG_BASE%/%NODENAME%-sasl.log"\"} ^
+-sasl sasl_error_logger {file,\""%LOG_BASE%/%RABBITMQ_NODENAME%-sasl.log"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
@@ -113,6 +113,5 @@ set MNESIA_DIR=%MNESIA_BASE%/%NODENAME%-mnesia
 -os_mon system_memory_high_watermark 0.95 ^
 -mnesia dir \""%MNESIA_DIR%"\" ^
 %CLUSTER_CONFIG% ^
-%RABBIT_ARGS% ^
+%RABBITMQ_SERVER_START_ARGS% ^
 %*
-

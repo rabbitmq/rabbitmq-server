@@ -165,7 +165,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -os_mon system_memory_high_watermark 0.95 ^
 -mnesia dir \""%MNESIA_DIR%"\" ^
 %CLUSTER_CONFIG% ^
-%RABBIT_ARGS% ^
+%RABBITMQ_SERVER_START_ARGS% ^
 %*
 
 set ERLANG_SERVICE_ARGUMENTS=%ERLANG_SERVICE_ARGUMENTS:\=\\%
