@@ -127,11 +127,12 @@ Available commands:
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
 
-<node> should be the name of the master node of the RabbitMQ cluster. It
-defaults to the node named \"rabbit\" on the local host. On a host named
-\"server.example.com\", the master node will usually be rabbit@server (unless
-NODENAME has been set to some non-default value at broker startup time). The
-output of hostname -s is usually the correct suffix to use after the \"@\" sign.
+<node> should be the name of the master node of the RabbitMQ
+cluster. It defaults to the node named \"rabbit\" on the local
+host. On a host named \"server.example.com\", the master node will
+usually be rabbit@server (unless RABBITMQ_NODENAME has been set to
+some non-default value at broker startup time). The output of hostname
+-s is usually the correct suffix to use after the \"@\" sign.
 
 The list_queues, list_exchanges and list_bindings commands accept an optional
 virtual host parameter for which to display results. The default value is \"/\".

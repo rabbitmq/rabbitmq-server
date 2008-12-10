@@ -90,8 +90,8 @@ action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),
     N = list_to_integer(NodeCount),
     {NodePids, Running} = start_nodes(N, N, [], true,
-                                      getenv("NODENAME"),
-                                      getenv("NODE_PORT"),
+                                      getenv("RABBITMQ_NODENAME"),
+                                      getenv("RABBITMQ_NODE_PORT"),
                                       RpcTimeout),
     write_pids_file(NodePids),
     case Running of
@@ -161,8 +161,8 @@ start_nodes(N, Total, PNodePid, Running,
                 NodeNameBase, NodePortBase, RpcTimeout).
 
 start_node(NodeName, NodePort, RpcTimeout) ->
-    os:putenv("NODENAME", NodeName),
-    os:putenv("NODE_PORT", integer_to_list(NodePort)),
+    os:putenv("RABBITMQ_NODENAME", NodeName),
+    os:putenv("RABBITMQ_NODE_PORT", integer_to_list(NodePort)),
     Node = rabbit_misc:localnode(list_to_atom(NodeName)),
     io:format("Starting node ~s...~n", [Node]),
     case rpc:call(Node, os, getpid, []) of
@@ -219,13 +219,13 @@ with_os(Handlers) ->
     end.
 
 script_filename() ->
-    ScriptHome = getenv("SCRIPT_HOME"),
+    ScriptHome = getenv("RABBITMQ_SCRIPT_HOME"),
     ScriptName = with_os(
                    [{unix , fun () -> "rabbitmq-server" end},
                     {win32, fun () -> "rabbitmq-server.bat" end}]),
     ScriptHome ++ "/" ++ ScriptName ++ " -noinput".
 
-pids_file() -> getenv("PIDS_FILE").
+pids_file() -> getenv("RABBITMQ_PIDS_FILE").
 
 write_pids_file(Pids) ->
     FileName = pids_file(),
