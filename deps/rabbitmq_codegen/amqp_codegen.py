@@ -47,6 +47,8 @@ except ImportError:
     print >> sys.stderr , " You can install it:"
     print >> sys.stderr , "   - by running 'apt-get install python-simplejson' on Debian-based systems,"
     print >> sys.stderr , "   - by running 'yum install python-simplejson' on Fedora/Red Hat system,"
+    print >> sys.stderr , "   - by running 'port install py25-simplejson' on Macports on OS X"
+    print >> sys.stderr , "     (you may need to say 'make PYTHON=python2.5', as well),"
     print >> sys.stderr , "   - from sources from 'http://pypi.python.org/pypi/simplejson'"
     print >> sys.stderr , "   - simplejson is a standard json library in the Python core since 2.6"
     sys.exit(1)
