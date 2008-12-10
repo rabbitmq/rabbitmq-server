@@ -189,7 +189,7 @@ name
     URL-encoded name of the exchange
 
 type
-    echange type (B<direct>, B<topic> or B<fanout>)
+    exchange type (B<direct>, B<topic> or B<fanout>)
 
 durable
     whether the exchange survives server restarts

@@ -148,7 +148,7 @@ auto_delete, arguments]. The default is to display name and type.
 The output format for \"list_bindings\" is a list of rows containing 
 exchange name, routing key, queue name and arguments, in that order.
 
-<ConnectioInfoItem> must be a member of the list [pid, address, port, 
+<ConnectionInfoItem> must be a member of the list [pid, address, port, 
 peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
 recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
 user, peer_address and peer_port.
