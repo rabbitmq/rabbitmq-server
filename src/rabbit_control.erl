@@ -298,7 +298,10 @@ display_info_list(Results, InfoItemArgs) when is_list(Results) ->
             io:nl()
         end,
         Results),
-    ok.
+    ok;
+
+display_info_list(Other, _) ->
+    Other.
 
 display_list(L) when is_list(L) ->
     lists:foreach(fun (I) ->
