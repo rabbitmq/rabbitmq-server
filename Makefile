@@ -142,7 +142,13 @@ distclean: clean
 	find . -name '*~' -exec rm {} \;
 
 %.gz: %.pod
-	pod2man -c "RabbitMQ AMQP Server" -d "" -r "" $< | gzip --best > $@
+	pod2man \
+		-n `echo $$(basename $*) | sed -e 's/\.[^.]\+//'` \
+		-s `echo $$(basename $*) | sed -e 's/.*\.\([^.]\+\)/\1/'` \
+		-c "RabbitMQ AMQP Server" \
+		-d "" \
+		-r "" \
+		$< | gzip --best > $@
 
 docs_all: $(MANPAGES)
 
