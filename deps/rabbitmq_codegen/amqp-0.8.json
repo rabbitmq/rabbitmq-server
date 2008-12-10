@@ -4,7 +4,8 @@
     "minor-version": 0,
     "port": 5672,
     "copyright": [
-        "Copyright (c) 2008 John Leuner\n",
+        "Copyright (C) 2008 LShift Ltd., Cohesive Financial Technologies LLC.,\n",
+        "and Rabbit Technologies Ltd.\n",
         "\n",
         "Permission is hereby granted, free of charge, to any person\n",
         "obtaining a copy of this file (the \"Software\"), to deal in the\n",
