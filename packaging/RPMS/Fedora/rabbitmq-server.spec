@@ -110,9 +110,7 @@ fi
 %defattr(-,root,root,-)
 %{_erllibdir}/rabbitmq_server-%{version}/
 %{_rabbitbindir}/
-%{_mandir}/man1/rabbitmq-multi.1.gz
-%{_mandir}/man1/rabbitmq-server.1.gz
-%{_mandir}/man1/rabbitmqctl.1.gz
+%{_mandir}/
 %{_sbindir}/rabbitmqctl
 %dir /var/lib/rabbitmq
 %dir /var/log/rabbitmq

@@ -34,20 +34,20 @@ if "%RABBITMQ_BASE%"=="" (
     set RABBITMQ_BASE=%APPDATA%\RabbitMQ
 )
 
-if "%NODENAME%"=="" (
-    set NODENAME=rabbit
+if "%RABBITMQ_NODENAME%"=="" (
+    set RABBITMQ_NODENAME=rabbit
 )
 
-if "%NODE_IP_ADDRESS%"=="" (
-    set NODE_IP_ADDRESS=0.0.0.0
+if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
+    set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
 )
 
-if "%NODE_PORT%"=="" (
-    set NODE_PORT=5672
+if "%RABBITMQ_NODE_PORT%"=="" (
+    set RABBITMQ_NODE_PORT=5672
 )
 
-set PIDS_FILE=%RABBITMQ_BASE%\rabbitmq.pids
-set SCRIPT_HOME=%~dp0%
+set RABBITMQ_PIDS_FILE=%RABBITMQ_BASE%\rabbitmq.pids
+set RABBITMQ_SCRIPT_HOME=%~dp0%
 
 if "%ERLANG_HOME%"=="" (
     set ERLANG_HOME=%~dp0%..\..\..
