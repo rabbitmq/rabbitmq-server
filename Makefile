@@ -163,6 +163,6 @@ install: all docs_all
 	for section in 1 5; do \
 		mkdir -p $(MAN_DIR)/man$$section; \
 		for manpage in docs/*.$$section.pod; do \
-			cp $$manpage $(MAN_DIR)/man$$section; \
+			cp docs/`basename $$manpage .pod`.gz $(MAN_DIR)/man$$section; \
 		done; \
 	done
