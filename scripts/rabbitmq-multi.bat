@@ -11,13 +11,19 @@ REM   under the License.
 REM
 REM   The Original Code is RabbitMQ.
 REM
-REM   The Initial Developers of the Original Code are LShift Ltd.,
-REM   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+REM   The Initial Developers of the Original Code are LShift Ltd,
+REM   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 REM
-REM   Portions created by LShift Ltd., Cohesive Financial Technologies
-REM   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-REM   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-REM   Technologies Ltd.;
+REM   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+REM   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+REM   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+REM   Technologies LLC, and Rabbit Technologies Ltd.
+REM
+REM   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+REM   Ltd. Portions created by Cohesive Financial Technologies LLC are
+REM   Copyright (C) 2007-2009 Cohesive Financial Technologies
+REM   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+REM   (C) 2007-2009 Rabbit Technologies Ltd.
 REM
 REM   All Rights Reserved.
 REM

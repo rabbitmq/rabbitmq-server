@@ -7,6 +7,7 @@ Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{v
 Source1: rabbitmq-server.init
 Source2: rabbitmq-server.wrapper
 Source3: rabbitmq-server.logrotate
+Source4: rabbitmq-server-preserve-db.sh
 URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
 %if 0%{?debian}
@@ -26,10 +27,13 @@ performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
 %ifarch x86_64
-  %define _erllibdir /usr/lib64/erlang/lib
+  %define _defaultlibdir /usr/lib64
 %else
-  %define _erllibdir /usr/lib/erlang/lib
+  %define _defaultlibdir /usr/lib
 %endif
+
+%define _erllibdir %{_defaultlibdir}/erlang/lib
+%define _rabbitbindir %{_defaultlibdir}/rabbitmq/bin
 
 %define _maindir %{buildroot}%{_erllibdir}/rabbitmq_server-%{version}
 
@@ -50,9 +54,8 @@ make
 rm -rf %{buildroot}
 
 make install TARGET_DIR=%{_maindir} \
-             SBIN_DIR=%{buildroot}%{_sbindir} \
+             SBIN_DIR=%{buildroot}%{_rabbitbindir} \
              MAN_DIR=%{buildroot}%{_mandir}
-             VERSION=%{version}
 
 mkdir -p %{buildroot}/var/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}/var/log/rabbitmq
@@ -62,10 +65,8 @@ mkdir -p %{buildroot}/etc/rc.d/init.d/
 install -m 0755 %SOURCE1 %{buildroot}/etc/rc.d/init.d/rabbitmq-server
 chmod 0755 %{buildroot}/etc/rc.d/init.d/rabbitmq-server
 
-mv %{buildroot}/usr/sbin/rabbitmqctl %{buildroot}/usr/sbin/rabbitmqctl_real
-install -m 0755 %SOURCE2 %{buildroot}/usr/sbin/rabbitmqctl
-
-cp %{buildroot}%{_mandir}/man1/rabbitmqctl.1.gz %{buildroot}%{_mandir}/man1/rabbitmqctl_real.1.gz
+mkdir -p %{buildroot}%{_sbindir}
+install -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmqctl
 
 mkdir -p %{buildroot}/etc/logrotate.d
 install %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
@@ -87,6 +88,11 @@ fi
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
 chown -R rabbitmq:rabbitmq /var/log/rabbitmq
 
+su rabbitmq -s /bin/sh -c %{_rabbitbindir}/rabbitmq-mnesia-current
+if [ $? = 1 ]; then
+	/bin/sh %SOURCE4 /var/lib/rabbitmq/mnesia
+fi
+
 /sbin/chkconfig --add %{name}
 /sbin/service rabbitmq-server start
 
@@ -103,16 +109,13 @@ fi
 %files
 %defattr(-,root,root,-)
 %{_erllibdir}/rabbitmq_server-%{version}/
+%{_rabbitbindir}/
 %{_mandir}/man1/rabbitmq-multi.1.gz
 %{_mandir}/man1/rabbitmq-server.1.gz
 %{_mandir}/man1/rabbitmqctl.1.gz
-%{_mandir}/man1/rabbitmqctl_real.1.gz
-%{_sbindir}/rabbitmq-multi
-%{_sbindir}/rabbitmq-server
 %{_sbindir}/rabbitmqctl
-%{_sbindir}/rabbitmqctl_real
-/var/lib/rabbitmq/
-/var/log/rabbitmq/
+%dir /var/lib/rabbitmq
+%dir /var/log/rabbitmq
 /etc/rc.d/init.d/rabbitmq-server
 %config(noreplace) /etc/logrotate.d/rabbitmq-server
 %doc LICENSE LICENSE-MPL-RabbitMQ INSTALL

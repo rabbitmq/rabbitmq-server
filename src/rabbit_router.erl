@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -36,6 +42,9 @@
 
 -define(SERVER, ?MODULE).
 
+%% cross-node routing optimisation is disabled because of bug 19758.
+-define(BUG19758, true).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -50,6 +59,14 @@
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+-ifdef(BUG19758).
+
+deliver(QPids, Mandatory, Immediate, Txn, Message) ->
+    check_delivery(Mandatory, Immediate,
+                   run_bindings(QPids, Mandatory, Immediate, Txn, Message)).
+
+-else.
 
 deliver(QPids, Mandatory, Immediate, Txn, Message) ->
     %% we reduce inter-node traffic by grouping the qpids by node and
@@ -113,6 +130,8 @@ deliver_per_node(NodeQPids, Mandatory, Immediate,
                     {false, []},
                     R),
     check_delivery(Mandatory, Immediate, {Routed, lists:append(Handled)}).
+
+-endif.
 
 %%--------------------------------------------------------------------
 

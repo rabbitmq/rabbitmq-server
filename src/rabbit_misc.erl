@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -42,7 +48,7 @@
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([append_file/2]).
+-export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 
 -import(mnesia).
@@ -100,6 +106,7 @@
              'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
+-spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'true').
 
 -endif.
@@ -378,6 +385,13 @@ append_file(File, _, Suffix) ->
     case file:read_file(File) of
         {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
         Error      -> Error
+    end.
+
+ensure_parent_dirs_exist(Filename) ->
+    case filelib:ensure_dir(Filename) of
+        ok              -> ok;
+        {error, Reason} -> 
+            throw({error, {cannot_create_parent_dirs, Filename, Reason}})
     end.
 
 format_stderr(Fmt, Args) ->
