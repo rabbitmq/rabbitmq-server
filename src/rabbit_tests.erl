@@ -526,7 +526,11 @@ test_server_status() ->
 control_action(Command, Args) -> control_action(Command, node(), Args).
 
 control_action(Command, Node, Args) ->
-    case catch rabbit_control:action(Command, Node, Args, fun io:format/2) of
+    case catch rabbit_control:action(
+                 Command, Node, Args,
+                 fun (Format, Args1) ->
+                         io:format(Format ++ " ...~n", Args1)
+                 end) of
         ok ->
             io:format("done.~n"),
             ok;
