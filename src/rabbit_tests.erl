@@ -35,6 +35,7 @@
 
 -import(lists).
 
+-include("rabbit.hrl").
 -include_lib("kernel/include/file.hrl").
 
 test_content_prop_roundtrip(Datum, Binary) ->
@@ -497,27 +498,42 @@ test_user_management() ->
 
 test_server_status() ->
 
-    % list queues
-    ok = control_action(list_queues, []),
-    ok = control_action(list_queues, ["name", "durable", "auto_delete",
-            "arguments", "pid", "messages_ready", "messages_unacknowledged", 
-            "messages_uncommitted", "messages", "acks_uncommitted", "consumers", 
-            "transactions", "memory"]),
+    %% create a queue so we have something to list
+    Q = #amqqueue{} = rabbit_amqqueue:declare(
+                        rabbit_misc:r(<<"/">>, queue, <<"foo">>),
+                        false, false, []),
 
-    % list exchanges
-    ok = control_action(list_exchanges, []),
-    ok = control_action(list_exchanges, ["name", "type", "durable", "auto_delete", 
-            "arguments"]),
+    %% list queues
+    ok = info_action(
+           list_queues,
+           [name, durable, auto_delete, arguments, pid,
+            messages_ready, messages_unacknowledged, messages_uncommitted,
+            messages, acks_uncommitted, consumers, transactions, memory],
+           true),
 
-    % list bindings
+    %% list exchanges
+    ok = info_action(
+           list_exchanges,
+           [name, type, durable, auto_delete, arguments],
+           true),
+
+    %% list bindings
     ok = control_action(list_bindings, []),
 
-    % list connections
-    ok = control_action(list_connections, []),
-    ok = control_action(list_connections, ["pid", "address", "port", "peer_address", 
-            "peer_port", "state", "channels", "user", "vhost", "timeout", 
-            "frame_max", "recv_oct", "recv_cnt", "send_oct", "send_cnt", 
-            "send_pend passed"]),
+    %% cleanup
+    {ok, _} = rabbit_amqqueue:delete(Q, false, false),
+
+    %% list connections
+    [#listener{host = H, port = P} | _] = rabbit_networking:active_listeners(),
+    {ok, C} = gen_tcp:connect(H, P, []),
+    timer:sleep(100),
+    ok = info_action(
+           list_connections,
+           [pid, address, port, peer_address, peer_port, state,
+            channels, user, vhost, timeout, frame_max,
+            recv_oct, recv_cnt, send_oct, send_cnt, send_pend],
+           false),
+    ok = gen_tcp:close(C),
 
     passed.
 
@@ -538,6 +554,15 @@ control_action(Command, Node, Args) ->
             io:format("failed.~n"),
             Other
     end.
+
+info_action(Command, Args, CheckVHost) ->
+    ok = control_action(Command, []),
+    if CheckVHost -> ok = control_action(Command, ["-p", "/"]);
+       true       -> ok
+    end,
+    ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
+    {bad_argument, dummy} = control_action(Command, ["dummy"]),
+    ok.
 
 empty_files(Files) ->
     [case file:read_file_info(File) of
