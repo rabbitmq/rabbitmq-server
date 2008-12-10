@@ -523,8 +523,6 @@ test_server_status() ->
 
 %---------------------------------------------------------------------
 
-%---------------------------------------------------------------------
-
 control_action(Command, Args) -> control_action(Command, node(), Args).
 
 control_action(Command, Node, Args) ->
