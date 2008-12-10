@@ -242,32 +242,41 @@ action(list_queues, Node, Args, Inform) ->
     Inform("Listing queues", []),
     {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
     ArgAtoms = default_if_empty(RemainingArgs, [name, messages]),
-    display_info_list(rpc_call(Node, rabbit_amqqueue, info_all, [VHostArg, ArgAtoms]), ArgAtoms);
+    display_info_list(rpc_call(Node, rabbit_amqqueue, info_all,
+                               [VHostArg, ArgAtoms]),
+                      ArgAtoms);
 
 action(list_exchanges, Node, Args, Inform) ->
     Inform("Listing exchanges", []),
     {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
     ArgAtoms = default_if_empty(RemainingArgs, [name, type]),
-    display_info_list(rpc_call(Node, rabbit_exchange, info_all, [VHostArg, ArgAtoms]), ArgAtoms);
+    display_info_list(rpc_call(Node, rabbit_exchange, info_all,
+                               [VHostArg, ArgAtoms]),
+                      ArgAtoms);
 
 action(list_bindings, Node, Args, Inform) ->
     Inform("Listing bindings", []),
     {VHostArg, _} = parse_vhost_flag(Args),
     InfoKeys = [exchange_name, routing_key, queue_name, args],
     display_info_list(
-        [lists:zip(InfoKeys, tuple_to_list(X)) || X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])], 
-        InfoKeys),
+      [lists:zip(InfoKeys, tuple_to_list(X)) ||
+          X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])], 
+      InfoKeys),
     ok;
 
 action(list_connections, Node, Args, Inform) ->
     Inform("Listing connections", []),
     ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port]),
-    display_info_list(rpc_call(Node, rabbit_networking, connection_info_all, [ArgAtoms]), ArgAtoms).
+    display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
+                               [ArgAtoms]),
+                      ArgAtoms).
 
 parse_vhost_flag(Args) when is_list(Args) ->
         case Args of 
-            ["-p", VHost | RemainingArgs] -> {list_to_binary(VHost), RemainingArgs};  
-            RemainingArgs                 -> {<<"/">>, RemainingArgs}
+            ["-p", VHost | RemainingArgs] ->
+                {list_to_binary(VHost), RemainingArgs};  
+            RemainingArgs ->
+                {<<"/">>, RemainingArgs}
         end.
 
 default_if_empty(List, Default) when is_list(List) ->
@@ -277,31 +286,35 @@ default_if_empty(List, Default) when is_list(List) ->
         [list_to_atom(X) || X <- List]
     end.
 
-display_info_list(Results, InfoItemArgs) when is_list(Results) ->
-    lists:map(
-        fun (ResultRow) ->
-            RenderInfoItem = 
-                fun(InfoItemName) -> 
-                    {value, Info = {InfoItemName, InfoItemValue}} = lists:keysearch(InfoItemName, 1, ResultRow),
-                    case Info of
-                        {_, #resource{name = Name}} ->
-                            url_encode(Name);
-                        {Key, IpAddress} when Key =:= address; Key =:= peer_address andalso is_tuple(IpAddress) ->
-                            inet_parse:ntoa(IpAddress);
-                        _ when is_binary(InfoItemValue) -> 
-                            url_encode(InfoItemValue);
-                        _ -> 
-                            io_lib:format("~w", [InfoItemValue])
-                    end 
-                end,
-            io:fwrite(lists:flatten(rabbit_misc:intersperse("\t", [RenderInfoItem(X) || X <- InfoItemArgs]))),
-            io:nl()
-        end,
-        Results),
+display_info_list(Results, InfoItemKeys) when is_list(Results) ->
+    lists:foreach(
+      fun (Result) ->
+              io:fwrite(
+                lists:flatten(
+                  rabbit_misc:intersperse(
+                    "\t",
+                    [format_info_item(Result, X) || X <- InfoItemKeys]))),
+              io:nl()
+      end,
+      Results),
     ok;
 
 display_info_list(Other, _) ->
     Other.
+
+format_info_item(Items, Key) ->
+    {value, Info = {Key, Value}} = lists:keysearch(Key, 1, Items),
+    case Info of
+        {_, #resource{name = Name}} ->
+            url_encode(Name);
+        {Key, IpAddress} when Key =:= address; Key =:= peer_address
+                              andalso is_tuple(IpAddress) ->
+            inet_parse:ntoa(IpAddress);
+        _ when is_binary(Value) -> 
+            url_encode(Value);
+        _ -> 
+            io_lib:format("~w", [Value])
+    end.
 
 display_list(L) when is_list(L) ->
     lists:foreach(fun (I) ->
