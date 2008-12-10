@@ -25,7 +25,11 @@ B<-n> I<node>
     RABBITMQ_NODENAME has been set to some non-default value at broker
     startup time).  The output of hostname -s is usually the correct
     suffix to use after the "@" sign. See rabbitmq-server(1) for
-    details of configur- ing the RabbitMQ broker.
+    details of configuring the RabbitMQ broker.
+   
+B<-q>
+    quiet output mode is selected with the B<-q> flag. Informational 
+    messages are suppressed when quiet mode is in effect.
 
 =head1 COMMANDS
 
@@ -119,6 +123,151 @@ list_user_vhost I<username>
     list all the virtual hosts to which the user named I<username> has
     been granted access.
     
+=head2 SERVER STATUS
+
+list_queues [-p I<vhostpath>] [I<queueinfoitem> ...]
+    list queue information by virtual host. If no I<queueinfoitem>s
+    are specified then then name and number of messages is displayed
+    for each queue.
+
+=head3 Queue information items
+
+=over 4
+
+name 
+    URL-encoded name of the queue
+
+durable 
+    whether the queue survives server restarts
+
+auto_delete
+    whether the queue will be deleted when no longer used
+
+arguments
+    queue arguments
+
+pid
+    Erlang process identifier associated with the queue
+
+messages_ready
+    number of ready messages
+
+messages_unacknowledged
+    number of unacknowledged messages
+
+messages_uncommitted
+    number of uncommitted messages
+
+messages
+    sum of ready, unacknowledged and uncommitted messages
+
+acks_uncommitted
+    number of uncommitted acknowledgements
+
+consumers
+    number of consumers
+
+transactions
+    number of transactions
+
+memory
+    bytes of memory consumed by the Erlang process for the queue,
+    including stack, heap and internal structures
+
+=back
+
+list_exchanges [-p I<vhostpath>] [I<exchangeinfoitem> ...]
+    list exchange information by virtual host. If no
+    I<exchangeinfoitem>s are specified then name and type is displayed
+    for each exchange.
+
+=head3 Exchange information items
+
+=over 4
+
+name 
+    URL-encoded name of the exchange
+
+type
+    exchange type (B<direct>, B<topic> or B<fanout>)
+
+durable
+    whether the exchange survives server restarts
+
+auto_delete
+    whether the exchange is deleted when no longer used
+
+arguments
+    exchange arguments
+
+=back
+
+list_bindings [-p I<vhostpath>]
+    list bindings by virtual host. Each line contains exchange name,
+    routing key and queue name (all URL encoded) and arguments.
+
+list_connections [I<connectioninfoitem> ...]
+    list connection information. If no I<connectioninfoitem>s are
+    specified then the user, peer address and peer port are displayed.
+
+=head3 Connection information items
+
+=over 4
+
+pid
+    Erlang process id associated with the connection
+
+address
+    server IP number
+
+port
+    server port
+
+peer_address
+    peer address
+
+peer_port
+    peer port
+    
+state
+    connection state (B<pre-init>, B<starting>, B<tuning>, B<opening>,
+    B<running>, B<closing>, B<closed>)
+
+channels
+    number of channels using the connection
+
+user
+    username associated with the connection
+
+vhost
+    URL-encoded virtual host
+
+timeout
+    connection timeout
+
+frame_max
+    maximum frame size (bytes)
+
+recv_oct
+    octets received
+
+recv_cnt
+    packets received
+
+send_oct
+    octets sent
+
+send_cnt
+    packets sent
+
+send_pend
+    send queue size
+
+The list_queues, list_exchanges and list_bindings commands accept an
+optional virtual host parameter for which to display results, defaulting
+to I<"/">. The default can be overridden with the B<-p> flag. Result
+columns for these commands and list_connections are tab-separated.
+
 =head1 EXAMPLES
 
 Create a user named foo with (initial) password bar at the Erlang node

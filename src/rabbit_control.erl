@@ -119,6 +119,11 @@ Available commands:
   list_user_vhosts <UserName>
   list_vhost_users <VHostPath>
 
+  list_queues    [-p <VHostPath>] [<QueueInfoItem> ...]
+  list_exchanges [-p <VHostPath>] [<ExchangeInfoItem> ...]
+  list_bindings  [-p <VHostPath>] 
+  list_connections [<ConnectionInfoItem> ...]
+
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
 
@@ -128,6 +133,25 @@ host. On a host named \"server.example.com\", the master node will
 usually be rabbit@server (unless RABBITMQ_NODENAME has been set to
 some non-default value at broker startup time). The output of hostname
 -s is usually the correct suffix to use after the \"@\" sign.
+
+The list_queues, list_exchanges and list_bindings commands accept an optional
+virtual host parameter for which to display results. The default value is \"/\".
+
+<QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
+arguments, pid, messages_ready, messages_unacknowledged, messages_uncommitted, 
+messages, acks_uncommitted, consumers, transactions, memory]. The default is 
+ to display name and (number of) messages.
+
+<ExchangeInfoItem> must be a member of the list [name, type, durable, 
+auto_delete, arguments]. The default is to display name and type.
+
+The output format for \"list_bindings\" is a list of rows containing 
+exchange name, routing key, queue name and arguments, in that order.
+
+<ConnectionInfoItem> must be a member of the list [pid, address, port, 
+peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
+recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
+user, peer_address and peer_port.
 
 "),
     halt(1).
@@ -213,7 +237,85 @@ action(list_user_vhosts, Node, Args = [_Username], Inform) ->
 
 action(list_vhost_users, Node, Args = [_VHostPath], Inform) ->
     Inform("Listing users for vhosts ~p", Args),
-    display_list(call(Node, {rabbit_access_control, list_vhost_users, Args})).
+    display_list(call(Node, {rabbit_access_control, list_vhost_users, Args}));
+
+action(list_queues, Node, Args, Inform) ->
+    Inform("Listing queues", []),
+    {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
+    ArgAtoms = default_if_empty(RemainingArgs, [name, messages]),
+    display_info_list(rpc_call(Node, rabbit_amqqueue, info_all,
+                               [VHostArg, ArgAtoms]),
+                      ArgAtoms);
+
+action(list_exchanges, Node, Args, Inform) ->
+    Inform("Listing exchanges", []),
+    {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
+    ArgAtoms = default_if_empty(RemainingArgs, [name, type]),
+    display_info_list(rpc_call(Node, rabbit_exchange, info_all,
+                               [VHostArg, ArgAtoms]),
+                      ArgAtoms);
+
+action(list_bindings, Node, Args, Inform) ->
+    Inform("Listing bindings", []),
+    {VHostArg, _} = parse_vhost_flag(Args),
+    InfoKeys = [exchange_name, routing_key, queue_name, args],
+    display_info_list(
+      [lists:zip(InfoKeys, tuple_to_list(X)) ||
+          X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])], 
+      InfoKeys),
+    ok;
+
+action(list_connections, Node, Args, Inform) ->
+    Inform("Listing connections", []),
+    ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port]),
+    display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
+                               [ArgAtoms]),
+                      ArgAtoms).
+
+parse_vhost_flag(Args) when is_list(Args) ->
+        case Args of 
+            ["-p", VHost | RemainingArgs] ->
+                {list_to_binary(VHost), RemainingArgs};  
+            RemainingArgs ->
+                {<<"/">>, RemainingArgs}
+        end.
+
+default_if_empty(List, Default) when is_list(List) ->
+    if List == [] -> 
+        Default; 
+       true -> 
+        [list_to_atom(X) || X <- List]
+    end.
+
+display_info_list(Results, InfoItemKeys) when is_list(Results) ->
+    lists:foreach(
+      fun (Result) ->
+              io:fwrite(
+                lists:flatten(
+                  rabbit_misc:intersperse(
+                    "\t",
+                    [format_info_item(Result, X) || X <- InfoItemKeys]))),
+              io:nl()
+      end,
+      Results),
+    ok;
+
+display_info_list(Other, _) ->
+    Other.
+
+format_info_item(Items, Key) ->
+    {value, Info = {Key, Value}} = lists:keysearch(Key, 1, Items),
+    case Info of
+        {_, #resource{name = Name}} ->
+            url_encode(Name);
+        {Key, IpAddress} when Key =:= address; Key =:= peer_address
+                              andalso is_tuple(IpAddress) ->
+            inet_parse:ntoa(IpAddress);
+        _ when is_binary(Value) -> 
+            url_encode(Value);
+        _ -> 
+            io_lib:format("~w", [Value])
+    end.
 
 display_list(L) when is_list(L) ->
     lists:foreach(fun (I) ->
@@ -228,3 +330,30 @@ call(Node, {Mod, Fun, Args}) ->
 
 rpc_call(Node, Mod, Fun, Args) ->
     rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
+
+%% url_encode is lifted from ibrowse, modified to preserve some characters
+url_encode(Bin) when binary(Bin) ->
+    url_encode_char(lists:reverse(binary_to_list(Bin)), []).
+
+url_encode_char([X | T], Acc) when X >= $a, X =< $z ->
+    url_encode_char(T, [X | Acc]);
+url_encode_char([X | T], Acc) when X >= $A, X =< $Z ->
+    url_encode_char(T, [X | Acc]);
+url_encode_char([X | T], Acc) when X >= $0, X =< $9 ->
+    url_encode_char(T, [X | Acc]);
+url_encode_char([X | T], Acc)
+  when X == $-; X == $_; X == $.; X == $~;
+       X == $!; X == $*; X == $'; X == $(;
+       X == $); X == $;; X == $:; X == $@;
+       X == $&; X == $=; X == $+; X == $$;
+       X == $,; X == $/; X == $?; X == $%;
+       X == $#; X == $[; X == $] ->
+    url_encode_char(T, [X | Acc]);
+url_encode_char([X | T], Acc) ->
+    url_encode_char(T, [$%, d2h(X bsr 4), d2h(X band 16#0f) | Acc]);
+url_encode_char([], Acc) ->
+    Acc.
+
+d2h(N) when N<10 -> N+$0;
+d2h(N) -> N+$a-10.
+

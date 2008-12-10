@@ -35,6 +35,7 @@
 
 -import(lists).
 
+-include("rabbit.hrl").
 -include_lib("kernel/include/file.hrl").
 
 test_content_prop_roundtrip(Datum, Binary) ->
@@ -51,6 +52,7 @@ all_tests() ->
     passed = test_log_management_during_startup(),
     passed = test_cluster_management(),
     passed = test_user_management(),
+    passed = test_server_status(),
     passed.
 
 test_parsing() ->
@@ -494,12 +496,57 @@ test_user_management() ->
 
     passed.
 
+test_server_status() ->
+
+    %% create a queue so we have something to list
+    Q = #amqqueue{} = rabbit_amqqueue:declare(
+                        rabbit_misc:r(<<"/">>, queue, <<"foo">>),
+                        false, false, []),
+
+    %% list queues
+    ok = info_action(
+           list_queues,
+           [name, durable, auto_delete, arguments, pid,
+            messages_ready, messages_unacknowledged, messages_uncommitted,
+            messages, acks_uncommitted, consumers, transactions, memory],
+           true),
+
+    %% list exchanges
+    ok = info_action(
+           list_exchanges,
+           [name, type, durable, auto_delete, arguments],
+           true),
+
+    %% list bindings
+    ok = control_action(list_bindings, []),
+
+    %% cleanup
+    {ok, _} = rabbit_amqqueue:delete(Q, false, false),
+
+    %% list connections
+    [#listener{host = H, port = P} | _] = rabbit_networking:active_listeners(),
+    {ok, C} = gen_tcp:connect(H, P, []),
+    timer:sleep(100),
+    ok = info_action(
+           list_connections,
+           [pid, address, port, peer_address, peer_port, state,
+            channels, user, vhost, timeout, frame_max,
+            recv_oct, recv_cnt, send_oct, send_cnt, send_pend],
+           false),
+    ok = gen_tcp:close(C),
+
+    passed.
+
 %---------------------------------------------------------------------
 
 control_action(Command, Args) -> control_action(Command, node(), Args).
 
 control_action(Command, Node, Args) ->
-    case catch rabbit_control:action(Command, Node, Args, fun io:format/2) of
+    case catch rabbit_control:action(
+                 Command, Node, Args,
+                 fun (Format, Args1) ->
+                         io:format(Format ++ " ...~n", Args1)
+                 end) of
         ok ->
             io:format("done.~n"),
             ok;
@@ -507,6 +554,15 @@ control_action(Command, Node, Args) ->
             io:format("failed.~n"),
             Other
     end.
+
+info_action(Command, Args, CheckVHost) ->
+    ok = control_action(Command, []),
+    if CheckVHost -> ok = control_action(Command, ["-p", "/"]);
+       true       -> ok
+    end,
+    ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
+    {bad_argument, dummy} = control_action(Command, ["dummy"]),
+    ok.
 
 empty_files(Files) ->
     [case file:read_file_info(File) of
