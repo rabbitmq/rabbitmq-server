@@ -30,6 +30,16 @@ environment variable names, with the B<RABBITMQ_> prefix removed:
 B<RABBITMQ_NODE_PORT> from the environment becomes B<NODE_PORT> in the
 /etc/default/rabbitmq file, etc.
 
+=head1 EXAMPLES
+
+The following is an example of a complete /etc/default/rabbitmq file
+that overrides the default Erlang node name from "rabbit" to "hare":
+
+    # I am a complete /etc/default/rabbitmq file.
+    # Comment lines start with a hash character.
+    # This is a /bin/sh script file - use ordinary envt var syntax
+    NODENAME=hare
+
 =head1 SEE ALSO
 
 rabbitmq-server(1), rabbitmq-multi(1), rabbitmqctl(1)
