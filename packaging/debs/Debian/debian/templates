@@ -6,8 +6,8 @@ Description: Schema changed
 
 Template: rabbitmq-server/do-what-with-mnesia-dir
 Type: select
-Choices: Deleted, Moved elsewhere, Kept it in place (WILL BREAK)
-Default: Moved elsewhere
+Choices: Moved, Deleted, Kept (WILL BREAK)
+Default: Moved
 Description: The old RabbitMQ database directory should be:
 
 Template: rabbitmq-server/move-mnesia-dir-where

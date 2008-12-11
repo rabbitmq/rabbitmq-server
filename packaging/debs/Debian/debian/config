@@ -13,7 +13,7 @@ if ! su rabbitmq -s /bin/sh -c /usr/lib/rabbitmq/bin/rabbitmq-mnesia-current ; t
 	db_get rabbitmq-server/do-what-with-mnesia-dir
 	if [ "$RET" = "Deleted" ]; then
 		rm -r /var/lib/rabbitmq/mnesia/
-	elif [ "$RET" = "Moved elsewhere" ]; then
+	elif [ "$RET" = "Moved" ]; then
 		db_input high rabbitmq-server/move-mnesia-dir-where || true
 		db_go
 
