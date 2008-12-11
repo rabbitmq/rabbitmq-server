@@ -163,8 +163,12 @@ start(normal, []) ->
 
                 ok = rabbit_amqqueue:start(),
 
-                ok = rabbit_alarm:start(),
-
+                ok = rabbit_alarm:start(
+                       case application:get_env(start_memsup) of
+                           {ok, Val} -> Val;
+                           undefined -> true
+                       end),
+                
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
 
