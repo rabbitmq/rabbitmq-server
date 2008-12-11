@@ -48,12 +48,11 @@ the broker will pick up extra configuration from
 make sure it is compiled, and then add the following text to
 /etc/default/rabbitmq:
 
-  RABBITMQ_SERVER_START_ARGS='
+  SERVER_START_ARGS='
     -pa /path/to/rabbitmq-stomp/ebin 
     -rabbit
        stomp_listeners [{"0.0.0.0",61613}]
        extra_startup_steps [{"STOMP-listeners",rabbit_stomp,kickstart,[]}]'
-  export RABBITMQ_SERVER_START_ARGS
 
 making sure to update the "/path/to/rabbitmq-stomp/ebin" appropriately
 for your system. Then restart the broker with
