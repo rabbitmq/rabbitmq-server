@@ -25,14 +25,14 @@ Compiling
 ---------------------------------------------------------------------------
 
 To build the plugin, you should have the RabbitMQ broker source code
-compiled in "../rabbitmq". If you have a different path to the code,
-supply it as a command-line argument to make as
-RABBIT_SOURCE_ROOT=/some/other/path/to/rabbitmq.
+compiled in "../rabbitmq-server". If you have a different path to the
+code, supply it as a command-line argument to make as
+RABBIT_SOURCE_ROOT=/some/other/path/to/rabbitmq-server.
 
 To compile the plugin and start the server with the plugin:
 
       make run
-or    make RABBIT_SOURCE_ROOT=/some/other/path/to/rabbitmq run
+or    make RABBIT_SOURCE_ROOT=/some/other/path/to/rabbitmq-server run
 
 If this is successful, you should end up with "starting
 STOMP-listeners ...done" and "broker running" in your terminal.
@@ -48,12 +48,12 @@ the broker will pick up extra configuration from
 make sure it is compiled, and then add the following text to
 /etc/default/rabbitmq:
 
-  RABBIT_ARGS='
+  RABBITMQ_SERVER_START_ARGS='
     -pa /path/to/rabbitmq-stomp/ebin 
     -rabbit
        stomp_listeners [{"0.0.0.0",61613}]
        extra_startup_steps [{"STOMP-listeners",rabbit_stomp,kickstart,[]}]'
-  export RABBIT_ARGS
+  export RABBITMQ_SERVER_START_ARGS
 
 making sure to update the "/path/to/rabbitmq-stomp/ebin" appropriately
 for your system. Then restart the broker with
