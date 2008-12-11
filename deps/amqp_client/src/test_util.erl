@@ -245,18 +245,18 @@ channel_flow_test(Connection) ->
     timer:sleep(1000),
     Channel = lib_amqp:start_channel(Connection),
     Parent = self(),
-    Child = spawn_link(fun() ->
-                    receive
-                        #'channel.flow'{active = false} ->
-                            blocked = lib_amqp:publish(Channel, 
-                                                       X, K, Payload),
-                            memsup:set_sysmem_high_watermark(0.99),
-                            receive
-                                #'channel.flow'{active = true} ->
-                                    Parent ! ok
-                            end
-                    end
-                  end),
+    Child = spawn_link(
+              fun() ->
+                      receive
+                          #'channel.flow'{active = false} -> ok
+                      end,
+                      blocked = lib_amqp:publish(Channel, X, K, Payload),
+                      memsup:set_sysmem_high_watermark(0.99),
+                      receive
+                          #'channel.flow'{active = true} -> ok
+                      end,
+                      Parent ! ok
+              end),
     amqp_channel:register_flow_handler(Channel, Child),
     timer:sleep(1000),
     memsup:set_sysmem_high_watermark(0.001),
