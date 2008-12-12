@@ -4,3 +4,5 @@ all:
 clean:
 	rm -f *.pyc
 
+distclean: clean
+	find . -regextype posix-extended -regex '.*~|.*swp|.*#' -exec rm {} \;
