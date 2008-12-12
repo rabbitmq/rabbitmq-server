@@ -3,7 +3,7 @@ Section: net
 Priority: extra
 Maintainer: Tony Garnock-Jones <tonyg@rabbitmq.com>
 Build-Depends: cdbs, debhelper (>= 5), erlang-nox, erlang-dev, python-simplejson
-Standards-Version: 3.7.2
+Standards-Version: 3.7.3
 
 Package: rabbitmq-server
 Architecture: all
