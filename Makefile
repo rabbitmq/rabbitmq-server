@@ -54,7 +54,7 @@ dialyze: $(TARGETS)
 clean: cleandb
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
-	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
+	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc $(AMQP_CODEGEN_DIR)/amqp_codegen.pyc
 	rm -f docs/*.[0-9].gz
 
 cleandb: stop-node
