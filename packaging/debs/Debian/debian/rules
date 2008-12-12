@@ -15,5 +15,4 @@ install/rabbitmq-server::
 	mkdir -p $(DOCDIR)
 	rm $(RABBIT_LIB)LICENSE*
 	cp debian/rabbitmqctl_wrapper $(DEB_DESTDIR)usr/sbin/rabbitmqctl
-	cp debian/rabbitmq-server.logrotate $(DEB_DESTDIR)etc/logrotate.d/rabbitmq-server
 	chmod a+x $(DEB_DESTDIR)usr/sbin/rabbitmqctl

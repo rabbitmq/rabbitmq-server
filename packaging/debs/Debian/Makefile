@@ -21,7 +21,7 @@ package: clean
 	cp -r debian $(UNPACKED_DIR)
 	chmod a+x $(UNPACKED_DIR)/debian/rules
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
-	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -rfakeroot $(SIGNING)
+	cd $(UNPACKED_DIR); debconf-updatepo; GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -rfakeroot $(SIGNING)
 	rm -rf $(UNPACKED_DIR)
 
 clean:
