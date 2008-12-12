@@ -5,4 +5,4 @@ clean:
 	rm -f *.pyc
 
 distclean: clean
-	find . -regex '.*\(~\|#\|swp\)' -exec rm {} \;
+	find . -regex '.*\(~\|#\|\.swp\)' -exec rm {} \;
