@@ -41,9 +41,11 @@ $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDE_DIR)/rabbit_framing.hrl $(INCL
 	erlc $(ERLC_OPTS) $<
 #	ERLC_EMULATOR="erl -smp" erlc $(ERLC_OPTS) $<
 
-$(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
-	python codegen.py header $(AMQP_SPEC_JSON_PATH) > $(INCLUDE_DIR)/rabbit_framing.hrl
-	python codegen.py body   $(AMQP_SPEC_JSON_PATH) > $(SOURCE_DIR)/rabbit_framing.erl
+$(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
+	python codegen.py header $(AMQP_SPEC_JSON_PATH) > $@
+
+$(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
+	python codegen.py body   $(AMQP_SPEC_JSON_PATH) > $@
 
 $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.rel $(TARGETS)
 	erl -noshell -eval 'systools:make_script("ebin/rabbit", [{path, ["ebin"]}]), halt().'
