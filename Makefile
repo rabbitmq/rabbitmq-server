@@ -141,7 +141,7 @@ srcdist: distclean
 distclean: clean
 	make -C $(AMQP_CODEGEN_DIR) distclean
 	rm -rf dist
-	find . -regextype posix-extended -regex '.*~|.*swp|.*#|.*\.dump' -exec rm {} \;
+	find . -regex '.*\(~\|#\|swp\|dump\)' -exec rm {} \;
 
 %.gz: %.pod
 	pod2man \
