@@ -79,6 +79,12 @@ install -m 0644 %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
 
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
+#Build the list of files
+rm -f %{_builddir}/filelist.%{name}.rpm
+echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm 
+(cd %{buildroot}; find . ! -regex '\./etc.*' \
+       -type f | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
+
 %post
 # create rabbitmq group
 if ! getent group rabbitmq >/dev/null; then
@@ -112,15 +118,8 @@ if [ $1 = 0 ]; then
   # Leave rabbitmq user and group
 fi
 
-%files
+%files -f ../filelist.%{name}.rpm
 %defattr(-,root,root,-)
-%{_erllibdir}/rabbitmq_server-%{version}/
-%{_rabbitbindir}/
-%{_mandir}/man1/rabbitmqctl.1.gz
-%{_mandir}/man1/rabbitmq-multi.1.gz
-%{_mandir}/man1/rabbitmq-server.1.gz
-%{_mandir}/man5/rabbitmq.5.gz
-%{_sbindir}/rabbitmqctl
 %dir /var/lib/rabbitmq
 %dir /var/log/rabbitmq
 /etc/rc.d/init.d/rabbitmq-server
