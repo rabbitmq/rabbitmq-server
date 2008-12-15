@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -30,6 +36,9 @@
 
 -export([table_names/0]).
 
+%% Called by rabbitmq-mnesia-current script
+-export([schema_current/0]).
+
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
 -export([create_tables/0]).
@@ -40,14 +49,15 @@
 
 -ifdef(use_specs).
 
--spec(status/0 :: () -> [{'nodes' | 'running_nodes', [node()]}]).
+-spec(status/0 :: () -> [{'nodes' | 'running_nodes', [erlang_node()]}]).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(is_db_empty/0 :: () -> bool()).
--spec(cluster/1 :: ([node()]) -> 'ok').
+-spec(cluster/1 :: ([erlang_node()]) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
+-spec(schema_current/0 :: () -> bool()).
 
 -endif.
 
@@ -91,6 +101,20 @@ cluster(ClusterNodes) ->
 reset()       -> reset(false).
 force_reset() -> reset(true).
 
+%% This is invoked by rabbitmq-mnesia-current.
+schema_current() ->
+    application:start(mnesia),
+    ok = ensure_mnesia_running(),
+    ok = ensure_mnesia_dir(),
+    ok = init_db(read_cluster_nodes_config()),
+    try 
+        ensure_schema_integrity(),
+        true
+    catch
+        {error, {schema_integrity_check_failed, _Reason}} ->
+            false
+    end.
+
 %%--------------------------------------------------------------------
 
 table_definitions() ->
@@ -105,7 +129,13 @@ table_definitions() ->
      {rabbit_config, [{disc_copies, [node()]}]},
      {listener, [{type, bag},
                  {attributes, record_info(fields, listener)}]},
-     {binding, [{attributes, record_info(fields, binding)}]},
+     {durable_routes, [{disc_copies, [node()]},
+                       {record_name, route},
+                       {attributes, record_info(fields, route)}]},
+     {route, [{type, ordered_set},
+              {attributes, record_info(fields, route)}]},
+     {reverse_route, [{type, ordered_set}, 
+                      {attributes, record_info(fields, reverse_route)}]},
      {durable_exchanges, [{disc_copies, [node()]},
                           {record_name, exchange},
                           {attributes, record_info(fields, exchange)}]},
@@ -255,7 +285,7 @@ init_db(ClusterNodes) ->
     end.
 
 create_schema() ->
-    mnesia:stop(), 
+    mnesia:stop(),
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
                           cannot_create_schema),
     rabbit_misc:ensure_ok(mnesia:start(),

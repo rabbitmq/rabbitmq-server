@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -27,7 +33,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/0]).
+-export([start_link/0, info/1, info/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
@@ -49,6 +55,11 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {sock, connection, callback, recv_ref, connection_state}).
+
+-define(INFO_KEYS,
+        [pid, address, port, peer_address, peer_port,
+         recv_oct, recv_cnt, send_oct, send_cnt, send_pend,
+         state, channels, user, vhost, timeout, frame_max]).
 
 %% connection lifecycle
 %%
@@ -120,6 +131,15 @@
 %%
 %% TODO: refactor the code so that the above is obvious
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(info/1 :: (pid()) -> [info()]).
+-spec(info/2 :: (pid(), [info_key()]) -> [info()]).
+
+-endif.
+
 %%--------------------------------------------------------------------------
 
 start_link() ->
@@ -139,6 +159,15 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
+
+info(Pid) ->
+    gen_server:call(Pid, info).
+
+info(Pid, Items) ->
+    case gen_server:call(Pid, {info, Items}) of
+        {ok, Res}      -> Res;
+        {error, Error} -> throw(Error)
+    end.
 
 setup_profiling() ->
     Value = rabbit_misc:get_config(profiling_enabled, false),
@@ -270,6 +299,14 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             end;
         timeout ->
             throw({timeout, State#v1.connection_state});
+        {'$gen_call', From, info} ->
+            gen_server:reply(From, infos(?INFO_KEYS, State)),
+            mainloop(Parent, Deb, State);
+        {'$gen_call', From, {info, Items}} ->
+            gen_server:reply(From, try {ok, infos(Items, State)}
+                                   catch Error -> {error, Error}
+                                   end),
+            mainloop(Parent, Deb, State);
         {system, From, Request} ->
             sys:handle_system_msg(Request, From,
                                   Parent, ?MODULE, Deb, State);
@@ -614,6 +651,51 @@ compute_redirects(false) ->
     if Node == LNode -> [];
        true -> rabbit_networking:node_listeners(LNode)
     end.
+
+%%--------------------------------------------------------------------------
+
+infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+
+i(pid, #v1{}) ->
+    self();
+i(address, #v1{sock = Sock}) ->
+    {ok, {A, _}} = inet:sockname(Sock),
+    A;
+i(port, #v1{sock = Sock}) ->
+    {ok, {_, P}} = inet:sockname(Sock),
+    P;
+i(peer_address, #v1{sock = Sock}) ->
+    {ok, {A, _}} = inet:peername(Sock),
+    A;
+i(peer_port, #v1{sock = Sock}) ->
+    {ok, {_, P}} = inet:peername(Sock),
+    P;
+i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
+                                   SockStat =:= recv_cnt; 
+                                   SockStat =:= send_oct;
+                                   SockStat =:= send_cnt;
+                                   SockStat =:= send_pend ->
+    case inet:getstat(Sock, [SockStat]) of
+        {ok, [{SockStat, StatVal}]} -> StatVal;
+        {error, einval}             -> undefined;
+        {error, Error}              -> throw({cannot_get_socket_stats, Error})
+    end;
+i(state, #v1{connection_state = S}) ->
+    S;
+i(channels, #v1{}) ->
+    length(all_channels());
+i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
+    Username;
+i(user, #v1{connection = #connection{user = none}}) ->
+    none;
+i(vhost, #v1{connection = #connection{vhost = VHost}}) ->
+    VHost;
+i(timeout, #v1{connection = #connection{timeout_sec = Timeout}}) ->
+    Timeout;
+i(frame_max, #v1{connection = #connection{frame_max = FrameMax}}) ->
+    FrameMax;
+i(Item, #v1{}) ->
+    throw({bad_argument, Item}).
 
 %%--------------------------------------------------------------------------
 

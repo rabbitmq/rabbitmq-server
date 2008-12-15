@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -27,9 +33,9 @@
 
 -export([start/0, recover/0, declare/4, delete/3, purge/1, internal_delete/1]).
 -export([pseudo_queue/2]).
--export([lookup/1, with/2, with_or_die/2, list_vhost_queues/1,
+-export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4]).
--export([add_binding/4, delete_binding/4, binding_forcibly_removed/2]).
+-export([list/1, info/1, info/2, info_all/1, info_all/2]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2]).
@@ -53,8 +59,6 @@
 -type(qstats() :: {'ok', queue_name(), non_neg_integer(), non_neg_integer()}).
 -type(qlen() :: {'ok', non_neg_integer()}).
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
--type(bind_res() :: {'ok', non_neg_integer()} |
-      {'error', 'queue_not_found' | 'exchange_not_found'}).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
@@ -62,16 +66,14 @@
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
              amqqueue()).
--spec(add_binding/4 ::
-      (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
-            bind_res() | {'error', 'durability_settings_incompatible'}).
--spec(delete_binding/4 ::
-      (queue_name(), exchange_name(), routing_key(), amqp_table()) ->
-             bind_res() | {'error', 'binding_not_found'}).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
--spec(list_vhost_queues/1 :: (vhost()) -> [amqqueue()]).
+-spec(list/1 :: (vhost()) -> [amqqueue()]).
+-spec(info/1 :: (amqqueue()) -> [info()]).
+-spec(info/2 :: (amqqueue(), [info_key()]) -> [info()]).
+-spec(info_all/1 :: (vhost()) -> [[info()]]).
+-spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
 -spec(stat/1 :: (amqqueue()) -> qstats()).
 -spec(stat_all/0 :: () -> [qstats()]).
 -spec(delete/3 ::
@@ -89,7 +91,6 @@
 -spec(commit_all/2 :: ([pid()], txn()) -> ok_or_errors()).
 -spec(rollback_all/2 :: ([pid()], txn()) -> ok_or_errors()).
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
--spec(binding_forcibly_removed/2 :: (binding_spec(), queue_name()) -> 'ok').
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), bool()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
@@ -100,7 +101,7 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
--spec(on_node_down/1 :: (node()) -> 'ok').
+-spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
 
 -endif.
@@ -131,7 +132,7 @@ recover_durable_queues() ->
     Queues = lists:map(fun start_queue_process/1, R),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              lists:foreach(fun recover_queue/1, Queues),
+              lists:foreach(fun store_queue/1, Queues),
               ok
       end).
 
@@ -140,12 +141,12 @@ declare(QueueName, Durable, AutoDelete, Args) ->
                                       durable = Durable,
                                       auto_delete = AutoDelete,
                                       arguments = Args,
-                                      binding_specs = [],
                                       pid = none}),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    case mnesia:wread({amqqueue, QueueName}) of
-                       [] -> ok = recover_queue(Q),
+                       [] -> ok = store_queue(Q),
+                             ok = add_default_binding(Q),
                              Q;
                        [ExistingQ] -> ExistingQ
                    end
@@ -167,82 +168,11 @@ start_queue_process(Q) ->
     {ok, Pid} = supervisor:start_child(rabbit_amqqueue_sup, [Q]),
     Q#amqqueue{pid = Pid}.
 
-recover_queue(Q) ->
-    ok = store_queue(Q),
-    ok = recover_bindings(Q),
+add_default_binding(#amqqueue{name = QueueName}) ->
+    Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
+    RoutingKey = QueueName#resource.name,
+    rabbit_exchange:add_binding(Exchange, QueueName, RoutingKey, []),
     ok.
-
-default_binding_spec(#resource{virtual_host = VHost, name = Name}) ->
-    #binding_spec{exchange_name = rabbit_misc:r(VHost, exchange, <<>>),
-                  routing_key = Name,
-                  arguments = []}.
-
-recover_bindings(Q = #amqqueue{name = QueueName, binding_specs = Specs}) ->
-    ok = rabbit_exchange:add_binding(default_binding_spec(QueueName), Q),
-    lists:foreach(fun (B) ->
-                          ok = rabbit_exchange:add_binding(B, Q)
-                  end, Specs),
-    ok.
-
-modify_bindings(QueueName, ExchangeName, RoutingKey, Arguments,
-                SpecPresentFun, SpecAbsentFun) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:wread({amqqueue, QueueName}) of
-                  [Q = #amqqueue{binding_specs = Specs0}] ->
-                      Spec = #binding_spec{exchange_name = ExchangeName,
-                                           routing_key = RoutingKey,
-                                           arguments = Arguments},
-                      case (case lists:member(Spec, Specs0) of
-                                true  -> SpecPresentFun;
-                                false -> SpecAbsentFun
-                            end)(Q, Spec) of
-                          {ok, #amqqueue{binding_specs = Specs}} ->
-                              {ok, length(Specs)};
-                          {error, not_found} ->
-                              {error, exchange_not_found};
-                          Other -> Other
-                      end;
-                  [] -> {error, queue_not_found}
-              end
-      end).
-
-update_bindings(Q = #amqqueue{binding_specs = Specs0}, Spec,
-                UpdateSpecFun, UpdateExchangeFun) ->
-    Q1 = Q#amqqueue{binding_specs = UpdateSpecFun(Spec, Specs0)},
-    case UpdateExchangeFun(Spec, Q1) of
-        ok    -> store_queue(Q1),
-                 {ok, Q1};
-        Other -> Other
-    end.
-
-add_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
-    modify_bindings(
-      QueueName, ExchangeName, RoutingKey, Arguments,
-      fun (Q, _Spec) -> {ok, Q} end,
-      fun (Q, Spec) -> update_bindings(
-                         Q, Spec,
-                         fun (S, Specs) -> [S | Specs] end,
-                         fun rabbit_exchange:add_binding/2)
-      end).
-
-delete_binding(QueueName, ExchangeName, RoutingKey, Arguments) ->
-    modify_bindings(
-      QueueName, ExchangeName, RoutingKey, Arguments,
-      fun (Q, Spec) -> update_bindings(
-                         Q, Spec,
-                         fun lists:delete/2,
-                         fun rabbit_exchange:delete_binding/2)
-      end,
-      fun (Q, Spec) ->
-              %% the following is essentially a no-op, though crucially
-              %% it produces {error, not_found} when the exchange does
-              %% not exist.
-              case rabbit_exchange:delete_binding(Spec, Q) of
-                  ok    -> {error, binding_not_found};
-                  Other -> Other
-              end
-      end).
 
 lookup(Name) ->
     rabbit_misc:dirty_read({amqqueue, Name}).
@@ -260,9 +190,24 @@ with_or_die(Name, F) ->
                               not_found, "no ~s", [rabbit_misc:rs(Name)])
                   end).
 
-list_vhost_queues(VHostPath) ->
+list(VHostPath) ->
     mnesia:dirty_match_object(
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
+
+map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
+
+info(#amqqueue{ pid = QPid }) ->
+    gen_server:call(QPid, info).
+
+info(#amqqueue{ pid = QPid }, Items) ->
+    case gen_server:call(QPid, {info, Items}) of
+        {ok, Res}      -> Res;
+        {error, Error} -> throw(Error)
+    end.
+
+info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
+
+info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
 stat(#amqqueue{pid = QPid}) -> gen_server:call(QPid, stat).
 
@@ -314,17 +259,6 @@ notify_down_all(QPids, ChPid) ->
       fun (QPid) -> gen_server:call(QPid, {notify_down, ChPid}, Timeout) end,
       QPids).
 
-binding_forcibly_removed(BindingSpec, QueueName) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:wread({amqqueue, QueueName}) of
-                  [] -> ok;
-                  [Q = #amqqueue{binding_specs = Specs}] ->
-                      store_queue(Q#amqqueue{binding_specs =
-                                             lists:delete(BindingSpec, Specs)})
-              end
-      end).
-
 claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
     gen_server:call(QPid, {claim_queue, ReaderPid}).
 
@@ -342,12 +276,6 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
 notify_sent(QPid, ChPid) ->
     gen_server:cast(QPid, {notify_sent, ChPid}).
 
-delete_bindings(Q = #amqqueue{binding_specs = Specs}) ->
-    lists:foreach(fun (BindingSpec) ->
-                          ok = rabbit_exchange:delete_binding(
-                                 BindingSpec, Q)
-                  end, Specs).
-
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
@@ -360,10 +288,8 @@ internal_delete(QueueName) ->
               end
       end).
 
-delete_queue(Q = #amqqueue{name = QueueName}) ->
-    ok = delete_bindings(Q),
-    ok = rabbit_exchange:delete_binding(
-           default_binding_spec(QueueName), Q),
+delete_queue(#amqqueue{name = QueueName}) ->
+    ok = rabbit_exchange:delete_bindings_for_queue(QueueName),
     ok = mnesia:delete({amqqueue, QueueName}),
     ok.
 
@@ -383,7 +309,6 @@ pseudo_queue(QueueName, Pid) ->
               durable = false,
               auto_delete = false,
               arguments = [],
-              binding_specs = [],
               pid = Pid}.
 
 safe_pmap_ok(H, F, L) ->
