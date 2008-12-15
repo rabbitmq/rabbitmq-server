@@ -31,18 +31,34 @@
 
 -module(rabbit_networking).
 
--export([start/0, start_tcp_listener/2, stop_tcp_listener/2,
-         on_node_down/1, active_listeners/0, node_listeners/1,
-         connections/0, connection_info/1, connection_info/2,
-         connection_info_all/0, connection_info_all/1]).
+-export([start/0, start_tcp_listener/2, start_ssl_listener/2,
+        stop_tcp_listener/2, on_node_down/1, active_listeners/0, 
+        node_listeners/1, connections/0, connection_info/1, 
+        connection_info/2, connection_info_all/0, connection_info_all/1]).
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/3]).
 
--export([tcp_listener_started/2, tcp_listener_stopped/2, start_client/1]).
+-export([tcp_listener_started/2, ssl_connection_upgrade/2, 
+        tcp_listener_stopped/2, start_client/1, start_ssl_client/1]).
 
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
 
+-define(RABBIT_TCP_OPTS, [
+        binary, 
+        {packet, raw}, % no packaging 
+        {reuseaddr, true}, % allow rebind without waiting 
+        %% {nodelay, true}, % TCP_NODELAY - disable Nagle's alg.  
+        %% {delay_send, true}, 
+        {exit_on_close, false}
+    ]).
+
+-define(RABBIT_SSL_OPTS, [
+        {verify, 0},
+        {cacertfile, "/etc/rabbitmq/cacerts.pem"},
+        {certfile, "/etc/rabbitmq/cert.pem"},
+        {keyfile, "/etc/rabbitmq/key.pem"}
+    ]).
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -95,22 +111,30 @@ check_tcp_listener_address(NamePrefix, Host, Port) ->
     Name = rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
     {IPAddress, Name}.
 
+
 start_tcp_listener(Host, Port) ->
     {IPAddress, Name} = check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {Name,
                 {tcp_listener_sup, start_link,
-                 [IPAddress, Port,
-                  [binary,
-                   {packet, raw}, % no packaging
-                   {reuseaddr, true}, % allow rebind without waiting
-                   %% {nodelay, true}, % TCP_NODELAY - disable Nagle's alg.
-                   %% {delay_send, true},
-                   {exit_on_close, false}],
+                 [IPAddress, Port, ?RABBIT_TCP_OPTS ,
                   {?MODULE, tcp_listener_started, []},
                   {?MODULE, tcp_listener_stopped, []},
                   {?MODULE, start_client, []}]},
+                transient, infinity, supervisor, [tcp_listener_sup]}),
+    ok.
+
+start_ssl_listener(Host, Port) ->
+    {IPAddress, Name} = check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
+    {ok,_} = supervisor:start_child(
+               rabbit_sup,
+               {Name,
+                {tcp_listener_sup, start_link,
+                 [IPAddress, Port, ?RABBIT_TCP_OPTS,
+                  {?MODULE, tcp_listener_started, []},
+                  {?MODULE, tcp_listener_stopped, []},
+                  {?MODULE, ssl_connection_upgrade, [?RABBIT_SSL_OPTS]}]},
                 transient, infinity, supervisor, [tcp_listener_sup]}),
     ok.
 
@@ -127,6 +151,7 @@ tcp_listener_started(IPAddress, Port) ->
                      protocol = tcp,
                      host = tcp_host(IPAddress),
                      port = Port}).
+
 
 tcp_listener_stopped(IPAddress, Port) ->
     ok = mnesia:dirty_delete_object(
@@ -149,6 +174,27 @@ start_client(Sock) ->
     ok = gen_tcp:controlling_process(Sock, Child),
     Child ! {go, Sock},
     Child.
+
+ssl_connection_upgrade(SslOpts, Sock) ->
+    {ok, {PeerAddress, PeerPort}} = inet:peername(Sock),
+    PeerIp = inet_parse:ntoa(PeerAddress),
+
+    case ssl:ssl_accept(Sock, SslOpts) of
+        {ok, SslSock} ->
+            error_logger:info_msg("Upgraded TCP connection from ~s:~p to SSL/TLS~n", 
+                [PeerIp, PeerPort]),
+            start_ssl_client(SslSock);
+        {error, Reason} ->
+            error_logger:error_msg("Failed to upgrade TCP connection from ~s:~p to SSL~n", 
+                [PeerIp, PeerPort]),
+            {error, Reason}
+    end.
+
+start_ssl_client(Sock) ->
+    {ok, {PeerAddress, PeerPort}} = ssl:peername(Sock),
+    PeerIp = inet_parse:ntoa(PeerAddress),
+    error_logger:info_msg("Dummy session started for ssl client from ~s:~p~n",
+        [PeerIp, PeerPort]).
 
 connections() ->
     [Pid || {_, Pid, _, _} <- supervisor:which_children(
