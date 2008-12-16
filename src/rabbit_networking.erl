@@ -39,7 +39,7 @@
 -export([check_tcp_listener_address/3]).
 
 -export([tcp_listener_started/2, ssl_connection_upgrade/2, 
-        tcp_listener_stopped/2, start_client/1, start_ssl_client/1]).
+        tcp_listener_stopped/2, start_client/1]).
 
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
@@ -171,30 +171,25 @@ on_node_down(Node) ->
 
 start_client(Sock) ->
     {ok, Child} = supervisor:start_child(rabbit_tcp_client_sup, []),
-    ok = gen_tcp:controlling_process(Sock, Child),
+    ok = rabbit_net:controlling_process(Sock, Child),
     Child ! {go, Sock},
     Child.
 
 ssl_connection_upgrade(SslOpts, Sock) ->
-    {ok, {PeerAddress, PeerPort}} = inet:peername(Sock),
+    {ok, {PeerAddress, PeerPort}} = rabbit_net:peername(Sock),
     PeerIp = inet_parse:ntoa(PeerAddress),
 
     case ssl:ssl_accept(Sock, SslOpts) of
         {ok, SslSock} ->
             error_logger:info_msg("Upgraded TCP connection from ~s:~p to SSL/TLS~n", 
                 [PeerIp, PeerPort]),
-            start_ssl_client(SslSock);
+            RabbitSslSock = #rabbit_ssl_socket{tcp=Sock, ssl=SslSock},
+            start_client(RabbitSslSock);
         {error, Reason} ->
             error_logger:error_msg("Failed to upgrade TCP connection from ~s:~p to SSL~n", 
                 [PeerIp, PeerPort]),
             {error, Reason}
     end.
-
-start_ssl_client(Sock) ->
-    {ok, {PeerAddress, PeerPort}} = ssl:peername(Sock),
-    PeerIp = inet_parse:ntoa(PeerAddress),
-    error_logger:info_msg("Dummy session started for ssl client from ~s:~p~n",
-        [PeerIp, PeerPort]).
 
 connections() ->
     [Pid || {_, Pid, _, _} <- supervisor:which_children(
