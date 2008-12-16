@@ -53,7 +53,7 @@ start_heartbeat(Sock, TimeoutSec) ->
     spawn_link(fun () -> heartbeater(Sock, TimeoutSec * 1000 div 2,
                                      send_oct, 0,
                                      fun () ->
-                                             catch gen_tcp:send(Sock, rabbit_binary_generator:build_heartbeat_frame()),
+                                             catch rabbit_net:send(Sock, rabbit_binary_generator:build_heartbeat_frame()),
                                              continue
                                      end,
                                      erlang:monitor(process, Parent)) end),
@@ -73,7 +73,7 @@ heartbeater(Sock, TimeoutMillisec, StatName, Threshold, Handler, MonitorRef) ->
                             {'DOWN', MonitorRef, process, _Object, _Info} -> ok;
                             Other -> exit({unexpected_message, Other})
                         after TimeoutMillisec ->
-                                case inet:getstat(Sock, [StatName]) of
+                                case rabbit_net:getstat(Sock, [StatName]) of
                                     {ok, [{StatName, NewStatVal}]} ->
                                         if NewStatVal =/= StatVal ->
                                                 F({NewStatVal, 0});
