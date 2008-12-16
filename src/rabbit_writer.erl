@@ -139,7 +139,7 @@ assemble_frames(Channel, MethodRecord, Content, FrameMax) ->
 
 tcp_send(Sock, Data) ->
     rabbit_misc:throw_on_error(inet_error,
-                               fun () -> gen_tcp:send(Sock, Data) end).
+                               fun () -> rabbit_net:send(Sock, Data) end).
 
 internal_send_command(Sock, Channel, MethodRecord) ->
     ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord)).
@@ -176,6 +176,6 @@ internal_send_command_async(Sock, Channel, MethodRecord, Content, FrameMax) ->
     ok.
 
 port_cmd(Sock, Data) ->
-    try erlang:port_command(Sock, Data)
+    try rabbit_net:port_command(Sock, Data)
     catch error:Error -> exit({writer, send_failed, Error})
     end.
