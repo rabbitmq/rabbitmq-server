@@ -48,4 +48,5 @@
 	 {extra_startup_steps, []},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
-         {default_vhost, <<"/">>}]}]}.
+         {default_vhost, <<"/">>},
+	 {memory_alarms, false}]}]}.
