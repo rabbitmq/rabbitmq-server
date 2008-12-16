@@ -49,4 +49,4 @@
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},
-	 {start_memsup, false}]}]}.
+	 {memory_alarms, false}]}]}.
