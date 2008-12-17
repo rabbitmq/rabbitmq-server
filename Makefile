@@ -163,7 +163,6 @@ install: all docs_all
 	cp scripts/rabbitmq-server $(SBIN_DIR)
 	cp scripts/rabbitmqctl $(SBIN_DIR)
 	cp scripts/rabbitmq-multi $(SBIN_DIR)
-	cp scripts/rabbitmq-mnesia-current $(SBIN_DIR)
 	for section in 1 5; do \
 		mkdir -p $(MAN_DIR)/man$$section; \
 		for manpage in docs/*.$$section.pod; do \
