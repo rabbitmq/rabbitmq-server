@@ -11,6 +11,8 @@ TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_D
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.pod, %.gz, $(wildcard docs/*.[0-9].pod))
 
+PYTHON=python
+
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
 # only available in R12B-3 upwards
@@ -42,10 +44,10 @@ $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDE_DIR)/rabbit_framing.hrl $(INCL
 #	ERLC_EMULATOR="erl -smp" erlc $(ERLC_OPTS) $<
 
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
-	python codegen.py header $(AMQP_SPEC_JSON_PATH) > $@
+	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_PATH) > $@
 
 $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
-	python codegen.py body   $(AMQP_SPEC_JSON_PATH) > $@
+	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_PATH) > $@
 
 $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.rel $(TARGETS)
 	erl -noshell -eval 'systools:make_script("ebin/rabbit", [{path, ["ebin"]}]), halt().'
