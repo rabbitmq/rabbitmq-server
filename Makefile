@@ -76,10 +76,6 @@ run: all
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -s rabbit" \
 		./scripts/rabbitmq-server
 
-check-mnesia-schema: all
-	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
-		./scripts/rabbitmq-mnesia-current
-
 run-node: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
