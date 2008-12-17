@@ -124,7 +124,7 @@ fi
 rm -rf %{buildroot}
 
 %changelog
-* Mon Dec 15 2008 Tony Garnock-Jones <tonyg@lshift.net> 1.5.0-1
+* Wed Dec 17 2008 Matthias Radestock <matthias@lshift.net> 1.5.0-1
 - New upstream release
 
 * Thu Jul 24 2008 Tony Garnock-Jones <tonyg@lshift.net> 1.4.0-1
