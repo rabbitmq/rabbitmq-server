@@ -78,10 +78,6 @@ run: all
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -s rabbit" \
 		./scripts/rabbitmq-server
 
-check-mnesia-schema: all
-	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
-		./scripts/rabbitmq-mnesia-current
-
 run-node: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
@@ -169,7 +165,6 @@ install: all docs_all
 	cp scripts/rabbitmq-server $(SBIN_DIR)
 	cp scripts/rabbitmqctl $(SBIN_DIR)
 	cp scripts/rabbitmq-multi $(SBIN_DIR)
-	cp scripts/rabbitmq-mnesia-current $(SBIN_DIR)
 	for section in 1 5; do \
 		mkdir -p $(MAN_DIR)/man$$section; \
 		for manpage in docs/*.$$section.pod; do \

@@ -34,7 +34,6 @@ chown -R rabbitmq:rabbitmq /var/log/rabbitmq
 
 case "$1" in
     configure)
-        . /usr/share/debconf/confmodule
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
