@@ -1,8 +1,8 @@
-rabbitmq-server (1.5.0) testing; urgency=low
+rabbitmq-server (1.5.0-1) testing; urgency=low
 
   * New Upstream Release
 
- -- Matthias Radestock <matthias@lshift.net>  Wed, 17 Dec 2008 16:01:16 +0000
+ -- Matthias Radestock <matthias@lshift.net>  Wed, 17 Dec 2008 18:23:47 +0000
 
 rabbitmq-server (1.4.0-1) testing; urgency=low
 
