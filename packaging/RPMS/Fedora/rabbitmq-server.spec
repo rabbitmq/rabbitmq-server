@@ -93,7 +93,7 @@ fi
 # create rabbitmq user
 if ! getent passwd rabbitmq >/dev/null; then
         useradd -r -g rabbitmq --home /var/lib/rabbitmq  rabbitmq
-        usermod -c "Rabbit AMQP Messaging Server" rabbitmq
+        usermod -c "RabbitMQ messaging server" rabbitmq
 fi
 
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
