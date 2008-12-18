@@ -84,8 +84,8 @@ decrement_capacity(LimiterPid, Magnitude) ->
 init([ChPid]) ->
     {ok, #lim{ch_pid = ChPid} }.
 
-% This queuries the limiter to ask if it is possible to send a message without
-% breaching a limit for this queue process
+% This queries the limiter to ask if it is possible to send a message
+% without breaching a limit for this queue process
 handle_call({can_send, QPid}, _From, State = #lim{in_use = InUse}) ->
     NewState = monitor_queue(QPid, State),
     case limit_reached(NewState) of
