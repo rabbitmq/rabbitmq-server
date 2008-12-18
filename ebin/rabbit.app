@@ -17,6 +17,7 @@
              rabbit_framing,
              rabbit_framing_channel,
              rabbit_heartbeat,
+             rabbit_limiter,
              rabbit_load,
              rabbit_log,
              rabbit_misc,
