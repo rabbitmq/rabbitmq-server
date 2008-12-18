@@ -35,6 +35,17 @@ publish(Channel, X, RoutingKey, Payload) ->
     publish(Channel, X, RoutingKey, Payload, false).
 
 publish(Channel, X, RoutingKey, Payload, Mandatory) ->
+    publish_internal(fun amqp_channel:call/3,
+                     Channel, X, RoutingKey, Payload, Mandatory).
+
+async_publish(Channel, X, RoutingKey, Payload) ->
+    async_publish(Channel, X, RoutingKey, Payload, false).
+
+async_publish(Channel, X, RoutingKey, Payload, Mandatory) ->
+    publish_internal(fun amqp_channel:cast/3,
+                     Channel, X, RoutingKey, Payload, Mandatory).
+
+publish_internal(Fun, Channel, X, RoutingKey, Payload, Mandatory) ->
     BasicPublish = #'basic.publish'{exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = Mandatory, immediate = false},
@@ -43,7 +54,7 @@ publish(Channel, X, RoutingKey, Payload, Mandatory) ->
                    properties = amqp_util:basic_properties(),
                    properties_bin = none,
                    payload_fragments_rev = [Payload]},
-    amqp_channel:cast(Channel, BasicPublish, Content).
+    Fun(Channel, BasicPublish, Content).
 
 close_channel(Channel) ->
     ChannelClose = #'channel.close'{reply_code = 200, reply_text = <<"Goodbye">>,
@@ -95,13 +106,17 @@ subscribe(Channel, Q, Consumer, Tag, NoAck) ->
                                     consumer_tag = Tag,
                                     no_local = false, no_ack = NoAck,
                                     exclusive = false, nowait = false},
-    #'basic.consume_ok'{consumer_tag = ConsumerTag} = amqp_channel:call(Channel,BasicConsume, Consumer),
+    #'basic.consume_ok'{consumer_tag = ConsumerTag} = 
+        amqp_channel:subscribe(Channel,BasicConsume, Consumer),
     ConsumerTag.
 
 unsubscribe(Channel, Tag) ->
     BasicCancel = #'basic.cancel'{consumer_tag = Tag, nowait = false},
     #'basic.cancel_ok'{} = amqp_channel:call(Channel,BasicCancel),
     ok.
+
+declare_queue(Channel) ->
+    declare_queue(Channel, <<>>).
 
 declare_queue(Channel, Q) ->
     QueueDeclare = #'queue.declare'{queue = Q,
