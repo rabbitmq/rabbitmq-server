@@ -40,7 +40,7 @@
 handshake(ConnectionState = #connection_state{serverhost = Host}) ->
     case gen_tcp:connect(Host, 5672, [binary, {packet, 0},{active,false}]) of
         {ok, Sock} ->
-            ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
+            ok = rabbit_net:send(Sock, amqp_util:protocol_header()),
             Parent = self(),
             FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
             ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
@@ -146,9 +146,9 @@ start_ok(#connection_state{username = Username, password = Password}) ->
 start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
     put({channel, 0},{chpid, FramingPid}),
-    {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
+    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, -1),
     reader_loop(Sock, undefined, undefined, undefined),
-    gen_tcp:close(Sock).
+    rabbit_net:close(Sock).
 
 start_writer(Sock, Channel) ->
     rabbit_writer:start(Sock, Channel, ?FRAME_MIN_SIZE).
@@ -160,11 +160,11 @@ reader_loop(Sock, Type, Channel, Length) ->
                 closed_ok ->
                     ok;
                 _ ->
-                    {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
+                    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, -1),
                     reader_loop(Sock, undefined, undefined, undefined)
             end;
         {inet_async, Sock, _, {ok, <<_Type:8,_Channel:16,PayloadSize:32>>}} ->
-            {ok, _Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
+            {ok, _Ref} = rabbit_net:async_recv(Sock, PayloadSize + 1, -1),
             reader_loop(Sock, _Type, _Channel, PayloadSize);
         {inet_async, Sock, _Ref, {error, Reason}} ->
             io:format("Socket error: ~p~n", [Reason]),
