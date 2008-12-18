@@ -89,19 +89,14 @@ handle_call({can_send, QPid}, _From, State = #lim{in_use = InUse}) ->
         false -> {reply, true, State#lim{in_use = InUse + 1}}
     end.
 
-handle_cast({prefetch_count, PrefetchCount},
-            State = #lim{prefetch_count = CurrentLimit}) ->
-    NewState = State#lim{prefetch_count = PrefetchCount},
-    {noreply, if PrefetchCount > CurrentLimit -> forget_queues(NewState);
-                 true                         -> NewState
-              end};
+handle_cast({prefetch_count, PrefetchCount}, State) ->
+    {noreply, maybe_notify(State, State#lim{prefetch_count = PrefetchCount})};
 
-handle_cast({decrement_capacity, Magnitude}, State) ->
-    NewState = decrement_in_use(Magnitude, State),
-    ShouldNotify = limit_reached(State) and not(limit_reached(NewState)),
-    {noreply, if ShouldNotify -> forget_queues(NewState);
-                 true         -> NewState
-              end}.
+handle_cast({decrement_capacity, Magnitude}, State = #lim{in_use = InUse}) ->
+    NewInUse = if InUse == 0 -> 0;
+                  true       -> InUse - Magnitude
+               end,
+    {noreply, maybe_notify(State, State#lim{in_use = NewInUse})}.
 
 handle_info({'DOWN', _MonitorRef, _Type, QPid, _Info},
             State = #lim{queues = Queues}) ->
@@ -117,6 +112,12 @@ code_change(_, State, _) ->
 %% Internal plumbing
 %%----------------------------------------------------------------------------
 
+maybe_notify(OldState, NewState) ->
+    case limit_reached(OldState) and not(limit_reached(NewState)) of
+        true  -> forget_queues(NewState);
+        false -> NewState
+    end.
+
 remember_queue(QPid, State = #lim{queues = Queues}) ->
     case dict:is_key(QPid, Queues) of
         false -> MonitorRef = erlang:monitor(process, QPid),
@@ -130,11 +131,6 @@ forget_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
                            rabbit_amqqueue:unblock(Q, ChPid)
                    end, ok, Queues),
     State#lim{queues = dict:new()}.
-
-decrement_in_use(_, State = #lim{in_use = 0}) ->
-    State#lim{in_use = 0};
-decrement_in_use(Magnitude, State = #lim{in_use = InUse}) ->
-    State#lim{in_use = InUse - Magnitude}.
 
 limit_reached(#lim{prefetch_count = 0}) ->
     false;
