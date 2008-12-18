@@ -55,11 +55,10 @@
               queues = dict:new(),
               in_use = 0}).
 
-%---------------------------------------------------------------------------
-% API
-%---------------------------------------------------------------------------
+%%----------------------------------------------------------------------------
+%% API
+%-%---------------------------------------------------------------------------
 
-% Kicks this pig
 start_link(ChPid) ->
     {ok, Pid} = gen_server:start_link(?MODULE, [ChPid], []),
     Pid.
@@ -67,19 +66,19 @@ start_link(ChPid) ->
 set_prefetch_count(LimiterPid, PrefetchCount) ->
     gen_server:cast(LimiterPid, {prefetch_count, PrefetchCount}).
 
-% Queries the limiter to ask whether the queue can deliver a message
-% without breaching a limit
+%% Ask the limiter whether the queue can deliver a message without
+%% breaching a limit
 can_send(LimiterPid, QPid) ->
     gen_server:call(LimiterPid, {can_send, QPid}).
 
-% Lets the limiter know that a queue has received an ack from a consumer
-% and hence can reduce the in-use-by-that queue capcity information
+%% Let the limiter know that the channel has received some acks from a
+%% consumer
 decrement_capacity(LimiterPid, Magnitude) ->
     gen_server:cast(LimiterPid, {decrement_capacity, Magnitude}).
 
-%---------------------------------------------------------------------------
-% gen_server callbacks
-%---------------------------------------------------------------------------
+%%----------------------------------------------------------------------------
+%% gen_server callbacks
+%%----------------------------------------------------------------------------
 
 init([ChPid]) ->
     {ok, #lim{ch_pid = ChPid} }.
