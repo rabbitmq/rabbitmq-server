@@ -180,7 +180,7 @@ deliver_immediately(Message, Delivered,
          RoundRobinTail} ->
             % Use Qos Limits if an ack is required
             % Query the limiter to find out if a limit has been breached
-            #cr{limiter_pid = LimiterPid} = ch_record(ChPid),
+            C = #cr{limiter_pid = LimiterPid} = ch_record(ChPid),
             case rabbit_limiter:can_send(LimiterPid, self()) of
                 true ->
                     really_deliver(AckRequired, ChPid, ConsumerTag,
@@ -189,7 +189,6 @@ deliver_immediately(Message, Delivered,
                 false ->
                     % Have another go by cycling through the consumer
                     % queue
-                    C = ch_record(ChPid),
                     store_ch_record(C#cr{is_limit_active = true}),
                     NewConsumers = block_consumers(ChPid, RoundRobinTail),
                     deliver_immediately(Message, Delivered,
