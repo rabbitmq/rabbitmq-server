@@ -131,7 +131,7 @@ handle_cast({decrement_capacity, Magnitude}, State = #lim{in_use = InUse}) ->
     if
         ShouldNotify ->
             notify_queues(State),
-            {noreply, State#lim{queues = sets:new(), in_use = InUse - 1}};
+            {noreply, State#lim{queues = sets:new(), in_use = InUse - Magnitude}};
         true ->
             {noreply, NewState}
     end.
