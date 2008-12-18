@@ -113,10 +113,13 @@ code_change(_, State, _) ->
 %%----------------------------------------------------------------------------
 
 maybe_notify(OldState, NewState) ->
-    case limit_reached(OldState) and not(limit_reached(NewState)) of
+    case limit_reached(OldState) andalso not(limit_reached(NewState)) of
         true  -> forget_queues(NewState);
         false -> NewState
     end.
+
+limit_reached(#lim{prefetch_count = Limit, in_use = InUse}) ->
+    Limit =/= 0 andalso InUse >= Limit.
 
 remember_queue(QPid, State = #lim{queues = Queues}) ->
     case dict:is_key(QPid, Queues) of
@@ -131,8 +134,3 @@ forget_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
                            rabbit_amqqueue:unblock(Q, ChPid)
                    end, ok, Queues),
     State#lim{queues = dict:new()}.
-
-limit_reached(#lim{prefetch_count = 0}) ->
-    false;
-limit_reached(#lim{prefetch_count = Limit, in_use = InUse}) ->
-    InUse >= Limit.
