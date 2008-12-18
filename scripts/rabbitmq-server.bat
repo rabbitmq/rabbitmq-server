@@ -11,13 +11,19 @@ REM   under the License.
 REM
 REM   The Original Code is RabbitMQ.
 REM
-REM   The Initial Developers of the Original Code are LShift Ltd.,
-REM   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+REM   The Initial Developers of the Original Code are LShift Ltd,
+REM   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 REM
-REM   Portions created by LShift Ltd., Cohesive Financial Technologies
-REM   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-REM   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-REM   Technologies Ltd.;
+REM   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+REM   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+REM   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+REM   Technologies LLC, and Rabbit Technologies Ltd.
+REM
+REM   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+REM   Ltd. Portions created by Cohesive Financial Technologies LLC are
+REM   Copyright (C) 2007-2009 Cohesive Financial Technologies
+REM   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+REM   (C) 2007-2009 Rabbit Technologies Ltd.
 REM
 REM   All Rights Reserved.
 REM
@@ -28,16 +34,16 @@ if "%RABBITMQ_BASE%"=="" (
     set RABBITMQ_BASE=%APPDATA%\RabbitMQ
 )
 
-if "%NODENAME%"=="" (
-    set NODENAME=rabbit
+if "%RABBITMQ_NODENAME%"=="" (
+    set RABBITMQ_NODENAME=rabbit
 )
 
-if "%NODE_IP_ADDRESS%"=="" (
-    set NODE_IP_ADDRESS=0.0.0.0
+if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
+    set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
 )
 
-if "%NODE_PORT%"=="" (
-    set NODE_PORT=5672
+if "%RABBITMQ_NODE_PORT%"=="" (
+    set RABBITMQ_NODE_PORT=5672
 )
 
 if "%ERLANG_HOME%"=="" (
@@ -58,8 +64,12 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
 
 set RABBITMQ_BASE_UNIX=%RABBITMQ_BASE:\=/%
 
-set MNESIA_BASE=%RABBITMQ_BASE_UNIX%/db
-set LOG_BASE=%RABBITMQ_BASE_UNIX%/log
+if "%RABBITMQ_MNESIA_BASE%"=="" (
+    set RABBITMQ_MNESIA_BASE=%RABBITMQ_BASE_UNIX%/db
+)
+if "%RABBITMQ_LOG_BASE%"=="" (
+    set RABBITMQ_LOG_BASE=%RABBITMQ_BASE_UNIX%/log
+)
 
 
 rem We save the previous logs in their respective backup
@@ -67,11 +77,11 @@ rem Log management (rotation, filtering based of size...) is left as an exercice
 
 set BACKUP_EXTENSION=.1
 
-set LOGS="%RABBITMQ_BASE%\log\%NODENAME%.log"
-set SASL_LOGS="%RABBITMQ_BASE%\log\%NODENAME%-sasl.log"
+set LOGS="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log"
+set SASL_LOGS="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log"
 
-set LOGS_BACKUP="%RABBITMQ_BASE%\log\%NODENAME%.log%BACKUP_EXTENSION%"
-set SASL_LOGS_BAKCUP="%RABBITMQ_BASE%\log\%NODENAME%-sasl.log%BACKUP_EXTENSION%"
+set LOGS_BACKUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log%BACKUP_EXTENSION%"
+set SASL_LOGS_BAKCUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXTENSION%"
 
 if exist %LOGS% (
 	type %LOGS% >> %LOGS_BACKUP%
@@ -83,36 +93,39 @@ if exist %SASL_LOGS% (
 rem End of log management
 
 
-set CLUSTER_CONFIG_FILE=%RABBITMQ_BASE%\rabbitmq_cluster.config
+if "%RABBITMQ_CLUSTER_CONFIG_FILE%"=="" (
+    set RABBITMQ_CLUSTER_CONFIG_FILE=%RABBITMQ_BASE%\rabbitmq_cluster.config
+)
 set CLUSTER_CONFIG=
-if not exist "%CLUSTER_CONFIG_FILE%" GOTO L1
-set CLUSTER_CONFIG=-rabbit cluster_config \""%CLUSTER_CONFIG_FILE:\=/%"\"
+if not exist "%RABBITMQ_CLUSTER_CONFIG_FILE%" GOTO L1
+set CLUSTER_CONFIG=-rabbit cluster_config \""%RABBITMQ_CLUSTER_CONFIG_FILE:\=/%"\"
 :L1
 
-set MNESIA_DIR=%MNESIA_BASE%/%NODENAME%-mnesia
+if "%RABBITMQ_MNESIA_DIR%"=="" (
+    set RABBITMQ_MNESIA_DIR=%RABBITMQ_MNESIA_BASE%/%RABBITMQ_NODENAME%-mnesia
+)
 
 "%ERLANG_HOME%\bin\erl.exe" ^
 -pa "%~dp0..\ebin" ^
 -noinput ^
 -boot start_sasl ^
--sname %NODENAME% ^
+-sname %RABBITMQ_NODENAME% ^
 -s rabbit ^
 +W w ^
 +A30 ^
 -kernel inet_default_listen_options "[{nodelay, true}, {sndbuf, 16384}, {recbuf, 4096}]" ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
--rabbit tcp_listeners "[{\"%NODE_IP_ADDRESS%\", %NODE_PORT%}]" ^
--kernel error_logger {file,\""%LOG_BASE%/%NODENAME%.log"\"} ^
+-rabbit tcp_listeners "[{\"%RABBITMQ_NODE_IP_ADDRESS%\", %RABBITMQ_NODE_PORT%}]" ^
+-kernel error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%.log"\"} ^
 -sasl errlog_type error ^
--sasl sasl_error_logger {file,\""%LOG_BASE%/%NODENAME%-sasl.log"\"} ^
+-sasl sasl_error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%-sasl.log"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
 -os_mon start_os_sup false ^
 -os_mon memsup_system_only true ^
 -os_mon system_memory_high_watermark 0.95 ^
--mnesia dir \""%MNESIA_DIR%"\" ^
+-mnesia dir \""%RABBITMQ_MNESIA_DIR%"\" ^
 %CLUSTER_CONFIG% ^
-%RABBIT_ARGS% ^
+%RABBITMQ_SERVER_START_ARGS% ^
 %*
-

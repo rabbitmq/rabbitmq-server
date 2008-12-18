@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -197,7 +203,7 @@ delete_vhost(VHostPath) ->
     lists:foreach(fun (Q) ->
                           {ok,_} = rabbit_amqqueue:delete(Q, false, false)
                   end,
-                  rabbit_amqqueue:list_vhost_queues(VHostPath)),
+                  rabbit_amqqueue:list(VHostPath)),
     R = rabbit_misc:execute_mnesia_transaction(
           rabbit_misc:with_vhost(
             VHostPath,
@@ -211,7 +217,7 @@ internal_delete_vhost(VHostPath) ->
     lists:foreach(fun (#exchange{name=Name}) ->
                           ok = rabbit_exchange:delete(Name, false)
                   end,
-                  rabbit_exchange:list_vhost_exchanges(VHostPath)),
+                  rabbit_exchange:list(VHostPath)),
     lists:foreach(fun (Username) ->
                           ok = unmap_user_vhost(Username, VHostPath)
                   end,

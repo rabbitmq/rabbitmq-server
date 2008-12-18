@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -29,9 +35,6 @@
          cluster/1, reset/0, force_reset/0]).
 
 -export([table_names/0]).
-
-%% Called by rabbitmq-mnesia-current script
--export([schema_current/0]).
 
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
@@ -51,7 +54,6 @@
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
--spec(schema_current/0 :: () -> bool()).
 
 -endif.
 
@@ -94,20 +96,6 @@ cluster(ClusterNodes) ->
 %% persisted messages
 reset()       -> reset(false).
 force_reset() -> reset(true).
-
-%% This is invoked by rabbitmq-mnesia-current.
-schema_current() ->
-    application:start(mnesia),
-    ok = ensure_mnesia_running(),
-    ok = ensure_mnesia_dir(),
-    ok = init_db(read_cluster_nodes_config()),
-    try 
-        ensure_schema_integrity(),
-        true
-    catch
-        {error, {schema_integrity_check_failed, _Reason}} ->
-            false
-    end.
 
 %%--------------------------------------------------------------------
 
@@ -163,17 +151,12 @@ ensure_mnesia_not_running() ->
         yes -> throw({error, mnesia_unexpectedly_running})
     end.
 
-ensure_schema_integrity() ->
-    case catch lists:foreach(fun (Tab) ->
-                                     mnesia:table_info(Tab, version)
-                             end,
-                             table_names()) of
-        {'EXIT', Reason} -> throw({error, {schema_integrity_check_failed,
-                                           Reason}});
-        _ -> ok
-    end,
+check_schema_integrity() ->
     %%TODO: more thorough checks
-    ok.
+    case catch [mnesia:table_info(Tab, version) || Tab <- table_names()] of
+        {'EXIT', Reason} -> {error, Reason};
+        _ -> ok
+    end.
 
 %% The cluster node config file contains some or all of the disk nodes
 %% that are members of the cluster this node is / should be a part of.
@@ -253,7 +236,20 @@ init_db(ClusterNodes) ->
     case mnesia:change_config(extra_db_nodes, ClusterNodes -- [node()]) of
         {ok, []} ->
             if WasDiskNode and IsDiskNode ->
-                    ok;
+                    case check_schema_integrity() of
+                        ok ->
+                            ok;
+                        {error, Reason} ->
+                            %% NB: we cannot use rabbit_log here since
+                            %% it may not have been started yet
+                            error_logger:warning_msg(
+                              "schema integrity check failed: ~p~n" ++
+                              "moving database to backup location " ++
+                              "and recreating schema from scratch~n",
+                              [Reason]),
+                            ok = move_db(),
+                            ok = create_schema()
+                    end;
                WasDiskNode ->
                     throw({error, {cannot_convert_disk_node_to_ram_node,
                                    ClusterNodes}});
@@ -285,6 +281,28 @@ create_schema() ->
     rabbit_misc:ensure_ok(mnesia:start(),
                           cannot_start_mnesia),
     create_tables().
+
+move_db() ->
+    mnesia:stop(),
+    MnesiaDir = filename:dirname(mnesia:system_info(directory) ++ "/"),
+    {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
+    BackupDir = lists:flatten(
+                  io_lib:format("~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
+                                [MnesiaDir,
+                                 Year, Month, Day, Hour, Minute, Second])),
+    case file:rename(MnesiaDir, BackupDir) of
+        ok ->
+            %% NB: we cannot use rabbit_log here since it may not have
+            %% been started yet
+            error_logger:warning_msg("moved database from ~s to ~s~n",
+                                     [MnesiaDir, BackupDir]),
+            ok;
+        {error, Reason} -> throw({error, {cannot_backup_mnesia,
+                                          MnesiaDir, BackupDir, Reason}})
+    end,
+    ok = ensure_mnesia_dir(),
+    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    ok.
 
 create_tables() ->
     lists:foreach(fun ({Tab, TabArgs}) ->
@@ -347,13 +365,17 @@ create_local_table_copy(Tab, Type) ->
     ok.
 
 wait_for_tables() -> 
-    ok = ensure_schema_integrity(),
-    case mnesia:wait_for_tables(table_names(), 30000) of
-        ok -> ok;
-        {timeout, BadTabs} ->
-            throw({error, {timeout_waiting_for_tables, BadTabs}});
+    case check_schema_integrity() of
+        ok ->
+            case mnesia:wait_for_tables(table_names(), 30000) of
+                ok -> ok;
+                {timeout, BadTabs} ->
+                    throw({error, {timeout_waiting_for_tables, BadTabs}});
+                {error, Reason} ->
+                    throw({error, {failed_waiting_for_tables, Reason}})
+            end;
         {error, Reason} ->
-            throw({error, {failed_waiting_for_tables, Reason}})
+            throw({error, {schema_integrity_check_failed, Reason}})
     end.
 
 reset(Force) ->

@@ -11,13 +11,19 @@ REM   under the License.
 REM
 REM   The Original Code is RabbitMQ.
 REM
-REM   The Initial Developers of the Original Code are LShift Ltd.,
-REM   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+REM   The Initial Developers of the Original Code are LShift Ltd,
+REM   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 REM
-REM   Portions created by LShift Ltd., Cohesive Financial Technologies
-REM   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-REM   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-REM   Technologies Ltd.;
+REM   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+REM   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+REM   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+REM   Technologies LLC, and Rabbit Technologies Ltd.
+REM
+REM   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+REM   Ltd. Portions created by Cohesive Financial Technologies LLC are
+REM   Copyright (C) 2007-2009 Cohesive Financial Technologies
+REM   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+REM   (C) 2007-2009 Rabbit Technologies Ltd.
 REM
 REM   All Rights Reserved.
 REM
@@ -28,20 +34,20 @@ if "%RABBITMQ_BASE%"=="" (
     set RABBITMQ_BASE=%APPDATA%\RabbitMQ
 )
 
-if "%NODENAME%"=="" (
-    set NODENAME=rabbit
+if "%RABBITMQ_NODENAME%"=="" (
+    set RABBITMQ_NODENAME=rabbit
 )
 
-if "%NODE_IP_ADDRESS%"=="" (
-    set NODE_IP_ADDRESS=0.0.0.0
+if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
+    set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
 )
 
-if "%NODE_PORT%"=="" (
-    set NODE_PORT=5672
+if "%RABBITMQ_NODE_PORT%"=="" (
+    set RABBITMQ_NODE_PORT=5672
 )
 
-set PIDS_FILE=%RABBITMQ_BASE%\rabbitmq.pids
-set SCRIPT_HOME=%~dp0%
+set RABBITMQ_PIDS_FILE=%RABBITMQ_BASE%\rabbitmq.pids
+set RABBITMQ_SCRIPT_HOME=%~dp0%
 
 if "%ERLANG_HOME%"=="" (
     set ERLANG_HOME=%~dp0%..\..\..

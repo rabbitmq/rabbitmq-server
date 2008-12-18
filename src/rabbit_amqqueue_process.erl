@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -63,6 +69,21 @@
              is_overload_protection_active,
              unsent_message_count}).
 
+-define(INFO_KEYS,
+        [name,
+         durable,
+         auto_delete,
+         arguments,
+         pid,
+         messages_ready,
+         messages_unacknowledged,
+         messages_uncommitted,
+         messages,
+         acks_uncommitted,
+         consumers,
+         transactions,
+         memory]).
+         
 %%----------------------------------------------------------------------------
 
 start_link(Q) ->
@@ -444,6 +465,9 @@ store_tx(Txn, Tx) ->
 erase_tx(Txn) ->
     erase({txn, Txn}).
 
+all_tx_record() ->
+    [T || {{txn, _}, T} <- get()].
+
 all_tx() ->
     [Txn || {{txn, Txn}, _} <- get()].
 
@@ -495,7 +519,49 @@ purge_message_buffer(QName, MessageBuffer) ->
     %% artifically ack them.
     persist_acks(none, QName, lists:append(Messages)).
 
+infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+
+i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
+i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
+i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
+i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
+i(pid,         #q{q = #amqqueue{pid         = Pid}})        -> Pid;
+i(messages_ready, #q{message_buffer = MessageBuffer}) ->
+    queue:len(MessageBuffer);
+i(messages_unacknowledged, _) ->
+    lists:sum([dict:size(UAM) ||
+                  #cr{unacked_messages = UAM} <- all_ch_record()]);
+i(messages_uncommitted, _) ->
+    lists:sum([length(Pending) ||
+                  #tx{pending_messages = Pending} <- all_tx_record()]);
+i(messages, State) ->
+    lists:sum([i(Item, State) || Item <- [messages_ready,
+                                             messages_unacknowledged,
+                                             messages_uncommitted]]);
+i(acks_uncommitted, _) ->
+    lists:sum([length(Pending) ||
+                  #tx{pending_acks = Pending} <- all_tx_record()]);
+i(consumers, _) ->
+    lists:sum([length(Consumers) ||
+                  #cr{consumers = Consumers} <- all_ch_record()]);
+i(transactions, _) ->
+    length(all_tx_record());
+i(memory, _) ->
+    {memory, M} = process_info(self(), memory),
+    M;
+i(Item, _) ->
+    throw({bad_argument, Item}).
+
 %---------------------------------------------------------------------------
+
+handle_call(info, _From, State) ->
+    reply(infos(?INFO_KEYS, State), State);
+
+handle_call({info, Items}, _From, State) ->
+    try
+        reply({ok, infos(Items, State)}, State)
+    catch Error -> reply({error, Error}, State)
+    end;
 
 handle_call({deliver_immediately, Txn, Message}, _From, State) ->
     %% Synchronous, "immediate" delivery mode

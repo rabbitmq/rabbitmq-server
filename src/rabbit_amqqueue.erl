@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -27,8 +33,9 @@
 
 -export([start/0, recover/0, declare/4, delete/3, purge/1, internal_delete/1]).
 -export([pseudo_queue/2]).
--export([lookup/1, with/2, with_or_die/2, list_vhost_queues/1,
+-export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4]).
+-export([list/1, info/1, info/2, info_all/1, info_all/2]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2]).
@@ -55,6 +62,7 @@
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
+
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
@@ -62,7 +70,11 @@
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
--spec(list_vhost_queues/1 :: (vhost()) -> [amqqueue()]).
+-spec(list/1 :: (vhost()) -> [amqqueue()]).
+-spec(info/1 :: (amqqueue()) -> [info()]).
+-spec(info/2 :: (amqqueue(), [info_key()]) -> [info()]).
+-spec(info_all/1 :: (vhost()) -> [[info()]]).
+-spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
 -spec(stat/1 :: (amqqueue()) -> qstats()).
 -spec(stat_all/0 :: () -> [qstats()]).
 -spec(delete/3 ::
@@ -180,9 +192,24 @@ with_or_die(Name, F) ->
                               not_found, "no ~s", [rabbit_misc:rs(Name)])
                   end).
 
-list_vhost_queues(VHostPath) ->
+list(VHostPath) ->
     mnesia:dirty_match_object(
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
+
+map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
+
+info(#amqqueue{ pid = QPid }) ->
+    gen_server:call(QPid, info).
+
+info(#amqqueue{ pid = QPid }, Items) ->
+    case gen_server:call(QPid, {info, Items}) of
+        {ok, Res}      -> Res;
+        {error, Error} -> throw(Error)
+    end.
+
+info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
+
+info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
 stat(#amqqueue{pid = QPid}) -> gen_server:call(QPid, stat).
 

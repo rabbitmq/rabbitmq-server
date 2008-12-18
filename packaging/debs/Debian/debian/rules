@@ -7,6 +7,7 @@ RABBIT_LIB=$(DEB_DESTDIR)usr/lib/erlang/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSI
 RABBIT_BIN=$(DEB_DESTDIR)usr/lib/rabbitmq/bin/
 
 DEB_MAKE_INSTALL_TARGET := install TARGET_DIR=$(RABBIT_LIB) SBIN_DIR=$(RABBIT_BIN) MAN_DIR=$(DEB_DESTDIR)usr/share/man/
+DEB_MAKE_CLEAN_TARGET:= distclean
 
 DOCDIR=$(DEB_DESTDIR)usr/share/doc/rabbitmq-server/
 
@@ -14,5 +15,4 @@ install/rabbitmq-server::
 	mkdir -p $(DOCDIR)
 	rm $(RABBIT_LIB)LICENSE*
 	cp debian/rabbitmqctl_wrapper $(DEB_DESTDIR)usr/sbin/rabbitmqctl
-	cp debian/rabbitmq-server.logrotate $(DEB_DESTDIR)etc/logrotate.d/rabbitmq-server
 	chmod a+x $(DEB_DESTDIR)usr/sbin/rabbitmqctl
