@@ -144,8 +144,11 @@ code_change(_, State, _) ->
 
 % Starts to monitor a particular queue
 monitor_queue(QPid, State = #lim{queues = Queues}) ->
-    MonitorRef = erlang:monitor(process, QPid),
-    State#lim{queues = dict:store(QPid, MonitorRef, Queues)}.
+    case dict:is_key(QPid, Queues) of
+        false -> MonitorRef = erlang:monitor(process, QPid),
+                 State#lim{queues = dict:store(QPid, MonitorRef, Queues)};
+        true  -> State
+    end.
 
 % Stops monitoring a particular queue
 demonitor_queue(QPid, State = #lim{queues = Queues}) ->
