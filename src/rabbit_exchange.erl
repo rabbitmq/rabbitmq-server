@@ -220,6 +220,14 @@ simple_publish(Mandatory, Immediate,
         {error, Error} -> {error, Error}
     end.
 
+route(X, R) ->
+    case get({route, X, R}) of
+        undefined -> Res = route2(X, R),
+                     put({route, X, R}, Res),
+                     Res;
+        Other -> Other
+    end.
+    
 %% return the list of qpids to which a message with a given routing
 %% key, sent to a particular exchange, should be delivered.
 %%
@@ -228,7 +236,7 @@ simple_publish(Mandatory, Immediate,
 %% current exchange types that is at most once.
 %%
 %% TODO: Maybe this should be handled by a cursor instead.
-route(#exchange{name = Name, type = topic}, RoutingKey) ->
+route2(#exchange{name = Name, type = topic}, RoutingKey) ->
     Query = qlc:q([QName ||
                       #route{binding = #binding{
                                exchange_name = ExchangeName,
@@ -240,10 +248,10 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
                       topic_matches(BindingKey, RoutingKey)]),
     lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query]));
 
-route(X = #exchange{type = fanout}, _) ->
+route2(X = #exchange{type = fanout}, _) ->
     route_internal(X, '_');
 
-route(X = #exchange{type = direct}, RoutingKey) ->
+route2(X = #exchange{type = direct}, RoutingKey) ->
     route_internal(X, RoutingKey).
 
 route_internal(#exchange{name = Name}, RoutingKey) ->
