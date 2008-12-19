@@ -199,7 +199,7 @@ deliver_immediately(Message, Delivered,
                            Delivered, Message, NextId, QName,
                            QEntry, RoundRobinTail, State);
         {empty, _} ->
-            not_offered
+            {not_offered, State}
     end.
 
 % TODO The arity of this function seems a bit large :-(
@@ -231,8 +231,8 @@ attempt_delivery(none, Message, State) ->
             persist_message(none, qname(State), Message),
             persist_delivery(qname(State), Message, false),
             {true, State1};
-        not_offered ->
-            {false, State}
+        {not_offered, State1} ->
+            {false, State1}
     end;
 attempt_delivery(Txn, Message, State) ->
     persist_message(Txn, qname(State), Message),
@@ -367,8 +367,8 @@ run_poke_burst(MessageBuffer, State) ->
                 {offered, false, NewState} ->
                     persist_auto_ack(qname(State), Message),
                     run_poke_burst(BufferTail, NewState);
-                not_offered ->
-                    State#q{message_buffer = MessageBuffer}
+                {not_offered, NewState} ->
+                    NewState#q{message_buffer = MessageBuffer}
             end;
         {empty, _} ->
             State#q{message_buffer = MessageBuffer}
