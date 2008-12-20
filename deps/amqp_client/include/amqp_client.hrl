@@ -33,7 +33,10 @@
                            direct,
                            channel_max,
                            heartbeat,
-                           channels = dict:new() }).
+                           channels = dict:new(),
+                           cacertfile=nil,
+                           certfile=nil,
+                           keyfile=nil}).
 
 -record(channel_state, {number,
                         parent_connection,
