@@ -43,10 +43,13 @@
 
 -include("rabbit.hrl").
 
+async_recv(Sock, Length, -1) when is_record(Sock, rabbit_ssl_socket) ->
+    async_recv(Sock, Length, infinity);
 
 async_recv(Sock, Length, Timeout) when is_record(Sock, rabbit_ssl_socket) ->
     Pid = self(),
     Ref = make_ref(),
+
 
     Fun = fun() ->
             case ssl:recv(Sock#rabbit_ssl_socket.ssl, Length, Timeout) of
@@ -64,7 +67,8 @@ async_recv(Sock, Length, Timeout) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, Timeout).
 
 close(Sock) when is_record(Sock, rabbit_ssl_socket) ->
-    ssl:close(Sock#rabbit_ssl_socket.ssl);
+    ssl:close(Sock#rabbit_ssl_socket.ssl),
+    gen_tcp:close(Sock#rabbit_ssl_socket.tcp);
 
 close(Sock) when is_port(Sock) ->
     gen_tcp:close(Sock).
@@ -92,7 +96,12 @@ peername(Sock) when is_port(Sock) ->
 
 
 port_command(Sock, Data) when is_record(Sock, rabbit_ssl_socket) ->
-    ssl:send(Sock#rabbit_ssl_socket.ssl, Data);
+    case ssl:send(Sock#rabbit_ssl_socket.ssl, Data) of
+        ok ->
+            true;
+        {error, Reason} ->
+            throw(Reason)
+    end;
 
 port_command(Sock, Data) when is_port(Sock) ->
     erlang:port_command(Sock, Data).
