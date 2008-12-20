@@ -49,8 +49,18 @@ handshake(ConnectionState = #connection_state{serverhost = Host, cacertfile=nil,
     end;
 
 handshake(ConnectionState = #connection_state{serverhost = Host}) ->
-    crypto:start(),
-    ok = ssl:start(),
+    EnsureStarted = fun(App) ->
+            case application:start(App) of
+                ok ->
+                    ok;
+                {error, {already_started, App}} ->
+                    ok;
+                {error, Reason} ->
+                    throw(Reason)
+            end
+    end,
+
+    lists:foreach(EnsureStarted, [crypto, ssl]),
 
     case gen_tcp:connect(Host, 5673, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
