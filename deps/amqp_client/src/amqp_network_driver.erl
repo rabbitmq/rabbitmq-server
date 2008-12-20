@@ -29,6 +29,8 @@
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include("amqp_client.hrl").
 
+-define(RABBIT_TCP_OPTS, [binary, {packet, 0},{active,false}]).
+
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
 -export([start_reader/2, start_writer/2]).
 -export([do/2,do/3]).
@@ -37,25 +39,42 @@
 % Driver API Methods
 %---------------------------------------------------------------------------
 
-handshake(ConnectionState = #connection_state{serverhost = Host}) ->
-    case gen_tcp:connect(Host, 5672, [binary, {packet, 0},{active,false}]) of
+handshake(ConnectionState = #connection_state{serverhost = Host, cacertfile=nil, certfile=nil, keyfile=nil}) ->
+    case gen_tcp:connect(Host, 5672, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
-            ok = rabbit_net:send(Sock, amqp_util:protocol_header()),
-            Parent = self(),
-            FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
-            ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
-            WriterPid = start_writer(Sock, 0),
-            ConnectionState1 = ConnectionState#connection_state{channel0_writer_pid = WriterPid,
-                                                                reader_pid = ReaderPid,
-                                                                sock = Sock},
-            ConnectionState2 = network_handshake(WriterPid, ConnectionState1),
-            #connection_state{heartbeat = Heartbeat} = ConnectionState2,
-            ReaderPid ! {heartbeat, Heartbeat},
-            ConnectionState2;
+            do_handshake(Sock, ConnectionState);
+        {error, Reason} ->
+            io:format("Could not start the network driver: ~p~n",[Reason]),
+            exit(Reason)
+    end;
+
+handshake(ConnectionState = #connection_state{serverhost = Host}) ->
+    crypto:start(),
+    ok = ssl:start(),
+
+    case gen_tcp:connect(Host, 5673, ?RABBIT_TCP_OPTS) of
+        {ok, Sock} ->
+            SslOpts = [
+                {cacertfile, ConnectionState#connection_state.cacertfile},
+                {certfile, ConnectionState#connection_state.certfile},
+                {keyfile, ConnectionState#connection_state.keyfile},
+                {verify, 2}
+            ],
+
+            case ssl:connect(Sock, SslOpts) of
+                {ok, SslSock} ->
+                    RabbitSslSock = #rabbit_ssl_socket{ssl=SslSock, tcp=Sock},
+                    do_handshake(RabbitSslSock, ConnectionState);
+                {error, Reason} ->
+                    io:format("Could not upgrade the network driver to ssl: ~p~n", [Reason]),
+                    exit(Reason)
+            end;
         {error, Reason} ->
             io:format("Could not start the network driver: ~p~n",[Reason]),
             exit(Reason)
     end.
+
+
 
 %% The reader runs unaware of the channel number that it is bound to
 %% because this will be parsed out of the frames received off the socket.
@@ -216,3 +235,19 @@ resolve_receiver(Channel) ->
        undefined ->
             exit(unknown_channel)
    end.
+
+
+do_handshake(Sock, ConnectionState) ->
+    ok = rabbit_net:send(Sock, amqp_util:protocol_header()),
+    Parent = self(),
+    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
+    ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
+    WriterPid = start_writer(Sock, 0),
+    ConnectionState1 = ConnectionState#connection_state{channel0_writer_pid = WriterPid,
+                                                        reader_pid = ReaderPid,
+                                                        sock = Sock},
+    ConnectionState2 = network_handshake(WriterPid, ConnectionState1),
+    #connection_state{heartbeat = Heartbeat} = ConnectionState2,
+    ReaderPid ! {heartbeat, Heartbeat},
+    ConnectionState2.
+
