@@ -33,8 +33,8 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 -export([open_channel/1, open_channel/3]).
--export([start/2, start/3, start/4, close/2]).
--export([start_link/2, start_link/3, start_link/4]).
+-export([start/2, start/3, start/4, start/6, start/7, close/2]).
+-export([start_link/2, start_link/3, start_link/4, start_link/6, start_link/7]).
 
 %---------------------------------------------------------------------------
 % AMQP Connection API Methods
@@ -62,10 +62,28 @@ start(User,Password,Host,VHost,ProcLink) ->
                                      vhostpath = VHost},
     {ok, Pid} = start_internal(InitialState, Handshake,ProcLink),
     {Pid, network}.
+
+%% Starts a networked conection over ssl to a remote AMQP server.
+start(User,Password,Host, Cacertfile, Certfile, Keyfile) -> start(User,Password,Host,<<"/">>, Cacertfile, Certfile, Keyfile,false).
+start(User,Password,Host,VHost, Cacertfile, Certfile, Keyfile) -> start(User,Password,Host,VHost,Cacertfile, Certfile, Keyfile, false).
+start(User,Password,Host,VHost,Cacertfile, Certfile, Keyfile, ProcLink) ->
+    Handshake = fun amqp_network_driver:handshake/1,
+    InitialState = #connection_state{username = User,
+                                     password = Password,
+                                     serverhost = Host,
+                                     vhostpath = VHost,
+                                     cacertfile=Cacertfile,
+                                     certfile=Certfile,
+                                     keyfile=Keyfile},
+    {ok, Pid} = start_internal(InitialState, Handshake,ProcLink),
+    {Pid, network}.
+
     
 start_link(User,Password) -> start(User,Password,true).
 start_link(User,Password,Host) -> start(User,Password,Host,<<"/">>,true).
+start_link(User,Password,Host, Cacertfile, Certfile, Keyfile) -> start(User,Password,Host,<<"/">>,Cacertfile,Certfile,Keyfile,true).
 start_link(User,Password,Host,VHost) -> start(User,Password,Host,VHost,true).
+start_link(User,Password,Host,VHost, Cacertfile, Certfile, Keyfile) -> start(User,Password,Host,VHost,Cacertfile,Certfile,Keyfile,true).
 
 start_internal(InitialState, Handshake,ProcLink) ->
     case ProcLink of
