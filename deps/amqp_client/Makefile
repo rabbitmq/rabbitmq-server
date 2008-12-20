@@ -62,17 +62,23 @@ run_server:
 	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) NODE_ONLY=true LOG_BASE=$(LOG_BASE) RABBIT_ARGS="$(RABBIT_ARGS) -s rabbit" MNESIA_DIR=$(MNESIA_DIR) $(BROKER_DIR)/scripts/rabbitmq-server
 	sleep 2 # so that the node is initialized when the tests are run
 
-all_tests: test_network test_network_coverage test_direct test_direct_coverage
+all_tests: test_network test_ssl test_network_coverage test_ssl_coverage test_direct test_direct_coverage
 	$(ERL_CALL) -q
 
-tests_network: test_network test_network_coverage
+tests_network: test_network test_ssl test_network_coverage test_ssl_coverage 
 	$(ERL_CALL) -q
 
 test_network: $(TARGETS)
 	erl -pa $(LOAD_PATH) -noshell -eval 'network_client_test:test(),halt().'
 
+test_ssl: $(TARGETS)
+	erl -pa $(LOAD_PATH) -noshell -eval 'ssl_client_test:test(),halt().'
+
 test_network_coverage: $(TARGETS)
 	erl -pa $(LOAD_PATH) -noshell -eval 'network_client_test:test_coverage(),halt().'
+
+test_ssl_coverage: $(TARGETS)
+	erl -pa $(LOAD_PATH) -noshell -eval 'ssl_client_test:test_coverage(),halt().'
 
 tests_direct: test_direct test_direct_coverage
 	$(ERL_CALL) -q
