@@ -238,7 +238,19 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
                       %% TODO: This causes a full scan for each entry
                       %% with the same exchange  (see bug 19336)
                       topic_matches(BindingKey, RoutingKey)]),
-    lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query]));
+    lookup_qpids(
+      try 
+          mnesia:async_dirty(fun qlc:e/1, [Query])
+      catch exit:{aborted, {badarg, _}} ->
+              %% work around OTP-7025, which was fixed in R12B-1, by
+              %% falling back on a less efficient method
+              [QName || #route{binding = #binding{queue_name = QName,
+                                                  key = BindingKey}} <-
+                            mnesia:dirty_match_object(
+                              #route{binding = #binding{exchange_name = Name,
+                                                        _ = '_'}}),
+                        topic_matches(BindingKey, RoutingKey)]
+      end);
 
 route(X = #exchange{type = fanout}, _) ->
     route_internal(X, '_');
