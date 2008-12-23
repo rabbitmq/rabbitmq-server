@@ -439,11 +439,11 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
     %% TODO: terminate limiter when transitioning to 'unlimited'
     NewLimiter = case Limiter of
                      undefined -> 
-                         %% TODO: tell queues with subscribers about
-                         %% the limiter
-                         rabbit_limiter:start_link(ProxyPid);
-                     Pid ->
-                         Pid
+                         LPid = rabbit_limiter:start_link(ProxyPid),
+                         ok = limit_queues(LPid, State),
+                         LPid;
+                     LPid ->
+                         LPid
                  end,
     ok = rabbit_limiter:limit(NewLimiter, PrefetchCount),
     {reply, #'basic.qos_ok'{}, State#ch{limiter = NewLimiter}};
@@ -832,18 +832,22 @@ fold_per_queue(F, Acc0, UAQ) ->
               Acc0, D).
 
 notify_queues(#ch{proxy_pid = ProxyPid, consumer_mapping = Consumers}) ->
-    rabbit_amqqueue:notify_down_all(
-      [QPid || QueueName <- 
-                   sets:to_list(
-                     dict:fold(fun (_ConsumerTag, QueueName, S) ->
-                                       sets:add_element(QueueName, S)
-                               end, sets:new(), Consumers)),
-               case rabbit_amqqueue:lookup(QueueName) of
-                   {ok, Q} -> QPid = Q#amqqueue.pid, true;
-                   %% queue has been deleted in the meantime
-                   {error, not_found} -> QPid = none, false
-               end],
-      ProxyPid).
+    rabbit_amqqueue:notify_down_all(consumer_queues(Consumers), ProxyPid).
+
+limit_queues(LPid, #ch{proxy_pid = ProxyPid, consumer_mapping = Consumers}) ->
+    rabbit_amqqueue:limit_all(consumer_queues(Consumers), ProxyPid, LPid).
+
+consumer_queues(Consumers) ->
+    [QPid || QueueName <- 
+                 sets:to_list(
+                   dict:fold(fun (_ConsumerTag, QueueName, S) ->
+                                     sets:add_element(QueueName, S)
+                             end, sets:new(), Consumers)),
+             case rabbit_amqqueue:lookup(QueueName) of
+                 {ok, Q} -> QPid = Q#amqqueue.pid, true;
+                 %% queue has been deleted in the meantime
+                 {error, not_found} -> QPid = none, false
+             end].
 
 %% tell the limiter about the number of acks that have been received
 %% for messages delivered to subscribed consumers, rather than those

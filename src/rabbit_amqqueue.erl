@@ -40,7 +40,7 @@
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2]).
 -export([unblock/2]).
--export([commit_all/2, rollback_all/2, notify_down_all/2]).
+-export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
 -import(mnesia).
@@ -92,6 +92,7 @@
 -spec(commit_all/2 :: ([pid()], txn()) -> ok_or_errors()).
 -spec(rollback_all/2 :: ([pid()], txn()) -> ok_or_errors()).
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
+-spec(limit_all/3 :: ([pid()], pid(), pid()) -> ok_or_errors()).
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), bool()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
@@ -261,6 +262,12 @@ notify_down_all(QPids, ChPid) ->
       fun (QPid) -> gen_server:call(QPid, {notify_down, ChPid}, Timeout) end,
       QPids).
 
+limit_all(QPids, ChPid, LimiterPid) ->
+    safe_pmap_ok(
+      fun (_) -> ok end,
+      fun (QPid) -> gen_server:cast(QPid, {limit, ChPid, LimiterPid}) end,
+      QPids).
+    
 claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
     gen_server:call(QPid, {claim_queue, ReaderPid}).
 

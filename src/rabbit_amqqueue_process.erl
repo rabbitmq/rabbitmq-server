@@ -781,7 +781,20 @@ handle_cast({notify_sent, ChPid}, State) ->
       possibly_unblock(State, ChPid,
                        fun (C = #cr{unsent_message_count = Count}) ->
                                C#cr{unsent_message_count = Count - 1}
-                       end)).
+                       end));
+
+handle_cast({limit, ChPid, LimiterPid}, State) ->
+    case lookup_ch(ChPid) of
+        not_found ->
+            ok;
+        C = #cr{consumers = Consumers} ->
+            if Consumers =/= [] ->
+                    ok = rabbit_limiter:register(LimiterPid, self());
+               true -> ok
+            end,
+            store_ch_record(C#cr{limiter_pid = LimiterPid})
+    end,
+    noreply(State).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
