@@ -126,6 +126,8 @@ handle_message({method, Method, Content}, State) ->
             terminate({amqp, Error, Explanation,
                        rabbit_misc:method_record_type(Method)},
                       State);
+        exit:normal ->
+            terminate(normal, State);
         _:Reason ->
             terminate({Reason, erlang:get_stacktrace()}, State)
     end;
