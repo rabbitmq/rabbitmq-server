@@ -60,10 +60,9 @@ setup_reply_queue(State = #rpc_client_state{channel = Channel}) ->
     State#rpc_client_state{reply_queue = Q}.
 
 % Registers this RPC client instance as a consumer to handle rpc responses
-setup_consumer(State = #rpc_client_state{channel = Channel,
-                                         reply_queue = Q}) ->
-    ConsumerTag = lib_amqp:subscribe(Channel, Q, self()),
-    State#rpc_client_state{consumer_tag = ConsumerTag}.
+setup_consumer(#rpc_client_state{channel = Channel,
+                                 reply_queue = Q}) ->
+    lib_amqp:subscribe(Channel, Q, self()).
 
 % Publishes to the broker, stores the From address against
 % the correlation id and increments the correlationid for
@@ -94,21 +93,17 @@ init([Connection, RoutingKey]) ->
                                      exchange = <<>>,
                                      routing_key = RoutingKey},
     State = setup_reply_queue(InitialState),
-    NewState = setup_consumer(State),
-    {ok, NewState}.
+    setup_consumer(State),
+    {ok, State}.
 
 % Closes the channel this gen_server instance started
 terminate(_Reason, #rpc_client_state{channel = Channel}) ->
     lib_amqp:close_channel(Channel),
     ok.
 
-% Handle the application initiated stop by unsubscribing from the
-% reply queue - let handle_info/2 process the server's response
-% in order to actually terminate this gen_server instance
-handle_call(stop, _From, State = #rpc_client_state{channel = Channel,
-                                                  consumer_tag = Tag}) ->
-    lib_amqp:unsubscribe(Channel, Tag),
-    {reply, ok, State};
+% Handle the application initiated stop by just stopping this gen server
+handle_call(stop, _From, State) ->
+    {stop, normal, ok, State};
 
 handle_call({call, Payload}, From, State) ->
     NewState = publish(Payload, From, State),
@@ -117,10 +112,8 @@ handle_call({call, Payload}, From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-
-handle_info(#'basic.consume_ok'{consumer_tag = ConsumerTag}, State) ->
-    NewState = State#rpc_client_state{consumer_tag = ConsumerTag},
-    {noreply, NewState};
+handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State};
 
 handle_info(#'basic.cancel_ok'{}, State) ->
     {stop, normal, State};
