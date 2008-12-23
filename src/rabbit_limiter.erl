@@ -42,6 +42,7 @@
 
 -ifdef(use_specs).
 
+-spec(start_link/1 :: (pid()) -> pid()).
 -spec(limit/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(can_send/2 :: (pid(), pid()) -> bool()).
 -spec(ack/2 :: (pid(), non_neg_integer()) -> 'ok').
