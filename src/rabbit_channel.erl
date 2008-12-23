@@ -108,8 +108,7 @@ init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
         username                = Username,
         virtual_host            = VHost,
         most_recently_declared_queue = <<>>,
-        % TODO See point 3.1.1 of the design - start the limiter lazily
-        limiter                 = rabbit_limiter:start_link(ProxyPid),
+        limiter                 = undefined,
         consumer_mapping        = dict:new()}.
 
 handle_message({method, Method, Content}, State) ->
@@ -430,10 +429,24 @@ handle_method(#'basic.qos'{prefetch_size = Size},
                 "Pre-fetch size (~s) for basic.qos not implementented",
                 [Size]);
 
-handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
-              _, State = #ch{limiter = Limiter}) ->
-    ok = rabbit_limiter:limit(Limiter, PrefetchCount),
+handle_method(#'basic.qos'{prefetch_count = 0},
+              _, State = #ch{ limiter = undefined }) ->
     {reply, #'basic.qos_ok'{}, State};
+
+handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
+              _, State = #ch{ limiter = Limiter,
+                              proxy_pid = ProxyPid }) ->
+    %% TODO: terminate limiter when transitioning to 'unlimited'
+    NewLimiter = case Limiter of
+                     undefined -> 
+                         %% TODO: tell queues with subscribers about
+                         %% the limiter
+                         rabbit_limiter:start_link(ProxyPid);
+                     Pid ->
+                         Pid
+                 end,
+    ok = rabbit_limiter:limit(NewLimiter, PrefetchCount),
+    {reply, #'basic.qos_ok'{}, State#ch{limiter = NewLimiter}};
 
 handle_method(#'basic.recover'{requeue = true},
               _, State = #ch{ transaction_id = none,
@@ -835,6 +848,8 @@ notify_queues(#ch{proxy_pid = ProxyPid, consumer_mapping = Consumers}) ->
 %% tell the limiter about the number of acks that have been received
 %% for messages delivered to subscribed consumers, rather than those
 %% for messages sent in a response to a basic.get
+notify_limiter(undefined, _Acked) ->
+    ok;
 notify_limiter(Limiter, Acked) ->
     case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
                          ({_, _, _}, Acc)    -> Acc + 1

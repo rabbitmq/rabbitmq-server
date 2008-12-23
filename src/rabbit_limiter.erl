@@ -70,6 +70,8 @@ limit(LimiterPid, PrefetchCount) ->
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
+can_send(undefined, _QPid) ->
+    true;
 can_send(LimiterPid, QPid) ->
     gen_server:call(LimiterPid, {can_send, QPid}).
 
