@@ -70,21 +70,19 @@ limit(LimiterPid, PrefetchCount) ->
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
-can_send(undefined, _QPid) ->
-    true;
-can_send(LimiterPid, QPid) ->
-    gen_server:call(LimiterPid, {can_send, QPid}).
+can_send(undefined, _QPid) -> true;
+can_send(LimiterPid, QPid) -> gen_server:call(LimiterPid, {can_send, QPid}).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
-ack(LimiterPid, Count) ->
-    gen_server:cast(LimiterPid, {ack, Count}).
+ack(undefined, _Count) -> ok;
+ack(LimiterPid, Count) -> gen_server:cast(LimiterPid, {ack, Count}).
 
-register(LimiterPid, QPid) ->
-    gen_server:cast(LimiterPid, {register, QPid}).
+register(undefined, _QPid) -> ok;
+register(LimiterPid, QPid) -> gen_server:cast(LimiterPid, {register, QPid}).
 
-unregister(LimiterPid, QPid) ->
-    gen_server:cast(LimiterPid, {unregister, QPid}).
+unregister(undefined, _QPid) -> ok;
+unregister(LimiterPid, QPid) -> gen_server:cast(LimiterPid, {unregister, QPid}).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
