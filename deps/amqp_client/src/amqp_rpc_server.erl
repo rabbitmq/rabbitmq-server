@@ -93,7 +93,9 @@ handle_call(stop, _From, State) ->
 handle_cast(_Message, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+% Closes the channel this gen_server instance started
+terminate(_Reason, #rpc_server_state{channel = Channel}) ->
+    lib_amqp:close_channel(Channel),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
