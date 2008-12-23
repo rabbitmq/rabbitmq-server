@@ -634,6 +634,11 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                     C1 = C#cr{consumers = [Consumer | Consumers],
                               limiter_pid = LimiterPid},
                     store_ch_record(C1),
+                    if Consumers == [] ->
+                            ok = rabbit_limiter:register(LimiterPid, self());
+                       true ->
+                            ok
+                    end,
                     State1 = State#q{has_had_consumers = true,
                                      exclusive_consumer =
                                        if
@@ -653,12 +658,17 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
         not_found ->
             ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
-        C = #cr{consumers = Consumers} ->
+        C = #cr{consumers = Consumers, limiter_pid = LimiterPid} ->
             NewConsumers = lists:filter
                              (fun (#consumer{tag = CT}) -> CT /= ConsumerTag end,
                               Consumers),
             C1 = C#cr{consumers = NewConsumers},
             store_ch_record(C1),
+            if NewConsumers == [] ->
+                    ok = rabbit_limiter:unregister(LimiterPid, self());
+               true ->
+                    ok
+            end,
             ok = maybe_send_reply(ChPid, OkMsg),
             case check_auto_delete(
                    State#q{exclusive_consumer = cancel_holder(ChPid,
