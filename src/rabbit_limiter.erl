@@ -36,15 +36,15 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([start_link/1]).
--export([set_prefetch_count/2, can_send/2, decrement_capacity/2]).
+-export([limit/2, can_send/2, ack/2]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(set_prefetch_count/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(limit/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(can_send/2 :: (pid(), pid()) -> bool()).
--spec(decrement_capacity/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(ack/2 :: (pid(), non_neg_integer()) -> 'ok').
 
 -endif.
 
@@ -63,8 +63,8 @@ start_link(ChPid) ->
     {ok, Pid} = gen_server:start_link(?MODULE, [ChPid], []),
     Pid.
 
-set_prefetch_count(LimiterPid, PrefetchCount) ->
-    gen_server:cast(LimiterPid, {prefetch_count, PrefetchCount}).
+limit(LimiterPid, PrefetchCount) ->
+    gen_server:cast(LimiterPid, {limit, PrefetchCount}).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
@@ -73,8 +73,8 @@ can_send(LimiterPid, QPid) ->
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
-decrement_capacity(LimiterPid, Magnitude) ->
-    gen_server:cast(LimiterPid, {decrement_capacity, Magnitude}).
+ack(LimiterPid, Count) ->
+    gen_server:cast(LimiterPid, {ack, Count}).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -89,12 +89,12 @@ handle_call({can_send, QPid}, _From, State = #lim{in_use = InUse}) ->
         false -> {reply, true, State#lim{in_use = InUse + 1}}
     end.
 
-handle_cast({prefetch_count, PrefetchCount}, State) ->
+handle_cast({limit, PrefetchCount}, State) ->
     {noreply, maybe_notify(State, State#lim{prefetch_count = PrefetchCount})};
 
-handle_cast({decrement_capacity, Magnitude}, State = #lim{in_use = InUse}) ->
+handle_cast({ack, Count}, State = #lim{in_use = InUse}) ->
     NewInUse = if InUse == 0 -> 0;
-                  true       -> InUse - Magnitude
+                  true       -> InUse - Count
                end,
     {noreply, maybe_notify(State, State#lim{in_use = NewInUse})}.
 

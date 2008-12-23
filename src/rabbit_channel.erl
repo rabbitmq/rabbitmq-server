@@ -430,7 +430,7 @@ handle_method(#'basic.qos'{prefetch_size = Size},
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
               _, State = #ch{limiter = Limiter}) ->
-    rabbit_limiter:set_prefetch_count(Limiter, PrefetchCount),
+    ok = rabbit_limiter:limit(Limiter, PrefetchCount),
     {reply, #'basic.qos_ok'{}, State};
 
 handle_method(#'basic.recover'{requeue = true},
@@ -838,7 +838,7 @@ notify_limiter(Limiter, Acked) ->
                          ({_, _, _}, Acc)    -> Acc + 1
                      end, 0, queue:to_list(Acked)) of
         0     -> ok;
-        Count -> rabbit_limiter:decrement_capacity(Limiter, Count)
+        Count -> rabbit_limiter:ack(Limiter, Count)
     end.
 
 is_message_persistent(#content{properties = #'P_basic'{
