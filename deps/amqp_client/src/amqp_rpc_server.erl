@@ -54,7 +54,7 @@ stop(Pid) ->
 
 init([Connection, Queue, Fun]) ->
     Channel = lib_amqp:start_channel(Connection),
-    lib_amqp:declare_queue(Channel, Queue),
+    lib_amqp:declare_private_queue(Channel, Queue),
     Tag = lib_amqp:subscribe(Channel, Queue, self()),
     State = #rpc_server_state{channel = Channel,
                               consumer_tag = Tag,

@@ -130,17 +130,40 @@ unsubscribe(Channel, Tag) ->
     #'basic.cancel_ok'{} = amqp_channel:call(Channel,BasicCancel),
     ok.
 
+%%---------------------------------------------------------------------------
+%% Convenience functions for manipulating queues
+
+%% TODO This whole part of the API needs to be refactored to reflect current
+%% usage patterns in a sensible way using the defaults that are in the spec
+%% file
 declare_queue(Channel) ->
     declare_queue(Channel, <<>>).
 
+declare_queue(Channel, QueueDeclare = #'queue.declare'{}) ->
+    #'queue.declare_ok'{queue = QueueName}
+        = amqp_channel:call(Channel, QueueDeclare),
+    QueueName;
+
 declare_queue(Channel, Q) ->
+    %% TODO Specifying these defaults is unecessary - this is already taken
+    %% care of in the spec file
     QueueDeclare = #'queue.declare'{queue = Q,
                                     passive = false, durable = false,
                                     exclusive = false, auto_delete = false,
                                     nowait = false, arguments = []},
-    #'queue.declare_ok'{queue = Q1}
-                        = amqp_channel:call(Channel, QueueDeclare),
-    Q1.
+    declare_queue(Channel, QueueDeclare).
+
+%% Creates a queue that is exclusive and auto-delete
+declare_private_queue(Channel) ->
+    declare_queue(Channel, #'queue.declare'{exclusive = true,
+                                            auto_delete = true}).
+
+declare_private_queue(Channel, QueueName) ->
+    declare_queue(Channel, #'queue.declare'{queue = QueueName,
+                                            exclusive = true,
+                                            auto_delete = true}).
+
+%%---------------------------------------------------------------------------
 
 delete_queue(Channel, Q) ->
     QueueDelete = #'queue.delete'{queue = Q,

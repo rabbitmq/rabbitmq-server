@@ -57,7 +57,7 @@ call(RpcClientPid, Payload) ->
 
 % Sets up a reply queue for this client to listen on
 setup_reply_queue(State = #rpc_client_state{channel = Channel}) ->
-    Q = lib_amqp:declare_queue(Channel, <<>>),
+    Q = lib_amqp:declare_private_queue(Channel),
     State#rpc_client_state{reply_queue = Q}.
 
 % Registers this RPC client instance as a consumer to handle rpc responses
