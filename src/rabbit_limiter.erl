@@ -129,8 +129,17 @@ remember_queue(QPid, State = #lim{queues = Queues}) ->
     end.
 
 forget_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
-    ok = dict:fold(fun(Q, Ref, ok) ->
-                           true = erlang:demonitor(Ref),
-                           rabbit_amqqueue:unblock(Q, ChPid)
-                   end, ok, Queues),
+    QList = dict:to_list(Queues),
+    case length(QList) of
+        0 -> ok;
+        L ->
+            %% We randomly vary the position in which each queue
+            %% appears in the list, thus ensuring that each queue has
+            %% an equal chance of being notified first.
+            {L1, L2} = lists:split(random:uniform(L), QList),
+            [begin
+                 true = erlang:demonitor(Ref),
+                 ok = rabbit_amqqueue:unblock(Q, ChPid)
+             end || {Q, Ref} <- L2 ++ L1]
+    end,
     State#lim{queues = dict:new()}.
