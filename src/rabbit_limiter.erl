@@ -35,7 +35,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
--export([start_link/1]).
+-export([start_link/1, shutdown/1]).
 -export([limit/2, can_send/2, ack/2, register/2, unregister/2]).
 
 %%----------------------------------------------------------------------------
@@ -43,6 +43,7 @@
 -ifdef(use_specs).
 
 -spec(start_link/1 :: (pid()) -> pid()).
+-spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(limit/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(can_send/2 :: (pid(), pid()) -> bool()).
 -spec(ack/2 :: (pid(), non_neg_integer()) -> 'ok').
@@ -65,6 +66,11 @@
 start_link(ChPid) ->
     {ok, Pid} = gen_server:start_link(?MODULE, [ChPid], []),
     Pid.
+
+shutdown(undefined) ->
+    ok;
+shutdown(LimiterPid) ->
+    gen_server:cast(LimiterPid, shutdown).
 
 limit(LimiterPid, PrefetchCount) ->
     gen_server:cast(LimiterPid, {limit, PrefetchCount}).
@@ -101,6 +107,9 @@ handle_call({can_send, _QPid}, _From, State = #lim{in_use = InUse}) ->
             {reply, false, State};
         false -> {reply, true, State#lim{in_use = InUse + 1}}
     end.
+
+handle_cast(shutdown, State) ->
+    {stop, normal, State};
 
 handle_cast({limit, PrefetchCount}, State) ->
     {noreply, maybe_notify(State, State#lim{prefetch_count = PrefetchCount})};

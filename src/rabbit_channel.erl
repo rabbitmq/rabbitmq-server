@@ -162,13 +162,15 @@ handle_message(Other, State) ->
 
 %%---------------------------------------------------------------------------
 
-terminate(Reason, State = #ch{writer_pid = WriterPid}) ->
+terminate(Reason, State = #ch{writer_pid = WriterPid,
+                              limiter_pid = LimiterPid}) ->
     Res = notify_queues(internal_rollback(State)),
     case Reason of
         normal -> ok = Res;
         _      -> ok
     end,
     rabbit_writer:shutdown(WriterPid),
+    rabbit_limiter:shutdown(LimiterPid),
     exit(Reason).
 
 return_ok(State, true, _Msg)  -> {noreply, State};
