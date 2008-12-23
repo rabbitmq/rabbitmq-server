@@ -41,8 +41,7 @@
 %---------------------------------------------------------------------------
 
 start(Connection, Queue) ->
-    Channel = lib_amqp:start_channel(Connection),
-    {ok, Pid} = gen_server:start(?MODULE, [Channel, Queue], []),
+    {ok, Pid} = gen_server:start(?MODULE, [Connection, Queue], []),
     Pid.
 
 stop(Pid) ->
@@ -89,7 +88,8 @@ publish(Payload, From,
 %---------------------------------------------------------------------------
 
 % Sets up a reply queue and consumer within an existing channel
-init([Channel, RoutingKey]) ->
+init([Connection, RoutingKey]) ->
+    Channel = lib_amqp:start_channel(Connection),
     InitialState = #rpc_client_state{channel = Channel,
                                      exchange = <<>>,
                                      routing_key = RoutingKey},
