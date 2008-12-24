@@ -784,17 +784,20 @@ handle_cast({notify_sent, ChPid}, State) ->
                        end));
 
 handle_cast({limit, ChPid, LimiterPid}, State) ->
-    case lookup_ch(ChPid) of
-        not_found ->
-            ok;
-        C = #cr{consumers = Consumers} ->
-            if Consumers =/= [] ->
-                    ok = rabbit_limiter:register(LimiterPid, self());
-               true -> ok
-            end,
-            store_ch_record(C#cr{limiter_pid = LimiterPid})
-    end,
-    noreply(State).
+    noreply(
+      possibly_unblock(
+        State, ChPid,
+        fun (C = #cr{consumers = Consumers,
+                     limiter_pid = OldLimiterPid,
+                     is_limit_active = Limited}) ->
+                if Consumers =/= [] andalso OldLimiterPid == undefined ->
+                        ok = rabbit_limiter:register(LimiterPid, self());
+                   true ->
+                        ok
+                end,
+                NewLimited = Limited andalso LimiterPid =/= undefined,
+                C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
+        end)).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->

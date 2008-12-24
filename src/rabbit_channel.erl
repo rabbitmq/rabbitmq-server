@@ -154,6 +154,12 @@ handle_message({conserve_memory, Conserve}, State) ->
            State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
     State;
 
+handle_message({'EXIT', Pid, Reason}, State = #ch{proxy_pid = Pid}) ->
+    terminate(Reason, State);
+
+handle_message({'EXIT', _Pid, normal}, State) ->
+    State;
+
 handle_message({'EXIT', _Pid, Reason}, State) ->
     terminate(Reason, State);
 
@@ -431,21 +437,22 @@ handle_method(#'basic.qos'{prefetch_size = Size},
                 "Pre-fetch size (~s) for basic.qos not implementented",
                 [Size]);
 
-handle_method(#'basic.qos'{prefetch_count = 0},
-              _, State = #ch{ limiter_pid = undefined }) ->
-    {reply, #'basic.qos_ok'{}, State};
-
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
               _, State = #ch{ limiter_pid = LimiterPid,
                               proxy_pid = ProxyPid }) ->
-    %% TODO: terminate limiter when transitioning to 'unlimited'
-    NewLimiterPid = case LimiterPid of
-                        undefined -> 
+    NewLimiterPid = case {LimiterPid, PrefetchCount} of
+                        {undefined, 0} ->
+                            undefined;
+                        {undefined, _} ->
                             LPid = rabbit_limiter:start_link(ProxyPid),
                             ok = limit_queues(LPid, State),
                             LPid;
-                        LPid ->
-                            LPid
+                        {_, 0} ->
+                            ok = rabbit_limiter:shutdown(LimiterPid),
+                            ok = limit_queues(undefined, State),
+                            undefined;
+                        {_, _} ->
+                            LimiterPid
                     end,
     ok = rabbit_limiter:limit(NewLimiterPid, PrefetchCount),
     {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = NewLimiterPid}};

@@ -72,13 +72,19 @@ shutdown(undefined) ->
 shutdown(LimiterPid) ->
     gen_server:cast(LimiterPid, shutdown).
 
+limit(undefined, 0) ->
+    ok;
 limit(LimiterPid, PrefetchCount) ->
     gen_server:cast(LimiterPid, {limit, PrefetchCount}).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
-can_send(undefined, _QPid) -> true;
-can_send(LimiterPid, QPid) -> gen_server:call(LimiterPid, {can_send, QPid}).
+can_send(undefined, _QPid) ->
+    true;
+can_send(LimiterPid, QPid) ->
+    rabbit_misc:with_exit_handler(
+      fun () -> true end,
+      fun () -> gen_server:call(LimiterPid, {can_send, QPid}) end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
