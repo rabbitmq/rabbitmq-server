@@ -57,7 +57,7 @@
 -record(lim, {prefetch_count = 0,
               ch_pid,
               queues = dict:new(),
-              in_use = 0}).
+              volume = 0}).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -104,10 +104,10 @@ unregister(LimiterPid, QPid) -> gen_server:cast(LimiterPid, {unregister, QPid}).
 init([ChPid]) ->
     {ok, #lim{ch_pid = ChPid} }.
 
-handle_call({can_send, QPid}, _From, State = #lim{in_use = InUse}) ->
+handle_call({can_send, QPid}, _From, State = #lim{volume = Volume}) ->
     case limit_reached(State) of
         true  -> {reply, false, limit_queue(QPid, State)};
-        false -> {reply, true, State#lim{in_use = InUse + 1}}
+        false -> {reply, true, State#lim{volume = Volume + 1}}
     end.
 
 handle_cast(shutdown, State) ->
@@ -116,11 +116,11 @@ handle_cast(shutdown, State) ->
 handle_cast({limit, PrefetchCount}, State) ->
     {noreply, maybe_notify(State, State#lim{prefetch_count = PrefetchCount})};
 
-handle_cast({ack, Count}, State = #lim{in_use = InUse}) ->
-    NewInUse = if InUse == 0 -> 0;
-                  true       -> InUse - Count
-               end,
-    {noreply, maybe_notify(State, State#lim{in_use = NewInUse})};
+handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
+    NewVolume = if Volume == 0 -> 0;
+                   true        -> Volume - Count
+                end,
+    {noreply, maybe_notify(State, State#lim{volume = NewVolume})};
 
 handle_cast({register, QPid}, State) ->
     {noreply, remember_queue(QPid, State)};
@@ -147,8 +147,8 @@ maybe_notify(OldState, NewState) ->
         false -> NewState
     end.
 
-limit_reached(#lim{prefetch_count = Limit, in_use = InUse}) ->
-    Limit =/= 0 andalso InUse >= Limit.
+limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
+    Limit =/= 0 andalso Volume >= Limit.
 
 remember_queue(QPid, State = #lim{queues = Queues}) ->
     case dict:is_key(QPid, Queues) of
