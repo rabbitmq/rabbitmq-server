@@ -48,7 +48,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--define(APPS, [os_mon, mnesia, crypto, ssl, rabbit]).
+-define(APPS, [os_mon, mnesia, crypto, rabbit]).
 
 %%----------------------------------------------------------------------------
 
@@ -202,6 +202,13 @@ start(normal, []) ->
        {"SSL listeners",
         fun () ->
                 {ok, SSLListeners} = application:get_env(ssl_listeners),
+                case length(SSLListeners) of
+                    0 ->
+                        continue;
+                    _Len ->
+                        ok = start_applications([ssl])
+                end,
+
                 lists:foreach(
                   fun ({Host, Port}) ->
                           ok = rabbit_networking:start_ssl_listener(Host, Port)

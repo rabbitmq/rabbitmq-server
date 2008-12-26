@@ -51,6 +51,7 @@
   {applications, [kernel, stdlib, sasl, mnesia, os_mon]},
   {mod, {rabbit, []}},
   {env, [{tcp_listeners, [{"0.0.0.0", 5672}]},
+     {ssl_listeners, []},
 	 {extra_startup_steps, []},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
