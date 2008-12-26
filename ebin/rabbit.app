@@ -26,6 +26,7 @@
              rabbit_mnesia,
              rabbit_multi,
              rabbit_networking,
+             rabbit_net,
              rabbit_node_monitor,
              rabbit_persister,
              rabbit_reader,
