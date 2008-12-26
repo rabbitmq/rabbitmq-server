@@ -7,7 +7,6 @@ Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{v
 Source1: rabbitmq-server.init
 Source2: rabbitmq-server.wrapper
 Source3: rabbitmq-server.logrotate
-Source4: rabbitmq-server-preserve-db.sh
 URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
 %if 0%{?debian}
@@ -75,9 +74,15 @@ install -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmqctl
 %endif
 
 mkdir -p %{buildroot}/etc/logrotate.d
-install %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
+install -m 0644 %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
 
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
+
+#Build the list of files
+rm -f %{_builddir}/filelist.%{name}.rpm
+echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm 
+(cd %{buildroot}; find . ! -regex '\./etc.*' \
+       -type f | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
 
 %post
 # create rabbitmq group
@@ -88,16 +93,11 @@ fi
 # create rabbitmq user
 if ! getent passwd rabbitmq >/dev/null; then
         useradd -r -g rabbitmq --home /var/lib/rabbitmq  rabbitmq
-        usermod -c "Rabbit AMQP Messaging Server" rabbitmq
+        usermod -c "RabbitMQ messaging server" rabbitmq
 fi
 
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
 chown -R rabbitmq:rabbitmq /var/log/rabbitmq
-
-su rabbitmq -s /bin/sh -c %{_rabbitbindir}/rabbitmq-mnesia-current
-if [ $? = 1 ]; then
-	/bin/sh %SOURCE4 /var/lib/rabbitmq/mnesia
-fi
 
 /sbin/chkconfig --add %{name}
 /sbin/service rabbitmq-server start
@@ -112,12 +112,8 @@ if [ $1 = 0 ]; then
   # Leave rabbitmq user and group
 fi
 
-%files
+%files -f ../filelist.%{name}.rpm
 %defattr(-,root,root,-)
-%{_erllibdir}/rabbitmq_server-%{version}/
-%{_rabbitbindir}/
-%{_mandir}/
-%{_sbindir}/rabbitmqctl
 %dir /var/lib/rabbitmq
 %dir /var/log/rabbitmq
 /etc/rc.d/init.d/rabbitmq-server
@@ -128,6 +124,9 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Wed Dec 17 2008 Matthias Radestock <matthias@lshift.net> 1.5.0-1
+- New upstream release
+
 * Thu Jul 24 2008 Tony Garnock-Jones <tonyg@lshift.net> 1.4.0-1
 - New upstream release
 
