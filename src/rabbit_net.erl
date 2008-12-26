@@ -43,16 +43,16 @@
 
 -include("rabbit.hrl").
 
-async_recv(Sock, Length, -1) when is_record(Sock, rabbit_ssl_socket) ->
+async_recv(Sock, Length, -1) when is_record(Sock, ssl_socket) ->
     async_recv(Sock, Length, infinity);
 
-async_recv(Sock, Length, Timeout) when is_record(Sock, rabbit_ssl_socket) ->
+async_recv(Sock, Length, Timeout) when is_record(Sock, ssl_socket) ->
     Pid = self(),
     Ref = make_ref(),
 
 
     Fun = fun() ->
-            case ssl:recv(Sock#rabbit_ssl_socket.ssl, Length, Timeout) of
+            case ssl:recv(Sock#ssl_socket.ssl, Length, Timeout) of
                 {ok, Data} ->
                     Pid ! {inet_async, Sock, Ref, {ok, Data}};
                 {error, Reason} ->
@@ -66,37 +66,37 @@ async_recv(Sock, Length, Timeout) when is_record(Sock, rabbit_ssl_socket) ->
 async_recv(Sock, Length, Timeout) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, Timeout).
 
-close(Sock) when is_record(Sock, rabbit_ssl_socket) ->
-    ssl:close(Sock#rabbit_ssl_socket.ssl),
-    gen_tcp:close(Sock#rabbit_ssl_socket.tcp);
+close(Sock) when is_record(Sock, ssl_socket) ->
+    ssl:close(Sock#ssl_socket.ssl),
+    gen_tcp:close(Sock#ssl_socket.tcp);
 
 close(Sock) when is_port(Sock) ->
     gen_tcp:close(Sock).
 
 
-controlling_process(Sock, Pid) when is_record(Sock, rabbit_ssl_socket) ->
-    ssl:controlling_process(Sock#rabbit_ssl_socket.ssl, Pid);
+controlling_process(Sock, Pid) when is_record(Sock, ssl_socket) ->
+    ssl:controlling_process(Sock#ssl_socket.ssl, Pid);
 
 controlling_process(Sock, Pid) when is_port(Sock) ->
     gen_tcp:controlling_process(Sock, Pid).
 
 
-getstat(Sock, Stats) when is_record(Sock, rabbit_ssl_socket) ->
-    inet:getstat(Sock#rabbit_ssl_socket.tcp, Stats);
+getstat(Sock, Stats) when is_record(Sock, ssl_socket) ->
+    inet:getstat(Sock#ssl_socket.tcp, Stats);
 
 getstat(Sock, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats).
 
 
-peername(Sock) when is_record(Sock, rabbit_ssl_socket) ->
-    ssl:peername(Sock#rabbit_ssl_socket.ssl);
+peername(Sock) when is_record(Sock, ssl_socket) ->
+    ssl:peername(Sock#ssl_socket.ssl);
 
 peername(Sock) when is_port(Sock) ->
     inet:peername(Sock).
 
 
-port_command(Sock, Data) when is_record(Sock, rabbit_ssl_socket) ->
-    case ssl:send(Sock#rabbit_ssl_socket.ssl, Data) of
+port_command(Sock, Data) when is_record(Sock, ssl_socket) ->
+    case ssl:send(Sock#ssl_socket.ssl, Data) of
         ok ->
             true;
         {error, Reason} ->
@@ -106,15 +106,15 @@ port_command(Sock, Data) when is_record(Sock, rabbit_ssl_socket) ->
 port_command(Sock, Data) when is_port(Sock) ->
     erlang:port_command(Sock, Data).
 
-send(Sock, Data) when is_record(Sock, rabbit_ssl_socket) ->
-    ssl:send(Sock#rabbit_ssl_socket.ssl, Data);
+send(Sock, Data) when is_record(Sock, ssl_socket) ->
+    ssl:send(Sock#ssl_socket.ssl, Data);
 
 send(Sock, Data) when is_port(Sock) ->
     gen_tcp:send(Sock, Data).
 
 
-sockname(Sock) when is_record(Sock, rabbit_ssl_socket) ->
-    ssl:sockname(Sock#rabbit_ssl_socket.ssl);
+sockname(Sock) when is_record(Sock, ssl_socket) ->
+    ssl:sockname(Sock#ssl_socket.ssl);
 
 sockname(Sock) when is_port(Sock) ->
     inet:sockname(Sock).

@@ -183,7 +183,7 @@ ssl_connection_upgrade(SslOpts, Sock) ->
         {ok, SslSock} ->
             error_logger:info_msg("Upgraded TCP connection from ~s:~p to SSL/TLS~n", 
                 [PeerIp, PeerPort]),
-            RabbitSslSock = #rabbit_ssl_socket{tcp=Sock, ssl=SslSock},
+            RabbitSslSock = #ssl_socket{tcp=Sock, ssl=SslSock},
             start_client(RabbitSslSock);
         {error, Reason} ->
             error_logger:error_msg("Failed to upgrade TCP connection from ~s:~p to SSL~n", 

@@ -62,7 +62,7 @@
 
 -record(basic_message, {exchange_name, routing_key, content, persistent_key}).
 
--record(rabbit_ssl_socket, {tcp, ssl}).
+-record(ssl_socket, {tcp, ssl}).
 
 %%----------------------------------------------------------------------------
 
