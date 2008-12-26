@@ -427,15 +427,12 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
             end
     end;
 
-handle_method(#'basic.qos'{global = Flag = true}, _, _State) ->
-    rabbit_misc:protocol_error(not_implemented, 
-                "Global flag (~s) for basic.qos not implementented", [Flag]);
+handle_method(#'basic.qos'{global = true}, _, _State) ->
+    rabbit_misc:protocol_error(not_implemented, "global=true", []);
 
-handle_method(#'basic.qos'{prefetch_size = Size},
-              _, _State) when Size /= 0 ->
+handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
     rabbit_misc:protocol_error(not_implemented, 
-                "Pre-fetch size (~s) for basic.qos not implementented",
-                [Size]);
+                               "prefetch_size!=0 (~w)", [Size]);
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
               _, State = #ch{ limiter_pid = LimiterPid,
@@ -859,8 +856,8 @@ consumer_queues(Consumers) ->
              end].
 
 %% tell the limiter about the number of acks that have been received
-%% for messages delivered to subscribed consumers, rather than those
-%% for messages sent in a response to a basic.get
+%% for messages delivered to subscribed consumers, but not acks for
+%% messages sent in a response to a basic.get.
 notify_limiter(undefined, _Acked) ->
     ok;
 notify_limiter(LimiterPid, Acked) ->

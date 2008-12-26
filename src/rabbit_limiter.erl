@@ -179,9 +179,9 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
     case length(QList) of
         0 -> ok;
         L ->
-            %% We randomly vary the position in which each queue
-            %% appears in the list, thus ensuring that each queue has
-            %% an equal chance of being notified first.
+            %% We randomly vary the position of queues in the list,
+            %% thus ensuring that each queue has an equal chance of
+            %% being notified first.
             {L1, L2} = lists:split(random:uniform(L), QList),
             [ok = rabbit_amqqueue:unblock(Q, ChPid) || Q <- L2 ++ L1],
             ok

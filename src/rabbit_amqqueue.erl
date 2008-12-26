@@ -38,8 +38,7 @@
 -export([list/1, info/1, info/2, info_all/1, info_all/2]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
--export([notify_sent/2]).
--export([unblock/2]).
+-export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
@@ -97,7 +96,7 @@
 -spec(basic_get/3 :: (amqqueue(), pid(), bool()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
 -spec(basic_consume/8 ::
-        (amqqueue(), bool(), pid(), pid(), pid(), ctag(), bool(), any()) ->
+      (amqqueue(), bool(), pid(), pid(), pid(), ctag(), bool(), any()) ->
              'ok' | {'error', 'queue_owned_by_another_connection' |
                      'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
