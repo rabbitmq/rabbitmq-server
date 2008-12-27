@@ -61,8 +61,7 @@ async_recv(Sock, Length, Timeout) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, Timeout).
 
 close(Sock) when is_record(Sock, ssl_socket) ->
-    ssl:close(Sock#ssl_socket.ssl),
-    gen_tcp:close(Sock#ssl_socket.tcp);
+    ssl:close(Sock#ssl_socket.ssl);
 
 close(Sock) when is_port(Sock) ->
     gen_tcp:close(Sock).
