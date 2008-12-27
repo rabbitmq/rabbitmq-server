@@ -73,7 +73,7 @@ handshake(ConnectionState = #connection_state{serverhost = Host}) ->
 
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
-                    RabbitSslSock = #rabbit_ssl_socket{ssl=SslSock, tcp=Sock},
+                    RabbitSslSock = #ssl_socket{ssl=SslSock, tcp=Sock},
                     do_handshake(RabbitSslSock, ConnectionState);
                 {error, Reason} ->
                     io:format("Could not upgrade the network driver to ssl: ~p~n", [Reason]),
