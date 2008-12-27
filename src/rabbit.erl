@@ -48,7 +48,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--define(APPS, [os_mon, mnesia, crypto, rabbit]).
+-define(APPS, [os_mon, mnesia, rabbit]).
 
 %%----------------------------------------------------------------------------
 
@@ -206,7 +206,7 @@ start(normal, []) ->
                     0 ->
                         continue;
                     _Len ->
-                        ok = start_applications([ssl])
+                        ok = start_applications([crypto, ssl])
                 end,
 
                 lists:foreach(
