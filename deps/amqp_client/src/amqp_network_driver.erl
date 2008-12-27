@@ -175,7 +175,7 @@ start_ok(#connection_state{username = Username, password = Password}) ->
 start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
     put({channel, 0},{chpid, FramingPid}),
-    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, -1),
+    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
     reader_loop(Sock, undefined, undefined, undefined),
     rabbit_net:close(Sock).
 
@@ -189,11 +189,11 @@ reader_loop(Sock, Type, Channel, Length) ->
                 closed_ok ->
                     ok;
                 _ ->
-                    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, -1),
+                    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
                     reader_loop(Sock, undefined, undefined, undefined)
             end;
         {inet_async, Sock, _, {ok, <<_Type:8,_Channel:16,PayloadSize:32>>}} ->
-            {ok, _Ref} = rabbit_net:async_recv(Sock, PayloadSize + 1, -1),
+            {ok, _Ref} = rabbit_net:async_recv(Sock, PayloadSize + 1, infinity),
             reader_loop(Sock, _Type, _Channel, PayloadSize);
         {inet_async, Sock, _Ref, {error, Reason}} ->
             io:format("Socket error: ~p~n", [Reason]),
