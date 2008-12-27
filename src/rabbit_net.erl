@@ -51,16 +51,10 @@ async_recv(Sock, Length, Timeout) when is_record(Sock, ssl_socket) ->
     Ref = make_ref(),
 
 
-    Fun = fun() ->
-            case ssl:recv(Sock#ssl_socket.ssl, Length, Timeout) of
-                {ok, Data} ->
-                    Pid ! {inet_async, Sock, Ref, {ok, Data}};
-                {error, Reason} ->
-                    Pid ! {inet_async, Sock, Ref, {error, Reason}}
-            end
-    end,
+    spawn(fun() -> Pid ! {inet_async, Sock, Ref, 
+                    ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)} 
+        end),
 
-    spawn(Fun),
     {ok, Ref};
 
 async_recv(Sock, Length, Timeout) when is_port(Sock) ->
