@@ -43,19 +43,19 @@
 
 -include("rabbit.hrl").
 
-async_recv(Sock, Length, -1) when is_record(Sock, ssl_socket) ->
-    async_recv(Sock, Length, infinity);
 
 async_recv(Sock, Length, Timeout) when is_record(Sock, ssl_socket) ->
     Pid = self(),
     Ref = make_ref(),
-
 
     spawn(fun() -> Pid ! {inet_async, Sock, Ref, 
                     ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)} 
         end),
 
     {ok, Ref};
+
+async_recv(Sock, Length, infinity) when is_port(Sock) ->
+    async_recv(Sock, Length, -1);
 
 async_recv(Sock, Length, Timeout) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, Timeout).

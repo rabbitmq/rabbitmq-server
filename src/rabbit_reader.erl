@@ -317,7 +317,7 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
 
 switch_callback(OldState, NewCallback, Length) ->
     Ref = inet_op(fun () -> rabbit_net:async_recv(
-                              OldState#v1.sock, Length, -1) end),
+                              OldState#v1.sock, Length, infinity) end),
     OldState#v1{callback = NewCallback,
                 recv_ref = Ref}.
 
