@@ -31,7 +31,7 @@
 
 -module(rabbit_networking).
 
--export([start/0, start_tcp_listener/2, start_ssl_listener/2,
+-export([start/0, start_tcp_listener/2, start_ssl_listener/3,
         stop_tcp_listener/2, on_node_down/1, active_listeners/0, 
         node_listeners/1, connections/0, connection_info/1, 
         connection_info/2, connection_info_all/0, connection_info_all/1]).
@@ -51,13 +51,6 @@
         %% {nodelay, true}, % TCP_NODELAY - disable Nagle's alg.  
         %% {delay_send, true}, 
         {exit_on_close, false}
-    ]).
-
--define(RABBIT_SSL_OPTS, [
-        {verify, 0},
-        {cacertfile, "/etc/rabbitmq/cacerts.pem"},
-        {certfile, "/etc/rabbitmq/cert.pem"},
-        {keyfile, "/etc/rabbitmq/key.pem"}
     ]).
 %%----------------------------------------------------------------------------
 
@@ -125,7 +118,7 @@ start_tcp_listener(Host, Port) ->
                 transient, infinity, supervisor, [tcp_listener_sup]}),
     ok.
 
-start_ssl_listener(Host, Port) ->
+start_ssl_listener(Host, Port, SSlOpts) ->
     {IPAddress, Name} = check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
@@ -134,7 +127,7 @@ start_ssl_listener(Host, Port) ->
                  [IPAddress, Port, ?RABBIT_TCP_OPTS,
                   {?MODULE, tcp_listener_started, []},
                   {?MODULE, tcp_listener_stopped, []},
-                  {?MODULE, ssl_connection_upgrade, [?RABBIT_SSL_OPTS]}]},
+                  {?MODULE, ssl_connection_upgrade, [SSlOpts]}]},
                 transient, infinity, supervisor, [tcp_listener_sup]}),
     ok.
 

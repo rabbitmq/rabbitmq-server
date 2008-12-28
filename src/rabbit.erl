@@ -204,16 +204,18 @@ start(normal, []) ->
                 {ok, SSLListeners} = application:get_env(ssl_listeners),
                 case length(SSLListeners) of
                     0 ->
-                        continue;
+                        ok;
                     _Len ->
-                        ok = start_applications([crypto, ssl])
-                end,
+                        ok = start_applications([crypto, ssl]),
 
-                lists:foreach(
-                  fun ({Host, Port}) ->
-                          ok = rabbit_networking:start_ssl_listener(Host, Port)
-                  end,
-                  SSLListeners)
+                        {ok, SslOpts} = application:get_env(ssl_options),
+
+                        lists:foreach(
+                          fun ({Host, Port}) ->
+                                  ok = rabbit_networking:start_ssl_listener(Host, Port, SslOpts)
+                          end,
+                          SSLListeners)
+                end
         end}]
       ++ ExtraSteps),
 

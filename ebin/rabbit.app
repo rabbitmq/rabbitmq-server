@@ -52,6 +52,7 @@
   {mod, {rabbit, []}},
   {env, [{tcp_listeners, [{"0.0.0.0", 5672}]},
      {ssl_listeners, []},
+     {ssl_options, []},
 	 {extra_startup_steps, []},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
