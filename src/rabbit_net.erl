@@ -91,9 +91,11 @@ peername(Sock) when is_port(Sock) ->
 port_command(Sock, Data) when is_record(Sock, ssl_socket) ->
     case ssl:send(Sock#ssl_socket.ssl, Data) of
         ok ->
+            self() ! {inet_reply, Sock, ok},
             true;
         {error, Reason} ->
-            throw(Reason)
+            self() ! {inet_reply, Sock, {error, Reason}},
+            erlang:error(Reason)
     end;
 
 port_command(Sock, Data) when is_port(Sock) ->
