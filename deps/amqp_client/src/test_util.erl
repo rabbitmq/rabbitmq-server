@@ -224,6 +224,128 @@ basic_qos_test(Connection) ->
 basic_reject_test(Connection) ->
     lib_amqp:close_connection(Connection).
 
+
+%----------------------------------------------------------------------------
+% Unit test for the direct client
+% This just relies on the fact that a fresh Rabbit VM must consume more than
+% 0.1 pc of the system memory:
+% 0. Wait 1 minute to let memsup do stuff
+% 1. Make sure that the high watermark is set high
+% 2. Start a process to receive the pause and resume commands from the broker
+% 3. Register this as flow control notification handler
+% 4. Let the system settle for a little bit
+% 5. Set the threshold to the lowest possible value
+% 6. When the flow handler receives the pause command, it sets the watermark
+%    to a high value in order to get the broker to send the resume command
+% 7. Allow 10 secs to receive the pause and resume, otherwise timeout and fail
+channel_flow_test(Connection) ->
+    X = <<"amq.direct">>,
+    K = Payload = <<"x">>,
+    memsup:set_sysmem_high_watermark(0.99),
+    timer:sleep(1000),
+    Channel = lib_amqp:start_channel(Connection),
+    Parent = self(),
+    Child = spawn_link(
+              fun() ->
+                      receive
+                          #'channel.flow'{active = false} -> ok
+                      end,
+                      blocked = lib_amqp:publish(Channel, X, K, Payload),
+                      memsup:set_sysmem_high_watermark(0.99),
+                      receive
+                          #'channel.flow'{active = true} -> ok
+                      end,
+                      Parent ! ok
+              end),
+    amqp_channel:register_flow_handler(Channel, Child),
+    timer:sleep(1000),
+    memsup:set_sysmem_high_watermark(0.001),
+    receive
+        ok -> ok
+    after 10000 ->
+        io:format("Are you sure that you have waited 1 minute?~n"),
+        exit(did_not_receive_channel_flow)
+    end.
+
+%----------------------------------------------------------------------------
+% This is a test, albeit not a unit test, to see if the producer
+% handles the effect of being throttled.
+
+channel_flow_sync(Connection) ->
+    start_channel_flow(Connection, fun lib_amqp:publish/4).
+
+channel_flow_async(Connection) ->
+    start_channel_flow(Connection, fun lib_amqp:async_publish/4).
+
+start_channel_flow(Connection, PublishFun) ->
+    X = <<"amq.direct">>,
+    Key = uuid(),
+    Producer = spawn_link(
+        fun() ->
+            Channel = lib_amqp:start_channel(Connection),
+            Parent = self(),
+            FlowHandler = spawn_link(fun() -> cf_handler_loop(Parent) end),
+            amqp_channel:register_flow_handler(Channel, FlowHandler),
+            Payload = << <<B:8>> || B <- lists:seq(1, 10000) >>,
+            cf_producer_loop(Channel, X, Key, PublishFun, Payload, 0)
+        end),
+    Consumer = spawn_link(
+        fun() ->
+            Channel = lib_amqp:start_channel(Connection),
+            Q = lib_amqp:declare_queue(Channel),
+            lib_amqp:bind_queue(Channel, X, Q, Key),
+            Tag = lib_amqp:subscribe(Channel, Q, self()),
+            cf_consumer_loop(Channel, Tag)
+        end),
+    {Producer, Consumer}.
+
+cf_consumer_loop(Channel, Tag) ->
+    receive
+        #'basic.consume_ok'{} -> cf_consumer_loop(Channel, Tag);
+        #'basic.cancel_ok'{} -> ok;
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, _Content} ->
+             lib_amqp:ack(Channel, DeliveryTag),
+             cf_consumer_loop(Channel, Tag);
+        stop ->
+             lib_amqp:unsubscribe(Channel, Tag),
+             ok
+    end.
+
+cf_producer_loop(Channel, X, Key, PublishFun, Payload, N) 
+        when N rem 5000 =:= 0 ->
+    io:format("Producer (~p) has sent about ~p messages since it started~n",
+              [self(), N]),
+    cf_producer_loop(Channel, X, Key, PublishFun, Payload, N + 1);
+
+cf_producer_loop(Channel, X, Key, PublishFun, Payload, N) ->
+    case PublishFun(Channel, X, Key, Payload) of 
+        blocked ->
+            io:format("Producer (~p) is blocked, will go to sleep.....ZZZ~n",
+                      [self()]),
+            receive
+                resume ->
+                    io:format("Producer (~p) has woken up :-)~n", [self()]),
+                    cf_producer_loop(Channel, X, Key, 
+                                     PublishFun, Payload, N + 1)
+            end;
+        _ ->
+            cf_producer_loop(Channel, X, Key, PublishFun, Payload, N + 1)
+    end.
+    
+cf_handler_loop(Producer) ->
+    receive
+        #'channel.flow'{active = false} ->
+            io:format("Producer throttling ON~n"),
+            cf_handler_loop(Producer);
+        #'channel.flow'{active = true} ->
+            io:format("Producer throttling OFF, waking up producer (~p)~n",
+                      [Producer]),
+            Producer ! resume,
+            cf_handler_loop(Producer);
+        stop -> ok
+    end.
+%----------------------------------------------------------------------------
+
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,
                        q = <<"a.b.c">>,
