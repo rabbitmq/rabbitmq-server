@@ -94,7 +94,6 @@ port_command(Sock, Data) when is_record(Sock, ssl_socket) ->
             self() ! {inet_reply, Sock, ok},
             true;
         {error, Reason} ->
-            self() ! {inet_reply, Sock, {error, Reason}},
             erlang:error(Reason)
     end;
 
