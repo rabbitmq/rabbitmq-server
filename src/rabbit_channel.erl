@@ -111,20 +111,23 @@ init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
         consumer_mapping        = dict:new()}.
 
 handle_message({method, Method, Content}, State) ->
-    case (catch handle_method(Method, Content, State)) of
+    try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
             NewState;
         {noreply, NewState} ->
             NewState;
         stop ->
-            exit(normal);
-        {'EXIT', {amqp, Error, Explanation, none}} ->
+            exit(normal)
+    catch
+        exit:{amqp, Error, Explanation, none} ->
             terminate({amqp, Error, Explanation,
                        rabbit_misc:method_record_type(Method)},
                       State);
-        {'EXIT', Reason} ->
-            terminate(Reason, State)
+        exit:normal ->
+            terminate(normal, State);
+        _:Reason ->
+            terminate({Reason, erlang:get_stacktrace()}, State)
     end;
 
 handle_message(terminate, State) ->
