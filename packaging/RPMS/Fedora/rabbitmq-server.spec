@@ -25,14 +25,8 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
-%ifarch x86_64
-  %define _defaultlibdir /usr/lib64
-%else
-  %define _defaultlibdir /usr/lib
-%endif
-
-%define _erllibdir %{_defaultlibdir}/erlang/lib
-%define _rabbitbindir %{_defaultlibdir}/rabbitmq/bin
+%define _erllibdir %{_libdir}/erlang/lib
+%define _rabbitbindir %{_libdir}/rabbitmq/bin
 
 %define _maindir %{buildroot}%{_erllibdir}/rabbitmq_server-%{version}
 
