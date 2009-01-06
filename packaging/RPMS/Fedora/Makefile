@@ -20,8 +20,8 @@ prepare:
 
 server: prepare
 	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --target i386
-	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --define '_arch x86_64' \
-		--define '_defaultdocdir /usr/share/doc' --target x86_64
+	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) --define '_libdir /usr/lib64' \
+		--define '_arch x86_64' --define '_defaultdocdir /usr/share/doc' --target x86_64
 
 clean:	
 	rm -rf SOURCES SPECS RPMS SRPMS BUILD tmp
