@@ -40,6 +40,9 @@
 
 -define(MEMSUP_CHECK_INTERVAL, 1000).
 
+%% OSes on which we know memory alarms to be trustworthy
+-define(SUPPORTED_OS, [{unix, linux}]).
+
 -record(alarms, {alertees, system_memory_high_watermark = false}).
 
 %%----------------------------------------------------------------------------
@@ -47,7 +50,7 @@
 -ifdef(use_specs).
 
 -type(mfa_tuple() :: {atom(), atom(), list()}).
--spec(start/1 :: (bool()) -> 'ok').
+-spec(start/1 :: (bool() | 'auto') -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), mfa_tuple()) -> 'ok').
              
@@ -56,9 +59,14 @@
 %%----------------------------------------------------------------------------
 
 start(MemoryAlarms) ->
-    ok = alarm_handler:add_alarm_handler(?MODULE, [MemoryAlarms]),
+    EnableAlarms = case MemoryAlarms of
+                       true  -> true;
+                       false -> false;
+                       auto  -> lists:member(os:type(), ?SUPPORTED_OS)
+                   end,
+    ok = alarm_handler:add_alarm_handler(?MODULE, [EnableAlarms]),
     case whereis(memsup) of
-        undefined -> if MemoryAlarms -> ok = start_memsup(),
+        undefined -> if EnableAlarms -> ok = start_memsup(),
                                         ok = adjust_memsup_interval();
                         true         -> ok
                      end;

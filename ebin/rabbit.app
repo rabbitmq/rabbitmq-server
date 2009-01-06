@@ -54,4 +54,4 @@
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},
-	 {memory_alarms, false}]}]}.
+	 {memory_alarms, auto}]}]}.
