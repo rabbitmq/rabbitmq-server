@@ -55,7 +55,7 @@ mkdir -p %{buildroot}/var/log/rabbitmq
 mkdir -p %{buildroot}%{_initrddir}
 
 #Copy all necessary lib files etc.
-install -m 0755 %SOURCE1 %{buildroot}/%{_initrddir}/rabbitmq-server
+install -m 0755 %SOURCE1 %{buildroot}%{_initrddir}/rabbitmq-server
 chmod 0755 %{buildroot}%{_initrddir}/rabbitmq-server
 %ifarch x86_64
     sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_initrddir}/rabbitmq-server
