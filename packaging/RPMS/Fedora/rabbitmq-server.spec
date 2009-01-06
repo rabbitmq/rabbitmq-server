@@ -58,13 +58,13 @@ mkdir -p %{buildroot}/etc/rc.d/init.d/
 install -m 0755 %SOURCE1 %{buildroot}/etc/rc.d/init.d/rabbitmq-server
 chmod 0755 %{buildroot}/etc/rc.d/init.d/rabbitmq-server
 %ifarch x86_64
-    sed -i 's/\/usr\/lib\//\/usr\/lib64\//' %{buildroot}/etc/rc.d/init.d/rabbitmq-server
+    sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}/etc/rc.d/init.d/rabbitmq-server
 %endif
 
 mkdir -p %{buildroot}%{_sbindir}
 install -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmqctl
 %ifarch x86_64
-    sed -i 's/\/usr\/lib\//\/usr\/lib64\//' %{buildroot}%{_sbindir}/rabbitmqctl
+    sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_sbindir}/rabbitmqctl
 %endif
 
 mkdir -p %{buildroot}/etc/logrotate.d
