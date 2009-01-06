@@ -224,7 +224,6 @@ basic_qos_test(Connection) ->
 basic_reject_test(Connection) ->
     lib_amqp:close_connection(Connection).
 
-
 %----------------------------------------------------------------------------
 % Unit test for the direct client
 % This just relies on the fact that a fresh Rabbit VM must consume more than
@@ -331,7 +330,7 @@ cf_producer_loop(Channel, X, Key, PublishFun, Payload, N) ->
         _ ->
             cf_producer_loop(Channel, X, Key, PublishFun, Payload, N + 1)
     end.
-    
+
 cf_handler_loop(Producer) ->
     receive
         #'channel.flow'{active = false} ->
@@ -344,7 +343,26 @@ cf_handler_loop(Producer) ->
             cf_handler_loop(Producer);
         stop -> ok
     end.
-%----------------------------------------------------------------------------
+
+%---------------------------------------------------------------------------
+% This tests whether RPC over AMQP produces the same result as invoking the
+% same argument against the same underlying gen_server instance.
+rpc_test(Connection) ->
+    Q = uuid(),
+    Fun = fun(X) -> X + 1 end,
+    RPCHandler = fun(X) -> term_to_binary(Fun(binary_to_term(X))) end,
+    Server = amqp_rpc_server:start(Connection, Q, RPCHandler),
+    Client = amqp_rpc_client:start(Connection, Q),
+    Input = 1,
+    Reply = amqp_rpc_client:call(Client, term_to_binary(Input)),
+    Expected = Fun(Input),
+    DecodedReply = binary_to_term(Reply),
+    ?assertMatch(Expected, DecodedReply),
+    amqp_rpc_client:stop(Client),
+    amqp_rpc_server:stop(Server),
+    ok.
+
+%---------------------------------------------------------------------------
 
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,

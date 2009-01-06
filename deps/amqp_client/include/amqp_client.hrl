@@ -50,21 +50,13 @@
                         flow_handler_pid,
                         consumers = dict:new()}).
 
--record(rpc_client_state, {broker_config,
-                           consumer_tag,
+-record(rpc_client_state, {channel,
+                           reply_queue,
+                           exchange,
+                           routing_key,
                            continuations = dict:new(),
-                           correlation_id = 0,
-                           type_mapping}).
+                           correlation_id = 0}).
 
--record(rpc_handler_state, {broker_config,
-                            server_pid,
-                            server_name,
-                            type_mapping
-                            }).
-
--record(broker_config, {channel_pid,
-                        exchange,
-                        routing_key,
-                        bind_key,
-                        queue}).
+-record(rpc_server_state, {channel,
+                           handler}).
 
