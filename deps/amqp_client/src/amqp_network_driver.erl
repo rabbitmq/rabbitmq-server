@@ -173,7 +173,6 @@ reader_loop(Sock, Type, Channel, Length) ->
             {ok, _Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
             reader_loop(Sock, _Type, _Channel, PayloadSize);
         {inet_async, Sock, _Ref, {error, closed}} ->
-            io:format("Socked closed ~n"),
             ok;
         {inet_async, Sock, _Ref, {error, Reason}} ->
             io:format("Socket error: ~p~n", [Reason]),
