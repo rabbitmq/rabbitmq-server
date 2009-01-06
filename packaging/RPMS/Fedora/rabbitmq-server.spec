@@ -57,15 +57,11 @@ mkdir -p %{buildroot}%{_initrddir}
 #Copy all necessary lib files etc.
 install -m 0755 %SOURCE1 %{buildroot}%{_initrddir}/rabbitmq-server
 chmod 0755 %{buildroot}%{_initrddir}/rabbitmq-server
-%ifarch x86_64
-    sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_initrddir}/rabbitmq-server
-%endif
+sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_initrddir}/rabbitmq-server
 
 mkdir -p %{buildroot}%{_sbindir}
 install -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmqctl
-%ifarch x86_64
-    sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_sbindir}/rabbitmqctl
-%endif
+sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_sbindir}/rabbitmqctl
 
 mkdir -p %{buildroot}/etc/logrotate.d
 install -m 0644 %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
