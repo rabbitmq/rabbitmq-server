@@ -34,6 +34,8 @@
 -export([do/2,do/3]).
 -export([handle_broker_close/1]).
 
+-define(SOCKET_CLOSING_TIMEOUT, 1000).
+
 %---------------------------------------------------------------------------
 % Driver API Methods
 %---------------------------------------------------------------------------
@@ -86,7 +88,7 @@ close_connection(Close = #'connection.close'{}, From,
         5000 ->
             exit(timeout_on_exit)
     end,
-    Reader ! close.
+    erlang:send_after(?SOCKET_CLOSING_TIMEOUT, Reader, close).
 
 do(Writer, Method) -> rabbit_writer:send_command(Writer, Method).
 do(Writer, Method, Content) -> rabbit_writer:send_command(Writer, Method, Content).
