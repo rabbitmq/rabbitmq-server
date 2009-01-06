@@ -83,7 +83,7 @@ rm -f %{_builddir}/filelist.%{name}.rpm
 echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm 
 (cd %{buildroot}; \
     find . -type f ! -regex '\./etc.*' \
-    	! -regex '\.\(%{_rabbit_erllibdir}\|%{_rabbit_libdir}\).*' \
+        ! -regex '\.\(%{_rabbit_erllibdir}\|%{_rabbit_libdir}\).*' \
         | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
 
 %post
