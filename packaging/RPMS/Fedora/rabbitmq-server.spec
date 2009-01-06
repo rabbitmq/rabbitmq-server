@@ -25,14 +25,8 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
-%ifarch x86_64
-  %define _defaultlibdir /usr/lib64
-%else
-  %define _defaultlibdir /usr/lib
-%endif
-
-%define _erllibdir %{_defaultlibdir}/erlang/lib
-%define _rabbitbindir %{_defaultlibdir}/rabbitmq/bin
+%define _erllibdir %{_libdir}/erlang/lib
+%define _rabbitbindir %{_libdir}/rabbitmq/bin
 
 %define _maindir %{buildroot}%{_erllibdir}/rabbitmq_server-%{version}
 
@@ -63,15 +57,11 @@ mkdir -p %{buildroot}/etc/rc.d/init.d/
 #Copy all necessary lib files etc.
 install -m 0755 %SOURCE1 %{buildroot}/etc/rc.d/init.d/rabbitmq-server
 chmod 0755 %{buildroot}/etc/rc.d/init.d/rabbitmq-server
-%ifarch x86_64
-    sed -i 's/\/usr\/lib\//\/usr\/lib64\//' %{buildroot}/etc/rc.d/init.d/rabbitmq-server
-%endif
+sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}/etc/rc.d/init.d/rabbitmq-server
 
 mkdir -p %{buildroot}%{_sbindir}
 install -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmqctl
-%ifarch x86_64
-    sed -i 's/\/usr\/lib\//\/usr\/lib64\//' %{buildroot}%{_sbindir}/rabbitmqctl
-%endif
+sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_sbindir}/rabbitmqctl
 
 mkdir -p %{buildroot}/etc/logrotate.d
 install -m 0644 %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
