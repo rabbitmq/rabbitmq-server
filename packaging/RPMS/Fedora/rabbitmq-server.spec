@@ -1,6 +1,6 @@
 Name: rabbitmq-server
 Version: %%VERSION%%
-Release: 1
+Release: 1%%RELEASE_OS%%
 License: MPLv1.1
 Group: Development/Libraries
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.gz
@@ -17,8 +17,8 @@ Requires: erlang, logrotate
 Packager: Hubert Plociniczak <hubert@lshift.net>
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
-Requires(post): chkconfig
-Requires(pre): chkconfig initscripts
+Requires(post): %%REQUIRES%%
+Requires(pre): %%REQUIRES%%
 
 %description
 RabbitMQ is an implementation of AMQP, the emerging standard for high
@@ -52,13 +52,13 @@ make install TARGET_DIR=%{_maindir} \
 
 mkdir -p %{buildroot}/var/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}/var/log/rabbitmq
-mkdir -p %{buildroot}/etc/rc.d/init.d/
+mkdir -p %{buildroot}%{_initrddir}
 
 #Copy all necessary lib files etc.
-install -m 0755 %SOURCE1 %{buildroot}/etc/rc.d/init.d/rabbitmq-server
-chmod 0755 %{buildroot}/etc/rc.d/init.d/rabbitmq-server
+install -m 0755 %SOURCE1 %{buildroot}/%{_initrddir}/rabbitmq-server
+chmod 0755 %{buildroot}%{_initrddir}/rabbitmq-server
 %ifarch x86_64
-    sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}/etc/rc.d/init.d/rabbitmq-server
+    sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_initrddir}/rabbitmq-server
 %endif
 
 mkdir -p %{buildroot}%{_sbindir}
@@ -110,7 +110,7 @@ fi
 %defattr(-,root,root,-)
 %dir /var/lib/rabbitmq
 %dir /var/log/rabbitmq
-/etc/rc.d/init.d/rabbitmq-server
+%{_initrddir}/rabbitmq-server
 %config(noreplace) /etc/logrotate.d/rabbitmq-server
 %doc LICENSE LICENSE-MPL-RabbitMQ INSTALL
 

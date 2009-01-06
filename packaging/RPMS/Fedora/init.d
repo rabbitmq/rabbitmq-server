@@ -29,9 +29,6 @@ LOCK_FILE=/var/lock/subsys/$NAME
 
 test -x $DAEMON || exit 0
 
-# source function library
-. /etc/rc.d/init.d/functions
-
 # Include rabbitmq defaults if available
 if [ -f /etc/default/rabbitmq ] ; then
 	. /etc/default/rabbitmq
