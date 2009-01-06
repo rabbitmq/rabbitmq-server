@@ -25,10 +25,10 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
-%define _erllibdir %{_libdir}/erlang/lib
-%define _rabbitbindir %{_libdir}/rabbitmq/bin
+%define _rabbit_erllibdir %{_libdir}/erlang/lib/rabbitmq_server-%{version}
+%define _rabbit_libdir %{_libdir}/rabbitmq
 
-%define _maindir %{buildroot}%{_erllibdir}/rabbitmq_server-%{version}
+%define _maindir %{buildroot}%{_rabbit_erllibdir}
 
 %pre
 if [ $1 -gt 1 ]; then
@@ -47,7 +47,7 @@ make
 rm -rf %{buildroot}
 
 make install TARGET_DIR=%{_maindir} \
-             SBIN_DIR=%{buildroot}%{_rabbitbindir} \
+             SBIN_DIR=%{buildroot}%{_rabbit_libdir}/bin \
              MAN_DIR=%{buildroot}%{_mandir}
 
 mkdir -p %{buildroot}/var/lib/rabbitmq/mnesia
@@ -71,8 +71,10 @@ rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 #Build the list of files
 rm -f %{_builddir}/filelist.%{name}.rpm
 echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm 
-(cd %{buildroot}; find . ! -regex '\./etc.*' \
-       -type f | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
+(cd %{buildroot}; \
+    find . -type f ! -regex '\./etc.*' \
+        ! -regex '\.\(%{_rabbit_erllibdir}\|%{_rabbit_libdir}\).*' \
+        | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
 
 %post
 # create rabbitmq group
@@ -106,6 +108,8 @@ fi
 %defattr(-,root,root,-)
 %dir /var/lib/rabbitmq
 %dir /var/log/rabbitmq
+%{_rabbit_erllibdir}
+%{_rabbit_libdir}
 %{_initrddir}/rabbitmq-server
 %config(noreplace) /etc/logrotate.d/rabbitmq-server
 %doc LICENSE LICENSE-MPL-RabbitMQ INSTALL
