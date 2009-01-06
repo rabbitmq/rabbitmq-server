@@ -166,16 +166,15 @@ start_writer(Sock, Channel) ->
 reader_loop(Sock, Type, Channel, Length) ->
     receive
         {inet_async, Sock, _, {ok, <<Payload:Length/binary,?FRAME_END>>} } ->
-            case handle_frame(Type, Channel, Payload) of
-                closed_ok ->
-                    ok;
-                _ ->
-                    {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
-                    reader_loop(Sock, undefined, undefined, undefined)
-            end;
+            handle_frame(Type, Channel, Payload),
+            {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
+            reader_loop(Sock, undefined, undefined, undefined);
         {inet_async, Sock, _, {ok, <<_Type:8,_Channel:16,PayloadSize:32>>}} ->
             {ok, _Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
             reader_loop(Sock, _Type, _Channel, PayloadSize);
+        {inet_async, Sock, _Ref, {error, closed}} ->
+            io:format("Socked closed ~n"),
+            ok;
         {inet_async, Sock, _Ref, {error, Reason}} ->
             io:format("Socket error: ~p~n", [Reason]),
             exit({socket_error, Reason});
@@ -206,15 +205,8 @@ handle_frame(Type, Channel, Payload) ->
     case rabbit_reader:analyze_frame(Type, Payload) of
         heartbeat when Channel /= 0 ->
             rabbit_misc:die(frame_error);
-        heartbeat ->
-            heartbeat;
         trace when Channel /= 0 ->
             rabbit_misc:die(frame_error);
-        trace ->
-            trace;
-        {method,'connection.close_ok',Content} ->
-            send_frame(Channel, {method,'connection.close_ok',Content}),
-            closed_ok;
         AnalyzedFrame ->
             send_frame(Channel, AnalyzedFrame)
     end.
