@@ -50,6 +50,7 @@
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
+-export([start_applications/1, stop_applications/1]).
 
 -import(mnesia).
 -import(lists).
@@ -108,6 +109,8 @@
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'true').
+-spec(start_applications/1 :: ([atom()]) -> 'ok').
+-spec(stop_applications/1 :: ([atom()]) -> 'ok').
 
 -endif.
 
@@ -398,3 +401,32 @@ format_stderr(Fmt, Args) ->
     Port = open_port({fd, 0, 2}, [out]),
     port_command(Port, io_lib:format(Fmt, Args)),
     port_close(Port).
+
+manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
+    Iterate(fun (App, Acc) ->
+                    case Do(App) of
+                        ok -> [App | Acc];
+                        {error, {SkipError, _}} -> Acc;
+                        {error, Reason} ->
+                            lists:foreach(Undo, Acc),
+                            throw({error, {ErrorTag, App, Reason}})
+                    end
+            end, [], Apps),
+    ok.
+
+start_applications(Apps) ->
+    manage_applications(fun lists:foldl/3,
+                        fun application:start/1,
+                        fun application:stop/1,
+                        already_started,
+                        cannot_start_application,
+                        Apps).
+
+stop_applications(Apps) ->
+    manage_applications(fun lists:foldr/3,
+                        fun application:stop/1,
+                        fun application:start/1,
+                        not_started,
+                        cannot_stop_application,
+                        Apps).
+
