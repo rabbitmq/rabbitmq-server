@@ -30,10 +30,9 @@
                            vhostpath,
                            reader_pid,
                            channel0_writer_pid,
-                           direct,
                            channel_max,
                            heartbeat,
-                           on_close_handler,
+                           driver,
                            channels = dict:new() }).
 
 -record(channel_state, {number,
