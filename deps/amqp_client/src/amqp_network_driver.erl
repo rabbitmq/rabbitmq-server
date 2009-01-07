@@ -209,6 +209,11 @@ handle_frame(Type, Channel, Payload) ->
             rabbit_misc:die(frame_error);
         trace when Channel /= 0 ->
             rabbit_misc:die(frame_error);
+        %% Match heartbeats and trace frames, but don't do anything with them
+        heartbeat ->
+            heartbeat;
+        trace ->
+            trace;
         {method,'connection.close_ok',Content} ->
             send_frame(Channel, {method, 'connection.close_ok', Content}),
             closed_ok;
