@@ -3,7 +3,6 @@
 %%
 %% 1) the module name is gen_server2
 %%
-%%
 %% 2) more efficient handling of selective receives in callbacks
 %% gen_server2 processes drain their message queue into an internal
 %% buffer before invoking any callback module functions. Messages are
@@ -12,6 +11,10 @@
 %% buffer and the real message queue.
 %% As a result of the draining, any selective receive invoked inside a
 %% callback is less likely to have to scan a large message queue.
+%%
+%% 3) gen_server2:cast is guaranteed to be order-preserving
+%% The original code could reorder messages when communicating with a
+%% process on a remote node that was not currently connected.
 %%
 %% All modifications are (C) 2009 LShift Ltd.
 
@@ -360,12 +363,7 @@ process_msg(Parent, Name, State, Mod, Time, Queue, Debug, Msg) ->
 %%% Send/recive functions
 %%% ---------------------------------------------------
 do_send(Dest, Msg) ->
-    case catch erlang:send(Dest, Msg, [noconnect]) of
-	noconnect ->
-	    spawn(erlang, send, [Dest,Msg]);
-	Other ->
-	    Other
-    end.
+    catch erlang:send(Dest, Msg).
 
 do_multi_call(Nodes, Name, Req, infinity) ->
     Tag = make_ref(),
