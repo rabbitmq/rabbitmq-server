@@ -45,9 +45,11 @@
 start(User,Password) -> start(User,Password,false).
 start(User,Password,ProcLink) when is_boolean(ProcLink) ->
     Handshake = fun amqp_direct_driver:handshake/1,
+    BrokerCloseHandler = fun amqp_direct_driver:handle_broker_close/1,
     InitialState = #connection_state{username = User,
                                      password = Password,
-                                     vhostpath = <<"/">>},
+                                     vhostpath = <<"/">>,
+                                     on_close_handler = BrokerCloseHandler},
     {ok, Pid} = start_internal(InitialState, Handshake,ProcLink),
     {Pid, direct};
 
@@ -56,13 +58,15 @@ start(User,Password,Host) -> start(User,Password,Host,<<"/">>,false).
 start(User,Password,Host,VHost) -> start(User,Password,Host,VHost,false).
 start(User,Password,Host,VHost,ProcLink) ->
     Handshake = fun amqp_network_driver:handshake/1,
+    BrokerCloseHandler = fun amqp_network_driver:handle_broker_close/1,
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      serverhost = Host,
-                                     vhostpath = VHost},
+                                     vhostpath = VHost,
+                                     on_close_handler = BrokerCloseHandler},
     {ok, Pid} = start_internal(InitialState, Handshake,ProcLink),
     {Pid, network}.
-    
+
 start_link(User,Password) -> start(User,Password,true).
 start_link(User,Password,Host) -> start(User,Password,Host,<<"/">>,true).
 start_link(User,Password,Host,VHost) -> start(User,Password,Host,VHost,true).
@@ -199,6 +203,18 @@ handle_call({Mode, Close = #'connection.close'{}}, From, State) ->
 
 handle_cast(_Message, State) ->
     {noreply, State}.
+
+%---------------------------------------------------------------------------
+% Handle forced close from the broker
+%---------------------------------------------------------------------------
+
+handle_info({method, #'connection.close'{reply_code = Code,
+                                         reply_text = Text},
+                                 _Content}, 
+            State = #connection_state{on_close_handler = OnCloseHandler}) ->
+    io:format("Broker forced connection: ~p -> ~p~n", [Code, Text]),
+    OnCloseHandler(State),
+    {stop, normal, State};
 
 %---------------------------------------------------------------------------
 % Trap exits

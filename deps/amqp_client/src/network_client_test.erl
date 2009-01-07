@@ -59,6 +59,9 @@ queue_unbind_test() ->
 command_serialization_test() ->
   test_util:command_serialization_test(new_connection()).
 
+teardown_test() ->
+    test_util:teardown_test(new_connection()).
+
 rpc_test() ->
     test_util:rpc_test(new_connection()).
 
