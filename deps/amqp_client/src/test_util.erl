@@ -381,13 +381,13 @@ setup_publish(Channel, #publish{routing_key = RoutingKey,
     lib_amqp:publish(Channel, X, RoutingKey, Payload),
     {ok, Q}.
 
-teardown_test(Connection = {ConnectionPid, _Mode}) ->
+teardown_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
     ?assertMatch(true, is_process_alive(Channel)),
-    ?assertMatch(true, is_process_alive(ConnectionPid)),
+    ?assertMatch(true, is_process_alive(Connection)),
     lib_amqp:teardown(Connection, Channel),
     ?assertMatch(false, is_process_alive(Channel)),
-    ?assertMatch(false, is_process_alive(ConnectionPid)).
+    ?assertMatch(false, is_process_alive(Connection)).
 
 setup_exchange(Channel, Q, X, Binding) ->
     lib_amqp:declare_exchange(Channel, X, <<"topic">>),
