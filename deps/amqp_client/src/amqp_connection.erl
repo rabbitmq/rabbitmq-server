@@ -90,9 +90,9 @@ close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close).
 % Internal plumbing
 %---------------------------------------------------------------------------
 
-%% Starts a new channel process, invokes the correct driver (network or direct)
-%% to perform any environment specific channel setup and starts the
-%% AMQP ChannelOpen handshake.
+%% Starts a new channel process, invokes the correct driver 
+%% (network or direct) to perform any environment specific channel setup and
+%% starts the AMQP ChannelOpen handshake.
 handle_open_channel({ChannelNumber, OutOfBand},
                     #connection_state{driver = Driver} = State) ->
     {ChannelPid, Number, NewState} = start_channel(ChannelNumber, State),
@@ -108,10 +108,10 @@ start_channel(ChannelNumber,
     ChannelState =
         #channel_state{
             parent_connection = self(),
-            number = Number  = assign_channel_number(ChannelNumber, State),
-            close_fun        = fun(X)       -> Driver:close_channel(X) end,
-            do2              = fun(X, Y)    -> Driver:do(X, Y) end,
-            do3              = fun(X, Y, Z) -> Driver:do(X, Y, Z) end,
+            number = Number   = assign_channel_number(ChannelNumber, State),
+            close_fun         = fun(X)       -> Driver:close_channel(X) end,
+            do2               = fun(X, Y)    -> Driver:do(X, Y) end,
+            do3               = fun(X, Y, Z) -> Driver:do(X, Y, Z) end,
             reader_pid = ReaderPid,
             writer_pid = WriterPid},
     process_flag(trap_exit, true),
@@ -200,8 +200,7 @@ handle_cast(_Message, State) ->
 %---------------------------------------------------------------------------
 
 handle_info({method, #'connection.close'{reply_code = Code,
-                                         reply_text = Text},
-                                 _Content}, 
+                                         reply_text = Text}, _Content},
             State = #connection_state{driver = Driver}) ->
     io:format("Broker forced connection: ~p -> ~p~n", [Code, Text]),
     Driver:handle_broker_close(State),
