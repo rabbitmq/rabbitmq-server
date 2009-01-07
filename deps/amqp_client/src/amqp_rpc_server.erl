@@ -54,17 +54,12 @@ stop(Pid) ->
 
 init([Connection, Queue, Fun]) ->
     Channel = lib_amqp:start_channel(Connection),
-    lib_amqp:declare_queue(Channel, Queue),
-    Tag = lib_amqp:subscribe(Channel, Queue, self()),
-    State = #rpc_server_state{channel = Channel,
-                              consumer_tag = Tag,
-                              handler = Fun},
-    {ok, State}.
+    lib_amqp:declare_private_queue(Channel, Queue),
+    lib_amqp:subscribe(Channel, Queue, self()),
+    {ok, #rpc_server_state{channel = Channel, handler = Fun} }.
 
-handle_info(shutdown, State = #rpc_server_state{channel = Channel,
-                                                consumer_tag = Tag}) ->
-    Reply = lib_amqp:unsubscribe(Channel, Tag),
-    {noreply, Reply, State};
+handle_info(shutdown, State) ->
+    {stop, normal, State};
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
@@ -93,7 +88,9 @@ handle_call(stop, _From, State) ->
 handle_cast(_Message, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+% Closes the channel this gen_server instance started
+terminate(_Reason, #rpc_server_state{channel = Channel}) ->
+    lib_amqp:close_channel(Channel),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

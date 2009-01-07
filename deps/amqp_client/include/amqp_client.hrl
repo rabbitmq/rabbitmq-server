@@ -51,7 +51,6 @@
                         consumers = dict:new()}).
 
 -record(rpc_client_state, {channel,
-                           consumer_tag,
                            reply_queue,
                            exchange,
                            routing_key,
@@ -59,6 +58,5 @@
                            correlation_id = 0}).
 
 -record(rpc_server_state, {channel,
-                           consumer_tag,
                            handler}).
 
