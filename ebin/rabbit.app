@@ -19,6 +19,7 @@
              rabbit_framing_channel,
              rabbit_framing,
              rabbit_heartbeat,
+             rabbit_limiter,
              rabbit_load,
              rabbit_log,
              rabbit_memsup_linux,
