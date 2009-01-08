@@ -39,9 +39,12 @@ ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 #all: $(EBIN_DIR)/rabbit.boot
 all: $(TARGETS)
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit.hrl
+$(EBIN_DIR)/gen_server2.beam: $(SOURCE_DIR)/gen_server2.erl
 	erlc $(ERLC_OPTS) $<
-#	ERLC_EMULATOR="erl -smp" erlc $(ERLC_OPTS) $<
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit.hrl $(EBIN_DIR)/gen_server2.beam
+	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
+#	ERLC_EMULATOR="erl -smp" erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_PATH) > $@
