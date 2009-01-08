@@ -31,7 +31,7 @@
 
 -module(rabbit_limiter).
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -70,12 +70,12 @@ start_link(ChPid) ->
 shutdown(undefined) ->
     ok;
 shutdown(LimiterPid) ->
-    gen_server:cast(LimiterPid, shutdown).
+    gen_server2:cast(LimiterPid, shutdown).
 
 limit(undefined, 0) ->
     ok;
 limit(LimiterPid, PrefetchCount) ->
-    gen_server:cast(LimiterPid, {limit, PrefetchCount}).
+    gen_server2:cast(LimiterPid, {limit, PrefetchCount}).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
@@ -84,18 +84,18 @@ can_send(undefined, _QPid) ->
 can_send(LimiterPid, QPid) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
-      fun () -> gen_server:call(LimiterPid, {can_send, QPid}) end).
+      fun () -> gen_server2:call(LimiterPid, {can_send, QPid}) end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
 ack(undefined, _Count) -> ok;
-ack(LimiterPid, Count) -> gen_server:cast(LimiterPid, {ack, Count}).
+ack(LimiterPid, Count) -> gen_server2:cast(LimiterPid, {ack, Count}).
 
 register(undefined, _QPid) -> ok;
-register(LimiterPid, QPid) -> gen_server:cast(LimiterPid, {register, QPid}).
+register(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {register, QPid}).
 
 unregister(undefined, _QPid) -> ok;
-unregister(LimiterPid, QPid) -> gen_server:cast(LimiterPid, {unregister, QPid}).
+unregister(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {unregister, QPid}).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
