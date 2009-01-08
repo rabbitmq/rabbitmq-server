@@ -33,7 +33,9 @@
 -export([basic_properties/0, protocol_header/0]).
 
 basic_properties() ->
-    #'P_basic'{content_type = <<"application/octet-stream">>, delivery_mode = 1, priority = 0}.
+    #'P_basic'{content_type = <<"application/octet-stream">>,
+               delivery_mode = 1,
+               priority = 0}.
 
 protocol_header() ->
     <<"AMQP", 1, 1, ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR>>.

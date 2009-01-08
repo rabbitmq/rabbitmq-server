@@ -32,15 +32,16 @@
 
 -behaviour(gen_server).
 
--export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
+-export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
+         handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
 -export([subscribe/3]).
 -export([register_direct_peer/2]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
 
-%% This diagram shows the interaction between the different component processes
-%% in an AMQP client scenario.
+%% This diagram shows the interaction between the different component
+%% processes in an AMQP client scenario.
 %%
 %%                             message* / reply*        +-------+
 %%                            +----------------------   | queue |
@@ -62,16 +63,17 @@
 %%       |
 %% [consumer tag --> consumer pid]
 %%
-%% * These notifications are processed asynchronously via handle_info/2 callbacks
+%% These notifications are processed asynchronously via
+%% handle_info/2 callbacks
 
-%---------------------------------------------------------------------------
-% AMQP Channel API methods
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
+%% AMQP Channel API methods
+%%---------------------------------------------------------------------------
 
 %% Generic AMQP RPC mechanism that expects a pseudo synchronous response
 call(Channel, Method) ->
     gen_server:call(Channel, {call, Method}).
-    
+
 %% Generic AMQP send mechanism with content
 call(Channel, Method, Content) ->
     gen_server:call(Channel, {call, Method, Content}).
@@ -84,18 +86,18 @@ cast(Channel, Method) ->
 cast(Channel, Method, Content) ->
     gen_server:cast(Channel, {cast, Method, Content}).
 
-%---------------------------------------------------------------------------
-% Consumer registration
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
+%% Consumer registration
+%%---------------------------------------------------------------------------
 
 %% Registers a consumer pid with the channel
 subscribe(Channel, BasicConsume = #'basic.consume'{}, Consumer) ->
     gen_server:call(Channel, {BasicConsume, Consumer}).
 
 
-%---------------------------------------------------------------------------
-% Direct peer registration
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
+%% Direct peer registration
+%%---------------------------------------------------------------------------
 
 %% Registers the direct channel peer with the state of this channel.
 %% This registration occurs after the amqp_channel gen_server instance
@@ -116,15 +118,15 @@ register_return_handler(Channel, ReturnHandler) ->
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
-%---------------------------------------------------------------------------
-% Internal plumbing
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
+%% Internal plumbing
+%%---------------------------------------------------------------------------
 
 rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
                                                   rpc_requests = RequestQueue,
                                                   do2 = Do2}) ->
     % Enqueue the incoming RPC request to serialize RPC dispatching
-    NewRequestQueue = queue:in({From,Method}, RequestQueue),
+    NewRequestQueue = queue:in({From, Method}, RequestQueue),
     NewState = State#channel_state{rpc_requests = NewRequestQueue},
     case queue:len(NewRequestQueue) of
         1 ->
@@ -134,9 +136,10 @@ rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
         end,
     {noreply, NewState}.
 
-rpc_bottom_half(#'channel.close'{reply_code = ReplyCode, 
-                                 reply_text = ReplyText},State) ->
-    io:format("Channel received close from peer, code: ~p , message: ~p~n",[ReplyCode,ReplyText]),
+rpc_bottom_half(#'channel.close'{reply_code = ReplyCode,
+                                 reply_text = ReplyText}, State) ->
+    io:format("Channel received close from peer, code: ~p , message: ~p~n",
+              [ReplyCode,ReplyText]),
     NewState = channel_cleanup(State),
     {stop, normal, NewState};
 
@@ -145,9 +148,9 @@ rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                                               do2 = Do2}) ->
     NewRequestQueue =
         case queue:out(RequestQueue) of
-            {empty, {[],[]}}        -> exit(empty_rpc_bottom_half);
-            {{value, {From, _}}, Q} -> gen_server:reply(From, Reply),
-                                       Q
+            {empty, {[], []}}        -> exit(empty_rpc_bottom_half);
+            {{value, {From, _}}, Q}  -> gen_server:reply(From, Reply),
+                                        Q
         end,
     case queue:is_empty(NewRequestQueue) of
         true  -> ok;
@@ -163,15 +166,18 @@ resolve_consumer(_ConsumerTag, #channel_state{consumers = []}) ->
 resolve_consumer(ConsumerTag, #channel_state{consumers = Consumers}) ->
     dict:fetch(ConsumerTag, Consumers).
 
-register_consumer(ConsumerTag, Consumer, State = #channel_state{consumers = Consumers0}) ->
+register_consumer(ConsumerTag, Consumer,
+                  State = #channel_state{consumers = Consumers0}) ->
     Consumers1 = dict:store(ConsumerTag, Consumer, Consumers0),
     State#channel_state{consumers = Consumers1}.
 
-unregister_consumer(ConsumerTag, State = #channel_state{consumers = Consumers0}) ->
+unregister_consumer(ConsumerTag,
+                    State = #channel_state{consumers = Consumers0}) ->
     Consumers1 = dict:erase(ConsumerTag, Consumers0),
     State#channel_state{consumers = Consumers1}.
 
-shutdown_writer(State = #channel_state{close_fun = CloseFun, writer_pid = WriterPid}) ->
+shutdown_writer(State = #channel_state{close_fun = CloseFun,
+                                       writer_pid = WriterPid}) ->
     CloseFun(WriterPid),
     State.
 
@@ -193,41 +199,44 @@ return_handler(State = #channel_state{return_handler_pid = undefined}) ->
 return_handler(State = #channel_state{return_handler_pid = ReturnHandler}) ->
     {ReturnHandler, State}.
 
-handle_method(BasicConsumeOk = #'basic.consume_ok'{consumer_tag = ConsumerTag},
-                        State = #channel_state{anon_sub_requests = Anon,
-                                               tagged_sub_requests = Tagged}) ->
+handle_method(ConsumeOk = #'basic.consume_ok'{consumer_tag = ConsumerTag},
+              State = #channel_state{anon_sub_requests = Anon,
+                                     tagged_sub_requests = Tagged}) ->
     {_From, Consumer, State0} =
-        case dict:find(ConsumerTag,Tagged) of
+        case dict:find(ConsumerTag, Tagged) of
             {ok, {F,C}} ->
                 NewTagged = dict:erase(ConsumerTag,Tagged),
                 {F,C,State#channel_state{tagged_sub_requests = NewTagged}};
             error ->
                 case queue:out(Anon) of
-                    {empty,_} ->
+                    {empty, _} ->
                         exit(anonymous_queue_empty, ConsumerTag);
-                    {{value, {F,C}}, NewAnon} ->
-                        {F,C,State#channel_state{anon_sub_requests = NewAnon}}
+                    {{value, {F, C}}, NewAnon} ->
+                        {F, C,
+                         State#channel_state{anon_sub_requests = NewAnon}}
                 end
         end,
-    Consumer ! BasicConsumeOk,
+    Consumer ! ConsumeOk,
     State1 = register_consumer(ConsumerTag, Consumer, State0),
-    rpc_bottom_half(BasicConsumeOk,State1);
+    rpc_bottom_half(ConsumeOk, State1);
 
-handle_method(BasicCancelOk = #'basic.cancel_ok'{consumer_tag = ConsumerTag}, State) ->
+handle_method(CancelOk = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
+              State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
-    Consumer ! BasicCancelOk,
+    Consumer ! CancelOk,
     NewState = unregister_consumer(ConsumerTag, State),
-    rpc_bottom_half(BasicCancelOk, NewState);
+    rpc_bottom_half(CancelOk, NewState);
 
-handle_method(ChannelCloseOk = #'channel.close_ok'{}, State) ->
-    {noreply, NewState} = rpc_bottom_half(ChannelCloseOk, State),
+handle_method(CloseOk = #'channel.close_ok'{}, State) ->
+    {noreply, NewState} = rpc_bottom_half(CloseOk, State),
     {stop, normal, NewState};
 
 %% This handles the flow control flag that the broker initiates.
 %% If defined, it informs the flow control handler to suspend submitting
 %% any content bearing methods
 handle_method(Flow = #'channel.flow'{active = Active},
-              State = #channel_state{writer_pid = Writer, do2 = Do2,
+              State = #channel_state{writer_pid = Writer,
+                                     do2 = Do2,
                                      flow_handler_pid = FlowHandler}) ->
     case FlowHandler of
         undefined -> ok;
@@ -239,9 +248,10 @@ handle_method(Flow = #'channel.flow'{active = Active},
 handle_method(Method, State) ->
     rpc_bottom_half(Method, State).
 
-handle_method(BasicDeliver = #'basic.deliver'{consumer_tag = ConsumerTag}, Content, State) ->
+handle_method(Deliver = #'basic.deliver'{consumer_tag = ConsumerTag},
+              Content, State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
-    Consumer ! {BasicDeliver, Content},
+    Consumer ! {Deliver, Content},
     {noreply, State};
 
 %% Why is the consumer a handle_method/3 call with the network driver,
@@ -257,9 +267,9 @@ handle_method(BasicReturn = #'basic.return'{}, Content, State) ->
 handle_method(Method, Content, State) ->
     rpc_bottom_half( {Method, Content} , State).
 
-%---------------------------------------------------------------------------
-% gen_server callbacks
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
+%% gen_server callbacks
+%%---------------------------------------------------------------------------
 
 init([InitialState]) ->
     {ok, InitialState}.
@@ -298,7 +308,8 @@ handle_call({Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
     rpc_top_half(Method, From, NewState).
 
 %% Standard implementation of the cast/2 command
-handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer, do2 = Do2}) ->
+handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer,
+                                                   do2 = Do2}) ->
     Do2(Writer, Method),
     {noreply, State};
 
@@ -319,7 +330,7 @@ handle_cast({cast, Method, Content},
 %% Registers the direct channel peer when using the direct client
 handle_cast({register_direct_peer, Peer}, State) ->
     link(Peer),
-    process_flag(trap_exit,true),
+    process_flag(trap_exit, true),
     NewState = State#channel_state{writer_pid = Peer},
     {noreply, NewState};
 
@@ -336,23 +347,29 @@ handle_cast({register_flow_handler, FlowHandler}, State) ->
 handle_cast({notify_sent, _Peer}, State) ->
     {noreply, State}.
 
-%---------------------------------------------------------------------------
-% Rabbit Writer API methods (gen_server callbacks).
-% These callbacks are invoked when a direct channel sends messages
-% to this gen_server instance.
-%----------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
+%% Rabbit Writer API methods (gen_server callbacks).
+%% These callbacks are invoked when a direct channel sends messages
+%% to this gen_server instance.
+%%---------------------------------------------------------------------------
 
-handle_info( {send_command, Method}, State) -> handle_method(Method, State);
-handle_info( {send_command, Method, Content}, State) -> handle_method(Method, Content, State);
+handle_info( {send_command, Method}, State) ->
+    handle_method(Method, State);
 
-%---------------------------------------------------------------------------
-% Network Writer methods (gen_server callbacks).
-% These callbacks are invoked when a network channel sends messages
-% to this gen_server instance.
-%---------------------------------------------------------------------------
+handle_info( {send_command, Method, Content}, State) ->
+    handle_method(Method, Content, State);
 
-handle_info( {method, Method, none}, State) -> handle_method(Method, State);
-handle_info( {method, Method, Content}, State) -> handle_method(Method, Content, State);
+%%---------------------------------------------------------------------------
+%% Network Writer methods (gen_server callbacks).
+%% These callbacks are invoked when a network channel sends messages
+%% to this gen_server instance.
+%%---------------------------------------------------------------------------
+
+handle_info( {method, Method, none}, State) ->
+    handle_method(Method, State);
+
+handle_info( {method, Method, Content}, State) ->
+    handle_method(Method, Content, State);
 
 
 %% Handles the delivery of a message from a direct channel
@@ -375,28 +392,24 @@ handle_info({'EXIT', _Pid, Reason},
     NewState = channel_cleanup(State),
     {stop, normal, NewState};
 
-%---------------------------------------------------------------------------
-% This is for a race condition between a close.close_ok and a subsequent channel.open
-%---------------------------------------------------------------------------
-
+%% This is for a race condition between a close.close_ok and a subsequent
+%% channel.open
 handle_info( {channel_close, Peer}, State ) ->
     NewState = channel_cleanup(State),
     %% TODO Do we still need this??
     Peer ! handshake,
     {noreply, NewState};
 
-%---------------------------------------------------------------------------
-% This is for a channel exception that can't be otherwise handled
-%---------------------------------------------------------------------------
-
+%% This is for a channel exception that can't be otherwise handled
 handle_info( {channel_exception, Channel, Reason}, State) ->
     io:format("Channel ~p is shutting down due to: ~p~n",[Channel, Reason]),
     NewState = channel_cleanup(State),
     {stop, shutdown, NewState}.
 
-%---------------------------------------------------------------------------
-% Rest of the gen_server callbacks
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
+%% Rest of the gen_server callbacks
+%%---------------------------------------------------------------------------
+
 terminate(normal, _State) ->
     ok;
 
