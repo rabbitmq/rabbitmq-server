@@ -31,7 +31,7 @@
 
 -module(rabbit_limiter).
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
