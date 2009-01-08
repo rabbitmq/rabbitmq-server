@@ -227,7 +227,7 @@ handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
     {HardError, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
     case HardError of
         false ->
-            io:format("Just trapping this exit and proceding to trap an"
+            io:format("Just trapping this exit and proceding to trap an "
                       "exit from the client channel process~n"),
             {noreply, State};
         true ->
