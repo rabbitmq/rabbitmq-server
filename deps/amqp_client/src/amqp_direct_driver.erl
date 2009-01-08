@@ -30,7 +30,7 @@
 -include("amqp_client.hrl").
 
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
--export([do/2,do/3]).
+-export([do/2, do/3]).
 -export([handle_broker_close/1]).
 
 %---------------------------------------------------------------------------
@@ -43,23 +43,31 @@ handshake(ConnectionState = #connection_state{username = User,
     UserBin = amqp_util:binary(User),
     PassBin = amqp_util:binary(Pass),
     rabbit_access_control:user_pass_login(UserBin, PassBin),
-    rabbit_access_control:check_vhost_access(#user{username = UserBin}, VHostPath),
+    rabbit_access_control:check_vhost_access(#user{username = UserBin},
+                                             VHostPath),
     ConnectionState.
 
 open_channel({_Channel, _OutOfBand}, ChannelPid,
-             State = #connection_state{username = User, vhostpath = VHost}) ->
+             State = #connection_state{username = User,
+                                       vhostpath = VHost}) ->
     UserBin = amqp_util:binary(User),
     ReaderPid = WriterPid = ChannelPid,
     Peer = rabbit_channel:start_link(ReaderPid, WriterPid, UserBin, VHost),
     amqp_channel:register_direct_peer(ChannelPid, Peer),
     State.
 
-close_channel(_WriterPid) -> ok.
+close_channel(_WriterPid) ->
+    ok.
 
 close_connection(_Close, From, _State) ->
     gen_server:reply(From, #'connection.close_ok'{}).
 
-do(Writer, Method) -> rabbit_channel:do(Writer, Method).
-do(Writer, Method, Content) -> rabbit_channel:do(Writer, Method, Content).
+do(Writer, Method) ->
+    rabbit_channel:do(Writer, Method).
 
-handle_broker_close(_State) -> ok.
+do(Writer, Method, Content) ->
+    rabbit_channel:do(Writer, Method, Content).
+
+handle_broker_close(_State) ->
+    ok.
+

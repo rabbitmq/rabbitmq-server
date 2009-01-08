@@ -79,7 +79,7 @@ publish(Payload, From,
                        reply_to = Q},
     lib_amqp:publish(Channel, X, RoutingKey, Payload, Props),
     State#rpc_client_state{correlation_id = CorrelationId + 1,
-                           continuations 
+                           continuations
                            = dict:store(CorrelationId, From, Continuations)}.
 
 %---------------------------------------------------------------------------

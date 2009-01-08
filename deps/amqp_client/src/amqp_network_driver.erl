@@ -31,7 +31,7 @@
 
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
 -export([start_reader/2, start_writer/2]).
--export([do/2,do/3]).
+-export([do/2, do/3]).
 -export([handle_broker_close/1]).
 
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
@@ -40,23 +40,26 @@
 % Driver API Methods
 %---------------------------------------------------------------------------
 
-handshake(ConnectionState = #connection_state{serverhost = Host}) ->
-    case gen_tcp:connect(Host, 5672, [binary, {packet, 0},{active,false}]) of
+handshake(State = #connection_state{serverhost = Host}) ->
+    case gen_tcp:connect(Host, 5672,
+                         [binary, {packet, 0}, {active, false}]) of
         {ok, Sock} ->
             ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
             Parent = self(),
-            FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
-            ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
+            FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end,
+                                                           [Parent]),
+            ReaderPid = spawn_link(?MODULE, start_reader,
+                                   [Sock, FramingPid]),
             WriterPid = start_writer(Sock, 0),
-            ConnectionState1 = ConnectionState#connection_state{channel0_writer_pid = WriterPid,
-                                                                reader_pid = ReaderPid,
-                                                                sock = Sock},
-            ConnectionState2 = network_handshake(WriterPid, ConnectionState1),
-            #connection_state{heartbeat = Heartbeat} = ConnectionState2,
+            State1 = State#connection_state{channel0_writer_pid = WriterPid,
+                                            reader_pid = ReaderPid,
+                                            sock = Sock},
+            State2 = network_handshake(WriterPid, State1),
+            #connection_state{heartbeat = Heartbeat} = State2,
             ReaderPid ! {heartbeat, Heartbeat},
-            ConnectionState2;
+            State2;
         {error, Reason} ->
-            io:format("Could not start the network driver: ~p~n",[Reason]),
+            io:format("Could not start the network driver: ~p~n", [Reason]),
             exit(Reason)
     end.
 
@@ -72,7 +75,7 @@ open_channel({ChannelNumber, _OutOfBand}, ChannelPid,
     amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
 
 close_channel(WriterPid) ->
-    %io:format("Shutting the channel writer ~p down~n",[WriterPid]),
+    %io:format("Shutting the channel writer ~p down~n", [WriterPid]),
     rabbit_writer:shutdown(WriterPid).
 
 %% This closes the writer down, waits for the confirmation from the
@@ -89,8 +92,11 @@ close_connection(Close = #'connection.close'{}, From,
             exit(timeout_on_exit)
     end.
 
-do(Writer, Method) -> rabbit_writer:send_command(Writer, Method).
-do(Writer, Method, Content) -> rabbit_writer:send_command(Writer, Method, Content).
+do(Writer, Method) ->
+    rabbit_writer:send_command(Writer, Method).
+
+do(Writer, Method, Content) ->
+    rabbit_writer:send_command(Writer, Method, Content).
 
 handle_broker_close(#connection_state{channel0_writer_pid = Writer,
                                       reader_pid = Reader}) ->
@@ -117,7 +123,8 @@ recv() ->
 % Internal plumbing
 %---------------------------------------------------------------------------
 
-network_handshake(Writer, State = #connection_state{ vhostpath = VHostPath }) ->
+network_handshake(Writer,
+                  State = #connection_state{ vhostpath = VHostPath }) ->
     #'connection.start'{} = recv(),
     do(Writer, start_ok(State)),
     #'connection.tune'{channel_max = ChannelMax,
@@ -129,7 +136,8 @@ network_handshake(Writer, State = #connection_state{ vhostpath = VHostPath }) ->
     do(Writer, TuneOk),
 
     %% This is something where I don't understand the protocol,
-    %% What happens if the following command reaches the server before the tune ok?
+    %% What happens if the following command reaches the server
+    %% before the tune ok?
     %% Or doesn't get sent at all?
     ConnectionOpen = #'connection.open'{virtual_host = VHostPath,
                                         capabilities = <<"">>,
@@ -146,7 +154,7 @@ start_ok(#connection_state{username = Username, password = Password}) ->
            client_properties = [
                             {<<"product">>, longstr, <<"Erlang-AMQC">>},
                             {<<"version">>, longstr, <<"0.1">>},
-                            {<<"platform">>,longstr, <<"Erlang">>}
+                            {<<"platform">>, longstr, <<"Erlang">>}
                            ],
            mechanism = <<"AMQPLAIN">>,
            response = rabbit_binary_generator:generate_table(LoginTable),
@@ -154,7 +162,7 @@ start_ok(#connection_state{username = Username, password = Password}) ->
 
 start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
-    put({channel, 0},{chpid, FramingPid}),
+    put({channel, 0}, {chpid, FramingPid}),
     {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
     reader_loop(Sock, undefined, undefined, undefined),
     gen_tcp:close(Sock).
@@ -164,7 +172,7 @@ start_writer(Sock, Channel) ->
 
 reader_loop(Sock, Type, Channel, Length) ->
     receive
-        {inet_async, Sock, _, {ok, <<Payload:Length/binary,?FRAME_END>>} } ->
+        {inet_async, Sock, _, {ok, <<Payload:Length/binary, ?FRAME_END>>} } ->
             case handle_frame(Type, Channel, Payload) of
                 closed_ok ->
                     ok;
@@ -172,9 +180,9 @@ reader_loop(Sock, Type, Channel, Length) ->
                     {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
                     reader_loop(Sock, undefined, undefined, undefined)
             end;
-        {inet_async, Sock, _, {ok, <<_Type:8,_Channel:16,PayloadSize:32>>}} ->
+        {inet_async, Sock, _, {ok, <<_Type:8, _Chan:16, PayloadSize:32>>}} ->
             {ok, _Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
-            reader_loop(Sock, _Type, _Channel, PayloadSize);
+            reader_loop(Sock, _Type, _Chan, PayloadSize);
         {inet_async, Sock, _Ref, {error, closed}} ->
             ok;
         {inet_async, Sock, _Ref, {error, Reason}} ->
@@ -187,11 +195,13 @@ reader_loop(Sock, Type, Channel, Length) ->
             start_framing_channel(ChannelPid, ChannelNumber),
             reader_loop(Sock, Type, Channel, Length);
         timeout ->
-            io:format("Reader (~p) received timeout from heartbeat, exiting ~n",[self()]);
+            io:format("Reader (~p) received timeout from heartbeat, "
+                      "exiting ~n", [self()]);
         close ->
-            io:format("Reader (~p) received close command, exiting ~n",[self()]);
+            io:format("Reader (~p) received close command, "
+                      "exiting ~n", [self()]);
         {'EXIT', Pid, _Reason} ->
-            [H|_] = get_keys({chpid,Pid}),
+            [H|_] = get_keys({chpid, Pid}),
             erase(H),
             reader_loop(Sock, Type, Channel, Length);
         Other ->
@@ -200,8 +210,9 @@ reader_loop(Sock, Type, Channel, Length) ->
     end.
 
 start_framing_channel(ChannelPid, ChannelNumber) ->
-    FramingPid = rabbit_framing_channel:start_link(fun(X) -> link(X), X end, [ChannelPid]),
-    put({channel, ChannelNumber},{chpid, FramingPid}).
+    FramingPid = rabbit_framing_channel:start_link(fun(X) -> link(X), X end,
+                                                   [ChannelPid]),
+    put({channel, ChannelNumber}, {chpid, FramingPid}).
 
 handle_frame(Type, Channel, Payload) ->
     case rabbit_reader:analyze_frame(Type, Payload) of
@@ -214,7 +225,7 @@ handle_frame(Type, Channel, Payload) ->
             heartbeat;
         trace ->
             trace;
-        {method,'connection.close_ok',Content} ->
+        {method, 'connection.close_ok', Content} ->
             send_frame(Channel, {method, 'connection.close_ok', Content}),
             closed_ok;
         AnalyzedFrame ->
@@ -228,3 +239,4 @@ resolve_receiver(Channel) ->
        undefined ->
             exit(unknown_channel)
    end.
+
