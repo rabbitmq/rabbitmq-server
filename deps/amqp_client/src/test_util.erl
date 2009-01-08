@@ -173,19 +173,33 @@ basic_ack_test(Connection) ->
 
 basic_consume_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
-    {ok, Q} = setup_publish(Channel),
+    X = uuid(),
+    lib_amqp:declare_exchange(Channel, X),
+    RoutingKey = uuid(),
     Parent = self(),
-    [spawn(fun() -> consume_loop(Channel, Q, Parent, <<Tag:32>>) end) || Tag <- lists:seq(1,?Latch)],
+    [spawn(
+        fun() ->
+            consume_loop(Channel, X, RoutingKey, Parent, <<Tag:32>>) end)
+        || Tag <- lists:seq(1, ?Latch)],
+    timer:sleep(?Latch * 20),
+    lib_amqp:publish(Channel, X, RoutingKey, <<"foobar">>),
     latch_loop(?Latch),
     lib_amqp:teardown(Connection, Channel).
 
-consume_loop(Channel, Q, Parent, Tag) ->
-    {ok, Consumer} = gen_event:start_link(),
-    gen_event:add_handler(Consumer, amqp_consumer , [] ),
-    lib_amqp:subscribe(Channel, Q, Consumer, Tag),
-    timer:sleep(?Wait div 4),
+consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
+    Q = lib_amqp:declare_queue(Channel),
+    lib_amqp:bind_queue(Channel, X, Q, RoutingKey),
+    lib_amqp:subscribe(Channel, Q, self(), Tag),
+    receive
+        #'basic.consume_ok'{consumer_tag = Tag} -> ok
+    end,
+    receive        
+        {#'basic.deliver'{}, _} -> ok
+    end,
     lib_amqp:unsubscribe(Channel, Tag),
-    gen_event:stop(Consumer),
+    receive
+        #'basic.cancel_ok'{consumer_tag = Tag} -> ok
+    end,
     Parent ! finished.
 
 basic_recover_test(Connection) ->
