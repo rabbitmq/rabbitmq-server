@@ -195,11 +195,11 @@ reader_loop(Sock, Type, Channel, Length) ->
             start_framing_channel(ChannelPid, ChannelNumber),
             reader_loop(Sock, Type, Channel, Length);
         timeout ->
-            io:format("Reader (~p) received timeout from heartbeat,
-                       exiting ~n", [self()]);
+            io:format("Reader (~p) received timeout from heartbeat, "
+                      "exiting ~n", [self()]);
         close ->
-            io:format("Reader (~p) received close command,
-                       exiting ~n", [self()]);
+            io:format("Reader (~p) received close command, "
+                      "exiting ~n", [self()]);
         {'EXIT', Pid, _Reason} ->
             [H|_] = get_keys({chpid, Pid}),
             erase(H),
