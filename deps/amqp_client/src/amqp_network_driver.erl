@@ -75,7 +75,6 @@ open_channel({ChannelNumber, _OutOfBand}, ChannelPid,
     amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
 
 close_channel(WriterPid) ->
-    %io:format("Shutting the channel writer ~p down~n", [WriterPid]),
     rabbit_writer:shutdown(WriterPid).
 
 %% This closes the writer down, waits for the confirmation from the
@@ -85,7 +84,7 @@ close_connection(Close = #'connection.close'{}, From,
     rabbit_writer:send_command(Writer, Close),
     rabbit_writer:shutdown(Writer),
     receive
-        {method, {'connection.close_ok'}, none } ->
+        {'$gen_cast', {method, {'connection.close_ok'}, none }} ->
             gen_server:reply(From, #'connection.close_ok'{})
     after
         5000 ->
@@ -115,7 +114,7 @@ send_frame(Channel, Frame) ->
 
 recv() ->
     receive
-        {method, Method, _Content} ->
+            {'$gen_cast', {method, Method, _Content}} ->
             Method
     end.
 
