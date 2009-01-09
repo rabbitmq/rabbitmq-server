@@ -116,10 +116,7 @@ handle_cast({method, Method, Content}, State) ->
         {noreply, NewState} ->
             {noreply, NewState};
         stop ->
-            %% TODO: this isn't quite right; it results in queues
-            %% being notified twice and rabbit_writer:shutdown being
-            %% called twice.
-            {stop, normal, State}
+            {stop, normal, State#ch{state = terminating}}
     catch
         exit:{amqp, Error, Explanation, none} ->
             {stop, {amqp, Error, Explanation,
@@ -153,6 +150,9 @@ handle_cast({conserve_memory, Conserve}, State) ->
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {noreply, Reason, State}.
+
+terminate(_Reason, #ch{writer_pid = WriterPid, state = terminating}) ->
+    rabbit_writer:shutdown(WriterPid);
 
 terminate(Reason, State = #ch{writer_pid = WriterPid}) ->
     Res = notify_queues(internal_rollback(State)),
@@ -247,7 +247,6 @@ handle_method(_Method, _, #ch{state = starting}) ->
 handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = notify_queues(internal_rollback(State)),
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
-    ok = rabbit_writer:shutdown(WriterPid),
     stop;
 
 handle_method(#'access.request'{},_, State) ->
