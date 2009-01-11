@@ -31,11 +31,35 @@
 
 -module(rabbit_net).
 -include("rabbit.hrl").
+-include_lib("kernel/include/inet.hrl").
 
 -export([async_recv/3, close/1, controlling_process/2,
         getstat/2, peername/1, port_command/2,
         send/2, sockname/1]).
+%%---------------------------------------------------------------------------
 
+-ifdef(use_specs).
+
+-type(stat_option() :: 
+	'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
+	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
+-type(timeout() :: 'infinity' | non_neg_integer()).
+
+-spec(async_recv/3 :: (socket(), integer(), timeout()) -> {'ok', ref()}).
+-spec(close/1 :: (socket()) -> 'ok' | {'error', any()}).
+-spec(controlling_process/2 :: (socket(), pid()) -> 'ok' | {'error', any()}).
+-spec(port_command/2 :: (socket(), iolist()) -> 'true').
+-spec(send/2 :: (socket(), iolist()) -> 'ok' | {'error', any()}).
+-spec(peername/1 :: (socket()) -> 
+        {'ok', {ip_address(), non_neg_integer()}} | {'error', any()}).
+-spec(sockname/1 :: (socket()) -> 
+        {'ok', {ip_address(), non_neg_integer()}} | {'error', any()}).
+-spec(getstat/2 :: (socket(), [stat_option()]) -> 
+        {'ok', [{stat_option(), integer()}]} | {'error', any()}). 		
+
+-endif.
+
+%%---------------------------------------------------------------------------
 
 
 async_recv(Sock, Length, Timeout) when is_record(Sock, ssl_socket) ->
