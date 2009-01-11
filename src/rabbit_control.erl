@@ -138,7 +138,7 @@ The list_queues, list_exchanges and list_bindings commands accept an optional
 virtual host parameter for which to display results. The default value is \"/\".
 
 <QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
-arguments, pid, messages_ready, messages_unacknowledged, messages_uncommitted, 
+arguments, node, messages_ready, messages_unacknowledged, messages_uncommitted, 
 messages, acks_uncommitted, consumers, transactions, memory]. The default is 
  to display name and (number of) messages.
 
@@ -148,7 +148,7 @@ auto_delete, arguments]. The default is to display name and type.
 The output format for \"list_bindings\" is a list of rows containing 
 exchange name, routing key, queue name and arguments, in that order.
 
-<ConnectionInfoItem> must be a member of the list [pid, address, port, 
+<ConnectionInfoItem> must be a member of the list [node, address, port, 
 peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
 recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
 user, peer_address and peer_port.
@@ -242,7 +242,8 @@ action(list_vhost_users, Node, Args = [_VHostPath], Inform) ->
 action(list_queues, Node, Args, Inform) ->
     Inform("Listing queues", []),
     {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
-    ArgAtoms = default_if_empty(RemainingArgs, [name, messages]),
+    ArgAtoms = list_replace(node, pid, 
+                            default_if_empty(RemainingArgs, [name, messages])),
     display_info_list(rpc_call(Node, rabbit_amqqueue, info_all,
                                [VHostArg, ArgAtoms]),
                       ArgAtoms);
@@ -267,7 +268,8 @@ action(list_bindings, Node, Args, Inform) ->
 
 action(list_connections, Node, Args, Inform) ->
     Inform("Listing connections", []),
-    ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port]),
+    ArgAtoms = list_replace(node, pid, 
+                            default_if_empty(Args, [user, peer_address, peer_port])),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms).
@@ -311,6 +313,8 @@ format_info_item(Items, Key) ->
         {Key, IpAddress} when Key =:= address; Key =:= peer_address
                               andalso is_tuple(IpAddress) ->
             inet_parse:ntoa(IpAddress);
+        {pid, _} ->
+            atom_to_list(node(Value));
         _ when is_binary(Value) -> 
             url_encode(Value);
         _ -> 
@@ -356,4 +360,7 @@ url_encode_char([], Acc) ->
 
 d2h(N) when N<10 -> N+$0;
 d2h(N) -> N+$a-10.
+
+list_replace(Find, Replace, List) ->
+    [case X of Find -> Replace; _ -> X end || X <- List].
 
