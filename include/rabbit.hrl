@@ -69,10 +69,17 @@
 -ifdef(use_specs).
 
 -include("rabbit_framing_spec.hrl").
+-include_lib("ssl/src/ssl_int.hrl").
 
 -type(maybe(T) :: T | 'none').
 -type(erlang_node() :: atom()).
--type(socket() :: port()).
+-type(sslsocket() ::
+    #sslsocket{fd :: 'nil' | integer(),
+               pid :: 'nil' | pid()}).
+-type(ssl_socket() :: 
+      #ssl_socket{tcp :: port(),
+                  ssl :: sslsocket()}).
+-type(socket() :: port() | ssl_socket()).
 -type(thunk(T) :: fun(() -> T)).
 -type(info_key() :: atom()).
 -type(info() :: {info_key(), any()}).
