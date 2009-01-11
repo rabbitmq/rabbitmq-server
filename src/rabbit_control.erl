@@ -310,10 +310,9 @@ format_info_item(Items, Key) ->
     case Info of
         {_, #resource{name = Name}} ->
             url_encode(Name);
-        {Key, IpAddress} when Key =:= address; Key =:= peer_address
-                              andalso is_tuple(IpAddress) ->
-            inet_parse:ntoa(IpAddress);
-        {pid, _} ->
+        _ when Key =:= address; Key =:= peer_address andalso is_tuple(Value) ->
+            inet_parse:ntoa(Value);
+        _ when is_pid(Value) ->
             atom_to_list(node(Value));
         _ when is_binary(Value) -> 
             url_encode(Value);
