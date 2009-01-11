@@ -30,18 +30,12 @@
 %%
 
 -module(rabbit_net).
--export([
-        async_recv/3,
-        close/1,
-        controlling_process/2,
-        getstat/2,
-        peername/1,
-        port_command/2,
-        send/2,
-        sockname/1
-    ]).
-
 -include("rabbit.hrl").
+
+-export([async_recv/3, close/1, controlling_process/2,
+        getstat/2, peername/1, port_command/2,
+        send/2, sockname/1]).
+
 
 
 async_recv(Sock, Length, Timeout) when is_record(Sock, ssl_socket) ->
