@@ -195,7 +195,7 @@ start(normal, []) ->
                 {ok, TCPListeners} = application:get_env(tcp_listeners),
                 lists:foreach(
                   fun ({Host, Port}) ->
-                          ok = rabbit_networking:start_tcp_listener(Host, Port)
+                          ok = rabbit_networking:start_tcp_listener(Host, Port, {rabbit_networking, start_client, []})
                   end,
                   TCPListeners)
         end},
@@ -212,7 +212,8 @@ start(normal, []) ->
 
                         lists:foreach(
                           fun ({Host, Port}) ->
-                                  ok = rabbit_networking:start_ssl_listener(Host, Port, SslOpts)
+                                  ok = rabbit_networking:start_tcp_listener(
+                                      Host, Port, {rabbit_networking, ssl_connection_upgrade, [SslOpts]})
                           end,
                           SSLListeners)
                 end

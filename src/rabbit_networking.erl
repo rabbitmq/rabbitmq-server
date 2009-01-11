@@ -31,10 +31,10 @@
 
 -module(rabbit_networking).
 
--export([start/0, start_tcp_listener/2, start_ssl_listener/3,
-        stop_tcp_listener/2, on_node_down/1, active_listeners/0, 
-        node_listeners/1, connections/0, connection_info/1, 
-        connection_info/2, connection_info_all/0, connection_info_all/1]).
+-export([start/0, start_tcp_listener/3, stop_tcp_listener/2, 
+        on_node_down/1, active_listeners/0, node_listeners/1, 
+        connections/0, connection_info/1, connection_info/2, 
+        connection_info_all/0, connection_info_all/1]).
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/3]).
 
@@ -60,7 +60,7 @@
 -type(connection() :: pid()).
 
 -spec(start/0 :: () -> 'ok').
--spec(start_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
+-spec(start_tcp_listener/3 :: (host(), ip_port(), mfa()) -> 'ok').
 -spec(stop_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [listener()]).
 -spec(node_listeners/1 :: (erlang_node()) -> [listener()]).
@@ -104,8 +104,7 @@ check_tcp_listener_address(NamePrefix, Host, Port) ->
     Name = rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
     {IPAddress, Name}.
 
-
-start_tcp_listener(Host, Port) ->
+start_tcp_listener(Host, Port, OnConnect) ->
     {IPAddress, Name} = check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
@@ -114,20 +113,7 @@ start_tcp_listener(Host, Port) ->
                  [IPAddress, Port, ?RABBIT_TCP_OPTS ,
                   {?MODULE, tcp_listener_started, []},
                   {?MODULE, tcp_listener_stopped, []},
-                  {?MODULE, start_client, []}]},
-                transient, infinity, supervisor, [tcp_listener_sup]}),
-    ok.
-
-start_ssl_listener(Host, Port, SSlOpts) ->
-    {IPAddress, Name} = check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
-    {ok,_} = supervisor:start_child(
-               rabbit_sup,
-               {Name,
-                {tcp_listener_sup, start_link,
-                 [IPAddress, Port, ?RABBIT_TCP_OPTS,
-                  {?MODULE, tcp_listener_started, []},
-                  {?MODULE, tcp_listener_stopped, []},
-                  {?MODULE, ssl_connection_upgrade, [SSlOpts]}]},
+                  OnConnect]},
                 transient, infinity, supervisor, [tcp_listener_sup]}),
     ok.
 
