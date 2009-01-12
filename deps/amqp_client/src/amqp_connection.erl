@@ -33,8 +33,8 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 -export([open_channel/1, open_channel/3]).
--export([start/2, start/3, start/4, start/6, start/7, close/2]).
--export([start_link/2, start_link/3, start_link/4, start_link/6, start_link/7]).
+-export([start/2, start/3, start/4, start/6, close/2]).
+-export([start_link/2, start_link/3, start_link/4, start_link/5]).
 
 %---------------------------------------------------------------------------
 % AMQP Connection API Methods
@@ -53,7 +53,9 @@ start(User,Password,ProcLink) when is_boolean(ProcLink) ->
 
 %% Starts a networked conection to a remote AMQP server.
 start(User,Password,Host) -> start(User,Password,Host,<<"/">>,false).
+start(User,Password,Host,SslOpts=[{_K,_V}|_T]) -> start(User,Password,Host,<<"/">>,SslOpts,false);
 start(User,Password,Host,VHost) -> start(User,Password,Host,VHost,false).
+start(User,Password,Host,VHost,SslOpts=[{_K,_V}|_T]) -> start(User,Password,Host,VHost,SslOpts, false);
 start(User,Password,Host,VHost,ProcLink) ->
     Handshake = fun amqp_network_driver:handshake/1,
     InitialState = #connection_state{username = User,
@@ -62,11 +64,11 @@ start(User,Password,Host,VHost,ProcLink) ->
                                      vhostpath = VHost},
     {ok, Pid} = start_internal(InitialState, Handshake,ProcLink),
     {Pid, network}.
+start(User,Password,Host,VHost,SslOpts=[{_K,_V}|_T], ProcLink) ->
+    {cacertfile, Cacertfile} = proplists:lookup(cacertfile, SslOpts),
+    {certfile, Certfile} = proplists:lookup(certfile, SslOpts),
+    {keyfile, Keyfile} = proplists:lookup(keyfile, SslOpts),
 
-%% Starts a networked conection over ssl to a remote AMQP server.
-start(User,Password,Host, Cacertfile, Certfile, Keyfile) -> start(User,Password,Host,<<"/">>, Cacertfile, Certfile, Keyfile,false).
-start(User,Password,Host,VHost, Cacertfile, Certfile, Keyfile) -> start(User,Password,Host,VHost,Cacertfile, Certfile, Keyfile, false).
-start(User,Password,Host,VHost,Cacertfile, Certfile, Keyfile, ProcLink) ->
     Handshake = fun amqp_network_driver:handshake/1,
     InitialState = #connection_state{username = User,
                                      password = Password,
@@ -82,9 +84,9 @@ start(User,Password,Host,VHost,Cacertfile, Certfile, Keyfile, ProcLink) ->
     
 start_link(User,Password) -> start(User,Password,true).
 start_link(User,Password,Host) -> start(User,Password,Host,<<"/">>,true).
-start_link(User,Password,Host, Cacertfile, Certfile, Keyfile) -> start(User,Password,Host,<<"/">>,Cacertfile,Certfile,Keyfile,true).
+start_link(User,Password,Host,SslOpts=[{_K,_V}|_T]) -> start(User,Password,Host,<<"/">>,SslOpts,true);
 start_link(User,Password,Host,VHost) -> start(User,Password,Host,VHost,true).
-start_link(User,Password,Host,VHost, Cacertfile, Certfile, Keyfile) -> start(User,Password,Host,VHost,Cacertfile,Certfile,Keyfile,true).
+start_link(User,Password,Host,VHost,SslOpts=[{_K,_V}|_T]) -> start(User,Password,Host,VHost,SslOpts,true).
 
 start_internal(InitialState, Handshake,ProcLink) ->
     case ProcLink of
