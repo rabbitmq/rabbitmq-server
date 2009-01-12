@@ -488,7 +488,8 @@ i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
 i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
 i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
 i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
-i(pid,         #q{q = #amqqueue{pid         = Pid}})        -> Pid;
+i(pid, _) ->
+    self();
 i(messages_ready, #q{message_buffer = MessageBuffer}) ->
     queue:len(MessageBuffer);
 i(messages_unacknowledged, _) ->

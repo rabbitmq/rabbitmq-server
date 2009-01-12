@@ -51,10 +51,10 @@
   {applications, [kernel, stdlib, sasl, mnesia, os_mon]},
   {mod, {rabbit, []}},
   {env, [{tcp_listeners, [{"0.0.0.0", 5672}]},
-	 {extra_startup_steps, []},
+         {extra_startup_steps, []},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},
          {ssl_listeners, []},
          {ssl_options, []},
-	 {memory_alarms, false}]}]}.
+         {memory_alarms, auto}]}]}.
