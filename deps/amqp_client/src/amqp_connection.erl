@@ -72,9 +72,10 @@ start(User,Password,Host,VHost,Cacertfile, Certfile, Keyfile, ProcLink) ->
                                      password = Password,
                                      serverhost = Host,
                                      vhostpath = VHost,
-                                     cacertfile=Cacertfile,
-                                     certfile=Certfile,
-                                     keyfile=Keyfile},
+                                     sslopts=#sslopts{
+                                         cacertfile=Cacertfile, 
+                                         certfile=Certfile, 
+                                         keyfile=Keyfile}},
     {ok, Pid} = start_internal(InitialState, Handshake,ProcLink),
     {Pid, network}.
 

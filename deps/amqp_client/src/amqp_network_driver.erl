@@ -39,7 +39,7 @@
 % Driver API Methods
 %---------------------------------------------------------------------------
 
-handshake(ConnectionState = #connection_state{serverhost = Host, cacertfile=nil, certfile=nil, keyfile=nil}) ->
+handshake(ConnectionState = #connection_state{serverhost = Host, sslopts=nil}) ->
     case gen_tcp:connect(Host, 5672, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
             do_handshake(Sock, ConnectionState);
@@ -48,7 +48,7 @@ handshake(ConnectionState = #connection_state{serverhost = Host, cacertfile=nil,
             exit(Reason)
     end;
 
-handshake(ConnectionState = #connection_state{serverhost = Host}) ->
+handshake(ConnectionState = #connection_state{serverhost = Host, sslopts=SslOpts}) ->
     EnsureStarted = fun(App) ->
             case application:start(App) of
                 ok ->
@@ -64,14 +64,10 @@ handshake(ConnectionState = #connection_state{serverhost = Host}) ->
 
     case gen_tcp:connect(Host, 5673, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
-            SslOpts = [
-                {cacertfile, ConnectionState#connection_state.cacertfile},
-                {certfile, ConnectionState#connection_state.certfile},
-                {keyfile, ConnectionState#connection_state.keyfile},
-                {verify, 2}
-            ],
-
-            case ssl:connect(Sock, SslOpts) of
+            case ssl:connect(Sock, [{cacertfile, SslOpts#sslopts.cacertfile}, 
+                        {certfile, SslOpts#sslopts.certfile}, 
+                        {keyfile, SslOpts#sslopts.keyfile},
+                        {verify, 2}]) of
                 {ok, SslSock} ->
                     RabbitSslSock = #ssl_socket{ssl=SslSock, tcp=Sock},
                     do_handshake(RabbitSslSock, ConnectionState);

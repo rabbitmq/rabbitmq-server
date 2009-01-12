@@ -34,9 +34,12 @@
                            channel_max,
                            heartbeat,
                            channels = dict:new(),
-                           cacertfile=nil,
-                           certfile=nil,
-                           keyfile=nil}).
+                           sslopts=nil}).
+
+-record(sslopts, {
+        cacertfile,
+        certfile,
+        keyfile}).
 
 -record(channel_state, {number,
                         parent_connection,
