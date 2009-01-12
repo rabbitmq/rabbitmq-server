@@ -178,7 +178,7 @@ start(normal, []) ->
                     0 ->
                         ok;
                     _Len ->
-                        ok = start_applications([crypto, ssl]),
+                        ok = rabbit_misc:start_applications([crypto, ssl]),
 
                         {ok, SslOpts} = application:get_env(ssl_options),
 
