@@ -32,6 +32,7 @@
 from __future__ import nested_scopes
 import re
 import sys
+from os import remove
 
 try:
     try:
@@ -171,16 +172,30 @@ class AmqpField(AmqpEntity):
 def do_main(header_fn,body_fn):
     def usage():
         print >> sys.stderr , "Usage:"
-        print >> sys.stderr , " %s header|body path_to_amqp_spec.json" % (sys.argv[0])
+        print >> sys.stderr , " %s header|body path_to_amqp_spec.json path_to_output_file" % (sys.argv[0])
         print >> sys.stderr , ""
-    if not len(sys.argv) == 3:
+        
+    def execute(fn, amqp_spec, out_file):
+        stdout = sys.stdout
+        f = open(out_file, 'w')
+        try:
+            sys.stdout = f
+            fn(amqp_spec)
+        except:
+            remove(out_file)
+            raise
+        finally:
+            sys.stdout = stdout
+            f.close()
+
+    if not len(sys.argv) == 4:
         usage()
         sys.exit(1)
     else:
         if sys.argv[1] == "header":
-            header_fn(sys.argv[2])
+            execute(header_fn, sys.argv[2], sys.argv[3])
         elif sys.argv[1] == "body":
-            body_fn(sys.argv[2])
+            execute(body_fn, sys.argv[2], sys.argv[3])
         else:
             usage()
             sys.exit(1)
