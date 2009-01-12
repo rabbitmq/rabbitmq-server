@@ -77,10 +77,10 @@ start(User,Password,Host,VHost,SslOpts=[{_K,_V}|_T], ProcLink) ->
                                      password = Password,
                                      serverhost = Host,
                                      vhostpath = VHost,
-                                     sslopts=#sslopts{
-                                         cacertfile=Cacertfile, 
-                                         certfile=Certfile, 
-                                         keyfile=Keyfile}},
+                                     sslopts=[
+                                         {cacertfile, Cacertfile},
+                                         {certfile, Certfile}, 
+                                         {keyfile, Keyfile}]},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
 

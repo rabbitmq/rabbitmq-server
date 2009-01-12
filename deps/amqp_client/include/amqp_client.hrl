@@ -60,8 +60,3 @@
 
 -record(rpc_server_state, {channel,
                            handler}).
-
--record(sslopts, {
-        cacertfile,
-        certfile,
-        keyfile}).
