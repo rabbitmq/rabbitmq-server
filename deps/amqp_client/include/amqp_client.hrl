@@ -30,16 +30,11 @@
                            vhostpath,
                            reader_pid,
                            channel0_writer_pid,
-                           direct,
                            channel_max,
                            heartbeat,
+                           driver,
                            channels = dict:new(),
                            sslopts=nil}).
-
--record(sslopts, {
-        cacertfile,
-        certfile,
-        keyfile}).
 
 -record(channel_state, {number,
                         parent_connection,
@@ -56,21 +51,17 @@
                         flow_handler_pid,
                         consumers = dict:new()}).
 
--record(rpc_client_state, {broker_config,
-                           consumer_tag,
+-record(rpc_client_state, {channel,
+                           reply_queue,
+                           exchange,
+                           routing_key,
                            continuations = dict:new(),
-                           correlation_id = 0,
-                           type_mapping}).
+                           correlation_id = 0}).
 
--record(rpc_handler_state, {broker_config,
-                            server_pid,
-                            server_name,
-                            type_mapping
-                            }).
+-record(rpc_server_state, {channel,
+                           handler}).
 
--record(broker_config, {channel_pid,
-                        exchange,
-                        routing_key,
-                        bind_key,
-                        queue}).
-
+-record(sslopts, {
+        cacertfile,
+        certfile,
+        keyfile}).

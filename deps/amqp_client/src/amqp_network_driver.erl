@@ -33,22 +33,25 @@
 
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
 -export([start_reader/2, start_writer/2]).
--export([do/2,do/3]).
+-export([do/2, do/3]).
+-export([handle_broker_close/1]).
+
+-define(SOCKET_CLOSING_TIMEOUT, 1000).
 
 %---------------------------------------------------------------------------
 % Driver API Methods
 %---------------------------------------------------------------------------
 
-handshake(ConnectionState = #connection_state{serverhost = Host, sslopts=nil}) ->
+handshake(State = #connection_state{serverhost = Host, sslopts=nil}) ->
     case gen_tcp:connect(Host, 5672, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
-            do_handshake(Sock, ConnectionState);
+            do_handshake(Sock, State);
         {error, Reason} ->
             io:format("Could not start the network driver: ~p~n",[Reason]),
             exit(Reason)
     end;
 
-handshake(ConnectionState = #connection_state{serverhost = Host, sslopts=SslOpts}) ->
+handshake(State = #connection_state{serverhost = Host, sslopts=SslOpts}) ->
     rabbit_misc:start_applications([crypto, ssl]),
 
     case gen_tcp:connect(Host, 5673, ?RABBIT_TCP_OPTS) of
@@ -59,13 +62,13 @@ handshake(ConnectionState = #connection_state{serverhost = Host, sslopts=SslOpts
                         {verify, 2}]) of
                 {ok, SslSock} ->
                     RabbitSslSock = #ssl_socket{ssl=SslSock, tcp=Sock},
-                    do_handshake(RabbitSslSock, ConnectionState);
+                    do_handshake(RabbitSslSock, State);
                 {error, Reason} ->
                     io:format("Could not upgrade the network driver to ssl: ~p~n", [Reason]),
                     exit(Reason)
             end;
         {error, Reason} ->
-            io:format("Could not start the network driver: ~p~n",[Reason]),
+            io:format("Could not start the network driver: ~p~n", [Reason]),
             exit(Reason)
     end.
 
@@ -83,13 +86,13 @@ open_channel({ChannelNumber, _OutOfBand}, ChannelPid,
     amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
 
 close_channel(WriterPid) ->
-    %io:format("Shutting the channel writer ~p down~n",[WriterPid]),
+    %io:format("Shutting the channel writer ~p down~n", [WriterPid]),
     rabbit_writer:shutdown(WriterPid).
 
 %% This closes the writer down, waits for the confirmation from the
 %% the channel and then returns the ack to the user
 close_connection(Close = #'connection.close'{}, From,
-                 #connection_state{channel0_writer_pid = Writer, reader_pid = Reader}) ->
+                 #connection_state{channel0_writer_pid = Writer}) ->
     rabbit_writer:send_command(Writer, Close),
     rabbit_writer:shutdown(Writer),
     receive
@@ -98,11 +101,20 @@ close_connection(Close = #'connection.close'{}, From,
     after
         5000 ->
             exit(timeout_on_exit)
-    end,
-    Reader ! close.
+    end.
 
-do(Writer, Method) -> rabbit_writer:send_command(Writer, Method).
-do(Writer, Method, Content) -> rabbit_writer:send_command(Writer, Method, Content).
+do(Writer, Method) ->
+    rabbit_writer:send_command(Writer, Method).
+
+do(Writer, Method, Content) ->
+    rabbit_writer:send_command(Writer, Method, Content).
+
+handle_broker_close(#connection_state{channel0_writer_pid = Writer,
+                                      reader_pid = Reader}) ->
+    CloseOk = #'connection.close_ok'{},
+    rabbit_writer:send_command(Writer, CloseOk),
+    rabbit_writer:shutdown(Writer),
+    erlang:send_after(?SOCKET_CLOSING_TIMEOUT, Reader, close).
 
 %---------------------------------------------------------------------------
 % AMQP message sending and receiving
@@ -122,7 +134,8 @@ recv() ->
 % Internal plumbing
 %---------------------------------------------------------------------------
 
-network_handshake(Writer, State = #connection_state{ vhostpath = VHostPath }) ->
+network_handshake(Writer,
+                  State = #connection_state{ vhostpath = VHostPath }) ->
     #'connection.start'{} = recv(),
     do(Writer, start_ok(State)),
     #'connection.tune'{channel_max = ChannelMax,
@@ -134,7 +147,8 @@ network_handshake(Writer, State = #connection_state{ vhostpath = VHostPath }) ->
     do(Writer, TuneOk),
 
     %% This is something where I don't understand the protocol,
-    %% What happens if the following command reaches the server before the tune ok?
+    %% What happens if the following command reaches the server
+    %% before the tune ok?
     %% Or doesn't get sent at all?
     ConnectionOpen = #'connection.open'{virtual_host = VHostPath,
                                         capabilities = <<"">>,
@@ -151,7 +165,7 @@ start_ok(#connection_state{username = Username, password = Password}) ->
            client_properties = [
                             {<<"product">>, longstr, <<"Erlang-AMQC">>},
                             {<<"version">>, longstr, <<"0.1">>},
-                            {<<"platform">>,longstr, <<"Erlang">>}
+                            {<<"platform">>, longstr, <<"Erlang">>}
                            ],
            mechanism = <<"AMQPLAIN">>,
            response = rabbit_binary_generator:generate_table(LoginTable),
@@ -169,7 +183,7 @@ start_writer(Sock, Channel) ->
 
 reader_loop(Sock, Type, Channel, Length) ->
     receive
-        {inet_async, Sock, _, {ok, <<Payload:Length/binary,?FRAME_END>>} } ->
+        {inet_async, Sock, _, {ok, <<Payload:Length/binary, ?FRAME_END>>} } ->
             case handle_frame(Type, Channel, Payload) of
                 closed_ok ->
                     ok;
@@ -180,6 +194,8 @@ reader_loop(Sock, Type, Channel, Length) ->
         {inet_async, Sock, _, {ok, <<_Type:8,_Channel:16,PayloadSize:32>>}} ->
             {ok, _Ref} = rabbit_net:async_recv(Sock, PayloadSize + 1, infinity),
             reader_loop(Sock, _Type, _Channel, PayloadSize);
+        {inet_async, Sock, _Ref, {error, closed}} ->
+            ok;
         {inet_async, Sock, _Ref, {error, Reason}} ->
             io:format("Socket error: ~p~n", [Reason]),
             exit({socket_error, Reason});
@@ -190,11 +206,13 @@ reader_loop(Sock, Type, Channel, Length) ->
             start_framing_channel(ChannelPid, ChannelNumber),
             reader_loop(Sock, Type, Channel, Length);
         timeout ->
-            io:format("Reader (~p) received timeout from heartbeat, exiting ~n",[self()]);
+            io:format("Reader (~p) received timeout from heartbeat, "
+                      "exiting ~n", [self()]);
         close ->
-            io:format("Reader (~p) received close command, exiting ~n",[self()]);
+            io:format("Reader (~p) received close command, "
+                      "exiting ~n", [self()]);
         {'EXIT', Pid, _Reason} ->
-            [H|_] = get_keys({chpid,Pid}),
+            [H|_] = get_keys({chpid, Pid}),
             erase(H),
             reader_loop(Sock, Type, Channel, Length);
         Other ->
@@ -203,21 +221,23 @@ reader_loop(Sock, Type, Channel, Length) ->
     end.
 
 start_framing_channel(ChannelPid, ChannelNumber) ->
-    FramingPid = rabbit_framing_channel:start_link(fun(X) -> link(X), X end, [ChannelPid]),
-    put({channel, ChannelNumber},{chpid, FramingPid}).
+    FramingPid = rabbit_framing_channel:start_link(fun(X) -> link(X), X end,
+                                                   [ChannelPid]),
+    put({channel, ChannelNumber}, {chpid, FramingPid}).
 
 handle_frame(Type, Channel, Payload) ->
     case rabbit_reader:analyze_frame(Type, Payload) of
         heartbeat when Channel /= 0 ->
             rabbit_misc:die(frame_error);
-        heartbeat ->
-            heartbeat;
         trace when Channel /= 0 ->
             rabbit_misc:die(frame_error);
+        %% Match heartbeats and trace frames, but don't do anything with them
+        heartbeat ->
+            heartbeat;
         trace ->
             trace;
-        {method,'connection.close_ok',Content} ->
-            send_frame(Channel, {method,'connection.close_ok',Content}),
+        {method, 'connection.close_ok', Content} ->
+            send_frame(Channel, {method, 'connection.close_ok', Content}),
             closed_ok;
         AnalyzedFrame ->
             send_frame(Channel, AnalyzedFrame)
@@ -231,18 +251,18 @@ resolve_receiver(Channel) ->
             exit(unknown_channel)
    end.
 
-
-do_handshake(Sock, ConnectionState) ->
+do_handshake(Sock, State) ->
     ok = rabbit_net:send(Sock, amqp_util:protocol_header()),
     Parent = self(),
-    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
-    ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
+    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end,
+                                                   [Parent]),
+    ReaderPid = spawn_link(?MODULE, start_reader,
+                           [Sock, FramingPid]),
     WriterPid = start_writer(Sock, 0),
-    ConnectionState1 = ConnectionState#connection_state{channel0_writer_pid = WriterPid,
-                                                        reader_pid = ReaderPid,
-                                                        sock = Sock},
-    ConnectionState2 = network_handshake(WriterPid, ConnectionState1),
-    #connection_state{heartbeat = Heartbeat} = ConnectionState2,
+    State1 = State#connection_state{channel0_writer_pid = WriterPid,
+                                    reader_pid = ReaderPid,
+                                    sock = Sock},
+    State2 = network_handshake(WriterPid, State1),
+    #connection_state{heartbeat = Heartbeat} = State2,
     ReaderPid ! {heartbeat, Heartbeat},
-    ConnectionState2.
-
+    State2.
