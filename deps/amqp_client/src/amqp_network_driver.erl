@@ -49,18 +49,7 @@ handshake(ConnectionState = #connection_state{serverhost = Host, sslopts=nil}) -
     end;
 
 handshake(ConnectionState = #connection_state{serverhost = Host, sslopts=SslOpts}) ->
-    EnsureStarted = fun(App) ->
-            case application:start(App) of
-                ok ->
-                    ok;
-                {error, {already_started, App}} ->
-                    ok;
-                {error, Reason} ->
-                    throw(Reason)
-            end
-    end,
-
-    lists:foreach(EnsureStarted, [crypto, ssl]),
+    rabbit_misc:start_applications([crypto, ssl]),
 
     case gen_tcp:connect(Host, 5673, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
