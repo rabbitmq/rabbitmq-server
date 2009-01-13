@@ -76,9 +76,10 @@ non_existent_exchange_test() ->
 
 new_connection() ->
     amqp_connection:start("guest", "guest", "localhost", [
-            {cacertfile, "src/cacerts.pem"}, 
-            {certfile, "src/cert.pem"}, 
-            {keyfile, "src/key.pem"}]).
+            {cacertfile, "examples/certs/ca/cacerts.pem"}, 
+            {certfile, "examples/certs/client/cert.pem"}, 
+            {keyfile, "examples/certs/client/key.pem"},
+            {verify, 2}]).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
