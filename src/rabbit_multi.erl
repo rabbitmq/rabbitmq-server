@@ -50,7 +50,7 @@ start() ->
             case catch action(Command, Args, RpcTimeout) of
                 ok ->
                     io:format("done.~n"),
-                    init:stop();
+                    halt();
                 {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
                     error("invalid command '~s'",
                           [lists:flatten(

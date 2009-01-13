@@ -57,7 +57,7 @@ start() ->
                 true  -> ok;
                 false -> io:format("...done.~n")
             end,
-            init:stop();
+            halt();
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
             error("invalid command '~s'",
                   [lists:flatten(
