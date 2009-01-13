@@ -56,7 +56,7 @@ handshake(State = #connection_state{serverhost = Host, sslopts=SslOpts}) ->
 
     case gen_tcp:connect(Host, 5673, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
-            case ssl:connect(Sock, [{verify, 2} | SslOpts]) of
+            case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
                     RabbitSslSock = #ssl_socket{ssl=SslSock, tcp=Sock},
                     do_handshake(RabbitSslSock, State);
