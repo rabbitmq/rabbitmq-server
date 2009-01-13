@@ -54,12 +54,12 @@ start(User, Password, ProcLink) when is_boolean(ProcLink) ->
 start(User, Password, Host) ->
     start(User, Password, Host, <<"/">>, false).
 
-start(User, Password, Host, SslOpts=[{_K,_V}|_T]) -> 
+start(User, Password, Host, SslOpts) when is_list(SslOpts)  -> 
     start(User,Password,Host,<<"/">>,SslOpts,false);
-start(User, Password, Host, VHost) ->
+start(User, Password, Host, VHost) when is_binary(VHost) ->
     start(User, Password, Host, VHost, false).
 
-start(User, Password, Host, VHost, SslOpts=[{_K,_V}|_T]) -> 
+start(User, Password, Host, VHost, SslOpts) when is_list(SslOpts) -> 
     start(User, Password, Host, VHost, SslOpts, false);
 start(User, Password, Host, VHost, ProcLink) ->
     InitialState = #connection_state{username = User,
@@ -68,23 +68,14 @@ start(User, Password, Host, VHost, ProcLink) ->
                                      vhostpath = VHost},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
-start(User,Password,Host,VHost,SslOpts=[{_K,_V}|_T], ProcLink) ->
-    {cacertfile, Cacertfile} = proplists:lookup(cacertfile, SslOpts),
-    {certfile, Certfile} = proplists:lookup(certfile, SslOpts),
-    {keyfile, Keyfile} = proplists:lookup(keyfile, SslOpts),
-
+start(User, Password, Host, VHost, SslOpts, ProcLink) when is_list(SslOpts) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      serverhost = Host,
                                      vhostpath = VHost,
-                                     sslopts=[
-                                         {cacertfile, Cacertfile},
-                                         {certfile, Certfile}, 
-                                         {keyfile, Keyfile}]},
+                                     sslopts=SslOpts},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
-
-    
 
 start_link(User, Password) ->
     start(User, Password, true).
