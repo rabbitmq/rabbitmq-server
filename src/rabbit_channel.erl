@@ -46,6 +46,8 @@
              username, virtual_host,
              most_recently_declared_queue, consumer_mapping}).
 
+-define(HIBERNATE_AFTER, 1000).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -105,15 +107,15 @@ init([ReaderPid, WriterPid, Username, VHost]) ->
              consumer_mapping        = dict:new()}}.
 
 handle_call(_Request, _From, State) ->
-    {noreply, State}.
+    noreply(State).
 
 handle_cast({method, Method, Content}, State) ->
     try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
-            {noreply, NewState};
+            noreply(NewState);
         {noreply, NewState} ->
-            {noreply, NewState};
+            noreply(NewState);
         stop ->
             {stop, normal, State#ch{state = terminating}}
     catch
@@ -131,22 +133,27 @@ handle_cast(terminate, State) ->
 
 handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Msg),
-    {noreply, State};
+    noreply(State);
 
 handle_cast({deliver, ConsumerTag, AckRequired, Msg},
             State = #ch{writer_pid = WriterPid,
                         next_tag = DeliveryTag}) ->
     State1 = lock_message(AckRequired, {DeliveryTag, ConsumerTag, Msg}, State),
     ok = internal_deliver(WriterPid, true, ConsumerTag, DeliveryTag, Msg),
-    {noreply, State1#ch{next_tag = DeliveryTag + 1}};
+    noreply(State1#ch{next_tag = DeliveryTag + 1});
 
 handle_cast({conserve_memory, Conserve}, State) ->
     ok = rabbit_writer:send_command(
            State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
-    {noreply, State}.
+    noreply(State).
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
-    {noreply, Reason, State}.
+    {noreply, Reason, State};
+
+handle_info(timeout, State) ->
+    %% TODO: Once we drop support for R11B-5, we can change this to
+    %% {noreply, State, hibernate};
+    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State]).
 
 terminate(_Reason, #ch{writer_pid = WriterPid, state = terminating}) ->
     rabbit_writer:shutdown(WriterPid);
@@ -163,6 +170,8 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%---------------------------------------------------------------------------
+
+noreply(NewState) -> {noreply, NewState, ?HIBERNATE_AFTER}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
