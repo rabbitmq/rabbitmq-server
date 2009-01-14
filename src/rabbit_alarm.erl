@@ -40,6 +40,9 @@
 
 -define(MEMSUP_CHECK_INTERVAL, 1000).
 
+%% OSes on which we know memory alarms to be trustworthy
+-define(SUPPORTED_OS, [{unix, linux}]).
+
 -record(alarms, {alertees, system_memory_high_watermark = false}).
 
 %%----------------------------------------------------------------------------
@@ -47,18 +50,23 @@
 -ifdef(use_specs).
 
 -type(mfa_tuple() :: {atom(), atom(), list()}).
--spec(start/1 :: (bool()) -> 'ok').
+-spec(start/1 :: (bool() | 'auto') -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), mfa_tuple()) -> 'ok').
-             
+
 -endif.
 
 %%----------------------------------------------------------------------------
 
 start(MemoryAlarms) ->
-    ok = alarm_handler:add_alarm_handler(?MODULE, [MemoryAlarms]),
+    EnableAlarms = case MemoryAlarms of
+                       true  -> true;
+                       false -> false;
+                       auto  -> lists:member(os:type(), ?SUPPORTED_OS)
+                   end,
+    ok = alarm_handler:add_alarm_handler(?MODULE, [EnableAlarms]),
     case whereis(memsup) of
-        undefined -> if MemoryAlarms -> ok = start_memsup(),
+        undefined -> if EnableAlarms -> ok = start_memsup(),
                                         ok = adjust_memsup_interval();
                         true         -> ok
                      end;
@@ -93,7 +101,7 @@ handle_call({register, Pid, HighMemMFA},
     end,
     NewAlertees = dict:store(Pid, HighMemMFA, Alertess),
     {ok, ok, State#alarms{alertees = NewAlertees}};
-    
+
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
@@ -127,7 +135,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 start_memsup() ->
-    Mod = case os:type() of 
+    Mod = case os:type() of
               %% memsup doesn't take account of buffers or cache when
               %% considering "free" memory - therefore on Linux we can
               %% get memory alarms very easily without any pressure
@@ -135,7 +143,7 @@ start_memsup() ->
               %% our own simple memory monitor.
               %%
               {unix, linux} -> rabbit_memsup_linux;
-              
+
               %% Start memsup programmatically rather than via the
               %% rabbitmq-server script. This is not quite the right
               %% thing to do as os_mon checks to see if memsup is

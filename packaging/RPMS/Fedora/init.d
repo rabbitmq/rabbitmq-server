@@ -16,7 +16,6 @@
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
 
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON_NAME=rabbitmq-multi
 DAEMON=/usr/lib/rabbitmq/bin/$DAEMON_NAME
 NAME=rabbitmq-server
@@ -28,9 +27,6 @@ ROTATE_SUFFIX=
 LOCK_FILE=/var/lock/subsys/$NAME
 
 test -x $DAEMON || exit 0
-
-# source function library
-. /etc/rc.d/init.d/functions
 
 # Include rabbitmq defaults if available
 if [ -f /etc/default/rabbitmq ] ; then
