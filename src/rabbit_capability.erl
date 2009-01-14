@@ -11,6 +11,11 @@
 -record('delegate.revoke', {capability}).
 -record('delegate.revoke_ok', {}).
 
+%% This is an experimental hack for the fact that the exchange.bind_ok and
+%% queue.bind_ok are empty commands - all it does is to carry a securely
+%% generated capability
+-record('secure.declare_ok', {capability}).
+
 -record(state, {caps = dict:new()}).
 
 %%    This is a test case to for creating and revoking forwarding capabilites,
@@ -34,7 +39,7 @@
 %%           * has the capability C;
 %%           * Just give Bob the capability C;
 
-test_exchange_declare() ->
+exchange_declare_test() ->
     %% Create the root state
     RootState = root_state(),
     %% Assert that root can create an exchange
@@ -80,13 +85,48 @@ test_exchange_declare() ->
         = run_command(BobsExchangeDeclare, State7),
 
     ok.
-
+    
+bind_test() ->
+    %% Create the root state
+    RootState = root_state(),
+    %% Assert that root can issue a bind command
+    RootBind = #'queue.bind'{arguments = [bind_root]},
+    {#'queue.bind_ok'{}, State0}
+        = run_command(RootBind, RootState),
+    %% ------------------------------------START OF COPY / PASTE
+    %% Create a delegate to create exchanges
+    RootExchangeDeclare = #'exchange.declare'{arguments = [exchange_root]},
+    {#'delegate.create_ok'{forwarding_facet = AlicesExDecForward,
+                           revoking_facet   = RootsExDecRevoke}, State1}
+        = run_command(#'delegate.create'{capability = delegate_create_root,
+                                         command    = RootExchangeDeclare},
+                      State0),
+    %% Use the forwarding facet to create an exchange
+    AlicesExDec = #'exchange.declare'{arguments = [AlicesExDecForward]},
+    {#'exchange.declare_ok'{}, State2}
+        = run_command(AlicesExDec, State1),
+    %% ------------------------------------END OF COPY / PASTE
+    
+    %% Create a delegate to issue bind commands
+    {#'delegate.create_ok'{forwarding_facet = AlicesBindForward,
+                           revoking_facet   = RootsBindRevoke}, State3}
+        = run_command(#'delegate.create'{capability = delegate_create_root,
+                                         command    = RootBind},
+                      State2),
+    
+    
+    
+    ok.
+    
 %% ---------------------------------------------------------------------------
 %% These functions intercept the AMQP command set - basically this is a typed
 %% wrapper around the underlying execute_delegate/3 function
 %% ---------------------------------------------------------------------------
 
 run_command(Command = #'exchange.declare'{arguments = [Cap|_]}, State) ->
+    execute_delegate(Command, Cap, State);
+    
+run_command(Command = #'queue.bind'{arguments = [Cap|_]}, State) ->
     execute_delegate(Command, Cap, State);
 
 run_command(Command = #'delegate.create'{capability = Cap}, State) ->
@@ -135,7 +175,12 @@ root_state() ->
                             fun(Command = #'delegate.create'{}, State) ->
                                 handle_method(Command, State)
                             end, State1),
-    State2.
+    %% The root capability to create delegates
+    State3 = add_capability(bind_root,
+                            fun(Command = #'queue.bind'{}, State) ->
+                                handle_method(Command, State)
+                            end, State2),
+    State3.
 
 
 %% ---------------------------------------------------------------------------
@@ -173,7 +218,10 @@ handle_method(#'delegate.create'{capability = Cap,
                            revoking_facet   = RevokeCapability}, NewState2};
 
 handle_method(Command = #'exchange.declare'{}, State) ->
-    {#'exchange.declare_ok'{}, State}.
+    {#'exchange.declare_ok'{}, State};
+
+handle_method(Command = #'queue.bind'{}, State) ->
+    {#'queue.bind_ok'{}, State}.
 
 is_valid(_Command) ->
     true.
