@@ -7,7 +7,10 @@ OBJECTS= server/key.pem \
 		 client/cert.pem
 
 all: $(OBJECTS)
-	@echo "All Done"
+	@echo "New Certs and Keys have been generated"
+	@echo " Please remember to use ca/cacerts.pem "
+	@echo " server/cert.pem and server/key.pem in "
+	@echo " your rabbitmq-server ssl configuration"
 
 server/key.pem: 
 	mkdir -p server
