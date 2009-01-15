@@ -15,7 +15,7 @@ dist:
 	mv $(SOURCE_DIR)/scripts/rabbitmq-multi.bat $(SOURCE_DIR)/sbin
 	rm -rf $(SOURCE_DIR)/scripts
 	rm -rf $(SOURCE_DIR)/codegen* $(SOURCE_DIR)/Makefile
-	rm -f $(SOURCE_DIR)/BUILD
+	rm -f $(SOURCE_DIR)/README
 	rm -rf $(SOURCE_DIR)/docs
 
 	mv $(SOURCE_DIR) $(TARGET_DIR)
