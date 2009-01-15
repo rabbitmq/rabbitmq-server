@@ -273,7 +273,7 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                                      routing_key    = RoutingKey,
                                      content        = DecodedContent,
                                      persistent_key = PersistentKey},
-                      rabbit_exchange:route(Exchange, RoutingKey), State)};
+                      rabbit_exchange:route(Exchange, RoutingKey, DecodedContent), State)};
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
