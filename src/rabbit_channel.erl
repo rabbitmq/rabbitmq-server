@@ -855,7 +855,8 @@ consumer_queues(Consumers) ->
 
 %% tell the limiter about the number of acks that have been received
 %% for messages delivered to subscribed consumers, but not acks for
-%% messages sent in a response to a basic.get.
+%% messages sent in a response to a basic.get (identified by their
+%% 'none' consumer tag)
 notify_limiter(undefined, _Acked) ->
     ok;
 notify_limiter(LimiterPid, Acked) ->
