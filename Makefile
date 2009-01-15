@@ -40,7 +40,7 @@ ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 #all: $(EBIN_DIR)/rabbit.boot
 all: $(TARGETS)
 
-$(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS)
+$(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) < $< > $@
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit.hrl
