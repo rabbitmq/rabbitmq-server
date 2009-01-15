@@ -233,34 +233,34 @@ sort_arguments(Arguments) ->
 %% The function ensures that a qpid appears in the return list exactly
 %% as many times as a message should be delivered to it. With the
 %% current exchange types that is at most once.
-route(#exchange{name = Name, type = topic}, RoutingKey, _Content) ->
-    match_bindings(Name, fun (#binding{key = BindingKey}) ->
-                                 topic_matches(BindingKey, RoutingKey)
-                         end);
+route(X = #exchange{type = topic}, RoutingKey, _Content) ->
+    match_bindings(X, fun (#binding{key = BindingKey}) ->
+                              topic_matches(BindingKey, RoutingKey)
+                      end);
 
-route(#exchange{name = Name, type = headers}, _RoutingKey, Content) ->
+route(X = #exchange{type = headers}, _RoutingKey, Content) ->
     Headers = case (Content#content.properties)#'P_basic'.headers of
 		  undefined -> [];
 		  H         -> sort_arguments(H)
 	      end,
-    match_bindings(Name, fun (#binding{args = Spec}) ->
-                                 headers_match(Spec, Headers)
-                         end);
+    match_bindings(X, fun (#binding{args = Spec}) ->
+                              headers_match(Spec, Headers)
+                      end);
 
 route(X = #exchange{type = fanout}, _RoutingKey, _Content) ->
-    route_internal(X, '_');
+    match_routing_key(X, '_');
 
 route(X = #exchange{type = direct}, RoutingKey, _Content) ->
-    route_internal(X, RoutingKey).
+    match_routing_key(X, RoutingKey).
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same exchange
-match_bindings(XName, Match) ->
+match_bindings(#exchange{name = Name}, Match) ->
     Query = qlc:q([QName || #route{binding = Binding = #binding{
                                                exchange_name = ExchangeName,
                                                queue_name = QName}} <-
                                 mnesia:table(route),
-                            ExchangeName == XName,
+                            ExchangeName == Name,
                             Match(Binding)]),
     lookup_qpids(
       try
@@ -271,12 +271,12 @@ match_bindings(XName, Match) ->
               [QName || #route{binding = Binding = #binding{
                                            queue_name = QName}} <-
                             mnesia:dirty_match_object(
-                              #route{binding = #binding{exchange_name = XName,
+                              #route{binding = #binding{exchange_name = Name,
                                                         _ = '_'}}),
                         Match(Binding)]
       end).
 
-route_internal(#exchange{name = Name}, RoutingKey) ->
+match_routing_key(#exchange{name = Name}, RoutingKey) ->
     MatchHead = #route{binding = #binding{exchange_name = Name,
                                           queue_name = '$1',
                                           key = RoutingKey,
