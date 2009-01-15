@@ -120,9 +120,9 @@ srcdist: distclean
 	cp INSTALL.in $(TARGET_SRC_DIR)/INSTALL
 	elinks -dump -no-references -no-numbering $(WEB_URL)install.html \
 		>> $(TARGET_SRC_DIR)/INSTALL
-	cp BUILD.in $(TARGET_SRC_DIR)/BUILD
+	cp README.in $(TARGET_SRC_DIR)/README
 	elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
-		>> $(TARGET_SRC_DIR)/BUILD
+		>> $(TARGET_SRC_DIR)/README
 	sed -i 's/%%VERSION%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit.app
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
