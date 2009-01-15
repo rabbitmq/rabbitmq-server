@@ -186,7 +186,8 @@ add_vhost(VHostPath) ->
                                   [{<<"">>,           direct},
                                    {<<"amq.direct">>, direct},
                                    {<<"amq.topic">>,  topic},
-				   {<<"amq.match">>,  headers},
+				   {<<"amq.match">>,  headers}, %% per 0-9-1 pdf
+				   {<<"amq.headers">>,  headers}, %% per 0-9-1 xml
                                    {<<"amq.fanout">>, fanout}]],
                           ok;
                       [_] ->
