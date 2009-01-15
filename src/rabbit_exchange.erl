@@ -264,13 +264,13 @@ route(#exchange{name = Name, type = headers},
       #content{properties = #'P_basic'{headers = Headers0}}) ->
     Headers = case Headers0 of
 		  undefined -> [];
-		  _ -> sort_arguments(Headers0)
+		  _         -> sort_arguments(Headers0)
 	      end,
     Query = qlc:q([QName ||
-                      #route{binding = #binding{exchange_name = ExchangeName,
-						queue_name = QName,
-						args = Spec}}
-			  <- mnesia:table(route),
+                      #route{binding = #binding{
+                               exchange_name = ExchangeName,
+                               queue_name = QName,
+                               args = Spec}} <- mnesia:table(route),
 		      ExchangeName == Name,
                       headers_match(Spec, Headers)]),
     lookup_qpids(
@@ -279,10 +279,11 @@ route(#exchange{name = Name, type = headers},
       catch exit:{aborted, {badarg, _}} ->
               %% work around OTP-7025, which was fixed in R12B-1, by
               %% falling back on a less efficient method
-              [QName || #route{binding = #binding{queue_name = QName, args = Spec}}
-			    <- mnesia:dirty_match_object(
-				 #route{binding = #binding{exchange_name = Name,
-							   _ = '_'}}),
+              [QName || #route{binding = #binding{queue_name = QName,
+                                                  args = Spec}} <-
+			    mnesia:dirty_match_object(
+                              #route{binding = #binding{exchange_name = Name,
+                                                        _ = '_'}}),
                         headers_match(Spec, Headers)]
       end);
 
@@ -468,7 +469,8 @@ default_headers_match_kind() -> all.
 parse_x_match(<<"all">>) -> all;
 parse_x_match(<<"any">>) -> any;
 parse_x_match(Other) ->
-    rabbit_log:warning("Invalid x-match field value ~p; expected all or any", [Other]),
+    rabbit_log:warning("Invalid x-match field value ~p; expected all or any",
+                       [Other]),
     default_headers_match_kind().
 
 %% Horrendous matching algorithm. Depends for its merge-like
@@ -483,7 +485,8 @@ headers_match(Pattern, Data) ->
     MatchKind = case lists:keysearch(<<"x-match">>, 1, Pattern) of
 		    {value, {_, longstr, MK}} -> parse_x_match(MK);
 		    {value, {_, Type, MK}} ->
-			rabbit_log:warning("Invalid x-match field type ~p (value ~p); expected longstr",
+			rabbit_log:warning("Invalid x-match field type ~p "
+                                           "(value ~p); expected longstr",
 					   [Type, MK]),
 			default_headers_match_kind();
 		    _ -> default_headers_match_kind()
@@ -494,34 +497,33 @@ headers_match([], _Data, AllMatch, _AnyMatch, all) ->
     AllMatch;
 headers_match([], _Data, _AllMatch, AnyMatch, any) ->
     AnyMatch;
-headers_match([{<<"x-", _/binary>>, _PT, _PV} | PRest], D, AllMatch, AnyMatch, MatchKind) ->
-    headers_match(PRest, D, AllMatch, AnyMatch, MatchKind);
+headers_match([{<<"x-", _/binary>>, _PT, _PV} | PRest], Data,
+              AllMatch, AnyMatch, MatchKind) ->
+    headers_match(PRest, Data, AllMatch, AnyMatch, MatchKind);
 headers_match(_Pattern, [], _AllMatch, AnyMatch, MatchKind) ->
     headers_match([], [], false, AnyMatch, MatchKind);
-headers_match(P = [{PK, _PT, _PV} | _], [{DK, _DT, _DV} | DRest], AllMatch, AnyMatch, MatchKind)
-  when PK > DK ->
-    headers_match(P, DRest, AllMatch, AnyMatch, MatchKind);
-headers_match([{PK, _PT, _PV} | PRest], D = [{DK, _DT, _DV} | _], _AllMatch, AnyMatch, MatchKind)
-  when PK < DK ->
-    headers_match(PRest, D, false, AnyMatch, MatchKind);
-headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest], AllMatch, AnyMatch, MatchKind)
-  when PK == DK ->
-    if
-	PT == void ->
-	    %% It's not properly specified, but a "no value" in a
-	    %% pattern field is supposed to mean simple presence of
-	    %% the corresponding data field. I've interpreted that to
-	    %% mean a type of "void" for the pattern field.
-	    headers_match(PRest, DRest, AllMatch, true, MatchKind);
-	PT =/= DT ->
+headers_match(Pattern = [{PK, _PT, _PV} | _], [{DK, _DT, _DV} | DRest],
+              AllMatch, AnyMatch, MatchKind) when PK > DK ->
+    headers_match(Pattern, DRest, AllMatch, AnyMatch, MatchKind);
+headers_match([{PK, _PT, _PV} | PRest], Data = [{DK, _DT, _DV} | _],
+              _AllMatch, AnyMatch, MatchKind) when PK < DK ->
+    headers_match(PRest, Data, false, AnyMatch, MatchKind);
+headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest],
+              AllMatch, AnyMatch, MatchKind) when PK == DK ->
+    {AllMatch1, AnyMatch1} =
+        if
+            %% It's not properly specified, but a "no value" in a
+            %% pattern field is supposed to mean simple presence of
+            %% the corresponding data field. I've interpreted that to
+            %% mean a type of "void" for the pattern field.
+            PT == void -> {AllMatch, true};
 	    %% Similarly, it's not specified, but I assume that a
 	    %% mismatched type causes a mismatched value.
-	    headers_match(PRest, DRest, false, AnyMatch, MatchKind);
-	PV == DV ->
-	    headers_match(PRest, DRest, AllMatch, true, MatchKind);
-	true ->
-	    headers_match(PRest, DRest, false, AnyMatch, MatchKind)
-    end.
+            PT =/= DT  -> {false, AnyMatch};
+            PV == DV   -> {AllMatch, true};
+            true       -> {false, AnyMatch}
+        end,
+    headers_match(PRest, DRest, AllMatch1, AnyMatch1, MatchKind).
 
 split_topic_key(Key) ->
     {ok, KeySplit} = regexp:split(binary_to_list(Key), "\\."),
