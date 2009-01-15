@@ -112,16 +112,14 @@ init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
         consumer_mapping        = dict:new()}.
 
 handle_message({method, Method, Content}, State) ->
-    try
-        case handle_method(Method, Content, State) of
-            {reply, Reply, NewState} ->
-                ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
-                NewState;
-            {noreply, NewState} ->
-                NewState;
-            stop ->
-                exit(normal)
-        end
+    try handle_method(Method, Content, State) of
+        {reply, Reply, NewState} ->
+            ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
+            NewState;
+        {noreply, NewState} ->
+            NewState;
+        stop ->
+            exit(normal)
     catch
         exit:{amqp, Error, Explanation, none} ->
             terminate({amqp, Error, Explanation,

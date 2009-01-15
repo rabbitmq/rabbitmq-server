@@ -268,8 +268,10 @@ route_internal(#exchange{name = Name}, RoutingKey) ->
 lookup_qpids(Queues) ->
     sets:fold(
       fun(Key, Acc) ->
-              [#amqqueue{pid = QPid}] = mnesia:dirty_read({amqqueue, Key}),
-              [QPid | Acc]
+              case mnesia:dirty_read({amqqueue, Key}) of
+                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
+                  []                      -> Acc
+              end
       end, [], sets:from_list(Queues)).
 
 %% TODO: Should all of the route and binding management not be

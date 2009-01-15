@@ -243,8 +243,8 @@ init_db(ClusterNodes) ->
                             %% NB: we cannot use rabbit_log here since
                             %% it may not have been started yet
                             error_logger:warning_msg(
-                              "schema integrity check failed: ~p~n" ++
-                              "moving database to backup location " ++
+                              "schema integrity check failed: ~p~n"
+                              "moving database to backup location "
                               "and recreating schema from scratch~n",
                               [Reason]),
                             ok = move_db(),

@@ -47,7 +47,7 @@ init({{File, Suffix}, []}) ->
     case rabbit_misc:append_file(File, Suffix) of
         ok -> ok;
         {error, Error} ->
-            rabbit_log:error("Failed to append contents of " ++
+            rabbit_log:error("Failed to append contents of "
                              "sasl log file '~s' to '~s':~n~p~n",
                              [File, [File, Suffix], Error])
     end,
