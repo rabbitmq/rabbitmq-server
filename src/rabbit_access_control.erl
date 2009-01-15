@@ -186,6 +186,7 @@ add_vhost(VHostPath) ->
                                   [{<<"">>,           direct},
                                    {<<"amq.direct">>, direct},
                                    {<<"amq.topic">>,  topic},
+				   {<<"amq.match">>,  headers},
                                    {<<"amq.fanout">>, fanout}]],
                           ok;
                       [_] ->

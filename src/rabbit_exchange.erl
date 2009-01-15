@@ -145,6 +145,8 @@ check_type(<<"direct">>) ->
     direct;
 check_type(<<"topic">>) ->
     topic;
+check_type(<<"headers">>) ->
+    headers;
 check_type(T) ->
     rabbit_misc:protocol_error(
       command_invalid, "invalid exchange type '~s'", [T]).
@@ -251,6 +253,9 @@ route(#exchange{name = Name, type = topic}, RoutingKey) ->
                                                         _ = '_'}}),
                         topic_matches(BindingKey, RoutingKey)]
       end);
+
+route(X = #exchange{type = headers}, _RoutingKey) ->
+    exit(headers_unimplemented);
 
 route(X = #exchange{type = fanout}, _) ->
     route_internal(X, '_');
