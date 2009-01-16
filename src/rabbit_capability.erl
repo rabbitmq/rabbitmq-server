@@ -6,7 +6,8 @@
 
 -compile(export_all).
 
--record('delegate.create', {capability, command}).
+-record('delegate.create', {capability,
+                            command}).
 -record('delegate.create_ok', {forwarding_facet, revoking_facet}).
 -record('delegate.revoke', {capability}).
 -record('delegate.revoke_ok', {}).
@@ -14,7 +15,7 @@
 %% This is an experimental hack for the fact that the exchange.bind_ok and
 %% queue.bind_ok are empty commands - all it does is to carry a securely
 %% generated capability
--record('secure.declare_ok', {capability}).
+-record('secure.ok', {capability}).
 
 -record(state, {caps = dict:new()}).
 
@@ -44,7 +45,7 @@ exchange_declare_test() ->
     RootState = root_state(),
     %% Assert that root can create an exchange
     RootExchangeDeclare = #'exchange.declare'{arguments = [exchange_root]},
-    {#'exchange.declare_ok'{}, State0}
+    {#'secure.ok'{}, State0}
         = run_command(RootExchangeDeclare, RootState),
     %% Create a delegate to create exchanges
     {#'delegate.create_ok'{forwarding_facet = AlicesForward,
@@ -54,7 +55,7 @@ exchange_declare_test() ->
                       State0),
     %% Use the forwarding facet to create an exchange
     AlicesExchangeDeclare = #'exchange.declare'{arguments = [AlicesForward]},
-    {#'exchange.declare_ok'{}, State2}
+    {#'secure.ok'{}, State2}
         = run_command(AlicesExchangeDeclare, State1),
     %% Use the revoking facet to revoke the capability to create exchanges
     RevocationByRoot = #'delegate.revoke'{capability = RootsRevoke},
@@ -74,7 +75,7 @@ exchange_declare_test() ->
                       State1),
     %% Use the delegated forwarding facet to create an exchange
     BobsExchangeDeclare = #'exchange.declare'{arguments = [BobsForward]},
-    {#'exchange.declare_ok'{}, State6}
+    {#'secure.ok'{}, State6}
         = run_command(BobsExchangeDeclare, State5),
     %% Use the original revoking facet to revoke the capability to create
     %% exchanges in a cascading fashion
@@ -90,9 +91,9 @@ bind_test() ->
     %% Create the root state
     RootState = root_state(),
     %% Assert that root can issue a bind command
-    RootBind = #'queue.bind'{arguments = [bind_root]},
-    {#'queue.bind_ok'{}, State0}
-        = run_command(RootBind, RootState),
+    RootsBind = #'queue.bind'{arguments = [bind_root]},
+    {#'secure.ok'{}, State0}
+        = run_command(RootsBind, RootState),
     %% ------------------------------------START OF COPY / PASTE
     %% Create a delegate to create exchanges
     RootExchangeDeclare = #'exchange.declare'{arguments = [exchange_root]},
@@ -103,18 +104,49 @@ bind_test() ->
                       State0),
     %% Use the forwarding facet to create an exchange
     AlicesExDec = #'exchange.declare'{arguments = [AlicesExDecForward]},
-    {#'exchange.declare_ok'{}, State2}
+    {#'secure.ok'{capability = AlicesExCap}, State2}
         = run_command(AlicesExDec, State1),
     %% ------------------------------------END OF COPY / PASTE
+
+    %% The important observation here is the Alice now has the capability to
+    %% whatever she wants with the exchange - so let's see her do something
+    %% useful with it
     
     %% Create a delegate to issue bind commands
     {#'delegate.create_ok'{forwarding_facet = AlicesBindForward,
                            revoking_facet   = RootsBindRevoke}, State3}
         = run_command(#'delegate.create'{capability = delegate_create_root,
-                                         command    = RootBind},
+                                         command    = RootsBind},
                       State2),
     
+    %% Use the forwarding facet to bind something
+    AlicesBind = #'queue.bind'{arguments = [AlicesBindForward]},
+    {#'secure.ok'{capability = AlicesBindCap}, State4}
+                          = run_command(AlicesBind, State3),
+
+    %% This is where it gets tricky - to be able to bind to an exchange,
+    %% Alice not only needs the capability to bind, but she also requires
+    %% the capability to the exchange object that she is binding to........
+
+    %% The bind command is a join between an exchange and a queue
+    BobsBindDelegate = #'queue.bind'{queue         = undefined,
+                                     routing_key   = undefined,
+                             %% undefined will be filled in by the compiler
+                             %% just making the destinction between trusted
+                             %% and untrusted clear
+                                     exchange  = AlicesExCap,
+                                     arguments = [AlicesBindForward]},
+    {#'delegate.create_ok'{forwarding_facet = BobsBindForward,
+                           revoking_facet   = AlicesBindRevoke}, State5}
+        = run_command(#'delegate.create'{capability = delegate_create_root,
+                                         command    = BobsBindDelegate},
+                      State4),
     
+    BobsBind = #'queue.bind'{queue = <<"untrusted">>,
+                             routing_key = <<"also untrusted">>,
+                             arguments = [BobsBindForward]},
+    {#'secure.ok'{capability = BobsBindCap}, State6}
+                             = run_command(BobsBindDelegate, State5),
     
     ok.
     
@@ -184,7 +216,7 @@ root_state() ->
 
 
 %% ---------------------------------------------------------------------------
-%% The internal API, which has no knowledge of capabilities.
+%% The internal API, which has *little* knowledge of capabilities.
 %% This is roughly analogous the current channel API in Rabbit.
 %% ---------------------------------------------------------------------------
 
@@ -218,10 +250,21 @@ handle_method(#'delegate.create'{capability = Cap,
                            revoking_facet   = RevokeCapability}, NewState2};
 
 handle_method(Command = #'exchange.declare'{}, State) ->
-    {#'exchange.declare_ok'{}, State};
+    Cap = uuid(),
+    %% TODO Do something with this
+    {#'secure.ok'{capability = Cap}, State};
 
-handle_method(Command = #'queue.bind'{}, State) ->
-    {#'queue.bind_ok'{}, State}.
+handle_method(Command = #'queue.bind'{queue = Q, 
+                                      exchange = X, 
+                                      routing_key = K}, State) ->
+    
+    
+    
+    
+    
+    Cap = uuid(),
+    %% TODO Do something with this
+    {#'secure.ok'{capability = Cap}, State}.
 
 is_valid(_Command) ->
     true.
