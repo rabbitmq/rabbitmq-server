@@ -43,19 +43,20 @@
 -type(stat_option() :: 
 	'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
 	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
--type(timeout() :: 'infinity' | non_neg_integer()).
+-type(timeout() :: 'infinity' | -1 | non_neg_integer()).
+-type(error() :: {'error', any()}).
 
 -spec(async_recv/3 :: (socket(), integer(), timeout()) -> {'ok', ref()}).
--spec(close/1 :: (socket()) -> 'ok' | {'error', any()}).
--spec(controlling_process/2 :: (socket(), pid()) -> 'ok' | {'error', any()}).
+-spec(close/1 :: (socket()) -> 'ok' | error()).
+-spec(controlling_process/2 :: (socket(), pid()) -> 'ok' | error()).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
--spec(send/2 :: (socket(), iolist()) -> 'ok' | {'error', any()}).
+-spec(send/2 :: (socket(), iolist()) -> 'ok' | error()).
 -spec(peername/1 :: (socket()) -> 
-        {'ok', {ip_address(), non_neg_integer()}} | {'error', any()}).
+        {'ok', {ip_address(), non_neg_integer()}} | error()).
 -spec(sockname/1 :: (socket()) -> 
-        {'ok', {ip_address(), non_neg_integer()}} | {'error', any()}).
+        {'ok', {ip_address(), non_neg_integer()}} | error()).
 -spec(getstat/2 :: (socket(), [stat_option()]) -> 
-        {'ok', [{stat_option(), integer()}]} | {'error', any()}). 		
+        {'ok', [{stat_option(), integer()}]} | error()).
 
 -endif.
 
