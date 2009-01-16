@@ -113,8 +113,9 @@ internal_lookup_vhost_access(Username, VHostPath) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:match_object(
-                     #user_vhost{username = Username,
-                                 virtual_host = VHostPath}) of
+                     #user_permission{username = Username,
+                                      virtual_host = VHostPath,
+                                      _ = '_'}) of
                   [] -> not_found;
                   [R] -> {ok, R}
               end
@@ -151,7 +152,7 @@ delete_user(Username) ->
             Username,
             fun () ->
                     ok = mnesia:delete({user, Username}),
-                    ok = mnesia:delete({user_vhost, Username})
+                    ok = mnesia:delete({user_permission, Username})
             end)),
     rabbit_log:info("Deleted user ~p~n", [Username]),
     R.
@@ -232,23 +233,23 @@ list_vhosts() ->
 
 list_vhost_users(VHostPath) ->
     [Username ||
-        #user_vhost{username = Username} <-
+        #user_permission{username = Username} <-
             %% TODO: use dirty ops instead
             rabbit_misc:execute_mnesia_transaction(
               rabbit_misc:with_vhost(
                 VHostPath,
-                fun () -> mnesia:index_read(user_vhost, VHostPath,
-                                            #user_vhost.virtual_host)
+                fun () -> mnesia:index_read(user_permission, VHostPath,
+                                            #user_permission.virtual_host)
                 end))].
 
 list_user_vhosts(Username) ->
     [VHostPath ||
-        #user_vhost{virtual_host = VHostPath} <-
+        #user_permission{virtual_host = VHostPath} <-
             %% TODO: use dirty ops instead
             rabbit_misc:execute_mnesia_transaction(
               rabbit_misc:with_user(
                 Username,
-                fun () -> mnesia:read({user_vhost, Username}) end))].
+                fun () -> mnesia:read({user_permission, Username}) end))].
 
 map_user_vhost(Username, VHostPath) ->
     rabbit_misc:execute_mnesia_transaction(
@@ -256,8 +257,11 @@ map_user_vhost(Username, VHostPath) ->
         Username, VHostPath,
         fun () ->
                 ok = mnesia:write(
-                       #user_vhost{username = Username,
-                                   virtual_host = VHostPath})
+                       #user_permission{username = Username,
+                                        virtual_host = VHostPath,
+                                        permission = #permission{
+                                         configuration = ".*",
+                                         messaging = ".*"}})
         end)).
 
 unmap_user_vhost(Username, VHostPath) ->
@@ -265,8 +269,11 @@ unmap_user_vhost(Username, VHostPath) ->
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath,
         fun () ->
-                ok = mnesia:delete_object(
-                       #user_vhost{username = Username,
-                                   virtual_host = VHostPath})
+                [ok = mnesia:delete_object(R) ||
+                    R <- mnesia:match_object(
+                           #user_permission{username = Username,
+                                            virtual_host = VHostPath,
+                                            _ = '_'})],
+                ok
         end)).
 

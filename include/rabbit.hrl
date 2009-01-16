@@ -30,7 +30,8 @@
 %%
 
 -record(user, {username, password}).
--record(user_vhost, {username, virtual_host}).
+-record(permission, {configuration, messaging}).
+-record(user_permission, {username, virtual_host, permission}).
 
 -record(vhost, {virtual_host, dummy}).
 
