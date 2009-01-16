@@ -39,7 +39,7 @@
 %% callbacks
 -export([init/2, handle_message/2]).
 
--record(ch, {state, proxy_pid, reader_pid, writer_pid,
+-record(ch, {state, proxy_pid, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host,
@@ -100,6 +100,7 @@ init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
         proxy_pid               = ProxyPid,
         reader_pid              = ReaderPid,
         writer_pid              = WriterPid,
+        limiter_pid             = undefined,
         transaction_id          = none,
         tx_participants         = sets:new(),
         next_tag                = 1,
@@ -151,6 +152,12 @@ handle_message({conserve_memory, Conserve}, State) ->
            State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
     State;
 
+handle_message({'EXIT', Pid, Reason}, State = #ch{proxy_pid = Pid}) ->
+    terminate(Reason, State);
+
+handle_message({'EXIT', _Pid, normal}, State) ->
+    State;
+
 handle_message({'EXIT', _Pid, Reason}, State) ->
     terminate(Reason, State);
 
@@ -159,13 +166,15 @@ handle_message(Other, State) ->
 
 %%---------------------------------------------------------------------------
 
-terminate(Reason, State = #ch{writer_pid = WriterPid}) ->
+terminate(Reason, State = #ch{writer_pid = WriterPid,
+                              limiter_pid = LimiterPid}) ->
     Res = notify_queues(internal_rollback(State)),
     case Reason of
         normal -> ok = Res;
         _      -> ok
     end,
     rabbit_writer:shutdown(WriterPid),
+    rabbit_limiter:shutdown(LimiterPid),
     exit(Reason).
 
 return_ok(State, true, _Msg)  -> {noreply, State};
@@ -273,7 +282,7 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                                      routing_key    = RoutingKey,
                                      content        = DecodedContent,
                                      persistent_key = PersistentKey},
-                      rabbit_exchange:route(Exchange, RoutingKey), State)};
+                      rabbit_exchange:route(Exchange, RoutingKey, DecodedContent), State)};
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
@@ -288,7 +297,8 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     Participants = ack(State#ch.proxy_pid, TxnKey, Acked),
     {noreply, case TxnKey of
-                  none -> State#ch{unacked_message_q = Remaining};
+                  none -> ok = notify_limiter(State#ch.limiter_pid, Acked),
+                          State#ch{unacked_message_q = Remaining};
                   _    -> NewUAQ = queue:join(State#ch.uncommitted_ack_q,
                                               Acked),
                           add_tx_participants(
@@ -332,6 +342,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                                nowait = NoWait},
               _, State = #ch{ proxy_pid = ProxyPid,
                               reader_pid = ReaderPid,
+                              limiter_pid = LimiterPid,
                               consumer_mapping = ConsumerMapping }) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
@@ -349,7 +360,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                    QueueName,
                    fun (Q) ->
                            rabbit_amqqueue:basic_consume(
-                             Q, NoAck, ReaderPid, ProxyPid,
+                             Q, NoAck, ReaderPid, ProxyPid, LimiterPid,
                              ActualConsumerTag, ExclusiveConsume,
                              ok_msg(NoWait, #'basic.consume_ok'{
                                       consumer_tag = ActualConsumerTag}))
@@ -414,9 +425,32 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
             end
     end;
 
-handle_method(#'basic.qos'{}, _, State) ->
-    %% FIXME: Need to implement QOS
-    {reply, #'basic.qos_ok'{}, State};
+handle_method(#'basic.qos'{global = true}, _, _State) ->
+    rabbit_misc:protocol_error(not_implemented, "global=true", []);
+
+handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
+    rabbit_misc:protocol_error(not_implemented, 
+                               "prefetch_size!=0 (~w)", [Size]);
+
+handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
+              _, State = #ch{ limiter_pid = LimiterPid,
+                              proxy_pid = ProxyPid }) ->
+    NewLimiterPid = case {LimiterPid, PrefetchCount} of
+                        {undefined, 0} ->
+                            undefined;
+                        {undefined, _} ->
+                            LPid = rabbit_limiter:start_link(ProxyPid),
+                            ok = limit_queues(LPid, State),
+                            LPid;
+                        {_, 0} ->
+                            ok = rabbit_limiter:shutdown(LimiterPid),
+                            ok = limit_queues(undefined, State),
+                            undefined;
+                        {_, _} ->
+                            LimiterPid
+                    end,
+    ok = rabbit_limiter:limit(NewLimiterPid, PrefetchCount),
+    {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = NewLimiterPid}};
 
 handle_method(#'basic.recover'{requeue = true},
               _, State = #ch{ transaction_id = none,
@@ -762,7 +796,9 @@ internal_commit(State = #ch{transaction_id = TxnKey,
                             tx_participants = Participants}) ->
     case rabbit_amqqueue:commit_all(sets:to_list(Participants),
                                     TxnKey) of
-        ok              -> new_tx(State);
+        ok              -> ok = notify_limiter(State#ch.limiter_pid,
+                                               State#ch.uncommitted_ack_q),
+                           new_tx(State);
         {error, Errors} -> rabbit_misc:protocol_error(
                              internal_error, "commit failed: ~w", [Errors])
     end.
@@ -800,18 +836,36 @@ fold_per_queue(F, Acc0, UAQ) ->
               Acc0, D).
 
 notify_queues(#ch{proxy_pid = ProxyPid, consumer_mapping = Consumers}) ->
-    rabbit_amqqueue:notify_down_all(
-      [QPid || QueueName <- 
-                   sets:to_list(
-                     dict:fold(fun (_ConsumerTag, QueueName, S) ->
-                                       sets:add_element(QueueName, S)
-                               end, sets:new(), Consumers)),
-               case rabbit_amqqueue:lookup(QueueName) of
-                   {ok, Q} -> QPid = Q#amqqueue.pid, true;
-                   %% queue has been deleted in the meantime
-                   {error, not_found} -> QPid = none, false
-               end],
-      ProxyPid).
+    rabbit_amqqueue:notify_down_all(consumer_queues(Consumers), ProxyPid).
+
+limit_queues(LPid, #ch{proxy_pid = ProxyPid, consumer_mapping = Consumers}) ->
+    rabbit_amqqueue:limit_all(consumer_queues(Consumers), ProxyPid, LPid).
+
+consumer_queues(Consumers) ->
+    [QPid || QueueName <- 
+                 sets:to_list(
+                   dict:fold(fun (_ConsumerTag, QueueName, S) ->
+                                     sets:add_element(QueueName, S)
+                             end, sets:new(), Consumers)),
+             case rabbit_amqqueue:lookup(QueueName) of
+                 {ok, Q} -> QPid = Q#amqqueue.pid, true;
+                 %% queue has been deleted in the meantime
+                 {error, not_found} -> QPid = none, false
+             end].
+
+%% tell the limiter about the number of acks that have been received
+%% for messages delivered to subscribed consumers, but not acks for
+%% messages sent in a response to a basic.get (identified by their
+%% 'none' consumer tag)
+notify_limiter(undefined, _Acked) ->
+    ok;
+notify_limiter(LimiterPid, Acked) ->
+    case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
+                         ({_, _, _}, Acc)    -> Acc + 1
+                     end, 0, queue:to_list(Acked)) of
+        0     -> ok;
+        Count -> rabbit_limiter:ack(LimiterPid, Count)
+    end.
 
 is_message_persistent(#content{properties = #'P_basic'{
                                  delivery_mode = Mode}}) ->
