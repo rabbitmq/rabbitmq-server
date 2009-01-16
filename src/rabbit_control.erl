@@ -114,7 +114,7 @@ Available commands:
   delete_vhost <VHostPath>
   list_vhosts
 
-  set_permissions   [-p <VHostPath>] <UserName> <Permission> <Permission>
+  set_permissions   [-p <VHostPath>] <UserName> <Regexp> <Regexp>
   clear_permissions [-p <VHostPath>] <UserName>
   list_user_vhosts <UserName>
   list_vhost_users <VHostPath>
@@ -223,18 +223,6 @@ action(list_vhosts, Node, [], Inform) ->
     Inform("Listing vhosts", []),
     display_list(call(Node, {rabbit_access_control, list_vhosts, []}));
 
-action(set_permissions, Node, Args, Inform) ->
-    {VHost, [Username, ConfigurationPerm, MessagingPerm]} =
-        parse_vhost_flag(Args),
-    Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
-    call(Node, {rabbit_access_control, set_permissions,
-                [Username, VHost, ConfigurationPerm, MessagingPerm]});
-
-action(clear_permissions, Node, Args, Inform) ->
-    {VHost, [Username]} = parse_vhost_flag(Args),
-    Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
-    call(Node, {rabbit_access_control, clear_permissions, [Username, VHost]});
-
 action(list_user_vhosts, Node, Args = [_Username], Inform) ->
     Inform("Listing vhosts for user ~p", Args),
     display_list(call(Node, {rabbit_access_control, list_user_vhosts, Args}));
@@ -276,7 +264,20 @@ action(list_connections, Node, Args, Inform) ->
                             default_if_empty(Args, [user, peer_address, peer_port])),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
-                      ArgAtoms).
+                      ArgAtoms);
+
+action(Command, Node, Args, Inform) ->
+    {VHost, RemainingArgs} = parse_vhost_flag(Args),
+    action(Command, Node, VHost, RemainingArgs, Inform).
+
+action(set_permissions, Node, VHost, [Username, CPerm, MPerm], Inform) ->
+    Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
+    call(Node, {rabbit_access_control, set_permissions,
+                [Username, VHost, CPerm, MPerm]});
+
+action(clear_permissions, Node, VHost, [Username], Inform) ->
+    Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
+    call(Node, {rabbit_access_control, clear_permissions, [Username, VHost]}).
 
 parse_vhost_flag(Args) when is_list(Args) ->
     case Args of 
