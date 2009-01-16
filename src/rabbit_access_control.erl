@@ -34,7 +34,7 @@
 -include("rabbit.hrl").
 
 -export([check_login/2, user_pass_login/2,
-         check_vhost_access/2]).
+         check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, list_users/0,
          lookup_user/1]).
 -export([add_vhost/1, delete_vhost/1, list_vhosts/0, list_vhost_users/1]).
@@ -47,6 +47,8 @@
 -spec(check_login/2 :: (binary(), binary()) -> user()).
 -spec(user_pass_login/2 :: (username(), password()) -> user()).
 -spec(check_vhost_access/2 :: (user(), vhost()) -> 'ok').
+-spec(check_resource_access/3 ::
+      (username(), r(atom()), non_neg_integer()) -> 'ok').
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
@@ -129,6 +131,35 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
             rabbit_misc:protocol_error(
               access_refused, "access to vhost '~s' refused for user '~s'",
               [VHostPath, Username])
+    end.
+
+check_resource_access(Username,
+                      R = #resource{kind = exchange, name = <<"">>},
+                      Permission) ->
+    check_resource_access(Username,
+                          R#resource{name = <<"amq.default">>},
+                          Permission);
+check_resource_access(Username,
+                      R = #resource{virtual_host = VHostPath, name = Name},
+                      Permission) ->
+    %% TODO: cache the results
+    Res = case mnesia:dirty_read({user_permission,
+                                  #user_vhost{username = Username,
+                                              virtual_host = VHostPath}}) of
+              [] ->
+                  false;
+              [#user_permission{permission = P}] ->
+                  case regexp:match(
+                         binary_to_list(Name),
+                         binary_to_list(element(Permission, P))) of
+                      {match, _, _} -> true;
+                      nomatch       -> false
+                  end
+          end,
+    if Res  -> ok;
+       true -> rabbit_misc:protocol_error(
+                 access_refused, "access to ~s refused for user '~s'",
+                 [rabbit_misc:rs(R), Username])
     end.
 
 add_user(Username, Password) ->
