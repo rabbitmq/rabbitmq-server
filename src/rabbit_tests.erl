@@ -444,17 +444,18 @@ test_user_management() ->
     {error, {no_such_vhost, _}} =
         control_action(delete_vhost, ["/testhost"]),
     {error, {no_such_user, _}} =
-        control_action(map_user_vhost, ["foo", "/"]),
+        control_action(set_permissions, ["foo", ".*", ".*"]),
     {error, {no_such_user, _}} =
-        control_action(unmap_user_vhost, ["foo", "/"]),
+        control_action(clear_permissions, ["foo"]),
     {error, {no_such_user, _}} =
         control_action(list_user_vhosts, ["foo"]),
     {error, {no_such_vhost, _}} =
-        control_action(map_user_vhost, ["guest", "/testhost"]),
-    {error, {no_such_vhost, _}} =
-        control_action(unmap_user_vhost, ["guest", "/testhost"]),
-    {error, {no_such_vhost, _}} =
         control_action(list_vhost_users, ["/testhost"]),
+    {error, {invalid_regexp, _, _}} =
+        control_action(set_permissions, ["guest", "+foo", ".*"]),
+    {error, {invalid_regexp, _, _}} =
+        control_action(set_permissions, ["guest", ".*", "+foo"]),
+
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
     {error, {user_already_exists, _}} =
@@ -469,13 +470,15 @@ test_user_management() ->
     ok = control_action(list_vhosts, []),
 
     %% user/vhost mapping
-    ok = control_action(map_user_vhost, ["foo", "/testhost"]),
-    ok = control_action(map_user_vhost, ["foo", "/testhost"]),
+    ok = control_action(set_permissions, ["-p", "/testhost",
+                                          "foo", ".*", ".*"]),
+    ok = control_action(set_permissions, ["-p", "/testhost",
+                                          "foo", ".*", ".*"]),
     ok = control_action(list_user_vhosts, ["foo"]),
 
     %% user/vhost unmapping
-    ok = control_action(unmap_user_vhost, ["foo", "/testhost"]),
-    ok = control_action(unmap_user_vhost, ["foo", "/testhost"]),
+    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
+    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
 
     %% vhost deletion
     ok = control_action(delete_vhost, ["/testhost"]),
@@ -484,7 +487,8 @@ test_user_management() ->
 
     %% deleting a populated vhost
     ok = control_action(add_vhost, ["/testhost"]),
-    ok = control_action(map_user_vhost, ["foo", "/testhost"]),
+    ok = control_action(set_permissions, ["-p", "/testhost",
+                                          "foo", ".*", ".*"]),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion

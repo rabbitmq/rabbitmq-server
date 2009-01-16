@@ -264,9 +264,13 @@ insert_default_data() ->
     {ok, DefaultUser} = application:get_env(default_user),
     {ok, DefaultPass} = application:get_env(default_pass),
     {ok, DefaultVHost} = application:get_env(default_vhost),
+    {ok, [DefaultConfigurationPerm, DefaultMessagingPerm]} =
+        application:get_env(default_permissions),
     ok = rabbit_access_control:add_vhost(DefaultVHost),
     ok = rabbit_access_control:add_user(DefaultUser, DefaultPass),
-    ok = rabbit_access_control:map_user_vhost(DefaultUser, DefaultVHost),
+    ok = rabbit_access_control:set_permissions(DefaultUser, DefaultVHost,
+                                               DefaultConfigurationPerm,
+                                               DefaultMessagingPerm),
     ok.
 
 start_builtin_amq_applications() ->

@@ -114,8 +114,8 @@ Available commands:
   delete_vhost <VHostPath>
   list_vhosts
 
-  map_user_vhost   <UserName> <VHostPath>
-  unmap_user_vhost <UserName> <VHostPath>
+  set_permissions   [-p <VHostPath>] <UserName> <Permission> <Permission>
+  clear_permissions [-p <VHostPath>] <UserName>
   list_user_vhosts <UserName>
   list_vhost_users <VHostPath>
 
@@ -223,13 +223,17 @@ action(list_vhosts, Node, [], Inform) ->
     Inform("Listing vhosts", []),
     display_list(call(Node, {rabbit_access_control, list_vhosts, []}));
 
-action(map_user_vhost, Node, Args = [_Username, _VHostPath], Inform) ->
-    Inform("Mapping user ~p to vhost ~p", Args),
-    call(Node, {rabbit_access_control, map_user_vhost, Args});
+action(set_permissions, Node, Args, Inform) ->
+    {VHost, [Username, ConfigurationPerm, MessagingPerm]} =
+        parse_vhost_flag(Args),
+    Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
+    call(Node, {rabbit_access_control, set_permissions,
+                [Username, VHost, ConfigurationPerm, MessagingPerm]});
 
-action(unmap_user_vhost, Node, Args = [_Username, _VHostPath], Inform) ->
-    Inform("Unmapping user ~p from vhost ~p", Args),
-    call(Node, {rabbit_access_control, unmap_user_vhost, Args});
+action(clear_permissions, Node, Args, Inform) ->
+    {VHost, [Username]} = parse_vhost_flag(Args),
+    Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
+    call(Node, {rabbit_access_control, clear_permissions, [Username, VHost]});
 
 action(list_user_vhosts, Node, Args = [_Username], Inform) ->
     Inform("Listing vhosts for user ~p", Args),
@@ -241,7 +245,7 @@ action(list_vhost_users, Node, Args = [_VHostPath], Inform) ->
 
 action(list_queues, Node, Args, Inform) ->
     Inform("Listing queues", []),
-    {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
+    {VHostArg, RemainingArgs} = parse_vhost_flag_bin(Args),
     ArgAtoms = list_replace(node, pid, 
                             default_if_empty(RemainingArgs, [name, messages])),
     display_info_list(rpc_call(Node, rabbit_amqqueue, info_all,
@@ -250,7 +254,7 @@ action(list_queues, Node, Args, Inform) ->
 
 action(list_exchanges, Node, Args, Inform) ->
     Inform("Listing exchanges", []),
-    {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
+    {VHostArg, RemainingArgs} = parse_vhost_flag_bin(Args),
     ArgAtoms = default_if_empty(RemainingArgs, [name, type]),
     display_info_list(rpc_call(Node, rabbit_exchange, info_all,
                                [VHostArg, ArgAtoms]),
@@ -258,7 +262,7 @@ action(list_exchanges, Node, Args, Inform) ->
 
 action(list_bindings, Node, Args, Inform) ->
     Inform("Listing bindings", []),
-    {VHostArg, _} = parse_vhost_flag(Args),
+    {VHostArg, _} = parse_vhost_flag_bin(Args),
     InfoKeys = [exchange_name, routing_key, queue_name, args],
     display_info_list(
       [lists:zip(InfoKeys, tuple_to_list(X)) ||
@@ -275,12 +279,16 @@ action(list_connections, Node, Args, Inform) ->
                       ArgAtoms).
 
 parse_vhost_flag(Args) when is_list(Args) ->
-        case Args of 
-            ["-p", VHost | RemainingArgs] ->
-                {list_to_binary(VHost), RemainingArgs};  
-            RemainingArgs ->
-                {<<"/">>, RemainingArgs}
-        end.
+    case Args of 
+        ["-p", VHost | RemainingArgs] ->
+            {VHost, RemainingArgs};  
+        RemainingArgs ->
+            {"/", RemainingArgs}
+    end.
+
+parse_vhost_flag_bin(Args) ->
+    {VHost, RemainingArgs} = parse_vhost_flag(Args),
+    {list_to_binary(VHost), RemainingArgs}.
 
 default_if_empty(List, Default) when is_list(List) ->
     if List == [] -> 
