@@ -33,7 +33,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -define(UNSENT_MESSAGE_LIMIT, 100).
 -define(HIBERNATE_AFTER, 1000).
@@ -86,7 +86,7 @@
 %%----------------------------------------------------------------------------
 
 start_link(Q) ->
-    gen_server:start_link(?MODULE, Q, []).
+    gen_server2:start_link(?MODULE, Q, []).
 
 %%----------------------------------------------------------------------------
 
@@ -566,14 +566,14 @@ handle_call({deliver, Txn, Message}, _From, State) ->
 handle_call({commit, Txn}, From, State) ->
     ok = commit_work(Txn, qname(State)),
     %% optimisation: we reply straight away so the sender can continue
-    gen_server:reply(From, ok),
+    gen_server2:reply(From, ok),
     NewState = process_pending(Txn, State),
     erase_tx(Txn),
     noreply(NewState);
 
 handle_call({notify_down, ChPid}, From, State) ->
     %% optimisation: we reply straight away so the sender can continue
-    gen_server:reply(From, ok),
+    gen_server2:reply(From, ok),
     handle_ch_down(ChPid, State);
 
 handle_call({basic_get, ChPid, NoAck}, _From,
@@ -800,7 +800,7 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
 handle_info(timeout, State) ->
     %% TODO: Once we drop support for R11B-5, we can change this to
     %% {noreply, State, hibernate};
-    proc_lib:hibernate(gen_server, enter_loop, [?MODULE, [], State]);
+    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State]);
 
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
