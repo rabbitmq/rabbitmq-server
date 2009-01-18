@@ -514,8 +514,8 @@ i(messages_uncommitted, _) ->
                   #tx{pending_messages = Pending} <- all_tx_record()]);
 i(messages, State) ->
     lists:sum([i(Item, State) || Item <- [messages_ready,
-                                             messages_unacknowledged,
-                                             messages_uncommitted]]);
+                                          messages_unacknowledged,
+                                          messages_uncommitted]]);
 i(acks_uncommitted, _) ->
     lists:sum([length(Pending) ||
                   #tx{pending_acks = Pending} <- all_tx_record()]);
