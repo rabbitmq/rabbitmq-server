@@ -150,19 +150,17 @@ pid
     Erlang process identifier associated with the queue
 
 messages_ready
-    number of ready messages
+    number of messages ready to be delivered to clients
 
 messages_unacknowledged
-    number of unacknowledged messages
+    number of messages delivered to clients but not yet acknowledged
 
 messages_uncommitted
-    number of uncommitted messages
-
-messages
-    sum of ready, unacknowledged and uncommitted messages
+    number of messages published in as yet uncommitted transactions
 
 acks_uncommitted
-    number of uncommitted acknowledgements
+    number of acknowledgements received in as yet uncommitted
+    transactions
 
 consumers
     number of consumers
