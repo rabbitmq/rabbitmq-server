@@ -448,9 +448,9 @@ test_user_management() ->
     {error, {no_such_user, _}} =
         control_action(clear_permissions, ["foo"]),
     {error, {no_such_user, _}} =
-        control_action(list_user_vhosts, ["foo"]),
+        control_action(list_user_permissions, ["foo"]),
     {error, {no_such_vhost, _}} =
-        control_action(list_vhost_users, ["/testhost"]),
+        control_action(list_permissions, ["-p", "/testhost"]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*"]),
     {error, {invalid_regexp, _, _}} =
@@ -474,7 +474,8 @@ test_user_management() ->
                                           "foo", ".*", ".*"]),
     ok = control_action(set_permissions, ["-p", "/testhost",
                                           "foo", ".*", ".*"]),
-    ok = control_action(list_user_vhosts, ["foo"]),
+    ok = control_action(list_permissions, ["-p", "/testhost"]),
+    ok = control_action(list_user_permissions, ["foo"]),
 
     %% user/vhost unmapping
     ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),

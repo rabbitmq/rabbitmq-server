@@ -116,8 +116,8 @@ Available commands:
 
   set_permissions   [-p <VHostPath>] <UserName> <Regexp> <Regexp>
   clear_permissions [-p <VHostPath>] <UserName>
-  list_user_vhosts <UserName>
-  list_vhost_users <VHostPath>
+  list_permissions  [-p <VHostPath>]
+  list_user_permissions <UserName>
 
   list_queues    [-p <VHostPath>] [<QueueInfoItem> ...]
   list_exchanges [-p <VHostPath>] [<ExchangeInfoItem> ...]
@@ -223,13 +223,10 @@ action(list_vhosts, Node, [], Inform) ->
     Inform("Listing vhosts", []),
     display_list(call(Node, {rabbit_access_control, list_vhosts, []}));
 
-action(list_user_vhosts, Node, Args = [_Username], Inform) ->
-    Inform("Listing vhosts for user ~p", Args),
-    display_list(call(Node, {rabbit_access_control, list_user_vhosts, Args}));
-
-action(list_vhost_users, Node, Args = [_VHostPath], Inform) ->
-    Inform("Listing users for vhosts ~p", Args),
-    display_list(call(Node, {rabbit_access_control, list_vhost_users, Args}));
+action(list_user_permissions, Node, Args = [_Username], Inform) ->
+    Inform("Listing permissions for user ~p", Args),
+    display_list(call(Node, {rabbit_access_control, list_user_permissions,
+                             Args}));
 
 action(list_queues, Node, Args, Inform) ->
     Inform("Listing queues", []),
@@ -277,7 +274,12 @@ action(set_permissions, Node, VHost, [Username, CPerm, MPerm], Inform) ->
 
 action(clear_permissions, Node, VHost, [Username], Inform) ->
     Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
-    call(Node, {rabbit_access_control, clear_permissions, [Username, VHost]}).
+    call(Node, {rabbit_access_control, clear_permissions, [Username, VHost]});
+
+action(list_permissions, Node, VHost, [], Inform) ->
+    Inform("Listing permissions in vhost ~p", [VHost]),
+    display_list(call(Node, {rabbit_access_control, list_vhost_permissions,
+                             [VHost]})).
 
 parse_vhost_flag(Args) when is_list(Args) ->
     case Args of 
@@ -299,20 +301,16 @@ default_if_empty(List, Default) when is_list(List) ->
     end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
-    lists:foreach(
-      fun (Result) ->
-              io:fwrite(
-                lists:flatten(
-                  rabbit_misc:intersperse(
-                    "\t",
-                    [format_info_item(Result, X) || X <- InfoItemKeys]))),
-              io:nl()
-      end,
-      Results),
+    lists:foreach(fun (Result) -> display_row([format_info_item(Result, X) ||
+                                                  X <- InfoItemKeys])
+                  end, Results),
     ok;
-
 display_info_list(Other, _) ->
     Other.
+
+display_row(Row) ->
+    io:fwrite(lists:flatten(rabbit_misc:intersperse("\t", Row))),
+    io:nl().
 
 format_info_item(Items, Key) ->
     {value, Info = {Key, Value}} = lists:keysearch(Key, 1, Items),
@@ -330,8 +328,10 @@ format_info_item(Items, Key) ->
     end.
 
 display_list(L) when is_list(L) ->
-    lists:foreach(fun (I) ->
-                          io:format("~s~n", [binary_to_list(I)])
+    lists:foreach(fun (I) when is_binary(I) ->
+                          io:format("~s~n", [url_encode(I)]);
+                      (I) when is_tuple(I) ->
+                          display_row([url_encode(V) || V <- tuple_to_list(I)])
                   end,
                   lists:sort(L)),
     ok;
