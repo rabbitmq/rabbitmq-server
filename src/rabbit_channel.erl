@@ -148,6 +148,7 @@ handle_message({deliver, ConsumerTag, AckRequired, Msg},
     State1#ch{next_tag = DeliveryTag + 1};
 
 handle_message({conserve_memory, Conserve}, State) ->
+    ok = clear_permission_cache(),
     ok = rabbit_writer:send_command(
            State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
     State;
@@ -199,13 +200,28 @@ return_queue_declare_ok(State, NoWait, Q) ->
             {reply, Reply, NewState}
     end.
 
+check_resource_access(Username, Resource, Perm, PermIndex) ->
+    K = {resource_permission, Resource, Perm},
+    %% TODO: we may want to make the cache bounded
+    case get(K) of
+        undefined -> R = rabbit_access_control:check_resource_access(
+                           Username, Resource, PermIndex),
+                     put(K, R),
+                     R;
+        Other     -> Other
+    end.
+
+clear_permission_cache() ->
+    [erase(R) || R = {resource_permission, _, _} <- get()],
+    ok.
+
 check_configuration_permitted(Resource, #ch{ username = Username}) ->
-    rabbit_access_control:check_resource_access(
-      Username, Resource, #permission.configuration).
+    check_resource_access(Username, Resource, configuration,
+                          #permission.configuration).
 
 check_messaging_permitted(Resource, #ch{ username = Username}) ->
-    rabbit_access_control:check_resource_access(
-      Username, Resource, #permission.messaging).
+    check_resource_access(Username, Resource, messaging,
+                          #permission.messaging).
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(

@@ -145,7 +145,6 @@ check_resource_access(Username,
 check_resource_access(Username,
                       R = #resource{virtual_host = VHostPath, name = Name},
                       Permission) ->
-    %% TODO: cache the results
     Res = case mnesia:dirty_read({user_permission,
                                   #user_vhost{username = Username,
                                               virtual_host = VHostPath}}) of
