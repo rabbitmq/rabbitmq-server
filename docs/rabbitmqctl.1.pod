@@ -150,19 +150,20 @@ node
     node on which the process associated with the queue resides
 
 messages_ready
-    number of ready messages
+    number of messages ready to be delivered to clients
 
 messages_unacknowledged
-    number of unacknowledged messages
+    number of messages delivered to clients but not yet acknowledged
 
 messages_uncommitted
-    number of uncommitted messages
+    number of messages published in as yet uncommitted transactions
 
 messages
     sum of ready, unacknowledged and uncommitted messages
 
 acks_uncommitted
-    number of uncommitted acknowledgements
+    number of acknowledgements received in as yet uncommitted
+    transactions
 
 consumers
     number of consumers
