@@ -33,17 +33,20 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
+-behaviour(gen_server2).
+
 -export([start_link/4, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2]).
 
-%% callbacks
--export([init/2, handle_message/2]).
+-export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
--record(ch, {state, proxy_pid, reader_pid, writer_pid, limiter_pid,
+-record(ch, {state, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host,
              most_recently_declared_queue, consumer_mapping}).
+
+-define(HIBERNATE_AFTER, 1000).
 
 %%----------------------------------------------------------------------------
 
@@ -62,109 +65,101 @@
 %%----------------------------------------------------------------------------
 
 start_link(ReaderPid, WriterPid, Username, VHost) ->
-    buffering_proxy:start_link(?MODULE, [ReaderPid, WriterPid,
-                                         Username, VHost]).
+    {ok, Pid} = gen_server2:start_link(
+                  ?MODULE, [ReaderPid, WriterPid, Username, VHost], []),
+    Pid.
 
 do(Pid, Method) ->
     do(Pid, Method, none).
 
 do(Pid, Method, Content) ->
-    Pid ! {method, Method, Content},
-    ok.
+    gen_server2:cast(Pid, {method, Method, Content}).
 
 shutdown(Pid) ->
-    Pid ! terminate,
-    ok.
+    gen_server2:cast(Pid, terminate).
 
 send_command(Pid, Msg) ->
-    Pid ! {command, Msg},
-    ok.
+    gen_server2:cast(Pid,  {command, Msg}).
 
 deliver(Pid, ConsumerTag, AckRequired, Msg) ->
-    Pid ! {deliver, ConsumerTag, AckRequired, Msg},
-    ok.
+    gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
 conserve_memory(Pid, Conserve) ->
-    Pid ! {conserve_memory, Conserve},
-    ok.
+    gen_server2:cast(Pid, {conserve_memory, Conserve}).
 
 %%---------------------------------------------------------------------------
 
-init(ProxyPid, [ReaderPid, WriterPid, Username, VHost]) ->
+init([ReaderPid, WriterPid, Username, VHost]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
-    %% this is bypassing the proxy so alarms can "jump the queue" and
-    %% be handled promptly
     rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
-    #ch{state                   = starting,
-        proxy_pid               = ProxyPid,
-        reader_pid              = ReaderPid,
-        writer_pid              = WriterPid,
-        limiter_pid             = undefined,
-        transaction_id          = none,
-        tx_participants         = sets:new(),
-        next_tag                = 1,
-        uncommitted_ack_q       = queue:new(),
-        unacked_message_q       = queue:new(),
-        username                = Username,
-        virtual_host            = VHost,
-        most_recently_declared_queue = <<>>,
-        consumer_mapping        = dict:new()}.
+    {ok, #ch{state                   = starting,
+             reader_pid              = ReaderPid,
+             writer_pid              = WriterPid,
+             limiter_pid             = undefined,
+             transaction_id          = none,
+             tx_participants         = sets:new(),
+             next_tag                = 1,
+             uncommitted_ack_q       = queue:new(),
+             unacked_message_q       = queue:new(),
+             username                = Username,
+             virtual_host            = VHost,
+             most_recently_declared_queue = <<>>,
+             consumer_mapping        = dict:new()}}.
 
-handle_message({method, Method, Content}, State) ->
+handle_call(_Request, _From, State) ->
+    noreply(State).
+
+handle_cast({method, Method, Content}, State) ->
     try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
-            NewState;
+            noreply(NewState);
         {noreply, NewState} ->
-            NewState;
+            noreply(NewState);
         stop ->
-            exit(normal)
+            {stop, normal, State#ch{state = terminating}}
     catch
         exit:{amqp, Error, Explanation, none} ->
-            terminate({amqp, Error, Explanation,
-                       rabbit_misc:method_record_type(Method)},
-                      State);
+            {stop, {amqp, Error, Explanation,
+                    rabbit_misc:method_record_type(Method)}, State};
         exit:normal ->
-            terminate(normal, State);
+            {stop, normal, State};
         _:Reason ->
-            terminate({Reason, erlang:get_stacktrace()}, State)
+            {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
 
-handle_message(terminate, State) ->
-    terminate(normal, State);
+handle_cast(terminate, State) ->
+    {stop, normal, State};
 
-handle_message({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
+handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Msg),
-    State;
+    noreply(State);
 
-handle_message({deliver, ConsumerTag, AckRequired, Msg},
-               State = #ch{proxy_pid = ProxyPid,
-                           writer_pid = WriterPid,
-                           next_tag = DeliveryTag}) ->
+handle_cast({deliver, ConsumerTag, AckRequired, Msg},
+            State = #ch{writer_pid = WriterPid,
+                        next_tag = DeliveryTag}) ->
     State1 = lock_message(AckRequired, {DeliveryTag, ConsumerTag, Msg}, State),
-    ok = internal_deliver(WriterPid, ProxyPid,
-                          true, ConsumerTag, DeliveryTag, Msg),
-    State1#ch{next_tag = DeliveryTag + 1};
+    ok = internal_deliver(WriterPid, true, ConsumerTag, DeliveryTag, Msg),
+    noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_message({conserve_memory, Conserve}, State) ->
+handle_cast({conserve_memory, Conserve}, State) ->
     ok = rabbit_writer:send_command(
            State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
-    State;
+    noreply(State).
 
-handle_message({'EXIT', Pid, Reason}, State = #ch{proxy_pid = Pid}) ->
-    terminate(Reason, State);
+handle_info({'EXIT', _Pid, Reason}, State) ->
+    {stop, Reason, State};
 
-handle_message({'EXIT', _Pid, normal}, State) ->
-    State;
+handle_info(timeout, State) ->
+    %% TODO: Once we drop support for R11B-5, we can change this to
+    %% {noreply, State, hibernate};
+    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State]).
 
-handle_message({'EXIT', _Pid, Reason}, State) ->
-    terminate(Reason, State);
-
-handle_message(Other, State) ->
-    terminate({unexpected_channel_message, Other}, State).
-
-%%---------------------------------------------------------------------------
+terminate(_Reason, #ch{writer_pid = WriterPid, limiter_pid = LimiterPid,
+                       state = terminating}) ->
+    rabbit_writer:shutdown(WriterPid),
+    rabbit_limiter:shutdown(LimiterPid);
 
 terminate(Reason, State = #ch{writer_pid = WriterPid,
                               limiter_pid = LimiterPid}) ->
@@ -174,8 +169,14 @@ terminate(Reason, State = #ch{writer_pid = WriterPid,
         _      -> ok
     end,
     rabbit_writer:shutdown(WriterPid),
-    rabbit_limiter:shutdown(LimiterPid),
-    exit(Reason).
+    rabbit_limiter:shutdown(LimiterPid).
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%---------------------------------------------------------------------------
+
+noreply(NewState) -> {noreply, NewState, ?HIBERNATE_AFTER}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -257,7 +258,6 @@ handle_method(_Method, _, #ch{state = starting}) ->
 handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = notify_queues(internal_rollback(State)),
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
-    ok = rabbit_writer:shutdown(WriterPid),
     stop;
 
 handle_method(#'access.request'{},_, State) ->
@@ -295,7 +295,7 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
        true -> ok
     end,
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
-    Participants = ack(State#ch.proxy_pid, TxnKey, Acked),
+    Participants = ack(TxnKey, Acked),
     {noreply, case TxnKey of
                   none -> ok = notify_limiter(State#ch.limiter_pid, Acked),
                           State#ch{unacked_message_q = Remaining};
@@ -309,12 +309,12 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
 
 handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
-              _, State = #ch{ proxy_pid = ProxyPid, writer_pid = WriterPid,
+              _, State = #ch{ writer_pid = WriterPid,
                               next_tag = DeliveryTag }) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     case rabbit_amqqueue:with_or_die(
            QueueName,
-           fun (Q) -> rabbit_amqqueue:basic_get(Q, ProxyPid, NoAck) end) of
+           fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
         {ok, MessageCount,
          Msg = {_QName, _QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,
@@ -340,8 +340,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                                no_ack = NoAck,
                                exclusive = ExclusiveConsume,
                                nowait = NoWait},
-              _, State = #ch{ proxy_pid = ProxyPid,
-                              reader_pid = ReaderPid,
+              _, State = #ch{ reader_pid = ReaderPid,
                               limiter_pid = LimiterPid,
                               consumer_mapping = ConsumerMapping }) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
@@ -360,7 +359,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                    QueueName,
                    fun (Q) ->
                            rabbit_amqqueue:basic_consume(
-                             Q, NoAck, ReaderPid, ProxyPid, LimiterPid,
+                             Q, NoAck, ReaderPid, self(), LimiterPid,
                              ActualConsumerTag, ExclusiveConsume,
                              ok_msg(NoWait, #'basic.consume_ok'{
                                       consumer_tag = ActualConsumerTag}))
@@ -391,8 +390,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
 
 handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
                               nowait = NoWait},
-              _, State = #ch{ proxy_pid = ProxyPid,
-                              consumer_mapping = ConsumerMapping }) ->
+              _, State = #ch{consumer_mapping = ConsumerMapping }) ->
     OkMsg = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
@@ -413,7 +411,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
                            %% cancel_ok ourselves it might overtake a
                            %% message sent previously by the queue.
                            rabbit_amqqueue:basic_cancel(
-                             Q, ProxyPid, ConsumerTag,
+                             Q, self(), ConsumerTag,
                              ok_msg(NoWait, #'basic.cancel_ok'{
                                       consumer_tag = ConsumerTag}))
                    end) of
@@ -433,13 +431,12 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
                                "prefetch_size!=0 (~w)", [Size]);
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
-              _, State = #ch{ limiter_pid = LimiterPid,
-                              proxy_pid = ProxyPid }) ->
+              _, State = #ch{ limiter_pid = LimiterPid }) ->
     NewLimiterPid = case {LimiterPid, PrefetchCount} of
                         {undefined, 0} ->
                             undefined;
                         {undefined, _} ->
-                            LPid = rabbit_limiter:start_link(ProxyPid),
+                            LPid = rabbit_limiter:start_link(self()),
                             ok = limit_queues(LPid, State),
                             LPid;
                         {_, 0} ->
@@ -454,7 +451,6 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
 
 handle_method(#'basic.recover'{requeue = true},
               _, State = #ch{ transaction_id = none,
-                              proxy_pid = ProxyPid,
                               unacked_message_q = UAMQ }) ->
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
@@ -463,14 +459,13 @@ handle_method(#'basic.recover'{requeue = true},
                    %% order. To keep it happy we reverse the id list
                    %% since we are given them in reverse order.
                    rabbit_amqqueue:requeue(
-                     QPid, lists:reverse(MsgIds), ProxyPid)
+                     QPid, lists:reverse(MsgIds), self())
            end, ok, UAMQ),
     %% No answer required, apparently!
     {noreply, State#ch{unacked_message_q = queue:new()}};
 
 handle_method(#'basic.recover'{requeue = false},
               _, State = #ch{ transaction_id = none,
-                              proxy_pid = ProxyPid,
                               writer_pid = WriterPid,
                               unacked_message_q = UAMQ }) ->
     lists:foreach(
@@ -488,8 +483,7 @@ handle_method(#'basic.recover'{requeue = false},
               %%
               %% FIXME: should we allocate a fresh DeliveryTag?
               ok = internal_deliver(
-                     WriterPid, ProxyPid,
-                     false, ConsumerTag, DeliveryTag,
+                     WriterPid, false, ConsumerTag, DeliveryTag,
                      {QName, QPid, MsgId, true, Message})
       end, queue:to_list(UAMQ)),
     %% No answer required, apparently!
@@ -778,10 +772,10 @@ add_tx_participants(MoreP, State = #ch{tx_participants = Participants}) ->
     State#ch{tx_participants = sets:union(Participants,
                                           sets:from_list(MoreP))}.
 
-ack(ProxyPid, TxnKey, UAQ) ->
+ack(TxnKey, UAQ) ->
     fold_per_queue(
       fun (QPid, MsgIds, L) ->
-              ok = rabbit_amqqueue:ack(QPid, TxnKey, MsgIds, ProxyPid),
+              ok = rabbit_amqqueue:ack(QPid, TxnKey, MsgIds, self()),
               [QPid | L]
       end, [], UAQ).
 
@@ -835,11 +829,11 @@ fold_per_queue(F, Acc0, UAQ) ->
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
 
-notify_queues(#ch{proxy_pid = ProxyPid, consumer_mapping = Consumers}) ->
-    rabbit_amqqueue:notify_down_all(consumer_queues(Consumers), ProxyPid).
+notify_queues(#ch{consumer_mapping = Consumers}) ->
+    rabbit_amqqueue:notify_down_all(consumer_queues(Consumers), self()).
 
-limit_queues(LPid, #ch{proxy_pid = ProxyPid, consumer_mapping = Consumers}) ->
-    rabbit_amqqueue:limit_all(consumer_queues(Consumers), ProxyPid, LPid).
+limit_queues(LPid, #ch{consumer_mapping = Consumers}) ->
+    rabbit_amqqueue:limit_all(consumer_queues(Consumers), self(), LPid).
 
 consumer_queues(Consumers) ->
     [QPid || QueueName <- 
@@ -883,7 +877,7 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
 lock_message(false, _MsgStruct, State) ->
     State.
 
-internal_deliver(WriterPid, ChPid, Notify, ConsumerTag, DeliveryTag,
+internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
                  {_QName, QPid, _MsgId, Redelivered,
                   #basic_message{exchange_name = ExchangeName,
                                  routing_key = RoutingKey,
@@ -895,6 +889,6 @@ internal_deliver(WriterPid, ChPid, Notify, ConsumerTag, DeliveryTag,
                          routing_key = RoutingKey},
     ok = case Notify of
              true  -> rabbit_writer:send_command_and_notify(
-                        WriterPid, QPid, ChPid, M, Content);
+                        WriterPid, QPid, self(), M, Content);
              false -> rabbit_writer:send_command(WriterPid, M, Content)
          end.
