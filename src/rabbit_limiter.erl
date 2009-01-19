@@ -75,6 +75,7 @@ start_link(ChPid) ->
 shutdown(undefined) ->
     ok;
 shutdown(LimiterPid) ->
+    unlink(LimiterPid),
     gen_server:cast(LimiterPid, shutdown).
 
 limit(undefined, 0) ->
