@@ -118,6 +118,9 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Mon Jan 19 2009 Ben Hood <0x6e6562@gmail.com> 1.5.1-1
+- Maintenance release for the 1.5.x series
+
 * Wed Dec 17 2008 Matthias Radestock <matthias@lshift.net> 1.5.0-1
 - New upstream release
 
