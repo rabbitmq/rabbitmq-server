@@ -48,6 +48,8 @@
 
 -define(HIBERNATE_AFTER, 1000).
 
+-define(MAX_PERMISSION_CACHE_SIZE, 12).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -202,28 +204,40 @@ return_queue_declare_ok(State, NoWait, Q) ->
             {reply, Reply, NewState}
     end.
 
-check_resource_access(Username, Resource, Perm, PermIndex) ->
-    K = {resource_permission, Resource, Perm},
-    %% TODO: we may want to make the cache bounded
-    case get(K) of
-        undefined -> R = rabbit_access_control:check_resource_access(
-                           Username, Resource, PermIndex),
-                     put(K, R),
-                     R;
-        Other     -> Other
+lru_cache_lookup(K, LookupFun, MaxSize, Cache) ->
+    case lists:keytake(K, 1, Cache) of
+        {value, E = {_, V}, Cache1} ->
+            {V, [E | Cache1]};
+        false ->
+            V = LookupFun(K),
+            {V, [{K, V} | lists:sublist(Cache, MaxSize - 1)]}
     end.
 
+check_resource_access(Username, Resource, Perm) ->
+    Cache = case get(permission_cache) of
+                undefined -> [];
+                Other     -> Other
+            end,
+    {Value, NewCache} =
+        lru_cache_lookup(
+          {Resource, Perm},
+          fun ({R, P}) -> rabbit_access_control:check_resource_access(
+                            Username, R, P)
+          end,
+          ?MAX_PERMISSION_CACHE_SIZE,
+          Cache),
+    put(permission_cache, NewCache),
+    Value.
+
 clear_permission_cache() ->
-    [erase(R) || R = {resource_permission, _, _} <- get()],
+    erase(permission_cache),
     ok.
 
 check_configuration_permitted(Resource, #ch{ username = Username}) ->
-    check_resource_access(Username, Resource, configuration,
-                          #permission.configuration).
+    check_resource_access(Username, Resource, #permission.configuration).
 
 check_messaging_permitted(Resource, #ch{ username = Username}) ->
-    check_resource_access(Username, Resource, messaging,
-                          #permission.messaging).
+    check_resource_access(Username, Resource, #permission.messaging).
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
