@@ -204,30 +204,21 @@ return_queue_declare_ok(State, NoWait, Q) ->
             {reply, Reply, NewState}
     end.
 
-lru_cache_lookup(K, LookupFun, MaxSize, Cache) ->
-    case lists:keytake(K, 1, Cache) of
-        {value, E = {_, V}, Cache1} ->
-            {V, [E | Cache1]};
-        false ->
-            V = LookupFun(K),
-            {V, [{K, V} | lists:sublist(Cache, MaxSize - 1)]}
-    end.
-
 check_resource_access(Username, Resource, Perm) ->
+    V = {Resource, Perm},
     Cache = case get(permission_cache) of
                 undefined -> [];
                 Other     -> Other
             end,
-    {Value, NewCache} =
-        lru_cache_lookup(
-          {Resource, Perm},
-          fun ({R, P}) -> rabbit_access_control:check_resource_access(
-                            Username, R, P)
-          end,
-          ?MAX_PERMISSION_CACHE_SIZE,
-          Cache),
-    put(permission_cache, NewCache),
-    Value.
+    CacheTail =
+        case lists:member(V, Cache) of
+            true  -> lists:delete(V, Cache);
+            false -> ok = rabbit_access_control:check_resource_access(
+                            Username, Resource, Perm),
+                     lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1)
+        end,
+    put(permission_cache, [V | CacheTail]),
+    ok.
 
 clear_permission_cache() ->
     erase(permission_cache),
