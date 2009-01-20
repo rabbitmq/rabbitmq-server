@@ -7,7 +7,7 @@
 -compile(export_all).
 
 -record('delegate.create', {capability,
-                            command}).
+                            command, content}).
 -record('delegate.create_ok', {forwarding_facet, revoking_facet}).
 -record('delegate.revoke', {capability}).
 -record('delegate.revoke_ok', {}).
@@ -90,11 +90,18 @@ exchange_declare_test() ->
 bind_test() ->
     %% Create the root state
     RootState = root_state(),
-    %% Assert that root can issue a bind command
+    %% Assert that root can issue bind and publish commands
     RootsBind = #'queue.bind'{arguments = [bind_root]},
     {#'secure.ok'{}, State0}
         = run_command(RootsBind, RootState),
-    %% ------------------------------------START OF COPY / PASTE
+    RootsPublish = #'basic.publish'{},
+    Cont = #content{class_id = 60, %% Hardcoded :-)
+                    properties = #'P_basic'{headers = [publish_root]},
+                    properties_bin = none,
+                    %% Define as undefined to make a distinction
+                    payload_fragments_rev = undefined},
+    {noreply, State0} = run_command(RootsPublish, Cont, RootState),
+
     %% Create a delegate to create exchanges
     RootExchangeDeclare = #'exchange.declare'{arguments = [exchange_root]},
     {#'delegate.create_ok'{forwarding_facet = AlicesExDecForward,
@@ -106,7 +113,6 @@ bind_test() ->
     AlicesExDec = #'exchange.declare'{arguments = [AlicesExDecForward]},
     {#'secure.ok'{capability = AlicesExCap}, State2}
         = run_command(AlicesExDec, State1),
-    %% ------------------------------------END OF COPY / PASTE
 
     %% The important observation here is the Alice now has the capability to
     %% whatever she wants with the exchange - so let's see her do something
@@ -147,7 +153,25 @@ bind_test() ->
                              arguments = [BobsBindForward]},
     {#'secure.ok'{capability = BobsBindCap}, State6}
                              = run_command(BobsBindDelegate, State5),
-    
+
+    %% Create a delegate to issue publish commands
+    {#'delegate.create_ok'{forwarding_facet = AlicesPublishForward,
+                           revoking_facet   = RootsPublishRevoke}, State7}
+     = run_command(#'delegate.create'{capability = delegate_create_root,
+                                      command    = RootsPublish},
+                   State6),
+
+    %% Create a delegate to give to Carol so that she can send messages
+    ContentDelegate
+      = #content{properties = #'P_basic'{headers = [AlicesPublishForward]}},
+    {#'delegate.create_ok'{forwarding_facet = CarolsPublishForward,
+                           revoking_facet   = AlicesPublishRevoke}, State8}
+       = run_command(#'delegate.create'{capability = delegate_create_root,
+                                        command    = #'basic.publish'{}
+                                        },
+                     ContentDelegate,
+                     State7),
+
     ok.
     
 %% ---------------------------------------------------------------------------
@@ -157,7 +181,7 @@ bind_test() ->
 
 run_command(Command = #'exchange.declare'{arguments = [Cap|_]}, State) ->
     execute_delegate(Command, Cap, State);
-    
+
 run_command(Command = #'queue.bind'{arguments = [Cap|_]}, State) ->
     execute_delegate(Command, Cap, State);
 
@@ -167,12 +191,27 @@ run_command(Command = #'delegate.create'{capability = Cap}, State) ->
 run_command(Command = #'delegate.revoke'{capability = Cap}, State) ->
     execute_delegate(Command, Cap, State).
 
+run_command(Command = #'delegate.create'{capability = Cap},
+            Content, State) ->
+    execute_delegate(Command, Content, Cap, State);
+
+run_command(Command = #'basic.publish'{},
+            Content = #content{properties = #'P_basic'{headers = [Cap|_]}},
+            State) ->
+    execute_delegate(Command, Content, Cap, State).
+
 %% ---------------------------------------------------------------------------
 %% Internal plumbing
 %% ---------------------------------------------------------------------------
 execute_delegate(Command, Cap, State) ->
     case resolve_capability(Cap, State) of
         {ok, Fun} -> Fun(Command, State);
+        error     -> {access_denied, State}
+    end.
+
+execute_delegate(Command, Content, Cap, State) ->
+    case resolve_capability(Cap, State) of
+        {ok, Fun} -> Fun(Command, Content, State);
         error     -> {access_denied, State}
     end.
 
@@ -207,12 +246,18 @@ root_state() ->
                             fun(Command = #'delegate.create'{}, State) ->
                                 handle_method(Command, State)
                             end, State1),
-    %% The root capability to create delegates
+    %% The root capability to bind queues to exchanges
     State3 = add_capability(bind_root,
                             fun(Command = #'queue.bind'{}, State) ->
                                 handle_method(Command, State)
                             end, State2),
-    State3.
+    %% The root capability to create publish messages
+    State4 = add_capability(publish_root,
+                            fun(Command = #'basic.publish'{},
+                                Content, State) ->
+                                handle_method(Command, Content, State)
+                            end, State3),
+    State4.
 
 
 %% ---------------------------------------------------------------------------
@@ -220,23 +265,48 @@ root_state() ->
 %% This is roughly analogous the current channel API in Rabbit.
 %% ---------------------------------------------------------------------------
 
+handle_method(Delegate = #'delegate.create'{}, State) ->
+    handle_method(Delegate, none, State);
+
+handle_method(Command = #'exchange.declare'{}, State) ->
+    Cap = uuid(),
+    %% TODO Do something with this
+    {#'secure.ok'{capability = Cap}, State};
+
+handle_method(Command = #'queue.bind'{queue = Q, 
+                                      exchange = X, 
+                                      routing_key = K}, State) ->
+    Cap = uuid(),
+    %% TODO Do something with this
+    {#'secure.ok'{capability = Cap}, State}.
+
 handle_method(#'delegate.create'{capability = Cap,
-                                 command    = Command}, State) ->
+                                 command    = Command}, Content, State) ->
     true = is_valid(Command),
 
     ForwardCapability = uuid(),
     RevokeCapability = uuid(),
 
-    ForwardingFacet
-        = fun(_Command, _State) ->
-                %% If the command types do not match up, then throw an error
+    %% If the command types do not match up, then throw an error
+    Check = fun(X) ->
                 if
-                    element(1, _Command) =:= element(1, Command) ->
-                        run_command(Command, _State);
-                    true ->
-                        exit(command_mismatch)
+                    element(1, X) =:= element(1, Command) -> ok;
+                    true -> exit(command_mismatch)
                 end
-        end,
+            end,
+
+    ForwardingFacet
+        = case Content of
+              none -> fun(_Command, _State) ->
+                           Check(_Command),
+                           run_command(Command, _State)
+                      end;
+              _    ->
+                      fun(_Command, _Content, _State) ->
+                           Check(_Command),
+                           run_command(Command, _Content, _State)
+                      end
+          end,
 
     RevokingFacet = fun(_Command, _State) ->
                         NewState = remove_capability(ForwardCapability,
@@ -249,22 +319,9 @@ handle_method(#'delegate.create'{capability = Cap,
     {#'delegate.create_ok'{forwarding_facet = ForwardCapability,
                            revoking_facet   = RevokeCapability}, NewState2};
 
-handle_method(Command = #'exchange.declare'{}, State) ->
-    Cap = uuid(),
-    %% TODO Do something with this
-    {#'secure.ok'{capability = Cap}, State};
+handle_method(Command = #'basic.publish'{}, Content, State) ->
+    {noreply, State}.
 
-handle_method(Command = #'queue.bind'{queue = Q, 
-                                      exchange = X, 
-                                      routing_key = K}, State) ->
-    
-    
-    
-    
-    
-    Cap = uuid(),
-    %% TODO Do something with this
-    {#'secure.ok'{capability = Cap}, State}.
 
 is_valid(_Command) ->
     true.
