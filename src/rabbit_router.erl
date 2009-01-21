@@ -32,7 +32,7 @@
 -module(rabbit_router).
 -include("rabbit.hrl").
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([start_link/0,
          deliver/5]).
@@ -58,7 +58,7 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 -ifdef(BUG19758).
 
@@ -143,7 +143,7 @@ handle_call({deliver, QPids, Mandatory, Immediate, Txn, Message},
     spawn(
       fun () ->
               R = run_bindings(QPids, Mandatory, Immediate, Txn, Message),
-              gen_server:reply(From, R)
+              gen_server2:reply(From, R)
       end),
     {noreply, State}.
 
