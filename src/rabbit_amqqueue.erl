@@ -91,7 +91,7 @@
 -spec(commit_all/2 :: ([pid()], txn()) -> ok_or_errors()).
 -spec(rollback_all/2 :: ([pid()], txn()) -> ok_or_errors()).
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
--spec(limit_all/3 :: ([pid()], pid(), pid()) -> ok_or_errors()).
+-spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), bool()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
@@ -276,7 +276,7 @@ basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
 basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid, LimiterPid,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
     gen_server2:call(QPid, {basic_consume, NoAck, ReaderPid, ChPid, 
-                           LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg}).
+                            LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     ok = gen_server2:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).

@@ -42,13 +42,15 @@
 
 -ifdef(use_specs).
 
+-type(maybe_pid() :: pid() | 'undefined').
+
 -spec(start_link/1 :: (pid()) -> pid()).
--spec(shutdown/1 :: (pid()) -> 'ok').
--spec(limit/2 :: (pid(), non_neg_integer()) -> 'ok').
--spec(can_send/2 :: (pid(), pid()) -> bool()).
--spec(ack/2 :: (pid(), non_neg_integer()) -> 'ok').
--spec(register/2 :: (pid(), pid()) -> 'ok').
--spec(unregister/2 :: (pid(), pid()) -> 'ok').
+-spec(shutdown/1 :: (maybe_pid()) -> 'ok').
+-spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
+-spec(can_send/2 :: (maybe_pid(), pid()) -> bool()).
+-spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
+-spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
+-spec(unregister/2 :: (maybe_pid(), pid()) -> 'ok').
 
 -endif.
 
@@ -56,8 +58,11 @@
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
-              queues = dict:new(),
+              queues = dict:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
+%% 'Notify' is a boolean that indicates whether a queue should be
+%% notified of a change in the limit or volume that may allow it to
+%% deliver more messages via the limiter's channel.
 
 %%----------------------------------------------------------------------------
 %% API
@@ -70,6 +75,7 @@ start_link(ChPid) ->
 shutdown(undefined) ->
     ok;
 shutdown(LimiterPid) ->
+    unlink(LimiterPid),
     gen_server2:cast(LimiterPid, shutdown).
 
 limit(undefined, 0) ->

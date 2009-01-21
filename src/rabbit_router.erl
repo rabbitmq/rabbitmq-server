@@ -110,7 +110,7 @@ deliver_per_node(NodeQPids, Mandatory, Immediate,
                  Txn, Message) ->
     R = rabbit_misc:upmap(
           fun ({Node, QPids}) ->
-                  try gen_server:call(
+                  try gen_server2:call(
                         {?SERVER, Node},
                         {deliver, QPids, Mandatory, Immediate, Txn, Message})
                   catch
