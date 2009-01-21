@@ -142,6 +142,10 @@ check_resource_access(Username,
     check_resource_access(Username,
                           R#resource{name = <<"amq.default">>},
                           Permission);
+check_resource_access(_Username,
+                      #resource{name = <<"amq.gen",_/binary>>},
+                      _Permission) ->
+    ok;
 check_resource_access(Username,
                       R = #resource{virtual_host = VHostPath, name = Name},
                       Permission) ->
