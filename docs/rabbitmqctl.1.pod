@@ -157,12 +157,9 @@ messages_unacknowledged
 
 messages_uncommitted
     number of messages published in as yet uncommitted transactions
-<<<<<<< local
-=======
 
 messages
     sum of ready, unacknowledged and uncommitted messages
->>>>>>> other
 
 acks_uncommitted
     number of acknowledgements received in as yet uncommitted
