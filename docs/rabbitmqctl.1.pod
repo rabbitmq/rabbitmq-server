@@ -114,17 +114,23 @@ delete_vhost I<vhostpath>
 list_vhosts
     list all virtual hosts.
 
-map_user_vhost I<username> I<vhostpath>
-    grant the user named I<username> access to the virtual host called
+set_permissions [-p I<vhostpath>] I<username> <regexp> <regexp>
+    set the permissions for the user named I<username> in the virtual
+    host I<vhostpath>, granting them configuration access to resources
+    with names matching the first I<regexp> and messaging access to
+    resources with names matching the second <regexp>.
+
+clear_permissions [-p I<vhostpath>] I<username>
+    remove the permissions for the user named I<username> in the
+    virtual host I<vhostpath>.
+
+list_permissions [-p I<vhostpath>]
+    list all the users and their permissions in the virtual host
     I<vhostpath>.
 
-unmap_user_vhost I<username> I<vhostpath>
-    deny the user named I<username> access to the virtual host called
-    I<vhostpath>.
-
-list_user_vhost I<username> 
-    list all the virtual hosts to which the user named I<username> has
-    been granted access.
+list_user_permissions I<username> 
+    list the permissions of the user named I<username> across all
+    virtual hosts.
 
 =head2 SERVER STATUS
 
