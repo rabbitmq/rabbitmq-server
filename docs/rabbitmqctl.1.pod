@@ -92,7 +92,10 @@ cluster I<clusternode> ...
 
 add_user I<username> I<password>
     create a user named I<username> with (initial) password I<password>.
-    
+
+delete_user I<username>
+    delete the user named I<username>.
+
 change_password I<username> I<newpassword>
     change the password for the user named I<username> to I<newpassword>.
 
