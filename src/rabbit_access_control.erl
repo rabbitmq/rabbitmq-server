@@ -309,7 +309,7 @@ list_vhost_permissions(VHostPath) ->
     [{Username, ConfigurationPerm, MessagingPerm} ||
         #user_permission{user_vhost = #user_vhost{username = Username},
                          permission = #permission{
-                          configuration = ConfigurationPerm,
+                           configuration = ConfigurationPerm,
                            messaging = MessagingPerm}} <-
             %% TODO: use dirty ops instead
             rabbit_misc:execute_mnesia_transaction(
@@ -326,7 +326,7 @@ list_user_permissions(Username) ->
     [{VHostPath, ConfigurationPerm, MessagingPerm} ||
         #user_permission{user_vhost = #user_vhost{virtual_host = VHostPath},
                          permission = #permission{
-                          configuration = ConfigurationPerm,
+                           configuration = ConfigurationPerm,
                            messaging = MessagingPerm}} <-
             %% TODO: use dirty ops instead
             rabbit_misc:execute_mnesia_transaction(
@@ -338,5 +338,3 @@ list_user_permissions(Username) ->
                                                virtual_host = '_'},
                                              permission = '_'})
                 end))].
-
-    
