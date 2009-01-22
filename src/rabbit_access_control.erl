@@ -117,7 +117,7 @@ internal_lookup_vhost_access(Username, VHostPath) ->
     %% TODO: use dirty ops instead
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:read({user_permission,
+              case mnesia:read({rabbit_user_permission,
                                 #user_vhost{username = Username,
                                             virtual_host = VHostPath}}) of
                   [] -> not_found;
@@ -149,7 +149,7 @@ check_resource_access(_Username,
 check_resource_access(Username,
                       R = #resource{virtual_host = VHostPath, name = Name},
                       Permission) ->
-    Res = case mnesia:dirty_read({user_permission,
+    Res = case mnesia:dirty_read({rabbit_user_permission,
                                   #user_vhost{username = Username,
                                               virtual_host = VHostPath}}) of
               [] ->
@@ -171,9 +171,9 @@ check_resource_access(Username,
 add_user(Username, Password) ->
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
-                  case mnesia:read({user, Username}) of
+                  case mnesia:read({rabbit_user, Username}) of
                       [] ->
-                          ok = mnesia:write(user,
+                          ok = mnesia:write(rabbit_user,
                                             #user{username = Username,
                                                   password = Password},
                                             write);
@@ -189,10 +189,11 @@ delete_user(Username) ->
           rabbit_misc:with_user(
             Username,
             fun () ->
-                    ok = mnesia:delete({user, Username}),
-                    [ok = mnesia:delete_object(user_permissions, R, write) ||
+                    ok = mnesia:delete({rabbit_user, Username}),
+                    [ok = mnesia:delete_object(
+                            rabbit_user_permissions, R, write) ||
                         R <- mnesia:match_object(
-                               user_permission,
+                               rabbit_user_permission,
                                #user_permission{user_vhost = #user_vhost{
                                                   username = Username,
                                                   virtual_host = '_'},
@@ -208,7 +209,7 @@ change_password(Username, Password) ->
           rabbit_misc:with_user(
             Username,
             fun () ->
-                    ok = mnesia:write(user,
+                    ok = mnesia:write(rabbit_user,
                                       #user{username = Username,
                                             password = Password},
                                       write)
@@ -217,17 +218,17 @@ change_password(Username, Password) ->
     R.
 
 list_users() ->
-    mnesia:dirty_all_keys(user).
+    mnesia:dirty_all_keys(rabbit_user).
 
 lookup_user(Username) ->
-    rabbit_misc:dirty_read({user, Username}).
+    rabbit_misc:dirty_read({rabbit_user, Username}).
 
 add_vhost(VHostPath) ->
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
-                  case mnesia:read({vhost, VHostPath}) of
+                  case mnesia:read({rabbit_vhost, VHostPath}) of
                       [] ->
-                          ok = mnesia:write(vhost,
+                          ok = mnesia:write(rabbit_vhost,
                                             #vhost{virtual_host = VHostPath},
                                             write),
                           [rabbit_exchange:declare(
@@ -275,11 +276,11 @@ internal_delete_vhost(VHostPath) ->
                           ok = clear_permissions(Username, VHostPath)
                   end,
                   list_vhost_permissions(VHostPath)),
-    ok = mnesia:delete({vhost, VHostPath}),
+    ok = mnesia:delete({rabbit_vhost, VHostPath}),
     ok.
 
 list_vhosts() ->
-    mnesia:dirty_all_keys(vhost).
+    mnesia:dirty_all_keys(rabbit_vhost).
 
 validate_regexp(RegexpBin) ->
     Regexp = binary_to_list(RegexpBin),
@@ -295,7 +296,7 @@ set_permissions(Username, VHostPath, ConfigurationPerm, MessagingPerm) ->
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath,
         fun () -> ok = mnesia:write(
-                         user_permission,
+                         rabbit_user_permission,
                          #user_permission{user_vhost = #user_vhost{
                                             username = Username,
                                             virtual_host = VHostPath},
@@ -310,7 +311,7 @@ clear_permissions(Username, VHostPath) ->
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath,
         fun () ->
-                ok = mnesia:delete({user_permission,
+                ok = mnesia:delete({rabbit_user_permission,
                                     #user_vhost{username = Username,
                                                 virtual_host = VHostPath}})
         end)).
@@ -339,7 +340,7 @@ list_permissions(QueryThunk) ->
 
 match_user_vhost(Username, VHostPath) ->
     fun () -> mnesia:match_object(
-                user_permission,
+                rabbit_user_permission,
                 #user_permission{user_vhost = #user_vhost{
                                    username = Username,
                                    virtual_host = VHostPath},
