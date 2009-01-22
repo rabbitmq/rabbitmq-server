@@ -160,10 +160,10 @@ declare(QueueName, Durable, AutoDelete, Args) ->
 
 store_queue(Q = #amqqueue{durable = true}) ->
     ok = mnesia:write(durable_queues, Q, write),
-    ok = mnesia:write(Q),
+    ok = mnesia:write(amqqueue, Q, write),
     ok;
 store_queue(Q = #amqqueue{durable = false}) ->
-    ok = mnesia:write(Q),
+    ok = mnesia:write(amqqueue, Q, write),
     ok.
 
 start_queue_process(Q) ->
@@ -194,6 +194,7 @@ with_or_die(Name, F) ->
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
+      amqqueue,
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
 
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).

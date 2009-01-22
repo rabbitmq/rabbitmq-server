@@ -123,6 +123,7 @@ stop_tcp_listener(Host, Port) ->
 
 tcp_listener_started(IPAddress, Port) ->
     ok = mnesia:dirty_write(
+           listener,
            #listener{node = node(),
                      protocol = tcp,
                      host = tcp_host(IPAddress),
@@ -130,6 +131,7 @@ tcp_listener_started(IPAddress, Port) ->
 
 tcp_listener_stopped(IPAddress, Port) ->
     ok = mnesia:dirty_delete_object(
+           listener,
            #listener{node = node(),
                      protocol = tcp,
                      host = tcp_host(IPAddress),

@@ -173,8 +173,10 @@ add_user(Username, Password) ->
           fun () ->
                   case mnesia:read({user, Username}) of
                       [] ->
-                          ok = mnesia:write(#user{username = Username,
-                                                  password = Password});
+                          ok = mnesia:write(user,
+                                            #user{username = Username,
+                                                  password = Password},
+                                            write);
                       _ ->
                           mnesia:abort({user_already_exists, Username})
                   end
@@ -188,12 +190,14 @@ delete_user(Username) ->
             Username,
             fun () ->
                     ok = mnesia:delete({user, Username}),
-                    [ok = mnesia:delete_object(R) ||
+                    [ok = mnesia:delete_object(user_permissions, R, write) ||
                         R <- mnesia:match_object(
+                               user_permission,
                                #user_permission{user_vhost = #user_vhost{
                                                   username = Username,
                                                   virtual_host = '_'},
-                                                permission = '_'})],
+                                                permission = '_'},
+                               read)],
                     ok
             end)),
     rabbit_log:info("Deleted user ~p~n", [Username]),
@@ -204,8 +208,10 @@ change_password(Username, Password) ->
           rabbit_misc:with_user(
             Username,
             fun () ->
-                    ok = mnesia:write(#user{username = Username,
-                                            password = Password})
+                    ok = mnesia:write(user,
+                                      #user{username = Username,
+                                            password = Password},
+                                      write)
             end)),
     rabbit_log:info("Changed password for user ~p~n", [Username]),
     R.
@@ -221,7 +227,9 @@ add_vhost(VHostPath) ->
           fun () ->
                   case mnesia:read({vhost, VHostPath}) of
                       [] ->
-                          ok = mnesia:write(#vhost{virtual_host = VHostPath}),
+                          ok = mnesia:write(vhost,
+                                            #vhost{virtual_host = VHostPath},
+                                            write),
                           [rabbit_exchange:declare(
                              rabbit_misc:r(VHostPath, exchange, Name),
                              Type, true, false, []) ||
@@ -287,12 +295,14 @@ set_permissions(Username, VHostPath, ConfigurationPerm, MessagingPerm) ->
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath,
         fun () -> ok = mnesia:write(
+                         user_permission,
                          #user_permission{user_vhost = #user_vhost{
                                             username = Username,
                                             virtual_host = VHostPath},
                                           permission = #permission{
                                             configuration = ConfigurationPerm,
-                                            messaging = MessagingPerm}})
+                                            messaging = MessagingPerm}},
+                         write)
         end)).
 
 clear_permissions(Username, VHostPath) ->
@@ -329,8 +339,10 @@ list_permissions(QueryThunk) ->
 
 match_user_vhost(Username, VHostPath) ->
     fun () -> mnesia:match_object(
+                user_permission,
                 #user_permission{user_vhost = #user_vhost{
                                    username = Username,
                                    virtual_host = VHostPath},
-                                 permission = '_'})
+                                 permission = '_'},
+                read)
     end.
