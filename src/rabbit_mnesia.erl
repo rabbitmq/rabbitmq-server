@@ -102,10 +102,8 @@ force_reset() -> reset(true).
 table_definitions() ->
     [{user, [{disc_copies, [node()]},
              {attributes, record_info(fields, user)}]},
-     {user_vhost, [{type, bag},
-                   {disc_copies, [node()]},
-                   {attributes, record_info(fields, user_vhost)},
-                   {index, [virtual_host]}]},
+     {user_permission, [{disc_copies, [node()]},
+                        {attributes, record_info(fields, user_permission)}]},
      {vhost, [{disc_copies, [node()]},
               {attributes, record_info(fields, vhost)}]},
      {rabbit_config, [{disc_copies, [node()]}]},
