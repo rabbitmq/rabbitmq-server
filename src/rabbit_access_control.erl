@@ -171,7 +171,7 @@ check_resource_access(Username,
 add_user(Username, Password) ->
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
-                  case mnesia:read({rabbit_user, Username}) of
+                  case mnesia:wread({rabbit_user, Username}) of
                       [] ->
                           ok = mnesia:write(rabbit_user,
                                             #user{username = Username,
@@ -198,7 +198,7 @@ delete_user(Username) ->
                                                   username = Username,
                                                   virtual_host = '_'},
                                                 permission = '_'},
-                               read)],
+                               write)],
                     ok
             end)),
     rabbit_log:info("Deleted user ~p~n", [Username]),
@@ -226,7 +226,7 @@ lookup_user(Username) ->
 add_vhost(VHostPath) ->
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
-                  case mnesia:read({rabbit_vhost, VHostPath}) of
+                  case mnesia:wread({rabbit_vhost, VHostPath}) of
                       [] ->
                           ok = mnesia:write(rabbit_vhost,
                                             #vhost{virtual_host = VHostPath},

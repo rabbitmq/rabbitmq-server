@@ -309,7 +309,7 @@ delete_bindings_for_exchange(ExchangeName) ->
                        rabbit_route,
                        #route{binding = #binding{exchange_name = ExchangeName,
                                                  _ = '_'}},
-                       read)],
+                       write)],
     ok.
 
 delete_bindings_for_queue(QueueName) ->
