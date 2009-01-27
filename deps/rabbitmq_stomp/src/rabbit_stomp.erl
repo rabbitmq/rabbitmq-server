@@ -204,10 +204,10 @@ send_reply(Command, State) ->
     error_logger:error_msg("STOMP Reply command unhandled: ~p~n", [Command]),
     State.
 
-maybe_binary_to_header(_Key, undefined) ->
-    [];
-maybe_binary_to_header(Key, Value) when is_binary(Value) ->
-    [{Key, binary_to_list(Value)}].
+maybe_header(_Key, undefined) -> [];
+maybe_header(Key, Value) when is_binary(Value) -> [{Key, binary_to_list(Value)}];
+maybe_header(Key, Value) when is_integer(Value) -> [{Key, integer_to_list(Value)}];
+maybe_header(_Key, _Value) -> [].
 
 send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
 			    delivery_tag = DeliveryTag,
@@ -215,7 +215,12 @@ send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
 			    routing_key = RoutingKey},
 	   #content{properties = #'P_basic'{headers = Headers,
 					    content_type = ContentType,
-					    content_encoding = ContentEncoding},
+					    content_encoding = ContentEncoding,
+					    delivery_mode = DeliveryMode,
+					    priority = Priority,
+					    correlation_id = CorrelationId,
+					    reply_to = ReplyTo,
+					    message_id = MessageId},
 		    payload_fragments_rev = BodyFragmentsRev},
 	   State = #state{session_id = SessionId}) ->
     send_frame("MESSAGE",
@@ -224,8 +229,8 @@ send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
 		%% TODO append ContentEncoding as ContentType; charset=ContentEncoding?
 		%% The STOMP SEND handle could also parse "content-type" to split it, perhaps?
 		{"message-id", SessionId ++ "_" ++ integer_to_list(DeliveryTag)}]
-	       ++ maybe_binary_to_header("content-type", ContentType)
-	       ++ maybe_binary_to_header("content-encoding", ContentEncoding)
+	       ++ maybe_header("content-type", ContentType)
+	       ++ maybe_header("content-encoding", ContentEncoding)
 	       ++ case ConsumerTag of
 		      <<"Q_", _/binary>> ->
 			  [];
@@ -235,7 +240,12 @@ send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
 	       ++ adhoc_convert_headers(case Headers of
 					    undefined -> [];
 					    _ -> Headers
-					end),
+					end)
+	       ++ maybe_header("delivery-mode", DeliveryMode)
+	       ++ maybe_header("priority", Priority)
+	       ++ maybe_header("correlation-id", CorrelationId)
+	       ++ maybe_header("reply-to", ReplyTo)
+	       ++ maybe_header("amqp-message-id", MessageId),
 	       lists:concat(lists:reverse(lists:map(fun erlang:binary_to_list/1,
 						    BodyFragmentsRev))),
 	       State);
@@ -431,7 +441,7 @@ process_command("SEND",
 	      priority = stomp_frame:integer_header(Frame, "priority", undefined),
 	      correlation_id = stomp_frame:binary_header(Frame, "correlation-id", undefined),
 	      reply_to = stomp_frame:binary_header(Frame, "reply-to", undefined),
-	      message_id = stomp_frame:binary_header(Frame, "message-id", undefined)
+	      message_id = stomp_frame:binary_header(Frame, "amqp-message-id", undefined)
 	     },
 	    Method = #'basic.publish'{ticket = Ticket,
 				      exchange = list_to_binary(ExchangeStr),
