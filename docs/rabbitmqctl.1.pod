@@ -114,11 +114,11 @@ delete_vhost I<vhostpath>
 list_vhosts
     list all virtual hosts.
 
-set_permissions [-p I<vhostpath>] I<username> I<regexp> I<regexp>
+set_permissions [-p I<vhostpath>] I<username> I<regexp> I<regexp> I<regexp>
     set the permissions for the user named I<username> in the virtual
-    host I<vhostpath>, granting them configuration access to resources
-    with names matching the first I<regexp> and messaging access to
-    resources with names matching the second I<regexp>.
+    host I<vhostpath>, granting 'configure', 'write' and 'read' access
+    to resources with names matching the first, second and third
+    I<regexp>, respectively.
 
 clear_permissions [-p I<vhostpath>] I<username>
     remove the permissions for the user named I<username> in the

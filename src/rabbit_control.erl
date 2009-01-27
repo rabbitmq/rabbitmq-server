@@ -114,7 +114,7 @@ Available commands:
   delete_vhost <VHostPath>
   list_vhosts
 
-  set_permissions   [-p <VHostPath>] <UserName> <Regexp> <Regexp>
+  set_permissions   [-p <VHostPath>] <UserName> <Regexp> <Regexp> <Regexp>
   clear_permissions [-p <VHostPath>] <UserName>
   list_permissions  [-p <VHostPath>]
   list_user_permissions <UserName>
@@ -267,10 +267,10 @@ action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
     action(Command, Node, VHost, RemainingArgs, Inform).
 
-action(set_permissions, Node, VHost, [Username, CPerm, MPerm], Inform) ->
+action(set_permissions, Node, VHost, [Username, CPerm, WPerm, RPerm], Inform) ->
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
     call(Node, {rabbit_access_control, set_permissions,
-                [Username, VHost, CPerm, MPerm]});
+                [Username, VHost, CPerm, WPerm, RPerm]});
 
 action(clear_permissions, Node, VHost, [Username], Inform) ->
     Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
