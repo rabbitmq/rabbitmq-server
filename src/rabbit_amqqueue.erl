@@ -128,7 +128,7 @@ recover_durable_queues() ->
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
-                                        <- mnesia:table(durable_queues),
+                                        <- mnesia:table(rabbit_durable_queue),
                                     node(Pid) == Node]))
           end),
     Queues = lists:map(fun start_queue_process/1, R),
@@ -146,7 +146,7 @@ declare(QueueName, Durable, AutoDelete, Args) ->
                                       pid = none}),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   case mnesia:wread({amqqueue, QueueName}) of
+                   case mnesia:wread({rabbit_queue, QueueName}) of
                        [] -> ok = store_queue(Q),
                              ok = add_default_binding(Q),
                              Q;
@@ -159,11 +159,11 @@ declare(QueueName, Durable, AutoDelete, Args) ->
     end.
 
 store_queue(Q = #amqqueue{durable = true}) ->
-    ok = mnesia:write(durable_queues, Q, write),
-    ok = mnesia:write(Q),
+    ok = mnesia:write(rabbit_durable_queue, Q, write),
+    ok = mnesia:write(rabbit_queue, Q, write),
     ok;
 store_queue(Q = #amqqueue{durable = false}) ->
-    ok = mnesia:write(Q),
+    ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
 start_queue_process(Q) ->
@@ -177,7 +177,7 @@ add_default_binding(#amqqueue{name = QueueName}) ->
     ok.
 
 lookup(Name) ->
-    rabbit_misc:dirty_read({amqqueue, Name}).
+    rabbit_misc:dirty_read({rabbit_queue, Name}).
 
 with(Name, F, E) ->
     case lookup(Name) of
@@ -194,6 +194,7 @@ with_or_die(Name, F) ->
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
+      rabbit_queue,
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
 
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
@@ -214,7 +215,7 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 stat(#amqqueue{pid = QPid}) -> gen_server2:call(QPid, stat).
 
 stat_all() ->
-    lists:map(fun stat/1, rabbit_misc:dirty_read_all(amqqueue)).
+    lists:map(fun stat/1, rabbit_misc:dirty_read_all(rabbit_queue)).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     gen_server2:call(QPid, {delete, IfUnused, IfEmpty}).
@@ -290,18 +291,18 @@ unblock(QPid, ChPid) ->
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:wread({amqqueue, QueueName}) of
+              case mnesia:wread({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
                   [Q] ->
                       ok = delete_queue(Q),
-                      ok = mnesia:delete({durable_queues, QueueName}),
+                      ok = mnesia:delete({rabbit_durable_queue, QueueName}),
                       ok
               end
       end).
 
 delete_queue(#amqqueue{name = QueueName}) ->
     ok = rabbit_exchange:delete_bindings_for_queue(QueueName),
-    ok = mnesia:delete({amqqueue, QueueName}),
+    ok = mnesia:delete({rabbit_queue, QueueName}),
     ok.
 
 on_node_down(Node) ->
@@ -311,7 +312,7 @@ on_node_down(Node) ->
                 fun (Q, Acc) -> ok = delete_queue(Q), Acc end,
                 ok,
                 qlc:q([Q || Q = #amqqueue{pid = Pid}
-                                <- mnesia:table(amqqueue),
+                                <- mnesia:table(rabbit_queue),
                             node(Pid) == Node]))
       end).
 

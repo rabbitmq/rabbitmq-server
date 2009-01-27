@@ -107,16 +107,18 @@ recover() ->
       fun () ->
               mnesia:foldl(
                 fun (Exchange, Acc) ->
-                        ok = mnesia:write(Exchange),
+                        ok = mnesia:write(rabbit_exchange, Exchange, write),
                         Acc
-                end, ok, durable_exchanges),
+                end, ok, rabbit_durable_exchange),
               mnesia:foldl(
                 fun (Route, Acc) ->
                         {_, ReverseRoute} = route_with_reverse(Route),
-                        ok = mnesia:write(Route),
-                        ok = mnesia:write(ReverseRoute),
+                        ok = mnesia:write(rabbit_route,
+                                          Route, write),
+                        ok = mnesia:write(rabbit_reverse_route,
+                                          ReverseRoute, write),
                         Acc
-                end, ok, durable_routes),
+                end, ok, rabbit_durable_route),
               ok
       end).
 
@@ -128,11 +130,11 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                          arguments = Args},
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:wread({exchange, ExchangeName}) of
-                  [] -> ok = mnesia:write(Exchange),
+              case mnesia:wread({rabbit_exchange, ExchangeName}) of
+                  [] -> ok = mnesia:write(rabbit_exchange, Exchange, write),
                         if Durable ->
-                                ok = mnesia:write(
-                                       durable_exchanges, Exchange, write);
+                                ok = mnesia:write(rabbit_durable_exchange,
+                                                  Exchange, write);
                            true -> ok
                         end,
                         Exchange;
@@ -161,7 +163,7 @@ assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
       [rabbit_misc:rs(Name), ActualType, RequiredType]).
 
 lookup(Name) ->
-    rabbit_misc:dirty_read({exchange, Name}).
+    rabbit_misc:dirty_read({rabbit_exchange, Name}).
 
 lookup_or_die(Name) ->
     case lookup(Name) of
@@ -173,6 +175,7 @@ lookup_or_die(Name) ->
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
+      rabbit_exchange,
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
 
 map(VHostPath, F) ->
@@ -259,7 +262,7 @@ match_bindings(#exchange{name = Name}, Match) ->
     Query = qlc:q([QName || #route{binding = Binding = #binding{
                                                exchange_name = ExchangeName,
                                                queue_name = QName}} <-
-                                mnesia:table(route),
+                                mnesia:table(rabbit_route),
                             ExchangeName == Name,
                             Match(Binding)]),
     lookup_qpids(
@@ -271,6 +274,7 @@ match_bindings(#exchange{name = Name}, Match) ->
               [QName || #route{binding = Binding = #binding{
                                            queue_name = QName}} <-
                             mnesia:dirty_match_object(
+                              rabbit_route,
                               #route{binding = #binding{exchange_name = Name,
                                                         _ = '_'}}),
                         Match(Binding)]
@@ -281,12 +285,12 @@ match_routing_key(#exchange{name = Name}, RoutingKey) ->
                                           queue_name = '$1',
                                           key = RoutingKey,
                                           _ = '_'}},
-    lookup_qpids(mnesia:dirty_select(route, [{MatchHead, [], ['$1']}])).
+    lookup_qpids(mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
 
 lookup_qpids(Queues) ->
     sets:fold(
       fun(Key, Acc) ->
-              case mnesia:dirty_read({amqqueue, Key}) of
+              case mnesia:dirty_read({rabbit_queue, Key}) of
                   [#amqqueue{pid = QPid}] -> [QPid | Acc];
                   []                      -> Acc
               end
@@ -297,33 +301,37 @@ lookup_qpids(Queues) ->
 %% to be implemented for 0.91 ?
 
 delete_bindings_for_exchange(ExchangeName) ->
-    indexed_delete(
-      #route{binding = #binding{exchange_name = ExchangeName,
-                                _ = '_'}}, 
-      fun delete_forward_routes/1, fun mnesia:delete_object/1).
+    [begin
+         ok = mnesia:delete_object(rabbit_reverse_route,
+                                   reverse_route(Route), write),
+         ok = delete_forward_routes(Route)
+     end || Route <- mnesia:match_object(
+                       rabbit_route,
+                       #route{binding = #binding{exchange_name = ExchangeName,
+                                                 _ = '_'}},
+                       write)],
+    ok.
 
 delete_bindings_for_queue(QueueName) ->
     Exchanges = exchanges_for_queue(QueueName),
-    indexed_delete(
-      reverse_route(#route{binding = #binding{queue_name = QueueName, 
-                                              _ = '_'}}),
-      fun mnesia:delete_object/1, fun delete_forward_routes/1),
     [begin
-         [X] = mnesia:read({exchange, ExchangeName}),
+         ok = delete_forward_routes(reverse_route(Route)),
+         ok = mnesia:delete_object(rabbit_reverse_route, Route, write)
+     end || Route <- mnesia:match_object(
+                       rabbit_reverse_route,
+                       reverse_route(
+                         #route{binding = #binding{queue_name = QueueName, 
+                                                   _ = '_'}}),
+                       write)],
+    [begin
+         [X] = mnesia:read({rabbit_exchange, ExchangeName}),
          ok = maybe_auto_delete(X)
      end || ExchangeName <- Exchanges],
     ok.
 
-indexed_delete(Match, ForwardsDeleteFun, ReverseDeleteFun) ->    
-    [begin
-         ok = ReverseDeleteFun(reverse_route(Route)),
-         ok = ForwardsDeleteFun(Route)
-     end || Route <- mnesia:match_object(Match)],
-    ok.
-
 delete_forward_routes(Route) ->
-    ok = mnesia:delete_object(Route),
-    ok = mnesia:delete_object(durable_routes, Route, write).
+    ok = mnesia:delete_object(rabbit_route, Route, write),
+    ok = mnesia:delete_object(rabbit_durable_route, Route, write).
 
 exchanges_for_queue(QueueName) ->
     MatchHead = reverse_route(
@@ -332,17 +340,18 @@ exchanges_for_queue(QueueName) ->
                                             _ = '_'}}),
     sets:to_list(
       sets:from_list(
-        mnesia:select(reverse_route, [{MatchHead, [], ['$1']}]))).
+        mnesia:select(rabbit_reverse_route, [{MatchHead, [], ['$1']}]))).
 
 has_bindings(ExchangeName) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
                                           _ = '_'}},
     try
-        continue(mnesia:select(route, [{MatchHead, [], ['$_']}], 1, read))
+        continue(mnesia:select(rabbit_route, [{MatchHead, [], ['$_']}],
+                               1, read))
     catch exit:{aborted, {badarg, _}} ->
             %% work around OTP-7025, which was fixed in R12B-1, by
             %% falling back on a less efficient method
-            case mnesia:match_object(MatchHead) of
+            case mnesia:match_object(rabbit_route, MatchHead, read) of
                 []    -> false;
                 [_|_] -> true
             end
@@ -354,7 +363,7 @@ continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
 call_with_exchange(Exchange, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun() -> case mnesia:read({exchange, Exchange}) of
+      fun() -> case mnesia:read({rabbit_exchange, Exchange}) of
                    []  -> {error, exchange_not_found};
                    [X] -> Fun(X)
                end
@@ -363,7 +372,7 @@ call_with_exchange(Exchange, Fun) ->
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
     call_with_exchange(
       Exchange, 
-      fun(X) -> case mnesia:read({amqqueue, Queue}) of
+      fun(X) -> case mnesia:read({rabbit_queue, Queue}) of
                     []  -> {error, queue_not_found};
                     [Q] -> Fun(X, Q)
                 end
@@ -397,11 +406,13 @@ sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
                        key = RoutingKey,
                        args = sort_arguments(Arguments)},
     ok = case Durable of
-             true  -> Fun(durable_routes, #route{binding = Binding}, write);
+             true  -> Fun(rabbit_durable_route,
+                          #route{binding = Binding}, write);
              false -> ok
          end,
-    [ok, ok] = [Fun(element(1, R), R, write) ||
-                   R <- tuple_to_list(route_with_reverse(Binding))],
+    {Route, ReverseRoute} = route_with_reverse(Binding),
+    ok = Fun(rabbit_route, Route, write),
+    ok = Fun(rabbit_reverse_route, ReverseRoute, write),
     ok.
 
 list_bindings(VHostPath) ->
@@ -412,6 +423,7 @@ list_bindings(VHostPath) ->
                  queue_name    = QueueName,
                  args          = Arguments}}
             <- mnesia:dirty_match_object(
+                 rabbit_route,
                  #route{binding = #binding{
                           exchange_name = rabbit_misc:r(VHostPath, exchange),
                           _ = '_'},
@@ -554,8 +566,8 @@ conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
 
 unconditional_delete(#exchange{name = ExchangeName}) ->
     ok = delete_bindings_for_exchange(ExchangeName),
-    ok = mnesia:delete({durable_exchanges, ExchangeName}),
-    ok = mnesia:delete({exchange, ExchangeName}).
+    ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
+    ok = mnesia:delete({rabbit_exchange, ExchangeName}).
 
 %%----------------------------------------------------------------------------
 %% EXTENDED API
@@ -571,7 +583,7 @@ list_exchange_bindings(ExchangeName) ->
         #route{binding = #binding{queue_name = QueueName,
                                   key = RoutingKey,
                                   args = Arguments}} 
-            <- mnesia:dirty_match_object(Route)].
+            <- mnesia:dirty_match_object(rabbit_route, Route)].
 
 % Refactoring is left as an exercise for the reader
 list_queue_bindings(QueueName) ->
@@ -581,4 +593,4 @@ list_queue_bindings(QueueName) ->
         #route{binding = #binding{exchange_name = ExchangeName,
                                   key = RoutingKey,
                                   args = Arguments}} 
-            <- mnesia:dirty_match_object(Route)].
+            <- mnesia:dirty_match_object(rabbit_route, Route)].

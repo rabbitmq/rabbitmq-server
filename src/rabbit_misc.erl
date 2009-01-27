@@ -237,7 +237,7 @@ filter_exit_map(F, L) ->
 
 with_user(Username, Thunk) ->
     fun () ->
-            case mnesia:read({user, Username}) of
+            case mnesia:read({rabbit_user, Username}) of
                 [] ->
                     mnesia:abort({no_such_user, Username});
                 [_U] ->
@@ -247,7 +247,7 @@ with_user(Username, Thunk) ->
 
 with_vhost(VHostPath, Thunk) ->
     fun () ->
-            case mnesia:read({vhost, VHostPath}) of
+            case mnesia:read({rabbit_vhost, VHostPath}) of
                 [] ->
                     mnesia:abort({no_such_vhost, VHostPath});
                 [_V] ->
