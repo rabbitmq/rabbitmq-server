@@ -911,7 +911,8 @@ is_message_persistent(#content{properties = #'P_basic'{
         1         -> false;
         2         -> true;
         undefined -> false;
-        Other     -> rabbit_log:warning("Unknown delivery mode ~p - treating as 1, non-persistent~n",
+        Other     -> rabbit_log:warning("Unknown delivery mode ~p - "
+                                        "treating as 1, non-persistent~n",
                                         [Other]),
                      false
     end.

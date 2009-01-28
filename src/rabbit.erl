@@ -87,7 +87,8 @@ stop() ->
 stop_and_halt() ->
     spawn(fun () ->
                   SleepTime = 1000,
-                  rabbit_log:info("Stop-and-halt request received; halting in ~p milliseconds~n",
+                  rabbit_log:info("Stop-and-halt request received; "
+                                  "halting in ~p milliseconds~n",
                                   [SleepTime]),
                   timer:sleep(SleepTime),
                   init:stop()
