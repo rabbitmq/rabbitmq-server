@@ -276,7 +276,8 @@ send_frame(Command, Headers, Body, State) ->
 send_error(Message, Detail, State) ->
     error_logger:error_msg("STOMP error frame sent:~nMessage: ~p~nDetail: ~p~n",
 			   [Message, Detail]),
-    send_frame("ERROR", [{"message", Message}], Detail, State).
+    send_frame("ERROR", [{"message", Message},
+			 {"content-type", "text/plain"}], Detail, State).
 
 send_error(Message, Format, Args, State) ->
     send_error(Message, lists:flatten(io_lib:format(Format, Args)), State).
