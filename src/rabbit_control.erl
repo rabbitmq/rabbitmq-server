@@ -57,7 +57,7 @@ start() ->
                 true  -> ok;
                 false -> io:format("...done.~n")
             end,
-            init:stop();
+            halt();
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
             error("invalid command '~s'",
                   [lists:flatten(
@@ -114,10 +114,10 @@ Available commands:
   delete_vhost <VHostPath>
   list_vhosts
 
-  map_user_vhost   <UserName> <VHostPath>
-  unmap_user_vhost <UserName> <VHostPath>
-  list_user_vhosts <UserName>
-  list_vhost_users <VHostPath>
+  set_permissions   [-p <VHostPath>] <UserName> <Regexp> <Regexp>
+  clear_permissions [-p <VHostPath>] <UserName>
+  list_permissions  [-p <VHostPath>]
+  list_user_permissions <UserName>
 
   list_queues    [-p <VHostPath>] [<QueueInfoItem> ...]
   list_exchanges [-p <VHostPath>] [<ExchangeInfoItem> ...]
@@ -138,7 +138,7 @@ The list_queues, list_exchanges and list_bindings commands accept an optional
 virtual host parameter for which to display results. The default value is \"/\".
 
 <QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
-arguments, pid, messages_ready, messages_unacknowledged, messages_uncommitted, 
+arguments, node, messages_ready, messages_unacknowledged, messages_uncommitted, 
 messages, acks_uncommitted, consumers, transactions, memory]. The default is 
  to display name and (number of) messages.
 
@@ -148,7 +148,7 @@ auto_delete, arguments]. The default is to display name and type.
 The output format for \"list_bindings\" is a list of rows containing 
 exchange name, routing key, queue name and arguments, in that order.
 
-<ConnectionInfoItem> must be a member of the list [pid, address, port, 
+<ConnectionInfoItem> must be a member of the list [node, address, port, 
 peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
 recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
 user, peer_address and peer_port.
@@ -223,33 +223,23 @@ action(list_vhosts, Node, [], Inform) ->
     Inform("Listing vhosts", []),
     display_list(call(Node, {rabbit_access_control, list_vhosts, []}));
 
-action(map_user_vhost, Node, Args = [_Username, _VHostPath], Inform) ->
-    Inform("Mapping user ~p to vhost ~p", Args),
-    call(Node, {rabbit_access_control, map_user_vhost, Args});
-
-action(unmap_user_vhost, Node, Args = [_Username, _VHostPath], Inform) ->
-    Inform("Unmapping user ~p from vhost ~p", Args),
-    call(Node, {rabbit_access_control, unmap_user_vhost, Args});
-
-action(list_user_vhosts, Node, Args = [_Username], Inform) ->
-    Inform("Listing vhosts for user ~p", Args),
-    display_list(call(Node, {rabbit_access_control, list_user_vhosts, Args}));
-
-action(list_vhost_users, Node, Args = [_VHostPath], Inform) ->
-    Inform("Listing users for vhosts ~p", Args),
-    display_list(call(Node, {rabbit_access_control, list_vhost_users, Args}));
+action(list_user_permissions, Node, Args = [_Username], Inform) ->
+    Inform("Listing permissions for user ~p", Args),
+    display_list(call(Node, {rabbit_access_control, list_user_permissions,
+                             Args}));
 
 action(list_queues, Node, Args, Inform) ->
     Inform("Listing queues", []),
-    {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
-    ArgAtoms = default_if_empty(RemainingArgs, [name, messages]),
+    {VHostArg, RemainingArgs} = parse_vhost_flag_bin(Args),
+    ArgAtoms = list_replace(node, pid, 
+                            default_if_empty(RemainingArgs, [name, messages])),
     display_info_list(rpc_call(Node, rabbit_amqqueue, info_all,
                                [VHostArg, ArgAtoms]),
                       ArgAtoms);
 
 action(list_exchanges, Node, Args, Inform) ->
     Inform("Listing exchanges", []),
-    {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
+    {VHostArg, RemainingArgs} = parse_vhost_flag_bin(Args),
     ArgAtoms = default_if_empty(RemainingArgs, [name, type]),
     display_info_list(rpc_call(Node, rabbit_exchange, info_all,
                                [VHostArg, ArgAtoms]),
@@ -257,7 +247,7 @@ action(list_exchanges, Node, Args, Inform) ->
 
 action(list_bindings, Node, Args, Inform) ->
     Inform("Listing bindings", []),
-    {VHostArg, _} = parse_vhost_flag(Args),
+    {VHostArg, _} = parse_vhost_flag_bin(Args),
     InfoKeys = [exchange_name, routing_key, queue_name, args],
     display_info_list(
       [lists:zip(InfoKeys, tuple_to_list(X)) ||
@@ -267,18 +257,41 @@ action(list_bindings, Node, Args, Inform) ->
 
 action(list_connections, Node, Args, Inform) ->
     Inform("Listing connections", []),
-    ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port]),
+    ArgAtoms = list_replace(node, pid, 
+                            default_if_empty(Args, [user, peer_address, peer_port])),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
-                      ArgAtoms).
+                      ArgAtoms);
+
+action(Command, Node, Args, Inform) ->
+    {VHost, RemainingArgs} = parse_vhost_flag(Args),
+    action(Command, Node, VHost, RemainingArgs, Inform).
+
+action(set_permissions, Node, VHost, [Username, CPerm, MPerm], Inform) ->
+    Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
+    call(Node, {rabbit_access_control, set_permissions,
+                [Username, VHost, CPerm, MPerm]});
+
+action(clear_permissions, Node, VHost, [Username], Inform) ->
+    Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
+    call(Node, {rabbit_access_control, clear_permissions, [Username, VHost]});
+
+action(list_permissions, Node, VHost, [], Inform) ->
+    Inform("Listing permissions in vhost ~p", [VHost]),
+    display_list(call(Node, {rabbit_access_control, list_vhost_permissions,
+                             [VHost]})).
 
 parse_vhost_flag(Args) when is_list(Args) ->
-        case Args of 
-            ["-p", VHost | RemainingArgs] ->
-                {list_to_binary(VHost), RemainingArgs};  
-            RemainingArgs ->
-                {<<"/">>, RemainingArgs}
-        end.
+    case Args of 
+        ["-p", VHost | RemainingArgs] ->
+            {VHost, RemainingArgs};  
+        RemainingArgs ->
+            {"/", RemainingArgs}
+    end.
+
+parse_vhost_flag_bin(Args) ->
+    {VHost, RemainingArgs} = parse_vhost_flag(Args),
+    {list_to_binary(VHost), RemainingArgs}.
 
 default_if_empty(List, Default) when is_list(List) ->
     if List == [] -> 
@@ -288,29 +301,26 @@ default_if_empty(List, Default) when is_list(List) ->
     end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
-    lists:foreach(
-      fun (Result) ->
-              io:fwrite(
-                lists:flatten(
-                  rabbit_misc:intersperse(
-                    "\t",
-                    [format_info_item(Result, X) || X <- InfoItemKeys]))),
-              io:nl()
-      end,
-      Results),
+    lists:foreach(fun (Result) -> display_row([format_info_item(Result, X) ||
+                                                  X <- InfoItemKeys])
+                  end, Results),
     ok;
-
 display_info_list(Other, _) ->
     Other.
+
+display_row(Row) ->
+    io:fwrite(lists:flatten(rabbit_misc:intersperse("\t", Row))),
+    io:nl().
 
 format_info_item(Items, Key) ->
     {value, Info = {Key, Value}} = lists:keysearch(Key, 1, Items),
     case Info of
         {_, #resource{name = Name}} ->
             url_encode(Name);
-        {Key, IpAddress} when Key =:= address; Key =:= peer_address
-                              andalso is_tuple(IpAddress) ->
-            inet_parse:ntoa(IpAddress);
+        _ when Key =:= address; Key =:= peer_address andalso is_tuple(Value) ->
+            inet_parse:ntoa(Value);
+        _ when is_pid(Value) ->
+            atom_to_list(node(Value));
         _ when is_binary(Value) -> 
             url_encode(Value);
         _ -> 
@@ -318,8 +328,10 @@ format_info_item(Items, Key) ->
     end.
 
 display_list(L) when is_list(L) ->
-    lists:foreach(fun (I) ->
-                          io:format("~s~n", [binary_to_list(I)])
+    lists:foreach(fun (I) when is_binary(I) ->
+                          io:format("~s~n", [url_encode(I)]);
+                      (I) when is_tuple(I) ->
+                          display_row([url_encode(V) || V <- tuple_to_list(I)])
                   end,
                   lists:sort(L)),
     ok;
@@ -356,4 +368,7 @@ url_encode_char([], Acc) ->
 
 d2h(N) when N<10 -> N+$0;
 d2h(N) -> N+$a-10.
+
+list_replace(Find, Replace, List) ->
+    [case X of Find -> Replace; _ -> X end || X <- List].
 

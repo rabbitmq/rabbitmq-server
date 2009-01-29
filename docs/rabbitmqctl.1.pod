@@ -26,7 +26,7 @@ B<-n> I<node>
     startup time).  The output of hostname -s is usually the correct
     suffix to use after the "@" sign. See rabbitmq-server(1) for
     details of configuring the RabbitMQ broker.
-   
+
 B<-q>
     quiet output mode is selected with the B<-q> flag. Informational 
     messages are suppressed when quiet mode is in effect.
@@ -43,32 +43,32 @@ stop_app
     This command is typically run prior to performing other management
     actions that require the RabbitMQ application to be stopped,
     e.g. I<reset>.
-    
+
 start_app
     start the RabbitMQ application.
     This command is typically run prior to performing other management
     actions that require the RabbitMQ application to be stopped,
     e.g. I<reset>.
-    
+
 status
     display various information about the RabbitMQ broker, such as
     whether the RabbitMQ application on the current node, its version
     number, what nodes are part of the broker, which of these are
     running.
-    
+
 force
     return a RabbitMQ node to its virgin state.
     Removes the node from any cluster it belongs to, removes all data
     from the management database, such as configured users, vhosts and
     deletes all persistent messages.
-    
+
 force_reset
     the same as I<force> command, but resets the node unconditionally,
     regardless of the current management database state and cluster
     configuration.
     It should only be used as a last resort if the database or cluster
     configuration has been corrupted.
-    
+
 rotate_logs [suffix]
     instruct the RabbitMQ node to rotate the log files. The RabbitMQ
     broker will attempt to append the current contents of the log file
@@ -81,48 +81,57 @@ rotate_logs [suffix]
     specified.
     This command might be helpful when you are e.g. writing your own
     logrotate script and you do not want to restart the RabbitMQ node.
-    
+
 cluster I<clusternode> ...
     instruct the node to become member of a cluster with the specified
     nodes determined by I<clusternode> option(s).
     See http://www.rabbitmq.com/clustering.html for more information
     about clustering.
-    
+
 =head2 USER MANAGEMENT
-    
+
 add_user I<username> I<password>
     create a user named I<username> with (initial) password I<password>.
-    
+
+delete_user I<username>
+    delete the user named I<username>.
+
 change_password I<username> I<newpassword>
     change the password for the user named I<username> to I<newpassword>.
 
 list_users
     list all users.
-    
+
 =head2 ACCESS CONTROL
 
 add_vhost I<vhostpath>
     create a new virtual host called I<vhostpath>.
-    
+
 delete_vhost I<vhostpath>
     delete a virtual host I<vhostpath>.
     That command deletes also all its exchanges, queues and user mappings.
-    
+
 list_vhosts
     list all virtual hosts.
-    
-map_user_vhost I<username> I<vhostpath>
-    grant the user named I<username> access to the virtual host called
-    I<vhostpath>.
-    
-unmap_user_vhost I<username> I<vhostpath>
-    deny the user named I<username> access to the virtual host called
+
+set_permissions [-p I<vhostpath>] I<username> I<regexp> I<regexp>
+    set the permissions for the user named I<username> in the virtual
+    host I<vhostpath>, granting them configuration access to resources
+    with names matching the first I<regexp> and messaging access to
+    resources with names matching the second I<regexp>.
+
+clear_permissions [-p I<vhostpath>] I<username>
+    remove the permissions for the user named I<username> in the
+    virtual host I<vhostpath>.
+
+list_permissions [-p I<vhostpath>]
+    list all the users and their permissions in the virtual host
     I<vhostpath>.
 
-list_user_vhost I<username> 
-    list all the virtual hosts to which the user named I<username> has
-    been granted access.
-    
+list_user_permissions I<username> 
+    list the permissions of the user named I<username> across all
+    virtual hosts.
+
 =head2 SERVER STATUS
 
 list_queues [-p I<vhostpath>] [I<queueinfoitem> ...]
@@ -146,23 +155,24 @@ auto_delete
 arguments
     queue arguments
 
-pid
-    Erlang process identifier associated with the queue
+node
+    node on which the process associated with the queue resides
 
 messages_ready
-    number of ready messages
+    number of messages ready to be delivered to clients
 
 messages_unacknowledged
-    number of unacknowledged messages
+    number of messages delivered to clients but not yet acknowledged
 
 messages_uncommitted
-    number of uncommitted messages
+    number of messages published in as yet uncommitted transactions
 
 messages
     sum of ready, unacknowledged and uncommitted messages
 
 acks_uncommitted
-    number of uncommitted acknowledgements
+    number of acknowledgements received in as yet uncommitted
+    transactions
 
 consumers
     number of consumers
@@ -214,8 +224,8 @@ list_connections [I<connectioninfoitem> ...]
 
 =over 4
 
-pid
-    Erlang process id associated with the connection
+node
+    node on which the process associated with the connection resides
 
 address
     server IP number
@@ -228,7 +238,7 @@ peer_address
 
 peer_port
     peer port
-    
+
 state
     connection state (B<pre-init>, B<starting>, B<tuning>, B<opening>,
     B<running>, B<closing>, B<closed>)
@@ -262,7 +272,7 @@ send_cnt
 
 send_pend
     send queue size
-    
+
 =back
 
 The list_queues, list_exchanges and list_bindings commands accept an
@@ -276,12 +286,12 @@ Create a user named foo with (initial) password bar at the Erlang node
 rabbit@test:
 
     rabbitmqctl -n rabbit@test add_user foo bar
-    
+
 Grant user named foo access to the virtual host called test at the
 default Erlang node:
 
     rabbitmqctl map_user_vhost foo test
-    
+
 Append the current logs' content to the files with ".1" suffix and reopen
 them:
 

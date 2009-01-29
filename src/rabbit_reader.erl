@@ -173,7 +173,8 @@ setup_profiling() ->
     Value = rabbit_misc:get_config(profiling_enabled, false),
     case Value of
         once ->
-            rabbit_log:info("Enabling profiling for this connection, and disabling for subsequent.~n"),
+            rabbit_log:info("Enabling profiling for this connection, "
+                            "and disabling for subsequent.~n"),
             rabbit_misc:set_config(profiling_enabled, false),
             fprof:trace(start);
         true ->
@@ -404,7 +405,8 @@ wait_for_channel_termination(N, TimerRef) ->
                         normal -> ok;
                         _ ->
                             rabbit_log:error(
-                              "connection ~p, channel ~p - error while terminating:~n~p~n",
+                              "connection ~p, channel ~p - "
+                              "error while terminating:~n~p~n",
                               [self(), Channel, Reason])
                     end,
                     wait_for_channel_termination(N-1, TimerRef)

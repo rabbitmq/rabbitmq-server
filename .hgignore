@@ -11,6 +11,7 @@ syntax: regexp
 ^include/rabbit_framing.hrl$
 ^src/rabbit_framing.erl$
 ^rabbit.plt$
+^ebin/rabbit.app$
 
 ^packaging/RPMS/Fedora/(BUILD|RPMS|SOURCES|SPECS|SRPMS)$
 ^packaging/debs/Debian/rabbitmq-server_.*\.(dsc|(diff|tar)\.gz|deb|changes)$
