@@ -35,12 +35,12 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, do/2, do/3, shutdown/1]).
+-export([start_link/5, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
--record(ch, {state, reader_pid, writer_pid, limiter_pid,
+-record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host,
@@ -54,7 +54,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/4 :: (pid(), pid(), username(), vhost()) -> pid()).
+-spec(start_link/5 ::
+      (channel_number(), pid(), pid(), username(), vhost()) -> pid()).
 -spec(do/2 :: (pid(), amqp_method()) -> 'ok').
 -spec(do/3 :: (pid(), amqp_method(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
@@ -66,9 +67,10 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(ReaderPid, WriterPid, Username, VHost) ->
+start_link(Channel, ReaderPid, WriterPid, Username, VHost) ->
     {ok, Pid} = gen_server2:start_link(
-                  ?MODULE, [ReaderPid, WriterPid, Username, VHost], []),
+                  ?MODULE, [Channel, ReaderPid, WriterPid,
+                            Username, VHost], []),
     Pid.
 
 do(Pid, Method) ->
@@ -91,11 +93,12 @@ conserve_memory(Pid, Conserve) ->
 
 %%---------------------------------------------------------------------------
 
-init([ReaderPid, WriterPid, Username, VHost]) ->
+init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
     rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
     {ok, #ch{state                   = starting,
+             channel                 = Channel,
              reader_pid              = ReaderPid,
              writer_pid              = WriterPid,
              limiter_pid             = undefined,
@@ -123,8 +126,11 @@ handle_cast({method, Method, Content}, State) ->
             {stop, normal, State#ch{state = terminating}}
     catch
         exit:{amqp, Error, Explanation, none} ->
-            {stop, {amqp, Error, Explanation,
-                    rabbit_misc:method_record_type(Method)}, State};
+            ok = notify_queues(internal_rollback(State)),
+            Reason = {amqp, Error, Explanation,
+                      rabbit_misc:method_record_type(Method)},
+            State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
+            {stop, normal, State#ch{state = terminating}};
         exit:normal ->
             {stop, normal, State};
         _:Reason ->
