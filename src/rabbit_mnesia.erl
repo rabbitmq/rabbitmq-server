@@ -143,8 +143,7 @@ table_definitions() ->
        {disc_copies, [node()]}]},
      {rabbit_queue,
       [{record_name, amqqueue},
-       {attributes, record_info(fields, amqqueue)},
-       {index, [pid]}]}].
+       {attributes, record_info(fields, amqqueue)}]}].
 
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
