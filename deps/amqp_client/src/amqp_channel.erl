@@ -401,10 +401,9 @@ handle_info( {channel_close, Peer}, State ) ->
     {noreply, NewState};
 
 %% This is for a channel exception that can't be otherwise handled
-handle_info( {channel_exception, Channel, Reason}, State) ->
-    io:format("Channel ~p is shutting down due to: ~p~n",[Channel, Reason]),
+handle_info( {channel_exit, Channel, Reason}, State) ->
     NewState = channel_cleanup(State),
-    {stop, shutdown, NewState}.
+    {stop, Reason, NewState}.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks

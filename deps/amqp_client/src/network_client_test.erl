@@ -71,6 +71,9 @@ rpc_test() ->
 non_existent_exchange_test() -> 
   negative_test_util:non_existent_exchange_test(new_connection()).
 
+hard_error_test() ->
+    negative_test_util:hard_error_test(new_connection()).
+
 %%---------------------------------------------------------------------------
 %% Common Functions
 

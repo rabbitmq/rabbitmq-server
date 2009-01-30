@@ -57,6 +57,9 @@ basic_ack_test() ->
 command_serialization_test() ->
     test_util:command_serialization_test(new_connection()).
 
+queue_unbind_test() ->
+    test_util:queue_unbind_test(new_connection()).
+
 %%---------------------------------------------------------------------------
 %% This must be kicked off manually because it can only be run after Rabbit
 %% has been running for 1 minute
@@ -70,8 +73,8 @@ test_channel_flow() ->
 non_existent_exchange_test() -> 
     negative_test_util:non_existent_exchange_test(new_connection()).
 
-queue_unbind_test() ->
-    test_util:queue_unbind_test(new_connection()).
+hard_error_test() ->
+    negative_test_util:hard_error_test(new_connection()).
 
 %%---------------------------------------------------------------------------
 %% Common Functions

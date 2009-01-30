@@ -25,6 +25,7 @@
 -module(negative_test_util).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 
 -compile(export_all).
 
@@ -44,3 +45,17 @@ non_existent_exchange_test(Connection) ->
     ?assertNot(is_process_alive(Channel)),
     ?assert(is_process_alive(Connection)),
     lib_amqp:close_connection(Connection).
+
+hard_error_test(Connection) ->
+    Channel = lib_amqp:start_channel(Connection),
+    try
+        amqp_channel:call(Channel, #'basic.qos'{global = true})
+    catch
+        exit:_ -> ok;
+        _:_    -> exit(did_not_throw_error)
+    end,
+    %% Give the connection some time to crash
+    timer:sleep(1000),
+    ?assertNot(is_process_alive(Channel)),
+    ?assertNot(is_process_alive(Connection)).
+
