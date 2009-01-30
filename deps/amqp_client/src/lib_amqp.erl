@@ -197,6 +197,13 @@ declare_private_queue(Channel, QueueName) ->
                                             auto_delete = true}).
 
 %%---------------------------------------------------------------------------
+%% Basic.Qos
+
+%% Sets the prefetch count for messages delivered on this channel
+set_prefetch_count(Channel, Prefetch) ->
+    amqp_channel:call(Channel, #'basic.qos'{prefetch_count = Prefetch}).
+
+%%---------------------------------------------------------------------------
 
 delete_queue(Channel, Q) ->
     QueueDelete = #'queue.delete'{queue = Q,

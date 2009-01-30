@@ -233,49 +233,65 @@ basic_recover_test(Connection) ->
     end,
     lib_amqp:teardown(Connection, Channel).
 
-basic_qos_test(Connection) ->
-    % TODO - this is code duplication
-    % Also, lib_amqp has an declare_queue function that returns
-    % an auto-created name, but that is in a branch that is awaiting
-    % QA
-    Messages = 50,
-    Workers = 5,
-    Q = uuid(),
+basic_qos_test(Con) ->
+    [basic_qos_test(Con, Prefetch) || Prefetch <- [0,1]].
+
+basic_qos_test(Connection, Prefetch) ->
+    Messages = 1000,
+    Workers = [1, 100],
     Parent = self(),
-    lib_amqp:declare_queue(lib_amqp:start_channel(Connection), Q),
-    %Channel = lib_amqp:start_channel(Connection),
-    [spawn(fun() -> Channel = lib_amqp:start_channel(Connection),
-                    amqp_channel:call(Channel,
-                                      #'basic.qos'{prefetch_count = 1}),
+    Chan = lib_amqp:start_channel(Connection),
+    Q = lib_amqp:declare_queue(Chan),
+    Kids = [spawn(fun() ->
+                    Channel = lib_amqp:start_channel(Connection),
+                    lib_amqp:set_prefetch_count(Channel, Prefetch),
                     lib_amqp:subscribe(Channel, Q, self(), false),
-                    amqp_channel:call(Channel,
-                                      #'basic.qos'{prefetch_count = 1}),
-                    sleeping_consumer(Channel, Sleep, Parent) end)
-                    || Sleep <- lists:seq(1, Workers)],
-    latch_loop(Workers),
-    producer_loop(lib_amqp:start_channel(Connection), Q, Messages),
-    latch_loop(Messages),
+                    sleeping_consumer(Channel, Sleep, Parent, 0)
+                  end) || Sleep <- Workers],
+    spawn(fun() -> producer_loop(lib_amqp:start_channel(Connection),
+                                 Q, Messages) end),
+    timer:sleep(15000),
+    [Kid ! stop || Kid <- Kids],
+    latch_loop(length(Workers)),
+    lib_amqp:close_channel(Chan),
     ok.
 
-sleeping_consumer(Channel, Sleep, Parent) ->
+sleeping_consumer(Channel, Sleep, Parent, N) ->
     receive
-        #'basic.consume_ok'{} -> 
-            Parent ! finished,
-            sleeping_consumer(Channel, Sleep, Parent);
-        #'basic.cancel_ok'{}  -> ok;
+        stop ->
+            do_stop(Channel, Sleep, Parent, N);
+        #'basic.consume_ok'{} ->
+            sleeping_consumer(Channel, Sleep, Parent, N);
+        #'basic.cancel_ok'{}  ->
+            ok;
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _Content} ->
-            io:format("Sleeper ~p got a msg~n",[Sleep]),
-            timer:sleep(Sleep * 100),
+            %% This selective receive effectively prioritizes
+            %% a stop message in the mailbox
+            if
+                Sleep > 10 ->
+                    receive stop -> do_stop(Channel, Sleep, Parent, N)
+                    after 5 -> ok
+                    end;
+                true -> ok
+            end,
+            timer:sleep(Sleep * 10),
             lib_amqp:ack(Channel, DeliveryTag),
-            Parent ! finished,
-            sleeping_consumer(Channel, Sleep, Parent)
+            sleeping_consumer(Channel, Sleep, Parent, N + 1)
     end.
 
-producer_loop(_Channel, _RoutingKey, 0) ->
+do_stop(Channel, Sleep, Parent, N) ->
+    io:format("Worker (~p Hz) has processed ~p messages~n",
+              [1000 div (Sleep * 10), N]),
+    Parent ! finished,
+    lib_amqp:close_channel(Channel),
+    exit(normal).
+
+producer_loop(Channel, _RoutingKey, 0) ->
+    lib_amqp:close_channel(Channel),
     ok;
 
 producer_loop(Channel, RoutingKey, N) ->
-    lib_amqp:publish(Channel, <<>>, RoutingKey, <<"foobar">>),
+    lib_amqp:publish(Channel, <<>>, RoutingKey, <<>>),
     producer_loop(Channel, RoutingKey, N - 1).
 
 %% Reject is not yet implemented in RabbitMQ
