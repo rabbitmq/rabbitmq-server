@@ -401,7 +401,7 @@ handle_info( {channel_close, Peer}, State ) ->
     {noreply, NewState};
 
 %% This is for a channel exception that can't be otherwise handled
-handle_info( {channel_exit, Channel, Reason}, State) ->
+handle_info( {channel_exit, _Channel, Reason}, State) ->
     NewState = channel_cleanup(State),
     {stop, Reason, NewState}.
 
