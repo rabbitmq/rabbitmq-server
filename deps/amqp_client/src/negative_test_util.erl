@@ -38,11 +38,7 @@ non_existent_exchange_test(Connection) ->
     lib_amqp:declare_exchange(Channel, X),
     %% Deliberately mix up the routingkey and exchange arguments
     lib_amqp:publish(Channel, RoutingKey, X, Payload),
-    receive
-        X -> ok
-    after 1000 -> ok
-    end,
-    ?assertNot(is_process_alive(Channel)),
+    wait_for_death(Channel),
     ?assert(is_process_alive(Connection)),
     lib_amqp:close_connection(Connection).
 
@@ -54,8 +50,11 @@ hard_error_test(Connection) ->
         exit:_ -> ok;
         _:_    -> exit(did_not_throw_error)
     end,
-    %% Give the connection some time to crash
-    timer:sleep(1000),
-    ?assertNot(is_process_alive(Channel)),
-    ?assertNot(is_process_alive(Connection)).
+    wait_for_death(Channel),
+    wait_for_death(Connection).
 
+wait_for_death(Pid) ->
+    Ref = erlang:monitor(process, Pid),
+    receive {'DOWN', Ref, process, Pid, _Reason} -> ok
+    after 1000 -> ?assert(false), ok
+    end.
