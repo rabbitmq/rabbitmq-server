@@ -47,12 +47,13 @@ handshake(ConnectionState = #connection_state{username = User,
                                              VHostPath),
     ConnectionState.
 
-open_channel({_Channel, _OutOfBand}, ChannelPid,
+open_channel({Channel, _OutOfBand}, ChannelPid,
              State = #connection_state{username = User,
                                        vhostpath = VHost}) ->
     UserBin = amqp_util:binary(User),
     ReaderPid = WriterPid = ChannelPid,
-    Peer = rabbit_channel:start_link(ReaderPid, WriterPid, UserBin, VHost),
+    Peer = rabbit_channel:start_link(Channel, ReaderPid, WriterPid,
+                                     UserBin, VHost),
     amqp_channel:register_direct_peer(ChannelPid, Peer),
     State.
 

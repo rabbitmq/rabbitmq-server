@@ -203,19 +203,16 @@ handle_call(Close = #'connection.close'{}, From, State) ->
     close_connection(Close, From, State),
     {stop, normal, State}.
 
-handle_cast(_Message, State) ->
-    {noreply, State}.
-
 %%---------------------------------------------------------------------------
 %% Handle forced close from the broker
 %%---------------------------------------------------------------------------
 
-handle_info({method, #'connection.close'{reply_code = Code,
+handle_cast({method, #'connection.close'{reply_code = Code,
                                          reply_text = Text}, _Content},
             State = #connection_state{driver = Driver}) ->
     io:format("Broker forced connection: ~p -> ~p~n", [Code, Text]),
     Driver:handle_broker_close(State),
-    {stop, normal, State};
+    {stop, normal, State}.
 
 %%---------------------------------------------------------------------------
 %% Trap exits
