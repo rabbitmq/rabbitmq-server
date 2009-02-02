@@ -326,7 +326,8 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, Realm, State) ->
 					      list_to_binary(Passcode)),
     ok = rabbit_access_control:check_vhost_access(U, list_to_binary(VirtualHost)),
     ChPid = 
-	rabbit_channel:start_link(self(), self(), U#user.username, list_to_binary(VirtualHost)),
+	rabbit_channel:start_link(?MODULE, self(), self(),
+				  U#user.username, list_to_binary(VirtualHost)),
     {ok, #'channel.open_ok'{}, State1} =
 	simple_method_sync_rpc(#'channel.open'{out_of_band = <<"">>},
 			       State#state{channel = ChPid}),
