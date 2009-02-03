@@ -284,10 +284,21 @@ send_error(Message, Format, Args, State) ->
 
 process_frame("CONNECT", Frame, State = #state{channel = none}) ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
-    do_login(stomp_frame:header(Frame, "login"),
-	     stomp_frame:header(Frame, "passcode"),
-	     stomp_frame:header(Frame, "virtual-host", binary_to_list(DefaultVHost)),
-	     State);
+    {ok, State1} = do_login(stomp_frame:header(Frame, "login"),
+			    stomp_frame:header(Frame, "passcode"),
+			    stomp_frame:header(Frame, "virtual-host", binary_to_list(DefaultVHost)),
+			    State),
+    State2 = case stomp_frame:integer_header(Frame, "prefetch") of
+		 {ok, PrefetchCount} ->
+		     {ok, #'basic.qos_ok'{}, S} =
+			 simple_method_sync_rpc(#'basic.qos'{prefetch_size = 0,
+							     prefetch_count = PrefetchCount,
+							     global = false},
+						State1),
+		     S;
+		 not_found -> State1
+	     end,
+    {ok, State2};
 process_frame("DISCONNECT", _Frame, _State = #state{channel = none}) ->
     stop;
 process_frame(_Command, _Frame, State = #state{channel = none}) ->
@@ -520,27 +531,13 @@ process_command("SUBSCRIBE",
 					 State1);
 			 not_found -> State1
 		     end,
-	    State3 = case stomp_frame:integer_header(Frame, "prefetch") of
-			 {ok, PrefetchCount} ->
-			     %% Gross hack. It sets per-channel QOS, even though this is a
-			     %% SUBSCRIBE operation! A better place for this is the
-			     %% CONNECT command, but the Ruby STOMP client doesn't let you
-			     %% add headers to that, at the time of writing.
-			     {ok, #'basic.qos_ok'{}, S} =
-				 simple_method_sync_rpc(#'basic.qos'{prefetch_size = 0,
-								     prefetch_count = PrefetchCount,
-								     global = false},
-							State2),
-			     S;
-			 not_found -> State2
-		     end,
-	    State4 = send_method(#'basic.consume'{queue = Queue,
+	    State3 = send_method(#'basic.consume'{queue = Queue,
 						  consumer_tag = ConsumerTag,
 						  no_local = false,
 						  no_ack = (AckMode == auto),
 						  exclusive = false,
 						  nowait = true},
-				 State3),
+				 State2),
 	    {ok, State3};
 	not_found ->
 	    {ok, send_error("Missing destination",
