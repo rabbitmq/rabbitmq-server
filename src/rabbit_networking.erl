@@ -175,6 +175,7 @@ ssl_connection_upgrade(SslOpts, Sock) ->
             RabbitSslSock = #ssl_socket{tcp=Sock, ssl=SslSock},
             start_client(RabbitSslSock);
         {error, Reason} ->
+            gen_tcp:close(Sock),
             rabbit_log:error("failed... SSL: ~n~p~n", 
                 [Reason]),
             {error, Reason}
