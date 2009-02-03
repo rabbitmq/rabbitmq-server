@@ -50,7 +50,7 @@
 -spec(close/1 :: (socket()) -> 'ok' | error()).
 -spec(controlling_process/2 :: (socket(), pid()) -> 'ok' | error()).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
--spec(send/2 :: (socket(), iolist()) -> 'ok' | error()).
+-spec(send/2 :: (socket(), binary() | iolist()) -> 'ok' | error()).
 -spec(peername/1 :: (socket()) -> 
         {'ok', {ip_address(), non_neg_integer()}} | error()).
 -spec(sockname/1 :: (socket()) -> 
