@@ -1,4 +1,5 @@
 OPENSSL=openssl
+VALID_DAYS=36500
 
 OBJECTS= server/key.pem \
 		 server/cert.pem \
@@ -17,7 +18,7 @@ server/key.pem:
 	$(OPENSSL) genrsa -out $@ 1024
 
 server/cert.pem: server/key.pem
-	$(OPENSSL) req -new -x509 -key $< -nodes -sha1 -days 365 -batch -out $@
+	$(OPENSSL) req -new -x509 -key $< -nodes -sha1 -days $(VALID_DAYS) -batch -out $@
 
 ca/cacerts.pem: server/cert.pem
 	mkdir -p ca
@@ -28,7 +29,7 @@ client/key.pem:
 	$(OPENSSL) genrsa -out $@ 1024
 
 client/cert.pem: client/key.pem
-	$(OPENSSL) req -new -x509 -key $< -nodes -sha1 -days 365 -batch -out $@
+	$(OPENSSL) req -new -x509 -key $< -nodes -sha1 -days $(VALID_DAYS) -batch -out $@
 
 clean:
 	rm -rf server
