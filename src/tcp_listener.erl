@@ -33,28 +33,28 @@
 
 -behaviour(gen_server).
 
--export([start_link/7]).
+-export([start_link/8]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {sock, on_startup, on_shutdown}).
+-record(state, {sock, on_startup, on_shutdown, label}).
 
 %%--------------------------------------------------------------------
 
 start_link(IPAddress, Port, SocketOpts,
            ConcurrentAcceptorCount, AcceptorSup,
-           OnStartup, OnShutdown) ->
+           OnStartup, OnShutdown, Label) ->
     gen_server:start_link(
       ?MODULE, {IPAddress, Port, SocketOpts,
                 ConcurrentAcceptorCount, AcceptorSup,
-                OnStartup, OnShutdown}, []).
+                OnStartup, OnShutdown, Label}, []).
 
 %%--------------------------------------------------------------------
 
 init({IPAddress, Port, SocketOpts,
       ConcurrentAcceptorCount, AcceptorSup,
-      {M,F,A} = OnStartup, OnShutdown}) ->
+      {M,F,A} = OnStartup, OnShutdown, Label}) ->
     process_flag(trap_exit, true),
     case gen_tcp:listen(Port, SocketOpts ++ [{ip, IPAddress},
                                              {active, false}]) of
@@ -65,15 +65,16 @@ init({IPAddress, Port, SocketOpts,
                           end,
                           lists:duplicate(ConcurrentAcceptorCount, dummy)),
             {ok, {LIPAddress, LPort}} = inet:sockname(LSock),
-            error_logger:info_msg("started TCP listener on ~s:~p~n",
-                                  [inet_parse:ntoa(LIPAddress), LPort]),
+            error_logger:info_msg("started ~s on ~s:~p~n",
+                                  [Label, inet_parse:ntoa(LIPAddress), LPort]),
             apply(M, F, A ++ [IPAddress, Port]),
             {ok, #state{sock=LSock,
-                        on_startup = OnStartup, on_shutdown = OnShutdown}};
+                        on_startup = OnStartup, on_shutdown = OnShutdown, 
+                        label=Label}};
         {error, Reason} ->
             error_logger:error_msg(
-              "failed to start TCP listener on ~s:~p - ~p~n",
-              [inet_parse:ntoa(IPAddress), Port, Reason]),
+              "failed to start ~s on ~s:~p - ~p~n",
+              [Label, inet_parse:ntoa(IPAddress), Port, Reason]),
             {stop, {cannot_listen, IPAddress, Port, Reason}}
     end.
 
@@ -86,11 +87,11 @@ handle_cast(_Msg, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, #state{sock=LSock, on_shutdown = {M,F,A}}) ->
+terminate(_Reason, #state{sock=LSock, on_shutdown = {M,F,A}, label=Label}) ->
     {ok, {IPAddress, Port}} = inet:sockname(LSock),
     gen_tcp:close(LSock),
-    error_logger:info_msg("stopped TCP listener on ~s:~p~n",
-                          [inet_parse:ntoa(IPAddress), Port]),
+    error_logger:info_msg("stopped ~s on ~s:~p~n",
+                          [Label, inet_parse:ntoa(IPAddress), Port]),
     apply(M, F, A ++ [IPAddress, Port]).
 
 code_change(_OldVsn, State, _Extra) ->

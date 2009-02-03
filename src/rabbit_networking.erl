@@ -107,12 +107,12 @@ check_tcp_listener_address(NamePrefix, Host, Port) ->
     {IPAddress, Name}.
 
 start_tcp_listener(Host, Port) ->
-    start_listener(Host, Port, {?MODULE, start_client, []}).
+    start_listener(Host, Port, "TCP Listener", {?MODULE, start_client, []}).
 
 start_ssl_listener(Host, Port, SslOpts) ->
-    start_listener(Host, Port, {?MODULE, ssl_connection_upgrade, [SslOpts]}).
+    start_listener(Host, Port, "SSL Listener", {?MODULE, ssl_connection_upgrade, [SslOpts]}).
 
-start_listener(Host, Port, OnConnect) ->
+start_listener(Host, Port, Label, OnConnect) ->
     {IPAddress, Name} = check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
@@ -121,7 +121,7 @@ start_listener(Host, Port, OnConnect) ->
                  [IPAddress, Port, ?RABBIT_TCP_OPTS ,
                   {?MODULE, tcp_listener_started, []},
                   {?MODULE, tcp_listener_stopped, []},
-                  OnConnect]},
+                  OnConnect, Label]},
                 transient, infinity, supervisor, [tcp_listener_sup]}),
     ok.
 
