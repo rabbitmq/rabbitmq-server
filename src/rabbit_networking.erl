@@ -170,13 +170,13 @@ ssl_connection_upgrade(SslOpts, Sock) ->
 
     case ssl:ssl_accept(Sock, SslOpts) of
         {ok, SslSock} ->
-            rabbit_log:info("Upgraded TCP connection from ~s:~p to SSL/TLS~n", 
+            rabbit_log:info("upgraded TCP connection from ~s:~p to SSL~n", 
                 [PeerIp, PeerPort]),
             RabbitSslSock = #ssl_socket{tcp=Sock, ssl=SslSock},
             start_client(RabbitSslSock);
         {error, Reason} ->
-            rabbit_log:error("Failed to upgrade TCP connection from ~s:~p to SSL/TLS. Reason: ~p~n", 
-                [PeerIp, PeerPort, Reason]),
+            rabbit_log:error("failed... SSL: ~n~p~n", 
+                [Reason]),
             {error, Reason}
     end.
 
