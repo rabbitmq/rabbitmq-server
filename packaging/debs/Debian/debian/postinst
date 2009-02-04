@@ -31,6 +31,7 @@ fi
 
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
 chown -R rabbitmq:rabbitmq /var/log/rabbitmq
+chown -R rabbitmq:rabbitmq /etc/rabbitmq
 
 case "$1" in
     configure)

@@ -40,7 +40,7 @@ Start 3 local RabbitMQ nodes with unique, sequential port numbers:
 
 =head1 SEE ALSO
 
-rabbitmq-server(1), rabbitmqctl(1)
+rabbitmq(5), rabbitmq-server(1), rabbitmqctl(1)
 
 =head1 AUTHOR
 

@@ -66,6 +66,8 @@ sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_sbindir}/rabbitmqctl
 mkdir -p %{buildroot}/etc/logrotate.d
 install -m 0644 %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
 
+mkdir -p %{buildroot}/etc/rabbitmq
+
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
 #Build the list of files
@@ -90,6 +92,7 @@ fi
 
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
 chown -R rabbitmq:rabbitmq /var/log/rabbitmq
+chown -R rabbitmq:rabbitmq /etc/rabbitmq
 
 /sbin/chkconfig --add %{name}
 /sbin/service rabbitmq-server start
@@ -108,6 +111,7 @@ fi
 %defattr(-,root,root,-)
 %dir /var/lib/rabbitmq
 %dir /var/log/rabbitmq
+%dir /etc/rabbitmq
 %{_rabbit_erllibdir}
 %{_rabbit_libdir}
 %{_initrddir}/rabbitmq-server
