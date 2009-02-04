@@ -36,8 +36,8 @@ fi
 
 %prep
 %setup -q
-sed -i 's|/usr/lib/|%{_libdir}/|' %SOURCE1
-sed -i 's|/usr/lib/|%{_libdir}/|' %SOURCE2
+sed -i 's|/usr/lib/|%{_libdir}/|' %{S:1}
+sed -i 's|/usr/lib/|%{_libdir}/|' %{S:2}
 
 %build
 make %{?_smp_mflags}
@@ -53,13 +53,13 @@ mkdir -p %{buildroot}/var/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}/var/log/rabbitmq
 
 #Copy all necessary lib files etc.
-install -p -D -m 0755 %SOURCE1 %{buildroot}%{_initrddir}/rabbitmq-server
-install -p -D -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmqctl
-install -p -D -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmq-server
-install -p -D -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmq-multi
+install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
+install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmqctl
+install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-server
+install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-multi
 
 mkdir -p %{buildroot}/etc/logrotate.d
-install -m 0644 %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
+install -m 0644 %{S:3} %{buildroot}/etc/logrotate.d/rabbitmq-server
 
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
