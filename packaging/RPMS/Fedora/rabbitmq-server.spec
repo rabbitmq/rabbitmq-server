@@ -58,8 +58,7 @@ install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmqctl
 install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-server
 install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-multi
 
-mkdir -p %{buildroot}/etc/logrotate.d
-install -m 0644 %{S:3} %{buildroot}/etc/logrotate.d/rabbitmq-server
+install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
@@ -79,12 +78,9 @@ fi
 
 # create rabbitmq user
 if ! getent passwd rabbitmq >/dev/null; then
-        useradd -r -g rabbitmq --home /var/lib/rabbitmq  rabbitmq
-        usermod -c "RabbitMQ messaging server" rabbitmq
+        useradd -r -g rabbitmq -d /var/lib/rabbitmq  rabbitmq \
+            -c "RabbitMQ messaging server" rabbitmq
 fi
-
-chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
-chown -R rabbitmq:rabbitmq /var/log/rabbitmq
 
 /sbin/chkconfig --add %{name}
 /sbin/service rabbitmq-server start
@@ -101,12 +97,12 @@ fi
 
 %files -f ../filelist.%{name}.rpm
 %defattr(-,root,root,-)
-%dir /var/lib/rabbitmq
-%dir /var/log/rabbitmq
+%attr(0750, rabbitmq, rabbitmq) %dir /var/lib/rabbitmq
+%attr(0750, rabbitmq, rabbitmq) %dir /var/log/rabbitmq
 %{_rabbit_erllibdir}
 %{_rabbit_libdir}
 %{_initrddir}/rabbitmq-server
-%config(noreplace) /etc/logrotate.d/rabbitmq-server
+%config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE LICENSE-MPL-RabbitMQ INSTALL
 
 %clean
