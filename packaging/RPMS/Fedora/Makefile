@@ -5,7 +5,7 @@ TARBALL=$(SOURCE_TARBALL_DIR)/rabbitmq-server-$(VERSION).tar.gz
 TOP_DIR=$(shell pwd)
 #Under debian we do not want to check build dependencies, since that
 #only checks build-dependencies using rpms, not debs
-DEFINES=--define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp' --define 'debian 1'
+DEFINES=--define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp'
 
 ifndef RPM_OS
 RPM_OS=fedora
@@ -35,9 +35,9 @@ prepare:
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare
-	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES) \
+	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES) \
 		--target i386
-	rpmbuild -ba SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES) \
+	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES) \
 		--define '_libdir /usr/lib64' --define '_arch x86_64' \
 		--define '_defaultdocdir /usr/share/doc' --target x86_64
 

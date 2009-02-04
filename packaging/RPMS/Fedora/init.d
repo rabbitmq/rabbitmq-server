@@ -28,8 +28,8 @@ LOCK_FILE=/var/lock/subsys/$NAME
 test -x $DAEMON || exit 0
 
 # Include rabbitmq defaults if available
-if [ -f /etc/default/rabbitmq ] ; then
-	. /etc/default/rabbitmq
+if [ -f /etc/sysconfig/rabbitmq ] ; then
+	. /etc/sysconfig/rabbitmq
 fi
 
 RETVAL=0

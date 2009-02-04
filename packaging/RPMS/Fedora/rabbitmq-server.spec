@@ -1,3 +1,5 @@
+%define debug_package %{nil}
+
 Name: rabbitmq-server
 Version: %%VERSION%%
 Release: 1%%RELEASE_OS%%
@@ -8,13 +10,8 @@ Source1: rabbitmq-server.init
 Source2: rabbitmq-script-wrapper
 Source3: rabbitmq-server.logrotate
 URL: http://www.rabbitmq.com/
-Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
-%if 0%{?debian}
-%else
 BuildRequires: erlang, python-simplejson
-%endif
 Requires: erlang, logrotate
-Packager: Hubert Plociniczak <hubert@lshift.net>
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 Requires(post): %%REQUIRES%%
@@ -38,11 +35,12 @@ if [ $1 -gt 1 ]; then
 fi
 
 %prep
-%setup -n %{name}-%{version}
+%setup -q
+sed -i 's|/usr/lib/|%{_libdir}/|' %SOURCE1
 sed -i 's|/usr/lib/|%{_libdir}/|' %SOURCE2
 
 %build
-make
+make %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}
@@ -53,14 +51,9 @@ make install TARGET_DIR=%{_maindir} \
 
 mkdir -p %{buildroot}/var/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}/var/log/rabbitmq
-mkdir -p %{buildroot}%{_initrddir}
 
 #Copy all necessary lib files etc.
-install -m 0755 %SOURCE1 %{buildroot}%{_initrddir}/rabbitmq-server
-chmod 0755 %{buildroot}%{_initrddir}/rabbitmq-server
-sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_initrddir}/rabbitmq-server
-
-
+install -p -D -m 0755 %SOURCE1 %{buildroot}%{_initrddir}/rabbitmq-server
 install -p -D -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmqctl
 install -p -D -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmq-server
 install -p -D -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmq-multi
