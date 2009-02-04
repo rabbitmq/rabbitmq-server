@@ -13,32 +13,21 @@ syntax is permitted (since the file is sourced using the shell "."
 operator), including line comments starting with "#".
 
 In order of preference, the startup scripts get their values from the
-environment, from /etc/default/rabbitmq (if starting through the standard
-init.d script), from /etc/rabbitmq/rabbitmq.conf and finally from the
+environment, from /etc/rabbitmq/rabbitmq.conf and finally from the
 built-in default values. For example, for the B<RABBITMQ_NODENAME> setting,
 
 B<RABBITMQ_NODENAME>
     from the environment is checked first. If it is absent or equal to
     the empty string, then 
 
-B<INITD_NODENAME>
-    from /etc/default/rabbitmq is checked next, only if the server is
-    started through the standard init.d script. If it is also absent or
-    set equal to the empty string, then
-
 B<NODENAME>
-    from /etc/rabbitmq/rabbitmq.conf is checked. If that is also absent
+    from /etc/rabbitmq/rabbitmq.conf is checked. If it is also absent
     or set equal to the empty string then the default value from
     the startup script is used.
 
 The variable names in /etc/rabbitmq/rabbitmq.conf are always equal to the
-environment variable names, with the B<RABBITMQ_> prefix removed.
-Similarly, variable names in /etc/default/rabbitmq (loaded only when
-starting through the init.d script) are always equal to the environmental
-variable names, with the B<RABBITMQ_> prefix substituted by B<INITD_>:
-
-B<RABBITMQ_NODE_PORT> from the environment becomes B<INITD_NODE_PORT> in 
-the /etc/default/rabbitmq and B<NODE_PORT> in the
+environment variable names, with the B<RABBITMQ_> prefix removed:
+B<RABBITMQ_NODE_PORT> from the environment becomes B<NODE_PORT> in the
 /etc/rabbitmq/rabbitmq.conf file, etc.
 
 =head1 EXAMPLES

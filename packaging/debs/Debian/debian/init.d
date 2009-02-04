@@ -13,7 +13,7 @@ DAEMON=/usr/lib/rabbitmq/bin/rabbitmq-multi
 NAME=rabbitmq-server
 DESC=rabbitmq-server
 USER=rabbitmq
-INITD_NODE_COUNT=1
+NODE_COUNT=1
 ROTATE_SUFFIX=
 
 test -x $DAEMON || exit 0
@@ -29,7 +29,7 @@ cd /
 
 start_rabbitmq () {
     set +e
-    su $USER -s /bin/sh -c "$DAEMON start_all ${INITD_NODE_COUNT}" > /var/log/rabbitmq/startup_log 2> /var/log/rabbitmq/startup_err
+    su $USER -s /bin/sh -c "$DAEMON start_all ${NODE_COUNT}" > /var/log/rabbitmq/startup_log 2> /var/log/rabbitmq/startup_err
     case "$?" in
       0)
         echo SUCCESS
