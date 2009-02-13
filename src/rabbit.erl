@@ -155,6 +155,10 @@ start(normal, []) ->
         fun () ->
                 ok = start_child(rabbit_persister)
         end},
+       {"guid generator",
+        fun () ->
+                ok = start_child(rabbit_guid)
+        end},
        {"builtin applications",
         fun () ->
                 {ok, DefaultVHost} = application:get_env(default_vhost),

@@ -314,7 +314,7 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     PersistentKey = case is_message_persistent(DecodedContent) of
-                        true  -> rabbit_misc:guid();
+                        true  -> rabbit_guid:guid();
                         false -> none
                     end,
     {noreply, publish(Mandatory, Immediate,
@@ -390,7 +390,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
             check_read_permitted(QueueName, State),
             ActualConsumerTag =
                 case ConsumerTag of
-                    <<>>  -> rabbit_misc:binstring_guid("amq.ctag");
+                    <<>>  -> rabbit_guid:binstring_guid("amq.ctag");
                     Other -> Other
                 end,
 
@@ -623,7 +623,7 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
             {error, not_found} ->
                 ActualNameBin =
                     case QueueNameBin of
-                        <<>>  -> rabbit_misc:binstring_guid("amq.gen");
+                        <<>>  -> rabbit_guid:binstring_guid("amq.gen");
                         Other -> check_name('queue', Other)
                     end,
                 QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
@@ -832,7 +832,7 @@ ack(TxnKey, UAQ) ->
               [QPid | L]
       end, [], UAQ).
 
-make_tx_id() -> rabbit_misc:guid().
+make_tx_id() -> rabbit_guid:guid().
 
 new_tx(State) ->
     State#ch{transaction_id    = make_tx_id(),
