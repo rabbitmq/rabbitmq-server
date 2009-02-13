@@ -341,7 +341,7 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
     {ok, #'channel.open_ok'{}, State1} =
 	simple_method_sync_rpc(#'channel.open'{out_of_band = <<"">>},
 			       State#state{channel = ChPid}),
-    SessionId = rabbit_misc:string_guid("session"),
+    SessionId = rabbit_guid:string_guid("session"),
     {ok, send_frame("CONNECTED",
 		    [{"session", SessionId}],
 		    "",
