@@ -143,46 +143,59 @@ list_queues [-p I<vhostpath>] [I<queueinfoitem> ...]
 
 =over 4
 
-name 
-    URL-encoded name of the queue
+=item name 
 
-durable 
-    whether the queue survives server restarts
+URL-encoded name of the queue
 
-auto_delete
-    whether the queue will be deleted when no longer used
+=item durable 
 
-arguments
-    queue arguments
+whether the queue survives server restarts
 
-node
-    node on which the process associated with the queue resides
+=item auto_delete
 
-messages_ready
-    number of messages ready to be delivered to clients
+whether the queue will be deleted when no longer used
 
-messages_unacknowledged
-    number of messages delivered to clients but not yet acknowledged
+=item arguments
 
-messages_uncommitted
-    number of messages published in as yet uncommitted transactions
+queue arguments
 
-messages
-    sum of ready, unacknowledged and uncommitted messages
+=item node
 
-acks_uncommitted
-    number of acknowledgements received in as yet uncommitted
-    transactions
+node on which the process associated with the queue resides
 
-consumers
-    number of consumers
+=item messages_ready
 
+number of messages ready to be delivered to clients
+
+=item messages_unacknowledged
+
+number of messages delivered to clients but not yet acknowledged
+
+=item messages_uncommitted
+
+number of messages published in as yet uncommitted transactions
+
+=item messages
+
+sum of ready, unacknowledged and uncommitted messages
+
+=item acks_uncommitted
+
+number of acknowledgements received in as yet uncommitted
 transactions
-    number of transactions
 
-memory
-    bytes of memory consumed by the Erlang process for the queue,
-    including stack, heap and internal structures
+=item consumers
+
+number of consumers
+
+=item transactions
+
+number of transactions
+
+=item memory
+
+bytes of memory consumed by the Erlang process for the queue,
+including stack, heap and internal structures
 
 =back
 
@@ -195,20 +208,25 @@ list_exchanges [-p I<vhostpath>] [I<exchangeinfoitem> ...]
 
 =over 4
 
-name 
-    URL-encoded name of the exchange
+=item name 
 
-type
-    exchange type (B<direct>, B<topic> or B<fanout>)
+URL-encoded name of the exchange
 
-durable
-    whether the exchange survives server restarts
+=item type
 
-auto_delete
-    whether the exchange is deleted when no longer used
+exchange type (B<direct>, B<topic> or B<fanout>)
 
-arguments
-    exchange arguments
+=item durable
+
+whether the exchange survives server restarts
+
+=item auto_delete
+
+whether the exchange is deleted when no longer used
+
+=item arguments
+
+exchange arguments
 
 =back
 
@@ -224,54 +242,70 @@ list_connections [I<connectioninfoitem> ...]
 
 =over 4
 
-node
-    node on which the process associated with the connection resides
+=item node
 
-address
-    server IP number
+node on which the process associated with the connection resides
 
-port
-    server port
+=item address
 
-peer_address
-    peer address
+server IP number
 
-peer_port
-    peer port
+=item port
 
-state
-    connection state (B<pre-init>, B<starting>, B<tuning>, B<opening>,
-    B<running>, B<closing>, B<closed>)
+server port
 
-channels
-    number of channels using the connection
+=item peer_address
 
-user
-    username associated with the connection
+peer address
 
-vhost
-    URL-encoded virtual host
+=item peer_port
 
-timeout
-    connection timeout
+peer port
 
-frame_max
-    maximum frame size (bytes)
+=item state
 
-recv_oct
-    octets received
+connection state (B<pre-init>, B<starting>, B<tuning>, B<opening>,
+B<running>, B<closing>, B<closed>)
 
-recv_cnt
-    packets received
+=item channels
 
-send_oct
-    octets sent
+number of channels using the connection
 
-send_cnt
-    packets sent
+=item user
 
-send_pend
-    send queue size
+username associated with the connection
+
+=item vhost
+
+URL-encoded virtual host
+
+=item timeout
+
+connection timeout
+
+=item frame_max
+
+maximum frame size (bytes)
+
+=item recv_oct
+
+octets received
+
+=item recv_cnt
+
+packets received
+
+=item send_oct
+
+octets sent
+
+=item send_cnt
+
+packets sent
+
+=item send_pend
+
+send queue size
 
 =back
 
