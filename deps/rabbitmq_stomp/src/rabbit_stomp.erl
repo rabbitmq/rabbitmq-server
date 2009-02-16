@@ -226,8 +226,10 @@ send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
     send_frame("MESSAGE",
                [{"destination", binary_to_list(RoutingKey)},
                 {"exchange", binary_to_list(Exchange)},
-                %% TODO append ContentEncoding as ContentType; charset=ContentEncoding?
-                %% The STOMP SEND handle could also parse "content-type" to split it, perhaps?
+                %% TODO append ContentEncoding as ContentType;
+                %% charset=ContentEncoding?  The STOMP SEND handler
+                %% could also parse "content-type" to split it,
+                %% perhaps?
                 {"message-id", SessionId ++ "_" ++ integer_to_list(DeliveryTag)}]
                ++ maybe_header("content-type", ContentType)
                ++ maybe_header("content-encoding", ContentEncoding)
@@ -286,7 +288,8 @@ process_frame("CONNECT", Frame, State = #state{channel = none}) ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
     {ok, State1} = do_login(stomp_frame:header(Frame, "login"),
                             stomp_frame:header(Frame, "passcode"),
-                            stomp_frame:header(Frame, "virtual-host", binary_to_list(DefaultVHost)),
+                            stomp_frame:header(Frame, "virtual-host",
+                                               binary_to_list(DefaultVHost)),
                             State),
     State2 = case stomp_frame:integer_header(Frame, "prefetch") of
                  {ok, PrefetchCount} ->
@@ -438,14 +441,14 @@ process_command("SEND",
         {ok, RoutingKeyStr} ->
             ExchangeStr = stomp_frame:header(Frame, "exchange", ""),
             Props = #'P_basic'{
-              content_type = stomp_frame:binary_header(Frame, "content-type", <<"text/plain">>),
+              content_type     = stomp_frame:binary_header(Frame, "content-type", <<"text/plain">>),
               content_encoding = stomp_frame:binary_header(Frame, "content-encoding", undefined),
-              headers = make_string_table(fun user_header_key/1, Headers),
-              delivery_mode = stomp_frame:integer_header(Frame, "delivery-mode", undefined),
-              priority = stomp_frame:integer_header(Frame, "priority", undefined),
-              correlation_id = stomp_frame:binary_header(Frame, "correlation-id", undefined),
-              reply_to = stomp_frame:binary_header(Frame, "reply-to", undefined),
-              message_id = stomp_frame:binary_header(Frame, "amqp-message-id", undefined)
+              headers          = make_string_table(fun user_header_key/1, Headers),
+              delivery_mode    = stomp_frame:integer_header(Frame, "delivery-mode", undefined),
+              priority         = stomp_frame:integer_header(Frame, "priority", undefined),
+              correlation_id   = stomp_frame:binary_header(Frame, "correlation-id", undefined),
+              reply_to         = stomp_frame:binary_header(Frame, "reply-to", undefined),
+              message_id       = stomp_frame:binary_header(Frame, "amqp-message-id", undefined)
              },
             Method = #'basic.publish'{exchange = list_to_binary(ExchangeStr),
                                       routing_key = list_to_binary(RoutingKeyStr),
@@ -505,16 +508,18 @@ process_command("SUBSCRIBE",
                                   list_to_binary("Q_" ++ QueueStr)
                           end,
             Queue = list_to_binary(QueueStr),
-            State1 = send_method(#'queue.declare'{queue = Queue,
-                                                  passive = stomp_frame:boolean_header(Frame, "passive", false),
-                                                  durable = stomp_frame:boolean_header(Frame, "durable", false),
-                                                  exclusive = stomp_frame:boolean_header(Frame, "exclusive", false),
-                                                  auto_delete = stomp_frame:boolean_header(Frame, "auto-delete", true),
-                                                  nowait = true,
-                                                  arguments =
-                                                    make_string_table(fun user_queue_header_key/1,
-                                                                      Headers)},
-                                 State),
+            State1 = send_method(
+                       #'queue.declare'{
+                           queue = Queue,
+                           passive = stomp_frame:boolean_header(Frame, "passive", false),
+                           durable = stomp_frame:boolean_header(Frame, "durable", false),
+                           exclusive = stomp_frame:boolean_header(Frame, "exclusive", false),
+                           auto_delete = stomp_frame:boolean_header(Frame, "auto-delete", true),
+                           nowait = true,
+                           arguments =
+                             make_string_table(fun user_queue_header_key/1,
+                                               Headers)},
+                       State),
             State2 = case stomp_frame:header(Frame, "exchange") of
                          {ok, ExchangeStr } ->
                              Exchange = list_to_binary(ExchangeStr),
