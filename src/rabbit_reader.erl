@@ -173,7 +173,8 @@ setup_profiling() ->
     Value = rabbit_misc:get_config(profiling_enabled, false),
     case Value of
         once ->
-            rabbit_log:info("Enabling profiling for this connection, and disabling for subsequent.~n"),
+            rabbit_log:info("Enabling profiling for this connection, "
+                            "and disabling for subsequent.~n"),
             rabbit_misc:set_config(profiling_enabled, false),
             fprof:trace(start);
         true ->
@@ -283,6 +284,8 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             exit(Reason);
         {'EXIT', _Pid, E = {writer, send_failed, _Error}} ->
             throw(E);
+        {channel_exit, Channel, Reason} ->
+            mainloop(Parent, Deb, handle_channel_exit(Channel, Reason, State));
         {'EXIT', Pid, Reason} ->
             mainloop(Parent, Deb, handle_dependent_exit(Pid, Reason, State));
         {terminate_channel, Channel, Ref1} ->
@@ -350,6 +353,14 @@ terminate_channel(Channel, Ref, State) ->
     end,
     State.
 
+handle_channel_exit(Channel, Reason, State) ->
+    %% We remove the channel from the inbound map only. That allows
+    %% the channel to be re-opened, but also means the remaining
+    %% cleanup, including possibly closing the connection, is deferred
+    %% until we get the (normal) exit signal.
+    erase({channel, Channel}),
+    handle_exception(State, Channel, Reason).
+
 handle_dependent_exit(Pid, normal, State) ->
     channel_cleanup(Pid),
     maybe_close(State);
@@ -404,7 +415,8 @@ wait_for_channel_termination(N, TimerRef) ->
                         normal -> ok;
                         _ ->
                             rabbit_log:error(
-                              "connection ~p, channel ~p - error while terminating:~n~p~n",
+                              "connection ~p, channel ~p - "
+                              "error while terminating:~n~p~n",
                               [self(), Channel, Reason])
                     end,
                     wait_for_channel_termination(N-1, TimerRef)
@@ -709,8 +721,8 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
                   vhost = VHost}} = State,
             WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
             ChPid = rabbit_framing_channel:start_link(
-                      fun rabbit_channel:start_link/4,
-                      [self(), WriterPid, Username, VHost]),
+                      fun rabbit_channel:start_link/5,
+                      [Channel, self(), WriterPid, Username, VHost]),
             put({channel, Channel}, {chpid, ChPid}),
             put({chpid, ChPid}, {channel, Channel}),
             ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame);

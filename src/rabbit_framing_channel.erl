@@ -95,13 +95,15 @@ collect_content(ChannelPid, MethodName) ->
                true ->
                     rabbit_misc:protocol_error(
                       command_invalid,
-                      "expected content header for class ~w, got one for class ~w instead",
+                      "expected content header for class ~w, "
+                      "got one for class ~w instead",
                       [ClassId, HeaderClassId])
             end;
         _ ->
             rabbit_misc:protocol_error(
               command_invalid,
-              "expected content header for class ~w, got non content header frame instead",
+              "expected content header for class ~w, "
+              "got non content header frame instead",
               [ClassId])
     end.
 

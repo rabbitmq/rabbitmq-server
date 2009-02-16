@@ -30,7 +30,9 @@
 %%
 
 -record(user, {username, password}).
+-record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
+-record(user_permission, {user_vhost, permission}).
 
 -record(vhost, {virtual_host, dummy}).
 
@@ -74,6 +76,7 @@
 -type(thunk(T) :: fun(() -> T)).
 -type(info_key() :: atom()).
 -type(info() :: {info_key(), any()}).
+-type(regexp() :: binary()).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: any()).
@@ -88,6 +91,10 @@
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
+-type(permission() ::
+      #permission{configure :: regexp(),
+                  write     :: regexp(),
+                  read      :: regexp()}).
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
                 durable       :: bool(),

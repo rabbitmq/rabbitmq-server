@@ -32,7 +32,7 @@
 -module(rabbit_router).
 -include("rabbit.hrl").
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([start_link/0,
          deliver/5]).
@@ -58,7 +58,7 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 -ifdef(BUG19758).
 
@@ -100,7 +100,7 @@ deliver_per_node(NodeQPids, Mandatory = false, Immediate = false,
     %% than the non-immediate case below.
     {ok, lists:flatmap(
            fun ({Node, QPids}) ->
-                   gen_server:cast(
+                   gen_server2:cast(
                      {?SERVER, Node},
                      {deliver, QPids, Mandatory, Immediate, Txn, Message}),
                    QPids
@@ -110,7 +110,7 @@ deliver_per_node(NodeQPids, Mandatory, Immediate,
                  Txn, Message) ->
     R = rabbit_misc:upmap(
           fun ({Node, QPids}) ->
-                  try gen_server:call(
+                  try gen_server2:call(
                         {?SERVER, Node},
                         {deliver, QPids, Mandatory, Immediate, Txn, Message})
                   catch
@@ -143,7 +143,7 @@ handle_call({deliver, QPids, Mandatory, Immediate, Txn, Message},
     spawn(
       fun () ->
               R = run_bindings(QPids, Mandatory, Immediate, Txn, Message),
-              gen_server:reply(From, R)
+              gen_server2:reply(From, R)
       end),
     {noreply, State}.
 
