@@ -9,6 +9,7 @@
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
 
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DAEMON=/usr/lib/rabbitmq/bin/rabbitmq-multi
 NAME=rabbitmq-server
 DESC=rabbitmq-server
