@@ -92,7 +92,7 @@ start_link() ->
 
 transaction(MessageList) ->
     ?LOGDEBUG("transaction ~p~n", [MessageList]),
-    TxnKey = rabbit_misc:guid(),
+    TxnKey = rabbit_guid:guid(),
     gen_server:call(?SERVER, {transaction, TxnKey, MessageList}).
 
 extend_transaction(TxnKey, MessageList) ->
