@@ -123,7 +123,6 @@ stop_tcp_listener(Host, Port) ->
 
 tcp_listener_started(IPAddress, Port) ->
     ok = mnesia:dirty_write(
-           rabbit_listener,
            #listener{node = node(),
                      protocol = tcp,
                      host = tcp_host(IPAddress),
@@ -131,20 +130,19 @@ tcp_listener_started(IPAddress, Port) ->
 
 tcp_listener_stopped(IPAddress, Port) ->
     ok = mnesia:dirty_delete_object(
-           rabbit_listener,
            #listener{node = node(),
                      protocol = tcp,
                      host = tcp_host(IPAddress),
                      port = Port}).
 
 active_listeners() ->
-    rabbit_misc:dirty_read_all(rabbit_listener).
+    rabbit_misc:dirty_read_all(listener).
 
 node_listeners(Node) ->
-    mnesia:dirty_read(rabbit_listener, Node).
+    mnesia:dirty_read(listener, Node).
 
 on_node_down(Node) ->
-    ok = mnesia:dirty_delete(rabbit_listener, Node).
+    ok = mnesia:dirty_delete(listener, Node).
 
 start_client(Sock) ->
     {ok, Child} = supervisor:start_child(rabbit_tcp_client_sup, []),
