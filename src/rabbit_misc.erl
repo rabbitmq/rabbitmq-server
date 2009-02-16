@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -34,7 +40,7 @@
 -export([dirty_read/1]).
 -export([r/3, r/2, rs/1]).
 -export([enable_cover/0, report_cover/0]).
--export([throw_on_error/2, with_exit_handler/2]).
+-export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
@@ -42,7 +48,9 @@
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([append_file/2]).
+-export([append_file/2, ensure_parent_dirs_exist/1]).
+-export([format_stderr/2]).
+-export([start_applications/1, stop_applications/1]).
 
 -import(mnesia).
 -import(lists).
@@ -80,12 +88,13 @@
 -spec(throw_on_error/2 ::
       (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
+-spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (username(), thunk(A)) -> A).
 -spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
--spec(localnode/1 :: (atom()) -> node()).
+-spec(localnode/1 :: (atom()) -> erlang_node()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
@@ -98,6 +107,10 @@
              'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
+-spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
+-spec(format_stderr/2 :: (string(), [any()]) -> 'true').
+-spec(start_applications/1 :: ([atom()]) -> 'ok').
+-spec(stop_applications/1 :: ([atom()]) -> 'ok').
 
 -endif.
 
@@ -215,9 +228,16 @@ with_exit_handler(Handler, Thunk) ->
             Handler()
     end.
 
+filter_exit_map(F, L) ->
+    Ref = make_ref(),
+    lists:filter(fun (R) -> R =/= Ref end,
+                 [with_exit_handler(
+                    fun () -> Ref end,
+                    fun () -> F(I) end) || I <- L]).
+
 with_user(Username, Thunk) ->
     fun () ->
-            case mnesia:read({user, Username}) of
+            case mnesia:read({rabbit_user, Username}) of
                 [] ->
                     mnesia:abort({no_such_user, Username});
                 [_U] ->
@@ -227,7 +247,7 @@ with_user(Username, Thunk) ->
 
 with_vhost(VHostPath, Thunk) ->
     fun () ->
-            case mnesia:read({vhost, VHostPath}) of
+            case mnesia:read({rabbit_vhost, VHostPath}) of
                 [] ->
                     mnesia:abort({no_such_vhost, VHostPath});
                 [_V] ->
@@ -369,3 +389,44 @@ append_file(File, _, Suffix) ->
         {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
         Error      -> Error
     end.
+
+ensure_parent_dirs_exist(Filename) ->
+    case filelib:ensure_dir(Filename) of
+        ok              -> ok;
+        {error, Reason} -> 
+            throw({error, {cannot_create_parent_dirs, Filename, Reason}})
+    end.
+
+format_stderr(Fmt, Args) ->
+    Port = open_port({fd, 0, 2}, [out]),
+    port_command(Port, io_lib:format(Fmt, Args)),
+    port_close(Port).
+
+manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
+    Iterate(fun (App, Acc) ->
+                    case Do(App) of
+                        ok -> [App | Acc];
+                        {error, {SkipError, _}} -> Acc;
+                        {error, Reason} ->
+                            lists:foreach(Undo, Acc),
+                            throw({error, {ErrorTag, App, Reason}})
+                    end
+            end, [], Apps),
+    ok.
+
+start_applications(Apps) ->
+    manage_applications(fun lists:foldl/3,
+                        fun application:start/1,
+                        fun application:stop/1,
+                        already_started,
+                        cannot_start_application,
+                        Apps).
+
+stop_applications(Apps) ->
+    manage_applications(fun lists:foldr/3,
+                        fun application:stop/1,
+                        fun application:start/1,
+                        not_started,
+                        cannot_stop_application,
+                        Apps).
+

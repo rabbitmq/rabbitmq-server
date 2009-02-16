@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -27,7 +33,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -define(UNSENT_MESSAGE_LIMIT, 100).
 -define(HIBERNATE_AFTER, 1000).
@@ -63,13 +69,27 @@
              monitor_ref,
              unacked_messages,
              is_limit_active,
-             is_overload_protection_active,
              unsent_message_count}).
 
+-define(INFO_KEYS,
+        [name,
+         durable,
+         auto_delete,
+         arguments,
+         pid,
+         messages_ready,
+         messages_unacknowledged,
+         messages_uncommitted,
+         messages,
+         acks_uncommitted,
+         consumers,
+         transactions,
+         memory]).
+         
 %%----------------------------------------------------------------------------
 
 start_link(Q) ->
-    gen_server:start_link(?MODULE, Q, []).
+    gen_server2:start_link(?MODULE, Q, []).
 
 %%----------------------------------------------------------------------------
 
@@ -129,7 +149,7 @@ ch_record(ChPid) ->
                     ch_pid = ChPid,
                     monitor_ref = MonitorRef,
                     unacked_messages = dict:new(),
-                    is_overload_protection_active = false,
+                    is_limit_active = false,
                     unsent_message_count = 0},
             put(Key, C),
             C;
@@ -142,24 +162,8 @@ store_ch_record(C = #cr{ch_pid = ChPid}) ->
 all_ch_record() ->
     [C || {{ch, _}, C} <- get()].
 
-update_store_and_maybe_block_ch(
-  C = #cr{is_overload_protection_active = Overloaded,
-          is_limit_active = Limited,
-          unsent_message_count = Count}) ->
-    {Result, NewOverloaded, NewLimited} =
-        if
-            not(Overloaded) and (Count > ?UNSENT_MESSAGE_LIMIT) ->
-                {block_ch, true, Limited};
-            Overloaded and (Count == 0) ->
-                {unblock_ch, false, Limited};
-            Limited and (Count < ?UNSENT_MESSAGE_LIMIT) ->
-                {unblock_ch, Overloaded, false};
-            true ->
-                {ok, Overloaded, Limited}
-        end,
-    store_ch_record(C#cr{is_overload_protection_active = NewOverloaded,
-                         is_limit_active = NewLimited}),
-    Result.
+is_ch_blocked(#cr{unsent_message_count = Count, is_limit_active = Limited}) ->
+    Limited orelse Count > ?UNSENT_MESSAGE_LIMIT.
 
 increment_dropped_message_count(State) ->
     State#q{dropped_message_count = State#q.dropped_message_count + 1}.
@@ -176,6 +180,18 @@ find_auto_ack_consumer(RoundRobin, RoundRobinNew) ->
             end;
         {empty, _} -> false
     end.
+                    State = #q{q = #amqqueue{name = QName},
+                               round_robin = RoundRobin,
+                               next_msg_id = NextId}) ->
+    ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Message]),
+    case queue:out(RoundRobin) of
+        {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
+                                            ack_required = AckRequired}}},
+         RoundRobinTail} ->
+            C = #cr{limiter_pid = LimiterPid,
+                    unsent_message_count = Count,
+                    unacked_messages = UAM} = ch_record(ChPid),
+            case not(AckRequired) orelse rabbit_limiter:can_send(
 
 deliver_to_consumer(Message, Delivered, QName, MsgId,
                     QEntry = {ChPid, #consumer{tag = ConsumerTag,
@@ -220,10 +236,6 @@ deliver_immediately(Message, Delivered, true,
                  end
     end;
 deliver_immediately(Message, Delivered, false,
-                    State = #q{q = #amqqueue{name = QName},
-                               round_robin = RoundRobin,
-                               next_msg_id = NextId}) ->
-    case queue:out(RoundRobin) of
 <<<<<<< local
         {{value, QEntry}, RoundRobinTail} ->
             {AckRequired, NewRoundRobin} =
@@ -232,59 +244,16 @@ deliver_immediately(Message, Delivered, false,
             {offered, AckRequired, State#q{round_robin = NewRoundRobin,
                                            next_msg_id = NextId + 1}};
 =======
-        {{value, QEntry = {ChPid,
-                           #consumer{tag = ConsumerTag,
-                                     ack_required = AckRequired = true}}},
-         RoundRobinTail} ->
-            % Use Qos Limits if an ack is required
-            % Query the limiter to find out if a limit has been breached
-            #cr{limiter_pid = LimiterPid} = ch_record(ChPid),
-            case rabbit_limiter:can_send(LimiterPid, self()) of
-                true ->
-                    really_deliver(AckRequired, ChPid, ConsumerTag,
-                                   Delivered, Message, NextId, QName,
-                                   QEntry, RoundRobinTail, State);
+>>>>>>> other
                 false ->
-                    % Have another go by cycling through the consumer
-                    % queue
-                    C = ch_record(ChPid),
                     store_ch_record(C#cr{is_limit_active = true}),
                     NewConsumers = block_consumers(ChPid, RoundRobinTail),
                     deliver_immediately(Message, Delivered,
                                         State#q{round_robin = NewConsumers})
             end;
-        {{value, QEntry = {ChPid,
-                           #consumer{tag = ConsumerTag,
-                                     ack_required = AckRequired = false}}},
-         RoundRobinTail} ->
-            really_deliver(AckRequired, ChPid, ConsumerTag,
-                           Delivered, Message, NextId, QName,
-                           QEntry, RoundRobinTail, State);
->>>>>>> other
         {empty, _} ->
             {not_offered, State}
     end.
-
-% TODO The arity of this function seems a bit large :-(
-really_deliver(AckRequired, ChPid, ConsumerTag, Delivered, Message, NextId,
-               QName, QEntry, RoundRobinTail, State) ->
-    rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
-              {QName, self(), NextId, Delivered, Message}),
-    C = #cr{unsent_message_count = Count,
-            unacked_messages = UAM} = ch_record(ChPid),
-    NewUAM = case AckRequired of
-                true  -> dict:store(NextId, Message, UAM);
-                false -> UAM
-             end,
-    NewConsumers =
-        case update_store_and_maybe_block_ch(
-                       C#cr{unsent_message_count = Count + 1,
-                            unacked_messages = NewUAM}) of
-            ok       -> queue:in(QEntry, RoundRobinTail);
-            block_ch -> block_consumers(ChPid, RoundRobinTail)
-        end,
-    {offered, AckRequired, State#q{round_robin = NewConsumers,
-                                   next_msg_id = NextId +1}}.
 
 attempt_delivery(none, Message, State = #q{conserve_memory = Conserve}) ->
     case deliver_immediately(Message, false, Conserve, State) of
@@ -338,16 +307,22 @@ block_consumer(ChPid, ConsumerTag, RoundRobin) ->
                               (CP /= ChPid) or (CT /= ConsumerTag)
                       end, queue:to_list(RoundRobin))).
 
-possibly_unblock(C = #cr{consumers = Consumers, ch_pid = ChPid},
-                 State = #q{round_robin = RoundRobin}) ->
-    case update_store_and_maybe_block_ch(C) of
-        ok ->
+possibly_unblock(State, ChPid, Update) ->
+    case lookup_ch(ChPid) of
+        not_found ->
             State;
-        unblock_ch ->
-            run_poke_burst(State#q{round_robin =
-                                   unblock_consumers(ChPid, Consumers, RoundRobin)})
+        C ->
+            NewC = Update(C),
+            store_ch_record(NewC),
+            case ch_record_state_transition(C, NewC) of
+                ok      -> State;
+                unblock -> NewRR = unblock_consumers(ChPid,
+                                                     NewC#cr.consumers,
+                                                     State#q.round_robin),
+                           run_poke_burst(State#q{round_robin = NewRR})
+            end
     end.
-
+    
 check_auto_delete(State = #q{q = #amqqueue{auto_delete = false}}) ->
     {continue, State};
 check_auto_delete(State = #q{has_had_consumers = false}) ->
@@ -530,6 +505,9 @@ store_tx(Txn, Tx) ->
 erase_tx(Txn) ->
     erase({txn, Txn}).
 
+all_tx_record() ->
+    [T || {{txn, _}, T} <- get()].
+
 all_tx() ->
     [Txn || {{txn, Txn}, _} <- get()].
 
@@ -589,10 +567,50 @@ purge_message_buffer(QName, MessageBuffer) ->
     %% artifically ack them.
     persist_acks(none, QName, lists:append(Messages)).
 
+infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+
+i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
+i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
+i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
+i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
+i(pid, _) ->
+    self();
+i(messages_ready, #q{message_buffer = MessageBuffer}) ->
+    queue:len(MessageBuffer);
+i(messages_unacknowledged, _) ->
+    lists:sum([dict:size(UAM) ||
+                  #cr{unacked_messages = UAM} <- all_ch_record()]);
+i(messages_uncommitted, _) ->
+    lists:sum([length(Pending) ||
+                  #tx{pending_messages = Pending} <- all_tx_record()]);
+i(messages, State) ->
+    lists:sum([i(Item, State) || Item <- [messages_ready,
+                                          messages_unacknowledged,
+                                          messages_uncommitted]]);
+i(acks_uncommitted, _) ->
+    lists:sum([length(Pending) ||
+                  #tx{pending_acks = Pending} <- all_tx_record()]);
+i(consumers, _) ->
+    lists:sum([length(Consumers) ||
+                  #cr{consumers = Consumers} <- all_ch_record()]);
+i(transactions, _) ->
+    length(all_tx_record());
+i(memory, _) ->
+    {memory, M} = process_info(self(), memory),
+    M;
+i(Item, _) ->
+    throw({bad_argument, Item}).
+
 %---------------------------------------------------------------------------
 
 handle_call({conserve_memory, Conserve}, _From, State) ->
     {reply, ok, conserve_memory(Conserve, State)};
+
+handle_call({info, Items}, _From, State) ->
+    try
+        reply({ok, infos(Items, State)}, State)
+    catch Error -> reply({error, Error}, State)
+    end;
 
 handle_call({deliver_immediately, Txn, Message}, _From, State) ->
     %% Synchronous, "immediate" delivery mode
@@ -633,7 +651,7 @@ handle_call({commit, Txn}, From, State) ->
 
 handle_call({notify_down, ChPid}, From, State) ->
     %% optimisation: we reply straight away so the sender can continue
-    gen_server:reply(From, ok),
+    gen_server2:reply(From, ok),
     handle_ch_down(ChPid, State);
 
 handle_call({basic_get, ChPid, NoAck}, _From,
@@ -675,9 +693,13 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                 ok ->
                     C = #cr{consumers = Consumers} = ch_record(ChPid),
                     Consumer = #consumer{tag = ConsumerTag, ack_required = not(NoAck)},
-                    C1 = C#cr{consumers = [Consumer | Consumers],
-                              limiter_pid = LimiterPid},
-                    store_ch_record(C1),
+                    store_ch_record(C#cr{consumers = [Consumer | Consumers],
+                                         limiter_pid = LimiterPid}),
+                    if Consumers == [] ->
+                            ok = rabbit_limiter:register(LimiterPid, self());
+                       true ->
+                            ok
+                    end,
                     State1 = State#q{has_had_consumers = true,
                                      exclusive_consumer =
                                        if
@@ -697,12 +719,16 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
         not_found ->
             ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
-        C = #cr{consumers = Consumers} ->
+        C = #cr{consumers = Consumers, limiter_pid = LimiterPid} ->
             NewConsumers = lists:filter
                              (fun (#consumer{tag = CT}) -> CT /= ConsumerTag end,
                               Consumers),
-            C1 = C#cr{consumers = NewConsumers},
-            store_ch_record(C1),
+            store_ch_record(C#cr{consumers = NewConsumers}),
+            if NewConsumers == [] ->
+                    ok = rabbit_limiter:unregister(LimiterPid, self());
+               true ->
+                    ok
+            end,
             ok = maybe_send_reply(ChPid, OkMsg),
             case check_auto_delete(
                    State#q{exclusive_consumer = cancel_holder(ChPid,
@@ -775,8 +801,7 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             noreply(State);
-        C = #cr{unacked_messages = UAM, limiter_pid = LimiterPid} ->
-            rabbit_limiter:decrement_capacity(LimiterPid, self()),
+        C = #cr{unacked_messages = UAM} ->
             {Acked, Remaining} = collect_messages(MsgIds, UAM),
             persist_acks(Txn, qname(State), Acked),
             case Txn of
@@ -810,27 +835,32 @@ handle_cast({requeue, MsgIds, ChPid}, State) ->
     end;
 
 handle_cast({unblock, ChPid}, State) ->
-    % TODO Refactor the code duplication
-    % between this an the notify_sent cast handler
-    case lookup_ch(ChPid) of
-        not_found ->
-            noreply(State);
-        C = #cr{is_limit_active = true} ->
-            noreply(possibly_unblock(C, State));
-        C ->
-            rabbit_log:warning("Ignoring unblock for an active ch: ~p~n",
-                               [C]),
-            noreply(State)
-    end;
+    noreply(
+      possibly_unblock(State, ChPid,
+                       fun (C) -> C#cr{is_limit_active = false} end));
 
 handle_cast({notify_sent, ChPid}, State) ->
-    case lookup_ch(ChPid) of
-        not_found -> noreply(State);
-        T = #cr{unsent_message_count =Count} ->
-            noreply(possibly_unblock(
-                      T#cr{unsent_message_count = Count - 1},
-                      State))
-    end.
+    noreply(
+      possibly_unblock(State, ChPid,
+                       fun (C = #cr{unsent_message_count = Count}) ->
+                               C#cr{unsent_message_count = Count - 1}
+                       end));
+
+handle_cast({limit, ChPid, LimiterPid}, State) ->
+    noreply(
+      possibly_unblock(
+        State, ChPid,
+        fun (C = #cr{consumers = Consumers,
+                     limiter_pid = OldLimiterPid,
+                     is_limit_active = Limited}) ->
+                if Consumers =/= [] andalso OldLimiterPid == undefined ->
+                        ok = rabbit_limiter:register(LimiterPid, self());
+                   true ->
+                        ok
+                end,
+                NewLimited = Limited andalso LimiterPid =/= undefined,
+                C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
+        end)).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -851,7 +881,7 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
 handle_info(timeout, State) ->
     %% TODO: Once we drop support for R11B-5, we can change this to
     %% {noreply, State, hibernate};
-    proc_lib:hibernate(gen_server, enter_loop, [?MODULE, [], State]);
+    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State]);
 
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),

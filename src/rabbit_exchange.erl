@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -29,13 +35,13 @@
 -include("rabbit_framing.hrl").
 
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
-         list_vhost_exchanges/1,
+         list/1, info/1, info/2, info_all/1, info_all/2,
          simple_publish/6, simple_publish/3,
-         route/2]).
--export([add_binding/4, delete_binding/4]).
+         route/3]).
+-export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
 -export([delete_bindings_for_queue/1]).
--export([check_type/1, assert_type/2, topic_matches/2]).
+-export([check_type/1, assert_type/2, topic_matches/2, headers_match/2]).
 
 %% EXTENDED API
 -export([list_exchange_bindings/1]).
@@ -62,20 +68,27 @@
 -spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
--spec(list_vhost_exchanges/1 :: (vhost()) -> [exchange()]).
+-spec(list/1 :: (vhost()) -> [exchange()]).
+-spec(info/1 :: (exchange()) -> [info()]).
+-spec(info/2 :: (exchange(), [info_key()]) -> [info()]).
+-spec(info_all/1 :: (vhost()) -> [[info()]]).
+-spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
 -spec(simple_publish/6 ::
       (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
              publish_res()).
 -spec(simple_publish/3 :: (bool(), bool(), message()) -> publish_res()).
--spec(route/2 :: (exchange(), routing_key()) -> [pid()]).
+-spec(route/3 :: (exchange(), routing_key(), decoded_content()) -> [pid()]).
 -spec(add_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'durability_settings_incompatible'}).
 -spec(delete_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'binding_not_found'}).
+-spec(list_bindings/1 :: (vhost()) -> 
+             [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
 -spec(delete_bindings_for_queue/1 :: (queue_name()) -> 'ok').
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
+-spec(headers_match/2 :: (amqp_table(), amqp_table()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
              'ok' | not_found() | {'error', 'in_use'}).
 -spec(list_queue_bindings/1 :: (queue_name()) -> 
@@ -87,21 +100,25 @@
 
 %%----------------------------------------------------------------------------
 
+-define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
+
 recover() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               mnesia:foldl(
                 fun (Exchange, Acc) ->
-                        ok = mnesia:write(Exchange),
+                        ok = mnesia:write(rabbit_exchange, Exchange, write),
                         Acc
-                end, ok, durable_exchanges),
+                end, ok, rabbit_durable_exchange),
               mnesia:foldl(
                 fun (Route, Acc) ->
                         {_, ReverseRoute} = route_with_reverse(Route),
-                        ok = mnesia:write(Route),
-                        ok = mnesia:write(ReverseRoute),
+                        ok = mnesia:write(rabbit_route,
+                                          Route, write),
+                        ok = mnesia:write(rabbit_reverse_route,
+                                          ReverseRoute, write),
                         Acc
-                end, ok, durable_routes),
+                end, ok, rabbit_durable_route),
               ok
       end).
 
@@ -113,11 +130,11 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                          arguments = Args},
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:wread({exchange, ExchangeName}) of
-                  [] -> ok = mnesia:write(Exchange),
+              case mnesia:wread({rabbit_exchange, ExchangeName}) of
+                  [] -> ok = mnesia:write(rabbit_exchange, Exchange, write),
                         if Durable ->
-                                ok = mnesia:write(
-                                       durable_exchanges, Exchange, write);
+                                ok = mnesia:write(rabbit_durable_exchange,
+                                                  Exchange, write);
                            true -> ok
                         end,
                         Exchange;
@@ -131,6 +148,8 @@ check_type(<<"direct">>) ->
     direct;
 check_type(<<"topic">>) ->
     topic;
+check_type(<<"headers">>) ->
+    headers;
 check_type(T) ->
     rabbit_misc:protocol_error(
       command_invalid, "invalid exchange type '~s'", [T]).
@@ -144,7 +163,7 @@ assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
       [rabbit_misc:rs(Name), ActualType, RequiredType]).
 
 lookup(Name) ->
-    rabbit_misc:dirty_read({exchange, Name}).
+    rabbit_misc:dirty_read({rabbit_exchange, Name}).
 
 lookup_or_die(Name) ->
     case lookup(Name) of
@@ -154,9 +173,32 @@ lookup_or_die(Name) ->
               not_found, "no ~s", [rabbit_misc:rs(Name)])
     end.
 
-list_vhost_exchanges(VHostPath) ->
+list(VHostPath) ->
     mnesia:dirty_match_object(
+      rabbit_exchange,
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
+
+map(VHostPath, F) ->
+    %% TODO: there is scope for optimisation here, e.g. using a
+    %% cursor, parallelising the function invocation
+    lists:map(F, list(VHostPath)).
+
+infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
+
+i(name,        #exchange{name        = Name})       -> Name;
+i(type,        #exchange{type        = Type})       -> Type;
+i(durable,     #exchange{durable     = Durable})    -> Durable;
+i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
+i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
+i(Item, _) -> throw({bad_argument, Item}).
+
+info(X = #exchange{}) -> infos(?INFO_KEYS, X).
+
+info(X = #exchange{}, Items) -> infos(Items, X).
+
+info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
+
+info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
 %% Usable by Erlang code that wants to publish messages.
 simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
@@ -175,14 +217,18 @@ simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
 %% Usable by Erlang code that wants to publish messages.
 simple_publish(Mandatory, Immediate,
                Message = #basic_message{exchange_name = ExchangeName,
-                                        routing_key = RoutingKey}) ->
+                                        routing_key = RoutingKey,
+					content = Content}) ->
     case lookup(ExchangeName) of
         {ok, Exchange} ->
-            QPids = route(Exchange, RoutingKey),
+            QPids = route(Exchange, RoutingKey, Content),
             rabbit_router:deliver(QPids, Mandatory, Immediate,
                                   none, Message);
         {error, Error} -> {error, Error}
     end.
+
+sort_arguments(Arguments) ->
+    lists:keysort(1, Arguments).
 
 %% return the list of qpids to which a message with a given routing
 %% key, sent to a particular exchange, should be delivered.
@@ -190,38 +236,64 @@ simple_publish(Mandatory, Immediate,
 %% The function ensures that a qpid appears in the return list exactly
 %% as many times as a message should be delivered to it. With the
 %% current exchange types that is at most once.
-%%
+route(X = #exchange{type = topic}, RoutingKey, _Content) ->
+    match_bindings(X, fun (#binding{key = BindingKey}) ->
+                              topic_matches(BindingKey, RoutingKey)
+                      end);
+
+route(X = #exchange{type = headers}, _RoutingKey, Content) ->
+    Headers = case (Content#content.properties)#'P_basic'.headers of
+		  undefined -> [];
+		  H         -> sort_arguments(H)
+	      end,
+    match_bindings(X, fun (#binding{args = Spec}) ->
+                              headers_match(Spec, Headers)
+                      end);
+
+route(X = #exchange{type = fanout}, _RoutingKey, _Content) ->
+    match_routing_key(X, '_');
+
+route(X = #exchange{type = direct}, RoutingKey, _Content) ->
+    match_routing_key(X, RoutingKey).
+
 %% TODO: Maybe this should be handled by a cursor instead.
-route(#exchange{name = Name, type = topic}, RoutingKey) ->
-    Query = qlc:q([QName ||
-                      #route{binding = #binding{
-                               exchange_name = ExchangeName,
-                               queue_name = QName,
-                               key = BindingKey}} <- mnesia:table(route),
-                      ExchangeName == Name,
-                      %% TODO: This causes a full scan for each entry
-                      %% with the same exchange  (see bug 19336)
-                      topic_matches(BindingKey, RoutingKey)]),
-    lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query]));
+%% TODO: This causes a full scan for each entry with the same exchange
+match_bindings(#exchange{name = Name}, Match) ->
+    Query = qlc:q([QName || #route{binding = Binding = #binding{
+                                               exchange_name = ExchangeName,
+                                               queue_name = QName}} <-
+                                mnesia:table(rabbit_route),
+                            ExchangeName == Name,
+                            Match(Binding)]),
+    lookup_qpids(
+      try
+          mnesia:async_dirty(fun qlc:e/1, [Query])
+      catch exit:{aborted, {badarg, _}} ->
+              %% work around OTP-7025, which was fixed in R12B-1, by
+              %% falling back on a less efficient method
+              [QName || #route{binding = Binding = #binding{
+                                           queue_name = QName}} <-
+                            mnesia:dirty_match_object(
+                              rabbit_route,
+                              #route{binding = #binding{exchange_name = Name,
+                                                        _ = '_'}}),
+                        Match(Binding)]
+      end).
 
-route(X = #exchange{type = fanout}, _) ->
-    route_internal(X, '_');
-
-route(X = #exchange{type = direct}, RoutingKey) ->
-    route_internal(X, RoutingKey).
-
-route_internal(#exchange{name = Name}, RoutingKey) ->
+match_routing_key(#exchange{name = Name}, RoutingKey) ->
     MatchHead = #route{binding = #binding{exchange_name = Name,
                                           queue_name = '$1',
                                           key = RoutingKey,
                                           _ = '_'}},
-    lookup_qpids(mnesia:dirty_select(route, [{MatchHead, [], ['$1']}])).
+    lookup_qpids(mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
 
 lookup_qpids(Queues) ->
     sets:fold(
       fun(Key, Acc) ->
-              [#amqqueue{pid = QPid}] = mnesia:dirty_read({amqqueue, Key}),
-              [QPid | Acc]
+              case mnesia:dirty_read({rabbit_queue, Key}) of
+                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
+                  []                      -> Acc
+              end
       end, [], sets:from_list(Queues)).
 
 %% TODO: Should all of the route and binding management not be
@@ -229,33 +301,37 @@ lookup_qpids(Queues) ->
 %% to be implemented for 0.91 ?
 
 delete_bindings_for_exchange(ExchangeName) ->
-    indexed_delete(
-      #route{binding = #binding{exchange_name = ExchangeName,
-                                _ = '_'}}, 
-      fun delete_forward_routes/1, fun mnesia:delete_object/1).
+    [begin
+         ok = mnesia:delete_object(rabbit_reverse_route,
+                                   reverse_route(Route), write),
+         ok = delete_forward_routes(Route)
+     end || Route <- mnesia:match_object(
+                       rabbit_route,
+                       #route{binding = #binding{exchange_name = ExchangeName,
+                                                 _ = '_'}},
+                       write)],
+    ok.
 
 delete_bindings_for_queue(QueueName) ->
     Exchanges = exchanges_for_queue(QueueName),
-    indexed_delete(
-      reverse_route(#route{binding = #binding{queue_name = QueueName, 
-                                              _ = '_'}}),
-      fun mnesia:delete_object/1, fun delete_forward_routes/1),
     [begin
-         [X] = mnesia:read({exchange, ExchangeName}),
+         ok = delete_forward_routes(reverse_route(Route)),
+         ok = mnesia:delete_object(rabbit_reverse_route, Route, write)
+     end || Route <- mnesia:match_object(
+                       rabbit_reverse_route,
+                       reverse_route(
+                         #route{binding = #binding{queue_name = QueueName, 
+                                                   _ = '_'}}),
+                       write)],
+    [begin
+         [X] = mnesia:read({rabbit_exchange, ExchangeName}),
          ok = maybe_auto_delete(X)
      end || ExchangeName <- Exchanges],
     ok.
 
-indexed_delete(Match, ForwardsDeleteFun, ReverseDeleteFun) ->    
-    [begin
-         ok = ReverseDeleteFun(reverse_route(Route)),
-         ok = ForwardsDeleteFun(Route)
-     end || Route <- mnesia:match_object(Match)],
-    ok.
-
 delete_forward_routes(Route) ->
-    ok = mnesia:delete_object(Route),
-    ok = mnesia:delete_object(durable_routes, Route, write).
+    ok = mnesia:delete_object(rabbit_route, Route, write),
+    ok = mnesia:delete_object(rabbit_durable_route, Route, write).
 
 exchanges_for_queue(QueueName) ->
     MatchHead = reverse_route(
@@ -264,17 +340,18 @@ exchanges_for_queue(QueueName) ->
                                             _ = '_'}}),
     sets:to_list(
       sets:from_list(
-        mnesia:select(reverse_route, [{MatchHead, [], ['$1']}]))).
+        mnesia:select(rabbit_reverse_route, [{MatchHead, [], ['$1']}]))).
 
 has_bindings(ExchangeName) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
                                           _ = '_'}},
     try
-        continue(mnesia:select(route, [{MatchHead, [], ['$_']}], 1, read))
+        continue(mnesia:select(rabbit_route, [{MatchHead, [], ['$_']}],
+                               1, read))
     catch exit:{aborted, {badarg, _}} ->
             %% work around OTP-7025, which was fixed in R12B-1, by
             %% falling back on a less efficient method
-            case mnesia:match_object(MatchHead) of
+            case mnesia:match_object(rabbit_route, MatchHead, read) of
                 []    -> false;
                 [_|_] -> true
             end
@@ -286,7 +363,7 @@ continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
 call_with_exchange(Exchange, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun() -> case mnesia:read({exchange, Exchange}) of
+      fun() -> case mnesia:read({rabbit_exchange, Exchange}) of
                    []  -> {error, exchange_not_found};
                    [X] -> Fun(X)
                end
@@ -295,7 +372,7 @@ call_with_exchange(Exchange, Fun) ->
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
     call_with_exchange(
       Exchange, 
-      fun(X) -> case mnesia:read({amqqueue, Queue}) of
+      fun(X) -> case mnesia:read({rabbit_queue, Queue}) of
                     []  -> {error, queue_not_found};
                     [Q] -> Fun(X, Q)
                 end
@@ -327,14 +404,30 @@ sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
     Binding = #binding{exchange_name = ExchangeName,
                        queue_name = QueueName,
                        key = RoutingKey,
-                       args = Arguments},
+                       args = sort_arguments(Arguments)},
     ok = case Durable of
-             true  -> Fun(durable_routes, #route{binding = Binding}, write);
+             true  -> Fun(rabbit_durable_route,
+                          #route{binding = Binding}, write);
              false -> ok
          end,
-    [ok, ok] = [Fun(element(1, R), R, write) ||
-                   R <- tuple_to_list(route_with_reverse(Binding))],
+    {Route, ReverseRoute} = route_with_reverse(Binding),
+    ok = Fun(rabbit_route, Route, write),
+    ok = Fun(rabbit_reverse_route, ReverseRoute, write),
     ok.
+
+list_bindings(VHostPath) ->
+    [{ExchangeName, QueueName, RoutingKey, Arguments} ||
+        #route{binding = #binding{
+                 exchange_name = ExchangeName,
+                 key           = RoutingKey, 
+                 queue_name    = QueueName,
+                 args          = Arguments}}
+            <- mnesia:dirty_match_object(
+                 rabbit_route,
+                 #route{binding = #binding{
+                          exchange_name = rabbit_misc:r(VHostPath, exchange),
+                          _ = '_'},
+                        _ = '_'})].
 
 route_with_reverse(#route{binding = Binding}) ->
     route_with_reverse(Binding);
@@ -365,6 +458,67 @@ reverse_binding(#binding{exchange_name = Exchange,
                      queue_name = Queue,
                      key = Key,
                      args = Args}.
+
+default_headers_match_kind() -> all.
+
+parse_x_match(<<"all">>) -> all;
+parse_x_match(<<"any">>) -> any;
+parse_x_match(Other) ->
+    rabbit_log:warning("Invalid x-match field value ~p; expected all or any",
+                       [Other]),
+    default_headers_match_kind().
+
+%% Horrendous matching algorithm. Depends for its merge-like
+%% (linear-time) behaviour on the lists:keysort (sort_arguments) that
+%% route/3 and sync_binding/6 do.
+%%
+%%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+%% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
+%%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+%%
+headers_match(Pattern, Data) ->
+    MatchKind = case lists:keysearch(<<"x-match">>, 1, Pattern) of
+		    {value, {_, longstr, MK}} -> parse_x_match(MK);
+		    {value, {_, Type, MK}} ->
+			rabbit_log:warning("Invalid x-match field type ~p "
+                                           "(value ~p); expected longstr",
+					   [Type, MK]),
+			default_headers_match_kind();
+		    _ -> default_headers_match_kind()
+		end,
+    headers_match(Pattern, Data, true, false, MatchKind).
+
+headers_match([], _Data, AllMatch, _AnyMatch, all) ->
+    AllMatch;
+headers_match([], _Data, _AllMatch, AnyMatch, any) ->
+    AnyMatch;
+headers_match([{<<"x-", _/binary>>, _PT, _PV} | PRest], Data,
+              AllMatch, AnyMatch, MatchKind) ->
+    headers_match(PRest, Data, AllMatch, AnyMatch, MatchKind);
+headers_match(_Pattern, [], _AllMatch, AnyMatch, MatchKind) ->
+    headers_match([], [], false, AnyMatch, MatchKind);
+headers_match(Pattern = [{PK, _PT, _PV} | _], [{DK, _DT, _DV} | DRest],
+              AllMatch, AnyMatch, MatchKind) when PK > DK ->
+    headers_match(Pattern, DRest, AllMatch, AnyMatch, MatchKind);
+headers_match([{PK, _PT, _PV} | PRest], Data = [{DK, _DT, _DV} | _],
+              _AllMatch, AnyMatch, MatchKind) when PK < DK ->
+    headers_match(PRest, Data, false, AnyMatch, MatchKind);
+headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest],
+              AllMatch, AnyMatch, MatchKind) when PK == DK ->
+    {AllMatch1, AnyMatch1} =
+        if
+            %% It's not properly specified, but a "no value" in a
+            %% pattern field is supposed to mean simple presence of
+            %% the corresponding data field. I've interpreted that to
+            %% mean a type of "void" for the pattern field.
+            PT == void -> {AllMatch, true};
+	    %% Similarly, it's not specified, but I assume that a
+	    %% mismatched type causes a mismatched value.
+            PT =/= DT  -> {false, AnyMatch};
+            PV == DV   -> {AllMatch, true};
+            true       -> {false, AnyMatch}
+        end,
+    headers_match(PRest, DRest, AllMatch1, AnyMatch1, MatchKind).
 
 split_topic_key(Key) ->
     {ok, KeySplit} = regexp:split(binary_to_list(Key), "\\."),
@@ -412,8 +566,8 @@ conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
 
 unconditional_delete(#exchange{name = ExchangeName}) ->
     ok = delete_bindings_for_exchange(ExchangeName),
-    ok = mnesia:delete({durable_exchanges, ExchangeName}),
-    ok = mnesia:delete({exchange, ExchangeName}).
+    ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
+    ok = mnesia:delete({rabbit_exchange, ExchangeName}).
 
 %%----------------------------------------------------------------------------
 %% EXTENDED API
@@ -429,7 +583,7 @@ list_exchange_bindings(ExchangeName) ->
         #route{binding = #binding{queue_name = QueueName,
                                   key = RoutingKey,
                                   args = Arguments}} 
-            <- mnesia:dirty_match_object(Route)].
+            <- mnesia:dirty_match_object(rabbit_route, Route)].
 
 % Refactoring is left as an exercise for the reader
 list_queue_bindings(QueueName) ->
@@ -439,4 +593,4 @@ list_queue_bindings(QueueName) ->
         #route{binding = #binding{exchange_name = ExchangeName,
                                   key = RoutingKey,
                                   args = Arguments}} 
-            <- mnesia:dirty_match_object(Route)].
+            <- mnesia:dirty_match_object(rabbit_route, Route)].

@@ -1,79 +1,141 @@
-%% TODO Decide what to do with the license statement now that Cohesive have
-%% bailed.
+%%   The contents of this file are subject to the Mozilla Public License
+%%   Version 1.1 (the "License"); you may not use this file except in
+%%   compliance with the License. You may obtain a copy of the License at
+%%   http://www.mozilla.org/MPL/
+%%
+%%   Software distributed under the License is distributed on an "AS IS"
+%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%   License for the specific language governing rights and limitations
+%%   under the License.
+%%
+%%   The Original Code is RabbitMQ.
+%%
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%
+%%   All Rights Reserved.
+%%
+%%   Contributor(s): ______________________________________.
+%%
+
 -module(rabbit_limiter).
 
-
-% I'm starting out with a gen_server because of the synchronous query
-% that the queue process makes
 -behaviour(gen_server).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
--export([start_link/1]).
--export([can_send/2, decrement_capacity/2]).
+-export([start_link/1, shutdown/1]).
+-export([limit/2, can_send/2, ack/2, register/2, unregister/2]).
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-type(maybe_pid() :: pid() | 'undefined').
+
+-spec(start_link/1 :: (pid()) -> pid()).
+-spec(shutdown/1 :: (maybe_pid()) -> 'ok').
+-spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
+-spec(can_send/2 :: (maybe_pid(), pid()) -> bool()).
+-spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
+-spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
+-spec(unregister/2 :: (maybe_pid(), pid()) -> 'ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
-              in_use = dict:new()}).
+              queues = dict:new(), % QPid -> {MonitorRef, Notify}
+              volume = 0}).
+%% 'Notify' is a boolean that indicates whether a queue should be
+%% notified of a change in the limit or volume that may allow it to
+%% deliver more messages via the limiter's channel.
 
-%---------------------------------------------------------------------------
-% API
-%---------------------------------------------------------------------------
+%%----------------------------------------------------------------------------
+%% API
+%%----------------------------------------------------------------------------
 
-% Kicks this pig
 start_link(ChPid) ->
     {ok, Pid} = gen_server:start_link(?MODULE, [ChPid], []),
     Pid.
 
-% Queries the limiter to ask whether the queue can deliver a message
-% without breaching a limit
+shutdown(undefined) ->
+    ok;
+shutdown(LimiterPid) ->
+    unlink(LimiterPid),
+    gen_server2:cast(LimiterPid, shutdown).
+
+limit(undefined, 0) ->
+    ok;
+limit(LimiterPid, PrefetchCount) ->
+    gen_server2:cast(LimiterPid, {limit, PrefetchCount}).
+
+%% Ask the limiter whether the queue can deliver a message without
+%% breaching a limit
+can_send(undefined, _QPid) ->
+    true;
 can_send(LimiterPid, QPid) ->
-    gen_server:call(LimiterPid, {can_send, QPid}).
+    rabbit_misc:with_exit_handler(
+      fun () -> true end,
+      fun () -> gen_server2:call(LimiterPid, {can_send, QPid}) end).
 
-% Lets the limiter know that a queue has received an ack from a consumer
-% and hence can reduce the in-use-by-that queue capcity information
-decrement_capacity(LimiterPid, QPid) ->
-    gen_server:cast(LimiterPid, {decrement_capacity, QPid}).
+%% Let the limiter know that the channel has received some acks from a
+%% consumer
+ack(undefined, _Count) -> ok;
+ack(LimiterPid, Count) -> gen_server2:cast(LimiterPid, {ack, Count}).
 
-%---------------------------------------------------------------------------
-% gen_server callbacks
-%---------------------------------------------------------------------------
+register(undefined, _QPid) -> ok;
+register(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {register, QPid}).
+
+unregister(undefined, _QPid) -> ok;
+unregister(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {unregister, QPid}).
+
+%%----------------------------------------------------------------------------
+%% gen_server callbacks
+%%----------------------------------------------------------------------------
 
 init([ChPid]) ->
     {ok, #lim{ch_pid = ChPid} }.
 
-% This queuries the limiter to ask if it is possible to send a message without
-% breaching a limit for this queue process
-handle_call({can_send, QPid}, _From, State) ->
+handle_call({can_send, QPid}, _From, State = #lim{volume = Volume}) ->
     case limit_reached(State) of
-        true  -> {reply, false, State};
-        false -> {reply, true, update_in_use_capacity(QPid, State)}
+        true  -> {reply, false, limit_queue(QPid, State)};
+        false -> {reply, true, State#lim{volume = Volume + 1}}
     end.
 
-% This is an asynchronous ack from a queue that it has received an ack from
-% a queue. This allows the limiter to update the the in-use-by-that queue
-% capacity infromation.
-handle_cast({decrement_capacity, QPid}, State) ->
-    NewState = decrement_in_use(QPid, State),
-    ShouldNotify = limit_reached(State) and not(limit_reached(NewState)),
-    if
-        ShouldNotify -> notify_queues(State);
-        true         -> ok
-    end,
-    {noreply, NewState}.
+handle_cast(shutdown, State) ->
+    {stop, normal, State};
 
-% When the new limit is larger than the existing limit,
-% notify all queues and forget about queues with an in-use
-% capcity of zero
-handle_info({prefetch_count, PrefetchCount},
-            State = #lim{prefetch_count = CurrentLimit})
-            when PrefetchCount > CurrentLimit ->
-    % TODO implement this requirement
-    {noreply, State#lim{prefetch_count = PrefetchCount}};
+handle_cast({limit, PrefetchCount}, State) ->
+    {noreply, maybe_notify(State, State#lim{prefetch_count = PrefetchCount})};
 
-% Default setter of the prefetch count
-handle_info({prefetch_count, PrefetchCount}, State) ->
-    {noreply, State#lim{prefetch_count = PrefetchCount}}.
+handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
+    NewVolume = if Volume == 0 -> 0;
+                   true        -> Volume - Count
+                end,
+    {noreply, maybe_notify(State, State#lim{volume = NewVolume})};
+
+handle_cast({register, QPid}, State) ->
+    {noreply, remember_queue(QPid, State)};
+
+handle_cast({unregister, QPid}, State) ->
+    {noreply, forget_queue(QPid, State)}.
+
+handle_info({'DOWN', _MonitorRef, _Type, QPid, _Info}, State) ->
+    {noreply, forget_queue(QPid, State)}.
 
 terminate(_, _) ->
     ok.
@@ -81,39 +143,53 @@ terminate(_, _) ->
 code_change(_, State, _) ->
     State.
 
-%---------------------------------------------------------------------------
-% Internal plumbing
-%---------------------------------------------------------------------------
+%%----------------------------------------------------------------------------
+%% Internal plumbing
+%%----------------------------------------------------------------------------
 
-% Reduces the in-use-count of the queue by one
-decrement_in_use(QPid, State = #lim{in_use = InUse}) ->
-    NewInUse = dict:update_counter(QPid, -1, InUse),
-    Count = dict:fetch(QPid, NewInUse),
-    if
-        Count < 1 ->
-            State#lim{in_use = dict:erase(QPid, NewInUse)};
-        true ->
-            State#lim{in_use = NewInUse}
+maybe_notify(OldState, NewState) ->
+    case limit_reached(OldState) andalso not(limit_reached(NewState)) of
+        true  -> notify_queues(NewState);
+        false -> NewState
     end.
 
-% Unblocks every queue that this limiter knows about
-notify_queues(#lim{ch_pid = ChPid, in_use = InUse}) ->
-    dict:map(fun(Q,_) -> rabbit_amqqueue:unblock(Q, ChPid) end, InUse).
+limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
+    Limit =/= 0 andalso Volume >= Limit.
 
-% Computes the current aggregrate capacity of all of the in-use queues
-current_capacity(#lim{in_use = InUse}) ->
-    % TODO It *seems* expensive to compute this on the fly
-    dict:fold(fun(_, PerQ, Acc) -> PerQ + Acc end, 0, InUse).
+remember_queue(QPid, State = #lim{queues = Queues}) ->
+    case dict:is_key(QPid, Queues) of
+        false -> MRef = erlang:monitor(process, QPid),
+                 State#lim{queues = dict:store(QPid, {MRef, false}, Queues)};
+        true  -> State
+    end.
 
-% A prefetch limit of zero means unlimited
-limit_reached(#lim{prefetch_count = 0}) ->
-    false;
+forget_queue(QPid, State = #lim{ch_pid = ChPid, queues = Queues}) ->
+    case dict:find(QPid, Queues) of
+        {ok, {MRef, _}} ->
+            true = erlang:demonitor(MRef),
+            ok = rabbit_amqqueue:unblock(QPid, ChPid),
+            State#lim{queues = dict:erase(QPid, Queues)};
+        error -> State
+    end.
 
-% Works out whether the limit is breached for the current limiter state
-limit_reached(State = #lim{prefetch_count = Limit}) ->
-    current_capacity(State) == Limit.
+limit_queue(QPid, State = #lim{queues = Queues}) ->
+    UpdateFun = fun ({MRef, _}) -> {MRef, true} end,
+    State#lim{queues = dict:update(QPid, UpdateFun, Queues)}.
 
-% Increments the counter for the in-use-capacity of a particular queue
-update_in_use_capacity(QPid, State = #lim{in_use = InUse}) ->
-    State#lim{in_use = dict:update_counter(QPid, 1, InUse)}.
-
+notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
+    {QList, NewQueues} =
+        dict:fold(fun (_QPid, {_, false}, Acc) -> Acc;
+                      (QPid, {MRef, true}, {L, D}) ->
+                          {[QPid | L], dict:store(QPid, {MRef, false}, D)}
+                  end, {[], Queues}, Queues),
+    case length(QList) of
+        0 -> ok;
+        L ->
+            %% We randomly vary the position of queues in the list,
+            %% thus ensuring that each queue has an equal chance of
+            %% being notified first.
+            {L1, L2} = lists:split(random:uniform(L), QList),
+            [ok = rabbit_amqqueue:unblock(Q, ChPid) || Q <- L2 ++ L1],
+            ok
+    end,
+    State#lim{queues = NewQueues}.
