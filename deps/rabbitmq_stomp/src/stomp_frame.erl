@@ -225,5 +225,3 @@ serialize_header({K, V}) when is_integer(V) ->
     [K, $:, integer_to_list(V), $\n];
 serialize_header({K, V}) when is_list(V) ->
     [K, $:, V, $\n].
-
-%% vi:noet:ts=8:sts=4:sw=4:cindent

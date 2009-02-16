@@ -573,5 +573,3 @@ process_command(Command, _Frame, State) ->
     {ok, send_error("Bad command",
 		    "Could not interpret command " ++ Command ++ "\n",
 		    State)}.
-
-%% vi:noet:ts=8:sts=4:sw=4:cindent
