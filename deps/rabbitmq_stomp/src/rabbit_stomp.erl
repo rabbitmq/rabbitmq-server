@@ -143,7 +143,8 @@ mainloop(State) ->
             ?MODULE:mainloop(State);
         Data ->
             error_logger:error_msg("Internal error: unknown STOMP Data: ~p~n", [Data]),
-            ?MODULE:mainloop(State)
+            send_error("Error", "Internal error in mainloop\n", State),
+            done
     end.
 
 simple_method_sync_rpc(Method, State0) ->
