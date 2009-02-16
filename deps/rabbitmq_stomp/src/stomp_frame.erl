@@ -39,7 +39,10 @@
 -export([parse_headers/2, initial_headers_state/0]).
 -export([parse_body/2, initial_body_state/1]).
 -export([parse/2, initial_state/0]).
--export([header/2, header/3, boolean_header/2, boolean_header/3, integer_header/2, integer_header/3, binary_header/2, binary_header/3]).
+-export([header/2, header/3,
+         boolean_header/2, boolean_header/3,
+         integer_header/2, integer_header/3,
+         binary_header/2, binary_header/3]).
 -export([serialize/1]).
 
 -record(hstate, {state, acc, key, command, headers}).
