@@ -73,6 +73,11 @@ fi
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT='-noinput -s rabbit'
 
+# we need to turn off path expansion because some of the vars, notably
+# RABBITMQ_SERVER_ERL_ARGS, contain terms that look like globs and
+# there is no other way of preventing their expansion.
+set -f
+
 exec erl \
     -pa "`dirname $0`/../ebin" \
     ${RABBITMQ_START_RABBIT} \
