@@ -10,10 +10,14 @@ for arg in "$@" ; do
 done
 
 cd /
+
+SCRIPT=`basename $0`
+
 if [ `id -u` = 0 ] ; then
-	su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/rabbitmqctl ${CMDLINE}"
+    su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
 else
-	/usr/lib/rabbitmq/bin/rabbitmqctl
-	echo -e "\nOnly root should run rabbitmqctl\n"
-	exit 1
+    /usr/lib/rabbitmq/bin/${SCRIPT}
+    echo -e "\nOnly root should run ${SCRIPT}\n"
+    exit 1
 fi
+
