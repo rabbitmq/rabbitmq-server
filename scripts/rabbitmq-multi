@@ -54,6 +54,11 @@ export \
     RABBITMQ_SCRIPT_HOME \
     RABBITMQ_PIDS_FILE
 
+# we need to turn off path expansion because some of the vars, notably
+# RABBITMQ_MULTI_ERL_ARGS, may contain terms that look like globs and
+# there is no other way of preventing their expansion.
+set -f
+
 exec erl \
     -pa "`dirname $0`/../ebin" \
     -noinput \
