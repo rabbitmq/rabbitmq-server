@@ -26,3 +26,13 @@ Comments from Sean Treadway, 2 June 2008, on the rabbitmq-discuss list:
     properties on a SUBSCRIBE message. Neither seem nice to me.  Third
     option is to do nothing, and delete the queues outside of the
     STOMP protocol"
+
+Comments from Darien Kindlund, 11 February 2009, on the rabbitmq-discuss list:
+
+ - On testing of connection establishment:
+
+   "[O]nce I switched each perl process over to re-using their
+    existing STOMP connection, things worked much, much better.  As
+    such, I'm continuing development.  In your unit testing, you may
+    want to include rapid connect/disconnect behavior or otherwise
+    explicitly warn developers to avoid this scenario."
