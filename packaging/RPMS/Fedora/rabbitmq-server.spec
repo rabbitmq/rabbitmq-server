@@ -5,7 +5,7 @@ License: MPLv1.1
 Group: Development/Libraries
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.gz
 Source1: rabbitmq-server.init
-Source2: rabbitmq-server.wrapper
+Source2: rabbitmq-script-wrapper
 Source3: rabbitmq-server.logrotate
 URL: http://www.rabbitmq.com/
 Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
@@ -39,6 +39,7 @@ fi
 
 %prep
 %setup -n %{name}-%{version}
+sed -i 's|/usr/lib/|%{_libdir}/|' %SOURCE2
 
 %build
 make
@@ -59,9 +60,10 @@ install -m 0755 %SOURCE1 %{buildroot}%{_initrddir}/rabbitmq-server
 chmod 0755 %{buildroot}%{_initrddir}/rabbitmq-server
 sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_initrddir}/rabbitmq-server
 
-mkdir -p %{buildroot}%{_sbindir}
-install -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmqctl
-sed -i 's|/usr/lib/|%{_libdir}/|' %{buildroot}%{_sbindir}/rabbitmqctl
+
+install -p -D -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmqctl
+install -p -D -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmq-server
+install -p -D -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmq-multi
 
 mkdir -p %{buildroot}/etc/logrotate.d
 install -m 0644 %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server

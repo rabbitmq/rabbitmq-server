@@ -1,5 +1,6 @@
 TARBALL_DIR=../../../dist
 TARBALL=$(shell (cd $(TARBALL_DIR); echo rabbitmq-server-[0-9]*.tar.gz))
+COMMON_DIR=../../common
 DEBIAN_ORIG_TARBALL=$(shell echo $(TARBALL) |  sed -e 's:\(.*\)-\(.*\)\(\.tar\.gz\):\1_\2\.orig\3:g')
 VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
 UNPACKED_DIR=rabbitmq-server-$(VERSION)
@@ -19,6 +20,7 @@ package: clean
 	cp $(TARBALL_DIR)/$(TARBALL) $(DEBIAN_ORIG_TARBALL)
 	tar -zxvf $(DEBIAN_ORIG_TARBALL)
 	cp -r debian $(UNPACKED_DIR)
+	cp $(COMMON_DIR)/* $(UNPACKED_DIR)/debian/
 	chmod a+x $(UNPACKED_DIR)/debian/rules
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
 	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -rfakeroot $(SIGNING)
