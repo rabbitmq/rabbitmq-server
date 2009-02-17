@@ -141,6 +141,8 @@ list_queues [-p I<vhostpath>] [I<queueinfoitem> ...]
 
 =head3 Queue information items
 
+=for xhtml <a id="queue-information-items"/>
+
 =over 4
 
 =item name 
@@ -206,6 +208,8 @@ list_exchanges [-p I<vhostpath>] [I<exchangeinfoitem> ...]
 
 =head3 Exchange information items
 
+=for xhtml <a id="exchange-information-items"/>
+
 =over 4
 
 =item name 
@@ -239,6 +243,8 @@ list_connections [I<connectioninfoitem> ...]
     specified then the user, peer address and peer port are displayed.
 
 =head3 Connection information items
+
+=for xhtml <a id="connection-information-items"/>
 
 =over 4
 
