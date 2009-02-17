@@ -292,7 +292,7 @@ them:
 
 =head1 SEE ALSO
 
-rabbitmq-multi(1), rabbitmq-server(1)
+rabbitmq.conf(5), rabbitmq-multi(1), rabbitmq-server(1)
 
 =head1 AUTHOR
 

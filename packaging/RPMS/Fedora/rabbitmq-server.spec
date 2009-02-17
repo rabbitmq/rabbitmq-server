@@ -92,7 +92,6 @@ fi
 
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
 chown -R rabbitmq:rabbitmq /var/log/rabbitmq
-chown -R rabbitmq:rabbitmq /etc/rabbitmq
 
 /sbin/chkconfig --add %{name}
 /sbin/service rabbitmq-server start
