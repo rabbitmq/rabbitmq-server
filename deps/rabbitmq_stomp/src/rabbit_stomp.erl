@@ -252,14 +252,14 @@ send_reply(Command, Content, State) ->
     error_logger:error_msg("STOMP Reply command unhandled: ~p~n~p~n", [Command, Content]),
     State.
 
-adhoc_convert_headers([]) ->
-    [];
-adhoc_convert_headers([{K, longstr, V} | Rest]) ->
-    [{"X-" ++ binary_to_list(K), binary_to_list(V)} | adhoc_convert_headers(Rest)];
-adhoc_convert_headers([{K, signedint, V} | Rest]) ->
-    [{"X-" ++ binary_to_list(K), integer_to_list(V)} | adhoc_convert_headers(Rest)];
-adhoc_convert_headers([_ | Rest]) ->
-    adhoc_convert_headers(Rest).
+adhoc_convert_headers(Headers) ->
+    lists:foldr(fun ({K, longstr, V}, Acc) ->
+                        [{"X-" ++ binary_to_list(K), binary_to_list(V)} | Acc];
+                    ({K, signedint, V}, Acc) ->
+                        [{"X-" ++ binary_to_list(K), integer_to_list(V)} | Acc];
+                    (_, Acc) ->
+                        Acc
+                end, [], Headers).
 
 send_frame(Frame, State = #state{socket = Sock}) ->
     %% io:format("Sending ~p~n", [Frame]),
