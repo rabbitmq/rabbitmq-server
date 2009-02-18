@@ -157,11 +157,8 @@ simple_method_sync_rpc(Method, State0) ->
     end.
 
 handle_exit({'EXIT', _Pid, normal}, _State) ->
-    %% Normal exits (it'll be the channel, which we receive because
-    %% we're the writer and the writer is linked to the channel, or
-    %% the channel's buffering_proxy, which we receive because we're
-    %% the reader and the reader is linked to the buffering_proxy) are
-    %% fine
+    %% Normal exits (it'll be the channel we're linked to in our roles
+    %% as reader and writer) are fine
     done;
 handle_exit({'EXIT', _Pid, {amqp, Code, Method}}, State) ->
     explain_amqp_death(Code, Method, State),
