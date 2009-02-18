@@ -63,9 +63,10 @@ start(Listeners) ->
 start_listeners([]) ->
     ok;
 start_listeners([{Host, Port} | More]) ->
-    {IPAddress, Name} = rabbit_networking:check_tcp_listener_address(rabbit_stomp_listener_sup,
-                                                                     Host,
-                                                                     Port),
+    {IPAddress, Name} = rabbit_networking:check_tcp_listener_address(
+                          rabbit_stomp_listener_sup,
+                          Host,
+                          Port),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {Name,
@@ -144,7 +145,8 @@ mainloop(State) ->
             %% which event we do respond to.
             ?MODULE:mainloop(State);
         Data ->
-            send_priv_error("Error", "Internal error in mainloop\n", Data, State),
+            send_priv_error("Error", "Internal error in mainloop\n",
+                            Data, State),
             done
     end.
 
@@ -176,13 +178,15 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
             ?MODULE:mainloop(State#state{parse_state = ParseState1});
         {ok, Frame = #stomp_frame{command = Command}, Rest} ->
             %% io:format("Frame: ~p~n", [Frame]),
+            PS = stomp_frame:initial_state(),
             case catch process_frame(Command, Frame,
-                                     State#state{parse_state = stomp_frame:initial_state()}) of
+                                     State#state{parse_state = PS}) of
                 {'EXIT', {amqp, Code, Method}} ->
                     explain_amqp_death(Code, Method, State),
                     done;
                 {'EXIT', Reason} ->
-                    send_priv_error("Processing error", "Processing error\n", Reason, State),
+                    send_priv_error("Processing error", "Processing error\n",
+                                    Reason, State),
                     done;
                 {ok, NewState} ->
                     process_received_bytes(Rest, NewState);
@@ -190,7 +194,8 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
                     done
             end;
         {error, Reason} ->
-            send_priv_error("Invalid frame", "Could not parse frame\n", Reason, State),
+            send_priv_error("Invalid frame", "Could not parse frame\n",
+                            Reason, State),
             done
     end.
 
@@ -203,10 +208,14 @@ send_reply(Command, State) ->
     error_logger:error_msg("STOMP Reply command unhandled: ~p~n", [Command]),
     State.
 
-maybe_header(_Key, undefined) -> [];
-maybe_header(Key, Value) when is_binary(Value) -> [{Key, binary_to_list(Value)}];
-maybe_header(Key, Value) when is_integer(Value) -> [{Key, integer_to_list(Value)}];
-maybe_header(_Key, _Value) -> [].
+maybe_header(_Key, undefined) ->
+    [];
+maybe_header(Key, Value) when is_binary(Value) ->
+    [{Key, binary_to_list(Value)}];
+maybe_header(Key, Value) when is_integer(Value) ->
+    [{Key, integer_to_list(Value)}];
+maybe_header(_Key, _Value) ->
+    [].
 
 send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
                             delivery_tag = DeliveryTag,
@@ -222,36 +231,35 @@ send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
                                             message_id = MessageId},
                     payload_fragments_rev = BodyFragmentsRev},
            State = #state{session_id = SessionId}) ->
-    send_frame("MESSAGE",
-               [{"destination", binary_to_list(RoutingKey)},
-                {"exchange", binary_to_list(Exchange)},
-                %% TODO append ContentEncoding as ContentType;
-                %% charset=ContentEncoding?  The STOMP SEND handler
-                %% could also parse "content-type" to split it,
-                %% perhaps?
-                {"message-id", SessionId ++ "_" ++ integer_to_list(DeliveryTag)}]
-               ++ maybe_header("content-type", ContentType)
-               ++ maybe_header("content-encoding", ContentEncoding)
-               ++ case ConsumerTag of
-                      <<"Q_", _/binary>> ->
-                          [];
-                      <<"T_", Id/binary>> ->
-                          [{"subscription", binary_to_list(Id)}]
-                  end
-               ++ adhoc_convert_headers(case Headers of
-                                            undefined -> [];
-                                            _ -> Headers
-                                        end)
-               ++ maybe_header("delivery-mode", DeliveryMode)
-               ++ maybe_header("priority", Priority)
-               ++ maybe_header("correlation-id", CorrelationId)
-               ++ maybe_header("reply-to", ReplyTo)
-               ++ maybe_header("amqp-message-id", MessageId),
-               lists:concat(lists:reverse(lists:map(fun erlang:binary_to_list/1,
-                                                    BodyFragmentsRev))),
-               State);
+    send_frame(
+      "MESSAGE",
+      [{"destination", binary_to_list(RoutingKey)},
+       {"exchange", binary_to_list(Exchange)},
+       %% TODO append ContentEncoding as ContentType;
+       %% charset=ContentEncoding?  The STOMP SEND handler could also
+       %% parse "content-type" to split it, perhaps?
+       {"message-id", SessionId ++ "_" ++ integer_to_list(DeliveryTag)}]
+      ++ maybe_header("content-type", ContentType)
+      ++ maybe_header("content-encoding", ContentEncoding)
+      ++ case ConsumerTag of
+             <<"Q_",  _/binary>> -> [];
+             <<"T_", Id/binary>> -> [{"subscription", binary_to_list(Id)}]
+         end
+      ++ adhoc_convert_headers(case Headers of
+                                   undefined -> [];
+                                   _         -> Headers
+                               end)
+      ++ maybe_header("delivery-mode", DeliveryMode)
+      ++ maybe_header("priority", Priority)
+      ++ maybe_header("correlation-id", CorrelationId)
+      ++ maybe_header("reply-to", ReplyTo)
+      ++ maybe_header("amqp-message-id", MessageId),
+      lists:concat(lists:reverse(lists:map(fun erlang:binary_to_list/1,
+                                           BodyFragmentsRev))),
+      State);
 send_reply(Command, Content, State) ->
-    error_logger:error_msg("STOMP Reply command unhandled: ~p~n~p~n", [Command, Content]),
+    error_logger:error_msg("STOMP Reply command unhandled: ~p~n~p~n",
+                           [Command, Content]),
     State.
 
 adhoc_convert_headers(Headers) ->
@@ -303,10 +311,11 @@ process_frame("CONNECT", Frame, State = #state{channel = none}) ->
     State2 = case stomp_frame:integer_header(Frame, "prefetch") of
                  {ok, PrefetchCount} ->
                      {ok, #'basic.qos_ok'{}, S} =
-                         simple_method_sync_rpc(#'basic.qos'{prefetch_size = 0,
-                                                             prefetch_count = PrefetchCount,
-                                                             global = false},
-                                                State1),
+                         simple_method_sync_rpc(
+                           #'basic.qos'{prefetch_size = 0,
+                                        prefetch_count = PrefetchCount,
+                                        global = false},
+                           State1),
                      S;
                  not_found -> State1
              end,
@@ -322,7 +331,8 @@ process_frame(Command, Frame, State) ->
         {ok, State1} ->
             {ok, case stomp_frame:header(Frame, "receipt") of
                      {ok, Id} ->
-                         send_frame("RECEIPT", [{"receipt-id", Id}], "", State1);
+                         send_frame("RECEIPT", [{"receipt-id", Id}], "",
+                                    State1);
                      not_found ->
                          State1
                  end};
@@ -335,18 +345,20 @@ send_method(Method, State = #state{channel = ChPid}) ->
     State.
 
 send_method(Method, Properties, Body, State = #state{channel = ChPid}) ->
-    ok = rabbit_channel:do(ChPid,
-                           Method,
-                           #content{class_id = 60, %% basic
-                                    properties = Properties,
-                                    properties_bin = none,
-                                    payload_fragments_rev = [list_to_binary(Body)]}),
+    ok = rabbit_channel:do(
+           ChPid,
+           Method,
+           #content{class_id = 60, %% basic
+                    properties = Properties,
+                    properties_bin = none,
+                    payload_fragments_rev = [list_to_binary(Body)]}),
     State.
 
 do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
     U = rabbit_access_control:user_pass_login(list_to_binary(Login),
                                               list_to_binary(Passcode)),
-    ok = rabbit_access_control:check_vhost_access(U, list_to_binary(VirtualHost)),
+    ok = rabbit_access_control:check_vhost_access(U,
+                                                  list_to_binary(VirtualHost)),
     ChPid = 
         rabbit_channel:start_link(?MODULE, self(), self(),
                                   U#user.username, list_to_binary(VirtualHost)),
@@ -359,7 +371,8 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
                     "",
                     State1#state{session_id = SessionId})};
 do_login(_, _, _, State) ->
-    {ok, send_error("Bad CONNECT", "Missing login or passcode header(s)\n", State)}.
+    {ok, send_error("Bad CONNECT", "Missing login or passcode header(s)\n",
+                    State)}.
 
 longstr_field(K, V) ->
     {list_to_binary(K), longstr, list_to_binary(V)}.
@@ -386,7 +399,8 @@ with_transaction(Transaction, State, Fun) ->
     case get({transaction, Transaction}) of
         undefined ->
             {ok, send_error("Bad transaction",
-                            "Invalid transaction identifier: ~p\n", [Transaction],
+                            "Invalid transaction identifier: ~p\n",
+                            [Transaction],
                             State)};
         Actions ->
             Fun(Actions, State)
@@ -397,28 +411,31 @@ begin_transaction(Transaction, State) ->
     {ok, State}.
 
 extend_transaction(Transaction, Action, State0) ->
-    with_transaction(Transaction, State0,
-                     fun (Actions, State) ->
-                             put({transaction, Transaction}, [Action | Actions]),
-                             {ok, State}
-                     end).
+    with_transaction(
+      Transaction, State0,
+      fun (Actions, State) ->
+              put({transaction, Transaction}, [Action | Actions]),
+              {ok, State}
+      end).
 
 commit_transaction(Transaction, State0) ->
-    with_transaction(Transaction, State0,
-                     fun (Actions, State) ->
-                             FinalState = lists:foldr(fun perform_transaction_action/2,
-                                                      State,
-                                                      Actions),
-                             erase({transaction, Transaction}),
-                             {ok, FinalState}
-                     end).
+    with_transaction(
+      Transaction, State0,
+      fun (Actions, State) ->
+              FinalState = lists:foldr(fun perform_transaction_action/2,
+                                       State,
+                                       Actions),
+              erase({transaction, Transaction}),
+              {ok, FinalState}
+      end).
 
 abort_transaction(Transaction, State0) ->
-    with_transaction(Transaction, State0,
-                     fun (_Actions, State) ->
-                             erase({transaction, Transaction}),
-                             {ok, State}
-                     end).
+    with_transaction(
+      Transaction, State0,
+      fun (_Actions, State) ->
+              erase({transaction, Transaction}),
+              {ok, State}
+      end).
 
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
@@ -430,32 +447,37 @@ process_command("BEGIN", Frame, State) ->
 process_command("SEND",
                 Frame = #stomp_frame{headers = Headers, body = Body},
                 State) ->
+    BinH = fun(K, V) -> stomp_frame:binary_header(Frame, K, V) end,
+    IntH = fun(K, V) -> stomp_frame:integer_header(Frame, K, V) end,
     case stomp_frame:header(Frame, "destination") of
         {ok, RoutingKeyStr} ->
             ExchangeStr = stomp_frame:header(Frame, "exchange", ""),
             Props = #'P_basic'{
-              content_type     = stomp_frame:binary_header(Frame, "content-type", <<"text/plain">>),
-              content_encoding = stomp_frame:binary_header(Frame, "content-encoding", undefined),
-              headers          = [longstr_field(K, V) || {"X-" ++ K, V} <- Headers],
-              delivery_mode    = stomp_frame:integer_header(Frame, "delivery-mode", undefined),
-              priority         = stomp_frame:integer_header(Frame, "priority", undefined),
-              correlation_id   = stomp_frame:binary_header(Frame, "correlation-id", undefined),
-              reply_to         = stomp_frame:binary_header(Frame, "reply-to", undefined),
-              message_id       = stomp_frame:binary_header(Frame, "amqp-message-id", undefined)
-             },
-            Method = #'basic.publish'{exchange = list_to_binary(ExchangeStr),
-                                      routing_key = list_to_binary(RoutingKeyStr),
-                                      mandatory = false,
-                                      immediate = false},
+              content_type     = BinH("content-type",     <<"text/plain">>),
+              content_encoding = BinH("content-encoding", undefined),
+              delivery_mode    = IntH("delivery-mode",    undefined),
+              priority         = IntH("priority",         undefined),
+              correlation_id   = BinH("correlation-id",   undefined),
+              reply_to         = BinH("reply-to",         undefined),
+              message_id       = BinH("amqp-message-id",  undefined),
+              headers          = [longstr_field(K, V) ||
+                                     {"X-" ++ K, V} <- Headers]},
+            Method = #'basic.publish'{
+              exchange = list_to_binary(ExchangeStr),
+              routing_key = list_to_binary(RoutingKeyStr),
+              mandatory = false,
+              immediate = false},
             case transactional(Frame) of
                 {yes, Transaction} ->
-                    extend_transaction(Transaction, {Method, Props, Body}, State);
+                    extend_transaction(Transaction, {Method, Props, Body},
+                                       State);
                 no ->
                     {ok, send_method(Method, Props, Body, State)}
             end;
         not_found ->
             {ok, send_error("Missing destination",
-                            "SEND must include a 'destination', and optional 'exchange' header\n",
+                            "SEND must include a 'destination', "
+                            "and optional 'exchange' header\n",
                             State)}
     end;
 process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
@@ -464,7 +486,8 @@ process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
             IdPrefix = SessionId ++ "_",
             case string:substr(IdStr, 1, length(IdPrefix)) of
                 IdPrefix ->
-                    DeliveryTag = list_to_integer(string:substr(IdStr, length(IdPrefix) + 1)),
+                    DeliveryTag = list_to_integer(
+                                    string:substr(IdStr, length(IdPrefix) + 1)),
                     Method = #'basic.ack'{delivery_tag = DeliveryTag,
                                           multiple = false},
                     case transactional(Frame) of
@@ -481,6 +504,7 @@ process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
                             "ACK must include a 'message-id' header\n",
                             State)}
     end;
+
 process_command("COMMIT", Frame, State) ->
     transactional_action(Frame, "COMMIT", fun commit_transaction/2, State);
 process_command("ABORT", Frame, State) ->
@@ -501,29 +525,33 @@ process_command("SUBSCRIBE",
                                   list_to_binary("Q_" ++ QueueStr)
                           end,
             Queue = list_to_binary(QueueStr),
+            BoolH = fun(K, V) -> stomp_frame:boolean_header(Frame, K, V) end,
             State1 = send_method(
                        #'queue.declare'{
-                           queue = Queue,
-                           passive = stomp_frame:boolean_header(Frame, "passive", false),
-                           durable = stomp_frame:boolean_header(Frame, "durable", false),
-                           exclusive = stomp_frame:boolean_header(Frame, "exclusive", false),
-                           auto_delete = stomp_frame:boolean_header(Frame, "auto-delete", true),
-                           nowait = true,
-                           arguments = [longstr_field(K, V) || {"X-Q-" ++ K, V} <- Headers]},
+                           queue       = Queue,
+                           passive     = BoolH("passive", false),
+                           durable     = BoolH("durable", false),
+                           exclusive   = BoolH("exclusive", false),
+                           auto_delete = BoolH("auto-delete", true),
+                           nowait      = true,
+                           arguments   = [longstr_field(K, V) ||
+                                             {"X-Q-" ++ K, V} <- Headers]},
                        State),
             State2 = case stomp_frame:header(Frame, "exchange") of
                          {ok, ExchangeStr } ->
                              Exchange = list_to_binary(ExchangeStr),
-                             RoutingKeyStr = stomp_frame:header(Frame, "routing_key", ""),
-                             RoutingKey = list_to_binary(RoutingKeyStr),
-                             send_method(#'queue.bind'{queue = Queue,
-                                                       exchange = Exchange,
-                                                       routing_key = RoutingKey,
-                                                       nowait = true,
-                                                       arguments =
-                                                         [longstr_field(K, V) ||
-                                                             {"X-B-" ++ K, V} <- Headers]},
-                                         State1);
+                             RoutingKey = list_to_binary(
+                                            stomp_frame:header(
+                                              Frame, "routing_key", "")),
+                             send_method(
+                               #'queue.bind'{
+                                   queue = Queue,
+                                   exchange = Exchange,
+                                   routing_key = RoutingKey,
+                                   nowait = true,
+                                   arguments = [longstr_field(K, V) ||
+                                                   {"X-B-" ++ K, V} <- Headers]},
+                               State1);
                          not_found -> State1
                      end,
             State3 = send_method(#'basic.consume'{queue = Queue,
@@ -554,7 +582,8 @@ process_command("UNSUBSCRIBE", Frame, State) ->
     if
         ConsumerTag == missing ->
             {ok, send_error("Missing destination or id",
-                            "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
+                            "UNSUBSCRIBE must include a 'destination' "
+                            "or 'id' header\n",
                             State)};
         true ->
             {ok, send_method(#'basic.cancel'{consumer_tag = ConsumerTag,

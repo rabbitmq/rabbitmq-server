@@ -57,7 +57,10 @@ initial_headers_state() ->
 parse_headers([], ParseState) ->
     {more, ParseState};
 parse_headers([$\r | Rest], ParseState = #hstate{state = State})
-  when State == command orelse State == key orelse State == eatspace orelse State == value ->
+  when State == command  orelse
+       State == key      orelse
+       State == eatspace orelse
+       State == value ->
     parse_headers(Rest, ParseState);
 parse_headers([$\n | Rest], ParseState = #hstate{state = command, acc = []}) ->
     parse_headers(Rest, ParseState);
@@ -65,30 +68,29 @@ parse_headers([$\n | Rest], ParseState = #hstate{state = command, acc = Acc}) ->
     parse_headers(Rest, ParseState#hstate{state = key, acc = [],
                                           command = lists:reverse(Acc)});
 parse_headers([$\n | Rest], _ParseState = #hstate{state = key, acc = Acc,
-                                                  command = Command, headers = Headers}) ->
+                                                  command = Command,
+                                                  headers = Headers}) ->
     case Acc of
-        [] ->
-            {ok, Command, Headers, Rest};
-        _ ->
-            {error, {bad_header_key, lists:reverse(Acc)}}
+        [] -> {ok, Command, Headers, Rest};
+        _  -> {error, {bad_header_key, lists:reverse(Acc)}}
     end;
 parse_headers([$: | Rest], ParseState = #hstate{state = key, acc = Acc}) ->
-    parse_headers(Rest, ParseState#hstate{state = eatspace, acc = [], key = lists:reverse(Acc)});
+    parse_headers(Rest, ParseState#hstate{state = eatspace, acc = [],
+                                          key = lists:reverse(Acc)});
 parse_headers([$  | Rest], ParseState = #hstate{state = eatspace}) ->
     parse_headers(Rest, ParseState);
 parse_headers(Input, ParseState = #hstate{state = eatspace}) ->
     parse_headers(Input, ParseState#hstate{state = value});
-parse_headers([$\n | Rest], ParseState = #hstate{state = value, acc = Acc, key = Key,
+parse_headers([$\n | Rest], ParseState = #hstate{state = value, acc = Acc,
+                                                 key = Key,
                                                  headers = Headers}) ->
     parse_headers(Rest, ParseState#hstate{state = key, acc = [],
                                           headers = [{Key, lists:reverse(Acc)}
                                                      | Headers]});
 parse_headers([Ch | Rest], ParseState = #hstate{acc = Acc}) ->
     if
-        Ch < 32 ->
-            {error, {bad_character, Ch}};
-        true ->
-            parse_headers(Rest, ParseState#hstate{acc = [Ch | Acc]})
+        Ch < 32 -> {error, {bad_character, Ch}};
+        true    -> parse_headers(Rest, ParseState#hstate{acc = [Ch | Acc]})
     end.
 
 default_value({ok, Value}, _DefaultValue) ->
@@ -98,10 +100,8 @@ default_value(not_found, DefaultValue) ->
 
 header(#stomp_frame{headers = Headers}, Key) ->
     case lists:keysearch(Key, 1, Headers) of
-        {value, {_, Str}} ->
-            {ok, Str};
-        _ ->
-            not_found
+        {value, {_, Str}} -> {ok, Str};
+        _                 -> not_found
     end.
 
 header(Frame, Key, DefaultValue) ->
@@ -109,12 +109,9 @@ header(Frame, Key, DefaultValue) ->
 
 boolean_header(#stomp_frame{headers = Headers}, Key) ->
     case lists:keysearch(Key, 1, Headers) of
-        {value, {_, "true"}} ->
-            {ok, true};
-        {value, {_, "false"}} ->
-            {ok, false};
-        _ ->
-            not_found
+        {value, {_, "true"}}  -> {ok, true};
+        {value, {_, "false"}} -> {ok, false};
+        _                     -> not_found
     end.
 
 boolean_header(H, Key, D) ->
@@ -122,10 +119,8 @@ boolean_header(H, Key, D) ->
 
 internal_integer_header(Headers, Key) ->
     case lists:keysearch(Key, 1, Headers) of
-        {value, {_, Str}} ->
-            {ok, list_to_integer(string:strip(Str))};
-        _ ->
-            not_found
+        {value, {_, Str}} -> {ok, list_to_integer(string:strip(Str))};
+        _                 -> not_found
     end.
 
 integer_header(#stomp_frame{headers = Headers}, Key) ->
@@ -144,12 +139,11 @@ binary_header(F, K, V) ->
     default_value(binary_header(F, K), V).
 
 initial_body_state(Headers) ->
-    case internal_integer_header(Headers, "content-length") of
-        {ok, ByteCount} ->
-            #bstate{acc = [], remaining = ByteCount};
-        not_found ->
-            #bstate{acc = [], remaining = unknown}
-    end.
+    Remaining = case internal_integer_header(Headers, "content-length") of
+                    {ok, ByteCount} -> ByteCount;
+                    not_found       -> unknown
+                end,
+    #bstate{acc = [], remaining = Remaining}.
 
 parse_body([], State) ->
     {more, State};
@@ -196,12 +190,11 @@ serialize(#stomp_frame{command = Command,
                        body = Body}) ->
     Len = length(Body),
     [Command, $\n,
-     lists:map(fun serialize_header/1, lists:keydelete("content-length", 1, Headers)),
+     lists:map(fun serialize_header/1,
+               lists:keydelete("content-length", 1, Headers)),
      if
-         Len > 0 ->
-             ["content-length:", integer_to_list(length(Body)), $\n];
-         true ->
-             []
+         Len > 0 -> ["content-length:", integer_to_list(length(Body)), $\n];
+         true    -> []
      end,
      $\n,
      Body,
