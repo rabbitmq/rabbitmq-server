@@ -94,7 +94,6 @@ chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
 chown -R rabbitmq:rabbitmq /var/log/rabbitmq
 
 /sbin/chkconfig --add %{name}
-/sbin/service rabbitmq-server start
 
 %preun
 if [ $1 = 0 ]; then

@@ -2,16 +2,14 @@
 #
 # rabbitmq-server RabbitMQ broker
 #
-#chkconfig: 2345 80 05
-#description: Enable AMQP service provided by RabbitMQ
+# chkconfig: - 80 05
+# description: Enable AMQP service provided by RabbitMQ
 #
 
 ### BEGIN INIT INFO
-# Provides:          rabbitmq
+# Provides:          rabbitmq-server
 # Required-Start:    $remote_fs $network
 # Required-Stop:     $remote_fs $network
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
 # Description:       RabbitMQ broker
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
