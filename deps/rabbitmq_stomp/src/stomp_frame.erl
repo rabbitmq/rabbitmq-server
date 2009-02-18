@@ -108,8 +108,6 @@ header(#stomp_frame{headers = Headers}, Key, DefaultValue) ->
     end.
 
 boolean_header(#stomp_frame{headers = Headers}, Key) ->
-    boolean_header(Headers, Key);
-boolean_header(Headers, Key) ->
     case lists:keysearch(Key, 1, Headers) of
         {value, {_, "true"}} ->
             {ok, true};
@@ -127,15 +125,16 @@ boolean_header(H, Key, D) ->
             D
     end.
 
-integer_header(#stomp_frame{headers = Headers}, Key) ->
-    integer_header(Headers, Key);
-integer_header(Headers, Key) ->
+internal_integer_header(Headers, Key) ->
     case lists:keysearch(Key, 1, Headers) of
         {value, {_, Str}} ->
             {ok, list_to_integer(string:strip(Str))};
         _ ->
             not_found
     end.
+
+integer_header(#stomp_frame{headers = Headers}, Key) ->
+    internal_integer_header(Headers, Key).
 
 integer_header(H, Key, D) ->
     case integer_header(H, Key) of
@@ -157,11 +156,8 @@ binary_header(F, K, V) ->
         not_found -> V
     end.
 
-content_length(Headers) ->
-    integer_header(Headers, "content-length").
-
 initial_body_state(Headers) ->
-    case content_length(Headers) of
+    case internal_integer_header(Headers, "content-length") of
         {ok, ByteCount} ->
             #bstate{acc = [], remaining = ByteCount};
         not_found ->
