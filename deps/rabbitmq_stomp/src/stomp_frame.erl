@@ -91,6 +91,11 @@ parse_headers([Ch | Rest], ParseState = #hstate{acc = Acc}) ->
             parse_headers(Rest, ParseState#hstate{acc = [Ch | Acc]})
     end.
 
+default_value({ok, Value}, _DefaultValue) ->
+    Value;
+default_value(not_found, DefaultValue) ->
+    DefaultValue.
+
 header(#stomp_frame{headers = Headers}, Key) ->
     case lists:keysearch(Key, 1, Headers) of
         {value, {_, Str}} ->
@@ -99,13 +104,8 @@ header(#stomp_frame{headers = Headers}, Key) ->
             not_found
     end.
 
-header(#stomp_frame{headers = Headers}, Key, DefaultValue) ->
-    case lists:keysearch(Key, 1, Headers) of
-        {value, {_, Str}} ->
-            Str;
-        _ ->
-            DefaultValue
-    end.
+header(Frame, Key, DefaultValue) ->
+    default_value(header(Frame, Key), DefaultValue).
 
 boolean_header(#stomp_frame{headers = Headers}, Key) ->
     case lists:keysearch(Key, 1, Headers) of
@@ -118,12 +118,7 @@ boolean_header(#stomp_frame{headers = Headers}, Key) ->
     end.
 
 boolean_header(H, Key, D) ->
-    case boolean_header(H, Key) of
-        {ok, V} ->
-            V;
-        not_found ->
-            D
-    end.
+    default_value(boolean_header(H, Key), D).
 
 internal_integer_header(Headers, Key) ->
     case lists:keysearch(Key, 1, Headers) of
@@ -137,12 +132,7 @@ integer_header(#stomp_frame{headers = Headers}, Key) ->
     internal_integer_header(Headers, Key).
 
 integer_header(H, Key, D) ->
-    case integer_header(H, Key) of
-        {ok, V} ->
-            V;
-        not_found ->
-            D
-    end.
+    default_value(integer_header(H, Key), D).
 
 binary_header(F, K) ->
     case header(F, K) of
@@ -151,10 +141,7 @@ binary_header(F, K) ->
     end.
 
 binary_header(F, K, V) ->
-    case header(F, K) of
-        {ok, Str} -> list_to_binary(Str);
-        not_found -> V
-    end.
+    default_value(binary_header(F, K), V).
 
 initial_body_state(Headers) ->
     case internal_integer_header(Headers, "content-length") of
