@@ -104,13 +104,15 @@ init(_Parent) ->
             PeerAddressS = inet_parse:ntoa(PeerAddress),
             error_logger:info_msg("starting STOMP connection ~p from ~s:~p~n",
                                   [self(), PeerAddressS, PeerPort]),
-
-            ?MODULE:mainloop(#state{socket = Sock,
-                                    channel = none,
-                                    parse_state = stomp_frame:initial_state()}),
-
-            error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
-                                  [self(), PeerAddressS, PeerPort])
+            ParseState = stomp_frame:initial_state(),
+            try
+                ?MODULE:mainloop(#state{socket = Sock,
+                                        channel = none,
+                                        parse_state = ParseState})
+            after
+                error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
+                                      [self(), PeerAddressS, PeerPort])
+            end
     end.
 
 mainloop(State) ->
