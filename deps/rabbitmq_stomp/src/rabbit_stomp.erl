@@ -350,24 +350,8 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
 do_login(_, _, _, State) ->
     {ok, send_error("Bad CONNECT", "Missing login or passcode header(s)\n", State)}.
 
-user_header_key("X-" ++ UserKey) -> UserKey;
-user_header_key(_) -> false.
-
-user_queue_header_key("X-Q-" ++ UserKey) -> UserKey;
-user_queue_header_key(_) -> false.
-
-user_binding_header_key("X-B-" ++ UserKey) -> UserKey;
-user_binding_header_key(_) -> false.
-
-make_string_table(_KeyFilter, []) -> [];
-make_string_table(KeyFilter, [{K, V} | Rest]) ->
-    case KeyFilter(K) of
-        false ->
-            make_string_table(KeyFilter, Rest);
-        NewK ->
-            [{list_to_binary(NewK), longstr, list_to_binary(V)}
-             | make_string_table(KeyFilter, Rest)]
-    end.
+longstr_field(K, V) ->
+    {list_to_binary(K), longstr, list_to_binary(V)}.
 
 transactional(Frame) ->
     case stomp_frame:header(Frame, "transaction") of
@@ -441,7 +425,7 @@ process_command("SEND",
             Props = #'P_basic'{
               content_type     = stomp_frame:binary_header(Frame, "content-type", <<"text/plain">>),
               content_encoding = stomp_frame:binary_header(Frame, "content-encoding", undefined),
-              headers          = make_string_table(fun user_header_key/1, Headers),
+              headers          = [longstr_field(K, V) || {"X-" ++ K, V} <- Headers],
               delivery_mode    = stomp_frame:integer_header(Frame, "delivery-mode", undefined),
               priority         = stomp_frame:integer_header(Frame, "priority", undefined),
               correlation_id   = stomp_frame:binary_header(Frame, "correlation-id", undefined),
@@ -514,9 +498,7 @@ process_command("SUBSCRIBE",
                            exclusive = stomp_frame:boolean_header(Frame, "exclusive", false),
                            auto_delete = stomp_frame:boolean_header(Frame, "auto-delete", true),
                            nowait = true,
-                           arguments =
-                             make_string_table(fun user_queue_header_key/1,
-                                               Headers)},
+                           arguments = [longstr_field(K, V) || {"X-Q-" ++ K, V} <- Headers]},
                        State),
             State2 = case stomp_frame:header(Frame, "exchange") of
                          {ok, ExchangeStr } ->
@@ -528,9 +510,8 @@ process_command("SUBSCRIBE",
                                                        routing_key = RoutingKey,
                                                        nowait = true,
                                                        arguments =
-                                                         make_string_table(
-                                                           fun user_binding_header_key/1,
-                                                           Headers)},
+                                                         [longstr_field(K, V) ||
+                                                             {"X-B-" ++ K, V} <- Headers]},
                                          State1);
                          not_found -> State1
                      end,
