@@ -142,8 +142,7 @@ mainloop(State) ->
             %% which event we do respond to.
             ?MODULE:mainloop(State);
         Data ->
-            error_logger:error_msg("Internal error: unknown STOMP Data: ~p~n", [Data]),
-            send_error("Error", "Internal error in mainloop\n", State),
+            send_priv_error("Error", "Internal error in mainloop\n", Data, State),
             done
     end.
 
@@ -164,7 +163,7 @@ handle_exit({'EXIT', _Pid, {amqp, Code, Method}}, State) ->
     explain_amqp_death(Code, Method, State),
     done;
 handle_exit({'EXIT', Pid, Reason}, State) ->
-    send_error("Error", "Process ~p exited with reason:~n~p~n", [Pid, Reason], State),
+    send_priv_error("Error", "Process ~p exited\n", [Pid], Reason, State),
     done.
 
 process_received_bytes([], State) ->
@@ -181,7 +180,7 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
                     explain_amqp_death(Code, Method, State),
                     done;
                 {'EXIT', Reason} ->
-                    send_error("Processing error", "~p~n", [Reason], State),
+                    send_priv_error("Processing error", "Processing error\n", Reason, State),
                     done;
                 {ok, NewState} ->
                     process_received_bytes(Rest, NewState);
@@ -189,12 +188,12 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
                     done
             end;
         {error, Reason} ->
-            send_error("Invalid frame", "Could not parse frame: ~p~n", [Reason], State),
+            send_priv_error("Invalid frame", "Could not parse frame\n", Reason, State),
             done
     end.
 
 explain_amqp_death(Code, Method, State) ->
-    send_error(atom_to_list(Code), "Method was ~p~n", [Method], State).
+    send_error(atom_to_list(Code), "Method was ~p\n", [Method], State).
 
 send_reply(#'channel.close_ok'{}, State) ->
     State;
@@ -273,14 +272,24 @@ send_frame(Command, Headers, Body, State) ->
                             body = Body},
                State).
 
-send_error(Message, Detail, State) ->
-    error_logger:error_msg("STOMP error frame sent:~nMessage: ~p~nDetail: ~p~n",
-                           [Message, Detail]),
+send_priv_error(Message, Detail, ServerPrivateDetail, State) ->
+    error_logger:error_msg("STOMP error frame sent:~n" ++
+                           "Message: ~p~n" ++
+                           "Detail: ~p~n" ++
+                           "Server private detail: ~p~n",
+                           [Message, Detail, ServerPrivateDetail]),
     send_frame("ERROR", [{"message", Message},
                          {"content-type", "text/plain"}], Detail, State).
 
+send_priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
+    send_priv_error(Message, lists:flatten(io_lib:format(Format, Args)),
+                    ServerPrivateDetail, State).
+
+send_error(Message, Detail, State) ->
+    send_priv_error(Message, Detail, none, State).
+
 send_error(Message, Format, Args, State) ->
-    send_error(Message, lists:flatten(io_lib:format(Format, Args)), State).
+    send_priv_error(Message, Format, Args, none, State).
 
 process_frame("CONNECT", Frame, State = #state{channel = none}) ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
@@ -375,7 +384,7 @@ with_transaction(Transaction, State, Fun) ->
     case get({transaction, Transaction}) of
         undefined ->
             {ok, send_error("Bad transaction",
-                            "Invalid transaction identifier: ~p~n", [Transaction],
+                            "Invalid transaction identifier: ~p\n", [Transaction],
                             State)};
         Actions ->
             Fun(Actions, State)
