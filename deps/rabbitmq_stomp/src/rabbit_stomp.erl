@@ -537,7 +537,14 @@ process_command("SUBSCRIBE",
                            arguments   = [longstr_field(K, V) ||
                                              {"X-Q-" ++ K, V} <- Headers]},
                        State),
-            State2 = case stomp_frame:header(Frame, "exchange") of
+            State2 = send_method(#'basic.consume'{queue = Queue,
+                                                  consumer_tag = ConsumerTag,
+                                                  no_local = false,
+                                                  no_ack = (AckMode == auto),
+                                                  exclusive = false,
+                                                  nowait = true},
+                                 State1),
+            State3 = case stomp_frame:header(Frame, "exchange") of
                          {ok, ExchangeStr } ->
                              Exchange = list_to_binary(ExchangeStr),
                              RoutingKey = list_to_binary(
@@ -551,16 +558,9 @@ process_command("SUBSCRIBE",
                                    nowait = true,
                                    arguments = [longstr_field(K, V) ||
                                                    {"X-B-" ++ K, V} <- Headers]},
-                               State1);
-                         not_found -> State1
+                               State2);
+                         not_found -> State2
                      end,
-            State3 = send_method(#'basic.consume'{queue = Queue,
-                                                  consumer_tag = ConsumerTag,
-                                                  no_local = false,
-                                                  no_ack = (AckMode == auto),
-                                                  exclusive = false,
-                                                  nowait = true},
-                                 State2),
             {ok, State3};
         not_found ->
             {ok, send_error("Missing destination",
