@@ -182,11 +182,9 @@ start(normal, []) ->
 
                         {ok, SslOpts} = application:get_env(ssl_options),
 
-                        lists:foreach(
-                          fun ({Host, Port}) ->
-                                  ok = rabbit_networking:start_ssl_listener(Host, Port, SslOpts)
-                          end,
-                          SslListeners)
+                        [rabbit_networking:start_ssl_listener(Host, Port, SslOpts) ||
+                            {Host, Port} <- SslListeners],
+                        ok
                 end
         end}]
       ++ ExtraSteps),
