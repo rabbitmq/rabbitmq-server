@@ -118,8 +118,10 @@ init(_Parent) ->
 
 mainloop(State) ->
     receive
-        E = {'EXIT', _Pid, _Reason} ->
-            handle_exit(E, State);
+        {'EXIT', Pid, Reason} ->
+            handle_exit(Pid, Reason, State);
+        {channel_exit, ChannelId, Reason} ->
+            handle_exit(ChannelId, Reason, State);
         {tcp, _Sock, Bytes} ->
             process_received_bytes(Bytes, State);
         {tcp_closed, _Sock} ->
@@ -153,21 +155,21 @@ mainloop(State) ->
 simple_method_sync_rpc(Method, State0) ->
     State = send_method(Method, State0),
     receive
-        E = {'EXIT', _Pid, _Reason} ->
-            handle_exit(E, State);
+        {'EXIT', Pid, Reason} ->
+            handle_exit(Pid, Reason, State);
         {send_command, Reply} ->
             {ok, Reply, State}
     end.
 
-handle_exit({'EXIT', _Pid, normal}, _State) ->
+handle_exit(_Who, normal, _State) ->
     %% Normal exits (it'll be the channel we're linked to in our roles
     %% as reader and writer) are fine
     done;
-handle_exit({'EXIT', _Pid, {amqp, Code, Method}}, State) ->
-    explain_amqp_death(Code, Method, State),
+handle_exit(_Who, {amqp, Code, Explanation, Method}, State) ->
+    explain_amqp_death(Code, Explanation, Method, State),
     done;
-handle_exit({'EXIT', Pid, Reason}, State) ->
-    send_priv_error("Error", "Process ~p exited\n", [Pid], Reason, State),
+handle_exit(Who, Reason, State) ->
+    send_priv_error("Error", "~p exited\n", [Who], Reason, State),
     done.
 
 process_received_bytes([], State) ->
@@ -181,8 +183,8 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
             PS = stomp_frame:initial_state(),
             case catch process_frame(Command, Frame,
                                      State#state{parse_state = PS}) of
-                {'EXIT', {amqp, Code, Method}} ->
-                    explain_amqp_death(Code, Method, State),
+                {'EXIT', {amqp, Code, Explanation, Method}} ->
+                    explain_amqp_death(Code, Explanation, Method, State),
                     done;
                 {'EXIT', Reason} ->
                     send_priv_error("Processing error", "Processing error\n",
@@ -199,8 +201,8 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
             done
     end.
 
-explain_amqp_death(Code, Method, State) ->
-    send_error(atom_to_list(Code), "Method was ~p\n", [Method], State).
+explain_amqp_death(Code, Explanation, Method, State) ->
+    send_error(atom_to_list(Code), "~s~nMethod was ~p\n", [Explanation, Method], State).
 
 send_reply(#'channel.close_ok'{}, State) ->
     State;
