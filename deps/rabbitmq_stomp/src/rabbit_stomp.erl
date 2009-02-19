@@ -515,7 +515,14 @@ process_command("SUBSCRIBE",
 						    make_string_table(fun user_queue_header_key/1,
 								      Headers)},
 				 State),
-	    State2 = case stomp_frame:header(Frame, "exchange") of
+	    State2 = send_method(#'basic.consume'{queue = Queue,
+						  consumer_tag = ConsumerTag,
+						  no_local = false,
+						  no_ack = (AckMode == auto),
+						  exclusive = false,
+						  nowait = true},
+				 State1),
+	    State3 = case stomp_frame:header(Frame, "exchange") of
 			 {ok, ExchangeStr } ->
 			     Exchange = list_to_binary(ExchangeStr),
 			     RoutingKeyStr = stomp_frame:header(Frame, "routing_key", ""),
@@ -528,16 +535,9 @@ process_command("SUBSCRIBE",
 						         make_string_table(
 							   fun user_binding_header_key/1,
 							   Headers)},
-					 State1);
-			 not_found -> State1
+					 State2);
+			 not_found -> State2
 		     end,
-	    State3 = send_method(#'basic.consume'{queue = Queue,
-						  consumer_tag = ConsumerTag,
-						  no_local = false,
-						  no_ack = (AckMode == auto),
-						  exclusive = false,
-						  nowait = true},
-				 State2),
 	    {ok, State3};
 	not_found ->
 	    {ok, send_error("Missing destination",
