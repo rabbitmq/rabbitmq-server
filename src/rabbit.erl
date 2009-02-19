@@ -174,11 +174,10 @@ start(normal, []) ->
         end},
        {"SSL listeners",
         fun () ->
-                {ok, SslListeners} = application:get_env(ssl_listeners),
-                case length(SslListeners) of
-                    0 ->
+                case application:get_env(ssl_listeners) of
+                    {ok, []} ->
                         ok;
-                    _Len ->
+                    {ok, SslListeners} ->
                         ok = rabbit_misc:start_applications([crypto, ssl]),
 
                         {ok, SslOpts} = application:get_env(ssl_options),
