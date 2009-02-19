@@ -231,8 +231,12 @@ start_connection(Parent, Deb, ClientSock) ->
                                     connection_state = pre_init},
                                 handshake, 8))
     catch
-        Ex -> rabbit_log:error("error on TCP connection ~p from ~s:~p~n~p~n",
-                               [self(), PeerAddressS, PeerPort, Ex])
+	Ex -> (if Ex == connection_closed_abruptly ->
+                       fun rabbit_log:warning/2;
+                  true ->
+                       fun rabbit_log:error/2
+               end)("exception on TCP connection ~p from ~s:~p~n~p~n",
+                    [self(), PeerAddressS, PeerPort, Ex])
     after
         rabbit_log:info("closing TCP connection ~p from ~s:~p~n",
                         [self(), PeerAddressS, PeerPort]),
@@ -284,6 +288,8 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             exit(Reason);
         {'EXIT', _Pid, E = {writer, send_failed, _Error}} ->
             throw(E);
+        {channel_exit, Channel, Reason} ->
+            mainloop(Parent, Deb, handle_channel_exit(Channel, Reason, State));
         {'EXIT', Pid, Reason} ->
             mainloop(Parent, Deb, handle_dependent_exit(Pid, Reason, State));
         {terminate_channel, Channel, Ref1} ->
@@ -350,6 +356,14 @@ terminate_channel(Channel, Ref, State) ->
         {_Ref, _} -> ok %% got close_ok, and have new closing channel
     end,
     State.
+
+handle_channel_exit(Channel, Reason, State) ->
+    %% We remove the channel from the inbound map only. That allows
+    %% the channel to be re-opened, but also means the remaining
+    %% cleanup, including possibly closing the connection, is deferred
+    %% until we get the (normal) exit signal.
+    erase({channel, Channel}),
+    handle_exception(State, Channel, Reason).
 
 handle_dependent_exit(Pid, normal, State) ->
     channel_cleanup(Pid),
@@ -711,8 +725,8 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
                   vhost = VHost}} = State,
             WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
             ChPid = rabbit_framing_channel:start_link(
-                      fun rabbit_channel:start_link/4,
-                      [self(), WriterPid, Username, VHost]),
+                      fun rabbit_channel:start_link/5,
+                      [Channel, self(), WriterPid, Username, VHost]),
             put({channel, Channel}, {chpid, ChPid}),
             put({chpid, ChPid}, {channel, Channel}),
             ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame);

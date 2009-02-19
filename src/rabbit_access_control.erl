@@ -38,7 +38,7 @@
 -export([add_user/2, delete_user/1, change_password/2, list_users/0,
          lookup_user/1]).
 -export([add_vhost/1, delete_vhost/1, list_vhosts/0]).
--export([set_permissions/4, clear_permissions/2,
+-export([set_permissions/5, clear_permissions/2,
          list_vhost_permissions/1, list_user_permissions/1]).
 
 %%----------------------------------------------------------------------------
@@ -58,12 +58,13 @@
 -spec(add_vhost/1 :: (vhost()) -> 'ok').
 -spec(delete_vhost/1 :: (vhost()) -> 'ok').
 -spec(list_vhosts/0 :: () -> [vhost()]).
--spec(set_permissions/4 :: (username(), vhost(), regexp(), regexp()) -> 'ok').
+-spec(set_permissions/5 ::
+      (username(), vhost(), regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (username(), vhost()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
-      (vhost()) -> [{username(), regexp(), regexp()}]).
+      (vhost()) -> [{username(), regexp(), regexp(), regexp()}]).
 -spec(list_user_permissions/1 ::
-      (username()) -> [{vhost(), regexp(), regexp()}]).
+      (username()) -> [{vhost(), regexp(), regexp(), regexp()}]).
 
 -endif.
 
@@ -272,7 +273,7 @@ internal_delete_vhost(VHostPath) ->
                           ok = rabbit_exchange:delete(Name, false)
                   end,
                   rabbit_exchange:list(VHostPath)),
-    lists:foreach(fun ({Username, _, _}) ->
+    lists:foreach(fun ({Username, _, _, _}) ->
                           ok = clear_permissions(Username, VHostPath)
                   end,
                   list_vhost_permissions(VHostPath)),
@@ -289,9 +290,8 @@ validate_regexp(RegexpBin) ->
         {error, Reason} -> throw({error, {invalid_regexp, Regexp, Reason}})
     end.
 
-set_permissions(Username, VHostPath, ConfigurationPerm, MessagingPerm) ->
-    validate_regexp(ConfigurationPerm),
-    validate_regexp(MessagingPerm),
+set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
+    lists:map(fun validate_regexp/1, [ConfigurePerm, WritePerm, ReadPerm]),
     rabbit_misc:execute_mnesia_transaction(
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath,
@@ -301,8 +301,9 @@ set_permissions(Username, VHostPath, ConfigurationPerm, MessagingPerm) ->
                                             username = Username,
                                             virtual_host = VHostPath},
                                           permission = #permission{
-                                            configuration = ConfigurationPerm,
-                                            messaging = MessagingPerm}},
+                                            configure = ConfigurePerm,
+                                            write = WritePerm,
+                                            read = ReadPerm}},
                          write)
         end)).
 
@@ -317,24 +318,25 @@ clear_permissions(Username, VHostPath) ->
         end)).
 
 list_vhost_permissions(VHostPath) ->
-    [{Username, ConfigurationPerm, MessagingPerm} ||
-        {Username, _, ConfigurationPerm, MessagingPerm} <-
+    [{Username, ConfigurePerm, WritePerm, ReadPerm} ||
+        {Username, _, ConfigurePerm, WritePerm, ReadPerm} <-
             list_permissions(rabbit_misc:with_vhost(
                                VHostPath, match_user_vhost('_', VHostPath)))].
 
 list_user_permissions(Username) ->
-    [{VHostPath, ConfigurationPerm, MessagingPerm} ||
-        {_, VHostPath, ConfigurationPerm, MessagingPerm} <-
+    [{VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
+        {_, VHostPath, ConfigurePerm, WritePerm, ReadPerm} <-
             list_permissions(rabbit_misc:with_user(
                                Username, match_user_vhost(Username, '_')))].
 
 list_permissions(QueryThunk) ->
-    [{Username, VHostPath, ConfigurationPerm, MessagingPerm} ||
+    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
         #user_permission{user_vhost = #user_vhost{username = Username,
                                                   virtual_host = VHostPath},
                          permission = #permission{
-                           configuration = ConfigurationPerm,
-                           messaging = MessagingPerm}} <-
+                           configure = ConfigurePerm,
+                           write = WritePerm,
+                           read = ReadPerm}} <-
             %% TODO: use dirty ops instead
             rabbit_misc:execute_mnesia_transaction(QueryThunk)].
 

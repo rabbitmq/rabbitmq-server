@@ -46,7 +46,6 @@
 -export([ensure_ok/2]).
 -export([localnode/1, tcp_name/3]).
 -export([intersperse/2, upmap/2, map_in_order/2]).
--export([guid/0, string_guid/1, binstring_guid/1]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
@@ -99,9 +98,6 @@
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(guid/0 :: () -> guid()).
--spec(string_guid/1 :: (any()) -> string()).
--spec(binstring_guid/1 :: (any()) -> binary()).
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
@@ -301,42 +297,6 @@ upmap(F, L) ->
 map_in_order(F, L) ->
     lists:reverse(
       lists:foldl(fun (E, Acc) -> [F(E) | Acc] end, [], L)).
-
-%% generate a guid that is monotonically increasing per process.
-%%
-%% The id is only unique within a single cluster and as the persistent
-%% message store hasn't been deleted.
-guid() ->
-    %% We don't use erlang:now() here because a) it may return
-    %% duplicates when the system clock has been rewound prior to a
-    %% restart, or ids were generated at a high rate (which causes
-    %% now() to move ahead of the system time), and b) it is really
-    %% slow since it takes a global lock and makes a system call.
-    %%
-    %% rabbit_persister:serial/0, in combination with self/0 (which
-    %% includes the node name) uniquely identifies a process in space
-    %% and time. We combine that with a process-local counter to give
-    %% us a GUID that is monotonically increasing per process.
-    G = case get(guid) of
-            undefined -> {{rabbit_persister:serial(), self()}, 0};
-            {S, I}   -> {S, I+1}
-        end,
-    put(guid, G),
-    G.
-
-%% generate a readable string representation of a guid. Note that any
-%% monotonicity of the guid is not preserved in the encoding.
-string_guid(Prefix) ->
-    %% we use the (undocumented) ssl_base64 module here because it is
-    %% present throughout OTP R11 and R12 whereas base64 only becomes
-    %% available in R11B-4.
-    %%
-    %% TODO: once debian stable and EPEL have moved from R11B-2 to
-    %% R11B-4 or later we should change this to use base64.
-    Prefix ++ "-" ++ ssl_base64:encode(erlang:md5(term_to_binary(guid()))).
-
-binstring_guid(Prefix) ->
-    list_to_binary(string_guid(Prefix)).
 
 dirty_read_all(TableName) ->
     mnesia:dirty_select(TableName, [{'$1',[],['$1']}]).

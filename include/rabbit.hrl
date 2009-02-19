@@ -30,7 +30,7 @@
 %%
 
 -record(user, {username, password}).
--record(permission, {configuration, messaging}).
+-record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
 
@@ -95,8 +95,9 @@
       #user{username :: username(),
             password :: password()}).
 -type(permission() ::
-      #permission{configuration :: regexp(),
-                  messaging     :: regexp()}).
+      #permission{configure :: regexp(),
+                  write     :: regexp(),
+                  read      :: regexp()}).
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
                 durable       :: bool(),

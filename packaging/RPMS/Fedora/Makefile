@@ -1,5 +1,6 @@
 VERSION=0.0.0
 SOURCE_TARBALL_DIR=../../../dist
+COMMON_DIR=../../common
 TARBALL=$(SOURCE_TARBALL_DIR)/rabbitmq-server-$(VERSION).tar.gz
 TOP_DIR=$(shell pwd)
 #Under debian we do not want to check build dependencies, since that
@@ -30,7 +31,7 @@ prepare:
 		SPECS/rabbitmq-server.spec
 
 	cp init.d SOURCES/rabbitmq-server.init
-	cp rabbitmqctl_wrapper SOURCES/rabbitmq-server.wrapper
+	cp ${COMMON_DIR}/* SOURCES/
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare

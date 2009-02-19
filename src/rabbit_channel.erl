@@ -35,12 +35,12 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, do/2, do/3, shutdown/1]).
+-export([start_link/5, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
--record(ch, {state, reader_pid, writer_pid, limiter_pid,
+-record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host,
@@ -54,7 +54,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/4 :: (pid(), pid(), username(), vhost()) -> pid()).
+-spec(start_link/5 ::
+      (channel_number(), pid(), pid(), username(), vhost()) -> pid()).
 -spec(do/2 :: (pid(), amqp_method()) -> 'ok').
 -spec(do/3 :: (pid(), amqp_method(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
@@ -66,9 +67,10 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(ReaderPid, WriterPid, Username, VHost) ->
+start_link(Channel, ReaderPid, WriterPid, Username, VHost) ->
     {ok, Pid} = gen_server2:start_link(
-                  ?MODULE, [ReaderPid, WriterPid, Username, VHost], []),
+                  ?MODULE, [Channel, ReaderPid, WriterPid,
+                            Username, VHost], []),
     Pid.
 
 do(Pid, Method) ->
@@ -91,11 +93,12 @@ conserve_memory(Pid, Conserve) ->
 
 %%---------------------------------------------------------------------------
 
-init([ReaderPid, WriterPid, Username, VHost]) ->
+init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
     rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
     {ok, #ch{state                   = starting,
+             channel                 = Channel,
              reader_pid              = ReaderPid,
              writer_pid              = WriterPid,
              limiter_pid             = undefined,
@@ -123,8 +126,11 @@ handle_cast({method, Method, Content}, State) ->
             {stop, normal, State#ch{state = terminating}}
     catch
         exit:{amqp, Error, Explanation, none} ->
-            {stop, {amqp, Error, Explanation,
-                    rabbit_misc:method_record_type(Method)}, State};
+            ok = notify_queues(internal_rollback(State)),
+            Reason = {amqp, Error, Explanation,
+                      rabbit_misc:method_record_type(Method)},
+            State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
+            {stop, normal, State#ch{state = terminating}};
         exit:normal ->
             {stop, normal, State};
         _:Reason ->
@@ -224,11 +230,14 @@ clear_permission_cache() ->
     erase(permission_cache),
     ok.
 
-check_configuration_permitted(Resource, #ch{ username = Username}) ->
-    check_resource_access(Username, Resource, #permission.configuration).
+check_configure_permitted(Resource, #ch{ username = Username}) ->
+    check_resource_access(Username, Resource, #permission.configure).
 
-check_messaging_permitted(Resource, #ch{ username = Username}) ->
-    check_resource_access(Username, Resource, #permission.messaging).
+check_write_permitted(Resource, #ch{ username = Username}) ->
+    check_resource_access(Username, Resource, #permission.write).
+
+check_read_permitted(Resource, #ch{ username = Username}) ->
+    check_resource_access(Username, Resource, #permission.read).
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
@@ -299,13 +308,13 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                                immediate = Immediate},
               Content, State = #ch{ virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_messaging_permitted(ExchangeName, State),
+    check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     PersistentKey = case is_message_persistent(DecodedContent) of
-                        true  -> rabbit_misc:guid();
+                        true  -> rabbit_guid:guid();
                         false -> none
                     end,
     {noreply, publish(Mandatory, Immediate,
@@ -343,7 +352,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
               _, State = #ch{ writer_pid = WriterPid,
                               next_tag = DeliveryTag }) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_messaging_permitted(QueueName, State),
+    check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_or_die(
            QueueName,
            fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
@@ -378,10 +387,10 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
             QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-            check_messaging_permitted(QueueName, State),
+            check_read_permitted(QueueName, State),
             ActualConsumerTag =
                 case ConsumerTag of
-                    <<>>  -> rabbit_misc:binstring_guid("amq.ctag");
+                    <<>>  -> rabbit_guid:binstring_guid("amq.ctag");
                     Other -> Other
                 end,
 
@@ -537,7 +546,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
               _, State = #ch{ virtual_host = VHostPath }) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_configuration_permitted(ExchangeName, State),
+    check_configure_permitted(ExchangeName, State),
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
@@ -557,7 +566,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   nowait = NoWait},
               _, State = #ch{ virtual_host = VHostPath }) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_configuration_permitted(ExchangeName, State),
+    check_configure_permitted(ExchangeName, State),
     X = rabbit_exchange:lookup_or_die(ExchangeName),
     ok = rabbit_exchange:assert_type(X, rabbit_exchange:check_type(TypeNameBin)),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
@@ -567,7 +576,7 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
                                  nowait = NoWait},
               _, State = #ch { virtual_host = VHostPath }) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_configuration_permitted(ExchangeName, State),
+    check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
@@ -614,15 +623,15 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
             {error, not_found} ->
                 ActualNameBin =
                     case QueueNameBin of
-                        <<>>  -> rabbit_misc:binstring_guid("amq.gen");
+                        <<>>  -> rabbit_guid:binstring_guid("amq.gen");
                         Other -> check_name('queue', Other)
                     end,
                 QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
-                check_configuration_permitted(QueueName, State),
+                check_configure_permitted(QueueName, State),
                 Finish(rabbit_amqqueue:declare(QueueName,
                                                Durable, AutoDelete, Args));
             Other = #amqqueue{name = QueueName} ->
-                check_configuration_permitted(QueueName, State),
+                check_configure_permitted(QueueName, State),
                 Other
         end,
     return_queue_declare_ok(State, NoWait, Q);
@@ -632,7 +641,7 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                                nowait = NoWait},
               _, State = #ch{ virtual_host = VHostPath }) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
-    check_configuration_permitted(QueueName, State),
+    check_configure_permitted(QueueName, State),
     Q = rabbit_amqqueue:with_or_die(QueueName, fun (Q) -> Q end),
     return_queue_declare_ok(State, NoWait, Q);
 
@@ -643,7 +652,7 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
                              },
               _, State) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_configuration_permitted(QueueName, State),
+    check_configure_permitted(QueueName, State),
     case rabbit_amqqueue:with_or_die(
            QueueName,
            fun (Q) -> rabbit_amqqueue:delete(Q, IfUnused, IfEmpty) end) of
@@ -680,7 +689,7 @@ handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},
               _, State) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_messaging_permitted(QueueName, State),
+    check_read_permitted(QueueName, State),
     {ok, PurgedMessageCount} = rabbit_amqqueue:with_or_die(
                                  QueueName,
                                  fun (Q) -> rabbit_amqqueue:purge(Q) end),
@@ -730,11 +739,11 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     %% FIXME: don't allow binding to internal exchanges - 
     %% including the one named "" !
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_configuration_permitted(QueueName, State),
+    check_write_permitted(QueueName, State),
     ActualRoutingKey = expand_routing_key_shortcut(QueueNameBin, RoutingKey,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_configuration_permitted(ExchangeName, State),
+    check_read_permitted(ExchangeName, State),
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments) of
         {error, queue_not_found} ->
             rabbit_misc:protocol_error(
@@ -823,7 +832,7 @@ ack(TxnKey, UAQ) ->
               [QPid | L]
       end, [], UAQ).
 
-make_tx_id() -> rabbit_misc:guid().
+make_tx_id() -> rabbit_guid:guid().
 
 new_tx(State) ->
     State#ch{transaction_id    = make_tx_id(),
