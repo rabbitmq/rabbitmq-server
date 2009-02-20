@@ -49,8 +49,8 @@ make install TARGET_DIR=%{_maindir} \
              SBIN_DIR=%{buildroot}%{_rabbit_libdir}/bin \
              MAN_DIR=%{buildroot}%{_mandir}
 
-mkdir -p %{buildroot}/var/lib/rabbitmq/mnesia
-mkdir -p %{buildroot}/var/log/rabbitmq
+mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
+mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 
 #Copy all necessary lib files etc.
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
@@ -60,7 +60,7 @@ install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-multi
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
-mkdir -p %{buildroot}/etc/rabbitmq
+mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
@@ -68,7 +68,7 @@ rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 rm -f %{_builddir}/filelist.%{name}.rpm
 echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm 
 (cd %{buildroot}; \
-    find . -type f ! -regex '\./etc.*' \
+    find . -type f ! -regex '\.%{_sysconfdir}.*' \
         ! -regex '\.\(%{_rabbit_erllibdir}\|%{_rabbit_libdir}\).*' \
         | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
 
@@ -80,7 +80,7 @@ fi
 
 # create rabbitmq user
 if ! getent passwd rabbitmq >/dev/null; then
-        useradd -r -g rabbitmq -d /var/lib/rabbitmq  rabbitmq \
+        useradd -r -g rabbitmq -d %{_localstatedir}/lib/rabbitmq  rabbitmq \
             -c "RabbitMQ messaging server" rabbitmq
 fi
 
@@ -99,11 +99,11 @@ fi
 
 %files -f ../filelist.%{name}.rpm
 %defattr(-,root,root,-)
-%attr(0750, rabbitmq, rabbitmq) %dir /var/lib/rabbitmq
-%attr(0750, rabbitmq, rabbitmq) %dir /var/log/rabbitmq
-%dir /var/lib/rabbitmq
-%dir /var/log/rabbitmq
-%dir /etc/rabbitmq
+%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
+%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
+%dir %{_localstatedir}/lib/rabbitmq
+%dir %{_localstatedir}/log/rabbitmq
+%dir %{_sysconfdir}/rabbitmq
 %{_rabbit_erllibdir}
 %{_rabbit_libdir}
 %{_initrddir}/rabbitmq-server
