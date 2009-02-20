@@ -68,6 +68,8 @@ install -p -D -m 0755 %SOURCE2 %{buildroot}%{_sbindir}/rabbitmq-multi
 mkdir -p %{buildroot}/etc/logrotate.d
 install -m 0644 %SOURCE3 %{buildroot}/etc/logrotate.d/rabbitmq-server
 
+mkdir -p %{buildroot}/etc/rabbitmq
+
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
 #Build the list of files
@@ -110,6 +112,7 @@ fi
 %defattr(-,root,root,-)
 %dir /var/lib/rabbitmq
 %dir /var/log/rabbitmq
+%dir /etc/rabbitmq
 %{_rabbit_erllibdir}
 %{_rabbit_libdir}
 %{_initrddir}/rabbitmq-server
