@@ -27,8 +27,8 @@ LOCK_FILE=/var/lock/subsys/$NAME
 test -x $DAEMON || exit 0
 
 # Include rabbitmq defaults if available
-if [ -f /etc/default/rabbitmq ] ; then
-	. /etc/default/rabbitmq
+if [ -f /etc/sysconfig/rabbitmq ] ; then
+	. /etc/sysconfig/rabbitmq
 fi
 
 RETVAL=0
@@ -130,7 +130,7 @@ case "$1" in
         ;;
     *)
         echo "Usage: $0 {start|stop|status|rotate-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
-        RETVAL=1
+        RETVAL=2
         ;;
 esac
 
