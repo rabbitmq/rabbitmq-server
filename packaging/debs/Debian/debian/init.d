@@ -9,6 +9,7 @@
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
 
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DAEMON=/usr/sbin/rabbitmq-multi
 NAME=rabbitmq-server
 DESC=rabbitmq-server
@@ -78,7 +79,10 @@ status_rabbitmq() {
 
 rotate_logs_rabbitmq() {
     set +e
-    $DAEMON rotate_logs ${ROTATE_SUFFIX} 2>&1
+    $DAEMON rotate_logs ${ROTATE_SUFFIX}
+    if [ $? != 0 ] ; then
+        RETVAL=1
+    fi
     set -e
 }
 

@@ -60,6 +60,8 @@ install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-multi
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
+mkdir -p %{buildroot}/etc/rabbitmq
+
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
 #Build the list of files
@@ -99,6 +101,9 @@ fi
 %defattr(-,root,root,-)
 %attr(0750, rabbitmq, rabbitmq) %dir /var/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir /var/log/rabbitmq
+%dir /var/lib/rabbitmq
+%dir /var/log/rabbitmq
+%dir /etc/rabbitmq
 %{_rabbit_erllibdir}
 %{_rabbit_libdir}
 %{_initrddir}/rabbitmq-server

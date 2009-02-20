@@ -106,7 +106,8 @@ add_vhost I<vhostpath>
     
 delete_vhost I<vhostpath>
     delete a virtual host I<vhostpath>.
-    That command deletes also all its exchanges, queues and user mappings.
+    That command deletes also all its exchanges, queues and user
+    mappings.
     
 list_vhosts
     list all virtual hosts.
@@ -153,7 +154,8 @@ messages_ready
     number of messages ready to be delivered to clients
 
 messages_unacknowledged
-    number of messages delivered to clients but not yet acknowledged
+    number of messages delivered to clients but not yet
+    acknowledged
 
 messages_uncommitted
     number of messages published in as yet uncommitted transactions
@@ -290,7 +292,7 @@ them:
 
 =head1 SEE ALSO
 
-rabbitmq-multi(1), rabbitmq-server(1)
+rabbitmq.conf(5), rabbitmq-multi(1), rabbitmq-server(1)
 
 =head1 AUTHOR
 

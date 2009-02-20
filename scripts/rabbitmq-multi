@@ -30,7 +30,7 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-[ -f /etc/default/rabbitmq ] && . /etc/default/rabbitmq
+[ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=rabbit
@@ -53,6 +53,11 @@ export \
     RABBITMQ_NODE_PORT \
     RABBITMQ_SCRIPT_HOME \
     RABBITMQ_PIDS_FILE
+
+# we need to turn off path expansion because some of the vars, notably
+# RABBITMQ_MULTI_ERL_ARGS, may contain terms that look like globs and
+# there is no other way of preventing their expansion.
+set -f
 
 exec erl \
     -pa "`dirname $0`/../ebin" \

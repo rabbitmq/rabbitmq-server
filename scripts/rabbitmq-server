@@ -30,7 +30,7 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-[ -f /etc/default/rabbitmq ] && . /etc/default/rabbitmq
+[ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=rabbit
@@ -43,7 +43,7 @@
 -kernel inet_default_listen_options [{nodelay,true},{sndbuf,16384},{recbuf,4096}] \
 -kernel inet_default_connect_options [{nodelay,true}]"
 [ "x" = "x$RABBITMQ_CLUSTER_CONFIG_FILE" ] && RABBITMQ_CLUSTER_CONFIG_FILE=${CLUSTER_CONFIG_FILE}
-[ "x" = "x$RABBITMQ_CLUSTER_CONFIG_FILE" ] && RABBITMQ_CLUSTER_CONFIG_FILE=/etc/default/rabbitmq_cluster.config
+[ "x" = "x$RABBITMQ_CLUSTER_CONFIG_FILE" ] && RABBITMQ_CLUSTER_CONFIG_FILE=/etc/rabbitmq/rabbitmq_cluster.config
 [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
 [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=/var/log/rabbitmq
 [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
@@ -72,6 +72,11 @@ fi
 
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT='-noinput -s rabbit'
+
+# we need to turn off path expansion because some of the vars, notably
+# RABBITMQ_SERVER_ERL_ARGS, contain terms that look like globs and
+# there is no other way of preventing their expansion.
+set -f
 
 exec erl \
     -pa "`dirname $0`/../ebin" \

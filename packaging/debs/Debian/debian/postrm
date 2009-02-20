@@ -31,6 +31,9 @@ case "$1" in
         if [ -d /var/run/rabbitmq ]; then
                 rm -r /var/run/rabbitmq
         fi
+        if [ -d /etc/rabbitmq ]; then
+                rm -r /etc/rabbitmq
+        fi
         if getent passwd rabbitmq >/dev/null; then
                 deluser rabbitmq
         fi
