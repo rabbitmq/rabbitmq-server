@@ -113,6 +113,9 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Mon Feb 23 2009 Tony Garnock-Jones <tonyg@lshift.net> 1.5.2-1
+- Maintenance release for the 1.5.x series
+
 * Mon Jan 19 2009 Ben Hood <0x6e6562@gmail.com> 1.5.1-1
 - Maintenance release for the 1.5.x series
 
