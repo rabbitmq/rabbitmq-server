@@ -150,7 +150,7 @@ distclean: clean
 
 %.gz: %.pod
 	pod2man \
-		-n `echo $$(basename $*) | sed -e 's/\.[^.]\+//'` \
+		-n `echo $$(basename $*) | sed -e 's/\.[[:digit:]]\+//'` \
 		-s `echo $$(basename $*) | sed -e 's/.*\.\([^.]\+\)/\1/'` \
 		-c "RabbitMQ AMQP Server" \
 		-d "" \
