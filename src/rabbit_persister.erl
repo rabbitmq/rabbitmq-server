@@ -49,6 +49,8 @@
 -define(LOG_BUNDLE_DELAY, 5).
 -define(COMPLETE_BUNDLE_DELAY, 2).
 
+-define(HIBERNATE_AFTER, 10000).
+
 -define(MAX_WRAP_ENTRIES, 500).
 
 -define(PERSISTER_LOG_FORMAT_VERSION, {2, 4}).
@@ -164,10 +166,8 @@ handle_call({transaction, Key, MessageList}, From, State) ->
     do_noreply(internal_commit(From, Key, NewState));
 handle_call({commit_transaction, TxnKey}, From, State) ->
     do_noreply(internal_commit(From, TxnKey, State));
-handle_call(force_snapshot, _From, State = #pstate{log_handle = LH,
-                                                   snapshot = Snapshot}) -> 
-    ok = take_snapshot(LH, Snapshot),
-    do_reply(ok, State);
+handle_call(force_snapshot, _From, State) -> 
+    do_reply(ok, flush(true, State));
 handle_call(serial, _From,
             State = #pstate{snapshot = #psnapshot{serial = Serial}}) ->
     do_reply(Serial, State);
@@ -183,8 +183,13 @@ handle_cast({extend_transaction, TxnKey, MessageList}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info(timeout, State = #pstate{deadline = infinity}) ->
+    State1 = flush(true, State),
+    %% TODO: Once we drop support for R11B-5, we can change this to
+    %% {noreply, State1, hibernate};
+    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State1]);
 handle_info(timeout, State) ->
-    {noreply, flush(State)};
+    do_noreply(flush(State));
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -275,12 +280,13 @@ take_snapshot_and_save_old(LogHandle, Snapshot) ->
     rabbit_log:info("Saving persister log in ~p~n", [OldFileName]),
     ok = take_snapshot(LogHandle, OldFileName, Snapshot).
 
-maybe_take_snapshot(State = #pstate{entry_count = EntryCount, log_handle = LH,
-                                    snapshot = Snapshot})
-  when EntryCount >= ?MAX_WRAP_ENTRIES ->
+maybe_take_snapshot(Force, State = #pstate{entry_count = EntryCount,
+                                           log_handle = LH,
+                                           snapshot = Snapshot})
+  when Force orelse EntryCount >= ?MAX_WRAP_ENTRIES ->
     ok = take_snapshot(LH, Snapshot),
     State#pstate{entry_count = 0};
-maybe_take_snapshot(State) ->
+maybe_take_snapshot(_Force, State) ->
     State.
 
 later_ms(DeltaMilliSec) ->
@@ -298,7 +304,7 @@ compute_deadline(_TimerDelay, ExistingDeadline) ->
     ExistingDeadline.
 
 compute_timeout(infinity) ->
-    infinity;
+    ?HIBERNATE_AFTER;
 compute_timeout(Deadline) ->
     DeltaMilliSec = time_diff(Deadline, now()) * 1000.0,
     if
@@ -314,18 +320,18 @@ do_noreply(State = #pstate{deadline = Deadline}) ->
 do_reply(Reply, State = #pstate{deadline = Deadline}) ->
     {reply, Reply, State, compute_timeout(Deadline)}.
 
-flush(State = #pstate{pending_logs = PendingLogs,
-                      pending_replies = Waiting,
-                      log_handle = LogHandle}) ->
-    State1 = if
-                 PendingLogs /= [] ->
+flush(State) -> flush(false, State).
+
+flush(ForceSnapshot, State = #pstate{pending_logs = PendingLogs,
+                                     pending_replies = Waiting,
+                                     log_handle = LogHandle}) ->
+    State1 = if PendingLogs /= [] ->
                      disk_log:alog(LogHandle, lists:reverse(PendingLogs)),
-                     maybe_take_snapshot(
-                       State#pstate{
-                         entry_count = State#pstate.entry_count + 1});
-                 true ->
+                     State#pstate{entry_count = State#pstate.entry_count + 1};
+                true ->
                      State
              end,
+    State2 = maybe_take_snapshot(ForceSnapshot, State1),
     if Waiting /= [] ->
             ok = disk_log:sync(LogHandle),
             lists:foreach(fun (From) -> gen_server:reply(From, ok) end,
@@ -333,7 +339,7 @@ flush(State = #pstate{pending_logs = PendingLogs,
        true ->
             ok
     end,
-    State1#pstate{deadline = infinity,
+    State2#pstate{deadline = infinity,
                   pending_logs = [],
                   pending_replies = []}.
 
