@@ -1,79 +1,101 @@
-# $Id$ -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:filetype=tcl:et:sw=4:ts=4:sts=4
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:filetype=tcl:et:sw=4:ts=4:sts=4
+# $Id$
 
-PortSystem 1.0
-name		rabbitmq-server
-version		1.3.0
-revision	0
-categories	net 
-maintainers	tonyg@rabbitmq.com
-platforms	darwin
-description	The RabbitMQ AMQP Server
-long_description	\
+PortSystem      1.0
+
+name            rabbitmq-server
+version         1.5.3
+revision        0
+categories      net
+maintainers     tonyg@rabbitmq.com cpettitt@gmail.com
+platforms       darwin
+description     The RabbitMQ AMQP Server
+long_description    \
     RabbitMQ is an implementation of AMQP, the emerging standard for \
     high performance enterprise messaging. The RabbitMQ server is a \
     robust and scalable implementation of an AMQP broker.
 
-homepage	http://www.rabbitmq.com/
-master_sites	http://www.rabbitmq.com/releases/source/
 
-distname	rabbitmq-${version}
+homepage        http://www.rabbitmq.com/
+master_sites    http://www.rabbitmq.com/releases/rabbitmq-server/v${version}/
+
+distname        rabbitmq-server-${version}
 
 checksums \
-    md5 46ee6dbbacdc67b25cc6ccd9c394b6f2 \
-    sha1 67e1e640136a1993567ace97dc5f67b1ad8e6304 \
-    rmd160 9e92502d36ab5cd1e3f0d39a46bb512b9440f35a
+    md5 3242a67885c2471b5ab62254bf024679 \
+    sha1 f4d6a01eaa2c74fa32f567fe410d21d9be1b43aa \
+    rmd160 1a1c4b97d765548028c161d1617905151ca9e040
 
-depends_build	port:erlang
-depends_run	port:erlang
+depends_build   port:erlang port:py25-simplejson
+depends_run     port:erlang
 
-use_configure no
+set serveruser  rabbitmq
+set servergroup rabbitmq
+set serverhome ${prefix}/var/lib/rabbitmq
+set logdir ${prefix}/var/log/rabbitmq
+set mnesiadbdir ${prefix}/var/lib/rabbitmq/mnesia
+set plistloc ${prefix}/etc/LaunchDaemons/org.macports.rabbitmq-server
 
-worksrcdir rabbitmq-${version}/erlang/rabbit
+use_configure   no
 
 use_parallel_build yes
 
+build.args      PYTHON=${prefix}/bin/python2.5
+
 destroot.destdir \
-    DIST_DIR=${destroot}${prefix}/lib/erlang/lib/rabbitmq_server-${version} \
-    SBIN_DIR=${destroot}${prefix}/sbin
-destroot.target dist-unix
+    TARGET_DIR=${destroot}${prefix}/lib/erlang/lib/rabbitmq_server-${version} \
+    SBIN_DIR=${destroot}${prefix}/sbin \
+    MAN_DIR=${destroot}${prefix}/share/man
 
 destroot.keepdirs \
-    ${destroot}${prefix}/var/lib/rabbitmq/pids \
-    ${destroot}${prefix}/var/log/rabbitmq \
-    ${destroot}${prefix}/var/lib/rabbitmq/mnesia
+    ${destroot}${logdir} \
+    ${destroot}${mnesiadbdir}
 
 pre-destroot {
-    addgroup rabbitmq
-    adduser rabbitmq gid=[existsgroup rabbitmq] realname=RabbitMQ\ Server home=${prefix}/var/lib/rabbitmq
+    addgroup ${servergroup}
+    adduser ${serveruser} gid=[existsgroup ${servergroup}] realname=RabbitMQ\ Server home=${serverhome}
 }
 
 post-destroot {
-    xinstall -d ${destroot}${prefix}/etc/default
-    xinstall -d -g [existsgroup rabbitmq] -m 775 ${destroot}${prefix}/var/log/rabbitmq
-    xinstall -d -g [existsgroup rabbitmq] -m 775 ${destroot}${prefix}/var/lib/rabbitmq
-    xinstall -d -g [existsgroup rabbitmq] -m 775 ${destroot}${prefix}/var/lib/rabbitmq/pids
-    xinstall -d -g [existsgroup rabbitmq] -m 775 ${destroot}${prefix}/var/lib/rabbitmq/mnesia
+    xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${logdir}
+    xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${serverhome}
+    xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
+
+    reinplace -E "s:(/etc/rabbitmq/rabbitmq.conf):${prefix}\\1:g" \
+        ${destroot}${prefix}/sbin/rabbitmq-multi \
+        ${destroot}${prefix}/sbin/rabbitmq-server \
+        ${destroot}${prefix}/sbin/rabbitmqctl
+    reinplace -E "s:(RABBITMQ_CLUSTER_CONFIG_FILE)=/:\\1=${prefix}/:" \
+        ${destroot}${prefix}/sbin/rabbitmq-multi \
+        ${destroot}${prefix}/sbin/rabbitmq-server \
+        ${destroot}${prefix}/sbin/rabbitmqctl
+    reinplace -E "s:(RABBITMQ_LOG_BASE)=/:\\1=${prefix}/:" \
+        ${destroot}${prefix}/sbin/rabbitmq-multi \
+        ${destroot}${prefix}/sbin/rabbitmq-server \
+        ${destroot}${prefix}/sbin/rabbitmqctl
+    reinplace -E "s:(RABBITMQ_MNESIA_BASE)=/:\\1=${prefix}/:" \
+        ${destroot}${prefix}/sbin/rabbitmq-multi \
+        ${destroot}${prefix}/sbin/rabbitmq-server \
+        ${destroot}${prefix}/sbin/rabbitmqctl
+    reinplace -E "s:(RABBITMQ_PIDS_FILE)=/:\\1=${prefix}/:" \
+        ${destroot}${prefix}/sbin/rabbitmq-multi \
+        ${destroot}${prefix}/sbin/rabbitmq-server \
+        ${destroot}${prefix}/sbin/rabbitmqctl
+
     file rename ${destroot}${prefix}/sbin/rabbitmqctl ${destroot}${prefix}/sbin/rabbitmqctl_real
     xinstall -m 555 ${filespath}/rabbitmqctl_wrapper ${destroot}${prefix}/sbin
     file rename ${destroot}${prefix}/sbin/rabbitmqctl_wrapper ${destroot}${prefix}/sbin/rabbitmqctl
-    file copy ${filespath}/rabbitmq-defaults ${destroot}${prefix}/etc/default/rabbitmq
-    reinplace "s:^CLUSTER_CONFIG_FILE=:CLUSTER_CONFIG_FILE=${prefix}:" \
-        ${destroot}${prefix}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/sbin/rabbitmqctl \
-        ${destroot}${prefix}/sbin/rabbitmqctl_real
-    reinplace "s:^CONFIG_FILE=:CONFIG_FILE=${prefix}:" \
-        ${destroot}${prefix}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/sbin/rabbitmqctl \
-        ${destroot}${prefix}/sbin/rabbitmqctl_real
-    reinplace "s|@PREFIX@|${prefix}|" \
-        ${destroot}${prefix}/sbin/rabbitmqctl \
-        ${destroot}${prefix}/etc/default/rabbitmq
+
+    reinplace -E "s:@PREFIX@:${prefix}:" \
+        ${destroot}${prefix}/sbin/rabbitmqctl
+}
+
+pre-install {
+    system "cd ${destroot}${plistloc}; patch <${filespath}/patch-org.macports.rabbitmq-server.plist.diff"
 }
 
 startupitem.create      yes
 startupitem.init        "PATH=${prefix}/bin:${prefix}/sbin:\$PATH; export PATH"
-startupitem.start       "su rabbitmq -c rabbitmq-server 2>&1"
+startupitem.start       "rabbitmq-server 2>&1"
 startupitem.stop        "rabbitmqctl stop 2>&1"
 startupitem.logfile     ${prefix}/var/log/rabbitmq/startupitem.log
