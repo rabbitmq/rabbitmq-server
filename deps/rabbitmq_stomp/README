@@ -1,119 +1,243 @@
----------------------------------------------------------------------------
-Introduction
----------------------------------------------------------------------------
+# RabbitMQ STOMP adapter
 
-This is a STOMP transport plugin for use with RabbitMQ.
+## Introduction
 
- - http://stomp.codehaus.org/
- - http://www.rabbitmq.com/
- - https://dev.rabbitmq.com/wiki/StompGateway
+This is a STOMP adapter plugin for use with RabbitMQ.
+
+ - <http://stomp.codehaus.org/>
+ - <http://www.rabbitmq.com/>
+ - <https://dev.rabbitmq.com/wiki/StompGateway>
 
 You can get the code by checking it out from our repository with
 
-  hg clone http://hg.rabbitmq.com/rabbitmq-stomp/
+    hg clone http://hg.rabbitmq.com/rabbitmq-stomp/
 
-Announcements regarding the transport are periodically made on the
-RabbitMQ mailing list, and on LShift's blog.
+Please make sure that after you have cloned the repository you update
+it to the correct tag for your RabbitMQ server version -- see below
+for details.
 
- - http://lists.rabbitmq.com/cgi-bin/mailman/listinfo/rabbitmq-discuss
- - http://www.lshift.net/blog/
- - http://www.lshift.net/blog/category/lshift-sw/rabbitmq/
+Announcements regarding the adapter are periodically made on the
+RabbitMQ mailing list and on LShift's blog.
 
-
----------------------------------------------------------------------------
-Compiling
----------------------------------------------------------------------------
-
-To build the plugin, you should have the RabbitMQ broker source code
-compiled in "../rabbitmq-server". If you have a different path to the
-code, supply it as a command-line argument to make as
-RABBIT_SOURCE_ROOT=/some/other/path/to/rabbitmq-server.
-
-To compile the plugin and start the server with the plugin:
-
-      make run
-or    make RABBIT_SOURCE_ROOT=/some/other/path/to/rabbitmq-server run
-
-If this is successful, you should end up with "starting
-STOMP-listeners ...done" and "broker running" in your terminal.
+ - <http://lists.rabbitmq.com/cgi-bin/mailman/listinfo/rabbitmq-discuss>
+ - <http://www.lshift.net/blog/>
+ - <http://www.lshift.net/blog/category/lshift-sw/rabbitmq/>
 
 
----------------------------------------------------------------------------
-Configuring the broker on Debian to start the plugin automatically
----------------------------------------------------------------------------
+## Compiling
 
-If you've installed the rabbitmq-server package on debian or ubuntu,
-the broker will pick up extra configuration from
-/etc/default/rabbitmq. To tell the server to start your plugin, first
-make sure it is compiled, and then add the following text to
-/etc/default/rabbitmq:
+Once you have the RabbitMQ STOMP adapter code, you will need to
+compile it against the RabbitMQ server before configuring it.
 
-  SERVER_START_ARGS='
-    -pa /path/to/rabbitmq-stomp/ebin 
-    -rabbit
-       stomp_listeners [{"0.0.0.0",61613}]
-       extra_startup_steps [{"STOMP-listeners",rabbit_stomp,kickstart,[]}]'
+### Compiling from released server binary packages
 
-making sure to update the "/path/to/rabbitmq-stomp/ebin" appropriately
-for your system. Then restart the broker with
+(Please make sure that you have a version of the STOMP plugin code
+that is compatible with the version of the server you're using. See
+below for more information on this topic.)
 
-sudo /etc/init.d/rabbitmq-server restart
+Usually, the server packages are installed to
+`/usr/lib/erlang/lib/rabbitmq_server-X.Y.Z`. From within the
+`rabbitmq-stomp` directory, issue the command
 
-You should then be able to connect to port 61613 using a STOMP client
-of your choice.
+    make RABBIT_SERVER_INCLUDE_DIR=/usr/lib/erlang/lib/rabbitmq_server-X.Y.Z/include
+
+### Compiling from released server source code tarballs
+
+(Please make sure that you have a version of the STOMP plugin code
+that is compatible with the version of the server you're using. See
+below for more information on this topic.)
+
+If you've downloaded a server source code tarball named
+`rabbitmq-server-X.Y.Z.zip`, unzip it and create a symbolic link that
+aliases the resulting `rabbitmq-server-X.Y.Z` directory to plain old
+`rabbitmq-server`:
+
+    unzip rabbitmq-server-X.Y.Z.zip
+    ln -s rabbitmq-server-X.Y.Z rabbitmq-server
+
+You will then need to compile the RabbitMQ server code:
+
+    (cd rabbitmq-server; make)
+
+Finally, from within the `rabbitmq-stomp` directory, issue the command
+
+    make
+
+### Making sure the STOMP plugin version matches the server version
+
+Generally, the STOMP plugin's source code repository is tagged when a
+new version of the RabbitMQ server is released.
+
+For example, if you are using RabbitMQ server version 1.5.3, then
+examine the output of `hg tags` in your local copy of
+`rabbitmq-stomp`:
+
+    $ hg tags
+    tip                               93:9cd7eba4269c
+    rabbitmq_v1_5_3                   91:5ee5e2c0b64a
+    rabbitmq_v1_5_1                   65:2eba20816126
+    rabbitmq_v1_5_0                   60:1a1ff5067bb6
+    rabbitmq_v1_4_0                   49:71b922193057
+    Migrated to mercurial             11:a28eea2c2a2b
+
+To make sure your checkout is at the `rabbitmq_v1_5_3` tag, use `hg
+update`:
+
+    hg update rabbitmq_v1_5_3
+
+Then proceed with compiling the plugin as explained above.
+
+If there is no specific tag for the version of the server you are
+using, try using the newest tag that has the same major and minor
+version number. For instance, if you were running RabbitMQ server
+version 1.5.4, but no corresponding tag on `rabbitmq-stomp` was
+available, you should try using tag `rabbitmq_v1_5_3`. Another
+alternative for this hypothetical situation would be to use the tip of
+the 1.5.x branch:
+
+    $ hg branches
+    default                        93:9cd7eba4269c
+    rabbitmq_v1_3_0_branch         45:90dd1726fe0b
+    v1_5                           92:0ba97fbaea1f (inactive)
+    $ hg update v1_5
+    4 files updated, 0 files merged, 5 files removed, 0 files unresolved
+    $ 
+
+### Compiling from a Mercurial checkout
+
+If you want to use the bleeding-edge features of the broker and/or the
+STOMP adapter, you will need to clone and compile three separate
+repositories that work together:
+
+    hg clone http://hg.rabbitmq.com/rabbitmq-server
+    hg clone http://hg.rabbitmq.com/rabbitmq-codegen
+    hg clone http://hg.rabbitmq.com/rabbitmq-stomp
+    (cd rabbitmq-server; make)
+    (cd rabbitmq-stomp; make)
+
+### Compiling from anywhere else
+
+If you have a file system layout not covered above, you can
+investigate setting the Makefile variables `RABBIT_SOURCE_ROOT`,
+`RABBIT_SERVER_SOURCE_ROOT`, and/or `RABBIT_SERVER_INCLUDE_DIR`. For
+example, if you had a particular version of `rabbit.hrl` and
+`rabbit_framing.hrl` you wanted to use, you might say
+
+    make RABBIT_SERVER_INCLUDE_DIR=/path/to/include
+
+so that the STOMP adapter source code can find the `rabbit.hrl` and
+`rabbit_framing.hrl` files in the `/path/to/include` directory.
 
 
----------------------------------------------------------------------------
-Running the Ruby examples
----------------------------------------------------------------------------
+## Running the STOMP adapter
+
+### Configuring the server to start the plugin automatically
+
+Most RabbitMQ server packages are set up to cause the server to pick
+up configuration from `/etc/rabbitmq/rabbitmq.conf`. To tell the
+server to start your plugin, first make sure it is compiled, and then
+add the following text to `/etc/rabbitmq/rabbitmq.conf`:
+
+    SERVER_START_ARGS='
+      -pa /path/to/rabbitmq-stomp/ebin 
+      -rabbit
+         stomp_listeners [{"0.0.0.0",61613}]
+         extra_startup_steps [{"STOMP-listeners",rabbit_stomp,kickstart,[]}]'
+
+making sure to update the `/path/to/rabbitmq-stomp/ebin` appropriately
+for your system. Then restart the server with
+
+    sudo /etc/init.d/rabbitmq-server restart
+
+### Checking that the adapter is running
+
+If the adapter is running, you should be able to connect to port 61613
+using a STOMP client of your choice. In a pinch, `telnet` or netcat
+(`nc`) will do nicely:
+
+    $ nc localhost 61613
+    dummy
+    dummy
+    ERROR
+    message:Invalid frame
+    content-type:text/plain
+    content-length:22
+    
+    Could not parse frame
+    $ 
+
+That `ERROR` message indicates that the adapter is listening and
+attempting to parse STOMP frames.
+
+Another option is to try out the examples that come with the STOMP
+adapter -- see below.
+
+### Running the adapter during development
+
+If you are working with the full source code for the RabbitMQ server,
+and you either have the `../rabbitmq-server` directory or
+`RABBIT_SERVER_SOURCE_ROOT` Makefile variable set up correctly, you
+can simply say `make run`:
+
+    make run
+
+or
+
+    make RABBIT_SERVER_SOURCE_ROOT=/some/other/path/to/rabbitmq-server run
+
+If this is successful, you should end up with `starting
+STOMP-listeners ...done` and `broker running` in your terminal.
+
+
+## Running the examples
+
+### Ruby
 
 At this point you can try out the service - for instance, you can run
 the Ruby examples if you have Ruby and rubygems handy:
 
-sudo apt-get install ruby
-sudo apt-get install rubygems
-sudo gem install stomp
-ruby examples/ruby/cb-receiver.rb
+    sudo apt-get install ruby
+    sudo apt-get install rubygems
+    sudo gem install stomp
+    ruby examples/ruby/cb-receiver.rb
 
 and in another window
 
-ruby examples/ruby/cb-sender.rb
+    ruby examples/ruby/cb-sender.rb
 
 It will transfer 10,000 short messages, and end up displaying
 
-...
-Test Message number 9998
-Test Message number 9999
-All Done!
+    ...
+    Test Message number 9998
+    Test Message number 9999
+    All Done!
 
 in the receiver-side terminal.
 
 
----------------------------------------------------------------------------
-Running the Perl examples
----------------------------------------------------------------------------
+### Perl
 
-$ sudo cpan -i Net::Stomp
+    $ sudo cpan -i Net::Stomp
 
-The examples are those from the Net::Stomp documentation - run perldoc
-Net::Stomp to read the originals.
+The examples are those from the `Net::Stomp` documentation - run
+`perldoc Net::Stomp` to read the originals.
 
 Run the receiver before the sender to make sure the queue exists at
 the moment the send takes place. In one terminal window, start the
 receiver:
 
-$ perl examples/perl/rabbitmq_stomp_recv.pl
+    $ perl examples/perl/rabbitmq_stomp_recv.pl
 
 In another terminal window, run the sender:
 
-$ perl examples/perl/rabbitmq_stomp_send.pl
-$ perl examples/perl/rabbitmq_stomp_send.pl "hello world"
-$ perl examples/perl/rabbitmq_stomp_send.pl QUIT
+    $ perl examples/perl/rabbitmq_stomp_send.pl
+    $ perl examples/perl/rabbitmq_stomp_send.pl "hello world"
+    $ perl examples/perl/rabbitmq_stomp_send.pl QUIT
 
 The receiver's window should contain the received messages:
 
-$ perl examples/perl/rabbitmq_stomp_recv.pl 
-test message
-hello
-QUIT
-$
+    $ perl examples/perl/rabbitmq_stomp_recv.pl 
+    test message
+    hello
+    QUIT
+    $
