@@ -5,9 +5,8 @@ PortSystem      1.0
 
 name            rabbitmq-server
 version         1.5.3
-revision        0
 categories      net
-maintainers     tonyg@rabbitmq.com cpettitt@gmail.com
+maintainers     tonyg@rabbitmq.com
 platforms       darwin
 description     The RabbitMQ AMQP Server
 long_description    \
@@ -18,8 +17,6 @@ long_description    \
 
 homepage        http://www.rabbitmq.com/
 master_sites    http://www.rabbitmq.com/releases/rabbitmq-server/v${version}/
-
-distname        rabbitmq-server-${version}
 
 checksums \
     md5 3242a67885c2471b5ab62254bf024679 \
