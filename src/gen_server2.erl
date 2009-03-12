@@ -276,7 +276,7 @@ enter_loop(Mod, Options, State, ServerName, Timeout) ->
     Name = get_proc_name(ServerName),
     Parent = get_parent(),
     Debug = debug_options(Name, Options),
-    Queue = queue:new(),
+    Queue = priority_queue:new(),
     loop(Parent, Name, State, Mod, Timeout, Queue, Debug).
 
 %%%========================================================================
@@ -294,7 +294,7 @@ init_it(Starter, self, Name, Mod, Args, Options) ->
     init_it(Starter, self(), Name, Mod, Args, Options);
 init_it(Starter, Parent, Name, Mod, Args, Options) ->
     Debug = debug_options(Name, Options),
-    Queue = queue:new(),
+    Queue = priority_queue:new(),
     case catch Mod:init(Args) of
 	{ok, State} ->
 	    proc_lib:init_ack(Starter, {ok, self()}), 	    
@@ -326,9 +326,9 @@ init_it(Starter, Parent, Name, Mod, Args, Options) ->
 loop(Parent, Name, State, Mod, Time, Queue, Debug) ->
     receive
         Input -> loop(Parent, Name, State, Mod,
-                      Time, queue:in(Input, Queue), Debug)
+                      Time, priority_queue:in(Input, Queue), Debug)
     after 0 ->
-            case queue:out(Queue) of
+            case priority_queue:out(Queue) of
                 {{value, Msg}, Queue1} ->
                     process_msg(Parent, Name, State, Mod,
                                 Time, Queue1, Debug, Msg);
@@ -336,7 +336,7 @@ loop(Parent, Name, State, Mod, Time, Queue, Debug) ->
                     receive
                         Input ->
                             loop(Parent, Name, State, Mod,
-                                 Time, queue:in(Input, Queue1), Debug)
+                                 Time, priority_queue:in(Input, Queue1), Debug)
                     after Time ->
                             process_msg(Parent, Name, State, Mod,
                                         Time, Queue1, Debug, timeout)
@@ -850,5 +850,5 @@ format_status(Opt, StatusData) ->
      {data, [{"Status", SysState},
 	     {"Parent", Parent},
 	     {"Logged events", Log},
-             {"Queued messages", queue:to_list(Queue)}]} |
+             {"Queued messages", priority_queue:to_list(Queue)}]} |
      Specfic].
