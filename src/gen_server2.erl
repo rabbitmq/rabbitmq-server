@@ -107,8 +107,8 @@
 %% API
 -export([start/3, start/4,
 	 start_link/3, start_link/4,
-	 call/2, call/3,
-	 cast/2, reply/2,
+	 call/2, call/3, pcall/3, pcall/4,
+	 cast/2, pcast/3, reply/2,
 	 abcast/2, abcast/3,
 	 multi_call/2, multi_call/3, multi_call/4,
 	 enter_loop/3, enter_loop/4, enter_loop/5]).
@@ -188,6 +188,22 @@ call(Name, Request, Timeout) ->
 	    exit({Reason, {?MODULE, call, [Name, Request, Timeout]}})
     end.
 
+pcall(Name, Priority, Request) ->
+    case catch gen:call(Name, '$gen_pcall', {Priority, Request}) of
+	{ok,Res} ->
+	    Res;
+	{'EXIT',Reason} ->
+	    exit({Reason, {?MODULE, pcall, [Name, Priority, Request]}})
+    end.
+
+pcall(Name, Priority, Request, Timeout) ->
+    case catch gen:call(Name, '$gen_pcall', {Priority, Request}, Timeout) of
+	{ok,Res} ->
+	    Res;
+	{'EXIT',Reason} ->
+	    exit({Reason, {?MODULE, pcall, [Name, Priority, Request, Timeout]}})
+    end.
+
 %% -----------------------------------------------------------------
 %% Make a cast to a generic server.
 %% -----------------------------------------------------------------
@@ -206,6 +222,22 @@ do_cast(Dest, Request) ->
     ok.
     
 cast_msg(Request) -> {'$gen_cast',Request}.
+
+pcast({global,Name}, Priority, Request) ->
+    catch global:send(Name, cast_msg(Priority, Request)),
+    ok;
+pcast({Name,Node}=Dest, Priority, Request) when is_atom(Name), is_atom(Node) -> 
+    do_cast(Dest, Priority, Request);
+pcast(Dest, Priority, Request) when is_atom(Dest) ->
+    do_cast(Dest, Priority, Request);
+pcast(Dest, Priority, Request) when is_pid(Dest) ->
+    do_cast(Dest, Priority, Request).
+
+do_cast(Dest, Priority, Request) -> 
+    do_send(Dest, cast_msg(Priority, Request)),
+    ok.
+    
+cast_msg(Priority, Request) -> {'$gen_pcast', {Priority, Request}}.
 
 %% -----------------------------------------------------------------
 %% Send a reply to the client.
@@ -326,7 +358,7 @@ init_it(Starter, Parent, Name, Mod, Args, Options) ->
 loop(Parent, Name, State, Mod, Time, Queue, Debug) ->
     receive
         Input -> loop(Parent, Name, State, Mod,
-                      Time, priority_queue:in(Input, Queue), Debug)
+                      Time, in(Input, Queue), Debug)
     after 0 ->
             case priority_queue:out(Queue) of
                 {{value, Msg}, Queue1} ->
@@ -336,14 +368,21 @@ loop(Parent, Name, State, Mod, Time, Queue, Debug) ->
                     receive
                         Input ->
                             loop(Parent, Name, State, Mod,
-                                 Time, priority_queue:in(Input, Queue1), Debug)
+                                 Time, in(Input, Queue1), Debug)
                     after Time ->
                             process_msg(Parent, Name, State, Mod,
                                         Time, Queue1, Debug, timeout)
                     end
             end
     end.
-                    
+
+in({'$gen_pcast', {Priority, Msg}}, Queue) ->
+    priority_queue:in({'$gen_cast', Msg}, Priority, Queue);
+in({'$gen_pcall', From, {Priority, Msg}}, Queue) ->
+    priority_queue:in({'$gen_call', From, Msg}, Priority, Queue);
+in(Input, Queue) ->
+    priority_queue:in(Input, Queue).
+
 process_msg(Parent, Name, State, Mod, Time, Queue, Debug, Msg) ->
     case Msg of
 	{system, From, Req} ->

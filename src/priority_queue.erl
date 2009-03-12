@@ -88,7 +88,8 @@ in(Item, Other) ->
     in(Item, infinity, Other).
 
 in(Item, Priority, {queue, In, Out}) ->
-    in(Item, Priority, {pqueue, 0, to_tree(In, Out)});
+    {Counter, Tree} = to_tree(In, Out),
+    in(Item, Priority, {pqueue, Counter, Tree});
 in(Item, Priority, {pqueue, Counter, Tree}) ->
     {pqueue, Counter + 1, gb_trees:insert({Priority, Counter}, Item, Tree)}.
 
