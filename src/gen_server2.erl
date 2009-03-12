@@ -16,6 +16,11 @@
 %% The original code could reorder messages when communicating with a
 %% process on a remote node that was not currently connected.
 %%
+%% 4) The new functions gen_server2:pcall/3, pcall/4, and pcast/3
+%% allow callers to attach priorities to requests. Requests with
+%% higher priorities are processed before requests with lower
+%% priorities. The default priority is 0.
+%%
 %% All modifications are (C) 2009 LShift Ltd.
 
 %% ``The contents of this file are subject to the Erlang Public License,
