@@ -36,7 +36,7 @@
 %% Priorities should be integers - the higher the value the higher the
 %% priority - but we don't actually check that.
 %%
-%% in/2 inserts items with the highest priority.
+%% in/2 inserts items with priority 0.
 %%
 %% We optimise the case where a priority queue is being used just like
 %% an ordinary queue. When that is the case we represent the priority
@@ -76,22 +76,22 @@ len({pqueue, _, Tree}) ->
     gb_trees:size(Tree).
 
 to_list({queue, In, Out}) when is_list(In), is_list(Out) ->
-    Out ++ lists:reverse(In, []);
+    [{0, V} || V <- Out ++ lists:reverse(In, [])];
 to_list({pqueue, _, Tree}) ->
-    gb_trees:to_list(Tree).
+    [{-P, V} || {{P, _C}, V} <- gb_trees:to_list(Tree)].
 
 in(X, {queue, [_] = In, []}) ->
     {queue, [X], In};
 in(X, {queue, In, Out}) when is_list(In), is_list(Out) ->
     {queue, [X|In], Out};
 in(Item, Other) ->
-    in(Item, infinity, Other).
+    in(Item, 0, Other).
 
 in(Item, Priority, {queue, In, Out}) ->
     {Counter, Tree} = to_tree(In, Out),
     in(Item, Priority, {pqueue, Counter, Tree});
 in(Item, Priority, {pqueue, Counter, Tree}) ->
-    {pqueue, Counter + 1, gb_trees:insert({Priority, Counter}, Item, Tree)}.
+    {pqueue, Counter + 1, gb_trees:insert({-Priority, Counter}, Item, Tree)}.
 
 out({queue, [], []} = Q) ->
     {empty, Q};
@@ -113,7 +113,7 @@ out({pqueue, Counter, Tree}) ->
 
 to_tree(In, Out) ->
     lists:foldl(fun (V, {C, T}) ->
-                        {C + 1, gb_trees:insert({infinity, C}, V, T)}
+                        {C + 1, gb_trees:insert({0, C}, V, T)}
                 end, {0, gb_trees:empty()}, Out ++ lists:reverse(In, [])).
 
 r2f([]) ->
