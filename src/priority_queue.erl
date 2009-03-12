@@ -107,7 +107,7 @@ out({queue, In,[V|Out]}) when is_list(In) ->
 out({pqueue, Counter, Tree}) ->
     {_, Item, Tree1} = gb_trees:take_smallest(Tree),
     {{value, Item}, case gb_trees:is_empty(Tree1) of
-                        true  -> {queue, queue:new()};
+                        true  -> {queue, [], []};
                         false -> {pqueue, Counter, Tree1}
                     end}.
 
