@@ -200,10 +200,10 @@ list(VHostPath) ->
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
 info(#amqqueue{ pid = QPid }) ->
-    gen_server2:call(QPid, info).
+    gen_server2:pcall(QPid, 9, info).
 
 info(#amqqueue{ pid = QPid }, Items) ->
-    case gen_server2:call(QPid, {info, Items}) of
+    case gen_server2:pcall(QPid, 9, {info, Items}) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
