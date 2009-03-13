@@ -45,9 +45,10 @@
 %% functions directly in here, thus saving on inter-module calls and
 %% eliminating a level of boxing.
 %%
-%% When in/3 is invoked for the first time we change the
-%% representation from an ordinary queue to a gb_tree with {Priority,
-%% Counter} as the key. Counter is incremented with for every 'in',
+%% When the queue contains items with non-zero priorities, it is
+%% represented as a sorted kv list with the inverted Priority as the
+%% key and an ordinary queue as the value.
+
 
 -module(priority_queue).
 
@@ -58,40 +59,44 @@ new() ->
 
 is_queue({queue, R, F}) when is_list(R), is_list(F) ->
     true;
-is_queue({pqueue, Counter, _Tree}) when is_integer(Counter), Counter >= 0 ->
-    true;
+is_queue({pqueue, Queues}) when is_list(Queues) ->
+    lists:all(fun ({P, Q}) -> is_integer(P) andalso queue:is_queue(Q) end,
+              Queues);
 is_queue(_) ->
     false.
 
 is_empty({queue, [], []}) ->
     true;
-is_empty({queue, In,Out}) when is_list(In), is_list(Out) ->
-    false;
-is_empty({pqueue, _, Tree}) ->
-    gb_trees:is_empty(Tree).
+is_empty(_) ->
+    false.
 
 len({queue, R, F}) when is_list(R), is_list(F) ->
     length(R) + length(F);
-len({pqueue, _, Tree}) ->
-    gb_trees:size(Tree).
+len({pqueue, Queues}) ->
+    lists:sum([queue:len(Q) || {_, Q} <- Queues]).
 
 to_list({queue, In, Out}) when is_list(In), is_list(Out) ->
     [{0, V} || V <- Out ++ lists:reverse(In, [])];
-to_list({pqueue, _, Tree}) ->
-    [{-P, V} || {{P, _C}, V} <- gb_trees:to_list(Tree)].
+to_list({pqueue, Queues}) ->
+    [{P, V} || {P, Q} <- Queues, V <- queue:to_list(Q)].
 
-in(X, {queue, [_] = In, []}) ->
+in(Item, Q) ->
+    in(Item, 0, Q).
+
+in(X, 0, {queue, [_] = In, []}) ->
     {queue, [X], In};
-in(X, {queue, In, Out}) when is_list(In), is_list(Out) ->
+in(X, 0, {queue, In, Out}) when is_list(In), is_list(Out) ->
     {queue, [X|In], Out};
-in(Item, Other) ->
-    in(Item, 0, Other).
-
-in(Item, Priority, {queue, In, Out}) ->
-    {Counter, Tree} = to_tree(In, Out),
-    in(Item, Priority, {pqueue, Counter, Tree});
-in(Item, Priority, {pqueue, Counter, Tree}) ->
-    {pqueue, Counter + 1, gb_trees:insert({-Priority, Counter}, Item, Tree)}.
+in(X, Priority, {queue, In, Out}) ->
+    in(X, Priority, {pqueue, [{0, {In, Out}}]});
+in(X, Priority, {pqueue, Queues}) ->
+    P = -Priority,
+    {pqueue, case lists:keysearch(P, 1, Queues) of
+                 {value, {_, Q}} ->
+                     lists:keyreplace(P, 1, Queues, {P, queue:in(X, Q)});
+                 false ->
+                     lists:keysort(1, [{P, {[X], []}} | Queues])
+             end}.
 
 out({queue, [], []} = Q) ->
     {empty, Q};
@@ -104,23 +109,19 @@ out({queue, In, [V]}) when is_list(In) ->
     {{value,V}, r2f(In)};
 out({queue, In,[V|Out]}) when is_list(In) ->
     {{value, V}, {queue, In, Out}};
-out({pqueue, Counter, Tree}) ->
-    {_, Item, Tree1} = gb_trees:take_smallest(Tree),
-    {{value, Item}, case gb_trees:is_empty(Tree1) of
-                        true  -> {queue, [], []};
-                        false -> {pqueue, Counter, Tree1}
-                    end}.
+out({pqueue, [{P, Q} | Queues]}) ->
+    {R, Q1} = queue:out(Q),
+    NewQ = case queue:is_empty(Q1) of
+               true -> case Queues of
+                           [] -> {queue, [], []};
+                           [{0, {In, Out}}] -> {queue, In, Out};
+                           [_|_] -> {pqueue, Queues}
+                       end;
+               false -> {pqueue, [{P, Q1} | Queues]}
+           end,
+    {R, NewQ}.
 
-to_tree(In, Out) ->
-    lists:foldl(fun (V, {C, T}) ->
-                        {C + 1, gb_trees:insert({0, C}, V, T)}
-                end, {0, gb_trees:empty()}, Out ++ lists:reverse(In, [])).
-
-r2f([]) ->
-    {queue, [], []};
-r2f([_] = R) ->
-    {queue, [], R};
-r2f([X,Y]) ->
-    {queue, [X], [Y]};
-r2f([X,Y|R]) ->
-    {queue, [X,Y], lists:reverse(R, [])}.
+r2f([])      -> {queue, [], []};
+r2f([_] = R) -> {queue, [], R};
+r2f([X,Y])   -> {queue, [X], [Y]};
+r2f([X,Y|R]) -> {queue, [X,Y], lists:reverse(R, [])}.
