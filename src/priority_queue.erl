@@ -78,7 +78,7 @@ len({pqueue, Queues}) ->
 to_list({queue, In, Out}) when is_list(In), is_list(Out) ->
     [{0, V} || V <- Out ++ lists:reverse(In, [])];
 to_list({pqueue, Queues}) ->
-    [{P, V} || {P, Q} <- Queues, V <- queue:to_list(Q)].
+    [{-P, V} || {P, Q} <- Queues, V <- queue:to_list(Q)].
 
 in(Item, Q) ->
     in(Item, 0, Q).
