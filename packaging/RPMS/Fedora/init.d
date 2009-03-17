@@ -2,16 +2,14 @@
 #
 # rabbitmq-server RabbitMQ broker
 #
-#chkconfig: 2345 80 05
-#description: Enable AMQP service provided by RabbitMQ
+# chkconfig: - 80 05
+# description: Enable AMQP service provided by RabbitMQ
 #
 
 ### BEGIN INIT INFO
-# Provides:          rabbitmq
+# Provides:          rabbitmq-server
 # Required-Start:    $remote_fs $network
 # Required-Stop:     $remote_fs $network
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
 # Description:       RabbitMQ broker
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
@@ -29,8 +27,8 @@ LOCK_FILE=/var/lock/subsys/$NAME
 test -x $DAEMON || exit 0
 
 # Include rabbitmq defaults if available
-if [ -f /etc/default/rabbitmq ] ; then
-	. /etc/default/rabbitmq
+if [ -f /etc/sysconfig/rabbitmq ] ; then
+	. /etc/sysconfig/rabbitmq
 fi
 
 RETVAL=0
@@ -90,7 +88,10 @@ status_rabbitmq() {
 
 rotate_logs_rabbitmq() {
     set +e
-    $DAEMON rotate_logs ${ROTATE_SUFFIX} 2>&1
+    $DAEMON rotate_logs ${ROTATE_SUFFIX}
+    if [ $? != 0 ] ; then
+        RETVAL=1
+    fi
     set -e
 }
 
@@ -129,7 +130,7 @@ case "$1" in
         ;;
     *)
         echo "Usage: $0 {start|stop|status|rotate-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
-        RETVAL=1
+        RETVAL=2
         ;;
 esac
 
