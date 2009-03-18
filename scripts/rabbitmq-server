@@ -80,7 +80,7 @@ RABBITMQ_START_RABBIT=
 # there is no other way of preventing their expansion.
 set -f
 
-erl \
+exec erl \
     -pa "`dirname $0`/../ebin" \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
