@@ -122,19 +122,32 @@ recover() ->
 
 recover_durable_queues() ->
     Node = node(),
-    %% TODO: use dirty ops instead
-    R = rabbit_misc:execute_mnesia_transaction(
-          fun () ->
-                  qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
-                                        <- mnesia:table(durable_queues),
-                                    node(Pid) == Node]))
-          end),
-    Queues = lists:map(fun start_queue_process/1, R),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              lists:foreach(fun store_queue/1, Queues),
-              ok
-      end).
+    lists:foreach(
+      fun (RecoveredQ) ->
+              Q = start_queue_process(RecoveredQ),
+              %% We need to catch the case where a client connected to
+              %% another node has deleted the queue (and possibly
+              %% re-created it).
+              case rabbit_misc:execute_mnesia_transaction(
+                     fun () -> case mnesia:match_object(
+                                 durable_queues, RecoveredQ, read) of
+                                   [_] -> ok = store_queue(Q),
+                                          true;
+                                   []  -> false
+                               end
+                     end) of
+                  true  -> ok;
+                  false -> exit(Q#amqqueue.pid, shutdown)
+              end
+      end,
+      %% TODO: use dirty ops instead
+      rabbit_misc:execute_mnesia_transaction(
+        fun () ->
+                qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
+                                      <- mnesia:table(durable_queues),
+                                  node(Pid) == Node]))
+        end)),
+    ok.
 
 declare(QueueName, Durable, AutoDelete, Args) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
