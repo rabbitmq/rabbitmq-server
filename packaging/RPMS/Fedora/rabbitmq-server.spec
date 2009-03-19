@@ -36,10 +36,12 @@ fi
 
 %prep
 %setup -q
-sed -i 's|/usr/lib/|%{_libdir}/|' %{S:1}
-sed -i 's|/usr/lib/|%{_libdir}/|' %{S:2}
 
 %build
+%define _source2 %{_builddir}/`basename %{S:2}`
+
+cp %{S:2} %{_source2}
+sed -i 's|/usr/lib/|%{_libdir}/|' %{_source2}
 make %{?_smp_mflags}
 
 %install
@@ -54,9 +56,9 @@ mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 
 #Copy all necessary lib files etc.
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
-install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmqctl
-install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-server
-install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-multi
+install -p -D -m 0755 %{_source2} %{buildroot}%{_sbindir}/rabbitmqctl
+install -p -D -m 0755 %{_source2} %{buildroot}%{_sbindir}/rabbitmq-server
+install -p -D -m 0755 %{_source2} %{buildroot}%{_sbindir}/rabbitmq-multi
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
