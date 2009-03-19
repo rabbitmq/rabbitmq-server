@@ -9,7 +9,7 @@ for arg in "$@" ; do
 	CMDLINE="${CMDLINE} \"${arg}\""
 done
 
-cd /
+cd /var/lib/rabbitmq
 
 SCRIPT=`basename $0`
 
