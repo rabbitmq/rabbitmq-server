@@ -117,6 +117,7 @@ if "%RABBITMQ_MNESIA_DIR%"=="" (
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 -rabbit tcp_listeners "[{\"%RABBITMQ_NODE_IP_ADDRESS%\", %RABBITMQ_NODE_PORT%}]" ^
 -kernel error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%.log"\"} ^
+%RABBITMQ_SERVER_ERL_ARGS% ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%-sasl.log"\"} ^
 -os_mon start_cpu_sup true ^
