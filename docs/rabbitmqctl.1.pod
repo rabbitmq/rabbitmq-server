@@ -219,7 +219,7 @@ URL-encoded name of the exchange
 
 =item type
 
-exchange type (B<direct>, B<topic> or B<fanout>)
+exchange type (B<direct>, B<topic>, B<fanout>, or B<headers>)
 
 =item durable
 
