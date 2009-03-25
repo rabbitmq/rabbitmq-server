@@ -24,6 +24,7 @@ scalable implementation of an AMQP broker.
 
 %define _rabbit_erllibdir %{_libdir}/erlang/lib/rabbitmq_server-%{version}
 %define _rabbit_libdir %{_libdir}/rabbitmq
+%define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
 
@@ -36,10 +37,10 @@ fi
 
 %prep
 %setup -q
-sed -i 's|/usr/lib/|%{_libdir}/|' %{S:1}
-sed -i 's|/usr/lib/|%{_libdir}/|' %{S:2}
 
 %build
+cp %{S:2} %{_rabbit_wrapper}
+sed 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
 make %{?_smp_mflags}
 
 %install
@@ -54,9 +55,9 @@ mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 
 #Copy all necessary lib files etc.
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
-install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmqctl
-install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-server
-install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-multi
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmqctl
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-server
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-multi
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
