@@ -100,8 +100,6 @@ fi
 %defattr(-,root,root,-)
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
-%dir %{_localstatedir}/lib/rabbitmq
-%dir %{_localstatedir}/log/rabbitmq
 %dir %{_sysconfdir}/rabbitmq
 %{_rabbit_erllibdir}
 %{_rabbit_libdir}
