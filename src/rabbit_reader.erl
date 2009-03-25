@@ -231,8 +231,12 @@ start_connection(Parent, Deb, ClientSock) ->
                                     connection_state = pre_init},
                                 handshake, 8))
     catch
-        Ex -> rabbit_log:error("error on TCP connection ~p from ~s:~p~n~p~n",
-                               [self(), PeerAddressS, PeerPort, Ex])
+	Ex -> (if Ex == connection_closed_abruptly ->
+                       fun rabbit_log:warning/2;
+                  true ->
+                       fun rabbit_log:error/2
+               end)("exception on TCP connection ~p from ~s:~p~n~p~n",
+                    [self(), PeerAddressS, PeerPort, Ex])
     after
         rabbit_log:info("closing TCP connection ~p from ~s:~p~n",
                         [self(), PeerAddressS, PeerPort]),

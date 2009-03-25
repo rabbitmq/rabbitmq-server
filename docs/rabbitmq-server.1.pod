@@ -53,7 +53,7 @@ Defaults to 5672.
 
 =item B<RABBITMQ_CLUSTER_CONFIG_FILE>
 
-Defaults to /etc/default/rabbitmq_cluster.config. If this file is
+Defaults to /etc/rabbitmq/rabbitmq_cluster.config. If this file is
 present it is used by the server to auto-configure a RabbitMQ
 cluster. See the L<clustering guide|http://www.rabbitmq.com/clustering.html>
 for details.
@@ -72,7 +72,7 @@ Run RabbitMQ AMQP server in the background:
 
 =head1 SEE ALSO
 
-rabbitmq-multi(1), rabbitmqctl(1)
+rabbitmq.conf(5), rabbitmq-multi(1), rabbitmqctl(1)
 
 =head1 AUTHOR
 

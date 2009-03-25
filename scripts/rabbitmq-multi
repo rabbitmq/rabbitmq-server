@@ -30,7 +30,7 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-[ -f /etc/default/rabbitmq ] && . /etc/default/rabbitmq
+[ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=rabbit

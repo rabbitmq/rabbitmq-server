@@ -1,3 +1,15 @@
+rabbitmq-server (1.5.3-1) hardy; urgency=low
+
+  * New Upstream Release
+
+ -- Tony Garnock-Jones <tonyg@lshift.net>  Tue, 24 Feb 2009 18:23:33 +0000
+
+rabbitmq-server (1.5.2-1) hardy; urgency=low
+
+  * New Upstream Release
+
+ -- Tony Garnock-Jones <tonyg@lshift.net>  Mon, 23 Feb 2009 16:03:38 +0000
+
 rabbitmq-server (1.5.1-1) hardy; urgency=low
 
   * New Upstream Release
