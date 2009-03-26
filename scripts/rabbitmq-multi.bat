@@ -47,7 +47,7 @@ if "%RABBITMQ_NODE_PORT%"=="" (
 )
 
 set RABBITMQ_PIDS_FILE=%RABBITMQ_BASE%\rabbitmq.pids
-set RABBITMQ_SCRIPT_HOME=%~dp0%
+set RABBITMQ_SCRIPT_HOME=%~sdp0%
 
 if "%ERLANG_HOME%"=="" (
     set ERLANG_HOME=%~dp0%..\..\..
