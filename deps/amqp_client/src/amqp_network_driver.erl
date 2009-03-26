@@ -163,7 +163,7 @@ start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
     put({channel, 0}, {chpid, FramingPid}),
     {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
-    reader_loop(Sock, undefined, undefined, undefined),
+    ok = reader_loop(Sock, undefined, undefined, undefined),
     gen_tcp:close(Sock).
 
 start_writer(Sock, Channel) ->
@@ -183,7 +183,7 @@ reader_loop(Sock, Type, Channel, Length) ->
             {ok, _Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
             reader_loop(Sock, _Type, _Chan, PayloadSize);
         {inet_async, Sock, _Ref, {error, closed}} ->
-            ok;
+            exit(connection_socket_closed_unexpectedly);
         {inet_async, Sock, _Ref, {error, Reason}} ->
             io:format("Socket error: ~p~n", [Reason]),
             exit({socket_error, Reason});
@@ -195,10 +195,12 @@ reader_loop(Sock, Type, Channel, Length) ->
             reader_loop(Sock, Type, Channel, Length);
         timeout ->
             io:format("Reader (~p) received timeout from heartbeat, "
-                      "exiting ~n", [self()]);
+                      "exiting ~n", [self()]),
+            exit(connection_timeout);
         close ->
             io:format("Reader (~p) received close command, "
-                      "exiting ~n", [self()]);
+                      "exiting ~n", [self()]),
+            ok;
         {'EXIT', Pid, _Reason} ->
             [H|_] = get_keys({chpid, Pid}),
             erase(H),
