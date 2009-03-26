@@ -192,7 +192,7 @@ delete_user(Username) ->
             fun () ->
                     ok = mnesia:delete({rabbit_user, Username}),
                     [ok = mnesia:delete_object(
-                            rabbit_user_permissions, R, write) ||
+                            rabbit_user_permission, R, write) ||
                         R <- mnesia:match_object(
                                rabbit_user_permission,
                                #user_permission{user_vhost = #user_vhost{
