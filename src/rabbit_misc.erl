@@ -372,6 +372,16 @@ ensure_parent_dirs_exist(Filename) ->
     end.
 
 format_stderr(Fmt, Args) ->
-    Port = open_port({fd, 0, 2}, [out]),
-    port_command(Port, io_lib:format(Fmt, Args)),
-    port_close(Port).
+    case os:type() of
+        {unix, _} ->
+            Port = open_port({fd, 0, 2}, [out]),
+            port_command(Port, io_lib:format(Fmt, Args)),
+            port_close(Port);
+        {win32, _} ->
+            %% stderr on Windows is buffered and I can't figure out a
+            %% way to trigger a fflush(stderr) in Erlang. So rather
+            %% than risk losing output we write to stdout instead,
+            %% which appears to be unbuffered.
+            io:format(Fmt, Args)
+    end,
+    ok.
