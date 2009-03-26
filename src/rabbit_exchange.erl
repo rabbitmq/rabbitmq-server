@@ -102,22 +102,15 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
 
 recover() ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              mnesia:foldl(
-                fun (Exchange, Acc) ->
-                        ok = mnesia:write(Exchange),
-                        Acc
-                end, ok, durable_exchanges),
-              mnesia:foldl(
-                fun (Route, Acc) ->
-                        {_, ReverseRoute} = route_with_reverse(Route),
-                        ok = mnesia:write(Route),
-                        ok = mnesia:write(ReverseRoute),
-                        Acc
-                end, ok, durable_routes),
-              ok
-      end).
+    ok = rabbit_misc:table_foreach(
+           fun(Exchange) -> ok = mnesia:write(Exchange) end,
+           durable_exchanges),
+    ok = rabbit_misc:table_foreach(
+           fun(Route) -> {_, ReverseRoute} = route_with_reverse(Route),
+                         ok = mnesia:write(Route),
+                         ok = mnesia:write(ReverseRoute)
+           end, durable_routes),
+    ok.
 
 declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
     Exchange = #exchange{name = ExchangeName,
