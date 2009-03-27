@@ -26,7 +26,6 @@
 -module(network_client_test).
 
 -export([test_coverage/0]).
--export([test_basic_qos/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -35,6 +34,9 @@ basic_get_test() ->
 
 basic_return_test() ->
     test_util:basic_return_test(new_connection()).
+
+basic_qos_test() ->
+    test_util:basic_qos_test(new_connection()).
 
 basic_recover_test() -> 
     test_util:basic_recover_test(new_connection()).
@@ -71,12 +73,6 @@ non_existent_exchange_test() ->
 
 hard_error_test() ->
     negative_test_util:hard_error_test(new_connection()).
-
-%%---------------------------------------------------------------------------
-%% This must be kicked off manually because it is timing sensitive
-
-test_basic_qos() ->
-    test_util:basic_qos_test(new_connection()).
 
 %%---------------------------------------------------------------------------
 %% Common Functions
