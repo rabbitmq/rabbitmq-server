@@ -57,6 +57,27 @@
 
 -export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, in/2, in/3, out/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-type(priority() :: integer()).
+-type(squeue() :: {queue, [any()], [any()]}).
+-type(pqueue() ::  squeue() | {pqueue, [{priority(), squeue()}]}).
+
+-spec(new/0 :: () -> pqueue()).
+-spec(is_queue/1 :: (any()) -> bool()).
+-spec(is_empty/1 :: (pqueue()) -> bool()).
+-spec(len/1 :: (pqueue()) -> non_neg_integer()).
+-spec(to_list/1 :: (pqueue()) -> [{priority(), any()}]).
+-spec(in/2 :: (any(), pqueue()) -> pqueue()).
+-spec(in/3 :: (any(), priority(), pqueue()) -> pqueue()).
+-spec(out/1 :: (pqueue()) -> {empty | {value, any()}, pqueue()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 new() ->
     {queue, [], []}.
 
