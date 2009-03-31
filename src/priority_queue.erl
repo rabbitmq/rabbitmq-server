@@ -47,7 +47,10 @@
 %%
 %% When the queue contains items with non-zero priorities, it is
 %% represented as a sorted kv list with the inverted Priority as the
-%% key and an ordinary queue as the value.
+%% key and an ordinary queue as the value. Here again we use our own
+%% ordinary queue implemention for efficiency, often making recursive
+%% calls into the same function knowing that ordinary queues represent
+%% a base case.
 
 
 -module(priority_queue).
@@ -60,7 +63,7 @@ new() ->
 is_queue({queue, R, F}) when is_list(R), is_list(F) ->
     true;
 is_queue({pqueue, Queues}) when is_list(Queues) ->
-    lists:all(fun ({P, Q}) -> is_integer(P) andalso queue:is_queue(Q) end,
+    lists:all(fun ({P, Q}) -> is_integer(P) andalso is_queue(Q) end,
               Queues);
 is_queue(_) ->
     false.
@@ -73,12 +76,12 @@ is_empty(_) ->
 len({queue, R, F}) when is_list(R), is_list(F) ->
     length(R) + length(F);
 len({pqueue, Queues}) ->
-    lists:sum([queue:len(Q) || {_, Q} <- Queues]).
+    lists:sum([len(Q) || {_, Q} <- Queues]).
 
 to_list({queue, In, Out}) when is_list(In), is_list(Out) ->
     [{0, V} || V <- Out ++ lists:reverse(In, [])];
 to_list({pqueue, Queues}) ->
-    [{-P, V} || {P, Q} <- Queues, V <- queue:to_list(Q)].
+    [{-P, V} || {P, Q} <- Queues, V <- to_list(Q)].
 
 in(Item, Q) ->
     in(Item, 0, Q).
@@ -88,14 +91,14 @@ in(X, 0, {queue, [_] = In, []}) ->
 in(X, 0, {queue, In, Out}) when is_list(In), is_list(Out) ->
     {queue, [X|In], Out};
 in(X, Priority, {queue, In, Out}) ->
-    in(X, Priority, {pqueue, [{0, {In, Out}}]});
+    in(X, Priority, {pqueue, [{0, {queue, In, Out}}]});
 in(X, Priority, {pqueue, Queues}) ->
     P = -Priority,
     {pqueue, case lists:keysearch(P, 1, Queues) of
                  {value, {_, Q}} ->
-                     lists:keyreplace(P, 1, Queues, {P, queue:in(X, Q)});
+                     lists:keyreplace(P, 1, Queues, {P, in(X, Q)});
                  false ->
-                     lists:keysort(1, [{P, {[X], []}} | Queues])
+                     lists:keysort(1, [{P, {queue, [X], []}} | Queues])
              end}.
 
 out({queue, [], []} = Q) ->
@@ -110,12 +113,12 @@ out({queue, In, [V]}) when is_list(In) ->
 out({queue, In,[V|Out]}) when is_list(In) ->
     {{value, V}, {queue, In, Out}};
 out({pqueue, [{P, Q} | Queues]}) ->
-    {R, Q1} = queue:out(Q),
-    NewQ = case queue:is_empty(Q1) of
+    {R, Q1} = out(Q),
+    NewQ = case is_empty(Q1) of
                true -> case Queues of
-                           [] -> {queue, [], []};
-                           [{0, {In, Out}}] -> {queue, In, Out};
-                           [_|_] -> {pqueue, Queues}
+                           []           -> {queue, [], []};
+                           [{0, OnlyQ}] -> OnlyQ;
+                           [_|_]        -> {pqueue, Queues}
                        end;
                false -> {pqueue, [{P, Q1} | Queues]}
            end,
