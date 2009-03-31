@@ -90,8 +90,8 @@ in(X, 0, {queue, [_] = In, []}) ->
     {queue, [X], In};
 in(X, 0, {queue, In, Out}) when is_list(In), is_list(Out) ->
     {queue, [X|In], Out};
-in(X, Priority, {queue, In, Out}) ->
-    in(X, Priority, {pqueue, [{0, {queue, In, Out}}]});
+in(X, Priority, Q = {queue, _, _}) ->
+    in(X, Priority, {pqueue, [{0, Q}]});
 in(X, Priority, {pqueue, Queues}) ->
     P = -Priority,
     {pqueue, case lists:keysearch(P, 1, Queues) of
