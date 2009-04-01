@@ -95,7 +95,7 @@ start_link() ->
 transaction(MessageList) ->
     ?LOGDEBUG("transaction ~p~n", [MessageList]),
     TxnKey = rabbit_guid:guid(),
-    gen_server:call(?SERVER, {transaction, TxnKey, MessageList}).
+    gen_server:call(?SERVER, {transaction, TxnKey, MessageList}, infinity).
 
 extend_transaction(TxnKey, MessageList) ->
     ?LOGDEBUG("extend_transaction ~p ~p~n", [TxnKey, MessageList]),
@@ -107,17 +107,17 @@ dirty_work(MessageList) ->
 
 commit_transaction(TxnKey) ->
     ?LOGDEBUG("commit_transaction ~p~n", [TxnKey]),
-    gen_server:call(?SERVER, {commit_transaction, TxnKey}).
+    gen_server:call(?SERVER, {commit_transaction, TxnKey}, infinity).
 
 rollback_transaction(TxnKey) ->
     ?LOGDEBUG("rollback_transaction ~p~n", [TxnKey]),
     gen_server:cast(?SERVER, {rollback_transaction, TxnKey}).
 
 force_snapshot() ->
-    gen_server:call(?SERVER, force_snapshot).
+    gen_server:call(?SERVER, force_snapshot, infinity).
 
 serial() ->
-    gen_server:call(?SERVER, serial).
+    gen_server:call(?SERVER, serial, infinity).
 
 %%--------------------------------------------------------------------
 
