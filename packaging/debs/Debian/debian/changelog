@@ -1,3 +1,9 @@
+rabbitmq-server (1.5.4-1) hardy; urgency=low
+
+  * New Upstream Release
+
+ -- Matthias Radestock <matthias@lshift.net>  Mon, 06 Apr 2009 09:19:32 +0100
+
 rabbitmq-server (1.5.3-1) hardy; urgency=low
 
   * New Upstream Release
