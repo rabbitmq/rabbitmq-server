@@ -1,2 +1,0 @@
-#!/bin/bash
-exec sudo -H -u rabbitmq "@PREFIX@/sbin/rabbitmqctl_real" "$@"
