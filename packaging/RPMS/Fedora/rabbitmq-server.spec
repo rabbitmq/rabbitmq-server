@@ -40,7 +40,7 @@ fi
 
 %build
 cp %{S:2} %{_rabbit_wrapper}
-sed 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
+sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
 make %{?_smp_mflags}
 
 %install
