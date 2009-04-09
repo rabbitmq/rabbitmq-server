@@ -64,6 +64,8 @@
 
 -record(basic_message, {exchange_name, routing_key, content, persistent_key}).
 
+-record(dq_msg_loc, {queue_and_msg_id, is_delivered}).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
