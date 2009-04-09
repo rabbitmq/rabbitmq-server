@@ -45,47 +45,226 @@
 -define(FILE_EXTENSION, ".rdq").
 -define(FILE_EXTENSION_TMP, ".rdt").
 
--record(dqstate, {msg_location, file_summary, file_detail, next_file_name}).
+-record(dqstate, {msg_location,
+		  file_summary,
+		  file_detail,
+		  current_file_num,
+		  current_file_name,
+		  current_file_handle,
+		  file_size_limit,
+		  read_file_handles,
+		  read_file_handles_limit
+		 }).
 
-init(_Args) ->
+init(FileSizeLimit, ReadFileHandlesLimit) ->
     process_flag(trap_exit, true),
     Dir = base_directory(),
     ok = filelib:ensure_dir(Dir),
     State = #dqstate { msg_location = ets:new((?MSG_LOC_ETS_NAME), [set, private]),
 		       file_summary = dict:new(),
 		       file_detail = ets:new((?FILE_DETAIL_ETS_NAME), [bag, private]),
-		       next_file_name = 0
+		       current_file_num = 0,
+		       current_file_name = "0" ++ (?FILE_EXTENSION),
+		       current_file_handle = undefined,
+		       file_size_limit = FileSizeLimit,
+		       read_file_handles = {dict:new(), gb_trees:empty()},
+		       read_file_handles_limit = ReadFileHandlesLimit
 		     },
-    {ok, State1} = load_from_disk(State),
-    {ok, State1}.
-    
+    {ok, State1 = #dqstate { current_file_name = CurrentName } } = load_from_disk(State),
+    {ok, FileHdl} = file:open(form_filename(CurrentName), [append, raw, binary]),
+    {ok, State1 # dqstate { current_file_handle = FileHdl }}.
+
+form_filename(Name) ->
+    filename:join(base_directory(), Name).
 
 base_directory() ->
     filename:join(mnesia:system_info(directory), "/rabbit_disk_queue/").
 
-%% ---- DISK RECOVERY ----
+%% ---- INTERNAL RAW FUNCTIONS ----
 
-load_from_disk(State = #dqstate{ msg_location = MsgLoc,
-				 file_summary = FileSum,
-				 file_detail = FileDetail
-			       }
-	      ) ->
-    {Files, TmpFiles} = get_disk_queue_files(),
-    ok = recover_crashed_compactions(Files, TmpFiles),
+internal_deliver(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
+					      current_file_handle = CurHdl,
+					      current_file_name = CurName,
+					      read_file_handles_limit = ReadFileHandlesLimit,
+					      read_file_handles = {ReadHdls, ReadHdlsAge}
+					     }) ->
+    [{MsgId, _RefCount, File, Offset, TotalSize}] = ets:lookup(MsgLocation, MsgId),
+    if CurName =:= File ->
+	ok = file:sync(CurHdl)
+    end,
+    % so this next bit implements an LRU for file handles. But it's a bit insane, and smells
+    % of premature optimisation. So I might remove it and dump it overboard
+    {FileHdl, ReadHdls1, ReadHdlsAge1}
+	= case dict:find(File, ReadHdls) of
+	      error ->
+		  {ok, Hdl} = file:open(form_filename(File), [read, raw, binary]),
+		  Now = now(),
+		  case dict:size(ReadHdls) < ReadFileHandlesLimit of
+		      true ->
+			  {Hdl, dict:store(File, {Hdl, Now}, ReadHdls), gb_trees:enter(Now, File, ReadHdlsAge)};
+		      _False ->
+			  {_Then, OldFile, ReadHdlsAge2} = gb_trees:take_smallest(ReadHdlsAge),
+			  OldHdl = dict:find(OldFile, ReadHdls),
+			  ok = file:close(OldHdl),
+			  ReadHdls2 = dict:erase(OldFile, ReadHdls),
+			  {Hdl, dict:store(File, {Hdl, Now}, ReadHdls2), gb_trees:enter(Now, File, ReadHdlsAge2)}
+		  end;
+	      {ok, {Hdl, Then}} ->
+		  Now = now(),
+		  {Hdl, dict:store(File, {Hdl, Now}, ReadHdls), gb_trees:enter(Now, File, gb_trees:delete(Then, ReadHdlsAge))}
+	  end,
+    % read the message
+    {ok, {MsgBody, BodySize, TotalSize}} = read_message_at_offset(FileHdl, Offset),
+    ok = mnesia:write(rabbit_disk_queue, {Q, MsgId}, write),
+    {ok, {MsgBody, BodySize, TotalSize}, State # dqstate { read_file_handles = {ReadHdls1, ReadHdlsAge1} }}.
+
+internal_ack(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
+					  file_summary = FileSummary,
+					  file_detail = FileDetail
+					 }) ->
+    [{MsgId, RefCount, File, Offset, TotalSize}] = ets:lookup(MsgLocation, MsgId),
+    % is this the last time we need the message, in which case tidy up
+    FileSummary1 =
+	if 1 =:= RefCount ->
+		true = ets:delete(MsgLocation, MsgId),
+		true = ets:delete_object(FileDetail, {File, Offset, TotalSize}),
+		{ok, {ValidTotalSize, ContiguousTop, Left, Right}} = dict:find(File, FileSummary),
+		ContiguousTop1 = lists:min([ContiguousTop, Offset]),
+		FileSummary2 = dict:store(File, {ValidTotalSize - TotalSize - 1 - (2* (?INTEGER_SIZE_BYTES)),
+						 ContiguousTop1, Left, Right}, FileSummary),
+		ok = mnesia:delete({rabbit_disk_queue, {Q, MsgId}}),
+		FileSummary2;
+	   true ->
+		ets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
+		FileSummary
+	end,
+    State1 = compact(File, State # dqstate { file_summary = FileSummary1 } ),
+    {ok, State1}.
+
+internal_publish(Q, MsgId, MsgBody, State = #dqstate { msg_location = MsgLocation,
+						       current_file_handle = CurHdl,
+						       current_file_name = CurName,
+						       file_summary = FileSummary,
+						       file_detail = FileDetail
+						      }
+		) when is_binary(MsgBody) ->
+    {ok, State1} =
+	case ets:lookup(MsgLocation, MsgId) of
+	    [] ->
+	        % New message, lots to do
+		{ok, Offset} = file:position(CurHdl, cur),
+		{ok, TotalSize} = append_message(CurHdl, MsgId, MsgBody),
+		true = ets:insert_new(MsgLocation, {MsgId, 1, CurName, Offset, TotalSize}),
+		true = ets:insert_new(FileDetail, {CurName, Offset, TotalSize}),
+		{ok, {ValidTotalSize, ContiguousTop, Left, undefined}} = dict:find(CurName, FileSummary),
+		ValidTotalSize1 = ValidTotalSize + TotalSize + 1 + (2* (?INTEGER_SIZE_BYTES)),
+		ContiguousTop1 = if Offset =:= ContiguousTop ->
+					 ValidTotalSize; % can't be any holes in this file
+				    true -> ContiguousTop
+				 end,
+		FileSummary2 = dict:store(CurName, {ValidTotalSize1, ContiguousTop1, Left, undefined}, FileSummary),
+		maybe_roll_to_new_file(Offset + TotalSize + 1 + (2* (?INTEGER_SIZE_BYTES)),
+				       State # dqstate { file_summary = FileSummary2 });
+	    [{MsgId, RefCount, File, Offset, TotalSize}] ->
+	        % We already know about it, just update counter
+		ets:insert(MsgLocation, {MsgId, RefCount + 1, File, Offset, TotalSize}),
+		{ok, State}
+	end,
+    ok = mnesia:write(rabbit_disk_queue, {Q, MsgId}, write),
+    {ok, State1}.
+
+%% ---- ROLLING OVER THE APPEND FILE ----
+
+maybe_roll_to_new_file(Offset, State = #dqstate { file_size_limit = FileSizeLimit,
+						  current_file_name = CurName,
+						  current_file_handle = CurHdl,
+						  current_file_num = CurNum,
+						  file_summary = FileSummary,
+						  file_detail = FileDetail
+						}
+		      ) when Offset >= FileSizeLimit ->
+    ok = file:sync(CurHdl),
+    ok = file:close(CurHdl),
+    NextNum = CurNum + 1,
+    NextName = integer_to_list(NextNum) ++ (?FILE_EXTENSION),
+    [] = ets:lookup(FileDetail, NextName),
+    {ok, NextHdl} = file:open(form_filename(NextNum), [write, raw, binary]),
+    {ok, {ValidTotalSize, ContiguousTop, Left, undefined}} = dict:find(CurName, FileSummary),
+    FileSummary1 = dict:store(CurName, {ValidTotalSize, ContiguousTop, Left, NextName}, FileSummary),
+    {ok, State # dqstate { current_file_name = NextName,
+			   current_file_handle = NextHdl,
+			   current_file_num = NextNum,
+			   file_summary = dict:store(NextName, {0, 0, CurName, undefined}, FileSummary1)
+			 }
+    };
+maybe_roll_to_new_file(_, State) ->
     {ok, State}.
 
-recover_crashed_compactions(Files, []) ->
+%% ---- GARBAGE COLLECTION / COMPACTION / AGGREGATION ----
+
+compact(File, State) ->
+    State.
+
+%% ---- DISK RECOVERY ----
+
+load_from_disk(State) ->
+    % sorted so that smallest number is first. which also means eldest file (left-most) first
+    {Files, TmpFiles} = get_disk_queue_files(),
+    ok = recover_crashed_compactions(Files, TmpFiles),
+    % There should be no more tmp files now, so go ahead and load the whole lot
+    {ok, State1 = #dqstate{ msg_location = MsgLocation }} = load_messages(undefined, Files, State),
+    % Finally, check there is nothing in mnesia which we haven't loaded
+    true = lists:all(fun ({_Q, MsgId}) -> 1 =:= length(ets:lookup(MsgLocation, MsgId)) end,
+		     mnesia:all_keys(rabbit_disk_queue)),
+    {ok, State1}.
+
+load_messages(undefined, [], State) ->
+    State;
+load_messages(Left, [], State) ->
+    Num = list_to_integer(filename:rootname(Left)),
+    State # dqstate { current_file_num = Num, current_file_name = Left };
+load_messages(Left, [File|Files],
+	      State = #dqstate { msg_location = MsgLocation,
+				 file_summary = FileSummary,
+				 file_detail = FileDetail
+			       }) ->
+    % [{MsgId, TotalSize, FileOffset}]
+    {ok, Messages} = scan_file_for_valid_messages(form_filename(File)),
+    {ValidMessagesRev, ValidTotalSize} = lists:foldl(
+	fun ({MsgId, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
+		case length(mnesia:match_object(rabbit_disk_queue, {dq_msg_loc, {'_', MsgId}, '_'})) of
+		    0 -> {VMAcc, VTSAcc};
+		    RefCount ->
+			true = ets:insert_new(MsgLocation, {MsgId, RefCount, File, Offset, TotalSize}),
+			true = ets:insert_new(FileDetail, {File, Offset, TotalSize}),
+			{[{MsgId, TotalSize, Offset}|VMAcc], VTSAcc + TotalSize + 1 + (2* (?INTEGER_SIZE_BYTES))}
+		end
+	end, {[], 0}, Messages),
+    % foldl reverses lists and find_contiguous_block_prefix needs elems in the same order
+    % as from scan_file_for_valid_messages
+    {ContiguousTop, _} = find_contiguous_block_prefix(lists:reverse(ValidMessagesRev)),
+    Right = case Files of
+		[] -> undefined;
+		[F|_] -> F
+	    end,
+    State1 = State # dqstate { file_summary =
+			       dict:store(File, {ValidTotalSize, ContiguousTop, Left, Right}, FileSummary) },
+    load_messages(File, Files, State1).
+
+%% ---- DISK RECOVERY OF FAILED COMPACTION ----
+
+recover_crashed_compactions(_Files, []) ->
     ok;
 recover_crashed_compactions(Files, [TmpFile|TmpFiles]) ->
     NonTmpRelatedFile = filename:rootname(TmpFile) ++ (?FILE_EXTENSION),
     true = lists:member(NonTmpRelatedFile, Files),
     % [{MsgId, TotalSize, FileOffset}]
-    {ok, UncorruptedMessagesTmp} = scan_file_for_valid_messages(filename:join(base_directory(), TmpFile)),
+    {ok, UncorruptedMessagesTmp} = scan_file_for_valid_messages(form_filename(TmpFile)),
     % all of these messages should appear in the mnesia table, otherwise they wouldn't have been copied out
     lists:foreach(fun ({MsgId, _TotalSize, _FileOffset}) ->
 			  0 < length(mnesia:match_object(rabbit_disk_queue, {dq_msg_loc, {'_', MsgId}, '_'}))
 		  end, UncorruptedMessagesTmp),
-    {ok, UncorruptedMessages} = scan_file_for_valid_messages(filename:join(base_directory(), NonTmpRelatedFile)),
+    {ok, UncorruptedMessages} = scan_file_for_valid_messages(form_filename(NonTmpRelatedFile)),
     %% 1) It's possible that everything in the tmp file is also in the main file
     %%    such that the main file is (prefix ++ tmpfile). This means that compaction
     %%    failed immediately prior to the final step of deleting the tmp file.
@@ -123,7 +302,7 @@ recover_crashed_compactions(Files, [TmpFile|TmpFiles]) ->
 	    % we should have that none of the messages in the prefix are in the tmp file
 	    true = lists:all(fun (MsgId) -> not(lists:member(MsgId, MsgIdsTmp)) end, MsgIds),
 
-	    {ok, MainHdl} = file:open(filename:join(base_directory(), NonTmpRelatedFile), [write, raw, binary]),
+	    {ok, MainHdl} = file:open(form_filename(NonTmpRelatedFile), [write, raw, binary]),
 	    {ok, Top} = file:position(MainHdl, Top),
 	    ok = file:truncate(MainHdl), % wipe out any rubbish at the end of the file
 	    % there really could be rubbish at the end of the file - we could have failed after the
@@ -136,11 +315,18 @@ recover_crashed_compactions(Files, [TmpFile|TmpFiles]) ->
 	    ok = file:truncate(MainHdl), % and now extend the main file as big as necessary in a single move
 					 % if we run out of disk space, this truncate could fail, but we still
 					 % aren't risking losing data
-	    {ok, TmpHdl} = file:open(filename:join(base_directory(), TmpFile), [read, raw, binary]),
+	    {ok, TmpHdl} = file:open(form_filename(TmpFile), [read, raw, binary]),
 	    {ok, TmpSize} = file:copy(TmpHdl, MainHdl, TmpSize),
 	    ok = file:close(MainHdl),
 	    ok = file:close(TmpHdl),
-	    ok = file:delete(TmpFile)
+	    ok = file:delete(TmpFile),
+
+	    {ok, MainMessages} = scan_file_for_valid_messages(form_filename(NonTmpRelatedFile)),
+	    MsgIdsMain = lists:map(GrabMsgId, MainMessages),
+	    % check that everything in MsgIds is in MsgIdsMain
+	    true = lists:all(fun (MsgId) -> lists:member(MsgId, MsgIdsMain) end, MsgIds),
+	    % check that everything in MsgIdsTmp is in MsgIdsMain
+	    true = lists:all(fun (MsgId) -> lists:member(MsgId, MsgIdsMain) end, MsgIdsTmp)
     end,
     recover_crashed_compactions(Files, TmpFiles).
 
@@ -160,7 +346,7 @@ find_contiguous_block_prefix([], _N, _Acc) ->
 find_contiguous_block_prefix([{MsgId, TotalSize, Offset}|Tail], ExpectedOffset, Acc)
   when ExpectedOffset =:= Offset + TotalSize + 1 + (2* (?INTEGER_SIZE_BYTES)) ->
     find_contiguous_block_prefix(Tail, Offset, [MsgId|Acc]);
-find_contiguous_block_prefix(List, _ExpectedOffset, Acc) ->
+find_contiguous_block_prefix(List, _ExpectedOffset, _Acc) ->
     find_contiguous_block_prefix(List).
     
 file_name_sort(A, B) ->
@@ -185,7 +371,8 @@ append_message(FileHdl, MsgId, MsgBody) when is_binary(MsgBody) ->
     case file:write(FileHdl, <<TotalSize:(?INTEGER_SIZE_BITS),
 			       MsgIdBinSize:(?INTEGER_SIZE_BITS),
 			       MsgIdBin:MsgIdBinSize/binary, MsgBody:BodySize/binary>>) of
-	ok -> file:write(FileHdl, <<(?WRITE_OK):(?WRITE_OK_SIZE_BITS)>>);
+	ok -> ok = file:write(FileHdl, <<(?WRITE_OK):(?WRITE_OK_SIZE_BITS)>>),
+	      {ok, TotalSize};
 	KO -> KO
     end.
 
@@ -200,7 +387,7 @@ read_message_at_offset(FileHdl, Offset) ->
 			    BodySize = TotalSize - MsgIdBinSize,
 			    case file:read(FileHdl, 1 + BodySize) of
 				{ok, <<MsgBody:BodySize/binary, (?WRITE_OK):(?WRITE_OK_SIZE_BITS)>>} ->
-				    {ok, MsgBody, BodySize};
+				    {ok, {MsgBody, BodySize, TotalSize}};
 				KO -> KO
 			    end;
 			KO -> KO
@@ -213,7 +400,7 @@ read_message_at_offset(FileHdl, Offset) ->
 scan_file_for_valid_messages(File) ->
     {ok, Hdl} = file:open(File, [raw, binary, read]),
     Valid = scan_file_for_valid_messages(Hdl, 0, []),
-    file:close(Hdl),
+    file:close(Hdl), % if something really bad's happened, the close could fail, but ignore
     Valid.
 
 scan_file_for_valid_messages(FileHdl, Offset, Acc) ->
@@ -223,7 +410,7 @@ scan_file_for_valid_messages(FileHdl, Offset, Acc) ->
 	    scan_file_for_valid_messages(FileHdl, NextOffset, Acc);
 	{ok, {ok, MsgId, TotalSize, NextOffset}} ->
 	    scan_file_for_valid_messages(FileHdl, NextOffset, [{MsgId, TotalSize, Offset}|Acc]);
-	KO -> {ok, Acc} %% bad message, but we may still have recovered some valid messages
+	_KO -> {ok, Acc} %% bad message, but we may still have recovered some valid messages
     end.
 	    
 
