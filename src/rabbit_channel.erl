@@ -765,6 +765,7 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
 
 publish(Mandatory, Immediate, Message, QPids,
         State = #ch{transaction_id = TxnKey, writer_pid = WriterPid}) ->
+    rabbit_log:tap_trace_in(Message, QPids),
     Handled = deliver(QPids, Mandatory, Immediate, TxnKey,
                       Message, WriterPid),
     case TxnKey of

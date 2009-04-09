@@ -41,8 +41,12 @@
 -export([debug/1, debug/2, message/4, info/1, info/2,
          warning/1, warning/2, error/1, error/2]).
 
+-export([tap_trace_in/2, tap_trace_out/2]).
+
 -import(io).
 -import(error_logger).
+
+-include("rabbit.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -94,6 +98,54 @@ error(Fmt) ->
 
 error(Fmt, Args) when is_list(Args) ->
     gen_server:cast(?SERVER, {error, Fmt, Args}).
+
+tap_trace_in(Message = #basic_message{exchange_name = XName},
+             QPids) ->
+    case application:get_env(trace_exchange) of
+        undefined ->
+            ok;
+        {ok, TraceExchangeBin} ->
+            QInfos = [rabbit_amqqueue:info(#amqqueue{pid = P}, [name]) || P <- QPids],
+            QNames = [N || [{name, #resource{name = N}}] <- QInfos],
+            maybe_inject(TraceExchangeBin,
+                         XName,
+                         <<"publish">>,
+                         XName,
+                         [{queue_names, QNames},
+                          {message, Message}])
+    end.
+
+tap_trace_out(Message = #basic_message{exchange_name = XName},
+              QName) ->
+    case application:get_env(trace_exchange) of
+        undefined ->
+            ok;
+        {ok, TraceExchangeBin} ->
+            maybe_inject(TraceExchangeBin,
+                         XName,
+                         <<"deliver">>,
+                         QName,
+                         [{message, Message}])
+    end.
+
+maybe_inject(TraceExchangeBin,
+             #resource{virtual_host = VHostBin, name = OriginalExchangeBin},
+             RKPrefix,
+             #resource{name = RKSuffix},
+             Term) ->
+    if
+        TraceExchangeBin =:= OriginalExchangeBin ->
+            ok;
+        true ->
+            rabbit_exchange:simple_publish(
+              false,
+              false,
+              rabbit_misc:r(VHostBin, exchange, TraceExchangeBin),
+              <<RKPrefix/binary, ".", RKSuffix/binary>>,
+              <<"text/plain">>,
+              list_to_binary(io_lib:format("~p", [Term]))),
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 
