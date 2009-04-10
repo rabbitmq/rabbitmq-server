@@ -48,15 +48,15 @@
 -define(INTEGER_SIZE_BYTES, 8).
 -define(INTEGER_SIZE_BITS, 8 * ?INTEGER_SIZE_BYTES).
 -define(MSG_LOC_ETS_NAME, rabbit_disk_queue_msg_location).
--define(FILE_DETAIL_ETS_NAME, rabbit_disk_queue_file_detail).
 -define(FILE_EXTENSION, ".rdq").
 -define(FILE_EXTENSION_TMP, ".rdt").
 
 -define(SERVER, ?MODULE).
 
+-record(dqfile, {valid_data, contiguous_prefix, left, right, detail}).
+
 -record(dqstate, {msg_location,
 		  file_summary,
-		  file_detail,
 		  current_file_num,
 		  current_file_name,
 		  current_file_handle,
@@ -94,8 +94,12 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     process_flag(trap_exit, true),
     InitName = "0" ++ (?FILE_EXTENSION),
     State = #dqstate { msg_location = ets:new((?MSG_LOC_ETS_NAME), [set, private]),
-		       file_summary = dict:store(InitName, {0, 0, undefined, undefined}, dict:new()),
-		       file_detail = ets:new((?FILE_DETAIL_ETS_NAME), [bag, private]),
+		       file_summary = dict:store(InitName, (#dqfile { valid_data = 0,
+								      contiguous_prefix = 0,
+								      left = undefined,
+								      right = undefined,
+								      detail = dict:new()}),
+						 dict:new()),
 		       current_file_num = 0,
 		       current_file_name = InitName,
 		       current_file_handle = undefined,
@@ -199,19 +203,23 @@ internal_deliver(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
      State # dqstate { read_file_handles = {ReadHdls1, ReadHdlsAge1} }}.
 
 internal_ack(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
-					  file_summary = FileSummary,
-					  file_detail = FileDetail
-					 }) ->
+					  file_summary = FileSummary
+					}) ->
     [{MsgId, RefCount, File, Offset, TotalSize}] = ets:lookup(MsgLocation, MsgId),
     % is this the last time we need the message, in which case tidy up
     FileSummary1 =
 	if 1 =:= RefCount ->
 		true = ets:delete(MsgLocation, MsgId),
-		true = ets:delete_object(FileDetail, {File, Offset, TotalSize}),
-		{ok, {ValidTotalSize, ContiguousTop, Left, Right}} = dict:find(File, FileSummary),
+		{ok, FileSum = #dqfile { valid_data = ValidTotalSize,
+					 contiguous_prefix = ContiguousTop,
+					 detail = FileDetail }}
+		    = dict:find(File, FileSummary),
+		FileDetail1 = dict:erase(Offset, FileDetail),
 		ContiguousTop1 = lists:min([ContiguousTop, Offset]),
-		FileSummary2 = dict:store(File, {ValidTotalSize - TotalSize - file_packing_adjustment_bytes(),
-						 ContiguousTop1, Left, Right}, FileSummary),
+		FileSummary2 = dict:store(File, FileSum #dqfile { valid_data = (ValidTotalSize - TotalSize - file_packing_adjustment_bytes()),
+								  contiguous_prefix = ContiguousTop1,
+								  detail = FileDetail1
+								}, FileSummary),
 		ok = mnesia:dirty_delete({rabbit_disk_queue, {Q, MsgId}}),
 		FileSummary2;
 	   1 < RefCount ->
@@ -224,8 +232,7 @@ internal_ack(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
 internal_tx_publish(MsgId, MsgBody, State = #dqstate { msg_location = MsgLocation,
 						       current_file_handle = CurHdl,
 						       current_file_name = CurName,
-						       file_summary = FileSummary,
-						       file_detail = FileDetail
+						       file_summary = FileSummary
 						     }) ->
     case ets:lookup(MsgLocation, MsgId) of
 	[] ->
@@ -234,16 +241,23 @@ internal_tx_publish(MsgId, MsgBody, State = #dqstate { msg_location = MsgLocatio
 	    io:format("Reported file position: ~p~n", [Offset]),
 	    {ok, TotalSize} = append_message(CurHdl, MsgId, MsgBody),
 	    true = ets:insert_new(MsgLocation, {MsgId, 1, CurName, Offset, TotalSize}),
-	    true = ets:insert(FileDetail, {CurName, Offset, TotalSize}),
-	    {ok, {ValidTotalSize, ContiguousTop, Left, undefined}} = dict:find(CurName, FileSummary),
+	    {ok, FileSum = #dqfile { valid_data = ValidTotalSize,
+				     contiguous_prefix = ContiguousTop,
+				     right = undefined,
+				     detail = FileDetail }}
+		= dict:find(CurName, FileSummary),
+	    FileDetail1 = dict:store(Offset, TotalSize, FileDetail),
 	    ValidTotalSize1 = ValidTotalSize + TotalSize + file_packing_adjustment_bytes(),
 	    ContiguousTop1 = if Offset =:= ContiguousTop ->
 				     ValidTotalSize; % can't be any holes in this file
 				true -> ContiguousTop
 			     end,
-	    FileSummary2 = dict:store(CurName, {ValidTotalSize1, ContiguousTop1, Left, undefined}, FileSummary),
+	    FileSummary1 = dict:store(CurName, FileSum #dqfile { valid_data = ValidTotalSize1,
+								 contiguous_prefix = ContiguousTop1,
+								 detail = FileDetail1},
+				      FileSummary),
 	    maybe_roll_to_new_file(Offset + TotalSize + file_packing_adjustment_bytes(),
-				   State # dqstate { file_summary = FileSummary2 });
+				   State # dqstate { file_summary = FileSummary1 });
 	[{MsgId, RefCount, File, Offset, TotalSize}] ->
 	    % We already know about it, just update counter
 	    true = ets:insert(MsgLocation, {MsgId, RefCount + 1, File, Offset, TotalSize}),
@@ -273,19 +287,24 @@ internal_publish(Q, MsgId, MsgBody, State) ->
     internal_tx_commit(Q, [MsgId], State1).
 
 internal_tx_cancel(MsgIds, State = #dqstate { msg_location = MsgLocation,
-					      file_summary = FileSummary,
-					      file_detail = FileDetail }) ->
+					      file_summary = FileSummary
+					    }) ->
     FileSummary1 =
 	lists:foldl(fun (MsgId, FileSummary2) ->
 			    [{MsgId, RefCount, File, Offset, TotalSize}]
 				= ets:lookup(MsgLocation, MsgId),
 			    if 1 =:= RefCount ->
 				    true = ets:delete(MsgLocation, MsgId),
-				    true = ets:delete_object(FileDetail, {File, Offset, TotalSize}),
-				    {ok, {ValidTotalSize, ContiguousTop, Left, Right}} = dict:find(File, FileSummary2),
+				    {ok, FileSum = #dqfile { valid_data = ValidTotalSize,
+							     contiguous_prefix = ContiguousTop,
+							     detail = FileDetail }}
+					= dict:find(File, FileSummary2),
+				    FileDetail1 = dict:erase(Offset, FileDetail),
 				    ContiguousTop1 = lists:min([ContiguousTop, Offset]),
-				    dict:store(File, {ValidTotalSize - TotalSize - file_packing_adjustment_bytes(),
-						      ContiguousTop1, Left, Right}, FileSummary2);
+				    dict:store(File, FileSum #dqfile { valid_data = (ValidTotalSize - TotalSize - file_packing_adjustment_bytes()),
+								       contiguous_prefix = ContiguousTop1,
+								       detail = FileDetail1
+								     }, FileSummary2);
 			       1 < RefCount ->
 				    ets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
 				    FileSummary2
@@ -299,22 +318,25 @@ maybe_roll_to_new_file(Offset, State = #dqstate { file_size_limit = FileSizeLimi
 						  current_file_name = CurName,
 						  current_file_handle = CurHdl,
 						  current_file_num = CurNum,
-						  file_summary = FileSummary,
-						  file_detail = FileDetail
+						  file_summary = FileSummary
 						}
 		      ) when Offset >= FileSizeLimit ->
     ok = file:sync(CurHdl),
     ok = file:close(CurHdl),
     NextNum = CurNum + 1,
     NextName = integer_to_list(NextNum) ++ (?FILE_EXTENSION),
-    [] = ets:lookup(FileDetail, NextName),
     {ok, NextHdl} = file:open(form_filename(NextName), [write, raw, binary]),
-    {ok, {ValidTotalSize, ContiguousTop, Left, undefined}} = dict:find(CurName, FileSummary),
-    FileSummary1 = dict:store(CurName, {ValidTotalSize, ContiguousTop, Left, NextName}, FileSummary),
+    {ok, FileSum = #dqfile {right = undefined}} = dict:find(CurName, FileSummary),
+    FileSummary1 = dict:store(CurName, FileSum #dqfile {right = NextName}, FileSummary),
     {ok, State # dqstate { current_file_name = NextName,
 			   current_file_handle = NextHdl,
 			   current_file_num = NextNum,
-			   file_summary = dict:store(NextName, {0, 0, CurName, undefined}, FileSummary1)
+			   file_summary = dict:store(NextName, #dqfile { valid_data = 0,
+									 contiguous_prefix = 0,
+									 left = CurName,
+									 right = undefined,
+									 detail = dict:new()},
+						     FileSummary1)
 			 }
     };
 maybe_roll_to_new_file(_, State) ->
@@ -345,21 +367,22 @@ load_messages(Left, [], State) ->
     State # dqstate { current_file_num = Num, current_file_name = Left };
 load_messages(Left, [File|Files],
 	      State = #dqstate { msg_location = MsgLocation,
-				 file_summary = FileSummary,
-				 file_detail = FileDetail
+				 file_summary = FileSummary
 			       }) ->
     % [{MsgId, TotalSize, FileOffset}]
     {ok, Messages} = scan_file_for_valid_messages(form_filename(File)),
-    {ValidMessagesRev, ValidTotalSize} = lists:foldl(
-	fun ({MsgId, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
+    {ValidMessagesRev, ValidTotalSize, FileDetail} = lists:foldl(
+	fun ({MsgId, TotalSize, Offset}, {VMAcc, VTSAcc, FileDetail1}) ->
 		case length(mnesia:dirty_match_object(rabbit_disk_queue, {dq_msg_loc, {'_', MsgId}, '_'})) of
-		    0 -> {VMAcc, VTSAcc};
+		    0 -> {VMAcc, VTSAcc, FileDetail1};
 		    RefCount ->
 			true = ets:insert_new(MsgLocation, {MsgId, RefCount, File, Offset, TotalSize}),
-			true = ets:insert(FileDetail, {File, Offset, TotalSize}),
-			{[{MsgId, TotalSize, Offset}|VMAcc], VTSAcc + TotalSize + file_packing_adjustment_bytes()}
+			{[{MsgId, TotalSize, Offset}|VMAcc],
+			 VTSAcc + TotalSize + file_packing_adjustment_bytes(),
+			 dict:store(Offset, TotalSize, FileDetail1)
+			}
 		end
-	end, {[], 0}, Messages),
+	end, {[], 0, dict:new()}, Messages),
     % foldl reverses lists and find_contiguous_block_prefix needs elems in the same order
     % as from scan_file_for_valid_messages
     {ContiguousTop, _} = find_contiguous_block_prefix(lists:reverse(ValidMessagesRev)),
@@ -368,7 +391,14 @@ load_messages(Left, [File|Files],
 		[F|_] -> F
 	    end,
     State1 = State # dqstate { file_summary =
-			       dict:store(File, {ValidTotalSize, ContiguousTop, Left, Right}, FileSummary) },
+			       dict:store(File, #dqfile { valid_data = ValidTotalSize,
+							  contiguous_prefix = ContiguousTop,
+							  left = Left,
+							  right = Right,
+							  detail = FileDetail
+							 },
+					  FileSummary)
+			     },
     load_messages(File, Files, State1).
 
 %% ---- DISK RECOVERY OF FAILED COMPACTION ----
