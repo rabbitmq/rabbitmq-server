@@ -140,8 +140,7 @@ rpc_bottom_half(#'channel.close'{reply_code = ReplyCode,
                                  reply_text = ReplyText}, State) ->
     io:format("Channel received close from peer, code: ~p , message: ~p~n",
               [ReplyCode,ReplyText]),
-    NewState = channel_cleanup(State),
-    {stop, normal, NewState};
+    {stop, normal, State};
 
 rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                                               rpc_requests = RequestQueue,
@@ -379,8 +378,7 @@ handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     {noreply, State};
 
 handle_info(shutdown, State) ->
-    NewState = channel_cleanup(State),
-    {stop, normal, NewState};
+    {stop, normal, State};
 
 %% Handle a trapped exit, e.g. from the direct peer
 %% In the direct case this is the local channel
@@ -389,8 +387,7 @@ handle_info(shutdown, State) ->
 handle_info({'EXIT', _Pid, Reason},
             State = #channel_state{number = Number}) ->
     io:format("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
-    NewState = channel_cleanup(State),
-    {stop, normal, NewState};
+    {stop, normal, State};
 
 %% This is for a race condition between a close.close_ok and a subsequent
 %% channel.open
@@ -403,15 +400,11 @@ handle_info( {channel_close, Peer}, State ) ->
 %% This is for a channel exception that can't be otherwise handled
 handle_info( {channel_exception, Channel, Reason}, State) ->
     io:format("Channel ~p is shutting down due to: ~p~n",[Channel, Reason]),
-    NewState = channel_cleanup(State),
-    {stop, shutdown, NewState}.
+    {stop, shutdown, State}.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks
 %%---------------------------------------------------------------------------
-
-terminate(normal, _State) ->
-    ok;
 
 terminate(_Reason, State) ->
     channel_cleanup(State),
