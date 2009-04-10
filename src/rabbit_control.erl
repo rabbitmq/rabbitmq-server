@@ -124,6 +124,10 @@ Available commands:
   list_bindings  [-p <VHostPath>] 
   list_connections [<ConnectionInfoItem> ...]
 
+  enable_tap <ExchangeName>
+  query_tap
+  disable_tap
+
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
 
@@ -262,6 +266,18 @@ action(list_connections, Node, Args, Inform) ->
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
+
+action(enable_tap, Node, [ExchangeName], Inform) ->
+    Inform("Enabling tap to exchange ~p", [ExchangeName]),
+    rpc_call(Node, application, set_env, [rabbit, trace_exchange, list_to_binary(ExchangeName)]);
+
+action(query_tap, Node, [], Inform) ->
+    Inform("Querying tap", []),
+    io:format("~p~n", [rpc_call(Node, application, get_env, [rabbit, trace_exchange])]);
+
+action(disable_tap, Node, [], Inform) ->
+    Inform("Disabling tap", []),
+    rpc_call(Node, application, unset_env, [rabbit, trace_exchange]);
 
 action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
