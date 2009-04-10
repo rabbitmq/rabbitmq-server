@@ -68,6 +68,9 @@ $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
 $(EBIN_DIR)/%.beam: $(TEST_SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
 	erlc $(ERLC_OPTS) $<
 
+run:
+	erl -pa $(LOAD_PATH)
+
 run_server:
 	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) NODE_ONLY=true LOG_BASE=$(LOG_BASE) RABBIT_ARGS="$(RABBIT_ARGS) -s rabbit" MNESIA_DIR=$(MNESIA_DIR) $(BROKER_DIR)/scripts/rabbitmq-server
 	sleep 2 # so that the node is initialized when the tests are run
