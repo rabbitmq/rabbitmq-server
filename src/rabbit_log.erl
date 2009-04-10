@@ -194,7 +194,7 @@ message_to_table(#basic_message{exchange_name = #resource{name = XName},
                                              {<<"type">>, longstr, Type},
                                              {<<"user_id">>, longstr, UserId},
                                              {<<"app_id">>, longstr, AppId}])},
-     {<<"body">>, binary, list_to_binary(lists:reverse(PFR))}].
+     {<<"body">>, longstr, list_to_binary(lists:reverse(PFR))}].
 
 prune_undefined(Fields) ->
     [F || F = {_, _, Value} <- Fields,
