@@ -165,15 +165,15 @@ file_packing_adjustment_bytes() ->
 %% ---- INTERNAL RAW FUNCTIONS ----
 
 internal_deliver(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
-					      current_file_handle = CurHdl,
-					      current_file_name = CurName,
+					      %current_file_handle = CurHdl,
+					      %current_file_name = CurName,
 					      read_file_handles_limit = ReadFileHandlesLimit,
 					      read_file_handles = {ReadHdls, ReadHdlsAge}
 					     }) ->
     [{MsgId, _RefCount, File, Offset, _TotalSize}] = ets:lookup(MsgLocation, MsgId),
-    if CurName =:= File -> ok = file:sync(CurHdl);
-       true -> ok
-    end,
+    %if CurName =:= File -> ok = file:sync(CurHdl); % don't think this is necessary. Within a process you should always have a consistent view of a file
+    %   true -> ok
+    %end,
     % so this next bit implements an LRU for file handles. But it's a bit insane, and smells
     % of premature optimisation. So I might remove it and dump it overboard
     {FileHdl, ReadHdls1, ReadHdlsAge1}
@@ -186,7 +186,7 @@ internal_deliver(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
 			  {Hdl, dict:store(File, {Hdl, Now}, ReadHdls), gb_trees:enter(Now, File, ReadHdlsAge)};
 		      _False ->
 			  {_Then, OldFile, ReadHdlsAge2} = gb_trees:take_smallest(ReadHdlsAge),
-			  {ok, OldHdl} = dict:find(OldFile, ReadHdls),
+			  {ok, {OldHdl, _Then}} = dict:find(OldFile, ReadHdls),
 			  ok = file:close(OldHdl),
 			  ReadHdls2 = dict:erase(OldFile, ReadHdls),
 			  {Hdl, dict:store(File, {Hdl, Now}, ReadHdls2), gb_trees:enter(Now, File, ReadHdlsAge2)}
@@ -197,8 +197,8 @@ internal_deliver(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
 	  end,
     % read the message
     {ok, {MsgBody, BodySize, _TotalSize}} = read_message_at_offset(FileHdl, Offset),
-    [#dq_msg_loc {queue_and_msg_id = {Q, MsgId}, is_delivered = Delivered}] = mnesia:dirty_read(rabbit_disk_queue, {Q, MsgId}),
-    ok = mnesia:dirty_write(rabbit_disk_queue, #dq_msg_loc {queue_and_msg_id = {Q, MsgId}, is_delivered = true}),
+    [#dq_msg_loc {queue_and_msg_id = {MsgId, Q}, is_delivered = Delivered}] = mnesia:dirty_read(rabbit_disk_queue, {MsgId, Q}),
+    ok = mnesia:dirty_write(rabbit_disk_queue, #dq_msg_loc {queue_and_msg_id = {MsgId, Q}, is_delivered = true}),
     {ok, {MsgBody, BodySize, Delivered},
      State # dqstate { read_file_handles = {ReadHdls1, ReadHdlsAge1} }}.
 
@@ -220,7 +220,7 @@ internal_ack(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
 								  contiguous_prefix = ContiguousTop1,
 								  detail = FileDetail1
 								}, FileSummary),
-		ok = mnesia:dirty_delete({rabbit_disk_queue, {Q, MsgId}}),
+		ok = mnesia:dirty_delete({rabbit_disk_queue, {MsgId, Q}}),
 		FileSummary2;
 	   1 < RefCount ->
 		ets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
@@ -238,7 +238,6 @@ internal_tx_publish(MsgId, MsgBody, State = #dqstate { msg_location = MsgLocatio
 	[] ->
 	    % New message, lots to do
 	    {ok, Offset} = file:position(CurHdl, cur),
-	    io:format("Reported file position: ~p~n", [Offset]),
 	    {ok, TotalSize} = append_message(CurHdl, MsgId, MsgBody),
 	    true = ets:insert_new(MsgLocation, {MsgId, 1, CurName, Offset, TotalSize}),
 	    {ok, FileSum = #dqfile { valid_data = ValidTotalSize,
@@ -273,7 +272,7 @@ internal_tx_commit(Q, MsgIds, State = #dqstate { msg_location = MsgLocation,
 	    fun() -> lists:foldl(fun (MsgId, Acc) ->
 					 [{MsgId, _RefCount, File, _Offset, _TotalSize}] =
 					     ets:lookup(MsgLocation, MsgId),
-					 ok = mnesia:write(rabbit_disk_queue, #dq_msg_loc { queue_and_msg_id = {Q, MsgId}, is_delivered = false}, write),
+					 ok = mnesia:write(rabbit_disk_queue, #dq_msg_loc { queue_and_msg_id = {MsgId, Q}, is_delivered = false}, write),
 					 Acc or (CurName =:= File)
 				 end, false, MsgIds)
 	    end),
@@ -284,7 +283,9 @@ internal_tx_commit(Q, MsgIds, State = #dqstate { msg_location = MsgLocation,
 
 internal_publish(Q, MsgId, MsgBody, State) ->
     {ok, State1} = internal_tx_publish(MsgId, MsgBody, State),
-    internal_tx_commit(Q, [MsgId], State1).
+    ok = mnesia:dirty_write(rabbit_disk_queue, #dq_msg_loc { queue_and_msg_id = {MsgId, Q}, is_delivered = false}),
+    {ok, State1}.
+
 
 internal_tx_cancel(MsgIds, State = #dqstate { msg_location = MsgLocation,
 					      file_summary = FileSummary
@@ -356,7 +357,7 @@ load_from_disk(State) ->
     % There should be no more tmp files now, so go ahead and load the whole lot
     (State1 = #dqstate{ msg_location = MsgLocation }) = load_messages(undefined, Files, State),
     % Finally, check there is nothing in mnesia which we haven't loaded
-    true = lists:all(fun ({_Q, MsgId}) -> 1 =:= length(ets:lookup(MsgLocation, MsgId)) end,
+    true = lists:all(fun ({MsgId, _Q}) -> 1 =:= length(ets:lookup(MsgLocation, MsgId)) end,
 		     mnesia:async_dirty(fun() -> mnesia:all_keys(rabbit_disk_queue) end)),
     {ok, State1}.
 
@@ -373,7 +374,7 @@ load_messages(Left, [File|Files],
     {ok, Messages} = scan_file_for_valid_messages(form_filename(File)),
     {ValidMessagesRev, ValidTotalSize, FileDetail} = lists:foldl(
 	fun ({MsgId, TotalSize, Offset}, {VMAcc, VTSAcc, FileDetail1}) ->
-		case length(mnesia:dirty_match_object(rabbit_disk_queue, {dq_msg_loc, {'_', MsgId}, '_'})) of
+		case length(mnesia:dirty_match_object(rabbit_disk_queue, {dq_msg_loc, {MsgId, '_'}, '_'})) of
 		    0 -> {VMAcc, VTSAcc, FileDetail1};
 		    RefCount ->
 			true = ets:insert_new(MsgLocation, {MsgId, RefCount, File, Offset, TotalSize}),
@@ -414,7 +415,7 @@ recover_crashed_compactions(Files, [TmpFile|TmpFiles]) ->
     MsgIdsTmp = lists:map(GrabMsgId, UncorruptedMessagesTmp),
     % all of these messages should appear in the mnesia table, otherwise they wouldn't have been copied out
     lists:foreach(fun (MsgId) ->
-			  true = 0 < length(mnesia:dirty_match_object(rabbit_disk_queue, {dq_msg_loc, {'_', MsgId}, '_'}))
+			  true = 0 < length(mnesia:dirty_match_object(rabbit_disk_queue, {dq_msg_loc, {MsgId, '_'}, '_'}))
 		  end, MsgIdsTmp),
     {ok, UncorruptedMessages} = scan_file_for_valid_messages(form_filename(NonTmpRelatedFile)),
     MsgIds = lists:map(GrabMsgId, UncorruptedMessages),
@@ -445,7 +446,7 @@ recover_crashed_compactions(Files, [TmpFile|TmpFiles]) ->
 	    % we're in case 4 above.
 	    % check that everything in the main file is a valid message in mnesia
 	    lists:foreach(fun (MsgId) ->
-				  true = 0 < length(mnesia:dirty_match_object(rabbit_disk_queue, {dq_msg_loc, {'_', MsgId}, '_'}))
+				  true = 0 < length(mnesia:dirty_match_object(rabbit_disk_queue, {dq_msg_loc, {MsgId, '_'}, '_'}))
 			  end, MsgIds),
 	    % The main file should be contiguous
 	    {Top, MsgIds} = find_contiguous_block_prefix(UncorruptedMessages),
