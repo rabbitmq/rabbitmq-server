@@ -124,9 +124,9 @@ Available commands:
   list_bindings  [-p <VHostPath>] 
   list_connections [<ConnectionInfoItem> ...]
 
-  enable_tap <ExchangeName>
-  query_tap
-  disable_tap
+  set_env <VariableName> <ErlangTerm>
+  get_env <VariableName>
+  unset_env <VariableName>
 
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
@@ -267,17 +267,19 @@ action(list_connections, Node, Args, Inform) ->
                                [ArgAtoms]),
                       ArgAtoms);
 
-action(enable_tap, Node, [ExchangeName], Inform) ->
-    Inform("Enabling tap to exchange ~p", [ExchangeName]),
-    rpc_call(Node, application, set_env, [rabbit, trace_exchange, list_to_binary(ExchangeName)]);
+action(set_env, Node, [VariableName, ErlangTermStr], Inform) ->
+    Inform("Setting variable ~p for node ~p to ~s", [VariableName, Node, ErlangTermStr]),
+    {ok, Tokens, _} = erl_scan:string(ErlangTermStr ++ "."),
+    {ok, Term} = erl_parse:parse_term(Tokens),
+    rpc_call(Node, application, set_env, [rabbit, list_to_atom(VariableName), Term]);
 
-action(query_tap, Node, [], Inform) ->
-    Inform("Querying tap", []),
-    io:format("~p~n", [rpc_call(Node, application, get_env, [rabbit, trace_exchange])]);
+action(get_env, Node, [VariableName], Inform) ->
+    Inform("Getting variable ~p for node ~p", [VariableName, Node]),
+    io:format("~p~n", [rpc_call(Node, application, get_env, [rabbit, list_to_atom(VariableName)])]);
 
-action(disable_tap, Node, [], Inform) ->
-    Inform("Disabling tap", []),
-    rpc_call(Node, application, unset_env, [rabbit, trace_exchange]);
+action(unset_env, Node, [VariableName], Inform) ->
+    Inform("Clearing variable ~p for node ~p", [VariableName, Node]),
+    rpc_call(Node, application, unset_env, [rabbit, list_to_atom(VariableName)]);
 
 action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
