@@ -269,7 +269,8 @@ internal_tx_commit(Q, MsgIds, State = #dqstate { msg_location = MsgLocation,
 					       }) ->
     {atomic, Sync}
 	= mnesia:transaction(
-	    fun() -> lists:foldl(fun (MsgId, Acc) ->
+	    fun() -> ok = mnesia:write_lock_table(rabbit_disk_queue),
+		     lists:foldl(fun (MsgId, Acc) ->
 					 [{MsgId, _RefCount, File, _Offset, _TotalSize}] =
 					     ets:lookup(MsgLocation, MsgId),
 					 ok = mnesia:write(rabbit_disk_queue, #dq_msg_loc { queue_and_msg_id = {MsgId, Q}, is_delivered = false}, write),
