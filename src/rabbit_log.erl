@@ -100,15 +100,18 @@ error(Fmt) ->
 error(Fmt, Args) when is_list(Args) ->
     gen_server:cast(?SERVER, {error, Fmt, Args}).
 
-tap_trace_in(Message = #basic_message{exchange_name = XName},
+tap_trace_in(Message = #basic_message{exchange_name = #resource{virtual_host = VHostBin,
+                                                                name = XNameBin}},
              QPids) ->
-    check_trace(fun (TraceExchangeBin) ->
+    check_trace(VHostBin,
+                fun (TraceExchangeBin) ->
                         QInfos = [rabbit_amqqueue:info(#amqqueue{pid = P}, [name]) || P <- QPids],
                         QNames = [N || [{name, #resource{name = N}}] <- QInfos],
                         maybe_inject(TraceExchangeBin,
-                                     XName,
+                                     VHostBin,
+                                     XNameBin,
                                      <<"publish">>,
-                                     XName,
+                                     XNameBin,
                                      [{<<"queue_names">>,
                                        longstr,
                                        list_to_binary(rabbit_misc:intersperse(",", QNames))},
@@ -117,20 +120,23 @@ tap_trace_in(Message = #basic_message{exchange_name = XName},
                                        message_to_table(Message)}])
                 end).
 
-tap_trace_out(Message = #basic_message{exchange_name = XName},
-              QName) ->
-    check_trace(fun (TraceExchangeBin) ->
+tap_trace_out(Message = #basic_message{exchange_name = #resource{virtual_host = VHostBin,
+                                                                 name = XNameBin}},
+              #resource{name = QNameBin}) ->
+    check_trace(VHostBin,
+                fun (TraceExchangeBin) ->
                         maybe_inject(TraceExchangeBin,
-                                     XName,
+                                     VHostBin,
+                                     XNameBin,
                                      <<"deliver">>,
-                                     QName,
+                                     QNameBin,
                                      [{<<"message">>,
                                        table,
                                        message_to_table(Message)}])
                 end).
 
-check_trace(F) ->
-    case catch case application:get_env(rabbit, trace_exchange) of
+check_trace(VHostBin, F) ->
+    case catch case application:get_env(rabbit, {trace_exchange, VHostBin}) of
                    undefined ->
                        ok;
                    {ok, TraceExchangeBin} ->
@@ -143,9 +149,10 @@ check_trace(F) ->
     end.
 
 maybe_inject(TraceExchangeBin,
-             #resource{virtual_host = VHostBin, name = OriginalExchangeBin},
+             VHostBin,
+             OriginalExchangeBin,
              RKPrefix,
-             #resource{name = RKSuffix},
+             RKSuffix,
              Table) ->
     if
         TraceExchangeBin =:= OriginalExchangeBin ->

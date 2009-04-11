@@ -124,9 +124,9 @@ Available commands:
   list_bindings  [-p <VHostPath>] 
   list_connections [<ConnectionInfoItem> ...]
 
-  set_env <VariableName> <ErlangTerm>
-  get_env <VariableName>
-  unset_env <VariableName>
+  set_env <VariableTerm> <ErlangTerm>
+  get_env <VariableTerm>
+  unset_env <VariableTerm>
 
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
@@ -267,19 +267,17 @@ action(list_connections, Node, Args, Inform) ->
                                [ArgAtoms]),
                       ArgAtoms);
 
-action(set_env, Node, [VariableName, ErlangTermStr], Inform) ->
-    Inform("Setting variable ~p for node ~p to ~s", [VariableName, Node, ErlangTermStr]),
-    {ok, Tokens, _} = erl_scan:string(ErlangTermStr ++ "."),
-    {ok, Term} = erl_parse:parse_term(Tokens),
-    rpc_call(Node, application, set_env, [rabbit, list_to_atom(VariableName), Term]);
+action(set_env, Node, [VarStr, TermStr], Inform) ->
+    Inform("Setting control variable ~s for node ~p to ~s", [VarStr, Node, TermStr]),
+    rpc_call(Node, application, set_env, [rabbit, parse_term(VarStr), parse_term(TermStr)]);
 
-action(get_env, Node, [VariableName], Inform) ->
-    Inform("Getting variable ~p for node ~p", [VariableName, Node]),
-    io:format("~p~n", [rpc_call(Node, application, get_env, [rabbit, list_to_atom(VariableName)])]);
+action(get_env, Node, [VarStr], Inform) ->
+    Inform("Getting control variable ~s for node ~p", [VarStr, Node]),
+    io:format("~p~n", [rpc_call(Node, application, get_env, [rabbit, parse_term(VarStr)])]);
 
-action(unset_env, Node, [VariableName], Inform) ->
-    Inform("Clearing variable ~p for node ~p", [VariableName, Node]),
-    rpc_call(Node, application, unset_env, [rabbit, list_to_atom(VariableName)]);
+action(unset_env, Node, [VarStr], Inform) ->
+    Inform("Clearing control variable ~s for node ~p", [VarStr, Node]),
+    rpc_call(Node, application, unset_env, [rabbit, parse_term(VarStr)]);
 
 action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
@@ -317,6 +315,11 @@ default_if_empty(List, Default) when is_list(List) ->
        true -> 
         [list_to_atom(X) || X <- List]
     end.
+
+parse_term(Str) ->
+    {ok, Tokens, _} = erl_scan:string(Str ++ "."),
+    {ok, Term} = erl_parse:parse_term(Tokens),
+    Term.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
     lists:foreach(fun (Result) -> display_row([format_info_item(Result, X) ||
