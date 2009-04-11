@@ -99,10 +99,6 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     process_flag(trap_exit, true),
     InitName = "0" ++ (?FILE_EXTENSION),
     FileSummary = ets:new((?FILE_SUMMARY_ETS_NAME), [set, private]),
-    true = ets:insert(FileSummary, {InitName, #dqfile { valid_data = 0,
-							contiguous_prefix = 0,
-							left = undefined,
-							right = undefined}}),
     State = #dqstate { msg_location = ets:new((?MSG_LOC_ETS_NAME), [set, private]),
 		       file_summary = FileSummary,
 		       file_detail = ets:new((?FILE_DETAIL_ETS_NAME), [ordered_set, private]),
@@ -357,7 +353,11 @@ load_from_disk(State) ->
 		       true, mnesia:async_dirty(fun() -> mnesia:all_keys(rabbit_disk_queue) end)),
     {ok, State1}.
 
-load_messages(undefined, [], State) ->
+load_messages(undefined, [], State = #dqstate { file_summary = FileSummary, current_file_name = CurName }) ->
+    true = ets:insert_new(FileSummary, {CurName, #dqfile { valid_data = 0,
+							   contiguous_prefix = 0,
+							   left = undefined,
+							   right = undefined}}),
     State;
 load_messages(Left, [], State = #dqstate { file_detail = FileDetail }) ->
     Num = list_to_integer(filename:rootname(Left)),
