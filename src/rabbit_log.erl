@@ -130,7 +130,7 @@ tap_trace_out(Message = #basic_message{exchange_name = XName},
                 end).
 
 check_trace(F) ->
-    case catch case application:get_env(trace_exchange) of
+    case catch case application:get_env(rabbit, trace_exchange) of
                    undefined ->
                        ok;
                    {ok, TraceExchangeBin} ->
