@@ -145,7 +145,6 @@ handle_info(_Info, State) ->
 terminate(_Reason, #dqstate { current_file_handle = FileHdl,
 			      read_file_handles = {ReadHdls, _ReadHdlsAge}
 			    }) ->
-    io:format("DYING~n", []),
     ok = file:sync(FileHdl),
     ok = file:close(FileHdl),
     dict:fold(fun (_File, Hdl, _Acc) ->
