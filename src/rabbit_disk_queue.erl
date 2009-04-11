@@ -335,7 +335,7 @@ maybe_roll_to_new_file(Offset, State = #dqstate { file_size_limit = FileSizeLimi
 			   current_file_handle = NextHdl,
 			   current_file_num = NextNum,
 			   current_offset = 0
-			 }}
+			 }};
 maybe_roll_to_new_file(_, State) ->
     {ok, State}.
 
