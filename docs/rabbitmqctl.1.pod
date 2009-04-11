@@ -282,6 +282,18 @@ optional virtual host parameter for which to display results, defaulting
 to I<"/">. The default can be overridden with the B<-p> flag. Result
 columns for these commands and list_connections are tab-separated.
 
+=head2 CONTROL VARIABLES
+
+set_env I<variable> I<erlangterm>
+    set the value of control variable I<variable> to I<erlangterm>.
+
+get_env I<variable>
+    get the value of control variable I<variable>, printing either
+    {ok,I<value>} or undefined.
+
+unset_env I<variable>
+    clear control variable I<variable>.
+
 =head1 EXAMPLES
 
 Create a user named foo with (initial) password bar at the Erlang node
