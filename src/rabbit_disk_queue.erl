@@ -205,7 +205,7 @@ internal_ack(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
 					}) ->
     [{MsgId, RefCount, File, Offset, TotalSize}] = ets:lookup(MsgLocation, MsgId),
     % is this the last time we need the message, in which case tidy up
-    FileSummary1 =
+    State1 =
 	if 1 =:= RefCount ->
 		true = ets:delete(MsgLocation, MsgId),
 		{ok, FileSum = #dqfile { valid_data = ValidTotalSize,
@@ -214,17 +214,16 @@ internal_ack(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
 		    = dict:find(File, FileSummary),
 		FileDetail1 = dict:erase(Offset, FileDetail),
 		ContiguousTop1 = lists:min([ContiguousTop, Offset]),
-		FileSummary2 = dict:store(File, FileSum #dqfile { valid_data = (ValidTotalSize - TotalSize - (?FILE_PACKING_ADJUSTMENT)),
+		FileSummary1 = dict:store(File, FileSum #dqfile { valid_data = (ValidTotalSize - TotalSize - (?FILE_PACKING_ADJUSTMENT)),
 								  contiguous_prefix = ContiguousTop1,
 								  detail = FileDetail1
 								}, FileSummary),
 		ok = mnesia:dirty_delete({rabbit_disk_queue, {MsgId, Q}}),
-		FileSummary2;
+		compact(File, State # dqstate { file_summary = FileSummary1 } );
 	   1 < RefCount ->
 		ets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
-		FileSummary
+		State
 	end,
-    State1 = compact(File, State # dqstate { file_summary = FileSummary1 } ),
     {ok, State1}.
 
 internal_tx_publish(MsgId, MsgBody, State = #dqstate { msg_location = MsgLocation,
