@@ -55,6 +55,7 @@ all_tests() ->
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
+    passed = test_disk_queue(),
     passed.
 
 test_parsing() ->
@@ -625,21 +626,33 @@ delete_log_handlers(Handlers) ->
     ok.
 
 test_disk_queue() ->
-    [begin rdq_time_tx_publish_commit(q, MsgCount, MsgSize), timer:sleep(1000) end || % 1000 milliseconds
+    [begin rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSize), timer:sleep(1000) end || % 1000 milliseconds
 	MsgSize <- [128, 512, 2048, 8192, 32768, 131072],
+	Qs <- [[1], lists:seq(1,10), lists:seq(1,100), lists:seq(1,1000)],
 	MsgCount <- [1024, 2048, 4096, 8192, 16384]
     ],
-    rdq_virgin().
+    rdq_virgin(),
+    passed.
 
-rdq_time_tx_publish_commit(Q, MsgCount, MsgSizeBytes) ->
+rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
     rdq_virgin(),
     rdq_start(),
+    QCount = length(Qs),
     Msg = <<0:(8*MsgSizeBytes)>>,
     List = lists:seq(1, MsgCount),
     {Micros, ok} = timer:tc(?MODULE, rdq_time_commands,
-			    [[fun() -> [rabbit_disk_queue:tx_publish(N, Msg) || N <- List] end,
-			      fun() -> rabbit_disk_queue:tx_commit(Q, List) end]]),
-    io:format("Published ~p ~p-byte messages in ~p microseconds (~p microseconds/msg) (~p microseconds/byte)~n", [MsgCount, MsgSizeBytes, Micros, (Micros / MsgCount), (Micros / MsgCount / MsgSizeBytes)]),
+			   [[fun() -> [rabbit_disk_queue:tx_publish(N, Msg) || N <- List, _ <- Qs] end,
+			     fun() -> [rabbit_disk_queue:tx_commit(Q, List) || Q <- Qs] end
+			    ]]),
+    io:format("Published ~p ~p-byte messages in ~p microseconds to ~p queues (~p microseconds/msg) (~p microseconds/byte)~n",
+	      [MsgCount, MsgSizeBytes, Micros, QCount, (Micros / (MsgCount * QCount)), (Micros / (MsgCount * QCount * MsgSizeBytes))]),
+    {Micros2, ok} = timer:tc(?MODULE, rdq_time_commands,
+			    [[fun() -> [begin [begin rabbit_disk_queue:deliver(Q, N), ok end || N <- List],
+					      rabbit_disk_queue:ack(Q, List),
+					      rabbit_disk_queue:tx_commit(Q, [])
+					end || Q <- Qs]
+			      end]]),
+    io:format("Delivered ~p ~p-byte messages in ~p microseconds from ~p queues (~p microseconds/msg) (~p microseconds/byte)~n", [MsgCount, MsgSizeBytes, Micros2, QCount, (Micros2 / (MsgCount * QCount)), (Micros2 / (MsgCount * QCount * MsgSizeBytes))]),
     rdq_stop().
 
 rdq_time_commands(Funcs) ->

@@ -144,8 +144,8 @@ handle_call(clean_stop, _From, State) ->
     true = ets:delete(FileSummary),
     true = ets:delete(FileDetail),
     lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
-    {stop, normal, ok, State # dqstate { current_file_handle = undefined,
-					 read_file_handles = {dict:new(), gb_trees:empty()}}}.
+    {stop, normal, ok, State1 # dqstate { current_file_handle = undefined,
+					  read_file_handles = {dict:new(), gb_trees:empty()}}}.
     %% gen_server now calls terminate, which then calls shutdown
 
 handle_cast({publish, Q, MsgId, MsgBody}, State) ->
@@ -197,7 +197,7 @@ internal_deliver(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
 					      read_file_handles_limit = ReadFileHandlesLimit,
 					      read_file_handles = {ReadHdls, ReadHdlsAge}
 					     }) ->
-    [{MsgId, _RefCount, File, Offset, _TotalSize}] = ets:lookup(MsgLocation, MsgId),
+    [{MsgId, _RefCount, File, Offset, TotalSize}] = ets:lookup(MsgLocation, MsgId),
     % so this next bit implements an LRU for file handles. But it's a bit insane, and smells
     % of premature optimisation. So I might remove it and dump it overboard
     {FileHdl, ReadHdls1, ReadHdlsAge1}
@@ -221,7 +221,7 @@ internal_deliver(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
 		   gb_trees:enter(Now, File, gb_trees:delete(Then, ReadHdlsAge))}
 	  end,
     % read the message
-    {ok, {MsgBody, BodySize, _TotalSize}} = read_message_at_offset(FileHdl, Offset),
+    {ok, {MsgBody, BodySize}} = read_message_at_offset(FileHdl, Offset, TotalSize),
     [Obj = #dq_msg_loc {is_delivered = Delivered}]
 	= mnesia:dirty_read(rabbit_disk_queue, {MsgId, Q}),
     if Delivered -> ok;
@@ -270,7 +270,7 @@ remove_messages(Q, MsgIds, MnesiaDelete, State = # dqstate { msg_location = MsgL
 internal_tx_publish(MsgId, MsgBody, State = #dqstate { msg_location = MsgLocation,
 						       current_file_handle = CurHdl,
 						       current_file_name = CurName,
-						       current_offset = Offset,
+						       current_offset = CurOffset,
 						       file_summary = FileSummary,
 						       file_detail = FileDetail
 						     }) ->
@@ -278,21 +278,21 @@ internal_tx_publish(MsgId, MsgBody, State = #dqstate { msg_location = MsgLocatio
 	[] ->
 	    % New message, lots to do
 	    {ok, TotalSize} = append_message(CurHdl, MsgId, MsgBody),
-	    true = ets:insert_new(MsgLocation, {MsgId, 1, CurName, Offset, TotalSize}),
+	    true = ets:insert_new(MsgLocation, {MsgId, 1, CurName, CurOffset, TotalSize}),
 	    [{CurName, FileSum = #dqfile { valid_data = ValidTotalSize,
 					   contiguous_prefix = ContiguousTop,
 					   right = undefined }}]
 		= ets:lookup(FileSummary, CurName),
-	    true = ets:insert_new(FileDetail, {{CurName, Offset}, TotalSize}),
+	    true = ets:insert_new(FileDetail, {{CurName, CurOffset}, TotalSize}),
 	    ValidTotalSize1 = ValidTotalSize + TotalSize + (?FILE_PACKING_ADJUSTMENT),
-	    ContiguousTop1 = if Offset =:= ContiguousTop ->
+	    ContiguousTop1 = if CurOffset =:= ContiguousTop ->
 				     ValidTotalSize; % can't be any holes in this file
 				true -> ContiguousTop
 			     end,
 	    true = ets:insert(FileSummary, {CurName, FileSum #dqfile { valid_data = ValidTotalSize1,
 								       contiguous_prefix = ContiguousTop1 }}),
-	    maybe_roll_to_new_file(Offset + TotalSize + (?FILE_PACKING_ADJUSTMENT),
-				   State # dqstate {current_offset = Offset + TotalSize + (?FILE_PACKING_ADJUSTMENT)});
+	    maybe_roll_to_new_file(CurOffset + TotalSize + (?FILE_PACKING_ADJUSTMENT),
+				   State # dqstate {current_offset = CurOffset + TotalSize + (?FILE_PACKING_ADJUSTMENT)});
 	[{MsgId, RefCount, File, Offset, TotalSize}] ->
 	    % We already know about it, just update counter
 	    true = ets:insert(MsgLocation, {MsgId, RefCount + 1, File, Offset, TotalSize}),
@@ -559,22 +559,15 @@ append_message(FileHdl, MsgId, MsgBody) when is_binary(MsgBody) ->
 	KO -> KO
     end.
 
-read_message_at_offset(FileHdl, Offset) ->
+read_message_at_offset(FileHdl, Offset, TotalSize) ->
+    TotalSizeWriteOkBytes = TotalSize + 1,
     case file:position(FileHdl, {bof, Offset}) of
 	{ok, Offset} ->
-	    case file:read(FileHdl, 2 * (?INTEGER_SIZE_BYTES)) of
-		{ok, <<TotalSize:(?INTEGER_SIZE_BITS), MsgIdBinSize:(?INTEGER_SIZE_BITS)>>} ->
-		    ExpectedAbsPos = Offset + (2 * (?INTEGER_SIZE_BYTES)) + MsgIdBinSize,
-		    case file:position(FileHdl, {cur, MsgIdBinSize}) of
-			{ok, ExpectedAbsPos} ->
-			    BodySize = TotalSize - MsgIdBinSize,
-			    case file:read(FileHdl, 1 + BodySize) of
-				{ok, <<MsgBody:BodySize/binary, (?WRITE_OK):(?WRITE_OK_SIZE_BITS)>>} ->
-				    {ok, {MsgBody, BodySize, TotalSize}};
-				KO -> KO
-			    end;
-			KO -> KO
-		    end;
+	    case file:read(FileHdl, TotalSize + (?FILE_PACKING_ADJUSTMENT)) of
+		{ok, <<TotalSize:(?INTEGER_SIZE_BITS), MsgIdBinSize:(?INTEGER_SIZE_BITS), Rest:TotalSizeWriteOkBytes/binary>>} ->
+		    BodySize = TotalSize - MsgIdBinSize,
+		    <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary, (?WRITE_OK):(?WRITE_OK_SIZE_BITS)>> = Rest,
+		    {ok, {MsgBody, BodySize}};
 		KO -> KO
 	    end;
 	KO -> KO
