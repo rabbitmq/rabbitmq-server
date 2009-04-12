@@ -240,27 +240,29 @@ remove_messages(Q, MsgIds, MnesiaDelete, State = # dqstate { msg_location = MsgL
 	= lists:foldl(fun (MsgId, Files2) ->
 			      [{MsgId, RefCount, File, Offset, TotalSize}]
 				  = ets:lookup(MsgLocation, MsgId),
-			      if 1 =:= RefCount ->
-				      true = ets:delete(MsgLocation, MsgId),
-				      [{File, ValidTotalSize, ContiguousTop, Left, Right}]
-					  = ets:lookup(FileSummary, File),
-				      true = ets:delete(FileDetail, {File, Offset}),
-				      ContiguousTop1 = lists:min([ContiguousTop, Offset]),
-				      true = ets:insert(FileSummary,
-							{File, (ValidTotalSize - TotalSize - ?FILE_PACKING_ADJUSTMENT),
-							 ContiguousTop1, Left, Right}),
-				      if MnesiaDelete ->
-					      ok = mnesia:dirty_delete(rabbit_disk_queue, {MsgId, Q});
-					 true ->
-					      ok
-				      end,
-				      if CurName =:= File -> Files2;
-					 true -> sets:add_element(File, Files2)
-				      end;
-				 1 < RefCount ->
-				      ets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
-				      Files2
-			      end
+			      Files3 =
+				  if 1 =:= RefCount ->
+					  true = ets:delete(MsgLocation, MsgId),
+					  [{File, ValidTotalSize, ContiguousTop, Left, Right}]
+					      = ets:lookup(FileSummary, File),
+					  true = ets:delete(FileDetail, {File, Offset}),
+					  ContiguousTop1 = lists:min([ContiguousTop, Offset]),
+					  true = ets:insert(FileSummary,
+							    {File, (ValidTotalSize - TotalSize - ?FILE_PACKING_ADJUSTMENT),
+							     ContiguousTop1, Left, Right}),
+					  if CurName =:= File -> Files2;
+					     true -> sets:add_element(File, Files2)
+					  end;
+				     1 < RefCount ->
+					  ets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
+					  Files2
+				  end,
+			      if MnesiaDelete ->
+				      ok = mnesia:dirty_delete(rabbit_disk_queue, {MsgId, Q});
+				 true ->
+				      ok
+			      end,
+			      Files3
 		      end, sets:new(), MsgIds),
     State2 = compact(Files, State),
     {ok, State2}.
