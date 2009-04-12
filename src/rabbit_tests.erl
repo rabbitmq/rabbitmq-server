@@ -627,9 +627,9 @@ delete_log_handlers(Handlers) ->
 
 test_disk_queue() ->
     [begin rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSize), timer:sleep(1000) end || % 1000 milliseconds
-	MsgSize <- [128, 512, 2048, 8192, 32768, 131072],
-	Qs <- [[1], lists:seq(1,10), lists:seq(1,100), lists:seq(1,1000)],
-	MsgCount <- [1024, 2048, 4096, 8192, 16384]
+	MsgSize <- [512, 8192, 32768, 131072],
+	Qs <- [[1], lists:seq(1,10)], %, lists:seq(1,100), lists:seq(1,1000)],
+	MsgCount <- [1024, 4096, 16384]
     ],
     rdq_virgin(),
     passed.

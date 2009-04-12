@@ -384,7 +384,7 @@ load_from_disk(State) ->
     % There should be no more tmp files now, so go ahead and load the whole lot
     (State1 = #dqstate{ msg_location = MsgLocation }) = load_messages(undefined, Files, State),
     % Finally, check there is nothing in mnesia which we haven't loaded
-    true = lists:foldl(fun ({MsgId, _Q}, true) -> 1 =:= length(ets:lookup(MsgLocation, MsgId)) end,
+    true = lists:foldl(fun ({MsgId, _Q}, true) -> true = 1 =:= length(ets:lookup(MsgLocation, MsgId)) end,
 		       true, mnesia:dirty_all_keys(rabbit_disk_queue)),
     {ok, State1}.
 
