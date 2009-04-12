@@ -31,7 +31,9 @@
 
 -module(rabbit_tests).
 
--export([all_tests/0, test_parsing/0]).
+-compile(export_all).
+
+-export([all_tests/0, test_parsing/0, test_disk_queue/0]).
 
 -import(lists).
 
@@ -621,3 +623,35 @@ delete_log_handlers(Handlers) ->
     [[] = error_logger:delete_report_handler(Handler) ||
         Handler <- Handlers],
     ok.
+
+test_disk_queue() ->
+    [begin rdq_time_tx_publish_commit(q, MsgCount, MsgSize), timer:sleep(1000) end || % 1000 milliseconds
+	MsgSize <- [128, 512, 2048, 8192, 32768, 131072],
+	MsgCount <- [1024, 2048, 4096, 8192, 16384]
+    ],
+    rdq_virgin().
+
+rdq_time_tx_publish_commit(Q, MsgCount, MsgSizeBytes) ->
+    rdq_virgin(),
+    rdq_start(),
+    Msg = <<0:(8*MsgSizeBytes)>>,
+    List = lists:seq(1, MsgCount),
+    {Micros, ok} = timer:tc(?MODULE, rdq_time_commands,
+			    [[fun() -> [rabbit_disk_queue:tx_publish(N, Msg) || N <- List] end,
+			      fun() -> rabbit_disk_queue:tx_commit(Q, List) end]]),
+    io:format("Published ~p ~p-byte messages in ~p microseconds (~p microseconds/msg) (~p microseconds/byte)~n", [MsgCount, MsgSizeBytes, Micros, (Micros / MsgCount), (Micros / MsgCount / MsgSizeBytes)]),
+    rdq_stop().
+
+rdq_time_commands(Funcs) ->
+    lists:foreach(fun (F) -> F() end, Funcs).
+
+rdq_virgin() ->
+    {Micros, {ok, _}} = timer:tc(rabbit_disk_queue, start_link, [1024*1024*10, 1000]),
+    io:format("Disk queue start up took ~p microseconds~n", [Micros]),
+    ok = rabbit_disk_queue:clean_stop().
+
+rdq_start() ->
+    {ok, _} = rabbit_disk_queue:start_link(1024*1024*10, 1000).
+
+rdq_stop() ->
+    rabbit_disk_queue:stop().
