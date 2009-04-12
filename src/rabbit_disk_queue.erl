@@ -48,13 +48,13 @@
 -define(WRITE_OK_SIZE_BITS, 8).
 -define(WRITE_OK, 255).
 -define(INTEGER_SIZE_BYTES, 8).
--define(INTEGER_SIZE_BITS, 8 * ?INTEGER_SIZE_BYTES).
+-define(INTEGER_SIZE_BITS, (8 * ?INTEGER_SIZE_BYTES)).
 -define(MSG_LOC_ETS_NAME, rabbit_disk_queue_msg_location).
 -define(FILE_DETAIL_ETS_NAME, rabbit_disk_queue_file_detail).
 -define(FILE_SUMMARY_ETS_NAME, rabbit_disk_queue_file_summary).
 -define(FILE_EXTENSION, ".rdq").
 -define(FILE_EXTENSION_TMP, ".rdt").
--define(FILE_PACKING_ADJUSTMENT, 1 + (2* (?INTEGER_SIZE_BYTES))).
+-define(FILE_PACKING_ADJUSTMENT, (1 + (2* (?INTEGER_SIZE_BYTES)))).
 
 -define(SERVER, ?MODULE).
 
@@ -105,11 +105,11 @@ clean_stop() ->
 
 init([FileSizeLimit, ReadFileHandlesLimit]) ->
     process_flag(trap_exit, true),
-    InitName = "0" ++ (?FILE_EXTENSION),
-    FileSummary = ets:new((?FILE_SUMMARY_ETS_NAME), [set, private]),
-    State = #dqstate { msg_location = ets:new((?MSG_LOC_ETS_NAME), [set, private]),
+    InitName = "0" ++ ?FILE_EXTENSION,
+    FileSummary = ets:new(?FILE_SUMMARY_ETS_NAME, [set, private]),
+    State = #dqstate { msg_location = ets:new(?MSG_LOC_ETS_NAME, [set, private]),
 		       file_summary = FileSummary,
-		       file_detail = ets:new((?FILE_DETAIL_ETS_NAME), [ordered_set, private]),
+		       file_detail = ets:new(?FILE_DETAIL_ETS_NAME, [ordered_set, private]),
 		       current_file_num = 0,
 		       current_file_name = InitName,
 		       current_file_handle = undefined,
@@ -251,7 +251,7 @@ remove_messages(Q, MsgIds, MnesiaDelete, State = # dqstate { msg_location = MsgL
 				      ContiguousTop1 = lists:min([ContiguousTop, Offset]),
 				      true = ets:insert(FileSummary,
 							{File, FileSum #dqfile { valid_data = (ValidTotalSize -
-											       TotalSize - (?FILE_PACKING_ADJUSTMENT)),
+											       TotalSize - ?FILE_PACKING_ADJUSTMENT),
 										 contiguous_prefix = ContiguousTop1}}),
 				      if MnesiaDelete ->
 					      ok = mnesia:dirty_delete(rabbit_disk_queue, {MsgId, Q});
@@ -284,15 +284,15 @@ internal_tx_publish(MsgId, MsgBody, State = #dqstate { msg_location = MsgLocatio
 					   right = undefined }}]
 		= ets:lookup(FileSummary, CurName),
 	    true = ets:insert_new(FileDetail, {{CurName, CurOffset}, TotalSize}),
-	    ValidTotalSize1 = ValidTotalSize + TotalSize + (?FILE_PACKING_ADJUSTMENT),
+	    ValidTotalSize1 = ValidTotalSize + TotalSize + ?FILE_PACKING_ADJUSTMENT,
 	    ContiguousTop1 = if CurOffset =:= ContiguousTop ->
 				     ValidTotalSize; % can't be any holes in this file
 				true -> ContiguousTop
 			     end,
 	    true = ets:insert(FileSummary, {CurName, FileSum #dqfile { valid_data = ValidTotalSize1,
 								       contiguous_prefix = ContiguousTop1 }}),
-	    maybe_roll_to_new_file(CurOffset + TotalSize + (?FILE_PACKING_ADJUSTMENT),
-				   State # dqstate {current_offset = CurOffset + TotalSize + (?FILE_PACKING_ADJUSTMENT)});
+	    maybe_roll_to_new_file(CurOffset + TotalSize + ?FILE_PACKING_ADJUSTMENT,
+				   State # dqstate {current_offset = CurOffset + TotalSize + ?FILE_PACKING_ADJUSTMENT});
 	[{MsgId, RefCount, File, Offset, TotalSize}] ->
 	    % We already know about it, just update counter
 	    true = ets:insert(MsgLocation, {MsgId, RefCount + 1, File, Offset, TotalSize}),
@@ -341,7 +341,7 @@ maybe_roll_to_new_file(Offset, State = #dqstate { file_size_limit = FileSizeLimi
     ok = file:sync(CurHdl),
     ok = file:close(CurHdl),
     NextNum = CurNum + 1,
-    NextName = integer_to_list(NextNum) ++ (?FILE_EXTENSION),
+    NextName = integer_to_list(NextNum) ++ ?FILE_EXTENSION,
     {ok, NextHdl} = file:open(form_filename(NextName), [write, raw, binary, delayed_write]),
     [{CurName, FileSum = #dqfile {right = undefined}}] = ets:lookup(FileSummary, CurName),
     true = ets:insert(FileSummary, {CurName, FileSum #dqfile {right = NextName}}),
@@ -387,7 +387,7 @@ load_messages(Left, [], State = #dqstate { file_detail = FileDetail }) ->
     Offset = case ets:match_object(FileDetail, {{Left, '_'}, '_'}) of
 		 [] -> 0;
 		 L -> {{Left, Offset1}, TotalSize} = lists:last(L),
-		      Offset1 + TotalSize + (?FILE_PACKING_ADJUSTMENT)
+		      Offset1 + TotalSize + ?FILE_PACKING_ADJUSTMENT
 	     end,
     State # dqstate { current_file_num = Num, current_file_name = Left,
 		      current_offset = Offset };
@@ -408,7 +408,7 @@ load_messages(Left, [File|Files],
 			true = ets:insert_new(MsgLocation, {MsgId, RefCount, File, Offset, TotalSize}),
 			true = ets:insert_new(FileDetail, {{File, Offset}, TotalSize}),
 			{[{MsgId, TotalSize, Offset}|VMAcc],
-			 VTSAcc + TotalSize + (?FILE_PACKING_ADJUSTMENT)
+			 VTSAcc + TotalSize + ?FILE_PACKING_ADJUSTMENT
 			}
 		end
 	end, {[], 0}, Messages),
@@ -435,7 +435,7 @@ recover_crashed_compactions(Files, TmpFiles) ->
 
 recover_crashed_compactions1(Files, TmpFile) ->
     GrabMsgId = fun ({MsgId, _TotalSize, _FileOffset}) -> MsgId end,
-    NonTmpRelatedFile = filename:rootname(TmpFile) ++ (?FILE_EXTENSION),
+    NonTmpRelatedFile = filename:rootname(TmpFile) ++ ?FILE_EXTENSION,
     true = lists:member(NonTmpRelatedFile, Files),
     % [{MsgId, TotalSize, FileOffset}]
     {ok, UncorruptedMessagesTmp} = scan_file_for_valid_messages(form_filename(TmpFile)),
@@ -492,7 +492,7 @@ recover_crashed_compactions1(Files, TmpFile) ->
 	    % extending truncate.
 	    % Remember the head of the list will be the highest entry in the file
 	    [{_, TmpTopTotalSize, TmpTopOffset}|_] = UncorruptedMessagesTmp,
-	    TmpSize = TmpTopOffset + TmpTopTotalSize + (?FILE_PACKING_ADJUSTMENT),
+	    TmpSize = TmpTopOffset + TmpTopTotalSize + ?FILE_PACKING_ADJUSTMENT,
 	    ExpectedAbsPos = Top + TmpSize,
 	    {ok, ExpectedAbsPos} = file:position(MainHdl, {cur, TmpSize}),
 	    ok = file:truncate(MainHdl), % and now extend the main file as big as necessary in a single move
@@ -519,7 +519,7 @@ recover_crashed_compactions1(Files, TmpFile) ->
 find_contiguous_block_prefix([]) -> {0, []};
 find_contiguous_block_prefix([{MsgId, TotalSize, Offset}|Tail]) ->
     case find_contiguous_block_prefix(Tail, Offset, [MsgId]) of
-	{ok, Acc} -> {Offset + TotalSize + (?FILE_PACKING_ADJUSTMENT), lists:reverse(Acc)};
+	{ok, Acc} -> {Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT, lists:reverse(Acc)};
 	Res -> Res
     end.
 find_contiguous_block_prefix([], 0, Acc) ->
@@ -527,7 +527,7 @@ find_contiguous_block_prefix([], 0, Acc) ->
 find_contiguous_block_prefix([], _N, _Acc) ->
     {0, []};
 find_contiguous_block_prefix([{MsgId, TotalSize, Offset}|Tail], ExpectedOffset, Acc)
-  when ExpectedOffset =:= Offset + TotalSize + (?FILE_PACKING_ADJUSTMENT) ->
+  when ExpectedOffset =:= Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT ->
     find_contiguous_block_prefix(Tail, Offset, [MsgId|Acc]);
 find_contiguous_block_prefix(List, _ExpectedOffset, _Acc) ->
     find_contiguous_block_prefix(List).
@@ -538,9 +538,9 @@ file_name_sort(A, B) ->
     ANum < BNum.
 
 get_disk_queue_files() ->
-    DQFiles = filelib:wildcard("*" ++ (?FILE_EXTENSION), base_directory()),
+    DQFiles = filelib:wildcard("*" ++ ?FILE_EXTENSION, base_directory()),
     DQFilesSorted = lists:sort(fun file_name_sort/2, DQFiles),
-    DQTFiles = filelib:wildcard("*" ++ (?FILE_EXTENSION_TMP), base_directory()),
+    DQTFiles = filelib:wildcard("*" ++ ?FILE_EXTENSION_TMP, base_directory()),
     DQTFilesSorted = lists:sort(fun file_name_sort/2, DQTFiles),
     {DQFilesSorted, DQTFilesSorted}.
 
@@ -551,10 +551,10 @@ append_message(FileHdl, MsgId, MsgBody) when is_binary(MsgBody) ->
     MsgIdBin = term_to_binary(MsgId),
     MsgIdBinSize = size(MsgIdBin),
     TotalSize = BodySize + MsgIdBinSize,
-    case file:write(FileHdl, <<TotalSize:(?INTEGER_SIZE_BITS),
-			       MsgIdBinSize:(?INTEGER_SIZE_BITS),
+    case file:write(FileHdl, <<TotalSize:?INTEGER_SIZE_BITS,
+			       MsgIdBinSize:?INTEGER_SIZE_BITS,
 			       MsgIdBin:MsgIdBinSize/binary, MsgBody:BodySize/binary,
-			       (?WRITE_OK):(?WRITE_OK_SIZE_BITS)>>) of
+			       ?WRITE_OK:?WRITE_OK_SIZE_BITS>>) of
 	ok -> {ok, TotalSize};
 	KO -> KO
     end.
@@ -563,10 +563,10 @@ read_message_at_offset(FileHdl, Offset, TotalSize) ->
     TotalSizeWriteOkBytes = TotalSize + 1,
     case file:position(FileHdl, {bof, Offset}) of
 	{ok, Offset} ->
-	    case file:read(FileHdl, TotalSize + (?FILE_PACKING_ADJUSTMENT)) of
-		{ok, <<TotalSize:(?INTEGER_SIZE_BITS), MsgIdBinSize:(?INTEGER_SIZE_BITS), Rest:TotalSizeWriteOkBytes/binary>>} ->
+	    case file:read(FileHdl, TotalSize + ?FILE_PACKING_ADJUSTMENT) of
+		{ok, <<TotalSize:?INTEGER_SIZE_BITS, MsgIdBinSize:?INTEGER_SIZE_BITS, Rest:TotalSizeWriteOkBytes/binary>>} ->
 		    BodySize = TotalSize - MsgIdBinSize,
-		    <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary, (?WRITE_OK):(?WRITE_OK_SIZE_BITS)>> = Rest,
+		    <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary, ?WRITE_OK:?WRITE_OK_SIZE_BITS>> = Rest,
 		    {ok, {MsgBody, BodySize}};
 		KO -> KO
 	    end;
@@ -591,13 +591,13 @@ scan_file_for_valid_messages(FileHdl, Offset, Acc) ->
 	    
 
 read_next_file_entry(FileHdl, Offset) ->
-    TwoIntegers = 2 * (?INTEGER_SIZE_BYTES),
+    TwoIntegers = 2 * ?INTEGER_SIZE_BYTES,
     case file:read(FileHdl, TwoIntegers) of
-	{ok, <<TotalSize:(?INTEGER_SIZE_BITS), MsgIdBinSize:(?INTEGER_SIZE_BITS)>>} ->
+	{ok, <<TotalSize:?INTEGER_SIZE_BITS, MsgIdBinSize:?INTEGER_SIZE_BITS>>} ->
 	    case {TotalSize =:= 0, MsgIdBinSize =:= 0} of
 		{true, _} -> {ok, eof}; %% Nothing we can do other than stop
 		{false, true} -> %% current message corrupted, try skipping past it
-		    ExpectedAbsPos = Offset + (?FILE_PACKING_ADJUSTMENT) + TotalSize,
+		    ExpectedAbsPos = Offset + ?FILE_PACKING_ADJUSTMENT + TotalSize,
 		    case file:position(FileHdl, {cur, TotalSize + 1}) of
 			{ok, ExpectedAbsPos} -> {ok, {corrupted, ExpectedAbsPos}};
 			{ok, _SomeOtherPos} -> {ok, eof}; %% seek failed, so give up
@@ -610,11 +610,11 @@ read_next_file_entry(FileHdl, Offset) ->
 			    case file:position(FileHdl, {cur, TotalSize - MsgIdBinSize}) of
 				{ok, ExpectedAbsPos} ->
 				    case file:read(FileHdl, 1) of
-					{ok, <<(?WRITE_OK):(?WRITE_OK_SIZE_BITS)>>} ->
+					{ok, <<?WRITE_OK:?WRITE_OK_SIZE_BITS>>} ->
 					    {ok, {ok, binary_to_term(MsgId), TotalSize,
-						  Offset + (?FILE_PACKING_ADJUSTMENT) + TotalSize}};
+						  Offset + ?FILE_PACKING_ADJUSTMENT + TotalSize}};
 					{ok, _SomeOtherData} ->
-					    {ok, {corrupted, Offset + (?FILE_PACKING_ADJUSTMENT) + TotalSize}};
+					    {ok, {corrupted, Offset + ?FILE_PACKING_ADJUSTMENT + TotalSize}};
 					KO -> KO
 				    end;
 				{ok, _SomeOtherPos} -> {ok, eof}; %% seek failed, so give up
