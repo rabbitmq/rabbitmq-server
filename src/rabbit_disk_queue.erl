@@ -199,33 +199,39 @@ internal_deliver(Q, MsgId, State = #dqstate { msg_location = MsgLocation,
     {ok, {MsgBody, BodySize, Delivered},
      State # dqstate { read_file_handles = {ReadHdls1, ReadHdlsAge1} }}.
 
-internal_ack(Q, MsgIds, State = #dqstate { msg_location = MsgLocation,
-					   file_summary = FileSummary,
-					   file_detail = FileDetail
-					  }) ->
-    Files
-	= lists:foldl(fun (MsgId, Files2) ->
-			      [{MsgId, RefCount, File, Offset, TotalSize}] = ets:lookup(MsgLocation, MsgId),
-			      % is this the last time we need the message, in which case tidy up
-			      if 1 =:= RefCount ->
-				      true = ets:delete(MsgLocation, MsgId),
-				      [{File, FileSum = #dqfile { valid_data = ValidTotalSize,
-								  contiguous_prefix = ContiguousTop }}]
-					  = ets:lookup(FileSummary, File),
-				      true = ets:delete(FileDetail, {File, Offset}),
-				      ContiguousTop1 = lists:min([ContiguousTop, Offset]),
-				      true = ets:insert(FileSummary,
-							{File, FileSum #dqfile { valid_data = (ValidTotalSize - TotalSize - (?FILE_PACKING_ADJUSTMENT)),
-										 contiguous_prefix = ContiguousTop1}}),
-				      [Obj] = mnesia:dirty_match_object(rabbit_disk_queue,
-									#dq_msg_loc {msg_id = MsgId, queue = Q, is_delivered = '_'}),
-				      ok = mnesia:dirty_delete_object(rabbit_disk_queue, Obj),
-				      sets:add_element(File, Files2);
-				 1 < RefCount ->
-				      true = ets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
-				      Files2
-			      end
-		      end, sets:new(), MsgIds),
+internal_ack(Q, MsgIds, State) ->
+    remove_messages(Q, MsgIds, true, State).
+
+%% Q is only needed if MnesiaDelete = true
+remove_messages(Q, MsgIds, MnesiaDelete, State = # dqstate { msg_location = MsgLocation,
+							     file_summary = FileSummary,
+							     file_detail = FileDetail
+							   }) ->
+    Files = lists:foldl(fun (MsgId, Files2) ->
+			[{MsgId, RefCount, File, Offset, TotalSize}]
+			    = ets:lookup(MsgLocation, MsgId),
+			if 1 =:= RefCount ->
+				true = ets:delete(MsgLocation, MsgId),
+				[{File, FileSum = #dqfile { valid_data = ValidTotalSize,
+							    contiguous_prefix = ContiguousTop }}]
+				    = ets:lookup(FileSummary, File),
+				true = ets:delete(FileDetail, {File, Offset}),
+				ContiguousTop1 = lists:min([ContiguousTop, Offset]),
+				true = ets:insert(FileSummary, {File, FileSum #dqfile { valid_data = (ValidTotalSize - TotalSize - (?FILE_PACKING_ADJUSTMENT)),
+											contiguous_prefix = ContiguousTop1}}),
+				if MnesiaDelete ->
+					[Obj] = mnesia:dirty_match_object(rabbit_disk_queue,
+									  #dq_msg_loc {msg_id = MsgId, queue = Q, is_delivered = '_'}),
+					ok = mnesia:dirty_delete_object(rabbit_disk_queue, Obj);
+				   true ->
+					ok
+				end,
+				sets:add_element(File, Files2);
+			   1 < RefCount ->
+				ets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
+				Files2
+			end
+		end, sets:new(), MsgIds),
     State2 = compact(Files, State),
     {ok, State2}.
 
@@ -286,31 +292,8 @@ internal_publish(Q, MsgId, MsgBody, State) ->
     ok = mnesia:dirty_write(rabbit_disk_queue, #dq_msg_loc { msg_id = MsgId, queue = Q, is_delivered = false}),
     {ok, State1}.
 
-internal_tx_cancel(MsgIds, State = #dqstate { msg_location = MsgLocation,
-					      file_summary = FileSummary,
-					      file_detail = FileDetail
-					    }) ->
-    Files =
-	lists:foldl(fun (MsgId, Files2) ->
-			    [{MsgId, RefCount, File, Offset, TotalSize}]
-				= ets:lookup(MsgLocation, MsgId),
-			    if 1 =:= RefCount ->
-				    true = ets:delete(MsgLocation, MsgId),
-				    [{File, FileSum = #dqfile { valid_data = ValidTotalSize,
-								contiguous_prefix = ContiguousTop }}]
-					= ets:lookup(FileSummary, File),
-				    true = ets:delete(FileDetail, {File, Offset}),
-				    ContiguousTop1 = lists:min([ContiguousTop, Offset]),
-				    true = ets:insert(FileSummary, {File, FileSum #dqfile { valid_data = (ValidTotalSize - TotalSize - (?FILE_PACKING_ADJUSTMENT)),
-											    contiguous_prefix = ContiguousTop1}}),
-				    sets:add_element(File, Files2);
-			       1 < RefCount ->
-				    ets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
-				    Files2
-			    end
-		    end, sets:new(), MsgIds),
-    State2 = compact(Files, State),
-    {ok, State2}.
+internal_tx_cancel(MsgIds, State) ->
+    remove_messages(undefined, MsgIds, false, State).
 
 %% ---- ROLLING OVER THE APPEND FILE ----
 
