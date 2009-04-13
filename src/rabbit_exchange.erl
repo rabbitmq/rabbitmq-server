@@ -34,7 +34,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, declare/5, lookup/1, lookup_or_die/1,
+-export([recover/0, declare/4, lookup/1, lookup_or_die/1,
          list/1, info/1, info/2, info_all/1, info_all/2,
          simple_publish/6, simple_publish/3,
          route/3]).
@@ -62,8 +62,7 @@
 -type(bind_res() :: 'ok' |
       {'error', 'queue_not_found' | 'exchange_not_found'}).
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 :: (exchange_name(), exchange_type(), bool(), bool(),
-                    amqp_table()) -> exchange()).
+-spec(declare/4 :: (exchange_name(), exchange_type(), bool(), amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
 -spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
@@ -100,7 +99,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
+-define(INFO_KEYS, [name, type, durable, arguments].
 
 recover() ->
     ok = rabbit_misc:table_foreach(
@@ -115,11 +114,10 @@ recover() ->
                                            ReverseRoute, write)
            end, rabbit_durable_route).
 
-declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
+declare(ExchangeName, Type, Durable, Args) ->
     Exchange = #exchange{name = ExchangeName,
                          type = Type,
                          durable = Durable,
-                         auto_delete = AutoDelete,
                          arguments = Args},
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
@@ -181,7 +179,6 @@ infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 i(name,        #exchange{name        = Name})       -> Name;
 i(type,        #exchange{type        = Type})       -> Type;
 i(durable,     #exchange{durable     = Durable})    -> Durable;
-i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
 i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
 i(Item, _) -> throw({bad_argument, Item}).
 
@@ -306,7 +303,6 @@ delete_bindings_for_exchange(ExchangeName) ->
     ok.
 
 delete_bindings_for_queue(QueueName) ->
-    Exchanges = exchanges_for_queue(QueueName),
     [begin
          ok = delete_forward_routes(reverse_route(Route)),
          ok = mnesia:delete_object(rabbit_reverse_route, Route, write)
@@ -316,24 +312,11 @@ delete_bindings_for_queue(QueueName) ->
                          #route{binding = #binding{queue_name = QueueName, 
                                                    _ = '_'}}),
                        write)],
-    [begin
-         [X] = mnesia:read({rabbit_exchange, ExchangeName}),
-         ok = maybe_auto_delete(X)
-     end || ExchangeName <- Exchanges],
     ok.
 
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
     ok = mnesia:delete_object(rabbit_durable_route, Route, write).
-
-exchanges_for_queue(QueueName) ->
-    MatchHead = reverse_route(
-                  #route{binding = #binding{exchange_name = '$1',
-                                            queue_name = QueueName,
-                                            _ = '_'}}),
-    sets:to_list(
-      sets:from_list(
-        mnesia:select(rabbit_reverse_route, [{MatchHead, [], ['$1']}]))).
 
 has_bindings(ExchangeName) ->
     MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
@@ -386,11 +369,10 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
     call_with_exchange_and_queue(
       ExchangeName, QueueName,
-      fun (X, Q) ->
+      fun (_X, Q) ->
               ok = sync_binding(
                      ExchangeName, QueueName, RoutingKey, Arguments,
-                     Q#amqqueue.durable, fun mnesia:delete_object/3),
-              maybe_auto_delete(X)
+                     Q#amqqueue.durable, fun mnesia:delete_object/3)
       end).
 
 sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
@@ -544,12 +526,6 @@ delete(ExchangeName, _IfUnused = true) ->
     call_with_exchange(ExchangeName, fun conditional_delete/1);
 delete(ExchangeName, _IfUnused = false) ->
     call_with_exchange(ExchangeName, fun unconditional_delete/1).
-
-maybe_auto_delete(#exchange{auto_delete = false}) ->
-    ok;
-maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
-    conditional_delete(Exchange),
-    ok.
 
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     case has_bindings(ExchangeName) of

@@ -299,9 +299,6 @@ handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
     stop;
 
-handle_method(#'access.request'{},_, State) ->
-    {reply, #'access.request_ok'{ticket = 1}, State};
-
 handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                                routing_key = RoutingKey,
                                mandatory = Mandatory,
@@ -372,7 +369,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                    Content),
             {noreply, State1#ch{next_tag = DeliveryTag + 1}};
         empty ->
-            {reply, #'basic.get_empty'{cluster_id = <<>>}, State}
+            {reply, #'basic.get_empty'{deprecated_cluster_id = <<>>}, State}
     end;
 
 handle_method(#'basic.consume'{queue = QueueNameBin,
@@ -539,8 +536,8 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
                                   durable = Durable,
-                                  auto_delete = AutoDelete,
-                                  internal = false,
+                                  deprecated_auto_delete = false, %% 0-9-1: true not supported
+                                  deprecated_internal = false, %% 0-9-1: true not supported
                                   nowait = NoWait,
                                   arguments = Args},
               _, State = #ch{ virtual_host = VHostPath }) ->
@@ -554,7 +551,6 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                 rabbit_exchange:declare(ExchangeName,
                                         CheckedType,
                                         Durable,
-                                        AutoDelete,
                                         Args)
         end,
     ok = rabbit_exchange:assert_type(X, CheckedType),

@@ -49,7 +49,7 @@
 
 -record(resource, {virtual_host, kind, name}).
 
--record(exchange, {name, type, durable, auto_delete, arguments}).
+-record(exchange, {name, type, durable, arguments}).
 
 -record(amqqueue, {name, durable, auto_delete, arguments, pid}).
 
@@ -105,7 +105,6 @@
       #exchange{name        :: exchange_name(),
                 type        :: exchange_type(),
                 durable     :: bool(),
-                auto_delete :: bool(),
                 arguments   :: amqp_table()}).
 -type(binding() ::
       #binding{exchange_name    :: exchange_name(),
