@@ -356,8 +356,42 @@ compact(FilesSet, State) ->
     % smallest number, hence eldest, hence left-most, first
     Files = lists:sort(sets:to_list(FilesSet)),
     % foldl reverses, so now youngest/right-most first
-    RemainingFiles = lists:foldl(fun(File, Acc) -> delete_empty_files(File, Acc, State) end, [], Files),
+    RemainingFiles = lists:foldl(fun (File, Acc) -> delete_empty_files(File, Acc, State) end, [], Files),
+    lists:foldl(fun combineFile/2, State, lists:reverse(RemainingFiles)).
+
+combineFile(File, State = #dqstate { file_size_limit = FileSizeLimit,
+				     file_summary = FileSummary,
+				     current_file_name = CurName
+				   }) ->
+    [{File, ValidData, _ContiguousTop, Left, Right}] = ets:lookup(FileSummary, File),
+    GoRight = fun() ->
+		      case Right of
+			  undefined -> State;
+			  _ when not(CurName =:= Right) ->
+			      [{Right, RightValidData, _RightContiguousTop, File, _Right}]
+				  = ets:lookup(FileSummary, Right),
+			      if FileSizeLimit >= (ValidData + RightValidData) ->
+				      combineFiles(Right, File, State);
+				 true -> State
+			      end;
+			  _ -> State
+		      end
+		 end,
+    case Left of
+	undefined ->
+	    GoRight();
+	_ -> [{Left, LeftValidData, _LeftContiguousTop, _Left, File}]
+		 = ets:lookup(FileSummary, Left),
+	     if FileSizeLimit >= (ValidData + LeftValidData) ->
+		     combineFiles(File, Left, State);
+		true ->
+		     GoRight()
+	     end
+    end.
+
+combineFiles(Source, Destination, State) ->
     State.
+    
 
 delete_empty_files(File, Acc, #dqstate { file_summary = FileSummary }) ->
     [{File, ValidData, _ContiguousTop, Left, Right}] = ets:lookup(FileSummary, File),
