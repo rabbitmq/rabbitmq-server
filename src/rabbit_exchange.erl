@@ -90,7 +90,7 @@
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
 -spec(headers_match/2 :: (amqp_table(), amqp_table()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
-             'ok' | not_found() | {'error', 'in_use'}).
+             'ok' | {'error', 'exchange_not_found'} | {'error', 'in_use'}).
 -spec(list_queue_bindings/1 :: (queue_name()) -> 
               [{exchange_name(), routing_key(), amqp_table()}]).
 -spec(list_exchange_bindings/1 :: (exchange_name()) -> 
