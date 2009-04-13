@@ -259,10 +259,7 @@ expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
 die_precondition_failed(Fmt, Params) ->
-    %% FIXME: 406 should be replaced with precondition_failed when we
-    %% move to AMQP spec >=8.1
-    rabbit_misc:protocol_error({false, 406, <<"PRECONDITION_FAILED">>},
-                               Fmt, Params).
+    rabbit_misc:protocol_error(precondition_failed, Fmt, Params).
 
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
@@ -774,14 +771,10 @@ deliver(QPids, Mandatory, Immediate, Txn, Message, WriterPid) ->
     case rabbit_router:deliver(QPids, Mandatory, Immediate, Txn, Message) of
         {ok, DeliveredQPids}   -> DeliveredQPids;
         {error, unroutable}    ->
-            %% FIXME: 312 should be replaced by the ?NO_ROUTE
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 312, <<"unroutable">>),
+            ok = basic_return(Message, WriterPid, ?NO_ROUTE, <<"unroutable">>),
             [];
-        {error, not_delivered} ->
-            %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>),
+        {error, no_consumers} ->
+            ok = basic_return(Message, WriterPid, ?NO_CONSUMERS, <<"no_consumers">>),
             []
     end.
 

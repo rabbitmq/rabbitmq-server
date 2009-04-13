@@ -58,7 +58,7 @@
 -ifdef(use_specs).
 
 -type(publish_res() :: {'ok', [pid()]} |
-      not_found() | {'error', 'unroutable' | 'not_delivered'}).
+      not_found() | {'error', 'unroutable' | 'no_consumers'}).
 -type(bind_res() :: 'ok' |
       {'error', 'queue_not_found' | 'exchange_not_found'}).
 -spec(recover/0 :: () -> 'ok').

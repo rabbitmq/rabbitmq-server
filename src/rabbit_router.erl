@@ -51,7 +51,7 @@
 
 -spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(deliver/5 :: ([pid()], bool(), bool(), maybe(txn()), message()) ->
-             {'ok', [pid()]} | {'error', 'unroutable' | 'not_delivered'}).
+             {'ok', [pid()]} | {'error', 'unroutable' | 'no_consumers'}).
 
 -endif.
 
@@ -180,5 +180,5 @@ run_bindings(QPids, IsMandatory, IsImmediate, Txn, Message) ->
 
 %% check_delivery(Mandatory, Immediate, {WasRouted, QPids})
 check_delivery(true, _   , {false, []}) -> {error, unroutable};
-check_delivery(_   , true, {_    , []}) -> {error, not_delivered};
+check_delivery(_   , true, {_    , []}) -> {error, no_consumers};
 check_delivery(_   , _   , {_    , Qs}) -> {ok, Qs}.
