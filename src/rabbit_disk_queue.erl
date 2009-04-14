@@ -459,7 +459,7 @@ combineFiles({Source, SourceValid, _SourceContiguousTop, _SourceLeft, _SourceRig
 	    {ok, 0} = file:position(TmpHdl, {bof, 0}),
 	    {ok, DestinationContiguousTop} = file:position(DestinationHdl, {bof, DestinationContiguousTop}),
 	    ok = file:truncate(DestinationHdl),
-	    {ok, ExpectedSize} = file:position(DestinationHdl, {cur, SourceValid}),
+	    {ok, ExpectedSize} = file:position(DestinationHdl, {bof, ExpectedSize}),
 	    ok = file:truncate(DestinationHdl),
 	    {ok, DestinationContiguousTop} = file:position(DestinationHdl, {bof, DestinationContiguousTop}),
 	    {ok, TmpSize} = file:copy(TmpHdl, DestinationHdl, TmpSize),
