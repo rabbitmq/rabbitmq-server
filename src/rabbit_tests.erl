@@ -632,6 +632,8 @@ test_disk_queue() ->
 	MsgCount <- [1024, 4096, 16384]
     ],
     rdq_virgin(),
+    rdq_stress_gc(100),
+    rdq_stress_gc(1000),
     passed.
 
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
@@ -647,12 +649,37 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
     io:format("Published ~p ~p-byte messages in ~p microseconds to ~p queues (~p microseconds/msg) (~p microseconds/byte)~n",
 	      [MsgCount, MsgSizeBytes, Micros, QCount, (Micros / (MsgCount * QCount)), (Micros / (MsgCount * QCount * MsgSizeBytes))]),
     {Micros2, ok} = timer:tc(?MODULE, rdq_time_commands,
-			    [[fun() -> [begin [begin rabbit_disk_queue:deliver(Q, N), ok end || N <- List],
+			    [[fun() -> [begin [begin {Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(Q, N), ok end || N <- List],
 					      rabbit_disk_queue:ack(Q, List),
 					      rabbit_disk_queue:tx_commit(Q, [])
 					end || Q <- Qs]
 			      end]]),
     io:format("Delivered ~p ~p-byte messages in ~p microseconds from ~p queues (~p microseconds/msg) (~p microseconds/byte)~n", [MsgCount, MsgSizeBytes, Micros2, QCount, (Micros2 / (MsgCount * QCount)), (Micros2 / (MsgCount * QCount * MsgSizeBytes))]),
+    rdq_stop().
+
+% we know each file is going to be 1024*1024*10 bytes in size (10MB), so make sure we have
+% several files, and then keep punching holes in a reasonably sensible way.
+rdq_stress_gc(MsgCount) ->
+    rdq_virgin(),
+    rdq_start(),
+    MsgSizeBytes = 1024*1024,
+    Msg = <<0:(8*MsgSizeBytes)>>, % 1MB
+    List = lists:seq(1, MsgCount),
+    [rabbit_disk_queue:tx_publish(N, Msg) || N <- List],
+    rabbit_disk_queue:tx_commit(q, List),
+    % this list generation is _very_ slow, as it's O(N^2)
+    AckList =
+	lists:reverse(lists:foldl(fun (E, Acc) -> case lists:member(E, Acc) of
+						      true ->
+							  Acc;
+						      _False -> [E|Acc]
+						  end
+				  end, [], lists:flatten([lists:seq(N,MsgCount,N) || N <- lists:seq(4,MsgCount)])))
+	++ lists:seq(1, 3),
+    [begin {Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(q, N),
+	   rabbit_disk_queue:ack(q, [N]),
+	   rabbit_disk_queue:tx_commit(q, [])
+     end || N <- AckList],
     rdq_stop().
 
 rdq_time_commands(Funcs) ->

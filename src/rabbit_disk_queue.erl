@@ -285,7 +285,7 @@ internal_tx_publish(MsgId, MsgBody, State = #dqstate { msg_location = MsgLocatio
 	    true = ets:insert_new(FileDetail, {{CurName, CurOffset}, TotalSize, MsgId}),
 	    ValidTotalSize1 = ValidTotalSize + TotalSize + ?FILE_PACKING_ADJUSTMENT,
 	    ContiguousTop1 = if CurOffset =:= ContiguousTop ->
-				     ValidTotalSize; % can't be any holes in this file
+				     ValidTotalSize1; % can't be any holes in this file
 				true -> ContiguousTop
 			     end,
 	    true = ets:insert(FileSummary, {CurName, ValidTotalSize1, ContiguousTop1, Left, undefined}),
@@ -440,19 +440,37 @@ combineFiles({Source, SourceValid, _SourceContiguousTop, _SourceLeft, _SourceRig
 					    % extended by TotalSize
 					    Offset > DestinationContiguousTop
 				    end, ets:match_object(FileDetail, {{Destination, '_'}, '_', '_'})),
-	    TmpSize =
-		lists:foldl(fun ({{Destination2, Offset}, TotalSize, MsgId}, CurOffset) when Destination2 =:= Destination ->
-				    {ok, Offset} = file:position(DestinationHdl, {bof, Offset}),
+	    TmpSize = DestinationValid - DestinationContiguousTop,
+	    {TmpSize, BlockStart1, BlockEnd1} =
+		lists:foldl(fun ({{Destination2, Offset}, TotalSize, MsgId}, {CurOffset, BlockStart, BlockEnd}) when Destination2 =:= Destination ->
+				    % CurOffset is in the TmpFile.
+				    % Offset, BlockStart and BlockEnd are in the DestinationFile (which is currently the source!)
 				    Size = TotalSize + ?FILE_PACKING_ADJUSTMENT,
-				    {ok, Size} = file:copy(DestinationHdl, TmpHdl, Size),
 				    % this message is going to end up back in Destination, at DestinationContiguousTop + CurOffset
 				    FinalOffset = DestinationContiguousTop + CurOffset,
 				    true = ets:update_element(MsgLocation, MsgId, {4, FinalOffset}),
 				    % sadly you can't use update_element to change the key:
 				    true = ets:delete(FileDetail, {Destination, Offset}),
 				    true = ets:insert_new(FileDetail, {{Destination, FinalOffset}, TotalSize, MsgId}),
-				    CurOffset + Size
-			    end, 0, Worklist),
+				    NextOffset = CurOffset + Size,
+				    if BlockStart =:= undefined ->
+					    % base case, called only for the first list elem
+					    {NextOffset, Offset, Offset + Size};
+				       Offset =:= BlockEnd ->
+					    % extend the current block because the next msg follows straight on
+					    {NextOffset, BlockStart, BlockEnd + Size};
+				       true ->
+					    % found a gap, so actually do the work for the previous block
+					    BSize = BlockEnd - BlockStart,
+					    {ok, BlockStart} = file:position(DestinationHdl, {bof, BlockStart}),
+					    {ok, BSize} = file:copy(DestinationHdl, TmpHdl, BSize),
+					    {NextOffset, Offset, Offset + Size}
+				    end
+			    end, {0, undefined, undefined}, Worklist),
+	    % do the last remaining block
+	    BSize1 = BlockEnd1 - BlockStart1,
+	    {ok, BlockStart1} = file:position(DestinationHdl, {bof, BlockStart1}),
+	    {ok, BSize1} = file:copy(DestinationHdl, TmpHdl, BSize1),
 	    % so now Tmp contains everything we need to salvage from Destination,
 	    % and both FileDetail and MsgLocation have been updated to reflect compaction of Destination
 	    % so truncate Destination and copy from Tmp back to the end
@@ -469,18 +487,36 @@ combineFiles({Source, SourceValid, _SourceContiguousTop, _SourceLeft, _SourceRig
 	    ok = file:delete(form_filename(Tmp))
     end,
     SourceWorkList = ets:match_object(FileDetail, {{Source, '_'}, '_', '_'}),
-    ExpectedSize =
-	lists:foldl(fun ({{Source2, Offset}, TotalSize, MsgId}, CurOffset) when Source2 =:= Source ->
-			    {ok, Offset} = file:position(SourceHdl, {bof, Offset}),
+    {ExpectedSize, BlockStart2, BlockEnd2} =
+	lists:foldl(fun ({{Source2, Offset}, TotalSize, MsgId}, {CurOffset, BlockStart, BlockEnd}) when Source2 =:= Source ->
+			    % CurOffset is in the DestinationFile.
+			    % Offset, BlockStart and BlockEnd are in the SourceFile
 			    Size = TotalSize + ?FILE_PACKING_ADJUSTMENT,
-			    {ok, Size} = file:copy(SourceHdl, DestinationHdl, Size),
 			    % update MsgLocation to reflect change of file (3rd field) and offset (4th field)
 			    true = ets:update_element(MsgLocation, MsgId, [{3, Destination}, {4, CurOffset}]),
 			    % can't use update_element to change key:
 			    true = ets:delete(FileDetail, {Source, Offset}),
 			    true = ets:insert_new(FileDetail, {{Destination, CurOffset}, TotalSize, MsgId}),
-			    CurOffset + Size
-		    end, DestinationValid, SourceWorkList),
+			    NextOffset = CurOffset + Size,
+			    if BlockStart =:= undefined ->
+				    % base case, called only for the first list elem
+				    {NextOffset, Offset, Offset + Size};
+			       Offset =:= BlockEnd ->
+				    % extend the current block because the next msg follows straight on
+				    {NextOffset, BlockStart, BlockEnd + Size};
+			       true ->
+				    % found a gap, so actually do the work for the previous block
+				    BSize = BlockEnd - BlockStart,
+				    {ok, BlockStart} = file:position(SourceHdl, {bof, BlockStart}),
+				    {ok, BSize} = file:copy(SourceHdl, DestinationHdl, BSize),
+				    {NextOffset, Offset, Offset + Size}
+			    end
+		    end, {DestinationValid, undefined, undefined}, SourceWorkList),
+    % do the last remaining block
+    BSize2 = BlockEnd2 - BlockStart2,
+    {ok, BlockStart2} = file:position(SourceHdl, {bof, BlockStart2}),
+    {ok, BSize2} = file:copy(SourceHdl, DestinationHdl, BSize2),
+    % tidy up
     ok = file:sync(DestinationHdl),
     ok = file:close(SourceHdl),
     ok = file:close(DestinationHdl),
@@ -535,7 +571,7 @@ load_messages(Left, [], State = #dqstate { file_detail = FileDetail }) ->
     Num = list_to_integer(filename:rootname(Left)),
     Offset = case ets:match_object(FileDetail, {{Left, '_'}, '_', '_'}) of
 		 [] -> 0;
-		 L -> {{Left, Offset1}, TotalSize} = lists:last(L),
+		 L -> {{Left, Offset1}, TotalSize, _MsgId} = lists:last(L),
 		      Offset1 + TotalSize + ?FILE_PACKING_ADJUSTMENT
 	     end,
     State # dqstate { current_file_num = Num, current_file_name = Left,
