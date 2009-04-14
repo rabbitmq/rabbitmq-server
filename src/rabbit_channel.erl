@@ -578,7 +578,7 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
-        {error, exchange_not_found} ->
+        {error, not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s", [rabbit_misc:rs(ExchangeName)]);
         {error, in_use} ->
