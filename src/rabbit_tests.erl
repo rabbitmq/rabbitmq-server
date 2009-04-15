@@ -83,6 +83,10 @@ test_priority_queue() ->
     {true, false, 2, [{2, bar}, {1, foo}], [bar, foo]} =
         test_priority_queue(Q3),
 
+    %% 1-element negative priority Q
+    Q4 = priority_queue:in(foo, -1, priority_queue:new()),
+    {true, false, 1, [{-1, foo}], [foo]} = test_priority_queue(Q4),
+
     passed.
 
 priority_queue_in_all(Q, L) ->
