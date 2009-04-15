@@ -112,7 +112,8 @@ deliver_per_node(NodeQPids, Mandatory, Immediate,
           fun ({Node, QPids}) ->
                   try gen_server2:call(
                         {?SERVER, Node},
-                        {deliver, QPids, Mandatory, Immediate, Txn, Message})
+                        {deliver, QPids, Mandatory, Immediate, Txn, Message},
+                        infinity)
                   catch
                       _Class:_Reason ->
                           %% TODO: figure out what to log (and do!) here

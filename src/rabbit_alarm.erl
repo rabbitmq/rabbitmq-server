@@ -78,7 +78,8 @@ stop() ->
 
 register(Pid, HighMemMFA) ->
     ok = gen_event:call(alarm_handler, ?MODULE,
-                        {register, Pid, HighMemMFA}).
+                        {register, Pid, HighMemMFA},
+                        infinity).
 
 %%----------------------------------------------------------------------------
 

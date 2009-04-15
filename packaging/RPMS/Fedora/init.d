@@ -33,7 +33,6 @@ fi
 
 RETVAL=0
 set -e
-cd /
 
 start_rabbitmq () {
     set +e

@@ -133,7 +133,7 @@ srcdist: distclean
 	sed -i 's/%%VERSION%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
-	cp codegen.py Makefile $(TARGET_SRC_DIR)
+	cp codegen.py Makefile generate_app $(TARGET_SRC_DIR)
 
 	cp -r scripts $(TARGET_SRC_DIR)
 	cp -r docs $(TARGET_SRC_DIR)
