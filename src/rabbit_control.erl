@@ -38,6 +38,19 @@
 
 -define(RPC_TIMEOUT, 30000).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start/0 :: () -> no_return()).
+-spec(stop/0 :: () -> 'ok').
+-spec(action/4 :: (atom(), erlang_node(), [string()],
+                   fun ((string(), [any()]) -> 'ok')) -> 'ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start() ->
     FullCommand = init:get_plain_arguments(),
     #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
