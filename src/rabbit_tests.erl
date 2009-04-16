@@ -662,23 +662,26 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
 rdq_stress_gc(MsgCount) ->
     rdq_virgin(),
     rdq_start(),
-    MsgSizeBytes = 1024*1024,
-    Msg = <<0:(8*MsgSizeBytes)>>, % 1MB
+    MsgSizeBytes = 256*1024,
+    Msg = <<0:(8*MsgSizeBytes)>>, % 256KB
     List = lists:seq(1, MsgCount),
     [rabbit_disk_queue:tx_publish(N, Msg) || N <- List],
     rabbit_disk_queue:tx_commit(q, List),
-    % this list generation is _very_ slow, as it's O(N^2)
+    StartChunk = round(MsgCount / 20), % 5%
     AckList =
-	lists:reverse(lists:foldl(fun (E, Acc) -> case lists:member(E, Acc) of
-						      true ->
-							  Acc;
-						      _False -> [E|Acc]
+	lists:reverse(lists:foldl(fun (E, Acc) -> case Acc of
+						      [] -> [E];
+						      [F|_Fs] ->
+							  case E rem F of
+							      0 -> Acc;
+							      _ -> [E|Acc]
+							  end
 						  end
-				  end, [], lists:flatten([lists:seq(N,MsgCount,N) || N <- lists:seq(4,MsgCount)])))
-	++ lists:seq(1, 3),
+				  end, [], lists:flatten([lists:seq(N,MsgCount,N) || N <- lists:seq(StartChunk,MsgCount)])))
+	++ lists:seq(1, (StartChunk - 1)),
     [begin {Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(q, N),
-	   rabbit_disk_queue:ack(q, [N]),
-	   rabbit_disk_queue:tx_commit(q, [])
+    	   rabbit_disk_queue:ack(q, [N]),
+    	   rabbit_disk_queue:tx_commit(q, [])
      end || N <- AckList],
     rdq_stop().
 
