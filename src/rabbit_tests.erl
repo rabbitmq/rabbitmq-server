@@ -430,7 +430,13 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
     {error, {no_running_cluster_nodes, _, _}} =
         control_action(reset, []),
+
+    %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
+    ok = control_action(start_app, []),
+    ok = control_action(force_reset, SecondaryNode, []),
+    ok = control_action(cluster, SecondaryNode, [NodeS]),
+    ok = control_action(start_app, SecondaryNode, []),
 
     passed.
 
