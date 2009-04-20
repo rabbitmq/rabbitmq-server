@@ -692,8 +692,7 @@ test_disk_queue() ->
 	MsgCount <- [1024, 4096, 16384]
     ],
     rdq_virgin(),
-    rdq_stress_gc(100),
-    rdq_stress_gc(1000),
+    rdq_stress_gc(10000),
     passed.
 
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
