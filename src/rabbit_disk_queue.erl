@@ -50,7 +50,6 @@
 -define(INTEGER_SIZE_BYTES, 8).
 -define(INTEGER_SIZE_BITS, (8 * ?INTEGER_SIZE_BYTES)).
 -define(MSG_LOC_ETS_NAME, rabbit_disk_queue_msg_location).
--define(FILE_DETAIL_ETS_NAME, rabbit_disk_queue_file_detail).
 -define(FILE_SUMMARY_ETS_NAME, rabbit_disk_queue_file_summary).
 -define(FILE_EXTENSION, ".rdq").
 -define(FILE_EXTENSION_TMP, ".rdt").
@@ -60,7 +59,6 @@
 
 -record(dqstate, {msg_location,
 		  file_summary,
-		  file_detail,
 		  current_file_num,
 		  current_file_name,
 		  current_file_handle,
@@ -106,7 +104,6 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     InitName = "0" ++ ?FILE_EXTENSION,
     State = #dqstate { msg_location = ets:new(?MSG_LOC_ETS_NAME, [set, private]),
 		       file_summary = ets:new(?FILE_SUMMARY_ETS_NAME, [set, private]),
-		       file_detail = ets:new(?FILE_DETAIL_ETS_NAME, [ordered_set, private]),
 		       current_file_num = 0,
 		       current_file_name = InitName,
 		       current_file_handle = undefined,
@@ -133,13 +130,11 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State}; %% gen_server now calls terminate
 handle_call(clean_stop, _From, State) ->
     State1 = #dqstate { msg_location = MsgLocation,
-			file_summary = FileSummary,
-			file_detail = FileDetail }
+			file_summary = FileSummary }
 	= shutdown(State), %% tidy up file handles early
     {atomic, ok} = mnesia:clear_table(rabbit_disk_queue),
     true = ets:delete(MsgLocation),
     true = ets:delete(FileSummary),
-    true = ets:delete(FileDetail),
     lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
     {stop, normal, ok, State1 # dqstate { current_file_handle = undefined,
 					  read_file_handles = {dict:new(), gb_trees:empty()}}}.
@@ -234,7 +229,6 @@ internal_ack(Q, MsgIds, State) ->
 %% Q is only needed if MnesiaDelete = true
 remove_messages(Q, MsgIds, MnesiaDelete, State = # dqstate { msg_location = MsgLocation,
 							     file_summary = FileSummary,
-							     file_detail = FileDetail,
 							     current_file_name = CurName
 							   }) ->
     Files
@@ -246,7 +240,6 @@ remove_messages(Q, MsgIds, MnesiaDelete, State = # dqstate { msg_location = MsgL
 					  true = ets:delete(MsgLocation, MsgId),
 					  [{File, ValidTotalSize, ContiguousTop, Left, Right}]
 					      = ets:lookup(FileSummary, File),
-					  true = ets:delete(FileDetail, {File, Offset}),
 					  ContiguousTop1 = lists:min([ContiguousTop, Offset]),
 					  true = ets:insert(FileSummary,
 							    {File, (ValidTotalSize - TotalSize - ?FILE_PACKING_ADJUSTMENT),
@@ -272,8 +265,7 @@ internal_tx_publish(MsgId, MsgBody, State = #dqstate { msg_location = MsgLocatio
 						       current_file_handle = CurHdl,
 						       current_file_name = CurName,
 						       current_offset = CurOffset,
-						       file_summary = FileSummary,
-						       file_detail = FileDetail
+						       file_summary = FileSummary
 						     }) ->
     case ets:lookup(MsgLocation, MsgId) of
 	[] ->
@@ -282,7 +274,6 @@ internal_tx_publish(MsgId, MsgBody, State = #dqstate { msg_location = MsgLocatio
 	    true = ets:insert_new(MsgLocation, {MsgId, 1, CurName, CurOffset, TotalSize}),
 	    [{CurName, ValidTotalSize, ContiguousTop, Left, undefined}]
 		= ets:lookup(FileSummary, CurName),
-	    true = ets:insert_new(FileDetail, {{CurName, CurOffset}, TotalSize, MsgId}),
 	    ValidTotalSize1 = ValidTotalSize + TotalSize + ?FILE_PACKING_ADJUSTMENT,
 	    ContiguousTop1 = if CurOffset =:= ContiguousTop ->
 				     ValidTotalSize1; % can't be any holes in this file
@@ -414,7 +405,7 @@ combineFile(File, State = #dqstate { file_size_limit = FileSizeLimit,
 combineFiles({Source, SourceValid, _SourceContiguousTop, _SourceLeft, _SourceRight},
 	     {Destination, DestinationValid, DestinationContiguousTop, _DestinationLeft, _DestinationRight},
 	     State1) ->
-    (State = #dqstate { file_detail = FileDetail, msg_location = MsgLocation })
+    (State = #dqstate { msg_location = MsgLocation })
 	= closeFile(Source, closeFile(Destination, State1)),
     {ok, SourceHdl} = file:open(form_filename(Source), [read, write, raw, binary, delayed_write, read_ahead]),
     {ok, DestinationHdl} = file:open(form_filename(Destination), [read, write, raw, binary, delayed_write, read_ahead]),
@@ -432,26 +423,27 @@ combineFiles({Source, SourceValid, _SourceContiguousTop, _SourceLeft, _SourceRig
        true ->
 	    Tmp = filename:rootname(Destination) ++ ?FILE_EXTENSION_TMP,
 	    {ok, TmpHdl} = file:open(form_filename(Tmp), [read, write, raw, binary, delayed_write, read_ahead]),
-	    % as FileDetail is an ordered_set, we should have the lowest offsets first
-	    Worklist = lists:filter(fun ({{Destination2, Offset}, _TotalSize, _MsgId})
-					when Destination2 =:= Destination, Offset /= DestinationContiguousTop ->
-					    % it cannot be that Offset == DestinationContiguousTop
-					    % because if it was then DestinationContiguousTop would have been
-					    % extended by TotalSize
-					    Offset > DestinationContiguousTop
-				    end, ets:match_object(FileDetail, {{Destination, '_'}, '_', '_'})),
+	    Worklist
+		= lists:dropwhile(fun ({_, _, _, Offset, _}) when Offset /= DestinationContiguousTop ->
+						% it cannot be that Offset == DestinationContiguousTop
+						% because if it was then DestinationContiguousTop would have been
+						% extended by TotalSize
+					  Offset < DestinationContiguousTop
+				  % Given expected access patterns, I suspect that the list should be
+				  % naturally sorted as we require, however, we need to enforce it anyway
+				  end, lists:sort(fun ({_, _, _, OffA, _}, {_, _, _, OffB, _}) ->
+						      OffA < OffB
+						  end,
+						  ets:match_object(MsgLocation, {'_', '_', Destination, '_', '_'}))),
 	    TmpSize = DestinationValid - DestinationContiguousTop,
 	    {TmpSize, BlockStart1, BlockEnd1} =
-		lists:foldl(fun ({{Destination2, Offset}, TotalSize, MsgId}, {CurOffset, BlockStart, BlockEnd}) when Destination2 =:= Destination ->
+		lists:foldl(fun ({MsgId, _RefCount, _Destination, Offset, TotalSize}, {CurOffset, BlockStart, BlockEnd}) ->
 				    % CurOffset is in the TmpFile.
 				    % Offset, BlockStart and BlockEnd are in the DestinationFile (which is currently the source!)
 				    Size = TotalSize + ?FILE_PACKING_ADJUSTMENT,
 				    % this message is going to end up back in Destination, at DestinationContiguousTop + CurOffset
 				    FinalOffset = DestinationContiguousTop + CurOffset,
 				    true = ets:update_element(MsgLocation, MsgId, {4, FinalOffset}),
-				    % sadly you can't use update_element to change the key:
-				    true = ets:delete(FileDetail, {Destination, Offset}),
-				    true = ets:insert_new(FileDetail, {{Destination, FinalOffset}, TotalSize, MsgId}),
 				    NextOffset = CurOffset + Size,
 				    if BlockStart =:= undefined ->
 					    % base case, called only for the first list elem
@@ -472,7 +464,7 @@ combineFiles({Source, SourceValid, _SourceContiguousTop, _SourceLeft, _SourceRig
 	    {ok, BlockStart1} = file:position(DestinationHdl, {bof, BlockStart1}),
 	    {ok, BSize1} = file:copy(DestinationHdl, TmpHdl, BSize1),
 	    % so now Tmp contains everything we need to salvage from Destination,
-	    % and both FileDetail and MsgLocation have been updated to reflect compaction of Destination
+	    % and MsgLocation has been updated to reflect compaction of Destination
 	    % so truncate Destination and copy from Tmp back to the end
 	    {ok, 0} = file:position(TmpHdl, {bof, 0}),
 	    {ok, DestinationContiguousTop} = file:position(DestinationHdl, {bof, DestinationContiguousTop}),
@@ -486,17 +478,16 @@ combineFiles({Source, SourceValid, _SourceContiguousTop, _SourceLeft, _SourceRig
 	    ok = file:close(TmpHdl),
 	    ok = file:delete(form_filename(Tmp))
     end,
-    SourceWorkList = ets:match_object(FileDetail, {{Source, '_'}, '_', '_'}),
+    SourceWorkList = lists:sort(fun ({_, _, _, OffA, _}, {_, _, _, OffB, _}) ->
+					OffA < OffB
+				end, ets:match_object(MsgLocation, {'_', '_', Source, '_', '_'})),
     {ExpectedSize, BlockStart2, BlockEnd2} =
-	lists:foldl(fun ({{Source2, Offset}, TotalSize, MsgId}, {CurOffset, BlockStart, BlockEnd}) when Source2 =:= Source ->
+	lists:foldl(fun ({MsgId, _RefCount, _Source, Offset, TotalSize}, {CurOffset, BlockStart, BlockEnd}) ->
 			    % CurOffset is in the DestinationFile.
 			    % Offset, BlockStart and BlockEnd are in the SourceFile
 			    Size = TotalSize + ?FILE_PACKING_ADJUSTMENT,
 			    % update MsgLocation to reflect change of file (3rd field) and offset (4th field)
 			    true = ets:update_element(MsgLocation, MsgId, [{3, Destination}, {4, CurOffset}]),
-			    % can't use update_element to change key:
-			    true = ets:delete(FileDetail, {Source, Offset}),
-			    true = ets:insert_new(FileDetail, {{Destination, CurOffset}, TotalSize, MsgId}),
 			    NextOffset = CurOffset + Size,
 			    if BlockStart =:= undefined ->
 				    % base case, called only for the first list elem
@@ -567,19 +558,21 @@ load_messages(undefined, [], State = #dqstate { file_summary = FileSummary,
 						current_file_name = CurName }) ->
     true = ets:insert_new(FileSummary, {CurName, 0, 0, undefined, undefined}),
     State;
-load_messages(Left, [], State = #dqstate { file_detail = FileDetail }) ->
+load_messages(Left, [], State = #dqstate { msg_location = MsgLocation }) ->
     Num = list_to_integer(filename:rootname(Left)),
-    Offset = case ets:match_object(FileDetail, {{Left, '_'}, '_', '_'}) of
+    Offset = case ets:match_object(MsgLocation, {'_', '_', Left, '_', '_'}) of
 		 [] -> 0;
-		 L -> {{Left, Offset1}, TotalSize, _MsgId} = lists:last(L),
-		      Offset1 + TotalSize + ?FILE_PACKING_ADJUSTMENT
+		 L -> [{_MsgId, _RefCount, Left, MaxOffset, TotalSize}|_]
+			  = lists:sort(fun ({_, _, _, OffA, _}, {_, _, _, OffB, _}) ->
+					       OffB < OffA
+				       end, L),
+		      MaxOffset + TotalSize + ?FILE_PACKING_ADJUSTMENT
 	     end,
     State # dqstate { current_file_num = Num, current_file_name = Left,
 		      current_offset = Offset };
 load_messages(Left, [File|Files],
 	      State = #dqstate { msg_location = MsgLocation,
-				 file_summary = FileSummary,
-				 file_detail = FileDetail
+				 file_summary = FileSummary
 			       }) ->
     % [{MsgId, TotalSize, FileOffset}]
     {ok, Messages} = scan_file_for_valid_messages(form_filename(File)),
@@ -591,7 +584,6 @@ load_messages(Left, [File|Files],
 		    0 -> {VMAcc, VTSAcc};
 		    RefCount ->
 			true = ets:insert_new(MsgLocation, {MsgId, RefCount, File, Offset, TotalSize}),
-			true = ets:insert_new(FileDetail, {{File, Offset}, TotalSize, MsgId}),
 			{[{MsgId, TotalSize, Offset}|VMAcc],
 			 VTSAcc + TotalSize + ?FILE_PACKING_ADJUSTMENT
 			}
