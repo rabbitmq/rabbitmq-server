@@ -712,7 +712,7 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
 					       rabbit_disk_queue:tx_commit(Q, [])
 					 end || Q <- Qs]
 			       end]]),
-    io:format(" ~15.10B| ~14.10B| ~14.10B| ~14.1f| ~14.1f| ~14.6f| ~14.8f| ~14.1f| ~14.6f| ~14.8f~n",
+    io:format(" ~15.10B| ~14.10B| ~14.10B| ~14.1f| ~14.1f| ~14.6f| ~14.10f| ~14.1f| ~14.6f| ~14.10f~n",
 	      [MsgCount, MsgSizeBytes, QCount, float(Startup),
 	       float(Publish), (Publish / (MsgCount * QCount)), (Publish / (MsgCount * QCount * MsgSizeBytes)),
 	       float(Deliver), (Deliver / (MsgCount * QCount)), (Deliver / (MsgCount * QCount * MsgSizeBytes))]),
