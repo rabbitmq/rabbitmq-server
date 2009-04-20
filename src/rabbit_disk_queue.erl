@@ -102,6 +102,7 @@ clean_stop() ->
 
 init([FileSizeLimit, ReadFileHandlesLimit]) ->
     process_flag(trap_exit, true),
+    ok = filelib:ensure_dir(form_filename("nothing")),
     InitName = "0" ++ ?FILE_EXTENSION,
     {ok, MsgLocation} = dets:open_file(?MSG_LOC_DETS_NAME,
 				       [{file, form_filename(atom_to_list(?MSG_LOC_DETS_NAME) ++ ?FILE_EXTENSION_DETS)},
