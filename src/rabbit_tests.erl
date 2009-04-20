@@ -703,12 +703,12 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
     List = lists:seq(1, MsgCount),
     {Publish, ok} = timer:tc(?MODULE, rdq_time_commands,
 			     [[fun() -> [rabbit_disk_queue:tx_publish(N, Msg) || N <- List, _ <- Qs] end,
-			       fun() -> [rabbit_disk_queue:tx_commit(Q, List) || Q <- Qs] end
+			       fun() -> [ok = rabbit_disk_queue:tx_commit(Q, List) || Q <- Qs] end
 			      ]]),
     {Deliver, ok} = timer:tc(?MODULE, rdq_time_commands,
 			     [[fun() -> [begin [begin {Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(Q, N), ok end || N <- List],
 					       rabbit_disk_queue:ack(Q, List),
-					       rabbit_disk_queue:tx_commit(Q, [])
+					       ok = rabbit_disk_queue:tx_commit(Q, [])
 					 end || Q <- Qs]
 			       end]]),
     io:format(" ~15.10B| ~14.10B| ~14.10B| ~14.1f| ~14.1f| ~14.6f| ~14.10f| ~14.1f| ~14.6f| ~14.10f~n",
