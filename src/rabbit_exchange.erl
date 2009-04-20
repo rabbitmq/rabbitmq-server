@@ -40,7 +40,7 @@
          route/3]).
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
--export([delete_bindings_for_queue/1]).
+-export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
 -export([check_type/1, assert_type/2, topic_matches/2, headers_match/2]).
 
 %% EXTENDED API
@@ -86,7 +86,8 @@
              bind_res() | {'error', 'binding_not_found'}).
 -spec(list_bindings/1 :: (vhost()) -> 
              [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
--spec(delete_bindings_for_queue/1 :: (queue_name()) -> 'ok').
+-spec(delete_queue_bindings/1 :: (queue_name()) -> 'ok').
+-spec(delete_transient_queue_bindings/1 :: (queue_name()) -> 'ok').
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
 -spec(headers_match/2 :: (amqp_table(), amqp_table()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
@@ -293,7 +294,7 @@ lookup_qpids(Queues) ->
 %% refactored to its own module, especially seeing as unbind will have
 %% to be implemented for 0.91 ?
 
-delete_bindings_for_exchange(ExchangeName) ->
+delete_exchange_bindings(ExchangeName) ->
     [begin
          ok = mnesia:delete_object(rabbit_reverse_route,
                                    reverse_route(Route), write),
@@ -305,10 +306,16 @@ delete_bindings_for_exchange(ExchangeName) ->
                        write)],
     ok.
 
-delete_bindings_for_queue(QueueName) ->
+delete_queue_bindings(QueueName) ->
+    delete_queue_bindings(QueueName, fun delete_forward_routes/1).
+
+delete_transient_queue_bindings(QueueName) ->
+    delete_queue_bindings(QueueName, fun delete_transient_forward_routes/1).
+
+delete_queue_bindings(QueueName, FwdDeleteFun) ->
     Exchanges = exchanges_for_queue(QueueName),
     [begin
-         ok = delete_forward_routes(reverse_route(Route)),
+         ok = FwdDeleteFun(reverse_route(Route)),
          ok = mnesia:delete_object(rabbit_reverse_route, Route, write)
      end || Route <- mnesia:match_object(
                        rabbit_reverse_route,
@@ -325,6 +332,9 @@ delete_bindings_for_queue(QueueName) ->
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
     ok = mnesia:delete_object(rabbit_durable_route, Route, write).
+
+delete_transient_forward_routes(Route) ->
+    ok = mnesia:delete_object(rabbit_route, Route, write).
 
 exchanges_for_queue(QueueName) ->
     MatchHead = reverse_route(
@@ -558,7 +568,7 @@ conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     end.
 
 unconditional_delete(#exchange{name = ExchangeName}) ->
-    ok = delete_bindings_for_exchange(ExchangeName),
+    ok = delete_exchange_bindings(ExchangeName),
     ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
     ok = mnesia:delete({rabbit_exchange, ExchangeName}).
 
