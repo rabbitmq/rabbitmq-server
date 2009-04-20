@@ -683,6 +683,9 @@ delete_log_handlers(Handlers) ->
     ok.
 
 test_disk_queue() ->
+    % unicode chars are supported properly from r13 onwards
+    % io:format("Msg Count\t| Msg Size\t| Queue Count\t| Startup μs\t| Publish μs\t| Pub μs/msg\t| Pub μs/byte\t| Deliver μs\t| Del μs/msg\t| Del μs/byte~n", []),
+    io:format("Msg Count\t| Msg Size\t| Queue Count\t| Startup mu s\t| Publish mu s\t| Pub mu s/msg\t| Pub mu s/byte\t| Deliver mu s\t| Del mu s/msg\t| Del mu s/byte~n", []),
     [begin rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSize), timer:sleep(1000) end || % 1000 milliseconds
 	MsgSize <- [512, 8192, 32768, 131072],
 	Qs <- [[1], lists:seq(1,10)], %, lists:seq(1,100), lists:seq(1,1000)],
@@ -694,24 +697,25 @@ test_disk_queue() ->
     passed.
 
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
-    rdq_virgin(),
+    Startup = rdq_virgin(),
     rdq_start(),
     QCount = length(Qs),
     Msg = <<0:(8*MsgSizeBytes)>>,
     List = lists:seq(1, MsgCount),
-    {Micros, ok} = timer:tc(?MODULE, rdq_time_commands,
-			   [[fun() -> [rabbit_disk_queue:tx_publish(N, Msg) || N <- List, _ <- Qs] end,
-			     fun() -> [rabbit_disk_queue:tx_commit(Q, List) || Q <- Qs] end
-			    ]]),
-    io:format("Published ~p ~p-byte messages in ~p microseconds to ~p queues (~p microseconds/msg) (~p microseconds/byte)~n",
-	      [MsgCount, MsgSizeBytes, Micros, QCount, (Micros / (MsgCount * QCount)), (Micros / (MsgCount * QCount * MsgSizeBytes))]),
-    {Micros2, ok} = timer:tc(?MODULE, rdq_time_commands,
-			    [[fun() -> [begin [begin {Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(Q, N), ok end || N <- List],
-					      rabbit_disk_queue:ack(Q, List),
-					      rabbit_disk_queue:tx_commit(Q, [])
-					end || Q <- Qs]
-			      end]]),
-    io:format("Delivered ~p ~p-byte messages in ~p microseconds from ~p queues (~p microseconds/msg) (~p microseconds/byte)~n", [MsgCount, MsgSizeBytes, Micros2, QCount, (Micros2 / (MsgCount * QCount)), (Micros2 / (MsgCount * QCount * MsgSizeBytes))]),
+    {Publish, ok} = timer:tc(?MODULE, rdq_time_commands,
+			     [[fun() -> [rabbit_disk_queue:tx_publish(N, Msg) || N <- List, _ <- Qs] end,
+			       fun() -> [rabbit_disk_queue:tx_commit(Q, List) || Q <- Qs] end
+			      ]]),
+    {Deliver, ok} = timer:tc(?MODULE, rdq_time_commands,
+			     [[fun() -> [begin [begin {Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(Q, N), ok end || N <- List],
+					       rabbit_disk_queue:ack(Q, List),
+					       rabbit_disk_queue:tx_commit(Q, [])
+					 end || Q <- Qs]
+			       end]]),
+    io:format(" ~15.10B| ~14.10B| ~14.10B| ~14.1f| ~14.1f| ~14.6f| ~14.8f| ~14.1f| ~14.6f| ~14.8f~n",
+	      [MsgCount, MsgSizeBytes, QCount, float(Startup),
+	       float(Publish), (Publish / (MsgCount * QCount)), (Publish / (MsgCount * QCount * MsgSizeBytes)),
+	       float(Deliver), (Deliver / (MsgCount * QCount)), (Deliver / (MsgCount * QCount * MsgSizeBytes))]),
     rdq_stop().
 
 % we know each file is going to be 1024*1024*10 bytes in size (10MB), so make sure we have
@@ -747,8 +751,8 @@ rdq_time_commands(Funcs) ->
 
 rdq_virgin() ->
     {Micros, {ok, _}} = timer:tc(rabbit_disk_queue, start_link, [1024*1024*10, 1000]),
-    io:format("Disk queue start up took ~p microseconds~n", [Micros]),
-    ok = rabbit_disk_queue:clean_stop().
+    ok = rabbit_disk_queue:clean_stop(),
+    Micros.
 
 rdq_start() ->
     {ok, _} = rabbit_disk_queue:start_link(1024*1024*10, 1000).
