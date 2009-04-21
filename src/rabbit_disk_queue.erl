@@ -274,13 +274,14 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete, State = # dqstate { msg_location = M
 					  ok = dets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
 					  Files2
 				  end,
-			      {if MnesiaDelete ->
-				       ok = mnesia:dirty_delete(rabbit_disk_queue, {Q, SeqId}),
-				       lists:max([SeqId, MaxSeqId2]);
-				  true ->
-				       MaxSeqId2
-			       end,
-			       Files3}
+			      MaxSeqId3 =
+				  if MnesiaDelete ->
+					  ok = mnesia:dirty_delete(rabbit_disk_queue, {Q, SeqId}),
+					  lists:max([SeqId, MaxSeqId2]);
+				     true ->
+					  MaxSeqId2
+				  end,
+			      {Files3, MaxSeqId3}
 		      end, {sets:new(), 0}, MsgSeqIds),
     true = if MnesiaDelete ->
 		   [{Q, ReadSeqId, WriteSeqId}] = ets:lookup(Sequences, Q),
