@@ -705,8 +705,8 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
 			       fun() -> [ok = rabbit_disk_queue:tx_commit(Q, List) || Q <- Qs] end
 			      ]]),
     {Deliver, ok} = timer:tc(?MODULE, rdq_time_commands,
-			     [[fun() -> [begin [begin {N, Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(Q), ok end || N <- List],
-					       rabbit_disk_queue:ack(Q, List),
+			     [[fun() -> [begin SeqIds = [begin {N, Msg, MsgSizeBytes, false, SeqId} = rabbit_disk_queue:deliver(Q), SeqId end || N <- List],
+					       rabbit_disk_queue:ack(Q, SeqIds),
 					       ok = rabbit_disk_queue:tx_commit(Q, [])
 					 end || Q <- Qs]
 			       end]]),
@@ -738,8 +738,8 @@ rdq_stress_gc(MsgCount) ->
 						  end
 				  end, [], lists:flatten([lists:seq(N,MsgCount,N) || N <- lists:seq(StartChunk,MsgCount)])))
 	++ lists:seq(1, (StartChunk - 1)),
-    [begin {N, Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(q),
-    	   rabbit_disk_queue:ack(q, [N]),
+    [begin {N, Msg, MsgSizeBytes, false, SeqId} = rabbit_disk_queue:deliver(q),
+    	   rabbit_disk_queue:ack(q, [SeqId]),
     	   rabbit_disk_queue:tx_commit(q, [])
      end || N <- AckList],
     rdq_stop().
