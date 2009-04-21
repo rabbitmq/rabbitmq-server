@@ -684,7 +684,6 @@ delete_log_handlers(Handlers) ->
 
 test_disk_queue() ->
     % unicode chars are supported properly from r13 onwards
-    % io:format("Msg Count\t| Msg Size\t| Queue Count\t| Startup μs\t| Publish μs\t| Pub μs/msg\t| Pub μs/byte\t| Deliver μs\t| Del μs/msg\t| Del μs/byte~n", []),
     io:format("Msg Count\t| Msg Size\t| Queue Count\t| Startup mu s\t| Publish mu s\t| Pub mu s/msg\t| Pub mu s/byte\t| Deliver mu s\t| Del mu s/msg\t| Del mu s/byte~n", []),
     [begin rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSize), timer:sleep(1000) end || % 1000 milliseconds
 	MsgSize <- [512, 8192, 32768, 131072],
@@ -706,7 +705,7 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
 			       fun() -> [ok = rabbit_disk_queue:tx_commit(Q, List) || Q <- Qs] end
 			      ]]),
     {Deliver, ok} = timer:tc(?MODULE, rdq_time_commands,
-			     [[fun() -> [begin [begin {Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(Q, N), ok end || N <- List],
+			     [[fun() -> [begin [begin {N, Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(Q), ok end || N <- List],
 					       rabbit_disk_queue:ack(Q, List),
 					       ok = rabbit_disk_queue:tx_commit(Q, [])
 					 end || Q <- Qs]
@@ -739,7 +738,7 @@ rdq_stress_gc(MsgCount) ->
 						  end
 				  end, [], lists:flatten([lists:seq(N,MsgCount,N) || N <- lists:seq(StartChunk,MsgCount)])))
 	++ lists:seq(1, (StartChunk - 1)),
-    [begin {Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(q, N),
+    [begin {N, Msg, MsgSizeBytes, false} = rabbit_disk_queue:deliver(q),
     	   rabbit_disk_queue:ack(q, [N]),
     	   rabbit_disk_queue:tx_commit(q, [])
      end || N <- AckList],
