@@ -95,10 +95,10 @@ tx_cancel(MsgIds) when is_list(MsgIds) ->
     gen_server:cast(?SERVER, {tx_cancel, MsgIds}).
 
 stop() ->
-    gen_server:call(?SERVER, stop).
+    gen_server:call(?SERVER, stop, infinity).
 
 clean_stop() ->
-    gen_server:call(?SERVER, clean_stop).
+    gen_server:call(?SERVER, clean_stop, infinity).
 
 %% ---- GEN-SERVER INTERNAL API ----
 
