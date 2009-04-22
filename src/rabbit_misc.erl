@@ -106,7 +106,7 @@
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
--spec(format_stderr/2 :: (string(), [any()]) -> 'true').
+-spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 
