@@ -501,8 +501,8 @@ combineFile(File, State = #dqstate { file_size_limit = FileSizeLimit,
     end.
 
 sortMsgLocationsByOffset(Asc, List) ->
-    Comp = if Asc -> fun(X, Y) -> X < Y end;
-	      true -> fun(X, Y) -> X > Y end
+    Comp = if Asc  -> fun erlang:'<'/2;
+	      true -> fun erlang:'>'/2
 	   end,
     lists:sort(fun ({_, _, _, OffA, _}, {_, _, _, OffB, _}) ->
 		       Comp(OffA, OffB)
