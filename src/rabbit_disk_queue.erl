@@ -59,7 +59,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(dqstate, {msg_location,            % where are messages?
+-record(dqstate, {msg_location,            %% where are messages?
 		  file_summary,            %% what's in the files?
 		  sequences,               %% next read and write for each q
 		  current_file_num,        %% current file name as number
@@ -70,6 +70,85 @@
 		  read_file_handles,       %% file handles for reading (LRU)
 		  read_file_handles_limit  %% how many file handles can we open?
 		 }).
+
+%% The components:
+%%
+%% MsgLocation: this is a dets table which contains:
+%%              {MsgId, RefCount, File, Offset, TotalSize}
+%% FileSummary: this is an ets table which contains:
+%%              {File, ValidTotalSize, ContiguousTop, Left, Right}
+%% Sequences:   this is an ets table which contains:
+%%              {Q, ReadSeqId, WriteSeqId}
+%% rabbit_disk_queue: this is an mnesia table which contains:
+%%              #dq_msg_loc { queue_and_seq_id = {Q, SeqId},
+%% 			      is_delivered = IsDelivered,
+%% 			      msg_id = MsgId
+%% 			    }
+%%
+
+%% The basic idea is that messages are appended to the current file up
+%% until that file becomes too big (> file_size_limit). At that point,
+%% the file is closed and a new file is created on the _right_ of the
+%% old file which is used for new messages. Files are named
+%% numerically ascending, thus the file with the lowest name is the
+%% eldest file.
+%%
+%% We need to keep track of which messages are in which files (this is
+%% the MsgLocation table); how much useful data is in each file and
+%% which files are on the left and right of each other. This is the
+%% purpose of the FileSummary table.
+%%
+%% As messages are removed from files, holes appear in these
+%% files. The field ValidTotalSize contains the total amount of useful
+%% data left in the file, whilst ContiguousTop contains the amount of
+%% valid data right at the start of each file. These are needed for
+%% garbage collection.
+%%
+%% On publish, we write the message to disk, record the changes to
+%% FileSummary and MsgLocation, and, should this be either a plain
+%% publish, or followed by a tx_commit, we record the message in the
+%% mnesia table. Sequences exists to enforce ordering of messages as
+%% they are published within a queue.
+%%
+%% On delivery, we read the next message to be read from disk
+%% (according to the ReadSeqId for the given queue) and record in the
+%% mnesia table that the message has been delivered.
+%%
+%% On ack we remove the relevant entry from MsgLocation, update
+%% FileSummary and delete from the mnesia table.
+%%
+%% In order to avoid extra mnesia searching, we return the SeqId
+%% during delivery which must be returned in ack - it is not possible
+%% to ack from MsgId alone.
+
+%% As messages are ack'd, holes develop in the files. When we discover
+%% that either a file is now empty or that it can be combined with the
+%% useful data in either its left or right file, we compact the two
+%% files together. This keeps disk utilisation high and aids
+%% performance.
+%%
+%% Given the compaction between two files, the left file is considered
+%% the ultimate destination for the good data in the right file. If
+%% necessary, the good data in the left file which is fragmented
+%% throughout the file is written out to a temporary file, then read
+%% back in to form a contiguous chunk of good data at the start of the
+%% left file. Thus the left file is garbage collected and
+%% compacted. Then the good data from the right file is copied onto
+%% the end of the left file. MsgLocation and FileSummary tables are
+%% updated.
+%%
+%% On startup, we scan the files we discover, dealing with the
+%% possibilites of a crash have occured during a compaction (this
+%% consists of tidyup - the compaction is deliberately designed such
+%% that data is duplicated on disk rather than risking it being lost),
+%% and rebuild the dets and ets tables (MsgLocation, FileSummary,
+%% Sequences) from what we find. We ensure that the messages we have
+%% discovered on disk match exactly with the messages recorded in the
+%% mnesia table.
+
+%% MsgLocation is deliberately a dets table, and the mnesia table is
+%% set to be a disk_only_table in order to ensure that we are not RAM
+%% constrained.
 
 %% ---- PUBLIC API ----
 
