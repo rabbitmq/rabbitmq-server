@@ -147,7 +147,6 @@ table_definitions() ->
      {rabbit_disk_queue,
       [{record_name, dq_msg_loc},
        {type, set},
-       {index, [msg_id]},
        {attributes, record_info(fields, dq_msg_loc)},
        {disc_only_copies, [node()]}]}
     ].

@@ -40,7 +40,7 @@
 
 -export([publish/3, deliver/1, ack/2, tx_publish/2, tx_commit/2, tx_cancel/1]).
 
--export([stop/0, clean_stop/0]).
+-export([stop/0, stop_and_obliterate/0]).
 
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
@@ -233,7 +233,7 @@ tx_cancel(MsgIds) when is_list(MsgIds) ->
 stop() ->
     gen_server:call(?SERVER, stop, infinity).
 
-clean_stop() ->
+stop_and_obliterate() ->
     gen_server:call(?SERVER, clean_stop, infinity).
 
 %% ---- GEN-SERVER INTERNAL API ----
