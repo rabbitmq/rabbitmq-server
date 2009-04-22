@@ -769,7 +769,7 @@ rdq_stress_gc(MsgCount) ->
 rdq_time_insane_startup() ->
     rdq_virgin(),
     OneGig = 1024*1024*1024,
-    rabbit_disk_queue:start_link(OneGig, 5),
+    rabbit_disk_queue:start_link(OneGig),
     Msg = <<>>,
     List = lists:seq(1, 1024*1024),
     %% 1M empty messages, at say, 100B per message, should all fit
@@ -788,12 +788,12 @@ rdq_time_commands(Funcs) ->
 
 rdq_virgin() ->
     {Micros, {ok, _}} =
-	timer:tc(rabbit_disk_queue, start_link, [1024*1024, 5]),
+	timer:tc(rabbit_disk_queue, start_link, [1024*1024]),
     ok = rabbit_disk_queue:stop_and_obliterate(),
     Micros.
 
 rdq_start() ->
-    {ok, _} = rabbit_disk_queue:start_link(1024*1024, 5).
+    {ok, _} = rabbit_disk_queue:start_link(1024*1024).
 
 rdq_stop() ->
     rabbit_disk_queue:stop().

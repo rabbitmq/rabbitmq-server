@@ -33,7 +33,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/2]).
+-export([start_link/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -58,6 +58,8 @@
 -define(FILE_PACKING_ADJUSTMENT,  (1 + (2* (?INTEGER_SIZE_BYTES)))).
 
 -define(SERVER, ?MODULE).
+
+-define(MAX_READ_FILE_HANDLES, 256).
 
 -record(dqstate, {msg_location,            %% where are messages?
 		  file_summary,            %% what's in the files?
@@ -212,7 +214,7 @@
 
 -type(seq_id() :: non_neg_integer()).
 
--spec(start_link/2 :: (non_neg_integer(), non_neg_integer()) ->
+-spec(start_link/1 :: (non_neg_integer()) ->
 	      {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(publish/3 :: (queue_name(), msg_id(), binary()) -> 'ok').
 -spec(deliver/1 :: (queue_name()) ->
@@ -229,9 +231,9 @@
 
 %% ---- PUBLIC API ----
 
-start_link(FileSizeLimit, ReadFileHandlesLimit) ->
+start_link(FileSizeLimit) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE,
-			  [FileSizeLimit, ReadFileHandlesLimit], []).
+			  [FileSizeLimit, ?MAX_READ_FILE_HANDLES], []).
 
 publish(Q, MsgId, Msg) when is_binary(Msg) ->
     gen_server:cast(?SERVER, {publish, Q, MsgId, Msg}).
