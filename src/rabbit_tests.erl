@@ -685,7 +685,8 @@ delete_log_handlers(Handlers) ->
 test_disk_queue() ->
     % unicode chars are supported properly from r13 onwards
     io:format("Msg Count\t| Msg Size\t| Queue Count\t| Startup mu s\t| Publish mu s\t| Pub mu s/msg\t| Pub mu s/byte\t| Deliver mu s\t| Del mu s/msg\t| Del mu s/byte~n", []),
-    [begin rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSize), timer:sleep(1000) end || % 1000 milliseconds
+    [begin rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSize),
+	   timer:sleep(1000) end || % 1000 milliseconds
 	MsgSize <- [512, 8192, 32768, 131072],
 	Qs <- [[1], lists:seq(1,10)], %, lists:seq(1,100), lists:seq(1,1000)],
 	MsgCount <- [1024, 4096, 16384]
@@ -700,20 +701,29 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
     QCount = length(Qs),
     Msg = <<0:(8*MsgSizeBytes)>>,
     List = lists:seq(1, MsgCount),
-    {Publish, ok} = timer:tc(?MODULE, rdq_time_commands,
-			     [[fun() -> [rabbit_disk_queue:tx_publish(N, Msg) || N <- List, _ <- Qs] end,
-			       fun() -> [ok = rabbit_disk_queue:tx_commit(Q, List) || Q <- Qs] end
-			      ]]),
-    {Deliver, ok} = timer:tc(?MODULE, rdq_time_commands,
-			     [[fun() -> [begin SeqIds = [begin {N, Msg, MsgSizeBytes, false, SeqId} = rabbit_disk_queue:deliver(Q), SeqId end || N <- List],
-					       rabbit_disk_queue:ack(Q, SeqIds),
-					       ok = rabbit_disk_queue:tx_commit(Q, [])
-					 end || Q <- Qs]
-			       end]]),
+    {Publish, ok} =
+	timer:tc(?MODULE, rdq_time_commands,
+		 [[fun() -> [rabbit_disk_queue:tx_publish(N, Msg)
+			     || N <- List, _ <- Qs] end,
+		   fun() -> [ok = rabbit_disk_queue:tx_commit(Q, List)
+			     || Q <- Qs] end
+		  ]]),
+    {Deliver, ok} =
+	timer:tc(?MODULE, rdq_time_commands,
+		 [[fun() -> [begin SeqIds =
+				       [begin {N, Msg, MsgSizeBytes, false, SeqId} =
+						  rabbit_disk_queue:deliver(Q), SeqId end
+					|| N <- List],
+				   rabbit_disk_queue:ack(Q, SeqIds),
+				   ok = rabbit_disk_queue:tx_commit(Q, [])
+			     end || Q <- Qs]
+		   end]]),
     io:format(" ~15.10B| ~14.10B| ~14.10B| ~14.1f| ~14.1f| ~14.6f| ~14.10f| ~14.1f| ~14.6f| ~14.10f~n",
 	      [MsgCount, MsgSizeBytes, QCount, float(Startup),
-	       float(Publish), (Publish / (MsgCount * QCount)), (Publish / (MsgCount * QCount * MsgSizeBytes)),
-	       float(Deliver), (Deliver / (MsgCount * QCount)), (Deliver / (MsgCount * QCount * MsgSizeBytes))]),
+	       float(Publish), (Publish / (MsgCount * QCount)),
+	       (Publish / (MsgCount * QCount * MsgSizeBytes)),
+	       float(Deliver), (Deliver / (MsgCount * QCount)),
+	       (Deliver / (MsgCount * QCount * MsgSizeBytes))]),
     rdq_stop().
 
 % we know each file is going to be 1024*1024*10 bytes in size (10MB), so make sure we have
@@ -728,22 +738,30 @@ rdq_stress_gc(MsgCount) ->
     rabbit_disk_queue:tx_commit(q, List),
     StartChunk = round(MsgCount / 20), % 5%
     AckList =
-	lists:reverse(lists:foldl(fun (E, Acc) -> case Acc of
-						      [] -> [E];
-						      [F|_Fs] ->
-							  case E rem F of
-							      0 -> Acc;
-							      _ -> [E|Acc]
-							  end
-						  end
-				  end, [], lists:flatten([lists:seq(N,MsgCount,N) || N <- lists:seq(StartChunk,MsgCount)])))
-	++ lists:seq(1, (StartChunk - 1)),
-    MsgIdToSeqDict
-	= lists:foldl(fun (_, Acc) ->
-			      {MsgId, Msg, MsgSizeBytes, false, SeqId} = rabbit_disk_queue:deliver(q),
-			      dict:store(MsgId, SeqId, Acc)
-		      end, dict:new(), List),
-    rabbit_disk_queue:ack(q, [begin {ok, SeqId} = dict:find(MsgId, MsgIdToSeqDict), SeqId end || MsgId <- AckList]),
+	lists:reverse(
+	  lists:foldl(
+	    fun (E, Acc) ->
+		    case Acc of
+			[] -> [E];
+			[F|_Fs] ->
+			    case E rem F of
+				0 -> Acc;
+				_ -> [E|Acc]
+			    end
+		    end
+	    end, [], lists:flatten([lists:seq(N,MsgCount,N)
+				    || N <- lists:seq(StartChunk,MsgCount)]))) ++
+	lists:seq(1, (StartChunk - 1)),
+    MsgIdToSeqDict =
+	lists:foldl(
+	  fun (_, Acc) ->
+		  {MsgId, Msg, MsgSizeBytes, false, SeqId} =
+		      rabbit_disk_queue:deliver(q),
+		  dict:store(MsgId, SeqId, Acc)
+	  end, dict:new(), List),
+    rabbit_disk_queue:ack(q, [begin {ok, SeqId} = dict:find(MsgId, MsgIdToSeqDict),
+				    SeqId end
+			      || MsgId <- AckList]),
     rabbit_disk_queue:tx_commit(q, []),
     rdq_stop(),
     passed.
@@ -752,7 +770,8 @@ rdq_time_commands(Funcs) ->
     lists:foreach(fun (F) -> F() end, Funcs).
 
 rdq_virgin() ->
-    {Micros, {ok, _}} = timer:tc(rabbit_disk_queue, start_link, [1024*1024*10, 1000]),
+    {Micros, {ok, _}} =
+	timer:tc(rabbit_disk_queue, start_link, [1024*1024*10, 1000]),
     ok = rabbit_disk_queue:clean_stop(),
     Micros.
 
