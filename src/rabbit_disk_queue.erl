@@ -608,17 +608,13 @@ extract_sequence_numbers(State = #dqstate { sequences = Sequences }) ->
       fun() ->
 	      ok = mnesia:read_lock_table(rabbit_disk_queue),
 	      mnesia:foldl(
-		fun (#dq_msg_loc { queue_and_seq_id = {Q, SeqId},
-				   is_delivered = Delivered }, true) ->
-			NextRead = if Delivered -> SeqId + 1;
-				      true -> SeqId
-				   end,
+		fun (#dq_msg_loc { queue_and_seq_id = {Q, SeqId} }, true) ->
 			NextWrite = SeqId + 1,
 			case ets:lookup(Sequences, Q) of
 			    [] ->
-				true = ets:insert_new(Sequences, {Q, NextRead, NextWrite});
+				true = ets:insert_new(Sequences, {Q, SeqId, NextWrite});
 			    [Orig = {Q, Read, Write}] ->
-				Repl = {Q, lists:min([Read, NextRead]),
+				Repl = {Q, lists:min([Read, SeqId]),
 					lists:max([Write, NextWrite])},
 				if Orig /= Repl ->
 					true = ets:insert(Sequences, Repl);

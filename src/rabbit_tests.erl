@@ -738,10 +738,13 @@ rdq_stress_gc(MsgCount) ->
 						  end
 				  end, [], lists:flatten([lists:seq(N,MsgCount,N) || N <- lists:seq(StartChunk,MsgCount)])))
 	++ lists:seq(1, (StartChunk - 1)),
-    [begin {_, Msg, MsgSizeBytes, false, SeqId} = rabbit_disk_queue:deliver(q),
-    	   rabbit_disk_queue:ack(q, [SeqId]),
-    	   rabbit_disk_queue:tx_commit(q, [])
-     end || N <- AckList],
+    MsgIdToSeqDict
+	= lists:foldl(fun (_, Acc) ->
+			      {MsgId, Msg, MsgSizeBytes, false, SeqId} = rabbit_disk_queue:deliver(q),
+			      dict:store(MsgId, SeqId, Acc)
+		      end, dict:new(), List),
+    rabbit_disk_queue:ack(q, [begin {ok, SeqId} = dict:find(MsgId, MsgIdToSeqDict), SeqId end || MsgId <- AckList]),
+    rabbit_disk_queue:tx_commit(q, []),
     rdq_stop(),
     passed.
 
