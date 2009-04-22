@@ -691,7 +691,7 @@ test_disk_queue() ->
 	MsgCount <- [1024, 4096, 16384]
     ],
     rdq_virgin(),
-    rdq_stress_gc(10000),
+    passed = rdq_stress_gc(10000),
     passed.
 
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
@@ -738,11 +738,12 @@ rdq_stress_gc(MsgCount) ->
 						  end
 				  end, [], lists:flatten([lists:seq(N,MsgCount,N) || N <- lists:seq(StartChunk,MsgCount)])))
 	++ lists:seq(1, (StartChunk - 1)),
-    [begin {N, Msg, MsgSizeBytes, false, SeqId} = rabbit_disk_queue:deliver(q),
+    [begin {_, Msg, MsgSizeBytes, false, SeqId} = rabbit_disk_queue:deliver(q),
     	   rabbit_disk_queue:ack(q, [SeqId]),
     	   rabbit_disk_queue:tx_commit(q, [])
      end || N <- AckList],
-    rdq_stop().
+    rdq_stop(),
+    passed.
 
 rdq_time_commands(Funcs) ->
     lists:foreach(fun (F) -> F() end, Funcs).

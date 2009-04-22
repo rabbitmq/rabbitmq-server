@@ -250,12 +250,11 @@ internal_ack(Q, MsgIds, State) ->
 %% called from tx_cancel with MnesiaDelete = false
 %% called from ack with MnesiaDelete = true
 remove_messages(Q, MsgSeqIds, MnesiaDelete, State = # dqstate { msg_location = MsgLocation,
-								sequences = Sequences,
 								file_summary = FileSummary,
 								current_file_name = CurName
 							       }) ->
-    {Files, MaxSeqId}
-	= lists:foldl(fun ({MsgId, SeqId}, {Files2, MaxSeqId2}) ->
+    Files
+	= lists:foldl(fun ({MsgId, SeqId}, Files2) ->
 			      [{MsgId, RefCount, File, Offset, TotalSize}]
 				  = dets:lookup(MsgLocation, MsgId),
 			      Files3 =
@@ -274,23 +273,12 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete, State = # dqstate { msg_location = M
 					  ok = dets:insert(MsgLocation, {MsgId, RefCount - 1, File, Offset, TotalSize}),
 					  Files2
 				  end,
-			      MaxSeqId3 =
-				  if MnesiaDelete ->
-					  ok = mnesia:dirty_delete(rabbit_disk_queue, {Q, SeqId}),
-					  lists:max([SeqId, MaxSeqId2]);
-				     true ->
-					  MaxSeqId2
-				  end,
-			      {Files3, MaxSeqId3}
-		      end, {sets:new(), 0}, MsgSeqIds),
-    true = if MnesiaDelete ->
-		   [{Q, ReadSeqId, WriteSeqId}] = ets:lookup(Sequences, Q),
-		   if MaxSeqId > ReadSeqId ->
-			   true = ets:insert(Sequences, {Q, MaxSeqId, WriteSeqId});
-		      true -> true
-		   end;
-	      true -> true
-	   end,
+			      if MnesiaDelete ->
+				      ok = mnesia:dirty_delete(rabbit_disk_queue, {Q, SeqId});
+				 true -> ok
+			      end,
+			      Files3
+		      end, sets:new(), MsgSeqIds),
     State2 = compact(Files, State),
     {ok, State2}.
 
@@ -369,7 +357,7 @@ internal_tx_cancel(MsgIds, State) ->
     % we don't need seq ids because we're not touching mnesia, because seqids were
     % never assigned
     MsgSeqIds = lists:zip(MsgIds, lists:duplicate(length(MsgIds), undefined)),
-    remove_messages(undefined, MsgIds, false, State).
+    remove_messages(undefined, MsgSeqIds, false, State).
 
 %% ---- ROLLING OVER THE APPEND FILE ----
 
