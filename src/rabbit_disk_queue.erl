@@ -150,6 +150,60 @@
 %% set to be a disk_only_table in order to ensure that we are not RAM
 %% constrained.
 
+%% So, with this design, messages move to the left. Eventually, they
+%% should end up in a contiguous block on the left and are then never
+%% rewritten. But this isn't quite the case. If in a file there is one
+%% message that is being ignored, for some reason, and messages in the
+%% file to the right and in the current block are being read all the
+%% time then it will repeatedly be the case that the good data from
+%% both files can be combined and will be written out to a new
+%% file. Whenever this happens, our shunned message will be rewritten.
+%%
+%% So, provided that we combine messages in the right order,
+%% (i.e. left file, bottom to top, right file, bottom to top),
+%% eventually our shunned message will end up at the bottom of the
+%% left file. The compaction/combining algorithm is smart enough to
+%% read in good data from the left file that is scattered throughout
+%% (i.e. C and D in the below diagram), then truncate the file to just
+%% above B (i.e. truncate to the limit of the good contiguous region
+%% at the start of the file), then write C and D on top and then write
+%% E, F and G from the right file on top. Thus contiguous blocks of
+%% good data at the bottom of files are not rewritten.
+%%
+%% ---------    ---------         ---------
+%% |   X   |    |   G   |	  |   G   |
+%% ---------    ---------	  ---------
+%% |   D   |    |   X   |	  |   F   |
+%% ---------    ---------	  ---------
+%% |   X   |    |   X   |	  |   E   |
+%% ---------    ---------	  ---------
+%% |   C   |    |   F   |   ===>  |   D   |
+%% ---------    ---------	  ---------
+%% |   X   |    |   X   |	  |   C   |
+%% ---------    ---------	  ---------
+%% |   B   |    |   X   |	  |   B   |
+%% ---------    ---------	  ---------
+%% |   A   |    |   E   |	  |   A   |
+%% ---------    ---------         ---------
+%%   left         right             left
+%%
+%% From this reasoning, we do have a bound on the number of times the
+%% message is rewritten. From when it is inserted, there can be no
+%% files inserted between it and the head of the queue, and the worst
+%% case is that everytime it is rewritten, it moves one position lower
+%% in the file (for it to stay at the same position requires that
+%% there are no holes beneath it, which means truncate would be used
+%% and so it would not be rewritten at all). Thus this seems to
+%% suggest the limit is the number of messages ahead of it in the
+%% queue, though it's likely that that's pessimistic, given the
+%% requirements for compaction/combination of files.
+%%
+%% The other property is that we have is the bound on the lowest
+%% utilisation, which should be 50% - worst case is that all files are
+%% fractionally over half full and can't be combined (equivalent is
+%% alternating full files and files with only one tiny message in
+%% them).
+
 %% ---- PUBLIC API ----
 
 start_link(FileSizeLimit, ReadFileHandlesLimit) ->
