@@ -45,17 +45,17 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--define(WRITE_OK_SIZE_BITS, 8).
--define(WRITE_OK, 255).
--define(INTEGER_SIZE_BYTES, 8).
--define(INTEGER_SIZE_BITS, (8 * ?INTEGER_SIZE_BYTES)).
--define(MSG_LOC_DETS_NAME, rabbit_disk_queue_msg_location).
--define(FILE_SUMMARY_ETS_NAME, rabbit_disk_queue_file_summary).
--define(SEQUENCE_ETS_NAME, rabbit_disk_queue_sequences).
--define(FILE_EXTENSION, ".rdq").
--define(FILE_EXTENSION_TMP, ".rdt").
--define(FILE_EXTENSION_DETS, ".dets").
--define(FILE_PACKING_ADJUSTMENT, (1 + (2* (?INTEGER_SIZE_BYTES)))).
+-define(WRITE_OK_SIZE_BITS,       8).
+-define(WRITE_OK,                 255).
+-define(INTEGER_SIZE_BYTES,       8).
+-define(INTEGER_SIZE_BITS,        (8 * ?INTEGER_SIZE_BYTES)).
+-define(MSG_LOC_DETS_NAME,        rabbit_disk_queue_msg_location).
+-define(FILE_SUMMARY_ETS_NAME,    rabbit_disk_queue_file_summary).
+-define(SEQUENCE_ETS_NAME,        rabbit_disk_queue_sequences).
+-define(FILE_EXTENSION,           ".rdq").
+-define(FILE_EXTENSION_TMP,       ".rdt").
+-define(FILE_EXTENSION_DETS,      ".dets").
+-define(FILE_PACKING_ADJUSTMENT,  (1 + (2* (?INTEGER_SIZE_BYTES)))).
 
 -define(SERVER, ?MODULE).
 
@@ -113,15 +113,15 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
 					{max_no_slots, 1024*1024*1024},
 					{type, set}
 				       ]),
-    State = #dqstate { msg_location = MsgLocation,
-		       file_summary = ets:new(?FILE_SUMMARY_ETS_NAME, [set, private]),
-		       sequences = ets:new(?SEQUENCE_ETS_NAME, [set, private]),
-		       current_file_num = 0,
-		       current_file_name = InitName,
-		       current_file_handle = undefined,
-		       current_offset = 0,
-		       file_size_limit = FileSizeLimit,
-		       read_file_handles = {dict:new(), gb_trees:empty()},
+    State = #dqstate { msg_location            = MsgLocation,
+		       file_summary            = ets:new(?FILE_SUMMARY_ETS_NAME, [set, private]),
+		       sequences               = ets:new(?SEQUENCE_ETS_NAME, [set, private]),
+		       current_file_num        = 0,
+		       current_file_name       = InitName,
+		       current_file_handle     = undefined,
+		       current_offset          = 0,
+		       file_size_limit         = FileSizeLimit,
+		       read_file_handles       = {dict:new(), gb_trees:empty()},
 		       read_file_handles_limit = ReadFileHandlesLimit
 		     },
     {ok, State1 = #dqstate { current_file_name = CurrentName,
@@ -448,7 +448,7 @@ combineFiles({Source, SourceValid, _SourceContiguousTop, _SourceLeft, _SourceRig
 	     State1) ->
     (State = #dqstate { msg_location = MsgLocation })
 	= closeFile(Source, closeFile(Destination, State1)),
-    {ok, SourceHdl} = file:open(form_filename(Source), [read, write, raw, binary, delayed_write, read_ahead]),
+    {ok, SourceHdl}      = file:open(form_filename(Source),      [read, write, raw, binary, delayed_write, read_ahead]),
     {ok, DestinationHdl} = file:open(form_filename(Destination), [read, write, raw, binary, delayed_write, read_ahead]),
     ExpectedSize = SourceValid + DestinationValid,
     % if DestinationValid =:= DestinationContiguousTop then we don't need a tmp file
