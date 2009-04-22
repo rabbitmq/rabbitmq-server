@@ -771,12 +771,12 @@ rdq_time_commands(Funcs) ->
 
 rdq_virgin() ->
     {Micros, {ok, _}} =
-	timer:tc(rabbit_disk_queue, start_link, [1024*1024*10, 1000]),
+	timer:tc(rabbit_disk_queue, start_link, [1024*1024, 5]),
     ok = rabbit_disk_queue:clean_stop(),
     Micros.
 
 rdq_start() ->
-    {ok, _} = rabbit_disk_queue:start_link(1024*1024*10, 1000).
+    {ok, _} = rabbit_disk_queue:start_link(1024*1024, 5).
 
 rdq_stop() ->
     rabbit_disk_queue:stop().
