@@ -168,7 +168,9 @@
 %% above B (i.e. truncate to the limit of the good contiguous region
 %% at the start of the file), then write C and D on top and then write
 %% E, F and G from the right file on top. Thus contiguous blocks of
-%% good data at the bottom of files are not rewritten.
+%% good data at the bottom of files are not rewritten (yes, this is
+%% the data the size of which is tracked by the ContiguousTop
+%% variable. Judicious use of a mirror is required).
 %%
 %% ---------    ---------         ---------
 %% |   X   |    |   G   |	  |   G   |
