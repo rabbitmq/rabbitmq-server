@@ -59,8 +59,10 @@
 
 -type(publish_res() :: {'ok', [pid()]} |
       not_found() | {'error', 'unroutable' | 'not_delivered'}).
--type(bind_res() :: 'ok' |
-      {'error', 'queue_not_found' | 'exchange_not_found'}).
+-type(bind_res() :: 'ok' | {'error',
+                            'queue_not_found' |
+                            'exchange_not_found' |
+                            'exchange_and_queue_not_found'}).
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/5 :: (exchange_name(), exchange_type(), bool(), bool(),
                     amqp_table()) -> exchange()).
@@ -340,18 +342,20 @@ continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 call_with_exchange(Exchange, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun() -> case mnesia:read({exchange, Exchange}) of
-                   []  -> {error, exchange_not_found};
+                   []  -> {error, not_found};
                    [X] -> Fun(X)
                end
       end).
 
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
-    call_with_exchange(
-      Exchange, 
-      fun(X) -> case mnesia:read({amqqueue, Queue}) of
-                    []  -> {error, queue_not_found};
-                    [Q] -> Fun(X, Q)
-                end
+    rabbit_misc:execute_mnesia_transaction(
+      fun() -> case {mnesia:read({exchange, Exchange}),
+                     mnesia:read({amqqueue, Queue})} of
+                   {[X], [Q]} -> Fun(X, Q);
+                   {[ ], [_]} -> {error, exchange_not_found};
+                   {[_], [ ]} -> {error, queue_not_found};
+                   {[ ], [ ]} -> {error, exchange_and_queue_not_found}
+               end
       end).
 
 add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
