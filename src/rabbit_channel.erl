@@ -745,12 +745,16 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments) of
-        {error, queue_not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(QueueName)]);
         {error, exchange_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s", [rabbit_misc:rs(ExchangeName)]);
+        {error, queue_not_found} ->
+            rabbit_misc:protocol_error(
+              not_found, "no ~s", [rabbit_misc:rs(QueueName)]);
+        {error, exchange_and_queue_not_found} ->
+            rabbit_misc:protocol_error(
+              not_found, "no ~s and no ~s", [rabbit_misc:rs(ExchangeName),
+                                             rabbit_misc:rs(QueueName)]);
         {error, binding_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no binding ~s between ~s and ~s",
