@@ -106,7 +106,7 @@
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
--spec(format_stderr/2 :: (string(), [any()]) -> 'true').
+-spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 
@@ -375,9 +375,19 @@ ensure_parent_dirs_exist(Filename) ->
     end.
 
 format_stderr(Fmt, Args) ->
-    Port = open_port({fd, 0, 2}, [out]),
-    port_command(Port, io_lib:format(Fmt, Args)),
-    port_close(Port).
+    case os:type() of
+        {unix, _} ->
+            Port = open_port({fd, 0, 2}, [out]),
+            port_command(Port, io_lib:format(Fmt, Args)),
+            port_close(Port);
+        {win32, _} ->
+            %% stderr on Windows is buffered and I can't figure out a
+            %% way to trigger a fflush(stderr) in Erlang. So rather
+            %% than risk losing output we write to stdout instead,
+            %% which appears to be unbuffered.
+            io:format(Fmt, Args)
+    end,
+    ok.
 
 manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
     Iterate(fun (App, Acc) ->

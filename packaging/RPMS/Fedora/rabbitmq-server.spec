@@ -40,7 +40,7 @@ fi
 
 %build
 cp %{S:2} %{_rabbit_wrapper}
-sed 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
+sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
 make %{?_smp_mflags}
 
 %install
@@ -112,6 +112,9 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Mon Apr 6 2009 Matthias Radestock <matthias@lshift.net> 1.5.4-1
+- Maintenance release for the 1.5.x series
+
 * Tue Feb 24 2009 Tony Garnock-Jones <tonyg@lshift.net> 1.5.3-1
 - Maintenance release for the 1.5.x series
 

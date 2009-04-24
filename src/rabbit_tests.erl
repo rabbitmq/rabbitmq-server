@@ -45,6 +45,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
+    passed = test_priority_queue(),
     passed = test_parsing(),
     passed = test_topic_matching(),
     passed = test_log_management(),
@@ -53,6 +54,62 @@ all_tests() ->
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
+    passed.
+
+test_priority_queue() ->
+
+    false = priority_queue:is_queue(not_a_queue),
+
+    %% empty Q
+    Q = priority_queue:new(),
+    {true, true, 0, [], []} = test_priority_queue(Q),
+
+    %% 1-4 element no-priority Q
+    true = lists:all(fun (X) -> X =:= passed end,
+                     lists:map(fun test_simple_n_element_queue/1,
+                               lists:seq(1, 4))),
+
+    %% 1-element priority Q
+    Q1 = priority_queue:in(foo, 1, priority_queue:new()),
+    {true, false, 1, [{1, foo}], [foo]} = test_priority_queue(Q1),
+
+    %% 2-element same-priority Q
+    Q2 = priority_queue:in(bar, 1, Q1),
+    {true, false, 2, [{1, foo}, {1, bar}], [foo, bar]} =
+        test_priority_queue(Q2),
+
+    %% 2-element different-priority Q
+    Q3 = priority_queue:in(bar, 2, Q1),
+    {true, false, 2, [{2, bar}, {1, foo}], [bar, foo]} =
+        test_priority_queue(Q3),
+
+    %% 1-element negative priority Q
+    Q4 = priority_queue:in(foo, -1, priority_queue:new()),
+    {true, false, 1, [{-1, foo}], [foo]} = test_priority_queue(Q4),
+
+    passed.
+
+priority_queue_in_all(Q, L) ->
+    lists:foldl(fun (X, Acc) -> priority_queue:in(X, Acc) end, Q, L).
+
+priority_queue_out_all(Q) ->
+    case priority_queue:out(Q) of
+        {empty, _}       -> [];
+        {{value, V}, Q1} -> [V | priority_queue_out_all(Q1)]
+    end.
+
+test_priority_queue(Q) ->
+    {priority_queue:is_queue(Q),
+     priority_queue:is_empty(Q),
+     priority_queue:len(Q),
+     priority_queue:to_list(Q),
+     priority_queue_out_all(Q)}.
+
+test_simple_n_element_queue(N) ->
+    Items = lists:seq(1, N),
+    Q = priority_queue_in_all(priority_queue:new(), Items),
+    ToListRes = [{0, X} || X <- Items],
+    {true, false, N, ToListRes, Items} = test_priority_queue(Q),
     passed.
 
 test_parsing() ->
@@ -430,7 +487,13 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
     {error, {no_running_cluster_nodes, _, _}} =
         control_action(reset, []),
+
+    %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
+    ok = control_action(start_app, []),
+    ok = control_action(force_reset, SecondaryNode, []),
+    ok = control_action(cluster, SecondaryNode, [NodeS]),
+    ok = control_action(start_app, SecondaryNode, []),
 
     passed.
 
