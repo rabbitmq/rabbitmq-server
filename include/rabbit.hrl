@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -24,7 +30,9 @@
 %%
 
 -record(user, {username, password}).
+-record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
+-record(user_permission, {user_vhost, permission}).
 
 -record(vhost, {virtual_host, dummy}).
 
@@ -43,11 +51,14 @@
 
 -record(exchange, {name, type, durable, auto_delete, arguments}).
 
--record(amqqueue, {name, durable, auto_delete, arguments, binding_specs, pid}).
--record(binding_spec, {exchange_name, routing_key, arguments}).
+-record(amqqueue, {name, durable, auto_delete, arguments, pid}).
 
--record(binding, {key, handlers}).
--record(handler, {binding_spec, queue, qpid}).
+%% mnesia doesn't like unary records, so we add a dummy 'value' field
+-record(route, {binding, value = const}).
+-record(reverse_route, {reverse_binding, value = const}).
+
+-record(binding, {exchange_name, key, queue_name, args = []}).
+-record(reverse_binding, {queue_name, key, exchange_name, args = []}).
 
 -record(listener, {node, protocol, host, port}).
 
@@ -60,9 +71,12 @@
 -include("rabbit_framing_spec.hrl").
 
 -type(maybe(T) :: T | 'none').
--type(node() :: atom()).
+-type(erlang_node() :: atom()).
 -type(socket() :: port()).
 -type(thunk(T) :: fun(() -> T)).
+-type(info_key() :: atom()).
+-type(info() :: {info_key(), any()}).
+-type(regexp() :: binary()).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: any()).
@@ -77,16 +91,15 @@
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
--type(binding_spec() ::
-      #binding_spec{exchange_name :: exchange_name(),
-                    routing_key   :: routing_key(),
-                    arguments     :: amqp_table()}).
+-type(permission() ::
+      #permission{configure :: regexp(),
+                  write     :: regexp(),
+                  read      :: regexp()}).
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
                 durable       :: bool(),
                 auto_delete   :: bool(),
                 arguments     :: amqp_table(),
-                binding_specs :: [binding_spec()],
                 pid           :: maybe(pid())}).
 -type(exchange() ::
       #exchange{name        :: exchange_name(),
@@ -94,6 +107,10 @@
                 durable     :: bool(),
                 auto_delete :: bool(),
                 arguments   :: amqp_table()}).
+-type(binding() ::
+      #binding{exchange_name    :: exchange_name(),
+               queue_name       :: queue_name(),
+               key              :: binding_key()}).
 %% TODO: make this more precise by tying specific class_ids to
 %% specific properties
 -type(undecoded_content() ::
@@ -121,7 +138,7 @@
 -type(msg_id() :: non_neg_integer()).
 -type(msg() :: {queue_name(), pid(), msg_id(), bool(), message()}).
 -type(listener() ::
-      #listener{node     :: node(),
+      #listener{node     :: erlang_node(),
                 protocol :: atom(),
                 host     :: string() | atom(),
                 port     :: non_neg_integer()}).
@@ -131,7 +148,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2008 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
+-define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2009 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
 
 -ifdef(debug).

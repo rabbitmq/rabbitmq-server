@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -26,7 +32,7 @@
 -module(rabbit_router).
 -include("rabbit.hrl").
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([start_link/0,
          deliver/5]).
@@ -35,6 +41,9 @@
          terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
+
+%% cross-node routing optimisation is disabled because of bug 19758.
+-define(BUG19758, true).
 
 %%----------------------------------------------------------------------------
 
@@ -49,7 +58,15 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+-ifdef(BUG19758).
+
+deliver(QPids, Mandatory, Immediate, Txn, Message) ->
+    check_delivery(Mandatory, Immediate,
+                   run_bindings(QPids, Mandatory, Immediate, Txn, Message)).
+
+-else.
 
 deliver(QPids, Mandatory, Immediate, Txn, Message) ->
     %% we reduce inter-node traffic by grouping the qpids by node and
@@ -83,7 +100,7 @@ deliver_per_node(NodeQPids, Mandatory = false, Immediate = false,
     %% than the non-immediate case below.
     {ok, lists:flatmap(
            fun ({Node, QPids}) ->
-                   gen_server:cast(
+                   gen_server2:cast(
                      {?SERVER, Node},
                      {deliver, QPids, Mandatory, Immediate, Txn, Message}),
                    QPids
@@ -93,9 +110,10 @@ deliver_per_node(NodeQPids, Mandatory, Immediate,
                  Txn, Message) ->
     R = rabbit_misc:upmap(
           fun ({Node, QPids}) ->
-                  try gen_server:call(
+                  try gen_server2:call(
                         {?SERVER, Node},
-                        {deliver, QPids, Mandatory, Immediate, Txn, Message})
+                        {deliver, QPids, Mandatory, Immediate, Txn, Message},
+                        infinity)
                   catch
                       _Class:_Reason ->
                           %% TODO: figure out what to log (and do!) here
@@ -114,6 +132,8 @@ deliver_per_node(NodeQPids, Mandatory, Immediate,
                     R),
     check_delivery(Mandatory, Immediate, {Routed, lists:append(Handled)}).
 
+-endif.
+
 %%--------------------------------------------------------------------
 
 init([]) ->
@@ -124,7 +144,7 @@ handle_call({deliver, QPids, Mandatory, Immediate, Txn, Message},
     spawn(
       fun () ->
               R = run_bindings(QPids, Mandatory, Immediate, Txn, Message),
-              gen_server:reply(From, R)
+              gen_server2:reply(From, R)
       end),
     {noreply, State}.
 
@@ -150,11 +170,9 @@ run_bindings(QPids, IsMandatory, IsImmediate, Txn, Message) ->
       fun (QPid, {Routed, Handled}) ->
               case catch rabbit_amqqueue:deliver(IsMandatory, IsImmediate,
                                                  Txn, Message, QPid) of
-                  true             -> {true, [QPid | Handled]};
-                  false            -> {true, Handled};
-                  {'EXIT', Reason} -> rabbit_log:warning("delivery to ~p failed:~n~p~n",
-                                                         [QPid, Reason]),
-                                      {Routed, Handled}
+                  true              -> {true, [QPid | Handled]};
+                  false             -> {true, Handled};
+                  {'EXIT', _Reason} -> {Routed, Handled}
               end
       end,
       {false, []},

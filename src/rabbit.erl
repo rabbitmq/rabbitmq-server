@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -57,8 +63,8 @@
 -spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
-              {nodes, [node()]} |
-              {running_nodes, [node()]}]).
+              {nodes, [erlang_node()]} |
+              {running_nodes, [erlang_node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -endif.
@@ -69,19 +75,20 @@ start() ->
     try
         ok = ensure_working_log_handlers(),
         ok = rabbit_mnesia:ensure_mnesia_dir(),
-        ok = start_applications(?APPS)
+        ok = rabbit_misc:start_applications(?APPS)
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
 stop() ->
-    ok = stop_applications(?APPS).
+    ok = rabbit_misc:stop_applications(?APPS).
 
 stop_and_halt() ->
     spawn(fun () ->
                   SleepTime = 1000,
-                  rabbit_log:info("Stop-and-halt request received; halting in ~p milliseconds~n",
+                  rabbit_log:info("Stop-and-halt request received; "
+                                  "halting in ~p milliseconds~n",
                                   [SleepTime]),
                   timer:sleep(SleepTime),
                   init:stop()
@@ -102,34 +109,6 @@ rotate_logs(BinarySuffix) ->
                                     rabbit_sasl_report_file_h)).
 
 %%--------------------------------------------------------------------
-
-manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
-    Iterate(fun (App, Acc) ->
-                    case Do(App) of
-                        ok -> [App | Acc];
-                        {error, {SkipError, _}} -> Acc;
-                        {error, Reason} ->
-                            lists:foreach(Undo, Acc),
-                            throw({error, {ErrorTag, App, Reason}})
-                    end
-            end, [], Apps),
-    ok.
-
-start_applications(Apps) ->
-    manage_applications(fun lists:foldl/3,
-                        fun application:start/1,
-                        fun application:stop/1,
-                        already_started,
-                        cannot_start_application,
-                        Apps).
-
-stop_applications(Apps) ->
-    manage_applications(fun lists:foldr/3,
-                        fun application:stop/1,
-                        fun application:start/1,
-                        not_started,
-                        cannot_stop_application,
-                        Apps).
 
 start(normal, []) ->
 
@@ -157,6 +136,9 @@ start(normal, []) ->
 
                 ok = rabbit_amqqueue:start(),
 
+		{ok, MemoryAlarms} = application:get_env(memory_alarms),
+                ok = rabbit_alarm:start(MemoryAlarms),
+                
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
 
@@ -172,6 +154,10 @@ start(normal, []) ->
        {"persister",
         fun () ->
                 ok = start_child(rabbit_persister)
+        end},
+       {"guid generator",
+        fun () ->
+                ok = start_child(rabbit_guid)
         end},
        {"builtin applications",
         fun () ->
@@ -198,6 +184,7 @@ start(normal, []) ->
 
 stop(_State) ->
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
+    ok = rabbit_alarm:stop(),
     ok.
 
 %---------------------------------------------------------------------------
@@ -282,9 +269,14 @@ insert_default_data() ->
     {ok, DefaultUser} = application:get_env(default_user),
     {ok, DefaultPass} = application:get_env(default_pass),
     {ok, DefaultVHost} = application:get_env(default_vhost),
+    {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
+        application:get_env(default_permissions),
     ok = rabbit_access_control:add_vhost(DefaultVHost),
     ok = rabbit_access_control:add_user(DefaultUser, DefaultPass),
-    ok = rabbit_access_control:map_user_vhost(DefaultUser, DefaultVHost),
+    ok = rabbit_access_control:set_permissions(DefaultUser, DefaultVHost,
+                                               DefaultConfigurePerm,
+                                               DefaultWritePerm,
+                                               DefaultReadPerm),
     ok.
 
 start_builtin_amq_applications() ->

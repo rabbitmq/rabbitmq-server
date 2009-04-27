@@ -2,23 +2,20 @@
 #
 # rabbitmq-server RabbitMQ broker
 #
-#chkconfig: 2345 80 05
-#description: Enable AMQP service provided by RabbitMQ
+# chkconfig: - 80 05
+# description: Enable AMQP service provided by RabbitMQ
 #
 
 ### BEGIN INIT INFO
-# Provides:          rabbitmq
+# Provides:          rabbitmq-server
 # Required-Start:    $remote_fs $network
 # Required-Stop:     $remote_fs $network
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
 # Description:       RabbitMQ broker
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
 
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DAEMON_NAME=rabbitmq-multi
-DAEMON=/usr/sbin/$DAEMON_NAME
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+DAEMON=/usr/sbin/rabbitmq-multi
 NAME=rabbitmq-server
 DESC=rabbitmq-server
 USER=rabbitmq
@@ -29,21 +26,17 @@ LOCK_FILE=/var/lock/subsys/$NAME
 
 test -x $DAEMON || exit 0
 
-# source function library
-. /etc/rc.d/init.d/functions
-
 # Include rabbitmq defaults if available
-if [ -f /etc/default/rabbitmq ] ; then
-	. /etc/default/rabbitmq
+if [ -f /etc/sysconfig/rabbitmq ] ; then
+	. /etc/sysconfig/rabbitmq
 fi
 
 RETVAL=0
 set -e
-cd /
 
 start_rabbitmq () {
     set +e
-    su $USER -s /bin/sh -c "$DAEMON start_all ${NODE_COUNT}" > /var/log/rabbitmq/startup_log 2> /var/log/rabbitmq/startup_err
+    $DAEMON start_all ${NODE_COUNT} > /var/log/rabbitmq/startup_log 2> /var/log/rabbitmq/startup_err
     case "$?" in
       0)
         echo SUCCESS && touch $LOCK_FILE
@@ -64,8 +57,8 @@ start_rabbitmq () {
 stop_rabbitmq () {
     set +e
     status_rabbitmq quiet
-    if [ $RETVAL == 0 ] ; then
-        su $USER -s /bin/sh -c "$DAEMON stop_all" > /var/log/rabbitmq/shutdown_log 2> /var/log/rabbitmq/shutdown_err
+    if [ $RETVAL = 0 ] ; then
+        $DAEMON stop_all > /var/log/rabbitmq/shutdown_log 2> /var/log/rabbitmq/shutdown_err
         RETVAL=$?
         if [ $RETVAL != 0 ] ; then
             echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
@@ -82,9 +75,9 @@ stop_rabbitmq () {
 status_rabbitmq() {
     set +e
     if [ "$1" != "quiet" ] ; then
-        su $USER -s /bin/sh -c "$DAEMON status" 2>&1
+        $DAEMON status 2>&1
     else
-        su $USER -s /bin/sh -c "$DAEMON status" > /dev/null 2>&1
+        $DAEMON status > /dev/null 2>&1
     fi
     if [ $? != 0 ] ; then
         RETVAL=1
@@ -94,7 +87,10 @@ status_rabbitmq() {
 
 rotate_logs_rabbitmq() {
     set +e
-    su $USER -s /bin/sh -c "$DAEMON rotate_logs ${ROTATE_SUFFIX}" 2>&1
+    $DAEMON rotate_logs ${ROTATE_SUFFIX}
+    if [ $? != 0 ] ; then
+        RETVAL=1
+    fi
     set -e
 }
 
@@ -133,7 +129,7 @@ case "$1" in
         ;;
     *)
         echo "Usage: $0 {start|stop|status|rotate-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
-        RETVAL=1
+        RETVAL=2
         ;;
 esac
 

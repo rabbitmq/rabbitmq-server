@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -35,6 +41,8 @@
 -import(gen_tcp).
 
 -record(wstate, {sock, channel, frame_max}).
+
+-define(HIBERNATE_AFTER, 5000).
 
 %%----------------------------------------------------------------------------
 
@@ -63,6 +71,8 @@ start(Sock, Channel, FrameMax) ->
 mainloop(State) ->
     receive
         Message -> ?MODULE:mainloop(handle_message(Message, State))
+    after ?HIBERNATE_AFTER ->
+            erlang:hibernate(?MODULE, mainloop, [State])
     end.
 
 handle_message({send_command, MethodRecord},
@@ -127,12 +137,16 @@ assemble_frames(Channel, MethodRecord, Content, FrameMax) ->
                       Channel, Content, FrameMax),
     [MethodFrame | ContentFrames].
 
+tcp_send(Sock, Data) ->
+    rabbit_misc:throw_on_error(inet_error,
+                               fun () -> gen_tcp:send(Sock, Data) end).
+
 internal_send_command(Sock, Channel, MethodRecord) ->
-    ok = gen_tcp:send(Sock, assemble_frames(Channel, MethodRecord)).
+    ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord)).
 
 internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax) ->
-    ok = gen_tcp:send(Sock, assemble_frames(Channel, MethodRecord,
-                                            Content, FrameMax)).
+    ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord,
+                                        Content, FrameMax)).
 
 %% gen_tcp:send/2 does a selective receive of {inet_reply, Sock,
 %% Status} to obtain the result. That is bad when it is called from
@@ -153,10 +167,15 @@ internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax) ->
 %% when these are full. So the fact that we process the result
 %% asynchronously does not impact flow control.
 internal_send_command_async(Sock, Channel, MethodRecord) ->
-    true = erlang:port_command(Sock, assemble_frames(Channel, MethodRecord)),
+    true = port_cmd(Sock, assemble_frames(Channel, MethodRecord)),
     ok.
 
 internal_send_command_async(Sock, Channel, MethodRecord, Content, FrameMax) ->
-    true = erlang:port_command(Sock, assemble_frames(Channel, MethodRecord,
-                                                     Content, FrameMax)),
+    true = port_cmd(Sock, assemble_frames(Channel, MethodRecord,
+                                              Content, FrameMax)),
     ok.
+
+port_cmd(Sock, Data) ->
+    try erlang:port_command(Sock, Data)
+    catch error:Error -> exit({writer, send_failed, Error})
+    end.

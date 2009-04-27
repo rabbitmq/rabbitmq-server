@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -34,16 +40,18 @@
 -export([dirty_read/1]).
 -export([r/3, r/2, rs/1]).
 -export([enable_cover/0, report_cover/0]).
--export([with_exit_handler/2]).
+-export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
 -export([localnode/1, tcp_name/3]).
 -export([intersperse/2, upmap/2, map_in_order/2]).
--export([guid/0, string_guid/1, binstring_guid/1]).
+-export([table_foreach/2]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([escape_routing_key/1, emit_presence/2]).
--export([append_file/2]).
+-export([append_file/2, ensure_parent_dirs_exist/1]).
+-export([format_stderr/2]).
+-export([start_applications/1, stop_applications/1]).
 
 -import(mnesia).
 -import(lists).
@@ -69,7 +77,8 @@
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (vhost(), K, resource_name()) -> r(K) when is_subtype(K, atom())).
+-spec(r/3 :: (vhost() | r(atom()), K, resource_name()) -> r(K) 
+              when is_subtype(K, atom())).
 -spec(r/2 :: (vhost(), K) -> #resource{virtual_host :: vhost(),
                                        kind         :: K,
                                        name         :: '_'}
@@ -77,25 +86,30 @@
 -spec(rs/1 :: (r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> 'ok' | {'error', any()}).
 -spec(report_cover/0 :: () -> 'ok').
+-spec(throw_on_error/2 ::
+      (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
+-spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (username(), thunk(A)) -> A).
 -spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
--spec(localnode/1 :: (atom()) -> node()).
+-spec(localnode/1 :: (atom()) -> erlang_node()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(guid/0 :: () -> guid()).
--spec(string_guid/1 :: (any()) -> string()).
--spec(binstring_guid/1 :: (any()) -> binary()).
+-spec(table_foreach/2 :: (fun ((any()) -> any()), atom()) -> 'ok').
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
+-spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
+-spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
+-spec(start_applications/1 :: ([atom()]) -> 'ok').
+-spec(stop_applications/1 :: ([atom()]) -> 'ok').
 
 -endif.
 
@@ -198,16 +212,31 @@ report_coverage_percentage(File, Cov, NotCov, Mod) ->
                end,
                Mod]).
 
+throw_on_error(E, Thunk) ->
+    case Thunk() of
+        {error, Reason} -> throw({E, Reason});
+        {ok, Res}       -> Res;
+        Res             -> Res
+    end.
+
 with_exit_handler(Handler, Thunk) ->
     try
         Thunk()
     catch
-        exit:{R, _} when R =:= noproc; R =:= normal -> Handler()
+        exit:{R, _} when R =:= noproc; R =:= normal; R =:= shutdown ->
+            Handler()
     end.
+
+filter_exit_map(F, L) ->
+    Ref = make_ref(),
+    lists:filter(fun (R) -> R =/= Ref end,
+                 [with_exit_handler(
+                    fun () -> Ref end,
+                    fun () -> F(I) end) || I <- L]).
 
 with_user(Username, Thunk) ->
     fun () ->
-            case mnesia:read({user, Username}) of
+            case mnesia:read({rabbit_user, Username}) of
                 [] ->
                     mnesia:abort({no_such_user, Username});
                 [_U] ->
@@ -217,7 +246,7 @@ with_user(Username, Thunk) ->
 
 with_vhost(VHostPath, Thunk) ->
     fun () ->
-            case mnesia:read({vhost, VHostPath}) of
+            case mnesia:read({rabbit_vhost, VHostPath}) of
                 [] ->
                     mnesia:abort({no_such_vhost, VHostPath});
                 [_V] ->
@@ -227,6 +256,7 @@ with_vhost(VHostPath, Thunk) ->
 
 with_user_and_vhost(Username, VHostPath, Thunk) ->
     with_user(Username, with_vhost(VHostPath, Thunk)).
+
 
 execute_mnesia_transaction(TxFun) ->
     %% Making this a sync_transaction allows us to use dirty_read
@@ -271,41 +301,20 @@ map_in_order(F, L) ->
     lists:reverse(
       lists:foldl(fun (E, Acc) -> [F(E) | Acc] end, [], L)).
 
-%% generate a guid that is monotonically increasing per process.
+%% For each entry in a table, execute a function in a transaction.
+%% This is often far more efficient than wrapping a tx around the lot.
 %%
-%% The id is only unique within a single cluster and as the persistent
-%% message store hasn't been deleted.
-guid() ->
-    %% We don't use erlang:now() here because a) it may return
-    %% duplicates when the system clock has been rewound prior to a
-    %% restart, or ids were generated at a high rate (which causes
-    %% now() to move ahead of the system time), and b) it is really
-    %% slow since it takes a global lock and makes a system call.
-    %%
-    %% rabbit_persister:serial/0, in combination with self/0 (which
-    %% includes the node name) uniquely identifies a process in space
-    %% and time. We combine that with a process-local counter to give
-    %% us a GUID that is monotonically increasing per process.
-    G = case get(guid) of
-            undefined -> {{rabbit_persister:serial(), self()}, 0};
-            {S, I}   -> {S, I+1}
-        end,
-    put(guid, G),
-    G.
-
-%% generate a readable string representation of a guid. Note that any
-%% monotonicity of the guid is not preserved in the encoding.
-string_guid(Prefix) ->
-    %% we use the (undocumented) ssl_base64 module here because it is
-    %% present throughout OTP R11 and R12 whereas base64 only becomes
-    %% available in R11B-4.
-    %%
-    %% TODO: once debian stable and EPEL have moved from R11B-2 to
-    %% R11B-4 or later we should change this to use base64.
-    Prefix ++ "-" ++ ssl_base64:encode(erlang:md5(term_to_binary(guid()))).
-
-binstring_guid(Prefix) ->
-    list_to_binary(string_guid(Prefix)).
+%% We ignore entries that have been modified or removed.
+table_foreach(F, TableName) ->
+    lists:foreach(
+      fun (E) -> execute_mnesia_transaction(
+                   fun () -> case mnesia:match_object(TableName, E, read) of
+                                 [] -> ok;
+                                 _  -> F(E)
+                             end
+                   end)
+      end, dirty_read_all(TableName)),
+    ok.
 
 dirty_read_all(TableName) ->
     mnesia:dirty_select(TableName, [{'$1',[],['$1']}]).
@@ -383,3 +392,54 @@ append_file(File, _, Suffix) ->
         {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
         Error      -> Error
     end.
+
+ensure_parent_dirs_exist(Filename) ->
+    case filelib:ensure_dir(Filename) of
+        ok              -> ok;
+        {error, Reason} -> 
+            throw({error, {cannot_create_parent_dirs, Filename, Reason}})
+    end.
+
+format_stderr(Fmt, Args) ->
+    case os:type() of
+        {unix, _} ->
+            Port = open_port({fd, 0, 2}, [out]),
+            port_command(Port, io_lib:format(Fmt, Args)),
+            port_close(Port);
+        {win32, _} ->
+            %% stderr on Windows is buffered and I can't figure out a
+            %% way to trigger a fflush(stderr) in Erlang. So rather
+            %% than risk losing output we write to stdout instead,
+            %% which appears to be unbuffered.
+            io:format(Fmt, Args)
+    end,
+    ok.
+
+manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
+    Iterate(fun (App, Acc) ->
+                    case Do(App) of
+                        ok -> [App | Acc];
+                        {error, {SkipError, _}} -> Acc;
+                        {error, Reason} ->
+                            lists:foreach(Undo, Acc),
+                            throw({error, {ErrorTag, App, Reason}})
+                    end
+            end, [], Apps),
+    ok.
+
+start_applications(Apps) ->
+    manage_applications(fun lists:foldl/3,
+                        fun application:start/1,
+                        fun application:stop/1,
+                        already_started,
+                        cannot_start_application,
+                        Apps).
+
+stop_applications(Apps) ->
+    manage_applications(fun lists:foldr/3,
+                        fun application:stop/1,
+                        fun application:start/1,
+                        not_started,
+                        cannot_stop_application,
+                        Apps).
+

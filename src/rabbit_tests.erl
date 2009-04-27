@@ -10,13 +10,19 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial Technologies
-%%   LLC., and Rabbit Technologies Ltd. are Copyright (C) 2007-2008
-%%   LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -29,6 +35,7 @@
 
 -import(lists).
 
+-include("rabbit.hrl").
 -include_lib("kernel/include/file.hrl").
 
 test_content_prop_roundtrip(Datum, Binary) ->
@@ -38,6 +45,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
+    passed = test_priority_queue(),
     passed = test_parsing(),
     passed = test_topic_matching(),
     passed = test_log_management(),
@@ -45,6 +53,63 @@ all_tests() ->
     passed = test_log_management_during_startup(),
     passed = test_cluster_management(),
     passed = test_user_management(),
+    passed = test_server_status(),
+    passed.
+
+test_priority_queue() ->
+
+    false = priority_queue:is_queue(not_a_queue),
+
+    %% empty Q
+    Q = priority_queue:new(),
+    {true, true, 0, [], []} = test_priority_queue(Q),
+
+    %% 1-4 element no-priority Q
+    true = lists:all(fun (X) -> X =:= passed end,
+                     lists:map(fun test_simple_n_element_queue/1,
+                               lists:seq(1, 4))),
+
+    %% 1-element priority Q
+    Q1 = priority_queue:in(foo, 1, priority_queue:new()),
+    {true, false, 1, [{1, foo}], [foo]} = test_priority_queue(Q1),
+
+    %% 2-element same-priority Q
+    Q2 = priority_queue:in(bar, 1, Q1),
+    {true, false, 2, [{1, foo}, {1, bar}], [foo, bar]} =
+        test_priority_queue(Q2),
+
+    %% 2-element different-priority Q
+    Q3 = priority_queue:in(bar, 2, Q1),
+    {true, false, 2, [{2, bar}, {1, foo}], [bar, foo]} =
+        test_priority_queue(Q3),
+
+    %% 1-element negative priority Q
+    Q4 = priority_queue:in(foo, -1, priority_queue:new()),
+    {true, false, 1, [{-1, foo}], [foo]} = test_priority_queue(Q4),
+
+    passed.
+
+priority_queue_in_all(Q, L) ->
+    lists:foldl(fun (X, Acc) -> priority_queue:in(X, Acc) end, Q, L).
+
+priority_queue_out_all(Q) ->
+    case priority_queue:out(Q) of
+        {empty, _}       -> [];
+        {{value, V}, Q1} -> [V | priority_queue_out_all(Q1)]
+    end.
+
+test_priority_queue(Q) ->
+    {priority_queue:is_queue(Q),
+     priority_queue:is_empty(Q),
+     priority_queue:len(Q),
+     priority_queue:to_list(Q),
+     priority_queue_out_all(Q)}.
+
+test_simple_n_element_queue(N) ->
+    Items = lists:seq(1, N),
+    Q = priority_queue_in_all(priority_queue:new(), Items),
+    ToListRes = [{0, X} || X <- Items],
+    {true, false, N, ToListRes, Items} = test_priority_queue(Q),
     passed.
 
 test_parsing() ->
@@ -236,25 +301,51 @@ test_log_management_during_startup() ->
     ok = error_logger:tty(false),
     ok = delete_log_handlers([sasl_report_tty_h]),
     ok = case catch control_action(start_app, []) of
-        ok -> exit(got_success_but_expected_failure);
-        {error, {cannot_log_to_tty, _, _}} -> ok
-    end,
+             ok -> exit({got_success_but_expected_failure,
+                        log_rotation_tty_no_handlers_test});
+             {error, {cannot_log_to_tty, _, _}} -> ok
+         end,
 
     %% fix sasl logging
     ok = application:set_env(sasl, sasl_error_logger,
                              {file, SaslLog}),
 
-    %% start application with logging to invalid directory
+    %% start application with logging to non-existing directory
     TmpLog = "/tmp/rabbit-tests/test.log",
-    file:delete(TmpLog),
+    delete_file(TmpLog),
     ok = application:set_env(kernel, error_logger, {file, TmpLog}),
 
     ok = delete_log_handlers([rabbit_error_logger_file_h]),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
-    ok = case catch control_action(start_app, []) of
-        ok -> exit(got_success_but_expected_failure);
-        {error, {cannot_log_to_file, _, _}} -> ok
-    end,
+    ok = control_action(start_app, []),
+
+    %% start application with logging to directory with no
+    %% write permissions
+    TmpDir = "/tmp/rabbit-tests",
+    ok = set_permissions(TmpDir, 8#00400),
+    ok = delete_log_handlers([rabbit_error_logger_file_h]),
+    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    ok = case control_action(start_app, []) of
+             ok -> exit({got_success_but_expected_failure,
+                        log_rotation_no_write_permission_dir_test}); 
+            {error, {cannot_log_to_file, _, _}} -> ok
+         end,
+
+    %% start application with logging to a subdirectory which
+    %% parent directory has no write permissions
+    TmpTestDir = "/tmp/rabbit-tests/no-permission/test/log",
+    ok = application:set_env(kernel, error_logger, {file, TmpTestDir}),
+    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    ok = case control_action(start_app, []) of
+             ok -> exit({got_success_but_expected_failure,
+                        log_rotatation_parent_dirs_test});
+             {error, {cannot_log_to_file, _,
+               {error, {cannot_create_parent_dirs, _, eacces}}}} -> ok
+         end,
+    ok = set_permissions(TmpDir, 8#00700),
+    ok = set_permissions(TmpLog, 8#00600),
+    ok = delete_file(TmpLog),
+    ok = file:del_dir(TmpDir),
 
     %% start application with standard error_logger_file_h
     %% handler not installed 
@@ -396,7 +487,13 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
     {error, {no_running_cluster_nodes, _, _}} =
         control_action(reset, []),
+
+    %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
+    ok = control_action(start_app, []),
+    ok = control_action(force_reset, SecondaryNode, []),
+    ok = control_action(cluster, SecondaryNode, [NodeS]),
+    ok = control_action(start_app, SecondaryNode, []),
 
     passed.
 
@@ -410,17 +507,16 @@ test_user_management() ->
     {error, {no_such_vhost, _}} =
         control_action(delete_vhost, ["/testhost"]),
     {error, {no_such_user, _}} =
-        control_action(map_user_vhost, ["foo", "/"]),
+        control_action(set_permissions, ["foo", ".*", ".*", ".*"]),
     {error, {no_such_user, _}} =
-        control_action(unmap_user_vhost, ["foo", "/"]),
+        control_action(clear_permissions, ["foo"]),
     {error, {no_such_user, _}} =
-        control_action(list_user_vhosts, ["foo"]),
+        control_action(list_user_permissions, ["foo"]),
     {error, {no_such_vhost, _}} =
-        control_action(map_user_vhost, ["guest", "/testhost"]),
-    {error, {no_such_vhost, _}} =
-        control_action(unmap_user_vhost, ["guest", "/testhost"]),
-    {error, {no_such_vhost, _}} =
-        control_action(list_vhost_users, ["/testhost"]),
+        control_action(list_permissions, ["-p", "/testhost"]),
+    {error, {invalid_regexp, _, _}} =
+        control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
+
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
     {error, {user_already_exists, _}} =
@@ -435,13 +531,16 @@ test_user_management() ->
     ok = control_action(list_vhosts, []),
 
     %% user/vhost mapping
-    ok = control_action(map_user_vhost, ["foo", "/testhost"]),
-    ok = control_action(map_user_vhost, ["foo", "/testhost"]),
-    ok = control_action(list_user_vhosts, ["foo"]),
+    ok = control_action(set_permissions, ["-p", "/testhost",
+                                          "foo", ".*", ".*", ".*"]),
+    ok = control_action(set_permissions, ["-p", "/testhost",
+                                          "foo", ".*", ".*", ".*"]),
+    ok = control_action(list_permissions, ["-p", "/testhost"]),
+    ok = control_action(list_user_permissions, ["foo"]),
 
     %% user/vhost unmapping
-    ok = control_action(unmap_user_vhost, ["foo", "/testhost"]),
-    ok = control_action(unmap_user_vhost, ["foo", "/testhost"]),
+    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
+    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
 
     %% vhost deletion
     ok = control_action(delete_vhost, ["/testhost"]),
@@ -450,7 +549,8 @@ test_user_management() ->
 
     %% deleting a populated vhost
     ok = control_action(add_vhost, ["/testhost"]),
-    ok = control_action(map_user_vhost, ["foo", "/testhost"]),
+    ok = control_action(set_permissions, ["-p", "/testhost",
+                                          "foo", ".*", ".*", ".*"]),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion
@@ -460,12 +560,57 @@ test_user_management() ->
 
     passed.
 
+test_server_status() ->
+
+    %% create a queue so we have something to list
+    Q = #amqqueue{} = rabbit_amqqueue:declare(
+                        rabbit_misc:r(<<"/">>, queue, <<"foo">>),
+                        false, false, []),
+
+    %% list queues
+    ok = info_action(
+           list_queues,
+           [name, durable, auto_delete, arguments, pid,
+            messages_ready, messages_unacknowledged, messages_uncommitted,
+            messages, acks_uncommitted, consumers, transactions, memory],
+           true),
+
+    %% list exchanges
+    ok = info_action(
+           list_exchanges,
+           [name, type, durable, auto_delete, arguments],
+           true),
+
+    %% list bindings
+    ok = control_action(list_bindings, []),
+
+    %% cleanup
+    {ok, _} = rabbit_amqqueue:delete(Q, false, false),
+
+    %% list connections
+    [#listener{host = H, port = P} | _] = rabbit_networking:active_listeners(),
+    {ok, C} = gen_tcp:connect(H, P, []),
+    timer:sleep(100),
+    ok = info_action(
+           list_connections,
+           [pid, address, port, peer_address, peer_port, state,
+            channels, user, vhost, timeout, frame_max,
+            recv_oct, recv_cnt, send_oct, send_cnt, send_pend],
+           false),
+    ok = gen_tcp:close(C),
+
+    passed.
+
 %---------------------------------------------------------------------
 
 control_action(Command, Args) -> control_action(Command, node(), Args).
 
 control_action(Command, Node, Args) ->
-    case catch rabbit_control:action(Command, Node, Args) of
+    case catch rabbit_control:action(
+                 Command, Node, Args,
+                 fun (Format, Args1) ->
+                         io:format(Format ++ " ...~n", Args1)
+                 end) of
         ok ->
             io:format("done.~n"),
             ok;
@@ -473,6 +618,15 @@ control_action(Command, Node, Args) ->
             io:format("failed.~n"),
             Other
     end.
+
+info_action(Command, Args, CheckVHost) ->
+    ok = control_action(Command, []),
+    if CheckVHost -> ok = control_action(Command, ["-p", "/"]);
+       true       -> ok
+    end,
+    ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
+    {bad_argument, dummy} = control_action(Command, ["dummy"]),
+    ok.
 
 empty_files(Files) ->
     [case file:read_file_info(File) of
@@ -493,6 +647,14 @@ test_logs_working(MainLogFile, SaslLogFile) ->
     timer:sleep(50),
     [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
     ok.
+
+set_permissions(Path, Mode) ->
+    case file:read_file_info(Path) of
+        {ok, FInfo} -> file:write_file_info(
+                         Path,
+                         FInfo#file_info{mode=Mode});
+        Error       -> Error
+    end.
 
 clean_logs(Files, Suffix) ->
     [begin

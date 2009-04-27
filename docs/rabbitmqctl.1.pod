@@ -1,0 +1,312 @@
+=head1 NAME
+
+rabbitmqctl - command line tool for managing a RabbitMQ broker
+
+=head1 SYNOPSIS
+
+rabbitmqctl [-n I<node>] I<<command>> [command options]
+
+=head1 DESCRIPTION
+
+RabbitMQ is an implementation of AMQP, the emerging standard for high
+performance enterprise messaging. The RabbitMQ server is a robust and
+scalable implementation of an AMQP broker.
+
+rabbitmqctl is a command line tool for managing a RabbitMQ broker.
+It performs all actions by connecting to one of the broker's nodes.
+
+
+=head1 OPTIONS
+
+B<-n> I<node>
+    default node is C<rabbit@server>, where server is the local host.
+    On a host named C<server.example.com>, the node name of the
+    RabbitMQ Erlang node will usually be rabbit@server (unless
+    RABBITMQ_NODENAME has been set to some non-default value at broker
+    startup time).  The output of hostname -s is usually the correct
+    suffix to use after the "@" sign. See rabbitmq-server(1) for
+    details of configuring the RabbitMQ broker.
+
+B<-q>
+    quiet output mode is selected with the B<-q> flag. Informational 
+    messages are suppressed when quiet mode is in effect.
+
+=head1 COMMANDS
+
+=head2 APPLICATION AND CLUSTER MANAGEMENT
+
+stop
+    stop the Erlang node on which RabbitMQ broker is running.
+
+stop_app
+    stop the RabbitMQ application, leaving the Erlang node running.
+    This command is typically run prior to performing other management
+    actions that require the RabbitMQ application to be stopped,
+    e.g. I<reset>.
+
+start_app
+    start the RabbitMQ application.
+    This command is typically run prior to performing other management
+    actions that require the RabbitMQ application to be stopped,
+    e.g. I<reset>.
+
+status
+    display various information about the RabbitMQ broker, such as
+    whether the RabbitMQ application on the current node, its version
+    number, what nodes are part of the broker, which of these are
+    running.
+
+force
+    return a RabbitMQ node to its virgin state.
+    Removes the node from any cluster it belongs to, removes all data
+    from the management database, such as configured users, vhosts and
+    deletes all persistent messages.
+
+force_reset
+    the same as I<force> command, but resets the node unconditionally,
+    regardless of the current management database state and cluster
+    configuration.
+    It should only be used as a last resort if the database or cluster
+    configuration has been corrupted.
+
+rotate_logs [suffix]
+    instruct the RabbitMQ node to rotate the log files. The RabbitMQ
+    broker will attempt to append the current contents of the log file
+    to the file with the name composed of the original name and the
+    suffix. It will create a new file if such a file does not already
+    exist. When no I<suffix> is specified, the empty log file is
+    simply created at the original location; no rotation takes place.
+    When an error occurs while appending the contents of the old log
+    file, the operation behaves in the same way as if no I<suffix> was
+    specified.
+    This command might be helpful when you are e.g. writing your own
+    logrotate script and you do not want to restart the RabbitMQ node.
+
+cluster I<clusternode> ...
+    instruct the node to become member of a cluster with the specified
+    nodes determined by I<clusternode> option(s).
+    See http://www.rabbitmq.com/clustering.html for more information
+    about clustering.
+
+=head2 USER MANAGEMENT
+
+add_user I<username> I<password>
+    create a user named I<username> with (initial) password I<password>.
+
+delete_user I<username>
+    delete the user named I<username>.
+
+change_password I<username> I<newpassword>
+    change the password for the user named I<username> to I<newpassword>.
+
+list_users
+    list all users.
+
+=head2 ACCESS CONTROL
+
+add_vhost I<vhostpath>
+    create a new virtual host called I<vhostpath>.
+
+delete_vhost I<vhostpath>
+    delete a virtual host I<vhostpath>.
+    That command deletes also all its exchanges, queues and user
+    mappings.
+    
+list_vhosts
+    list all virtual hosts.
+
+set_permissions [-p I<vhostpath>] I<username> I<regexp> I<regexp> I<regexp>
+    set the permissions for the user named I<username> in the virtual
+    host I<vhostpath>, granting 'configure', 'write' and 'read' access
+    to resources with names matching the first, second and third
+    I<regexp>, respectively.
+
+clear_permissions [-p I<vhostpath>] I<username>
+    remove the permissions for the user named I<username> in the
+    virtual host I<vhostpath>.
+
+list_permissions [-p I<vhostpath>]
+    list all the users and their permissions in the virtual host
+    I<vhostpath>.
+
+list_user_permissions I<username> 
+    list the permissions of the user named I<username> across all
+    virtual hosts.
+
+=head2 SERVER STATUS
+
+list_queues [-p I<vhostpath>] [I<queueinfoitem> ...]
+    list queue information by virtual host. If no I<queueinfoitem>s
+    are specified then then name and number of messages is displayed
+    for each queue.
+
+=head3 Queue information items
+
+=over 4
+
+name 
+    URL-encoded name of the queue
+
+durable 
+    whether the queue survives server restarts
+
+auto_delete
+    whether the queue will be deleted when no longer used
+
+arguments
+    queue arguments
+
+node
+    node on which the process associated with the queue resides
+
+messages_ready
+    number of messages ready to be delivered to clients
+
+messages_unacknowledged
+    number of messages delivered to clients but not yet
+    acknowledged
+
+messages_uncommitted
+    number of messages published in as yet uncommitted transactions
+
+messages
+    sum of ready, unacknowledged and uncommitted messages
+
+acks_uncommitted
+    number of acknowledgements received in as yet uncommitted
+    transactions
+
+consumers
+    number of consumers
+
+transactions
+    number of transactions
+
+memory
+    bytes of memory consumed by the Erlang process for the queue,
+    including stack, heap and internal structures
+
+=back
+
+list_exchanges [-p I<vhostpath>] [I<exchangeinfoitem> ...]
+    list exchange information by virtual host. If no
+    I<exchangeinfoitem>s are specified then name and type is displayed
+    for each exchange.
+
+=head3 Exchange information items
+
+=over 4
+
+name 
+    URL-encoded name of the exchange
+
+type
+    exchange type (B<direct>, B<topic> or B<fanout>)
+
+durable
+    whether the exchange survives server restarts
+
+auto_delete
+    whether the exchange is deleted when no longer used
+
+arguments
+    exchange arguments
+
+=back
+
+list_bindings [-p I<vhostpath>]
+    list bindings by virtual host. Each line contains exchange name,
+    routing key and queue name (all URL encoded) and arguments.
+
+list_connections [I<connectioninfoitem> ...]
+    list connection information. If no I<connectioninfoitem>s are
+    specified then the user, peer address and peer port are displayed.
+
+=head3 Connection information items
+
+=over 4
+
+node
+    node on which the process associated with the connection resides
+
+address
+    server IP number
+
+port
+    server port
+
+peer_address
+    peer address
+
+peer_port
+    peer port
+
+state
+    connection state (B<pre-init>, B<starting>, B<tuning>, B<opening>,
+    B<running>, B<closing>, B<closed>)
+
+channels
+    number of channels using the connection
+
+user
+    username associated with the connection
+
+vhost
+    URL-encoded virtual host
+
+timeout
+    connection timeout
+
+frame_max
+    maximum frame size (bytes)
+
+recv_oct
+    octets received
+
+recv_cnt
+    packets received
+
+send_oct
+    octets sent
+
+send_cnt
+    packets sent
+
+send_pend
+    send queue size
+
+=back
+
+The list_queues, list_exchanges and list_bindings commands accept an
+optional virtual host parameter for which to display results, defaulting
+to I<"/">. The default can be overridden with the B<-p> flag. Result
+columns for these commands and list_connections are tab-separated.
+
+=head1 EXAMPLES
+
+Create a user named foo with (initial) password bar at the Erlang node
+rabbit@test:
+
+    rabbitmqctl -n rabbit@test add_user foo bar
+
+Grant user named foo access to the virtual host called test at the
+default Erlang node:
+
+    rabbitmqctl map_user_vhost foo test
+
+Append the current logs' content to the files with ".1" suffix and reopen
+them:
+
+    rabbitmqctl rotate_logs .1
+
+=head1 SEE ALSO
+
+rabbitmq.conf(5), rabbitmq-multi(1), rabbitmq-server(1)
+
+=head1 AUTHOR
+
+The RabbitMQ Team <info@rabbitmq.com>
+
+=head1 REFERENCES
+
+RabbitMQ Web Site: http://www.rabbitmq.com

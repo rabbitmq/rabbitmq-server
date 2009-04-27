@@ -1,0 +1,60 @@
+=head1 NAME
+
+/etc/rabbitmq/rabbitmq.conf - default settings for RabbitMQ AMQP server
+
+=head1 DESCRIPTION
+
+/etc/rabbitmq/rabbitmq.conf contains variable settings that override the
+defaults built in to the RabbitMQ startup scripts.
+
+The file is interpreted by the system shell, and so should consist of
+a sequence of shell environment variable definitions. Normal shell
+syntax is permitted (since the file is sourced using the shell "."
+operator), including line comments starting with "#".
+
+In order of preference, the startup scripts get their values from the
+environment, from /etc/rabbitmq/rabbitmq.conf and finally from the
+built-in default values. For example, for the B<RABBITMQ_NODENAME> setting,
+
+B<RABBITMQ_NODENAME>
+    from the environment is checked first. If it is absent or equal to
+    the empty string, then 
+
+B<NODENAME>
+    from /etc/rabbitmq/rabbitmq.conf is checked. If it is also absent
+    or set equal to the empty string then the default value from
+    the startup script is used.
+
+The variable names in /etc/rabbitmq/rabbitmq.conf are always equal to the
+environment variable names, with the B<RABBITMQ_> prefix removed:
+B<RABBITMQ_NODE_PORT> from the environment becomes B<NODE_PORT> in the
+/etc/rabbitmq/rabbitmq.conf file, etc.
+
+=head1 EXAMPLES
+
+The following is an example of a complete /etc/rabbitmq/rabbitmq.conf file
+that overrides the default Erlang node name from "rabbit" to "hare":
+
+    # I am a complete /etc/rabbitmq/rabbitmq.conf file.
+    # Comment lines start with a hash character.
+    # This is a /bin/sh script file - use ordinary envt var syntax
+    NODENAME=hare
+
+=head1 SEE ALSO
+
+rabbitmq-server(1), rabbitmq-multi(1), rabbitmqctl(1)
+
+=head1 AUTHOR
+
+Originally written by The RabbitMQ Team <info@rabbitmq.com>
+
+=head1 COPYRIGHT
+
+This package, the RabbitMQ server is licensed under the MPL.
+
+If you have any questions regarding licensing, please contact us at 
+info@rabbitmq.com.
+
+=head1 REFERENCES
+
+RabbitMQ Web Site: http://www.rabbitmq.com

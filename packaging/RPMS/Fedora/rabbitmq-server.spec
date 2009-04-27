@@ -1,29 +1,32 @@
+%define debug_package %{nil}
+
 Name: rabbitmq-server
-Version: %{rpm_version}
-Release: 1
+Version: %%VERSION%%
+Release: 1%%RELEASE_OS%%
 License: MPLv1.1
 Group: Development/Libraries
-Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{main_version}/%{name}-%{main_version}.tar.gz
+Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.gz
+Source1: rabbitmq-server.init
+Source2: rabbitmq-script-wrapper
+Source3: rabbitmq-server.logrotate
 URL: http://www.rabbitmq.com/
-Vendor: LShift Ltd., Cohesive Financial Technologies LLC., Rabbit Technlogies Ltd.
+BuildRequires: erlang, python-simplejson
 Requires: erlang, logrotate
-Packager: Hubert Plociniczak <hubert@lshift.net>
-BuildRoot: %{_tmppath}/%{name}-%{main_version}-%{release}-root
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
-Requires(post): chkconfig
-Requires(pre): chkconfig initscripts
+Requires(post): %%REQUIRES%%
+Requires(pre): %%REQUIRES%%
 
 %description
 RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
+%define _rabbit_erllibdir %{_libdir}/erlang/lib/rabbitmq_server-%{version}
+%define _rabbit_libdir %{_libdir}/rabbitmq
+%define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
 
-%define _mandir /usr/share/man
-%define _sbindir /usr/sbin
-%define _libdir %(erl -noshell -eval "io:format('~s~n', [code:lib_dir()]), halt().")
-%define _maindir %{buildroot}%{_libdir}/rabbitmq_server-%{main_version}
-
+%define _maindir %{buildroot}%{_rabbit_erllibdir}
 
 %pre
 if [ $1 -gt 1 ]; then
@@ -33,35 +36,42 @@ if [ $1 -gt 1 ]; then
 fi
 
 %prep
-%setup -n %{name}-%{main_version}
+%setup -q
 
 %build
-make
+cp %{S:2} %{_rabbit_wrapper}
+sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
+make %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}
 
 make install TARGET_DIR=%{_maindir} \
-             SBIN_DIR=%{buildroot}%{_sbindir} \
+             SBIN_DIR=%{buildroot}%{_rabbit_libdir}/bin \
              MAN_DIR=%{buildroot}%{_mandir}
-             VERSION=%{main_version}
 
-mkdir -p %{buildroot}/var/lib/rabbitmq/mnesia
-mkdir -p %{buildroot}/var/log/rabbitmq
-mkdir -p %{buildroot}/etc/rc.d/init.d/
+mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
+mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 
 #Copy all necessary lib files etc.
-cp ../init.d %{buildroot}/etc/rc.d/init.d/rabbitmq-server
-chmod 0755 %{buildroot}/etc/rc.d/init.d/rabbitmq-server
+install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmqctl
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-server
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-multi
 
-mv %{buildroot}/usr/sbin/rabbitmqctl %{buildroot}/usr/sbin/rabbitmqctl_real
-cp ../rabbitmqctl_wrapper %{buildroot}/usr/sbin/rabbitmqctl
-chmod 0755 %{buildroot}/usr/sbin/rabbitmqctl
+install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
-cp %{buildroot}%{_mandir}/man1/rabbitmqctl.1.gz %{buildroot}%{_mandir}/man1/rabbitmqctl_real.1.gz
+mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 
-mkdir -p %{buildroot}/etc/logrotate.d
-cp ../rabbitmq-server.logrotate %{buildroot}/etc/logrotate.d/rabbitmq-server
+rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
+
+#Build the list of files
+rm -f %{_builddir}/filelist.%{name}.rpm
+echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm 
+(cd %{buildroot}; \
+    find . -type f ! -regex '\.%{_sysconfdir}.*' \
+        ! -regex '\.\(%{_rabbit_erllibdir}\|%{_rabbit_libdir}\).*' \
+        | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
 
 %post
 # create rabbitmq group
@@ -71,15 +81,11 @@ fi
 
 # create rabbitmq user
 if ! getent passwd rabbitmq >/dev/null; then
-        useradd -r -g rabbitmq --home /var/lib/rabbitmq  rabbitmq
-        usermod -c "Rabbit AMQP Messaging Server" rabbitmq
+        useradd -r -g rabbitmq -d %{_localstatedir}/lib/rabbitmq  rabbitmq \
+            -c "RabbitMQ messaging server" rabbitmq
 fi
 
-chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
-chown -R rabbitmq:rabbitmq /var/log/rabbitmq
-
 /sbin/chkconfig --add %{name}
-/sbin/service rabbitmq-server start
 
 %preun
 if [ $1 = 0 ]; then
@@ -91,26 +97,36 @@ if [ $1 = 0 ]; then
   # Leave rabbitmq user and group
 fi
 
-%files
+%files -f ../filelist.%{name}.rpm
 %defattr(-,root,root,-)
-%{_libdir}/rabbitmq_server-%{main_version}/
-%{_mandir}/man1/rabbitmq-multi.1.gz
-%{_mandir}/man1/rabbitmq-server.1.gz
-%{_mandir}/man1/rabbitmqctl.1.gz
-%{_mandir}/man1/rabbitmqctl_real.1.gz
-%{_sbindir}/rabbitmq-multi
-%{_sbindir}/rabbitmq-server
-%{_sbindir}/rabbitmqctl
-%{_sbindir}/rabbitmqctl_real
-/var/lib/rabbitmq/
-/var/log/rabbitmq/
-/etc/rc.d/init.d/rabbitmq-server
-%config(noreplace) /etc/logrotate.d/rabbitmq-server
+%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
+%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
+%dir %{_sysconfdir}/rabbitmq
+%{_rabbit_erllibdir}
+%{_rabbit_libdir}
+%{_initrddir}/rabbitmq-server
+%config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
+%doc LICENSE LICENSE-MPL-RabbitMQ INSTALL
 
 %clean
 rm -rf %{buildroot}
 
 %changelog
+* Mon Apr 6 2009 Matthias Radestock <matthias@lshift.net> 1.5.4-1
+- Maintenance release for the 1.5.x series
+
+* Tue Feb 24 2009 Tony Garnock-Jones <tonyg@lshift.net> 1.5.3-1
+- Maintenance release for the 1.5.x series
+
+* Mon Feb 23 2009 Tony Garnock-Jones <tonyg@lshift.net> 1.5.2-1
+- Maintenance release for the 1.5.x series
+
+* Mon Jan 19 2009 Ben Hood <0x6e6562@gmail.com> 1.5.1-1
+- Maintenance release for the 1.5.x series
+
+* Wed Dec 17 2008 Matthias Radestock <matthias@lshift.net> 1.5.0-1
+- New upstream release
+
 * Thu Jul 24 2008 Tony Garnock-Jones <tonyg@lshift.net> 1.4.0-1
 - New upstream release
 

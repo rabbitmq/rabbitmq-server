@@ -1,0 +1,131 @@
+=head1 NAME
+
+rabbitmq-service - manage RabbitMQ AMQP service
+
+=head1 SYNOPSIS
+
+rabbitmq-service.bat command
+
+=head1 DESCRIPTION
+
+RabbitMQ is an implementation of AMQP, the emerging standard for high
+performance enterprise messaging. The RabbitMQ server is a robust and
+scalable implementation of an AMQP broker.
+
+Running B<rabbitmq-service> allows the RabbitMQ broker to be run as a
+service on NT/2000/2003/XP/Vista® environments. The RabbitMQ broker 
+service can be started and stopped using the Windows® services 
+applet. 
+
+By default the service will run in the authentication context of the 
+local system account. It is therefore necessary to synchronise Erlang
+cookies between the local system account (typically 
+C<C:\WINDOWS\.erlang.cookie> and the account that will be used to
+run B<rabbitmqctl>.
+
+=head1 COMMANDS
+
+=head2 help
+
+Display usage information.
+
+=head2 install 
+
+Install the service. The service will not be started.
+Subsequent invocations will update the service parameters if
+relevant environment variables were modified.
+
+=head2 remove
+
+Remove the service. If the service is running then it will
+automatically be stopped before being removed. No files will be
+deleted as a consequence and B<rabbitmq-server> will remain operable.
+
+=head2 start
+
+Start the service. The service must have been correctly installed
+beforehand. 
+
+=head2 stop
+
+Stop the service. The service must be running for this command to 
+have any effect.
+
+=head2 disable
+
+Disable the service. This is the equivalent of setting the startup
+type to B<Disabled> using the service control panel.
+
+=head2 enable
+
+Enable the service. This is the equivalent of setting the startup
+type to B<Automatic> using the service control panel.
+
+=head1 ENVIRONMENT
+
+=head2 RABBITMQ_SERVICENAME
+
+Defaults to RabbitMQ.
+This is the location of log and database directories.
+
+=head2 RABBITMQ_BASE
+
+Defaults to the application data directory of the current user.
+This is the location of log and database directories.
+
+=head2 RABBITMQ_NODENAME
+
+Defaults to "rabbit". This can be useful if you want to run more than
+one node per machine - B<RABBITMQ_NODENAME> should be unique per
+erlang-node-and-machine combination. See clustering on a single
+machine guide at
+L<http://www.rabbitmq.com/clustering.html#single-machine> for details.
+
+=head2 RABBITMQ_NODE_IP_ADDRESS
+
+Defaults to "0.0.0.0". This can be changed if you only want to bind
+to one network interface. 
+
+=head2 RABBITMQ_NODE_PORT
+
+Defaults to 5672. 
+
+=head2 ERLANG_SERVICE_MANAGER_PATH
+
+Defaults to F<C:\Program Files\erl5.5.5\erts-5.5.5\bin>. This is 
+the installation location of the Erlang service manager.
+
+=head2 CLUSTER_CONFIG_FILE
+
+If this file is present it is used by the server to
+auto-configure a RabbitMQ cluster.  See the clustering guide
+at L<http://www.rabbitmq.com/clustering.html> for details.
+
+=head2 RABBITMQ_CONSOLE_LOG
+
+Set this varable to B<new> or B<reuse> to have the console 
+output from the server redirected to a file named B<SERVICENAME>.debug
+in the  application data directory of the user that installed the service.
+Under Vista this will be F<C:\Documents and Settings\User\AppData\username\SERVICENAME>.
+Under previous versions of Windows this will be 
+F<C:\Documents and Settings\username\Application Data\SERVICENAME>.
+If B<RABBITMQ_CONSOLE_LOG> is set to B<new> then a new file will be
+created each time the service starts. If B<RABBITMQ_CONSOLE_LOG> is
+set to B<reuse> then the file will be overwritten each time the
+service starts.  The default behaviour when B<RABBITMQ_CONSOLE_LOG> is
+not set or set to a value other than B<new> or B<reuse> is to discard
+the server output.
+
+=head1 EXAMPLES
+
+Start a previously-installed RabbitMQ AMQP service:
+
+          rabbitmq-service start
+
+=head1 AUTHOR
+
+The RabbitMQ Team <info@rabbitmq.com>
+
+=head1 REFERENCES
+
+RabbitMQ Web Site: http://www.rabbitmq.com
