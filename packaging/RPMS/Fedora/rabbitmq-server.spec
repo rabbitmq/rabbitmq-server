@@ -24,22 +24,16 @@ scalable implementation of an AMQP broker.
 
 %define _rabbit_erllibdir %{_libdir}/erlang/lib/rabbitmq_server-%{version}
 %define _rabbit_libdir %{_libdir}/rabbitmq
+%define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
 
-%pre
-if [ $1 -gt 1 ]; then
-  #Upgrade - stop and remove previous instance of rabbitmq-server init.d script
-  /sbin/service rabbitmq-server stop
-  /sbin/chkconfig --del rabbitmq-server
-fi
-
 %prep
 %setup -q
-sed -i 's|/usr/lib/|%{_libdir}/|' %{S:1}
-sed -i 's|/usr/lib/|%{_libdir}/|' %{S:2}
 
 %build
+cp %{S:2} %{_rabbit_wrapper}
+sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
 make %{?_smp_mflags}
 
 %install
@@ -54,9 +48,9 @@ mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 
 #Copy all necessary lib files etc.
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
-install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmqctl
-install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-server
-install -p -D -m 0755 %{S:2} %{buildroot}%{_sbindir}/rabbitmq-multi
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmqctl
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-server
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-multi
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
@@ -72,7 +66,14 @@ echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm
         ! -regex '\.\(%{_rabbit_erllibdir}\|%{_rabbit_libdir}\).*' \
         | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
 
-%post
+%pre
+
+if [ $1 -gt 1 ]; then
+  #Upgrade - stop and remove previous instance of rabbitmq-server init.d script
+  /sbin/service rabbitmq-server stop
+  /sbin/chkconfig --del rabbitmq-server
+fi
+
 # create rabbitmq group
 if ! getent group rabbitmq >/dev/null; then
         groupadd -r rabbitmq
@@ -80,10 +81,11 @@ fi
 
 # create rabbitmq user
 if ! getent passwd rabbitmq >/dev/null; then
-        useradd -r -g rabbitmq -d %{_localstatedir}/lib/rabbitmq  rabbitmq \
-            -c "RabbitMQ messaging server" rabbitmq
+        useradd -r -g rabbitmq -d %{_localstatedir}/lib/rabbitmq rabbitmq \
+            -c "RabbitMQ messaging server"
 fi
 
+%post
 /sbin/chkconfig --add %{name}
 
 %preun
@@ -100,8 +102,6 @@ fi
 %defattr(-,root,root,-)
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
-%dir %{_localstatedir}/lib/rabbitmq
-%dir %{_localstatedir}/log/rabbitmq
 %dir %{_sysconfdir}/rabbitmq
 %{_rabbit_erllibdir}
 %{_rabbit_libdir}
@@ -113,6 +113,9 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Mon Apr 6 2009 Matthias Radestock <matthias@lshift.net> 1.5.4-1
+- Maintenance release for the 1.5.x series
+
 * Tue Feb 24 2009 Tony Garnock-Jones <tonyg@lshift.net> 1.5.3-1
 - Maintenance release for the 1.5.x series
 

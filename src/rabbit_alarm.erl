@@ -81,9 +81,16 @@ start(MemoryAlarms) ->
 stop() ->
     ok = alarm_handler:delete_alarm_handler(?MODULE).
 
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_alarm.erl
 maybe_conserve_memory(QPid) ->
     gen_event:call(alarm_handler, ?MODULE, {maybe_conserve_memory, QPid}).
                         {register, Pid, HighMemMFA}).
+=======
+register(Pid, HighMemMFA) ->
+    ok = gen_event:call(alarm_handler, ?MODULE,
+                        {register, Pid, HighMemMFA},
+                        infinity).
+>>>>>>> /tmp/rabbit_alarm.erl~other.Lee8ob
 
 %%----------------------------------------------------------------------------
 

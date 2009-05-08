@@ -150,8 +150,22 @@ delete_user(Username) ->
           rabbit_misc:with_user(
             Username,
             fun () ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_access_control.erl
                     ok = mnesia:delete({user, Username}),
                     ok = mnesia:delete({user_vhost, Username})
+=======
+                    ok = mnesia:delete({rabbit_user, Username}),
+                    [ok = mnesia:delete_object(
+                            rabbit_user_permission, R, write) ||
+                        R <- mnesia:match_object(
+                               rabbit_user_permission,
+                               #user_permission{user_vhost = #user_vhost{
+                                                  username = Username,
+                                                  virtual_host = '_'},
+                                                permission = '_'},
+                               write)],
+                    ok
+>>>>>>> /tmp/rabbit_access_control.erl~other.wd6AMx
             end)),
     rabbit_log:info("Deleted user ~p~n", [Username]),
     R.

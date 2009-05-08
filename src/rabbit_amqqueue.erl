@@ -124,6 +124,7 @@ recover() ->
 
 recover_durable_queues() ->
     Node = node(),
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
     %% TODO: use dirty ops instead
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
@@ -137,6 +138,34 @@ recover_durable_queues() ->
               lists:foreach(fun store_queue/1, Queues),
               ok
       end).
+=======
+    lists:foreach(
+      fun (RecoveredQ) ->
+              Q = start_queue_process(RecoveredQ),
+              %% We need to catch the case where a client connected to
+              %% another node has deleted the queue (and possibly
+              %% re-created it).
+              case rabbit_misc:execute_mnesia_transaction(
+                     fun () -> case mnesia:match_object(
+                                      rabbit_durable_queue, RecoveredQ, read) of
+                                   [_] -> ok = store_queue(Q),
+                                          true;
+                                   []  -> false
+                               end
+                     end) of
+                  true  -> ok;
+                  false -> exit(Q#amqqueue.pid, shutdown)
+              end
+      end,
+      %% TODO: use dirty ops instead
+      rabbit_misc:execute_mnesia_transaction(
+        fun () ->
+                qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
+                                        <- mnesia:table(rabbit_durable_queue),
+                                  node(Pid) == Node]))
+        end)),
+    ok.
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 
 conserve_memory(Conserve) ->
     [ok = gen_server:cast(QPid, {conserve_memory, Conserve}) ||
@@ -213,10 +242,18 @@ list(VHostPath) ->
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
 info(#amqqueue{ pid = QPid }) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
     gen_server:call(QPid, info).
+=======
+    gen_server2:pcall(QPid, 9, info, infinity).
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 
 info(#amqqueue{ pid = QPid }, Items) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
     case gen_server:call(QPid, {info, Items}) of
+=======
+    case gen_server2:pcall(QPid, 9, {info, Items}, infinity) of
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
@@ -225,20 +262,40 @@ info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
 stat(#amqqueue{pid = QPid}) -> gen_server:call(QPid, stat).
+=======
+stat(#amqqueue{pid = QPid}) -> gen_server2:call(QPid, stat, infinity).
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 
 stat_all() ->
     lists:map(fun stat/1, rabbit_misc:dirty_read_all(amqqueue)).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
     gen_server:call(QPid, {delete, IfUnused, IfEmpty}).
+=======
+    gen_server2:call(QPid, {delete, IfUnused, IfEmpty}, infinity).
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
 purge(#amqqueue{ pid = QPid }) -> gen_server:call(QPid, purge).
+=======
+purge(#amqqueue{ pid = QPid }) -> gen_server2:call(QPid, purge, infinity).
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 
 deliver(_IsMandatory, true, Txn, Message, QPid) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
     gen_server:call(QPid, {deliver_immediately, Txn, Message});
+=======
+    gen_server2:call(QPid, {deliver_immediately, Txn, Message}, infinity);
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 deliver(true, _IsImmediate, Txn, Message, QPid) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
     gen_server:call(QPid, {deliver, Txn, Message}),
+=======
+    gen_server2:call(QPid, {deliver, Txn, Message}, infinity),
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
     true;
 deliver(false, _IsImmediate, Txn, Message, QPid) ->
     gen_server:cast(QPid, {deliver, Txn, Message}),
@@ -254,10 +311,13 @@ ack(QPid, Txn, MsgIds, ChPid) ->
     gen_server:cast(QPid, {ack, Txn, MsgIds, ChPid}).
 
 commit_all(QPids, Txn) ->
-    Timeout = length(QPids) * ?CALL_TIMEOUT,
     safe_pmap_ok(
       fun (QPid) -> exit({queue_disappeared, QPid}) end,
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
       fun (QPid) -> gen_server:call(QPid, {commit, Txn}, Timeout) end,
+=======
+      fun (QPid) -> gen_server2:call(QPid, {commit, Txn}, infinity) end,
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
       QPids).
 
 rollback_all(QPids, Txn) ->
@@ -267,27 +327,49 @@ rollback_all(QPids, Txn) ->
       QPids).
 
 notify_down_all(QPids, ChPid) ->
-    Timeout = length(QPids) * ?CALL_TIMEOUT,
     safe_pmap_ok(
       %% we don't care if the queue process has terminated in the
       %% meantime
       fun (_)    -> ok end,
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
       fun (QPid) -> gen_server:call(QPid, {notify_down, ChPid}, Timeout) end,
+=======
+      fun (QPid) -> gen_server2:call(QPid, {notify_down, ChPid}, infinity) end,
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
       QPids).
 
 claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
     gen_server:call(QPid, {claim_queue, ReaderPid}).
+=======
+    gen_server2:call(QPid, {claim_queue, ReaderPid}, infinity).
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
     gen_server:call(QPid, {basic_get, ChPid, NoAck}).
+=======
+    gen_server2:call(QPid, {basic_get, ChPid, NoAck}, infinity).
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 
 basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
     gen_server:call(QPid, {basic_consume, NoAck, ReaderPid, ChPid,
                            ConsumerTag, ExclusiveConsume, OkMsg}).
+=======
+    gen_server2:call(QPid, {basic_consume, NoAck, ReaderPid, ChPid, 
+                            LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg},
+                     infinity).
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
     ok = gen_server:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
+=======
+    ok = gen_server2:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg},
+                          infinity).
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 
 notify_sent(QPid, ChPid) ->
     gen_server:cast(QPid, {notify_sent, ChPid}).
@@ -295,29 +377,52 @@ notify_sent(QPid, ChPid) ->
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
               case mnesia:wread({amqqueue, QueueName}) of
                   [] -> {error, not_found};
                   [Q] ->
                       ok = delete_queue(Q),
                       ok = mnesia:delete({durable_queues, QueueName}),
+=======
+              case mnesia:wread({rabbit_queue, QueueName}) of
+                  []  -> {error, not_found};
+                  [_] ->
+                      ok = rabbit_exchange:delete_queue_bindings(QueueName),
+                      ok = mnesia:delete({rabbit_queue, QueueName}),
+                      ok = mnesia:delete({rabbit_durable_queue, QueueName}),
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
                       ok
               end
       end).
 
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
 delete_queue(#amqqueue{name = QueueName}) ->
     ok = rabbit_exchange:delete_bindings_for_queue(QueueName),
     ok = mnesia:delete({amqqueue, QueueName}),
     ok.
 
+=======
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               qlc:fold(
-                fun (Q, Acc) -> ok = delete_queue(Q), Acc end,
+                fun (QueueName, Acc) ->
+                        ok = rabbit_exchange:delete_transient_queue_bindings(
+                               QueueName),
+                        ok = mnesia:delete({rabbit_queue, QueueName}),
+                        Acc
+                end,
                 ok,
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_amqqueue.erl
                 qlc:q([Q || Q = #amqqueue{pid = Pid}
                                 <- mnesia:table(amqqueue),
                             node(Pid) == Node]))
+=======
+                qlc:q([QueueName || #amqqueue{name = QueueName, pid = Pid}
+                                        <- mnesia:table(rabbit_queue),
+                                    node(Pid) == Node]))
+>>>>>>> /tmp/rabbit_amqqueue.erl~other.MhI2TH
       end).
 
 pseudo_queue(QueueName, Pid) ->

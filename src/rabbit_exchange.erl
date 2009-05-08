@@ -40,8 +40,13 @@
          route/2]).
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_exchange.erl
 -export([delete_bindings_for_queue/1]).
 -export([check_type/1, assert_type/2, topic_matches/2]).
+=======
+-export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
+-export([check_type/1, assert_type/2, topic_matches/2, headers_match/2]).
+>>>>>>> /tmp/rabbit_exchange.erl~other.4_e6ym
 
 %% EXTENDED API
 -export([list_exchange_bindings/1]).
@@ -59,8 +64,10 @@
 
 -type(publish_res() :: {'ok', [pid()]} |
       not_found() | {'error', 'unroutable' | 'not_delivered'}).
--type(bind_res() :: 'ok' |
-      {'error', 'queue_not_found' | 'exchange_not_found'}).
+-type(bind_res() :: 'ok' | {'error',
+                            'queue_not_found' |
+                            'exchange_not_found' |
+                            'exchange_and_queue_not_found'}).
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/5 :: (exchange_name(), exchange_type(), bool(), bool(),
                     amqp_table()) -> exchange()).
@@ -86,7 +93,8 @@
              bind_res() | {'error', 'binding_not_found'}).
 -spec(list_bindings/1 :: (vhost()) -> 
              [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
--spec(delete_bindings_for_queue/1 :: (queue_name()) -> 'ok').
+-spec(delete_queue_bindings/1 :: (queue_name()) -> 'ok').
+-spec(delete_transient_queue_bindings/1 :: (queue_name()) -> 'ok').
 -spec(topic_matches/2 :: (binary(), binary()) -> bool()).
 -spec(delete/2 :: (exchange_name(), bool()) ->
              'ok' | not_found() | {'error', 'in_use'}).
@@ -102,6 +110,7 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
 
 recover() ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_exchange.erl
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               mnesia:foldl(
@@ -118,6 +127,19 @@ recover() ->
                 end, ok, durable_routes),
               ok
       end).
+=======
+    ok = rabbit_misc:table_foreach(
+           fun(Exchange) -> ok = mnesia:write(rabbit_exchange,
+                                              Exchange, write)
+           end, rabbit_durable_exchange),
+    ok = rabbit_misc:table_foreach(
+           fun(Route) -> {_, ReverseRoute} = route_with_reverse(Route),
+                         ok = mnesia:write(rabbit_route,
+                                           Route, write),
+                         ok = mnesia:write(rabbit_reverse_route,
+                                           ReverseRoute, write)
+           end, rabbit_durable_route).
+>>>>>>> /tmp/rabbit_exchange.erl~other.4_e6ym
 
 declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
     Exchange = #exchange{name = ExchangeName,
@@ -278,20 +300,53 @@ lookup_qpids(Queues) ->
 %% refactored to its own module, especially seeing as unbind will have
 %% to be implemented for 0.91 ?
 
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_exchange.erl
 delete_bindings_for_exchange(ExchangeName) ->
     indexed_delete(
       #route{binding = #binding{exchange_name = ExchangeName,
                                 _ = '_'}}, 
       fun delete_forward_routes/1, fun mnesia:delete_object/1).
+=======
+delete_exchange_bindings(ExchangeName) ->
+    [begin
+         ok = mnesia:delete_object(rabbit_reverse_route,
+                                   reverse_route(Route), write),
+         ok = delete_forward_routes(Route)
+     end || Route <- mnesia:match_object(
+                       rabbit_route,
+                       #route{binding = #binding{exchange_name = ExchangeName,
+                                                 _ = '_'}},
+                       write)],
+    ok.
+>>>>>>> /tmp/rabbit_exchange.erl~other.4_e6ym
 
-delete_bindings_for_queue(QueueName) ->
+delete_queue_bindings(QueueName) ->
+    delete_queue_bindings(QueueName, fun delete_forward_routes/1).
+
+delete_transient_queue_bindings(QueueName) ->
+    delete_queue_bindings(QueueName, fun delete_transient_forward_routes/1).
+
+delete_queue_bindings(QueueName, FwdDeleteFun) ->
     Exchanges = exchanges_for_queue(QueueName),
     indexed_delete(
       reverse_route(#route{binding = #binding{queue_name = QueueName, 
                                               _ = '_'}}),
       fun mnesia:delete_object/1, fun delete_forward_routes/1),
     [begin
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_exchange.erl
          [X] = mnesia:read({exchange, ExchangeName}),
+=======
+         ok = FwdDeleteFun(reverse_route(Route)),
+         ok = mnesia:delete_object(rabbit_reverse_route, Route, write)
+     end || Route <- mnesia:match_object(
+                       rabbit_reverse_route,
+                       reverse_route(
+                         #route{binding = #binding{queue_name = QueueName, 
+                                                   _ = '_'}}),
+                       write)],
+    [begin
+         [X] = mnesia:read({rabbit_exchange, ExchangeName}),
+>>>>>>> /tmp/rabbit_exchange.erl~other.4_e6ym
          ok = maybe_auto_delete(X)
      end || ExchangeName <- Exchanges],
     ok.
@@ -306,6 +361,9 @@ indexed_delete(Match, ForwardsDeleteFun, ReverseDeleteFun) ->
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(Route),
     ok = mnesia:delete_object(durable_routes, Route, write).
+
+delete_transient_forward_routes(Route) ->
+    ok = mnesia:delete_object(rabbit_route, Route, write).
 
 exchanges_for_queue(QueueName) ->
     MatchHead = reverse_route(
@@ -336,19 +394,35 @@ continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
 call_with_exchange(Exchange, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_exchange.erl
       fun() -> case mnesia:read({exchange, Exchange}) of
                    []  -> {error, exchange_not_found};
+=======
+      fun() -> case mnesia:read({rabbit_exchange, Exchange}) of
+                   []  -> {error, not_found};
+>>>>>>> /tmp/rabbit_exchange.erl~other.4_e6ym
                    [X] -> Fun(X)
                end
       end).
 
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_exchange.erl
     call_with_exchange(
       Exchange, 
       fun(X) -> case mnesia:read({amqqueue, Queue}) of
                     []  -> {error, queue_not_found};
                     [Q] -> Fun(X, Q)
                 end
+=======
+    rabbit_misc:execute_mnesia_transaction(
+      fun() -> case {mnesia:read({rabbit_exchange, Exchange}),
+                     mnesia:read({rabbit_queue, Queue})} of
+                   {[X], [Q]} -> Fun(X, Q);
+                   {[ ], [_]} -> {error, exchange_not_found};
+                   {[_], [ ]} -> {error, queue_not_found};
+                   {[ ], [ ]} -> {error, exchange_and_queue_not_found}
+               end
+>>>>>>> /tmp/rabbit_exchange.erl~other.4_e6ym
       end).
 
 add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
@@ -474,9 +548,15 @@ conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     end.
 
 unconditional_delete(#exchange{name = ExchangeName}) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_exchange.erl
     ok = delete_bindings_for_exchange(ExchangeName),
     ok = mnesia:delete({durable_exchanges, ExchangeName}),
     ok = mnesia:delete({exchange, ExchangeName}).
+=======
+    ok = delete_exchange_bindings(ExchangeName),
+    ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
+    ok = mnesia:delete({rabbit_exchange, ExchangeName}).
+>>>>>>> /tmp/rabbit_exchange.erl~other.4_e6ym
 
 %%----------------------------------------------------------------------------
 %% EXTENDED API
