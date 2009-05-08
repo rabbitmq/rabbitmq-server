@@ -179,11 +179,12 @@ def do_main(header_fn,body_fn):
         stdout = sys.stdout
         f = open(out_file, 'w')
         try:
-            sys.stdout = f
-            fn(amqp_spec)
-        except:
-            remove(out_file)
-            raise
+            try:
+                sys.stdout = f
+                fn(amqp_spec)
+            except:
+                remove(out_file)
+                raise
         finally:
             sys.stdout = stdout
             f.close()
