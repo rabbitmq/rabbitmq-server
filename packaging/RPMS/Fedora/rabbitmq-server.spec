@@ -81,8 +81,8 @@ fi
 
 # create rabbitmq user
 if ! getent passwd rabbitmq >/dev/null; then
-        useradd -r -g rabbitmq -d %{_localstatedir}/lib/rabbitmq  rabbitmq \
-            -c "RabbitMQ messaging server" rabbitmq
+        useradd -r -g rabbitmq -d %{_localstatedir}/lib/rabbitmq rabbitmq \
+            -c "RabbitMQ messaging server"
 fi
 
 /sbin/chkconfig --add %{name}
