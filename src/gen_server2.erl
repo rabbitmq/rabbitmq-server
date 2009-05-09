@@ -16,6 +16,11 @@
 %% The original code could reorder messages when communicating with a
 %% process on a remote node that was not currently connected.
 %%
+%% 4) The new functions gen_server2:pcall/3, pcall/4, and pcast/3
+%% allow callers to attach priorities to requests. Requests with
+%% higher priorities are processed before requests with lower
+%% priorities. The default priority is 0.
+%%
 %% All modifications are (C) 2009 LShift Ltd.
 
 %% ``The contents of this file are subject to the Erlang Public License,
@@ -107,8 +112,8 @@
 %% API
 -export([start/3, start/4,
 	 start_link/3, start_link/4,
-	 call/2, call/3,
-	 cast/2, reply/2,
+	 call/2, call/3, pcall/3, pcall/4,
+	 cast/2, pcast/3, reply/2,
 	 abcast/2, abcast/3,
 	 multi_call/2, multi_call/3, multi_call/4,
 	 enter_loop/3, enter_loop/4, enter_loop/5]).
@@ -188,6 +193,22 @@ call(Name, Request, Timeout) ->
 	    exit({Reason, {?MODULE, call, [Name, Request, Timeout]}})
     end.
 
+pcall(Name, Priority, Request) ->
+    case catch gen:call(Name, '$gen_pcall', {Priority, Request}) of
+	{ok,Res} ->
+	    Res;
+	{'EXIT',Reason} ->
+	    exit({Reason, {?MODULE, pcall, [Name, Priority, Request]}})
+    end.
+
+pcall(Name, Priority, Request, Timeout) ->
+    case catch gen:call(Name, '$gen_pcall', {Priority, Request}, Timeout) of
+	{ok,Res} ->
+	    Res;
+	{'EXIT',Reason} ->
+	    exit({Reason, {?MODULE, pcall, [Name, Priority, Request, Timeout]}})
+    end.
+
 %% -----------------------------------------------------------------
 %% Make a cast to a generic server.
 %% -----------------------------------------------------------------
@@ -206,6 +227,22 @@ do_cast(Dest, Request) ->
     ok.
     
 cast_msg(Request) -> {'$gen_cast',Request}.
+
+pcast({global,Name}, Priority, Request) ->
+    catch global:send(Name, cast_msg(Priority, Request)),
+    ok;
+pcast({Name,Node}=Dest, Priority, Request) when is_atom(Name), is_atom(Node) -> 
+    do_cast(Dest, Priority, Request);
+pcast(Dest, Priority, Request) when is_atom(Dest) ->
+    do_cast(Dest, Priority, Request);
+pcast(Dest, Priority, Request) when is_pid(Dest) ->
+    do_cast(Dest, Priority, Request).
+
+do_cast(Dest, Priority, Request) -> 
+    do_send(Dest, cast_msg(Priority, Request)),
+    ok.
+    
+cast_msg(Priority, Request) -> {'$gen_pcast', {Priority, Request}}.
 
 %% -----------------------------------------------------------------
 %% Send a reply to the client.
@@ -276,7 +313,7 @@ enter_loop(Mod, Options, State, ServerName, Timeout) ->
     Name = get_proc_name(ServerName),
     Parent = get_parent(),
     Debug = debug_options(Name, Options),
-    Queue = queue:new(),
+    Queue = priority_queue:new(),
     loop(Parent, Name, State, Mod, Timeout, Queue, Debug).
 
 %%%========================================================================
@@ -294,7 +331,7 @@ init_it(Starter, self, Name, Mod, Args, Options) ->
     init_it(Starter, self(), Name, Mod, Args, Options);
 init_it(Starter, Parent, Name, Mod, Args, Options) ->
     Debug = debug_options(Name, Options),
-    Queue = queue:new(),
+    Queue = priority_queue:new(),
     case catch Mod:init(Args) of
 	{ok, State} ->
 	    proc_lib:init_ack(Starter, {ok, self()}), 	    
@@ -326,9 +363,9 @@ init_it(Starter, Parent, Name, Mod, Args, Options) ->
 loop(Parent, Name, State, Mod, Time, Queue, Debug) ->
     receive
         Input -> loop(Parent, Name, State, Mod,
-                      Time, queue:in(Input, Queue), Debug)
+                      Time, in(Input, Queue), Debug)
     after 0 ->
-            case queue:out(Queue) of
+            case priority_queue:out(Queue) of
                 {{value, Msg}, Queue1} ->
                     process_msg(Parent, Name, State, Mod,
                                 Time, Queue1, Debug, Msg);
@@ -336,14 +373,21 @@ loop(Parent, Name, State, Mod, Time, Queue, Debug) ->
                     receive
                         Input ->
                             loop(Parent, Name, State, Mod,
-                                 Time, queue:in(Input, Queue1), Debug)
+                                 Time, in(Input, Queue1), Debug)
                     after Time ->
                             process_msg(Parent, Name, State, Mod,
                                         Time, Queue1, Debug, timeout)
                     end
             end
     end.
-                    
+
+in({'$gen_pcast', {Priority, Msg}}, Queue) ->
+    priority_queue:in({'$gen_cast', Msg}, Priority, Queue);
+in({'$gen_pcall', From, {Priority, Msg}}, Queue) ->
+    priority_queue:in({'$gen_call', From, Msg}, Priority, Queue);
+in(Input, Queue) ->
+    priority_queue:in(Input, Queue).
+
 process_msg(Parent, Name, State, Mod, Time, Queue, Debug, Msg) ->
     case Msg of
 	{system, From, Req} ->
@@ -850,5 +894,5 @@ format_status(Opt, StatusData) ->
      {data, [{"Status", SysState},
 	     {"Parent", Parent},
 	     {"Logged events", Log},
-             {"Queued messages", queue:to_list(Queue)}]} |
+             {"Queued messages", priority_queue:to_list(Queue)}]} |
      Specfic].

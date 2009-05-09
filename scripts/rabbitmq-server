@@ -36,7 +36,7 @@ NODE_PORT=5672
 SERVER_ERL_ARGS="+K true +A30 \
 -kernel inet_default_listen_options [{nodelay,true},{sndbuf,16384},{recbuf,4096}] \
 -kernel inet_default_connect_options [{nodelay,true}]"
-CLUSTER_CONFIG_FILE=/etc/rabbitmq/cluster.config
+CLUSTER_CONFIG_FILE=/etc/rabbitmq/rabbitmq_cluster.config
 LOG_BASE=/var/log/rabbitmq
 MNESIA_BASE=/var/lib/rabbitmq/mnesia
 SERVER_START_ARGS=

@@ -47,7 +47,7 @@ if "%RABBITMQ_NODE_PORT%"=="" (
 )
 
 set RABBITMQ_PIDS_FILE=%RABBITMQ_BASE%\rabbitmq.pids
-set RABBITMQ_SCRIPT_HOME=%~dp0%
+set RABBITMQ_SCRIPT_HOME=%~sdp0%
 
 if "%ERLANG_HOME%"=="" (
     set ERLANG_HOME=%~dp0%..\..\..
@@ -65,5 +65,5 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
     exit /B
 )
 
-"%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden -sname rabbitmq_multi -s rabbit_multi %START_ARGS% -extra %*
+"%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden %RABBITMQ_MULTI_ERL_ARGS% -sname rabbitmq_multi -s rabbit_multi %RABBITMQ_MULTI_START_ARGS% -extra %*
 
