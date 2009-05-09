@@ -362,6 +362,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                routing_key = RoutingKey,
                                content = Content}}} ->
             State1 = lock_message(not(NoAck), {DeliveryTag, none, Msg}, State),
+            rabbit_log:tap_trace_out(Msg, DeliveryTag, none),
             ok = rabbit_writer:send_command(
                    WriterPid,
                    #'basic.get_ok'{delivery_tag = DeliveryTag,
@@ -937,15 +938,16 @@ lock_message(false, _MsgStruct, State) ->
     State.
 
 internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
-                 {_QName, QPid, _MsgId, Redelivered,
-                  #basic_message{exchange_name = ExchangeName,
-                                 routing_key = RoutingKey,
-                                 content = Content}}) ->
+                 Msg = {_QName, QPid, _MsgId, Redelivered,
+                        #basic_message{exchange_name = ExchangeName,
+                                       routing_key = RoutingKey,
+                                       content = Content}}) ->
     M = #'basic.deliver'{consumer_tag = ConsumerTag,
                          delivery_tag = DeliveryTag,
                          redelivered = Redelivered,
                          exchange = ExchangeName#resource.name,
                          routing_key = RoutingKey},
+    rabbit_log:tap_trace_out(Msg, DeliveryTag, ConsumerTag),
     ok = case Notify of
              true  -> rabbit_writer:send_command_and_notify(
                         WriterPid, QPid, self(), M, Content);

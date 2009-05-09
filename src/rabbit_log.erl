@@ -41,7 +41,7 @@
 -export([debug/1, debug/2, message/4, info/1, info/2,
          warning/1, warning/2, error/1, error/2]).
 
--export([tap_trace_in/2, tap_trace_out/2]).
+-export([tap_trace_in/2, tap_trace_out/3]).
 
 -import(io).
 -import(error_logger).
@@ -120,19 +120,29 @@ tap_trace_in(Message = #basic_message{exchange_name = #resource{virtual_host = V
                                        message_to_table(Message)}])
                 end).
 
-tap_trace_out(Message = #basic_message{exchange_name = #resource{virtual_host = VHostBin,
-                                                                 name = XNameBin}},
-              #resource{name = QNameBin}) ->
+tap_trace_out({#resource{name = QNameBin}, _QPid, QMsgId, Redelivered,
+               Message = #basic_message{exchange_name = #resource{virtual_host = VHostBin,
+                                                                  name = XNameBin}}},
+              DeliveryTag,
+              ConsumerTagOrNone) ->
     check_trace(VHostBin,
                 fun (TraceExchangeBin) ->
+                        RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
+                        Fields0 = [{<<"delivery_tag">>, signedint, DeliveryTag}, %% FIXME later
+                                   {<<"queue_msg_number">>, signedint, QMsgId},
+                                   {<<"redelivered">>, signedint, RedeliveredNum},
+                                   {<<"message">>, table, message_to_table(Message)}],
+                        Fields = case ConsumerTagOrNone of
+                                     none -> Fields0;
+                                     ConsumerTag -> [{<<"consumer_tag">>, longstr, ConsumerTag}
+                                                     | Fields0]
+                                 end,
                         maybe_inject(TraceExchangeBin,
                                      VHostBin,
                                      XNameBin,
                                      <<"deliver">>,
                                      QNameBin,
-                                     [{<<"message">>,
-                                       table,
-                                       message_to_table(Message)}])
+                                     Fields)
                 end).
 
 check_trace(VHostBin, F) ->

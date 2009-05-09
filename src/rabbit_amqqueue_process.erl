@@ -161,7 +161,6 @@ deliver_immediately(Message, Delivered,
                                round_robin = RoundRobin,
                                next_msg_id = NextId}) ->
     ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Message]),
-    rabbit_log:tap_trace_out(Message, QName),
     case queue:out(RoundRobin) of
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
                                             ack_required = AckRequired}}},
