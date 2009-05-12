@@ -504,8 +504,25 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, Stat
             throw({bad_payload, PayloadAndMarker})
     end;
 
-handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
-             State = #v1{sock = Sock, connection = Connection}) ->
+handle_input(handshake, <<"AMQP",0,ProtocolMajor,ProtocolMinor,ProtocolRevision>>, State) ->
+    %% 0-9-1 style protocol header.
+    check_protocol_header(ProtocolMajor, ProtocolMinor, ProtocolRevision, State);
+handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>, State) ->
+    %% 0-8 and 0-9 style protocol header.
+    check_protocol_header(ProtocolMajor, ProtocolMinor, 0, State);
+
+handle_input(handshake, Other, #v1{sock = Sock}) ->
+    ok = inet_op(fun () -> gen_tcp:send(
+                             Sock, <<"AMQP",1,1,
+                                    ?PROTOCOL_VERSION_MAJOR,
+                                    ?PROTOCOL_VERSION_MINOR>>) end),
+    throw({bad_header, Other});
+
+handle_input(Callback, Data, _State) ->
+    throw({bad_input, Callback, Data}).
+
+check_protocol_header(ProtocolMajor, ProtocolMinor, _ProtocolRevision,
+                      State = #v1{sock = Sock, connection = Connection}) ->
     case check_version({ProtocolMajor, ProtocolMinor},
                        {?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR}) of
         true ->
@@ -532,17 +549,7 @@ handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
              frame_header, 7};
         false ->
             throw({bad_version, ProtocolMajor, ProtocolMinor})
-    end;
-
-handle_input(handshake, Other, #v1{sock = Sock}) ->
-    ok = inet_op(fun () -> gen_tcp:send(
-                             Sock, <<"AMQP",1,1,
-                                    ?PROTOCOL_VERSION_MAJOR,
-                                    ?PROTOCOL_VERSION_MINOR>>) end),
-    throw({bad_header, Other});
-
-handle_input(Callback, Data, _State) ->
-    throw({bad_input, Callback, Data}).
+    end.
 
 %% the 0-8 spec, confusingly, defines the version as 8-0
 adjust_version({8,0})   -> {0,8};
