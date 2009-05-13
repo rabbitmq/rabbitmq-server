@@ -772,17 +772,17 @@ rdq_time_insane_startup() ->
     rabbit_disk_queue:start_link(OneGig),
     rabbit_disk_queue:to_ram_disk_mode(),
     Msg = <<>>,
-    List = lists:seq(1, 1024*1024),
+    Count = 100000,
+    List = lists:seq(1, Count),
     %% 1M empty messages, at say, 100B per message, should all fit
     %% within 1GB and thus in a single file
-    io:format("Publishing 1M empty messages...~n",[]),
+    io:format("Publishing ~p empty messages...~n",[Count]),
     [rabbit_disk_queue:tx_publish(N, Msg) || N <- List],
     rabbit_disk_queue:tx_commit(q, List),
     io:format("...done. Timing restart...~n", []),
     rdq_stop(),
     Micros = rdq_virgin(),
-    io:format("...startup took ~w microseconds.~n", [Micros]),
-    rdq_stop().
+    io:format("...startup took ~w microseconds.~n", [Micros]).
 
 rdq_time_commands(Funcs) ->
     lists:foreach(fun (F) -> F() end, Funcs).
@@ -791,6 +791,7 @@ rdq_virgin() ->
     {Micros, {ok, _}} =
 	timer:tc(rabbit_disk_queue, start_link, [1024*1024]),
     ok = rabbit_disk_queue:stop_and_obliterate(),
+    timer:sleep(1000),
     Micros.
 
 rdq_start() ->
