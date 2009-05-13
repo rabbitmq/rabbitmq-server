@@ -698,6 +698,7 @@ test_disk_queue() ->
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
     Startup = rdq_virgin(),
     rdq_start(),
+    rabbit_disk_queue:to_ram_disk_mode(),
     QCount = length(Qs),
     Msg = <<0:(8*MsgSizeBytes)>>,
     List = lists:seq(1, MsgCount),
@@ -705,7 +706,7 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
 	timer:tc(?MODULE, rdq_time_commands,
 		 [[fun() -> [rabbit_disk_queue:tx_publish(N, Msg)
 			     || N <- List, _ <- Qs] end,
-		   fun() -> [ok = rabbit_disk_queue:tx_commit(Q, List)
+		   fun() -> [ok = rabbit_disk_queue:tx_commit(Q, List, [])
 			     || Q <- Qs] end
 		  ]]),
     {Deliver, ok} =
@@ -714,8 +715,7 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
 				       [begin {N, Msg, MsgSizeBytes, false, SeqId} =
 						  rabbit_disk_queue:deliver(Q), SeqId end
 					|| N <- List],
-				   rabbit_disk_queue:ack(Q, SeqIds),
-				   ok = rabbit_disk_queue:tx_commit(Q, [])
+				   ok = rabbit_disk_queue:tx_commit(Q, [], SeqIds)
 			     end || Q <- Qs]
 		   end]]),
     io:format(" ~15.10B| ~14.10B| ~14.10B| ~14.1f| ~14.1f| ~14.6f| ~14.10f| ~14.1f| ~14.6f| ~14.10f~n",
@@ -735,7 +735,7 @@ rdq_stress_gc(MsgCount) ->
     Msg = <<0:(8*MsgSizeBytes)>>, % 256KB
     List = lists:seq(1, MsgCount),
     [rabbit_disk_queue:tx_publish(N, Msg) || N <- List],
-    rabbit_disk_queue:tx_commit(q, List),
+    rabbit_disk_queue:tx_commit(q, List, []),
     StartChunk = round(MsgCount / 20), % 5%
     AckList =
 	lists:reverse(
@@ -759,10 +759,11 @@ rdq_stress_gc(MsgCount) ->
 		      rabbit_disk_queue:deliver(q),
 		  dict:store(MsgId, SeqId, Acc)
 	  end, dict:new(), List),
-    rabbit_disk_queue:ack(q, [begin {ok, SeqId} = dict:find(MsgId, MsgIdToSeqDict),
-				    SeqId end
-			      || MsgId <- AckList]),
-    rabbit_disk_queue:tx_commit(q, []),
+    %% we really do want to ack each of this individually
+    [begin {ok, SeqId} = dict:find(MsgId, MsgIdToSeqDict),
+	   rabbit_disk_queue:ack(q, [SeqId]) end
+     || MsgId <- AckList],
+    rabbit_disk_queue:tx_commit(q, [], []),
     rdq_stop(),
     passed.
 
@@ -778,7 +779,7 @@ rdq_time_insane_startup() ->
     %% within 1GB and thus in a single file
     io:format("Publishing ~p empty messages...~n",[Count]),
     [rabbit_disk_queue:tx_publish(N, Msg) || N <- List],
-    rabbit_disk_queue:tx_commit(q, List),
+    rabbit_disk_queue:tx_commit(q, List, []),
     io:format("...done. Timing restart...~n", []),
     rdq_stop(),
     Micros = rdq_virgin(),
