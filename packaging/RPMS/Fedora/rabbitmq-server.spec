@@ -111,7 +111,7 @@ fi
 %{_rabbit_libdir}
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
-%doc LICENSE LICENSE-MPL-RabbitMQ INSTALL
+%doc LICENSE LICENSE-MPL-RabbitMQ
 
 %clean
 rm -rf %{buildroot}
