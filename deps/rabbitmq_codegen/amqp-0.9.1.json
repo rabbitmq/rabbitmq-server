@@ -155,7 +155,7 @@
 			 "arguments": [{"type": "shortstr", "name": "deprecated-out-of-band", "default-value": ""}],
 			 "name": "open"},
 			{"id": 11,
-			 "arguments": [],
+			 "arguments": [{"type": "longstr", "name": "deprecated-channel-id", "default-value": ""}],
 			 "name": "open-ok"},
 			{"id": 20,
 			 "arguments": [{"type": "bit", "name": "active"}],
