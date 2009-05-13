@@ -92,8 +92,10 @@ Defaults to 5672.
 
 =head2 ERLANG_SERVICE_MANAGER_PATH
 
-Defaults to F<C:\Program Files\erl5.5.5\erts-5.5.5\bin>. This is 
-the installation location of the Erlang service manager.
+Defaults to F<C:\Program Files\erl5.5.5\erts-5.5.5\bin>
+(or F<C:\Program Files (x86)\erl5.5.5\erts-5.5.5\bin> for 64-bit
+environments). This is the installation location of the Erlang service
+manager.
 
 =head2 CLUSTER_CONFIG_FILE
 
