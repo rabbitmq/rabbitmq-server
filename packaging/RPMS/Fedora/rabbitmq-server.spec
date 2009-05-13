@@ -28,13 +28,6 @@ scalable implementation of an AMQP broker.
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
 
-%pre
-if [ $1 -gt 1 ]; then
-  #Upgrade - stop and remove previous instance of rabbitmq-server init.d script
-  /sbin/service rabbitmq-server stop
-  /sbin/chkconfig --del rabbitmq-server
-fi
-
 %prep
 %setup -q
 
@@ -73,7 +66,14 @@ echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm
         ! -regex '\.\(%{_rabbit_erllibdir}\|%{_rabbit_libdir}\).*' \
         | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
 
-%post
+%pre
+
+if [ $1 -gt 1 ]; then
+  #Upgrade - stop and remove previous instance of rabbitmq-server init.d script
+  /sbin/service rabbitmq-server stop
+  /sbin/chkconfig --del rabbitmq-server
+fi
+
 # create rabbitmq group
 if ! getent group rabbitmq >/dev/null; then
         groupadd -r rabbitmq
@@ -81,10 +81,11 @@ fi
 
 # create rabbitmq user
 if ! getent passwd rabbitmq >/dev/null; then
-        useradd -r -g rabbitmq -d %{_localstatedir}/lib/rabbitmq  rabbitmq \
-            -c "RabbitMQ messaging server" rabbitmq
+        useradd -r -g rabbitmq -d %{_localstatedir}/lib/rabbitmq rabbitmq \
+            -c "RabbitMQ messaging server"
 fi
 
+%post
 /sbin/chkconfig --add %{name}
 
 %preun
