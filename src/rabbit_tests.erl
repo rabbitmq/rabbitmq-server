@@ -693,6 +693,8 @@ test_disk_queue() ->
     ],
     rdq_virgin(),
     passed = rdq_stress_gc(10000),
+    passed = rdq_test_startup_with_queue_gaps(),
+    passed = rdq_test_redeliver(),
     passed.
 
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
@@ -784,6 +786,82 @@ rdq_time_insane_startup() ->
     rdq_stop(),
     Micros = rdq_virgin(),
     io:format("...startup took ~w microseconds.~n", [Micros]).
+
+rdq_test_startup_with_queue_gaps() ->
+    rdq_virgin(),
+    rdq_start(),
+    Msg = <<0:(8*256)>>,
+    Total = 1000,
+    Half = round(Total/2),
+    All = lists:seq(1,Total),
+    [rabbit_disk_queue:tx_publish(N, Msg) || N <- All],
+    rabbit_disk_queue:tx_commit(q, All, []),
+    io:format("Publish done~n", []),
+    %% deliver first half
+    Seqs = [begin {N, Msg, 256, false, SeqId} = rabbit_disk_queue:deliver(q), SeqId end
+	    || N <- lists:seq(1,Half)],
+    io:format("Deliver first half done~n", []),
+    %% ack every other message we have delivered (starting at the _first_)
+    lists:foldl(fun (SeqId2, true) ->
+			rabbit_disk_queue:ack(q, [SeqId2]),
+			false;
+		    (_SeqId2, false) ->
+			true
+		end, true, Seqs),
+    rabbit_disk_queue:tx_commit(q, [], []),
+    io:format("Acked every other message delivered done~n", []),
+    rdq_stop(),
+    rdq_start(),
+    io:format("Startup (with shuffle) done~n", []),
+    %% should have shuffled up. So we should now get lists:seq(2,500,2) already delivered
+    Seqs2 = [begin {N, Msg, 256, true, SeqId} = rabbit_disk_queue:deliver(q), SeqId end
+	     || N <- lists:seq(2,Half,2)],
+    rabbit_disk_queue:tx_commit(q, [], Seqs2),
+    io:format("Reread non-acked messages done~n", []),
+    %% and now fetch the rest
+    Seqs3 = [begin {N, Msg, 256, false, SeqId} = rabbit_disk_queue:deliver(q), SeqId end
+	     || N <- lists:seq(1 + Half,Total)],
+    rabbit_disk_queue:tx_commit(q, [], Seqs3),
+    io:format("Read second half done~n", []),
+    empty = rabbit_disk_queue:deliver(q),
+    rdq_stop(),
+    passed.
+
+rdq_test_redeliver() ->
+    rdq_virgin(),
+    rdq_start(),
+    Msg = <<0:(8*256)>>,
+    Total = 1000,
+    Half = round(Total/2),
+    All = lists:seq(1,Total),
+    [rabbit_disk_queue:tx_publish(N, Msg) || N <- All],
+    rabbit_disk_queue:tx_commit(q, All, []),
+    io:format("Publish done~n", []),
+    %% deliver first half
+    Seqs = [begin {N, Msg, 256, false, SeqId} = rabbit_disk_queue:deliver(q), SeqId end
+	    || N <- lists:seq(1,Half)],
+    io:format("Deliver first half done~n", []),
+    %% now requeue every other message (starting at the _first_)
+    %% and ack the other ones
+    lists:foldl(fun (SeqId2, true) ->
+			rabbit_disk_queue:requeue(q, [SeqId2]),
+			false;
+		    (SeqId2, false) ->
+			rabbit_disk_queue:ack(q, [SeqId2]),
+			true
+		end, true, Seqs),
+    rabbit_disk_queue:tx_commit(q, [], []),
+    io:format("Redeliver and acking done~n", []),
+    %% we should now get the 2nd half in order, followed by every-other-from-the-first-half
+    Seqs2 = [begin {N, Msg, 256, false, SeqId} = rabbit_disk_queue:deliver(q), SeqId end
+	    || N <- lists:seq(1+Half, Total)],
+    rabbit_disk_queue:tx_commit(q, [], Seqs2),
+    Seqs3 = [begin {N, Msg, 256, true, SeqId} = rabbit_disk_queue:deliver(q), SeqId end
+	    || N <- lists:seq(1, Half, 2)],
+    rabbit_disk_queue:tx_commit(q, [], Seqs3),
+    empty = rabbit_disk_queue:deliver(q),
+    rdq_stop(),
+    passed.
 
 rdq_time_commands(Funcs) ->
     lists:foreach(fun (F) -> F() end, Funcs).
