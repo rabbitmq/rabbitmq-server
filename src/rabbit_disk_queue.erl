@@ -38,7 +38,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([publish/3, deliver/1, ack/2, tx_publish/2, tx_commit/3, tx_cancel/1, requeue/2]).
+-export([publish/3, deliver/1, phantom_deliver/1, ack/2, tx_publish/2, tx_commit/3, tx_cancel/1, requeue/2]).
 
 -export([stop/0, stop_and_obliterate/0, to_disk_only_mode/0, to_ram_disk_mode/0]).
 
@@ -227,6 +227,8 @@
 -spec(deliver/1 :: (queue_name()) ->
 	     {'empty' | {msg_id(), binary(), non_neg_integer(),
 			 bool(), {msg_id(), seq_id()}}}).
+-spec(phantom_deliver/1 :: (queue_name()) ->
+	     { 'empty' | {msg_id(), bool(), {msg_id(), seq_id()}}}).
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_publish/2 :: (msg_id(), binary()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [msg_id()], [seq_id()]) -> 'ok').
@@ -250,6 +252,9 @@ publish(Q, MsgId, Msg) when is_binary(Msg) ->
 
 deliver(Q) ->
     gen_server:call(?SERVER, {deliver, Q}, infinity).
+
+phantom_deliver(Q) ->
+    gen_server:call(?SERVER, {phantom_deliver, Q}).
 
 ack(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server:cast(?SERVER, {ack, Q, MsgSeqIds}).
@@ -335,7 +340,10 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     {ok, State1 #dqstate { current_file_handle = FileHdl }}.
 
 handle_call({deliver, Q}, _From, State) ->
-    {ok, Result, State1} = internal_deliver(Q, State),
+    {ok, Result, State1} = internal_deliver(Q, true, State),
+    {reply, Result, State1};
+handle_call({phantom_deliver, Q}, _From, State) ->
+    {ok, Result, State1} = internal_deliver(Q, false, State),
     {reply, Result, State1};
 handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, _From, State) ->
     {ok, State1} = internal_tx_commit(Q, PubMsgIds, AckSeqIds, State),
@@ -465,7 +473,7 @@ dets_ets_match_object(#dqstate { msg_location_ets = MsgLocationEts, operation_mo
 
 %% ---- INTERNAL RAW FUNCTIONS ----
 
-internal_deliver(Q, State = #dqstate { sequences = Sequences }) ->
+internal_deliver(Q, ReadMsg, State = #dqstate { sequences = Sequences }) ->
     case ets:lookup(Sequences, Q) of
 	[] -> {ok, empty, State};
 	[{Q, ReadSeqId, WriteSeqId}] ->
@@ -475,17 +483,21 @@ internal_deliver(Q, State = #dqstate { sequences = Sequences }) ->
 		 #dq_msg_loc {is_delivered = Delivered, msg_id = MsgId}] ->
 		    [{MsgId, _RefCount, File, Offset, TotalSize}] =
 			dets_ets_lookup(State, MsgId),
-		    {FileHdl, State1} = get_read_handle(File, State),
-		    %% read the message
-		    {ok, {MsgBody, BodySize}} =
-			read_message_at_offset(FileHdl, Offset, TotalSize),
-		    if Delivered -> ok;
-		       true ->  ok = mnesia:dirty_write(rabbit_disk_queue,
-							Obj #dq_msg_loc {is_delivered = true})
-		    end,
 		    true = ets:insert(Sequences, {Q, ReadSeqId + 1, WriteSeqId}),
-		    {ok, {MsgId, MsgBody, BodySize, Delivered, {MsgId, ReadSeqId}},
-		     State1}
+		    ok =
+			if Delivered -> ok;
+			   true ->
+				mnesia:dirty_write(rabbit_disk_queue,
+						   Obj #dq_msg_loc {is_delivered = true})
+			end,
+		    if ReadMsg ->
+			    {FileHdl, State1} = get_read_handle(File, State),
+			    {ok, {MsgBody, BodySize}} =
+				read_message_at_offset(FileHdl, Offset, TotalSize),
+			    {ok, {MsgId, MsgBody, BodySize, Delivered, {MsgId, ReadSeqId}},
+			     State1};
+		       true -> {ok, {MsgId, Delivered, {MsgId, ReadSeqId}}, State}
+		    end
 	    end
     end.
 

@@ -59,7 +59,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([publish/3, deliver/1, ack/2, tx_publish/2, tx_commit/3, tx_cancel/1, requeue/2]).
+-export([publish/3, deliver/1, phantom_deliver/1, ack/2, tx_publish/2, tx_commit/3, tx_cancel/1, requeue/2]).
 
 -export([stop/0, stop_and_obliterate/0]).
 
@@ -80,6 +80,8 @@
 -spec(deliver/1 :: (queue_name()) ->
 	     {'empty' | {msg_id(), binary(), non_neg_integer(),
 			 bool(), {msg_id(), seq_id()}}}).
+-spec(phantom_deliver/1 :: (queue_name()) ->
+	     { 'empty' | {msg_id(), bool(), {msg_id(), seq_id()}}}).
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_publish/2 :: (msg_id(), binary()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [msg_id()], [seq_id()]) -> 'ok').
@@ -101,6 +103,9 @@ publish(Q, MsgId, Msg) when is_binary(Msg) ->
 
 deliver(Q) ->
     gen_server:call(?SERVER, {deliver, Q}, infinity).
+
+phantom_deliver(Q) ->
+    gen_server:call(?SERVER, {phantom_deliver, Q}).
 
 ack(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server:cast(?SERVER, {ack, Q, MsgSeqIds}).
@@ -136,7 +141,10 @@ init([DSN]) ->
     {ok, State}.
 
 handle_call({deliver, Q}, _From, State) ->
-    {ok, Result, State1} = internal_deliver(Q, State),
+    {ok, Result, State1} = internal_deliver(Q, true, State),
+    {reply, Result, State1};
+handle_call({phantom_deliver, Q}, _From, State) ->
+    {ok, Result, State1} = internal_deliver(Q, false, State),
     {reply, Result, State1};
 handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, _From, State) ->
     {ok, State1} = internal_tx_commit(Q, PubMsgIds, AckSeqIds, State),
@@ -232,7 +240,7 @@ hex_string_to_binary([A,B|Rest], Acc) ->
 
 %% ---- INTERNAL RAW FUNCTIONS ----
 
-internal_deliver(Q, State = #dbstate { db_conn = Conn }) ->
+internal_deliver(Q, ReadMsg, State = #dbstate { db_conn = Conn }) ->
     QStr = binary_to_escaped_string(term_to_binary(Q)),
     case odbc:sql_query(Conn, "select next_read from sequence where queue = " ++ QStr) of
 	{selected, _, []} ->
@@ -252,14 +260,19 @@ internal_deliver(Q, State = #dbstate { db_conn = Conn }) ->
 		    MsgId = binary_to_term(hex_string_to_binary(MsgIdStr)),
 		    %% yeah, this is really necessary. sigh
 		    MsgIdStr2 = binary_to_escaped_string(term_to_binary(MsgId)),
-		    {selected, _, [{MsgBodyStr}]} =
-			odbc:sql_query(Conn, "select msg from message where msg_id = " ++ MsgIdStr2),
 		    odbc:sql_query(Conn, "update sequence set next_read = " ++ integer_to_list(ReadSeqId + 1) ++
 				   " where queue = " ++ QStr),
-		    odbc:commit(Conn, commit),
-		    MsgBody = hex_string_to_binary(MsgBodyStr),
-		    BodySize = size(MsgBody),
-		    {ok, {MsgId, MsgBody, BodySize, IsDelivered, {MsgId, ReadSeqId}}, State}
+		    if ReadMsg ->
+			    {selected, _, [{MsgBodyStr}]} =
+				odbc:sql_query(Conn, "select msg from message where msg_id = " ++ MsgIdStr2),
+			    odbc:commit(Conn, commit),
+			    MsgBody = hex_string_to_binary(MsgBodyStr),
+			    BodySize = size(MsgBody),
+			    {ok, {MsgId, MsgBody, BodySize, IsDelivered, {MsgId, ReadSeqId}}, State};
+		       true ->
+			    odbc:commit(Conn, commit),
+			    {ok, {MsgId, IsDelivered, {MsgId, ReadSeqId}}, State}
+		    end
 	    end
     end.
 
