@@ -82,7 +82,8 @@ guid() ->
     %% and time. We combine that with a process-local counter to give
     %% us a GUID that is monotonically increasing per process.
     G = case get(guid) of
-            undefined -> {{gen_server:call(?SERVER, serial), self()}, 0};
+            undefined -> {{gen_server:call(?SERVER, serial, infinity), self()},
+                          0};
             {S, I}   -> {S, I+1}
         end,
     put(guid, G),

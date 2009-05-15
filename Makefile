@@ -94,11 +94,10 @@ run-node: all
 run-tests: all
 	echo "rabbit_tests:all_tests()." | $(ERL_CALL)
 
-start-background-node: stop-node
+start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
-		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached" \
-		./scripts/rabbitmq-server ; sleep 1
+		./scripts/rabbitmq-server -detached; sleep 1
 
 start-rabbit-on-node: all
 	echo "rabbit:start()." | $(ERL_CALL)
@@ -130,10 +129,10 @@ srcdist: distclean
 	cp README.in $(TARGET_SRC_DIR)/README
 	elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
 		>> $(TARGET_SRC_DIR)/BUILD
-	sed -i 's/%%VERSION%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in
+	sed -i.save 's/%%VERSION%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in && rm -f $(TARGET_SRC_DIR)/ebin/rabbit_app.in.save
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
-	cp codegen.py Makefile $(TARGET_SRC_DIR)
+	cp codegen.py Makefile generate_app $(TARGET_SRC_DIR)
 
 	cp -r scripts $(TARGET_SRC_DIR)
 	cp -r docs $(TARGET_SRC_DIR)
@@ -150,7 +149,7 @@ distclean: clean
 
 %.gz: %.pod
 	pod2man \
-		-n `echo $$(basename $*) | sed -e 's/\.[^.]\+//'` \
+		-n `echo $$(basename $*) | sed -e 's/\.[[:digit:]]\+//'` \
 		-s `echo $$(basename $*) | sed -e 's/.*\.\([^.]\+\)/\1/'` \
 		-c "RabbitMQ AMQP Server" \
 		-d "" \

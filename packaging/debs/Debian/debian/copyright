@@ -3,14 +3,47 @@ Wed,  3 Jan 2007 15:43:44 +0000.
 
 It was downloaded from http://www.rabbitmq.com/
 
-Upstream Author: The RabbitMQ team <info@rabbitmq.com>
+The file codegen/amqp-0.8.json is covered by the following terms:
 
-Copyright: 2006-2009 Rabbit Technologies Ltd.
+        "Copyright (C) 2008-2009 LShift Ltd, Cohesive Financial Technologies LLC,
+        and Rabbit Technologies Ltd
+        
+        Permission is hereby granted, free of charge, to any person
+        obtaining a copy of this file (the Software), to deal in the
+        Software without restriction, including without limitation the 
+        rights to use, copy, modify, merge, publish, distribute, 
+        sublicense, and/or sell copies of the Software, and to permit 
+        persons to whom the Software is furnished to do so, subject to 
+        the following conditions:
+	
+	The above copyright notice and this permission notice shall be
+        included in all copies or substantial portions of the Software.
+	
+	THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+        EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+        OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+        NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+        HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+        WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+        FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+        OTHER DEALINGS IN THE SOFTWARE."
 
-License:
-The RabbitMQ server is licensed under the MPL.
+The rest of this package is licensed under the Mozilla Public License 1.1
+Authors and Copyright are as described below:
 
+     The Initial Developers of the Original Code are LShift Ltd,
+     Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
 
+     Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+     Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+     are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+     Technologies LLC, and Rabbit Technologies Ltd.
+
+     Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+     Ltd. Portions created by Cohesive Financial Technologies LLC are
+     Copyright (C) 2007-2009 Cohesive Financial Technologies
+     LLC. Portions created by Rabbit Technologies Ltd are Copyright
+     (C) 2007-2009 Rabbit Technologies Ltd.
 
 
                           MOZILLA PUBLIC LICENSE

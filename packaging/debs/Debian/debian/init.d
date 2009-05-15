@@ -26,7 +26,6 @@ fi
 
 RETVAL=0
 set -e
-cd /
 
 start_rabbitmq () {
     set +e
@@ -79,7 +78,10 @@ status_rabbitmq() {
 
 rotate_logs_rabbitmq() {
     set +e
-    $DAEMON rotate_logs ${ROTATE_SUFFIX} 2>&1
+    $DAEMON rotate_logs ${ROTATE_SUFFIX}
+    if [ $? != 0 ] ; then
+        RETVAL=1
+    fi
     set -e
 }
 

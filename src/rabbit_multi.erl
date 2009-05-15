@@ -36,6 +36,17 @@
 
 -define(RPC_SLEEP, 500).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start/0 :: () -> no_return()).
+-spec(stop/0 :: () -> 'ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start() ->
     RpcTimeout =
         case init:get_argument(maxwait) of
