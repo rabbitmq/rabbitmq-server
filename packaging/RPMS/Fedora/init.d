@@ -8,6 +8,8 @@
 
 ### BEGIN INIT INFO
 # Provides:          rabbitmq-server
+# Default-Start:
+# Default-Stop:
 # Required-Start:    $remote_fs $network
 # Required-Stop:     $remote_fs $network
 # Description:       RabbitMQ broker
