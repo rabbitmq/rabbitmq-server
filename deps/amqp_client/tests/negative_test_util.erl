@@ -25,6 +25,7 @@
 -module(negative_test_util).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 
 -compile(export_all).
 
@@ -37,10 +38,23 @@ non_existent_exchange_test(Connection) ->
     lib_amqp:declare_exchange(Channel, X),
     %% Deliberately mix up the routingkey and exchange arguments
     lib_amqp:publish(Channel, RoutingKey, X, Payload),
-    receive
-        X -> ok
-    after 1000 -> ok
-    end,
-    ?assertNot(is_process_alive(Channel)),
+    wait_for_death(Channel),
     ?assert(is_process_alive(Connection)),
     lib_amqp:close_connection(Connection).
+
+hard_error_test(Connection) ->
+    Channel = lib_amqp:start_channel(Connection),
+    try
+        amqp_channel:call(Channel, #'basic.qos'{global = true})
+    catch
+        exit:_ -> ok;
+        _:_    -> exit(did_not_throw_error)
+    end,
+    wait_for_death(Channel),
+    wait_for_death(Connection).
+
+wait_for_death(Pid) ->
+    Ref = erlang:monitor(process, Pid),
+    receive {'DOWN', Ref, process, Pid, _Reason} -> ok
+    after 1000 -> ?assert(false), ok
+    end.

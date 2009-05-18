@@ -25,6 +25,7 @@
 
 EBIN_DIR=ebin
 SOURCE_DIR=src
+TEST_SOURCE_DIR=tests
 INCLUDE_DIR=include
 DIST_DIR=rabbitmq-erlang-client
 
@@ -32,7 +33,9 @@ LOAD_PATH=ebin rabbitmq_server/ebin
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
+TEST_SOURCES=$(wildcard $(TEST_SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
+TEST_TARGETS=$(patsubst $(TEST_SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(TEST_SOURCES))
 
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info
 
@@ -45,7 +48,11 @@ LOG_BASE=/tmp
 
 ERL_CALL=erl_call -sname $(NODENAME) -e
 
-all: $(EBIN_DIR) $(TARGETS)
+all: compile
+
+compile: $(EBIN_DIR) $(TARGETS)
+
+compile_tests: $(EBIN_DIR) $(TEST_TARGETS)
 
 $(BROKER_SYMLINK):
 ifdef BROKER_DIR
@@ -58,9 +65,12 @@ $(EBIN_DIR):
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
 	erlc $(ERLC_OPTS) $<
 
-run_server:
-	NODE_IP_ADDRESS=$(NODE_IP_ADDRESS) NODE_PORT=$(NODE_PORT) NODE_ONLY=true LOG_BASE=$(LOG_BASE) RABBIT_ARGS="$(RABBIT_ARGS) -s rabbit" MNESIA_DIR=$(MNESIA_DIR) $(BROKER_DIR)/scripts/rabbitmq-server
-	sleep 2 # so that the node is initialized when the tests are run
+$(EBIN_DIR)/%.beam: $(TEST_SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
+	erlc $(ERLC_OPTS) $<
+
+run:
+	erl -pa $(LOAD_PATH)
+
 
 all_tests: test_network test_ssl test_network_coverage test_ssl_coverage test_direct test_direct_coverage
 	$(ERL_CALL) -q
@@ -68,13 +78,13 @@ all_tests: test_network test_ssl test_network_coverage test_ssl_coverage test_di
 tests_network: test_network test_ssl test_network_coverage test_ssl_coverage 
 	$(ERL_CALL) -q
 
-test_network: $(TARGETS)
+test_network: compile compile_tests
 	erl -pa $(LOAD_PATH) -noshell -eval 'network_client_test:test(),halt().'
 
 test_ssl: $(TARGETS)
 	erl -pa $(LOAD_PATH) -noshell -eval 'ssl_client_test:test(),halt().'
 
-test_network_coverage: $(TARGETS)
+test_network_coverage: compile compile_tests
 	erl -pa $(LOAD_PATH) -noshell -eval 'network_client_test:test_coverage(),halt().'
 
 test_ssl_coverage: $(TARGETS)
@@ -84,13 +94,13 @@ tests_direct: test_direct test_direct_coverage
 	$(ERL_CALL) -q
 	rm -rf $(MNESIA_DIR)
 
-test_direct: $(TARGETS)
+test_direct: compile compile_tests
 	erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl -s rabbit -noshell \
 	-sasl sasl_error_logger '{file, "'${LOG_BASE}'/rabbit-sasl.log"}' \
 	-kernel error_logger '{file, "'${LOG_BASE}'/rabbit.log"}' \
 	-eval 'direct_client_test:test(),halt().'
 
-test_direct_coverage: $(TARGETS)
+test_direct_coverage: compile compile_tests
 	erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl -s rabbit -noshell \
 	-sasl sasl_error_logger '{file, "'${LOG_BASE}'/rabbit-sasl.log"}' \
 	-kernel error_logger '{file, "'${LOG_BASE}'/rabbit.log"}' \
