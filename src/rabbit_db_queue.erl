@@ -63,7 +63,6 @@
 
 -export([stop/0, stop_and_obliterate/0]).
 
--include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
 -define(SERVER, ?MODULE).

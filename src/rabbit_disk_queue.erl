@@ -42,7 +42,6 @@
 
 -export([stop/0, stop_and_obliterate/0, to_disk_only_mode/0, to_ram_disk_mode/0]).
 
--include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
 -define(WRITE_OK_SIZE_BITS,       8).
