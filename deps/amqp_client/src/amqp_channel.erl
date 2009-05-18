@@ -389,14 +389,6 @@ handle_info({'EXIT', _Pid, Reason},
     io:format("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
     {stop, normal, State};
 
-%% This is for a race condition between a close.close_ok and a subsequent
-%% channel.open
-handle_info( {channel_close, Peer}, State ) ->
-    NewState = channel_cleanup(State),
-    %% TODO Do we still need this??
-    Peer ! handshake,
-    {noreply, NewState};
-
 %% This is for a channel exception that can't be otherwise handled
 handle_info( {channel_exception, Channel, Reason}, State) ->
     io:format("Channel ~p is shutting down due to: ~p~n",[Channel, Reason]),
