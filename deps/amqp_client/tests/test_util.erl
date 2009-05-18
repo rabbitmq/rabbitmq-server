@@ -234,14 +234,14 @@ basic_recover_test(Connection) ->
     lib_amqp:teardown(Connection, Channel).
 
 basic_qos_test(Con) ->
-    [With, Without] = [basic_qos_test(Con, Prefetch) || Prefetch <- [0,1]],
-    %% in a perfect run the ratio would be close to 0.5, but we give a
-    %% bit of leeway.
-    ?assert(Without / With < 0.80).
+    [NoQos, Qos] = [basic_qos_test(Con, Prefetch) || Prefetch <- [0,1]],
+    ExpectedRatio = (1+1) / (1+50/5),
+    FudgeFactor = 2, %% account for timing variations
+    ?assert(Qos / NoQos < ExpectedRatio * FudgeFactor).
 
 basic_qos_test(Connection, Prefetch) ->
-    Messages = 400,
-    Workers = [1, 10],
+    Messages = 100,
+    Workers = [5, 50],
     Parent = self(),
     Chan = lib_amqp:start_channel(Connection),
     Q = lib_amqp:declare_queue(Chan),
@@ -249,8 +249,10 @@ basic_qos_test(Connection, Prefetch) ->
                     Channel = lib_amqp:start_channel(Connection),
                     lib_amqp:set_prefetch_count(Channel, Prefetch),
                     lib_amqp:subscribe(Channel, Q, self(), false),
+                    Parent ! finished,
                     sleeping_consumer(Channel, Sleep, Parent)
                   end) || Sleep <- Workers],
+    latch_loop(length(Kids)),
     spawn(fun() -> producer_loop(lib_amqp:start_channel(Connection),
                                  Q, Messages) end),
     {Res, ok} = timer:tc(erlang, apply, [fun latch_loop/1, [Messages]]),
