@@ -31,7 +31,7 @@
 
 -module(rabbit_mnesia).
 
--export([ensure_mnesia_dir/0, status/0, init/0, is_db_empty/0,
+-export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, reset/0, force_reset/0]).
 
 -export([table_names/0]).
@@ -47,6 +47,7 @@
 -ifdef(use_specs).
 
 -spec(status/0 :: () -> [{'nodes' | 'running_nodes', [erlang_node()]}]).
+-spec(dir/0 :: () -> string()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(is_db_empty/0 :: () -> bool()).
@@ -131,8 +132,10 @@ table_definitions() ->
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
 
+dir() -> mnesia:system_info(directory).
+    
 ensure_mnesia_dir() ->
-    MnesiaDir = mnesia:system_info(directory) ++ "/",
+    MnesiaDir = dir() ++ "/",
     case filelib:ensure_dir(MnesiaDir) of
         {error, Reason} ->
             throw({error, {cannot_create_mnesia_dir, MnesiaDir, Reason}});
@@ -168,7 +171,7 @@ check_schema_integrity() ->
 %% it doesn't.
 
 cluster_nodes_config_filename() ->
-    mnesia:system_info(directory) ++ "/cluster_nodes.config".
+    dir() ++ "/cluster_nodes.config".
 
 create_cluster_nodes_config(ClusterNodes) ->
     FileName = cluster_nodes_config_filename(),
@@ -284,7 +287,7 @@ create_schema() ->
 
 move_db() ->
     mnesia:stop(),
-    MnesiaDir = filename:dirname(mnesia:system_info(directory) ++ "/"),
+    MnesiaDir = filename:dirname(dir() ++ "/"),
     {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
     BackupDir = lists:flatten(
                   io_lib:format("~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
@@ -401,7 +404,7 @@ reset(Force) ->
     ok = delete_cluster_nodes_config(),
     %% remove persistet messages and any other garbage we find
     lists:foreach(fun file:delete/1,
-                  filelib:wildcard(mnesia:system_info(directory) ++ "/*")),
+                  filelib:wildcard(dir() ++ "/*")),
     ok.
 
 leave_cluster([], _) -> ok;

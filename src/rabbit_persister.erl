@@ -254,7 +254,7 @@ log(State = #pstate{deadline = ExistingDeadline, pending_logs = Logs},
                  pending_logs = [Message | Logs]}.
 
 base_filename() ->
-    mnesia:system_info(directory) ++ "/rabbit_persister.LOG".
+    rabbit_mnesia:dir() ++ "/rabbit_persister.LOG".
 
 take_snapshot(LogHandle, OldFileName, Snapshot) ->
     ok = disk_log:sync(LogHandle),
