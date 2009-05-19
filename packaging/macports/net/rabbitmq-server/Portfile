@@ -2,7 +2,7 @@
 
 PortSystem 1.0
 name		rabbitmq-server
-version		1.3.0
+version		1.5.5
 revision	0
 categories	net 
 maintainers	tonyg@rabbitmq.com
