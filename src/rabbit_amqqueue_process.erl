@@ -203,15 +203,15 @@ attempt_delivery(none, Message, State) ->
         {offered, false, State1} ->
             {true, State1};
         {offered, true, State1} ->
-            persist_message(none, qname(State), Message),
-            persist_delivery(qname(State), Message, false),
+            persist_message(none, qname(State), Message), %% DQ HERE
+            persist_delivery(qname(State), Message, false), %% DQ HERE
             {true, State1};
         {not_offered, State1} ->
             {false, State1}
     end;
 attempt_delivery(Txn, Message, State) ->
-    persist_message(Txn, qname(State), Message),
-    record_pending_message(Txn, Message),
+    persist_message(Txn, qname(State), Message), %% DQ tx_commit and store msgid in txn map
+    record_pending_message(Txn, Message), %% DQ seems to be done here!
     {true, State}.
 
 deliver_or_enqueue(Txn, Message, State) ->
@@ -219,8 +219,8 @@ deliver_or_enqueue(Txn, Message, State) ->
         {true, NewState} ->
             {true, NewState};
         {false, NewState} ->
-            persist_message(Txn, qname(State), Message),
-            NewMB = queue:in({Message, false}, NewState#q.message_buffer),
+            persist_message(Txn, qname(State), Message), %% DQ Txn must be false here
+            NewMB = queue:in({Message, false}, NewState#q.message_buffer), %% DQ magic here
             {false, NewState#q{message_buffer = NewMB}}
     end.
 
@@ -302,7 +302,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
             case check_auto_delete(
                    deliver_or_enqueue_n(
                      [{Message, true} ||
-                         {_Messsage_id, Message} <- dict:to_list(UAM)],
+                         {_Messsage_id, Message} <- dict:to_list(UAM)], %% DQ alter all this stuff?
                      State#q{
                        exclusive_consumer = case Holder of
                                                 {ChPid, _} -> none;
@@ -343,10 +343,10 @@ run_poke_burst(MessageBuffer, State) ->
         {{value, {Message, Delivered}}, BufferTail} ->
             case deliver_immediately(Message, Delivered, State) of
                 {offered, true, NewState} ->
-                    persist_delivery(qname(State), Message, Delivered),
+                    persist_delivery(qname(State), Message, Delivered), %% DQ ack needed
                     run_poke_burst(BufferTail, NewState);
                 {offered, false, NewState} ->
-                    persist_auto_ack(qname(State), Message),
+                    persist_auto_ack(qname(State), Message), %% DQ record? We don't persist acks anyway now...
                     run_poke_burst(BufferTail, NewState);
                 {not_offered, NewState} ->
                     NewState#q{message_buffer = MessageBuffer}
@@ -371,7 +371,7 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
-persist_message(_Txn, _QName, #basic_message{persistent_key = none}) ->
+persist_message(_Txn, _QName, #basic_message{is_persistent = false}) -> %% DQ
     ok;
 persist_message(Txn, QName, Message) ->
     M = Message#basic_message{
@@ -379,29 +379,29 @@ persist_message(Txn, QName, Message) ->
           content = rabbit_binary_parser:clear_decoded_content(
                       Message#basic_message.content)},
     persist_work(Txn, QName,
-                 [{publish, M, {QName, M#basic_message.persistent_key}}]).
+                 [{publish, M, {QName, M#basic_message.guid}}]).
 
-persist_delivery(_QName, _Message,
+persist_delivery(_QName, _Message, %% DQ
                  true) ->
     ok;
-persist_delivery(_QName, #basic_message{persistent_key = none},
+persist_delivery(_QName, #basic_message{is_persistent = false}, %% DQ
                  _Delivered) ->
     ok;
-persist_delivery(QName, #basic_message{persistent_key = PKey},
+persist_delivery(QName, #basic_message{guid = MsgId}, %% DQ
                  _Delivered) ->
-    persist_work(none, QName, [{deliver, {QName, PKey}}]).
+    persist_work(none, QName, [{deliver, {QName, MsgId}}]).
 
-persist_acks(Txn, QName, Messages) ->
+persist_acks(Txn, QName, Messages) ->  %% DQ 
     persist_work(Txn, QName,
-                 [{ack, {QName, PKey}} ||
-                     #basic_message{persistent_key = PKey} <- Messages,
-                     PKey =/= none]).
+                 [{ack, {QName, MsgId}} ||
+                     #basic_message{guid = MsgId, is_persistent = P} <- Messages,
+                     P]).
 
-persist_auto_ack(_QName, #basic_message{persistent_key = none}) ->
+persist_auto_ack(_QName, #basic_message{is_persistent = false}) ->
     ok;
-persist_auto_ack(QName, #basic_message{persistent_key = PKey}) ->
+persist_auto_ack(QName, #basic_message{is_persistent = true, guid = MsgId}) ->
     %% auto-acks are always non-transactional
-    rabbit_persister:dirty_work([{ack, {QName, PKey}}]).
+    rabbit_persister:dirty_work([{ack, {QName, MsgId}}]).
 
 persist_work(_Txn,_QName, []) ->
     ok;

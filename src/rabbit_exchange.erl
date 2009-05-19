@@ -204,7 +204,9 @@ simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
     Message = #basic_message{exchange_name = ExchangeName,
                              routing_key = RoutingKeyBin,
                              content = Content,
-                             persistent_key = none},
+			     is_persistent = false,
+			     guid = rabbit_guid:guid()
+			    },
     simple_publish(Mandatory, Immediate, Message).
 
 %% Usable by Erlang code that wants to publish messages.
