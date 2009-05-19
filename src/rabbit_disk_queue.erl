@@ -38,7 +38,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([publish/3, deliver/1, phantom_deliver/1, ack/2, tx_publish/2, tx_commit/3, tx_cancel/1, requeue/2]).
+-export([publish/3, deliver/1, phantom_deliver/1, ack/2, tx_publish/2,
+	 tx_commit/3, tx_cancel/1, requeue/2, purge/1]).
 
 -export([stop/0, stop_and_obliterate/0, to_disk_only_mode/0, to_ram_disk_mode/0]).
 
@@ -233,6 +234,7 @@
 -spec(tx_commit/3 :: (queue_name(), [msg_id()], [seq_id()]) -> 'ok').
 -spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [seq_id()]) -> 'ok').
+-spec(purge/1 :: (queue_name()) -> non_neg_integer()).
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
 -spec(to_ram_disk_mode/0 :: () -> 'ok').
@@ -269,6 +271,9 @@ tx_cancel(MsgIds) when is_list(MsgIds) ->
 
 requeue(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server:cast(?SERVER, {requeue, Q, MsgSeqIds}).
+
+purge(Q) ->
+    gen_server:call(?SERVER, {purge, Q}).
 
 stop() ->
     gen_server:call(?SERVER, stop, infinity).
@@ -356,6 +361,9 @@ handle_call({phantom_deliver, Q}, _From, State) ->
 handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, _From, State) ->
     {ok, State1} = internal_tx_commit(Q, PubMsgIds, AckSeqIds, State),
     {reply, ok, State1};
+handle_call({purge, Q}, _From, State) ->
+    {ok, Count, State1} = internal_purge(Q, State),
+    {reply, Count, State1};
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}; %% gen_server now calls terminate
 handle_call(stop_vaporise, _From, State) ->
@@ -544,6 +552,7 @@ internal_ack(Q, MsgSeqIds, State) ->
 %% called from tx_cancel with MnesiaDelete = false
 %% called from internal_tx_cancel with MnesiaDelete = txn
 %% called from ack with MnesiaDelete = true
+%% called from purge with MnesiaDelete = txn
 remove_messages(Q, MsgSeqIds, MnesiaDelete,
 		State = #dqstate { file_summary = FileSummary,
 				   current_file_name = CurName
@@ -625,7 +634,7 @@ internal_tx_commit(Q, PubMsgIds, AckSeqIds,
 	    [] -> {0,0};
 	    [{Q, ReadSeqId2, WriteSeqId2}] -> {ReadSeqId2, WriteSeqId2}
 	end,
-    {atomic, {Sync, WriteSeqId}} =
+    {atomic, {Sync, WriteSeqId, State2}} =
 	mnesia:transaction(
 	  fun() -> ok = mnesia:write_lock_table(rabbit_disk_queue),
 		   %% must deal with publishes first, if we didn't
@@ -646,14 +655,14 @@ internal_tx_commit(Q, PubMsgIds, AckSeqIds,
 						   write),
 				 {Acc or (CurName =:= File), NextWriteSeqId + 1}
 			 end, {false, InitWriteSeqId}, PubMsgIds),
-		   remove_messages(Q, AckSeqIds, txn, State),
-		   {Sync2, WriteSeqId3}
+		   {ok, State3} = remove_messages(Q, AckSeqIds, txn, State),
+		   {Sync2, WriteSeqId3, State3}
 	  end),
     true = ets:insert(Sequences, {Q, ReadSeqId, WriteSeqId}),
     if Sync -> ok = file:sync(CurHdl);
        true -> ok
     end,
-    {ok, State}.
+    {ok, State2}.
 
 internal_publish(Q, MsgId, MsgBody, State) ->
     {ok, State1 = #dqstate { sequences = Sequences }} =
@@ -721,6 +730,26 @@ internal_requeue(Q, MsgSeqIds, State = #dqstate { sequences = Sequences }) ->
 	  end),
     true = ets:insert(Sequences, {Q, ReadSeqId, WriteSeqId2}),
     {ok, State}.
+
+internal_purge(Q, State = #dqstate { sequences = Sequences }) ->
+    case ets:lookup(Sequences, Q) of
+	[] -> {ok, 0, State};
+	[{Q, ReadSeqId, WriteSeqId}] ->
+	    {atomic, {ok, State2}} =
+		mnesia:transaction(
+		  fun() ->
+			  ok = mnesia:write_lock_table(rabbit_disk_queue),
+			  MsgSeqIds = lists:foldl(
+			    fun (SeqId, Acc) ->
+				    [#dq_msg_loc { is_delivered = false, msg_id = MsgId }] =
+					mnesia:read(rabbit_disk_queue, {Q, SeqId}, write),
+				    [{MsgId, SeqId} | Acc]
+			    end, [], lists:seq(ReadSeqId, WriteSeqId - 1)),
+			  remove_messages(Q, MsgSeqIds, txn, State)
+		  end),
+	    true = ets:insert(Sequences, {Q, WriteSeqId, WriteSeqId}),
+	    {ok, WriteSeqId - ReadSeqId, State2}
+    end.
 
 %% ---- ROLLING OVER THE APPEND FILE ----
 

@@ -59,7 +59,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([publish/3, deliver/1, phantom_deliver/1, ack/2, tx_publish/2, tx_commit/3, tx_cancel/1, requeue/2]).
+-export([publish/3, deliver/1, phantom_deliver/1, ack/2, tx_publish/2,
+	 tx_commit/3, tx_cancel/1, requeue/2, purge/1]).
 
 -export([stop/0, stop_and_obliterate/0]).
 
@@ -86,6 +87,7 @@
 -spec(tx_commit/3 :: (queue_name(), [msg_id()], [seq_id()]) -> 'ok').
 -spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [seq_id()]) -> 'ok').
+-spec(purge/1 :: (queue_name()) -> non_neg_integer()).
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
 
@@ -121,6 +123,9 @@ tx_cancel(MsgIds) when is_list(MsgIds) ->
 requeue(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server:cast(?SERVER, {requeue, Q, MsgSeqIds}).
 
+purge(Q) ->
+    gen_server:call(?SERVER, {purge, Q}).
+
 stop() ->
     gen_server:call(?SERVER, stop, infinity).
 
@@ -148,6 +153,9 @@ handle_call({phantom_deliver, Q}, _From, State) ->
 handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, _From, State) ->
     {ok, State1} = internal_tx_commit(Q, PubMsgIds, AckSeqIds, State),
     {reply, ok, State1};
+handle_call({purge, Q}, _From, State) ->
+    {ok, Count, State1} = internal_purge(Q, State),
+    {reply, Count, State1};
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}; %% gen_server now calls terminate
 handle_call(stop_vaporise, _From, State = #dbstate { db_conn = Conn }) ->
@@ -424,3 +432,23 @@ shuffle_up(Conn, QStr, BaseSeqId, SeqId, Gap) ->
 		0
 	end,
     shuffle_up(Conn, QStr, BaseSeqId, SeqId - 1, Gap + GapInc).
+
+internal_purge(Q, State = #dbstate { db_conn = Conn }) ->
+    QStr = binary_to_escaped_string(term_to_binary(Q)),
+    case odbc:sql_query(Conn, "select next_read from sequence where queue = " ++ QStr) of
+	{selected, _, []} ->
+	    odbc:commit(Conn, commit),
+	    {ok, 0, State};
+	{selected, _, [{ReadSeqId}]} ->
+	    odbc:sql_query(Conn, "update sequence set next_read = next_write where queue = " ++ QStr),
+	    {selected, _, MsgSeqIds} =
+		odbc:sql_query(Conn, "select msg_id, seq_id from ledger where queue = " ++
+			       QStr ++ " and seq_id >= " ++ ReadSeqId),
+	    MsgSeqIds2 = lists:map(
+			   fun ({MsgIdStr, SeqIdStr}) ->
+				   { binary_to_term(hex_string_to_binary(MsgIdStr)),
+				     list_to_integer(SeqIdStr) }
+			   end, MsgSeqIds),
+	    {ok, State2} = remove_messages(Q, MsgSeqIds2, true, State),
+	    {ok, length(MsgSeqIds2), State2}
+    end.

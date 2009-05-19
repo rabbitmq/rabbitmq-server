@@ -695,6 +695,7 @@ test_disk_queue() ->
     passed = rdq_stress_gc(10000),
     passed = rdq_test_startup_with_queue_gaps(),
     passed = rdq_test_redeliver(),
+    passed = rdq_test_purge(),
     passed.
 
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
@@ -862,6 +863,28 @@ rdq_test_redeliver() ->
     empty = rabbit_disk_queue:deliver(q),
     rdq_stop(),
     passed.
+
+rdq_test_purge() ->
+    rdq_virgin(),
+    rdq_start(),
+    Msg = <<0:(8*256)>>,
+    Total = 1000,
+    Half = round(Total/2),
+    All = lists:seq(1,Total),
+    [rabbit_disk_queue:tx_publish(N, Msg) || N <- All],
+    rabbit_disk_queue:tx_commit(q, All, []),
+    io:format("Publish done~n", []),
+    %% deliver first half
+    Seqs = [begin {N, Msg, 256, false, SeqId} = rabbit_disk_queue:deliver(q), SeqId end
+	    || N <- lists:seq(1,Half)],
+    io:format("Deliver first half done~n", []),
+    rabbit_disk_queue:purge(q),
+    io:format("Purge done~n", []),
+    rabbit_disk_queue:tx_commit(q, [], Seqs),
+    io:format("Ack first half done~n", []),
+    empty = rabbit_disk_queue:deliver(q),
+    rdq_stop(),
+    passed.    
 
 rdq_time_commands(Funcs) ->
     lists:foreach(fun (F) -> F() end, Funcs).
