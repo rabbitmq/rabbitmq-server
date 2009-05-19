@@ -36,7 +36,7 @@
 
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
          list/1, info/1, info/2, info_all/1, info_all/2,
-         simple_publish/6, simple_publish/3,
+         publish/5, simple_publish/6, simple_publish/3,
          route/3]).
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
@@ -58,7 +58,7 @@
 -ifdef(use_specs).
 
 -type(publish_res() :: {'ok', [pid()]} |
-      not_found() | {'error', 'unroutable' | 'not_delivered'}).
+      {'error', 'not_found' | 'unroutable' | 'not_delivered', [pid()]}).
 -type(bind_res() :: 'ok' | {'error',
                             'queue_not_found' |
                             'exchange_not_found' |
@@ -75,6 +75,8 @@
 -spec(info/2 :: (exchange(), [info_key()]) -> [info()]).
 -spec(info_all/1 :: (vhost()) -> [[info()]]).
 -spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
+-spec(publish/5 :: (exchange(), bool(), bool(), maybe(txn()), message()) ->
+             publish_res()).
 -spec(simple_publish/6 ::
       (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
              publish_res()).
@@ -196,6 +198,36 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
+publish(X, Mandatory, Immediate, Txn,
+        Message = #basic_message{routing_key = RK, content = C}) ->
+    case rabbit_router:deliver(route(X, RK, C),
+                               Mandatory, Immediate, Txn, Message) of
+        R = {ok, [_|_]} ->
+            R;
+        {ok, []} ->
+            {ok, _} = handle_unrouted(X, Txn, Message);
+        {error, Error} ->
+            {ok, DeliveredQPids} = handle_unrouted(X, Txn, Message),
+            {error, Error, DeliveredQPids}
+    end.
+
+handle_unrouted(#exchange{name = XName, arguments = Args}, Txn, Message) ->
+    case lists:keysearch(<<"ume">>, 1, Args) of
+        {value, {_, longstr, UmeNameBin}} ->
+            UmeName = rabbit_misc:r(XName, exchange, UmeNameBin),
+            case lookup(UmeName) of
+                {ok, Ume} ->
+                    publish(Ume, false, false, Txn, Message);
+                {error, not_found} ->
+                    rabbit_log:warning(
+                      "unroutable message exchange for ~s does not exist: ~s",
+                      [rabbit_misc:rs(XName), rabbit_misc:rs(UmeName)]),
+                    {ok, []}
+            end;
+        false ->
+            {ok, []}
+    end.
+
 %% Usable by Erlang code that wants to publish messages.
 simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
                ContentTypeBin, BodyBin) ->
@@ -212,15 +244,10 @@ simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
 
 %% Usable by Erlang code that wants to publish messages.
 simple_publish(Mandatory, Immediate,
-               Message = #basic_message{exchange_name = ExchangeName,
-                                        routing_key = RoutingKey,
-					content = Content}) ->
+               Message = #basic_message{exchange_name = ExchangeName}) ->
     case lookup(ExchangeName) of
-        {ok, Exchange} ->
-            QPids = route(Exchange, RoutingKey, Content),
-            rabbit_router:deliver(QPids, Mandatory, Immediate,
-                                  none, Message);
-        {error, Error} -> {error, Error}
+        {ok, X}        -> publish(X, Mandatory, Immediate, none, Message);
+        {error, Error} -> {error, Error, []}
     end.
 
 sort_arguments(Arguments) ->

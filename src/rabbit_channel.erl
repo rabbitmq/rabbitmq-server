@@ -319,12 +319,25 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                         true  -> rabbit_guid:guid();
                         false -> none
                     end,
-    Handled = publish(Exchange, Mandatory, Immediate, TxnKey,
-                      #basic_message{exchange_name  = ExchangeName,
-                                     routing_key    = RoutingKey,
-                                     content        = DecodedContent,
-                                     persistent_key = PersistentKey},
-                      WriterPid),
+    Message = #basic_message{exchange_name  = ExchangeName,
+                             routing_key    = RoutingKey,
+                             content        = DecodedContent,
+                             persistent_key = PersistentKey},
+    Handled =
+        case rabbit_exchange:publish(Exchange, Mandatory, Immediate, TxnKey,
+                                     Message) of
+            {ok, DeliveredQPids} -> DeliveredQPids;
+            {error, unroutable, DeliveredQPids} ->
+                %% FIXME: 312 should be replaced by the ?NO_ROUTE
+                %% definition, when we move to >=0-9
+                ok = basic_return(Message, WriterPid, 312, <<"unroutable">>),
+                DeliveredQPids;
+            {error, not_delivered, DeliveredQPids} ->
+                %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
+                %% definition, when we move to >=0-9
+                ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>),
+                DeliveredQPids
+        end,
     {noreply, case TxnKey of
                   none -> State;
                   _    -> add_tx_participants(Handled, State)
@@ -771,48 +784,6 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
               not_allowed, "durability settings of ~s incompatible with ~s",
               [rabbit_misc:rs(QueueName), rabbit_misc:rs(ExchangeName)]);
         ok -> return_ok(State, NoWait, ReturnMethod)
-    end.
-
-publish(X, Mandatory, Immediate, Txn,
-        Message = #basic_message{routing_key = RK, content = C}, WriterPid) ->
-    case deliver(rabbit_exchange:route(X, RK, C), Mandatory, Immediate,
-                 Txn, Message, WriterPid) of
-        [] ->
-            case lists:keysearch(<<"ume">>, 1, X#exchange.arguments) of
-                {value, {_, longstr, UmeNameBin}} ->
-                    XName = X#exchange.name,
-                    UmeName = rabbit_misc:r(XName, exchange, UmeNameBin),
-                    case rabbit_exchange:lookup(UmeName) of
-                        {ok, Ume} ->
-                            publish(Ume, false, false, Txn, Message, WriterPid);
-                        {error, not_found} ->
-                            rabbit_log:warning(
-                              "unroutable message exchange for ~s "
-                              "does not exist: ~s",
-                              [rabbit_misc:rs(XName),
-                               rabbit_misc:rs(UmeName)]),
-                            []
-                    end;
-                false ->
-                    []
-            end;
-        Handled ->
-            Handled
-    end.
-
-deliver(QPids, Mandatory, Immediate, Txn, Message, WriterPid) ->
-    case rabbit_router:deliver(QPids, Mandatory, Immediate, Txn, Message) of
-        {ok, DeliveredQPids}   -> DeliveredQPids;
-        {error, unroutable}    ->
-            %% FIXME: 312 should be replaced by the ?NO_ROUTE
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 312, <<"unroutable">>),
-            [];
-        {error, not_delivered} ->
-            %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>),
-            []
     end.
 
 basic_return(#basic_message{exchange_name = ExchangeName,
