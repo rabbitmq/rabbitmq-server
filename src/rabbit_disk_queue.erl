@@ -333,8 +333,17 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
 			     current_offset = Offset } } =
 	load_from_disk(State),
     Path = form_filename(CurrentName),
+    Exists = case file:read_file_info(Path) of
+		 {error,enoent} -> false;
+		 {ok, _} -> true
+	     end,
     %% read is only needed so that we can seek
     {ok, FileHdl} = file:open(Path, [read, write, raw, binary, delayed_write]),
+    ok = if Exists -> ok;
+	    true -> %% new file, so preallocate
+		 {ok, FileSizeLimit} = file:position(FileHdl, {bof, FileSizeLimit}),
+		 file:truncate(FileHdl)
+	 end,
     {ok, Offset} = file:position(FileHdl, {bof, Offset}),
     {ok, State1 #dqstate { current_file_handle = FileHdl }}.
 
@@ -729,13 +738,17 @@ maybe_roll_to_new_file(Offset,
     NextName = integer_to_list(NextNum) ++ ?FILE_EXTENSION,
     {ok, NextHdl} = file:open(form_filename(NextName),
 			      [write, raw, binary, delayed_write]),
+    {ok, FileSizeLimit} = file:position(NextHdl, {bof, FileSizeLimit}),
+    ok = file:truncate(NextHdl),
+    {ok, 0} = file:position(NextHdl, {bof, 0}),
     true = ets:update_element(FileSummary, CurName, {5, NextName}), %% 5 is Right
     true = ets:insert_new(FileSummary, {NextName, 0, 0, CurName, undefined}),
-    {ok, State #dqstate { current_file_name = NextName,
-			  current_file_handle = NextHdl,
-			  current_file_num = NextNum,
-			  current_offset = 0
-			}};
+    State1 = State #dqstate { current_file_name = NextName,
+			      current_file_handle = NextHdl,
+			      current_file_num = NextNum,
+			      current_offset = 0
+			     },
+    {ok, compact(sets:from_list([CurName]), State1)};
 maybe_roll_to_new_file(_, State) ->
     {ok, State}.
 
