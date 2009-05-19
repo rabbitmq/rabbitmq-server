@@ -90,7 +90,7 @@ can_send(undefined, _QPid) ->
 can_send(LimiterPid, QPid) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
-      fun () -> gen_server2:call(LimiterPid, {can_send, QPid}) end).
+      fun () -> gen_server2:call(LimiterPid, {can_send, QPid}, infinity) end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer

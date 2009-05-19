@@ -8,6 +8,8 @@
 
 ### BEGIN INIT INFO
 # Provides:          rabbitmq-server
+# Default-Start:
+# Default-Stop:
 # Required-Start:    $remote_fs $network
 # Required-Stop:     $remote_fs $network
 # Description:       RabbitMQ broker
@@ -33,7 +35,6 @@ fi
 
 RETVAL=0
 set -e
-cd /
 
 start_rabbitmq () {
     set +e

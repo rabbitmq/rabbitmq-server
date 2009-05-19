@@ -30,10 +30,15 @@
 ##   Contributor(s): ______________________________________.
 ##
 
+[ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
+
+[ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
+
 exec erl \
     -pa "`dirname $0`/../ebin" \
     -noinput \
     -hidden \
+    ${RABBITMQ_CTL_ERL_ARGS} \
     -sname rabbitmqctl$$ \
     -s rabbit_control \
     -extra "$@"

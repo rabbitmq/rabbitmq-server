@@ -161,10 +161,10 @@ system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
 info(Pid) ->
-    gen_server:call(Pid, info).
+    gen_server:call(Pid, info, infinity).
 
 info(Pid, Items) ->
-    case gen_server:call(Pid, {info, Items}) of
+    case gen_server:call(Pid, {info, Items}, infinity) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
