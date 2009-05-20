@@ -36,7 +36,7 @@
 
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
          list/1, info/1, info/2, info_all/1, info_all/2,
-         publish/5, simple_publish/6, simple_publish/3, route/3]).
+         publish/5]).
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
@@ -74,12 +74,6 @@
 -spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
 -spec(publish/5 :: (exchange(), bool(), bool(), maybe(txn()), message()) ->
              {routing_result(), [pid()]}).
--spec(simple_publish/6 ::
-      (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
-             {ok, routing_result()} | not_found()).
--spec(simple_publish/3 :: (bool(), bool(), message()) ->
-             {ok, routing_result()} | not_found()).
--spec(route/3 :: (exchange(), routing_key(), decoded_content()) -> [pid()]).
 -spec(add_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'durability_settings_incompatible'}).
@@ -196,59 +190,35 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
+sort_arguments(Arguments) ->
+    lists:keysort(1, Arguments).
+
 publish(X, Mandatory, Immediate, Txn,
         Message = #basic_message{routing_key = RK, content = C}) ->
     case rabbit_router:deliver(route(X, RK, C),
                                Mandatory, Immediate, Txn, Message) of
-        {RoutingRes, []} ->
-            {routed, DeliveredQPids} = handle_unrouted(X, Txn, Message),
-            {RoutingRes, DeliveredQPids};
-        Other ->
-            Other
+        {RoutingRes, []} -> DeliveredQPids = handle_unrouted(X, Txn, Message),
+                            {RoutingRes, DeliveredQPids};
+        Other            -> Other
     end.
 
 handle_unrouted(#exchange{name = XName, arguments = Args}, Txn, Message) ->
     case rabbit_misc:r_arg(XName, exchange, Args, <<"ume">>) of
         undefined ->
-            {routed, []};
+            [];
         UmeName ->
             case lookup(UmeName) of
                 {ok, Ume} ->
-                    publish(Ume, false, false, Txn, Message);
+                    {routed, DeliveredQPids} =
+                        publish(Ume, false, false, Txn, Message),
+                    DeliveredQPids;
                 {error, not_found} ->
                     rabbit_log:warning(
                       "unroutable message exchange for ~s does not exist: ~s",
                       [rabbit_misc:rs(XName), rabbit_misc:rs(UmeName)]),
-                    {routed, []}
+                    []
             end
     end.
-
-%% Usable by Erlang code that wants to publish messages.
-simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
-               ContentTypeBin, BodyBin) ->
-    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
-    Content = #content{class_id = ClassId,
-                       properties = #'P_basic'{content_type = ContentTypeBin},
-                       properties_bin = none,
-                       payload_fragments_rev = [BodyBin]},
-    Message = #basic_message{exchange_name = ExchangeName,
-                             routing_key = RoutingKeyBin,
-                             content = Content,
-                             persistent_key = none},
-    simple_publish(Mandatory, Immediate, Message).
-
-%% Usable by Erlang code that wants to publish messages.
-simple_publish(Mandatory, Immediate,
-               Message = #basic_message{exchange_name = ExchangeName}) ->
-    case lookup(ExchangeName) of
-        {ok, X} -> {RoutingRes, _} = publish(X, Mandatory, Immediate, none,
-                                             Message),
-                   {ok, RoutingRes};
-        Other   -> Other
-    end.
-
-sort_arguments(Arguments) ->
-    lists:keysort(1, Arguments).
 
 %% return the list of qpids to which a message with a given routing
 %% key, sent to a particular exchange, should be delivered.
