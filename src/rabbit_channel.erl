@@ -323,24 +323,24 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                              routing_key    = RoutingKey,
                              content        = DecodedContent,
                              persistent_key = PersistentKey},
-    Handled =
-        case rabbit_exchange:publish(Exchange, Mandatory, Immediate, TxnKey,
-                                     Message) of
-            {ok, DeliveredQPids} -> DeliveredQPids;
-            {error, unroutable, DeliveredQPids} ->
-                %% FIXME: 312 should be replaced by the ?NO_ROUTE
-                %% definition, when we move to >=0-9
-                ok = basic_return(Message, WriterPid, 312, <<"unroutable">>),
-                DeliveredQPids;
-            {error, not_delivered, DeliveredQPids} ->
-                %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
-                %% definition, when we move to >=0-9
-                ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>),
-                DeliveredQPids
-        end,
+    {RoutingRes, DeliveredQPids} =
+        rabbit_exchange:publish(Exchange, Mandatory, Immediate, TxnKey,
+                                Message),
+    case RoutingRes of
+        routed ->
+            ok;
+        unroutable ->
+            %% FIXME: 312 should be replaced by the ?NO_ROUTE
+            %% definition, when we move to >=0-9
+            ok = basic_return(Message, WriterPid, 312, <<"unroutable">>);
+        not_delivered ->
+            %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
+            %% definition, when we move to >=0-9
+            ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>)
+    end,
     {noreply, case TxnKey of
                   none -> State;
-                  _    -> add_tx_participants(Handled, State)
+                  _    -> add_tx_participants(DeliveredQPids, State)
               end};
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,

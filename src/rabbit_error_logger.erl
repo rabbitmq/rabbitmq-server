@@ -74,7 +74,7 @@ publish(_Other, _Format, _Data, _State) ->
     ok.
 
 publish1(RoutingKey, Format, Data, LogExch) ->
-    {ok, _QueueNames} = rabbit_exchange:simple_publish(
+    {ok, _RoutingRes} = rabbit_exchange:simple_publish(
                           false, false, LogExch, RoutingKey, <<"text/plain">>,
                           list_to_binary(io_lib:format(Format, Data))),
     ok.

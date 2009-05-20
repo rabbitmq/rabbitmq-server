@@ -36,8 +36,7 @@
 
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
          list/1, info/1, info/2, info_all/1, info_all/2,
-         publish/5, simple_publish/6, simple_publish/3,
-         route/3]).
+         publish/5, simple_publish/6, simple_publish/3, route/3]).
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
@@ -57,8 +56,6 @@
 
 -ifdef(use_specs).
 
--type(publish_res() :: {'ok', [pid()]} |
-      {'error', 'not_found' | 'unroutable' | 'not_delivered', [pid()]}).
 -type(bind_res() :: 'ok' | {'error',
                             'queue_not_found' |
                             'exchange_not_found' |
@@ -76,11 +73,12 @@
 -spec(info_all/1 :: (vhost()) -> [[info()]]).
 -spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
 -spec(publish/5 :: (exchange(), bool(), bool(), maybe(txn()), message()) ->
-             publish_res()).
+             {routing_result(), [pid()]}).
 -spec(simple_publish/6 ::
       (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
-             publish_res()).
--spec(simple_publish/3 :: (bool(), bool(), message()) -> publish_res()).
+             {ok, routing_result()} | not_found()).
+-spec(simple_publish/3 :: (bool(), bool(), message()) ->
+             {ok, routing_result()} | not_found()).
 -spec(route/3 :: (exchange(), routing_key(), decoded_content()) -> [pid()]).
 -spec(add_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
@@ -202,13 +200,11 @@ publish(X, Mandatory, Immediate, Txn,
         Message = #basic_message{routing_key = RK, content = C}) ->
     case rabbit_router:deliver(route(X, RK, C),
                                Mandatory, Immediate, Txn, Message) of
-        R = {ok, [_|_]} ->
-            R;
-        {ok, []} ->
-            {ok, _} = handle_unrouted(X, Txn, Message);
-        {error, Error} ->
-            {ok, DeliveredQPids} = handle_unrouted(X, Txn, Message),
-            {error, Error, DeliveredQPids}
+        {RoutingRes, []} ->
+            {routed, DeliveredQPids} = handle_unrouted(X, Txn, Message),
+            {RoutingRes, DeliveredQPids};
+        Other ->
+            Other
     end.
 
 handle_unrouted(#exchange{name = XName, arguments = Args}, Txn, Message) ->
@@ -222,10 +218,10 @@ handle_unrouted(#exchange{name = XName, arguments = Args}, Txn, Message) ->
                     rabbit_log:warning(
                       "unroutable message exchange for ~s does not exist: ~s",
                       [rabbit_misc:rs(XName), rabbit_misc:rs(UmeName)]),
-                    {ok, []}
+                    {routed, []}
             end;
         false ->
-            {ok, []}
+            {routed, []}
     end.
 
 %% Usable by Erlang code that wants to publish messages.
@@ -246,8 +242,10 @@ simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
 simple_publish(Mandatory, Immediate,
                Message = #basic_message{exchange_name = ExchangeName}) ->
     case lookup(ExchangeName) of
-        {ok, X}        -> publish(X, Mandatory, Immediate, none, Message);
-        {error, Error} -> {error, Error, []}
+        {ok, X} -> {RoutingRes, _} = publish(X, Mandatory, Immediate, none,
+                                             Message),
+                   {ok, RoutingRes};
+        Other   -> Other
     end.
 
 sort_arguments(Arguments) ->
