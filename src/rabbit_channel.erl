@@ -570,6 +570,12 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
                 check_name('exchange', ExchangeNameBin),
+                case rabbit_misc:r_arg(VHostPath, exchange, Args, <<"ume">>) of
+                    undefined -> ok;
+                    UmeName   -> check_read_permitted(ExchangeName, State),
+                                 check_write_permitted(UmeName, State),
+                                 ok
+                end,
                 rabbit_exchange:declare(ExchangeName,
                                         CheckedType,
                                         Durable,

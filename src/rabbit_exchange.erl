@@ -208,9 +208,10 @@ publish(X, Mandatory, Immediate, Txn,
     end.
 
 handle_unrouted(#exchange{name = XName, arguments = Args}, Txn, Message) ->
-    case lists:keysearch(<<"ume">>, 1, Args) of
-        {value, {_, longstr, UmeNameBin}} ->
-            UmeName = rabbit_misc:r(XName, exchange, UmeNameBin),
+    case rabbit_misc:r_arg(XName, exchange, Args, <<"ume">>) of
+        undefined ->
+            {routed, []};
+        UmeName ->
             case lookup(UmeName) of
                 {ok, Ume} ->
                     publish(Ume, false, false, Txn, Message);
@@ -219,9 +220,7 @@ handle_unrouted(#exchange{name = XName, arguments = Args}, Txn, Message) ->
                       "unroutable message exchange for ~s does not exist: ~s",
                       [rabbit_misc:rs(XName), rabbit_misc:rs(UmeName)]),
                     {routed, []}
-            end;
-        false ->
-            {routed, []}
+            end
     end.
 
 %% Usable by Erlang code that wants to publish messages.
