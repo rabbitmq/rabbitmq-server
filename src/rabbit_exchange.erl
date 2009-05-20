@@ -190,34 +190,29 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-sort_arguments(Arguments) ->
-    lists:keysort(1, Arguments).
-
 publish(X, Mandatory, Immediate, Txn,
         Message = #basic_message{routing_key = RK, content = C}) ->
     case rabbit_router:deliver(route(X, RK, C),
                                Mandatory, Immediate, Txn, Message) of
-        {RoutingRes, []} -> DeliveredQPids = handle_unrouted(X, Txn, Message),
-                            {RoutingRes, DeliveredQPids};
-        Other            -> Other
-    end.
-
-handle_unrouted(#exchange{name = XName, arguments = Args}, Txn, Message) ->
-    case rabbit_misc:r_arg(XName, exchange, Args, <<"ume">>) of
-        undefined ->
-            [];
-        UmeName ->
-            case lookup(UmeName) of
-                {ok, Ume} ->
-                    {routed, DeliveredQPids} =
-                        publish(Ume, false, false, Txn, Message),
-                    DeliveredQPids;
-                {error, not_found} ->
-                    rabbit_log:warning(
-                      "unroutable message exchange for ~s does not exist: ~s",
-                      [rabbit_misc:rs(XName), rabbit_misc:rs(UmeName)]),
-                    []
-            end
+        {_, []} = R ->
+            #exchange{name = XName, arguments = Args} = X,
+            case rabbit_misc:r_arg(XName, exchange, Args, <<"ume">>) of
+                undefined ->
+                    R;
+                UmeName ->
+                    case lookup(UmeName) of
+                        {ok, Ume} ->
+                            publish(Ume, Mandatory, Immediate, Txn, Message);
+                        {error, not_found} ->
+                            rabbit_log:warning(
+                              "unroutable message exchange for ~s "
+                              "does not exist: ~s",
+                              [rabbit_misc:rs(XName), rabbit_misc:rs(UmeName)]),
+                            R
+                    end
+            end;
+        R ->
+            R
     end.
 
 %% return the list of qpids to which a message with a given routing
@@ -245,6 +240,9 @@ route(X = #exchange{type = fanout}, _RoutingKey, _Content) ->
 
 route(X = #exchange{type = direct}, RoutingKey, _Content) ->
     match_routing_key(X, RoutingKey).
+
+sort_arguments(Arguments) ->
+    lists:keysort(1, Arguments).
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same exchange
