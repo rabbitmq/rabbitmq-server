@@ -190,7 +190,10 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-publish(X, Mandatory, Immediate, Txn,
+publish(X, Mandatory, Immediate, Txn, Message) ->
+    publish(X, [], Mandatory, Immediate, Txn, Message).
+
+publish(X, Seen, Mandatory, Immediate, Txn,
         Message = #basic_message{routing_key = RK, content = C}) ->
     case rabbit_router:deliver(route(X, RK, C),
                                Mandatory, Immediate, Txn, Message) of
@@ -200,15 +203,24 @@ publish(X, Mandatory, Immediate, Txn,
                 undefined ->
                     R;
                 UmeName ->
-                    case lookup(UmeName) of
-                        {ok, Ume} ->
-                            publish(Ume, Mandatory, Immediate, Txn, Message);
-                        {error, not_found} ->
-                            rabbit_log:warning(
-                              "unroutable message exchange for ~s "
-                              "does not exist: ~s",
-                              [rabbit_misc:rs(XName), rabbit_misc:rs(UmeName)]),
-                            R
+                    NewSeen = [XName | Seen],
+                    case lists:member(UmeName, NewSeen) of
+                        true ->
+                            R;
+                        false ->
+                            case lookup(UmeName) of
+                                {ok, Ume} ->
+                                    publish(Ume, NewSeen,
+                                            Mandatory, Immediate, Txn,
+                                            Message);
+                                {error, not_found} ->
+                                    rabbit_log:warning(
+                                      "unroutable message exchange for ~s "
+                                      "does not exist: ~s",
+                                      [rabbit_misc:rs(XName),
+                                       rabbit_misc:rs(UmeName)]),
+                                    R
+                            end
                     end
             end;
         R ->
