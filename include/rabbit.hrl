@@ -64,7 +64,7 @@
 
 -record(basic_message, {exchange_name, routing_key, content, guid, is_persistent}).
 
--record(dq_msg_loc, {queue_and_seq_id, is_delivered, msg_id}).
+-record(dq_msg_loc, {queue_and_seq_id, is_delivered, msg_id, next_seq_id}).
 
 %%----------------------------------------------------------------------------
 
