@@ -317,6 +317,9 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
 			{max_no_slots, 1024*1024*1024},
 			{type, set}
 		       ]),
+
+    %% it would be better to have this as private, but dets:from_ets/2
+    %% seems to blow up if it is set private
     MsgLocationEts = ets:new(?MSG_LOC_NAME, [set, protected]),
     State =
 	#dqstate { msg_location_dets       = MsgLocationDets,
