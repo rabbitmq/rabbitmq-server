@@ -83,7 +83,7 @@
                                        name         :: '_'}
                                  when is_subtype(K, atom())).
 -spec(r_arg/4 :: (vhost() | r(atom()), K, amqp_table(), binary()) ->
-             r(K)  when is_subtype(K, atom())).
+             undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> 'ok' | {'error', any()}).
 -spec(report_cover/0 :: () -> 'ok').
