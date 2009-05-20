@@ -199,18 +199,19 @@ publish(X, Seen, Mandatory, Immediate, Txn,
                                Mandatory, Immediate, Txn, Message) of
         {_, []} = R ->
             #exchange{name = XName, arguments = Args} = X,
-            case rabbit_misc:r_arg(XName, exchange, Args, <<"ume">>) of
+            case rabbit_misc:r_arg(XName, exchange, Args,
+                                   <<"alternate-exchange">>) of
                 undefined ->
                     R;
-                UmeName ->
+                AName ->
                     NewSeen = [XName | Seen],
-                    case lists:member(UmeName, NewSeen) of
+                    case lists:member(AName, NewSeen) of
                         true ->
                             R;
                         false ->
-                            case lookup(UmeName) of
-                                {ok, Ume} ->
-                                    publish(Ume, NewSeen,
+                            case lookup(AName) of
+                                {ok, AX} ->
+                                    publish(AX, NewSeen,
                                             Mandatory, Immediate, Txn,
                                             Message);
                                 {error, not_found} ->
@@ -218,7 +219,7 @@ publish(X, Seen, Mandatory, Immediate, Txn,
                                       "unroutable message exchange for ~s "
                                       "does not exist: ~s",
                                       [rabbit_misc:rs(XName),
-                                       rabbit_misc:rs(UmeName)]),
+                                       rabbit_misc:rs(AName)]),
                                     R
                             end
                     end
