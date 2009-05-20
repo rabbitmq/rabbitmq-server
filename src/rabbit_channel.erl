@@ -579,8 +579,7 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
     check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
         {error, not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(ExchangeName)]);
+            rabbit_misc:not_found(ExchangeName);
         {error, in_use} ->
             die_precondition_failed(
               "~s in use", [rabbit_misc:rs(ExchangeName)]);
@@ -746,11 +745,9 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     check_read_permitted(ExchangeName, State),
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments) of
         {error, exchange_not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(ExchangeName)]);
+            rabbit_misc:not_found(ExchangeName);
         {error, queue_not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(QueueName)]);
+            rabbit_misc:not_found(QueueName);
         {error, exchange_and_queue_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s and no ~s", [rabbit_misc:rs(ExchangeName),

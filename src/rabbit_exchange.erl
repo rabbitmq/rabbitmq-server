@@ -164,9 +164,7 @@ lookup(Name) ->
 lookup_or_die(Name) ->
     case lookup(Name) of
         {ok, X} -> X;
-        {error, not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(Name)])
+        {error, not_found} -> rabbit_misc:not_found(Name)
     end.
 
 list(VHostPath) ->
