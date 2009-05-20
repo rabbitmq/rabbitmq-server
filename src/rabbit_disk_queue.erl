@@ -234,8 +234,9 @@
 	     { 'empty' | {msg_id(), bool(), {msg_id(), seq_id()}}}).
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_publish/2 :: (msg_id(), binary()) -> 'ok').
--spec(tx_commit/3 :: (queue_name(), [msg_id()], [seq_id()]) -> 'ok').
--spec(tx_commit_with_seqs/3 :: (queue_name(), [{msg_id(), seq_id()}], [seq_id()]) -> 'ok').
+-spec(tx_commit/3 :: (queue_name(), [msg_id()], [{msg_id(), seq_id()}]) -> 'ok').
+-spec(tx_commit_with_seqs/3 :: (queue_name(), [{msg_id(), seq_id()}],
+				[{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(requeue_with_seqs/2 :: (queue_name(), [{{msg_id(), seq_id()}, seq_id()}]) -> 'ok').
