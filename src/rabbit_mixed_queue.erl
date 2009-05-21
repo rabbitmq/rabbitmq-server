@@ -87,9 +87,12 @@ deliver(State = #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf, next_write
 remove_noacks(Acks) ->
     lists:filter(fun (A) -> A /= noack end, Acks).
 
-ack(Acks, State = #mqstate { queue = Q }) ->             
-    ok = rabbit_disk_queue:ack(Q, remove_noacks(Acks)),
-    {ok, State}.
+ack(Acks, State = #mqstate { queue = Q }) ->
+    case remove_noacks(Acks) of
+        [] -> {ok, State};
+        AckTags -> ok = rabbit_disk_queue:ack(Q, AckTags),
+                   {ok, State}
+    end.
                                                    
 tx_publish(MsgId, Msg, _IsPersistent, State = #mqstate { mode = disk }) ->
     ok = rabbit_disk_queue:tx_publish(MsgId, Msg),
