@@ -350,7 +350,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
             erase({ch, ChPid}),
             case check_auto_delete(
                    deliver_or_requeue_n(
-                     [Message ||
+                     [Message || %% TODO NEED TO GRAB ACKTAGS OUT OF HERE AND PASS THEM THROUGH
                          {_Messsage_id, Message} <- dict:to_list(UAM)],
                      State#q{
                        exclusive_consumer = case Holder of
@@ -722,7 +722,7 @@ handle_cast({requeue, MsgIds, ChPid}, State) ->
                                [ChPid]),
             noreply(State);
         C = #cr{unacked_messages = UAM} ->
-            {Messages, NewUAM} = collect_messages(MsgIds, UAM),
+            {Messages, NewUAM} = collect_messages(MsgIds, UAM), %% TODO Messages must contain AckTags too
             store_ch_record(C#cr{unacked_messages = NewUAM}),
             noreply(deliver_or_requeue_n(Messages, State))
     end;
