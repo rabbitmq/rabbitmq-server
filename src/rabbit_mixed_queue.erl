@@ -35,7 +35,7 @@
 
 -export([publish/4, deliver/1, ack/2,
          tx_publish/4, tx_commit/3, tx_cancel/2,
-         requeue/2, purge/1]).
+         requeue/2, purge/1, length/1, is_empty/1]).
 
 -record(mqstate, { mode,
                    msg_buf,
@@ -49,7 +49,7 @@
 start_link(Queue, Mode) when Mode =:= disk orelse Mode =:= mixed ->
     rabbit_disk_queue:start_link(?FILE_SIZE_LIMIT),
     rabbit_disk_queue:to_ram_disk_mode(), %% TODO, CHANGE ME
-    {ok, #mqstate { mode = Mode, msg_buf = queue:new(), next_write_seq = 0, queue = Queue }}.
+    {ok, #mqstate { mode = Mode, msg_buf = queue:new(), next_write_seq = 1, queue = Queue }}.
 
 publish(MsgId, Msg, _IsPersistent, State = #mqstate { mode = disk, queue = Q }) ->
     ok = rabbit_disk_queue:publish(Q, MsgId, Msg),
@@ -173,3 +173,12 @@ purge(State = #mqstate { queue = Q, msg_buf = MsgBuf, mode = mixed }) ->
     rabbit_disk_queue:purge(Q),
     Count = queue:len(MsgBuf),
     {Count, State #mqstate { msg_buf = queue:new() }}.
+
+length(State = #mqstate { queue = Q, mode = disk }) ->
+    Length = rabbit_disk_queue:length(Q),
+    {Length, State};
+length(State = #mqstate { mode = mixed, msg_buf = MsgBuf }) ->
+    {queue:length(MsgBuf), State}.
+
+is_empty(State) ->
+    0 == rabbit_mixed_queue:length(State).
