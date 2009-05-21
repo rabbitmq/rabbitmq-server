@@ -234,11 +234,14 @@ basic_recover_test(Connection) ->
     lib_amqp:teardown(Connection, Channel).
 
 basic_qos_test(Con) ->
-    [basic_qos_test(Con, Prefetch) || Prefetch <- [0,1]].
+    [NoQos, Qos] = [basic_qos_test(Con, Prefetch) || Prefetch <- [0,1]],
+    ExpectedRatio = (1+1) / (1+50/5),
+    FudgeFactor = 2, %% account for timing variations
+    ?assert(Qos / NoQos < ExpectedRatio * FudgeFactor).
 
 basic_qos_test(Connection, Prefetch) ->
-    Messages = 1000,
-    Workers = [1, 100],
+    Messages = 100,
+    Workers = [5, 50],
     Parent = self(),
     Chan = lib_amqp:start_channel(Connection),
     Q = lib_amqp:declare_queue(Chan),
@@ -246,42 +249,36 @@ basic_qos_test(Connection, Prefetch) ->
                     Channel = lib_amqp:start_channel(Connection),
                     lib_amqp:set_prefetch_count(Channel, Prefetch),
                     lib_amqp:subscribe(Channel, Q, self(), false),
-                    sleeping_consumer(Channel, Sleep, Parent, 0)
+                    Parent ! finished,
+                    sleeping_consumer(Channel, Sleep, Parent)
                   end) || Sleep <- Workers],
+    latch_loop(length(Kids)),
     spawn(fun() -> producer_loop(lib_amqp:start_channel(Connection),
                                  Q, Messages) end),
-    timer:sleep(15000),
+    {Res, ok} = timer:tc(erlang, apply, [fun latch_loop/1, [Messages]]),
     [Kid ! stop || Kid <- Kids],
-    latch_loop(length(Workers)),
+    latch_loop(length(Kids)),
     lib_amqp:close_channel(Chan),
-    ok.
+    Res.
 
-sleeping_consumer(Channel, Sleep, Parent, N) ->
+sleeping_consumer(Channel, Sleep, Parent) ->
     receive
         stop ->
-            do_stop(Channel, Sleep, Parent, N);
+            do_stop(Channel, Parent);
         #'basic.consume_ok'{} ->
-            sleeping_consumer(Channel, Sleep, Parent, N);
+            sleeping_consumer(Channel, Sleep, Parent);
         #'basic.cancel_ok'{}  ->
             ok;
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _Content} ->
-            %% This selective receive effectively prioritizes
-            %% a stop message in the mailbox
-            if
-                Sleep > 10 ->
-                    receive stop -> do_stop(Channel, Sleep, Parent, N)
-                    after 5 -> ok
-                    end;
-                true -> ok
+            Parent ! finished,
+            receive stop -> do_stop(Channel, Parent)
+            after Sleep -> ok
             end,
-            timer:sleep(Sleep * 10),
             lib_amqp:ack(Channel, DeliveryTag),
-            sleeping_consumer(Channel, Sleep, Parent, N + 1)
+            sleeping_consumer(Channel, Sleep, Parent)
     end.
 
-do_stop(Channel, Sleep, Parent, N) ->
-    io:format("Worker (~p Hz) has processed ~p messages~n",
-              [1000 div (Sleep * 10), N]),
+do_stop(Channel, Parent) ->
     Parent ! finished,
     lib_amqp:close_channel(Channel),
     exit(normal).
