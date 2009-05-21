@@ -68,19 +68,19 @@ publish(MsgId, Msg, IsPersistent,
 
 deliver(State = #mqstate { mode = disk, queue = Q }) ->
     {rabbit_disk_queue:deliver(Q), State};
-deliver(State = #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf }) ->
+deliver(State = #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf, next_write_seq = NextWrite }) ->
     {Result, MsgBuf2} = queue:out(MsgBuf),
     case Result of
         empty ->
             {empty, State};
-        {value, {_Seq, {MsgId, Msg, IsPersistent}}} ->
+        {value, {Seq, {MsgId, Msg, IsPersistent}}} ->
             {IsDelivered, Ack} =
                 if IsPersistent ->
-                        {MsgId, IsDelivered2, Ack2} = rabbit_disk_queue:phantom_deliver(Q),
+                        {MsgId, IsDelivered2, Ack2, _PersistRemaining} = rabbit_disk_queue:phantom_deliver(Q),
                         {IsDelivered2, Ack2};
                    true -> {false, noack}
                 end,
-            {{MsgId, Msg, size(Msg), IsDelivered, Ack},
+            {{MsgId, Msg, size(Msg), IsDelivered, Ack, (NextWrite - 1 - Seq)},
              State #mqstate { msg_buf = MsgBuf2 }}
     end.
 
