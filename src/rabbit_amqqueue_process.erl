@@ -228,7 +228,7 @@ attempt_delivery(none, Message, State) ->
                 {AckTag, State3} =
                     if AckRequired ->
                             %% TODO API CHANGE
-                            {ok, MS, AckTag2} = rabbit_mixed_queue:publish_delivered(Message,
+                            {ok, AckTag2, MS} = rabbit_mixed_queue:publish_delivered(Message,
                                                                                      State2 #q.mixed_state),
                             {AckTag2, State2 #q { mixed_state = MS }};
                        true ->
