@@ -705,7 +705,7 @@ internal_tx_commit(Q, PubMsgSeqIds, AckSeqIds,
                         [{Q, ReadSeqId2, WriteSeqId2, Length2}] ->
                             {ReadSeqId2, WriteSeqId2, Length2}
                     end,
-                InitReadSeqId2 = if InitReadSeqId == InitWriteSeqId andalso FirstSeqIdTo > InitWriteSeqId ->
+                InitReadSeqId2 = if InitReadSeqId == InitWriteSeqId andalso FirstSeqIdTo > InitWriteSeqId andalso FirstSeqIdTo /= next ->
                                          FirstSeqIdTo;
                                     true -> InitReadSeqId
                                  end,
@@ -812,7 +812,7 @@ internal_requeue(Q, MsgSeqIds = [{_, FirstSeqIdTo}|MsgSeqIdsTail],
     %% the Q _must_ already exist
     [{Q, ReadSeqId, WriteSeqId, Length}] = ets:lookup(Sequences, Q),
     ReadSeqId2 =
-        if ReadSeqId == WriteSeqId andalso FirstSeqIdTo > WriteSeqId -> FirstSeqIdTo;
+        if ReadSeqId == WriteSeqId andalso FirstSeqIdTo > WriteSeqId andalso FirstSeqIdTo /= next -> FirstSeqIdTo;
            true -> ReadSeqId
         end,
     MsgSeqIdsZipped = lists:zip(MsgSeqIds, MsgSeqIdsTail ++ [{next, next}]),
