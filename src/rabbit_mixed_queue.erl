@@ -77,11 +77,14 @@ publish(Msg = #basic_message { guid = MsgId, is_persistent = IsPersistent },
 
 %% assumption here is that the queue is empty already (only called via publish immediate)
 publish_delivered(Msg = #basic_message { guid = MsgId, is_persistent = IsPersistent},
-                  State = #mqstate { mode = Mode, queue = Q })
+                  State = #mqstate { mode = Mode, queue = Q, next_write_seq = NextSeq })
   when Mode =:= disk orelse IsPersistent ->
     ok = rabbit_disk_queue:publish(Q, MsgId, msg_to_bin(Msg)),
     {MsgId, false, AckTag, 0} = rabbit_disk_queue:phantom_deliver(Q),
-    {ok, AckTag, State};
+    State2 = if Mode =:= mixed -> State #mqstate { next_write_seq = NextSeq + 1 };
+                true -> State
+             end,
+    {ok, AckTag, State2};
 publish_delivered(#basic_message { is_persistent = false },
                   State = #mqstate { mode = mixed }) ->
     {ok, noack, State}.
@@ -203,9 +206,9 @@ purge(State = #mqstate { queue = Q, msg_buf = MsgBuf, mode = mixed }) ->
     Count = queue:len(MsgBuf),
     {Count, State #mqstate { msg_buf = queue:new() }}.
 
-length(State = #mqstate { queue = Q, mode = disk }) ->
+length(#mqstate { queue = Q, mode = disk }) ->
     rabbit_disk_queue:length(Q);
-length(State = #mqstate { mode = mixed, msg_buf = MsgBuf }) ->
+length(#mqstate { mode = mixed, msg_buf = MsgBuf }) ->
     queue:len(MsgBuf).
 
 is_empty(State) ->

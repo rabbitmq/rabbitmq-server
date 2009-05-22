@@ -51,6 +51,7 @@
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
+-export([unfold/2]).
 
 -import(mnesia).
 -import(lists).
@@ -406,3 +407,12 @@ stop_applications(Apps) ->
                         not_started,
                         cannot_stop_application,
                         Apps).
+
+unfold(Fun, Init) ->
+    unfold(Fun, [], Init).
+
+unfold(Fun, Acc, Init) ->
+    case Fun(Init) of
+        {true, E, I} -> unfold(Fun, [E|Acc], I);
+        false -> Acc
+    end.
