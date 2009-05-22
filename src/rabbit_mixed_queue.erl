@@ -204,10 +204,9 @@ purge(State = #mqstate { queue = Q, msg_buf = MsgBuf, mode = mixed }) ->
     {Count, State #mqstate { msg_buf = queue:new() }}.
 
 length(State = #mqstate { queue = Q, mode = disk }) ->
-    Length = rabbit_disk_queue:length(Q),
-    {Length, State};
+    rabbit_disk_queue:length(Q);
 length(State = #mqstate { mode = mixed, msg_buf = MsgBuf }) ->
-    {queue:length(MsgBuf), State}.
+    queue:len(MsgBuf).
 
 is_empty(State) ->
     0 == rabbit_mixed_queue:length(State).
