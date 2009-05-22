@@ -51,7 +51,6 @@
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
--export([dropwhilefoldl/3]).
 
 -import(mnesia).
 -import(lists).
@@ -407,13 +406,3 @@ stop_applications(Apps) ->
                         not_started,
                         cannot_stop_application,
                         Apps).
-
-dropwhilefoldl(_PredFun, Acc0, []) ->
-    {Acc0, []};
-dropwhilefoldl(PredFun, Acc0, [E|List]) ->
-    case PredFun(E, Acc0) of
-        {true, Acc1} ->
-            dropwhilefoldl(PredFun, Acc1, List);
-        {false, Acc1} ->
-            {Acc1, List}
-    end.

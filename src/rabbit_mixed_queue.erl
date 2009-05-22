@@ -80,8 +80,8 @@ publish_delivered(Msg = #basic_message { guid = MsgId, is_persistent = IsPersist
                   State = #mqstate { mode = Mode, queue = Q })
   when Mode =:= disk orelse IsPersistent ->
     ok = rabbit_disk_queue:publish(Q, MsgId, msg_to_bin(Msg)),
-    {MsgId, false, Ack, 0} = rabbit_disk_queue:phantom_deliver(Q),
-    {ok, Ack, State};
+    {MsgId, false, AckTag, 0} = rabbit_disk_queue:phantom_deliver(Q),
+    {ok, AckTag, State};
 publish_delivered(#basic_message { is_persistent = false },
                   State = #mqstate { mode = mixed }) ->
     {ok, noack, State}.
