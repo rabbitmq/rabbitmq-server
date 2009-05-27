@@ -117,6 +117,9 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Tue May 19 2009 Matthias Radestock <matthias@lshift.net> 1.5.5-1
+- Maintenance release for the 1.5.x series
+
 * Mon Apr 6 2009 Matthias Radestock <matthias@lshift.net> 1.5.4-1
 - Maintenance release for the 1.5.x series
 
