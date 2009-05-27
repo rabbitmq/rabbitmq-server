@@ -46,11 +46,7 @@
                  }
        ).
 
--define(FILE_SIZE_LIMIT, (100*1024*1024)).
-
 start_link(Queue, Mode) when Mode =:= disk orelse Mode =:= mixed ->
-    rabbit_disk_queue:start_link(?FILE_SIZE_LIMIT),
-    rabbit_disk_queue:to_ram_disk_mode(), %% TODO, CHANGE ME
     {ok, #mqstate { mode = Mode, msg_buf = queue:new(), next_write_seq = 1, queue = Queue }}.
 
 msg_to_bin(Msg = #basic_message { content = Content }) ->

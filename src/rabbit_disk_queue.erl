@@ -33,7 +33,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/1]).
+-export([start_link/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -63,6 +63,7 @@
 -define(SERVER, ?MODULE).
 
 -define(MAX_READ_FILE_HANDLES, 256).
+-define(FILE_SIZE_LIMIT, (25*1024*1024)).
 
 -record(dqstate, {msg_location_dets,       %% where are messages?
 		  msg_location_ets,        %% as above, but for ets version
@@ -226,7 +227,7 @@
 -type(seq_id() :: non_neg_integer()).
 -type(seq_id_or_next() :: { seq_id() | 'next' }).
 
--spec(start_link/1 :: (non_neg_integer()) ->
+-spec(start_link/0 :: () ->
               {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(publish/3 :: (queue_name(), msg_id(), binary()) -> 'ok').
 -spec(publish_with_seq/4 :: (queue_name(), msg_id(), seq_id_or_next(), binary()) -> 'ok').
@@ -255,9 +256,9 @@
 
 %% ---- PUBLIC API ----
 
-start_link(FileSizeLimit) ->
+start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE,
-                          [FileSizeLimit, ?MAX_READ_FILE_HANDLES], []).
+                          [?FILE_SIZE_LIMIT, ?MAX_READ_FILE_HANDLES], []).
 
 publish(Q, MsgId, Msg) when is_binary(Msg) ->
     gen_server:cast(?SERVER, {publish, Q, MsgId, Msg}).
