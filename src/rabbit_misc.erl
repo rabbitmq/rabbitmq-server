@@ -36,6 +36,7 @@
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, protocol_error/3, protocol_error/4]).
+-export([not_found/1]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
 -export([r/3, r/2, r_arg/4, rs/1]).
@@ -72,6 +73,7 @@
       (atom() | amqp_error(), string(), [any()]) -> no_return()).
 -spec(protocol_error/4 ::
       (atom() | amqp_error(), string(), [any()], atom()) -> no_return()).
+-spec(not_found/1 :: (r(atom())) -> no_return()).
 -spec(get_config/1 :: (atom()) -> {'ok', any()} | not_found()).
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
@@ -140,6 +142,8 @@ protocol_error(Error, Explanation, Params) ->
 protocol_error(Error, Explanation, Params, Method) ->
     CompleteExplanation = lists:flatten(io_lib:format(Explanation, Params)),
     exit({amqp, Error, CompleteExplanation, Method}).
+
+not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
 get_config(Key) ->
     case dirty_read({rabbit_config, Key}) of

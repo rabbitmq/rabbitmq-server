@@ -201,9 +201,7 @@ with(Name, F, E) ->
 with(Name, F) ->
     with(Name, F, fun () -> {error, not_found} end).
 with_or_die(Name, F) ->
-    with(Name, F, fun () -> rabbit_misc:protocol_error(
-                              not_found, "no ~s", [rabbit_misc:rs(Name)])
-                  end).
+    with(Name, F, fun () -> rabbit_misc:not_found(Name) end).
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
