@@ -108,7 +108,7 @@ terminate(_Reason, State) ->
         lists:foldl(fun (Txn, State1) ->
                             rollback_transaction(Txn, State1)
                     end, State, all_tx()),
-    rabbit_mixed_queue:purge(NewState #q.mixed_state),
+    rabbit_mixed_queue:delete_queue(NewState #q.mixed_state),
     ok = rabbit_amqqueue:internal_delete(QName).
 
 code_change(_OldVsn, State, _Extra) ->

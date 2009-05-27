@@ -36,8 +36,8 @@
 -export([start_link/2]).
 
 -export([publish/2, publish_delivered/2, deliver/1, ack/2,
-         tx_publish/2, tx_commit/3, tx_cancel/2,
-         requeue/2, purge/1, length/1, is_empty/1]).
+         tx_publish/2, tx_commit/3, tx_cancel/2, requeue/2, purge/1,
+         length/1, is_empty/1, delete_queue/1]).
 
 -record(mqstate, { mode,
                    msg_buf,
@@ -205,6 +205,13 @@ purge(State = #mqstate { queue = Q, msg_buf = MsgBuf, mode = mixed }) ->
     rabbit_disk_queue:purge(Q),
     Count = queue:len(MsgBuf),
     {Count, State #mqstate { msg_buf = queue:new() }}.
+
+delete_queue(State = #mqstate { queue = Q, mode = disk }) ->
+    rabbit_disk_queue:delete_queue(Q),
+    {ok, State};
+delete_queue(State = #mqstate { queue = Q, mode = mixed }) ->
+    rabbit_disk_queue:delete_queue(Q),
+    {ok, State #mqstate { msg_buf = queue:new() }}.
 
 length(#mqstate { queue = Q, mode = disk }) ->
     rabbit_disk_queue:length(Q);
