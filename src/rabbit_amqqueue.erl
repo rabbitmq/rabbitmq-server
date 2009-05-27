@@ -201,9 +201,7 @@ with(Name, F, E) ->
 with(Name, F) ->
     with(Name, F, fun () -> {error, not_found} end).
 with_or_die(Name, F) ->
-    with(Name, F, fun () -> rabbit_misc:protocol_error(
-                              not_found, "no ~s", [rabbit_misc:rs(Name)])
-                  end).
+    with(Name, F, fun () -> rabbit_misc:not_found(Name) end).
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
@@ -305,28 +303,29 @@ internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
-                  [] -> {error, not_found};
-                  [Q] ->
-                      ok = delete_queue(Q),
+                  []  -> {error, not_found};
+                  [_] ->
+                      ok = rabbit_exchange:delete_queue_bindings(QueueName),
+                      ok = mnesia:delete({rabbit_queue, QueueName}),
                       ok = mnesia:delete({rabbit_durable_queue, QueueName}),
                       ok
               end
       end).
 
-delete_queue(#amqqueue{name = QueueName}) ->
-    ok = rabbit_exchange:delete_bindings_for_queue(QueueName),
-    ok = mnesia:delete({rabbit_queue, QueueName}),
-    ok.
-
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               qlc:fold(
-                fun (Q, Acc) -> ok = delete_queue(Q), Acc end,
+                fun (QueueName, Acc) ->
+                        ok = rabbit_exchange:delete_transient_queue_bindings(
+                               QueueName),
+                        ok = mnesia:delete({rabbit_queue, QueueName}),
+                        Acc
+                end,
                 ok,
-                qlc:q([Q || Q = #amqqueue{pid = Pid}
-                                <- mnesia:table(rabbit_queue),
-                            node(Pid) == Node]))
+                qlc:q([QueueName || #amqqueue{name = QueueName, pid = Pid}
+                                        <- mnesia:table(rabbit_queue),
+                                    node(Pid) == Node]))
       end).
 
 pseudo_queue(QueueName, Pid) ->

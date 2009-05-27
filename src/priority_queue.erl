@@ -111,7 +111,7 @@ in(X, 0, {queue, [_] = In, []}) ->
     {queue, [X], In};
 in(X, 0, {queue, In, Out}) when is_list(In), is_list(Out) ->
     {queue, [X|In], Out};
-in(X, Priority, Q = {queue, [], []}) ->
+in(X, Priority, _Q = {queue, [], []}) ->
     in(X, Priority, {pqueue, []});
 in(X, Priority, Q = {queue, _, _}) ->
     in(X, Priority, {pqueue, [{0, Q}]});

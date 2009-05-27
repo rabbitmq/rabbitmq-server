@@ -36,6 +36,7 @@
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, protocol_error/3, protocol_error/4]).
+-export([not_found/1]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
 -export([r/3, r/2, rs/1]).
@@ -73,6 +74,7 @@
       (atom() | amqp_error(), string(), [any()]) -> no_return()).
 -spec(protocol_error/4 ::
       (atom() | amqp_error(), string(), [any()], atom()) -> no_return()).
+-spec(not_found/1 :: (r(atom())) -> no_return()).
 -spec(get_config/1 :: (atom()) -> {'ok', any()} | not_found()).
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
@@ -107,7 +109,7 @@
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
--spec(format_stderr/2 :: (string(), [any()]) -> 'true').
+-spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> [B]).
@@ -140,6 +142,8 @@ protocol_error(Error, Explanation, Params) ->
 protocol_error(Error, Explanation, Params, Method) ->
     CompleteExplanation = lists:flatten(io_lib:format(Explanation, Params)),
     exit({amqp, Error, CompleteExplanation, Method}).
+
+not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
 get_config(Key) ->
     case dirty_read({rabbit_config, Key}) of
@@ -377,9 +381,19 @@ ensure_parent_dirs_exist(Filename) ->
     end.
 
 format_stderr(Fmt, Args) ->
-    Port = open_port({fd, 0, 2}, [out]),
-    port_command(Port, io_lib:format(Fmt, Args)),
-    port_close(Port).
+    case os:type() of
+        {unix, _} ->
+            Port = open_port({fd, 0, 2}, [out]),
+            port_command(Port, io_lib:format(Fmt, Args)),
+            port_close(Port);
+        {win32, _} ->
+            %% stderr on Windows is buffered and I can't figure out a
+            %% way to trigger a fflush(stderr) in Erlang. So rather
+            %% than risk losing output we write to stdout instead,
+            %% which appears to be unbuffered.
+            io:format(Fmt, Args)
+    end,
+    ok.
 
 manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
     Iterate(fun (App, Acc) ->
