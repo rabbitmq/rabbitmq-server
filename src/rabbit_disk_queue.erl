@@ -63,7 +63,7 @@
 -define(SERVER, ?MODULE).
 
 -define(MAX_READ_FILE_HANDLES, 256).
--define(FILE_SIZE_LIMIT, (25*1024*1024)).
+-define(FILE_SIZE_LIMIT, (256*1024*1024)).
 
 -record(dqstate, {msg_location_dets,       %% where are messages?
 		  msg_location_ets,        %% as above, but for ets version

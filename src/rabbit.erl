@@ -157,8 +157,8 @@ start(normal, []) ->
         end},
        {"disk queue",
         fun () ->
-                ok = start_child(rabbit_disk_queue),
-                ok = rabbit_disk_queue:to_ram_disk_mode() %% TODO, CHANGE ME
+                ok = start_child(rabbit_disk_queue) %%,
+                %% ok = rabbit_disk_queue:to_ram_disk_mode() %% TODO, CHANGE ME
         end},
        {"guid generator",
         fun () ->
