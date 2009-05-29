@@ -216,7 +216,7 @@ publish(X, Seen, Mandatory, Immediate, Txn,
                                             Message);
                                 {error, not_found} ->
                                     rabbit_log:warning(
-                                      "unroutable message exchange for ~s "
+                                      "alternate exchange for ~s "
                                       "does not exist: ~s",
                                       [rabbit_misc:rs(XName),
                                        rabbit_misc:rs(AName)]),
