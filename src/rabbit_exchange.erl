@@ -381,32 +381,40 @@ call_with_exchange_and_queue(Exchange, Queue, Fun) ->
       end).
 
 add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
-    call_with_exchange_and_queue(
-      ExchangeName, QueueName,
-      fun (X, Q) ->
+    binding_action(
+      ExchangeName, QueueName, RoutingKey, Arguments,
+      fun (X, Q, B) ->
               if Q#amqqueue.durable and not(X#exchange.durable) ->
                       {error, durability_settings_incompatible};
-                 true -> ok = sync_binding(
-                            ExchangeName, QueueName, RoutingKey, Arguments,
-                            Q#amqqueue.durable, fun mnesia:write/3)
+                 true -> ok = sync_binding(B, Q#amqqueue.durable,
+                                           fun mnesia:write/3)
               end
       end).
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
+    binding_action(
+      ExchangeName, QueueName, RoutingKey, Arguments,
+      fun (X, Q, B) ->
+              case mnesia:match_object(rabbit_route, #route{binding = B},
+                                       write) of
+                  [] -> {error, binding_not_found};
+                  _  -> ok = sync_binding(B, Q#amqqueue.durable,
+                                          fun mnesia:delete_object/3),
+                        maybe_auto_delete(X)
+              end
+      end).
+
+binding_action(ExchangeName, QueueName, RoutingKey, Arguments, Fun) ->
     call_with_exchange_and_queue(
       ExchangeName, QueueName,
       fun (X, Q) ->
-              ok = sync_binding(
-                     ExchangeName, QueueName, RoutingKey, Arguments,
-                     Q#amqqueue.durable, fun mnesia:delete_object/3),
-              maybe_auto_delete(X)
+              Fun(X, Q, #binding{exchange_name = ExchangeName,
+                                 queue_name    = QueueName,
+                                 key           = RoutingKey,
+                                 args          = sort_arguments(Arguments)})
       end).
 
-sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
-    Binding = #binding{exchange_name = ExchangeName,
-                       queue_name = QueueName,
-                       key = RoutingKey,
-                       args = sort_arguments(Arguments)},
+sync_binding(Binding, Durable, Fun) ->
     ok = case Durable of
              true  -> Fun(rabbit_durable_route,
                           #route{binding = Binding}, write);
@@ -472,7 +480,7 @@ parse_x_match(Other) ->
 
 %% Horrendous matching algorithm. Depends for its merge-like
 %% (linear-time) behaviour on the lists:keysort (sort_arguments) that
-%% route/3 and sync_binding/6 do.
+%% route/3 and {add,delete}_binding/4 do.
 %%
 %%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 %% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
