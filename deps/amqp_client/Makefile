@@ -107,6 +107,6 @@ clean:
 
 source_tarball:
 	mkdir -p dist/$(DIST_DIR)
-	cp -a README Makefile src include dist/$(DIST_DIR)
+	cp -a README Makefile src/*.erl include/*.hrl dist/$(DIST_DIR)
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
 
