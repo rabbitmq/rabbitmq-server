@@ -105,7 +105,7 @@ clean:
 	rm -f rabbitmq_server erl_crash.dump
 	rm -fr cover dist
 
-source-tarball:
+source_tarball:
 	mkdir -p dist/$(DIST_DIR)
 	cp -a README Makefile src include dist/$(DIST_DIR)
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
