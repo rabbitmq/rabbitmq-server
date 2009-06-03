@@ -158,9 +158,7 @@ lookup(Name) ->
 lookup_or_die(Name) ->
     case lookup(Name) of
         {ok, X} -> X;
-        {error, not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(Name)])
+        {error, not_found} -> rabbit_misc:not_found(Name)
     end.
 
 list(VHostPath) ->
@@ -352,16 +350,13 @@ exchanges_for_queue(QueueName) ->
       sets:from_list(
         mnesia:select(rabbit_reverse_route, [{MatchHead, [], ['$1']}]))).
 
-has_bindings(ExchangeName) ->
-    MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
-                                          _ = '_'}},
+contains(Table, MatchHead) ->
     try
-        continue(mnesia:select(rabbit_route, [{MatchHead, [], ['$_']}],
-                               1, read))
+        continue(mnesia:select(Table, [{MatchHead, [], ['$_']}], 1, read))
     catch exit:{aborted, {badarg, _}} ->
             %% work around OTP-7025, which was fixed in R12B-1, by
             %% falling back on a less efficient method
-            case mnesia:match_object(rabbit_route, MatchHead, read) of
+            case mnesia:match_object(Table, MatchHead, read) of
                 []    -> false;
                 [_|_] -> true
             end
@@ -571,7 +566,11 @@ maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
     ok.
 
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
-    case has_bindings(ExchangeName) of
+    Match = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
+    %% we need to check for durable routes here too in case a bunch of
+    %% routes to durable queues have been removed temporarily as a
+    %% result of a node failure
+    case contains(rabbit_route, Match) orelse contains(rabbit_durable_route, Match) of
         false  -> unconditional_delete(Exchange);
         true   -> {error, in_use}
     end.
