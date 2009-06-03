@@ -143,6 +143,7 @@
                 host     :: string() | atom(),
                 port     :: non_neg_integer()}).
 -type(not_found() :: {'error', 'not_found'}).
+-type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
 
 -endif.
 
