@@ -45,11 +45,13 @@
 
 -ifdef(use_specs).
 
+-type(permission_atom() :: 'configure' | 'read' | 'write').
+
 -spec(check_login/2 :: (binary(), binary()) -> user()).
 -spec(user_pass_login/2 :: (username(), password()) -> user()).
 -spec(check_vhost_access/2 :: (user(), vhost()) -> 'ok').
 -spec(check_resource_access/3 ::
-      (username(), r(atom()), non_neg_integer()) -> 'ok').
+      (username(), r(atom()), permission_atom()) -> 'ok').
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
@@ -137,6 +139,10 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
               [VHostPath, Username])
     end.
 
+permission_index(configure) -> #permission.configure;
+permission_index(write) -> #permission.write;
+permission_index(read) -> #permission.read.
+
 check_resource_access(Username,
                       R = #resource{kind = exchange, name = <<"">>},
                       Permission) ->
@@ -158,7 +164,7 @@ check_resource_access(Username,
               [#user_permission{permission = P}] ->
                   case regexp:match(
                          binary_to_list(Name),
-                         binary_to_list(element(Permission, P))) of
+                         binary_to_list(element(permission_index(Permission), P))) of
                       {match, _, _} -> true;
                       nomatch       -> false
                   end
