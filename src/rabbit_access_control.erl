@@ -140,8 +140,8 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
     end.
 
 permission_index(configure) -> #permission.configure;
-permission_index(write) -> #permission.write;
-permission_index(read) -> #permission.read.
+permission_index(write)     -> #permission.write;
+permission_index(read)      -> #permission.read.
 
 check_resource_access(Username,
                       R = #resource{kind = exchange, name = <<"">>},
