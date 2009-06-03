@@ -300,7 +300,9 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                                routing_key = RoutingKey,
                                mandatory = Mandatory,
                                immediate = Immediate},
-              Content, State = #ch{ virtual_host = VHostPath}) ->
+              Content, State = #ch{ virtual_host = VHostPath,
+                                    transaction_id = TxnKey,
+                                    writer_pid = WriterPid}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -311,12 +313,29 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                         true  -> rabbit_guid:guid();
                         false -> none
                     end,
-    {noreply, publish(Mandatory, Immediate,
-                      #basic_message{exchange_name  = ExchangeName,
-                                     routing_key    = RoutingKey,
-                                     content        = DecodedContent,
-                                     persistent_key = PersistentKey},
-                      rabbit_exchange:route(Exchange, RoutingKey, DecodedContent), State)};
+    Message = #basic_message{exchange_name  = ExchangeName,
+                             routing_key    = RoutingKey,
+                             content        = DecodedContent,
+                             persistent_key = PersistentKey},
+    {RoutingRes, DeliveredQPids} =
+        rabbit_exchange:publish(Exchange, Mandatory, Immediate, TxnKey,
+                                Message),
+    case RoutingRes of
+        routed ->
+            ok;
+        unroutable ->
+            %% FIXME: 312 should be replaced by the ?NO_ROUTE
+            %% definition, when we move to >=0-9
+            ok = basic_return(Message, WriterPid, 312, <<"unroutable">>);
+        not_delivered ->
+            %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
+            %% definition, when we move to >=0-9
+            ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>)
+    end,
+    {noreply, case TxnKey of
+                  none -> State;
+                  _    -> add_tx_participants(DeliveredQPids, State)
+              end};
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
@@ -547,6 +566,13 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
                 check_name('exchange', ExchangeNameBin),
+                case rabbit_misc:r_arg(VHostPath, exchange, Args,
+                                       <<"alternate-exchange">>) of
+                    undefined -> ok;
+                    AName     -> check_read_permitted(ExchangeName, State),
+                                 check_write_permitted(AName, State),
+                                 ok
+                end,
                 rabbit_exchange:declare(ExchangeName,
                                         CheckedType,
                                         Durable,
@@ -574,8 +600,7 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
     check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
         {error, not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(ExchangeName)]);
+            rabbit_misc:not_found(ExchangeName);
         {error, in_use} ->
             die_precondition_failed(
               "~s in use", [rabbit_misc:rs(ExchangeName)]);
@@ -741,11 +766,9 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     check_read_permitted(ExchangeName, State),
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments) of
         {error, exchange_not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(ExchangeName)]);
+            rabbit_misc:not_found(ExchangeName);
         {error, queue_not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s", [rabbit_misc:rs(QueueName)]);
+            rabbit_misc:not_found(QueueName);
         {error, exchange_and_queue_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s and no ~s", [rabbit_misc:rs(ExchangeName),
@@ -760,26 +783,6 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
               not_allowed, "durability settings of ~s incompatible with ~s",
               [rabbit_misc:rs(QueueName), rabbit_misc:rs(ExchangeName)]);
         ok -> return_ok(State, NoWait, ReturnMethod)
-    end.
-
-publish(Mandatory, Immediate, Message, QPids,
-        State = #ch{transaction_id = TxnKey, writer_pid = WriterPid}) ->
-    Handled = deliver(QPids, Mandatory, Immediate, TxnKey,
-                      Message, WriterPid),
-    case TxnKey of
-        none -> State;
-        _    -> add_tx_participants(Handled, State)
-    end.
-
-deliver(QPids, Mandatory, Immediate, Txn, Message, WriterPid) ->
-    case rabbit_router:deliver(QPids, Mandatory, Immediate, Txn, Message) of
-        {ok, DeliveredQPids}   -> DeliveredQPids;
-        {error, unroutable}    ->
-            ok = basic_return(Message, WriterPid, ?NO_ROUTE, <<"unroutable">>),
-            [];
-        {error, no_consumers} ->
-            ok = basic_return(Message, WriterPid, ?NO_CONSUMERS, <<"no_consumers">>),
-            []
     end.
 
 basic_return(#basic_message{exchange_name = ExchangeName,

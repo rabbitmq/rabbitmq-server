@@ -36,9 +36,10 @@
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, protocol_error/3, protocol_error/4]).
+-export([not_found/1]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
--export([r/3, r/2, rs/1]).
+-export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
@@ -72,16 +73,19 @@
       (atom() | amqp_error(), string(), [any()]) -> no_return()).
 -spec(protocol_error/4 ::
       (atom() | amqp_error(), string(), [any()], atom()) -> no_return()).
+-spec(not_found/1 :: (r(atom())) -> no_return()).
 -spec(get_config/1 :: (atom()) -> {'ok', any()} | not_found()).
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (vhost() | r(atom()), K, resource_name()) -> r(K) 
-              when is_subtype(K, atom())).
+-spec(r/3 :: (vhost() | r(atom()), K, resource_name()) ->
+             r(K) when is_subtype(K, atom())).
 -spec(r/2 :: (vhost(), K) -> #resource{virtual_host :: vhost(),
                                        kind         :: K,
                                        name         :: '_'}
                                  when is_subtype(K, atom())).
+-spec(r_arg/4 :: (vhost() | r(atom()), K, amqp_table(), binary()) ->
+             undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> 'ok' | {'error', any()}).
 -spec(report_cover/0 :: () -> 'ok').
@@ -139,6 +143,8 @@ protocol_error(Error, Explanation, Params, Method) ->
     CompleteExplanation = lists:flatten(io_lib:format(Explanation, Params)),
     exit({amqp, Error, CompleteExplanation, Method}).
 
+not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
+
 get_config(Key) ->
     case dirty_read({rabbit_config, Key}) of
         {ok, {rabbit_config, Key, V}} -> {ok, V};
@@ -168,6 +174,14 @@ r(VHostPath, Kind, Name) when is_binary(Name) andalso is_binary(VHostPath) ->
 
 r(VHostPath, Kind) when is_binary(VHostPath) ->
     #resource{virtual_host = VHostPath, kind = Kind, name = '_'}.
+
+r_arg(#resource{virtual_host = VHostPath}, Kind, Table, Key) ->
+    r_arg(VHostPath, Kind, Table, Key);
+r_arg(VHostPath, Kind, Table, Key) ->
+    case lists:keysearch(Key, 1, Table) of
+        {value, {_, longstr, NameBin}} -> r(VHostPath, Kind, NameBin);
+        false                          -> undefined
+    end.
 
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
