@@ -703,6 +703,7 @@ test_disk_queue() ->
     passed = rdq_test_startup_with_queue_gaps(),
     passed = rdq_test_redeliver(),
     passed = rdq_test_purge(),
+    passed = rdq_test_dump_queue(),
     passed.
 
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
@@ -897,6 +898,34 @@ rdq_test_purge() ->
     empty = rabbit_disk_queue:deliver(q),
     rdq_stop(),
     passed.    
+
+rdq_test_dump_queue() ->
+    rdq_virgin(),
+    rdq_start(),
+    Msg = <<0:(8*256)>>,
+    Total = 1000,
+    All = lists:seq(1,Total),
+    [rabbit_disk_queue:tx_publish(N, Msg) || N <- All],
+    rabbit_disk_queue:tx_commit(q, All, []),
+    io:format("Publish done~n", []),
+    QList = [{N, Msg, 256, false, {N, (N-1)}} || N <- All],
+    QList = rabbit_disk_queue:dump_queue(q),
+    rdq_stop(),
+    io:format("dump ok undelivered~n", []),
+    rdq_start(),
+    lists:foreach(
+      fun (N) ->
+              Remaining = Total - N,
+              {N, Msg, 256, false, SeqId, Remaining} = rabbit_disk_queue:deliver(q)
+      end, All),
+    [] = rabbit_disk_queue:dump_queue(q),
+    rdq_stop(),
+    io:format("dump ok post delivery~n", []),
+    rdq_start(),
+    QList2 = [{N, Msg, 256, true, {N, (N-1)}} || N <- All],
+    QList2 = rabbit_disk_queue:dump_queue(q),
+    io:format("dump ok post delivery + restart~n", []),
+    passed.
 
 rdq_time_commands(Funcs) ->
     lists:foreach(fun (F) -> F() end, Funcs).

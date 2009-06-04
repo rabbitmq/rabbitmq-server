@@ -429,5 +429,5 @@ unfold(Fun, Init) ->
 unfold(Fun, Acc, Init) ->
     case Fun(Init) of
         {true, E, I} -> unfold(Fun, [E|Acc], I);
-        false -> Acc
+        false -> {Acc, Init}
     end.

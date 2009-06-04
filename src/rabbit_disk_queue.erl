@@ -40,7 +40,9 @@
 
 -export([publish/3, publish_with_seq/4, deliver/1, phantom_deliver/1, ack/2,
 	 tx_publish/2, tx_commit/3, tx_commit_with_seqs/3, tx_cancel/1,
-	 requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1]).
+	 requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1,
+         dump_queue/1
+        ]).
 
 -export([length/1, is_empty/1]).
 
@@ -245,6 +247,8 @@
 -spec(requeue/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(requeue_with_seqs/2 :: (queue_name(), [{{msg_id(), seq_id()}, seq_id_or_next()}]) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
+-spec(dump_queue/1 :: (queue_name()) -> [{msg_id(), binary(), non_neg_integer(),
+                                          bool(), {msg_id(), seq_id()}}]).
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
 -spec(to_ram_disk_mode/0 :: () -> 'ok').
@@ -299,6 +303,9 @@ purge(Q) ->
 
 delete_queue(Q) ->
     gen_server2:cast(?SERVER, {delete_queue, Q}).
+
+dump_queue(Q) ->
+    gen_server2:call(?SERVER, {dump_queue, Q}, infinity).
 
 stop() ->
     gen_server2:call(?SERVER, stop, infinity).
@@ -439,7 +446,10 @@ handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     case ets:lookup(Sequences, Q) of
         [] -> {reply, 0, State};
         [{Q, _ReadSeqId, _WriteSeqId, Length}] -> {reply, Length, State}
-    end.
+    end;
+handle_call({dump_queue, Q}, _From, State) ->
+    {Result, State1} = internal_dump_queue(Q, State),
+    {reply, Result, State1}.
 
 handle_cast({publish, Q, MsgId, MsgBody}, State) ->
     {ok, State1} = internal_publish(Q, MsgId, next, MsgBody, State),
@@ -611,28 +621,37 @@ internal_deliver(Q, ReadMsg, State = #dqstate { sequences = Sequences }) ->
         [] -> {ok, empty, State};
         [{Q, SeqId, SeqId, 0}] -> {ok, empty, State};
         [{Q, ReadSeqId, WriteSeqId, Length}] when Length > 0 ->
-            [Obj =
-             #dq_msg_loc {is_delivered = Delivered, msg_id = MsgId,
-                          next_seq_id = ReadSeqId2}] =
-                mnesia:dirty_read(rabbit_disk_queue, {Q, ReadSeqId}),
-            [{MsgId, _RefCount, File, Offset, TotalSize}] =
-                dets_ets_lookup(State, MsgId),
             Remaining = Length - 1,
-            true = ets:insert(Sequences, {Q, ReadSeqId2, WriteSeqId, Remaining}),
-            ok =
-                if Delivered -> ok;
-                   true ->
-                        mnesia:dirty_write(rabbit_disk_queue,
-                                           Obj #dq_msg_loc {is_delivered = true})
-                end,
-            if ReadMsg ->
-                    {FileHdl, State1} = get_read_handle(File, State),
-                    {ok, {MsgBody, BodySize}} =
-                        read_message_at_offset(FileHdl, Offset, TotalSize),
-                    {ok, {MsgId, MsgBody, BodySize, Delivered, {MsgId, ReadSeqId}, Remaining},
-                     State1};
-               true -> {ok, {MsgId, Delivered, {MsgId, ReadSeqId}, Remaining}, State}
-            end
+            {ok, Result, NextReadSeqId, State1} = internal_read_message(Q, ReadSeqId, false, ReadMsg, State),
+            true = ets:insert(Sequences, {Q, NextReadSeqId, WriteSeqId, Remaining}),
+            {ok, case Result of
+                     {MsgId, Delivered, {MsgId, ReadSeqId}} ->
+                         {MsgId, Delivered, {MsgId, ReadSeqId}, Remaining};
+                     {MsgId, MsgBody, BodySize, Delivered, {MsgId, ReadSeqId}} ->
+                         {MsgId, MsgBody, BodySize, Delivered, {MsgId, ReadSeqId}, Remaining}
+                 end, State1}
+    end.
+
+internal_read_message(Q, ReadSeqId, FakeDeliver, ReadMsg, State) ->
+    [Obj =
+     #dq_msg_loc {is_delivered = Delivered, msg_id = MsgId,
+                  next_seq_id = NextReadSeqId}] =
+        mnesia:dirty_read(rabbit_disk_queue, {Q, ReadSeqId}),
+    [{MsgId, _RefCount, File, Offset, TotalSize}] =
+        dets_ets_lookup(State, MsgId),
+    ok =
+        if FakeDeliver orelse Delivered -> ok;
+           true ->
+                mnesia:dirty_write(rabbit_disk_queue,
+                                   Obj #dq_msg_loc {is_delivered = true})
+        end,
+    if ReadMsg ->
+            {FileHdl, State1} = get_read_handle(File, State),
+            {ok, {MsgBody, BodySize}} =
+                read_message_at_offset(FileHdl, Offset, TotalSize),
+            {ok, {MsgId, MsgBody, BodySize, Delivered, {MsgId, ReadSeqId}},
+             NextReadSeqId, State1};
+       true -> {ok, {MsgId, Delivered, {MsgId, ReadSeqId}}, NextReadSeqId, State}
     end.
 
 internal_ack(Q, MsgSeqIds, State) ->
@@ -863,7 +882,7 @@ internal_purge(Q, State = #dqstate { sequences = Sequences }) ->
                 mnesia:transaction(
                   fun() ->
                           ok = mnesia:write_lock_table(rabbit_disk_queue),
-                          MsgSeqIds =
+                          {MsgSeqIds, WriteSeqId} =
                               rabbit_misc:unfold(
                                 fun (SeqId) when SeqId == WriteSeqId -> false;
                                     (SeqId) ->
@@ -899,6 +918,22 @@ internal_delete_queue(Q, State) ->
                   remove_messages(Q, MsgSeqIds, txn, State1)
           end),
     {ok, State2}.
+
+internal_dump_queue(Q, State = #dqstate { sequences = Sequences }) ->
+    case ets:lookup(Sequences, Q) of
+        [] -> {[], State};
+        [{Q, ReadSeq, WriteSeq, _Length}] ->
+            {QList, {WriteSeq, State3}} =
+                rabbit_misc:unfold(
+                  fun ({SeqId, _State1}) when SeqId == WriteSeq ->
+                          false;
+                      ({SeqId, State1}) ->
+                          {ok, Result, NextReadSeqId, State2} =
+                              internal_read_message(Q, SeqId, true, true, State1),
+                          {true, Result, {NextReadSeqId, State2}}
+                  end, {ReadSeq, State}),
+            {lists:reverse(QList), State3}
+    end.
 
 %% ---- ROLLING OVER THE APPEND FILE ----
 
