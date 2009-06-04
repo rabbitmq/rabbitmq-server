@@ -31,7 +31,8 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, recover/0, declare/4, delete/3, purge/1, internal_delete/1]).
+-export([start/0, recover/0, declare/4, delete/3, purge/1]).
+-export([internal_declare/2, internal_delete/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4]).
@@ -102,6 +103,7 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
+-spec(internal_declare/2 :: (amqqueue(), bool()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
@@ -157,11 +159,17 @@ declare(QueueName, Durable, AutoDelete, Args) ->
                                       auto_delete = AutoDelete,
                                       arguments = Args,
                                       pid = none}),
+    internal_declare(Q, true).
+
+internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    case mnesia:wread({rabbit_queue, QueueName}) of
                        [] -> ok = store_queue(Q),
-                             ok = add_default_binding(Q),
+                             case WantDefaultBinding of
+                                 true -> add_default_binding(Q);
+                                 false -> ok
+                             end,
                              Q;
                        [ExistingQ] -> ExistingQ
                    end
