@@ -90,9 +90,9 @@ start_link(Q) ->
 
 %%----------------------------------------------------------------------------
 
-init(Q = #amqqueue { name = QName }) ->
+init(Q = #amqqueue { name = QName, durable = Durable }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    {ok, MS} = rabbit_mixed_queue:start_link(QName, disk), %% TODO, CHANGE ME
+    {ok, MS} = rabbit_mixed_queue:start_link(QName, Durable, mixed), %% TODO, CHANGE ME
     {ok, #q{q = Q,
             owner = none,
             exclusive_consumer = none,
