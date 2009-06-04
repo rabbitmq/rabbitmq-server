@@ -1247,7 +1247,7 @@ extract_sequence_numbers(State = #dqstate { sequences = Sequences }) ->
                         case ets:lookup(Sequences, Q) of
                             [] ->
                                 true = ets:insert_new(Sequences,
-                                                      {Q, SeqId, NextWrite});
+                                                      {Q, SeqId, NextWrite, -1});
                             [Orig = {Q, Read, Write, Length}] ->
                                 Repl = {Q, lists:min([Read, SeqId]),
                                         %% Length is wrong here, but
