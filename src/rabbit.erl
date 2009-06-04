@@ -151,10 +151,6 @@ start(normal, []) ->
                 ok = rabbit_exchange:recover(),
                 ok = rabbit_amqqueue:recover()
         end},
-       {"persister",
-        fun () ->
-                ok = start_child(rabbit_persister)
-        end},
        {"disk queue",
         fun () ->
                 ok = start_child(rabbit_disk_queue),
