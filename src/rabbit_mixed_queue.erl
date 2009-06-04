@@ -48,7 +48,14 @@
        ).
 
 start_link(Queue, IsDurable, Mode) when Mode =:= disk orelse Mode =:= mixed ->
-    {ok, #mqstate { mode = Mode, msg_buf = queue:new(), next_write_seq = 1,
+    QList = rabbit_disk_queue:dump_queue(Queue),
+    {MsgBuf, NextSeq} =
+        lists:foldl(
+          fun ({MsgId, Msg, Size, Delivered, SeqId}, {Buf, NSeq})
+              when SeqId >= NSeq ->
+                  {queue:in({SeqId, Msg, Delivered}, Buf), SeqId + 1}
+          end, {queue:new(), 0}, QList),
+    {ok, #mqstate { mode = Mode, msg_buf = MsgBuf, next_write_seq = NextSeq,
                     queue = Queue, is_durable = IsDurable }}.
 
 msg_to_bin(Msg = #basic_message { content = Content }) ->

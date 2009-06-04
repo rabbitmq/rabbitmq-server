@@ -41,7 +41,7 @@
 -export([publish/3, publish_with_seq/4, deliver/1, phantom_deliver/1, ack/2,
 	 tx_publish/2, tx_commit/3, tx_commit_with_seqs/3, tx_cancel/1,
 	 requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1,
-         dump_queue/1
+         dump_queue/1, delete_non_durable_queues/1
         ]).
 
 -export([length/1, is_empty/1]).
@@ -248,7 +248,8 @@
 -spec(requeue_with_seqs/2 :: (queue_name(), [{{msg_id(), seq_id()}, seq_id_or_next()}]) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
 -spec(dump_queue/1 :: (queue_name()) -> [{msg_id(), binary(), non_neg_integer(),
-                                          bool(), {msg_id(), seq_id()}}]).
+                                          bool(), seq_id()}]).
+-spec(delete_non_durable_queues/1 :: (set()) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
 -spec(to_ram_disk_mode/0 :: () -> 'ok').
@@ -307,6 +308,9 @@ delete_queue(Q) ->
 dump_queue(Q) ->
     gen_server2:call(?SERVER, {dump_queue, Q}, infinity).
 
+delete_non_durable_queues(DurableQueues) ->
+    gen_server2:call(?SERVER, {delete_non_durable_queues, DurableQueues}, infinity).
+
 stop() ->
     gen_server2:call(?SERVER, stop, infinity).
 
@@ -346,7 +350,8 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
             E -> E
         end,
     ok = filelib:ensure_dir(form_filename("nothing")),
-    InitName = "0" ++ ?FILE_EXTENSION,
+    file:delete(form_filename(atom_to_list(?MSG_LOC_NAME) ++
+                              ?FILE_EXTENSION_DETS)),
     {ok, MsgLocationDets} =
         dets:open_file(?MSG_LOC_NAME,
                        [{file, form_filename(atom_to_list(?MSG_LOC_NAME) ++
@@ -360,6 +365,8 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %% it would be better to have this as private, but dets:from_ets/2
     %% seems to blow up if it is set private
     MsgLocationEts = ets:new(?MSG_LOC_NAME, [set, protected]),
+
+    InitName = "0" ++ ?FILE_EXTENSION,
     State =
         #dqstate { msg_location_dets       = MsgLocationDets,
                    msg_location_ets        = MsgLocationEts,
@@ -449,7 +456,10 @@ handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     end;
 handle_call({dump_queue, Q}, _From, State) ->
     {Result, State1} = internal_dump_queue(Q, State),
-    {reply, Result, State1}.
+    {reply, Result, State1};
+handle_call({delete_non_durable_queues, DurableQueues}, _From, State) ->
+    {ok, State1} = internal_delete_non_durable_queues(DurableQueues, State),
+    {reply, ok, State1}.
 
 handle_cast({publish, Q, MsgId, MsgBody}, State) ->
     {ok, State1} = internal_publish(Q, MsgId, next, MsgBody, State),
@@ -928,12 +938,26 @@ internal_dump_queue(Q, State = #dqstate { sequences = Sequences }) ->
                   fun ({SeqId, _State1}) when SeqId == WriteSeq ->
                           false;
                       ({SeqId, State1}) ->
-                          {ok, Result, NextReadSeqId, State2} =
+                          {ok, {MsgId, Msg, Size, Delivered, {MsgId, SeqId}}, NextReadSeqId, State2} =
                               internal_read_message(Q, SeqId, true, true, State1),
-                          {true, Result, {NextReadSeqId, State2}}
+                          {true, {MsgId, Msg, Size, Delivered, SeqId}, {NextReadSeqId, State2}}
                   end, {ReadSeq, State}),
             {lists:reverse(QList), State3}
     end.
+
+internal_delete_non_durable_queues(DurableQueues, State = #dqstate { sequences = Sequences }) ->
+    State3 =
+        ets:foldl(
+          fun ({Q, _Read, _Write, _Length}, State1) ->
+                  case sets:is_element(Q, DurableQueues) of
+                      true ->
+                          State1;
+                      false ->
+                          {ok, State2} = internal_delete_queue(Q, State1),
+                          State2
+                  end
+          end, State, Sequences),
+    {ok, State3}.
 
 %% ---- ROLLING OVER THE APPEND FILE ----
 
@@ -1064,10 +1088,10 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
     State = close_file(Source, close_file(Destination, State1)),
     {ok, SourceHdl} =
         file:open(form_filename(Source),
-                  [read, write, raw, binary, delayed_write, read_ahead]),
+                  [read, write, raw, binary, read_ahead, delayed_write]),
     {ok, DestinationHdl} =
         file:open(form_filename(Destination),
-                  [read, write, raw, binary, delayed_write, read_ahead]),
+                  [read, write, raw, binary, read_ahead, delayed_write]),
     ExpectedSize = SourceValid + DestinationValid,
     %% if DestinationValid =:= DestinationContiguousTop then we don't need a tmp file
     %% if they're not equal, then we need to write out everything past the DestinationContiguousTop to a tmp file
@@ -1080,7 +1104,7 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
             Tmp = filename:rootname(Destination) ++ ?FILE_EXTENSION_TMP,
             {ok, TmpHdl} =
                 file:open(form_filename(Tmp),
-                          [read, write, raw, binary, delayed_write, read_ahead]),
+                          [read, write, raw, binary, read_ahead, delayed_write]),
             Worklist =
                 lists:dropwhile(
                   fun ({_, _, _, Offset, _})
@@ -1262,9 +1286,11 @@ load_from_disk(State) ->
     {atomic, true} = mnesia:transaction(
              fun() ->
                      ok = mnesia:read_lock_table(rabbit_disk_queue),
-                     mnesia:foldl(fun (#dq_msg_loc { msg_id = MsgId }, true) ->
-                                          true = 1 =:=
-                                              erlang:length(dets_ets_lookup(State1, MsgId))
+                     mnesia:foldl(fun (#dq_msg_loc { msg_id = MsgId, queue_and_seq_id = {Q, SeqId} }, true) ->
+                                          case erlang:length(dets_ets_lookup(State1, MsgId)) of
+                                              0 -> ok == mnesia:delete(rabbit_disk_queue, {Q, SeqId}, write);
+                                              1 -> true
+                                          end
                                   end,
                                   true, rabbit_disk_queue)
              end),

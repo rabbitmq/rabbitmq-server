@@ -145,16 +145,20 @@ start(normal, []) ->
                 ok = start_child(rabbit_router),
                 ok = start_child(rabbit_node_monitor)
         end},
-       {"recovery",
-        fun () ->
-                ok = maybe_insert_default_data(),
-                ok = rabbit_exchange:recover(),
-                ok = rabbit_amqqueue:recover()
-        end},
        {"disk queue",
         fun () ->
                 ok = start_child(rabbit_disk_queue),
                 ok = rabbit_disk_queue:to_ram_disk_mode() %% TODO, CHANGE ME
+        end},
+       {"recovery",
+        fun () ->
+                ok = maybe_insert_default_data(),
+                ok = rabbit_exchange:recover(),
+                {ok, DurableQueues} = rabbit_amqqueue:recover(),
+                DurableQueueNames =
+                    sets:from_list(lists:map(
+                                     fun(Q) -> Q #amqqueue.name end, DurableQueues)),
+                ok = rabbit_disk_queue:delete_non_durable_queues(DurableQueueNames)
         end},
        {"guid generator",
         fun () ->
