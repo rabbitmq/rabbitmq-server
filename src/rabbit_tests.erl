@@ -703,6 +703,8 @@ test_disk_queue() ->
     passed = rdq_test_redeliver(),
     passed = rdq_test_purge(),
     passed = rdq_test_dump_queue(),
+    rdq_virgin(),
+    rdq_start(),
     passed.
 
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
