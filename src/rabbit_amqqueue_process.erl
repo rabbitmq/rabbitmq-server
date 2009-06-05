@@ -417,7 +417,7 @@ all_tx() ->
 
 record_pending_message(Txn, Message = #basic_message { is_persistent = IsPersistent }) ->
     Tx = #tx{pending_messages = Pending, is_persistent = IsPersistentTxn } = lookup_tx(Txn),
-    store_tx(Txn, Tx #tx { pending_messages = [{Message, false} | Pending],
+    store_tx(Txn, Tx #tx { pending_messages = [Message | Pending],
                            is_persistent = IsPersistentTxn orelse IsPersistent
                          }).
 
@@ -432,18 +432,21 @@ commit_transaction(Txn, State) ->
         } = lookup_tx(Txn),
     PendingMessagesOrdered = lists:reverse(PendingMessages),
     PendingAcksOrdered = lists:append(lists:reverse(PendingAcks)),
-    case lookup_ch(ChPid) of
-        not_found -> State;
-        C = #cr { unacked_messages = UAM } ->
-            {MsgWithAcks, Remaining} =
-                collect_messages(PendingAcksOrdered, UAM),
-            store_ch_record(C#cr{unacked_messages = Remaining}),
-            {ok, MS} = rabbit_mixed_queue:tx_commit(
-                         PendingMessagesOrdered,
-                         lists:map(fun ({_Msg, AckTag}) -> AckTag end, MsgWithAcks),
-                         State #q.mixed_state),
-            State #q { mixed_state = MS }
-    end.
+    {ok, MS} =
+        case lookup_ch(ChPid) of
+            not_found ->
+                rabbit_mixed_queue:tx_commit(
+                  PendingMessagesOrdered, [], State #q.mixed_state);
+            C = #cr { unacked_messages = UAM } ->
+                {MsgWithAcks, Remaining} =
+                    collect_messages(PendingAcksOrdered, UAM),
+                store_ch_record(C#cr{unacked_messages = Remaining}),
+                rabbit_mixed_queue:tx_commit(
+                  PendingMessagesOrdered,
+                  lists:map(fun ({_Msg, AckTag}) -> AckTag end, MsgWithAcks),
+                  State #q.mixed_state)
+        end,
+    State #q { mixed_state = MS }.
 
 rollback_transaction(Txn, State) ->
     #tx { pending_messages = PendingMessages

@@ -51,7 +51,7 @@ start_link(Queue, IsDurable, Mode) when Mode =:= disk orelse Mode =:= mixed ->
     QList = rabbit_disk_queue:dump_queue(Queue),
     {MsgBuf, NextSeq} =
         lists:foldl(
-          fun ({MsgId, Msg, Size, Delivered, SeqId}, {Buf, NSeq})
+          fun ({_MsgId, Msg, _Size, Delivered, SeqId}, {Buf, NSeq})
               when SeqId >= NSeq ->
                   {queue:in({SeqId, Msg, Delivered}, Buf), SeqId + 1}
           end, {queue:new(), 0}, QList),
@@ -178,8 +178,11 @@ only_persistent_msg_ids(Pubs) ->
 tx_cancel(Publishes, State = #mqstate { mode = disk }) ->
     ok = rabbit_disk_queue:tx_cancel(only_msg_ids(Publishes)),
     {ok, State};
-tx_cancel(Publishes, State = #mqstate { mode = mixed }) ->
-    ok = rabbit_disk_queue:tx_cancel(only_persistent_msg_ids(Publishes)),
+tx_cancel(Publishes, State = #mqstate { mode = mixed, is_durable = IsDurable }) ->
+    MsgIds = if IsDurable -> only_persistent_msg_ids(Publishes);
+                true -> []
+             end,
+    ok = rabbit_disk_queue:tx_cancel(MsgIds),
     {ok, State}.
 
 only_ack_tags(MsgWithAcks) ->

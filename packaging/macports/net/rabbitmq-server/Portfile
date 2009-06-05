@@ -1,15 +1,15 @@
 # -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:filetype=tcl:et:sw=4:ts=4:sts=4
 # $Id$
 
-PortSystem      1.0
-
-name            rabbitmq-server
-version         1.5.3
-categories      net
-maintainers     tonyg@rabbitmq.com
-platforms       darwin
-description     The RabbitMQ AMQP Server
-long_description    \
+PortSystem 1.0
+name		rabbitmq-server
+version		1.5.5
+revision	0
+categories	net 
+maintainers	tonyg@rabbitmq.com
+platforms	darwin
+description	The RabbitMQ AMQP Server
+long_description	\
     RabbitMQ is an implementation of AMQP, the emerging standard for \
     high performance enterprise messaging. The RabbitMQ server is a \
     robust and scalable implementation of an AMQP broker.

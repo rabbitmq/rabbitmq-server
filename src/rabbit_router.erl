@@ -51,7 +51,7 @@
 
 -spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(deliver/5 :: ([pid()], bool(), bool(), maybe(txn()), message()) ->
-             {'ok', [pid()]} | {'error', 'unroutable' | 'not_delivered'}).
+             {routing_result(), [pid()]}).
 
 -endif.
 
@@ -98,14 +98,15 @@ deliver_per_node(NodeQPids, Mandatory = false, Immediate = false,
     %% therefore safe to use a fire-and-forget cast here and return
     %% the QPids - the semantics is preserved. This scales much better
     %% than the non-immediate case below.
-    {ok, lists:flatmap(
-           fun ({Node, QPids}) ->
-                   gen_server2:cast(
-                     {?SERVER, Node},
-                     {deliver, QPids, Mandatory, Immediate, Txn, Message}),
-                   QPids
-           end,
-           NodeQPids)};
+    {routed,
+     lists:flatmap(
+       fun ({Node, QPids}) ->
+               gen_server2:cast(
+                 {?SERVER, Node},
+                 {deliver, QPids, Mandatory, Immediate, Txn, Message}),
+               QPids
+       end,
+       NodeQPids)};
 deliver_per_node(NodeQPids, Mandatory, Immediate,
                  Txn, Message) ->
     R = rabbit_misc:upmap(
@@ -179,6 +180,6 @@ run_bindings(QPids, IsMandatory, IsImmediate, Txn, Message) ->
       QPids).
 
 %% check_delivery(Mandatory, Immediate, {WasRouted, QPids})
-check_delivery(true, _   , {false, []}) -> {error, unroutable};
-check_delivery(_   , true, {_    , []}) -> {error, not_delivered};
-check_delivery(_   , _   , {_    , Qs}) -> {ok, Qs}.
+check_delivery(true, _   , {false, []}) -> {unroutable, []};
+check_delivery(_   , true, {_    , []}) -> {not_delivered, []};
+check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
