@@ -58,6 +58,8 @@ parse_headers([$\r | Rest], ParseState = #hstate{state = State})
     parse_headers(Rest, ParseState);
 parse_headers([$\n | Rest], ParseState = #hstate{state = command, acc = []}) ->
     parse_headers(Rest, ParseState);
+parse_headers([0 | Rest], ParseState = #hstate{state = command, acc = []}) ->
+    parse_headers(Rest, ParseState);
 parse_headers([$\n | Rest], ParseState = #hstate{state = command, acc = Acc}) ->
     parse_headers(Rest, ParseState#hstate{state = key, acc = [],
 					  command = lists:reverse(Acc)});
