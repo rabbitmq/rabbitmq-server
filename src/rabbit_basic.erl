@@ -61,7 +61,7 @@ publish(Delivery = #delivery{
 
 delivery(Mandatory, Immediate, Txn, Message) ->
     #delivery{mandatory = Mandatory, immediate = Immediate, txn = Txn,
-              message = Message}.
+              sender = self(), message = Message}.
 
 message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin) ->
     {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),

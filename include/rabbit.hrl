@@ -64,7 +64,7 @@
 
 -record(basic_message, {exchange_name, routing_key, content, persistent_key}).
 
--record(delivery, {mandatory, immediate, txn, message}).
+-record(delivery, {mandatory, immediate, txn, sender, message}).
 
 %%----------------------------------------------------------------------------
 
@@ -140,6 +140,7 @@
       #delivery{mandatory :: bool(),
                 immediate :: bool(),
                 txn       :: maybe(txn()),
+                sender    :: pid(),
                 message   :: message()}).
 %% this really should be an abstract type
 -type(msg_id() :: non_neg_integer()).
