@@ -704,7 +704,8 @@ test_disk_queue() ->
     passed = rdq_test_purge(),
     passed = rdq_test_dump_queue(),
     rdq_virgin(),
-    rdq_start(),
+    ok = control_action(stop_app, []),
+    ok = control_action(start_app, []),
     passed.
 
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
@@ -926,6 +927,7 @@ rdq_test_dump_queue() ->
     QList2 = [{N, Msg, 256, true, (N-1)} || N <- All],
     QList2 = rabbit_disk_queue:dump_queue(q),
     io:format("dump ok post delivery + restart~n", []),
+    rdq_stop(),
     passed.
 
 rdq_time_commands(Funcs) ->
