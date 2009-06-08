@@ -35,7 +35,7 @@
 -export([internal_declare/2, internal_delete/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
-         stat/1, stat_all/0, deliver/5, redeliver/2, requeue/3, ack/4]).
+         stat/1, stat_all/0, deliver/2, redeliver/2, requeue/3, ack/4]).
 -export([list/1, info/1, info/2, info_all/1, info_all/2]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
@@ -85,7 +85,7 @@
                                             {'error', 'in_use'} |
                                             {'error', 'not_empty'}).
 -spec(purge/1 :: (amqqueue()) -> qlen()).
--spec(deliver/5 :: (bool(), bool(), maybe(txn()), message(), pid()) -> bool()).
+-spec(deliver/2 :: (pid(), delivery()) -> bool()).
 -spec(redeliver/2 :: (pid(), [{message(), bool()}]) -> 'ok').
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
@@ -241,13 +241,16 @@ delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
 
 purge(#amqqueue{ pid = QPid }) -> gen_server2:call(QPid, purge, infinity).
 
-deliver(_IsMandatory, true, Txn, Message, QPid) ->
-    gen_server2:call(QPid, {deliver_immediately, Txn, Message}, infinity);
-deliver(true, _IsImmediate, Txn, Message, QPid) ->
-    gen_server2:call(QPid, {deliver, Txn, Message}, infinity),
+deliver(QPid, #delivery{immediate = true,
+                        txn = Txn, sender = ChPid, message = Message}) ->
+    gen_server2:call(QPid, {deliver_immediately, Txn, Message, ChPid},
+                     infinity);
+deliver(QPid, #delivery{mandatory = true,
+                        txn = Txn, sender = ChPid, message = Message}) ->
+    gen_server2:call(QPid, {deliver, Txn, Message, ChPid}, infinity),
     true;
-deliver(false, _IsImmediate, Txn, Message, QPid) ->
-    gen_server2:cast(QPid, {deliver, Txn, Message}),
+deliver(QPid, #delivery{txn = Txn, sender = ChPid, message = Message}) ->
+    gen_server2:cast(QPid, {deliver, Txn, Message, ChPid}),
     true.
 
 redeliver(QPid, Messages) ->

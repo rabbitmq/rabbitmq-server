@@ -64,6 +64,8 @@
 
 -record(basic_message, {exchange_name, routing_key, content, persistent_key}).
 
+-record(delivery, {mandatory, immediate, txn, sender, message}).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -134,6 +136,12 @@
                      content        :: content(),
                      persistent_key :: maybe(pkey())}).
 -type(message() :: basic_message()).
+-type(delivery() ::
+      #delivery{mandatory :: bool(),
+                immediate :: bool(),
+                txn       :: maybe(txn()),
+                sender    :: pid(),
+                message   :: message()}).
 %% this really should be an abstract type
 -type(msg_id() :: non_neg_integer()).
 -type(msg() :: {queue_name(), pid(), msg_id(), bool(), message()}).
