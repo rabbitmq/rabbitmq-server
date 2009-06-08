@@ -33,14 +33,15 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/4, message/4]).
+-export([publish/1, message/4, delivery/4]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(publish/4 :: (bool(), bool(), maybe(txn()), message()) ->
+-spec(publish/1 :: (delivery()) ->
              {ok, routing_result(), [pid()]} | not_found()).
+-spec(delivery/4 :: (bool(), bool(), maybe(txn()), message()) -> delivery()). 
 -spec(message/4 :: (exchange_name(), routing_key(), binary(), binary()) ->
              message()).
 
@@ -48,16 +49,19 @@
 
 %%----------------------------------------------------------------------------
 
-publish(Mandatory, Immediate, Txn,
-        Message = #basic_message{exchange_name = ExchangeName}) ->
+publish(Delivery = #delivery{
+          message = #basic_message{exchange_name = ExchangeName}}) ->
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, X} ->
-            {RoutingRes, DeliveredQPids} =
-                rabbit_exchange:publish(X, Mandatory, Immediate, Txn, Message),
+            {RoutingRes, DeliveredQPids} = rabbit_exchange:publish(X, Delivery),
             {ok, RoutingRes, DeliveredQPids};
         Other ->
             Other
     end.
+
+delivery(Mandatory, Immediate, Txn, Message) ->
+    #delivery{mandatory = Mandatory, immediate = Immediate, txn = Txn,
+              sender = self(), message = Message}.
 
 message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin) ->
     {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),

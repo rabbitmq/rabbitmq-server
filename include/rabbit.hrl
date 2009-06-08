@@ -66,6 +66,8 @@
 
 -record(dq_msg_loc, {queue_and_seq_id, is_delivered, msg_id, next_seq_id}).
 
+-record(delivery, {mandatory, immediate, txn, sender, message}).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -137,6 +139,12 @@
 		     guid           :: guid(),
                      is_persistent  :: bool()}).
 -type(message() :: basic_message()).
+-type(delivery() ::
+      #delivery{mandatory :: bool(),
+                immediate :: bool(),
+                txn       :: maybe(txn()),
+                sender    :: pid(),
+                message   :: message()}).
 %% this really should be an abstract type
 -type(msg_id() :: non_neg_integer()).
 -type(msg() :: {queue_name(), pid(), msg_id(), bool(), message()}).

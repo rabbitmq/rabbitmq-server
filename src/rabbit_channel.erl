@@ -321,8 +321,9 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                              guid           = rabbit_guid:guid(),
                              is_persistent  = is_message_persistent(DecodedContent)},
     {RoutingRes, DeliveredQPids} =
-        rabbit_exchange:publish(Exchange, Mandatory, Immediate, TxnKey,
-                                Message),
+        rabbit_exchange:publish(
+          Exchange,
+          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message)),
     case RoutingRes of
         routed ->
             ok;

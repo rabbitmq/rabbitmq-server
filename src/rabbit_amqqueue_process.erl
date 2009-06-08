@@ -66,6 +66,7 @@
              monitor_ref,
              unacked_messages,
              is_limit_active,
+             txn,
              unsent_message_count}).
 
 -define(INFO_KEYS,
@@ -136,6 +137,7 @@ ch_record(ChPid) ->
                     monitor_ref = MonitorRef,
                     unacked_messages = dict:new(),
                     is_limit_active = false,
+                    txn = none,
                     unsent_message_count = 0},
             put(Key, C),
             C;
@@ -159,6 +161,11 @@ ch_record_state_transition(OldCR, NewCR) ->
        true                               -> ok
     end.
 
+record_current_channel_tx(ChPid, Txn) ->
+    %% as a side effect this also starts monitoring the channel (if
+    %% that wasn't happening already)
+    store_ch_record((ch_record(ChPid))#cr{txn = Txn}).
+    
 deliver_queue(Fun, FunAcc0,
               State = #q{q = #amqqueue{name = QName},
                          round_robin = RoundRobin,
@@ -232,7 +239,7 @@ run_message_queue(State) ->
     {undefined, State2} = deliver_queue(fun deliver_from_queue/3, undefined, State),
     State2.
 
-attempt_immediate_delivery(none, Msg, State) ->
+attempt_immediate_delivery(none, _ChPid, Msg, State) ->
     Fun =
         fun (is_message_ready, false, _State) ->
                 true;
@@ -248,13 +255,13 @@ attempt_immediate_delivery(none, Msg, State) ->
                 {{Msg, false, AckTag, 0}, true, State3}
         end,
     deliver_queue(Fun, false, State);
-attempt_immediate_delivery(Txn, Msg, State) ->
+attempt_immediate_delivery(Txn, ChPid, Msg, State) ->
     {ok, MS} = rabbit_mixed_queue:tx_publish(Msg, State #q.mixed_state),
-    record_pending_message(Txn, Msg),
+    record_pending_message(Txn, ChPid, Msg),
     {true, State #q { mixed_state = MS }}.
 
-deliver_or_enqueue(Txn, Msg, State) ->
-    case attempt_immediate_delivery(Txn, Msg, State) of
+deliver_or_enqueue(Txn, ChPid, Msg, State) ->
+    case attempt_immediate_delivery(Txn, ChPid, Msg, State) of
         {true, NewState} ->
             {true, NewState};
         {false, NewState} ->
@@ -351,24 +358,30 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
                                    round_robin = ActiveConsumers}) ->
     case lookup_ch(DownPid) of
         not_found -> noreply(State);
-        #cr{monitor_ref = MonitorRef, ch_pid = ChPid, unacked_messages = UAM} ->
+        #cr{monitor_ref = MonitorRef, ch_pid = ChPid, txn = Txn,
+            unacked_messages = UAM} ->
             NewActive = block_consumers(ChPid, ActiveConsumers),
             erlang:demonitor(MonitorRef),
             erase({ch, ChPid}),
+            State1 =
+                case Txn of
+                    none -> State;
+                    _    -> rollback_transaction(Txn, State)
+                end,
             case check_auto_delete(
                    deliver_or_requeue_n(
                      [MsgWithAck ||
                          {_MsgId, MsgWithAck} <- dict:to_list(UAM)],
-                     State#q{
+                     State1 # q {
                        exclusive_consumer = case Holder of
                                                 {ChPid, _} -> none;
                                                 Other -> Other
                                             end,
                        round_robin = NewActive})) of
-                {continue, NewState} ->
-                    noreply(NewState);
-                {stop, NewState} ->
-                    {stop, normal, NewState}
+                {continue, State2} ->
+                    noreply(State2);
+                {stop, State2} ->
+                    {stop, normal, State2}
             end
     end.
 
@@ -428,15 +441,18 @@ all_tx_record() ->
 all_tx() ->
     [Txn || {{txn, Txn}, _} <- get()].
 
-record_pending_message(Txn, Message = #basic_message { is_persistent = IsPersistent }) ->
+record_pending_message(Txn, ChPid, Message = #basic_message { is_persistent = IsPersistent }) ->
     Tx = #tx{pending_messages = Pending, is_persistent = IsPersistentTxn } = lookup_tx(Txn),
+    record_current_channel_tx(ChPid, Txn),
     store_tx(Txn, Tx #tx { pending_messages = [Message | Pending],
                            is_persistent = IsPersistentTxn orelse IsPersistent
                          }).
 
 record_pending_acks(Txn, ChPid, MsgIds) ->
     Tx = #tx{pending_acks = Pending} = lookup_tx(Txn),
-    store_tx(Txn, Tx#tx{pending_acks = [MsgIds | Pending], ch_pid = ChPid}).
+    record_current_channel_tx(ChPid, Txn),
+    store_tx(Txn, Tx#tx{pending_acks = [MsgIds | Pending],
+                        ch_pid = ChPid}).
 
 commit_transaction(Txn, State) ->
     #tx { ch_pid = ChPid,
@@ -465,6 +481,7 @@ rollback_transaction(Txn, State) ->
     #tx { pending_messages = PendingMessages
         } = lookup_tx(Txn),
     {ok, MS} = rabbit_mixed_queue:tx_cancel(lists:reverse(PendingMessages), State #q.mixed_state),
+    erase_tx(Txn),
     State #q { mixed_state = MS }.
 
 %% {A, B} = collect_messages(C, D) %% A = C `intersect` D; B = D \\ C
@@ -519,7 +536,7 @@ handle_call({info, Items}, _From, State) ->
     catch Error -> reply({error, Error}, State)
     end;
 
-handle_call({deliver_immediately, Txn, Message}, _From, State) ->
+handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
     %% Synchronous, "immediate" delivery mode
     %%
     %% FIXME: Is this correct semantics?
@@ -533,12 +550,12 @@ handle_call({deliver_immediately, Txn, Message}, _From, State) ->
     %% just all ready-to-consume queues get the message, with unready
     %% queues discarding the message?
     %%
-    {Delivered, NewState} = attempt_immediate_delivery(Txn, Message, State),
+    {Delivered, NewState} = attempt_immediate_delivery(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
-handle_call({deliver, Txn, Message}, _From, State) ->
+handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
     %% Synchronous, "mandatory" delivery mode
-    {Delivered, NewState} = deliver_or_enqueue(Txn, Message, State),
+    {Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
 handle_call({commit, Txn}, From, State) ->
@@ -692,9 +709,9 @@ handle_call({claim_queue, ReaderPid}, _From, State = #q{owner = Owner,
             reply(locked, State)
     end.
 
-handle_cast({deliver, Txn, Message}, State) ->
+handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    {_Delivered, NewState} = deliver_or_enqueue(Txn, Message, State),
+    {_Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
     noreply(NewState);
 
 handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
@@ -716,9 +733,7 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
     end;
 
 handle_cast({rollback, Txn}, State) ->
-    NewState = rollback_transaction(Txn, State),
-    erase_tx(Txn),
-    noreply(NewState);
+    noreply(rollback_transaction(Txn, State));
 
 handle_cast({requeue, MsgIds, ChPid}, State) ->
     case lookup_ch(ChPid) of

@@ -36,7 +36,7 @@
 
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
          list/1, info/1, info/2, info_all/1, info_all/2,
-         publish/5]).
+         publish/2]).
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
@@ -72,8 +72,7 @@
 -spec(info/2 :: (exchange(), [info_key()]) -> [info()]).
 -spec(info_all/1 :: (vhost()) -> [[info()]]).
 -spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
--spec(publish/5 :: (exchange(), bool(), bool(), maybe(txn()), message()) ->
-             {routing_result(), [pid()]}).
+-spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
 -spec(add_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'durability_settings_incompatible'}).
@@ -188,13 +187,12 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-publish(X, Mandatory, Immediate, Txn, Message) ->
-    publish(X, [], Mandatory, Immediate, Txn, Message).
+publish(X, Delivery) ->
+    publish(X, [], Delivery).
 
-publish(X, Seen, Mandatory, Immediate, Txn,
-        Message = #basic_message{routing_key = RK, content = C}) ->
-    case rabbit_router:deliver(route(X, RK, C),
-                               Mandatory, Immediate, Txn, Message) of
+publish(X, Seen, Delivery = #delivery{
+                   message = #basic_message{routing_key = RK, content = C}}) ->
+    case rabbit_router:deliver(route(X, RK, C), Delivery) of
         {_, []} = R ->
             #exchange{name = XName, arguments = Args} = X,
             case rabbit_misc:r_arg(XName, exchange, Args,
@@ -209,9 +207,7 @@ publish(X, Seen, Mandatory, Immediate, Txn,
                         false ->
                             case lookup(AName) of
                                 {ok, AX} ->
-                                    publish(AX, NewSeen,
-                                            Mandatory, Immediate, Txn,
-                                            Message);
+                                    publish(AX, NewSeen, Delivery);
                                 {error, not_found} ->
                                     rabbit_log:warning(
                                       "alternate exchange for ~s "

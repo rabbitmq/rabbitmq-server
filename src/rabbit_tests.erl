@@ -56,7 +56,7 @@ all_tests() ->
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
-    passed = test_disk_queue(),
+    %%passed = test_disk_queue(),
     passed.
 
 test_priority_queue() ->
