@@ -36,7 +36,7 @@
 
 -export([recover/0, declare/4, lookup/1, lookup_or_die/1,
          list/1, info/1, info/2, info_all/1, info_all/2,
-         publish/5]).
+         publish/2]).
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
@@ -71,8 +71,7 @@
 -spec(info/2 :: (exchange(), [info_key()]) -> [info()]).
 -spec(info_all/1 :: (vhost()) -> [[info()]]).
 -spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
--spec(publish/5 :: (exchange(), bool(), bool(), maybe(txn()), message()) ->
-             {routing_result(), [pid()]}).
+-spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
 -spec(add_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'durability_settings_incompatible'}).
@@ -185,13 +184,12 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-publish(X, Mandatory, Immediate, Txn, Message) ->
-    publish(X, [], Mandatory, Immediate, Txn, Message).
+publish(X, Delivery) ->
+    publish(X, [], Delivery).
 
-publish(X, Seen, Mandatory, Immediate, Txn,
-        Message = #basic_message{routing_key = RK, content = C}) ->
-    case rabbit_router:deliver(route(X, RK, C),
-                               Mandatory, Immediate, Txn, Message) of
+publish(X, Seen, Delivery = #delivery{
+                   message = #basic_message{routing_key = RK, content = C}}) ->
+    case rabbit_router:deliver(route(X, RK, C), Delivery) of
         {_, []} = R ->
             #exchange{name = XName, arguments = Args} = X,
             case rabbit_misc:r_arg(XName, exchange, Args,
@@ -206,9 +204,7 @@ publish(X, Seen, Mandatory, Immediate, Txn,
                         false ->
                             case lookup(AName) of
                                 {ok, AX} ->
-                                    publish(AX, NewSeen,
-                                            Mandatory, Immediate, Txn,
-                                            Message);
+                                    publish(AX, NewSeen, Delivery);
                                 {error, not_found} ->
                                     rabbit_log:warning(
                                       "alternate exchange for ~s "
@@ -369,31 +365,39 @@ call_with_exchange_and_queue(Exchange, Queue, Fun) ->
       end).
 
 add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
-    call_with_exchange_and_queue(
-      ExchangeName, QueueName,
-      fun (X, Q) ->
+    binding_action(
+      ExchangeName, QueueName, RoutingKey, Arguments,
+      fun (X, Q, B) ->
               if Q#amqqueue.durable and not(X#exchange.durable) ->
                       {error, durability_settings_incompatible};
-                 true -> ok = sync_binding(
-                            ExchangeName, QueueName, RoutingKey, Arguments,
-                            Q#amqqueue.durable, fun mnesia:write/3)
+                 true -> ok = sync_binding(B, Q#amqqueue.durable,
+                                           fun mnesia:write/3)
               end
       end).
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
-    call_with_exchange_and_queue(
-      ExchangeName, QueueName,
-      fun (_X, Q) ->
-              ok = sync_binding(
-                     ExchangeName, QueueName, RoutingKey, Arguments,
-                     Q#amqqueue.durable, fun mnesia:delete_object/3)
+    binding_action(
+      ExchangeName, QueueName, RoutingKey, Arguments,
+      fun (_X, Q, B) ->
+              case mnesia:match_object(rabbit_route, #route{binding = B},
+                                       write) of
+                  [] -> {error, binding_not_found};
+                  _  -> ok = sync_binding(B, Q#amqqueue.durable,
+                                          fun mnesia:delete_object/3)
+              end
       end).
 
-sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
-    Binding = #binding{exchange_name = ExchangeName,
-                       queue_name = QueueName,
-                       key = RoutingKey,
-                       args = sort_arguments(Arguments)},
+binding_action(ExchangeName, QueueName, RoutingKey, Arguments, Fun) ->
+    call_with_exchange_and_queue(
+      ExchangeName, QueueName,
+      fun (X, Q) ->
+              Fun(X, Q, #binding{exchange_name = ExchangeName,
+                                 queue_name    = QueueName,
+                                 key           = RoutingKey,
+                                 args          = sort_arguments(Arguments)})
+      end).
+
+sync_binding(Binding, Durable, Fun) ->
     ok = case Durable of
              true  -> Fun(rabbit_durable_route,
                           #route{binding = Binding}, write);
@@ -459,7 +463,7 @@ parse_x_match(Other) ->
 
 %% Horrendous matching algorithm. Depends for its merge-like
 %% (linear-time) behaviour on the lists:keysort (sort_arguments) that
-%% route/3 and sync_binding/6 do.
+%% route/3 and {add,delete}_binding/4 do.
 %%
 %%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 %% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.

@@ -231,13 +231,13 @@ clear_permission_cache() ->
     ok.
 
 check_configure_permitted(Resource, #ch{ username = Username}) ->
-    check_resource_access(Username, Resource, #permission.configure).
+    check_resource_access(Username, Resource, configure).
 
 check_write_permitted(Resource, #ch{ username = Username}) ->
-    check_resource_access(Username, Resource, #permission.write).
+    check_resource_access(Username, Resource, write).
 
 check_read_permitted(Resource, #ch{ username = Username}) ->
-    check_resource_access(Username, Resource, #permission.read).
+    check_resource_access(Username, Resource, read).
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
@@ -318,8 +318,9 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
                              content        = DecodedContent,
                              persistent_key = PersistentKey},
     {RoutingRes, DeliveredQPids} =
-        rabbit_exchange:publish(Exchange, Mandatory, Immediate, TxnKey,
-                                Message),
+        rabbit_exchange:publish(
+          Exchange,
+          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message)),
     case RoutingRes of
         routed ->
             ok;
