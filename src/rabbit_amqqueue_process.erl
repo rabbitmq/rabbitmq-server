@@ -555,7 +555,8 @@ handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
 
 handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
     %% Synchronous, "mandatory" delivery mode
-    reply(deliver_or_enqueue(Txn, ChPid, Message, State));
+    {Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
+    reply(Delivered, NewState);
 
 handle_call({commit, Txn}, From, State) ->
     NewState = commit_transaction(Txn, State),
