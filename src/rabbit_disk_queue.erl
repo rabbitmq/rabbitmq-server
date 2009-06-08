@@ -1114,10 +1114,7 @@ sort_msg_locations_by_offset(Asc, List) ->
 truncate_and_extend_file(FileHdl, Lowpoint, Highpoint) ->
     {ok, Lowpoint} = file:position(FileHdl, {bof, Lowpoint}),
     ok = file:truncate(FileHdl),
-    {ok, Highpoint} = file:position(FileHdl, {bof, Highpoint}),
-    ok = file:truncate(FileHdl),
-    {ok, Lowpoint} = file:position(FileHdl, {bof, Lowpoint}),
-    ok.
+    ok = preallocate(FileHdl, Highpoint, Lowpoint).
 
 combine_files({Source, SourceValid, _SourceContiguousTop,
               _SourceLeft, _SourceRight},
