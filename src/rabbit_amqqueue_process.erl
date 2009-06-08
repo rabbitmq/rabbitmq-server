@@ -223,7 +223,7 @@ deliver_queue(Fun, FunAcc0,
     end.
 
 deliver_from_queue(is_message_ready, undefined, #q { mixed_state = MS }) ->
-    not(rabbit_mixed_queue:is_empty(MS));
+    0 /= rabbit_mixed_queue:length(MS);
 deliver_from_queue(AckRequired, Acc = undefined, State = #q { mixed_state = MS }) ->
     {Res, MS2} = rabbit_mixed_queue:deliver(MS),
     MS3 = case {Res, AckRequired} of
@@ -555,8 +555,7 @@ handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
 
 handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
     %% Synchronous, "mandatory" delivery mode
-    {Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
-    reply(Delivered, NewState);
+    reply(deliver_or_enqueue(Txn, ChPid, Message, State));
 
 handle_call({commit, Txn}, From, State) ->
     NewState = commit_transaction(Txn, State),
@@ -580,13 +579,12 @@ handle_call({basic_get, ChPid, NoAck}, _From,
         {{Msg, IsDelivered, AckTag, Remaining}, MS2} ->
             AckRequired = not(NoAck),
             {ok, MS3} =
-                case AckRequired of
-                    true  ->
+                if AckRequired ->
                         C = #cr{unacked_messages = UAM} = ch_record(ChPid),
                         NewUAM = dict:store(NextId, {Msg, AckTag}, UAM),
                         store_ch_record(C#cr{unacked_messages = NewUAM}),
                         {ok, MS2};
-                    false ->
+                   true ->
                         rabbit_mixed_queue:ack([AckTag], MS2)
                 end,
             Message = {QName, self(), NextId, IsDelivered, Msg},
