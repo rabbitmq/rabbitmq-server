@@ -41,8 +41,8 @@
 %---------------------------------------------------------------------------
 
 handshake(State = #connection_state{serverhost = Host}) ->
-    case gen_tcp:connect(Host, 5672,
-                         [binary, {packet, 0}, {active, false}]) of
+    case gen_tcp:connect(Host, 5672, [binary, {packet, 0}, {active, false},
+                                      {nodelay, true}]) of
         {ok, Sock} ->
             ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
             Parent = self(),
