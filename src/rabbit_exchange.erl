@@ -367,12 +367,8 @@ call_with_exchange_and_queue(Exchange, Queue, Fun) ->
 add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
     binding_action(
       ExchangeName, QueueName, RoutingKey, Arguments,
-      fun (X, Q, B) ->
-              if Q#amqqueue.durable and not(X#exchange.durable) ->
-                      {error, durability_settings_incompatible};
-                 true -> ok = sync_binding(B, Q#amqqueue.durable,
-                                           fun mnesia:write/3)
-              end
+      fun (_X, Q, B) ->
+              ok = sync_binding(B, Q#amqqueue.durable, fun mnesia:write/3)
       end).
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
