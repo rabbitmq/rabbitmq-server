@@ -178,9 +178,11 @@ deliver_queue(Fun, FunAcc0,
                     unsent_message_count = Count,
                     unacked_messages = UAM} = ch_record(ChPid),
             IsMsgReady = Fun(is_message_ready, FunAcc0, State),
-            case not(AckRequired) orelse
-                ( IsMsgReady andalso
-                  rabbit_limiter:can_send( LimiterPid, self())
+            case IsMsgReady
+                andalso
+                ( (not AckRequired)
+                  orelse
+                  rabbit_limiter:can_send( LimiterPid, self() )
                 ) of
                 true ->
                     case Fun(AckRequired, FunAcc0, State) of
