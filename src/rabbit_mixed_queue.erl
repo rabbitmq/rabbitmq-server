@@ -49,61 +49,62 @@
                  }
        ).
 
-start_link(Queue, IsDurable, Mode) when Mode =:= disk orelse Mode =:= mixed ->
-    QList = rabbit_disk_queue:dump_queue(Queue),
-    {MsgBuf, NextSeq} =
-        lists:foldl(
-          fun ({_MsgId, Msg, _Size, Delivered, SeqId}, {Buf, NSeq})
-              when SeqId >= NSeq ->
-                  {queue:in({SeqId, bin_to_msg(Msg), Delivered}, Buf), SeqId + 1}
-          end, {queue:new(), 0}, QList),
-    {ok, #mqstate { mode = Mode, msg_buf = MsgBuf, next_write_seq = NextSeq,
-                    queue = Queue, is_durable = IsDurable }}.
+start_link(Queue, IsDurable, disk) ->
+    NextSeq = rabbit_disk_queue:next_write_seq(Queue),
+    {ok, #mqstate { mode = disk, msg_buf = queue:new(), queue = Queue,
+                    next_write_seq = NextSeq, is_durable = IsDurable }};
+start_link(Queue, IsDurable, mixed) ->
+    {ok, State} = start_link(Queue, IsDurable, disk),
+    to_mixed_mode(State #mqstate { next_write_seq = 0 }).
 
 to_disk_only_mode(State = #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf,
-                                     is_durable = IsDurable }) ->
+                                     is_durable = IsDurable,
+                                     next_write_seq = NextSeq }) ->
     Msgs = queue:to_list(MsgBuf),
-    AckTags =
+    {NextSeq1, Requeue} =
         lists:foldl(
           fun ({_Seq, Msg = #basic_message { guid = MsgId,
-                                            is_persistent = IsPersistent },
-                IsDelivered}, AcksAcc) ->
-                  ok = rabbit_disk_queue:publish(Q, MsgId, msg_to_bin(Msg)),
+                                             is_persistent = IsPersistent },
+                IsDelivered}, {NSeq, RQueueAcc}) ->
                   if IsDurable andalso IsPersistent ->
-                          {MsgId, IsDelivered, AckTag, _PersistRemaining}
-                              = rabbit_disk_queue:phantom_deliver(Q),
-                          [AckTag | AcksAcc];
-                     true -> AcksAcc
+                          {MsgId, IsDelivered, AckTag, _PersistRemaining} =
+                              rabbit_disk_queue:phantom_deliver(Q),
+                          {NSeq + 1,
+                           [ {AckTag, {NSeq, IsDelivered}} | RQueueAcc ]};
+                     true ->
+                          ok = if [] == RQueueAcc -> ok;
+                                  true ->
+                                       rabbit_disk_queue:requeue_with_seqs(
+                                         Q, lists:reverse(RQueueAcc))
+                               end,
+                          ok = rabbit_disk_queue:publish_with_seq(
+                                 Q, MsgId, NSeq, msg_to_bin(Msg)),
+                          {NSeq + 1, []}
                   end
-          end, [], Msgs),
-    ok = rabbit_disk_queue:ack(Q, lists:reverse(AckTags)),
-    State #mqstate { mode = disk, msg_buf = queue:new() }.
+          end, {NextSeq, []}, Msgs),
+    ok = if [] == Requeue -> ok;
+            true ->
+                 rabbit_disk_queue:requeue_with_seqs(Q, lists:reverse(Requeue))
+         end,
+    {ok, State #mqstate { mode = disk, msg_buf = queue:new(),
+                          next_write_seq = NextSeq1 }}.
 
 to_mixed_mode(State = #mqstate { mode = disk, msg_buf = MsgBuf, queue = Q,
-                                 is_durable = IsDurable,
                                  next_write_seq = NextSeq }) ->
     QList = rabbit_disk_queue:dump_queue(Q),
-    {MsgBuf1, NextSeq1, AckTags} =
+    {MsgBuf1, NextSeq1} =
         lists:foldl(
-          fun ({MsgId, MsgBin, _Size, IsDelivered, SeqId}, {Buf, NSeq, AcksAcc})
+          fun ({MsgId, MsgBin, _Size, IsDelivered, _AckTag, SeqId}, {Buf, NSeq})
               when SeqId >= NSeq ->
-                  Msg = #basic_message { guid = MsgId,
-                                         is_persistent = IsPersistent }
+                  Msg = #basic_message { guid = MsgId }
                       = bin_to_msg(MsgBin),
-                  Buf1 = queue:in({SeqId, Msg, IsDelivered}, Buf),
+                  Buf1 = queue:in({SeqId,
+                                   Msg #basic_message { is_persistent = true },
+                                   IsDelivered}, Buf),
                   NSeq1 = SeqId + 1,
-                  AcksAcc1 =
-                      if IsDurable andalso IsPersistent ->
-                              [AcksAcc];
-                         true -> 
-                              {MsgId, IsDelivered, AckTag, _PersistRemaining} =
-                                  rabbit_disk_queue:phantom_deliver(Q),
-                              [AckTag | AcksAcc]
-                      end,
-                  {Buf1, NSeq1, AcksAcc1}
-          end, {MsgBuf, NextSeq, []}, QList),
-    ok = rabbit_disk_queue:ack(Q, lists:reverse(AckTags)),
-    State #mqstate { mode = mixed, msg_buf = MsgBuf1, next_write_seq = NextSeq1 }.
+                  {Buf1, NSeq1}
+          end, {MsgBuf, NextSeq}, QList),
+    {ok, State #mqstate { mode = mixed, msg_buf = MsgBuf1, next_write_seq = NextSeq1 }}.
 
 msg_to_bin(Msg = #basic_message { content = Content }) ->
     ClearedContent = rabbit_binary_parser:clear_decoded_content(Content),
@@ -250,7 +251,7 @@ requeue(MessagesWithAckTags, State = #mqstate { mode = mixed, queue = Q,
                             Acc2 =
                                 if IsDurable andalso IsPersistent ->
                                         {MsgId, _OldSeqId} = AckTag,
-                                        [{AckTag, NextSeq3} | Acc];
+                                        [{AckTag, {NextSeq3, true}} | Acc];
                                    true -> Acc
                                 end,
                             MsgBuf4 = queue:in({NextSeq3, Msg, true}, MsgBuf3),

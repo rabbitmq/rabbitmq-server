@@ -44,7 +44,7 @@
          dump_queue/1, delete_non_durable_queues/1
         ]).
 
--export([length/1, is_empty/1]).
+-export([length/1, is_empty/1, next_write_seq/1]).
 
 -export([stop/0, stop_and_obliterate/0, to_disk_only_mode/0, to_ram_disk_mode/0]).
 
@@ -249,13 +249,14 @@
 -spec(requeue_with_seqs/2 :: (queue_name(), [{{msg_id(), seq_id()}, seq_id_or_next()}]) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
 -spec(dump_queue/1 :: (queue_name()) -> [{msg_id(), binary(), non_neg_integer(),
-                                          bool(), seq_id()}]).
+                                          bool(), {msg_id(), seq_id()}, seq_id()}]).
 -spec(delete_non_durable_queues/1 :: (set()) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
 -spec(to_ram_disk_mode/0 :: () -> 'ok').
 -spec(to_disk_only_mode/0 :: () -> 'ok').
 -spec(length/1 :: (queue_name()) -> non_neg_integer()).
+-spec(next_write_seq/1 :: (queue_name()) -> non_neg_integer()).
 -spec(is_empty/1 :: (queue_name()) -> bool()).
 
 -endif.
@@ -326,6 +327,9 @@ to_ram_disk_mode() ->
 
 length(Q) ->
     gen_server2:call(?SERVER, {length, Q}, infinity).
+
+next_write_seq(Q) ->
+    gen_server2:call(?SERVER, {next_write_seq, Q}, infinity).
 
 is_empty(Q) ->
     Length = rabbit_disk_queue:length(Q),
@@ -460,6 +464,9 @@ handle_call(to_ram_disk_mode, _From,
 handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     {_ReadSeqId, _WriteSeqId, Length} = sequence_lookup(Sequences, Q),
     {reply, Length, State};
+handle_call({next_write_seq, Q}, _From, State = #dqstate { sequences = Sequences }) ->
+    {_ReadSeqId, WriteSeqId, _Length} = sequence_lookup(Sequences, Q),
+    {reply, WriteSeqId, State};
 handle_call({dump_queue, Q}, _From, State) ->
     {Result, State1} = internal_dump_queue(Q, State),
     {reply, Result, State1};
@@ -483,7 +490,7 @@ handle_cast({tx_cancel, MsgIds}, State) ->
     {ok, State1} = internal_tx_cancel(MsgIds, State),
     {noreply, State1};
 handle_cast({requeue, Q, MsgSeqIds}, State) ->
-    MsgSeqSeqIds = zip_with_tail(MsgSeqIds, {duplicate, next}),
+    MsgSeqSeqIds = zip_with_tail(MsgSeqIds, {duplicate, {next, true}}),
     {ok, State1} = internal_requeue(Q, MsgSeqSeqIds, State),
     {noreply, State1};
 handle_cast({requeue_with_seqs, Q, MsgSeqSeqIds}, State) ->
@@ -887,7 +894,7 @@ internal_tx_cancel(MsgIds, State) ->
 
 internal_requeue(_Q, [], State) ->
     {ok, State};
-internal_requeue(Q, MsgSeqIds = [{_, FirstSeqIdTo}|_],
+internal_requeue(Q, MsgSeqIds = [{_, {FirstSeqIdTo, _}}|_],
                  State = #dqstate { sequences = Sequences }) ->
     %% We know that every seq_id in here is less than the ReadSeqId
     %% you'll get if you look up this queue in Sequences (i.e. they've
@@ -913,7 +920,7 @@ internal_requeue(Q, MsgSeqIds = [{_, FirstSeqIdTo}|_],
 
     {ReadSeqId, WriteSeqId, Length} = sequence_lookup(Sequences, Q),
     ReadSeqId2 = determine_next_read_id(ReadSeqId, WriteSeqId, FirstSeqIdTo),
-    MsgSeqIdsZipped = zip_with_tail(MsgSeqIds, {last, {next, next}}),
+    MsgSeqIdsZipped = zip_with_tail(MsgSeqIds, {last, {next, {next, true}}}),
     {atomic, {WriteSeqId2, Q}} =
         mnesia:transaction(
           fun() ->
@@ -925,8 +932,8 @@ internal_requeue(Q, MsgSeqIds = [{_, FirstSeqIdTo}|_],
                                   Length + erlang:length(MsgSeqIds)}),
     {ok, State}.
 
-requeue_message({{{MsgId, SeqIdOrig}, SeqIdTo},
-                 {_NextMsgSeqId, NextSeqIdTo}},
+requeue_message({{{MsgId, SeqIdOrig}, {SeqIdTo, NewIsDelivered}},
+                 {_NextMsgSeqId, {NextSeqIdTo, _NextNewIsDelivered}}},
                 {ExpectedSeqIdTo, Q}) ->
     SeqIdTo2 = adjust_last_msg_seq_id(Q, ExpectedSeqIdTo, SeqIdTo, write),
     NextSeqIdTo2 = find_next_seq_id(SeqIdTo2, NextSeqIdTo),
@@ -937,7 +944,8 @@ requeue_message({{{MsgId, SeqIdOrig}, SeqIdTo},
        true ->
             ok = mnesia:write(rabbit_disk_queue,
                               Obj #dq_msg_loc {queue_and_seq_id = {Q, SeqIdTo2},
-                                               next_seq_id = NextSeqIdTo2
+                                               next_seq_id = NextSeqIdTo2,
+                                               is_delivered = NewIsDelivered
                                               },
                               write),
             ok = mnesia:delete(rabbit_disk_queue, {Q, SeqIdOrig}, write)
@@ -1007,7 +1015,8 @@ internal_dump_queue(Q, State = #dqstate { sequences = Sequences }) ->
                            NextReadSeqId, State2} =
                               internal_read_message(Q, SeqId, true, true,
                                                     State1),
-                          {true, {MsgId, Msg, Size, Delivered, SeqId},
+                          {true,
+                           {MsgId, Msg, Size, Delivered, {MsgId, SeqId}, SeqId},
                            {NextReadSeqId, State2}}
                   end, {ReadSeq, State}),
             {lists:reverse(QList), State3}

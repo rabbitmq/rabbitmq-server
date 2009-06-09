@@ -910,7 +910,7 @@ rdq_test_dump_queue() ->
     [rabbit_disk_queue:tx_publish(N, Msg) || N <- All],
     rabbit_disk_queue:tx_commit(q, All, []),
     io:format("Publish done~n", []),
-    QList = [{N, Msg, 256, false, (N-1)} || N <- All],
+    QList = [{N, Msg, 256, false, {N, (N-1)}, (N-1)} || N <- All],
     QList = rabbit_disk_queue:dump_queue(q),
     rdq_stop(),
     io:format("dump ok undelivered~n", []),
@@ -924,10 +924,78 @@ rdq_test_dump_queue() ->
     rdq_stop(),
     io:format("dump ok post delivery~n", []),
     rdq_start(),
-    QList2 = [{N, Msg, 256, true, (N-1)} || N <- All],
+    QList2 = [{N, Msg, 256, true, {N, (N-1)}, (N-1)} || N <- All],
     QList2 = rabbit_disk_queue:dump_queue(q),
     io:format("dump ok post delivery + restart~n", []),
     rdq_stop(),
+    passed.
+
+rdq_test_mixed_queue_modes() ->
+    rdq_virgin(),
+    rdq_start(),
+    Payload = <<0:(8*256)>>,
+    {ok, MS} = rabbit_mixed_queue:start_link(q, true, mixed),
+    MS2 = lists:foldl(fun (_N, MS1) ->
+                              Msg = rabbit_basic:message(x, <<>>, <<>>, Payload),
+                              {ok, MS1a} = rabbit_mixed_queue:publish(Msg, MS1),
+                              MS1a
+                      end, MS, lists:seq(1,10)),
+    MS4 = lists:foldl(fun (_N, MS3) ->
+                              Msg = (rabbit_basic:message(x, <<>>, <<>>, Payload))
+                                  #basic_message { is_persistent = true },
+                              {ok, MS3a} = rabbit_mixed_queue:publish(Msg, MS3),
+                              MS3a
+                      end, MS2, lists:seq(1,10)),
+    MS6 = lists:foldl(fun (_N, MS5) ->
+                              Msg = rabbit_basic:message(x, <<>>, <<>>, Payload),
+                              {ok, MS5a} = rabbit_mixed_queue:publish(Msg, MS5),
+                              MS5a
+                      end, MS4, lists:seq(1,10)),
+    30 = rabbit_mixed_queue:length(MS6),
+    io:format("Published a mixture of messages~n"),
+    {ok, _MS7} = rabbit_mixed_queue:to_disk_only_mode(MS6),
+    io:format("Converted to disk only mode~n"),
+    rdq_stop(),
+    rdq_start(),
+    {ok, MS8} = rabbit_mixed_queue:start_link(q, true, mixed),
+    30 = rabbit_mixed_queue:length(MS8),
+    io:format("Recovered queue~n"),
+    MS10 =
+        lists:foldl(
+          fun (N, MS9) ->
+                  Rem = 30 - N,
+                  {{#basic_message { is_persistent = true },
+                    false, _AckTag, Rem},
+                   MS9a} = rabbit_mixed_queue:deliver(MS9),
+                  MS9a
+          end, MS8, lists:seq(1,10)),
+    io:format("Delivered initial non persistent messages~n"),
+    {ok, _MS11} = rabbit_mixed_queue:to_disk_only_mode(MS10),
+    io:format("Converted to disk only mode~n"),
+    rdq_stop(),
+    rdq_start(),
+    {ok, MS12} = rabbit_mixed_queue:start_link(q, true, mixed),
+    30 = rabbit_mixed_queue:length(MS12),
+    io:format("Recovered queue~n"),
+    {MS14, AckTags} =
+        lists:foldl(
+          fun (N, {MS13, AcksAcc}) ->
+                  Rem = 30 - N,
+                  IsDelivered = N < 11,
+                  {{#basic_message { is_persistent = true },
+                    IsDelivered, AckTag, Rem},
+                   MS13a} = rabbit_mixed_queue:deliver(MS13),
+                  {MS13a, [AckTag | AcksAcc]}
+          end, {MS2, []}, lists:seq(1,20)),
+    {ok, MS15} = rabbit_mixed_queue:ack(AckTags, MS14),
+    io:format("Delivered and acked initial non persistent messages~n"),
+    {ok, _MS16} = rabbit_mixed_queue:to_disk_only_mode(MS15),
+    io:format("Converted to disk only mode~n"),
+    rdq_stop(),
+    rdq_start(),
+    {ok, MS17} = rabbit_mixed_queue:start_link(q, true, mixed),
+    10 = rabbit_mixed_queue:length(MS17),
+    io:format("Recovered queue~n"),
     passed.
 
 rdq_time_commands(Funcs) ->
