@@ -76,6 +76,7 @@
 		  current_file_name,       %% current file name
 		  current_file_handle,     %% current file handle
 		  current_offset,          %% current offset within current file
+                  current_dirty,           %% has the current file been written to since the last fsync?
 		  file_size_limit,         %% how big can our files get?
 		  read_file_handles,       %% file handles for reading (LRU)
 		  read_file_handles_limit  %% how many file handles can we open?
@@ -381,6 +382,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                    current_file_name       = InitName,
                    current_file_handle     = undefined,
                    current_offset          = 0,
+                   current_dirty           = false,
                    file_size_limit         = FileSizeLimit,
                    read_file_handles       = {dict:new(), gb_trees:empty()},
                    read_file_handles_limit = ReadFileHandlesLimit
@@ -515,6 +517,7 @@ shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
                      file:close(Hdl)
               end, ok, ReadHdls),
     State #dqstate { current_file_handle = undefined,
+                     current_dirty = false,
                      read_file_handles = {dict:new(), gb_trees:empty()}}.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -600,8 +603,17 @@ determine_next_read_id(CurrentRead, CurrentWrite, NextWrite)
     CurrentRead.
 
 get_read_handle(File, State =
-              #dqstate { read_file_handles = {ReadHdls, ReadHdlsAge},
-                         read_file_handles_limit = ReadFileHandlesLimit }) ->
+                #dqstate { read_file_handles = {ReadHdls, ReadHdlsAge},
+                           read_file_handles_limit = ReadFileHandlesLimit,
+                           current_file_name = CurName,
+                           current_file_handle = CurHdl,
+                           current_dirty = IsDirty
+                         }) ->
+    IsDirty2 = if CurName == File andalso IsDirty ->
+                       file:sync(CurHdl),
+                       false;
+                  true -> IsDirty
+               end,
     Now = now(),
     {FileHdl, ReadHdls1, ReadHdlsAge1} =
         case dict:find(File, ReadHdls) of
@@ -625,7 +637,9 @@ get_read_handle(File, State =
         end,
     ReadHdls3 = dict:store(File, {FileHdl, Now}, ReadHdls1),
     ReadHdlsAge3 = gb_trees:enter(Now, File, ReadHdlsAge1),
-    {FileHdl, State #dqstate {read_file_handles = {ReadHdls3, ReadHdlsAge3}}}.
+    {FileHdl, State #dqstate { read_file_handles = {ReadHdls3, ReadHdlsAge3},
+                               current_dirty = IsDirty2
+                             }}.
 
 adjust_last_msg_seq_id(_Q, ExpectedSeqId, next, _Mode) ->
     ExpectedSeqId;
@@ -777,7 +791,8 @@ internal_tx_publish(MsgId, MsgBody,
                                             ContiguousTop1, Left, undefined}),
             NextOffset = CurOffset + TotalSize + ?FILE_PACKING_ADJUSTMENT,
             maybe_roll_to_new_file(
-              NextOffset, State #dqstate {current_offset = NextOffset});
+              NextOffset, State #dqstate {current_offset = NextOffset,
+                                          current_dirty = true});
         [{MsgId, RefCount, File, Offset, TotalSize}] ->
             %% We already know about it, just update counter
             ok = dets_ets_insert(State, {MsgId, RefCount + 1, File,
@@ -789,6 +804,7 @@ internal_tx_publish(MsgId, MsgBody,
 internal_tx_commit(Q, PubMsgSeqIds, AckSeqIds,
                    State = #dqstate { current_file_handle = CurHdl,
                                       current_file_name = CurName,
+                                      current_dirty = IsDirty,
                                       sequences = Sequences
                                      }) ->
     {PubList, PubAcc, ReadSeqId, Length} =
@@ -839,10 +855,12 @@ internal_tx_commit(Q, PubMsgSeqIds, AckSeqIds,
               true -> ets:insert(Sequences, {Q, ReadSeqId, WriteSeqId,
                                              Length + erlang:length(PubList)})
            end,
-    ok = if Sync -> file:sync(CurHdl);
-            true -> ok
-         end,
-    {ok, State2}.
+    IsDirty2 = if IsDirty andalso Sync ->
+                       ok = file:sync(CurHdl),
+                       false;
+                  true -> IsDirty
+               end,
+    {ok, State2 #dqstate { current_dirty = IsDirty2 }}.
 
 %% SeqId can be 'next'
 internal_publish(Q, MsgId, SeqId, MsgBody, State) ->
@@ -1012,10 +1030,13 @@ maybe_roll_to_new_file(Offset,
                                           current_file_name = CurName,
                                           current_file_handle = CurHdl,
                                           current_file_num = CurNum,
+                                          current_dirty = IsDirty,
                                           file_summary = FileSummary
                                         }
                       ) when Offset >= FileSizeLimit ->
-    ok = file:sync(CurHdl),
+    ok = if IsDirty -> file:sync(CurHdl);
+            true -> ok
+         end,
     ok = file:close(CurHdl),
     NextNum = CurNum + 1,
     NextName = integer_to_list(NextNum) ++ ?FILE_EXTENSION,
@@ -1027,7 +1048,8 @@ maybe_roll_to_new_file(Offset,
     State1 = State #dqstate { current_file_name = NextName,
                               current_file_handle = NextHdl,
                               current_file_num = NextNum,
-                              current_offset = 0
+                              current_offset = 0,
+                              current_dirty = false
                              },
     {ok, compact(sets:from_list([CurName]), State1)};
 maybe_roll_to_new_file(_, State) ->
