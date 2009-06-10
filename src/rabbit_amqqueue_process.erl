@@ -148,7 +148,7 @@ all_ch_record() ->
     [C || {{ch, _}, C} <- get()].
 
 is_ch_blocked(#cr{unsent_message_count = Count, is_limit_active = Limited}) ->
-    Limited orelse Count > ?UNSENT_MESSAGE_LIMIT.
+    Limited orelse Count >= ?UNSENT_MESSAGE_LIMIT.
 
 ch_record_state_transition(OldCR, NewCR) ->
     BlockedOld = is_ch_blocked(OldCR),
