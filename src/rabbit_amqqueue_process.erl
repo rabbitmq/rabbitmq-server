@@ -175,8 +175,7 @@ deliver_immediately(Message, Delivered,
             C = #cr{limiter_pid = LimiterPid,
                     unsent_message_count = Count,
                     unacked_messages = UAM} = ch_record(ChPid),
-            case not(AckRequired) orelse rabbit_limiter:can_send(
-                                           LimiterPid, self()) of
+            case rabbit_limiter:can_send(LimiterPid, self(), AckRequired) of
                 true ->
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
