@@ -151,7 +151,7 @@ all_ch_record() ->
     [C || {{ch, _}, C} <- get()].
 
 is_ch_blocked(#cr{unsent_message_count = Count, is_limit_active = Limited}) ->
-    Limited orelse Count > ?UNSENT_MESSAGE_LIMIT.
+    Limited orelse Count >= ?UNSENT_MESSAGE_LIMIT.
 
 ch_record_state_transition(OldCR, NewCR) ->
     BlockedOld = is_ch_blocked(OldCR),
@@ -178,12 +178,8 @@ deliver_queue(Fun, FunAcc0,
                     unsent_message_count = Count,
                     unacked_messages = UAM} = ch_record(ChPid),
             IsMsgReady = Fun(is_message_ready, FunAcc0, State),
-            case IsMsgReady
-                andalso
-                ( (not AckRequired)
-                  orelse
-                  rabbit_limiter:can_send( LimiterPid, self() )
-                ) of
+            case (IsMsgReady andalso
+                  rabbit_limiter:can_send( LimiterPid, self(), AckRequired )) of
                 true ->
                     case Fun(AckRequired, FunAcc0, State) of
                         {empty, FunAcc1, State2} ->
@@ -611,7 +607,8 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                     reply({error, exclusive_consume_unavailable}, State);
                 ok ->
                     C = #cr{consumers = Consumers} = ch_record(ChPid),
-                    Consumer = #consumer{tag = ConsumerTag, ack_required = not(NoAck)},
+                    Consumer = #consumer{tag = ConsumerTag,
+                                         ack_required = not(NoAck)},
                     store_ch_record(C#cr{consumers = [Consumer | Consumers],
                                          limiter_pid = LimiterPid}),
                     if Consumers == [] ->
@@ -619,15 +616,23 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                        true ->
                             ok
                     end,
+                    ExclusiveConsumer =
+                        if ExclusiveConsume -> {ChPid, ConsumerTag};
+                           true             -> ExistingHolder
+                        end,
                     State1 = State#q{has_had_consumers = true,
-                                     exclusive_consumer =
-                                       if
-                                           ExclusiveConsume -> {ChPid, ConsumerTag};
-                                           true -> ExistingHolder
-                                       end,
-                                     round_robin = queue:in({ChPid, Consumer}, RoundRobin)},
+                                     exclusive_consumer = ExclusiveConsumer},
                     ok = maybe_send_reply(ChPid, OkMsg),
-                    reply(ok, run_message_queue(State1))
+                    State2 =
+                        case is_ch_blocked(C) of
+                            true  -> State1;
+                            false -> run_message_queue(
+                                       State1 #q {
+                                         round_robin = queue:in(
+                                                         {ChPid, Consumer},
+                                                         RoundRobin)})
+                        end,
+                    reply(ok, State2)
             end
     end;
 
