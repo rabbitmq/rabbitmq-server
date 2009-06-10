@@ -41,7 +41,7 @@
 -export([publish/4, publish_with_seq/5, deliver/1, phantom_deliver/1, ack/2,
          tx_publish/2, tx_commit/3, tx_commit_with_seqs/3, tx_cancel/1,
 	 requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1,
-         dump_queue/1, delete_non_durable_queues/1
+         dump_queue/1, delete_non_durable_queues/1, auto_ack_next_message/1
         ]).
 
 -export([length/1, is_empty/1, next_write_seq/1]).
@@ -287,6 +287,9 @@ phantom_deliver(Q) ->
 ack(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server2:cast(?SERVER, {ack, Q, MsgSeqIds}).
 
+auto_ack_next_message(Q) ->
+    gen_server2:cast(?SERVER, {auto_ack_next_message, Q}).
+
 tx_publish(MsgId, Msg) when is_binary(Msg) ->
     gen_server2:cast(?SERVER, {tx_publish, MsgId, Msg}).
 
@@ -315,7 +318,7 @@ delete_queue(Q) ->
     gen_server2:cast(?SERVER, {delete_queue, Q}).
 
 dump_queue(Q) ->
-    gen_server2:pcall(?SERVER, {dump_queue, Q}, infinity).
+    gen_server2:call(?SERVER, {dump_queue, Q}, infinity).
 
 delete_non_durable_queues(DurableQueues) ->
     gen_server2:call(?SERVER, {delete_non_durable_queues, DurableQueues}, infinity).
@@ -422,10 +425,10 @@ handle_call({publish_with_seq, Q, MsgId, SeqId, MsgBody}, _From, State) ->
         internal_publish(Q, MsgId, SeqId, MsgBody, true, State),
     {reply, MsgSeqId, State1};
 handle_call({deliver, Q}, _From, State) ->
-    {ok, Result, State1} = internal_deliver(Q, true, State),
+    {ok, Result, State1} = internal_deliver(Q, true, false, State),
     {reply, Result, State1};
 handle_call({phantom_deliver, Q}, _From, State) ->
-    {ok, Result, State1} = internal_deliver(Q, false, State),
+    {ok, Result, State1} = internal_deliver(Q, false, false, State),
     {reply, Result, State1};
 handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, _From, State) ->
     PubMsgSeqIds = zip_with_tail(PubMsgIds, {duplicate, next}),
@@ -498,6 +501,9 @@ handle_cast({publish_with_seq, Q, MsgId, SeqId, MsgBody}, State) ->
     {noreply, State1};
 handle_cast({ack, Q, MsgSeqIds}, State) ->
     {ok, State1} = internal_ack(Q, MsgSeqIds, State),
+    {noreply, State1};
+handle_cast({auto_ack_next_message, Q}, State) ->
+    {ok, State1} = internal_auto_ack(Q, State),
     {noreply, State1};
 handle_cast({tx_publish, MsgId, MsgBody}, State) ->
     {ok, State1} = internal_tx_publish(MsgId, MsgBody, State),
@@ -696,14 +702,14 @@ sequence_lookup(Sequences, Q) ->
 
 %% ---- INTERNAL RAW FUNCTIONS ----
 
-internal_deliver(Q, ReadMsg, State = #dqstate { sequences = Sequences }) ->
+internal_deliver(Q, ReadMsg, FakeDeliver, State = #dqstate { sequences = Sequences }) ->
     case ets:lookup(Sequences, Q) of
         [] -> {ok, empty, State};
         [{Q, SeqId, SeqId, 0}] -> {ok, empty, State};
         [{Q, ReadSeqId, WriteSeqId, Length}] when Length > 0 ->
             Remaining = Length - 1,
             {ok, Result, NextReadSeqId, State1} =
-                internal_read_message(Q, ReadSeqId, false, ReadMsg, State),
+                internal_read_message(Q, ReadSeqId, FakeDeliver, ReadMsg, State),
             true = ets:insert(Sequences,
                               {Q, NextReadSeqId, WriteSeqId, Remaining}),
             {ok,
@@ -738,6 +744,13 @@ internal_read_message(Q, ReadSeqId, FakeDeliver, ReadMsg, State) ->
        true ->
             {ok, {MsgId, Delivered, {MsgId, ReadSeqId}}, NextReadSeqId, State}
     end.
+
+internal_auto_ack(Q, State) ->
+    case internal_deliver(Q, false, true, State) of
+        {ok, empty, State1} -> {ok, State1};
+        {ok, {_MsgId, _Delivered, MsgSeqId, _Remaining}, State1} ->
+            remove_messages(Q, [MsgSeqId], true, State1)
+    end.        
 
 internal_ack(Q, MsgSeqIds, State) ->
     remove_messages(Q, MsgSeqIds, true, State).

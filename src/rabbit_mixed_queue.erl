@@ -103,7 +103,6 @@ to_mixed_mode(State = #mqstate { mode = disk, queue = Q }) ->
     %% load up a new queue with everything that's on disk.
     %% don't remove non-persistent messages that happen to be on disk
     QList = rabbit_disk_queue:dump_queue(Q),
-    rabbit_log:info("Queue length: ~p ~w~n", [Q, erlang:length(QList)]),
     {MsgBuf1, NextSeq1} =
         lists:foldl(
           fun ({MsgId, MsgBin, _Size, IsDelivered, _AckTag, SeqId}, {Buf, NSeq})
@@ -111,8 +110,12 @@ to_mixed_mode(State = #mqstate { mode = disk, queue = Q }) ->
                   Msg = #basic_message { guid = MsgId } = bin_to_msg(MsgBin),
                   {queue:in({SeqId, Msg, IsDelivered, true}, Buf), SeqId + 1}
           end, {queue:new(), 0}, QList),
-    {ok, State #mqstate { mode = mixed, msg_buf = MsgBuf1,
-			  next_write_seq = NextSeq1 }}.
+    State1 = State #mqstate { mode = mixed, msg_buf = MsgBuf1,
+			  next_write_seq = NextSeq1 },
+    rabbit_log:info("Queue length: ~p ~w ~w~n",
+                    [Q, rabbit_mixed_queue:length(State),
+                     rabbit_mixed_queue:length(State1)]),
+    {ok, State1}.
 
 purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
 						 is_durable = IsDurable }) ->
@@ -222,11 +225,13 @@ deliver(State = #mqstate { mode = mixed, queue = Q, is_durable = IsDurable,
 		 IsDelivered, OnDisk}} ->
             AckTag =
                 if OnDisk ->
-                        {MsgId, IsDelivered, AckTag2, _PersistRemaining} =
-			    rabbit_disk_queue:phantom_deliver(Q),
-			if IsPersistent andalso IsDurable -> AckTag2;
-			   true -> ok = rabbit_disk_queue:ack(Q, [AckTag2]),
-				   noack
+			if IsPersistent andalso IsDurable -> 
+                                {MsgId, IsDelivered, AckTag2, _PersistRem} =
+                                    rabbit_disk_queue:phantom_deliver(Q),
+                                AckTag2;
+			   true ->
+                                ok = rabbit_disk_queue:auto_ack_next_message(Q),
+                                noack
 			end;
                    true -> noack
                 end,
