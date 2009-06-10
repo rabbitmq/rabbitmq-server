@@ -264,7 +264,7 @@ test_log_management() ->
     %% original log files are not writable
     ok = make_files_non_writable([MainLog, SaslLog]),
     {error, {{cannot_rotate_main_logs, _},
-	     {cannot_rotate_sasl_logs, _}}} = control_action(rotate_logs, []),
+             {cannot_rotate_sasl_logs, _}}} = control_action(rotate_logs, []),
 
     %% logging directed to tty (handlers were removed in last test)
     ok = clean_logs([MainLog, SaslLog], Suffix),
@@ -283,7 +283,7 @@ test_log_management() ->
     ok = application:set_env(sasl, sasl_error_logger, {file, SaslLog}),
     ok = application:set_env(kernel, error_logger, {file, MainLog}),
     ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog},
-			   {rabbit_sasl_report_file_h, SaslLog}]),
+                           {rabbit_sasl_report_file_h, SaslLog}]),
     passed.
 
 test_log_management_during_startup() ->
@@ -689,6 +689,20 @@ delete_log_handlers(Handlers) ->
 
 test_disk_queue() ->
     rdq_stop(),
+    rdq_virgin(),
+    passed = rdq_stress_gc(10000),
+    passed = rdq_test_startup_with_queue_gaps(),
+    passed = rdq_test_redeliver(),
+    passed = rdq_test_purge(),
+    passed = rdq_test_dump_queue(),
+    passed = rdq_test_mixed_queue_modes(),
+    rdq_virgin(),
+    ok = control_action(stop_app, []),
+    ok = control_action(start_app, []),
+    passed.
+
+benchmark_disk_queue() ->
+    rdq_stop(),
     % unicode chars are supported properly from r13 onwards
     io:format("Msg Count\t| Msg Size\t| Queue Count\t| Startup mu s\t| Publish mu s\t| Pub mu s/msg\t| Pub mu s/byte\t| Deliver mu s\t| Del mu s/msg\t| Del mu s/byte~n", []),
     [begin rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSize),
@@ -697,12 +711,6 @@ test_disk_queue() ->
         Qs <- [[1], lists:seq(1,10)], %, lists:seq(1,100), lists:seq(1,1000)],
         MsgCount <- [1024, 4096, 16384]
     ],
-    rdq_virgin(),
-    passed = rdq_stress_gc(10000),
-    passed = rdq_test_startup_with_queue_gaps(),
-    passed = rdq_test_redeliver(),
-    passed = rdq_test_purge(),
-    passed = rdq_test_dump_queue(),
     rdq_virgin(),
     ok = control_action(stop_app, []),
     ok = control_action(start_app, []),
@@ -953,49 +961,52 @@ rdq_test_mixed_queue_modes() ->
                       end, MS4, lists:seq(1,10)),
     30 = rabbit_mixed_queue:length(MS6),
     io:format("Published a mixture of messages~n"),
-    {ok, _MS7} = rabbit_mixed_queue:to_disk_only_mode(MS6),
+    {ok, MS7} = rabbit_mixed_queue:to_disk_only_mode(MS6),
+    30 = rabbit_mixed_queue:length(MS7),
     io:format("Converted to disk only mode~n"),
-    rdq_stop(),
-    rdq_start(),
-    {ok, MS8} = rabbit_mixed_queue:start_link(q, true, mixed),
+    {ok, MS8} = rabbit_mixed_queue:to_mixed_mode(MS7),
     30 = rabbit_mixed_queue:length(MS8),
-    io:format("Recovered queue~n"),
+    io:format("Converted to mixed mode~n"),
     MS10 =
         lists:foldl(
           fun (N, MS9) ->
                   Rem = 30 - N,
-                  {{#basic_message { is_persistent = true },
+                  {{#basic_message { is_persistent = false },
                     false, _AckTag, Rem},
                    MS9a} = rabbit_mixed_queue:deliver(MS9),
                   MS9a
           end, MS8, lists:seq(1,10)),
+    20 = rabbit_mixed_queue:length(MS10),
     io:format("Delivered initial non persistent messages~n"),
-    {ok, _MS11} = rabbit_mixed_queue:to_disk_only_mode(MS10),
+    {ok, MS11} = rabbit_mixed_queue:to_disk_only_mode(MS10),
+    20 = rabbit_mixed_queue:length(MS11),
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
     rdq_start(),
     {ok, MS12} = rabbit_mixed_queue:start_link(q, true, mixed),
-    30 = rabbit_mixed_queue:length(MS12),
+    10 = rabbit_mixed_queue:length(MS12),
     io:format("Recovered queue~n"),
     {MS14, AckTags} =
         lists:foldl(
           fun (N, {MS13, AcksAcc}) ->
-                  Rem = 30 - N,
-                  IsDelivered = N < 11,
+                  Rem = 10 - N,
                   {{#basic_message { is_persistent = true },
-                    IsDelivered, AckTag, Rem},
+                    false, AckTag, Rem},
                    MS13a} = rabbit_mixed_queue:deliver(MS13),
                   {MS13a, [AckTag | AcksAcc]}
-          end, {MS2, []}, lists:seq(1,20)),
+          end, {MS12, []}, lists:seq(1,10)),
+    0 = rabbit_mixed_queue:length(MS14),
     {ok, MS15} = rabbit_mixed_queue:ack(AckTags, MS14),
-    io:format("Delivered and acked initial non persistent messages~n"),
-    {ok, _MS16} = rabbit_mixed_queue:to_disk_only_mode(MS15),
+    io:format("Delivered and acked all messages~n"),
+    {ok, MS16} = rabbit_mixed_queue:to_disk_only_mode(MS15),
+    0 = rabbit_mixed_queue:length(MS16),
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
     rdq_start(),
     {ok, MS17} = rabbit_mixed_queue:start_link(q, true, mixed),
-    10 = rabbit_mixed_queue:length(MS17),
+    0 = rabbit_mixed_queue:length(MS17),
     io:format("Recovered queue~n"),
+    rdq_stop(),
     passed.
 
 rdq_time_commands(Funcs) ->
@@ -1010,7 +1021,8 @@ rdq_virgin() ->
 
 rdq_start() ->
     {ok, _} = rabbit_disk_queue:start_link(),
-    rabbit_disk_queue:to_ram_disk_mode().
+    ok = rabbit_disk_queue:to_ram_disk_mode(),
+    ok.
 
 rdq_stop() ->
     rabbit_disk_queue:stop(),

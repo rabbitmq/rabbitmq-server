@@ -38,8 +38,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([publish/3, publish_with_seq/4, deliver/1, phantom_deliver/1, ack/2,
-	 tx_publish/2, tx_commit/3, tx_commit_with_seqs/3, tx_cancel/1,
+-export([publish/4, publish_with_seq/5, deliver/1, phantom_deliver/1, ack/2,
+         tx_publish/2, tx_commit/3, tx_commit_with_seqs/3, tx_cancel/1,
 	 requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1,
          dump_queue/1, delete_non_durable_queues/1
         ]).
@@ -232,8 +232,8 @@
 
 -spec(start_link/0 :: () ->
               {'ok', pid()} | 'ignore' | {'error', any()}).
--spec(publish/3 :: (queue_name(), msg_id(), binary()) -> 'ok').
--spec(publish_with_seq/4 :: (queue_name(), msg_id(), seq_id_or_next(), binary()) -> 'ok').
+-spec(publish/4 :: (queue_name(), msg_id(), binary(), bool()) -> 'ok').
+-spec(publish_with_seq/5 :: (queue_name(), msg_id(), seq_id_or_next(), binary(), bool()) -> 'ok').
 -spec(deliver/1 :: (queue_name()) ->
              {'empty' | {msg_id(), binary(), non_neg_integer(),
                          bool(), {msg_id(), seq_id()}, non_neg_integer()}}).
@@ -267,11 +267,16 @@ start_link() ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE,
                            [?FILE_SIZE_LIMIT, ?MAX_READ_FILE_HANDLES], []).
 
-publish(Q, MsgId, Msg) when is_binary(Msg) ->
-    gen_server2:cast(?SERVER, {publish, Q, MsgId, Msg}).
+publish(Q, MsgId, Msg, false) when is_binary(Msg) ->
+    gen_server2:cast(?SERVER, {publish, Q, MsgId, Msg});
+publish(Q, MsgId, Msg, true) when is_binary(Msg) ->
+    gen_server2:call(?SERVER, {publish, Q, MsgId, Msg}, infinity).
 
-publish_with_seq(Q, MsgId, SeqId, Msg) when is_binary(Msg) ->
-    gen_server2:cast(?SERVER, {publish_with_seq, Q, MsgId, SeqId, Msg}).
+publish_with_seq(Q, MsgId, SeqId, Msg, false) when is_binary(Msg) ->
+    gen_server2:cast(?SERVER, {publish_with_seq, Q, MsgId, SeqId, Msg});
+publish_with_seq(Q, MsgId, SeqId, Msg, true) when is_binary(Msg) ->
+    gen_server2:call(?SERVER, {publish_with_seq, Q, MsgId, SeqId, Msg},
+                     infinity).
 
 deliver(Q) ->
     gen_server2:call(?SERVER, {deliver, Q}, infinity).
@@ -285,12 +290,14 @@ ack(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
 tx_publish(MsgId, Msg) when is_binary(Msg) ->
     gen_server2:cast(?SERVER, {tx_publish, MsgId, Msg}).
 
-tx_commit(Q, PubMsgIds, AckSeqIds) when is_list(PubMsgIds) andalso is_list(AckSeqIds) ->
+tx_commit(Q, PubMsgIds, AckSeqIds)
+  when is_list(PubMsgIds) andalso is_list(AckSeqIds) ->
     gen_server2:call(?SERVER, {tx_commit, Q, PubMsgIds, AckSeqIds}, infinity).
 
 tx_commit_with_seqs(Q, PubMsgSeqIds, AckSeqIds)
   when is_list(PubMsgSeqIds) andalso is_list(AckSeqIds) ->
-    gen_server2:call(?SERVER, {tx_commit_with_seqs, Q, PubMsgSeqIds, AckSeqIds}, infinity).
+    gen_server2:call(?SERVER, {tx_commit_with_seqs, Q, PubMsgSeqIds, AckSeqIds},
+                     infinity).
 
 tx_cancel(MsgIds) when is_list(MsgIds) ->
     gen_server2:cast(?SERVER, {tx_cancel, MsgIds}).
@@ -332,8 +339,7 @@ next_write_seq(Q) ->
     gen_server2:call(?SERVER, {next_write_seq, Q}, infinity).
 
 is_empty(Q) ->
-    Length = rabbit_disk_queue:length(Q),
-    Length == 0.
+    0 == rabbit_disk_queue:length(Q).
 
 %% ---- GEN-SERVER INTERNAL API ----
 
@@ -407,6 +413,14 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     end,
     {ok, State1 #dqstate { current_file_handle = FileHdl }}.
 
+handle_call({publish, Q, MsgId, MsgBody}, _From, State) ->
+    {ok, MsgSeqId, State1} =
+        internal_publish(Q, MsgId, next, MsgBody, true, State),
+    {reply, MsgSeqId, State1};
+handle_call({publish_with_seq, Q, MsgId, SeqId, MsgBody}, _From, State) ->
+    {ok, MsgSeqId, State1} =
+        internal_publish(Q, MsgId, SeqId, MsgBody, true, State),
+    {reply, MsgSeqId, State1};
 handle_call({deliver, Q}, _From, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, State),
     {reply, Result, State1};
@@ -475,10 +489,10 @@ handle_call({delete_non_durable_queues, DurableQueues}, _From, State) ->
     {reply, ok, State1}.
 
 handle_cast({publish, Q, MsgId, MsgBody}, State) ->
-    {ok, State1} = internal_publish(Q, MsgId, next, MsgBody, State),
+    {ok, _MsgSeqId, State1} = internal_publish(Q, MsgId, next, MsgBody, false, State),
     {noreply, State1};
 handle_cast({publish_with_seq, Q, MsgId, SeqId, MsgBody}, State) ->
-    {ok, State1} = internal_publish(Q, MsgId, SeqId, MsgBody, State),
+    {ok, _MsgSeqId, State1} = internal_publish(Q, MsgId, SeqId, MsgBody, false, State),
     {noreply, State1};
 handle_cast({ack, Q, MsgSeqIds}, State) ->
     {ok, State1} = internal_ack(Q, MsgSeqIds, State),
@@ -870,7 +884,7 @@ internal_tx_commit(Q, PubMsgSeqIds, AckSeqIds,
     {ok, State2 #dqstate { current_dirty = IsDirty2 }}.
 
 %% SeqId can be 'next'
-internal_publish(Q, MsgId, SeqId, MsgBody, State) ->
+internal_publish(Q, MsgId, SeqId, MsgBody, IsDelivered, State) ->
     {ok, State1 = #dqstate { sequences = Sequences }} =
         internal_tx_publish(MsgId, MsgBody, State),
     {ReadSeqId, WriteSeqId, Length} =
@@ -882,9 +896,9 @@ internal_publish(Q, MsgId, SeqId, MsgBody, State) ->
                             #dq_msg_loc { queue_and_seq_id = {Q, WriteSeqId3},
                                           msg_id = MsgId,
                                           next_seq_id = WriteSeqId3Next,
-                                          is_delivered = false}),
+                                          is_delivered = IsDelivered}),
     true = ets:insert(Sequences, {Q, ReadSeqId3, WriteSeqId3Next, Length + 1}),
-    {ok, State1}.
+    {ok, {MsgId, WriteSeqId3}, State1}.
 
 internal_tx_cancel(MsgIds, State) ->
     %% we don't need seq ids because we're not touching mnesia,
