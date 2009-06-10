@@ -57,8 +57,11 @@ start_link(Queue, IsDurable, mixed) ->
     {ok, State} = start_link(Queue, IsDurable, disk),
     to_mixed_mode(State).
 
+to_disk_only_mode(State = #mqstate { mode = disk }) ->
+    {ok, State};
 to_disk_only_mode(State = #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf,
                                      next_write_seq = NextSeq }) ->
+    rabbit_log:info("Converting queue to disk only mode: ~p~n", [Q]),
     %% We enqueue _everything_ here. This means that should a message
     %% already be in the disk queue we must remove it and add it back
     %% in. Fortunately, by using requeue, we avoid rewriting the
@@ -93,7 +96,10 @@ to_disk_only_mode(State = #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf,
     {ok, State #mqstate { mode = disk, msg_buf = queue:new(),
                           next_write_seq = NextSeq1 }}.
 
+to_mixed_mode(State = #mqstate { mode = mixed }) ->
+    {ok, State};
 to_mixed_mode(State = #mqstate { mode = disk, queue = Q }) ->
+    rabbit_log:info("Converting queue to mixed mode: ~p~n", [Q]),
     %% load up a new queue with everything that's on disk.
     %% don't remove non-persistent messages that happen to be on disk
     QList = rabbit_disk_queue:dump_queue(Q),

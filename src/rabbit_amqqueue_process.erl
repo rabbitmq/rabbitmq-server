@@ -93,7 +93,8 @@ start_link(Q) ->
 
 init(Q = #amqqueue { name = QName, durable = Durable }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    {ok, MS} = rabbit_mixed_queue:start_link(QName, Durable, mixed), %% TODO, CHANGE ME
+    {ok, Mode} = rabbit_queue_mode_manager:register(self()),
+    {ok, MS} = rabbit_mixed_queue:start_link(QName, Durable, Mode), %% TODO, CHANGE ME
     {ok, #q{q = Q,
             owner = none,
             exclusive_consumer = none,
@@ -779,7 +780,13 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 end,
                 NewLimited = Limited andalso LimiterPid =/= undefined,
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
-        end)).
+        end));
+
+handle_cast({constrain, Constrain}, State = #q { mixed_state = MS }) ->
+    {ok, MS2} = if Constrain -> rabbit_mixed_queue:to_disk_only_mode(MS);
+                   true -> rabbit_mixed_queue:to_mixed_mode(MS)
+                end,
+    noreply(State #q { mixed_state = MS2 }).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->

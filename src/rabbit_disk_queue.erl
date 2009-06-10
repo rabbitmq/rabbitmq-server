@@ -458,6 +458,7 @@ handle_call(to_disk_only_mode, _From,
             State = #dqstate { operation_mode = ram_disk,
                                msg_location_dets = MsgLocationDets,
                                msg_location_ets = MsgLocationEts }) ->
+    rabbit_log:info("Converting disk queue to disk only mode~n", []),
     {atomic, ok} = mnesia:change_table_copy_type(rabbit_disk_queue, node(),
                                                  disc_only_copies),
     ok = dets:from_ets(MsgLocationDets, MsgLocationEts),
@@ -470,6 +471,7 @@ handle_call(to_ram_disk_mode, _From,
             State = #dqstate { operation_mode = disk_only,
                                msg_location_dets = MsgLocationDets,
                                msg_location_ets = MsgLocationEts }) ->
+    rabbit_log:info("Converting disk queue to ram disk mode~n", []),
     {atomic, ok} = mnesia:change_table_copy_type(rabbit_disk_queue, node(),
                                                  disc_copies),
     true = ets:from_dets(MsgLocationEts, MsgLocationDets),
@@ -514,6 +516,8 @@ handle_cast({delete_queue, Q}, State) ->
     {ok, State1} = internal_delete_queue(Q, State),
     {noreply, State1}.
 
+handle_info({'EXIT', _Pid, Reason}, State) ->
+    {stop, Reason, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
