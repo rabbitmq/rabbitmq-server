@@ -630,7 +630,8 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                     reply({error, exclusive_consume_unavailable}, State);
                 ok ->
                     C = #cr{consumers = Consumers} = ch_record(ChPid),
-                    Consumer = #consumer{tag = ConsumerTag, ack_required = not(NoAck)},
+                    Consumer = #consumer{tag = ConsumerTag,
+                                         ack_required = not(NoAck)},
                     store_ch_record(C#cr{consumers = [Consumer | Consumers],
                                          limiter_pid = LimiterPid}),
                     if Consumers == [] ->
@@ -638,13 +639,14 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                        true ->
                             ok
                     end,
+                    ExclusiveConsumer =
+                        if ExclusiveConsume -> {ChPid, ConsumerTag};
+                           true             -> ExistingHolder
+                        end,
                     State1 = State#q{has_had_consumers = true,
-                                     exclusive_consumer =
-                                       if
-                                           ExclusiveConsume -> {ChPid, ConsumerTag};
-                                           true -> ExistingHolder
-                                       end,
-                                     round_robin = queue:in({ChPid, Consumer}, RoundRobin)},
+                                     exclusive_consumer = ExclusiveConsumer,
+                                     round_robin = queue:in({ChPid, Consumer},
+                                                            RoundRobin)},
                     ok = maybe_send_reply(ChPid, OkMsg),
                     reply(ok, run_poke_burst(State1))
             end
