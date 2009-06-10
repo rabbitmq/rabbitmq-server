@@ -315,7 +315,7 @@ unblock(QPid, ChPid) ->
     gen_server2:cast(QPid, {unblock, ChPid}).
 
 constrain_memory(QPid, Constrain) ->
-    gen_server2:cast(QPid, {constrain, Constrain}).
+    gen_server2:pcast(QPid, 10, {constrain, Constrain}).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(

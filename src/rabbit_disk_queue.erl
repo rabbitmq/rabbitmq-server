@@ -315,7 +315,7 @@ delete_queue(Q) ->
     gen_server2:cast(?SERVER, {delete_queue, Q}).
 
 dump_queue(Q) ->
-    gen_server2:call(?SERVER, {dump_queue, Q}, infinity).
+    gen_server2:pcall(?SERVER, {dump_queue, Q}, infinity).
 
 delete_non_durable_queues(DurableQueues) ->
     gen_server2:call(?SERVER, {delete_non_durable_queues, DurableQueues}, infinity).
@@ -327,10 +327,10 @@ stop_and_obliterate() ->
     gen_server2:call(?SERVER, stop_vaporise, infinity).
 
 to_disk_only_mode() ->
-    gen_server2:call(?SERVER, to_disk_only_mode, infinity).
+    gen_server2:pcall(?SERVER, 10, to_disk_only_mode, infinity).
 
 to_ram_disk_mode() ->
-    gen_server2:call(?SERVER, to_ram_disk_mode, infinity).
+    gen_server2:pcall(?SERVER, 10, to_ram_disk_mode, infinity).
 
 length(Q) ->
     gen_server2:call(?SERVER, {length, Q}, infinity).

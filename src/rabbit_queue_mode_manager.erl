@@ -72,19 +72,19 @@ handle_call({register, Pid}, _From, State = #state { queues = Qs, mode = Mode })
 handle_cast({change_memory_usage, true}, State = #state { mode = disk_only }) ->
     {noreply, State};
 handle_cast({change_memory_usage, true}, State = #state { mode = ram_disk }) ->
-    ok = rabbit_disk_queue:to_disk_only_mode(),
+    constrain_queues(true, State #state.queues),
     {noreply, State #state { mode = disk_only }};
 handle_cast({change_memory_usage, true}, State = #state { mode = unlimited }) ->
-    constrain_queues(true, State #state.queues),
+    ok = rabbit_disk_queue:to_disk_only_mode(),
     {noreply, State #state { mode = ram_disk }};
 
 handle_cast({change_memory_usage, false}, State = #state { mode = unlimited }) ->
     {noreply, State};
 handle_cast({change_memory_usage, false}, State = #state { mode = ram_disk }) ->
-    constrain_queues(false, State #state.queues),
+    ok = rabbit_disk_queue:to_ram_disk_mode(),
     {noreply, State #state { mode = unlimited }};
 handle_cast({change_memory_usage, false}, State = #state { mode = disk_only }) ->
-    ok = rabbit_disk_queue:to_ram_disk_mode(),
+    constrain_queues(false, State #state.queues),
     {noreply, State #state { mode = ram_disk }}.
 
 handle_info({'EXIT', _Pid, Reason}, State) ->

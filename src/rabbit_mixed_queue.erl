@@ -103,6 +103,7 @@ to_mixed_mode(State = #mqstate { mode = disk, queue = Q }) ->
     %% load up a new queue with everything that's on disk.
     %% don't remove non-persistent messages that happen to be on disk
     QList = rabbit_disk_queue:dump_queue(Q),
+    rabbit_log:info("Queue length: ~p ~w~n", [Q, erlang:length(QList)]),
     {MsgBuf1, NextSeq1} =
         lists:foldl(
           fun ({MsgId, MsgBin, _Size, IsDelivered, _AckTag, SeqId}, {Buf, NSeq})
