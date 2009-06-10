@@ -90,7 +90,8 @@ can_send(undefined, _QPid, _AckRequired) ->
 can_send(LimiterPid, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
-      fun () -> gen_server2:call(LimiterPid, {can_send, QPid, AckRequired}, infinity) end).
+      fun () -> gen_server2:call(LimiterPid, {can_send, QPid, AckRequired},
+                                 infinity) end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
@@ -110,13 +111,13 @@ unregister(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {unregister, QPid})
 init([ChPid]) ->
     {ok, #lim{ch_pid = ChPid} }.
 
-handle_call({can_send, QPid, AckRequired}, _From, State = #lim{volume = Volume}) ->
-    Volume1 = if AckRequired -> Volume + 1;
-                 true -> Volume
-              end,
+handle_call({can_send, QPid, AckRequired}, _From,
+            State = #lim{volume = Volume}) ->
     case limit_reached(State) of
         true  -> {reply, false, limit_queue(QPid, State)};
-        false -> {reply, true, State#lim{volume = Volume1}}
+        false -> {reply, true, State#lim{volume = if AckRequired -> Volume + 1;
+                                                     true        -> Volume
+                                                  end}}
     end.
 
 handle_cast(shutdown, State) ->
