@@ -644,11 +644,18 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                            true             -> ExistingHolder
                         end,
                     State1 = State#q{has_had_consumers = true,
-                                     exclusive_consumer = ExclusiveConsumer,
-                                     round_robin = queue:in({ChPid, Consumer},
-                                                            RoundRobin)},
+                                     exclusive_consumer = ExclusiveConsumer},
                     ok = maybe_send_reply(ChPid, OkMsg),
-                    reply(ok, run_poke_burst(State1))
+                    State2 =
+                        case is_ch_blocked(C) of
+                            true  -> State1;
+                            false -> run_poke_burst(
+                                       State1#q{
+                                         round_robin = queue:in(
+                                                         {ChPid, Consumer},
+                                                         RoundRobin)})
+                        end,
+                    reply(ok, State2)
             end
     end;
 
