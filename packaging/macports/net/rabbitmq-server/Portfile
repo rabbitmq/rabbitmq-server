@@ -3,7 +3,7 @@
 
 PortSystem 1.0
 name		rabbitmq-server
-version		1.5.5
+version		1.5.3
 revision	0
 categories	net 
 maintainers	tonyg@rabbitmq.com
@@ -52,7 +52,7 @@ destroot.keepdirs \
 
 pre-destroot {
     addgroup ${servergroup}
-    adduser ${serveruser} gid=[existsgroup ${servergroup}] realname=RabbitMQ\ Server home=${serverhome}
+    adduser ${serveruser} gid=[existsgroup ${servergroup}] realname=RabbitMQ\ Server home=${serverhome} shell=/bin/bash
 }
 
 post-destroot {
