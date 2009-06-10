@@ -2,7 +2,7 @@
 
 Name: rabbitmq-server
 Version: %%VERSION%%
-Release: 1%%RELEASE_OS%%
+Release: 1%{?dist}
 License: MPLv1.1
 Group: Development/Libraries
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.gz
