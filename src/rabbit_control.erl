@@ -137,6 +137,9 @@ Available commands:
   list_bindings  [-p <VHostPath>] 
   list_connections [<ConnectionInfoItem> ...]
 
+  reduce_memory_footprint
+  increase_memory_footprint
+
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
 
@@ -275,6 +278,14 @@ action(list_connections, Node, Args, Inform) ->
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
+
+action(reduce_memory_footprint, Node, _Args, Inform) ->
+    Inform("Reducing memory footprint", []),
+    call(Node, {rabbit_queue_mode_manager, reduce_memory_usage, []});
+
+action(increase_memory_footprint, Node, _Args, Inform) ->
+    Inform("Reducing memory footprint", []),
+    call(Node, {rabbit_queue_mode_manager, increase_memory_usage, []});
 
 action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),

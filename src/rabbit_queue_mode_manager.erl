@@ -38,7 +38,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([register/1, change_memory_usage/2]).
+-export([register/1, change_memory_usage/2,
+         reduce_memory_usage/0, increase_memory_usage/0]).
 
 -define(SERVER, ?MODULE).
 
@@ -54,6 +55,12 @@ register(Pid) ->
 
 change_memory_usage(_Pid, Conserve) ->
     gen_server2:cast(?SERVER, {change_memory_usage, Conserve}).
+
+reduce_memory_usage() ->
+    gen_server2:cast(?SERVER, {change_memory_usage, true}).
+                           
+increase_memory_usage() ->
+    gen_server2:cast(?SERVER, {change_memory_usage, false}).
                            
 init([]) ->
     process_flag(trap_exit, true),

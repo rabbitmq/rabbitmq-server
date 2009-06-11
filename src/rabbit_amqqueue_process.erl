@@ -237,7 +237,7 @@ deliver_queue(Fun, FunAcc0,
     end.
 
 deliver_from_queue(is_message_ready, undefined, #q { mixed_state = MS }) ->
-    0 /= rabbit_mixed_queue:length(MS);
+    not rabbit_mixed_queue:is_empty(MS);
 deliver_from_queue(AckRequired, Acc = undefined, State = #q { mixed_state = MS }) ->
     {Res, MS2} = rabbit_mixed_queue:deliver(MS),
     MS3 = case {Res, AckRequired} of
