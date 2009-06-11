@@ -208,7 +208,7 @@ deliver_queue(Fun, FunAcc0,
                                true -> deliver_queue(Fun, FunAcc1, State3)
                             end
                     end;
-                %% if IsMsgReady then (AckRequired and we've hit the limiter)
+                %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
                     store_ch_record(C#cr{is_limit_active = true}),
                     NewConsumers = block_consumers(ChPid, RoundRobinTail),
@@ -245,8 +245,8 @@ attempt_immediate_delivery(none, _ChPid, Msg, State) ->
             (AckRequired, false, State2) ->
                 {AckTag, State3} =
                     if AckRequired ->
-                            {ok, AckTag2, MS} = rabbit_mixed_queue:publish_delivered(Msg,
-                                                                                     State2 #q.mixed_state),
+                            {ok, AckTag2, MS} = rabbit_mixed_queue:publish_delivered(
+                                                  Msg, State2 #q.mixed_state),
                             {AckTag2, State2 #q { mixed_state = MS }};
                        true ->
                             {noack, State2}

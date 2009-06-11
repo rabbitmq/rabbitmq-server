@@ -309,10 +309,10 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
                           infinity).
 
 notify_sent(QPid, ChPid) ->
-    gen_server2:cast(QPid, {notify_sent, ChPid}).
+    gen_server2:pcast(QPid, 10, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
-    gen_server2:cast(QPid, {unblock, ChPid}).
+    gen_server2:pcast(QPid, 10, {unblock, ChPid}).
 
 constrain_memory(QPid, Constrain) ->
     gen_server2:pcast(QPid, 10, {constrain, Constrain}).

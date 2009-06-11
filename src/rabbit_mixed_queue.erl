@@ -187,16 +187,19 @@ publish_delivered(Msg =
                   State = #mqstate { mode = Mode, is_durable = IsDurable,
                                      next_write_seq = NextSeq, queue = Q })
   when Mode =:= disk orelse (IsDurable andalso IsPersistent) ->
-    true = rabbit_disk_queue:is_empty(Q),
     rabbit_disk_queue:publish(Q, MsgId, msg_to_bin(Msg), false),
-    %% must call phantom_deliver otherwise the msg remains at the head
-    %% of the queue
-    {MsgId, false, AckTag, 0} = rabbit_disk_queue:phantom_deliver(Q),
-    State2 =
-	if Mode =:= mixed -> State #mqstate { next_write_seq = NextSeq + 1 };
-	   true -> State
-	end,
-    {ok, AckTag, State2};
+    if IsDurable andalso IsPersistent ->
+            %% must call phantom_deliver otherwise the msg remains at
+            %% the head of the queue. This is synchronous, but
+            %% unavoidable as we need the AckTag
+            {MsgId, false, AckTag, 0} = rabbit_disk_queue:phantom_deliver(Q),
+            {ok, AckTag, State};
+       true ->
+            %% in this case, we don't actually care about the ack, so
+            %% auto ack it (asynchronously).
+            ok = rabbit_disk_queue:auto_ack_next_message(Q),
+            {ok, noack, State #mqstate { next_write_seq = NextSeq + 1 }}
+    end;
 publish_delivered(_Msg, State = #mqstate { mode = mixed, msg_buf = MsgBuf }) ->
     true = queue:is_empty(MsgBuf),
     {ok, noack, State}.
