@@ -53,14 +53,15 @@
             has_had_consumers,
             mixed_state,
             next_msg_id,
-            round_robin}).
+            active_consumers,
+            blocked_consumers}).
 
 -record(consumer, {tag, ack_required}).
 
 -record(tx, {ch_pid, is_persistent, pending_messages, pending_acks}).
 
 %% These are held in our process dictionary
--record(cr, {consumers,
+-record(cr, {consumer_count,
              ch_pid,
              limiter_pid,
              monitor_ref,
@@ -94,14 +95,15 @@ start_link(Q) ->
 init(Q = #amqqueue { name = QName, durable = Durable }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     {ok, Mode} = rabbit_queue_mode_manager:register(self()),
-    {ok, MS} = rabbit_mixed_queue:start_link(QName, Durable, Mode), %% TODO, CHANGE ME
+    {ok, MS} = rabbit_mixed_queue:start_link(QName, Durable, Mode),
     {ok, #q{q = Q,
             owner = none,
             exclusive_consumer = none,
             has_had_consumers = false,
             mixed_state = MS,
             next_msg_id = 1,
-            round_robin = queue:new()}, ?HIBERNATE_AFTER}.
+            active_consumers = queue:new(),
+            blocked_consumers = queue:new()}, ?HIBERNATE_AFTER}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
@@ -133,7 +135,7 @@ ch_record(ChPid) ->
     case get(Key) of
         undefined ->
             MonitorRef = erlang:monitor(process, ChPid),
-            C = #cr{consumers = [],
+            C = #cr{consumer_count = 0,
                     ch_pid = ChPid,
                     monitor_ref = MonitorRef,
                     unacked_messages = dict:new(),
@@ -169,12 +171,13 @@ record_current_channel_tx(ChPid, Txn) ->
     
 deliver_queue(Fun, FunAcc0,
               State = #q{q = #amqqueue{name = QName},
-                         round_robin = RoundRobin,
+                         active_consumers = ActiveConsumers,
+                         blocked_consumers = BlockedConsumers,
                          next_msg_id = NextId}) ->
-    case queue:out(RoundRobin) of
+    case queue:out(ActiveConsumers) of
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
                                             ack_required = AckRequired}}},
-         RoundRobinTail} ->
+         ActiveConsumersTail} ->
             C = #cr{limiter_pid = LimiterPid,
                     unsent_message_count = Count,
                     unacked_messages = UAM} = ch_record(ChPid),
@@ -182,37 +185,49 @@ deliver_queue(Fun, FunAcc0,
             case (IsMsgReady andalso
                   rabbit_limiter:can_send( LimiterPid, self(), AckRequired )) of
                 true ->
-                    case Fun(AckRequired, FunAcc0, State) of
-                        {empty, FunAcc1, State2} ->
-                            {FunAcc1, State2};
-                        {{Msg, IsDelivered, AckTag, Remaining}, FunAcc1, State2} ->
-                            rabbit_channel:deliver(
-                              ChPid, ConsumerTag, AckRequired,
-                              {QName, self(), NextId, IsDelivered, Msg}),
-                            NewUAM = case AckRequired of
-                                         true  -> dict:store(NextId, {Msg, AckTag}, UAM);
-                                         false -> UAM
-                                     end,
-                            NewC = C#cr{unsent_message_count = Count + 1,
-                                        unacked_messages = NewUAM},
-                            store_ch_record(NewC),
-                            NewConsumers =
-                                case ch_record_state_transition(C, NewC) of
-                                    ok    -> queue:in(QEntry, RoundRobinTail);
-                                    block -> block_consumers(ChPid, RoundRobinTail)
-                                end,
-                            State3 = State2 #q { round_robin = NewConsumers,
-                                                 next_msg_id = NextId + 1
-                                                },
-                            if Remaining == 0 -> {FunAcc1, State3};
-                               true -> deliver_queue(Fun, FunAcc1, State3)
-                            end
+                    {{Msg, IsDelivered, AckTag, Remaining}, FunAcc1, State2} =
+                        Fun(AckRequired, FunAcc0, State),
+                    ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Msg]),
+                    rabbit_channel:deliver(
+                      ChPid, ConsumerTag, AckRequired,
+                      {QName, self(), NextId, IsDelivered, Msg}),
+                    NewUAM = case AckRequired of
+                                 true  -> dict:store(NextId, {Msg, AckTag}, UAM);
+                                 false -> UAM
+                             end,
+                    NewC = C#cr{unsent_message_count = Count + 1,
+                                unacked_messages = NewUAM},
+                    store_ch_record(NewC),
+                    {NewActiveConsumers, NewBlockedConsumers} =
+                        case ch_record_state_transition(C, NewC) of
+                            ok    -> {queue:in(QEntry, ActiveConsumersTail),
+                                      BlockedConsumers};
+                            block ->
+                                {ActiveConsumers1, BlockedConsumers1} =
+                                    move_consumers(ChPid,
+                                                   ActiveConsumersTail,
+                                                   BlockedConsumers),
+                                {ActiveConsumers1,
+                                 queue:in(QEntry, BlockedConsumers1)}
+                        end,
+                    State3 = State2 #q { active_consumers = NewActiveConsumers,
+                                         blocked_consumers = NewBlockedConsumers,
+                                         next_msg_id = NextId + 1
+                                       },
+                    if Remaining == 0 -> {FunAcc1, State3};
+                       true -> deliver_queue(Fun, FunAcc1, State3)
                     end;
                 %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
                     store_ch_record(C#cr{is_limit_active = true}),
-                    NewConsumers = block_consumers(ChPid, RoundRobinTail),
-                    deliver_queue(Fun, FunAcc0, State #q { round_robin = NewConsumers });
+                    {NewActiveConsumers, NewBlockedConsumers} =
+                        move_consumers(ChPid,
+                                       ActiveConsumers,
+                                       BlockedConsumers),
+                    deliver_queue(
+                      Fun, FunAcc0, 
+                      State#q{active_consumers = NewActiveConsumers,
+                              blocked_consumers = NewBlockedConsumers});
                 false ->
                     %% no message was ready, so we don't need to block anyone
                     {FunAcc0, State}
@@ -290,22 +305,24 @@ deliver_or_requeue_msgs(false, {Len, AcksAcc, [{Msg, AckTag} | MsgsWithAcks]}, S
 deliver_or_requeue_msgs(true, {Len, AcksAcc, [{Msg, AckTag} | MsgsWithAcks]}, State) ->
     {{Msg, true, AckTag, Len}, {Len - 1, AcksAcc, MsgsWithAcks}, State}.
 
-block_consumers(ChPid, RoundRobin) ->
-    %%?LOGDEBUG("~p Blocking ~p from ~p~n", [self(), ChPid, queue:to_list(RoundRobin)]),
-    queue:from_list(lists:filter(fun ({CP, _}) -> CP /= ChPid end,
-                                 queue:to_list(RoundRobin))).
+add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
-unblock_consumers(ChPid, Consumers, RoundRobin) ->
-    %%?LOGDEBUG("Unblocking ~p ~p ~p~n", [ChPid, Consumers, queue:to_list(RoundRobin)]),
-    queue:join(RoundRobin,
-               queue:from_list([{ChPid, Con} || Con <- Consumers])).
-
-block_consumer(ChPid, ConsumerTag, RoundRobin) ->
-    %%?LOGDEBUG("~p Blocking ~p from ~p~n", [self(), ConsumerTag, queue:to_list(RoundRobin)]),
+remove_consumer(ChPid, ConsumerTag, Queue) ->
+    %% TODO: replace this with queue:filter/2 once we move to R12
     queue:from_list(lists:filter(
                       fun ({CP, #consumer{tag = CT}}) ->
                               (CP /= ChPid) or (CT /= ConsumerTag)
-                      end, queue:to_list(RoundRobin))).
+                      end, queue:to_list(Queue))).
+
+remove_consumers(ChPid, Queue) ->
+    %% TODO: replace this with queue:filter/2 once we move to R12
+    queue:from_list(lists:filter(fun ({CP, _}) -> CP /= ChPid end,
+                                 queue:to_list(Queue))).
+
+move_consumers(ChPid, From, To) ->
+    {Kept, Removed} = lists:partition(fun ({CP, _}) -> CP /= ChPid end,
+                                      queue:to_list(From)),
+    {queue:from_list(Kept), queue:join(To, queue:from_list(Removed))}.
 
 possibly_unblock(State, ChPid, Update) ->
     case lookup_ch(ChPid) of
@@ -316,50 +333,25 @@ possibly_unblock(State, ChPid, Update) ->
             store_ch_record(NewC),
             case ch_record_state_transition(C, NewC) of
                 ok      -> State;
-                unblock -> NewRR = unblock_consumers(ChPid,
-                                                     NewC#cr.consumers,
-                                                     State#q.round_robin),
-                           run_message_queue(State#q{round_robin = NewRR})
+                unblock -> {NewBlockedeConsumers, NewActiveConsumers} =
+                               move_consumers(ChPid,
+                                              State#q.blocked_consumers,
+                                              State#q.active_consumers),
+                           run_message_queue(
+                             State#q{active_consumers = NewActiveConsumers,
+                                     blocked_consumers = NewBlockedeConsumers})
             end
     end.
     
-check_auto_delete(State = #q{q = #amqqueue{auto_delete = false}}) ->
-    {continue, State};
-check_auto_delete(State = #q{has_had_consumers = false}) ->
-    {continue, State};
-check_auto_delete(State = #q{round_robin = RoundRobin}) ->
-    % The clauses above rule out cases where no-one has consumed from
-    % this queue yet, and cases where we are not an auto_delete queue
-    % in any case. Thus it remains to check whether we have any active
-    % listeners at this point.
-    case queue:is_empty(RoundRobin) of
-        true ->
-            % There are no waiting listeners. It's possible that we're
-            % completely unused. Check.
-            case is_unused() of
-                true ->
-                    % There are no active consumers at this
-                    % point. This is the signal to autodelete.
-                    {stop, State};
-                false ->
-                    % There is at least one active consumer, so we
-                    % shouldn't delete ourselves.
-                    {continue, State}
-            end;
-        false ->
-            % There are some waiting listeners, thus we are not
-            % unused, so can continue life as normal without needing
-            % to check the process dictionary.
-            {continue, State}
-    end.
+should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
+should_auto_delete(#q{has_had_consumers = false}) -> false;
+should_auto_delete(State) -> is_unused(State).
 
-handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
-                                   round_robin = ActiveConsumers}) ->
+handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
     case lookup_ch(DownPid) of
         not_found -> noreply(State);
         #cr{monitor_ref = MonitorRef, ch_pid = ChPid, txn = Txn,
             unacked_messages = UAM} ->
-            NewActive = block_consumers(ChPid, ActiveConsumers),
             erlang:demonitor(MonitorRef),
             erase({ch, ChPid}),
             State1 =
@@ -367,20 +359,22 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
                     none -> State;
                     _    -> rollback_transaction(Txn, State)
                 end,
-            case check_auto_delete(
-                   deliver_or_requeue_n(
-                     [MsgWithAck ||
-                         {_MsgId, MsgWithAck} <- dict:to_list(UAM)],
-                     State1 # q {
-                       exclusive_consumer = case Holder of
-                                                {ChPid, _} -> none;
-                                                Other -> Other
-                                            end,
-                       round_robin = NewActive})) of
-                {continue, State2} ->
-                    noreply(State2);
-                {stop, State2} ->
-                    {stop, normal, State2}
+            State2 =
+                deliver_or_requeue_n(
+                  [MsgWithAck ||
+                      {_MsgId, MsgWithAck} <- dict:to_list(UAM)],
+                  State1 # q {
+                    exclusive_consumer = case Holder of
+                                             {ChPid, _} -> none;
+                                             Other -> Other
+                                         end,
+                    active_consumers = remove_consumers(
+                                         ChPid, State1#q.active_consumers),
+                    blocked_consumers = remove_consumers(
+                                          ChPid, State1#q.blocked_consumers)}),
+            case should_auto_delete(State2) of
+                false -> noreply(State2);
+                true  -> {stop, normal, State2}
             end
     end.
 
@@ -393,26 +387,18 @@ check_queue_owner(none,           _)         -> ok;
 check_queue_owner({ReaderPid, _}, ReaderPid) -> ok;
 check_queue_owner({_,         _}, _)         -> mismatch.
 
-check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume) ->
+check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume, _State) ->
     in_use;
-check_exclusive_access(none, false) ->
+check_exclusive_access(none, false, _State) ->
     ok;
-check_exclusive_access(none, true) ->
-    case is_unused() of
+check_exclusive_access(none, true, State) ->
+    case is_unused(State) of
         true  -> ok;
         false -> in_use
     end.
 
-is_unused() ->
-    is_unused1(get()).
-
-is_unused1([]) ->
-    true;
-is_unused1([{{ch, _}, #cr{consumers = Consumers}} | _Rest])
-  when Consumers /= [] ->
-    false;
-is_unused1([_ | Rest]) ->
-    is_unused1(Rest).
+is_unused(State) -> queue:is_empty(State#q.active_consumers) andalso
+                        queue:is_empty(State#q.blocked_consumers).
 
 maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
@@ -513,9 +499,8 @@ i(messages, State) ->
 i(acks_uncommitted, _) ->
     lists:sum([length(Pending) ||
                   #tx{pending_acks = Pending} <- all_tx_record()]);
-i(consumers, _) ->
-    lists:sum([length(Consumers) ||
-                  #cr{consumers = Consumers} <- all_ch_record()]);
+i(consumers, State) ->
+    queue:len(State#q.active_consumers) + queue:len(State#q.blocked_consumers);
 i(transactions, _) ->
     length(all_tx_record());
 i(memory, _) ->
@@ -597,22 +582,22 @@ handle_call({basic_get, ChPid, NoAck}, _From,
 handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
              ConsumerTag, ExclusiveConsume, OkMsg},
             _From, State = #q{owner = Owner,
-                              exclusive_consumer = ExistingHolder,
-                              round_robin = RoundRobin}) ->
+                              exclusive_consumer = ExistingHolder}) ->
     case check_queue_owner(Owner, ReaderPid) of
         mismatch ->
             reply({error, queue_owned_by_another_connection}, State);
         ok ->
-            case check_exclusive_access(ExistingHolder, ExclusiveConsume) of
+            case check_exclusive_access(ExistingHolder, ExclusiveConsume,
+                                        State) of
                 in_use ->
                     reply({error, exclusive_consume_unavailable}, State);
                 ok ->
-                    C = #cr{consumers = Consumers} = ch_record(ChPid),
+                    C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
                     Consumer = #consumer{tag = ConsumerTag,
                                          ack_required = not(NoAck)},
-                    store_ch_record(C#cr{consumers = [Consumer | Consumers],
+                    store_ch_record(C#cr{consumer_count = ConsumerCount +1,
                                          limiter_pid = LimiterPid}),
-                    if Consumers == [] ->
+                    if ConsumerCount == 0 ->
                             ok = rabbit_limiter:register(LimiterPid, self());
                        true ->
                             ok
@@ -626,60 +611,63 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                     ok = maybe_send_reply(ChPid, OkMsg),
                     State2 =
                         case is_ch_blocked(C) of
-                            true  -> State1;
+                            true  -> State1#q{
+                                       blocked_consumers =
+                                       add_consumer(
+                                         ChPid, Consumer,
+                                         State1#q.blocked_consumers)};
                             false -> run_message_queue(
-                                       State1 #q {
-                                         round_robin = queue:in(
-                                                         {ChPid, Consumer},
-                                                         RoundRobin)})
+                                       State1#q{
+                                         active_consumers =
+                                         add_consumer(
+                                           ChPid, Consumer,
+                                           State1#q.active_consumers)})
                         end,
                     reply(ok, State2)
             end
     end;
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
-            State = #q{exclusive_consumer = Holder,
-                       round_robin = RoundRobin}) ->
+            State = #q{exclusive_consumer = Holder}) ->
     case lookup_ch(ChPid) of
         not_found ->
             ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
-        C = #cr{consumers = Consumers, limiter_pid = LimiterPid} ->
-            NewConsumers = lists:filter
-                             (fun (#consumer{tag = CT}) -> CT /= ConsumerTag end,
-                              Consumers),
-            store_ch_record(C#cr{consumers = NewConsumers}),
-            if NewConsumers == [] ->
+        C = #cr{consumer_count = ConsumerCount, limiter_pid = LimiterPid} ->
+            store_ch_record(C#cr{consumer_count = ConsumerCount - 1}),
+            if ConsumerCount == 1 ->
                     ok = rabbit_limiter:unregister(LimiterPid, self());
                true ->
                     ok
             end,
             ok = maybe_send_reply(ChPid, OkMsg),
-            case check_auto_delete(
-                   State#q{exclusive_consumer = cancel_holder(ChPid,
-                                                              ConsumerTag,
-                                                              Holder),
-                           round_robin = block_consumer(ChPid,
-                                                        ConsumerTag,
-                                                        RoundRobin)}) of
-                {continue, State1} ->
-                    reply(ok, State1);
-                {stop, State1} ->
-                    {stop, normal, ok, State1}
+            NewState =
+                State#q{exclusive_consumer = cancel_holder(ChPid,
+                                                           ConsumerTag,
+                                                           Holder),
+                        active_consumers = remove_consumer(
+                                             ChPid, ConsumerTag,
+                                             State#q.active_consumers),
+                        blocked_consumers = remove_consumer(
+                                              ChPid, ConsumerTag,
+                                              State#q.blocked_consumers)},
+            case should_auto_delete(NewState) of
+                false -> reply(ok, NewState);
+                true  -> {stop, normal, ok, NewState}
             end
     end;
 
 handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
                                     mixed_state = MS,
-                                    round_robin = RoundRobin}) ->
+                                    active_consumers = ActiveConsumers}) ->
     Length = rabbit_mixed_queue:length(MS),
-    reply({ok, Name, Length, queue:len(RoundRobin)}, State);
+    reply({ok, Name, Length, queue:len(ActiveConsumers)}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q { mixed_state = MS }) ->
     Length = rabbit_mixed_queue:length(MS),
     IsEmpty = Length == 0,
-    IsUnused = is_unused(),
+    IsUnused = is_unused(State),
     if
         IfEmpty and not(IsEmpty) ->
             reply({error, not_empty}, State);
@@ -698,7 +686,7 @@ handle_call({claim_queue, ReaderPid}, _From, State = #q{owner = Owner,
                                                         exclusive_consumer = Holder}) ->
     case Owner of
         none ->
-            case check_exclusive_access(Holder, true) of
+            case check_exclusive_access(Holder, true, State) of
                 in_use ->
                     %% FIXME: Is this really the right answer? What if
                     %% an active consumer's reader is actually the
@@ -770,10 +758,10 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
     noreply(
       possibly_unblock(
         State, ChPid,
-        fun (C = #cr{consumers = Consumers,
+        fun (C = #cr{consumer_count = ConsumerCount,
                      limiter_pid = OldLimiterPid,
                      is_limit_active = Limited}) ->
-                if Consumers =/= [] andalso OldLimiterPid == undefined ->
+                if ConsumerCount =/= 0 andalso OldLimiterPid == undefined ->
                         ok = rabbit_limiter:register(LimiterPid, self());
                    true ->
                         ok
