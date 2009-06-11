@@ -209,7 +209,7 @@ handle_method(ConsumeOk = #'basic.consume_ok'{consumer_tag = ConsumerTag},
             error ->
                 case queue:out(Anon) of
                     {empty, _} ->
-                        exit(anonymous_queue_empty, ConsumerTag);
+                        exit({anonymous_queue_empty, ConsumerTag});
                     {{value, {F, C}}, NewAnon} ->
                         {F, C,
                          State#channel_state{anon_sub_requests = NewAnon}}
