@@ -11,6 +11,8 @@
                 rabbit_sup,
                 rabbit_tcp_client_sup]},
   {applications, [kernel, stdlib, sasl, mnesia, os_mon]},
+%% we also depend on ssl but it shouldn't be in here as we don't
+%% actually want to start it
   {mod, {rabbit, []}},
   {env, [{tcp_listeners, [{"0.0.0.0", 5672}]},
          {extra_startup_steps, []},
