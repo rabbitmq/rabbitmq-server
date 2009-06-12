@@ -27,6 +27,7 @@ EBIN_DIR=ebin
 SOURCE_DIR=src
 TEST_SOURCE_DIR=tests
 INCLUDE_DIR=include
+INCLUDE_SERV_DIR=rabbitmq_server/include
 DIST_DIR=rabbitmq-erlang-client
 
 LOAD_PATH=ebin rabbitmq_server/ebin
@@ -37,7 +38,15 @@ TEST_SOURCES=$(wildcard $(TEST_SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
 TEST_TARGETS=$(patsubst $(TEST_SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(TEST_SOURCES))
 
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info
+ifndef USE_SPECS
+# our type specs rely on features / bug fixes in dialyzer that are
+# only available in R12B-3 upwards
+#
+# NB: the test assumes that version number will only contain single digits
+USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.6.2" ]; then echo "true"; else echo "false"; fi)
+endif
+
+ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
 BROKER_DIR=../rabbitmq-server
 BROKER_SYMLINK=rabbitmq_server
@@ -48,7 +57,14 @@ LOG_BASE=/tmp
 
 ERL_CALL=erl_call -sname $(NODENAME) -e
 
+
 all: compile
+
+dialyze: $(EBIN_DIR) $(TARGETS)
+	dialyzer -c $(TARGETS)
+	
+dialyze-all: $(EBIN_DIR) $(TARGETS) $(TEST_TARGETS)
+	dialyzer -c $(TARGETS) $(TEST_TARGETS)
 
 compile: $(EBIN_DIR) $(TARGETS)
 
