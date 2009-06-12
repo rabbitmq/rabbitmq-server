@@ -69,7 +69,7 @@ clean: cleandb
 	rm -f docs/*.[0-9].gz
 
 cleandb: stop-node
-	erl -mnesia dir '"$(RABBITMQ_MNESIA_DIR)"' -noshell -eval 'lists:foreach(fun file:delete/1, filelib:wildcard(mnesia:system_info(directory) ++ "/*")), halt().'
+	rm -rf $(RABBITMQ_MNESIA_DIR)/*
 
 ############ various tasks to interact with RabbitMQ ###################
 
