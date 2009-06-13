@@ -237,7 +237,7 @@ basic_qos_test(Con) ->
     [NoQos, Qos] = [basic_qos_test(Con, Prefetch) || Prefetch <- [0,1]],
     ExpectedRatio = (1+1) / (1+50/5),
     FudgeFactor = 2, %% account for timing variations
-    ?assert(Qos / NoQos < ExpectedRatio * FudgeFactor).
+    ?assertMatch(true, Qos / NoQos < ExpectedRatio * FudgeFactor).
 
 basic_qos_test(Connection, Prefetch) ->
     Messages = 100,
