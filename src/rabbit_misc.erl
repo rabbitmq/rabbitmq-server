@@ -51,7 +51,6 @@
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
--export([start_applications/1, stop_applications/1]).
 
 -import(mnesia).
 -import(lists).
@@ -110,9 +109,13 @@
 -spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_misc.erl
+-spec(format_stderr/2 :: (string(), [any()]) -> 'true').
+=======
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
+>>>>>>> /tmp/rabbit_misc.erl~other.qjyLOB
 
 -endif.
 
@@ -249,7 +252,7 @@ filter_exit_map(F, L) ->
 
 with_user(Username, Thunk) ->
     fun () ->
-            case mnesia:read({rabbit_user, Username}) of
+            case mnesia:read({user, Username}) of
                 [] ->
                     mnesia:abort({no_such_user, Username});
                 [_U] ->
@@ -259,7 +262,7 @@ with_user(Username, Thunk) ->
 
 with_vhost(VHostPath, Thunk) ->
     fun () ->
-            case mnesia:read({rabbit_vhost, VHostPath}) of
+            case mnesia:read({vhost, VHostPath}) of
                 [] ->
                     mnesia:abort({no_such_vhost, VHostPath});
                 [_V] ->
@@ -389,6 +392,11 @@ ensure_parent_dirs_exist(Filename) ->
     end.
 
 format_stderr(Fmt, Args) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_misc.erl
+    Port = open_port({fd, 0, 2}, [out]),
+    port_command(Port, io_lib:format(Fmt, Args)),
+    port_close(Port).
+=======
     case os:type() of
         {unix, _} ->
             Port = open_port({fd, 0, 2}, [out]),
@@ -431,3 +439,4 @@ stop_applications(Apps) ->
                         cannot_stop_application,
                         Apps).
 
+>>>>>>> /tmp/rabbit_misc.erl~other.qjyLOB

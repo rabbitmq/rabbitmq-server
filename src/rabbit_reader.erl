@@ -105,18 +105,10 @@
 %%   terminate_channel timeout -> remove 'closing' mark, *closing*
 %%   handshake_timeout -> ignore, *closing*
 %%   heartbeat timeout -> *throw*
-%%   channel exit with hard error
-%%   -> log error, wait for channels to terminate forcefully, start
-%%      terminate_connection timer, send close, *closed*
-%%   channel exit with soft error
-%%   -> log error, start terminate_channel timer, mark channel as
-%%      closing
-%%      if last channel to exit then send connection.close_ok,
-%%         start terminate_connection timer, *closed*
-%%      else *closing*
-%%   channel exits normally
-%%   -> if last channel to exit then send connection.close_ok,
-%%      start terminate_connection timer, *closed*
+%%   channel exit ->
+%%     if abnormal exit then log error
+%%     if last channel to exit then send connection.close_ok, start
+%%        terminate_connection timer, *closing*
 %% closed:
 %%   socket close -> *terminate*
 %%   receive connection.close_ok -> self() ! terminate_connection,
@@ -173,8 +165,7 @@ setup_profiling() ->
     Value = rabbit_misc:get_config(profiling_enabled, false),
     case Value of
         once ->
-            rabbit_log:info("Enabling profiling for this connection, "
-                            "and disabling for subsequent.~n"),
+            rabbit_log:info("Enabling profiling for this connection, and disabling for subsequent.~n"),
             rabbit_misc:set_config(profiling_enabled, false),
             fprof:trace(start);
         true ->
@@ -288,8 +279,6 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             exit(Reason);
         {'EXIT', _Pid, E = {writer, send_failed, _Error}} ->
             throw(E);
-        {channel_exit, Channel, Reason} ->
-            mainloop(Parent, Deb, handle_channel_exit(Channel, Reason, State));
         {'EXIT', Pid, Reason} ->
             mainloop(Parent, Deb, handle_dependent_exit(Pid, Reason, State));
         {terminate_channel, Channel, Ref1} ->
@@ -357,6 +346,7 @@ terminate_channel(Channel, Ref, State) ->
     end,
     State.
 
+<<<<<<< local
 handle_channel_exit(Channel, Reason, State) ->
     %% We remove the channel from the inbound map only. That allows
     %% the channel to be re-opened, but also means the remaining
@@ -365,13 +355,26 @@ handle_channel_exit(Channel, Reason, State) ->
     erase({channel, Channel}),
     handle_exception(State, Channel, Reason).
 
+handle_dependent_exit(Pid, Reason,
+                      State = #v1{connection_state = closing}) ->
+    case channel_cleanup(Pid) of
+        undefined -> exit({abnormal_dependent_exit, Pid, Reason});
+        Channel ->
+            case Reason of
+                normal -> ok;
+                _      -> log_channel_error(closing, Channel, Reason)
+            end,
+            maybe_close(State)
+    end;
+=======
+>>>>>>> other
 handle_dependent_exit(Pid, normal, State) ->
     channel_cleanup(Pid),
-    maybe_close(State);
+    State;
 handle_dependent_exit(Pid, Reason, State) ->
     case channel_cleanup(Pid) of
         undefined -> exit({abnormal_dependent_exit, Pid, Reason});
-        Channel   -> maybe_close(handle_exception(State, Channel, Reason))
+        Channel   -> handle_exception(State, Channel, Reason)
     end.
 
 channel_cleanup(Pid) ->
@@ -419,8 +422,7 @@ wait_for_channel_termination(N, TimerRef) ->
                         normal -> ok;
                         _ ->
                             rabbit_log:error(
-                              "connection ~p, channel ~p - "
-                              "error while terminating:~n~p~n",
+                              "connection ~p, channel ~p - error while terminating:~n~p~n",
                               [self(), Channel, Reason])
                     end,
                     wait_for_channel_termination(N-1, TimerRef)
@@ -429,15 +431,13 @@ wait_for_channel_termination(N, TimerRef) ->
             exit(channel_termination_timeout)
     end.
 
-maybe_close(State = #v1{connection_state = closing}) ->
+maybe_close(State) ->
     case all_channels() of
         [] -> ok = send_on_channel0(
                      State#v1.sock, #'connection.close_ok'{}),
               close_connection(State);
         _  -> State
-    end;
-maybe_close(State) ->
-    State.
+    end.
 
 handle_frame(Type, 0, Payload, State = #v1{connection_state = CS})
   when CS =:= closing; CS =:= closed ->
@@ -725,8 +725,8 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
                   vhost = VHost}} = State,
             WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
             ChPid = rabbit_framing_channel:start_link(
-                      fun rabbit_channel:start_link/5,
-                      [Channel, self(), WriterPid, Username, VHost]),
+                      fun rabbit_channel:start_link/4,
+                      [self(), WriterPid, Username, VHost]),
             put({channel, Channel}, {chpid, ChPid}),
             put({chpid, ChPid}, {channel, Channel}),
             ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame);

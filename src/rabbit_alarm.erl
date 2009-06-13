@@ -33,7 +33,7 @@
 
 -behaviour(gen_event).
 
--export([start/1, stop/0, register/2]).
+-export([start/0, stop/0, maybe_conserve_memory/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -52,8 +52,13 @@
 -type(mfa_tuple() :: {atom(), atom(), list()}).
 -spec(start/1 :: (bool() | 'auto') -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(register/2 :: (pid(), mfa_tuple()) -> 'ok').
+<<<<<<< local
+-spec(maybe_conserve_memory/1 :: (pid()) -> 'ok').
 
+=======
+-spec(register/2 :: (pid(), mfa_tuple()) -> 'ok').
+             
+>>>>>>> other
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -76,10 +81,16 @@ start(MemoryAlarms) ->
 stop() ->
     ok = alarm_handler:delete_alarm_handler(?MODULE).
 
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_alarm.erl
+maybe_conserve_memory(QPid) ->
+    gen_event:call(alarm_handler, ?MODULE, {maybe_conserve_memory, QPid}).
+                        {register, Pid, HighMemMFA}).
+=======
 register(Pid, HighMemMFA) ->
     ok = gen_event:call(alarm_handler, ?MODULE,
                         {register, Pid, HighMemMFA},
                         infinity).
+>>>>>>> /tmp/rabbit_alarm.erl~other.Lee8ob
 
 %%----------------------------------------------------------------------------
 
@@ -89,12 +100,9 @@ init([MemoryAlarms]) ->
                                 false -> undefined
                             end}}.
 
-handle_call({register, _Pid, _HighMemMFA},
-            State = #alarms{alertees = undefined}) ->
-    {ok, ok, State};
-handle_call({register, Pid, HighMemMFA},
-            State = #alarms{alertees = Alertess}) ->
-    _MRef = erlang:monitor(process, Pid),
+handle_call({maybe_conserve_memory, QPid},
+            State = #alarms{system_memory_high_watermark = Conserve}) ->
+    {ok, rabbit_amqqueue:conserve_memory(QPid, Conserve), State};
     case State#alarms.system_memory_high_watermark of
         true  -> {M, F, A} = HighMemMFA,
                  ok = erlang:apply(M, F, A ++ [Pid, true]);
@@ -102,16 +110,16 @@ handle_call({register, Pid, HighMemMFA},
     end,
     NewAlertees = dict:store(Pid, HighMemMFA, Alertess),
     {ok, ok, State#alarms{alertees = NewAlertees}};
-
+    
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, {system_memory_high_watermark, []}}, State) ->
-    ok = alert(true, State#alarms.alertees),
+    rabbit_amqqueue:conserve_memory(true),
     {ok, State#alarms{system_memory_high_watermark = true}};
 
 handle_event({clear_alarm, system_memory_high_watermark}, State) ->
-    ok = alert(false, State#alarms.alertees),
+    rabbit_amqqueue:conserve_memory(false),
     {ok, State#alarms{system_memory_high_watermark = false}};
 
 handle_event(_Event, State) ->
@@ -136,7 +144,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 start_memsup() ->
-    Mod = case os:type() of
+    Mod = case os:type() of 
               %% memsup doesn't take account of buffers or cache when
               %% considering "free" memory - therefore on Linux we can
               %% get memory alarms very easily without any pressure
@@ -144,7 +152,7 @@ start_memsup() ->
               %% our own simple memory monitor.
               %%
               {unix, linux} -> rabbit_memsup_linux;
-
+              
               %% Start memsup programmatically rather than via the
               %% rabbitmq-server script. This is not quite the right
               %% thing to do as os_mon checks to see if memsup is

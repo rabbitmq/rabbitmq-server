@@ -75,20 +75,19 @@ start() ->
     try
         ok = ensure_working_log_handlers(),
         ok = rabbit_mnesia:ensure_mnesia_dir(),
-        ok = rabbit_misc:start_applications(?APPS)
+        ok = start_applications(?APPS)
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
 stop() ->
-    ok = rabbit_misc:stop_applications(?APPS).
+    ok = stop_applications(?APPS).
 
 stop_and_halt() ->
     spawn(fun () ->
                   SleepTime = 1000,
-                  rabbit_log:info("Stop-and-halt request received; "
-                                  "halting in ~p milliseconds~n",
+                  rabbit_log:info("Stop-and-halt request received; halting in ~p milliseconds~n",
                                   [SleepTime]),
                   timer:sleep(SleepTime),
                   init:stop()
@@ -109,6 +108,34 @@ rotate_logs(BinarySuffix) ->
                                     rabbit_sasl_report_file_h)).
 
 %%--------------------------------------------------------------------
+
+manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
+    Iterate(fun (App, Acc) ->
+                    case Do(App) of
+                        ok -> [App | Acc];
+                        {error, {SkipError, _}} -> Acc;
+                        {error, Reason} ->
+                            lists:foreach(Undo, Acc),
+                            throw({error, {ErrorTag, App, Reason}})
+                    end
+            end, [], Apps),
+    ok.
+
+start_applications(Apps) ->
+    manage_applications(fun lists:foldl/3,
+                        fun application:start/1,
+                        fun application:stop/1,
+                        already_started,
+                        cannot_start_application,
+                        Apps).
+
+stop_applications(Apps) ->
+    manage_applications(fun lists:foldr/3,
+                        fun application:stop/1,
+                        fun application:start/1,
+                        not_started,
+                        cannot_stop_application,
+                        Apps).
 
 start(normal, []) ->
 
@@ -273,14 +300,9 @@ insert_default_data() ->
     {ok, DefaultUser} = application:get_env(default_user),
     {ok, DefaultPass} = application:get_env(default_pass),
     {ok, DefaultVHost} = application:get_env(default_vhost),
-    {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
-        application:get_env(default_permissions),
     ok = rabbit_access_control:add_vhost(DefaultVHost),
     ok = rabbit_access_control:add_user(DefaultUser, DefaultPass),
-    ok = rabbit_access_control:set_permissions(DefaultUser, DefaultVHost,
-                                               DefaultConfigurePerm,
-                                               DefaultWritePerm,
-                                               DefaultReadPerm),
+    ok = rabbit_access_control:map_user_vhost(DefaultUser, DefaultVHost),
     ok.
 
 start_builtin_amq_applications() ->

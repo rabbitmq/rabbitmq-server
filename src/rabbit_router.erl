@@ -35,7 +35,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/0,
-         deliver/2]).
+         deliver/5]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -50,7 +50,8 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
--spec(deliver/2 :: ([pid()], delivery()) -> {routing_result(), [pid()]}).
+-spec(deliver/5 :: ([pid()], bool(), bool(), maybe(txn()), message()) ->
+             {'ok', [pid()]} | {'error', 'unroutable' | 'not_delivered'}).
 
 -endif.
 
@@ -61,13 +62,13 @@ start_link() ->
 
 -ifdef(BUG19758).
 
-deliver(QPids, Delivery) ->
-    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
-                   run_bindings(QPids, Delivery)).
+deliver(QPids, Mandatory, Immediate, Txn, Message) ->
+    check_delivery(Mandatory, Immediate,
+                   run_bindings(QPids, Mandatory, Immediate, Txn, Message)).
 
 -else.
 
-deliver(QPids, Delivery) ->
+deliver(QPids, Mandatory, Immediate, Txn, Message) ->
     %% we reduce inter-node traffic by grouping the qpids by node and
     %% only delivering one copy of the message to each node involved,
     %% which then in turn delivers it to its queues.
@@ -80,14 +81,16 @@ deliver(QPids, Delivery) ->
                               [QPid], D)
           end,
           dict:new(), QPids)),
-      Delivery).
+      Mandatory, Immediate, Txn, Message).
 
-deliver_per_node([{Node, QPids}], Delivery) when Node == node() ->
+deliver_per_node([{Node, QPids}], Mandatory, Immediate,
+                 Txn, Message)
+  when Node == node() ->
     %% optimisation
-    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
-                   run_bindings(QPids, Delivery));
-deliver_per_node(NodeQPids, Delivery = #delivery{mandatory = false,
-                                                 immediate = false}) ->
+    check_delivery(Mandatory, Immediate,
+                   run_bindings(QPids, Mandatory, Immediate, Txn, Message));
+deliver_per_node(NodeQPids, Mandatory = false, Immediate = false,
+                 Txn, Message) ->
     %% optimisation: when Mandatory = false and Immediate = false,
     %% rabbit_amqqueue:deliver in run_bindings below will deliver the
     %% message to the queue process asynchronously, and return true,
@@ -95,19 +98,22 @@ deliver_per_node(NodeQPids, Delivery = #delivery{mandatory = false,
     %% therefore safe to use a fire-and-forget cast here and return
     %% the QPids - the semantics is preserved. This scales much better
     %% than the non-immediate case below.
-    {routed,
-     lists:flatmap(
-       fun ({Node, QPids}) ->
-               gen_server2:cast({?SERVER, Node}, {deliver, QPids, Delivery}),
-               QPids
-       end,
-       NodeQPids)};
-deliver_per_node(NodeQPids, Delivery) ->
+    {ok, lists:flatmap(
+           fun ({Node, QPids}) ->
+                   gen_server2:cast(
+                     {?SERVER, Node},
+                     {deliver, QPids, Mandatory, Immediate, Txn, Message}),
+                   QPids
+           end,
+           NodeQPids)};
+deliver_per_node(NodeQPids, Mandatory, Immediate,
+                 Txn, Message) ->
     R = rabbit_misc:upmap(
           fun ({Node, QPids}) ->
-                  try gen_server2:call({?SERVER, Node},
-                                       {deliver, QPids, Delivery},
-                                       infinity)
+                  try gen_server2:call(
+                        {?SERVER, Node},
+                        {deliver, QPids, Mandatory, Immediate, Txn, Message},
+                        infinity)
                   catch
                       _Class:_Reason ->
                           %% TODO: figure out what to log (and do!) here
@@ -124,8 +130,7 @@ deliver_per_node(NodeQPids, Delivery) ->
                     end,
                     {false, []},
                     R),
-    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
-                   {Routed, lists:append(Handled)}).
+    check_delivery(Mandatory, Immediate, {Routed, lists:append(Handled)}).
 
 -endif.
 
@@ -134,17 +139,19 @@ deliver_per_node(NodeQPids, Delivery) ->
 init([]) ->
     {ok, no_state}.
 
-handle_call({deliver, QPids, Delivery}, From, State) ->
+handle_call({deliver, QPids, Mandatory, Immediate, Txn, Message},
+            From, State) ->
     spawn(
       fun () ->
-              R = run_bindings(QPids, Delivery),
+              R = run_bindings(QPids, Mandatory, Immediate, Txn, Message),
               gen_server2:reply(From, R)
       end),
     {noreply, State}.
 
-handle_cast({deliver, QPids, Delivery}, State) ->
+handle_cast({deliver, QPids, Mandatory, Immediate, Txn, Message},
+            State) ->
     %% in order to preserve message ordering we must not spawn here
-    run_bindings(QPids, Delivery),
+    run_bindings(QPids, Mandatory, Immediate, Txn, Message),
     {noreply, State}.
 
 handle_info(_Info, State) ->
@@ -158,10 +165,11 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%--------------------------------------------------------------------
 
-run_bindings(QPids, Delivery) ->
+run_bindings(QPids, IsMandatory, IsImmediate, Txn, Message) ->
     lists:foldl(
       fun (QPid, {Routed, Handled}) ->
-              case catch rabbit_amqqueue:deliver(QPid, Delivery) of
+              case catch rabbit_amqqueue:deliver(IsMandatory, IsImmediate,
+                                                 Txn, Message, QPid) of
                   true              -> {true, [QPid | Handled]};
                   false             -> {true, Handled};
                   {'EXIT', _Reason} -> {Routed, Handled}
@@ -171,6 +179,6 @@ run_bindings(QPids, Delivery) ->
       QPids).
 
 %% check_delivery(Mandatory, Immediate, {WasRouted, QPids})
-check_delivery(true, _   , {false, []}) -> {unroutable, []};
-check_delivery(_   , true, {_    , []}) -> {not_delivered, []};
-check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
+check_delivery(true, _   , {false, []}) -> {error, unroutable};
+check_delivery(_   , true, {_    , []}) -> {error, not_delivered};
+check_delivery(_   , _   , {_    , Qs}) -> {ok, Qs}.
