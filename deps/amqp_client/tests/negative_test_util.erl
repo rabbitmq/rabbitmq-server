@@ -56,5 +56,5 @@ hard_error_test(Connection) ->
 wait_for_death(Pid) ->
     Ref = erlang:monitor(process, Pid),
     receive {'DOWN', Ref, process, Pid, _Reason} -> ok
-    after 1000 -> erlang:error(waited_death_too_long)
+    after 1000 -> erlang:error(waited_death_too_long), ok
     end.
