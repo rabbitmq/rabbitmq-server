@@ -49,7 +49,7 @@
 
 -spec(check_login/2 :: (binary(), binary()) -> user()).
 -spec(user_pass_login/2 :: (username(), password()) -> user()).
--spec(check_vhost_access/2 :: (user(), vhost()) -> 'ok').
+-spec(check_vhost_access/2 :: (username(), vhost()) -> 'ok').
 -spec(check_resource_access/3 ::
       (username(), r(atom()), permission_atom()) -> 'ok').
 -spec(add_user/2 :: (username(), password()) -> 'ok').
@@ -128,7 +128,7 @@ internal_lookup_vhost_access(Username, VHostPath) ->
               end
       end).
 
-check_vhost_access(#user{username = Username}, VHostPath) ->
+check_vhost_access(Username, VHostPath) ->
     ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
     case internal_lookup_vhost_access(Username, VHostPath) of
         {ok, _R} ->
