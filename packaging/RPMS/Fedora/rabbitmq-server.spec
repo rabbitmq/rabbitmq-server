@@ -2,7 +2,7 @@
 
 Name: rabbitmq-server
 Version: %%VERSION%%
-Release: 1%%RELEASE_OS%%
+Release: 1%{?dist}
 License: MPLv1.1
 Group: Development/Libraries
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.gz
@@ -34,7 +34,11 @@ scalable implementation of an AMQP broker.
 %build
 cp %{S:2} %{_rabbit_wrapper}
 sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
-make %{?_smp_mflags}
+
+# The rabbitmq build needs escript, which is missing from /usr/bin in
+# some versions of the erlang RPM.  See
+# <https://bugzilla.redhat.com/show_bug.cgi?id=481302>
+PATH=%{_libdir}/erlang/bin:$PATH make %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}
@@ -107,12 +111,15 @@ fi
 %{_rabbit_libdir}
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
-%doc LICENSE LICENSE-MPL-RabbitMQ INSTALL
+%doc LICENSE LICENSE-MPL-RabbitMQ
 
 %clean
 rm -rf %{buildroot}
 
 %changelog
+* Tue May 19 2009 Matthias Radestock <matthias@lshift.net> 1.5.5-1
+- Maintenance release for the 1.5.x series
+
 * Mon Apr 6 2009 Matthias Radestock <matthias@lshift.net> 1.5.4-1
 - Maintenance release for the 1.5.x series
 

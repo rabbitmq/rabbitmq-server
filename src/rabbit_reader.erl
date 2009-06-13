@@ -610,9 +610,9 @@ handle_method0(#'connection.open'{virtual_host = VHostPath,
                                   insist = Insist},
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
-                                          user = User},
+                                           user = #user{username = Username}},
                            sock = Sock}) ->
-    ok = rabbit_access_control:check_vhost_access(User, VHostPath),
+    ok = rabbit_access_control:check_vhost_access(Username, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     KnownHosts = format_listeners(rabbit_networking:active_listeners()),
     Redirects = compute_redirects(Insist),
