@@ -63,7 +63,7 @@ all: compile
 dialyze: $(EBIN_DIR) $(TARGETS)
 	dialyzer -c $(TARGETS)
 	
-dialyze-all: $(EBIN_DIR) $(TARGETS) $(TEST_TARGETS)
+dialyze_all: $(EBIN_DIR) $(TARGETS) $(TEST_TARGETS)
 	dialyzer -c $(TARGETS) $(TEST_TARGETS)
 
 compile: $(EBIN_DIR) $(TARGETS)
