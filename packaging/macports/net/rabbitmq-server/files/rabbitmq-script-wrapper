@@ -1,20 +1,10 @@
 #!/bin/bash
-# Escape spaces and quotes, because shell is revolting.
-for arg in "$@" ; do
-	# Escape quotes in parameters, so that they're passed through cleanly.
-	arg=$(sed -e 's/"/\\"/' <<-END
-		$arg
-		END
-	)
-	CMDLINE="${CMDLINE} \"${arg}\""
-done
-
 cd /var/lib/rabbitmq
 
 SCRIPT=`basename $0`
 
 if [ `id -u` = 0 ] ; then
-    sudo -u rabbitmq -H /usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}
+    sudo -u rabbitmq -H /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
 else
     /usr/lib/rabbitmq/bin/${SCRIPT}
     echo -e "\nOnly root should run ${SCRIPT}\n"
