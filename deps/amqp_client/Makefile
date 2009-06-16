@@ -57,6 +57,8 @@ LOG_BASE=/tmp
 
 ERL_CALL=erl_call -sname $(NODENAME) -e
 
+PLT=$(HOME)/.dialyzer_plt
+
 
 all: compile
 
@@ -65,6 +67,9 @@ dialyze: $(EBIN_DIR) $(TARGETS)
 	
 dialyze_all: $(EBIN_DIR) $(TARGETS) $(TEST_TARGETS)
 	dialyzer -c $(TARGETS) $(TEST_TARGETS)
+	
+add_broker_to_plt: $(BROKER_SYMLINK)
+	dialyzer --add_to_plt --plt $(PLT) -r $</ebin
 
 compile: $(EBIN_DIR) $(TARGETS)
 

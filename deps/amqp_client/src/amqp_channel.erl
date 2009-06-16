@@ -147,9 +147,9 @@ rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                                               do2 = Do2}) ->
     NewRequestQueue =
         case queue:out(RequestQueue) of
-            {empty, {[], []}}        -> exit(empty_rpc_bottom_half);
-            {{value, {From, _}}, Q}  -> gen_server:reply(From, Reply),
-                                        Q
+            {empty, _}              -> exit(empty_rpc_bottom_half);
+            {{value, {From, _}}, Q} -> gen_server:reply(From, Reply),
+                                       Q
         end,
     case queue:is_empty(NewRequestQueue) of
         true  -> ok;
