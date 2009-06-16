@@ -3,7 +3,7 @@
 
 PortSystem 1.0
 name		rabbitmq-server
-version		1.5.3
+version		1.5.5
 revision	0
 categories	net 
 maintainers	tonyg@rabbitmq.com
@@ -19,9 +19,9 @@ homepage        http://www.rabbitmq.com/
 master_sites    http://www.rabbitmq.com/releases/rabbitmq-server/v${version}/
 
 checksums \
-    md5 3242a67885c2471b5ab62254bf024679 \
-    sha1 f4d6a01eaa2c74fa32f567fe410d21d9be1b43aa \
-    rmd160 1a1c4b97d765548028c161d1617905151ca9e040
+    md5 1dceb98bb57cd6acef90f58e96a7fce4 \
+    sha1 5daa50859c9f2342cc824188f4a3cc7f9edb938e \
+    rmd160 6e3703a30d45cb21ba6f7435fb68992027cf18f0
 
 depends_build   port:erlang port:py25-simplejson
 depends_run     port:erlang
@@ -64,19 +64,19 @@ post-destroot {
         ${sbindir}/rabbitmq-multi \
         ${sbindir}/rabbitmq-server \
         ${sbindir}/rabbitmqctl
-    reinplace -E "s:(RABBITMQ_CLUSTER_CONFIG_FILE)=/:\\1=${prefix}/:" \
+    reinplace -E "s:(CLUSTER_CONFIG_FILE)=/:\\1=${prefix}/:" \
         ${sbindir}/rabbitmq-multi \
         ${sbindir}/rabbitmq-server \
         ${sbindir}/rabbitmqctl
-    reinplace -E "s:(RABBITMQ_LOG_BASE)=/:\\1=${prefix}/:" \
+    reinplace -E "s:(LOG_BASE)=/:\\1=${prefix}/:" \
         ${sbindir}/rabbitmq-multi \
         ${sbindir}/rabbitmq-server \
         ${sbindir}/rabbitmqctl
-    reinplace -E "s:(RABBITMQ_MNESIA_BASE)=/:\\1=${prefix}/:" \
+    reinplace -E "s:(MNESIA_BASE)=/:\\1=${prefix}/:" \
         ${sbindir}/rabbitmq-multi \
         ${sbindir}/rabbitmq-server \
         ${sbindir}/rabbitmqctl
-    reinplace -E "s:(RABBITMQ_PIDS_FILE)=/:\\1=${prefix}/:" \
+    reinplace -E "s:(PIDS_FILE)=/:\\1=${prefix}/:" \
         ${sbindir}/rabbitmq-multi \
         ${sbindir}/rabbitmq-server \
         ${sbindir}/rabbitmqctl
