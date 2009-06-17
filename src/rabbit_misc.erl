@@ -114,7 +114,7 @@
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
--spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> [B]).
+-spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 
 -endif.
 

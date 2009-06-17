@@ -65,7 +65,7 @@
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -spec(start/0 :: () -> 'ok').
--spec(recover/0 :: () -> 'ok').
+-spec(recover/0 :: () -> {'ok', [amqqueue()]}).
 -spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
              amqqueue()).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).

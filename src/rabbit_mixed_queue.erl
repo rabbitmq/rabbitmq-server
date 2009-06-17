@@ -49,6 +49,45 @@
                  }
        ).
 
+-ifdef(use_specs).
+
+-type(mode() :: ( 'disk' | 'mixed' )).
+-type(mqstate() :: #mqstate { mode :: mode(),
+                              msg_buf :: queue(),
+                              queue :: queue_name(),
+                              is_durable :: bool(),
+                              length :: non_neg_integer()
+                            }).
+-type(acktag() :: ( 'noack' | { non_neg_integer(), non_neg_integer() })).
+
+-spec(init/3 :: (queue_name(), bool(), mode()) ->
+             {'ok', mqstate()}).
+-spec(publish/2 :: (message(), mqstate()) ->
+             {'ok', mqstate()}).
+-spec(publish_delivered/2 :: (message(), mqstate()) ->
+             {'ok', acktag(), mqstate()}).
+-spec(deliver/1 :: (mqstate()) ->
+             {('empty' | {message(), bool(), acktag(), non_neg_integer()}),
+              mqstate()}).
+-spec(ack/2 :: ([acktag()], mqstate()) ->
+             {'ok', mqstate()}).
+-spec(tx_publish/2 :: (message(), mqstate()) ->
+             {'ok', mqstate()}).
+-spec(tx_commit/3 :: ([message()], [acktag()], mqstate()) ->
+             {'ok', mqstate()}).
+-spec(tx_cancel/2 :: ([message()], mqstate()) ->
+             {'ok', mqstate()}).
+-spec(requeue/2 :: ([{message(), acktag()}], mqstate()) ->
+             {'ok', mqstate()}).
+-spec(purge/1 :: (mqstate()) ->
+             {'ok', mqstate()}).
+-spec(delete_queue/1 :: (mqstate()) ->
+             {'ok', mqstate()}).
+-spec(length/1 :: (mqstate()) -> non_neg_integer()).
+-spec(is_empty/1 :: (mqstate()) -> bool()).
+
+-endif.
+
 init(Queue, IsDurable, disk) ->
     purge_non_persistent_messages(
       #mqstate { mode = disk, msg_buf = queue:new(), queue = Queue,

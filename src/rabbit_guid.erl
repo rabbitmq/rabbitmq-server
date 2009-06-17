@@ -42,7 +42,7 @@
          terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(SERIAL_FILENAME, rabbit_guid).
+-define(SERIAL_FILENAME, "rabbit_guid").
 
 -record(state, {serial}).
 

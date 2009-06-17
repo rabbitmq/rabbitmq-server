@@ -231,19 +231,19 @@
 -ifdef(use_specs).
 
 -type(seq_id() :: non_neg_integer()).
--type(seq_id_or_next() :: { seq_id() | 'next' }).
+-type(seq_id_or_next() :: ( seq_id() | 'next' )).
 
 -spec(start_link/0 :: () ->
-              {'ok', pid()} | 'ignore' | {'error', any()}).
+              ({'ok', pid()} | 'ignore' | {'error', any()})).
 -spec(publish/4 :: (queue_name(), msg_id(), binary(), bool()) -> 'ok').
 -spec(publish_with_seq/5 :: (queue_name(), msg_id(), seq_id_or_next(), binary(),
                              bool()) -> 'ok').
 -spec(deliver/1 :: (queue_name()) ->
-             {'empty' | {msg_id(), binary(), non_neg_integer(),
-                         bool(), {msg_id(), seq_id()}, non_neg_integer()}}).
+             ('empty' | {msg_id(), binary(), non_neg_integer(),
+                         bool(), {msg_id(), seq_id()}, non_neg_integer()})).
 -spec(phantom_deliver/1 :: (queue_name()) ->
-             { 'empty' | {msg_id(), bool(), {msg_id(), seq_id()},
-                          non_neg_integer()}}).
+             ( 'empty' | {msg_id(), bool(), {msg_id(), seq_id()},
+                          non_neg_integer()})).
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_publish/2 :: (msg_id(), binary()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [msg_id()], [{msg_id(), seq_id()}]) ->

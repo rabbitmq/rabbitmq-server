@@ -43,6 +43,20 @@
 
 -define(SERVER, ?MODULE).
 
+-ifdef(use_specs).
+
+-type(mode() :: ( 'unlimited' | 'ram_disk' | 'disk_only' )).
+-type(queue_mode() :: ( 'mixed' | 'disk' )).
+
+-spec(start_link/0 :: () ->
+              ({'ok', pid()} | 'ignore' | {'error', any()})).
+-spec(register/1 :: (pid()) -> {'ok', queue_mode()}).
+-spec(change_memory_footprint/2 :: (pid(), bool()) -> 'ok').
+-spec(reduce_memory_footprint/0 :: () -> 'ok').
+-spec(increase_memory_footprint/0 :: () -> 'ok').
+
+-endif.
+
 -record(state, { mode,
                  queues
                }).
