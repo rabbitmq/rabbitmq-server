@@ -62,7 +62,8 @@
 
 -record(listener, {node, protocol, host, port}).
 
--record(basic_message, {exchange_name, routing_key, content, guid, is_persistent}).
+-record(basic_message, {exchange_name, routing_key, content,
+                        guid, is_persistent}).
 
 -record(dq_msg_loc, {queue_and_seq_id, is_delivered, msg_id, next_seq_id}).
 
@@ -136,7 +137,7 @@
       #basic_message{exchange_name  :: exchange_name(),
                      routing_key    :: routing_key(),
                      content        :: content(),
-		     guid           :: guid(),
+                     guid           :: guid(),
                      is_persistent  :: bool()}).
 -type(message() :: basic_message()).
 -type(delivery() ::
