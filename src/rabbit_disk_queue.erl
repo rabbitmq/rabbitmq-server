@@ -654,11 +654,10 @@ get_read_handle(File, State =
                            current_file_handle = CurHdl,
                            current_dirty = IsDirty
                          }) ->
-    IsDirty2 = case CurName of
-                   File when IsDirty ->
+    IsDirty2 = if CurName =:= File andalso IsDirty ->
                        file:sync(CurHdl),
                        false;
-                   _ -> IsDirty
+                  true -> IsDirty
                end,
     Now = now(),
     {FileHdl, ReadHdls1, ReadHdlsAge1} =
@@ -840,11 +839,10 @@ internal_tx_publish(MsgId, MsgBody,
                 ets:lookup(FileSummary, CurName),
             ValidTotalSize1 = ValidTotalSize + TotalSize +
                 ?FILE_PACKING_ADJUSTMENT,
-            ContiguousTop1 = case CurOffset of
-                                 ContiguousTop ->
+            ContiguousTop1 = if CurOffset =:= ContiguousTop ->
                                      %% can't be any holes in this file
                                      ValidTotalSize1;
-                                 _ -> ContiguousTop
+                                true -> ContiguousTop
                              end,
             true = ets:insert(FileSummary, {CurName, ValidTotalSize1,
                                             ContiguousTop1, Left, undefined}),
@@ -1222,11 +1220,10 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
     %%   the DestinationContiguousTop to a tmp file then truncate,
     %%   copy back in, and then copy over from Source
     %% otherwise we just truncate straight away and copy over from Source
-    case DestinationContiguousTop of
-        DestinationValid ->
+    if DestinationContiguousTop =:= DestinationValid ->
             ok = truncate_and_extend_file(DestinationHdl,
                                           DestinationValid, ExpectedSize);
-        _ ->
+       true ->
             Tmp = filename:rootname(Destination) ++ ?FILE_EXTENSION_TMP,
             {ok, TmpHdl} =
                 file:open(form_filename(Tmp),
