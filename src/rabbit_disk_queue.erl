@@ -44,7 +44,7 @@
          dump_queue/1, delete_non_durable_queues/1, auto_ack_next_message/1
         ]).
 
--export([length/1, is_empty/1, next_write_seq/1]).
+-export([length/1]).
 
 -export([stop/0, stop_and_obliterate/0,
          to_disk_only_mode/0, to_ram_disk_mode/0]).
@@ -205,7 +205,7 @@
 %% +-------+    +-------+         +-------+
 %% |   B   |    |   X   |         |   B   |
 %% +-------+    +-------+         +-------+
-%% |   A   |    |   E   |          |   A   |
+%% |   A   |    |   E   |         |   A   |
 %% +-------+    +-------+         +-------+
 %%   left         right             left
 %%
@@ -264,8 +264,6 @@
 -spec(to_ram_disk_mode/0 :: () -> 'ok').
 -spec(to_disk_only_mode/0 :: () -> 'ok').
 -spec(length/1 :: (queue_name()) -> non_neg_integer()).
--spec(next_write_seq/1 :: (queue_name()) -> non_neg_integer()).
--spec(is_empty/1 :: (queue_name()) -> bool()).
 
 -endif.
 
@@ -346,12 +344,6 @@ to_ram_disk_mode() ->
 
 length(Q) ->
     gen_server2:call(?SERVER, {length, Q}, infinity).
-
-next_write_seq(Q) ->
-    gen_server2:call(?SERVER, {next_write_seq, Q}, infinity).
-
-is_empty(Q) ->
-    0 == rabbit_disk_queue:length(Q).
 
 %% ---- GEN-SERVER INTERNAL API ----
 
@@ -493,10 +485,6 @@ handle_call(to_ram_disk_mode, _From,
 handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     {_ReadSeqId, _WriteSeqId, Length} = sequence_lookup(Sequences, Q),
     {reply, Length, State};
-handle_call({next_write_seq, Q}, _From,
-            State = #dqstate { sequences = Sequences }) ->
-    {_ReadSeqId, WriteSeqId, _Length} = sequence_lookup(Sequences, Q),
-    {reply, WriteSeqId, State};
 handle_call({dump_queue, Q}, _From, State) ->
     {Result, State1} = internal_dump_queue(Q, State),
     {reply, Result, State1};
