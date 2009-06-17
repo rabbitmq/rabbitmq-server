@@ -38,8 +38,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([register/1, change_memory_usage/2,
-         reduce_memory_usage/0, increase_memory_usage/0]).
+-export([register/1, change_memory_footprint/2,
+         reduce_memory_footprint/0, increase_memory_footprint/0]).
 
 -define(SERVER, ?MODULE).
 
@@ -53,18 +53,18 @@ start_link() ->
 register(Pid) ->
     gen_server2:call(?SERVER, {register, Pid}).
 
-change_memory_usage(_Pid, Conserve) ->
-    gen_server2:cast(?SERVER, {change_memory_usage, Conserve}).
+change_memory_footprint(_Pid, Conserve) ->
+    gen_server2:cast(?SERVER, {change_memory_footprint, Conserve}).
 
-reduce_memory_usage() ->
-    gen_server2:cast(?SERVER, {change_memory_usage, true}).
+reduce_memory_footprint() ->
+    gen_server2:cast(?SERVER, {change_memory_footprint, true}).
                            
-increase_memory_usage() ->
-    gen_server2:cast(?SERVER, {change_memory_usage, false}).
+increase_memory_footprint() ->
+    gen_server2:cast(?SERVER, {change_memory_footprint, false}).
                            
 init([]) ->
     process_flag(trap_exit, true),
-    ok = rabbit_alarm:register(self(), {?MODULE, change_memory_usage, []}),
+    ok = rabbit_alarm:register(self(), {?MODULE, change_memory_footprint, []}),
     {ok, #state { mode = unlimited,
                   queues = []
                 }}.
@@ -77,26 +77,26 @@ handle_call({register, Pid}, _From,
              end,
     {reply, {ok, Result}, State #state { queues = [Pid | Qs] }}.
 
-handle_cast({change_memory_usage, true},
+handle_cast({change_memory_footprint, true},
             State = #state { mode = disk_only }) ->
     {noreply, State};
-handle_cast({change_memory_usage, true},
+handle_cast({change_memory_footprint, true},
             State = #state { mode = ram_disk }) ->
     constrain_queues(true, State #state.queues),
     {noreply, State #state { mode = disk_only }};
-handle_cast({change_memory_usage, true},
+handle_cast({change_memory_footprint, true},
             State = #state { mode = unlimited }) ->
     ok = rabbit_disk_queue:to_disk_only_mode(),
     {noreply, State #state { mode = ram_disk }};
 
-handle_cast({change_memory_usage, false},
+handle_cast({change_memory_footprint, false},
             State = #state { mode = unlimited }) ->
     {noreply, State};
-handle_cast({change_memory_usage, false},
+handle_cast({change_memory_footprint, false},
             State = #state { mode = ram_disk }) ->
     ok = rabbit_disk_queue:to_ram_disk_mode(),
     {noreply, State #state { mode = unlimited }};
-handle_cast({change_memory_usage, false},
+handle_cast({change_memory_footprint, false},
             State = #state { mode = disk_only }) ->
     constrain_queues(false, State #state.queues),
     {noreply, State #state { mode = ram_disk }}.
