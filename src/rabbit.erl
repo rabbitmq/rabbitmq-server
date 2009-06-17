@@ -150,7 +150,8 @@ start(normal, []) ->
        {"disk queue",
         fun () ->
                 ok = start_child(rabbit_disk_queue),
-                ok = rabbit_disk_queue:to_ram_disk_mode() %% TODO, CHANGE ME
+                %% TODO, CHANGE ME, waiting on bug 20980
+                ok = rabbit_disk_queue:to_ram_disk_mode()
         end},
        {"recovery",
         fun () ->
