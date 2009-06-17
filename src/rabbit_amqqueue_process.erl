@@ -170,7 +170,7 @@ record_current_channel_tx(ChPid, Txn) ->
     %% that wasn't happening already)
     store_ch_record((ch_record(ChPid))#cr{txn = Txn}).
     
-deliver_queue(Funs = {PredFun, DeliverFun}, FunAcc0,
+deliver_queue(Funs = {PredFun, DeliverFun}, FunAcc,
               State = #q{q = #amqqueue{name = QName},
                          active_consumers = ActiveConsumers,
                          blocked_consumers = BlockedConsumers,
@@ -182,12 +182,12 @@ deliver_queue(Funs = {PredFun, DeliverFun}, FunAcc0,
             C = #cr{limiter_pid = LimiterPid,
                     unsent_message_count = Count,
                     unacked_messages = UAM} = ch_record(ChPid),
-            IsMsgReady = PredFun(FunAcc0, State),
+            IsMsgReady = PredFun(FunAcc, State),
             case (IsMsgReady andalso
                   rabbit_limiter:can_send( LimiterPid, self(), AckRequired )) of
                 true ->
                     {{Msg, IsDelivered, AckTag}, FunAcc1, State1} =
-                        DeliverFun(AckRequired, FunAcc0, State),
+                        DeliverFun(AckRequired, FunAcc, State),
                     ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Msg]),
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
@@ -226,15 +226,15 @@ deliver_queue(Funs = {PredFun, DeliverFun}, FunAcc0,
                                        ActiveConsumers,
                                        BlockedConsumers),
                     deliver_queue(
-                      Funs, FunAcc0,
+                      Funs, FunAcc,
                       State#q{active_consumers = NewActiveConsumers,
                               blocked_consumers = NewBlockedConsumers});
                 false ->
                     %% no message was ready, so we don't need to block anyone
-                    {FunAcc0, State}
+                    {FunAcc, State}
             end;
         {empty, _} ->
-            {FunAcc0, State}
+            {FunAcc, State}
     end.
 
 deliver_from_queue_pred({IsEmpty, _AutoAcks}, _State) ->
