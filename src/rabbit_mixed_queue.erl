@@ -133,14 +133,14 @@ deliver_all_messages(Q, IsDurable, Acks, Requeue, Length) ->
             #basic_message { guid = MsgId, is_persistent = IsPersistent } =
                 bin_to_msg(MsgBin),
             OnDisk = IsPersistent andalso IsDurable,
-            {Acks2, Requeue2, Length2} =
+            {Acks1, Requeue1, Length1} =
                 if OnDisk -> {Acks,
                               [{AckTag, {next, IsDelivered}} | Requeue],
                               Length + 1
                              };
                    true -> {[AckTag | Acks], Requeue, Length}
                 end,
-            deliver_all_messages(Q, IsDurable, Acks2, Requeue2, Length2)
+            deliver_all_messages(Q, IsDurable, Acks1, Requeue1, Length1)
     end.
 
 msg_to_bin(Msg = #basic_message { content = Content }) ->
@@ -196,25 +196,25 @@ deliver(State = #mqstate { mode = disk, queue = Q, is_durable = IsDurable,
         = rabbit_disk_queue:deliver(Q),
     #basic_message { guid = MsgId, is_persistent = IsPersistent } =
         Msg = bin_to_msg(MsgBin),
-    AckTag2 = if IsPersistent andalso IsDurable -> AckTag;
+    AckTag1 = if IsPersistent andalso IsDurable -> AckTag;
                  true -> ok = rabbit_disk_queue:ack(Q, [AckTag]),
                          noack
               end,
-    {{Msg, IsDelivered, AckTag2, Remaining},
+    {{Msg, IsDelivered, AckTag1, Remaining},
              State #mqstate { length = Length - 1}};
        
 deliver(State = #mqstate { mode = mixed, queue = Q, is_durable = IsDurable,
                            msg_buf = MsgBuf, length = Length }) ->
     {{value, {Msg = #basic_message { guid = MsgId,
                                           is_persistent = IsPersistent },
-              IsDelivered, OnDisk}}, MsgBuf2}
+              IsDelivered, OnDisk}}, MsgBuf1}
         = queue:out(MsgBuf),
     AckTag =
         if OnDisk ->
                 if IsPersistent andalso IsDurable -> 
-                        {MsgId, IsDelivered, AckTag2, _PersistRem} =
+                        {MsgId, IsDelivered, AckTag1, _PersistRem} =
                             rabbit_disk_queue:phantom_deliver(Q),
-                        AckTag2;
+                        AckTag1;
                    true ->
                         ok = rabbit_disk_queue:auto_ack_next_message(Q),
                         noack
@@ -223,7 +223,7 @@ deliver(State = #mqstate { mode = mixed, queue = Q, is_durable = IsDurable,
         end,
     Rem = Length - 1,
     {{Msg, IsDelivered, AckTag, Rem},
-     State #mqstate { msg_buf = MsgBuf2, length = Rem }}.
+     State #mqstate { msg_buf = MsgBuf1, length = Rem }}.
 
 remove_noacks(Acks) ->
     lists:filter(fun (A) -> A /= noack end, Acks).
@@ -264,17 +264,16 @@ tx_commit(Publishes, Acks, State = #mqstate { mode = mixed, queue = Q,
                                               is_durable = IsDurable,
                                               length = Length
                                             }) ->
-    {PersistentPubs, MsgBuf2} =
+    {PersistentPubs, MsgBuf1} =
         lists:foldl(fun (Msg = #basic_message { is_persistent = IsPersistent },
-                         {Acc, MsgBuf3}) ->
+                         {Acc, MsgBuf2}) ->
                             OnDisk = IsPersistent andalso IsDurable,
-                            Acc2 =
+                            Acc1 =
                                 if OnDisk ->
                                         [Msg #basic_message.guid | Acc];
                                    true -> Acc
                                 end,
-                            MsgBuf4 = queue:in({Msg, false, OnDisk}, MsgBuf3),
-                            {Acc2, MsgBuf4}
+                            {Acc1, queue:in({Msg, false, OnDisk}, MsgBuf2)}
                     end, {[], MsgBuf}, Publishes),
     %% foldl reverses, so re-reverse PersistentPubs to match
     %% requirements of rabbit_disk_queue (ascending SeqIds)
@@ -284,7 +283,7 @@ tx_commit(Publishes, Acks, State = #mqstate { mode = mixed, queue = Q,
                  rabbit_disk_queue:tx_commit(
                    Q, lists:reverse(PersistentPubs), RealAcks)
          end,
-    {ok, State #mqstate { msg_buf = MsgBuf2,
+    {ok, State #mqstate { msg_buf = MsgBuf1,
                           length = Length + erlang:length(Publishes) }}.
 
 only_persistent_msg_ids(Pubs) ->
@@ -325,7 +324,7 @@ requeue(MessagesWithAckTags, State = #mqstate { mode = disk, queue = Q,
                             true -> rabbit_disk_queue:requeue(
                                       Q, lists:reverse(RQ))
                          end,
-                    _AckTag2 = rabbit_disk_queue:publish(
+                    _AckTag1 = rabbit_disk_queue:publish(
                                  Q, MsgId, msg_to_bin(Msg), true),
                     []
             end, [], MessagesWithAckTags),
@@ -336,22 +335,21 @@ requeue(MessagesWithAckTags, State = #mqstate { mode = mixed, queue = Q,
                                                 is_durable = IsDurable,
                                                 length = Length
                                               }) ->
-    {PersistentPubs, MsgBuf2} =
+    {PersistentPubs, MsgBuf1} =
         lists:foldl(
           fun ({Msg = #basic_message { is_persistent = IsPersistent }, AckTag},
-               {Acc, MsgBuf3}) ->
+               {Acc, MsgBuf2}) ->
                   OnDisk = IsDurable andalso IsPersistent,
-                  Acc2 =
+                  Acc1 =
                       if OnDisk -> [AckTag | Acc];
                          true -> Acc
                       end,
-                  MsgBuf4 = queue:in({Msg, true, OnDisk}, MsgBuf3),
-                  {Acc2, MsgBuf4}
+                  {Acc1, queue:in({Msg, true, OnDisk}, MsgBuf2)}
           end, {[], MsgBuf}, MessagesWithAckTags),
     ok = if [] == PersistentPubs -> ok;
             true -> rabbit_disk_queue:requeue(Q, lists:reverse(PersistentPubs))
          end,
-    {ok, State #mqstate {msg_buf = MsgBuf2,
+    {ok, State #mqstate {msg_buf = MsgBuf1,
                          length = Length + erlang:length(MessagesWithAckTags)}}.
 
 purge(State = #mqstate { queue = Q, mode = disk, length = Count }) ->

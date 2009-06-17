@@ -654,7 +654,7 @@ get_read_handle(File, State =
                            current_file_handle = CurHdl,
                            current_dirty = IsDirty
                          }) ->
-    IsDirty2 = if CurName =:= File andalso IsDirty ->
+    IsDirty1 = if CurName =:= File andalso IsDirty ->
                        file:sync(CurHdl),
                        false;
                   true -> IsDirty
@@ -680,10 +680,10 @@ get_read_handle(File, State =
             {ok, {Hdl, Then}} ->
                 {Hdl, ReadHdls, gb_trees:delete(Then, ReadHdlsAge)}
         end,
-    ReadHdls3 = dict:store(File, {FileHdl, Now}, ReadHdls1),
+    ReadHdls2 = dict:store(File, {FileHdl, Now}, ReadHdls1),
     ReadHdlsAge3 = gb_trees:enter(Now, File, ReadHdlsAge1),
-    {FileHdl, State #dqstate { read_file_handles = {ReadHdls3, ReadHdlsAge3},
-                               current_dirty = IsDirty2
+    {FileHdl, State #dqstate { read_file_handles = {ReadHdls2, ReadHdlsAge3},
+                               current_dirty = IsDirty1
                              }}.
 
 adjust_last_msg_seq_id(_Q, ExpectedSeqId, next, _Mode) ->
@@ -784,10 +784,10 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete,
                                  }) ->
     Files =
         lists:foldl(
-          fun ({MsgId, SeqId}, Files2) ->
+          fun ({MsgId, SeqId}, Files1) ->
                   [{MsgId, RefCount, File, Offset, TotalSize}] =
                       dets_ets_lookup(State, MsgId),
-                  Files3 =
+                  Files2 =
                       case RefCount of
                           1 ->
                               ok = dets_ets_delete(State, MsgId),
@@ -800,28 +800,26 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete,
                                              {File, (ValidTotalSize-TotalSize-
                                                      ?FILE_PACKING_ADJUSTMENT),
                                                  ContiguousTop1, Left, Right}),
-                              if CurName =:= File -> Files2;
-                                 true -> sets:add_element(File, Files2)
+                              if CurName =:= File -> Files1;
+                                 true -> sets:add_element(File, Files1)
                               end;
                           _ when 1 < RefCount ->
                               ok = dets_ets_insert(
                                      State, {MsgId, RefCount - 1,
                                              File, Offset, TotalSize}),
-                              Files2
+                              Files1
                       end,
                   ok = case MnesiaDelete of
-                           true ->
-                               mnesia:dirty_delete(rabbit_disk_queue,
-                                                   {Q, SeqId});
-                           txn ->
-                               mnesia:delete(rabbit_disk_queue,
-                                             {Q, SeqId}, write);
+                           true -> mnesia:dirty_delete(rabbit_disk_queue,
+                                                       {Q, SeqId});
+                           txn -> mnesia:delete(rabbit_disk_queue,
+                                                {Q, SeqId}, write);
                            _ -> ok
                        end,
-                  Files3
+                  Files2
           end, sets:new(), MsgSeqIds),
-    State2 = compact(Files, State),
-    {ok, State2}.
+    State1 = compact(Files, State),
+    {ok, State1}.
 
 internal_tx_publish(MsgId, MsgBody,
                     State = #dqstate { current_file_handle = CurHdl,
@@ -870,12 +868,12 @@ internal_tx_commit(Q, PubMsgSeqIds, AckSeqIds,
             [{_, FirstSeqIdTo}|_] ->
                 {InitReadSeqId, InitWriteSeqId, InitLength} =
                     sequence_lookup(Sequences, Q),
-                InitReadSeqId2 = determine_next_read_id(
+                InitReadSeqId1 = determine_next_read_id(
                                    InitReadSeqId, InitWriteSeqId, FirstSeqIdTo),
                 { zip_with_tail(PubMsgSeqIds, {last, {next, next}}),
-                  InitWriteSeqId, InitReadSeqId2, InitLength}
+                  InitWriteSeqId, InitReadSeqId1, InitLength}
         end,
-    {atomic, {Sync, WriteSeqId, State2}} =
+    {atomic, {Sync, WriteSeqId, State1}} =
         mnesia:transaction(
           fun() ->
                   ok = mnesia:write_lock_table(rabbit_disk_queue),
@@ -884,42 +882,42 @@ internal_tx_commit(Q, PubMsgSeqIds, AckSeqIds,
                   %% it's been published, which is clearly
                   %% nonsense. I.e. in commit, do not do things in an
                   %% order which _could_not_ have happened.
-                  {Sync2, WriteSeqId3} =
+                  {Sync1, WriteSeqId1} =
                       lists:foldl(
                         fun ({{MsgId, SeqId}, {_NextMsgId, NextSeqId}},
                              {Acc, ExpectedSeqId}) ->
                                 [{MsgId, _RefCount, File, _Offset,
                                   _TotalSize}] = dets_ets_lookup(State, MsgId),
-                                 SeqId2 = adjust_last_msg_seq_id(
+                                 SeqId1 = adjust_last_msg_seq_id(
                                             Q, ExpectedSeqId, SeqId, write),
-                                 NextSeqId2 =
-                                    find_next_seq_id(SeqId2, NextSeqId),
+                                 NextSeqId1 =
+                                    find_next_seq_id(SeqId1, NextSeqId),
                                  ok = mnesia:write(
                                         rabbit_disk_queue,
                                         #dq_msg_loc { queue_and_seq_id =
-                                                      {Q, SeqId2},
+                                                      {Q, SeqId1},
                                                       msg_id = MsgId,
                                                       is_delivered = false,
-                                                      next_seq_id = NextSeqId2
+                                                      next_seq_id = NextSeqId1
                                                      },
                                         write),
-                                 {Acc orelse (CurName =:= File), NextSeqId2}
+                                 {Acc orelse (CurName =:= File), NextSeqId1}
                          end, {false, PubAcc}, PubList),
 
-                   {ok, State3} = remove_messages(Q, AckSeqIds, txn, State),
-                   {Sync2, WriteSeqId3, State3}
+                   {ok, State2} = remove_messages(Q, AckSeqIds, txn, State),
+                   {Sync1, WriteSeqId1, State2}
           end),
     true = case PubList of
                [] -> true;
                _  -> ets:insert(Sequences, {Q, ReadSeqId, WriteSeqId,
                                             Length + erlang:length(PubList)})
            end,
-    IsDirty2 = if IsDirty andalso Sync ->
+    IsDirty1 = if IsDirty andalso Sync ->
                        ok = file:sync(CurHdl),
                        false;
                   true -> IsDirty
                end,
-    {ok, State2 #dqstate { current_dirty = IsDirty2 }}.
+    {ok, State1 #dqstate { current_dirty = IsDirty1 }}.
 
 %% SeqId can be 'next'
 internal_publish(Q, MsgId, SeqId, MsgBody, IsDelivered, State) ->
@@ -971,44 +969,44 @@ internal_requeue(Q, MsgSeqIds = [{_, {FirstSeqIdTo, _}}|_],
     %% as they have no concept of sequence id anyway).
 
     {ReadSeqId, WriteSeqId, Length} = sequence_lookup(Sequences, Q),
-    ReadSeqId2 = determine_next_read_id(ReadSeqId, WriteSeqId, FirstSeqIdTo),
+    ReadSeqId1 = determine_next_read_id(ReadSeqId, WriteSeqId, FirstSeqIdTo),
     MsgSeqIdsZipped = zip_with_tail(MsgSeqIds, {last, {next, {next, true}}}),
-    {atomic, {WriteSeqId2, Q}} =
+    {atomic, {WriteSeqId1, Q}} =
         mnesia:transaction(
           fun() ->
                   ok = mnesia:write_lock_table(rabbit_disk_queue),
                   lists:foldl(fun requeue_message/2, {WriteSeqId, Q},
                               MsgSeqIdsZipped)
           end),
-    true = ets:insert(Sequences, {Q, ReadSeqId2, WriteSeqId2,
+    true = ets:insert(Sequences, {Q, ReadSeqId1, WriteSeqId1,
                                   Length + erlang:length(MsgSeqIds)}),
     {ok, State}.
 
 requeue_message({{{MsgId, SeqIdOrig}, {SeqIdTo, NewIsDelivered}},
                  {_NextMsgSeqId, {NextSeqIdTo, _NextNewIsDelivered}}},
                 {ExpectedSeqIdTo, Q}) ->
-    SeqIdTo2 = adjust_last_msg_seq_id(Q, ExpectedSeqIdTo, SeqIdTo, write),
-    NextSeqIdTo2 = find_next_seq_id(SeqIdTo2, NextSeqIdTo),
+    SeqIdTo1 = adjust_last_msg_seq_id(Q, ExpectedSeqIdTo, SeqIdTo, write),
+    NextSeqIdTo1 = find_next_seq_id(SeqIdTo1, NextSeqIdTo),
     [Obj = #dq_msg_loc { is_delivered = true, msg_id = MsgId,
                          next_seq_id = NextSeqIdOrig }] =
         mnesia:read(rabbit_disk_queue, {Q, SeqIdOrig}, write),
-    if SeqIdTo2 == SeqIdOrig andalso NextSeqIdTo2 == NextSeqIdOrig -> ok;
+    if SeqIdTo1 == SeqIdOrig andalso NextSeqIdTo1 == NextSeqIdOrig -> ok;
        true ->
             ok = mnesia:write(rabbit_disk_queue,
-                              Obj #dq_msg_loc {queue_and_seq_id = {Q, SeqIdTo2},
-                                               next_seq_id = NextSeqIdTo2,
+                              Obj #dq_msg_loc {queue_and_seq_id = {Q, SeqIdTo1},
+                                               next_seq_id = NextSeqIdTo1,
                                                is_delivered = NewIsDelivered
                                               },
                               write),
             ok = mnesia:delete(rabbit_disk_queue, {Q, SeqIdOrig}, write)
     end,
-    {NextSeqIdTo2, Q}.
+    {NextSeqIdTo1, Q}.
 
 internal_purge(Q, State = #dqstate { sequences = Sequences }) ->
     case ets:lookup(Sequences, Q) of
         [] -> {ok, 0, State};
         [{Q, ReadSeqId, WriteSeqId, _Length}] ->
-            {atomic, {ok, State2}} =
+            {atomic, {ok, State1}} =
                 mnesia:transaction(
                   fun() ->
                           ok = mnesia:write_lock_table(rabbit_disk_queue),
@@ -1025,7 +1023,7 @@ internal_purge(Q, State = #dqstate { sequences = Sequences }) ->
                           remove_messages(Q, MsgSeqIds, txn, State)
                   end),
             true = ets:insert(Sequences, {Q, WriteSeqId, WriteSeqId, 0}),
-            {ok, WriteSeqId - ReadSeqId, State2}
+            {ok, WriteSeqId - ReadSeqId, State1}
     end.
 
 internal_delete_queue(Q, State) ->
@@ -1279,7 +1277,7 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
               Destination, State) ->
-    {FinalOffset, BlockStart2, BlockEnd2} =
+    {FinalOffset, BlockStart1, BlockEnd1} =
         lists:foldl(
           fun ({MsgId, RefCount, _Source, Offset, TotalSize},
                {CurOffset, BlockStart, BlockEnd}) ->
@@ -1309,9 +1307,9 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                   end
           end, {InitOffset, undefined, undefined}, WorkList),
     %% do the last remaining block
-    BSize2 = BlockEnd2 - BlockStart2,
-    {ok, BlockStart2} = file:position(SourceHdl, {bof, BlockStart2}),
-    {ok, BSize2} = file:copy(SourceHdl, DestinationHdl, BSize2),
+    BSize1 = BlockEnd1 - BlockStart1,
+    {ok, BlockStart1} = file:position(SourceHdl, {bof, BlockStart1}),
+    {ok, BSize1} = file:copy(SourceHdl, DestinationHdl, BSize1),
     ok.
 
 close_file(File, State = #dqstate { read_file_handles =
@@ -1366,7 +1364,7 @@ del_index() ->
         %% hmm, something weird must be going on, but it's probably
         %% not the end of the world
         {aborted, {no_exists, rabbit_disk_queue,_}} -> ok;
-        E2 -> E2
+        E1 -> E1
     end.
 
 load_from_disk(State) ->
@@ -1449,11 +1447,11 @@ remove_gaps_in_sequences(#dqstate { sequences = Sequences }) ->
                   lists:foreach(
                     fun ({Q, ReadSeqId, WriteSeqId, _Length}) ->
                             Gap = shuffle_up(Q, ReadSeqId-1, WriteSeqId-1, 0),
-                            ReadSeqId2 = ReadSeqId + Gap,
-                            Length = WriteSeqId - ReadSeqId2,
+                            ReadSeqId1 = ReadSeqId + Gap,
+                            Length = WriteSeqId - ReadSeqId1,
                             true =
                                 ets:insert(Sequences,
-                                           {Q, ReadSeqId2, WriteSeqId, Length})
+                                           {Q, ReadSeqId1, WriteSeqId, Length})
                     end, ets:match_object(Sequences, '_'))
           end).
 

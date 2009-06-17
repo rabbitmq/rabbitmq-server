@@ -186,7 +186,7 @@ deliver_queue(Funs = {PredFun, DeliverFun}, FunAcc0,
             case (IsMsgReady andalso
                   rabbit_limiter:can_send( LimiterPid, self(), AckRequired )) of
                 true ->
-                    {{Msg, IsDelivered, AckTag}, FunAcc1, State2} =
+                    {{Msg, IsDelivered, AckTag}, FunAcc1, State1} =
                         DeliverFun(AckRequired, FunAcc0, State),
                     ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Msg]),
                     rabbit_channel:deliver(
@@ -212,12 +212,12 @@ deliver_queue(Funs = {PredFun, DeliverFun}, FunAcc0,
                                 {ActiveConsumers1,
                                  queue:in(QEntry, BlockedConsumers1)}
                         end,
-                    State3 = State2 #q {
+                    State2 = State1 #q {
                                active_consumers = NewActiveConsumers,
                                blocked_consumers = NewBlockedConsumers,
                                next_msg_id = NextId + 1
                                        },
-                    deliver_queue(Funs, FunAcc1, State3);
+                    deliver_queue(Funs, FunAcc1, State2);
                 %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
                     store_ch_record(C#cr{is_limit_active = true}),
@@ -241,41 +241,41 @@ deliver_from_queue_pred({IsEmpty, _AutoAcks}, _State) ->
     not IsEmpty.
 deliver_from_queue_deliver(AckRequired, {false, AutoAcks},
                            State = #q { mixed_state = MS }) ->
-    {{Msg, IsDelivered, AckTag, Remaining}, MS2} =
+    {{Msg, IsDelivered, AckTag, Remaining}, MS1} =
         rabbit_mixed_queue:deliver(MS),
-    AutoAcks2 =
+    AutoAcks1 =
         case AckRequired of
             true -> AutoAcks;
             false -> [AckTag | AutoAcks]
         end,
-    {{Msg, IsDelivered, AckTag}, {0 == Remaining, AutoAcks2},
-     State #q { mixed_state = MS2 }}.
+    {{Msg, IsDelivered, AckTag}, {0 == Remaining, AutoAcks1},
+     State #q { mixed_state = MS1 }}.
 
 run_message_queue(State = #q { mixed_state = MS }) ->
     Funs = { fun deliver_from_queue_pred/2,
              fun deliver_from_queue_deliver/3 },
     IsEmpty = rabbit_mixed_queue:is_empty(MS),
-    {{_IsEmpty2, AutoAcks}, State2} =
+    {{_IsEmpty1, AutoAcks}, State1} =
         deliver_queue(Funs, {IsEmpty, []}, State),
-    {ok, MS2} =
-        rabbit_mixed_queue:ack(lists:reverse(AutoAcks), State2 #q.mixed_state),
-    State2 #q { mixed_state = MS2 }.
+    {ok, MS1} =
+        rabbit_mixed_queue:ack(lists:reverse(AutoAcks), State1 #q.mixed_state),
+    State1 #q { mixed_state = MS1 }.
 
 attempt_immediate_delivery(none, _ChPid, Msg, State) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
-        fun (AckRequired, false, State2) ->
-                {AckTag, State3} =
+        fun (AckRequired, false, State1) ->
+                {AckTag, State2} =
                     case AckRequired of
                         true ->
-                            {ok, AckTag2, MS} =
+                            {ok, AckTag1, MS} =
                                 rabbit_mixed_queue:publish_delivered(
-                                  Msg, State2 #q.mixed_state),
-                            {AckTag2, State2 #q { mixed_state = MS }};
+                                  Msg, State1 #q.mixed_state),
+                            {AckTag1, State1 #q { mixed_state = MS }};
                         false ->
-                            {noack, State2}
+                            {noack, State1}
                     end,
-                {{Msg, false, AckTag}, true, State3}
+                {{Msg, false, AckTag}, true, State2}
         end,
     deliver_queue({ PredFun, DeliverFun }, false, State);
 attempt_immediate_delivery(Txn, ChPid, Msg, State) ->
@@ -307,8 +307,8 @@ deliver_or_requeue_n(MsgsWithAcks, State) ->
                                       NewState #q.mixed_state),
     case OutstandingMsgs of
         [] -> run_message_queue(NewState #q { mixed_state = MS });
-        _ -> {ok, MS2} = rabbit_mixed_queue:requeue(OutstandingMsgs, MS),
-             NewState #q { mixed_state = MS2 }
+        _ -> {ok, MS1} = rabbit_mixed_queue:requeue(OutstandingMsgs, MS),
+             NewState #q { mixed_state = MS1 }
     end.
 
 deliver_or_requeue_msgs_pred({Len, _AcksAcc, _MsgsWithAcks}, _State) ->
@@ -378,7 +378,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
                 deliver_or_requeue_n(
                   [MsgWithAck ||
                       {_MsgId, MsgWithAck} <- dict:to_list(UAM)],
-                  State1 # q {
+                  State1 #q {
                     exclusive_consumer = case Holder of
                                              {ChPid, _} -> none;
                                              Other -> Other
@@ -576,8 +576,8 @@ handle_call({basic_get, ChPid, NoAck}, _From,
                        mixed_state = MS
                        }) ->
     case rabbit_mixed_queue:deliver(MS) of
-        {empty, MS2} -> reply(empty, State #q { mixed_state = MS2 });
-        {{Msg, IsDelivered, AckTag, Remaining}, MS2} ->
+        {empty, MS1} -> reply(empty, State #q { mixed_state = MS1 });
+        {{Msg, IsDelivered, AckTag, Remaining}, MS1} ->
             AckRequired = not(NoAck),
             {ok, MS3} =
                 case AckRequired of
@@ -585,9 +585,9 @@ handle_call({basic_get, ChPid, NoAck}, _From,
                         C = #cr{unacked_messages = UAM} = ch_record(ChPid),
                         NewUAM = dict:store(NextId, {Msg, AckTag}, UAM),
                         store_ch_record(C#cr{unacked_messages = NewUAM}),
-                        {ok, MS2};
+                        {ok, MS1};
                     false ->
-                        rabbit_mixed_queue:ack([AckTag], MS2)
+                        rabbit_mixed_queue:ack([AckTag], MS1)
                 end,
             Message = {QName, self(), NextId, IsDelivered, Msg},
             reply({ok, Remaining, Message},
@@ -790,11 +790,11 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
         end));
 
 handle_cast({constrain, Constrain}, State = #q { mixed_state = MS }) ->
-    {ok, MS2} = (case Constrain of
+    {ok, MS1} = (case Constrain of
                     true  -> fun rabbit_mixed_queue:to_disk_only_mode/1;
                     false -> fun rabbit_mixed_queue:to_mixed_mode/1
                  end)(MS),
-    noreply(State #q { mixed_state = MS2 }).
+    noreply(State #q { mixed_state = MS1 }).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
