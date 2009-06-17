@@ -217,8 +217,9 @@ deliver_queue(Fun, FunAcc0,
                                blocked_consumers = NewBlockedConsumers,
                                next_msg_id = NextId + 1
                                        },
-                    if Remaining == 0 -> {FunAcc1, State3};
-                       true -> deliver_queue(Fun, FunAcc1, State3)
+                    case Remaining of
+                        0 -> {FunAcc1, State3};
+                        _ -> deliver_queue(Fun, FunAcc1, State3)
                     end;
                 %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
@@ -264,12 +265,13 @@ attempt_immediate_delivery(none, _ChPid, Msg, State) ->
                 true;
             (AckRequired, false, State2) ->
                 {AckTag, State3} =
-                    if AckRequired ->
+                    case AckRequired of
+                        true ->
                             {ok, AckTag2, MS} =
                                 rabbit_mixed_queue:publish_delivered(
                                   Msg, State2 #q.mixed_state),
                             {AckTag2, State2 #q { mixed_state = MS }};
-                       true ->
+                        false ->
                             {noack, State2}
                     end,
                 {{Msg, false, AckTag, 0}, true, State3}
@@ -579,12 +581,13 @@ handle_call({basic_get, ChPid, NoAck}, _From,
         {{Msg, IsDelivered, AckTag, Remaining}, MS2} ->
             AckRequired = not(NoAck),
             {ok, MS3} =
-                if AckRequired ->
+                case AckRequired of
+                    true ->
                         C = #cr{unacked_messages = UAM} = ch_record(ChPid),
                         NewUAM = dict:store(NextId, {Msg, AckTag}, UAM),
                         store_ch_record(C#cr{unacked_messages = NewUAM}),
                         {ok, MS2};
-                   true ->
+                    false ->
                         rabbit_mixed_queue:ack([AckTag], MS2)
                 end,
             Message = {QName, self(), NextId, IsDelivered, Msg},
@@ -612,15 +615,14 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                                          ack_required = not(NoAck)},
                     store_ch_record(C#cr{consumer_count = ConsumerCount +1,
                                          limiter_pid = LimiterPid}),
-                    if ConsumerCount == 0 ->
-                            ok = rabbit_limiter:register(LimiterPid, self());
-                       true ->
-                            ok
+                    case ConsumerCount of
+                        0 -> ok = rabbit_limiter:register(LimiterPid, self());
+                        _ -> ok
                     end,
-                    ExclusiveConsumer =
-                        if ExclusiveConsume -> {ChPid, ConsumerTag};
-                           true             -> ExistingHolder
-                        end,
+                    ExclusiveConsumer = case ExclusiveConsume of
+                                            true  -> {ChPid, ConsumerTag};
+                                            false -> ExistingHolder
+                                        end,
                     State1 = State#q{has_had_consumers = true,
                                      exclusive_consumer = ExclusiveConsumer},
                     ok = maybe_send_reply(ChPid, OkMsg),
@@ -650,11 +652,10 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             reply(ok, State);
         C = #cr{consumer_count = ConsumerCount, limiter_pid = LimiterPid} ->
             store_ch_record(C#cr{consumer_count = ConsumerCount - 1}),
-            if ConsumerCount == 1 ->
-                    ok = rabbit_limiter:unregister(LimiterPid, self());
-               true ->
-                    ok
-            end,
+            ok = case ConsumerCount of
+                     1 -> rabbit_limiter:unregister(LimiterPid, self());
+                     _ -> ok
+                 end,
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,
@@ -791,8 +792,9 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
         end));
 
 handle_cast({constrain, Constrain}, State = #q { mixed_state = MS }) ->
-    {ok, MS2} = if Constrain -> rabbit_mixed_queue:to_disk_only_mode(MS);
-                   true -> rabbit_mixed_queue:to_mixed_mode(MS)
+    {ok, MS2} = case Constrain of
+                    true  -> rabbit_mixed_queue:to_disk_only_mode(MS);
+                    false -> rabbit_mixed_queue:to_mixed_mode(MS)
                 end,
     noreply(State #q { mixed_state = MS2 }).
 

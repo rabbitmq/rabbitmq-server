@@ -419,8 +419,9 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
              end,
     %% read is only needed so that we can seek
     {ok, FileHdl} = file:open(Path, [read, write, raw, binary, delayed_write]),
-    if Exists -> {ok, Offset} = file:position(FileHdl, {bof, Offset});
-       true -> %% new file, so preallocate
+    case Exists of
+        true -> {ok, Offset} = file:position(FileHdl, {bof, Offset});
+        false -> %% new file, so preallocate
             ok = preallocate(FileHdl, FileSizeLimit, Offset)
     end,
     {ok, State1 #dqstate { current_file_handle = FileHdl }}.
@@ -552,9 +553,10 @@ shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
     file:delete(form_filename(atom_to_list(?MSG_LOC_NAME) ++
                               ?FILE_EXTENSION_DETS)),
     true = ets:delete_all_objects(MsgLocationEts),
-    if FileHdl =:= undefined -> ok;
-       true -> file:sync(FileHdl),
-               file:close(FileHdl)
+    case FileHdl of
+        undefined -> ok;
+        _ -> file:sync(FileHdl),
+             file:close(FileHdl)
     end,
     dict:fold(fun (_File, Hdl, _Acc) ->
                      file:close(Hdl)
@@ -652,10 +654,11 @@ get_read_handle(File, State =
                            current_file_handle = CurHdl,
                            current_dirty = IsDirty
                          }) ->
-    IsDirty2 = if CurName == File andalso IsDirty ->
+    IsDirty2 = case CurName of
+                   File when IsDirty ->
                        file:sync(CurHdl),
                        false;
-                  true -> IsDirty
+                   _ -> IsDirty
                end,
     Now = now(),
     {FileHdl, ReadHdls1, ReadHdlsAge1} =
@@ -749,13 +752,14 @@ internal_read_message(Q, ReadSeqId, FakeDeliver, ReadMsg, State) ->
                 mnesia:dirty_write(rabbit_disk_queue,
                                    Obj #dq_msg_loc {is_delivered = true})
         end,
-    if ReadMsg ->
+    case ReadMsg of
+        true ->
             {FileHdl, State1} = get_read_handle(File, State),
             {ok, {MsgBody, BodySize}} =
                 read_message_at_offset(FileHdl, Offset, TotalSize),
             {ok, {MsgId, MsgBody, BodySize, Delivered, {MsgId, ReadSeqId}},
              NextReadSeqId, State1};
-       true ->
+        false ->
             {ok, {MsgId, Delivered, {MsgId, ReadSeqId}}, NextReadSeqId, State}
     end.
 
@@ -785,7 +789,8 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete,
                   [{MsgId, RefCount, File, Offset, TotalSize}] =
                       dets_ets_lookup(State, MsgId),
                   Files3 =
-                      if 1 =:= RefCount ->
+                      case RefCount of
+                          1 ->
                               ok = dets_ets_delete(State, MsgId),
                               [{File, ValidTotalSize, ContiguousTop,
                                 Left, Right}] = ets:lookup(FileSummary, File),
@@ -799,19 +804,20 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete,
                               if CurName =:= File -> Files2;
                                  true -> sets:add_element(File, Files2)
                               end;
-                         1 < RefCount ->
+                          _ when 1 < RefCount ->
                               ok = dets_ets_insert(
                                      State, {MsgId, RefCount - 1,
                                              File, Offset, TotalSize}),
                               Files2
                       end,
-                  ok = if MnesiaDelete ->
+                  ok = case MnesiaDelete of
+                           true ->
                                mnesia:dirty_delete(rabbit_disk_queue,
                                                    {Q, SeqId});
-                          MnesiaDelete =:= txn ->
+                           txn ->
                                mnesia:delete(rabbit_disk_queue,
                                              {Q, SeqId}, write);
-                          true -> ok
+                           _ -> ok
                        end,
                   Files3
           end, sets:new(), MsgSeqIds),
@@ -834,10 +840,11 @@ internal_tx_publish(MsgId, MsgBody,
                 ets:lookup(FileSummary, CurName),
             ValidTotalSize1 = ValidTotalSize + TotalSize +
                 ?FILE_PACKING_ADJUSTMENT,
-            ContiguousTop1 = if CurOffset =:= ContiguousTop ->
+            ContiguousTop1 = case CurOffset of
+                                 ContiguousTop ->
                                      %% can't be any holes in this file
                                      ValidTotalSize1;
-                                true -> ContiguousTop
+                                 _ -> ContiguousTop
                              end,
             true = ets:insert(FileSummary, {CurName, ValidTotalSize1,
                                             ContiguousTop1, Left, undefined}),
@@ -904,9 +911,10 @@ internal_tx_commit(Q, PubMsgSeqIds, AckSeqIds,
                    {ok, State3} = remove_messages(Q, AckSeqIds, txn, State),
                    {Sync2, WriteSeqId3, State3}
           end),
-    true = if PubList =:= [] -> true;
-              true -> ets:insert(Sequences, {Q, ReadSeqId, WriteSeqId,
-                                             Length + erlang:length(PubList)})
+    true = case PubList of
+               [] -> true;
+               _  -> ets:insert(Sequences, {Q, ReadSeqId, WriteSeqId,
+                                            Length + erlang:length(PubList)})
            end,
     IsDirty2 = if IsDirty andalso Sync ->
                        ok = file:sync(CurHdl),
@@ -1089,8 +1097,9 @@ maybe_roll_to_new_file(Offset,
                                           file_summary = FileSummary
                                         }
                       ) when Offset >= FileSizeLimit ->
-    ok = if IsDirty -> file:sync(CurHdl);
-            true -> ok
+    ok = case IsDirty of
+             true -> file:sync(CurHdl);
+             false -> ok
          end,
     ok = file:close(CurHdl),
     NextNum = CurNum + 1,
@@ -1181,8 +1190,9 @@ adjust_meta_and_combine(
     end.
 
 sort_msg_locations_by_offset(Asc, List) ->
-    Comp = if Asc  -> fun erlang:'<'/2;
-              true -> fun erlang:'>'/2
+    Comp = case Asc of
+               true  -> fun erlang:'<'/2;
+               false -> fun erlang:'>'/2
            end,
     lists:sort(fun ({_, _, _, OffA, _}, {_, _, _, OffB, _}) ->
                        Comp(OffA, OffB)
@@ -1212,10 +1222,11 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
     %%   the DestinationContiguousTop to a tmp file then truncate,
     %%   copy back in, and then copy over from Source
     %% otherwise we just truncate straight away and copy over from Source
-    if DestinationContiguousTop =:= DestinationValid ->
+    case DestinationContiguousTop of
+        DestinationValid ->
             ok = truncate_and_extend_file(DestinationHdl,
                                           DestinationValid, ExpectedSize);
-       true ->
+        _ ->
             Tmp = filename:rootname(Destination) ++ ?FILE_EXTENSION_TMP,
             {ok, TmpHdl} =
                 file:open(form_filename(Tmp),
@@ -1413,9 +1424,9 @@ extract_sequence_numbers(State = #dqstate { sequences = Sequences }) ->
                                         %% subtraction to get the
                                         %% right length
                                         lists:max([Write, NextWrite]), Length},
-                                if Orig /= Repl ->
-                                        true = ets:insert(Sequences, Repl);
-                                   true -> true
+                                case Orig of
+                                    Repl -> true;
+                                    _ -> true = ets:insert(Sequences, Repl)
                                 end
                         end
                 end, true, rabbit_disk_queue)
@@ -1455,14 +1466,15 @@ shuffle_up(Q, BaseSeqId, SeqId, Gap) ->
         case mnesia:read(rabbit_disk_queue, {Q, SeqId}, write) of
             [] -> 1;
             [Obj] ->
-                if Gap =:= 0 -> ok;
-                   true -> mnesia:write(rabbit_disk_queue,
-                                        Obj #dq_msg_loc {
-                                          queue_and_seq_id = {Q, SeqId + Gap },
-                                          next_seq_id = SeqId + Gap + 1
-                                                        },
-                                        write),
-                           mnesia:delete(rabbit_disk_queue, {Q, SeqId}, write)
+                case Gap of
+                    0 -> ok;
+                    _ -> mnesia:write(rabbit_disk_queue,
+                                      Obj #dq_msg_loc {
+                                        queue_and_seq_id = {Q, SeqId + Gap },
+                                        next_seq_id = SeqId + Gap + 1
+                                       },
+                                      write),
+                         mnesia:delete(rabbit_disk_queue, {Q, SeqId}, write)
                 end,
                 0
         end,

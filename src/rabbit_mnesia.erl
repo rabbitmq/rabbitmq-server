@@ -272,7 +272,8 @@ init_db(ClusterNodes) ->
     ExtraNodes = ClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ExtraNodes) of
         {ok, []} ->
-            if WasDiskNode ->
+            case WasDiskNode of
+                true ->
                     case check_schema_integrity() of
                         ok ->
                             ok;
@@ -287,7 +288,7 @@ init_db(ClusterNodes) ->
                             ok = move_db(),
                             ok = create_schema()
                     end;
-               true ->
+                false ->
                     ok = create_schema()
             end;
         {ok, [_|_]} ->
