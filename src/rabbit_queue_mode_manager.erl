@@ -69,28 +69,29 @@ init([]) ->
                   queues = []
                 }}.
 
-handle_call({register, Pid}, _From, State = #state { queues = Qs, mode = Mode }) ->
+handle_call({register, Pid}, _From,
+            State = #state { queues = Qs, mode = Mode }) ->
     Result = case Mode of
                  unlimited -> mixed;
                  _ -> disk
              end,
     {reply, {ok, Result}, State #state { queues = [Pid | Qs] }}.
 
-handle_cast({change_memory_usage, true}, State = #state { mode = disk_only }) ->
+handle_cast({change_memory_usage, true}, State = #state { mode=disk_only }) ->
     {noreply, State};
-handle_cast({change_memory_usage, true}, State = #state { mode = ram_disk }) ->
+handle_cast({change_memory_usage, true}, State = #state { mode=ram_disk }) ->
     constrain_queues(true, State #state.queues),
     {noreply, State #state { mode = disk_only }};
-handle_cast({change_memory_usage, true}, State = #state { mode = unlimited }) ->
+handle_cast({change_memory_usage, true}, State = #state { mode=unlimited }) ->
     ok = rabbit_disk_queue:to_disk_only_mode(),
     {noreply, State #state { mode = ram_disk }};
 
-handle_cast({change_memory_usage, false}, State = #state { mode = unlimited }) ->
+handle_cast({change_memory_usage, false}, State = #state { mode=unlimited }) ->
     {noreply, State};
-handle_cast({change_memory_usage, false}, State = #state { mode = ram_disk }) ->
+handle_cast({change_memory_usage, false}, State = #state { mode=ram_disk }) ->
     ok = rabbit_disk_queue:to_ram_disk_mode(),
     {noreply, State #state { mode = unlimited }};
-handle_cast({change_memory_usage, false}, State = #state { mode = disk_only }) ->
+handle_cast({change_memory_usage, false}, State = #state { mode=disk_only }) ->
     constrain_queues(false, State #state.queues),
     {noreply, State #state { mode = ram_disk }}.
 

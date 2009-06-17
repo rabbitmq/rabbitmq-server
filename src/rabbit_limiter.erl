@@ -101,8 +101,10 @@ ack(LimiterPid, Count) -> gen_server2:cast(LimiterPid, {ack, Count}).
 register(undefined, _QPid) -> ok;
 register(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {register, QPid}).
 
-unregister(undefined, _QPid) -> ok;
-unregister(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {unregister, QPid}).
+unregister(undefined, _QPid) ->
+    ok;
+unregister(LimiterPid, QPid) ->
+    gen_server2:cast(LimiterPid, {unregister, QPid}).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks

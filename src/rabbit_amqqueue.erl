@@ -136,12 +136,15 @@ recover_durable_queues() ->
                   %% another node has deleted the queue (and possibly
                   %% re-created it).
                   case rabbit_misc:execute_mnesia_transaction(
-                         fun () -> case mnesia:match_object(
-                                          rabbit_durable_queue, RecoveredQ, read) of
-                                       [_] -> ok = store_queue(Q),
-                                              true;
-                                       []  -> false
-                                   end
+                         fun () ->
+                                 Match =
+                                     mnesia:match_object(
+                                       rabbit_durable_queue, RecoveredQ, read),
+                                 case Match of
+                                     [_] -> ok = store_queue(Q),
+                                            true;
+                                     []  -> false
+                                 end
                          end) of
                       true  -> [Q|Acc];
                       false -> exit(Q#amqqueue.pid, shutdown),

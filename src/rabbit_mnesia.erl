@@ -188,7 +188,8 @@ ensure_mnesia_not_running() ->
 
 check_schema_integrity() ->
     %%TODO: more thorough checks
-    case catch [mnesia:table_info(Tab, version) || Tab <- replicated_table_names()] of
+    case catch [mnesia:table_info(Tab, version)
+                || Tab <- replicated_table_names()] of
         {'EXIT', Reason} -> {error, Reason};
         _ -> ok
     end.
@@ -353,12 +354,14 @@ create_local_table_copies(Type) ->
               HasDiscCopies =
                   case lists:keysearch(disc_copies, 1, TabDef) of
                       false -> false;
-                      {value, {disc_copies, List1}} -> lists:member(node(), List1)
+                      {value, {disc_copies, List1}} ->
+                          lists:member(node(), List1)
                   end,
               HasDiscOnlyCopies =
                   case lists:keysearch(disc_only_copies, 1, TabDef) of
                       false -> false;
-                      {value, {disc_only_copies, List2}} -> lists:member(node(), List2)
+                      {value, {disc_only_copies, List2}} ->
+                          lists:member(node(), List2)
                   end,
               StorageType =
                   case Type of

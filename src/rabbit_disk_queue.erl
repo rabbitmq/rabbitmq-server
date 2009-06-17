@@ -46,7 +46,8 @@
 
 -export([length/1, is_empty/1, next_write_seq/1]).
 
--export([stop/0, stop_and_obliterate/0, to_disk_only_mode/0, to_ram_disk_mode/0]).
+-export([stop/0, stop_and_obliterate/0,
+         to_disk_only_mode/0, to_ram_disk_mode/0]).
 
 -include("rabbit.hrl").
 
@@ -67,20 +68,22 @@
 -define(MAX_READ_FILE_HANDLES, 256).
 -define(FILE_SIZE_LIMIT, (256*1024*1024)).
 
--record(dqstate, {msg_location_dets,       %% where are messages?
-                  msg_location_ets,        %% as above, but for ets version
-                  operation_mode,          %% ram_disk | disk_only
-                  file_summary,            %% what's in the files?
-                  sequences,               %% next read and write for each q
-                  current_file_num,        %% current file name as number
-                  current_file_name,       %% current file name
-                  current_file_handle,     %% current file handle
-                  current_offset,          %% current offset within current file
-                  current_dirty,           %% has the current file been written to since the last fsync?
-                  file_size_limit,         %% how big can our files get?
-                  read_file_handles,       %% file handles for reading (LRU)
-                  read_file_handles_limit  %% how many file handles can we open?
-                 }).
+-record(dqstate,
+        {msg_location_dets,       %% where are messages?
+         msg_location_ets,        %% as above, but for ets version
+         operation_mode,          %% ram_disk | disk_only
+         file_summary,            %% what's in the files?
+         sequences,               %% next read and write for each q
+         current_file_num,        %% current file name as number
+         current_file_name,       %% current file name
+         current_file_handle,     %% current file handle
+         current_offset,          %% current offset within current file
+         current_dirty,           %% has the current file been written to
+                                  %% since the last fsync?
+         file_size_limit,         %% how big can our files get?
+         read_file_handles,       %% file handles for reading (LRU)
+         read_file_handles_limit  %% how many file handles can we open?
+        }).
 
 %% The components:
 %%
@@ -233,23 +236,28 @@
 -spec(start_link/0 :: () ->
               {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(publish/4 :: (queue_name(), msg_id(), binary(), bool()) -> 'ok').
--spec(publish_with_seq/5 :: (queue_name(), msg_id(), seq_id_or_next(), binary(), bool()) -> 'ok').
+-spec(publish_with_seq/5 :: (queue_name(), msg_id(), seq_id_or_next(), binary(),
+                             bool()) -> 'ok').
 -spec(deliver/1 :: (queue_name()) ->
              {'empty' | {msg_id(), binary(), non_neg_integer(),
                          bool(), {msg_id(), seq_id()}, non_neg_integer()}}).
 -spec(phantom_deliver/1 :: (queue_name()) ->
-             { 'empty' | {msg_id(), bool(), {msg_id(), seq_id()}, non_neg_integer()}}).
+             { 'empty' | {msg_id(), bool(), {msg_id(), seq_id()},
+                          non_neg_integer()}}).
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_publish/2 :: (msg_id(), binary()) -> 'ok').
--spec(tx_commit/3 :: (queue_name(), [msg_id()], [{msg_id(), seq_id()}]) -> 'ok').
+-spec(tx_commit/3 :: (queue_name(), [msg_id()], [{msg_id(), seq_id()}]) ->
+             'ok').
 -spec(tx_commit_with_seqs/3 :: (queue_name(), [{msg_id(), seq_id_or_next()}],
                                 [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
--spec(requeue_with_seqs/2 :: (queue_name(), [{{msg_id(), seq_id()}, seq_id_or_next()}]) -> 'ok').
+-spec(requeue_with_seqs/2 :: (queue_name(), [{{msg_id(), seq_id()},
+                                              seq_id_or_next()}]) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
--spec(dump_queue/1 :: (queue_name()) -> [{msg_id(), binary(), non_neg_integer(),
-                                          bool(), {msg_id(), seq_id()}, seq_id()}]).
+-spec(dump_queue/1 :: (queue_name()) ->
+             [{msg_id(), binary(), non_neg_integer(), bool(),
+               {msg_id(), seq_id()}, seq_id()}]).
 -spec(delete_non_durable_queues/1 :: (set()) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
@@ -321,7 +329,8 @@ dump_queue(Q) ->
     gen_server2:call(?SERVER, {dump_queue, Q}, infinity).
 
 delete_non_durable_queues(DurableQueues) ->
-    gen_server2:call(?SERVER, {delete_non_durable_queues, DurableQueues}, infinity).
+    gen_server2:call(?SERVER, {delete_non_durable_queues, DurableQueues},
+                     infinity).
 
 stop() ->
     gen_server2:call(?SERVER, stop, infinity).
@@ -483,7 +492,8 @@ handle_call(to_ram_disk_mode, _From,
 handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     {_ReadSeqId, _WriteSeqId, Length} = sequence_lookup(Sequences, Q),
     {reply, Length, State};
-handle_call({next_write_seq, Q}, _From, State = #dqstate { sequences = Sequences }) ->
+handle_call({next_write_seq, Q}, _From,
+            State = #dqstate { sequences = Sequences }) ->
     {_ReadSeqId, WriteSeqId, _Length} = sequence_lookup(Sequences, Q),
     {reply, WriteSeqId, State};
 handle_call({dump_queue, Q}, _From, State) ->
@@ -494,10 +504,12 @@ handle_call({delete_non_durable_queues, DurableQueues}, _From, State) ->
     {reply, ok, State1}.
 
 handle_cast({publish, Q, MsgId, MsgBody}, State) ->
-    {ok, _MsgSeqId, State1} = internal_publish(Q, MsgId, next, MsgBody, false, State),
+    {ok, _MsgSeqId, State1} =
+        internal_publish(Q, MsgId, next, MsgBody, false, State),
     {noreply, State1};
 handle_cast({publish_with_seq, Q, MsgId, SeqId, MsgBody}, State) ->
-    {ok, _MsgSeqId, State1} = internal_publish(Q, MsgId, SeqId, MsgBody, false, State),
+    {ok, _MsgSeqId, State1} =
+        internal_publish(Q, MsgId, SeqId, MsgBody, false, State),
     {noreply, State1};
 handle_cast({ack, Q, MsgSeqIds}, State) ->
     {ok, State1} = internal_ack(Q, MsgSeqIds, State),
@@ -702,14 +714,16 @@ sequence_lookup(Sequences, Q) ->
 
 %% ---- INTERNAL RAW FUNCTIONS ----
 
-internal_deliver(Q, ReadMsg, FakeDeliver, State = #dqstate { sequences = Sequences }) ->
+internal_deliver(Q, ReadMsg, FakeDeliver,
+                 State = #dqstate { sequences = Sequences }) ->
     case ets:lookup(Sequences, Q) of
         [] -> {ok, empty, State};
         [{Q, SeqId, SeqId, 0}] -> {ok, empty, State};
         [{Q, ReadSeqId, WriteSeqId, Length}] when Length > 0 ->
             Remaining = Length - 1,
             {ok, Result, NextReadSeqId, State1} =
-                internal_read_message(Q, ReadSeqId, FakeDeliver, ReadMsg, State),
+                internal_read_message(
+                  Q, ReadSeqId, FakeDeliver, ReadMsg, State),
             true = ets:insert(Sequences,
                               {Q, NextReadSeqId, WriteSeqId, Remaining}),
             {ok,
@@ -873,7 +887,8 @@ internal_tx_commit(Q, PubMsgSeqIds, AckSeqIds,
                                   _TotalSize}] = dets_ets_lookup(State, MsgId),
                                  SeqId2 = adjust_last_msg_seq_id(
                                             Q, ExpectedSeqId, SeqId, write),
-                                 NextSeqId2 = find_next_seq_id(SeqId2, NextSeqId),
+                                 NextSeqId2 =
+                                    find_next_seq_id(SeqId2, NextSeqId),
                                  ok = mnesia:write(
                                         rabbit_disk_queue,
                                         #dq_msg_loc { queue_and_seq_id =

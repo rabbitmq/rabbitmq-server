@@ -118,7 +118,8 @@ purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
     {Acks, Requeue, Length} =
         deliver_all_messages(Q, IsDurable, [], [], 0),
     ok = if Requeue == [] -> ok;
-            true -> rabbit_disk_queue:requeue_with_seqs(Q, lists:reverse(Requeue))
+            true ->
+                 rabbit_disk_queue:requeue_with_seqs(Q, lists:reverse(Requeue))
          end,
     ok = if Acks == [] -> ok;
             true -> rabbit_disk_queue:ack(Q, lists:reverse(Acks))

@@ -40,7 +40,8 @@
 
 -export([start_link/1]).
 
--export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
+-export([init/1, terminate/2, code_change/3,
+         handle_call/3, handle_cast/2, handle_info/2]).
 
 -import(queue).
 -import(erlang).
@@ -191,10 +192,11 @@ deliver_queue(Fun, FunAcc0,
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
                       {QName, self(), NextId, IsDelivered, Msg}),
-                    NewUAM = case AckRequired of
-                                 true  -> dict:store(NextId, {Msg, AckTag}, UAM);
-                                 false -> UAM
-                             end,
+                    NewUAM =
+                        case AckRequired of
+                            true  -> dict:store(NextId, {Msg, AckTag}, UAM);
+                            false -> UAM
+                        end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 unacked_messages = NewUAM},
                     store_ch_record(NewC),
@@ -210,9 +212,10 @@ deliver_queue(Fun, FunAcc0,
                                 {ActiveConsumers1,
                                  queue:in(QEntry, BlockedConsumers1)}
                         end,
-                    State3 = State2 #q { active_consumers = NewActiveConsumers,
-                                         blocked_consumers = NewBlockedConsumers,
-                                         next_msg_id = NextId + 1
+                    State3 = State2 #q {
+                               active_consumers = NewActiveConsumers,
+                               blocked_consumers = NewBlockedConsumers,
+                               next_msg_id = NextId + 1
                                        },
                     if Remaining == 0 -> {FunAcc1, State3};
                        true -> deliver_queue(Fun, FunAcc1, State3)
@@ -238,7 +241,8 @@ deliver_queue(Fun, FunAcc0,
 
 deliver_from_queue(is_message_ready, undefined, #q { mixed_state = MS }) ->
     not rabbit_mixed_queue:is_empty(MS);
-deliver_from_queue(AckRequired, Acc = undefined, State = #q { mixed_state = MS }) ->
+deliver_from_queue(AckRequired, Acc = undefined,
+                   State = #q { mixed_state = MS }) ->
     {Res, MS2} = rabbit_mixed_queue:deliver(MS),
     MS3 = case {Res, AckRequired} of
               {_, true} -> MS2;
@@ -250,7 +254,8 @@ deliver_from_queue(AckRequired, Acc = undefined, State = #q { mixed_state = MS }
     {Res, Acc, State #q { mixed_state = MS3 }}.
 
 run_message_queue(State) ->
-    {undefined, State2} = deliver_queue(fun deliver_from_queue/3, undefined, State),
+    {undefined, State2} =
+        deliver_queue(fun deliver_from_queue/3, undefined, State),
     State2.
 
 attempt_immediate_delivery(none, _ChPid, Msg, State) ->
@@ -260,8 +265,9 @@ attempt_immediate_delivery(none, _ChPid, Msg, State) ->
             (AckRequired, false, State2) ->
                 {AckTag, State3} =
                     if AckRequired ->
-                            {ok, AckTag2, MS} = rabbit_mixed_queue:publish_delivered(
-                                                  Msg, State2 #q.mixed_state),
+                            {ok, AckTag2, MS} =
+                                rabbit_mixed_queue:publish_delivered(
+                                  Msg, State2 #q.mixed_state),
                             {AckTag2, State2 #q { mixed_state = MS }};
                        true ->
                             {noack, State2}
@@ -290,19 +296,24 @@ deliver_or_requeue_n([], State) ->
     run_message_queue(State);
 deliver_or_requeue_n(MsgsWithAcks, State) ->
     {{_RemainingLengthMinusOne, AutoAcks, OutstandingMsgs}, NewState} =
-        deliver_queue(fun deliver_or_requeue_msgs/3, {length(MsgsWithAcks) - 1, [], MsgsWithAcks}, State),
-    {ok, MS} = rabbit_mixed_queue:ack(lists:reverse(AutoAcks), NewState #q.mixed_state),
+        deliver_queue(fun deliver_or_requeue_msgs/3,
+                      {length(MsgsWithAcks) - 1, [], MsgsWithAcks}, State),
+    {ok, MS} = rabbit_mixed_queue:ack(lists:reverse(AutoAcks),
+                                      NewState #q.mixed_state),
     case OutstandingMsgs of
         [] -> run_message_queue(NewState #q { mixed_state = MS });
         _ -> {ok, MS2} = rabbit_mixed_queue:requeue(OutstandingMsgs, MS),
              NewState #q { mixed_state = MS2 }
     end.
 
-deliver_or_requeue_msgs(is_message_ready, {Len, _AcksAcc, _MsgsWithAcks}, _State) ->
+deliver_or_requeue_msgs(is_message_ready, {Len, _AcksAcc, _MsgsWithAcks},
+                        _State) ->
     -1 < Len;
-deliver_or_requeue_msgs(false, {Len, AcksAcc, [{Msg, AckTag} | MsgsWithAcks]}, State) ->
+deliver_or_requeue_msgs(false, {Len, AcksAcc, [{Msg, AckTag} | MsgsWithAcks]},
+                        State) ->
     {{Msg, true, noack, Len}, {Len - 1, [AckTag|AcksAcc], MsgsWithAcks}, State};
-deliver_or_requeue_msgs(true, {Len, AcksAcc, [{Msg, AckTag} | MsgsWithAcks]}, State) ->
+deliver_or_requeue_msgs(true, {Len, AcksAcc, [{Msg, AckTag} | MsgsWithAcks]},
+                        State) ->
     {{Msg, true, AckTag, Len}, {Len - 1, AcksAcc, MsgsWithAcks}, State}.
 
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
@@ -426,8 +437,10 @@ all_tx_record() ->
 all_tx() ->
     [Txn || {{txn, Txn}, _} <- get()].
 
-record_pending_message(Txn, ChPid, Message = #basic_message { is_persistent = IsPersistent }) ->
-    Tx = #tx{pending_messages = Pending, is_persistent = IsPersistentTxn } = lookup_tx(Txn),
+record_pending_message(Txn, ChPid, Message =
+                       #basic_message { is_persistent = IsPersistent }) ->
+    Tx = #tx{pending_messages = Pending, is_persistent = IsPersistentTxn } =
+        lookup_tx(Txn),
     record_current_channel_tx(ChPid, Txn),
     store_tx(Txn, Tx #tx { pending_messages = [Message | Pending],
                            is_persistent = IsPersistentTxn orelse IsPersistent
@@ -465,7 +478,8 @@ commit_transaction(Txn, State) ->
 rollback_transaction(Txn, State) ->
     #tx { pending_messages = PendingMessages
         } = lookup_tx(Txn),
-    {ok, MS} = rabbit_mixed_queue:tx_cancel(lists:reverse(PendingMessages), State #q.mixed_state),
+    {ok, MS} = rabbit_mixed_queue:tx_cancel(lists:reverse(PendingMessages),
+                                            State #q.mixed_state),
     erase_tx(Txn),
     State #q { mixed_state = MS }.
 
@@ -534,7 +548,8 @@ handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
     %% just all ready-to-consume queues get the message, with unready
     %% queues discarding the message?
     %%
-    {Delivered, NewState} = attempt_immediate_delivery(Txn, ChPid, Message, State),
+    {Delivered, NewState} =
+        attempt_immediate_delivery(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
 handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
@@ -682,8 +697,8 @@ handle_call(purge, _From, State) ->
     reply({ok, Count},
           State #q { mixed_state = MS });
 
-handle_call({claim_queue, ReaderPid}, _From, State = #q{owner = Owner,
-                                                        exclusive_consumer = Holder}) ->
+handle_call({claim_queue, ReaderPid}, _From,
+            State = #q{owner = Owner, exclusive_consumer = Holder}) ->
     case Owner of
         none ->
             case check_exclusive_access(Holder, true, State) of
@@ -696,7 +711,10 @@ handle_call({claim_queue, ReaderPid}, _From, State = #q{owner = Owner,
                     %% pid...
                     reply(locked, State);
                 ok ->
-                    reply(ok, State#q{owner = {ReaderPid, erlang:monitor(process, ReaderPid)}})
+                    reply(ok, State #q { owner =
+                                         {ReaderPid,
+                                          erlang:monitor(process, ReaderPid)} })
+                                                 
             end;
         {ReaderPid, _MonitorRef} ->
             reply(ok, State);
@@ -717,8 +735,10 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
             {MsgWithAcks, Remaining} = collect_messages(MsgIds, UAM),
             case Txn of
                 none ->
-                    Acks = lists:map(fun ({_Msg, AckTag}) -> AckTag end, MsgWithAcks),
-                    {ok, MS} = rabbit_mixed_queue:ack(Acks, State #q.mixed_state),
+                    Acks = lists:map(fun ({_Msg, AckTag}) -> AckTag end,
+                                     MsgWithAcks),
+                    {ok, MS} =
+                        rabbit_mixed_queue:ack(Acks, State #q.mixed_state),
                     store_ch_record(C#cr{unacked_messages = Remaining}),
                     noreply(State #q { mixed_state = MS });
                 _  ->

@@ -730,17 +730,18 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
                              || Q <- Qs] end
                   ]]),
     {Deliver, ok} =
-        timer:tc(?MODULE, rdq_time_commands,
-                 [[fun() -> [begin SeqIds =
-                                       [begin
-                                            Remaining = MsgCount - N,
-                                            {N, Msg, MsgSizeBytes, false, SeqId, Remaining} =
-                                                  rabbit_disk_queue:deliver(Q),
-                                            SeqId
-                                        end || N <- List],
-                                   ok = rabbit_disk_queue:tx_commit(Q, [], SeqIds)
-                             end || Q <- Qs]
-                   end]]),
+        timer:tc(
+          ?MODULE, rdq_time_commands,
+          [[fun() -> [begin SeqIds =
+                                [begin
+                                     Remaining = MsgCount - N,
+                                     {N, Msg, MsgSizeBytes, false, SeqId,
+                                      Remaining} = rabbit_disk_queue:deliver(Q),
+                                     SeqId
+                                 end || N <- List],
+                            ok = rabbit_disk_queue:tx_commit(Q, [], SeqIds)
+                      end || Q <- Qs]
+            end]]),
     io:format(" ~15.10B| ~14.10B| ~14.10B| ~14.1f| ~14.1f| ~14.6f| ~14.10f| ~14.1f| ~14.6f| ~14.10f~n",
               [MsgCount, MsgSizeBytes, QCount, float(Startup),
                float(Publish), (Publish / (MsgCount * QCount)),
@@ -749,8 +750,9 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
                (Deliver / (MsgCount * QCount * MsgSizeBytes))]),
     rdq_stop().
 
-% we know each file is going to be 1024*1024*10 bytes in size (10MB), so make sure we have
-% several files, and then keep punching holes in a reasonably sensible way.
+% we know each file is going to be 1024*1024*10 bytes in size (10MB),
+% so make sure we have several files, and then keep punching holes in
+% a reasonably sensible way.
 rdq_stress_gc(MsgCount) ->
     rdq_virgin(),
     rdq_start(),
@@ -804,7 +806,8 @@ rdq_test_startup_with_queue_gaps() ->
     %% deliver first half
     Seqs = [begin
                 Remaining = Total - N,
-                {N, Msg, 256, false, SeqId, Remaining} = rabbit_disk_queue:deliver(q), SeqId
+                {N, Msg, 256, false, SeqId, Remaining} =
+                    rabbit_disk_queue:deliver(q), SeqId
             end || N <- lists:seq(1,Half)],
     io:format("Deliver first half done~n", []),
     %% ack every other message we have delivered (starting at the _first_)
@@ -819,10 +822,12 @@ rdq_test_startup_with_queue_gaps() ->
     rdq_stop(),
     rdq_start(),
     io:format("Startup (with shuffle) done~n", []),
-    %% should have shuffled up. So we should now get lists:seq(2,500,2) already delivered
+    %% should have shuffled up. So we should now get
+    %% lists:seq(2,500,2) already delivered
     Seqs2 = [begin
                  Remaining = round(Total - ((Half + N)/2)),
-                 {N, Msg, 256, true, SeqId, Remaining} = rabbit_disk_queue:deliver(q),
+                 {N, Msg, 256, true, SeqId, Remaining} =
+                     rabbit_disk_queue:deliver(q),
                  SeqId
              end || N <- lists:seq(2,Half,2)],
     rabbit_disk_queue:tx_commit(q, [], Seqs2),
@@ -830,7 +835,8 @@ rdq_test_startup_with_queue_gaps() ->
     %% and now fetch the rest
     Seqs3 = [begin
                  Remaining = Total - N,
-                 {N, Msg, 256, false, SeqId, Remaining} = rabbit_disk_queue:deliver(q),
+                 {N, Msg, 256, false, SeqId, Remaining} =
+                     rabbit_disk_queue:deliver(q),
                  SeqId
              end || N <- lists:seq(1 + Half,Total)],
     rabbit_disk_queue:tx_commit(q, [], Seqs3),
@@ -852,7 +858,8 @@ rdq_test_redeliver() ->
     %% deliver first half
     Seqs = [begin
                 Remaining = Total - N,
-                {N, Msg, 256, false, SeqId, Remaining} = rabbit_disk_queue:deliver(q),
+                {N, Msg, 256, false, SeqId, Remaining} =
+                    rabbit_disk_queue:deliver(q),
                 SeqId
             end || N <- lists:seq(1,Half)],
     io:format("Deliver first half done~n", []),
@@ -867,16 +874,19 @@ rdq_test_redeliver() ->
                 end, true, Seqs),
     rabbit_disk_queue:tx_commit(q, [], []),
     io:format("Redeliver and acking done~n", []),
-    %% we should now get the 2nd half in order, followed by every-other-from-the-first-half
+    %% we should now get the 2nd half in order, followed by
+    %% every-other-from-the-first-half
     Seqs2 = [begin
                  Remaining = round(Total - N + (Half/2)),
-                 {N, Msg, 256, false, SeqId, Remaining} = rabbit_disk_queue:deliver(q),
+                 {N, Msg, 256, false, SeqId, Remaining} =
+                     rabbit_disk_queue:deliver(q),
                  SeqId
              end || N <- lists:seq(1+Half, Total)],
     rabbit_disk_queue:tx_commit(q, [], Seqs2),
     Seqs3 = [begin
                  Remaining = round((Half - N) / 2) - 1,
-                 {N, Msg, 256, true, SeqId, Remaining} = rabbit_disk_queue:deliver(q),
+                 {N, Msg, 256, true, SeqId, Remaining} =
+                     rabbit_disk_queue:deliver(q),
                  SeqId
              end || N <- lists:seq(1, Half, 2)],
     rabbit_disk_queue:tx_commit(q, [], Seqs3),
@@ -897,7 +907,8 @@ rdq_test_purge() ->
     %% deliver first half
     Seqs = [begin
                 Remaining = Total - N,
-                {N, Msg, 256, false, SeqId, Remaining} = rabbit_disk_queue:deliver(q),
+                {N, Msg, 256, false, SeqId, Remaining} =
+                    rabbit_disk_queue:deliver(q),
                 SeqId
             end || N <- lists:seq(1,Half)],
     io:format("Deliver first half done~n", []),
@@ -926,7 +937,8 @@ rdq_test_dump_queue() ->
     lists:foreach(
       fun (N) ->
               Remaining = Total - N,
-              {N, Msg, 256, false, _SeqId, Remaining} = rabbit_disk_queue:deliver(q)
+              {N, Msg, 256, false, _SeqId, Remaining} =
+                  rabbit_disk_queue:deliver(q)
       end, All),
     [] = rabbit_disk_queue:dump_queue(q),
     rdq_stop(),
@@ -943,22 +955,25 @@ rdq_test_mixed_queue_modes() ->
     rdq_start(),
     Payload = <<0:(8*256)>>,
     {ok, MS} = rabbit_mixed_queue:start_link(q, true, mixed),
-    MS2 = lists:foldl(fun (_N, MS1) ->
-                              Msg = rabbit_basic:message(x, <<>>, <<>>, Payload),
-                              {ok, MS1a} = rabbit_mixed_queue:publish(Msg, MS1),
-                              MS1a
-                      end, MS, lists:seq(1,10)),
-    MS4 = lists:foldl(fun (_N, MS3) ->
-                              Msg = (rabbit_basic:message(x, <<>>, <<>>, Payload))
-                                  #basic_message { is_persistent = true },
-                              {ok, MS3a} = rabbit_mixed_queue:publish(Msg, MS3),
-                              MS3a
-                      end, MS2, lists:seq(1,10)),
-    MS6 = lists:foldl(fun (_N, MS5) ->
-                              Msg = rabbit_basic:message(x, <<>>, <<>>, Payload),
-                              {ok, MS5a} = rabbit_mixed_queue:publish(Msg, MS5),
-                              MS5a
-                      end, MS4, lists:seq(1,10)),
+    MS2 = lists:foldl(
+            fun (_N, MS1) ->
+                    Msg = rabbit_basic:message(x, <<>>, <<>>, Payload),
+                    {ok, MS1a} = rabbit_mixed_queue:publish(Msg, MS1),
+                    MS1a
+            end, MS, lists:seq(1,10)),
+    MS4 = lists:foldl(
+            fun (_N, MS3) ->
+                    Msg = (rabbit_basic:message(x, <<>>, <<>>, Payload))
+                        #basic_message { is_persistent = true },
+                    {ok, MS3a} = rabbit_mixed_queue:publish(Msg, MS3),
+                    MS3a
+            end, MS2, lists:seq(1,10)),
+    MS6 = lists:foldl(
+            fun (_N, MS5) ->
+                    Msg = rabbit_basic:message(x, <<>>, <<>>, Payload),
+                    {ok, MS5a} = rabbit_mixed_queue:publish(Msg, MS5),
+                    MS5a
+            end, MS4, lists:seq(1,10)),
     30 = rabbit_mixed_queue:length(MS6),
     io:format("Published a mixture of messages~n"),
     {ok, MS7} = rabbit_mixed_queue:to_disk_only_mode(MS6),

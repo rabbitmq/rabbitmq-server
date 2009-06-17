@@ -158,9 +158,9 @@ start(normal, []) ->
                 ok = rabbit_exchange:recover(),
                 {ok, DurableQueues} = rabbit_amqqueue:recover(),
                 DurableQueueNames =
-                    sets:from_list(lists:map(
-                                     fun(Q) -> Q #amqqueue.name end, DurableQueues)),
-                ok = rabbit_disk_queue:delete_non_durable_queues(DurableQueueNames)
+                    sets:from_list([ Q #amqqueue.name || Q <- DurableQueues ]),
+                ok = rabbit_disk_queue:delete_non_durable_queues(
+                       DurableQueueNames)
         end},
        {"guid generator",
         fun () ->
