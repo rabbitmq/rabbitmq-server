@@ -1407,25 +1407,26 @@ extract_sequence_numbers(State = #dqstate { sequences = Sequences }) ->
               mnesia:foldl(
                 fun (#dq_msg_loc { queue_and_seq_id = {Q, SeqId} }, true) ->
                         NextWrite = SeqId + 1,
-                        case ets:lookup(Sequences, Q) of
-                            [] -> true =
-                                      ets:insert_new(Sequences,
+                        true =
+                            case ets:lookup(Sequences, Q) of
+                                [] -> ets:insert_new(Sequences,
                                                      {Q, SeqId, NextWrite, -1});
-                            [Orig = {Q, Read, Write, Length}] ->
-                                Repl = {Q, lists:min([Read, SeqId]),
-                                        %% Length is wrong here, but
-                                        %% it doesn't matter because
-                                        %% we'll pull out the gaps in
-                                        %% remove_gaps_in_sequences in
-                                        %% then do a straight
-                                        %% subtraction to get the
-                                        %% right length
-                                        lists:max([Write, NextWrite]), Length},
-                                case Orig of
-                                    Repl -> true;
-                                    _ -> true = ets:insert(Sequences, Repl)
-                                end
-                        end
+                                [Orig = {Q, Read, Write, Length}] ->
+                                    Repl = {Q, lists:min([Read, SeqId]),
+                                            %% Length is wrong here,
+                                            %% but it doesn't matter
+                                            %% because we'll pull out
+                                            %% the gaps in
+                                            %% remove_gaps_in_sequences
+                                            %% in then do a straight
+                                            %% subtraction to get the
+                                            %% right length
+                                            lists:max([Write, NextWrite]),
+                                            Length},
+                                    if Orig =:= Repl -> true;
+                                       true -> ets:insert(Sequences, Repl)
+                                    end
+                            end
                 end, true, rabbit_disk_queue)
       end),
     remove_gaps_in_sequences(State),
