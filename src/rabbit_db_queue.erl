@@ -60,7 +60,7 @@
          terminate/2, code_change/3]).
 
 -export([publish/3, deliver/1, phantom_deliver/1, ack/2, tx_publish/2,
-	 tx_commit/3, tx_cancel/1, requeue/2, purge/1]).
+         tx_commit/3, tx_cancel/1, requeue/2, purge/1]).
 
 -export([stop/0, stop_and_obliterate/0]).
 
@@ -75,13 +75,13 @@
 -type(seq_id() :: non_neg_integer()).
 
 -spec(start_link/1 :: (non_neg_integer()) ->
-	      {'ok', pid()} | 'ignore' | {'error', any()}).
+              {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(publish/3 :: (queue_name(), msg_id(), binary()) -> 'ok').
 -spec(deliver/1 :: (queue_name()) ->
-	     {'empty' | {msg_id(), binary(), non_neg_integer(),
-			 bool(), {msg_id(), seq_id()}}}).
+             {'empty' | {msg_id(), binary(), non_neg_integer(),
+                         bool(), {msg_id(), seq_id()}}}).
 -spec(phantom_deliver/1 :: (queue_name()) ->
-	     { 'empty' | {msg_id(), bool(), {msg_id(), seq_id()}}}).
+             { 'empty' | {msg_id(), bool(), {msg_id(), seq_id()}}}).
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_publish/2 :: (msg_id(), binary()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [msg_id()], [seq_id()]) -> 'ok').
@@ -97,7 +97,7 @@
 
 start_link(DSN) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE,
-			  [DSN], []).
+                          [DSN], []).
 
 publish(Q, MsgId, Msg) when is_binary(Msg) ->
     gen_server:cast(?SERVER, {publish, Q, MsgId, Msg}).
@@ -139,7 +139,7 @@ init([DSN]) ->
     process_flag(trap_exit, true),
     odbc:start(),
     {ok, Conn} = odbc:connect(DSN, [{auto_commit, off}, {tuple_row, on},
-				    {scrollable_cursors, off}, {trace_driver, off}]),
+                                    {scrollable_cursors, off}, {trace_driver, off}]),
     State = #dbstate { db_conn = Conn },
     compact_already_delivered(State),
     {ok, State}.
@@ -213,12 +213,12 @@ escape_byte(B) when B > 31 andalso B < 127 ->
     B;
 escape_byte(B) ->
     case io_lib:format("~.8B", [B]) of
-	O1 = [[_]] ->
-	    "\\\\00" ++ O1;
-	O2 = [[_,_]] ->
-	    "\\\\0" ++ O2;
-	O3 = [[_,_,_]] ->
-	    "\\\\" ++ O3
+        O1 = [[_]] ->
+            "\\\\00" ++ O1;
+        O2 = [[_,_]] ->
+            "\\\\0" ++ O2;
+        O3 = [[_,_,_]] ->
+            "\\\\" ++ O3
     end.
 
 escaped_string_to_binary(Str) when is_list(Str) ->
@@ -230,9 +230,9 @@ escaped_string_to_binary([$\\,$\\|Rest], Acc) ->
     escaped_string_to_binary(Rest, [$\\ | Acc]);
 escaped_string_to_binary([$\\,A,B,C|Rest], Acc) ->
     escaped_string_to_binary(Rest, [(list_to_integer([A])*64) +
-				    (list_to_integer([B])*8) +
-				    list_to_integer([C])
-				   | Acc]);
+                                    (list_to_integer([B])*8) +
+                                    list_to_integer([C])
+                                   | Acc]);
 escaped_string_to_binary([C|Rest], Acc) ->
     escaped_string_to_binary(Rest, [C|Acc]).
 
@@ -250,37 +250,37 @@ hex_string_to_binary([A,B|Rest], Acc) ->
 internal_deliver(Q, ReadMsg, State = #dbstate { db_conn = Conn }) ->
     QStr = binary_to_escaped_string(term_to_binary(Q)),
     case odbc:sql_query(Conn, "select next_read from sequence where queue = " ++ QStr) of
-	{selected, _, []} ->
-	    odbc:commit(Conn, commit),
-	    {ok, empty, State};
-	{selected, _, [{ReadSeqId}]} ->
-	    case odbc:sql_query(Conn, "select is_delivered, msg_id from ledger where queue = " ++ QStr ++
-				" and seq_id = " ++ integer_to_list(ReadSeqId)) of
-		{selected, _, []} ->
-		    {ok, empty, State};
-		{selected, _, [{IsDeliveredStr, MsgIdStr}]} ->
-		    IsDelivered = IsDeliveredStr /= "0",
-		    if IsDelivered -> ok;
-		       true -> odbc:sql_query(Conn, "update ledger set is_delivered = true where queue = " ++
-					      QStr ++ " and seq_id = " ++ integer_to_list(ReadSeqId))
-		    end,
-		    MsgId = binary_to_term(hex_string_to_binary(MsgIdStr)),
-		    %% yeah, this is really necessary. sigh
-		    MsgIdStr2 = binary_to_escaped_string(term_to_binary(MsgId)),
-		    odbc:sql_query(Conn, "update sequence set next_read = " ++ integer_to_list(ReadSeqId + 1) ++
-				   " where queue = " ++ QStr),
-		    if ReadMsg ->
-			    {selected, _, [{MsgBodyStr}]} =
-				odbc:sql_query(Conn, "select msg from message where msg_id = " ++ MsgIdStr2),
-			    odbc:commit(Conn, commit),
-			    MsgBody = hex_string_to_binary(MsgBodyStr),
-			    BodySize = size(MsgBody),
-			    {ok, {MsgId, MsgBody, BodySize, IsDelivered, {MsgId, ReadSeqId}}, State};
-		       true ->
-			    odbc:commit(Conn, commit),
-			    {ok, {MsgId, IsDelivered, {MsgId, ReadSeqId}}, State}
-		    end
-	    end
+        {selected, _, []} ->
+            odbc:commit(Conn, commit),
+            {ok, empty, State};
+        {selected, _, [{ReadSeqId}]} ->
+            case odbc:sql_query(Conn, "select is_delivered, msg_id from ledger where queue = " ++ QStr ++
+                                " and seq_id = " ++ integer_to_list(ReadSeqId)) of
+                {selected, _, []} ->
+                    {ok, empty, State};
+                {selected, _, [{IsDeliveredStr, MsgIdStr}]} ->
+                    IsDelivered = IsDeliveredStr /= "0",
+                    if IsDelivered -> ok;
+                       true -> odbc:sql_query(Conn, "update ledger set is_delivered = true where queue = " ++
+                                              QStr ++ " and seq_id = " ++ integer_to_list(ReadSeqId))
+                    end,
+                    MsgId = binary_to_term(hex_string_to_binary(MsgIdStr)),
+                    %% yeah, this is really necessary. sigh
+                    MsgIdStr2 = binary_to_escaped_string(term_to_binary(MsgId)),
+                    odbc:sql_query(Conn, "update sequence set next_read = " ++ integer_to_list(ReadSeqId + 1) ++
+                                   " where queue = " ++ QStr),
+                    if ReadMsg ->
+                            {selected, _, [{MsgBodyStr}]} =
+                                odbc:sql_query(Conn, "select msg from message where msg_id = " ++ MsgIdStr2),
+                            odbc:commit(Conn, commit),
+                            MsgBody = hex_string_to_binary(MsgBodyStr),
+                            BodySize = size(MsgBody),
+                            {ok, {MsgId, MsgBody, BodySize, IsDelivered, {MsgId, ReadSeqId}}, State};
+                       true ->
+                            odbc:commit(Conn, commit),
+                            {ok, {MsgId, IsDelivered, {MsgId, ReadSeqId}}, State}
+                    end
+            end
     end.
 
 internal_ack(Q, MsgSeqIds, State) ->
@@ -294,22 +294,22 @@ remove_messages(Q, MsgSeqIds, LedgerDelete, State = #dbstate { db_conn = Conn })
     QStr = binary_to_escaped_string(term_to_binary(Q)),
     lists:foreach(
       fun ({MsgId, SeqId}) ->
-	      MsgIdStr = binary_to_escaped_string(term_to_binary(MsgId)),
-	      {selected, _, [{RefCount}]} =
-		  odbc:sql_query(Conn, "select ref_count from message where msg_id = " ++
-				 MsgIdStr),
-	      case RefCount of
-		  1 -> odbc:sql_query(Conn, "delete from message where msg_id = " ++
-				      MsgIdStr);
-		  _ -> odbc:sql_query(Conn, "update message set ref_count = " ++
-				      integer_to_list(RefCount - 1) ++ " where msg_id = " ++
-				      MsgIdStr)
-	      end,
-	      if LedgerDelete ->
-		      odbc:sql_query(Conn, "delete from ledger where queue = " ++
-				     QStr ++ " and seq_id = " ++ integer_to_list(SeqId));
-		 true -> ok
-	      end
+              MsgIdStr = binary_to_escaped_string(term_to_binary(MsgId)),
+              {selected, _, [{RefCount}]} =
+                  odbc:sql_query(Conn, "select ref_count from message where msg_id = " ++
+                                 MsgIdStr),
+              case RefCount of
+                  1 -> odbc:sql_query(Conn, "delete from message where msg_id = " ++
+                                      MsgIdStr);
+                  _ -> odbc:sql_query(Conn, "update message set ref_count = " ++
+                                      integer_to_list(RefCount - 1) ++ " where msg_id = " ++
+                                      MsgIdStr)
+              end,
+              if LedgerDelete ->
+                      odbc:sql_query(Conn, "delete from ledger where queue = " ++
+                                     QStr ++ " and seq_id = " ++ integer_to_list(SeqId));
+                 true -> ok
+              end
       end, MsgSeqIds),
     odbc:commit(Conn, commit),
     {ok, State}.
@@ -318,12 +318,12 @@ internal_tx_publish(MsgId, MsgBody, State = #dbstate { db_conn = Conn }) ->
     MsgIdStr = binary_to_escaped_string(term_to_binary(MsgId)),
     MsgStr = binary_to_escaped_string(MsgBody),
     case odbc:sql_query(Conn, "select ref_count from message where msg_id = " ++ MsgIdStr) of
-	{selected, _, []} ->
-	    odbc:sql_query(Conn, "insert into message (msg_id, msg, ref_count) values (" ++
-			   MsgIdStr ++ ", " ++ MsgStr ++ ", 1)");
-	{selected, _, [{RefCount}]} ->
-	    odbc:sql_query(Conn, "update message set ref_count = " ++
-			   integer_to_list(RefCount + 1) ++ " where msg_id = " ++ MsgIdStr)
+        {selected, _, []} ->
+            odbc:sql_query(Conn, "insert into message (msg_id, msg, ref_count) values (" ++
+                           MsgIdStr ++ ", " ++ MsgStr ++ ", 1)");
+        {selected, _, [{RefCount}]} ->
+            odbc:sql_query(Conn, "update message set ref_count = " ++
+                           integer_to_list(RefCount + 1) ++ " where msg_id = " ++ MsgIdStr)
     end,
     odbc:commit(Conn, commit),
     {ok, State}.
@@ -331,24 +331,24 @@ internal_tx_publish(MsgId, MsgBody, State = #dbstate { db_conn = Conn }) ->
 internal_tx_commit(Q, PubMsgIds, AckSeqIds, State = #dbstate { db_conn = Conn }) ->
     QStr = binary_to_escaped_string(term_to_binary(Q)),
     {InsertOrUpdate, NextWrite} =
-	case odbc:sql_query(Conn, "select next_write from sequence where queue = " ++ QStr) of
-	    {selected, _, []} -> {insert, 0};
-	    {selected, _, [{NextWrite2}]} -> {update, NextWrite2}
-	end,
+        case odbc:sql_query(Conn, "select next_write from sequence where queue = " ++ QStr) of
+            {selected, _, []} -> {insert, 0};
+            {selected, _, [{NextWrite2}]} -> {update, NextWrite2}
+        end,
     NextWrite3 =
-	lists:foldl(fun (MsgId, WriteSeqInteger) ->
-			    MsgIdStr = binary_to_escaped_string(term_to_binary(MsgId)),
-			    odbc:sql_query(Conn,
-					   "insert into ledger (queue, seq_id, is_delivered, msg_id) values (" ++
-					   QStr ++ ", " ++ integer_to_list(WriteSeqInteger) ++ ", false, " ++
-					   MsgIdStr ++ ")"),
-			    WriteSeqInteger + 1
-		    end, NextWrite, PubMsgIds),
+        lists:foldl(fun (MsgId, WriteSeqInteger) ->
+                            MsgIdStr = binary_to_escaped_string(term_to_binary(MsgId)),
+                            odbc:sql_query(Conn,
+                                           "insert into ledger (queue, seq_id, is_delivered, msg_id) values (" ++
+                                           QStr ++ ", " ++ integer_to_list(WriteSeqInteger) ++ ", false, " ++
+                                           MsgIdStr ++ ")"),
+                            WriteSeqInteger + 1
+                    end, NextWrite, PubMsgIds),
     case InsertOrUpdate of
-	update -> odbc:sql_query(Conn, "update sequence set next_write = " ++ integer_to_list(NextWrite3) ++
-				 " where queue = " ++ QStr);
-	insert -> odbc:sql_query(Conn, "insert into sequence (queue, next_read, next_write) values (" ++
-				 QStr ++ ", 0, " ++ integer_to_list(NextWrite3) ++ ")")
+        update -> odbc:sql_query(Conn, "update sequence set next_write = " ++ integer_to_list(NextWrite3) ++
+                                 " where queue = " ++ QStr);
+        insert -> odbc:sql_query(Conn, "insert into sequence (queue, next_read, next_write) values (" ++
+                                 QStr ++ ", 0, " ++ integer_to_list(NextWrite3) ++ ")")
     end,
     odbc:commit(Conn, commit),
     remove_messages(Q, AckSeqIds, true, State),
@@ -359,19 +359,19 @@ internal_publish(Q, MsgId, MsgBody, State = #dbstate { db_conn = Conn }) ->
     MsgIdStr = binary_to_escaped_string(term_to_binary(MsgId)),
     QStr = binary_to_escaped_string(term_to_binary(Q)),
     NextWrite =
-	case odbc:sql_query(Conn, "select next_write from sequence where queue = " ++ QStr) of
-	    {selected, _, []} ->
-		odbc:sql_query(Conn,
-			       "insert into sequence (queue, next_read, next_write) values (" ++
-			       QStr ++ ", 0, 1)"),
-		0;
-	    {selected, _, [{NextWrite2}]} ->
-		odbc:sql_query(Conn, "update sequence set next_write = " ++ integer_to_list(1 + NextWrite2) ++
-			       " where queue = " ++ QStr),
-		NextWrite2
-	end,
+        case odbc:sql_query(Conn, "select next_write from sequence where queue = " ++ QStr) of
+            {selected, _, []} ->
+                odbc:sql_query(Conn,
+                               "insert into sequence (queue, next_read, next_write) values (" ++
+                               QStr ++ ", 0, 1)"),
+                0;
+            {selected, _, [{NextWrite2}]} ->
+                odbc:sql_query(Conn, "update sequence set next_write = " ++ integer_to_list(1 + NextWrite2) ++
+                               " where queue = " ++ QStr),
+                NextWrite2
+        end,
     odbc:sql_query(Conn, "insert into ledger (queue, seq_id, is_delivered, msg_id) values (" ++
-		   QStr ++ ", " ++ integer_to_list(NextWrite) ++ ", false, " ++ MsgIdStr ++ ")"),
+                   QStr ++ ", " ++ integer_to_list(NextWrite) ++ ", false, " ++ MsgIdStr ++ ")"),
     odbc:commit(Conn, commit),
     {ok, State1}.
 
@@ -382,36 +382,36 @@ internal_tx_cancel(MsgIds, State) ->
 internal_requeue(Q, MsgSeqIds, State = #dbstate { db_conn = Conn }) ->
     QStr = binary_to_escaped_string(term_to_binary(Q)),
     {selected, _, [{WriteSeqId}]} =
-	odbc:sql_query(Conn, "select next_write from sequence where queue = " ++ QStr),
+        odbc:sql_query(Conn, "select next_write from sequence where queue = " ++ QStr),
     WriteSeqId2 =
-	lists:foldl(
-	  fun ({_MsgId, SeqId}, NextWriteSeqId) ->
-		  odbc:sql_query(Conn, "update ledger set seq_id = " ++ integer_to_list(NextWriteSeqId) ++
-				 " where seq_id = " ++ integer_to_list(SeqId) ++ " and queue = " ++ QStr),
-		  NextWriteSeqId + 1
-	  end, WriteSeqId, MsgSeqIds),
+        lists:foldl(
+          fun ({_MsgId, SeqId}, NextWriteSeqId) ->
+                  odbc:sql_query(Conn, "update ledger set seq_id = " ++ integer_to_list(NextWriteSeqId) ++
+                                 " where seq_id = " ++ integer_to_list(SeqId) ++ " and queue = " ++ QStr),
+                  NextWriteSeqId + 1
+          end, WriteSeqId, MsgSeqIds),
     odbc:sql_query(Conn, "update sequence set next_write = " ++ integer_to_list(WriteSeqId2) ++
-		   " where queue = " ++ QStr),
+                   " where queue = " ++ QStr),
     odbc:commit(Conn, commit),
     {ok, State}.
-				 
+                                 
 
 compact_already_delivered(#dbstate { db_conn = Conn }) ->
     {selected, _, Seqs} = odbc:sql_query(Conn, "select queue, next_read from sequence"),
     lists:foreach(
       fun ({QHexStr, ReadSeqId}) ->
-	      Q = binary_to_term(hex_string_to_binary(QHexStr)),
-	      QStr = binary_to_escaped_string(term_to_binary(Q)),
-	      case odbc:sql_query(Conn, "select min(seq_id) from ledger where queue = "
-				  ++ QStr) of
-		  {selected, _, []} -> ok;
-		  {selected, _, [{null}]} -> ok; %% AGH!
-		  {selected, _, [{Min}]} ->
-		      Gap = shuffle_up(Conn, QStr, Min - 1, ReadSeqId - 1, 0),
-		      odbc:sql_query(Conn, "update sequence set next_read = " ++
-				     integer_to_list(Min + Gap) ++
-				     " where queue = " ++ QStr)
-	      end
+              Q = binary_to_term(hex_string_to_binary(QHexStr)),
+              QStr = binary_to_escaped_string(term_to_binary(Q)),
+              case odbc:sql_query(Conn, "select min(seq_id) from ledger where queue = "
+                                  ++ QStr) of
+                  {selected, _, []} -> ok;
+                  {selected, _, [{null}]} -> ok; %% AGH!
+                  {selected, _, [{Min}]} ->
+                      Gap = shuffle_up(Conn, QStr, Min - 1, ReadSeqId - 1, 0),
+                      odbc:sql_query(Conn, "update sequence set next_read = " ++
+                                     integer_to_list(Min + Gap) ++
+                                     " where queue = " ++ QStr)
+              end
       end, Seqs),
     odbc:commit(Conn, commit).
 
@@ -419,36 +419,36 @@ shuffle_up(_Conn, _QStr, SeqId, SeqId, Gap) ->
     Gap;
 shuffle_up(Conn, QStr, BaseSeqId, SeqId, Gap) ->
     GapInc =
-	case odbc:sql_query(Conn, "select count(1) from ledger where queue = " ++
-			    QStr ++ " and seq_id = " ++ integer_to_list(SeqId)) of
-	    {selected, _, [{"0"}]} ->
-		1;
-	    {selected, _, [{"1"}]} ->
-		if Gap =:= 0 -> ok;
-		   true -> odbc:sql_query(Conn, "update ledger set seq_id = " ++
-					  integer_to_list(SeqId + Gap) ++ " where seq_id = " ++
-					  integer_to_list(SeqId) ++ " and queue = " ++ QStr)
-		end,
-		0
-	end,
+        case odbc:sql_query(Conn, "select count(1) from ledger where queue = " ++
+                            QStr ++ " and seq_id = " ++ integer_to_list(SeqId)) of
+            {selected, _, [{"0"}]} ->
+                1;
+            {selected, _, [{"1"}]} ->
+                if Gap =:= 0 -> ok;
+                   true -> odbc:sql_query(Conn, "update ledger set seq_id = " ++
+                                          integer_to_list(SeqId + Gap) ++ " where seq_id = " ++
+                                          integer_to_list(SeqId) ++ " and queue = " ++ QStr)
+                end,
+                0
+        end,
     shuffle_up(Conn, QStr, BaseSeqId, SeqId - 1, Gap + GapInc).
 
 internal_purge(Q, State = #dbstate { db_conn = Conn }) ->
     QStr = binary_to_escaped_string(term_to_binary(Q)),
     case odbc:sql_query(Conn, "select next_read from sequence where queue = " ++ QStr) of
-	{selected, _, []} ->
-	    odbc:commit(Conn, commit),
-	    {ok, 0, State};
-	{selected, _, [{ReadSeqId}]} ->
-	    odbc:sql_query(Conn, "update sequence set next_read = next_write where queue = " ++ QStr),
-	    {selected, _, MsgSeqIds} =
-		odbc:sql_query(Conn, "select msg_id, seq_id from ledger where queue = " ++
-			       QStr ++ " and seq_id >= " ++ ReadSeqId),
-	    MsgSeqIds2 = lists:map(
-			   fun ({MsgIdStr, SeqIdStr}) ->
-				   { binary_to_term(hex_string_to_binary(MsgIdStr)),
-				     list_to_integer(SeqIdStr) }
-			   end, MsgSeqIds),
-	    {ok, State2} = remove_messages(Q, MsgSeqIds2, true, State),
-	    {ok, length(MsgSeqIds2), State2}
+        {selected, _, []} ->
+            odbc:commit(Conn, commit),
+            {ok, 0, State};
+        {selected, _, [{ReadSeqId}]} ->
+            odbc:sql_query(Conn, "update sequence set next_read = next_write where queue = " ++ QStr),
+            {selected, _, MsgSeqIds} =
+                odbc:sql_query(Conn, "select msg_id, seq_id from ledger where queue = " ++
+                               QStr ++ " and seq_id >= " ++ ReadSeqId),
+            MsgSeqIds2 = lists:map(
+                           fun ({MsgIdStr, SeqIdStr}) ->
+                                   { binary_to_term(hex_string_to_binary(MsgIdStr)),
+                                     list_to_integer(SeqIdStr) }
+                           end, MsgSeqIds),
+            {ok, State2} = remove_messages(Q, MsgSeqIds2, true, State),
+            {ok, length(MsgSeqIds2), State2}
     end.

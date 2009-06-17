@@ -40,7 +40,7 @@
 
 -export([publish/4, publish_with_seq/5, deliver/1, phantom_deliver/1, ack/2,
          tx_publish/2, tx_commit/3, tx_commit_with_seqs/3, tx_cancel/1,
-	 requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1,
+         requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1,
          dump_queue/1, delete_non_durable_queues/1, auto_ack_next_message/1
         ]).
 
@@ -68,19 +68,19 @@
 -define(FILE_SIZE_LIMIT, (256*1024*1024)).
 
 -record(dqstate, {msg_location_dets,       %% where are messages?
-		  msg_location_ets,        %% as above, but for ets version
+                  msg_location_ets,        %% as above, but for ets version
                   operation_mode,          %% ram_disk | disk_only
-		  file_summary,            %% what's in the files?
-		  sequences,               %% next read and write for each q
-		  current_file_num,        %% current file name as number
-		  current_file_name,       %% current file name
-		  current_file_handle,     %% current file handle
-		  current_offset,          %% current offset within current file
+                  file_summary,            %% what's in the files?
+                  sequences,               %% next read and write for each q
+                  current_file_num,        %% current file name as number
+                  current_file_name,       %% current file name
+                  current_file_handle,     %% current file handle
+                  current_offset,          %% current offset within current file
                   current_dirty,           %% has the current file been written to since the last fsync?
-		  file_size_limit,         %% how big can our files get?
-		  read_file_handles,       %% file handles for reading (LRU)
-		  read_file_handles_limit  %% how many file handles can we open?
-		 }).
+                  file_size_limit,         %% how big can our files get?
+                  read_file_handles,       %% file handles for reading (LRU)
+                  read_file_handles_limit  %% how many file handles can we open?
+                 }).
 
 %% The components:
 %%
@@ -92,10 +92,10 @@
 %%              {Q, ReadSeqId, WriteSeqId, QueueLength}
 %% rabbit_disk_queue: this is an mnesia table which contains:
 %%              #dq_msg_loc { queue_and_seq_id = {Q, SeqId},
-%% 			      is_delivered = IsDelivered,
-%% 			      msg_id = MsgId,
+%%                            is_delivered = IsDelivered,
+%%                            msg_id = MsgId,
 %%                            next_seq_id = SeqId
-%% 			    }
+%%                          }
 %%
 
 %% The basic idea is that messages are appended to the current file up
@@ -190,18 +190,18 @@
 %% variable. Judicious use of a mirror is required).
 %%
 %% +-------+    +-------+         +-------+
-%% |   X   |    |   G   |	  |   G   |
-%% +-------+    +-------+	  +-------+
-%% |   D   |    |   X   |	  |   F   |
-%% +-------+    +-------+	  +-------+
-%% |   X   |    |   X   |	  |   E   |
-%% +-------+    +-------+	  +-------+
+%% |   X   |    |   G   |         |   G   |
+%% +-------+    +-------+         +-------+
+%% |   D   |    |   X   |         |   F   |
+%% +-------+    +-------+         +-------+
+%% |   X   |    |   X   |         |   E   |
+%% +-------+    +-------+         +-------+
 %% |   C   |    |   F   |   ===>  |   D   |
-%% +-------+    +-------+	  +-------+
-%% |   X   |    |   X   |	  |   C   |
-%% +-------+    +-------+	  +-------+
-%% |   B   |    |   X   |	  |   B   |
-%% +-------+    +-------+	  +-------+
+%% +-------+    +-------+         +-------+
+%% |   X   |    |   X   |         |   C   |
+%% +-------+    +-------+         +-------+
+%% |   B   |    |   X   |         |   B   |
+%% +-------+    +-------+         +-------+
 %% |   A   |    |   E   |          |   A   |
 %% +-------+    +-------+         +-------+
 %%   left         right             left
