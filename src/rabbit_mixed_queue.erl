@@ -33,7 +33,7 @@
 
 -include("rabbit.hrl").
 
--export([start_link/3]).
+-export([init/3]).
 
 -export([publish/2, publish_delivered/2, deliver/1, ack/2,
          tx_publish/2, tx_commit/3, tx_cancel/2, requeue/2, purge/1,
@@ -49,12 +49,12 @@
                  }
        ).
 
-start_link(Queue, IsDurable, disk) ->
+init(Queue, IsDurable, disk) ->
     purge_non_persistent_messages(
       #mqstate { mode = disk, msg_buf = queue:new(), queue = Queue,
                  is_durable = IsDurable, length = 0 });
-start_link(Queue, IsDurable, mixed) ->
-    {ok, State} = start_link(Queue, IsDurable, disk),
+init(Queue, IsDurable, mixed) ->
+    {ok, State} = init(Queue, IsDurable, disk),
     to_mixed_mode(State).
 
 to_disk_only_mode(State = #mqstate { mode = disk }) ->

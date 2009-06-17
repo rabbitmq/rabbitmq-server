@@ -1413,6 +1413,7 @@ extract_sequence_numbers(State = #dqstate { sequences = Sequences }) ->
                                                      {Q, SeqId, NextWrite, -1});
                                 [Orig = {Q, Read, Write, Length}] ->
                                     Repl = {Q, lists:min([Read, SeqId]),
+                                            lists:max([Write, NextWrite]),
                                             %% Length is wrong here,
                                             %% but it doesn't matter
                                             %% because we'll pull out
@@ -1421,7 +1422,6 @@ extract_sequence_numbers(State = #dqstate { sequences = Sequences }) ->
                                             %% in then do a straight
                                             %% subtraction to get the
                                             %% right length
-                                            lists:max([Write, NextWrite]),
                                             Length},
                                     if Orig =:= Repl -> true;
                                        true -> ets:insert(Sequences, Repl)

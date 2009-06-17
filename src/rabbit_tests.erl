@@ -954,7 +954,7 @@ rdq_test_mixed_queue_modes() ->
     rdq_virgin(),
     rdq_start(),
     Payload = <<0:(8*256)>>,
-    {ok, MS} = rabbit_mixed_queue:start_link(q, true, mixed),
+    {ok, MS} = rabbit_mixed_queue:init(q, true, mixed),
     MS2 = lists:foldl(
             fun (_N, MS1) ->
                     Msg = rabbit_basic:message(x, <<>>, <<>>, Payload),
@@ -998,7 +998,7 @@ rdq_test_mixed_queue_modes() ->
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
     rdq_start(),
-    {ok, MS12} = rabbit_mixed_queue:start_link(q, true, mixed),
+    {ok, MS12} = rabbit_mixed_queue:init(q, true, mixed),
     10 = rabbit_mixed_queue:length(MS12),
     io:format("Recovered queue~n"),
     {MS14, AckTags} =
@@ -1018,7 +1018,7 @@ rdq_test_mixed_queue_modes() ->
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
     rdq_start(),
-    {ok, MS17} = rabbit_mixed_queue:start_link(q, true, mixed),
+    {ok, MS17} = rabbit_mixed_queue:init(q, true, mixed),
     0 = rabbit_mixed_queue:length(MS17),
     io:format("Recovered queue~n"),
     rdq_stop(),

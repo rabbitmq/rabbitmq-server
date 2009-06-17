@@ -96,7 +96,7 @@ start_link(Q) ->
 init(Q = #amqqueue { name = QName, durable = Durable }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     {ok, Mode} = rabbit_queue_mode_manager:register(self()),
-    {ok, MS} = rabbit_mixed_queue:start_link(QName, Durable, Mode),
+    {ok, MS} = rabbit_mixed_queue:init(QName, Durable, Mode),
     {ok, #q{q = Q,
             owner = none,
             exclusive_consumer = none,
@@ -461,20 +461,17 @@ commit_transaction(Txn, State) ->
         } = lookup_tx(Txn),
     PendingMessagesOrdered = lists:reverse(PendingMessages),
     PendingAcksOrdered = lists:append(lists:reverse(PendingAcks)),
-    {ok, MS} =
+    Acks =
         case lookup_ch(ChPid) of
-            not_found ->
-                rabbit_mixed_queue:tx_commit(
-                  PendingMessagesOrdered, [], State #q.mixed_state);
+            not_found -> [];
             C = #cr { unacked_messages = UAM } ->
                 {MsgWithAcks, Remaining} =
                     collect_messages(PendingAcksOrdered, UAM),
                 store_ch_record(C#cr{unacked_messages = Remaining}),
-                rabbit_mixed_queue:tx_commit(
-                  PendingMessagesOrdered,
-                  lists:map(fun ({_Msg, AckTag}) -> AckTag end, MsgWithAcks),
-                  State #q.mixed_state)
+                [ AckTag || {_Msg, AckTag} <- MsgWithAcks ]              
         end,
+    {ok, MS} = rabbit_mixed_queue:tx_commit(
+                 PendingMessagesOrdered, Acks, State #q.mixed_state),
     State #q { mixed_state = MS }.
 
 rollback_transaction(Txn, State) ->
@@ -736,8 +733,7 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
             {MsgWithAcks, Remaining} = collect_messages(MsgIds, UAM),
             case Txn of
                 none ->
-                    Acks = lists:map(fun ({_Msg, AckTag}) -> AckTag end,
-                                     MsgWithAcks),
+                    Acks = [ AckTag || {_Msg, AckTag} <- MsgWithAcks ],
                     {ok, MS} =
                         rabbit_mixed_queue:ack(Acks, State #q.mixed_state),
                     store_ch_record(C#cr{unacked_messages = Remaining}),
@@ -792,10 +788,10 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
         end));
 
 handle_cast({constrain, Constrain}, State = #q { mixed_state = MS }) ->
-    {ok, MS2} = case Constrain of
-                    true  -> rabbit_mixed_queue:to_disk_only_mode(MS);
-                    false -> rabbit_mixed_queue:to_mixed_mode(MS)
-                end,
+    {ok, MS2} = (case Constrain of
+                    true  -> fun rabbit_mixed_queue:to_disk_only_mode/1;
+                    false -> fun rabbit_mixed_queue:to_mixed_mode/1
+                 end)(MS),
     noreply(State #q { mixed_state = MS2 }).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
