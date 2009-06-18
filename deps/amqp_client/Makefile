@@ -64,10 +64,10 @@ all: compile
 
 dialyze: $(EBIN_DIR) $(TARGETS)
 	dialyzer -c $(TARGETS)
-	
+
 dialyze_all: $(EBIN_DIR) $(TARGETS) $(TEST_TARGETS)
 	dialyzer -c $(TARGETS) $(TEST_TARGETS)
-	
+
 add_broker_to_plt: $(BROKER_SYMLINK)
 	dialyzer --add_to_plt --plt $(PLT) -r $</ebin
 
@@ -130,4 +130,3 @@ source_tarball:
 	mkdir -p dist/$(DIST_DIR)
 	cp -a README Makefile src/*.erl include/*.hrl dist/$(DIST_DIR)
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
-
