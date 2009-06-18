@@ -239,7 +239,7 @@ deliver(State = #mqstate { mode = disk, queue = Q, is_durable = IsDurable,
 deliver(State = #mqstate { mode = mixed, queue = Q, is_durable = IsDurable,
                            msg_buf = MsgBuf, length = Length }) ->
     {{value, {Msg = #basic_message { guid = MsgId,
-                                          is_persistent = IsPersistent },
+                                     is_persistent = IsPersistent },
               IsDelivered, OnDisk}}, MsgBuf1}
         = queue:out(MsgBuf),
     AckTag =
