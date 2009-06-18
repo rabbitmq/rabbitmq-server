@@ -38,8 +38,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([publish/4, publish_with_seq/5, deliver/1, phantom_deliver/1, ack/2,
-         tx_publish/2, tx_commit/3, tx_commit_with_seqs/3, tx_cancel/1,
+-export([publish/4, deliver/1, phantom_deliver/1, ack/2,
+         tx_publish/2, tx_commit/3, tx_cancel/1,
          requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1,
          dump_queue/1, delete_non_durable_queues/1, auto_ack_next_message/1
         ]).
@@ -236,8 +236,6 @@
 -spec(start_link/0 :: () ->
               ({'ok', pid()} | 'ignore' | {'error', any()})).
 -spec(publish/4 :: (queue_name(), msg_id(), binary(), bool()) -> 'ok').
--spec(publish_with_seq/5 :: (queue_name(), msg_id(), seq_id_or_next(), binary(),
-                             bool()) -> 'ok').
 -spec(deliver/1 :: (queue_name()) ->
              ('empty' | {msg_id(), binary(), non_neg_integer(),
                          bool(), {msg_id(), seq_id()}, non_neg_integer()})).
@@ -248,8 +246,6 @@
 -spec(tx_publish/2 :: (msg_id(), binary()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [msg_id()], [{msg_id(), seq_id()}]) ->
              'ok').
--spec(tx_commit_with_seqs/3 :: (queue_name(), [{msg_id(), seq_id_or_next()}],
-                                [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(requeue_with_seqs/2 :: (queue_name(), [{{msg_id(), seq_id()},
@@ -278,12 +274,6 @@ publish(Q, MsgId, Msg, false) when is_binary(Msg) ->
 publish(Q, MsgId, Msg, true) when is_binary(Msg) ->
     gen_server2:call(?SERVER, {publish, Q, MsgId, Msg}, infinity).
 
-publish_with_seq(Q, MsgId, SeqId, Msg, false) when is_binary(Msg) ->
-    gen_server2:cast(?SERVER, {publish_with_seq, Q, MsgId, SeqId, Msg});
-publish_with_seq(Q, MsgId, SeqId, Msg, true) when is_binary(Msg) ->
-    gen_server2:call(?SERVER, {publish_with_seq, Q, MsgId, SeqId, Msg},
-                     infinity).
-
 deliver(Q) ->
     gen_server2:call(?SERVER, {deliver, Q}, infinity).
 
@@ -302,11 +292,6 @@ tx_publish(MsgId, Msg) when is_binary(Msg) ->
 tx_commit(Q, PubMsgIds, AckSeqIds)
   when is_list(PubMsgIds) andalso is_list(AckSeqIds) ->
     gen_server2:call(?SERVER, {tx_commit, Q, PubMsgIds, AckSeqIds}, infinity).
-
-tx_commit_with_seqs(Q, PubMsgSeqIds, AckSeqIds)
-  when is_list(PubMsgSeqIds) andalso is_list(AckSeqIds) ->
-    gen_server2:call(?SERVER, {tx_commit_with_seqs, Q, PubMsgSeqIds, AckSeqIds},
-                     infinity).
 
 tx_cancel(MsgIds) when is_list(MsgIds) ->
     gen_server2:cast(?SERVER, {tx_cancel, MsgIds}).
@@ -422,10 +407,6 @@ handle_call({publish, Q, MsgId, MsgBody}, _From, State) ->
     {ok, MsgSeqId, State1} =
         internal_publish(Q, MsgId, next, MsgBody, true, State),
     {reply, MsgSeqId, State1};
-handle_call({publish_with_seq, Q, MsgId, SeqId, MsgBody}, _From, State) ->
-    {ok, MsgSeqId, State1} =
-        internal_publish(Q, MsgId, SeqId, MsgBody, true, State),
-    {reply, MsgSeqId, State1};
 handle_call({deliver, Q}, _From, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, false, State),
     {reply, Result, State1};
@@ -435,9 +416,6 @@ handle_call({phantom_deliver, Q}, _From, State) ->
 handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, _From, State) ->
     PubMsgSeqIds = zip_with_tail(PubMsgIds, {duplicate, next}),
     {ok, State1} = internal_tx_commit(Q, PubMsgSeqIds, AckSeqIds, State),
-    {reply, ok, State1};
-handle_call({tx_commit_with_seqs, Q, PubSeqMsgIds, AckSeqIds}, _From, State) ->
-    {ok, State1} = internal_tx_commit(Q, PubSeqMsgIds, AckSeqIds, State),
     {reply, ok, State1};
 handle_call({purge, Q}, _From, State) ->
     {ok, Count, State1} = internal_purge(Q, State),
@@ -495,10 +473,6 @@ handle_call({delete_non_durable_queues, DurableQueues}, _From, State) ->
 handle_cast({publish, Q, MsgId, MsgBody}, State) ->
     {ok, _MsgSeqId, State1} =
         internal_publish(Q, MsgId, next, MsgBody, false, State),
-    {noreply, State1};
-handle_cast({publish_with_seq, Q, MsgId, SeqId, MsgBody}, State) ->
-    {ok, _MsgSeqId, State1} =
-        internal_publish(Q, MsgId, SeqId, MsgBody, false, State),
     {noreply, State1};
 handle_cast({ack, Q, MsgSeqIds}, State) ->
     {ok, State1} = internal_ack(Q, MsgSeqIds, State),
