@@ -284,7 +284,7 @@ action(reduce_memory_footprint, Node, _Args, Inform) ->
     call(Node, {rabbit_queue_mode_manager, reduce_memory_footprint, []});
 
 action(increase_memory_footprint, Node, _Args, Inform) ->
-    Inform("Reducing memory footprint", []),
+    Inform("Increasing memory footprint", []),
     call(Node, {rabbit_queue_mode_manager, increase_memory_footprint, []});
 
 action(Command, Node, Args, Inform) ->

@@ -39,13 +39,14 @@
          terminate/2, code_change/3]).
 
 -export([register/1, change_memory_footprint/2,
-         reduce_memory_footprint/0, increase_memory_footprint/0]).
+         reduce_memory_footprint/0, increase_memory_footprint/0,
+         gather_memory_estimates/0
+        ]).
 
 -define(SERVER, ?MODULE).
 
 -ifdef(use_specs).
 
--type(mode() :: ( 'unlimited' | 'ram_disk' | 'disk_only' )).
 -type(queue_mode() :: ( 'mixed' | 'disk' )).
 
 -spec(start_link/0 :: () ->
@@ -75,10 +76,14 @@ reduce_memory_footprint() ->
                            
 increase_memory_footprint() ->
     gen_server2:cast(?SERVER, {change_memory_footprint, false}).
-                           
+
+gather_memory_estimates() ->
+    gen_server2:cast(?SERVER, gather_memory_estimates).
+
 init([]) ->
     process_flag(trap_exit, true),
     ok = rabbit_alarm:register(self(), {?MODULE, change_memory_footprint, []}),
+    {ok, _TRef} = timer:apply_interval(5000, ?MODULE, gather_memory_estimates, []),
     {ok, #state { mode = unlimited,
                   queues = []
                 }}.
@@ -113,7 +118,11 @@ handle_cast({change_memory_footprint, false},
 handle_cast({change_memory_footprint, false},
             State = #state { mode = disk_only }) ->
     constrain_queues(false, State #state.queues),
-    {noreply, State #state { mode = ram_disk }}.
+    {noreply, State #state { mode = ram_disk }};
+
+handle_cast(gather_memory_estimates, State) ->
+    State1 = internal_gather(State),
+    {noreply, State1}.
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -131,3 +140,11 @@ constrain_queues(Constrain, Qs) ->
       fun (QPid) ->
               ok = rabbit_amqqueue:constrain_memory(QPid, Constrain)
       end, Qs).
+
+internal_gather(State = #state { queues = Qs }) ->
+    lists:foreach(fun(Q) ->
+                          io:format("Queue memory request: ~w is ~w bytes~n",
+                                    [Q, rabbit_amqqueue:report_desired_memory(Q)
+                                    ])
+                  end, Qs),
+    State.

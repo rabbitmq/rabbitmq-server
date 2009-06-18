@@ -720,7 +720,12 @@ handle_call({claim_queue, ReaderPid}, _From,
             reply(ok, State);
         _ ->
             reply(locked, State)
-    end.
+    end;
+
+handle_call(report_desired_memory, _From, State = #q { mixed_state = MS }) ->
+    MSize = rabbit_mixed_queue:estimate_extra_memory(MS),
+    {memory, PSize} = process_info(self(), memory),
+    reply(PSize + MSize, State).
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.

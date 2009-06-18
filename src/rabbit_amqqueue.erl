@@ -42,7 +42,7 @@
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([constrain_memory/2]).
+-export([constrain_memory/2, report_desired_memory/1]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -109,6 +109,7 @@
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
+-spec(report_desired_memory/1 :: (pid()) -> non_neg_integer()).
 
 -endif.
 
@@ -355,6 +356,9 @@ pseudo_queue(QueueName, Pid) ->
               auto_delete = false,
               arguments = [],
               pid = Pid}.
+
+report_desired_memory(QPid) ->
+    gen_server2:pcall(QPid, 9, report_desired_memory, infinity).
 
 safe_pmap_ok(H, F, L) ->
     case [R || R <- rabbit_misc:upmap(
