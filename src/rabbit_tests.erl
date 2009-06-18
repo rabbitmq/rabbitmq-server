@@ -975,13 +975,16 @@ rdq_test_mixed_queue_modes() ->
                     MS5a
             end, MS4, lists:seq(1,10)),
     30 = rabbit_mixed_queue:length(MS6),
-    io:format("Published a mixture of messages~n"),
+    io:format("Published a mixture of messages; ~w~n",
+              [rabbit_mixed_queue:estimate_extra_memory(MS6)]),
     {ok, MS7} = rabbit_mixed_queue:to_disk_only_mode(MS6),
     30 = rabbit_mixed_queue:length(MS7),
-    io:format("Converted to disk only mode~n"),
+    io:format("Converted to disk only mode; ~w~n",
+             [rabbit_mixed_queue:estimate_extra_memory(MS7)]),
     {ok, MS8} = rabbit_mixed_queue:to_mixed_mode(MS7),
     30 = rabbit_mixed_queue:length(MS8),
-    io:format("Converted to mixed mode~n"),
+    io:format("Converted to mixed mode; ~w~n",
+              [rabbit_mixed_queue:estimate_extra_memory(MS8)]),
     MS10 =
         lists:foldl(
           fun (N, MS9) ->
@@ -1020,6 +1023,7 @@ rdq_test_mixed_queue_modes() ->
     rdq_start(),
     {ok, MS17} = rabbit_mixed_queue:init(q, true, mixed),
     0 = rabbit_mixed_queue:length(MS17),
+    0 = rabbit_mixed_queue:estimate_extra_memory(MS17),
     io:format("Recovered queue~n"),
     rdq_stop(),
     passed.
