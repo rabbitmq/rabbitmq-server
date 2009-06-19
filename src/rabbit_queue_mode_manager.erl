@@ -40,7 +40,7 @@
 
 -export([register/1, change_memory_footprint/2,
          reduce_memory_footprint/0, increase_memory_footprint/0,
-         gather_memory_estimates/0
+         report_memory/2
         ]).
 
 -define(SERVER, ?MODULE).
@@ -55,6 +55,7 @@
 -spec(change_memory_footprint/2 :: (pid(), bool()) -> 'ok').
 -spec(reduce_memory_footprint/0 :: () -> 'ok').
 -spec(increase_memory_footprint/0 :: () -> 'ok').
+-spec(report_memory/2 :: (pid(), non_neg_integer()) -> 'ok').
 
 -endif.
 
@@ -77,24 +78,24 @@ reduce_memory_footprint() ->
 increase_memory_footprint() ->
     gen_server2:cast(?SERVER, {change_memory_footprint, false}).
 
-gather_memory_estimates() ->
-    gen_server2:cast(?SERVER, gather_memory_estimates).
+report_memory(Pid, Memory) ->
+    gen_server2:cast(?SERVER, {report_memory, Pid, Memory}).
 
 init([]) ->
     process_flag(trap_exit, true),
     ok = rabbit_alarm:register(self(), {?MODULE, change_memory_footprint, []}),
-    {ok, _TRef} = timer:apply_interval(5000, ?MODULE, gather_memory_estimates, []),
     {ok, #state { mode = unlimited,
-                  queues = []
+                  queues = dict:new()
                 }}.
 
 handle_call({register, Pid}, _From,
             State = #state { queues = Qs, mode = Mode }) ->
+    _MRef = erlang:monitor(process, Pid),
     Result = case Mode of
                  unlimited -> mixed;
                  _ -> disk
              end,
-    {reply, {ok, Result}, State #state { queues = [Pid | Qs] }}.
+    {reply, {ok, Result}, State #state { queues = dict:store(Pid, 0, Qs) }}.
 
 handle_cast({change_memory_footprint, true},
             State = #state { mode = disk_only }) ->
@@ -120,10 +121,13 @@ handle_cast({change_memory_footprint, false},
     constrain_queues(false, State #state.queues),
     {noreply, State #state { mode = ram_disk }};
 
-handle_cast(gather_memory_estimates, State) ->
-    State1 = internal_gather(State),
-    {noreply, State1}.
+handle_cast({report_memory, Pid, Memory}, State = #state { queues = Qs }) ->
+    io:format("Queue ~w requested ~w bytes~n", [Pid, Memory]),
+    {noreply, State #state { queues = dict:store(Pid, Memory, Qs) }}.
 
+handle_info({'DOWN', _MRef, process, Pid, _Reason},
+            State = #state { queues = Qs }) ->
+    {noreply, State #state { queues = dict:erase(Pid, Qs) }};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info(_Info, State) ->
@@ -136,15 +140,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 constrain_queues(Constrain, Qs) ->
-    lists:foreach(
-      fun (QPid) ->
-              ok = rabbit_amqqueue:constrain_memory(QPid, Constrain)
-      end, Qs).
-
-internal_gather(State = #state { queues = Qs }) ->
-    lists:foreach(fun(Q) ->
-                          io:format("Queue memory request: ~w is ~w bytes~n",
-                                    [Q, rabbit_amqqueue:report_desired_memory(Q)
-                                    ])
-                  end, Qs),
-    State.
+    dict:fold(
+      fun (QPid, _Mem, ok) ->
+              rabbit_amqqueue:constrain_memory(QPid, Constrain)
+      end, ok, Qs).

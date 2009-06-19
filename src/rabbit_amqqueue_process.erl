@@ -37,6 +37,7 @@
 
 -define(UNSENT_MESSAGE_LIMIT, 100).
 -define(HIBERNATE_AFTER, 1000).
+-define(MEMORY_REPORT_INTERVAL, 500).
 
 -export([start_link/1]).
 
@@ -55,7 +56,10 @@
             mixed_state,
             next_msg_id,
             active_consumers,
-            blocked_consumers}).
+            blocked_consumers,
+            memory_report_counter,
+            old_memory_report
+           }).
 
 -record(consumer, {tag, ack_required}).
 
@@ -104,7 +108,10 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
             mixed_state = MS,
             next_msg_id = 1,
             active_consumers = queue:new(),
-            blocked_consumers = queue:new()}, ?HIBERNATE_AFTER}.
+            blocked_consumers = queue:new(),
+            memory_report_counter = ?MEMORY_REPORT_INTERVAL,
+            old_memory_report = 1
+           }, ?HIBERNATE_AFTER}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
@@ -121,9 +128,16 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-reply(Reply, NewState) -> {reply, Reply, NewState, ?HIBERNATE_AFTER}.
+reply(Reply, NewState = #q { memory_report_counter = 0 }) ->
+    {reply, Reply, report_memory(NewState), ?HIBERNATE_AFTER};
+reply(Reply, NewState = #q { memory_report_counter = C }) ->
+    {reply, Reply, NewState #q { memory_report_counter = C - 1 },
+     ?HIBERNATE_AFTER}.
 
-noreply(NewState) -> {noreply, NewState, ?HIBERNATE_AFTER}.
+noreply(NewState = #q { memory_report_counter = 0}) ->
+    {noreply, report_memory(NewState), ?HIBERNATE_AFTER};
+noreply(NewState = #q { memory_report_counter = C}) ->
+    {noreply, NewState #q { memory_report_counter = C - 1 }, ?HIBERNATE_AFTER}.
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
@@ -524,6 +538,22 @@ i(memory, _) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
+report_memory(State = #q { old_memory_report = OldMem,
+                           mixed_state = MS }) ->
+    MSize = rabbit_mixed_queue:estimate_extra_memory(MS),
+    {memory, PSize} = process_info(self(), memory),
+    NewMem = case MSize + PSize of
+                 0 -> 1; %% avoid / 0
+                 N -> N
+             end,
+    State1 = State #q { memory_report_counter = ?MEMORY_REPORT_INTERVAL },
+    case (NewMem / OldMem) > 1.1 orelse (OldMem / NewMem) > 1.1 of
+        true ->
+            rabbit_queue_mode_manager:report_memory(self(), NewMem),
+            State1 #q { old_memory_report = NewMem };
+        false -> State1
+    end.
+
 %---------------------------------------------------------------------------
 
 handle_call(info, _From, State) ->
@@ -720,12 +750,7 @@ handle_call({claim_queue, ReaderPid}, _From,
             reply(ok, State);
         _ ->
             reply(locked, State)
-    end;
-
-handle_call(report_desired_memory, _From, State = #q { mixed_state = MS }) ->
-    MSize = rabbit_mixed_queue:estimate_extra_memory(MS),
-    {memory, PSize} = process_info(self(), memory),
-    reply(PSize + MSize, State).
+    end.
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
@@ -817,10 +842,16 @@ handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
 
-handle_info(timeout, State) ->
+handle_info(timeout, State = #q { memory_report_counter = Count }) 
+  when Count == ?MEMORY_REPORT_INTERVAL ->
+    %% Have to do the +1 because the timeout below, with noreply, will -1
     %% TODO: Once we drop support for R11B-5, we can change this to
     %% {noreply, State, hibernate};
     proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State]);
+
+handle_info(timeout, State) ->
+    State1 = report_memory(State),
+    noreply(State1 #q { memory_report_counter = 1 + ?MEMORY_REPORT_INTERVAL });
 
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
