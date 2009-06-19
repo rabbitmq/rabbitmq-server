@@ -68,8 +68,8 @@ dialyze: $(EBIN_DIR) $(TARGETS)
 dialyze_all: $(EBIN_DIR) $(TARGETS) $(TEST_TARGETS)
 	dialyzer --plt $(PLT) -c $(TARGETS) $(TEST_TARGETS)
 
-add_broker_to_plt: $(BROKER_SYMLINK)
-	dialyzer --add_to_plt --plt $(PLT) -r $</ebin
+add_broker_to_plt: $(BROKER_SYMLINK)/ebin
+	dialyzer --add_to_plt --plt $(PLT) -r $<
 
 compile: $(EBIN_DIR) $(TARGETS)
 
