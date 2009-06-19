@@ -759,7 +759,7 @@ internal_read_message(Q, ReadSeqId, FakeDeliver, ReadMsg, State) ->
     case ReadMsg of
         true ->
             case fetch_and_increment_cache(MsgId, State) of
-                false ->
+                not_found ->
                     {FileHdl, State1} = get_read_handle(File, State),
                     {ok, {MsgBody, BodySize}} =
                         read_message_at_offset(FileHdl, Offset, TotalSize),
@@ -808,11 +808,11 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete,
           fun ({MsgId, SeqId}, Files1) ->
                   [{MsgId, RefCount, File, Offset, TotalSize}] =
                       dets_ets_lookup(State, MsgId),
-                  ok = decrement_cache(MsgId, State),
                   Files2 =
                       case RefCount of
                           1 ->
                               ok = dets_ets_delete(State, MsgId),
+                              ok = remove_cache_entry(MsgId, State),
                               [{File, ValidTotalSize, ContiguousTop,
                                 Left, Right}] = ets:lookup(FileSummary, File),
                               ContiguousTop1 =
@@ -826,6 +826,7 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete,
                                  true -> sets:add_element(File, Files1)
                               end;
                           _ when 1 < RefCount ->
+                              ok = decrement_cache(MsgId, State),
                               ok = dets_ets_insert(
                                      State, {MsgId, RefCount - 1,
                                              File, Offset, TotalSize}),
