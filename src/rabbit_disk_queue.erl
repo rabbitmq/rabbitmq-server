@@ -44,7 +44,7 @@
          dump_queue/1, delete_non_durable_queues/1, auto_ack_next_message/1
         ]).
 
--export([length/1, get_cache_info/0]).
+-export([length/1, cache_info/0]).
 
 -export([stop/0, stop_and_obliterate/0,
          to_disk_only_mode/0, to_ram_disk_mode/0]).
@@ -263,7 +263,7 @@
 -spec(to_ram_disk_mode/0 :: () -> 'ok').
 -spec(to_disk_only_mode/0 :: () -> 'ok').
 -spec(length/1 :: (queue_name()) -> non_neg_integer()).
--spec(get_cache_info/0 :: () -> [{atom(), term()}]).
+-spec(cache_info/0 :: () -> [{atom(), term()}]).
 
 -endif.
 
@@ -334,8 +334,8 @@ to_ram_disk_mode() ->
 length(Q) ->
     gen_server2:call(?SERVER, {length, Q}, infinity).
 
-get_cache_info() ->
-    gen_server2:call(?SERVER, get_cache_info, infinity).
+cache_info() ->
+    gen_server2:call(?SERVER, cache_info, infinity).
 
 %% ---- GEN-SERVER INTERNAL API ----
 
@@ -478,7 +478,7 @@ handle_call({dump_queue, Q}, _From, State) ->
 handle_call({delete_non_durable_queues, DurableQueues}, _From, State) ->
     {ok, State1} = internal_delete_non_durable_queues(DurableQueues, State),
     {reply, ok, State1};
-handle_call(get_cache_info, _From, State = #dqstate { message_cache = Cache }) ->
+handle_call(cache_info, _From, State = #dqstate { message_cache = Cache }) ->
     {reply, ets:info(Cache), State}.
 
 handle_cast({publish, Q, Message}, State) ->
