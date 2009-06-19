@@ -775,7 +775,7 @@ internal_read_message(Q, ReadSeqId, FakeDeliver, ReadMsg, State) ->
                                  %% it's not in the cache and we only
                                  %% have 1 queue with the message. So
                                  %% don't bother putting it in the
-                                 %% queue.
+                                 %% cache.
                                  ok;
                              _ -> insert_into_cache(Message, BodySize, State1)
                          end,
