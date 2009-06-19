@@ -93,6 +93,12 @@ init(Queue, IsDurable, mixed) ->
     {ok, State} = init(Queue, IsDurable, disk),
     to_mixed_mode(State).
 
+size_of_message(
+  #basic_message { content = #content { payload_fragments_rev = Payload }}) ->
+    lists:foldl(fun (Frag, SumAcc) ->
+                        SumAcc + size(Frag)
+                end, 0, Payload).
+
 to_disk_only_mode(State = #mqstate { mode = disk }) ->
     {ok, State};
 to_disk_only_mode(State =
@@ -109,8 +115,7 @@ to_disk_only_mode(State =
         lists:foldl(
           fun ({Msg = #basic_message { guid = MsgId }, IsDelivered, OnDisk},
                {RQueueAcc, SizeAcc}) ->
-                  {MsgBin, MsgSize} = msg_to_bin(Msg),
-                  SizeAcc1 = SizeAcc + MsgSize,
+                  SizeAcc1 = SizeAcc + size_of_message(Msg),
                   RQueueAcc1 =
                       if OnDisk ->
                               {MsgId, IsDelivered, AckTag, _PersistRemaining} =
@@ -123,7 +128,7 @@ to_disk_only_mode(State =
                                              Q, lists:reverse(RQueueAcc))
                                    end,
                               ok = rabbit_disk_queue:publish(
-                                     Q, MsgId, MsgBin, false),
+                                     Q, Msg, false),
                               []
                       end,
                   {RQueueAcc1, SizeAcc1}
@@ -144,9 +149,8 @@ to_mixed_mode(State = #mqstate { mode = disk, queue = Q, length = Length }) ->
     QList = rabbit_disk_queue:dump_queue(Q),
     {MsgBuf1, Length} =
         lists:foldl(
-          fun ({MsgId, MsgBin, _Size, IsDelivered, _AckTag, _SeqId},
+          fun ({Msg, _Size, IsDelivered, _AckTag, _SeqId},
                {Buf, L}) ->
-                  Msg = #basic_message { guid = MsgId } = bin_to_msg(MsgBin),
                   {queue:in({Msg, IsDelivered, true}, Buf), L+1}
           end, {queue:new(), 0}, QList),
     {ok, State #mqstate { mode = mixed, msg_buf = MsgBuf1, memory_size = 0 }}.
@@ -170,9 +174,8 @@ purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
 deliver_all_messages(Q, IsDurable, Acks, Requeue, Length) ->
     case rabbit_disk_queue:deliver(Q) of
         empty -> {Acks, Requeue, Length};
-        {MsgId, MsgBin, _Size, IsDelivered, AckTag, _Remaining} ->
-            #basic_message { guid = MsgId, is_persistent = IsPersistent } =
-                bin_to_msg(MsgBin),
+        {#basic_message { is_persistent = IsPersistent },
+         _Size, IsDelivered, AckTag, _Remaining} ->
             OnDisk = IsPersistent andalso IsDurable,
             {Acks1, Requeue1, Length1} =
                 if OnDisk -> {Acks,
@@ -184,27 +187,17 @@ deliver_all_messages(Q, IsDurable, Acks, Requeue, Length) ->
             deliver_all_messages(Q, IsDurable, Acks1, Requeue1, Length1)
     end.
 
-msg_to_bin(Msg = #basic_message { content = Content }) ->
-    ClearedContent = rabbit_binary_parser:clear_decoded_content(Content),
-    Bin = term_to_binary(Msg #basic_message { content = ClearedContent }),
-    {Bin, size(Bin)}.
-
-bin_to_msg(MsgBin) ->
-    binary_to_term(MsgBin).
-
-publish(Msg = #basic_message { guid = MsgId },
-        State = #mqstate { mode = disk, queue = Q, length = Length,
-                           memory_size = Size}) ->
-    {MsgBin, MsgSize} = msg_to_bin(Msg),
-    ok = rabbit_disk_queue:publish(Q, MsgId, MsgBin, false),
-    {ok, State #mqstate { length = Length + 1, memory_size = Size + MsgSize }};
-publish(Msg = #basic_message { guid = MsgId, is_persistent = IsPersistent },
+publish(Msg, State = #mqstate { mode = disk, queue = Q, length = Length,
+                                memory_size = Size }) ->
+    ok = rabbit_disk_queue:publish(Q, Msg, false),
+    Size1 = Size + size_of_message(Msg),
+    {ok, State #mqstate { length = Length + 1, memory_size = Size1 }};
+publish(Msg = #basic_message { is_persistent = IsPersistent },
         State = #mqstate { queue = Q, mode = mixed, is_durable = IsDurable,
                            msg_buf = MsgBuf, length = Length }) ->
     OnDisk = IsDurable andalso IsPersistent,
-    {MsgBin, _MsgSize} = msg_to_bin(Msg),
     ok = if OnDisk ->
-                 rabbit_disk_queue:publish(Q, MsgId, MsgBin, false);
+                 rabbit_disk_queue:publish(Q, Msg, false);
             true -> ok
          end,
     {ok, State #mqstate { msg_buf = queue:in({Msg, false, OnDisk}, MsgBuf),
@@ -217,8 +210,7 @@ publish_delivered(Msg =
                   State = #mqstate { mode = Mode, is_durable = IsDurable,
                                      queue = Q, length = 0 })
   when Mode =:= disk orelse (IsDurable andalso IsPersistent) ->
-    {MsgBin, _MsgSize} = msg_to_bin(Msg),
-    rabbit_disk_queue:publish(Q, MsgId, MsgBin, false),
+    rabbit_disk_queue:publish(Q, Msg, false),
     if IsDurable andalso IsPersistent ->
             %% must call phantom_deliver otherwise the msg remains at
             %% the head of the queue. This is synchronous, but
@@ -238,10 +230,10 @@ deliver(State = #mqstate { length = 0 }) ->
     {empty, State};
 deliver(State = #mqstate { mode = disk, queue = Q, is_durable = IsDurable,
                            length = Length, memory_size = QSize }) ->
-    {MsgId, MsgBin, Size, IsDelivered, AckTag, Remaining}
+    {Msg = #basic_message { is_persistent = IsPersistent },
+     _Size, IsDelivered, AckTag, Remaining}
         = rabbit_disk_queue:deliver(Q),
-    #basic_message { guid = MsgId, is_persistent = IsPersistent } =
-        Msg = bin_to_msg(MsgBin),
+    Size = size_of_message(Msg),
     AckTag1 = if IsPersistent andalso IsDurable -> AckTag;
                  true -> ok = rabbit_disk_queue:ack(Q, [AckTag]),
                          noack
@@ -280,16 +272,13 @@ ack(Acks, State = #mqstate { queue = Q }) ->
                    {ok, State}
     end.
                                                    
-tx_publish(Msg = #basic_message { guid = MsgId },
-           State = #mqstate { mode = disk, memory_size = Size }) ->
-    {MsgBin, MsgSize} = msg_to_bin(Msg),
-    ok = rabbit_disk_queue:tx_publish(MsgId, MsgBin),
-    {ok, State #mqstate { memory_size = Size + MsgSize }};
-tx_publish(Msg = #basic_message { guid = MsgId, is_persistent = IsPersistent },
+tx_publish(Msg, State = #mqstate { mode = disk, memory_size = Size }) ->
+    ok = rabbit_disk_queue:tx_publish(Msg),
+    {ok, State #mqstate { memory_size = Size + size_of_message(Msg) }};
+tx_publish(Msg = #basic_message { is_persistent = IsPersistent },
            State = #mqstate { mode = mixed, is_durable = IsDurable })
   when IsDurable andalso IsPersistent ->
-    {MsgBin, _MsgSize} = msg_to_bin(Msg),
-    ok = rabbit_disk_queue:tx_publish(MsgId, MsgBin),
+    ok = rabbit_disk_queue:tx_publish(Msg),
     {ok, State};
 tx_publish(_Msg, State = #mqstate { mode = mixed }) ->
     %% this message will reappear in the tx_commit, so ignore for now
@@ -346,8 +335,7 @@ tx_cancel(Publishes, State = #mqstate { mode = disk, memory_size = TSize }) ->
     {MsgIds, CSize} =
         lists:foldl(
           fun (Msg = #basic_message { guid = MsgId }, {MsgIdsAcc, CSizeAcc}) ->
-                  {_MsgBin, MsgSize} = msg_to_bin(Msg),
-                  {[MsgId | MsgIdsAcc], CSizeAcc + MsgSize}
+                  {[MsgId | MsgIdsAcc], CSizeAcc + size_of_message(Msg)}
           end, {[], 0}, Publishes),
     ok = rabbit_disk_queue:tx_cancel(lists:reverse(MsgIds)),
     {ok, State #mqstate { memory_size = TSize - CSize }};
@@ -374,18 +362,15 @@ requeue(MessagesWithAckTags, State = #mqstate { mode = disk, queue = Q,
             fun ({Msg = #basic_message { is_persistent = IsPersistent },
                   AckTag}, {RQ, SizeAcc})
                 when IsPersistent andalso IsDurable ->
-                    {_MsgBin, MsgSize} = msg_to_bin(Msg),
-                    {[AckTag | RQ], SizeAcc + MsgSize};
-                ({Msg = #basic_message { guid = MsgId }, _AckTag},
-                 {RQ, SizeAcc}) ->
+                    {[AckTag | RQ], SizeAcc + size_of_message(Msg)};
+                ({Msg, _AckTag}, {RQ, SizeAcc}) ->
                     ok = if RQ == [] -> ok;
                             true -> rabbit_disk_queue:requeue(
                                       Q, lists:reverse(RQ))
                          end,
-                    {MsgBin, MsgSize} = msg_to_bin(Msg),
                     _AckTag1 = rabbit_disk_queue:publish(
-                                 Q, MsgId, MsgBin, true),
-                    {[], SizeAcc + MsgSize}
+                                 Q, Msg, true),
+                    {[], SizeAcc + size_of_message(Msg)}
             end, {[], 0}, MessagesWithAckTags),
     ok = rabbit_disk_queue:requeue(Q, lists:reverse(Requeue)),
     {ok, State #mqstate { length = Length + erlang:length(MessagesWithAckTags),

@@ -38,13 +38,13 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([publish/4, deliver/1, phantom_deliver/1, ack/2,
-         tx_publish/2, tx_commit/3, tx_cancel/1,
+-export([publish/3, deliver/1, phantom_deliver/1, ack/2,
+         tx_publish/1, tx_commit/3, tx_cancel/1,
          requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1,
          dump_queue/1, delete_non_durable_queues/1, auto_ack_next_message/1
         ]).
 
--export([length/1, filesync/0]).
+-export([length/1, filesync/0, cache_info/0]).
 
 -export([stop/0, stop_and_obliterate/0,
          to_disk_only_mode/0, to_ram_disk_mode/0]).
@@ -58,6 +58,7 @@
 -define(MSG_LOC_NAME,             rabbit_disk_queue_msg_location).
 -define(FILE_SUMMARY_ETS_NAME,    rabbit_disk_queue_file_summary).
 -define(SEQUENCE_ETS_NAME,        rabbit_disk_queue_sequences).
+-define(CACHE_ETS_NAME,           rabbit_disk_queue_cache).
 -define(FILE_EXTENSION,           ".rdq").
 -define(FILE_EXTENSION_TMP,       ".rdt").
 -define(FILE_EXTENSION_DETS,      ".dets").
@@ -86,7 +87,8 @@
          read_file_handles,       %% file handles for reading (LRU)
          read_file_handles_limit, %% how many file handles can we open?
          on_sync_froms,           %% list of commiters to run on sync (reversed)
-         timer_ref                %% TRef for our interval timer
+         timer_ref,               %% TRef for our interval timer
+         message_cache            %% ets message cache
         }).
 
 %% The components:
@@ -239,21 +241,22 @@
 
 -spec(start_link/0 :: () ->
               ({'ok', pid()} | 'ignore' | {'error', any()})).
--spec(publish/4 :: (queue_name(), msg_id(), binary(), bool()) -> 'ok').
+-spec(publish/3 :: (queue_name(), message(), bool()) -> 'ok').
 -spec(deliver/1 :: (queue_name()) ->
-             ('empty' | {msg_id(), binary(), non_neg_integer(),
+             ('empty' | {message(), non_neg_integer(),
                          bool(), {msg_id(), seq_id()}, non_neg_integer()})).
 -spec(phantom_deliver/1 :: (queue_name()) ->
              ( 'empty' | {msg_id(), bool(), {msg_id(), seq_id()},
                           non_neg_integer()})).
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
--spec(tx_publish/2 :: (msg_id(), binary()) -> 'ok').
+-spec(tx_publish/1 :: (message()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [msg_id()], [{msg_id(), seq_id()}]) ->
              'ok').
 -spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
--spec(requeue_with_seqs/2 :: (queue_name(), [{{msg_id(), seq_id()},
-                                              seq_id_or_next()}]) -> 'ok').
+-spec(requeue_with_seqs/2 ::
+      (queue_name(),
+       [{{msg_id(), seq_id()}, {seq_id_or_next(), bool()}}]) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
 -spec(dump_queue/1 :: (queue_name()) ->
              [{msg_id(), binary(), non_neg_integer(), bool(),
@@ -265,6 +268,7 @@
 -spec(to_disk_only_mode/0 :: () -> 'ok').
 -spec(length/1 :: (queue_name()) -> non_neg_integer()).
 -spec(filesync/0 :: () -> 'ok').
+-spec(cache_info/0 :: () -> [{atom(), term()}]).
 
 -endif.
 
@@ -274,10 +278,10 @@ start_link() ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE,
                            [?FILE_SIZE_LIMIT, ?MAX_READ_FILE_HANDLES], []).
 
-publish(Q, MsgId, Msg, false) when is_binary(Msg) ->
-    gen_server2:cast(?SERVER, {publish, Q, MsgId, Msg});
-publish(Q, MsgId, Msg, true) when is_binary(Msg) ->
-    gen_server2:call(?SERVER, {publish, Q, MsgId, Msg}, infinity).
+publish(Q, Message = #basic_message {}, false) ->
+    gen_server2:cast(?SERVER, {publish, Q, Message});
+publish(Q, Message = #basic_message {}, true) ->
+    gen_server2:call(?SERVER, {publish, Q, Message}, infinity).
 
 deliver(Q) ->
     gen_server2:call(?SERVER, {deliver, Q}, infinity).
@@ -291,8 +295,8 @@ ack(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
 auto_ack_next_message(Q) ->
     gen_server2:cast(?SERVER, {auto_ack_next_message, Q}).
 
-tx_publish(MsgId, Msg) when is_binary(Msg) ->
-    gen_server2:cast(?SERVER, {tx_publish, MsgId, Msg}).
+tx_publish(Message = #basic_message {}) ->
+    gen_server2:cast(?SERVER, {tx_publish, Message}).
 
 tx_commit(Q, PubMsgIds, AckSeqIds)
   when is_list(PubMsgIds) andalso is_list(AckSeqIds) ->
@@ -337,6 +341,9 @@ length(Q) ->
 
 filesync() ->
     gen_server2:pcast(?SERVER, 10, filesync).
+
+cache_info() ->
+    gen_server2:call(?SERVER, cache_info, infinity).
 
 %% ---- GEN-SERVER INTERNAL API ----
 
@@ -394,8 +401,10 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                    read_file_handles       = {dict:new(), gb_trees:empty()},
                    read_file_handles_limit = ReadFileHandlesLimit,
                    on_sync_froms           = [],
-                   timer_ref               = undefined
-                  },
+                   timer_ref               = undefined,
+                   message_cache           = ets:new(?CACHE_ETS_NAME,
+                                                     [set, private])
+                 },
     {ok, State1 = #dqstate { current_file_name = CurrentName,
                              current_offset = Offset } } =
         load_from_disk(State),
@@ -413,9 +422,9 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     end,
     {ok, State1 #dqstate { current_file_handle = FileHdl }}.
 
-handle_call({publish, Q, MsgId, MsgBody}, _From, State) ->
+handle_call({publish, Q, Message}, _From, State) ->
     {ok, MsgSeqId, State1} =
-        internal_publish(Q, MsgId, next, MsgBody, true, State),
+        internal_publish(Q, Message, next, true, State),
     reply(MsgSeqId, State1);
 handle_call({deliver, Q}, _From, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, false, State),
@@ -482,11 +491,13 @@ handle_call({dump_queue, Q}, _From, State) ->
     reply(Result, State1);
 handle_call({delete_non_durable_queues, DurableQueues}, _From, State) ->
     {ok, State1} = internal_delete_non_durable_queues(DurableQueues, State),
-    reply(ok, State1).
+    reply(ok, State1);
+handle_call(cache_info, _From, State = #dqstate { message_cache = Cache }) ->
+    reply(ets:info(Cache), State).
 
-handle_cast({publish, Q, MsgId, MsgBody}, State) ->
+handle_cast({publish, Q, Message}, State) ->
     {ok, _MsgSeqId, State1} =
-        internal_publish(Q, MsgId, next, MsgBody, false, State),
+        internal_publish(Q, Message, next, false, State),
     noreply(State1);
 handle_cast({ack, Q, MsgSeqIds}, State) ->
     {ok, State1} = internal_ack(Q, MsgSeqIds, State),
@@ -494,8 +505,8 @@ handle_cast({ack, Q, MsgSeqIds}, State) ->
 handle_cast({auto_ack_next_message, Q}, State) ->
     {ok, State1} = internal_auto_ack(Q, State),
     noreply(State1);
-handle_cast({tx_publish, MsgId, MsgBody}, State) ->
-    {ok, State1} = internal_tx_publish(MsgId, MsgBody, State),
+handle_cast({tx_publish, Message = #basic_message { guid = MsgId }}, State) ->
+    {ok, State1} = internal_tx_publish(MsgId, Message, State),
     noreply(State1);
 handle_cast({tx_cancel, MsgIds}, State) ->
     {ok, State1} = internal_tx_cancel(MsgIds, State),
@@ -730,6 +741,44 @@ sync_current_file_handle(State = #dqstate { current_file_handle = CurHdl,
               lists:reverse(Froms)),
     State #dqstate { current_dirty = false, on_sync_froms = [] }.
 
+msg_to_bin(Msg = #basic_message { content = Content }) ->
+    ClearedContent = rabbit_binary_parser:clear_decoded_content(Content),
+    term_to_binary(Msg #basic_message { content = ClearedContent }).
+
+bin_to_msg(MsgBin) ->
+    binary_to_term(MsgBin).
+
+remove_cache_entry(MsgId, #dqstate { message_cache = Cache }) ->
+    true = ets:delete(Cache, MsgId),
+    ok.
+
+fetch_and_increment_cache(MsgId, #dqstate { message_cache = Cache }) ->
+    case ets:lookup(Cache, MsgId) of
+        [] ->
+            not_found;
+        [{MsgId, Message, MsgSize, _RefCount}] ->
+            NewRefCount = ets:update_counter(Cache, MsgId, {4, 1}),
+            {Message, MsgSize, NewRefCount}
+    end.
+
+decrement_cache(MsgId, #dqstate { message_cache = Cache }) ->
+    true = try case ets:update_counter(Cache, MsgId, {4, -1}) of
+                   0  -> ets:delete(Cache, MsgId);
+                   _N -> true
+               end
+           catch error:badarg -> 
+                   %% MsgId is not in there because although it's been
+                   %% delivered, it's never actually been read (think:
+                   %% persistent message in mixed queue)
+                   true
+           end,
+    ok.
+
+insert_into_cache(Message = #basic_message { guid = MsgId },
+                  MsgSize, #dqstate { message_cache = Cache }) ->
+    true = ets:insert_new(Cache, {MsgId, Message, MsgSize, 1}),
+    ok.
+
 %% ---- INTERNAL RAW FUNCTIONS ----
 
 internal_deliver(Q, ReadMsg, FakeDeliver,
@@ -748,8 +797,8 @@ internal_deliver(Q, ReadMsg, FakeDeliver,
              case Result of
                  {MsgId, Delivered, {MsgId, ReadSeqId}} ->
                      {MsgId, Delivered, {MsgId, ReadSeqId}, Remaining};
-                 {MsgId, MsgBody, BodySize, Delivered, {MsgId, ReadSeqId}} ->
-                     {MsgId, MsgBody, BodySize, Delivered, {MsgId, ReadSeqId},
+                 {Message, BodySize, Delivered, {MsgId, ReadSeqId}} ->
+                     {Message, BodySize, Delivered, {MsgId, ReadSeqId},
                       Remaining}
              end, State1}
     end.
@@ -759,7 +808,7 @@ internal_read_message(Q, ReadSeqId, FakeDeliver, ReadMsg, State) ->
      #dq_msg_loc {is_delivered = Delivered, msg_id = MsgId,
                   next_seq_id = NextReadSeqId}] =
         mnesia:dirty_read(rabbit_disk_queue, {Q, ReadSeqId}),
-    [{MsgId, _RefCount, File, Offset, TotalSize}] =
+    [{MsgId, RefCount, File, Offset, TotalSize}] =
         dets_ets_lookup(State, MsgId),
     ok =
         if FakeDeliver orelse Delivered -> ok;
@@ -769,11 +818,27 @@ internal_read_message(Q, ReadSeqId, FakeDeliver, ReadMsg, State) ->
         end,
     case ReadMsg of
         true ->
-            {FileHdl, State1} = get_read_handle(File, State),
-            {ok, {MsgBody, BodySize}} =
-                read_message_at_offset(FileHdl, Offset, TotalSize),
-            {ok, {MsgId, MsgBody, BodySize, Delivered, {MsgId, ReadSeqId}},
-             NextReadSeqId, State1};
+            case fetch_and_increment_cache(MsgId, State) of
+                not_found ->
+                    {FileHdl, State1} = get_read_handle(File, State),
+                    {ok, {MsgBody, BodySize}} =
+                        read_message_at_offset(FileHdl, Offset, TotalSize),
+                    Message = bin_to_msg(MsgBody),
+                    ok = case RefCount of
+                             1 ->
+                                 %% it's not in the cache and we only
+                                 %% have 1 queue with the message. So
+                                 %% don't bother putting it in the
+                                 %% cache.
+                                 ok;
+                             _ -> insert_into_cache(Message, BodySize, State1)
+                         end,
+                    {ok, {Message, BodySize, Delivered, {MsgId, ReadSeqId}},
+                     NextReadSeqId, State1};
+                {Message, BodySize, _RefCount} ->
+                    {ok, {Message, BodySize, Delivered, {MsgId, ReadSeqId}},
+                     NextReadSeqId, State}
+            end;
         false ->
             {ok, {MsgId, Delivered, {MsgId, ReadSeqId}}, NextReadSeqId, State}
     end.
@@ -807,6 +872,7 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete,
                       case RefCount of
                           1 ->
                               ok = dets_ets_delete(State, MsgId),
+                              ok = remove_cache_entry(MsgId, State),
                               [{File, ValidTotalSize, ContiguousTop,
                                 Left, Right}] = ets:lookup(FileSummary, File),
                               ContiguousTop1 =
@@ -820,6 +886,7 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete,
                                  true -> sets:add_element(File, Files1)
                               end;
                           _ when 1 < RefCount ->
+                              ok = decrement_cache(MsgId, State),
                               ok = dets_ets_insert(
                                      State, {MsgId, RefCount - 1,
                                              File, Offset, TotalSize}),
@@ -837,7 +904,7 @@ remove_messages(Q, MsgSeqIds, MnesiaDelete,
     State1 = compact(Files, State),
     {ok, State1}.
 
-internal_tx_publish(MsgId, MsgBody,
+internal_tx_publish(MsgId, Message,
                     State = #dqstate { current_file_handle = CurHdl,
                                        current_file_name = CurName,
                                        current_offset = CurOffset,
@@ -846,7 +913,8 @@ internal_tx_publish(MsgId, MsgBody,
     case dets_ets_lookup(State, MsgId) of
         [] ->
             %% New message, lots to do
-            {ok, TotalSize} = append_message(CurHdl, MsgId, MsgBody),
+            {ok, TotalSize} =
+                append_message(CurHdl, MsgId, msg_to_bin(Message)),
             true = dets_ets_insert_new(State, {MsgId, 1, CurName,
                                                CurOffset, TotalSize}),
             [{CurName, ValidTotalSize, ContiguousTop, Left, undefined}] =
@@ -935,9 +1003,10 @@ internal_tx_commit(Q, PubMsgSeqIds, AckSeqIds, From,
     end.
 
 %% SeqId can be 'next'
-internal_publish(Q, MsgId, SeqId, MsgBody, IsDelivered, State) ->
+internal_publish(Q, Message = #basic_message { guid = MsgId }, SeqId,
+                 IsDelivered, State) ->
     {ok, State1 = #dqstate { sequences = Sequences }} =
-        internal_tx_publish(MsgId, MsgBody, State),
+        internal_tx_publish(MsgId, Message, State),
     {ReadSeqId, WriteSeqId, Length} =
         sequence_lookup(Sequences, Q),
     ReadSeqId3 = determine_next_read_id(ReadSeqId, WriteSeqId, SeqId),
@@ -1076,12 +1145,12 @@ internal_dump_queue(Q, State = #dqstate { sequences = Sequences }) ->
                   fun ({SeqId, _State1}) when SeqId == WriteSeq ->
                           false;
                       ({SeqId, State1}) ->
-                          {ok, {MsgId, Msg, Size, Delivered, {MsgId, SeqId}},
+                          {ok, {Message, Size, Delivered, {MsgId, SeqId}},
                            NextReadSeqId, State2} =
                               internal_read_message(Q, SeqId, true, true,
                                                     State1),
                           {true,
-                           {MsgId, Msg, Size, Delivered, {MsgId, SeqId}, SeqId},
+                           {Message, Size, Delivered, {MsgId, SeqId}, SeqId},
                            {NextReadSeqId, State2}}
                   end, {ReadSeq, State}),
             {lists:reverse(QList), State3}
