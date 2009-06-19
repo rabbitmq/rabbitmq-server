@@ -33,7 +33,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/1, message/4, delivery/4]).
+-export([publish/1, message/4, message/5, delivery/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -43,6 +43,8 @@
              {ok, routing_result(), [pid()]} | not_found()).
 -spec(delivery/4 :: (bool(), bool(), maybe(txn()), message()) -> delivery()). 
 -spec(message/4 :: (exchange_name(), routing_key(), binary(), binary()) ->
+             message()).
+-spec(message/5 :: (exchange_name(), routing_key(), binary(), binary(), guid()) ->
              message()).
 
 -endif.
@@ -64,6 +66,9 @@ delivery(Mandatory, Immediate, Txn, Message) ->
               sender = self(), message = Message}.
 
 message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin) ->
+    message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin, rabbit_guid:guid()).
+
+message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin, MsgId) ->
     {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
     Content = #content{class_id = ClassId,
                        properties = #'P_basic'{content_type = ContentTypeBin},
@@ -72,5 +77,5 @@ message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin) ->
     #basic_message{exchange_name  = ExchangeName,
                    routing_key    = RoutingKeyBin,
                    content        = Content,
-                   guid           = rabbit_guid:guid(),
+                   guid           = MsgId,
                    is_persistent  = false}.

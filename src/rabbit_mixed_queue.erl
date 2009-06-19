@@ -117,7 +117,7 @@ to_disk_only_mode(State =
                                          Q, lists:reverse(RQueueAcc))
                                end,
                           ok = rabbit_disk_queue:publish(
-                                 Q, MsgId, msg_to_bin(Msg), false),
+                                 Q, Msg, false),
                           []
                   end
           end, [], Msgs),
@@ -136,9 +136,8 @@ to_mixed_mode(State = #mqstate { mode = disk, queue = Q, length = Length }) ->
     QList = rabbit_disk_queue:dump_queue(Q),
     {MsgBuf1, Length} =
         lists:foldl(
-          fun ({MsgId, MsgBin, _Size, IsDelivered, _AckTag, _SeqId},
+          fun ({Msg, _Size, IsDelivered, _AckTag, _SeqId},
                {Buf, L}) ->
-                  Msg = #basic_message { guid = MsgId } = bin_to_msg(MsgBin),
                   {queue:in({Msg, IsDelivered, true}, Buf), L+1}
           end, {queue:new(), 0}, QList),
     {ok, State #mqstate { mode = mixed, msg_buf = MsgBuf1 }}.
@@ -162,9 +161,8 @@ purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
 deliver_all_messages(Q, IsDurable, Acks, Requeue, Length) ->
     case rabbit_disk_queue:deliver(Q) of
         empty -> {Acks, Requeue, Length};
-        {MsgId, MsgBin, _Size, IsDelivered, AckTag, _Remaining} ->
-            #basic_message { guid = MsgId, is_persistent = IsPersistent } =
-                bin_to_msg(MsgBin),
+        {#basic_message { is_persistent = IsPersistent },
+         _Size, IsDelivered, AckTag, _Remaining} ->
             OnDisk = IsPersistent andalso IsDurable,
             {Acks1, Requeue1, Length1} =
                 if OnDisk -> {Acks,
@@ -176,23 +174,15 @@ deliver_all_messages(Q, IsDurable, Acks, Requeue, Length) ->
             deliver_all_messages(Q, IsDurable, Acks1, Requeue1, Length1)
     end.
 
-msg_to_bin(Msg = #basic_message { content = Content }) ->
-    ClearedContent = rabbit_binary_parser:clear_decoded_content(Content),
-    term_to_binary(Msg #basic_message { content = ClearedContent }).
-
-bin_to_msg(MsgBin) ->
-    binary_to_term(MsgBin).
-
-publish(Msg = #basic_message { guid = MsgId },
-        State = #mqstate { mode = disk, queue = Q, length = Length }) ->
-    ok = rabbit_disk_queue:publish(Q, MsgId, msg_to_bin(Msg), false),
+publish(Msg, State = #mqstate { mode = disk, queue = Q, length = Length }) ->
+    ok = rabbit_disk_queue:publish(Q, Msg, false),
     {ok, State #mqstate { length = Length + 1 }};
-publish(Msg = #basic_message { guid = MsgId, is_persistent = IsPersistent },
+publish(Msg = #basic_message { is_persistent = IsPersistent },
         State = #mqstate { queue = Q, mode = mixed, is_durable = IsDurable,
                            msg_buf = MsgBuf, length = Length }) ->
     OnDisk = IsDurable andalso IsPersistent,
     ok = if OnDisk ->
-                 rabbit_disk_queue:publish(Q, MsgId, msg_to_bin(Msg), false);
+                 rabbit_disk_queue:publish(Q, Msg, false);
             true -> ok
          end,
     {ok, State #mqstate { msg_buf = queue:in({Msg, false, OnDisk}, MsgBuf),
@@ -205,7 +195,7 @@ publish_delivered(Msg =
                   State = #mqstate { mode = Mode, is_durable = IsDurable,
                                      queue = Q, length = 0 })
   when Mode =:= disk orelse (IsDurable andalso IsPersistent) ->
-    rabbit_disk_queue:publish(Q, MsgId, msg_to_bin(Msg), false),
+    rabbit_disk_queue:publish(Q, Msg, false),
     if IsDurable andalso IsPersistent ->
             %% must call phantom_deliver otherwise the msg remains at
             %% the head of the queue. This is synchronous, but
@@ -225,10 +215,9 @@ deliver(State = #mqstate { length = 0 }) ->
     {empty, State};
 deliver(State = #mqstate { mode = disk, queue = Q, is_durable = IsDurable,
                            length = Length }) ->
-    {MsgId, MsgBin, _Size, IsDelivered, AckTag, Remaining}
+    {Msg = #basic_message { is_persistent = IsPersistent },
+     _Size, IsDelivered, AckTag, Remaining}
         = rabbit_disk_queue:deliver(Q),
-    #basic_message { guid = MsgId, is_persistent = IsPersistent } =
-        Msg = bin_to_msg(MsgBin),
     AckTag1 = if IsPersistent andalso IsDurable -> AckTag;
                  true -> ok = rabbit_disk_queue:ack(Q, [AckTag]),
                          noack
@@ -268,14 +257,13 @@ ack(Acks, State = #mqstate { queue = Q }) ->
                    {ok, State}
     end.
                                                    
-tx_publish(Msg = #basic_message { guid = MsgId },
-           State = #mqstate { mode = disk }) ->
-    ok = rabbit_disk_queue:tx_publish(MsgId, msg_to_bin(Msg)),
+tx_publish(Msg, State = #mqstate { mode = disk }) ->
+    ok = rabbit_disk_queue:tx_publish(Msg),
     {ok, State};
-tx_publish(Msg = #basic_message { guid = MsgId, is_persistent = IsPersistent },
+tx_publish(Msg = #basic_message { is_persistent = IsPersistent },
            State = #mqstate { mode = mixed, is_durable = IsDurable })
   when IsDurable andalso IsPersistent ->
-    ok = rabbit_disk_queue:tx_publish(MsgId, msg_to_bin(Msg)),
+    ok = rabbit_disk_queue:tx_publish(Msg),
     {ok, State};
 tx_publish(_Msg, State = #mqstate { mode = mixed }) ->
     %% this message will reappear in the tx_commit, so ignore for now
@@ -352,13 +340,13 @@ requeue(MessagesWithAckTags, State = #mqstate { mode = disk, queue = Q,
             fun ({#basic_message { is_persistent = IsPersistent }, AckTag}, RQ)
                 when IsPersistent andalso IsDurable ->
                     [AckTag | RQ];
-                ({Msg = #basic_message { guid = MsgId }, _AckTag}, RQ) ->
+                ({Msg, _AckTag}, RQ) ->
                     ok = if RQ == [] -> ok;
                             true -> rabbit_disk_queue:requeue(
                                       Q, lists:reverse(RQ))
                          end,
                     _AckTag1 = rabbit_disk_queue:publish(
-                                 Q, MsgId, msg_to_bin(Msg), true),
+                                 Q, Msg, true),
                     []
             end, [], MessagesWithAckTags),
     ok = rabbit_disk_queue:requeue(Q, lists:reverse(Requeue)),
