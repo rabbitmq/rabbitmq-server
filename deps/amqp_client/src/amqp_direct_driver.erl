@@ -43,7 +43,8 @@ handshake(ConnectionState = #connection_state{username = User,
     UserBin = amqp_util:binary(User),
     PassBin = amqp_util:binary(Pass),
     rabbit_access_control:user_pass_login(UserBin, PassBin),
-    rabbit_access_control:check_vhost_access(#user{username = UserBin},
+    rabbit_access_control:check_vhost_access(#user{username = UserBin,
+                                                   password = PassBin},
                                              VHostPath),
     ConnectionState.
 

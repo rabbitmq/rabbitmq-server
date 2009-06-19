@@ -39,7 +39,7 @@ non_existent_exchange_test(Connection) ->
     %% Deliberately mix up the routingkey and exchange arguments
     lib_amqp:publish(Channel, RoutingKey, X, Payload),
     wait_for_death(Channel),
-    ?assert(is_process_alive(Connection)),
+    ?assertMatch(true, is_process_alive(Connection)),
     lib_amqp:close_connection(Connection).
 
 hard_error_test(Connection) ->
@@ -56,5 +56,5 @@ hard_error_test(Connection) ->
 wait_for_death(Pid) ->
     Ref = erlang:monitor(process, Pid),
     receive {'DOWN', Ref, process, Pid, _Reason} -> ok
-    after 1000 -> ?assert(false), ok
+    after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
     end.
