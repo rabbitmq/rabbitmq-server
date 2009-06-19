@@ -63,10 +63,10 @@ PLT=$(HOME)/.dialyzer_plt
 all: compile
 
 dialyze: $(EBIN_DIR) $(TARGETS)
-	dialyzer -c $(TARGETS)
+	dialyzer --plt $(PLT) -c $(TARGETS)
 
 dialyze_all: $(EBIN_DIR) $(TARGETS) $(TEST_TARGETS)
-	dialyzer -c $(TARGETS) $(TEST_TARGETS)
+	dialyzer --plt $(PLT) -c $(TARGETS) $(TEST_TARGETS)
 
 add_broker_to_plt: $(BROKER_SYMLINK)
 	dialyzer --add_to_plt --plt $(PLT) -r $</ebin
