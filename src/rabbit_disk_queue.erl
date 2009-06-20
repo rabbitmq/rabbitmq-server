@@ -1002,11 +1002,11 @@ internal_requeue(Q, MsgSeqIds = [{_, {FirstSeqIdTo, _}}|_],
     {ReadSeqId, WriteSeqId, Length} = sequence_lookup(Sequences, Q),
     ReadSeqId1 = determine_next_read_id(ReadSeqId, WriteSeqId, FirstSeqIdTo),
     MsgSeqIdsZipped = zip_with_tail(MsgSeqIds, {last, {next, {next, true}}}),
-    {atomic, {WriteSeqId1, Q}} =
+    {atomic, {WriteSeqId1, Q, State}} =
         mnesia:transaction(
           fun() ->
                   ok = mnesia:write_lock_table(rabbit_disk_queue),
-                  lists:foldl(fun requeue_message/2, {WriteSeqId, Q},
+                  lists:foldl(fun requeue_message/2, {WriteSeqId, Q, State},
                               MsgSeqIdsZipped)
           end),
     true = ets:insert(Sequences, {Q, ReadSeqId1, WriteSeqId1,
@@ -1015,7 +1015,7 @@ internal_requeue(Q, MsgSeqIds = [{_, {FirstSeqIdTo, _}}|_],
 
 requeue_message({{{MsgId, SeqIdOrig}, {SeqIdTo, NewIsDelivered}},
                  {_NextMsgSeqId, {NextSeqIdTo, _NextNewIsDelivered}}},
-                {ExpectedSeqIdTo, Q}) ->
+                {ExpectedSeqIdTo, Q, State}) ->
     SeqIdTo1 = adjust_last_msg_seq_id(Q, ExpectedSeqIdTo, SeqIdTo, write),
     NextSeqIdTo1 = find_next_seq_id(SeqIdTo1, NextSeqIdTo),
     [Obj = #dq_msg_loc { is_delivered = true, msg_id = MsgId,
@@ -1031,7 +1031,8 @@ requeue_message({{{MsgId, SeqIdOrig}, {SeqIdTo, NewIsDelivered}},
                               write),
             ok = mnesia:delete(rabbit_disk_queue, {Q, SeqIdOrig}, write)
     end,
-    {NextSeqIdTo1, Q}.
+    decrement_cache(MsgId, State),
+    {NextSeqIdTo1, Q, State}.
 
 internal_purge(Q, State = #dqstate { sequences = Sequences }) ->
     case ets:lookup(Sequences, Q) of
