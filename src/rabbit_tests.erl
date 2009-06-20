@@ -696,6 +696,7 @@ test_disk_queue() ->
     passed = rdq_test_purge(),
     passed = rdq_test_dump_queue(),
     passed = rdq_test_mixed_queue_modes(),
+    passed = rdq_test_mode_conversion_mid_txn(),
     rdq_virgin(),
     ok = control_action(stop_app, []),
     ok = control_action(start_app, []),
@@ -1047,6 +1048,54 @@ rdq_test_mixed_queue_modes() ->
     {ok, MS17} = rabbit_mixed_queue:init(q, true, mixed),
     0 = rabbit_mixed_queue:length(MS17),
     io:format("Recovered queue~n"),
+    rdq_stop(),
+    passed.
+
+rdq_test_mode_conversion_mid_txn() ->
+    rdq_virgin(),
+    rdq_start(),
+    Payload = <<0:(8*256)>>,
+    {ok, MS} = rabbit_mixed_queue:init(q, true, mixed),
+    MsgIds = lists:seq(1,10),
+    {MS2, Msgs} =
+        lists:foldl(
+            fun (N, {MS1, Acc}) ->
+                    Msg = rabbit_basic:message(x, <<>>, <<>>, Payload, N),
+                    {ok, MS1a} = rabbit_mixed_queue:tx_publish(Msg, MS1),
+                    {MS1a, [Msg | Acc]}
+            end, {MS, []}, MsgIds),
+    {ok, MS3} = rabbit_mixed_queue:to_disk_only_mode(MS2),
+    {ok, MS4} = rabbit_mixed_queue:tx_commit(lists:reverse(Msgs), [], MS3),
+    MS6 =
+        lists:foldl(
+          fun (N, MS5) ->
+                  Rem = 10 - N,
+                  {{#basic_message { is_persistent = false },
+                    false, _AckTag, Rem},
+                   MS5a} = rabbit_mixed_queue:deliver(MS5),
+                  MS5a
+          end, MS4, MsgIds),
+    0 = rabbit_mixed_queue:length(MS6),
+    {ok, MS7} = rabbit_mixed_queue:init(q, true, disk),
+    {MS9, Msgs1} =
+        lists:foldl(
+            fun (N, {MS8, Acc}) ->
+                    Msg = rabbit_basic:message(x, <<>>, <<>>, Payload, N),
+                    {ok, MS8a} = rabbit_mixed_queue:tx_publish(Msg, MS8),
+                    {MS8a, [Msg | Acc]}
+            end, {MS7, []}, MsgIds),
+    {ok, MS10} = rabbit_mixed_queue:to_mixed_mode(MS9),
+    {ok, MS11} = rabbit_mixed_queue:tx_commit(lists:reverse(Msgs1), [], MS10),
+    MS13 =
+        lists:foldl(
+          fun (N, MS12) ->
+                  Rem = 10 - N,
+                  {{#basic_message { is_persistent = false },
+                    false, _AckTag, Rem},
+                   MS12a} = rabbit_mixed_queue:deliver(MS12),
+                  MS12a
+          end, MS11, MsgIds),
+    0 = rabbit_mixed_queue:length(MS13),
     rdq_stop(),
     passed.
 
