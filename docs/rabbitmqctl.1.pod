@@ -201,7 +201,7 @@ name
     URL-encoded name of the exchange
 
 type
-    exchange type (B<direct>, B<topic> or B<fanout>)
+    exchange type (B<direct>, B<topic>, B<fanout>, or B<headers>)
 
 durable
     whether the exchange survives server restarts

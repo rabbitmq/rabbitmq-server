@@ -2,7 +2,7 @@
 
 Name: rabbitmq-server
 Version: %%VERSION%%
-Release: 1%%RELEASE_OS%%
+Release: 1%{?dist}
 License: MPLv1.1
 Group: Development/Libraries
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.gz
@@ -111,12 +111,18 @@ fi
 %{_rabbit_libdir}
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
-%doc LICENSE LICENSE-MPL-RabbitMQ INSTALL
+%doc LICENSE LICENSE-MPL-RabbitMQ
 
 %clean
 rm -rf %{buildroot}
 
 %changelog
+* Wed Jun 17 2009 Matthias Radestock <matthias@lshift.net> 1.6.0-1
+- New upstream release
+
+* Tue May 19 2009 Matthias Radestock <matthias@lshift.net> 1.5.5-1
+- Maintenance release for the 1.5.x series
+
 * Mon Apr 6 2009 Matthias Radestock <matthias@lshift.net> 1.5.4-1
 - Maintenance release for the 1.5.x series
 

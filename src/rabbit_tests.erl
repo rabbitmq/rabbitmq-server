@@ -261,7 +261,7 @@ test_log_management() ->
     %% original log files are not writable
     ok = make_files_non_writable([MainLog, SaslLog]),
     {error, {{cannot_rotate_main_logs, _},
-	     {cannot_rotate_sasl_logs, _}}} = control_action(rotate_logs, []),
+             {cannot_rotate_sasl_logs, _}}} = control_action(rotate_logs, []),
 
     %% logging directed to tty (handlers were removed in last test)
     ok = clean_logs([MainLog, SaslLog], Suffix),
@@ -280,7 +280,7 @@ test_log_management() ->
     ok = application:set_env(sasl, sasl_error_logger, {file, SaslLog}),
     ok = application:set_env(kernel, error_logger, {file, MainLog}),
     ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog},
-			   {rabbit_sasl_report_file_h, SaslLog}]),
+                           {rabbit_sasl_report_file_h, SaslLog}]),
     passed.
 
 test_log_management_during_startup() ->

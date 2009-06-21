@@ -136,7 +136,7 @@ start(normal, []) ->
 
                 ok = rabbit_amqqueue:start(),
 
-		{ok, MemoryAlarms} = application:get_env(memory_alarms),
+                {ok, MemoryAlarms} = application:get_env(memory_alarms),
                 ok = rabbit_alarm:start(MemoryAlarms),
                 
                 ok = rabbit_binary_generator:
@@ -226,10 +226,14 @@ print_banner() ->
               [Product, Version,
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
-    io:format("Logging to ~p~nSASL logging to ~p~n~n",
-              [log_location(kernel), log_location(sasl)]).
-
-
+    Settings = [{"node",         node()},
+                {"log",          log_location(kernel)},
+                {"sasl log",     log_location(sasl)},
+                {"database dir", rabbit_mnesia:dir()}],
+    DescrLen = lists:max([length(K) || {K, _V} <- Settings]),
+    Format = "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
+    lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
+    io:nl().
 
 start_child(Mod) ->
     {ok,_} = supervisor:start_child(rabbit_sup,
@@ -315,7 +319,7 @@ rotate_logs(File, Suffix, OldHandler, NewHandler) ->
 
 log_rotation_result({error, MainLogError}, {error, SaslLogError}) ->
     {error, {{cannot_rotate_main_logs, MainLogError},
-	     {cannot_rotate_sasl_logs, SaslLogError}}};
+             {cannot_rotate_sasl_logs, SaslLogError}}};
 log_rotation_result({error, MainLogError}, ok) ->
     {error, {cannot_rotate_main_logs, MainLogError}};
 log_rotation_result(ok, {error, SaslLogError}) ->

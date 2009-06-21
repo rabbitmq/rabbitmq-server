@@ -65,6 +65,7 @@
 -record(basic_message, {exchange_name, routing_key, content, persistent_key}).
 
 -record(ssl_socket, {tcp, ssl}).
+-record(delivery, {mandatory, immediate, txn, sender, message}).
 
 %%----------------------------------------------------------------------------
 
@@ -137,6 +138,12 @@
                      content        :: content(),
                      persistent_key :: maybe(pkey())}).
 -type(message() :: basic_message()).
+-type(delivery() ::
+      #delivery{mandatory :: bool(),
+                immediate :: bool(),
+                txn       :: maybe(txn()),
+                sender    :: pid(),
+                message   :: message()}).
 %% this really should be an abstract type
 -type(msg_id() :: non_neg_integer()).
 -type(msg() :: {queue_name(), pid(), msg_id(), bool(), message()}).
@@ -146,6 +153,7 @@
                 host     :: string() | atom(),
                 port     :: non_neg_integer()}).
 -type(not_found() :: {'error', 'not_found'}).
+-type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
 
 -endif.
 
