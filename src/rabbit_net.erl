@@ -43,7 +43,6 @@
 -type(stat_option() :: 
 	'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
 	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
--type(timeout() :: 'infinity' | -1 | non_neg_integer()).
 -type(error() :: {'error', any()}).
 
 -spec(async_recv/3 :: (socket(), integer(), timeout()) -> {'ok', ref()}).
