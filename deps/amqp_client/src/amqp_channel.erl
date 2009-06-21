@@ -140,17 +140,16 @@ rpc_bottom_half(#'channel.close'{reply_code = ReplyCode,
                                  reply_text = ReplyText}, State) ->
     io:format("Channel received close from peer, code: ~p , message: ~p~n",
               [ReplyCode,ReplyText]),
-    NewState = channel_cleanup(State),
-    {stop, normal, NewState};
+    {stop, normal, State};
 
 rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                                               rpc_requests = RequestQueue,
                                               do2 = Do2}) ->
     NewRequestQueue =
         case queue:out(RequestQueue) of
-            {empty, {[], []}}        -> exit(empty_rpc_bottom_half);
-            {{value, {From, _}}, Q}  -> gen_server:reply(From, Reply),
-                                        Q
+            {empty, _}              -> exit(empty_rpc_bottom_half);
+            {{value, {From, _}}, Q} -> gen_server:reply(From, Reply),
+                                       Q
         end,
     case queue:is_empty(NewRequestQueue) of
         true  -> ok;
@@ -210,7 +209,7 @@ handle_method(ConsumeOk = #'basic.consume_ok'{consumer_tag = ConsumerTag},
             error ->
                 case queue:out(Anon) of
                     {empty, _} ->
-                        exit(anonymous_queue_empty, ConsumerTag);
+                        exit({anonymous_queue_empty, ConsumerTag});
                     {{value, {F, C}}, NewAnon} ->
                         {F, C,
                          State#channel_state{anon_sub_requests = NewAnon}}
@@ -389,28 +388,15 @@ handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
 handle_info({'EXIT', _Pid, Reason},
             State = #channel_state{number = Number}) ->
     io:format("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
-    NewState = channel_cleanup(State),
-    {stop, normal, NewState};
-
-%% This is for a race condition between a close.close_ok and a subsequent
-%% channel.open
-handle_info( {channel_close, Peer}, State ) ->
-    NewState = channel_cleanup(State),
-    %% TODO Do we still need this??
-    Peer ! handshake,
-    {noreply, NewState};
+    {stop, normal, State};
 
 %% This is for a channel exception that can't be otherwise handled
 handle_info( {channel_exit, _Channel, Reason}, State) ->
-    NewState = channel_cleanup(State),
-    {stop, Reason, NewState}.
+   {stop, Reason, State}.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks
 %%---------------------------------------------------------------------------
-
-terminate(normal, _State) ->
-    ok;
 
 terminate(_Reason, State) ->
     channel_cleanup(State),

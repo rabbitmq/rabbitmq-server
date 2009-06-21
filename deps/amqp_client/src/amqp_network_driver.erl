@@ -29,7 +29,7 @@
 -include_lib("rabbitmq_server/include/rabbit.hrl").
 -include("amqp_client.hrl").
 
--define(RABBIT_TCP_OPTS, [binary, {packet, 0},{active,false}]).
+-define(RABBIT_TCP_OPTS, [binary, {packet, 0},{active,false}, {nodelay, true}]).
 
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
 -export([start_reader/2, start_writer/2]).
