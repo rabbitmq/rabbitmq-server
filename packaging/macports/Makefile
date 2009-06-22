@@ -2,7 +2,7 @@ TARBALL_DIR=../../dist
 TARBALL=$(shell (cd $(TARBALL_DIR); echo rabbitmq-server-[0-9]*.tar.gz))
 VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
 
-MD5=$(shell md5sum $(TARBALL_DIR)/$(TARBALL) | sed -e 's/\([0-9a-f]*\).*/\1/')
+MD5=$(shell openssl md5 $(TARBALL_DIR)/$(TARBALL) | sed -e 's/MD5\(.*\)= //')
 SHA1=$(shell openssl sha1 $(TARBALL_DIR)/$(TARBALL) | sed -e 's/SHA1\(.*\)= //')
 RMD160=$(shell openssl rmd160 $(TARBALL_DIR)/$(TARBALL) | sed -e 's/RIPEMD160\(.*\)= //')
 
