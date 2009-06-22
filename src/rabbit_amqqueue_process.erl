@@ -790,10 +790,13 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
         end));
 
 handle_cast({constrain, Constrain}, State = #q { mixed_state = MS }) ->
+    PendingMessages =
+        lists:flatten([Pending || #tx { pending_messages = Pending}
+                                      <- all_tx_record()]),
     {ok, MS1} = (case Constrain of
-                    true  -> fun rabbit_mixed_queue:to_disk_only_mode/1;
-                    false -> fun rabbit_mixed_queue:to_mixed_mode/1
-                 end)(MS),
+                    true  -> fun rabbit_mixed_queue:to_disk_only_mode/2;
+                    false -> fun rabbit_mixed_queue:to_mixed_mode/2
+                 end)(PendingMessages, MS),
     noreply(State #q { mixed_state = MS1 }).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},

@@ -1003,10 +1003,10 @@ rdq_test_mixed_queue_modes() ->
             end, MS4, lists:seq(1,10)),
     30 = rabbit_mixed_queue:length(MS6),
     io:format("Published a mixture of messages~n"),
-    {ok, MS7} = rabbit_mixed_queue:to_disk_only_mode(MS6),
+    {ok, MS7} = rabbit_mixed_queue:to_disk_only_mode([], MS6),
     30 = rabbit_mixed_queue:length(MS7),
     io:format("Converted to disk only mode~n"),
-    {ok, MS8} = rabbit_mixed_queue:to_mixed_mode(MS7),
+    {ok, MS8} = rabbit_mixed_queue:to_mixed_mode([], MS7),
     30 = rabbit_mixed_queue:length(MS8),
     io:format("Converted to mixed mode~n"),
     MS10 =
@@ -1020,7 +1020,7 @@ rdq_test_mixed_queue_modes() ->
           end, MS8, lists:seq(1,10)),
     20 = rabbit_mixed_queue:length(MS10),
     io:format("Delivered initial non persistent messages~n"),
-    {ok, MS11} = rabbit_mixed_queue:to_disk_only_mode(MS10),
+    {ok, MS11} = rabbit_mixed_queue:to_disk_only_mode([], MS10),
     20 = rabbit_mixed_queue:length(MS11),
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
@@ -1040,7 +1040,7 @@ rdq_test_mixed_queue_modes() ->
     0 = rabbit_mixed_queue:length(MS14),
     {ok, MS15} = rabbit_mixed_queue:ack(AckTags, MS14),
     io:format("Delivered and acked all messages~n"),
-    {ok, MS16} = rabbit_mixed_queue:to_disk_only_mode(MS15),
+    {ok, MS16} = rabbit_mixed_queue:to_disk_only_mode([], MS15),
     0 = rabbit_mixed_queue:length(MS16),
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
@@ -1064,8 +1064,9 @@ rdq_test_mode_conversion_mid_txn() ->
                     {ok, MS1a} = rabbit_mixed_queue:tx_publish(Msg, MS1),
                     {MS1a, [Msg | Acc]}
             end, {MS, []}, MsgIds),
-    {ok, MS3} = rabbit_mixed_queue:to_disk_only_mode(MS2),
-    {ok, MS4} = rabbit_mixed_queue:tx_commit(lists:reverse(Msgs), [], MS3),
+    MsgsOrdered = lists:reverse(Msgs),
+    {ok, MS3} = rabbit_mixed_queue:to_disk_only_mode(MsgsOrdered, MS2),
+    {ok, MS4} = rabbit_mixed_queue:tx_commit(MsgsOrdered, [], MS3),
     MS6 =
         lists:foldl(
           fun (N, MS5) ->
@@ -1084,8 +1085,9 @@ rdq_test_mode_conversion_mid_txn() ->
                     {ok, MS8a} = rabbit_mixed_queue:tx_publish(Msg, MS8),
                     {MS8a, [Msg | Acc]}
             end, {MS7, []}, MsgIds),
-    {ok, MS10} = rabbit_mixed_queue:to_mixed_mode(MS9),
-    {ok, MS11} = rabbit_mixed_queue:tx_commit(lists:reverse(Msgs1), [], MS10),
+    Msgs1Ordered = lists:reverse(Msgs1),
+    {ok, MS10} = rabbit_mixed_queue:to_mixed_mode(Msgs1Ordered, MS9),
+    {ok, MS11} = rabbit_mixed_queue:tx_commit(Msgs1Ordered, [], MS10),
     MS13 =
         lists:foldl(
           fun (N, MS12) ->
