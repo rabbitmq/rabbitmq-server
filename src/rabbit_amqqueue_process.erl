@@ -540,9 +540,8 @@ i(Item, _) ->
 
 report_memory(State = #q { old_memory_report = OldMem,
                            mixed_state = MS }) ->
-    MSize = rabbit_mixed_queue:estimate_extra_memory(MS),
-    {memory, PSize} = process_info(self(), memory),
-    NewMem = case MSize + PSize of
+    MSize = rabbit_mixed_queue:estimate_queue_memory(MS),
+    NewMem = case MSize of
                  0 -> 1; %% avoid / 0
                  N -> N
              end,
