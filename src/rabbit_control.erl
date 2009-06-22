@@ -140,6 +140,8 @@ Available commands:
   reduce_memory_footprint
   increase_memory_footprint
 
+  set_queue_mode <QueueName> (disk|mixed)
+
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
 
@@ -155,8 +157,8 @@ virtual host parameter for which to display results. The default value is \"/\".
 
 <QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
 arguments, node, messages_ready, messages_unacknowledged, messages_uncommitted, 
-messages, acks_uncommitted, consumers, transactions, memory]. The default is 
- to display name and (number of) messages.
+messages, acks_uncommitted, consumers, transactions, memory, mode]. The default 
+is to display name and (number of) messages.
 
 <ExchangeInfoItem> must be a member of the list [name, type, durable, 
 auto_delete, arguments]. The default is to display name and type.
@@ -291,6 +293,11 @@ action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
     action(Command, Node, VHost, RemainingArgs, Inform).
 
+action(set_queue_mode, Node, VHost, [Queue, Mode], Inform) ->
+    Inform("Setting queue mode to ~p for queue ~p in vhost ~p",
+           [Mode, Queue, VHost]),
+    call(Node, {rabbit_amqqueue, set_mode, [VHost, Queue, Mode]});
+    
 action(set_permissions, Node, VHost, [Username, CPerm, WPerm, RPerm], Inform) ->
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
     call(Node, {rabbit_access_control, set_permissions,

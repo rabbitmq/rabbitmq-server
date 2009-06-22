@@ -39,7 +39,8 @@
          tx_publish/2, tx_commit/3, tx_cancel/2, requeue/2, purge/1,
          length/1, is_empty/1, delete_queue/1]).
 
--export([to_disk_only_mode/2, to_mixed_mode/2, estimate_queue_memory/1]).
+-export([to_disk_only_mode/2, to_mixed_mode/2, estimate_queue_memory/1,
+         info/1]).
 
 -record(mqstate, { mode,
                    msg_buf,
@@ -86,6 +87,7 @@
 -spec(to_mixed_mode/2 :: ([message()], mqstate()) -> okmqs()).
 
 -spec(estimate_queue_memory/1 :: (mqstate()) -> non_neg_integer).
+-spec(info/1 :: (mqstate()) -> mode()).
 
 -endif.
 
@@ -455,3 +457,6 @@ is_empty(#mqstate { length = Length }) ->
 
 estimate_queue_memory(#mqstate { memory_size = Size }) ->
     2 * Size. %% Magic number. Will probably need playing with.
+
+info(#mqstate { mode = Mode }) ->
+    Mode.

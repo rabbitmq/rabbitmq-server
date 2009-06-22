@@ -99,6 +99,7 @@ handle_call({register, Pid}, _From,
 
 handle_cast({change_memory_footprint, true},
             State = #state { mode = disk_only }) ->
+    constrain_queues(true, State #state.queues),
     {noreply, State};
 handle_cast({change_memory_footprint, true},
             State = #state { mode = ram_disk }) ->
@@ -111,10 +112,12 @@ handle_cast({change_memory_footprint, true},
 
 handle_cast({change_memory_footprint, false},
             State = #state { mode = unlimited }) ->
+    constrain_queues(false, State #state.queues),
     {noreply, State};
 handle_cast({change_memory_footprint, false},
             State = #state { mode = ram_disk }) ->
     ok = rabbit_disk_queue:to_ram_disk_mode(),
+    constrain_queues(false, State #state.queues),
     {noreply, State #state { mode = unlimited }};
 handle_cast({change_memory_footprint, false},
             State = #state { mode = disk_only }) ->

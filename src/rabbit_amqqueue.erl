@@ -42,7 +42,7 @@
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([constrain_memory/2]).
+-export([constrain_memory/2, set_mode/3]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -225,6 +225,12 @@ list(VHostPath) ->
 
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
+set_mode(VHostPath, Queue, ModeBin)
+  when is_binary(VHostPath) andalso is_binary(Queue) ->
+    Mode = list_to_atom(binary_to_list(ModeBin)),
+    with(rabbit_misc:r(VHostPath, queue, Queue),
+         fun(Q) -> gen_server2:cast(Q #amqqueue.pid, {set_mode, Mode}) end).
+
 info(#amqqueue{ pid = QPid }) ->
     gen_server2:pcall(QPid, 9, info, infinity).
 
@@ -318,7 +324,10 @@ unblock(QPid, ChPid) ->
     gen_server2:pcast(QPid, 10, {unblock, ChPid}).
 
 constrain_memory(QPid, Constrain) ->
-    gen_server2:pcast(QPid, 10, {constrain, Constrain}).
+    gen_server2:pcast(QPid, 10, {set_mode, case Constrain of
+                                              true -> disk;
+                                              false -> mixed
+                                           end}).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
