@@ -33,7 +33,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/1, message/4, message/5, delivery/4]).
+-export([publish/1, message/4, message/5, message/6, delivery/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -44,8 +44,10 @@
 -spec(delivery/4 :: (bool(), bool(), maybe(txn()), message()) -> delivery()). 
 -spec(message/4 :: (exchange_name(), routing_key(), binary(), binary()) ->
              message()).
--spec(message/5 :: (exchange_name(), routing_key(), binary(), binary(), guid()) ->
-             message()).
+-spec(message/5 :: (exchange_name(), routing_key(), binary(), binary(),
+                    guid()) -> message()).
+-spec(message/6 :: (exchange_name(), routing_key(), binary(), binary(),
+                    guid(), bool()) -> message()).
 
 -endif.
 
@@ -69,6 +71,9 @@ message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin) ->
     message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin, rabbit_guid:guid()).
 
 message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin, MsgId) ->
+    message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin, MsgId, false).
+
+message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin, MsgId, IsPersistent) ->
     {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
     Content = #content{class_id = ClassId,
                        properties = #'P_basic'{content_type = ContentTypeBin},
@@ -78,4 +83,4 @@ message(ExchangeName, RoutingKeyBin, ContentTypeBin, BodyBin, MsgId) ->
                    routing_key    = RoutingKeyBin,
                    content        = Content,
                    guid           = MsgId,
-                   is_persistent  = false}.
+                   is_persistent  = IsPersistent}.
