@@ -229,7 +229,7 @@ set_mode(VHostPath, Queue, ModeBin)
   when is_binary(VHostPath) andalso is_binary(Queue) ->
     Mode = list_to_atom(binary_to_list(ModeBin)),
     with(rabbit_misc:r(VHostPath, queue, Queue),
-         fun(Q) -> gen_server2:cast(Q #amqqueue.pid, {set_mode, Mode}) end).
+         fun(Q) -> gen_server2:pcast(Q #amqqueue.pid, 10, {set_mode, Mode}) end).
 
 info(#amqqueue{ pid = QPid }) ->
     gen_server2:pcall(QPid, 9, info, infinity).
