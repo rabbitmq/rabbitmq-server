@@ -86,8 +86,8 @@ init([]) ->
 handle_call({register, Pid}, _From,
             State = #state { queues = Qs, mode = Mode }) ->
     Result = case Mode of
-                 unlimited -> mixed;
-                 _ -> disk
+                 disk_only -> disk;
+                 _ -> mixed
              end,
     {reply, {ok, Result}, State #state { queues = [Pid | Qs] }}.
 
