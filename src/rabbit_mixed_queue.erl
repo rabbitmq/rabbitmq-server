@@ -39,7 +39,7 @@
          tx_publish/2, tx_commit/3, tx_cancel/2, requeue/2, purge/1,
          length/1, is_empty/1, delete_queue/1]).
 
--export([to_disk_only_mode/1, to_mixed_mode/1, estimate_extra_memory/1]).
+-export([to_disk_only_mode/2, to_mixed_mode/2, estimate_extra_memory/1]).
 
 -record(mqstate, { mode,
                    msg_buf,
@@ -81,6 +81,10 @@
              
 -spec(length/1 :: (mqstate()) -> non_neg_integer()).
 -spec(is_empty/1 :: (mqstate()) -> bool()).
+
+-spec(to_disk_only_mode/2 :: ([message()], mqstate()) -> okmqs()).
+-spec(to_mixed_mode/2 :: ([message()], mqstate()) -> okmqs()).
+
 -spec(estimate_extra_memory/1 :: (mqstate()) -> non_neg_integer).
 
 -endif.
@@ -91,7 +95,7 @@ init(Queue, IsDurable, disk) ->
                  is_durable = IsDurable, length = 0, memory_size = 0 });
 init(Queue, IsDurable, mixed) ->
     {ok, State} = init(Queue, IsDurable, disk),
-    to_mixed_mode(State).
+    to_mixed_mode([], State).
 
 size_of_message(
   #basic_message { content = #content { payload_fragments_rev = Payload }}) ->
@@ -99,10 +103,11 @@ size_of_message(
                         SumAcc + size(Frag)
                 end, 0, Payload).
 
-to_disk_only_mode(State = #mqstate { mode = disk }) ->
+to_disk_only_mode(_TxnMessages, State = #mqstate { mode = disk }) ->
     {ok, State};
-to_disk_only_mode(State =
-                  #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf }) ->
+to_disk_only_mode(TxnMessages, State =
+                  #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf,
+                             is_durable = IsDurable }) ->
     rabbit_log:info("Converting queue to disk only mode: ~p~n", [Q]),
     %% We enqueue _everything_ here. This means that should a message
     %% already be in the disk queue we must remove it and add it back
@@ -137,12 +142,25 @@ to_disk_only_mode(State =
             true ->
                  rabbit_disk_queue:requeue_with_seqs(Q, lists:reverse(Requeue))
          end,
+    %% tx_publish txn messages. Some of these will have been already
+    %% published if they really are durable and persistent which is
+    %% why we can't just use our own tx_publish/2 function (would end
+    %% up publishing twice, so refcount would go wrong in disk_queue).
+    lists:foreach(
+      fun (Msg = #basic_message { is_persistent = IsPersistent }) ->
+              ok = case IsDurable andalso IsPersistent of
+                       true -> ok;
+                       _    -> rabbit_disk_queue:tx_publish(Msg)
+                   end
+      end, TxnMessages),
     {ok,
      State #mqstate { mode = disk, msg_buf = queue:new(), memory_size = Size }}.
 
-to_mixed_mode(State = #mqstate { mode = mixed }) ->
+to_mixed_mode(_TxnMessages, State = #mqstate { mode = mixed }) ->
     {ok, State};
-to_mixed_mode(State = #mqstate { mode = disk, queue = Q, length = Length }) ->
+to_mixed_mode(TxnMessages, State =
+              #mqstate { mode = disk, queue = Q, length = Length,
+                         is_durable = IsDurable }) ->
     rabbit_log:info("Converting queue to mixed mode: ~p~n", [Q]),
     %% load up a new queue with everything that's on disk.
     %% don't remove non-persistent messages that happen to be on disk
@@ -153,6 +171,19 @@ to_mixed_mode(State = #mqstate { mode = disk, queue = Q, length = Length }) ->
                {Buf, L}) ->
                   {queue:in({Msg, IsDelivered, true}, Buf), L+1}
           end, {queue:new(), 0}, QList),
+    %% remove txn messages from disk which are neither persistent and
+    %% durable. This is necessary to avoid leaks. This is also pretty
+    %% much the inverse behaviour of our own tx_cancel/2 which is why
+    %% we're not using it.
+    Cancel =
+        lists:foldl(
+          fun (Msg = #basic_message { is_persistent = IsPersistent }, Acc) ->
+                  case IsDurable andalso IsPersistent of
+                      true -> Acc;
+                      _    -> [Msg #basic_message.guid | Acc]
+                  end
+          end, [], TxnMessages),
+    ok = rabbit_disk_queue:tx_cancel(lists:reverse(Cancel)),
     {ok, State #mqstate { mode = mixed, msg_buf = MsgBuf1, memory_size = 0 }}.
 
 purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
