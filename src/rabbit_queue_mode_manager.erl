@@ -92,8 +92,8 @@ handle_call({register, Pid}, _From,
             State = #state { queues = Qs, mode = Mode }) ->
     _MRef = erlang:monitor(process, Pid),
     Result = case Mode of
-                 unlimited -> mixed;
-                 _ -> disk
+                 disk_only -> disk;
+                 _ -> mixed
              end,
     {reply, {ok, Result}, State #state { queues = dict:store(Pid, 0, Qs) }}.
 
