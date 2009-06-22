@@ -38,6 +38,7 @@
 -define(UNSENT_MESSAGE_LIMIT, 100).
 -define(HIBERNATE_AFTER, 1000).
 -define(MEMORY_REPORT_INTERVAL, 500).
+-define(MEMORY_REPORT_TIME_INTERVAL, 1000000). %% 1 second in microseconds
 
 -export([start_link/1]).
 
@@ -110,7 +111,7 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
             active_consumers = queue:new(),
             blocked_consumers = queue:new(),
             memory_report_counter = ?MEMORY_REPORT_INTERVAL,
-            old_memory_report = 1
+            old_memory_report = {1, now()}
            }, ?HIBERNATE_AFTER}.
 
 terminate(_Reason, State) ->
@@ -538,7 +539,7 @@ i(memory, _) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-report_memory(State = #q { old_memory_report = OldMem,
+report_memory(State = #q { old_memory_report = {OldMem, Then},
                            mixed_state = MS }) ->
     MSize = rabbit_mixed_queue:estimate_queue_memory(MS),
     NewMem = case MSize of
@@ -546,10 +547,12 @@ report_memory(State = #q { old_memory_report = OldMem,
                  N -> N
              end,
     State1 = State #q { memory_report_counter = ?MEMORY_REPORT_INTERVAL },
-    case (NewMem / OldMem) > 1.1 orelse (OldMem / NewMem) > 1.1 of
+    Now = now(),
+    case ((NewMem / OldMem) > 1.1 orelse (OldMem / NewMem) > 1.1) andalso
+        (?MEMORY_REPORT_TIME_INTERVAL < timer:now_diff(Now, Then)) of
         true ->
             rabbit_queue_mode_manager:report_memory(self(), NewMem),
-            State1 #q { old_memory_report = NewMem };
+            State1 #q { old_memory_report = {NewMem, Now} };
         false -> State1
     end.
 
