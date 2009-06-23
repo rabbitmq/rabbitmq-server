@@ -739,6 +739,8 @@ start_commit_timer(State = #dqstate { timer_ref = undefined }) ->
     {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, filesync, []),
     State #dqstate { timer_ref = TRef }.
 
+stop_commit_timer(State = #dqstate { timer_ref = undefined }) ->
+    State;
 stop_commit_timer(State = #dqstate { timer_ref = TRef }) ->
     {ok, cancel} = timer:cancel(TRef),
     State #dqstate { timer_ref = undefined }.
