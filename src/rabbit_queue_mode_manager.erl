@@ -81,7 +81,8 @@ handle_call({register, Pid}, _From,
              end,
     {reply, {ok, Result}, State #state { queues = dict:store(Pid, 0, Qs) }}.
 
-handle_cast(_Any, State) ->
+handle_cast(Any, State) ->
+    io:format("~w~n", [Any]),
     {noreply, State}.
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
