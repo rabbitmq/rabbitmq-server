@@ -42,7 +42,7 @@
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([constrain_memory/2, set_mode/3]).
+-export([set_mode/3]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -104,7 +104,7 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
--spec(constrain_memory/2 :: (pid(), bool()) -> 'ok').
+-spec(set_mode/3 :: (vhost(), amqqueue(), ('disk' | 'mixed')) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), bool()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
@@ -322,12 +322,6 @@ notify_sent(QPid, ChPid) ->
 
 unblock(QPid, ChPid) ->
     gen_server2:pcast(QPid, 10, {unblock, ChPid}).
-
-constrain_memory(QPid, Constrain) ->
-    gen_server2:pcast(QPid, 10, {set_mode, case Constrain of
-                                              true -> disk;
-                                              false -> mixed
-                                           end}).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(

@@ -46,7 +46,7 @@
 
 -export([length/1, filesync/0, cache_info/0]).
 
--export([stop/0, stop_and_obliterate/0,
+-export([stop/0, stop_and_obliterate/0, change_memory_footprint/2,
          to_disk_only_mode/0, to_ram_disk_mode/0]).
 
 -include("rabbit.hrl").
@@ -269,6 +269,7 @@
 -spec(length/1 :: (queue_name()) -> non_neg_integer()).
 -spec(filesync/0 :: () -> 'ok').
 -spec(cache_info/0 :: () -> [{atom(), term()}]).
+-spec(change_memory_footprint/2 :: (pid(), bool()) -> 'ok').
 
 -endif.
 
@@ -345,6 +346,9 @@ filesync() ->
 cache_info() ->
     gen_server2:call(?SERVER, cache_info, infinity).
 
+change_memory_footprint(_Pid, Conserve) ->
+    gen_server2:pcast(?SERVER, 9, {change_memory_footprint, Conserve}).
+
 %% ---- GEN-SERVER INTERNAL API ----
 
 init([FileSizeLimit, ReadFileHandlesLimit]) ->
@@ -357,6 +361,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %%       brutal_kill.
     %% Otherwise, the gen_server will be immediately terminated.
     process_flag(trap_exit, true),
+    ok = rabbit_alarm:register(self(), {?MODULE, change_memory_footprint, []}),
     Node = node(),
     ok = 
         case mnesia:change_table_copy_type(rabbit_disk_queue, Node,
@@ -457,32 +462,10 @@ handle_call(stop_vaporise, _From, State) ->
      State1 #dqstate { current_file_handle = undefined,
                        read_file_handles = {dict:new(), gb_trees:empty()}}};
     %% gen_server now calls terminate, which then calls shutdown
-handle_call(to_disk_only_mode, _From,
-            State = #dqstate { operation_mode = disk_only }) ->
-    reply(ok, State);
-handle_call(to_disk_only_mode, _From,
-            State = #dqstate { operation_mode = ram_disk,
-                               msg_location_dets = MsgLocationDets,
-                               msg_location_ets = MsgLocationEts }) ->
-    rabbit_log:info("Converting disk queue to disk only mode~n", []),
-    {atomic, ok} = mnesia:change_table_copy_type(rabbit_disk_queue, node(),
-                                                 disc_only_copies),
-    ok = dets:from_ets(MsgLocationDets, MsgLocationEts),
-    true = ets:delete_all_objects(MsgLocationEts),
-    reply(ok, State #dqstate { operation_mode = disk_only });
-handle_call(to_ram_disk_mode, _From,
-            State = #dqstate { operation_mode = ram_disk }) ->
-    reply(ok, State);
-handle_call(to_ram_disk_mode, _From,
-            State = #dqstate { operation_mode = disk_only,
-                               msg_location_dets = MsgLocationDets,
-                               msg_location_ets = MsgLocationEts }) ->
-    rabbit_log:info("Converting disk queue to ram disk mode~n", []),
-    {atomic, ok} = mnesia:change_table_copy_type(rabbit_disk_queue, node(),
-                                                 disc_copies),
-    true = ets:from_dets(MsgLocationEts, MsgLocationDets),
-    ok = dets:delete_all_objects(MsgLocationDets),
-    reply(ok, State #dqstate { operation_mode = ram_disk });
+handle_call(to_disk_only_mode, _From, State) ->
+    reply(ok, to_disk_only_mode(State));
+handle_call(to_ram_disk_mode, _From, State) ->
+    reply(ok, to_ram_disk_mode(State));
 handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     {_ReadSeqId, _WriteSeqId, Length} = sequence_lookup(Sequences, Q),
     reply(Length, State);
@@ -522,7 +505,12 @@ handle_cast({delete_queue, Q}, State) ->
     {ok, State1} = internal_delete_queue(Q, State),
     noreply(State1);
 handle_cast(filesync, State) ->
-    noreply(sync_current_file_handle(State)).
+    noreply(sync_current_file_handle(State));
+handle_cast({change_memory_footprint, Conserve}, State) ->
+    noreply((case Conserve of
+                 true -> fun to_disk_only_mode/1;
+                 false -> fun to_ram_disk_mode/1
+             end)(State)).
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -562,6 +550,30 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% ---- UTILITY FUNCTIONS ----
+
+to_disk_only_mode(State = #dqstate { operation_mode = disk_only }) ->
+    State;
+to_disk_only_mode(State = #dqstate { operation_mode = ram_disk,
+                                     msg_location_dets = MsgLocationDets,
+                                     msg_location_ets = MsgLocationEts }) ->
+    rabbit_log:info("Converting disk queue to disk only mode~n", []),
+    {atomic, ok} = mnesia:change_table_copy_type(rabbit_disk_queue, node(),
+                                                 disc_only_copies),
+    ok = dets:from_ets(MsgLocationDets, MsgLocationEts),
+    true = ets:delete_all_objects(MsgLocationEts),
+    State #dqstate { operation_mode = disk_only }.
+
+to_ram_disk_mode(State = #dqstate { operation_mode = ram_disk }) ->
+    State;
+to_ram_disk_mode(State = #dqstate { operation_mode = disk_only,
+                                    msg_location_dets = MsgLocationDets,
+                                    msg_location_ets = MsgLocationEts }) ->
+    rabbit_log:info("Converting disk queue to ram disk mode~n", []),
+    {atomic, ok} = mnesia:change_table_copy_type(rabbit_disk_queue, node(),
+                                                 disc_copies),
+    true = ets:from_dets(MsgLocationEts, MsgLocationDets),
+    ok = dets:delete_all_objects(MsgLocationDets),
+    State #dqstate { operation_mode = ram_disk }.
 
 noreply(NewState = #dqstate { current_dirty = true }) ->
     {noreply, start_commit_timer(NewState), 0};

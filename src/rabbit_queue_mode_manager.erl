@@ -38,10 +38,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([register/1, change_memory_footprint/2,
-         reduce_memory_footprint/0, increase_memory_footprint/0,
-         report_memory/2
-        ]).
+-export([register/1, report_memory/2]).
 
 -define(SERVER, ?MODULE).
 
@@ -52,9 +49,6 @@
 -spec(start_link/0 :: () ->
               ({'ok', pid()} | 'ignore' | {'error', any()})).
 -spec(register/1 :: (pid()) -> {'ok', queue_mode()}).
--spec(change_memory_footprint/2 :: (pid(), bool()) -> 'ok').
--spec(reduce_memory_footprint/0 :: () -> 'ok').
--spec(increase_memory_footprint/0 :: () -> 'ok').
 -spec(report_memory/2 :: (pid(), non_neg_integer()) -> 'ok').
 
 -endif.
@@ -69,21 +63,11 @@ start_link() ->
 register(Pid) ->
     gen_server2:call(?SERVER, {register, Pid}).
 
-change_memory_footprint(_Pid, Conserve) ->
-    gen_server2:cast(?SERVER, {change_memory_footprint, Conserve}).
-
-reduce_memory_footprint() ->
-    gen_server2:cast(?SERVER, {change_memory_footprint, true}).
-                           
-increase_memory_footprint() ->
-    gen_server2:cast(?SERVER, {change_memory_footprint, false}).
-
 report_memory(Pid, Memory) ->
     gen_server2:cast(?SERVER, {report_memory, Pid, Memory}).
 
 init([]) ->
     process_flag(trap_exit, true),
-    ok = rabbit_alarm:register(self(), {?MODULE, change_memory_footprint, []}),
     {ok, #state { mode = unlimited,
                   queues = dict:new()
                 }}.
@@ -97,36 +81,8 @@ handle_call({register, Pid}, _From,
              end,
     {reply, {ok, Result}, State #state { queues = dict:store(Pid, 0, Qs) }}.
 
-handle_cast({change_memory_footprint, true},
-            State = #state { mode = disk_only }) ->
-    constrain_queues(true, State #state.queues),
-    {noreply, State};
-handle_cast({change_memory_footprint, true},
-            State = #state { mode = ram_disk }) ->
-    constrain_queues(true, State #state.queues),
-    {noreply, State #state { mode = disk_only }};
-handle_cast({change_memory_footprint, true},
-            State = #state { mode = unlimited }) ->
-    ok = rabbit_disk_queue:to_disk_only_mode(),
-    {noreply, State #state { mode = ram_disk }};
-
-handle_cast({change_memory_footprint, false},
-            State = #state { mode = unlimited }) ->
-    constrain_queues(false, State #state.queues),
-    {noreply, State};
-handle_cast({change_memory_footprint, false},
-            State = #state { mode = ram_disk }) ->
-    ok = rabbit_disk_queue:to_ram_disk_mode(),
-    constrain_queues(false, State #state.queues),
-    {noreply, State #state { mode = unlimited }};
-handle_cast({change_memory_footprint, false},
-            State = #state { mode = disk_only }) ->
-    constrain_queues(false, State #state.queues),
-    {noreply, State #state { mode = ram_disk }};
-
-handle_cast({report_memory, Pid, Memory}, State = #state { queues = Qs }) ->
-    io:format("Queue ~w requested ~w bytes~n", [Pid, Memory]),
-    {noreply, State #state { queues = dict:store(Pid, Memory, Qs) }}.
+handle_cast(_Any, State) ->
+    {noreply, State}.
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state { queues = Qs }) ->
@@ -141,9 +97,3 @@ terminate(_Reason, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-constrain_queues(Constrain, Qs) ->
-    dict:fold(
-      fun (QPid, _Mem, ok) ->
-              rabbit_amqqueue:constrain_memory(QPid, Constrain)
-      end, ok, Qs).
