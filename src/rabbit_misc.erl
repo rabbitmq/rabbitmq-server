@@ -409,7 +409,7 @@ format_stderr(Fmt, Args) ->
 manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
     Iterate(fun (App, Acc) ->
                     case Do(App) of
-                        ok -> [App | Acc];
+                        ok -> timer:sleep(100), [App | Acc];
                         {error, {SkipError, _}} -> Acc;
                         {error, Reason} ->
                             lists:foreach(Undo, Acc),
