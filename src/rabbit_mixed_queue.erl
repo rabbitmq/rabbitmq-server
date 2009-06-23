@@ -169,7 +169,7 @@ to_mixed_mode(TxnMessages, State =
                       _    -> [Msg #basic_message.guid | Acc]
                   end
           end, [], TxnMessages),
-    ok = rabbit_disk_queue:tx_cancel(lists:reverse(Cancel)),
+    ok = rabbit_disk_queue:tx_cancel(Cancel),
     {ok, State #mqstate { mode = mixed, msg_buf = MsgBuf1 }}.
 
 purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
@@ -184,7 +184,7 @@ purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
                  rabbit_disk_queue:requeue_with_seqs(Q, lists:reverse(Requeue))
          end,
     ok = if Acks == [] -> ok;
-            true -> rabbit_disk_queue:ack(Q, lists:reverse(Acks))
+            true -> rabbit_disk_queue:ack(Q, Acks)
          end,
     {ok, State #mqstate { length = Length }}.
 
@@ -338,13 +338,12 @@ tx_commit(Publishes, Acks, State = #mqstate { mode = mixed, queue = Q,
                           length = Length + erlang:length(Publishes) }}.
 
 only_persistent_msg_ids(Pubs) ->
-    lists:reverse(
       lists:foldl(
         fun (Msg = #basic_message { is_persistent = IsPersistent }, Acc) ->
                 if IsPersistent -> [Msg #basic_message.guid | Acc];
                    true -> Acc
                 end
-        end, [], Pubs)).
+        end, [], Pubs).
 
 tx_cancel(Publishes, State = #mqstate { mode = disk }) ->
     ok = rabbit_disk_queue:tx_cancel(only_msg_ids(Publishes)),
