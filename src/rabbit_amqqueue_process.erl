@@ -275,7 +275,7 @@ run_message_queue(State = #q { mixed_state = MS }) ->
     {{_IsEmpty1, AutoAcks}, State1} =
         deliver_queue(Funs, {IsEmpty, []}, State),
     {ok, MS1} =
-        rabbit_mixed_queue:ack(lists:reverse(AutoAcks), State1 #q.mixed_state),
+        rabbit_mixed_queue:ack(AutoAcks, State1 #q.mixed_state),
     State1 #q { mixed_state = MS1 }.
 
 attempt_immediate_delivery(none, _ChPid, Msg, State) ->
@@ -320,7 +320,7 @@ deliver_or_requeue_n(MsgsWithAcks, State) ->
     {{_RemainingLengthMinusOne, AutoAcks, OutstandingMsgs}, NewState} =
         deliver_queue(Funs, {length(MsgsWithAcks) - 1, [], MsgsWithAcks},
                       State),
-    {ok, MS} = rabbit_mixed_queue:ack(lists:reverse(AutoAcks),
+    {ok, MS} = rabbit_mixed_queue:ack(AutoAcks,
                                       NewState #q.mixed_state),
     case OutstandingMsgs of
         [] -> run_message_queue(NewState #q { mixed_state = MS });
@@ -479,7 +479,7 @@ commit_transaction(Txn, State) ->
           pending_acks = PendingAcks
         } = lookup_tx(Txn),
     PendingMessagesOrdered = lists:reverse(PendingMessages),
-    PendingAcksOrdered = lists:append(lists:reverse(PendingAcks)),
+    PendingAcksOrdered = lists:append(PendingAcks),
     Acks =
         case lookup_ch(ChPid) of
             not_found -> [];
@@ -496,7 +496,7 @@ commit_transaction(Txn, State) ->
 rollback_transaction(Txn, State) ->
     #tx { pending_messages = PendingMessages
         } = lookup_tx(Txn),
-    {ok, MS} = rabbit_mixed_queue:tx_cancel(lists:reverse(PendingMessages),
+    {ok, MS} = rabbit_mixed_queue:tx_cancel(PendingMessages,
                                             State #q.mixed_state),
     erase_tx(Txn),
     State #q { mixed_state = MS }.

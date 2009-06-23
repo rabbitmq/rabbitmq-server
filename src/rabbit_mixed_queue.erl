@@ -181,7 +181,7 @@ to_mixed_mode(TxnMessages, State =
                       _    -> [Msg #basic_message.guid | Acc]
                   end
           end, [], TxnMessages),
-    ok = rabbit_disk_queue:tx_cancel(lists:reverse(Cancel)),
+    ok = rabbit_disk_queue:tx_cancel(Cancel),
     {ok, State #mqstate { mode = mixed, msg_buf = MsgBuf1 }}.
 
 purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
@@ -197,7 +197,7 @@ purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
                  rabbit_disk_queue:requeue_with_seqs(Q, lists:reverse(Requeue))
          end,
     ok = if Acks == [] -> ok;
-            true -> rabbit_disk_queue:ack(Q, lists:reverse(Acks))
+            true -> rabbit_disk_queue:ack(Q, Acks)
          end,
     {ok, State #mqstate { length = Length, memory_size = QSize - ASize }}.
 
@@ -303,7 +303,7 @@ remove_noacks(MsgsWithAcks) ->
             ({Msg, AckTag}, {AccAckTags, AccSize}) ->
                 {[AckTag | AccAckTags], size_of_message(Msg) + AccSize}
         end, {[], 0}, MsgsWithAcks),
-    {lists:reverse(AckTags), ASize}.
+    {AckTags, ASize}.
 
 ack(MsgsWithAcks, State = #mqstate { queue = Q, memory_size = QSize }) ->
     case remove_noacks(MsgsWithAcks) of
@@ -371,7 +371,7 @@ tx_cancel(Publishes, State = #mqstate { mode = disk, memory_size = QSize }) ->
           fun (Msg = #basic_message { guid = MsgId }, {MsgIdsAcc, CSizeAcc}) ->
                   {[MsgId | MsgIdsAcc], CSizeAcc + size_of_message(Msg)}
           end, {[], 0}, Publishes),
-    ok = rabbit_disk_queue:tx_cancel(lists:reverse(MsgIds)),
+    ok = rabbit_disk_queue:tx_cancel(MsgIds),
     {ok, State #mqstate { memory_size = QSize - CSize }};
 tx_cancel(Publishes, State = #mqstate { mode = mixed, is_durable = IsDurable,
                                         memory_size = QSize }) ->
@@ -387,7 +387,7 @@ tx_cancel(Publishes, State = #mqstate { mode = mixed, is_durable = IsDurable,
           end, {[], 0}, Publishes),
     ok =
         if IsDurable ->
-                rabbit_disk_queue:tx_cancel(lists:reverse(PersistentPubs));
+                rabbit_disk_queue:tx_cancel(PersistentPubs);
            true -> ok
         end,
     {ok, State #mqstate { memory_size = QSize - CSize }}.
