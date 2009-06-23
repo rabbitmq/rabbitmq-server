@@ -515,10 +515,11 @@ handle_cast(filesync, State) ->
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
-handle_info(timeout, State = #dqstate { current_dirty = true }) ->
+handle_info(timeout, State = #dqstate { timer_ref = TRef })
+  when TRef /= undefined ->
     noreply(sync_current_file_handle(State));
 handle_info(_Info, State) ->
-    {noreply, State}.
+    noreply(State).
 
 terminate(_Reason, State) ->
     shutdown(State).
@@ -552,15 +553,23 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% ---- UTILITY FUNCTIONS ----
 
-noreply(NewState = #dqstate { current_dirty = true }) ->
+noreply(NewState = #dqstate { on_sync_froms = [], timer_ref = undefined }) ->
+    {noreply, NewState, infinity};
+noreply(NewState = #dqstate { timer_ref = undefined }) ->
     {noreply, start_commit_timer(NewState), 0};
+noreply(NewState = #dqstate { on_sync_froms = [] }) ->
+    {noreply, stop_commit_timer(NewState), infinity};
 noreply(NewState) ->
-    {noreply, stop_commit_timer(NewState), infinity}.
+    {noreply, NewState, 0}.
 
-reply(Reply, NewState = #dqstate { current_dirty = true }) ->
+reply(Reply, NewState = #dqstate { on_sync_froms = [], timer_ref = undefined }) ->
+    {reply, Reply, NewState, infinity};
+reply(Reply, NewState = #dqstate { timer_ref = undefined }) ->
     {reply, Reply, start_commit_timer(NewState), 0};
+reply(Reply, NewState = #dqstate { on_sync_froms = [] }) ->
+    {reply, Reply, stop_commit_timer(NewState), infinity};
 reply(Reply, NewState) ->
-    {reply, Reply, stop_commit_timer(NewState), infinity}.
+    {reply, Reply, NewState, 0}.
 
 form_filename(Name) ->
     filename:join(base_directory(), Name).
@@ -705,12 +714,8 @@ sequence_lookup(Sequences, Q) ->
 
 start_commit_timer(State = #dqstate { timer_ref = undefined }) ->
     {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, filesync, []),
-    State #dqstate { timer_ref = TRef };
-start_commit_timer(State) ->
-    State.
+    State #dqstate { timer_ref = TRef }.
 
-stop_commit_timer(State = #dqstate { timer_ref = undefined }) ->
-    State;
 stop_commit_timer(State = #dqstate { timer_ref = TRef }) ->
     {ok, cancel} = timer:cancel(TRef),
     State #dqstate { timer_ref = undefined }.
