@@ -158,11 +158,13 @@ replicated_table_definitions() ->
                      not lists:member({local_content, true}, Attrs)
     ].
 
+non_replicated_table_definitions() ->
+    [{Tab, Attrs} || {Tab, Attrs} <- table_definitions(),
+                     lists:member({local_content, true}, Attrs)
+    ].
+
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
-
-replicated_table_names() ->
-    [Tab || {Tab, _} <- replicated_table_definitions()].
 
 dir() -> mnesia:system_info(directory).
     
@@ -189,7 +191,7 @@ ensure_mnesia_not_running() ->
 check_schema_integrity() ->
     %%TODO: more thorough checks
     case catch [mnesia:table_info(Tab, version)
-                || Tab <- replicated_table_names()] of
+                || Tab <- table_names()] of
         {'EXIT', Reason} -> {error, Reason};
         _ -> ok
     end.
@@ -292,12 +294,13 @@ init_db(ClusterNodes) ->
                     ok = create_schema()
             end;
         {ok, [_|_]} ->
+            TableCopyType = case IsDiskNode of
+                                true  -> disc;
+                                false -> ram
+                            end,
+            ok = create_local_non_replicated_table_copies(TableCopyType),
             ok = wait_for_tables(),
-            ok = create_local_table_copies(
-                   case IsDiskNode of
-                       true  -> disc;
-                       false -> ram
-                   end);
+            ok = create_local_replicated_table_copies(TableCopyType);
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
@@ -348,7 +351,13 @@ create_tables() ->
                   table_definitions()),
     ok.
 
-create_local_table_copies(Type) ->
+create_local_replicated_table_copies(Type) ->
+    create_local_table_copies(Type, replicated_table_definitions()).
+
+create_local_non_replicated_table_copies(Type) ->
+    create_local_table_copies(Type, non_replicated_table_definitions()).
+
+create_local_table_copies(Type, TableDefinitions) ->
     ok = create_local_table_copy(schema, disc_copies),
     lists:foreach(
       fun({Tab, TabDef}) ->
@@ -384,7 +393,7 @@ create_local_table_copies(Type) ->
                   end,
               ok = create_local_table_copy(Tab, StorageType)
       end,
-      table_definitions()),
+      TableDefinitions),
     ok.
 
 create_local_table_copy(Tab, Type) ->
@@ -402,7 +411,7 @@ create_local_table_copy(Tab, Type) ->
 wait_for_tables() -> 
     case check_schema_integrity() of
         ok ->
-            case mnesia:wait_for_tables(replicated_table_names(), 30000) of
+            case mnesia:wait_for_tables(table_names(), 30000) of
                 ok -> ok;
                 {timeout, BadTabs} ->
                     throw({error, {timeout_waiting_for_tables, BadTabs}});
