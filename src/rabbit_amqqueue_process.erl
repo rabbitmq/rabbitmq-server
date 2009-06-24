@@ -545,7 +545,8 @@ i(Item, _) ->
 
 report_memory(State = #q { old_memory_report = {OldMem, Then},
                            mixed_state = MS }) ->
-    MSize = rabbit_mixed_queue:estimate_queue_memory(MS),
+    {MSize, Gain, Loss} =
+        rabbit_mixed_queue:estimate_queue_memory(MS),
     NewMem = case MSize of
                  0 -> 1; %% avoid / 0
                  N -> N
@@ -555,8 +556,9 @@ report_memory(State = #q { old_memory_report = {OldMem, Then},
     case ((NewMem / OldMem) > 1.1 orelse (OldMem / NewMem) > 1.1) andalso
         (?MEMORY_REPORT_TIME_INTERVAL < timer:now_diff(Now, Then)) of
         true ->
-            rabbit_queue_mode_manager:report_memory(self(), NewMem),
-            State1 #q { old_memory_report = {NewMem, Now} };
+            rabbit_queue_mode_manager:report_memory(self(), NewMem, Gain, Loss),
+            State1 #q { old_memory_report = {NewMem, Now},
+                        mixed_state = rabbit_mixed_queue:reset_counters(MS) };
         false -> State1
     end.
 

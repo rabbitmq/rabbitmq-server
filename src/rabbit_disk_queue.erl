@@ -279,10 +279,8 @@ start_link() ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE,
                            [?FILE_SIZE_LIMIT, ?MAX_READ_FILE_HANDLES], []).
 
-publish(Q, Message = #basic_message {}, false) ->
-    gen_server2:cast(?SERVER, {publish, Q, Message});
-publish(Q, Message = #basic_message {}, true) ->
-    gen_server2:call(?SERVER, {publish, Q, Message}, infinity).
+publish(Q, Message = #basic_message {}, IsDelivered) ->
+    gen_server2:cast(?SERVER, {publish, Q, Message, IsDelivered}).
 
 deliver(Q) ->
     gen_server2:call(?SERVER, {deliver, Q}, infinity).
@@ -427,10 +425,6 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     end,
     {ok, State1 #dqstate { current_file_handle = FileHdl }}.
 
-handle_call({publish, Q, Message}, _From, State) ->
-    {ok, MsgSeqId, State1} =
-        internal_publish(Q, Message, next, true, State),
-    reply(MsgSeqId, State1);
 handle_call({deliver, Q}, _From, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, false, State),
     reply(Result, State1);
@@ -478,9 +472,9 @@ handle_call({delete_non_durable_queues, DurableQueues}, _From, State) ->
 handle_call(cache_info, _From, State = #dqstate { message_cache = Cache }) ->
     reply(ets:info(Cache), State).
 
-handle_cast({publish, Q, Message}, State) ->
+handle_cast({publish, Q, Message, IsDelivered}, State) ->
     {ok, _MsgSeqId, State1} =
-        internal_publish(Q, Message, next, false, State),
+        internal_publish(Q, Message, next, IsDelivered, State),
     noreply(State1);
 handle_cast({ack, Q, MsgSeqIds}, State) ->
     {ok, State1} = internal_ack(Q, MsgSeqIds, State),

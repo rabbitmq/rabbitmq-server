@@ -38,7 +38,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([register/1, report_memory/2]).
+-export([register/1, report_memory/4]).
 
 -define(SERVER, ?MODULE).
 
@@ -49,7 +49,8 @@
 -spec(start_link/0 :: () ->
               ({'ok', pid()} | 'ignore' | {'error', any()})).
 -spec(register/1 :: (pid()) -> {'ok', queue_mode()}).
--spec(report_memory/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(report_memory/4 :: (pid(), non_neg_integer(),
+                          non_neg_integer(), non_neg_integer()) -> 'ok').
 
 -endif.
 
@@ -63,8 +64,8 @@ start_link() ->
 register(Pid) ->
     gen_server2:call(?SERVER, {register, Pid}).
 
-report_memory(Pid, Memory) ->
-    gen_server2:cast(?SERVER, {report_memory, Pid, Memory}).
+report_memory(Pid, Memory, Gain, Loss) ->
+    gen_server2:cast(?SERVER, {report_memory, Pid, Memory, Gain, Loss}).
 
 init([]) ->
     process_flag(trap_exit, true),
