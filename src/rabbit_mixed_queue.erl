@@ -186,11 +186,11 @@ to_mixed_mode(TxnMessages, State =
 
 purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
                                                  is_durable = IsDurable,
-                                                 memory_size = QSize }) ->
+                                                 memory_size = 0 }) ->
     %% iterate through the content on disk, ack anything which isn't
     %% persistent, accumulate everything else that is persistent and
     %% requeue it
-    {Acks, Requeue, Length, ASize} =
+    {Acks, Requeue, Length, QSize} =
         deliver_all_messages(Q, IsDurable, [], [], 0, 0),
     ok = if Requeue == [] -> ok;
             true ->
@@ -199,22 +199,21 @@ purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
     ok = if Acks == [] -> ok;
             true -> rabbit_disk_queue:ack(Q, Acks)
          end,
-    {ok, State #mqstate { length = Length, memory_size = QSize - ASize }}.
+    {ok, State #mqstate { length = Length, memory_size = QSize }}.
 
-deliver_all_messages(Q, IsDurable, Acks, Requeue, Length, ASize) ->
+deliver_all_messages(Q, IsDurable, Acks, Requeue, Length, QSize) ->
     case rabbit_disk_queue:deliver(Q) of
-        empty -> {Acks, Requeue, Length, ASize};
+        empty -> {Acks, Requeue, Length, QSize};
         {Msg = #basic_message { is_persistent = IsPersistent },
          _Size, IsDelivered, AckTag, _Remaining} ->
             OnDisk = IsPersistent andalso IsDurable,
-            {Acks1, Requeue1, Length1, ASize1} =
+            {Acks1, Requeue1, Length1, QSize1} =
                 if OnDisk -> { Acks,
                                [{AckTag, {next, IsDelivered}} | Requeue],
-                               Length + 1, ASize };
-                   true   -> { [AckTag | Acks], Requeue, Length,
-                               ASize + size_of_message(Msg) }
+                               Length + 1, QSize + size_of_message(Msg) };
+                   true   -> { [AckTag | Acks], Requeue, Length, QSize }
                 end,
-            deliver_all_messages(Q, IsDurable, Acks1, Requeue1, Length1, ASize1)
+            deliver_all_messages(Q, IsDurable, Acks1, Requeue1, Length1, QSize1)
     end.
 
 publish(Msg, State = #mqstate { mode = disk, queue = Q, length = Length,
