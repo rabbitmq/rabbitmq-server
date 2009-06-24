@@ -44,7 +44,13 @@
 
 -define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
 
--record(state, {memory_fraction, alarmed, timeout, timer}).   
+-record(state, {memory_fraction,
+                alarmed,
+                timeout,
+                timer,
+                total_memory,
+                allocated_memory
+               }).
 
 %%----------------------------------------------------------------------------
 
@@ -69,10 +75,13 @@ update() ->
 init(_Args) -> 
     Fraction = os_mon:get_env(memsup, system_memory_high_watermark),
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
-    {ok, #state{alarmed = false, 
-                memory_fraction = Fraction, 
-                timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
-                timer = TRef}}.
+    {ok, update(#state{alarmed = false, 
+                       memory_fraction = Fraction, 
+                       timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
+                       timer = TRef,
+                       total_memory = undefined,
+                       allocated_memory = undefined
+                      })}.
 
 start_timer(Timeout) ->
     {ok, TRef} = timer:apply_interval(Timeout, ?MODULE, update, []),
@@ -94,11 +103,33 @@ handle_call({set_check_interval, Timeout}, _From, State) ->
     {ok, cancel} = timer:cancel(State#state.timer),
     {reply, ok, State#state{timeout = Timeout, timer = start_timer(Timeout)}};
 
-handle_call(_Request, _From, State) -> 
+handle_call(get_memory_data, _From,
+            State = #state { total_memory = MemTotal,
+                             allocated_memory = MemUsed }) ->
+    {reply, {MemTotal, MemUsed, undefined}, State};
+
+handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast(update, State = #state{alarmed = Alarmed,
-                                   memory_fraction = MemoryFraction}) -> 
+handle_cast(update, State) ->
+    {noreply, update(State)};
+
+handle_cast(_Request, State) -> 
+    {noreply, State}.
+
+handle_info(_Info, State) -> 
+    {noreply, State}.
+
+terminate(_Reason, _State) -> 
+    ok.
+
+code_change(_OldVsn, State, _Extra) -> 
+    {ok, State}.
+
+%%----------------------------------------------------------------------------
+
+update(State = #state{alarmed = Alarmed,
+                      memory_fraction = MemoryFraction}) -> 
     File = read_proc_file("/proc/meminfo"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line/1, Lines)),
@@ -116,21 +147,8 @@ handle_cast(update, State = #state{alarmed = Alarmed,
         _ ->
             ok
     end,
-    {noreply,  State#state{alarmed = NewAlarmed}};
-
-handle_cast(_Request, State) -> 
-    {noreply, State}.
-
-handle_info(_Info, State) -> 
-    {noreply, State}.
-
-terminate(_Reason, _State) -> 
-    ok.
-
-code_change(_OldVsn, State, _Extra) -> 
-    {ok, State}.
-
-%%----------------------------------------------------------------------------
+    State#state{alarmed = NewAlarmed,
+                total_memory = MemTotal, allocated_memory = MemUsed}.
 
 -define(BUFFER_SIZE, 1024).
 
@@ -152,5 +170,9 @@ read_proc_file(IoDevice, Acc) ->
 
 %% A line looks like "FooBar: 123456 kB"
 parse_line(Line) ->
-    [Name, Value | _] = string:tokens(Line, ": "),   
-    {list_to_atom(Name), list_to_integer(Value)}.
+    [Name, Value | Rest] = string:tokens(Line, ": "),
+    Value1 = case Rest of
+                 [] -> list_to_integer(Value); %% no units
+                 ["kB"] -> list_to_integer(Value) * 1024
+             end,
+    {list_to_atom(Name), Value1}.

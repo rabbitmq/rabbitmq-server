@@ -40,6 +40,12 @@
 
 -export([register/1, report_memory/4]).
 
+-define(TOTAL_TOKENS, 1000).
+-define(LOW_WATER_MARK_FRACTION, 0.25).
+-define(EXPIRY_INTERVAL_MICROSECONDS, 5000000).
+-define(ACTIVITY_THRESHOLD, 10).
+-define(INITIAL_TOKEN_ALLOCATION, 10).
+
 -define(SERVER, ?MODULE).
 
 -ifdef(use_specs).
@@ -54,8 +60,10 @@
 
 -endif.
 
--record(state, { mode,
-                 queues
+-record(state, { remaining_tokens,
+                 mixed_queues,
+                 disk_queues,
+                 bytes_per_token
                }).
 
 start_link() ->
@@ -69,26 +77,48 @@ report_memory(Pid, Memory, Gain, Loss) ->
 
 init([]) ->
     process_flag(trap_exit, true),
-    {ok, #state { mode = unlimited,
-                  queues = dict:new()
+    %% todo, fix up this call as os_mon may not be running
+    {MemTotal, _MemUsed, _BigProc} = memsup:get_memory_data(),
+    {ok, #state { remaining_tokens = ?TOTAL_TOKENS,
+                  mixed_queues = dict:new(),
+                  disk_queues = sets:new(),
+                  bytes_per_token = MemTotal / ?TOTAL_TOKENS
                 }}.
 
 handle_call({register, Pid}, _From,
-            State = #state { queues = Qs, mode = Mode }) ->
+            State = #state { remaining_tokens = Remaining,
+                             mixed_queues = Mixed,
+                             disk_queues = Disk }) ->
     _MRef = erlang:monitor(process, Pid),
-    Result = case Mode of
-                 disk_only -> disk;
-                 _ -> mixed
-             end,
-    {reply, {ok, Result}, State #state { queues = dict:store(Pid, 0, Qs) }}.
+    {Result, State1} =
+        case Remaining >= ?INITIAL_TOKEN_ALLOCATION of
+            true ->
+                {mixed, State #state { remaining_tokens =
+                                       Remaining - ?INITIAL_TOKEN_ALLOCATION,
+                                       mixed_queues = dict:store
+                                       (Pid, {?INITIAL_TOKEN_ALLOCATION, now()},
+                                        Mixed) }};
+                                              
+            false ->
+                {disk, State #state { disk_queues =
+                                      sets:add_element(Pid, Disk) }}
+        end,
+    {reply, {ok, Result}, State1 }.
 
-handle_cast(Any, State) ->
-    io:format("~w~n", [Any]),
+handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost}, State) ->
     {noreply, State}.
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
-            State = #state { queues = Qs }) ->
-    {noreply, State #state { queues = dict:erase(Pid, Qs) }};
+            State = #state { remaining_tokens = Remaining,
+                             mixed_queues = Mixed }) ->
+    State1 = case find_queue(Pid, State) of
+                 disk ->
+                     State;
+                 {mixed, {Tokens, _When}} ->
+                     State #state { remaining_tokens = Remaining + Tokens,
+                                    mixed_queues = dict:erase(Pid, Mixed) }
+             end,
+    {noreply, State1};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info(_Info, State) ->
@@ -99,3 +129,10 @@ terminate(_Reason, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+find_queue(Pid, #state { disk_queues = Disk, mixed_queues = Mixed }) ->
+    case sets:is_element(Pid, Disk) of
+        true -> disk;
+        false -> {mixed, dict:fetch(Pid, Mixed)}
+    end.
+            
