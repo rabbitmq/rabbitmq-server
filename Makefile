@@ -1,7 +1,11 @@
+ifndef TMPDIR
+TMPDIR := /tmp
+endif
+
 RABBITMQ_NODENAME=rabbit
 RABBITMQ_SERVER_START_ARGS=
-RABBITMQ_MNESIA_DIR=/tmp/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
-RABBITMQ_LOG_BASE=/tmp
+RABBITMQ_MNESIA_DIR=$(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
+RABBITMQ_LOG_BASE=$(TMPDIR)
 
 SOURCE_DIR=src
 EBIN_DIR=ebin
@@ -69,7 +73,7 @@ clean: cleandb
 	rm -f docs/*.[0-9].gz
 
 cleandb: stop-node
-	erl -mnesia dir '"$(RABBITMQ_MNESIA_DIR)"' -noshell -eval 'lists:foreach(fun file:delete/1, filelib:wildcard(mnesia:system_info(directory) ++ "/*")), halt().'
+	rm -rf $(RABBITMQ_MNESIA_DIR)/*
 
 ############ various tasks to interact with RabbitMQ ###################
 

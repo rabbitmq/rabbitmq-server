@@ -13,12 +13,10 @@ endif
 
 ifeq "x$(RPM_OS)" "xsuse"
 REQUIRES=/sbin/chkconfig /sbin/service
-OS_DEFINES=--define '_initrddir /etc/init.d'
-RELEASE_OS=.suse
+OS_DEFINES=--define '_initrddir /etc/init.d' --define 'dist .suse'
 else
 REQUIRES=chkconfig initscripts
 OS_DEFINES=--define '_initrddir /etc/rc.d/init.d'
-RELEASE_OS=
 endif
 
 rpms:   clean server
@@ -27,7 +25,7 @@ prepare:
 	mkdir -p BUILD SOURCES SPECS SRPMS RPMS tmp
 	cp $(TOP_DIR)/$(TARBALL) SOURCES
 	cp rabbitmq-server.spec SPECS
-	sed -i 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|;s|%%RELEASE_OS%%|$(RELEASE_OS)|' \
+	sed -i 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
 		SPECS/rabbitmq-server.spec
 
 	cp init.d SOURCES/rabbitmq-server.init

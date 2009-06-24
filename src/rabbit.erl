@@ -136,7 +136,7 @@ start(normal, []) ->
 
                 ok = rabbit_amqqueue:start(),
 
-		{ok, MemoryAlarms} = application:get_env(memory_alarms),
+                {ok, MemoryAlarms} = application:get_env(memory_alarms),
                 ok = rabbit_alarm:start(MemoryAlarms),
                 
                 ok = rabbit_binary_generator:
@@ -304,7 +304,7 @@ rotate_logs(File, Suffix, OldHandler, NewHandler) ->
 
 log_rotation_result({error, MainLogError}, {error, SaslLogError}) ->
     {error, {{cannot_rotate_main_logs, MainLogError},
-	     {cannot_rotate_sasl_logs, SaslLogError}}};
+             {cannot_rotate_sasl_logs, SaslLogError}}};
 log_rotation_result({error, MainLogError}, ok) ->
     {error, {cannot_rotate_main_logs, MainLogError}};
 log_rotation_result(ok, {error, SaslLogError}) ->

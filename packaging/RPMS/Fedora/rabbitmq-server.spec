@@ -2,7 +2,7 @@
 
 Name: rabbitmq-server
 Version: %%VERSION%%
-Release: 1%%RELEASE_OS%%
+Release: 1%{?dist}
 License: MPLv1.1
 Group: Development/Libraries
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.gz
@@ -117,6 +117,9 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Wed Jun 17 2009 Matthias Radestock <matthias@lshift.net> 1.6.0-1
+- New upstream release
+
 * Tue May 19 2009 Matthias Radestock <matthias@lshift.net> 1.5.5-1
 - Maintenance release for the 1.5.x series
 
