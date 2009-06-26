@@ -24,19 +24,20 @@
 #
 
 EBIN_DIR=ebin
+TEST_EBIN_DIR=tests/ebin
 SOURCE_DIR=src
-TEST_SOURCE_DIR=tests
+TEST_SOURCE_DIR=tests/src
 INCLUDE_DIR=include
 INCLUDE_SERV_DIR=rabbitmq_server/include
 DIST_DIR=rabbitmq-erlang-client
 
-LOAD_PATH=ebin rabbitmq_server/ebin
+LOAD_PATH=$(EBIN_DIR) rabbitmq_server/ebin $(TEST_EBIN_DIR)
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TEST_SOURCES=$(wildcard $(TEST_SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
-TEST_TARGETS=$(patsubst $(TEST_SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(TEST_SOURCES))
+TEST_TARGETS=$(patsubst $(TEST_SOURCE_DIR)/%.erl, $(TEST_EBIN_DIR)/%.beam,$(TEST_SOURCES))
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
@@ -47,6 +48,7 @@ USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(versi
 endif
 
 ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
+TEST_ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(TEST_EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
 BROKER_DIR=../rabbitmq-server
 BROKER_SYMLINK=rabbitmq_server
@@ -86,17 +88,14 @@ $(EBIN_DIR):
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
 	erlc $(ERLC_OPTS) $<
 
-$(EBIN_DIR)/%.beam: $(TEST_SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
-	erlc $(ERLC_OPTS) $<
+$(TEST_EBIN_DIR)/%.beam: $(TEST_SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
+	erlc $(TEST_ERLC_OPTS) $<
 
 run:
 	erl -pa $(LOAD_PATH)
 
 
-all_tests: test_network test_network_coverage test_direct test_direct_coverage
-	$(ERL_CALL) -q
-
-tests_network: test_network test_network_coverage
+all_tests: test_network test_direct
 	$(ERL_CALL) -q
 
 test_network: compile compile_tests
@@ -104,10 +103,6 @@ test_network: compile compile_tests
 
 test_network_coverage: compile compile_tests
 	erl -pa $(LOAD_PATH) -noshell -eval 'network_client_test:test_coverage(),halt().'
-
-tests_direct: test_direct test_direct_coverage
-	$(ERL_CALL) -q
-	rm -rf $(MNESIA_DIR)
 
 test_direct: compile compile_tests
 	erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl -s rabbit -noshell \
@@ -123,8 +118,9 @@ test_direct_coverage: compile compile_tests
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
+	rm -f $(TEST_EBIN_DIR)/*.beam
 	rm -f rabbitmq_server erl_crash.dump
-	rm -fr cover dist
+	rm -fr cover dist tmp
 
 source_tarball:
 	mkdir -p dist/$(DIST_DIR)
