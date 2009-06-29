@@ -94,29 +94,36 @@ need to specify the path to this directory:
 
     $ make BROKER_DIR=PATH_TO_THE_SERVER
 
-Running the network client tests
---------------------------------
-In order to run the network client, you need to run the RabbitMQ
-server in a separate Erlang process (or use any other compliant AMQP
-server). Start your server as usual.
-
-After you have done this, you can run the unit tests:
+Running the network and direct client tests
+-------------------------------------------
+The direct client has to be run in the same Erlang VM instance as the
+RabbitMQ server. In order to use the makefile to run either the network or the
+direct client tests, you will need to shutdown any other running instance of
+RabbitMQ that you may have on your machine. This is because the Makefile targets
+for running the network or direct tests boots its own instance of RabbitMQ.
+To run these tests, use the either of the following targets:
 
     $ make test_network
-
-To get more examples of the API, look at the functions in the
-test_util module.
-
-Running the direct client tests
--------------------------------
-The direct client has to be run in the same Erlang VM instance as the
-RabbitMQ server. In order to use the makefile to run the direct client tests,
-you will need to shutdown any other running instance of RabbitMQ that you may
-have on your machine. This is because the Makefile target for running the
-direct tests boots its own instance of RabbitMQ. To run these tests, use the
-following target.
-
     $ make test_direct
+
+Or to run both:
+
+    $ make all_tests
+
+The network client test can also be run from a separate Erlang VM instance from
+RabbitMQ server. You can start an instance of the server and then, in the
+rabbitmq-erlang-client folder, type
+
+    rabbitmq-erlang-client $ make compile_tests
+    rabbitmq-erlang-client $ make run
+    erl -pa ebin rabbitmq_server/ebin tests/ebin
+    Erlang (BEAM) emulator version 5.6.5 [source] [64-bit] [smp:4] \
+    [async-threads:0] [hipe] [kernel-poll:false]
+
+    Eshell V5.6.5  (abort with ^G)
+    1> network_client_test:test().
+
+To get more examples of the API, look at the functions in the test_util module.
 
 Running the channel flow tests
 ------------------------------
