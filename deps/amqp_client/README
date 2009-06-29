@@ -199,3 +199,52 @@ wake up again:
     Producer (<0.39.0>) has woken up :-)
     Producer (<0.39.0>) has sent about 240000 messages since it started
     .....
+
+Make targets
+------------
+Interesting rabbitmq-erlang-client make targets include
+
+all
+    The default target. Builds the client (does not compile the tests).
+
+run
+    Builds the client and starts an Erlang shell with both the client and the
+    server in the load path.
+
+clean
+    Removes build products and wipes all files produced by any other
+    rabbitmq-erlang-client make targets or client errors.
+
+run_with_broker
+    Same as run, except that this make target also runs the broker when starting
+    the Erlang shell.
+
+dialyze
+    Analyses the client source code with dialyzer. Uses PLT file from default
+    location: ~/.dialyzer_plt. Use
+
+        $ make PLT=/path/to/plt dialyze
+
+    to override this. Add broker to PLT beforehand, otherwise you will a lot
+    of 'unknown function' warnings. See add_broker_to_plt make target.
+
+dialyze_all
+    Same as dialyze, except that this also analyses tests source code.
+
+add_broker_to_plt
+    Adds broker .beam files to default plt. Use
+
+        $ make PLT=/path/to/plt add_broker_to_plt
+
+    to override default plt location ( ~/.dialyzer_plt ).
+
+all_tests
+    Compiles client and client tests source code and runs network_client_test
+    and direct_client_test. During the testing, this make target runs an
+    instance of the broker, so make sure there is no other instance running.
+
+all_tests_coverage
+    Same as all_tests, except that the tests are run in coverage mode.
+
+source_tarball
+    Creates tarball of all the client source code.

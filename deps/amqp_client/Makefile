@@ -123,5 +123,11 @@ clean:
 
 source_tarball:
 	mkdir -p dist/$(DIST_DIR)
-	cp -a README Makefile src/*.erl include/*.hrl dist/$(DIST_DIR)
+	cp -a README Makefile dist/$(DIST_DIR)/
+	mkdir -p dist/$(DIST_DIR)/$(SOURCE_DIR)
+	cp -a $(SOURCE_DIR)/*.erl dist/$(DIST_DIR)/$(SOURCE_DIR)/
+	mkdir -p dist/$(DIST_DIR)/$(INCLUDE_DIR)
+	cp -a $(INCLUDE_DIR)/*.hrl dist/$(DIST_DIR)/$(INCLUDE_DIR)/
+	mkdir -p dist/$(DIST_DIR)/$(TEST_SOURCE_DIR)
+	cp -a $(TEST_SOURCE_DIR)/*.erl dist/$(DIST_DIR)/$(TEST_SOURCE_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
