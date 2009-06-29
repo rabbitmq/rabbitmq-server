@@ -54,10 +54,9 @@ BROKER_DIR=../rabbitmq-server
 BROKER_SYMLINK=rabbitmq_server
 
 LOG_BASE=/tmp
-ERL_WITH_BROKER=erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl \
-	-s rabbit -noshell \
-	-sasl sasl_error_logger '{file, "'${LOG_BASE}'/rabbit-sasl.log"}' \
-	-kernel error_logger '{file, "'${LOG_BASE}'/rabbit.log"}'
+LOG_IN_FILE=true
+ERL_WITH_BROKER=erl -pa $(LOAD_PATH) -mnesia dir tmp -boot start_sasl -s rabbit \
+	$(shell [ $(LOG_IN_FILE) = "true" ] && echo "-sasl sasl_error_logger '{file, \"'${LOG_BASE}'/rabbit-sasl.log\"}' -kernel error_logger '{file, \"'${LOG_BASE}'/rabbit.log\"}'")
 
 PLT=$(HOME)/.dialyzer_plt
 
@@ -91,8 +90,11 @@ $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
 $(TEST_EBIN_DIR)/%.beam: $(TEST_SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
 	erlc $(TEST_ERLC_OPTS) $<
 
-run:
+run: compile
 	erl -pa $(LOAD_PATH)
+
+run_with_broker: compile
+	$(ERL_WITH_BROKER)
 
 
 all_tests: compile compile_tests
