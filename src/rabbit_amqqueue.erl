@@ -42,7 +42,7 @@
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([set_mode/3]).
+-export([set_mode/3, set_mode/2, report_memory/1]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -105,10 +105,12 @@
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(set_mode/3 :: (vhost(), amqqueue(), ('disk' | 'mixed')) -> 'ok').
+-spec(set_mode/2 :: (pid(), ('disk' | 'mixed')) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), bool()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
+-spec(report_memory/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -229,7 +231,13 @@ set_mode(VHostPath, Queue, ModeBin)
   when is_binary(VHostPath) andalso is_binary(Queue) ->
     Mode = list_to_atom(binary_to_list(ModeBin)),
     with(rabbit_misc:r(VHostPath, queue, Queue),
-         fun(Q) -> gen_server2:pcast(Q #amqqueue.pid, 10, {set_mode, Mode}) end).
+         fun(Q) -> set_mode(Q #amqqueue.pid, Mode) end).
+
+set_mode(QPid, Mode) ->
+    gen_server2:pcast(QPid, 10, {set_mode, Mode}).
+
+report_memory(QPid) ->
+    gen_server2:cast(QPid, report_memory).
 
 info(#amqqueue{ pid = QPid }) ->
     gen_server2:pcall(QPid, 9, info, infinity).

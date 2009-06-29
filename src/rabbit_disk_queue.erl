@@ -46,7 +46,7 @@
 
 -export([length/1, filesync/0, cache_info/0]).
 
--export([stop/0, stop_and_obliterate/0, change_memory_footprint/2,
+-export([stop/0, stop_and_obliterate/0, conserve_memory/2,
          to_disk_only_mode/0, to_ram_disk_mode/0]).
 
 -include("rabbit.hrl").
@@ -270,7 +270,7 @@
 -spec(length/1 :: (queue_name()) -> non_neg_integer()).
 -spec(filesync/0 :: () -> 'ok').
 -spec(cache_info/0 :: () -> [{atom(), term()}]).
--spec(change_memory_footprint/2 :: (pid(), bool()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
 
 -endif.
 
@@ -345,8 +345,8 @@ filesync() ->
 cache_info() ->
     gen_server2:call(?SERVER, cache_info, infinity).
 
-change_memory_footprint(_Pid, Conserve) ->
-    gen_server2:pcast(?SERVER, 9, {change_memory_footprint, Conserve}).
+conserve_memory(_Pid, Conserve) ->
+    gen_server2:pcast(?SERVER, 9, {conserve_memory, Conserve}).
 
 %% ---- GEN-SERVER INTERNAL API ----
 
@@ -360,11 +360,11 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %%       brutal_kill.
     %% Otherwise, the gen_server will be immediately terminated.
     process_flag(trap_exit, true),
-    ok = rabbit_alarm:register(self(), {?MODULE, change_memory_footprint, []}),
+    ok = rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
     Node = node(),
     ok = 
         case mnesia:change_table_copy_type(rabbit_disk_queue, Node,
-                                           disc_only_copies) of
+                                           disc_copies) of
             {atomic, ok} -> ok;
             {aborted, {already_exists, rabbit_disk_queue, Node,
                        disc_only_copies}} -> ok;
@@ -391,7 +391,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     State =
         #dqstate { msg_location_dets       = MsgLocationDets,
                    msg_location_ets        = MsgLocationEts,
-                   operation_mode          = disk_only,
+                   operation_mode          = ram_disk,
                    file_summary            = ets:new(?FILE_SUMMARY_ETS_NAME,
                                                      [set, private]),
                    sequences               = ets:new(?SEQUENCE_ETS_NAME,
@@ -502,7 +502,7 @@ handle_cast({delete_queue, Q}, State) ->
     noreply(State1);
 handle_cast(filesync, State) ->
     noreply(sync_current_file_handle(State));
-handle_cast({change_memory_footprint, Conserve}, State) ->
+handle_cast({conserve_memory, Conserve}, State) ->
     noreply((case Conserve of
                  true -> fun to_disk_only_mode/1;
                  false -> fun to_ram_disk_mode/1

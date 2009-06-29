@@ -37,8 +37,7 @@
 
 -define(UNSENT_MESSAGE_LIMIT, 100).
 -define(HIBERNATE_AFTER, 1000).
--define(MEMORY_REPORT_INTERVAL, 500).
--define(MEMORY_REPORT_TIME_INTERVAL, 1000000). %% 1 second in microseconds
+-define(MEMORY_REPORT_TIME_INTERVAL, 10000). %% 10 seconds in milliseconds
 
 -export([start_link/1]).
 
@@ -58,8 +57,7 @@
             next_msg_id,
             active_consumers,
             blocked_consumers,
-            memory_report_counter,
-            old_memory_report
+            memory_report_timer
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -112,8 +110,7 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
             next_msg_id = 1,
             active_consumers = queue:new(),
             blocked_consumers = queue:new(),
-            memory_report_counter = 0,
-            old_memory_report = {1, now()}
+            memory_report_timer = start_memory_timer()
            }, ?HIBERNATE_AFTER}.
 
 terminate(_Reason, State) ->
@@ -124,6 +121,7 @@ terminate(_Reason, State) ->
                             rollback_transaction(Txn, State1)
                     end, State, all_tx()),
     rabbit_mixed_queue:delete_queue(NewState #q.mixed_state),
+    stop_memory_timer(NewState),
     ok = rabbit_amqqueue:internal_delete(QName).
 
 code_change(_OldVsn, State, _Extra) ->
@@ -131,16 +129,30 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-reply(Reply, NewState = #q { memory_report_counter = 0 }) ->
-    {reply, Reply, report_memory(NewState), ?HIBERNATE_AFTER};
-reply(Reply, NewState = #q { memory_report_counter = C }) ->
-    {reply, Reply, NewState #q { memory_report_counter = C - 1 },
-     ?HIBERNATE_AFTER}.
+reply(Reply, NewState = #q { memory_report_timer = undefined }) ->
+    {reply, Reply, start_memory_timer(NewState), ?HIBERNATE_AFTER};
+reply(Reply, NewState) ->
+    {reply, Reply, NewState, ?HIBERNATE_AFTER}.
 
-noreply(NewState = #q { memory_report_counter = 0}) ->
-    {noreply, report_memory(NewState), ?HIBERNATE_AFTER};
-noreply(NewState = #q { memory_report_counter = C}) ->
-    {noreply, NewState #q { memory_report_counter = C - 1 }, ?HIBERNATE_AFTER}.
+noreply(NewState = #q { memory_report_timer = undefined }) ->
+    {noreply, start_memory_timer(NewState), ?HIBERNATE_AFTER};
+noreply(NewState) ->
+    {noreply, NewState, ?HIBERNATE_AFTER}.
+
+start_memory_timer() ->
+    {ok, TRef} = timer:apply_interval(?MEMORY_REPORT_TIME_INTERVAL,
+                                      rabbit_amqqueue, report_memory, [self()]),
+    TRef.
+start_memory_timer(State = #q { memory_report_timer = undefined }) ->
+    State #q { memory_report_timer = start_memory_timer() };
+start_memory_timer(State) ->
+    State.
+
+stop_memory_timer(State = #q { memory_report_timer = undefined }) ->
+    State;
+stop_memory_timer(State = #q { memory_report_timer = TRef }) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State #q { memory_report_timer = undefined }.
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
@@ -543,24 +555,15 @@ i(memory, _) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-report_memory(State = #q { old_memory_report = {OldMem, Then},
-                           mixed_state = MS }) ->
+report_memory(State = #q { mixed_state = MS }) ->
     {MSize, Gain, Loss} =
         rabbit_mixed_queue:estimate_queue_memory(MS),
     NewMem = case MSize of
                  0 -> 1; %% avoid / 0
                  N -> N
              end,
-    State1 = State #q { memory_report_counter = ?MEMORY_REPORT_INTERVAL },
-    Now = now(),
-    case ((NewMem / OldMem) > 1.1 orelse (OldMem / NewMem) > 1.1) andalso
-        (?MEMORY_REPORT_TIME_INTERVAL < timer:now_diff(Now, Then)) of
-        true ->
-            rabbit_queue_mode_manager:report_memory(self(), NewMem, Gain, Loss),
-            State1 #q { old_memory_report = {NewMem, Now},
-                        mixed_state = rabbit_mixed_queue:reset_counters(MS) };
-        false -> State1
-    end.
+    rabbit_queue_mode_manager:report_memory(self(), NewMem, Gain, Loss),
+    State #q { mixed_state = rabbit_mixed_queue:reset_counters(MS) }.
 
 %---------------------------------------------------------------------------
 
@@ -834,8 +837,10 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
                     disk  -> fun rabbit_mixed_queue:to_disk_only_mode/2;
                     mixed -> fun rabbit_mixed_queue:to_mixed_mode/2
                  end)(PendingMessages, MS),
-    noreply(State #q { mixed_state = MS1 }).
-                                                 
+    noreply(State #q { mixed_state = MS1 });
+
+handle_cast(report_memory, State) ->
+    noreply(report_memory(State)).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -853,16 +858,11 @@ handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
 
-handle_info(timeout, State = #q { memory_report_counter = Count }) 
-  when Count == ?MEMORY_REPORT_INTERVAL ->
-    %% Have to do the +1 because the timeout below, with noreply, will -1
+handle_info(timeout, State) ->
     %% TODO: Once we drop support for R11B-5, we can change this to
     %% {noreply, State, hibernate};
-    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State]);
-
-handle_info(timeout, State) ->
-    State1 = report_memory(State),
-    noreply(State1 #q { memory_report_counter = 1 + ?MEMORY_REPORT_INTERVAL });
+    State1 = stop_memory_timer(report_memory(State)),
+    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State1]);
 
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
