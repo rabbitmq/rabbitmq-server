@@ -53,11 +53,11 @@ TEST_ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(TEST_EBIN_DIR) -Wal
 BROKER_DIR=../rabbitmq-server
 BROKER_SYMLINK=rabbitmq_server
 
-NODENAME=rabbit_test_direct
-MNESIA_DIR=/tmp/rabbitmq_$(NODENAME)_mnesia
 LOG_BASE=/tmp
-
-ERL_CALL=erl_call -sname $(NODENAME) -e
+ERL_WITH_BROKER=erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl \
+	-s rabbit -noshell \
+	-sasl sasl_error_logger '{file, "'${LOG_BASE}'/rabbit-sasl.log"}' \
+	-kernel error_logger '{file, "'${LOG_BASE}'/rabbit.log"}'
 
 PLT=$(HOME)/.dialyzer_plt
 
@@ -95,26 +95,23 @@ run:
 	erl -pa $(LOAD_PATH)
 
 
-all_tests: test_network test_direct
-	$(ERL_CALL) -q
+all_tests: compile compile_tests
+	$(ERL_WITH_BROKER) -eval 'network_client_test:test(),direct_client_test:test(),halt()'
+
+all_tests_coverage: compile compile_tests
+	$(ERL_WITH_BROKER) -eval 'rabbit_misc:enable_cover(),network_client_test:test(),direct_client_test:test(),rabbit_misc:report_cover(),halt()'
 
 test_network: compile compile_tests
-	erl -pa $(LOAD_PATH) -noshell -eval 'network_client_test:test(),halt().'
+	$(ERL_WITH_BROKER) -eval 'network_client_test:test(),halt().'
 
 test_network_coverage: compile compile_tests
-	erl -pa $(LOAD_PATH) -noshell -eval 'network_client_test:test_coverage(),halt().'
+	$(ERL_WITH_BROKER) -eval 'network_client_test:test_coverage(),halt().'
 
 test_direct: compile compile_tests
-	erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl -s rabbit -noshell \
-	-sasl sasl_error_logger '{file, "'${LOG_BASE}'/rabbit-sasl.log"}' \
-	-kernel error_logger '{file, "'${LOG_BASE}'/rabbit.log"}' \
-	-eval 'direct_client_test:test(),halt().'
+	$(ERL_WITH_BROKER) -eval 'direct_client_test:test(),halt().'
 
 test_direct_coverage: compile compile_tests
-	erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl -s rabbit -noshell \
-	-sasl sasl_error_logger '{file, "'${LOG_BASE}'/rabbit-sasl.log"}' \
-	-kernel error_logger '{file, "'${LOG_BASE}'/rabbit.log"}' \
-	-eval 'direct_client_test:test_coverage(),halt().'
+	$(ERL_WITH_BROKER) -eval 'direct_client_test:test_coverage(),halt().'
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
