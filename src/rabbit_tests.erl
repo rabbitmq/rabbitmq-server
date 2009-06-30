@@ -694,7 +694,7 @@ test_disk_queue() ->
     passed = rdq_test_startup_with_queue_gaps(),
     passed = rdq_test_redeliver(),
     passed = rdq_test_purge(),
-    passed = rdq_test_dump_queue(),
+    passed = rdq_test_dump_queue(1000),
     passed = rdq_test_mixed_queue_modes(),
     passed = rdq_test_mode_conversion_mid_txn(),
     rdq_virgin(),
@@ -940,11 +940,10 @@ rdq_test_purge() ->
     rdq_stop(),
     passed.    
 
-rdq_test_dump_queue() ->
+rdq_test_dump_queue(Total) ->
     rdq_virgin(),
     rdq_start(),
     Msg = <<0:(8*256)>>,
-    Total = 1000,
     All = lists:seq(1,Total),
     [rabbit_disk_queue:tx_publish(rdq_message(N, Msg)) || N <- All],
     rabbit_disk_queue:tx_commit(q, All, []),
@@ -953,9 +952,9 @@ rdq_test_dump_queue() ->
                    Size = size(term_to_binary(Message)),
                    {Message, Size, false, {N, (N-1)}, (N-1)}
              end || N <- All],
-    QList = rabbit_disk_queue:dump_queue(q),
+    {Micros, QList} = timer:tc(rabbit_disk_queue, dump_queue, [q]),
     rdq_stop(),
-    io:format("dump ok undelivered~n", []),
+    io:format("dump ok undelivered (~w micros)~n", [Micros]),
     rdq_start(),
     lists:foreach(
       fun (N) ->
@@ -972,8 +971,8 @@ rdq_test_dump_queue() ->
                     Size = size(term_to_binary(Message)),
                     {Message, Size, true, {N, (N-1)}, (N-1)}
               end || N <- All],
-    QList2 = rabbit_disk_queue:dump_queue(q),
-    io:format("dump ok post delivery + restart~n", []),
+    {Micros2, QList2} = timer:tc(rabbit_disk_queue, dump_queue, [q]),
+    io:format("dump ok post delivery + restart (~w micros)~n", [Micros2]),
     rdq_stop(),
     passed.
 
