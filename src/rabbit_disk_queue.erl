@@ -367,7 +367,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                                            disc_copies) of
             {atomic, ok} -> ok;
             {aborted, {already_exists, rabbit_disk_queue, Node,
-                       disc_only_copies}} -> ok;
+                       disc_copies}} -> ok;
             E -> E
         end,
     ok = filelib:ensure_dir(form_filename("nothing")),
