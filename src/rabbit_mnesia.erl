@@ -166,6 +166,9 @@ non_replicated_table_definitions() ->
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
 
+replicated_table_names() ->
+    [Tab || {Tab, _} <- replicated_table_definitions()].
+
 dir() -> mnesia:system_info(directory).
     
 ensure_mnesia_dir() ->
@@ -298,10 +301,10 @@ init_db(ClusterNodes) ->
                                 true  -> disc;
                                 false -> ram
                             end,
+            ok = wait_for_replicated_tables(),
             ok = create_local_table_copy(schema, disc_copies),
             ok = create_local_non_replicated_table_copies(disc),
-            ok = create_local_replicated_table_copies(TableCopyType),
-            ok = wait_for_tables();
+            ok = create_local_replicated_table_copies(TableCopyType);
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
@@ -408,10 +411,16 @@ create_local_table_copy(Tab, Type) ->
         end,
     ok.
 
-wait_for_tables() -> 
+wait_for_replicated_tables() ->
+    wait_for_tables(replicated_table_names()).
+
+wait_for_tables() ->
+    wait_for_tables(table_names()).
+
+wait_for_tables(TableNames) -> 
     case check_schema_integrity() of
         ok ->
-            case mnesia:wait_for_tables(table_names(), 30000) of
+            case mnesia:wait_for_tables(TableNames, 30000) of
                 ok -> ok;
                 {timeout, BadTabs} ->
                     throw({error, {timeout_waiting_for_tables, BadTabs}});
