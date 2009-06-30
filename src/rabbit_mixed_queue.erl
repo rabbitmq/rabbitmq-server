@@ -129,11 +129,12 @@ to_disk_only_mode(TxnMessages, State =
         lists:foldl(
           fun ({Msg = #basic_message { guid = MsgId }, IsDelivered, OnDisk},
                RQueueAcc) ->
-                  if OnDisk ->
+                  case OnDisk of
+                      true ->
                           {MsgId, IsDelivered, AckTag, _PersistRemaining} =
                               rabbit_disk_queue:phantom_deliver(Q),
                           [ {AckTag, {next, IsDelivered}} | RQueueAcc ];
-                     true ->
+                      false ->
                           ok = if [] == RQueueAcc -> ok;
                                   true ->
                                        rabbit_disk_queue:requeue_with_seqs(
@@ -142,7 +143,11 @@ to_disk_only_mode(TxnMessages, State =
                           ok = rabbit_disk_queue:publish(
                                  Q, Msg, false),
                           []
-                  end
+                  end;
+              ({MsgId, IsDelivered}, RQueueAcc) ->
+                  {MsgId, IsDelivered, AckTag, _PersistRemaining} =
+                      rabbit_disk_queue:phantom_deliver(Q),
+                  [ {AckTag, {next, IsDelivered}} | RQueueAcc ]
           end, [], Msgs),
     ok = if [] == Requeue -> ok;
             true ->
@@ -170,12 +175,8 @@ to_mixed_mode(TxnMessages, State =
     %% load up a new queue with everything that's on disk.
     %% don't remove non-persistent messages that happen to be on disk
     QList = rabbit_disk_queue:dump_queue(Q),
-    {MsgBuf1, Length} =
-        lists:foldl(
-          fun ({Msg, _Size, IsDelivered, _AckTag, _SeqId},
-               {Buf, L}) ->
-                  {queue:in({Msg, IsDelivered, true}, Buf), L+1}
-          end, {queue:new(), 0}, QList),
+    Length = erlang:length(QList),
+    MsgBuf = queue:from_list(QList),
     %% remove txn messages from disk which are neither persistent and
     %% durable. This is necessary to avoid leaks. This is also pretty
     %% much the inverse behaviour of our own tx_cancel/2 which is why
@@ -189,7 +190,7 @@ to_mixed_mode(TxnMessages, State =
                   end
           end, [], TxnMessages),
     ok = rabbit_disk_queue:tx_cancel(Cancel),
-    {ok, State #mqstate { mode = mixed, msg_buf = MsgBuf1 }}.
+    {ok, State #mqstate { mode = mixed, msg_buf = MsgBuf }}.
 
 purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
                                                  is_durable = IsDurable,
@@ -290,21 +291,41 @@ deliver(State = #mqstate { mode = disk, queue = Q, is_durable = IsDurable,
      State #mqstate { length = Length - 1 }};
 deliver(State = #mqstate { mode = mixed, msg_buf = MsgBuf, queue = Q,
                            is_durable = IsDurable, length = Length }) ->
-    {{value, {Msg = #basic_message { guid = MsgId,
-                                     is_persistent = IsPersistent },
-              IsDelivered, OnDisk}}, MsgBuf1}
+    {{value, Value}, MsgBuf1}
         = queue:out(MsgBuf),
-    AckTag =
-        if OnDisk ->
-                if IsPersistent andalso IsDurable -> 
-                        {MsgId, IsDelivered, AckTag1, _PersistRem} =
-                            rabbit_disk_queue:phantom_deliver(Q),
-                        AckTag1;
-                   true ->
-                        ok = rabbit_disk_queue:auto_ack_next_message(Q),
-                        noack
-                end;
-           true -> noack
+    {Msg, IsDelivered, AckTag} =
+        case Value of
+            {Msg1 = #basic_message { guid = MsgId,
+                                     is_persistent = IsPersistent },
+             IsDelivered1, OnDisk} ->
+                AckTag1 =
+                    case OnDisk of
+                        true ->
+                            case IsPersistent andalso IsDurable of
+                                true ->
+                                    {MsgId, IsDelivered1, AckTag2, _PersistRem}
+                                        = rabbit_disk_queue:phantom_deliver(Q),
+                                    AckTag2;
+                                false ->
+                                    ok = rabbit_disk_queue:auto_ack_next_message
+                                           (Q),
+                                    noack
+                            end;
+                        false -> noack
+                    end,
+                {Msg1, IsDelivered1, AckTag1};
+            {MsgId, IsDelivered1} ->
+                {Msg1 = #basic_message { guid = MsgId,
+                                         is_persistent = IsPersistent },
+                 _Size, IsDelivered1, AckTag1, _PersistRem}
+                    = rabbit_disk_queue:deliver(Q),
+                AckTag2 =
+                    case IsPersistent andalso IsDurable of
+                        true -> AckTag1;
+                        false -> rabbit_disk_queue:ack(Q, [AckTag1]),
+                                 noack
+                    end,
+                {Msg1, IsDelivered1, AckTag2}
         end,
     Rem = Length - 1,
     {{Msg, IsDelivered, AckTag, Rem},

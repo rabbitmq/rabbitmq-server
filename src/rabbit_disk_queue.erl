@@ -259,9 +259,7 @@
       (queue_name(),
        [{{msg_id(), seq_id()}, {seq_id_or_next(), bool()}}]) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
--spec(dump_queue/1 :: (queue_name()) ->
-             [{msg_id(), binary(), non_neg_integer(), bool(),
-               {msg_id(), seq_id()}, seq_id()}]).
+-spec(dump_queue/1 :: (queue_name()) -> [{msg_id(), bool()}]).
 -spec(delete_non_durable_queues/1 :: (set()) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
@@ -1163,20 +1161,27 @@ internal_dump_queue(Q, State = #dqstate { sequences = Sequences }) ->
     case ets:lookup(Sequences, Q) of
         [] -> {[], State};
         [{Q, ReadSeq, WriteSeq, _Length}] ->
-            {QList, {WriteSeq, State3}} =
-                rabbit_misc:unfold(
-                  fun ({SeqId, _State1}) when SeqId == WriteSeq ->
-                          false;
-                      ({SeqId, State1}) ->
-                          {ok, {Message, Size, Delivered, {MsgId, SeqId}},
-                           NextReadSeqId, State2} =
-                              internal_read_message(Q, SeqId, true, true,
-                                                    State1),
-                          {true,
-                           {Message, Size, Delivered, {MsgId, SeqId}, SeqId},
-                           {NextReadSeqId, State2}}
-                  end, {ReadSeq, State}),
-            {lists:reverse(QList), State3}
+            Objs =
+                mnesia:dirty_match_object(
+                  rabbit_disk_queue,
+                  #dq_msg_loc { queue_and_seq_id = {Q, '_'},
+                                msg_id = '_',
+                                is_delivered = '_',
+                                next_seq_id = '_'
+                               }),
+            {Msgs, WriteSeq} =
+                lists:foldl(
+                  fun (#dq_msg_loc { queue_and_seq_id = {_, Seq},
+                                     msg_id = MsgId,
+                                     is_delivered = Delivered,
+                                     next_seq_id = NextSeq },
+                       {Acc, Seq}) ->
+                          {[{MsgId, Delivered} | Acc], NextSeq};
+                      (#dq_msg_loc { queue_and_seq_id = {_, Seq} },
+                       {[], RSeq}) when Seq < RSeq ->
+                          {[], RSeq}
+                  end, {[], ReadSeq}, lists:keysort(2, Objs)),
+            {lists:reverse(Msgs), State}
     end.
 
 internal_delete_non_durable_queues(
