@@ -298,9 +298,10 @@ init_db(ClusterNodes) ->
                                 true  -> disc;
                                 false -> ram
                             end,
-            ok = create_local_non_replicated_table_copies(TableCopyType),
-            ok = wait_for_tables(),
-            ok = create_local_replicated_table_copies(TableCopyType);
+            ok = create_local_table_copy(schema, disc_copies),
+            ok = create_local_non_replicated_table_copies(disc),
+            ok = create_local_replicated_table_copies(TableCopyType),
+            ok = wait_for_tables();
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
@@ -358,7 +359,6 @@ create_local_non_replicated_table_copies(Type) ->
     create_local_table_copies(Type, non_replicated_table_definitions()).
 
 create_local_table_copies(Type, TableDefinitions) ->
-    ok = create_local_table_copy(schema, disc_copies),
     lists:foreach(
       fun({Tab, TabDef}) ->
               HasDiscCopies =
