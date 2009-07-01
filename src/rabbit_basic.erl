@@ -90,15 +90,12 @@ properties(P) when is_list(P) ->
     %% Yes, this is O(length(P) * record_info(size, 'P_basic') / 2),
     %% i.e. slow. Use the definition of 'P_basic' directly if
     %% possible!
-    alist_to_properties(P).
-
-alist_to_properties([]) ->
-    #'P_basic'{};
-alist_to_properties([{Key, Value} | Rest]) ->
-    case indexof(record_info(fields, 'P_basic'), Key) of
-        0 -> throw({unknown_P_basic_property_name, Key});
-        N -> setelement(N, alist_to_properties(Rest), Value)
-    end.
+    lists:foldl(fun ({Key, Value}, Acc) ->
+                        case indexof(record_info(fields, 'P_basic'), Key) of
+                            0 -> throw({unknown_P_basic_property_name, Key});
+                            N -> setelement(N, Acc, Value)
+                        end
+                end, #'P_basic'{}, P).
 
 indexof(L, Element) -> indexof(L, Element, 1).
 
