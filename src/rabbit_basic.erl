@@ -100,7 +100,7 @@ alist_to_properties([{Key, Value} | Rest]) ->
         N -> setelement(N, alist_to_properties(Rest), Value)
     end.
 
-indexof(L, Element) -> indexof(L, Element, 0).
+indexof(L, Element) -> indexof(L, Element, 1).
 
 indexof([], _Element, _N)              -> 0;
 indexof([Element | _Rest], Element, N) -> N;
