@@ -47,6 +47,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
+    passed = test_disk_queue(),
     passed = test_priority_queue(),
     passed = test_parsing(),
     passed = test_topic_matching(),
@@ -56,7 +57,6 @@ all_tests() ->
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
-    passed = test_disk_queue(),
     passed.
 
 test_priority_queue() ->
@@ -698,8 +698,6 @@ test_disk_queue() ->
     passed = rdq_test_mixed_queue_modes(),
     passed = rdq_test_mode_conversion_mid_txn(),
     rdq_virgin(),
-    ok = control_action(stop_app, []),
-    ok = control_action(start_app, []),
     passed.
 
 benchmark_disk_queue() ->
