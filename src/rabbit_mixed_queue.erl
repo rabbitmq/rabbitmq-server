@@ -125,30 +125,37 @@ to_disk_only_mode(TxnMessages, State =
     %% Note we also batch together messages on disk so that we minimise
     %% the calls to requeue.
     Msgs = queue:to_list(MsgBuf),
-    Requeue =
+    {Requeue, TxPublish} =
         lists:foldl(
           fun ({Msg = #basic_message { guid = MsgId }, IsDelivered, OnDisk},
-               RQueueAcc) ->
+               {RQueueAcc, TxPublishAcc}) ->
                   case OnDisk of
                       true ->
+                          ok = rabbit_disk_queue:tx_commit(Q, TxPublishAcc, []),
                           {MsgId, IsDelivered, AckTag, _PersistRemaining} =
                               rabbit_disk_queue:phantom_deliver(Q),
-                          [ {AckTag, {next, IsDelivered}} | RQueueAcc ];
+                          {[ {AckTag, {next, IsDelivered}} | RQueueAcc ], []};
                       false ->
                           ok = if [] == RQueueAcc -> ok;
                                   true ->
                                        rabbit_disk_queue:requeue_with_seqs(
                                          Q, lists:reverse(RQueueAcc))
                                end,
-                          ok = rabbit_disk_queue:publish(
-                                 Q, Msg, false),
-                          []
+                          ok = rabbit_disk_queue:tx_publish(Msg),
+                          {[], [ MsgId | TxPublishAcc ]}
                   end;
-              ({MsgId, IsDelivered}, RQueueAcc) ->
+              ({MsgId, IsDelivered}, {RQueueAcc, TxPublishAcc}) ->
+                  ok = if [] == TxPublishAcc -> ok;
+                          true -> rabbit_disk_queue:tx_commit(Q, TxPublishAcc,
+                                                              [])
+                       end,
                   {MsgId, IsDelivered, AckTag, _PersistRemaining} =
                       rabbit_disk_queue:phantom_deliver(Q),
-                  [ {AckTag, {next, IsDelivered}} | RQueueAcc ]
-          end, [], Msgs),
+                  {[ {AckTag, {next, IsDelivered}} | RQueueAcc ], []}
+          end, {[], []}, Msgs),
+    ok = if [] == TxPublish -> ok;
+            true -> rabbit_disk_queue:tx_commit(Q, TxPublish, [])
+         end,
     ok = if [] == Requeue -> ok;
             true ->
                  rabbit_disk_queue:requeue_with_seqs(Q, lists:reverse(Requeue))
