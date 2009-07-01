@@ -92,7 +92,7 @@ properties(P) when is_list(P) ->
     %% possible!
     lists:foldl(fun ({Key, Value}, Acc) ->
                         case indexof(record_info(fields, 'P_basic'), Key) of
-                            0 -> throw({unknown_P_basic_property_name, Key});
+                            0 -> throw({unknown_basic_property, Key});
                             N -> setelement(N + 1, Acc, Value)
                         end
                 end, #'P_basic'{}, P).
