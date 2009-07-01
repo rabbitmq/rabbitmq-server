@@ -43,16 +43,15 @@
 -type(properties_input() :: (amqp_properties() | [{atom(), any()}])).
 -type(publish_result() :: ({ok, routing_result(), [pid()]} | not_found())).
 
--spec(publish/1 :: (delivery()) ->
-             publish_result()).
+-spec(publish/1 :: (delivery()) -> publish_result()).
 -spec(delivery/4 :: (bool(), bool(), maybe(txn()), message()) -> delivery()). 
--spec(message/4 :: (exchange_name(), routing_key(), properties_input(), binary()) ->
-             message()).
+-spec(message/4 :: (exchange_name(), routing_key(), properties_input(),
+                    binary()) -> message()).
 -spec(properties/1 :: (properties_input()) -> amqp_properties()).
--spec(publish/4 :: (exchange_name(), routing_key(), properties_input(), binary()) ->
-             publish_result()).
--spec(publish/7 :: (exchange_name(), routing_key(), bool(), bool(), maybe(txn()),
-                    properties_input(), binary()) ->
+-spec(publish/4 :: (exchange_name(), routing_key(), properties_input(),
+                    binary()) -> publish_result()).
+-spec(publish/7 :: (exchange_name(), routing_key(), bool(), bool(),
+                    maybe(txn()), properties_input(), binary()) ->
              publish_result()).
 
 -endif.
@@ -97,29 +96,26 @@ alist_to_properties([]) ->
     #'P_basic'{};
 alist_to_properties([{Key, Value} | Rest]) ->
     case indexof(record_info(fields, 'P_basic'), Key) of
-        0 ->
-            throw({unknown_P_basic_property_name, Key});
-        N ->
-            setelement(N, alist_to_properties(Rest), Value)
+        0 -> throw({unknown_P_basic_property_name, Key});
+        N -> setelement(N, alist_to_properties(Rest), Value)
     end.
 
-indexof(L, Element) ->
-    indexof(L, Element, 0).
+indexof(L, Element) -> indexof(L, Element, 0).
 
-indexof([], _Element, _N) ->
-    0;
-indexof([Element | _Rest], Element, N) ->
-    N;
-indexof([_ | Rest], Element, N) ->
-    indexof(Rest, Element, N + 1).
+indexof([], _Element, _N)              -> 0;
+indexof([Element | _Rest], Element, N) -> N;
+indexof([_ | Rest], Element, N)        -> indexof(Rest, Element, N + 1).
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
 publish(ExchangeName, RoutingKeyBin, Properties, BodyBin) ->
-    publish(ExchangeName, RoutingKeyBin, false, false, none, Properties, BodyBin).
+    publish(ExchangeName, RoutingKeyBin, false, false, none, Properties,
+            BodyBin).
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
-publish(ExchangeName, RoutingKeyBin, Mandatory, Immediate, Txn, Properties, BodyBin) ->
+publish(ExchangeName, RoutingKeyBin, Mandatory, Immediate, Txn, Properties,
+        BodyBin) ->
     publish(delivery(Mandatory, Immediate, Txn,
-                     message(ExchangeName, RoutingKeyBin, properties(Properties), BodyBin))).
+                     message(ExchangeName, RoutingKeyBin,
+                             properties(Properties), BodyBin))).
