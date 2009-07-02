@@ -595,14 +595,14 @@ i(memory, _) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-report_memory(State = #q { mixed_state = MS }) ->
+report_memory(Hibernating, State = #q { mixed_state = MS }) ->
     {MSize, Gain, Loss} =
         rabbit_mixed_queue:estimate_queue_memory(MS),
     NewMem = case MSize of
                  0 -> 1; %% avoid / 0
                  N -> N
              end,
-    rabbit_queue_mode_manager:report_memory(self(), NewMem, Gain, Loss),
+    rabbit_queue_mode_manager:report_memory(self(), NewMem, Gain, Loss, Hibernating),
     State #q { mixed_state = rabbit_mixed_queue:reset_counters(MS),
                memory_report_timer = undefined }.
 
@@ -881,7 +881,7 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
     noreply(State #q { mixed_state = MS1 });
 
 handle_cast(report_memory, State) ->
-    noreply1(report_memory(State)).
+    noreply1(report_memory(false, State)).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -902,7 +902,7 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
 handle_info(timeout, State) ->
     %% TODO: Once we drop support for R11B-5, we can change this to
     %% {noreply, State, hibernate};
-    State1 = (stop_memory_timer(report_memory(State)))
+    State1 = (stop_memory_timer(report_memory(true, State)))
         #q { hibernated_at = now() },
     proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State1]);
 
