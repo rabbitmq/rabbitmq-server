@@ -41,7 +41,7 @@
 -export([publish/3, deliver/1, phantom_deliver/1, ack/2,
          tx_publish/1, tx_commit/3, tx_cancel/1,
          requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1,
-         dump_queue/1, delete_non_durable_queues/1, auto_ack_next_message/1
+         delete_non_durable_queues/1, auto_ack_next_message/1
         ]).
 
 -export([length/1, filesync/0, cache_info/0]).
@@ -259,7 +259,6 @@
       (queue_name(),
        [{{msg_id(), seq_id()}, {seq_id_or_next(), bool()}}]) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
--spec(dump_queue/1 :: (queue_name()) -> [{msg_id(), bool()}]).
 -spec(delete_non_durable_queues/1 :: (set()) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
@@ -314,9 +313,6 @@ purge(Q) ->
 
 delete_queue(Q) ->
     gen_server2:cast(?SERVER, {delete_queue, Q}).
-
-dump_queue(Q) ->
-    gen_server2:call(?SERVER, {dump_queue, Q}, infinity).
 
 delete_non_durable_queues(DurableQueues) ->
     gen_server2:call(?SERVER, {delete_non_durable_queues, DurableQueues},
@@ -463,9 +459,6 @@ handle_call(to_ram_disk_mode, _From, State) ->
 handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     {_ReadSeqId, _WriteSeqId, Length} = sequence_lookup(Sequences, Q),
     reply(Length, State);
-handle_call({dump_queue, Q}, _From, State) ->
-    {Result, State1} = internal_dump_queue(Q, State),
-    reply(Result, State1);
 handle_call({delete_non_durable_queues, DurableQueues}, _From, State) ->
     {ok, State1} = internal_delete_non_durable_queues(DurableQueues, State),
     reply(ok, State1);
@@ -1156,33 +1149,6 @@ internal_delete_queue(Q, State) ->
                   remove_messages(Q, MsgSeqIds, txn, State1)
           end),
     {ok, State2}.
-
-internal_dump_queue(Q, State = #dqstate { sequences = Sequences }) ->
-    case ets:lookup(Sequences, Q) of
-        [] -> {[], State};
-        [{Q, ReadSeq, WriteSeq, _Length}] ->
-            Objs =
-                mnesia:dirty_match_object(
-                  rabbit_disk_queue,
-                  #dq_msg_loc { queue_and_seq_id = {Q, '_'},
-                                msg_id = '_',
-                                is_delivered = '_',
-                                next_seq_id = '_'
-                               }),
-            {Msgs, WriteSeq} =
-                lists:foldl(
-                  fun (#dq_msg_loc { queue_and_seq_id = {_, Seq},
-                                     msg_id = MsgId,
-                                     is_delivered = Delivered,
-                                     next_seq_id = NextSeq },
-                       {Acc, Seq}) ->
-                          {[{MsgId, Delivered} | Acc], NextSeq};
-                      (#dq_msg_loc { queue_and_seq_id = {_, Seq} },
-                       {[], RSeq}) when Seq < RSeq ->
-                          {[], RSeq}
-                  end, {[], ReadSeq}, lists:keysort(2, Objs)),
-            {lists:reverse(Msgs), State}
-    end.
 
 internal_delete_non_durable_queues(
   DurableQueues, State = #dqstate { sequences = Sequences }) ->

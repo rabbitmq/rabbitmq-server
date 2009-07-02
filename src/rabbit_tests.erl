@@ -690,11 +690,10 @@ delete_log_handlers(Handlers) ->
 test_disk_queue() ->
     rdq_stop(),
     rdq_virgin(),
-    passed = rdq_stress_gc(10000),
+    passed = rdq_stress_gc(1000),
     passed = rdq_test_startup_with_queue_gaps(),
     passed = rdq_test_redeliver(),
     passed = rdq_test_purge(),
-    passed = rdq_test_dump_queue(1000),
     passed = rdq_test_mixed_queue_modes(),
     passed = rdq_test_mode_conversion_mid_txn(),
     rdq_virgin(),
@@ -937,37 +936,6 @@ rdq_test_purge() ->
     empty = rabbit_disk_queue:deliver(q),
     rdq_stop(),
     passed.    
-
-rdq_test_dump_queue(Total) ->
-    rdq_virgin(),
-    rdq_start(),
-    Msg = <<0:(8*256)>>,
-    All = lists:seq(1,Total),
-    [rabbit_disk_queue:tx_publish(rdq_message(N, Msg)) || N <- All],
-    rabbit_disk_queue:tx_commit(q, All, []),
-    io:format("Publish done~n", []),
-    QList = [{N, false} || N <- All],
-    {Micros, QList} = timer:tc(rabbit_disk_queue, dump_queue, [q]),
-    rdq_stop(),
-    io:format("dump ok undelivered (~w micros)~n", [Micros]),
-    {Micros1, _} = timer:tc(rabbit_tests, rdq_start, []),
-    io:format("restarted (~w micros)~n", [Micros1]),
-    lists:foreach(
-      fun (N) ->
-              Remaining = Total - N,
-              {Message, _TSize, false, _SeqId, Remaining} =
-                  rabbit_disk_queue:deliver(q),
-              ok = rdq_match_message(Message, N, Msg, 256)
-      end, All),
-    [] = rabbit_disk_queue:dump_queue(q),
-    rdq_stop(),
-    io:format("dump ok post delivery~n", []),
-    rdq_start(),
-    QList2 = [{N, true} || N <- All],
-    {Micros2, QList2} = timer:tc(rabbit_disk_queue, dump_queue, [q]),
-    io:format("dump ok post delivery + restart (~w micros)~n", [Micros2]),
-    rdq_stop(),
-    passed.
 
 rdq_test_mixed_queue_modes() ->
     rdq_virgin(),

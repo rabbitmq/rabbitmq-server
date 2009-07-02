@@ -144,14 +144,20 @@ to_disk_only_mode(TxnMessages, State =
                           ok = rabbit_disk_queue:tx_publish(Msg),
                           {[], [ MsgId | TxPublishAcc ]}
                   end;
-              ({MsgId, IsDelivered}, {RQueueAcc, TxPublishAcc}) ->
+              ({disk, Count}, {RQueueAcc, TxPublishAcc}) ->
                   ok = if [] == TxPublishAcc -> ok;
                           true -> rabbit_disk_queue:tx_commit(Q, TxPublishAcc,
                                                               [])
                        end,
-                  {MsgId, IsDelivered, AckTag, _PersistRemaining} =
-                      rabbit_disk_queue:phantom_deliver(Q),
-                  {[ {AckTag, {next, IsDelivered}} | RQueueAcc ], []}
+                  {RQueueAcc1, 0} =
+                      rabbit_misc:unfold(
+                        fun (0) -> false;
+                            (N) ->
+                                {_MsgId, IsDelivered, AckTag, _PersistRemaining}
+                                    = rabbit_disk_queue:phantom_deliver(Q),
+                                {true, {AckTag, {next, IsDelivered}}, N - 1}
+                        end, Count),
+                  {RQueueAcc1 ++ RQueueAcc, []}
           end, {[], []}, Msgs),
     ok = if [] == TxPublish -> ok;
             true -> rabbit_disk_queue:tx_commit(Q, TxPublish, [])
@@ -179,11 +185,13 @@ to_mixed_mode(TxnMessages, State =
               #mqstate { mode = disk, queue = Q, length = Length,
                          is_durable = IsDurable }) ->
     rabbit_log:info("Converting queue to mixed mode: ~p~n", [Q]),
-    %% load up a new queue with everything that's on disk.
-    %% don't remove non-persistent messages that happen to be on disk
-    QList = rabbit_disk_queue:dump_queue(Q),
-    Length = erlang:length(QList),
-    MsgBuf = queue:from_list(QList),
+    %% load up a new queue with a token that says how many messages
+    %% are on disk
+    %% don't actually do anything to the disk
+    MsgBuf = case Length of
+                 0 -> queue:new();
+                 _ -> queue:from_list([{disk, Length}])
+             end,
     %% remove txn messages from disk which are neither persistent and
     %% durable. This is necessary to avoid leaks. This is also pretty
     %% much the inverse behaviour of our own tx_cancel/2 which is why
@@ -300,7 +308,7 @@ deliver(State = #mqstate { mode = mixed, msg_buf = MsgBuf, queue = Q,
                            is_durable = IsDurable, length = Length }) ->
     {{value, Value}, MsgBuf1}
         = queue:out(MsgBuf),
-    {Msg, IsDelivered, AckTag} =
+    {Msg, IsDelivered, AckTag, MsgBuf2} =
         case Value of
             {Msg1 = #basic_message { guid = MsgId,
                                      is_persistent = IsPersistent },
@@ -320,10 +328,9 @@ deliver(State = #mqstate { mode = mixed, msg_buf = MsgBuf, queue = Q,
                             end;
                         false -> noack
                     end,
-                {Msg1, IsDelivered1, AckTag1};
-            {MsgId, IsDelivered1} ->
-                {Msg1 = #basic_message { guid = MsgId,
-                                         is_persistent = IsPersistent },
+                {Msg1, IsDelivered1, AckTag1, MsgBuf1};
+            {disk, Rem1} ->
+                {Msg1 = #basic_message { is_persistent = IsPersistent },
                  _Size, IsDelivered1, AckTag1, _PersistRem}
                     = rabbit_disk_queue:deliver(Q),
                 AckTag2 =
@@ -332,11 +339,15 @@ deliver(State = #mqstate { mode = mixed, msg_buf = MsgBuf, queue = Q,
                         false -> rabbit_disk_queue:ack(Q, [AckTag1]),
                                  noack
                     end,
-                {Msg1, IsDelivered1, AckTag2}
+                MsgBuf3 = case Rem1 of
+                              1 -> MsgBuf1;
+                              _ -> queue:in_r({disk, Rem1 - 1}, MsgBuf1)
+                          end,
+                {Msg1, IsDelivered1, AckTag2, MsgBuf3}
         end,
     Rem = Length - 1,
     {{Msg, IsDelivered, AckTag, Rem},
-     State #mqstate { msg_buf = MsgBuf1, length = Rem }}.
+     State #mqstate { msg_buf = MsgBuf2, length = Rem }}.
 
 remove_noacks(MsgsWithAcks) ->
     {AckTags, ASize} =
