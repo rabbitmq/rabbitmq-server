@@ -146,8 +146,8 @@ to_disk_only_mode(TxnMessages, State =
                   end;
               ({disk, Count}, {RQueueAcc, TxPublishAcc}) ->
                   ok = if [] == TxPublishAcc -> ok;
-                          true -> rabbit_disk_queue:tx_commit(Q, TxPublishAcc,
-                                                              [])
+                          true ->
+                               rabbit_disk_queue:tx_commit(Q, TxPublishAcc, [])
                        end,
                   {RQueueAcc1, 0} =
                       rabbit_misc:unfold(
