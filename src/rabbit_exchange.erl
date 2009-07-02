@@ -235,9 +235,9 @@ route(X = #exchange{type = topic}, RoutingKey, _Content) ->
 
 route(X = #exchange{type = headers}, _RoutingKey, Content) ->
     Headers = case (Content#content.properties)#'P_basic'.headers of
-		  undefined -> [];
-		  H         -> sort_arguments(H)
-	      end,
+                  undefined -> [];
+                  H         -> sort_arguments(H)
+              end,
     match_bindings(X, fun (#binding{args = Spec}) ->
                               headers_match(Spec, Headers)
                       end);
@@ -489,14 +489,14 @@ parse_x_match(Other) ->
 %%
 headers_match(Pattern, Data) ->
     MatchKind = case lists:keysearch(<<"x-match">>, 1, Pattern) of
-		    {value, {_, longstr, MK}} -> parse_x_match(MK);
-		    {value, {_, Type, MK}} ->
-			rabbit_log:warning("Invalid x-match field type ~p "
+                    {value, {_, longstr, MK}} -> parse_x_match(MK);
+                    {value, {_, Type, MK}} ->
+                        rabbit_log:warning("Invalid x-match field type ~p "
                                            "(value ~p); expected longstr",
-					   [Type, MK]),
-			default_headers_match_kind();
-		    _ -> default_headers_match_kind()
-		end,
+                                           [Type, MK]),
+                        default_headers_match_kind();
+                    _ -> default_headers_match_kind()
+                end,
     headers_match(Pattern, Data, true, false, MatchKind).
 
 headers_match([], _Data, AllMatch, _AnyMatch, all) ->
@@ -523,8 +523,8 @@ headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest],
             %% the corresponding data field. I've interpreted that to
             %% mean a type of "void" for the pattern field.
             PT == void -> {AllMatch, true};
-	    %% Similarly, it's not specified, but I assume that a
-	    %% mismatched type causes a mismatched value.
+            %% Similarly, it's not specified, but I assume that a
+            %% mismatched type causes a mismatched value.
             PT =/= DT  -> {false, AnyMatch};
             PV == DV   -> {AllMatch, true};
             true       -> {false, AnyMatch}

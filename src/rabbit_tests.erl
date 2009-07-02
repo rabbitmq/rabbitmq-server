@@ -716,7 +716,7 @@ benchmark_disk_queue() ->
     passed.
 
 rdq_message(MsgId, MsgBody) ->
-    rabbit_basic:message(x, <<>>, <<>>, MsgBody, MsgId).
+    rabbit_basic:message(x, <<>>, [], MsgBody, MsgId).
 
 rdq_match_message(
   #basic_message { guid = MsgId, content =
@@ -976,20 +976,20 @@ rdq_test_mixed_queue_modes() ->
     {ok, MS} = rabbit_mixed_queue:init(q, true, mixed),
     MS2 = lists:foldl(
             fun (_N, MS1) ->
-                    Msg = rabbit_basic:message(x, <<>>, <<>>, Payload),
+                    Msg = rabbit_basic:message(x, <<>>, [], Payload),
                     {ok, MS1a} = rabbit_mixed_queue:publish(Msg, MS1),
                     MS1a
             end, MS, lists:seq(1,10)),
     MS4 = lists:foldl(
             fun (_N, MS3) ->
-                    Msg = (rabbit_basic:message(x, <<>>, <<>>, Payload))
+                    Msg = (rabbit_basic:message(x, <<>>, [], Payload))
                         #basic_message { is_persistent = true },
                     {ok, MS3a} = rabbit_mixed_queue:publish(Msg, MS3),
                     MS3a
             end, MS2, lists:seq(1,10)),
     MS6 = lists:foldl(
             fun (_N, MS5) ->
-                    Msg = rabbit_basic:message(x, <<>>, <<>>, Payload),
+                    Msg = rabbit_basic:message(x, <<>>, [], Payload),
                     {ok, MS5a} = rabbit_mixed_queue:publish(Msg, MS5),
                     MS5a
             end, MS4, lists:seq(1,10)),
@@ -1050,11 +1050,11 @@ rdq_test_mixed_queue_modes() ->
 rdq_test_mode_conversion_mid_txn() ->
     Payload = <<0:(8*256)>>,
     MsgIdsA = lists:seq(0,9),
-    MsgsA = [ rabbit_basic:message(x, <<>>, <<>>, Payload, MsgId,
+    MsgsA = [ rabbit_basic:message(x, <<>>, [], Payload, MsgId,
                                    (0 == MsgId rem 2))
             || MsgId <- MsgIdsA ],
     MsgIdsB = lists:seq(10,20),
-    MsgsB = [ rabbit_basic:message(x, <<>>, <<>>, Payload, MsgId,
+    MsgsB = [ rabbit_basic:message(x, <<>>, [], Payload, MsgId,
                                    (0 == MsgId rem 2))
             || MsgId <- MsgIdsB ],
 
