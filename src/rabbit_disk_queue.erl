@@ -46,23 +46,24 @@
 
 -export([length/1, filesync/0, cache_info/0]).
 
--export([stop/0, stop_and_obliterate/0, conserve_memory/2,
-         to_disk_only_mode/0, to_ram_disk_mode/0]).
+-export([stop/0, stop_and_obliterate/0, report_memory/0,
+         set_mode/1, to_disk_only_mode/0, to_ram_disk_mode/0]).
 
 -include("rabbit.hrl").
 
--define(WRITE_OK_SIZE_BITS,       8).
--define(WRITE_OK,                 255).
--define(INTEGER_SIZE_BYTES,       8).
--define(INTEGER_SIZE_BITS,        (8 * ?INTEGER_SIZE_BYTES)).
--define(MSG_LOC_NAME,             rabbit_disk_queue_msg_location).
--define(FILE_SUMMARY_ETS_NAME,    rabbit_disk_queue_file_summary).
--define(SEQUENCE_ETS_NAME,        rabbit_disk_queue_sequences).
--define(CACHE_ETS_NAME,           rabbit_disk_queue_cache).
--define(FILE_EXTENSION,           ".rdq").
--define(FILE_EXTENSION_TMP,       ".rdt").
--define(FILE_EXTENSION_DETS,      ".dets").
--define(FILE_PACKING_ADJUSTMENT,  (1 + (2* (?INTEGER_SIZE_BYTES)))).
+-define(WRITE_OK_SIZE_BITS,          8).
+-define(WRITE_OK,                    255).
+-define(INTEGER_SIZE_BYTES,          8).
+-define(INTEGER_SIZE_BITS,           (8 * ?INTEGER_SIZE_BYTES)).
+-define(MSG_LOC_NAME,                rabbit_disk_queue_msg_location).
+-define(FILE_SUMMARY_ETS_NAME,       rabbit_disk_queue_file_summary).
+-define(SEQUENCE_ETS_NAME,           rabbit_disk_queue_sequences).
+-define(CACHE_ETS_NAME,              rabbit_disk_queue_cache).
+-define(FILE_EXTENSION,              ".rdq").
+-define(FILE_EXTENSION_TMP,          ".rdt").
+-define(FILE_EXTENSION_DETS,         ".dets").
+-define(FILE_PACKING_ADJUSTMENT,     (1 + (2* (?INTEGER_SIZE_BYTES)))).
+-define(MEMORY_REPORT_TIME_INTERVAL, 10000). %% 10 seconds in milliseconds
 
 -define(SERVER, ?MODULE).
 
@@ -89,7 +90,9 @@
          on_sync_froms,           %% list of commiters to run on sync (reversed)
          timer_ref,               %% TRef for our interval timer
          last_sync_offset,        %% current_offset at the last time we sync'd
-         message_cache            %% ets message cache
+         message_cache,           %% ets message cache
+         memory_report_timer,     %% TRef for the memory report timer
+         wordsize                 %% bytes in a word on this platform
         }).
 
 %% The components:
@@ -267,7 +270,8 @@
 -spec(length/1 :: (queue_name()) -> non_neg_integer()).
 -spec(filesync/0 :: () -> 'ok').
 -spec(cache_info/0 :: () -> [{atom(), term()}]).
--spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
+-spec(report_memory/0 :: () -> 'ok').
+-spec(set_mode/1 :: ('disk' | 'mixed') -> 'ok').
 
 -endif.
 
@@ -339,8 +343,11 @@ filesync() ->
 cache_info() ->
     gen_server2:call(?SERVER, cache_info, infinity).
 
-conserve_memory(_Pid, Conserve) ->
-    gen_server2:pcast(?SERVER, 9, {conserve_memory, Conserve}).
+report_memory() ->
+    gen_server2:cast(?SERVER, report_memory).
+
+set_mode(Mode) ->
+    gen_server2:cast(?SERVER, {set_mode, Mode}).
 
 %% ---- GEN-SERVER INTERNAL API ----
 
@@ -354,7 +361,8 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %%       brutal_kill.
     %% Otherwise, the gen_server will be immediately terminated.
     process_flag(trap_exit, true),
-    ok = rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
+    {ok, Mode} = rabbit_queue_mode_manager:register
+                   (self(), rabbit_disk_queue, set_mode, []),
     Node = node(),
     ok = 
         case mnesia:change_table_copy_type(rabbit_disk_queue, Node,
@@ -381,6 +389,10 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %% seems to blow up if it is set private
     MsgLocationEts = ets:new(?MSG_LOC_NAME, [set, protected]),
 
+    {ok, TRef} = timer:apply_interval(?MEMORY_REPORT_TIME_INTERVAL,
+                                      rabbit_disk_queue, report_memory, []),
+
+
     InitName = "0" ++ ?FILE_EXTENSION,
     State =
         #dqstate { msg_location_dets       = MsgLocationDets,
@@ -402,7 +414,9 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                    timer_ref               = undefined,
                    last_sync_offset        = 0,
                    message_cache           = ets:new(?CACHE_ETS_NAME,
-                                                     [set, private])
+                                                     [set, private]),
+                   memory_report_timer     = TRef,
+                   wordsize                = erlang:system_info(wordsize)
                  },
     {ok, State1 = #dqstate { current_file_name = CurrentName,
                              current_offset = Offset } } =
@@ -419,7 +433,11 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
         false -> %% new file, so preallocate
             ok = preallocate(FileHdl, FileSizeLimit, Offset)
     end,
-    {ok, State1 #dqstate { current_file_handle = FileHdl }}.
+    State2 = State1 #dqstate { current_file_handle = FileHdl },
+    {ok, case Mode of
+             mixed -> State2;
+             disk -> to_disk_only_mode(State2)
+         end}.
 
 handle_call({deliver, Q}, _From, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, false, State),
@@ -493,11 +511,15 @@ handle_cast({delete_queue, Q}, State) ->
     noreply(State1);
 handle_cast(filesync, State) ->
     noreply(sync_current_file_handle(State));
-handle_cast({conserve_memory, Conserve}, State) ->
-    noreply((case Conserve of
-                 true -> fun to_disk_only_mode/1;
-                 false -> fun to_ram_disk_mode/1
-             end)(State)).
+handle_cast({set_mode, Mode}, State) ->
+    noreply((case Mode of
+                 disk -> fun to_disk_only_mode/1;
+                 mixed -> fun to_ram_disk_mode/1
+             end)(State));
+handle_cast(report_memory, State) ->
+    Bytes = memory_use(State),
+    rabbit_queue_mode_manager:report_memory(self(), Bytes),
+    noreply(State).
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -513,10 +535,12 @@ terminate(_Reason, State) ->
 shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
                             msg_location_ets = MsgLocationEts,
                             current_file_handle = FileHdl,
-                            read_file_handles = {ReadHdls, _ReadHdlsAge}
+                            read_file_handles = {ReadHdls, _ReadHdlsAge},
+                            memory_report_timer = TRef
                           }) ->
-    State1 = stop_commit_timer(State),
     %% deliberately ignoring return codes here
+    timer:cancel(TRef),
+    State1 = stop_commit_timer(State),
     dets:close(MsgLocationDets),
     file:delete(form_filename(atom_to_list(?MSG_LOC_NAME) ++
                               ?FILE_EXTENSION_DETS)),
@@ -531,13 +555,35 @@ shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
               end, ok, ReadHdls),
     State1 #dqstate { current_file_handle = undefined,
                       current_dirty = false,
-                      read_file_handles = {dict:new(), gb_trees:empty()}
+                      read_file_handles = {dict:new(), gb_trees:empty()},
+                      memory_report_timer = undefined
                     }.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% ---- UTILITY FUNCTIONS ----
+
+memory_use(#dqstate { operation_mode = ram_disk,
+                      file_summary = FileSummary,
+                      sequences = Sequences,
+                      msg_location_ets = MsgLocationEts,
+                      wordsize = WordSize
+                     }) ->
+    WordSize * (mnesia:table_info(rabbit_disk_queue, memory) +
+                ets:info(MsgLocationEts, memory) +
+                ets:info(FileSummary, memory) +
+                ets:info(Sequences, memory));
+memory_use(#dqstate { operation_mode = disk_only,
+                      file_summary = FileSummary,
+                      sequences = Sequences,
+                      msg_location_dets = MsgLocationDets,
+                      wordsize = WordSize
+                     }) ->
+    (WordSize * (ets:info(FileSummary, memory) +
+                 ets:info(Sequences, memory))) +
+        mnesia:table_info(rabbit_disk_queue, memory) +
+        dets:info(MsgLocationDets, memory).
 
 to_disk_only_mode(State = #dqstate { operation_mode = disk_only }) ->
     State;

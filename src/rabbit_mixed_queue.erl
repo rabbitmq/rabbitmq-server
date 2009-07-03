@@ -541,7 +541,7 @@ is_empty(#mqstate { length = Length }) ->
 
 estimate_queue_memory(#mqstate { memory_size = Size, memory_gain = Gain,
                                  memory_loss = Loss }) ->
-    {2*Size, Gain, Loss}.
+    {Size, Gain, Loss}.
 
 reset_counters(State) ->
     State #mqstate { memory_gain = 0, memory_loss = 0 }.

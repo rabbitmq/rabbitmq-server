@@ -102,7 +102,8 @@ start_link(Q) ->
 
 init(Q = #amqqueue { name = QName, durable = Durable }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    {ok, Mode} = rabbit_queue_mode_manager:register(self()),
+    {ok, Mode} = rabbit_queue_mode_manager:register
+                   (self(), rabbit_amqqueue, set_mode, [self()]),
     {ok, MS} = rabbit_mixed_queue:init(QName, Durable, Mode),
     {ok, #q{q = Q,
             owner = none,
@@ -141,7 +142,7 @@ reply(Reply, NewState) ->
 reply1(Reply, NewState = #q { hibernated_at = undefined }) ->
     {reply, Reply, NewState, NewState #q.hibernate_after};
 reply1(Reply, NewState) ->
-    NewState1 = report_memory(false, adjust_hibernate_after(NewState)),
+    NewState1 = adjust_hibernate_after(NewState),
     {reply, Reply, NewState1, NewState1 #q.hibernate_after}.
 
 noreply(NewState = #q { memory_report_timer = undefined }) ->
@@ -152,7 +153,7 @@ noreply(NewState) ->
 noreply1(NewState = #q { hibernated_at = undefined }) ->
     {noreply, NewState, NewState #q.hibernate_after};
 noreply1(NewState) ->
-    NewState1 = report_memory(false, adjust_hibernate_after(NewState)),
+    NewState1 = adjust_hibernate_after(NewState),
     {noreply, NewState1, NewState1 #q.hibernate_after}.
 
 adjust_hibernate_after(State = #q { hibernated_at = undefined }) ->

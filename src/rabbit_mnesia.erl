@@ -150,7 +150,7 @@ table_definitions() ->
        {type, set},
        {local_content, true},
        {attributes, record_info(fields, dq_msg_loc)},
-       {disc_only_copies, [node()]}]}
+       {disc_copies, [node()]}]}
     ].
 
 replicated_table_definitions() ->
