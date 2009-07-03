@@ -141,7 +141,7 @@ reply(Reply, NewState) ->
 reply1(Reply, NewState = #q { hibernated_at = undefined }) ->
     {reply, Reply, NewState, NewState #q.hibernate_after};
 reply1(Reply, NewState) ->
-    NewState1 = adjust_hibernate_after(NewState),
+    NewState1 = report_memory(false, adjust_hibernate_after(NewState)),
     {reply, Reply, NewState1, NewState1 #q.hibernate_after}.
 
 noreply(NewState = #q { memory_report_timer = undefined }) ->
@@ -152,7 +152,7 @@ noreply(NewState) ->
 noreply1(NewState = #q { hibernated_at = undefined }) ->
     {noreply, NewState, NewState #q.hibernate_after};
 noreply1(NewState) ->
-    NewState1 = adjust_hibernate_after(NewState),
+    NewState1 = report_memory(false, adjust_hibernate_after(NewState)),
     {noreply, NewState1, NewState1 #q.hibernate_after}.
 
 adjust_hibernate_after(State = #q { hibernated_at = undefined }) ->
@@ -603,8 +603,7 @@ report_memory(Hibernating, State = #q { mixed_state = MS }) ->
                  N -> N
              end,
     rabbit_queue_mode_manager:report_memory(self(), NewMem, Gain, Loss, Hibernating),
-    State #q { mixed_state = rabbit_mixed_queue:reset_counters(MS),
-               memory_report_timer = undefined }.
+    State #q { mixed_state = rabbit_mixed_queue:reset_counters(MS) }.
 
 %---------------------------------------------------------------------------
 
@@ -881,7 +880,8 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
     noreply(State #q { mixed_state = MS1 });
 
 handle_cast(report_memory, State) ->
-    noreply1(report_memory(false, State)).
+    noreply1
+      ((report_memory(false, State)) #q { memory_report_timer = undefined }).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
