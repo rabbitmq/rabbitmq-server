@@ -57,9 +57,7 @@
             next_msg_id,
             active_consumers,
             blocked_consumers,
-            memory_report_timer,
-            hibernate_after,
-            hibernated_at
+            memory_report_timer
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -113,10 +111,8 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
             next_msg_id = 1,
             active_consumers = queue:new(),
             blocked_consumers = queue:new(),
-            memory_report_timer = start_memory_timer(),
-            hibernate_after = ?HIBERNATE_AFTER_MIN,
-            hibernated_at = undefined
-           }, ?HIBERNATE_AFTER_MIN}.
+            memory_report_timer = start_memory_timer()
+           }, {binary, ?HIBERNATE_AFTER_MIN}}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
@@ -135,50 +131,14 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 reply(Reply, NewState = #q { memory_report_timer = undefined }) ->
-    reply1(Reply, start_memory_timer(NewState));
+    {reply, Reply, start_memory_timer(NewState), binary};
 reply(Reply, NewState) ->
-    reply1(Reply, NewState).
-
-reply1(Reply, NewState = #q { hibernated_at = undefined }) ->
-    {reply, Reply, NewState, NewState #q.hibernate_after};
-reply1(Reply, NewState) ->
-    NewState1 = adjust_hibernate_after(NewState),
-    {reply, Reply, NewState1, NewState1 #q.hibernate_after}.
+    {reply, Reply, NewState, binary}.
 
 noreply(NewState = #q { memory_report_timer = undefined }) ->
-    noreply1(start_memory_timer(NewState));
+    {noreply, start_memory_timer(NewState), binary};
 noreply(NewState) ->
-    noreply1(NewState).
-
-noreply1(NewState = #q { hibernated_at = undefined }) ->
-    {noreply, NewState, NewState #q.hibernate_after};
-noreply1(NewState) ->
-    NewState1 = adjust_hibernate_after(NewState),
-    {noreply, NewState1, NewState1 #q.hibernate_after}.
-
-adjust_hibernate_after(State = #q { hibernated_at = undefined }) ->
-    State;
-adjust_hibernate_after(State = #q { hibernated_at = Then,
-                                    hibernate_after = Timeout }) ->
-    State1 = State #q { hibernated_at = undefined },
-    NapLengthMicros = timer:now_diff(now(), Then),
-    TimeoutMicros = Timeout * 1000,
-    LowTargetMicros = TimeoutMicros * 4,
-    HighTargetMicros = LowTargetMicros * 4,
-    if
-        NapLengthMicros < LowTargetMicros ->
-            %% nap was too short, don't go to sleep as soon
-            State1 #q { hibernate_after = Timeout * 2 };
-
-        NapLengthMicros > HighTargetMicros ->
-            %% nap was long, try going to sleep sooner
-            Timeout1 = lists:max([?HIBERNATE_AFTER_MIN, round(Timeout / 2)]),
-            State1 #q { hibernate_after = Timeout1 };
-
-        true ->
-            %% nap and timeout seem to be in the right relationship. stay here
-            State1
-    end.
+    {noreply, NewState, binary}.
 
 start_memory_timer() ->
     {ok, TRef} = timer:apply_after(?MEMORY_REPORT_TIME_INTERVAL,
@@ -881,8 +841,7 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
     noreply(State #q { mixed_state = MS1 });
 
 handle_cast(report_memory, State) ->
-    noreply1
-      ((report_memory(false, State)) #q { memory_report_timer = undefined }).
+    {noreply, (report_memory(false, State)) #q { memory_report_timer = undefined }, binary}.
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -903,9 +862,8 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
 handle_info(timeout, State) ->
     %% TODO: Once we drop support for R11B-5, we can change this to
     %% {noreply, State, hibernate};
-    State1 = (stop_memory_timer(report_memory(true, State)))
-        #q { hibernated_at = now() },
-    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State1]);
+    State1 = stop_memory_timer(report_memory(true, State)),
+    {noreply, State1, hibernate};
 
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
