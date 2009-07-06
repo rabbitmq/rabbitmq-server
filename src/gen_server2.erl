@@ -152,7 +152,9 @@
 %%%  API
 %%%=========================================================================
 
+-ifdef(use_specs).
 -spec behaviour_info(atom()) -> 'undefined' | [{atom(), arity()}].
+-endif.
 
 behaviour_info(callbacks) ->
     [{init,1},{handle_call,3},{handle_cast,2},{handle_info,2},
@@ -395,7 +397,9 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
 
 name({local,Name}) -> Name;
 name({global,Name}) -> Name;
-name(Pid) when is_pid(Pid) -> Pid.
+%% name(Pid) when is_pid(Pid) -> Pid;
+%% when R11 goes away, drop the line beneath and uncomment the line above
+name(Name) -> Name.
 
 unregister_name({local,Name}) ->
     _ = (catch unregister(Name));
@@ -509,12 +513,7 @@ process_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue,
 %%% Send/recive functions
 %%% ---------------------------------------------------
 do_send(Dest, Msg) ->
-    case catch erlang:send(Dest, Msg, [noconnect]) of
-	noconnect ->
-	    spawn(erlang, send, [Dest,Msg]);
-	Other ->
-	    Other
-    end.
+    catch erlang:send(Dest, Msg).
 
 do_multi_call(Nodes, Name, Req, infinity) ->
     Tag = make_ref(),
@@ -812,7 +811,9 @@ reply(Name, {To, Tag}, Reply, State, Debug) ->
 system_continue(Parent, Debug, [Name, State, Mod, Time, TimeoutState, Queue]) ->
     loop(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug).
 
+-ifdef(use_specs).
 -spec system_terminate(_, _, _, [_]) -> no_return().
+-endif.
 
 system_terminate(Reason, _Parent, Debug, [Name, State, Mod, _Time,
                                           _TimeoutState, _Queue]) ->
