@@ -54,9 +54,7 @@
             next_msg_id,
             message_buffer,
             active_consumers,
-            blocked_consumers,
-            hibernate_after,
-            hibernated_at
+            blocked_consumers
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -104,10 +102,8 @@ init(Q) ->
             next_msg_id = 1,
             message_buffer = queue:new(),
             active_consumers = queue:new(),
-            blocked_consumers = queue:new(),
-            hibernate_after = ?HIBERNATE_AFTER_MIN,
-            hibernated_at = undefined
-           }, ?HIBERNATE_AFTER_MIN}.
+            blocked_consumers = queue:new()
+           }, {binary, ?HIBERNATE_AFTER_MIN}}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
@@ -122,41 +118,11 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-reply(Reply, NewState = #q { hibernated_at = undefined }) ->
-    {reply, Reply, NewState, NewState #q.hibernate_after};
 reply(Reply, NewState) ->
-    NewState1 = adjust_hibernate_after(NewState),
-    {reply, Reply, NewState1, NewState1 #q.hibernate_after}.
+    {reply, Reply, NewState, binary}.
 
-noreply(NewState = #q { hibernated_at = undefined }) ->
-    {noreply, NewState, NewState #q.hibernate_after};
 noreply(NewState) ->
-    NewState1 = adjust_hibernate_after(NewState),
-    {noreply, NewState1, NewState1 #q.hibernate_after}.
-
-adjust_hibernate_after(State = #q { hibernated_at = undefined }) ->
-    State;
-adjust_hibernate_after(State = #q { hibernated_at = Then,
-                                    hibernate_after = Timeout }) ->
-    State1 = State #q { hibernated_at = undefined },
-    NapLengthMicros = timer:now_diff(now(), Then),
-    TimeoutMicros = Timeout * 1000,
-    LowTargetMicros = TimeoutMicros * 4,
-    HighTargetMicros = LowTargetMicros * 4,
-    if
-        NapLengthMicros < LowTargetMicros ->
-            %% nap was too short, don't go to sleep as soon
-            State1 #q { hibernate_after = Timeout * 2 };
-
-        NapLengthMicros > HighTargetMicros ->
-            %% nap was long, try going to sleep sooner
-            Timeout1 = lists:max([?HIBERNATE_AFTER_MIN, round(Timeout / 2)]),
-            State1 #q { hibernate_after = Timeout1 };
-
-        true ->
-            %% nap and timeout seem to be in the right relationship. stay here
-            State1
-    end.
+    {noreply, NewState, binary}.
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
@@ -852,8 +818,7 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
 
 handle_info(timeout, State) ->
-    State1 = State #q { hibernated_at = now() },
-    {noreply, State1, hibernate};
+    {noreply, State, hibernate};
 
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
