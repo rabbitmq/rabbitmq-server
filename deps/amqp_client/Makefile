@@ -26,7 +26,7 @@
 EBIN_DIR=ebin
 export INCLUDE_DIR=include
 export INCLUDE_SERV_DIR=$(BROKER_SYMLINK)/include
-TEST_DIR=tests
+TEST_DIR=test
 SOURCE_DIR=src
 DIST_DIR=rabbitmq-erlang-client
 
@@ -100,22 +100,22 @@ run_with_broker: compile
 
 
 all_tests: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'network_client_test:test(),direct_client_test:test(),halt()'
+	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),direct_client_SUITE:test(),halt()'
 
 all_tests_coverage: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'rabbit_misc:enable_cover(),network_client_test:test(),direct_client_test:test(),rabbit_misc:report_cover(),halt()'
+	$(ERL_WITH_BROKER) -eval 'rabbit_misc:enable_cover(),network_client_SUITE:test(),direct_client_SUITE:test(),rabbit_misc:report_cover(),halt()'
 
 test_network: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'network_client_test:test(),halt().'
+	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),halt().'
 
 test_network_coverage: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'network_client_test:test_coverage(),halt().'
+	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test_coverage(),halt().'
 
 test_direct: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'direct_client_test:test(),halt().'
+	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test(),halt().'
 
 test_direct_coverage: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'direct_client_test:test_coverage(),halt().'
+	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test_coverage(),halt().'
 
 
 clean:

@@ -121,7 +121,7 @@ rabbitmq-erlang-client folder, type
     [async-threads:0] [hipe] [kernel-poll:false]
 
     Eshell V5.6.5  (abort with ^G)
-    1> network_client_test:test().
+    1> network_client_SUITE:test().
 
 To get more examples of the API, look at the functions in the test_util module.
 
@@ -155,7 +155,7 @@ When that has booted, you need to *wait one minute* for the memory
 alarms to become active. After that, you can run the following from
 the Erlang shell:
 
-    1> direct_client_test:test_channel_flow().
+    1> direct_client_SUITE:test_channel_flow().
 
     =INFO REPORT==== 17-Dec-2008::13:39:41 ===
     alarm_handler: {set,{system_memory_high_watermark,[]}}
@@ -246,8 +246,8 @@ add_broker_to_plt
     to override default plt location ( ~/.dialyzer_plt ).
 
 all_tests
-    Compiles client and client tests source code and runs network_client_test
-    and direct_client_test. During the testing, this make target runs an
+    Compiles client and client tests source code and runs network_client_SUITE
+    and direct_client_SUITE tests. During the testing, this make target runs an
     instance of the broker, so make sure there is no other instance running.
 
 all_tests_coverage
