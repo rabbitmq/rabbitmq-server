@@ -53,6 +53,7 @@
 -spec(start_link/0 :: () ->
               ({'ok', pid()} | 'ignore' | {'error', any()})).
 -spec(register/4 :: (pid(), atom(), atom(), list()) -> {'ok', queue_mode()}).
+-spec(report_memory/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(report_memory/5 :: (pid(), non_neg_integer(),
                           non_neg_integer(), non_neg_integer(), bool()) ->
              'ok').
@@ -66,6 +67,71 @@
                  lowrate,
                  hibernate
                }).
+
+%% Token-credit based memory management
+
+%% Start off by working out the amount of memory available in the
+%% system (RAM). Then, work out how many tokens each byte corresponds
+%% to. This is the tokens_per_byte field. When a process registers, it
+%% must provide an M-F-A triple to a function that needs one further
+%% argument, which is the new mode. This will either be 'mixed' or
+%% 'disk'.
+%%
+%% Processes then report their own memory usage, in bytes, and the
+%% manager takes care of the rest.
+%%
+%% There are a finite number of tokens in the system. These are
+%% allocated to processes as they are requested. We keep track of
+%% processes which have hibernated, and processes that are doing only
+%% a low rate of work. When a request for memory can't be satisfied,
+%% we try and evict processes first from the hibernated group, and
+%% then from the lowrate group. The hibernated group is a simple
+%% queue, and so is implicitly sorted by the order in which processes
+%% were added to the queue. This means that when removing from the
+%% queue, we hibernate the sleepiest pid first. The lowrate group is a
+%% priority queue, where the priority is the amount of memory
+%% allocated. Thus when we remove from the queue, we first remove the
+%% queue with the most amount of memory.
+%%
+%% If the request still can't be satisfied after evicting to disk
+%% everyone from those two groups (and note that we check first
+%% whether or not freeing them would make available enough tokens to
+%% satisfy the request rather than just sending all those queues to
+%% disk and then going "whoops, didn't help afterall"), then we send
+%% the requesting process to disk.
+%%
+%% If a process has been sent to disk, it continues making
+%% requests. As soon as a request can be satisfied (and this can
+%% include sending other processes to disk in the way described
+%% above), it will be told to come back into mixed mode.
+%%
+%% Note that the lowrate and hibernate groups can get very out of
+%% date. This is fine, and kinda unavoidable given the absence of
+%% useful APIs for queues. Thus we allow them to get out of date
+%% (processes will be left in there when they change groups,
+%% duplicates can appear, dead processes are not pruned etc etc etc),
+%% and when we go through the groups, summing up their amount of
+%% memory, we tidy up at that point.
+%%
+%% A process which is not evicted to disk, and is requesting a smaller
+%% amount of ram than its last request will always be satisfied. A
+%% mixed-mode process that is busy but consuming an unchanging amount
+%% of RAM will never be sent to disk. The disk_queue is also managed
+%% in the same way. This means that a queue that has gone back to
+%% being mixed after being in disk mode now has its messages counted
+%% twice as they are counted both in the request made by the queue
+%% (even though they may not yet be in RAM) and also by the
+%% disk_queue. This means that the threshold for going mixed -> disk
+%% is above the threshold for going disk -> mixed. This is actually
+%% fairly sensible as it reduces the risk of any oscillations
+%% occurring.
+%%
+%% The queue process deliberately reports 4 times its estimated RAM
+%% usage, and the disk_queue 2 times. In practise, this seems to work
+%% well. Note that we are deliberately running out of tokes a little
+%% early because of the fact that the mixed -> disk transition can
+%% transiently eat a lot of memory and take some time (flushing a few
+%% million messages to disk is never going to be instantaneous).
 
 start_link() ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
