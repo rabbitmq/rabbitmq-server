@@ -518,7 +518,7 @@ handle_cast({set_mode, Mode}, State) ->
              end)(State));
 handle_cast(report_memory, State) ->
     Bytes = memory_use(State),
-    rabbit_queue_mode_manager:report_memory(self(), Bytes),
+    rabbit_queue_mode_manager:report_memory(self(), 2 * Bytes),
     noreply(State).
 
 handle_info({'EXIT', _Pid, Reason}, State) ->

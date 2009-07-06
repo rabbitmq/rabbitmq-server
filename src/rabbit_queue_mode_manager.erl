@@ -87,7 +87,7 @@ init([]) ->
     process_flag(trap_exit, true),
     %% todo, fix up this call as os_mon may not be running
     {MemTotal, MemUsed, _BigProc} = memsup:get_memory_data(),
-    MemAvail = (MemTotal - MemUsed) / 3, %% magic
+    MemAvail = MemTotal - MemUsed,
     {ok, #state { available_tokens = ?TOTAL_TOKENS,
                   mixed_queues = dict:new(),
                   callbacks = dict:new(),
@@ -128,7 +128,7 @@ handle_call(info, _From, State) ->
              { lowrate_queues, priority_queue:to_list(Lazy) },
              { hibernated_queues, queue:to_list(Sleepy) }], State1}.
 
-                                              
+
 handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
             State = #state { mixed_queues = Mixed,
                              available_tokens = Avail,
