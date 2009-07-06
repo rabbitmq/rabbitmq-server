@@ -411,18 +411,23 @@ unregister_name(Pid) when is_pid(Pid) ->
 %%% The MAIN loop.
 %%% ---------------------------------------------------
 loop(Parent, Name, State, Mod, hibernate, undefined, Queue, Debug) ->
-    proc_lib:hibernate(?MODULE,wake_hib,[Parent, Name, State, Mod, undefined, Queue, Debug]);
-loop(Parent, Name, State, Mod, hibernate, {Current, Min, undefined}, Queue, Debug) ->
-    proc_lib:hibernate(?MODULE,wake_hib,[Parent, Name, State, Mod, {Current, Min, now()}, Queue, Debug]);
+    proc_lib:hibernate(?MODULE,wake_hib,
+                       [Parent, Name, State, Mod, undefined, Queue, Debug]);
+loop(Parent, Name, State, Mod, hibernate, {Current, Min, undefined}, Queue,
+     Debug) ->
+    proc_lib:hibernate(?MODULE,wake_hib,[Parent, Name, State, Mod,
+                                         {Current, Min, now()}, Queue, Debug]);
 loop(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
     receive
         Input -> loop(Parent, Name, State, Mod,
                       Time, TimeoutState, in(Input, Queue), Debug)
     after 0 ->
-            process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug, false)
+            process_next_msg(Parent, Name, State, Mod, Time, TimeoutState,
+                             Queue, Debug, false)
     end.
 
-process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug, Hib) ->
+process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue,
+                 Debug, Hib) ->
     case priority_queue:out(Queue) of
         {{value, Msg}, Queue1} ->
             process_msg(Parent, Name, State, Mod,
@@ -448,7 +453,8 @@ wake_hib(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
 		  Input
 	  end,
     TimeoutState1 = adjust_hibernate_after(TimeoutState),
-    process_next_msg(Parent, Name, State, Mod, hibernate, TimeoutState1, in(Msg, Queue), Debug, true).
+    process_next_msg(Parent, Name, State, Mod, hibernate, TimeoutState1,
+                     in(Msg, Queue), Debug, true).
 
 adjust_hibernate_after(undefined) ->
     undefined;
@@ -478,11 +484,13 @@ in({'$gen_pcall', From, {Priority, Msg}}, Queue) ->
 in(Input, Queue) ->
     priority_queue:in(Input, Queue).
 
-process_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug, _Hib, Msg) ->
+process_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue,
+            Debug, _Hib, Msg) ->
     case Msg of
 	{system, From, Req} ->
-	    sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug,
-				  [Name, State, Mod, Time, TimeoutState, Queue]);
+	    sys:handle_system_msg
+              (Req, From, Parent, ?MODULE, Debug,
+               [Name, State, Mod, Time, TimeoutState, Queue]);
         %% gen_server puts Hib on the end as the 7th arg, but that
         %% version of the function seems not to be documented so
         %% leaving out for now.
@@ -493,7 +501,8 @@ process_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug, _Hib, Ms
 	_Msg ->
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, 
 				      Name, {in, Msg}),
-	    handle_msg(Msg, Parent, Name, State, Mod, TimeoutState, Queue, Debug1)
+	    handle_msg(Msg, Parent, Name, State, Mod, TimeoutState, Queue,
+                       Debug1)
     end.
 
 %%% ---------------------------------------------------
@@ -713,27 +722,30 @@ handle_msg({'$gen_call', From, Msg},
 		(catch terminate(Reason, Name, Msg, Mod, NState, [])),
 	    reply(From, Reply),
 	    exit(R);
-	Other -> handle_common_reply(Other,
-                                     Parent, Name, Msg, Mod, State, TimeoutState, Queue)
+	Other -> handle_common_reply(Other, Parent, Name, Msg, Mod, State,
+                                     TimeoutState, Queue)
     end;
 handle_msg(Msg,
            Parent, Name, State, Mod, TimeoutState, Queue) ->
     Reply = (catch dispatch(Msg, Mod, State)),
-    handle_common_reply(Reply, Parent, Name, Msg, Mod, State, TimeoutState, Queue).
+    handle_common_reply(Reply, Parent, Name, Msg, Mod, State,
+                        TimeoutState, Queue).
 
 handle_msg({'$gen_call', From, Msg},
            Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
     case catch Mod:handle_call(Msg, From, State) of
 	{reply, Reply, NState} ->
 	    Debug1 = reply(Name, From, Reply, NState, Debug),
-	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue, Debug1);
+	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue,
+                 Debug1);
 	{reply, Reply, NState, Time1} ->
 	    Debug1 = reply(Name, From, Reply, NState, Debug),
 	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, Debug1);
 	{noreply, NState} ->
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
-	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue, Debug1);
+	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue,
+                 Debug1);
 	{noreply, NState, Time1} ->
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
@@ -744,16 +756,17 @@ handle_msg({'$gen_call', From, Msg},
 	    reply(Name, From, Reply, NState, Debug),
 	    exit(R);
 	Other ->
-	    handle_common_reply(Other,
-                                Parent, Name, Msg, Mod, State, TimeoutState, Queue, Debug)
+	    handle_common_reply(Other, Parent, Name, Msg, Mod, State,
+                                TimeoutState, Queue, Debug)
     end;
 handle_msg(Msg,
            Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
     Reply = (catch dispatch(Msg, Mod, State)),
-    handle_common_reply(Reply,
-                        Parent, Name, Msg, Mod, State, TimeoutState, Queue, Debug).
+    handle_common_reply(Reply, Parent, Name, Msg, Mod, State,
+                        TimeoutState, Queue, Debug).
 
-handle_common_reply(Reply, Parent, Name, Msg, Mod, State, TimeoutState, Queue) ->
+handle_common_reply(Reply, Parent, Name, Msg, Mod, State,
+                    TimeoutState, Queue) ->
     case Reply of
 	{noreply, NState} ->
 	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue, []);
@@ -767,12 +780,14 @@ handle_common_reply(Reply, Parent, Name, Msg, Mod, State, TimeoutState, Queue) -
 	    terminate({bad_return_value, Reply}, Name, Msg, Mod, State, [])
     end.
 
-handle_common_reply(Reply, Parent, Name, Msg, Mod, State, TimeoutState, Queue, Debug) ->
+handle_common_reply(Reply, Parent, Name, Msg, Mod, State, TimeoutState, Queue,
+                    Debug) ->
     case Reply of
 	{noreply, NState} ->
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
-	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue, Debug1);
+	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue,
+                 Debug1);
 	{noreply, NState, Time1} ->
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
@@ -799,13 +814,17 @@ system_continue(Parent, Debug, [Name, State, Mod, Time, TimeoutState, Queue]) ->
 
 -spec system_terminate(_, _, _, [_]) -> no_return().
 
-system_terminate(Reason, _Parent, Debug, [Name, State, Mod, _Time, _TimeoutState, _Queue]) ->
+system_terminate(Reason, _Parent, Debug, [Name, State, Mod, _Time,
+                                          _TimeoutState, _Queue]) ->
     terminate(Reason, Name, [], Mod, State, Debug).
 
-system_code_change([Name, State, Mod, Time, TimeoutState, Queue], _Module, OldVsn, Extra) ->
+system_code_change([Name, State, Mod, Time, TimeoutState, Queue], _Module,
+                   OldVsn, Extra) ->
     case catch Mod:code_change(OldVsn, State, Extra) of
-	{ok, NewState} -> {ok, [Name, NewState, Mod, Time, TimeoutState, Queue]};
-	Else -> Else
+	{ok, NewState} ->
+            {ok, [Name, NewState, Mod, Time, TimeoutState, Queue]};
+	Else ->
+            Else
     end.
 
 %%-----------------------------------------------------------------
@@ -973,7 +992,8 @@ name_to_pid(Name) ->
 %% Status information
 %%-----------------------------------------------------------------
 format_status(Opt, StatusData) ->
-    [PDict, SysState, Parent, Debug, [Name, State, Mod, _Time, TimeoutState, Queue]] =
+    [PDict, SysState, Parent, Debug, [Name, State, Mod, _Time,
+                                      TimeoutState, Queue]] =
         StatusData,
     NameTag = if is_pid(Name) ->
 		      pid_to_list(Name);
@@ -995,7 +1015,8 @@ format_status(Opt, StatusData) ->
     Specfic1 = case TimeoutState of
                    undefined -> Specfic;
                    {Current, Min, undefined} ->
-                       [{"Binary Timeout Current and Min", {Current, Min}} | Specfic]
+                       [ {"Binary Timeout Current and Min", {Current, Min}}
+                       | Specfic]
                end,
     [{header, Header},
      {data, [{"Status", SysState},
