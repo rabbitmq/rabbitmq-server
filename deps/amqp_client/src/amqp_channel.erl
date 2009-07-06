@@ -25,8 +25,8 @@
 
 -module(amqp_channel).
 
--include_lib("rabbitmq_server/include/rabbit.hrl").
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 -include("amqp_client.hrl").
 

@@ -100,7 +100,7 @@ The direct client has to be run in the same Erlang VM instance as the
 RabbitMQ server. In order to use the makefile to run either the network or the
 direct client tests, you will need to shutdown any other running instance of
 RabbitMQ that you may have on your machine. This is because the Makefile targets
-for running the network or direct tests boots its own instance of RabbitMQ.
+for running the network or direct tests boot their own instance of RabbitMQ.
 To run these tests, use the either of the following targets:
 
     $ make test_network
@@ -116,7 +116,7 @@ rabbitmq-erlang-client folder, type
 
     rabbitmq-erlang-client $ make compile_tests
     rabbitmq-erlang-client $ make run
-    erl -pa ebin rabbitmq_server/ebin tests/ebin
+    erl -pa ebin rabbitmq_server/ebin tests
     Erlang (BEAM) emulator version 5.6.5 [source] [64-bit] [smp:4] \
     [async-threads:0] [hipe] [kernel-poll:false]
 
