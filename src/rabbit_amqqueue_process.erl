@@ -852,10 +852,8 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
 
 handle_info(timeout, State) ->
-    %% TODO: Once we drop support for R11B-5, we can change this to
-    %% {noreply, State, hibernate};
     State1 = State #q { hibernated_at = now() },
-    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State1]);
+    {noreply, State1, hibernate};
 
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
