@@ -38,7 +38,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([register/4, report_memory/2, report_memory/5, info/0]).
+-export([register/4, report_memory/2, report_memory/5, info/0,
+         pin_to_disk/1, unpin_to_disk/1]).
 
 -define(TOTAL_TOKENS, 1000).
 -define(ACTIVITY_THRESHOLD, 25).
@@ -57,6 +58,8 @@
 -spec(report_memory/5 :: (pid(), non_neg_integer(),
                           non_neg_integer(), non_neg_integer(), bool()) ->
              'ok').
+-spec(pin_to_disk/1 :: (pid()) -> 'ok').
+-spec(unpin_to_disk/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -65,7 +68,8 @@
                  callbacks,
                  tokens_per_byte,
                  lowrate,
-                 hibernate
+                 hibernate,
+                 disk_mode_pins
                }).
 
 %% Token-credit based memory management
@@ -139,6 +143,12 @@ start_link() ->
 register(Pid, Module, Function, Args) ->
     gen_server2:call(?SERVER, {register, Pid, Module, Function, Args}).
 
+pin_to_disk(Pid) ->
+    gen_server2:call(?SERVER, {pin_to_disk, Pid}).
+
+unpin_to_disk(Pid) ->
+    gen_server2:call(?SERVER, {unpin_to_disk, Pid}).
+
 report_memory(Pid, Memory) ->
     report_memory(Pid, Memory, undefined, undefined, false).
 
@@ -159,7 +169,8 @@ init([]) ->
                   callbacks = dict:new(),
                   tokens_per_byte = ?TOTAL_TOKENS / MemAvail,
                   lowrate = priority_queue:new(),
-                  hibernate = queue:new()
+                  hibernate = queue:new(),
+                  disk_mode_pins = sets:new()
                 }}.
 
 handle_call({register, Pid, Module, Function, Args}, _From,
@@ -183,22 +194,56 @@ handle_call({register, Pid, Module, Function, Args}, _From,
         end,
     {reply, {ok, Result}, State3};
 
+handle_call({pin_to_disk, Pid}, _From,
+            State = #state { mixed_queues = Mixed,
+                             callbacks = Callbacks,
+                             available_tokens = Avail,
+                             disk_mode_pins = Pins }) ->
+    {Res, State1} =
+        case sets:is_element(Pid, Pins) of
+            true -> {already_pinned, State};
+            false ->
+                case find_queue(Pid, Mixed) of
+                    {mixed, {OAlloc, _OActivity}} ->
+                        {Module, Function, Args} = dict:fetch(Pid, Callbacks),
+                        ok = erlang:apply(Module, Function, Args ++ [disk]),
+                        {convert_to_disk_mode,
+                         State #state { mixed_queues = dict:erase(Pid, Mixed),
+                                        available_tokens = Avail + OAlloc,
+                                        disk_mode_pins =
+                                        sets:add_element(Pid, Pins)
+                                       }};
+                    disk ->
+                        {already_disk,
+                         State #state { disk_mode_pins =
+                                        sets:add_element(Pid, Pins) }}
+                end
+        end,
+    {reply, Res, State1};
+
+handle_call({unpin_to_disk, Pid}, _From,
+            State = #state { disk_mode_pins = Pins }) ->
+    {reply, ok, State #state { disk_mode_pins = sets:del_element(Pid, Pins) }};
+
 handle_call(info, _From, State) ->
     State1 = #state { available_tokens = Avail,
                       mixed_queues = Mixed,
                       lowrate = Lazy,
-                      hibernate = Sleepy } =
+                      hibernate = Sleepy,
+                      disk_mode_pins = Pins } =
         free_upto(undef, 1 + ?TOTAL_TOKENS, State), %% this'll just do tidying
     {reply, [{ available_tokens, Avail },
              { mixed_queues, dict:to_list(Mixed) },
              { lowrate_queues, priority_queue:to_list(Lazy) },
-             { hibernated_queues, queue:to_list(Sleepy) }], State1}.
+             { hibernated_queues, queue:to_list(Sleepy) },
+             { queues_pinned_to_disk, sets:to_list(Pins) }], State1}.
 
 
 handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
             State = #state { mixed_queues = Mixed,
                              available_tokens = Avail,
                              callbacks = Callbacks,
+                             disk_mode_pins = Pins,
                              tokens_per_byte = TPB }) ->
     Req = rabbit_misc:ceil(TPB * Memory),
     LowRate = case {BytesGained, BytesLost} of
@@ -234,24 +279,31 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
                          Activity}
                 end;
             disk ->
-                State1 = #state { available_tokens = Avail1,
-                                  mixed_queues = Mixed1 } =
-                    free_upto(Pid, Req, State),
-                case Req > Avail1 of
-                    true -> %% not enough space, stay as disk
-                        {State1, disk};
-                    false -> %% can go to mixed mode
-                        {Module, Function, Args} = dict:fetch(Pid, Callbacks),
-                        ok = erlang:apply(Module, Function, Args ++ [mixed]),
-                        Activity = if Hibernating -> hibernate;
-                                      LowRate -> lowrate;
-                                      true -> active
-                                   end,
-                        {State1 #state {
-                           mixed_queues =
-                           dict:store(Pid, {Req, Activity}, Mixed1),
-                           available_tokens = Avail1 - Req },
-                         disk}
+                case sets:is_element(Pid, Pins) of
+                    true ->
+                        {State, disk};
+                    false ->
+                        State1 = #state { available_tokens = Avail1,
+                                          mixed_queues = Mixed1 } =
+                            free_upto(Pid, Req, State),
+                        case Req > Avail1 of
+                            true -> %% not enough space, stay as disk
+                                {State1, disk};
+                            false -> %% can go to mixed mode
+                                {Module, Function, Args} =
+                                    dict:fetch(Pid, Callbacks),
+                                ok = erlang:apply(Module, Function,
+                                                  Args ++ [mixed]),
+                                Activity = if Hibernating -> hibernate;
+                                              LowRate -> lowrate;
+                                              true -> active
+                                           end,
+                                {State1 #state {
+                                   mixed_queues =
+                                   dict:store(Pid, {Req, Activity}, Mixed1),
+                                   available_tokens = Avail1 - Req },
+                                 disk}
+                        end
                 end
         end,
     StateN1 =

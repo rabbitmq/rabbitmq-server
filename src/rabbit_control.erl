@@ -137,7 +137,8 @@ Available commands:
   list_bindings  [-p <VHostPath>] 
   list_connections [<ConnectionInfoItem> ...]
 
-  set_queue_mode <QueueName> (disk|mixed)
+  pin_queue_to_disk <QueueName>
+  unpin_queue_from_disk <QueueName>
 
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
@@ -168,6 +169,9 @@ peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
 recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
 user, peer_address and peer_port.
 
+pin_queue_to_disk will force a queue to be in disk mode.
+unpin_queue_from_disk will permit a queue that has been pinned to disk mode
+to be converted to mixed mode should there be enough memory available.
 "),
     halt(1).
 
@@ -282,10 +286,15 @@ action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
     action(Command, Node, VHost, RemainingArgs, Inform).
 
-action(set_queue_mode, Node, VHost, [Queue, Mode], Inform) ->
-    Inform("Setting queue mode to ~p for queue ~p in vhost ~p",
-           [Mode, Queue, VHost]),
-    call(Node, {rabbit_amqqueue, set_mode, [VHost, Queue, Mode]});
+action(pin_queue_to_disk, Node, VHost, [Queue], Inform) ->
+    Inform("Pinning queue ~p in vhost ~p to disk",
+           [Queue, VHost]),
+    call(Node, {rabbit_amqqueue, set_mode_pin, [VHost, Queue, "true"]});
+    
+action(unpin_queue_from_disk, Node, VHost, [Queue], Inform) ->
+    Inform("Unpinning queue ~p in vhost ~p from disk",
+           [Queue, VHost]),
+    call(Node, {rabbit_amqqueue, set_mode_pin, [VHost, Queue, "false"]});
     
 action(set_permissions, Node, VHost, [Username, CPerm, WPerm, RPerm], Inform) ->
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
