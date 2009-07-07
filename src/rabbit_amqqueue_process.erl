@@ -841,7 +841,9 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
     noreply(State #q { mixed_state = MS1 });
 
 handle_cast(report_memory, State) ->
-    {noreply, (report_memory(false, State)) #q { memory_report_timer = undefined }, binary}.
+    %% deliberately don't call noreply/2 as we don't want to restart the timer
+    {noreply, (report_memory(false, State))
+     #q { memory_report_timer = undefined }, binary}.
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
