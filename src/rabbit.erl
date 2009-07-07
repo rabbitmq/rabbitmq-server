@@ -138,7 +138,6 @@ start(normal, []) ->
 
                 {ok, MemoryAlarms} = application:get_env(memory_alarms),
                 ok = rabbit_alarm:start(MemoryAlarms),
-                
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
 
@@ -175,6 +174,10 @@ start(normal, []) ->
                           ok = rabbit_networking:start_tcp_listener(Host, Port)
                   end,
                   TCPListeners)
+        end},
+       {"plugins",
+        fun () ->
+                ok = start_plugins()
         end}]
       ++ ExtraSteps),
 
@@ -288,6 +291,26 @@ start_builtin_amq_applications() ->
     %%they don't bring down the entire app when they die and fail to
     %%restart
     ok.
+
+%% Loads shared libraries and plugins that exist in the plugin dir
+start_plugins() ->
+    PluginsDir = "plugins",
+    case filelib:is_dir(PluginsDir) of
+        false -> ok;
+        true  ->
+            LibDir = PluginsDir ++ "/lib",
+            case filelib:is_dir(LibDir) of
+                false  -> ok;
+                true   -> true = code:add_path(LibDir)
+            end,
+            [begin
+                [Dir,Plugin,Ebin,Mod|_] = string:tokens(PluginApp,"/."),
+                true = code:add_path(Dir ++ "/" ++ Plugin ++ "/" ++ Ebin),
+                %% TODO: Might want a separate supervisor
+                start_child(list_to_atom(Mod))
+            end || PluginApp <- filelib:wildcard("plugins/*/ebin/*.app")],
+        ok
+    end.
 
 rotate_logs(File, Suffix, Handler) ->
     rotate_logs(File, Suffix, Handler, Handler).
