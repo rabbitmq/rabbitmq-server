@@ -302,28 +302,29 @@ start_plugins() ->
             case filelib:is_dir(LibDir) of
                 false  -> ok;
                 true   ->
-                    % TODO: Refactor the commonality
                     [begin
                         [WithoutExtension|_] = string:tokens(Path, "."),
                         {module,_} = code:load_abs(WithoutExtension)
                     end || Path <- filelib:wildcard(LibDir ++ "/*/ebin/*.beam")]
             end,
             [begin
-                [Dir,Plugin,Ebin,Mod|_] = string:tokens(Config,"/."),
-                true = code:add_path(Dir ++ "/" ++ Plugin ++ "/" ++ Ebin),
-                %% TODO: Might want a separate supervisor
-                %start_child(list_to_atom(Mod))
-                {Name, Fun} = parse_plugin_config(Config),
-                %Fun(),
-                io:format("Started ~n plugin ~p", [Name])
-            end || Config <- filelib:wildcard("plugins/*/ebin/*.plugin")],
+                [Dir,Plugin|_] = string:tokens(Config,"/"),
+                BasePath = Dir ++ "/" ++ Plugin,
+                Path = BasePath ++ "/ebin",
+                true = code:add_path(Path),
+                Name = parse_plugin_config(Config),
+                EnvConfig = BasePath ++ "/" ++ atom_to_list(Name) ++ ".cfg",
+                {ok, Terms} = file:consult(EnvConfig),
+                Name:start_plugin(Terms),
+                io:format("Started ~p plugin ~n", [Name])
+            end || Config <- filelib:wildcard("plugins/*/*.plugin")],
         ok
     end.
 
 parse_plugin_config(File) ->
     case file:consult(File) of
-        {ok, [{plugin, Name, [{startup_function, {M, F, A}}, {env, Env}]}]} ->
-            {Name, M:F(A)};
+        {ok, [{plugin, Name}]} ->
+            Name;
         _ -> 
             error
     end.
