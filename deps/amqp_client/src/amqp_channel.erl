@@ -39,6 +39,7 @@
 -export([register_direct_peer/2]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
+-export([signal_closing/1, get_writer_status/1]).
 
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
@@ -117,6 +118,20 @@ register_return_handler(Channel, ReturnHandler) ->
 %% Registers a handler to deal with flow control
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
+
+
+%%---------------------------------------------------------------------------
+%% Closing the connection
+%%---------------------------------------------------------------------------
+
+%% Signal close; will stop accepting RPCs and write requests
+signal_closing(Channel) ->
+    gen_server:call(Channel, {signal_closing}).
+
+%% Returns writer status
+get_writer_status(Channel) ->
+    gen_server:call(Channel, {get_writer_status}).
+
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -273,6 +288,15 @@ handle_method(Method, Content, State) ->
 init([InitialState]) ->
     {ok, InitialState}.
 
+%% Get writer status
+handle_call({get_writer_status}, _From,  State = #channel_state{writer_pid = Writer}) ->
+    {reply, erlang:process_info(Writer, status), State};
+
+%% Raise closing flag
+handle_call({signal_closing}, _From, State) ->
+    NewState = State#channel_state{closing = true},
+    {reply, ok, NewState};
+
 %% Standard implementation of top half of the call/2 command
 %% Do not accept any further RPCs when the channel is about to close
 handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
@@ -280,6 +304,12 @@ handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
 
 handle_call({call, _Method, _Content}, _From,
             State = #channel_state{flow_control = true}) ->
+    {reply, blocked, State};
+
+%% Do not accept any further messages for writer when the channel is about to
+%% close
+handle_call({call, _Method, _Content}, _From,
+            State = #channel_state{closing = true}) ->
     {reply, blocked, State};
 
 handle_call({call, Method, Content}, _From,
@@ -306,6 +336,11 @@ handle_call({Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
     NewState = State#channel_state{tagged_sub_requests = NewSubs},
     rpc_top_half(Method, From, NewState).
 
+%% Do not accept any further messages for writer when the channel is about to
+%% close
+handle_cast({cast, _Method}, State = #channel_state{closing = true}) ->
+    {noreply, State};
+
 %% Standard implementation of the cast/2 command
 handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer,
                                                    do2 = Do2}) ->
@@ -318,6 +353,11 @@ handle_cast({cast, Method, _Content},
             State = #channel_state{flow_control = true}) ->
     % Discard the message and log it
     io:format("Discarding content bearing method (~p) ~n", [Method]),
+    {noreply, State};
+
+%% Do not accept any further messages for writer when the channel is about to
+%% close
+handle_cast({cast, _Method, _Content}, State = #channel_state{closing = true}) ->
     {noreply, State};
 
 %% Standard implementation of the cast/3 command

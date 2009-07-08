@@ -34,6 +34,7 @@
          handle_info/2]).
 -export([open_channel/1, open_channel/3]).
 -export([start/2, start/3, start/4, close/2]).
+-export([signal_back_when_no_channel_writing/2]).
 -export([start_link/2, start_link/3, start_link/4]).
 
 %%---------------------------------------------------------------------------
@@ -183,8 +184,41 @@ allocate_channel_number(Channels, _Max) ->
     %% TODO check channel max and reallocate appropriately
     MaxChannel + 1.
 
+get_channels_pids(#connection_state{channels = ChannelDict}) ->
+    ChannelNums = dict:fetch_keys(ChannelDict),
+    lists:map(fun(ChannelNum) ->dict:fetch(ChannelNum, ChannelDict) end,
+              ChannelNums).
+
 close_connection(Close, From, State = #connection_state{driver = Driver}) ->
+    ChannelPids = get_channels_pids(State),
+    catch lists:foreach(fun amqp_channel:signal_closing/1, ChannelPids),
+    spawn(?MODULE, signal_back_when_no_channel_writing, [ChannelPids, self()]),
+    receive
+        no_channel_writing -> ok
+    after 2000 ->
+        io:format("Waiting for all channels to finish writing timed out. "
+                  "Forcing connection close!~n")
+    end,
     Driver:close_connection(Close, From, State).
+
+signal_back_when_no_channel_writing([], Parent) ->
+    catch Parent ! no_channel_writing;
+
+signal_back_when_no_channel_writing(ChannelPids = [ChanHead | ChanRem],
+                                    Parent) ->
+    Pass =
+        case catch amqp_channel:get_writer_status(ChanHead) of
+            {'EXIT', _} -> true;
+            {status, waiting} -> true;
+            _ -> false
+        end,
+    if
+        Pass ->
+            signal_back_when_no_channel_writing(ChanRem, Parent);
+        true ->
+            timer:sleep(3),
+            signal_back_when_no_channel_writing(ChannelPids, Parent)
+    end.
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
