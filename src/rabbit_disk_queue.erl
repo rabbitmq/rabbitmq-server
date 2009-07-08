@@ -41,7 +41,8 @@
 -export([publish/3, deliver/1, phantom_deliver/1, ack/2,
          tx_publish/1, tx_commit/3, tx_cancel/1,
          requeue/2, requeue_with_seqs/2, purge/1, delete_queue/1,
-         delete_non_durable_queues/1, auto_ack_next_message/1
+         delete_non_durable_queues/1, auto_ack_next_message/1,
+         requeue_next_n/2
         ]).
 
 -export([length/1, filesync/0, cache_info/0]).
@@ -264,6 +265,7 @@
 -spec(requeue_with_seqs/2 ::
       (queue_name(),
        [{{msg_id(), seq_id()}, {seq_id_or_next(), bool()}}]) -> 'ok').
+-spec(requeue_next_n/2 :: (queue_name(), non_neg_integer()) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
 -spec(delete_non_durable_queues/1 :: (set()) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
@@ -314,6 +316,9 @@ requeue(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
 
 requeue_with_seqs(Q, MsgSeqSeqIds) when is_list(MsgSeqSeqIds) ->
     gen_server2:cast(?SERVER, {requeue_with_seqs, Q, MsgSeqSeqIds}).
+
+requeue_next_n(Q, N) when is_integer(N) ->
+    gen_server2:cast(?SERVER, {requeue_next_n, Q, N}).
 
 purge(Q) ->
     gen_server2:call(?SERVER, {purge, Q}, infinity).
@@ -508,6 +513,9 @@ handle_cast({requeue, Q, MsgSeqIds}, State) ->
     noreply(State1);
 handle_cast({requeue_with_seqs, Q, MsgSeqSeqIds}, State) ->
     {ok, State1} = internal_requeue(Q, MsgSeqSeqIds, State),
+    noreply(State1);
+handle_cast({requeue_next_n, Q, N}, State) ->
+    {ok, State1} = internal_requeue_next_n(Q, N, State),
     noreply(State1);
 handle_cast({delete_queue, Q}, State) ->
     {ok, State1} = internal_delete_queue(Q, State),
@@ -747,13 +755,19 @@ find_next_seq_id(CurrentSeq, NextSeqId)
   when NextSeqId > CurrentSeq ->
     NextSeqId.
 
+%% the queue is empty, and we've just written exactly where we
+%% expected, so read it back
 determine_next_read_id(CurrentReadWrite, CurrentReadWrite, CurrentReadWrite) ->
     CurrentReadWrite;
+%% we've just written in the next slot, so the next read pos is unaltered
 determine_next_read_id(CurrentRead, _CurrentWrite, next) ->
     CurrentRead;
+%% queue is empty, but we've written somewhere else - a gap has formed
+%% - so read back from where we wrote, after the gap
 determine_next_read_id(CurrentReadWrite, CurrentReadWrite, NextWrite)
   when NextWrite > CurrentReadWrite ->
     NextWrite;
+%% queue is not empty, and we've created a gap, so the read pos is unaltered
 determine_next_read_id(CurrentRead, CurrentWrite, NextWrite)
   when NextWrite >= CurrentWrite ->
     CurrentRead.
@@ -1199,6 +1213,37 @@ requeue_message({{{MsgId, SeqIdOrig}, {SeqIdTo, NewIsDelivered}},
     end,
     decrement_cache(MsgId, State),
     {NextSeqIdTo1, Q, State}.
+
+%% move the next N messages from the front of the queue to the back.
+internal_requeue_next_n(Q, N, State = #dqstate { sequences = Sequences }) ->
+    {ReadSeqId, WriteSeqId, Length} = sequence_lookup(Sequences, Q),
+    ReadSeqId1 = determine_next_read_id(ReadSeqId, WriteSeqId, next),
+    if N >= Length -> {ok, State};
+       true ->
+            {atomic, {ReadSeqIdN, WriteSeqIdN}} =
+                mnesia:transaction(
+                  fun() ->
+                          ok = mnesia:write_lock_table(rabbit_disk_queue),
+                          requeue_next_messages(Q, N, ReadSeqId1, WriteSeqId)
+                  end
+                 ),
+            true = ets:insert(Sequences, {Q, ReadSeqIdN, WriteSeqIdN, Length}),
+            {ok, State}
+    end.
+
+requeue_next_messages(_Q, 0, ReadSeq, WriteSeq) ->
+    {ReadSeq, WriteSeq};
+requeue_next_messages(Q, N, ReadSeq, WriteSeq) ->
+    WriteSeq1 = adjust_last_msg_seq_id(Q, WriteSeq, next, write),
+    NextWriteSeq = find_next_seq_id(WriteSeq1, next),
+    [Obj = #dq_msg_loc { next_seq_id = NextSeqIdOrig }] =
+        mnesia:read(rabbit_disk_queue, {Q, ReadSeq}, write),
+    ok = mnesia:write(rabbit_disk_queue,
+                      Obj #dq_msg_loc {queue_and_seq_id = {Q, WriteSeq1},
+                                       next_seq_id = NextWriteSeq
+                                      }, write),
+    ok = mnesia:delete(rabbit_disk_queue, {Q, ReadSeq}, write),
+    requeue_next_messages(Q, N - 1, NextSeqIdOrig, NextWriteSeq).
 
 internal_purge(Q, State = #dqstate { sequences = Sequences }) ->
     case ets:lookup(Sequences, Q) of

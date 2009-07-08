@@ -126,7 +126,7 @@ to_disk_only_mode(TxnMessages, State =
     %% message on disk.
     %% Note we also batch together messages on disk so that we minimise
     %% the calls to requeue.
-    ok = send_messages_to_disk(Q, MsgBuf, [], 0, []),
+    ok = send_messages_to_disk(Q, MsgBuf, 0, 0, []),
     %% tx_publish txn messages. Some of these will have been already
     %% published if they really are durable and persistent which is
     %% why we can't just use our own tx_publish/2 function (would end
@@ -141,47 +141,36 @@ to_disk_only_mode(TxnMessages, State =
     garbage_collect(),
     {ok, State #mqstate { mode = disk, msg_buf = queue:new() }}.
 
-send_messages_to_disk(Q, Queue, Requeue, PublishCount, Commit) ->
+send_messages_to_disk(Q, Queue, RequeueCount, PublishCount, Commit) ->
     case queue:out(Queue) of
         {empty, Queue} ->
             ok = flush_messages_to_disk_queue(Q, Commit),
-            [] = flush_requeue_to_disk_queue(Q, Requeue, []),
+            [] = flush_requeue_to_disk_queue(Q, RequeueCount, []),
             ok;
-        {{value, {Msg = #basic_message { guid = MsgId }, IsDelivered, OnDisk}},
+        {{value, {Msg = #basic_message { guid = MsgId }, _IsDelivered, OnDisk}},
          Queue1} ->
             case OnDisk of
                 true ->
-                    ok = flush_messages_to_disk_queue (Q, Commit),
-                    {MsgId, IsDelivered, AckTag, _PersistRemaining} =
-                        rabbit_disk_queue:phantom_deliver(Q),
+                    ok = flush_messages_to_disk_queue(Q, Commit),
                     send_messages_to_disk(
-                      Q, Queue1, [{AckTag, {next, IsDelivered}} | Requeue],
-                      0, []);
+                      Q, Queue1, 1 + RequeueCount, 0, []);
                 false ->
                     Commit1 =
-                        flush_requeue_to_disk_queue(Q, Requeue, Commit),
+                        flush_requeue_to_disk_queue(Q, RequeueCount, Commit),
                     ok = rabbit_disk_queue:tx_publish(Msg),
                     case PublishCount == ?TO_DISK_MAX_FLUSH_SIZE of
                         true ->
                             ok = flush_messages_to_disk_queue(Q, Commit1),
-                            send_messages_to_disk(Q, Queue1, [], 1, [MsgId]);
+                            send_messages_to_disk(Q, Queue1, 0, 1, [MsgId]);
                         false ->
                             send_messages_to_disk
-                              (Q, Queue1, [], PublishCount + 1,
+                              (Q, Queue1, 0, PublishCount + 1,
                                [MsgId | Commit1])
                     end
             end;
         {{value, {disk, Count}}, Queue2} ->
             ok = flush_messages_to_disk_queue(Q, Commit),
-            {Requeue1, 0} =
-                rabbit_misc:unfold(
-                  fun (0) -> false;
-                      (N) ->
-                          {_MsgId, IsDelivered, AckTag, _PersistRemaining}
-                              = rabbit_disk_queue:phantom_deliver(Q),
-                          {true, {AckTag, {next, IsDelivered}}, N - 1}
-                  end, Count),
-            send_messages_to_disk(Q, Queue2, Requeue1 ++ Requeue, 0, [])
+            send_messages_to_disk(Q, Queue2, RequeueCount + Count, 0, [])
     end.
 
 flush_messages_to_disk_queue(Q, Commit) ->
@@ -189,10 +178,10 @@ flush_messages_to_disk_queue(Q, Commit) ->
             true -> rabbit_disk_queue:tx_commit(Q, lists:reverse(Commit), [])
          end.
 
-flush_requeue_to_disk_queue(Q, Requeue, Commit) ->
-    if [] == Requeue -> Commit;
+flush_requeue_to_disk_queue(Q, RequeueCount, Commit) ->
+    if 0 == RequeueCount -> Commit;
        true -> ok = rabbit_disk_queue:tx_commit(Q, lists:reverse(Commit), []),
-               rabbit_disk_queue:requeue_with_seqs(Q, lists:reverse(Requeue)),
+               rabbit_disk_queue:requeue_next_n(Q, RequeueCount),
                []
     end.
 

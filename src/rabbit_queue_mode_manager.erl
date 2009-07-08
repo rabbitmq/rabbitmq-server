@@ -201,20 +201,20 @@ handle_call({pin_to_disk, Pid}, _From,
                              disk_mode_pins = Pins }) ->
     {Res, State1} =
         case sets:is_element(Pid, Pins) of
-            true -> {already_pinned, State};
+            true -> {ok, State};
             false ->
                 case find_queue(Pid, Mixed) of
                     {mixed, {OAlloc, _OActivity}} ->
                         {Module, Function, Args} = dict:fetch(Pid, Callbacks),
                         ok = erlang:apply(Module, Function, Args ++ [disk]),
-                        {convert_to_disk_mode,
+                        {ok,
                          State #state { mixed_queues = dict:erase(Pid, Mixed),
                                         available_tokens = Avail + OAlloc,
                                         disk_mode_pins =
                                         sets:add_element(Pid, Pins)
                                        }};
                     disk ->
-                        {already_disk,
+                        {ok,
                          State #state { disk_mode_pins =
                                         sets:add_element(Pid, Pins) }}
                 end
