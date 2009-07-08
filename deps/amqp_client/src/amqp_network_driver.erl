@@ -41,7 +41,16 @@
 %---------------------------------------------------------------------------
 
 handshake(State = #connection_state{serverhost = Host}) ->
-    case gen_tcp:connect(Host, 5672, [binary, {packet, 0}, {active, false},
+    Port =
+        case os:getenv("RABBITMQ_NODE_PORT") of
+            false -> ?PROTOCOL_PORT;
+            StrPort ->
+                case catch list_to_integer(StrPort) of
+                    {'EXIT', {badarg, _}} -> ?PROTOCOL_PORT;
+                    OutPort -> OutPort
+                end
+        end,
+    case gen_tcp:connect(Host, Port, [binary, {packet, 0}, {active, false},
                                       {nodelay, true}]) of
         {ok, Sock} ->
             ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
