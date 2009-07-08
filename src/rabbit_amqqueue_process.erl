@@ -130,22 +130,19 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-reply(Reply, NewState = #q { memory_report_timer = undefined }) ->
-    {reply, Reply, start_memory_timer(NewState), binary};
 reply(Reply, NewState) ->
-    {reply, Reply, NewState, binary}.
+    {reply, Reply, start_memory_timer(NewState), binary}.
 
-noreply(NewState = #q { memory_report_timer = undefined }) ->
-    {noreply, start_memory_timer(NewState), binary};
 noreply(NewState) ->
-    {noreply, NewState, binary}.
+    {noreply, start_memory_timer(NewState), binary}.
 
 start_memory_timer() ->
     {ok, TRef} = timer:apply_after(?MEMORY_REPORT_TIME_INTERVAL,
                                    rabbit_amqqueue, report_memory, [self()]),
     TRef.
 start_memory_timer(State = #q { memory_report_timer = undefined }) ->
-    State #q { memory_report_timer = start_memory_timer() };
+    report_memory(false,
+                  State #q { memory_report_timer = start_memory_timer() });
 start_memory_timer(State) ->
     State.
 
@@ -842,8 +839,8 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
 
 handle_cast(report_memory, State) ->
     %% deliberately don't call noreply/2 as we don't want to restart the timer
-    {noreply, (report_memory(false, State))
-     #q { memory_report_timer = undefined }, binary}.
+    %% by unsetting the timer, we force a report on the next normal message
+    {noreply, State #q { memory_report_timer = undefined }, binary}.
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -862,9 +859,8 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
 
 handle_info(timeout, State) ->
-    %% TODO: Once we drop support for R11B-5, we can change this to
-    %% {noreply, State, hibernate};
     State1 = stop_memory_timer(report_memory(true, State)),
+    %% don't call noreply/1 as that'll restart the memory_report_timer
     {noreply, State1, hibernate};
 
 handle_info(Info, State) ->

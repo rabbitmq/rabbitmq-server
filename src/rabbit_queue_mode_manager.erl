@@ -38,7 +38,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([register/4, report_memory/2, report_memory/5, info/0,
+-export([register/4, report_memory/3, report_memory/5, info/0,
          pin_to_disk/1, unpin_to_disk/1]).
 
 -define(TOTAL_TOKENS, 1000).
@@ -54,7 +54,7 @@
 -spec(start_link/0 :: () ->
               ({'ok', pid()} | 'ignore' | {'error', any()})).
 -spec(register/4 :: (pid(), atom(), atom(), list()) -> {'ok', queue_mode()}).
--spec(report_memory/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(report_memory/3 :: (pid(), non_neg_integer(), bool()) -> 'ok').
 -spec(report_memory/5 :: (pid(), non_neg_integer(),
                           non_neg_integer(), non_neg_integer(), bool()) ->
              'ok').
@@ -131,11 +131,11 @@
 %% occurring.
 %%
 %% The queue process deliberately reports 4 times its estimated RAM
-%% usage, and the disk_queue 2 times. In practise, this seems to work
-%% well. Note that we are deliberately running out of tokes a little
-%% early because of the fact that the mixed -> disk transition can
-%% transiently eat a lot of memory and take some time (flushing a few
-%% million messages to disk is never going to be instantaneous).
+%% usage, and the disk_queue 2.5 times. In practise, this seems to
+%% work well. Note that we are deliberately running out of tokes a
+%% little early because of the fact that the mixed -> disk transition
+%% can transiently eat a lot of memory and take some time (flushing a
+%% few million messages to disk is never going to be instantaneous).
 
 start_link() ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
@@ -149,8 +149,8 @@ pin_to_disk(Pid) ->
 unpin_to_disk(Pid) ->
     gen_server2:call(?SERVER, {unpin_to_disk, Pid}).
 
-report_memory(Pid, Memory) ->
-    report_memory(Pid, Memory, undefined, undefined, false).
+report_memory(Pid, Memory, Hibernating) ->
+    report_memory(Pid, Memory, undefined, undefined, Hibernating).
 
 report_memory(Pid, Memory, Gain, Loss, Hibernating) ->
     gen_server2:cast(?SERVER,
