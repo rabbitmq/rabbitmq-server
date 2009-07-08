@@ -301,15 +301,32 @@ start_plugins() ->
             LibDir = PluginsDir ++ "/lib",
             case filelib:is_dir(LibDir) of
                 false  -> ok;
-                true   -> true = code:add_path(LibDir)
+                true   ->
+                    % TODO: Refactor the commonality
+                    [begin
+                        [WithoutExtension|_] = string:tokens(Path, "."),
+                        io:format("Loading ~p~n",[WithoutExtension]),
+                        {module,_} = code:load_abs(WithoutExtension)
+                    end || Path <- filelib:wildcard(LibDir ++ "/*/ebin/*.beam")]
             end,
             [begin
-                [Dir,Plugin,Ebin,Mod|_] = string:tokens(PluginApp,"/."),
+                [Dir,Plugin,Ebin,Mod|_] = string:tokens(Config,"/."),
                 true = code:add_path(Dir ++ "/" ++ Plugin ++ "/" ++ Ebin),
                 %% TODO: Might want a separate supervisor
-                start_child(list_to_atom(Mod))
-            end || PluginApp <- filelib:wildcard("plugins/*/ebin/*.app")],
+                %start_child(list_to_atom(Mod))
+                {Name, Fun} = parse_plugin_config(Config),
+                %Fun(),
+                io:format("Started ~n plugin ~p", [Name])
+            end || Config <- filelib:wildcard("plugins/*/ebin/*.plugin")],
         ok
+    end.
+
+parse_plugin_config(File) ->
+    case file:consult(File) of
+        {ok, [{plugin, Name, [{startup_function, {M, F, A}}, {env, Env}]}]} ->
+            {Name, M:F(A)};
+        _ -> 
+            error
     end.
 
 rotate_logs(File, Suffix, Handler) ->
