@@ -180,9 +180,13 @@ flush_messages_to_disk_queue(Q, Commit) ->
 
 flush_requeue_to_disk_queue(Q, RequeueCount, Commit) ->
     if 0 == RequeueCount -> Commit;
-       true -> ok = rabbit_disk_queue:tx_commit(Q, lists:reverse(Commit), []),
-               rabbit_disk_queue:requeue_next_n(Q, RequeueCount),
-               []
+       true ->
+            ok = if [] == Commit -> ok;
+                    true -> rabbit_disk_queue:tx_commit
+                              (Q, lists:reverse(Commit), [])
+                 end,
+            rabbit_disk_queue:requeue_next_n(Q, RequeueCount),
+            []
     end.
 
 to_mixed_mode(_TxnMessages, State = #mqstate { mode = mixed }) ->
@@ -226,7 +230,7 @@ purge_non_persistent_messages(State = #mqstate { mode = disk, queue = Q,
         deliver_all_messages(Q, IsDurable, [], [], 0, 0),
     ok = if Requeue == [] -> ok;
             true ->
-                 rabbit_disk_queue:requeue_with_seqs(Q, lists:reverse(Requeue))
+                 rabbit_disk_queue:requeue(Q, lists:reverse(Requeue))
          end,
     ok = if Acks == [] -> ok;
             true -> rabbit_disk_queue:ack(Q, Acks)
@@ -241,7 +245,7 @@ deliver_all_messages(Q, IsDurable, Acks, Requeue, Length, QSize) ->
             OnDisk = IsPersistent andalso IsDurable,
             {Acks1, Requeue1, Length1, QSize1} =
                 if OnDisk -> { Acks,
-                               [{AckTag, {next, IsDelivered}} | Requeue],
+                               [{AckTag, IsDelivered} | Requeue],
                                Length + 1, QSize + size_of_message(Msg) };
                    true   -> { [AckTag | Acks], Requeue, Length, QSize }
                 end,
@@ -484,7 +488,7 @@ requeue(MessagesWithAckTags, State = #mqstate { mode = disk, queue = Q,
         = lists:foldl(
             fun ({#basic_message { is_persistent = IsPersistent }, AckTag}, RQ)
                 when IsDurable andalso IsPersistent ->
-                    [AckTag | RQ];
+                    [{AckTag, true} | RQ];
                 ({Msg, _AckTag}, RQ) ->
                     ok = case RQ == [] of
                              true  -> ok;
@@ -508,7 +512,7 @@ requeue(MessagesWithAckTags, State = #mqstate { mode = mixed, queue = Q,
                {Acc, MsgBuf2}) ->
                   OnDisk = IsDurable andalso IsPersistent,
                   Acc1 =
-                      if OnDisk -> [AckTag | Acc];
+                      if OnDisk -> [{AckTag, true} | Acc];
                          true -> Acc
                       end,
                   {Acc1, queue:in({Msg, true, OnDisk}, MsgBuf2)}

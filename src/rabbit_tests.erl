@@ -924,7 +924,7 @@ rdq_test_redeliver() ->
     %% now requeue every other message (starting at the _first_)
     %% and ack the other ones
     lists:foldl(fun (SeqId2, true) ->
-                        rabbit_disk_queue:requeue(q, [SeqId2]),
+                        rabbit_disk_queue:requeue(q, [{SeqId2, true}]),
                         false;
                     (SeqId2, false) ->
                         rabbit_disk_queue:ack(q, [SeqId2]),
