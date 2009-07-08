@@ -305,7 +305,6 @@ start_plugins() ->
                     % TODO: Refactor the commonality
                     [begin
                         [WithoutExtension|_] = string:tokens(Path, "."),
-                        io:format("Loading ~p~n",[WithoutExtension]),
                         {module,_} = code:load_abs(WithoutExtension)
                     end || Path <- filelib:wildcard(LibDir ++ "/*/ebin/*.beam")]
             end,
