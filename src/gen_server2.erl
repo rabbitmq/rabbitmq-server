@@ -334,7 +334,15 @@ multi_call(Nodes, Name, Req, Timeout)
 
 
 %%-----------------------------------------------------------------
-%% enter_loop(Mod, Options, State, <ServerName>, <TimeOut>) ->_ 
+%% enter_loop(Mod, Options, State) -> _
+%% enter_loop(Mod, Options, State, ServerName) -> _
+%% enter_loop(Mod, Options, State, [{Key, Value}]) -> _
+%% enter_loop(Mod, Options, State, Timeout) -> _
+%% enter_loop(Mod, Options, State, ServerName, [{Key, Value}]) -> _
+%% enter_loop(Mod, Options, State, ServerName, Timeout) -> _
+%% enter_loop(Mod, Options, State, ServerName, Timeout, MinPri) -> _
+%%
+%% {Key, Value} = {min_priority, MinPri} | {timeout, Timeout}
 %%   
 %% Description: Makes an existing process into a gen_server. 
 %%              The calling process will enter the gen_server receive 
