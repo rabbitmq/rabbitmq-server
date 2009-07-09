@@ -41,9 +41,9 @@
 -export([register/4, report_memory/3, report_memory/5, info/0,
          pin_to_disk/1, unpin_to_disk/1]).
 
--define(TOTAL_TOKENS, 1000).
+-define(TOTAL_TOKENS, 10000000).
 -define(ACTIVITY_THRESHOLD, 25).
--define(INITIAL_TOKEN_ALLOCATION, 10).
+-define(INITIAL_TOKEN_ALLOCATION, 100).
 
 -define(SERVER, ?MODULE).
 
@@ -286,8 +286,10 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
                         State1 = #state { available_tokens = Avail1,
                                           mixed_queues = Mixed1 } =
                             free_upto(Pid, Req, State),
-                        case Req > Avail1 of
-                            true -> %% not enough space, stay as disk
+                        case Req > Avail1 orelse Hibernating orelse LowRate of
+                            true ->
+                                %% not enough space, or no compelling
+                                %% reason, so stay as disk
                                 {State1, disk};
                             false -> %% can go to mixed mode
                                 {Module, Function, Args} =
