@@ -433,7 +433,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     {ok, case Mode of
              mixed -> State2;
              disk -> to_disk_only_mode(State2)
-         end, {binary, ?HIBERNATE_AFTER_MIN}}.
+         end, {binary, ?HIBERNATE_AFTER_MIN}, 0}.
 
 handle_call({deliver, Q}, _From, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, false, State),
@@ -517,10 +517,9 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 handle_info(timeout, State = #dqstate { commit_timer_ref = undefined }) ->
     ok = report_memory(true, State),
     %% don't use noreply/1 or noreply1/1 as they'll restart the memory timer
-    {noreply, stop_memory_timer(State), hibernate};
+    {noreply, stop_memory_timer(State), hibernate, 0};
 handle_info(timeout, State) ->
-    noreply(sync_current_file_handle(State));
-handle_info(_Info, State) ->
+    noreply(sync_current_file_handle(State)).
     noreply(State).
 
 terminate(_Reason, State) ->
@@ -647,26 +646,26 @@ noreply(NewState) ->
 
 noreply1(NewState = #dqstate { on_sync_froms = [],
                                commit_timer_ref = undefined }) ->
-    {noreply, NewState, binary};
+    {noreply, NewState, binary, 0};
 noreply1(NewState = #dqstate { commit_timer_ref = undefined }) ->
-    {noreply, start_commit_timer(NewState), 0};
+    {noreply, start_commit_timer(NewState), 0, 0};
 noreply1(NewState = #dqstate { on_sync_froms = [] }) ->
-    {noreply, stop_commit_timer(NewState), binary};
+    {noreply, stop_commit_timer(NewState), binary, 0};
 noreply1(NewState) ->
-    {noreply, NewState, 0}.
+    {noreply, NewState, 0, 0}.
 
 reply(Reply, NewState) ->
     reply1(Reply, start_memory_timer(NewState)).
 
 reply1(Reply, NewState = #dqstate { on_sync_froms = [],
                                     commit_timer_ref = undefined }) ->
-    {reply, Reply, NewState, binary};
+    {reply, Reply, NewState, binary, 0};
 reply1(Reply, NewState = #dqstate { commit_timer_ref = undefined }) ->
-    {reply, Reply, start_commit_timer(NewState), 0};
+    {reply, Reply, start_commit_timer(NewState), 0, 0};
 reply1(Reply, NewState = #dqstate { on_sync_froms = [] }) ->
-    {reply, Reply, stop_commit_timer(NewState), binary};
+    {reply, Reply, stop_commit_timer(NewState), binary, 0};
 reply1(Reply, NewState) ->
-    {reply, Reply, NewState, 0}.
+    {reply, Reply, NewState, 0, 0}.
 
 form_filename(Name) ->
     filename:join(base_directory(), Name).

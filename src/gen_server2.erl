@@ -477,11 +477,11 @@ loop(Parent, Name, State, Mod, Time, TimeoutState, MinPri, Queue, Debug) ->
                       Time, TimeoutState, MinPri, in(Input, Queue), Debug)
     after 0 ->
             process_next_msg(Parent, Name, State, Mod, Time, TimeoutState,
-                             MinPri, Queue, Debug, false)
+                             MinPri, Queue, Debug)
     end.
 
 process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, MinPri, Queue,
-                 Debug, Hib) ->
+                 Debug) ->
     Res = case MinPri of
               any -> priority_queue:out(Queue);
               _ -> priority_queue:out(MinPri, Queue)
@@ -489,11 +489,11 @@ process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, MinPri, Queue,
     case Res of
         {{value, Msg}, Queue1} ->
             process_msg(Parent, Name, State, Mod,
-                        Time, TimeoutState, Queue1, Debug, Hib, Msg);
+                        Time, TimeoutState, Queue1, Debug, Msg);
         {empty, Queue1} ->
-            Time1 = case {Hib, Time, TimeoutState} of
-                        {true, _, _} -> 0;
-                        {_, binary, {Current, _Min, undefined}} -> Current;
+            Time1 = case {Time, TimeoutState} of
+                        {hibernate, _} -> 0;
+                        {binary, {Current, _Min, undefined}} -> Current;
                         _ -> Time
                     end,
             receive
@@ -502,11 +502,11 @@ process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, MinPri, Queue,
                          Time, TimeoutState, MinPri, in(Input, Queue1), Debug)
             after Time1 ->
                     process_msg(Parent, Name, State, Mod,
-                                Time, TimeoutState, Queue1, Debug, Hib,
-                               case Hib of
-                                  true -> roused_and_disinterested;
-                                  false -> timeout
-                               end)
+                                Time, TimeoutState, Queue1, Debug,
+                                case Time == hibernate of
+                                    true -> roused_and_disinterested;
+                                    false -> timeout
+                                end)
             end
     end.
 
@@ -517,7 +517,7 @@ wake_hib(Parent, Name, State, Mod, TimeoutState, MinPri, Queue, Debug) ->
 	  end,
     TimeoutState1 = adjust_hibernate_after(TimeoutState),
     process_next_msg(Parent, Name, State, Mod, hibernate, TimeoutState1,
-                     MinPri, in(Msg, Queue), Debug, true).
+                     MinPri, in(Msg, Queue), Debug).
 
 adjust_hibernate_after(undefined) ->
     undefined;
@@ -548,15 +548,12 @@ in(Input, Queue) ->
     priority_queue:in(Input, Queue).
 
 process_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue,
-            Debug, _Hib, Msg) ->
+            Debug, Msg) ->
     case Msg of
 	{system, From, Req} ->
 	    sys:handle_system_msg
               (Req, From, Parent, ?MODULE, Debug,
                [Name, State, Mod, Time, TimeoutState, Queue]);
-        %% gen_server puts Hib on the end as the 7th arg, but that
-        %% version of the function seems not to be documented so
-        %% leaving out for now.
 	{'EXIT', Parent, Reason} ->
 	    terminate(Reason, Name, Msg, Mod, State, Debug);
 	_Msg when Debug =:= [] ->
