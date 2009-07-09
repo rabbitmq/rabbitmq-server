@@ -80,6 +80,10 @@ RABBITMQ_START_RABBIT=
 # there is no other way of preventing their expansion.
 set -f
 
+% This puts the plugins directory on the load path
+% This does not seem to work with the -pa flag
+export ERL_LIBS=$ERL_LIBS:plugins:plugins/lib
+
 exec erl \
     -pa "`dirname $0`/../ebin" \
     ${RABBITMQ_START_RABBIT} \

@@ -75,7 +75,8 @@ start() ->
     try
         ok = ensure_working_log_handlers(),
         ok = rabbit_mnesia:ensure_mnesia_dir(),
-        ok = rabbit_misc:start_applications(?APPS)
+        ok = rabbit_misc:start_applications(?APPS),
+        ok = start_plugins()
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
@@ -174,10 +175,6 @@ start(normal, []) ->
                           ok = rabbit_networking:start_tcp_listener(Host, Port)
                   end,
                   TCPListeners)
-        end},
-       {"plugins",
-        fun () ->
-                ok = start_plugins()
         end}]
       ++ ExtraSteps),
 
@@ -294,38 +291,42 @@ start_builtin_amq_applications() ->
 
 %% Loads shared libraries and plugins that exist in the plugin dir
 start_plugins() ->
-    PluginsDir = "plugins",
-    case filelib:is_dir(PluginsDir) of
-        false -> ok;
-        true  ->
-            LibDir = PluginsDir ++ "/lib",
-            case filelib:is_dir(LibDir) of
-                false  -> ok;
-                true   ->
-                    [begin
-                        [WithoutExtension|_] = string:tokens(Path, "."),
-                        {module,_} = code:load_abs(WithoutExtension)
-                    end || Path <- filelib:wildcard(LibDir ++ "/*/ebin/*.beam")]
-            end,
-            [begin
-                [Dir,Plugin|_] = string:tokens(Config,"/"),
-                BasePath = Dir ++ "/" ++ Plugin,
-                Path = BasePath ++ "/ebin",
-                true = code:add_path(Path),
-                Name = parse_plugin_config(Config),
-                EnvConfig = BasePath ++ "/" ++ atom_to_list(Name) ++ ".cfg",
-                {ok, Terms} = file:consult(EnvConfig),
-                Name:start_plugin(Terms),
-                io:format("Started ~p plugin ~n", [Name])
-            end || Config <- filelib:wildcard("plugins/*/*.plugin")],
-        ok
-    end.
+    io:format("~nstarting plugins...~n"),
+    [begin
+        [_Dir,Plugin|_] = string:tokens(Config,"/."),
+        case parse_plugin_config(Plugin) of
+            ok ->
+                case application:start(list_to_atom(Plugin)) of
+                    {error, Reason} ->
+                        rabbit_log:error("Error starting ~p plugin: "
+                                         "~p~n", [Plugin, Reason]);
+                    _ ->
+                        io:format("...started ~p plugin ~n", [Plugin])
+                end;
+            _ -> ok
+        end
+    end || Config <- filelib:wildcard("plugins/*.ez")],
+    io:format("...done~n").
 
-parse_plugin_config(File) ->
-    case file:consult(File) of
-        {ok, [{plugin, Name}]} ->
-            Name;
-        _ -> 
+%% TODO Think of something better than this name, probablt somewhere in /etc
+-define(PLUGIN_CONF_DIR, "plugins").
+
+parse_plugin_config(Plugin) ->
+    Atom = list_to_atom(Plugin),
+    Conf = ?PLUGIN_CONF_DIR ++ "/" ++ Plugin ++ ".cfg",
+    case file:consult(Conf) of
+        {ok, Terms} ->
+            lists:foreach(fun({K,V}) ->
+                             application:set_env(Atom, K, V)
+                          end, Terms),
+            ok;
+        {error, enoent} ->
+            rabbit_log:warning("Could not locate a config file for the ~p "
+                               "plugin, this might be normal though~n", [Atom]),
+            ok;
+        {error, _} ->
+            rabbit_log:error("Error accessing config file for ~p
+                              plugin, ", [Atom]),
             error
     end.
 
