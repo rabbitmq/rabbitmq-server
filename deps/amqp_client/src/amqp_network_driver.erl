@@ -116,6 +116,8 @@ recv() ->
     receive
             {'$gen_cast', {method, Method, _Content}} ->
             Method
+    after 60000 ->
+        exit(awaiting_response_from_server_timed_out)
     end.
 
 %---------------------------------------------------------------------------
