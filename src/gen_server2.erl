@@ -37,6 +37,28 @@
 %% Explicit timeouts (i.e. not 'binary') from the handle_* functions
 %% are still supported, and do not have any effect on the current
 %% timeout value.
+%%
+%% 6) init/1 can also return (either a further arg in addition to
+%% timeout above, or as a key-value list with the timeout as {timeout,
+%% Timeout}) a minimum priority (key: min_priority). This can also be
+%% returned from handle_* functions (i.e. {noreply, NewState} or
+%% {noreply, NewState, Timeout} or {noreply, NewState, Timeout,
+%% MinPri} or {noreply, NewState, [{min_priority, MinPri}]} or
+%% {noreply, NewState, [{min_priority, MinPri}, {timeout,
+%% Timeout}]}). What this does is to only allow messages greater than
+%% the indicated priority through to the module. To allow any message
+%% through (as is the default), use 'any'. One effect of this is that
+%% when hibernating, the process can be woken up to receive a message
+%% which it then realises it is not interested in. When this happens,
+%% handle_info(roused_and_disinterested, State) will be called as soon
+%% as there are no further messages to process (i.e. upon waking, the
+%% message queue is drained, and a timeout of 0 is used). A suggested
+%% use of this is to cater for low priority background casts, which
+%% can be sent with negative priorities, and to use a priority of 0 or
+%% higher for everything else. Then, if you return from handle_* with
+%% a timeout of 0 and find handle_info(timeout, State) being called,
+%% you can then return with a min_priority of 'any' and pick up the
+%% low priority messages.
 
 %% All modifications are (C) 2009 LShift Ltd.
 
@@ -133,7 +155,8 @@
 	 cast/2, pcast/3, reply/2,
 	 abcast/2, abcast/3,
 	 multi_call/2, multi_call/3, multi_call/4,
-	 enter_loop/3, enter_loop/4, enter_loop/5, wake_hib/7]).
+	 enter_loop/3, enter_loop/4, enter_loop/5, enter_loop/6,
+         wake_hib/8]).
 
 -export([behaviour_info/1]).
 
@@ -322,22 +345,32 @@ multi_call(Nodes, Name, Req, Timeout)
 %%              process, including registering a name for it.
 %%-----------------------------------------------------------------
 enter_loop(Mod, Options, State) ->
-    enter_loop(Mod, Options, State, self(), infinity).
+    enter_loop(Mod, Options, State, self(), []).
 
 enter_loop(Mod, Options, State, ServerName = {_, _}) ->
-    enter_loop(Mod, Options, State, ServerName, infinity);
+    enter_loop(Mod, Options, State, ServerName, []);
+
+enter_loop(Mod, Options, State, Opts) when is_list(Opts) ->
+    enter_loop(Mod, Options, State, self(), Opts);
 
 enter_loop(Mod, Options, State, Timeout) ->
-    enter_loop(Mod, Options, State, self(), Timeout).
+    enter_loop(Mod, Options, State, self(), [{timeout, Timeout}]).
 
-enter_loop(Mod, Options, State, ServerName, Timeout) ->
+enter_loop(Mod, Options, State, ServerName, Opts) when is_list(Opts) ->
     Name = get_proc_name(ServerName),
     Parent = get_parent(),
     Debug = debug_options(Name, Options),
     Queue = priority_queue:new(),
+    [{timeout, Timeout}, {min_priority, MinPri}] = extract_timeout_minpri(Opts),
     {Timeout1, TimeoutState} = build_timeout_state(Timeout),
-    loop(Parent, Name, State, Mod, Timeout1, TimeoutState, Queue, Debug).
+    loop(Parent, Name, State, Mod, Timeout1, TimeoutState, MinPri, Queue, Debug);
 
+enter_loop(Mod, Options, State, ServerName, Timeout) ->
+    enter_loop(Mod, Options, State, ServerName, [{timeout, Timeout}]).
+
+enter_loop(Mod, Options, State, ServerName, Timeout, MinPri) ->
+    enter_loop(Mod, Options, State, ServerName,
+               [{timeout, Timeout}, {min_priority, MinPri}]).
 %%%========================================================================
 %%% Gen-callback functions
 %%%========================================================================
@@ -357,13 +390,19 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
     Queue = priority_queue:new(),
     case catch Mod:init(Args) of
 	{ok, State} ->
-	    proc_lib:init_ack(Starter, {ok, self()}), 	    
-	    loop(Parent, Name, State, Mod, infinity, undefined, Queue, Debug);
+	    proc_lib:init_ack(Starter, {ok, self()}),
+	    loop(Parent, Name, State, Mod, infinity, undefined,
+                 any, Queue, Debug);
 	{ok, State, Timeout} ->
 	    proc_lib:init_ack(Starter, {ok, self()}),
             {Timeout1, TimeoutState} = build_timeout_state(Timeout),
-	    loop(Parent, Name, State, Mod, Timeout1, TimeoutState, Queue,
-                 Debug);
+	    loop(Parent, Name, State, Mod, Timeout1, TimeoutState,
+                 any, Queue, Debug);
+	{ok, State, Timeout, MinPri} ->
+	    proc_lib:init_ack(Starter, {ok, self()}),
+            {Timeout1, TimeoutState} = build_timeout_state(Timeout),
+	    loop(Parent, Name, State, Mod, Timeout1, TimeoutState,
+                 MinPri, Queue, Debug);
 	{stop, Reason} ->
 	    %% For consistency, we must make sure that the
 	    %% registered name (if any) is unregistered before
@@ -407,57 +446,70 @@ build_timeout_state(Timeout) ->
         _             -> {Timeout, undefined}
     end.
 
+extract_timeout_minpri(Opts) ->
+    rabbit_misc:keygets([{timeout, infinity}, {min_priority, any}], Opts).
+
 %%%========================================================================
 %%% Internal functions
 %%%========================================================================
 %%% ---------------------------------------------------
 %%% The MAIN loop.
 %%% ---------------------------------------------------
-loop(Parent, Name, State, Mod, hibernate, undefined, Queue, Debug) ->
-    proc_lib:hibernate(?MODULE,wake_hib,
-                       [Parent, Name, State, Mod, undefined, Queue, Debug]);
-loop(Parent, Name, State, Mod, hibernate, {Current, Min, undefined}, Queue,
-     Debug) ->
+loop(Parent, Name, State, Mod, hibernate, undefined, MinPri, Queue, Debug) ->
+    proc_lib:hibernate(?MODULE, wake_hib, [Parent, Name, State, Mod, undefined,
+                                           MinPri, Queue, Debug]);
+loop(Parent, Name, State, Mod, hibernate, {Current, Min, undefined},
+     MinPri, Queue, Debug) ->
     proc_lib:hibernate(?MODULE,wake_hib,[Parent, Name, State, Mod,
-                                         {Current, Min, now()}, Queue, Debug]);
-loop(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
+                                         {Current, Min, now()},
+                                         MinPri, Queue, Debug]);
+loop(Parent, Name, State, Mod, Time, TimeoutState, MinPri, Queue, Debug) ->
     receive
         Input -> loop(Parent, Name, State, Mod,
-                      Time, TimeoutState, in(Input, Queue), Debug)
+                      Time, TimeoutState, MinPri, in(Input, Queue), Debug)
     after 0 ->
             process_next_msg(Parent, Name, State, Mod, Time, TimeoutState,
-                             Queue, Debug, false)
+                             MinPri, Queue, Debug, false)
     end.
 
-process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue,
+process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, MinPri, Queue,
                  Debug, Hib) ->
-    case priority_queue:out(Queue) of
+    Res = case MinPri of
+              any -> priority_queue:out(Queue);
+              _ -> priority_queue:out(MinPri, Queue)
+          end,
+    case Res of
         {{value, Msg}, Queue1} ->
             process_msg(Parent, Name, State, Mod,
                         Time, TimeoutState, Queue1, Debug, Hib, Msg);
         {empty, Queue1} ->
-            Time1 = case {Time, TimeoutState} of
-                        {binary, {Current, _Min, undefined}} -> Current;
+            Time1 = case {Hib, Time, TimeoutState} of
+                        {true, _, _} -> 0;
+                        {_, binary, {Current, _Min, undefined}} -> Current;
                         _ -> Time
                     end,
             receive
                 Input ->
                     loop(Parent, Name, State, Mod,
-                         Time, TimeoutState, in(Input, Queue1), Debug)
+                         Time, TimeoutState, MinPri, in(Input, Queue1), Debug)
             after Time1 ->
                     process_msg(Parent, Name, State, Mod,
-                                Time, TimeoutState, Queue1, Debug, Hib, timeout)
+                                Time, TimeoutState, Queue1, Debug, Hib,
+                               case Hib of
+                                  true -> roused_and_disinterested;
+                                  false -> timeout
+                               end)
             end
     end.
 
-wake_hib(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
+wake_hib(Parent, Name, State, Mod, TimeoutState, MinPri, Queue, Debug) ->
     Msg = receive
 	      Input ->
 		  Input
 	  end,
     TimeoutState1 = adjust_hibernate_after(TimeoutState),
     process_next_msg(Parent, Name, State, Mod, hibernate, TimeoutState1,
-                     in(Msg, Queue), Debug, true).
+                     MinPri, in(Msg, Queue), Debug, true).
 
 adjust_hibernate_after(undefined) ->
     undefined;
@@ -707,14 +759,34 @@ handle_msg({'$gen_call', From, Msg},
     case catch Mod:handle_call(Msg, From, State) of
 	{reply, Reply, NState} ->
 	    reply(From, Reply),
-	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue, []);
-	{reply, Reply, NState, Time1} ->
+	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, any, Queue,
+                 []);
+	{reply, Reply, NState, Opts} when is_list(Opts) ->
 	    reply(From, Reply),
-	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, []);
+            [{timeout, Time}, {min_priority, MinPri}] =
+                extract_timeout_minpri(Opts),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 []);
+	{reply, Reply, NState, Time} ->
+	    reply(From, Reply),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, any, Queue, []);
+	{reply, Reply, NState, Time, MinPri} ->
+	    reply(From, Reply),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 []);
 	{noreply, NState} ->
-	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue, []);
-	{noreply, NState, Time1} ->
-	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, []);
+	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, any, Queue,
+                 []);
+	{noreply, NState, Opts} when is_list(Opts) ->
+            [{timeout, Time}, {min_priority, MinPri}] =
+                extract_timeout_minpri(Opts),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 []);
+	{noreply, NState, Time} ->
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, any, Queue, []);
+	{noreply, NState, Time, MinPri} ->
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 []);
 	{stop, Reason, Reply, NState} ->
 	    {'EXIT', R} = 
 		(catch terminate(Reason, Name, Msg, Mod, NState, [])),
@@ -734,20 +806,44 @@ handle_msg({'$gen_call', From, Msg},
     case catch Mod:handle_call(Msg, From, State) of
 	{reply, Reply, NState} ->
 	    Debug1 = reply(Name, From, Reply, NState, Debug),
-	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue,
+	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, any, Queue,
                  Debug1);
-	{reply, Reply, NState, Time1} ->
+	{reply, Reply, NState, Opts} when is_list(Opts) ->
 	    Debug1 = reply(Name, From, Reply, NState, Debug),
-	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, Debug1);
+            [{timeout, Time}, {min_priority, MinPri}] =
+                extract_timeout_minpri(Opts),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 Debug1);
+	{reply, Reply, NState, Time} ->
+	    Debug1 = reply(Name, From, Reply, NState, Debug),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, any, Queue,
+                 Debug1);
+	{reply, Reply, NState, Time, MinPri} ->
+	    Debug1 = reply(Name, From, Reply, NState, Debug),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 Debug1);
 	{noreply, NState} ->
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
-	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue,
+	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, any, Queue,
                  Debug1);
-	{noreply, NState, Time1} ->
+	{noreply, NState, Opts} when is_list(Opts) ->
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
-	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, Debug1);
+            [{timeout, Time}, {min_priority, MinPri}] =
+                extract_timeout_minpri(Opts),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 Debug1);
+	{noreply, NState, Time} ->
+	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
+				      {noreply, NState}),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, any, Queue,
+                 Debug1);
+	{noreply, NState, Time, MinPri} ->
+	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
+				      {noreply, NState}),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 Debug1);
 	{stop, Reason, Reply, NState} ->
 	    {'EXIT', R} = 
 		(catch terminate(Reason, Name, Msg, Mod, NState, Debug)),
@@ -767,9 +863,18 @@ handle_common_reply(Reply, Parent, Name, Msg, Mod, State,
                     TimeoutState, Queue) ->
     case Reply of
 	{noreply, NState} ->
-	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue, []);
-	{noreply, NState, Time1} ->
-	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, []);
+	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, any, Queue,
+                 []);
+	{noreply, NState, Opts} when is_list(Opts) ->
+            [{timeout, Time}, {min_priority, MinPri}] =
+                extract_timeout_minpri(Opts),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 []);
+	{noreply, NState, Time} ->
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, any, Queue, []);
+	{noreply, NState, Time, MinPri} ->
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 []);
 	{stop, Reason, NState} ->
 	    terminate(Reason, Name, Msg, Mod, NState, []);
 	{'EXIT', What} ->
@@ -784,12 +889,25 @@ handle_common_reply(Reply, Parent, Name, Msg, Mod, State, TimeoutState, Queue,
 	{noreply, NState} ->
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
-	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue,
+	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, any, Queue,
                  Debug1);
-	{noreply, NState, Time1} ->
+	{noreply, NState, Opts} when is_list(Opts) ->
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
-	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, Debug1);
+            [{timeout, Time}, {min_priority, MinPri}] =
+                extract_timeout_minpri(Opts),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 Debug1);
+	{noreply, NState, Time} ->
+	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
+				      {noreply, NState}),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, any, Queue,
+                 Debug1);
+	{noreply, NState, Time, MinPri} ->
+	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
+				      {noreply, NState}),
+	    loop(Parent, Name, NState, Mod, Time, TimeoutState, MinPri, Queue,
+                 Debug1);
 	{stop, Reason, NState} ->
 	    terminate(Reason, Name, Msg, Mod, NState, Debug);
 	{'EXIT', What} ->
@@ -807,8 +925,9 @@ reply(Name, {To, Tag}, Reply, State, Debug) ->
 %%-----------------------------------------------------------------
 %% Callback functions for system messages handling.
 %%-----------------------------------------------------------------
-system_continue(Parent, Debug, [Name, State, Mod, Time, TimeoutState, Queue]) ->
-    loop(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug).
+system_continue(Parent, Debug, [Name, State, Mod, Time, TimeoutState, MinPri,
+                                Queue]) ->
+    loop(Parent, Name, State, Mod, Time, TimeoutState, MinPri, Queue, Debug).
 
 -ifdef(use_specs).
 -spec system_terminate(_, _, _, [_]) -> no_return().

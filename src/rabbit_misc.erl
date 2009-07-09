@@ -52,7 +52,7 @@
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
--export([unfold/2, ceil/1]).
+-export([unfold/2, ceil/1, keygets/2]).
 
 -import(mnesia).
 -import(lists).
@@ -116,6 +116,8 @@
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
+-spec(keygets/2 :: ([({K, V} | {K, non_neg_integer(), V})], [any()]) ->
+             [({K, V} | any())]).
               
 -endif.
 
@@ -448,3 +450,18 @@ ceil(N) when N - trunc(N) > 0 ->
     1 + trunc(N);
 ceil(N) ->
     N.
+
+keygets(Keys, KeyList) ->
+    lists:reverse(
+      lists:foldl(
+        fun({Key, Pos, Default}, Acc) ->
+                case lists:keysearch(Key, Pos, KeyList) of
+                    false -> [{Key, Default} | Acc];
+                    {value, T} -> [T | Acc]
+                end;
+           ({Key, Default}, Acc) ->
+                case lists:keysearch(Key, 1, KeyList) of
+                    false -> [{Key, Default} | Acc];
+                    {value, T} -> [T | Acc]
+                end
+        end, [], Keys)).

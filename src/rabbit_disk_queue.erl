@@ -817,7 +817,7 @@ fetch_and_increment_cache(MsgId, #dqstate { message_cache = Cache }) ->
 
 decrement_cache(MsgId, #dqstate { message_cache = Cache }) ->
     true = try case ets:update_counter(Cache, MsgId, {4, -1}) of
-                   0  -> ets:delete(Cache, MsgId);
+                   N when N =< 0 -> ets:delete(Cache, MsgId);
                    _N -> true
                end
            catch error:badarg -> 
@@ -1114,22 +1114,24 @@ internal_requeue_next_n(Q, N, State = #dqstate { sequences = Sequences }) ->
                 mnesia:transaction(
                   fun() ->
                           ok = mnesia:write_lock_table(rabbit_disk_queue),
-                          requeue_next_messages(Q, N, ReadSeqId, WriteSeqId)
+                          requeue_next_messages(Q, State, N, ReadSeqId, WriteSeqId)
                   end
                  ),
             true = ets:insert(Sequences, {Q, ReadSeqIdN, WriteSeqIdN}),
             {ok, State}
     end.
 
-requeue_next_messages(_Q, 0, ReadSeq, WriteSeq) ->
+requeue_next_messages(_Q, _State, 0, ReadSeq, WriteSeq) ->
     {ReadSeq, WriteSeq};
-requeue_next_messages(Q, N, ReadSeq, WriteSeq) ->
-    [Obj] = mnesia:read(rabbit_disk_queue, {Q, ReadSeq}, write),
+requeue_next_messages(Q, State, N, ReadSeq, WriteSeq) ->
+    [Obj = #dq_msg_loc { msg_id = MsgId }] =
+        mnesia:read(rabbit_disk_queue, {Q, ReadSeq}, write),
     ok = mnesia:write(rabbit_disk_queue,
                       Obj #dq_msg_loc {queue_and_seq_id = {Q, WriteSeq}},
                       write),
     ok = mnesia:delete(rabbit_disk_queue, {Q, ReadSeq}, write),
-    requeue_next_messages(Q, N - 1, ReadSeq + 1, WriteSeq + 1).
+    decrement_cache(MsgId, State),
+    requeue_next_messages(Q, State, N - 1, ReadSeq + 1, WriteSeq + 1).
 
 internal_purge(Q, State = #dqstate { sequences = Sequences }) ->
     case sequence_lookup(Sequences, Q) of

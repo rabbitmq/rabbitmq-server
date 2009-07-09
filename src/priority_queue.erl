@@ -56,7 +56,7 @@
 -module(priority_queue).
 
 -export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, in/2, in/3,
-         out/1, pout/1, join/2]).
+         out/1, out/2, pout/1, join/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -73,8 +73,9 @@
 -spec(to_list/1 :: (pqueue()) -> [{priority(), any()}]).
 -spec(in/2 :: (any(), pqueue()) -> pqueue()).
 -spec(in/3 :: (any(), priority(), pqueue()) -> pqueue()).
--spec(out/1 :: (pqueue()) -> {empty | {value, any()}, pqueue()}).
--spec(pout/1 :: (pqueue()) -> {empty | {value, any(), priority()}, pqueue()}).
+-spec(out/1 :: (pqueue()) -> {(empty | {value, any()}), pqueue()}).
+-spec(out/2 :: (priority(), pqueue()) -> {(empty | {value, any()}), pqueue()}).
+-spec(pout/1 :: (pqueue()) -> {(empty | {value, any(), priority()}), pqueue()}).
 -spec(join/2 :: (pqueue(), pqueue()) -> pqueue()).
 
 -endif.
@@ -150,8 +151,19 @@ out({pqueue, [{P, Q} | Queues]}) ->
            end,
     {R, NewQ}.
 
-pout({queue, [], []}) ->
-    {empty, {queue, [], []}};
+out(_Priority, {queue, [], []} = Q) ->
+    {empty, Q};
+out(Priority, {queue, _, _} = Q) when Priority =< 0 ->
+    out(Q);
+out(_Priority, {queue, _, _} = Q) ->
+    {empty, Q};
+out(Priority, {pqueue, [{P, _Q} | _Queues]} = Q) when Priority =< (-P) ->
+    out(Q);
+out(_Priority, {pqueue, [_|_]} = Q) ->
+    {empty, Q}.
+
+pout({queue, [], []} = Q) ->
+    {empty, Q};
 pout({queue, _, _} = Q) ->
     {{value, V}, Q1} = out(Q),
     {{value, V, 0}, Q1};
