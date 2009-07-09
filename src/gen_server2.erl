@@ -335,12 +335,8 @@ enter_loop(Mod, Options, State, ServerName, Timeout) ->
     Parent = get_parent(),
     Debug = debug_options(Name, Options),
     Queue = priority_queue:new(),
-    TimeoutState = case Timeout of
-                       {binary, Min} ->
-                           {Min, Min, undefined};
-                       _ -> undefined
-                   end,
-    loop(Parent, Name, State, Mod, Timeout, TimeoutState, Queue, Debug).
+    {Timeout1, TimeoutState} = build_timeout_state(Timeout),
+    loop(Parent, Name, State, Mod, Timeout1, TimeoutState, Queue, Debug).
 
 %%%========================================================================
 %%% Gen-callback functions
@@ -365,12 +361,9 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
 	    loop(Parent, Name, State, Mod, infinity, undefined, Queue, Debug);
 	{ok, State, Timeout} ->
 	    proc_lib:init_ack(Starter, {ok, self()}),
-            TimeoutState = case Timeout of
-                               {binary, Min} ->
-                                   {Min, Min, undefined};
-                               _ -> undefined
-                           end,
-	    loop(Parent, Name, State, Mod, binary, TimeoutState, Queue, Debug);
+            {Timeout1, TimeoutState} = build_timeout_state(Timeout),
+	    loop(Parent, Name, State, Mod, Timeout1, TimeoutState, Queue,
+                 Debug);
 	{stop, Reason} ->
 	    %% For consistency, we must make sure that the
 	    %% registered name (if any) is unregistered before
@@ -407,6 +400,12 @@ unregister_name({global,Name}) ->
     _ = global:unregister_name(Name);
 unregister_name(Pid) when is_pid(Pid) ->
     Pid.
+
+build_timeout_state(Timeout) ->
+    case Timeout of
+        {binary, Min} -> {binary,  {Min, Min, undefined}};
+        _             -> {Timeout, undefined}
+    end.
 
 %%%========================================================================
 %%% Internal functions
