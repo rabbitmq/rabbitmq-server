@@ -110,8 +110,7 @@
 %% rabbit_disk_queue: this is an mnesia table which contains:
 %%              #dq_msg_loc { queue_and_seq_id = {Q, SeqId},
 %%                            is_delivered = IsDelivered,
-%%                            msg_id = MsgId,
-%%                            next_seq_id = SeqId
+%%                            msg_id = MsgId
 %%                          }
 %%
 
