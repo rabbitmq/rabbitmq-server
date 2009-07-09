@@ -45,7 +45,7 @@
          requeue_next_n/2
         ]).
 
--export([length/1, filesync/0, cache_info/0]).
+-export([filesync/0, cache_info/0]).
 
 -export([stop/0, stop_and_obliterate/0, report_memory/0,
          set_mode/1, to_disk_only_mode/0, to_ram_disk_mode/0]).
@@ -267,7 +267,6 @@
 -spec(stop_and_obliterate/0 :: () -> 'ok').
 -spec(to_ram_disk_mode/0 :: () -> 'ok').
 -spec(to_disk_only_mode/0 :: () -> 'ok').
--spec(length/1 :: (queue_name()) -> non_neg_integer()).
 -spec(filesync/0 :: () -> 'ok').
 -spec(cache_info/0 :: () -> [{atom(), term()}]).
 -spec(report_memory/0 :: () -> 'ok').
@@ -333,9 +332,6 @@ to_disk_only_mode() ->
 
 to_ram_disk_mode() ->
     gen_server2:pcall(?SERVER, 9, to_ram_disk_mode, infinity).
-
-length(Q) ->
-    gen_server2:call(?SERVER, {length, Q}, infinity).
 
 filesync() ->
     gen_server2:pcast(?SERVER, 10, filesync).
@@ -473,9 +469,6 @@ handle_call(to_disk_only_mode, _From, State) ->
     reply(ok, to_disk_only_mode(State));
 handle_call(to_ram_disk_mode, _From, State) ->
     reply(ok, to_ram_disk_mode(State));
-handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
-    {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
-    reply(WriteSeqId - ReadSeqId, State);
 handle_call({delete_non_durable_queues, DurableQueues}, _From, State) ->
     {ok, State1} = internal_delete_non_durable_queues(DurableQueues, State),
     reply(ok, State1);
@@ -1006,7 +999,7 @@ internal_tx_commit(Q, PubMsgIds, AckSeqIds, From,
                                       last_sync_offset = SyncOffset
                                     }) ->
     {InitReadSeqId, InitWriteSeqId} = sequence_lookup(Sequences, Q),
-    WriteSeqId = InitWriteSeqId + erlang:length(PubMsgIds),
+    WriteSeqId = InitWriteSeqId + length(PubMsgIds),
     {atomic, {InCurFile, WriteSeqId, State1}} =
         mnesia:transaction(
           fun() ->
@@ -1061,8 +1054,7 @@ internal_publish(Q, Message = #basic_message { guid = MsgId },
 internal_tx_cancel(MsgIds, State) ->
     %% we don't need seq ids because we're not touching mnesia,
     %% because seqids were never assigned
-    MsgSeqIds = lists:zip(MsgIds,
-                          lists:duplicate(erlang:length(MsgIds), undefined)),
+    MsgSeqIds = lists:zip(MsgIds, lists:duplicate(length(MsgIds), undefined)),
     remove_messages(undefined, MsgSeqIds, false, State).
 
 internal_requeue(_Q, [], State) ->
@@ -1496,8 +1488,7 @@ load_from_disk(State) ->
                        fun (#dq_msg_loc { msg_id = MsgId,
                                           queue_and_seq_id = {Q, SeqId} },
                             true) ->
-                               case erlang:length(dets_ets_lookup(
-                                                    State1, MsgId)) of
+                               case length(dets_ets_lookup(State1, MsgId)) of
                                    0 -> ok == mnesia:delete(rabbit_disk_queue,
                                                             {Q, SeqId}, write);
                                    1 -> true
@@ -1595,7 +1586,7 @@ load_messages(Left, [File|Files],
     {ok, Messages} = scan_file_for_valid_messages(form_filename(File)),
     {ValidMessagesRev, ValidTotalSize} = lists:foldl(
         fun ({MsgId, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
-                case erlang:length(mnesia:dirty_index_match_object
+                case length(mnesia:dirty_index_match_object
                             (rabbit_disk_queue,
                              #dq_msg_loc { msg_id = MsgId,
                                            queue_and_seq_id = '_',
@@ -1635,13 +1626,13 @@ recover_crashed_compactions(Files, TmpFiles) ->
 verify_messages_in_mnesia(MsgIds) ->
     lists:foreach(
       fun (MsgId) ->
-              true = 0 < erlang:length(mnesia:dirty_index_match_object
-                                       (rabbit_disk_queue,
-                                        #dq_msg_loc { msg_id = MsgId,
-                                                      queue_and_seq_id = '_',
-                                                      is_delivered = '_'
-                                                     },
-                                        msg_id))
+              true = 0 < length(mnesia:dirty_index_match_object
+                                (rabbit_disk_queue,
+                                 #dq_msg_loc { msg_id = MsgId,
+                                               queue_and_seq_id = '_',
+                                               is_delivered = '_'
+                                              },
+                                 msg_id))
       end, MsgIds).
 
 recover_crashed_compactions1(Files, TmpFile) ->
