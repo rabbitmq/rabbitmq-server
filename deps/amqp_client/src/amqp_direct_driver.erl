@@ -40,6 +40,11 @@
 handshake(ConnectionState = #connection_state{username = User,
                                               password = Pass,
                                               vhostpath = VHostPath}) ->
+    case catch mnesia:table_info(rabbit_user, size) of
+        0 -> throw(broker_not_found_in_vm);
+        {'EXIT', _} -> throw(broker_not_found_in_vm);
+        _ -> ok
+    end,
     UserBin = amqp_util:binary(User),
     PassBin = amqp_util:binary(Pass),
     rabbit_access_control:user_pass_login(UserBin, PassBin),
