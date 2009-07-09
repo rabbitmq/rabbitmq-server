@@ -519,7 +519,8 @@ handle_info(timeout, State = #dqstate { commit_timer_ref = undefined }) ->
     %% don't use noreply/1 or noreply1/1 as they'll restart the memory timer
     {noreply, stop_memory_timer(State), hibernate, 0};
 handle_info(timeout, State) ->
-    noreply(sync_current_file_handle(State)).
+    noreply(sync_current_file_handle(State));
+handle_info(_Info, State) ->
     noreply(State).
 
 terminate(_Reason, State) ->
