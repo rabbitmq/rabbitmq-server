@@ -46,7 +46,7 @@ start(Connection, Queue, Fun) ->
     Pid.
 
 stop(Pid) ->
-    gen_server:call(Pid, stop).
+    gen_server:call(Pid, stop, infinity).
 
 %---------------------------------------------------------------------------
 % gen_server callbacks

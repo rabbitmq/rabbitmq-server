@@ -45,10 +45,10 @@ start(Connection, Queue) ->
     Pid.
 
 stop(Pid) ->
-    gen_server:call(Pid, stop).
+    gen_server:call(Pid, stop, infinity).
 
 call(RpcClientPid, Payload) ->
-    gen_server:call(RpcClientPid, {call, Payload}).
+    gen_server:call(RpcClientPid, {call, Payload}, infinity).
 
 %---------------------------------------------------------------------------
 % Plumbing
