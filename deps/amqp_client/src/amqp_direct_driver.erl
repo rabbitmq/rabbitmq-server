@@ -40,10 +40,9 @@
 handshake(ConnectionState = #connection_state{username = User,
                                               password = Pass,
                                               vhostpath = VHostPath}) ->
-    case catch mnesia:table_info(rabbit_user, size) of
-        0 -> throw(broker_not_found_in_vm);
-        {'EXIT', _} -> throw(broker_not_found_in_vm);
-        _ -> ok
+    case rabbit_running() of
+        false -> throw(broker_not_found_in_vm);
+        true -> ok
     end,
     UserBin = amqp_util:binary(User),
     PassBin = amqp_util:binary(Pass),
@@ -78,3 +77,29 @@ do(Writer, Method, Content) ->
 handle_broker_close(_State) ->
     ok.
 
+
+%---------------------------------------------------------------------------
+% Internal plumbing
+%---------------------------------------------------------------------------
+
+rabbit_running() ->
+    {running_applications, Apps} =
+        keyfind2(running_applications, rabbit:status()),
+    case keyfind3(rabbit, Apps) of
+        {rabbit, _, _} -> true;
+        _ -> false
+    end.
+
+keyfind2(_, []) -> false;
+keyfind2(KeyToFind, [Pair = {Key, _} | Rem]) ->
+    if
+        KeyToFind == Key -> Pair;
+        true -> keyfind2(KeyToFind, Rem)
+    end.
+
+keyfind3(_, []) -> false;
+keyfind3(KeyToFind, [Tuple = {Key, _, _} | Rem]) ->
+    if
+        KeyToFind == Key -> Tuple;
+        true -> keyfind3(KeyToFind, Rem)
+    end.
