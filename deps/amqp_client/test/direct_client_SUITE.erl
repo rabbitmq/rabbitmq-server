@@ -23,13 +23,17 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
--module(network_client_test).
+-module(direct_client_SUITE).
+
+-define(RPC_TIMEOUT, 10000).
+-define(RPC_SLEEP, 500).
 
 -export([test_coverage/0]).
+-export([test_channel_flow/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
-basic_get_test() ->
+basic_get_test() -> 
     test_util:basic_get_test(new_connection()).
 
 basic_return_test() ->
@@ -38,10 +42,10 @@ basic_return_test() ->
 basic_qos_test() ->
     test_util:basic_qos_test(new_connection()).
 
-basic_recover_test() -> 
+basic_recover_test() ->
     test_util:basic_recover_test(new_connection()).
 
-basic_consume_test() -> 
+basic_consume_test() ->
     test_util:basic_consume_test(new_connection()).
 
 lifecycle_test() ->
@@ -50,37 +54,37 @@ lifecycle_test() ->
 basic_ack_test() ->
     test_util:basic_ack_test(new_connection()).
 
-channel_lifecycle_test() ->
-    test_util:channel_lifecycle_test(new_connection()).
+command_serialization_test() ->
+    test_util:command_serialization_test(new_connection()).
 
 queue_unbind_test() ->
     test_util:queue_unbind_test(new_connection()).
 
-command_serialization_test() ->
-    test_util:command_serialization_test(new_connection()).
-
-teardown_test() ->
-    test_util:teardown_test(new_connection()).
-
-rpc_test() ->
-    test_util:rpc_test(new_connection()).
+%%---------------------------------------------------------------------------
+%% This must be kicked off manually because it can only be run after Rabbit
+%% has been running for 1 minute
+test_channel_flow() ->
+    test_util:channel_flow_test(new_connection()).
 
 %%---------------------------------------------------------------------------
 %% Negative Tests
+%%---------------------------------------------------------------------------
 
 non_existent_exchange_test() -> 
-  negative_test_util:non_existent_exchange_test(new_connection()).
+    negative_test_util:non_existent_exchange_test(new_connection()).
 
 hard_error_test() ->
     negative_test_util:hard_error_test(new_connection()).
 
 %%---------------------------------------------------------------------------
 %% Common Functions
+%%---------------------------------------------------------------------------
 
 new_connection() ->
-  amqp_connection:start("guest", "guest", "localhost").
+    amqp_connection:start("guest", "guest").
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().
+
