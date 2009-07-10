@@ -26,6 +26,7 @@
 
 TEST_SOURCES=$(wildcard *.erl)
 TEST_TARGETS=$(patsubst %.erl, %.beam, $(TEST_SOURCES))
+INCLUDES=$(wildcard ../$(INCLUDE_DIR)/*.hrl)
 
 ERLC_OPTS=-I ../$(INCLUDE_DIR) -I ../$(INCLUDE_SERV_DIR) -o ./ -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
@@ -33,7 +34,7 @@ all: compile
 
 compile: $(TEST_TARGETS)
 
-%.beam: %.erl
+%.beam: %.erl $(INCLUDES)
 	erlc $(ERLC_OPTS) $<
 
 clean:

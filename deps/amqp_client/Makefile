@@ -64,7 +64,7 @@ all: compile
 
 compile: $(TARGETS)
 
-compile_tests: $(TEST_TARGETS)
+compile_tests: $(TEST_DIR)
 
 
 dialyze: $(TARGETS)
@@ -76,8 +76,10 @@ dialyze_all: $(TARGETS) $(TEST_TARGETS)
 add_broker_to_plt: $(BROKER_SYMLINK)/ebin
 	$(DIALYZER_CALL) --add_to_plt -r $<
 
+$(TEST_TARGETS): $(TEST_DIR)
 
-$(TEST_TARGETS): $(BROKER_SYMLINK)
+.PHONY: $(TEST_DIR)
+$(TEST_DIR): $(BROKER_SYMLINK)
 	$(MAKE) -C $(TEST_DIR)
 
 $(BROKER_SYMLINK):
@@ -88,7 +90,7 @@ endif
 $(EBIN_DIR):
 	mkdir -p $@
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(EBIN_DIR) $(BROKER_SYMLINK)
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
 	erlc $(ERLC_OPTS) $<
 
 
