@@ -52,13 +52,17 @@
 %% which it then realises it is not interested in. When this happens,
 %% handle_info(roused_and_disinterested, State) will be called as soon
 %% as there are no further messages to process (i.e. upon waking, the
-%% message queue is drained, and a timeout of 0 is used). A suggested
-%% use of this is to cater for low priority background casts, which
-%% can be sent with negative priorities, and to use a priority of 0 or
-%% higher for everything else. Then, if you return from handle_* with
-%% a timeout of 0 and find handle_info(timeout, State) being called,
-%% you can then return with a min_priority of 'any' and pick up the
-%% low priority messages.
+%% message queue is drained, and a timeout of 0 is used).
+%%
+%% This feature means that you can delay processing lower priority
+%% messages. For example, when a min_priority of 0 is combined with
+%% the binary backoff timeout, you can delay processing any
+%% negative-priority messages until the first timeout fires which
+%% indicates that, given a steady state, the process has been idle for
+%% sufficiently long that it's reasonable to expect it to be
+%% uninterrupted by higher-priority messages for some little while;
+%% thus preventing low-priority, but lengthy jobs from getting in the
+%% way of higher priority jobs that need quick responses.
 
 %% All modifications are (C) 2009 LShift Ltd.
 
