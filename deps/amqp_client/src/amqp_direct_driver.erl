@@ -40,7 +40,7 @@
 handshake(ConnectionState = #connection_state{username = User,
                                               password = Pass,
                                               vhostpath = VHostPath}) ->
-    case rabbit_running() of
+    case lists:keymember(rabbit, 1, application:which_applications()) of
         false -> throw(broker_not_found_in_vm);
         true -> ok
     end,
@@ -76,30 +76,3 @@ do(Writer, Method, Content) ->
 
 handle_broker_close(_State) ->
     ok.
-
-
-%---------------------------------------------------------------------------
-% Internal plumbing
-%---------------------------------------------------------------------------
-
-rabbit_running() ->
-    {running_applications, Apps} =
-        keyfind2(running_applications, rabbit:status()),
-    case keyfind3(rabbit, Apps) of
-        {rabbit, _, _} -> true;
-        _ -> false
-    end.
-
-keyfind2(_, []) -> false;
-keyfind2(KeyToFind, [Pair = {Key, _} | Rem]) ->
-    if
-        KeyToFind == Key -> Pair;
-        true -> keyfind2(KeyToFind, Rem)
-    end.
-
-keyfind3(_, []) -> false;
-keyfind3(KeyToFind, [Tuple = {Key, _, _} | Rem]) ->
-    if
-        KeyToFind == Key -> Tuple;
-        true -> keyfind3(KeyToFind, Rem)
-    end.
