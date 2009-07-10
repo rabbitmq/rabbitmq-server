@@ -508,8 +508,9 @@ process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, MinPri, Queue,
                     process_msg(Parent, Name, State, Mod,
                                 Time, TimeoutState, Queue1, Debug,
                                 case Time == hibernate of
-                                    true -> roused_and_disinterested;
-                                    false -> timeout
+                                    true -> {roused_and_disinterested, MinPri};
+                                    false when MinPri =:= any -> timeout;
+                                    false -> {timeout, MinPri}
                                 end)
             end
     end.

@@ -200,7 +200,8 @@ to_mixed_mode(TxnMessages, State =
     %% don't actually do anything to the disk
     MsgBuf = case Length of
                  0 -> queue:new();
-                 _ -> queue:from_list([{disk, Length}])
+                 _ -> ok = rabbit_disk_queue:prefetch(Q, Length),
+                      queue:from_list([{disk, Length}])
              end,
     %% remove txn messages from disk which are neither persistent and
     %% durable. This is necessary to avoid leaks. This is also pretty
@@ -341,6 +342,7 @@ deliver(State = #mqstate { mode = mixed, msg_buf = MsgBuf, queue = Q,
                             end;
                         false -> noack
                     end,
+                ok = maybe_prefetch(Q, MsgBuf1),
                 {Msg1, IsDelivered1, AckTag1, MsgBuf1};
             {disk, Rem1} ->
                 {Msg1 = #basic_message { is_persistent = IsPersistent },
@@ -353,7 +355,8 @@ deliver(State = #mqstate { mode = mixed, msg_buf = MsgBuf, queue = Q,
                                  noack
                     end,
                 MsgBuf3 = case Rem1 of
-                              1 -> MsgBuf1;
+                              1 -> ok = maybe_prefetch(Q, MsgBuf1),
+                                   MsgBuf1;
                               _ -> queue:in_r({disk, Rem1 - 1}, MsgBuf1)
                           end,
                 {Msg1, IsDelivered1, AckTag2, MsgBuf3}
@@ -361,6 +364,14 @@ deliver(State = #mqstate { mode = mixed, msg_buf = MsgBuf, queue = Q,
     Rem = Length - 1,
     {{Msg, IsDelivered, AckTag, Rem},
      State #mqstate { msg_buf = MsgBuf2, length = Rem }}.
+
+maybe_prefetch(Q, MsgBuf) ->
+    case queue:peek(MsgBuf) of
+        empty -> ok;
+        {value, {disk, Count}} -> rabbit_disk_queue:prefetch(Q, Count);
+        {value, _} -> ok
+    end.
+            
 
 remove_noacks(MsgsWithAcks) ->
     {AckTags, ASize} =
