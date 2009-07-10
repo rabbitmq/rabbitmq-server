@@ -125,7 +125,6 @@ start_channel(ChannelNumber,
             do3               = fun(X, Y, Z) -> Driver:do(X, Y, Z) end,
             reader_pid        = ReaderPid,
             writer_pid        = WriterPid},
-    process_flag(trap_exit, true),
     {ok, ChannelPid} = gen_server:start_link(amqp_channel,
                                              [ChannelState], []),
     NewState = register_channel(Number, ChannelPid, State),
@@ -191,6 +190,7 @@ close_connection(Close, From, State = #connection_state{driver = Driver}) ->
 %%---------------------------------------------------------------------------
 
 init([InitialState, Driver]) when is_atom(Driver) ->
+    process_flag(trap_exit, true),
     State = Driver:handshake(InitialState),
     {ok, State#connection_state{driver = Driver} }.
 
@@ -239,6 +239,16 @@ handle_info( {'EXIT', Pid, normal}, State) ->
 %% This is a special case for abruptly closed socket connections
 handle_info( {'EXIT', _Pid, {socket_error, Reason}}, State) ->
     {stop, {socket_error, Reason}, State};
+
+handle_info( {'EXIT', _Pid, Reason = {unknown_message_type, _}}, State) ->
+    {stop, Reason, State};
+
+handle_info( {'EXIT', _Pid, Reason = connection_socket_closed_unexpectedly},
+             State) ->
+    {stop, Reason, State};
+
+handle_info( {'EXIT', _Pid, Reason = connection_timeout}, State) ->
+    {stop, Reason, State};
 
 handle_info( {'EXIT', Pid, Reason}, State) ->
     io:format("Connection: Handling exit from ~p --> ~p~n", [Pid, Reason]),
