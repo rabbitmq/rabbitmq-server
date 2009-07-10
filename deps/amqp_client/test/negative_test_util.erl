@@ -25,7 +25,7 @@
 -module(negative_test_util).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
+-include_lib("rabbit_framing.hrl").
 
 -compile(export_all).
 

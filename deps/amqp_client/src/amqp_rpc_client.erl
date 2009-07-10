@@ -25,8 +25,8 @@
 
 -module(amqp_rpc_client).
 
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
--include_lib("rabbitmq_server/include/rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
 -include("amqp_client.hrl").
 
 -behaviour(gen_server).
@@ -45,10 +45,10 @@ start(Connection, Queue) ->
     Pid.
 
 stop(Pid) ->
-    gen_server:call(Pid, stop).
+    gen_server:call(Pid, stop, infinity).
 
 call(RpcClientPid, Payload) ->
-    gen_server:call(RpcClientPid, {call, Payload}).
+    gen_server:call(RpcClientPid, {call, Payload}, infinity).
 
 %---------------------------------------------------------------------------
 % Plumbing

@@ -25,8 +25,8 @@
 
 -module(test_util).
 
--include_lib("rabbitmq_server/include/rabbit.hrl").
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("amqp_client.hrl").
 
@@ -291,6 +291,10 @@ producer_loop(Channel, RoutingKey, N) ->
     lib_amqp:publish(Channel, <<>>, RoutingKey, <<>>),
     producer_loop(Channel, RoutingKey, N - 1).
 
+%% Reject is not yet implemented in RabbitMQ
+basic_reject_test(Connection) ->
+    lib_amqp:close_connection(Connection).
+
 %% ----------------------------------------------------------------------------
 %% Test for the network client
 %% Sets up a 'spammer' to publish async in the background, then sends a bunch
@@ -378,10 +382,7 @@ pc_consumer_loop(Channel, Payload, SpamPayload, NRemaining, NSpamRemaining) ->
     after 3000 ->
         {{messages_remaining, NRemaining},{spam_remaining, NSpamRemaining}}
     end.
-
-%% Reject is not yet implemented in RabbitMQ
-basic_reject_test(Connection) ->
-    lib_amqp:close_connection(Connection).
+    
 
 %%----------------------------------------------------------------------------
 %% Unit test for the direct client

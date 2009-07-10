@@ -25,8 +25,8 @@
 
 -module(amqp_channel).
 
--include_lib("rabbitmq_server/include/rabbit.hrl").
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 -include("amqp_client.hrl").
 
@@ -73,11 +73,11 @@
 
 %% Generic AMQP RPC mechanism that expects a pseudo synchronous response
 call(Channel, Method) ->
-    gen_server:call(Channel, {call, Method}).
+    gen_server:call(Channel, {call, Method}, infinity).
 
 %% Generic AMQP send mechanism with content
 call(Channel, Method, Content) ->
-    gen_server:call(Channel, {call, Method, Content}).
+    gen_server:call(Channel, {call, Method, Content}, infinity).
 
 %% Generic AMQP send mechanism that doesn't expect a response
 cast(Channel, Method) ->
@@ -93,7 +93,7 @@ cast(Channel, Method, Content) ->
 
 %% Registers a consumer pid with the channel
 subscribe(Channel, BasicConsume = #'basic.consume'{}, Consumer) ->
-    gen_server:call(Channel, {BasicConsume, Consumer}).
+    gen_server:call(Channel, {BasicConsume, Consumer}, infinity).
 
 
 %%---------------------------------------------------------------------------
