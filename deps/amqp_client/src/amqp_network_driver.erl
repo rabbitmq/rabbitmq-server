@@ -46,8 +46,10 @@ handshake(State = #connection_state{serverhost = Host}) ->
             false -> ?PROTOCOL_PORT;
             StrPort ->
                 case catch list_to_integer(StrPort) of
-                    {'EXIT', {badarg, _}} -> ?PROTOCOL_PORT;
-                    OutPort -> OutPort
+                    {'EXIT', Msg} ->
+                        exit({error_parsing_node_port_env_var, Msg});
+                    OutPort ->
+                        OutPort
                 end
         end,
     case gen_tcp:connect(Host, Port, [binary, {packet, 0}, {active, false},
