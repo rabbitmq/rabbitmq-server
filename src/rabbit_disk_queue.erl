@@ -271,6 +271,7 @@
 -spec(cache_info/0 :: () -> [{atom(), term()}]).
 -spec(report_memory/0 :: () -> 'ok').
 -spec(set_mode/1 :: ('disk' | 'mixed') -> 'ok').
+-spec(prefetch/2 :: (queue_name(), non_neg_integer()) -> 'ok').
 
 -endif.
 
