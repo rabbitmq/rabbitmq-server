@@ -97,7 +97,7 @@ open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
 
 %% Closes the AMQP connection. Timeout can be an int or the atom 'infinity'
 close(ConnectionPid, Close, Timeout) ->
-    gen_server:call(ConnectionPid, {Close, Timeout}).
+    gen_server:call(ConnectionPid, {Close, Timeout}, infinity).
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
