@@ -92,10 +92,10 @@ open_channel(ConnectionPid) ->
 open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
     gen_server:call(ConnectionPid,
                     {open_channel, ChannelNumber,
-                     amqp_util:binary(OutOfBand)}).
+                     amqp_util:binary(OutOfBand)}, infinity).
 
 %% Closes the AMQP connection
-close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close).
+close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close, infinity).
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
