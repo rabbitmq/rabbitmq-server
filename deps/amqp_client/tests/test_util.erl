@@ -316,8 +316,8 @@ producer_loop(Channel, RoutingKey, N) ->
 %% get the messages.
 pub_and_close_test(Connection1, Connection2) ->
     X = uuid(), Q = uuid(), Key = uuid(),
-    Payload = <<"eggs">>, NMessages = 5000,
-    SpamPayload = <<"spam">>, NSpamMessages = 30000,
+    Payload = <<"eggs">>, NMessages = 50000,
+    SpamPayload = <<"spam">>, NSpamMessages = 300000,
     Channel1 = lib_amqp:start_channel(Connection1),
     Channel2 = lib_amqp:start_channel(Connection1),
     lib_amqp:declare_exchange(Channel1, X),
@@ -329,7 +329,7 @@ pub_and_close_test(Connection1, Connection2) ->
     %% Send important messages
     pc_producer_loop(Channel1, X, Key, Payload, NMessages),
     %% Close connection without closing channels
-    lib_amqp:close_connection(Connection1),
+    lib_amqp:close_connection(Connection1, infinity),
     %% Get sent messages back and count them
     Channel3 = lib_amqp:start_channel(Connection2),
     lib_amqp:subscribe(Channel3, Q, self(), true),

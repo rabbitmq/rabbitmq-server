@@ -107,18 +107,22 @@ close_channel(Channel) ->
     #'channel.close_ok'{} = amqp_channel:call(Channel, ChannelClose),
     ok.
 
+
 close_connection(Connection) ->
+    close_connection(Connection, 3000).
+
+close_connection(Connection, Timeout) ->
     ConnectionClose = #'connection.close'{reply_code = 200,
                                           reply_text = <<"Goodbye">>,
                                           class_id = 0,
                                           method_id = 0},
-    #'connection.close_ok'{} = amqp_connection:close(Connection,
-                                                     ConnectionClose),
+    #'connection.close_ok'{} =
+        amqp_connection:close(Connection, ConnectionClose, Timeout),
     ok.
 
 teardown(Connection, Channel) ->
     close_channel(Channel),
-    close_connection(Connection).
+    close_connection(Connection, infinity).
 
 
 get(Channel, Q) -> get(Channel, Q, true).
