@@ -307,15 +307,6 @@ basic_reject_test(Connection) ->
 %% So, in the end, if we set up a consumer, we should get all the important
 %% messages, but not all spam (we waited for all messages in buffer to be sent,
 %% but didn't allow further adding to the buffer).
-%% This test sometimes fails due to other causes - if a message leaves the
-%% socket doesn't mean it will be delivered; or maybe all spam messages have
-%% actually been buffered before the connection closed, thus all of them will
-%% be delivered.
-%% ... and sometimes succeedes (when it shouldn't) - the messages might be
-%% buffered and delivered very quickly (but not the spam), before the
-%% connection gets to close.
-%% ... though in the end, per a larger number of tests, the greater of the
-%% success and failure rates reflects the real results.
 %% First connection is used for sending messages, second connection is used to
 %% get the messages.
 pub_and_close_test(Connection1, Connection2) ->
