@@ -40,18 +40,7 @@
 % Driver API Methods
 %---------------------------------------------------------------------------
 
-handshake(State = #connection_state{serverhost = Host}) ->
-    Port =
-        case os:getenv("RABBITMQ_NODE_PORT") of
-            false -> ?PROTOCOL_PORT;
-            StrPort ->
-                case catch list_to_integer(StrPort) of
-                    {'EXIT', Msg} ->
-                        exit({error_parsing_node_port_env_var, Msg});
-                    OutPort ->
-                        OutPort
-                end
-        end,
+handshake(State = #connection_state{serverhost = Host, port = Port}) ->
     case gen_tcp:connect(Host, Port, [binary, {packet, 0}, {active, false},
                                       {nodelay, true}]) of
         {ok, Sock} ->
