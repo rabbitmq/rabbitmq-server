@@ -5,8 +5,8 @@ syntax: glob
 erl_crash.dump
 
 syntax: regexp
-^tmp/
-^dist/
+^mochiweb/
+^deps/
 ^include/rabbit_framing.hrl$
 ^src/rabbit_framing.erl$
 ^rabbit.plt$
