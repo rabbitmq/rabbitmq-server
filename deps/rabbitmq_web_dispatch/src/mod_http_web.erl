@@ -1,21 +1,17 @@
-%% @author author <author@example.com>
-%% @copyright YYYY author.
-
-%% @doc Web server for mod_http.
-
 -module(mod_http_web).
--author('author <author@example.com>').
 
 -export([start/1, stop/0, loop/2]).
+-export([install_static/2]).
 
 %% External API
 
 start(Options) ->
-    {DocRoot, Options1} = get_option(docroot, Options),
+    {ok, DocRoot} = application:get_env(docroot),
+    {ok, Port} = application:get_env(port),
     Loop = fun (Req) ->
                    ?MODULE:loop(Req, DocRoot)
            end,
-    mochiweb_http:start([{name, ?MODULE}, {loop, Loop} | Options1]).
+    mochiweb_http:start([{name, ?MODULE}, {port, Port}, {loop, Loop}]).
 
 stop() ->
     mochiweb_http:stop(?MODULE).
@@ -36,6 +32,23 @@ loop(Req, DocRoot) ->
         _ ->
             Req:respond({501, [], []})
     end.
+
+%% The idea here is for mod_http to put all static content into this
+%% directory when an application deploys a zip file containing static content
+%% and to key it based on the name of the app
+install_static(ModuleName, Archive) when is_list(Archive) ->
+    {ok, DocRoot} = application:get_env(mod_http, docroot),
+    %% TODO This should be cleaned down before any new stuff is deployed
+    %% Might be an idea to do this on application startup though
+    Parent = filename:join(DocRoot, ModuleName),
+    case filelib:is_dir(Parent) of
+        true  -> ok;
+        false ->
+            ok = filelib:ensure_dir(Parent),
+            ok = file:make_dir(Parent)
+    end,
+    zip:unzip(Archive, [{cwd, Parent}]).
+
 
 %% Internal API
 
