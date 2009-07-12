@@ -67,15 +67,9 @@ ensure_dependencies(Plugin) when is_atom(Plugin)->
         {error, Reason} ->
             rabbit_log:error("Error loading descriptor for ~p plugin: "
                              "~p~n", [Plugin, Reason])
-    end,
-    io:format("0 ~p~n",[Plugin]),
-    io:format("0/1 ~p~n",[application:get_key(mod_http,applications)]),
-    
+    end,    
     {ok, Required} = application:get_key(Plugin, applications),
-
-    io:format("1 ~p~n",[Required]),
     {Running, _, _} = lists:unzip3(application:which_applications()),
-    io:format("2 ~p~n",[Running]),
     [case lists:member(App, Running) of
         true  -> ok;
         false -> application:start(App)
