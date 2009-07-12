@@ -66,8 +66,9 @@ ensure_dependencies(Plugin) when is_atom(Plugin)->
         {error, {already_loaded, Plugin}} -> ok;
         {error, Reason} ->
             rabbit_log:error("Error loading descriptor for ~p plugin: "
-                             "~p~n", [Plugin, Reason])
-    end,    
+                             "~p~n", [Plugin, Reason]),
+            exit(plugin_not_loadable)
+    end,
     {ok, Required} = application:get_key(Plugin, applications),
     {Running, _, _} = lists:unzip3(application:which_applications()),
     [case lists:member(App, Running) of
