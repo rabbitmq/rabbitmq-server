@@ -76,7 +76,7 @@ start() ->
         ok = ensure_working_log_handlers(),
         ok = rabbit_mnesia:ensure_mnesia_dir(),
         ok = rabbit_misc:start_applications(?APPS),
-        ok = start_plugins()
+        ok = rabbit_plugin:start_plugins()
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
@@ -288,47 +288,6 @@ start_builtin_amq_applications() ->
     %%they don't bring down the entire app when they die and fail to
     %%restart
     ok.
-
-%% Loads shared libraries and plugins that exist in the plugin dir
-start_plugins() ->
-    io:format("~nstarting plugins...~n"),
-    [begin
-        [_Dir,Plugin|_] = string:tokens(Config,"/."),
-        case parse_plugin_config(Plugin) of
-            ok ->
-                case application:start(list_to_atom(Plugin)) of
-                    {error, Reason} ->
-                        rabbit_log:error("Error starting ~p plugin: "
-                                         "~p~n", [Plugin, Reason]);
-                    _ ->
-                        io:format("...started ~p plugin ~n", [Plugin])
-                end;
-            _ -> ok
-        end
-    end || Config <- filelib:wildcard("plugins/*.ez")],
-    io:format("...done~n").
-
-%% TODO Think of something better than this name, probablt somewhere in /etc
--define(PLUGIN_CONF_DIR, "plugins").
-
-parse_plugin_config(Plugin) ->
-    Atom = list_to_atom(Plugin),
-    Conf = ?PLUGIN_CONF_DIR ++ "/" ++ Plugin ++ ".cfg",
-    case file:consult(Conf) of
-        {ok, Terms} ->
-            lists:foreach(fun({K,V}) ->
-                             application:set_env(Atom, K, V)
-                          end, Terms),
-            ok;
-        {error, enoent} ->
-            rabbit_log:warning("Could not locate a config file for the ~p "
-                               "plugin, this might be normal though~n", [Atom]),
-            ok;
-        {error, _} ->
-            rabbit_log:error("Error accessing config file for ~p
-                              plugin, ", [Atom]),
-            error
-    end.
 
 rotate_logs(File, Suffix, Handler) ->
     rotate_logs(File, Suffix, Handler, Handler).
