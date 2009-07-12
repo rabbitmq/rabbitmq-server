@@ -24,56 +24,61 @@
 #
 
 EBIN_DIR=ebin
+export INCLUDE_DIR=include
+export INCLUDE_SERV_DIR=$(BROKER_SYMLINK)/include
+TEST_DIR=test
 SOURCE_DIR=src
-TEST_SOURCE_DIR=tests
-INCLUDE_DIR=include
-INCLUDE_SERV_DIR=rabbitmq_server/include
 DIST_DIR=rabbitmq-erlang-client
-
-LOAD_PATH=ebin rabbitmq_server/ebin
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
-TEST_SOURCES=$(wildcard $(TEST_SOURCE_DIR)/*.erl)
-TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
-TEST_TARGETS=$(patsubst $(TEST_SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(TEST_SOURCES))
+TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
+TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
+TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
+
+LOAD_PATH=$(EBIN_DIR) $(BROKER_SYMLINK)/ebin $(TEST_DIR)
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
 # only available in R12B-3 upwards
 #
 # NB: the test assumes that version number will only contain single digits
-USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.6.2" ]; then echo "true"; else echo "false"; fi)
+export USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.6.2" ]; then echo "true"; else echo "false"; fi)
 endif
 
 ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
-BROKER_DIR=../rabbitmq-server
-BROKER_SYMLINK=rabbitmq_server
-
-NODENAME=rabbit_test_direct
-MNESIA_DIR=/tmp/rabbitmq_$(NODENAME)_mnesia
 LOG_BASE=/tmp
-
-ERL_CALL=erl_call -sname $(NODENAME) -e
+LOG_IN_FILE=true
+ERL_WITH_BROKER=erl -pa $(LOAD_PATH) -mnesia dir tmp -boot start_sasl -s rabbit \
+	$(shell [ $(LOG_IN_FILE) = "true" ] && echo "-sasl sasl_error_logger '{file, \"'${LOG_BASE}'/rabbit-sasl.log\"}' -kernel error_logger '{file, \"'${LOG_BASE}'/rabbit.log\"}'")
 
 PLT=$(HOME)/.dialyzer_plt
+DIALYZER_CALL=dialyzer --plt $(PLT)
+
+BROKER_DIR=../rabbitmq-server
+BROKER_SYMLINK=rabbitmq_server
 
 
 all: compile
 
-dialyze: $(EBIN_DIR) $(TARGETS)
-	dialyzer --plt $(PLT) -c $(TARGETS)
+compile: $(TARGETS)
 
-dialyze_all: $(EBIN_DIR) $(TARGETS) $(TEST_TARGETS)
-	dialyzer --plt $(PLT) -c $(TARGETS) $(TEST_TARGETS)
+compile_tests: $(TEST_TARGETS)
+
+
+dialyze: $(TARGETS)
+	$(DIALYZER_CALL) -c $^
+
+dialyze_all: $(TARGETS) $(TEST_TARGETS)
+	$(DIALYZER_CALL) -c $^
 
 add_broker_to_plt: $(BROKER_SYMLINK)/ebin
-	dialyzer --add_to_plt --plt $(PLT) -r $<
+	$(DIALYZER_CALL) --add_to_plt -r $<
 
-compile: $(EBIN_DIR) $(TARGETS)
 
-compile_tests: $(EBIN_DIR) $(TEST_TARGETS)
+$(TEST_TARGETS): $(BROKER_SYMLINK)
+	$(MAKE) -C $(TEST_DIR)
 
 $(BROKER_SYMLINK):
 ifdef BROKER_DIR
@@ -83,56 +88,52 @@ endif
 $(EBIN_DIR):
 	mkdir -p $@
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(EBIN_DIR) $(BROKER_SYMLINK)
 	erlc $(ERLC_OPTS) $<
 
-$(EBIN_DIR)/%.beam: $(TEST_SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
-	erlc $(ERLC_OPTS) $<
 
-run:
+run: compile
 	erl -pa $(LOAD_PATH)
 
+run_with_broker: compile
+	$(ERL_WITH_BROKER)
 
-all_tests: test_network test_ssl test_network_coverage test_ssl_coverage test_direct test_direct_coverage
-	$(ERL_CALL) -q
+all_tests: compile compile_tests
+	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),direct_client_SUITE:test(),halt()'
 
-tests_network: test_network test_ssl test_network_coverage test_ssl_coverage 
-	$(ERL_CALL) -q
+all_tests_coverage: compile compile_tests
+	$(ERL_WITH_BROKER) -eval 'rabbit_misc:enable_cover(),network_client_SUITE:test(),direct_client_SUITE:test(),rabbit_misc:report_cover(),halt()'
 
 test_network: compile compile_tests
-	erl -pa $(LOAD_PATH) -noshell -eval 'network_client_test:test(),halt().'
+	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),halt().'
 
 test_ssl: $(TARGETS)
 	erl -pa $(LOAD_PATH) -noshell -eval 'ssl_client_test:test(),halt().'
 
 test_network_coverage: compile compile_tests
-	erl -pa $(LOAD_PATH) -noshell -eval 'network_client_test:test_coverage(),halt().'
-
-test_ssl_coverage: $(TARGETS)
-	erl -pa $(LOAD_PATH) -noshell -eval 'ssl_client_test:test_coverage(),halt().'
-
-tests_direct: test_direct test_direct_coverage
-	$(ERL_CALL) -q
-	rm -rf $(MNESIA_DIR)
+	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test_coverage(),halt().'
 
 test_direct: compile compile_tests
-	erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl -s rabbit -noshell \
-	-sasl sasl_error_logger '{file, "'${LOG_BASE}'/rabbit-sasl.log"}' \
-	-kernel error_logger '{file, "'${LOG_BASE}'/rabbit.log"}' \
-	-eval 'direct_client_test:test(),halt().'
+	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test(),halt().'
 
 test_direct_coverage: compile compile_tests
-	erl -pa $(LOAD_PATH) -noshell -mnesia dir tmp -boot start_sasl -s rabbit -noshell \
-	-sasl sasl_error_logger '{file, "'${LOG_BASE}'/rabbit-sasl.log"}' \
-	-kernel error_logger '{file, "'${LOG_BASE}'/rabbit.log"}' \
-	-eval 'direct_client_test:test_coverage(),halt().'
+	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test_coverage(),halt().'
+
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f rabbitmq_server erl_crash.dump
-	rm -fr cover dist
+	rm -fr cover dist tmp
+	$(MAKE) -C $(TEST_DIR) clean
 
 source_tarball:
 	mkdir -p dist/$(DIST_DIR)
-	cp -a README Makefile src/*.erl include/*.hrl dist/$(DIST_DIR)
+	cp -a README Makefile dist/$(DIST_DIR)/
+	mkdir -p dist/$(DIST_DIR)/$(SOURCE_DIR)
+	cp -a $(SOURCE_DIR)/*.erl dist/$(DIST_DIR)/$(SOURCE_DIR)/
+	mkdir -p dist/$(DIST_DIR)/$(INCLUDE_DIR)
+	cp -a $(INCLUDE_DIR)/*.hrl dist/$(DIST_DIR)/$(INCLUDE_DIR)/
+	mkdir -p dist/$(DIST_DIR)/$(TEST_DIR)
+	cp -a $(TEST_DIR)/*.erl dist/$(DIST_DIR)/$(TEST_DIR)/
+	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)

@@ -27,8 +27,8 @@
 
 -behaviour(gen_server).
 
--include_lib("rabbitmq_server/include/rabbit.hrl").
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -export([init/1, terminate/2, code_change/3, handle_call/3,
@@ -46,7 +46,7 @@ start(Connection, Queue, Fun) ->
     Pid.
 
 stop(Pid) ->
-    gen_server:call(Pid, stop).
+    gen_server:call(Pid, stop, infinity).
 
 %---------------------------------------------------------------------------
 % gen_server callbacks

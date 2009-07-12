@@ -25,8 +25,8 @@
 
 -module(amqp_network_driver).
 
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
--include_lib("rabbitmq_server/include/rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
 -include("amqp_client.hrl").
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0},{active,false}, {nodelay, true}]).
@@ -146,9 +146,7 @@ network_handshake(Writer,
     %% What happens if the following command reaches the server
     %% before the tune ok?
     %% Or doesn't get sent at all?
-    ConnectionOpen = #'connection.open'{virtual_host = VHostPath,
-                                        capabilities = <<"">>,
-                                        insist = false },
+    ConnectionOpen = #'connection.open'{virtual_host = VHostPath},
     do(Writer, ConnectionOpen),
     #'connection.open_ok'{} = recv(),
     %% TODO What should I do with the KnownHosts?
@@ -164,8 +162,7 @@ start_ok(#connection_state{username = Username, password = Password}) ->
                             {<<"platform">>, longstr, <<"Erlang">>}
                            ],
            mechanism = <<"AMQPLAIN">>,
-           response = rabbit_binary_generator:generate_table(LoginTable),
-           locale = <<"en_US">>}.
+           response = rabbit_binary_generator:generate_table(LoginTable)}.
 
 start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
