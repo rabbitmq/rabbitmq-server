@@ -24,8 +24,14 @@ LIB_PACKAGE=mochiweb
 LIB_PACKAGE_DIR=$(LIB_PACKAGE)
 LIB_PACKAGE_NAME=$(LIB_PACKAGE).ez
 
+JSON_APP=rfc4627_jsonrpc
+JSON_APP_ARCHIVE=$(JSON_APP).ez
+JSON_DIR=../erlang-rfc4627
+
 ERLC_OPTS=-o $(EBIN_DIR) -Wall +debug_info
 TEST_ERLC_OPTS=-o $(TEST_EBIN_DIR)
+
+ERL=ERL_LIBS=$(DEPS_DIR):$(DIST_DIR):$(JSON_APP) erl
 
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES)) $(DEPS_DIR)/$(LIB_PACKAGE_NAME)
@@ -38,7 +44,7 @@ clean: distclean
 	rm -rf $(EBIN_DIR)/*.beam $(LIB_PACKAGE_DIR) $(TARGETS)
 
 distclean:
-	rm -rf $(DIST_DIR)
+	rm -rf $(DIST_DIR) $(DEPS_DIR)
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl
 	erlc $(ERLC_OPTS) $<
@@ -50,8 +56,6 @@ $(TEST_DIR)/%.erl: $(TEST_EBIN_DIR)
 
 $(TEST_EBIN_DIR)/%.beam: $(TEST_DIR)/%.erl
 	erlc $(TEST_ERLC_OPTS) $<
-
-compile_tests: $(TEST_EBIN_DIR)/%.beam
 
 $(DEPS_DIR):
 	mkdir -p $@
@@ -88,3 +92,16 @@ install: package $(DEPS_DIR)/$(LIB_PACKAGE_NAME)
 	mkdir -p $(PLUGINS_LIB_DIR)
 	cp $(DIST_DIR)/$(PACKAGE_NAME) $(PLUGINS_DIR)
 	cp $(DEPS_DIR)/$(LIB_PACKAGE_NAME) $(PLUGINS_LIB_DIR)
+
+$(JSON_APP):
+	mkdir -p $@	
+	
+$(JSON_APP)/$(JSON_APP_ARCHIVE): $(JSON_APP)
+	$(MAKE) -C $(JSON_DIR) package
+	cp $(JSON_DIR)/$(DIST_DIR)/$(JSON_APP_ARCHIVE) \
+		$(JSON_APP)/$(JSON_APP_ARCHIVE)
+
+test: package package_tests $(JSON_APP)/$(JSON_APP_ARCHIVE)
+	$(ERL) -s crypto -s mod_http -eval \
+	'application:start(rfc4627_jsonrpc),application:start(mod_http_test)'
+	
