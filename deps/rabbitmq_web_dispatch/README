@@ -1,0 +1,22 @@
+Testing
+-------
+
+There is a module called mod_http_test.
+
+I symlinked the rfc4627_jsonrpc to the root of this directory, hence the
+ERL_LIBs path.
+
+This is how I am booting it ATM:
+
+$ make distclean package package_tests && ERL_LIBS=deps:dist:. erl -boot start_sasl -s crypto -s mod_http
+
+For some reason, you need to start rfc4627_jsonrpc programmically ATM,
+mod_http_test depends on this:
+
+1> application:start(rfc4627_jsonrpc).
+ok
+2> application:start(mod_http_test).
+ok
+
+And then go to http://localhost:8000/ in a browser.
+
