@@ -77,16 +77,23 @@ process_docroot(ServerRoot, Path) ->
 
 extract(Handle, Target, #zip_file{name = Name}) ->
     case filename:split(Name) of
-        [_Module, "priv", "www" | [_Rest]] ->
+        [_Module, "priv", "www"] -> ok;
+        [_Module, "priv", "www" | _Rest] ->
             case zip:zip_get(Name, Handle) of
                 {error, Reason} ->
                     io:format("Error(~p) extracting this file: ~p~n",[Reason, Name]),
                     ok;
                 {ok, _} ->
-                    io:format("Extracted ~p to ~p~n", [Name, Target])
+                    {ok, [Prefix, Suffix]} = regexp:split(Name,"priv/www/"),
+                    OldName = Target ++ "/" ++ Name,
+                    NewName = Target ++ "/" ++ Prefix ++ Suffix,
+                    io:format("2. Renaming ~p to ~p~n", [OldName, NewName]),
+                    Y = file:rename(OldName, NewName),
+                    io:format("1. Extracted to ~p~n", [Y]),
+                    io:format("2. Extracted ~p to ~p~n", [Name, NewName])
             end;
-        _ -> 
-            io:format("Ignored this file: ~p~n",[Name]), ok
+        X -> 
+            io:format("Ignored this file: ~p~n",[X]), ok
     end.
 
 %% Internal API
