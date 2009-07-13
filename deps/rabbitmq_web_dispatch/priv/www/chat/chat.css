@@ -1,0 +1,20 @@
+body {
+	background: white;
+}
+
+.nick {
+	color: red;
+}
+
+span.nick {
+	padding-right: 0.5em;
+}
+
+.utterance .message {
+	color: blue;
+}
+
+#chatOutput {
+	border: solid black 2px;
+	padding: 0.5em;
+}

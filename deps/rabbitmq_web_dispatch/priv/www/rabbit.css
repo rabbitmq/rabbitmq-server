@@ -1,0 +1,229 @@
+body, table {
+	font: 12px/15px Verdana, sans-serif;
+	color: #333 !important;
+	background-color: #fff;
+}
+
+body {
+	margin: 40px 0;
+}
+
+div#outerContainer {
+	text-align: left;
+	clear: both;
+	margin: 0 auto;
+	width: 770px;
+	padding: 16px 0 0 0;
+}
+	
+:link {
+	color: #f60;
+	text-decoration: underline;
+	}
+
+:visited {
+	color: #c40;        
+}
+
+:link img, :visited img {
+	border: 0;
+	}
+	
+
+a:hover {
+	text-decoration: none;
+	}
+	
+h1, h2, h3 {
+	color: #f60;
+	font-family: Helvetica, Arial, sans-serif;
+	margin: 0;
+	padding: 0 ;
+	}
+
+h1 {
+	margin: 0;
+	float: left;
+	}
+
+h2 a {
+	color: #f60;
+	}
+
+h2 {
+	font-size: 18px;
+	line-height: 18px;
+	}
+
+h3 {
+	font-size: 14px;
+	line-height: 14px;
+	}
+	
+.col {
+	float: left;
+	width: 49.5%;
+	background: url(img/listBg.gif) Repeat-X top right;
+	margin: 0.5ex 0 4ex 0;
+	padding: 0;
+	}
+
+.columnLeft {
+	float: left;
+}
+.columnRight {
+	float: right;
+}
+	
+.col h3 {
+	background: url(img/listBg.gif) Repeat-X top left;
+	margin: 0 25px 0 0;
+	padding: 10px;
+}
+
+ul {
+	margin: 0;
+	padding: 0 2em 0 0 ;
+	}
+	
+li {
+	list-style-type: none; 
+	background: url(img/li.gif) no-repeat 1px 12px;
+	margin: 0;
+	padding: 1ex 1em;
+	border-bottom: #e4e4e4 1px solid;
+	}
+	
+p {
+	clear:left;
+	}
+	
+.logos {
+	text-align: center;
+	margin-top: 3ex;
+	}
+.logos img {
+	padding: 0 20px;}
+.intro {
+     font-weight: bold;
+}
+
+.clear {
+	clear:left;
+}
+
+.document h2, h3 {
+  margin-top: 1em;
+}
+.document li {
+  border: none;
+}
+
+ul.mainNav {
+	text-align: right;
+	margin: 1em 0 0 0;
+	padding: 4px 0 0 0;
+	height: 20px;
+	float: right:
+	clear: both;
+}
+.mainNav li {
+	display: inline;
+	border: none;
+	background: white;
+	padding: 0;
+	margin: 1px;
+	text-decoration: none;
+}
+.mainNav :link, .mainNav :visited {
+	color: #a9b5af;
+	text-decoration: none;
+}
+.mainNav :hover, .mainNav :active {
+	color: #a9b5af;
+	text-decoration: underline;
+}
+
+hr {
+	clear: both;
+	visibility: hidden;
+}
+
+.compact li {
+	padding-bottom: 0em;
+}
+.compact {
+	padding-bottom: 1ex;
+}
+
+.docToc {
+	border: #e4e4e4 1px solid;
+	padding: 1em;
+}
+
+.docToc h1, .docToc h2, .docToc h3 {
+	margin: 0em;
+}
+
+.faqHeading {
+	border-top: #e4e4e4 1px solid;
+	margin-top: 1em;
+	padding-top: 1em;
+	color: #f60;
+	font-weight: bold;
+}
+
+.faqQuestion {
+	font-style: italic;
+}
+
+.faqAnswer {
+	margin-left: 0em;
+}
+
+.sourcecode {
+	padding: 1em;
+	border: #e4e4e4 1px solid;
+	background: #efd2bf;
+}
+.sourcecode i {
+	color: darkred;
+}
+.sourcecode b {
+	color: darkcyan;
+}
+
+table {
+	width: 100%;
+	border: #e4e4e4 1px solid;
+}
+th {
+	border-bottom: #e4e4e4 1px solid;
+}
+th, td {
+	text-align: left;
+	padding-left: 0.5em;
+	padding-right: 0.5em;
+}
+
+.amqpRules th, .amqpRules td {
+	vertical-align: top;
+}
+.amqpRules .notes {
+	font-style: italic;
+}
+.amqpRules .notes .leader {
+	font-weight: bold;
+}
+.amqpRules .statusCell {
+	background: #ccc;
+}
+.amqpRules .status_ok			{background: #0c0;}
+.amqpRules .status_planned		{background: #cf0;}
+.amqpRules .status_partial		{background: #cf0;}
+.amqpRules .status_unsupported		{background: #fc0;}
+.amqpRules .status_failing		{background: #c00; color: white;}
+
+.platformHighlight {
+	background: #ff0;
+}
