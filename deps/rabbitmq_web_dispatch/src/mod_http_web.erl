@@ -32,6 +32,8 @@ loop(Req, DocRoot) ->
         _ ->
             Req:respond({501, [], []})
     end.
+    
+deploy() -> ok.
 
 %% The idea here is for mod_http to put all static content into this
 %% directory when an application deploys a zip file containing static content
