@@ -11,7 +11,7 @@
   {registered, []},
   {mod, {mod_http_app, []}},
   {env, [
-        {docroot, "priv3/www"},
+        {docroot, "priv/www"},
         {port, 8000}
         ]},
   {applications, [kernel, stdlib, crypto]}]}.
