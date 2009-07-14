@@ -1,34 +1,3 @@
-//   The contents of this file are subject to the Mozilla Public License
-//   Version 1.1 (the "License"); you may not use this file except in
-//   compliance with the License. You may obtain a copy of the License at
-//   http://www.mozilla.org/MPL/
-//
-//   Software distributed under the License is distributed on an "AS IS"
-//   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-//   License for the specific language governing rights and limitations
-//   under the License.
-//
-//   The Original Code is RabbitMQ.
-//
-//   The Initial Developers of the Original Code are LShift Ltd,
-//   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-//
-//   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-//   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-//   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-//   Technologies LLC, and Rabbit Technologies Ltd.
-//
-//   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
-//   Ltd. Portions created by Cohesive Financial Technologies LLC are
-//   Copyright (C) 2007-2009 Cohesive Financial Technologies
-//   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-//   (C) 2007-2009 Rabbit Technologies Ltd.
-//
-//   All Rights Reserved.
-//
-//   Contributor(s): ______________________________________.
-//
-
 JsonRpcRequestId = 1;
 
 JsonRpcTransaction = Class.create();
@@ -37,7 +6,6 @@ Object.extend(JsonRpcTransaction.prototype,
     initialize: function(serviceUrl, methodName, params, options) {
 	this.options = {
 	    debug: false,
-	    debugLogger: alert,
 	    timeout: 0 /* milliseconds; zero means "do not specify" */
 	};
 	Object.extend(this.options, options || {});
@@ -65,34 +33,24 @@ Object.extend(JsonRpcTransaction.prototype,
 	if (this.options.timeout) {
 	    headers.push('X-JSON-RPC-Timeout', this.options.timeout);
 	}
-	var req = this.buildRequest();
-	//this.debugLog({requestX: req});
 	this.request =
 	    new Ajax.Request(this.serviceUrl,
 			     { method: 'post',
 			       requestHeaders: headers,
-			       postBody: JSON.stringify(req),
+			       postBody: JSON.stringify(this.buildRequest()),
 			       onComplete: this.receiveReply.bind(this) });
-    },
-
-    debugLog: function(x) {
-	if (this.options.debug) {
-	    this.options.debugLogger(x);
-	}
     },
 
     receiveReply: function(ajaxRequest) {
 	var response = JSON.parse(ajaxRequest.responseText);
-	//this.debugLog({responseX: response});
 	if (response.error) {
 	    if (this.options.debug) {
-		this.debugLog("JsonRPC error:" +
-			      "\nService: " + JSON.stringify(this.serviceUrl) +
-			      "\nMethod: " + JSON.stringify(this.methodName) +
-			      "\nParams: " + JSON.stringify(this.params) +
-			      "\nResponse: " + JSON.stringify(response).replace(/\\n/g, "\n"));
+		alert("JsonRPC error:\n" +
+		      "Service: " + JSON.stringify(this.serviceUrl) + "\n" +
+		      "Method: " + JSON.stringify(this.methodName) + "\n" +
+		      "Params: " + JSON.stringify(this.params) + "\n" +
+		      "Response: " + JSON.stringify(response) + "\n");
 	    }
-
 	    this.error = response.error;
 	    this.errorCallbacks.each(function (cb) {
 					 try { cb(response.error, true); }
@@ -107,16 +65,6 @@ Object.extend(JsonRpcTransaction.prototype,
 				    catch (err) {}
 				});
 	}
-    },
-
-    addReplyTransformer: function(xformer) {
-	var oldAddCallback = this.addCallback.bind(this);
-	this.addCallback = function(cb) {
-	    return oldAddCallback(function(reply, is_error) {
-				      cb(is_error ? reply : xformer(reply), is_error);
-				  });
-	}
-	return this;
     },
 
     addCallback: function(cb) {
@@ -145,8 +93,7 @@ Object.extend(JsonRpcService.prototype,
 	this.options = {
 	    transactionClass: JsonRpcTransaction,
 	    timeout: 0, /* milliseconds; zero means "do not specify" */
-	    debug: false,
-	    debugLogger: alert
+	    debug: false
 	};
 	Object.extend(this.options, options || {});
 	this.serviceUrl = serviceUrl;
@@ -154,8 +101,7 @@ Object.extend(JsonRpcService.prototype,
 	var txn = new (this.options.transactionClass)(serviceUrl,
 						      "system.describe",
 						      [],
-						      {debug: this.options.debug,
-						       debugLogger: this.options.debugLogger});
+						      {debug: this.options.debug});
 	txn.addCallback(receiveServiceDescription);
 	function receiveServiceDescription(sd) {
 	    svc.serviceDescription = sd;
@@ -165,20 +111,13 @@ Object.extend(JsonRpcService.prototype,
     },
 
     installGenericProxy: function(desc) {
-	if (this.options.debug) {
-	    this.options.debugLogger({installGenericProxy: desc});
-	}
 	this[desc.name] = function () {
 	    var actuals = $A(arguments);
-	    while (actuals.length < desc.params.length) {
-		actuals.push(null);
-	    }
 	    return new (this.options.transactionClass)(this.serviceUrl,
 						       desc.name,
 						       actuals,
 						       {
 							   debug: this.options.debug,
-							   debugLogger: this.options.debugLogger,
 							   timeout: this.options.timeout
 						       });
 	};

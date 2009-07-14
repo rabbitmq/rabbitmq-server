@@ -1,13 +1,19 @@
 PACKAGE=mod_http
 PACKAGE_NAME=$(PACKAGE).ez
 
+JSON_APP=rfc4627_jsonrpc
+JSON_APP_ARCHIVE=$(JSON_APP).ez
+JSON_DIR=../erlang-rfc4627
+
 EBIN_DIR=ebin
+INCLUDE_DIR=include
 SOURCE_DIR=src
 PRIV_DIR=priv
 DIST_DIR=dist
 
 TEST_DIR=test
 TEST_EBIN_DIR=test_ebin
+TEST_INCLUDE_DIR=$(JSON_DIR)/$(INCLUDE_DIR)
 TEST_PACKAGE=mod_http_test
 TEST_PACKAGE_NAME=$(TEST_PACKAGE).ez
 
@@ -24,12 +30,8 @@ LIB_PACKAGE=mochiweb
 LIB_PACKAGE_DIR=$(LIB_PACKAGE)
 LIB_PACKAGE_NAME=$(LIB_PACKAGE).ez
 
-JSON_APP=rfc4627_jsonrpc
-JSON_APP_ARCHIVE=$(JSON_APP).ez
-JSON_DIR=../erlang-rfc4627
-
 ERLC_OPTS=-o $(EBIN_DIR) -Wall +debug_info
-TEST_ERLC_OPTS=-o $(TEST_EBIN_DIR)
+TEST_ERLC_OPTS=-o $(TEST_EBIN_DIR) -I $(TEST_INCLUDE_DIR)
 
 ERL=ERL_LIBS=$(DEPS_DIR):$(DIST_DIR):$(JSON_APP) erl
 
@@ -41,10 +43,10 @@ TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_EBIN_DIR)/%.beam, $(TEST_SOURC
 all: $(TARGETS) $(TEST_TARGETS)
 
 clean: distclean
-	rm -rf $(EBIN_DIR)/*.beam $(LIB_PACKAGE_DIR) $(TARGETS)
+	rm -rf $(EBIN_DIR)/*.beam $(LIB_PACKAGE_DIR) $(TARGETS) $(TEST_TARGETS)
 
 distclean:
-	rm -rf $(DIST_DIR) $(DEPS_DIR)
+	rm -rf $(DIST_DIR) $(DEPS_DIR) $(PRIV_DIR)/www/$(TEST_PACKAGE)
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl
 	erlc $(ERLC_OPTS) $<

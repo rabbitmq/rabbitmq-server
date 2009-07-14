@@ -6,9 +6,11 @@
 -export([start/1, stop/0, loop/2]).
 -export([install_static/1]).
 
-%% External API
+%% ----------------------------------------------------------------------
+%% HTTPish API
+%% ----------------------------------------------------------------------
 
-start(Options) ->
+start(_Options) ->
     {ok, DocRoot} = application:get_env(docroot),
     {ok, Port} = application:get_env(port),
     Loop = fun (Req) ->
@@ -28,15 +30,21 @@ loop(Req, DocRoot) ->
                     Req:serve_file(Path, DocRoot)
             end;
         'POST' ->
-            case Path of
-                _ ->
-                    Req:not_found()
+            %% TODO The path is hard coded to handle mod_http_test
+            case rfc4627_jsonrpc_mochiweb:handle("/mod_http_test/rpc", Req) of
+                 no_match ->
+                     io:format("PROCESSING REQUEST ~p~n",[Req]),
+                     Req:not_found();
+                 {ok, Response} ->
+                     Req:respond(Response)
             end;
         _ ->
             Req:respond({501, [], []})
     end.
     
-deploy() -> ok.
+%% ----------------------------------------------------------------------
+%% NON-HTTP API - maybe this should go in some other module
+%% ----------------------------------------------------------------------
 
 %% The idea here is for mod_http to put all static content into this
 %% directory when an application deploys a zip file containing static content
@@ -108,8 +116,3 @@ extract(Handle, Target, #zip_file{name = Name}) ->
                     ok 
             end
     end.
-
-%% Internal API
-
-get_option(Option, Options) ->
-    {proplists:get_value(Option, Options), proplists:delete(Option, Options)}.
