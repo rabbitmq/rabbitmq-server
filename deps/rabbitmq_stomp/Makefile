@@ -20,6 +20,7 @@ $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES)
 
 clean:
 	rm -f ebin/*.beam $(TARGETS)
+	rm -f build-stamp install-stamp
 
 distclean: clean
 
