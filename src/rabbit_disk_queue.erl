@@ -42,7 +42,7 @@
          tx_publish/1, tx_commit/3, tx_cancel/1,
          requeue/2, purge/1, delete_queue/1,
          delete_non_durable_queues/1, auto_ack_next_message/1,
-         requeue_next_n/2, prefetch/2
+         requeue_next_n/2, prefetch/2, length/1
         ]).
 
 -export([filesync/0, cache_info/0]).
@@ -255,6 +255,7 @@
              ( 'empty' | {msg_id(), bool(), {msg_id(), seq_id()},
                           non_neg_integer()})).
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
+-spec(auto_ack_next_message/1 :: (queue_name()) -> 'ok').
 -spec(tx_publish/1 :: (message()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [msg_id()], [{msg_id(), seq_id()}]) ->
              'ok').
@@ -262,11 +263,13 @@
 -spec(requeue/2 :: (queue_name(), [{{msg_id(), seq_id()}, bool()}]) -> 'ok').
 -spec(requeue_next_n/2 :: (queue_name(), non_neg_integer()) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
+-spec(delete_queue/1 :: (queue_name()) -> 'ok').
 -spec(delete_non_durable_queues/1 :: (set()) -> 'ok').
+-spec(length/1 :: (queue_name()) -> non_neg_integer()).
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
--spec(to_ram_disk_mode/0 :: () -> 'ok').
 -spec(to_disk_only_mode/0 :: () -> 'ok').
+-spec(to_ram_disk_mode/0 :: () -> 'ok').
 -spec(filesync/0 :: () -> 'ok').
 -spec(cache_info/0 :: () -> [{atom(), term()}]).
 -spec(report_memory/0 :: () -> 'ok').
@@ -321,6 +324,9 @@ delete_queue(Q) ->
 delete_non_durable_queues(DurableQueues) ->
     gen_server2:call(?SERVER, {delete_non_durable_queues, DurableQueues},
                      infinity).
+
+length(Q) ->
+    gen_server2:call(?SERVER, {length, Q}, infinity).
 
 stop() ->
     gen_server2:call(?SERVER, stop, infinity).
@@ -455,6 +461,9 @@ handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, From, State) ->
 handle_call({purge, Q}, _From, State) ->
     {ok, Count, State1} = internal_purge(Q, State),
     reply(Count, State1);
+handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
+    {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
+    reply(WriteSeqId - ReadSeqId, State);
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}; %% gen_server now calls terminate
 handle_call(stop_vaporise, _From, State) ->
@@ -1033,7 +1042,7 @@ internal_tx_commit(Q, PubMsgIds, AckSeqIds, From,
                                       last_sync_offset = SyncOffset
                                     }) ->
     {InitReadSeqId, InitWriteSeqId} = sequence_lookup(Sequences, Q),
-    WriteSeqId = InitWriteSeqId + length(PubMsgIds),
+    WriteSeqId = InitWriteSeqId + erlang:length(PubMsgIds),
     {atomic, {InCurFile, WriteSeqId, State1}} =
         mnesia:transaction(
           fun() ->
@@ -1088,7 +1097,8 @@ internal_publish(Q, Message = #basic_message { guid = MsgId },
 internal_tx_cancel(MsgIds, State) ->
     %% we don't need seq ids because we're not touching mnesia,
     %% because seqids were never assigned
-    MsgSeqIds = lists:zip(MsgIds, lists:duplicate(length(MsgIds), undefined)),
+    MsgSeqIds = lists:zip(MsgIds, lists:duplicate(erlang:length(MsgIds),
+                                                  undefined)),
     remove_messages(undefined, MsgSeqIds, false, State).
 
 internal_requeue(_Q, [], State) ->
@@ -1524,7 +1534,8 @@ load_from_disk(State) ->
                        fun (#dq_msg_loc { msg_id = MsgId,
                                           queue_and_seq_id = {Q, SeqId} },
                             true) ->
-                               case length(dets_ets_lookup(State1, MsgId)) of
+                               case erlang:length
+                                   (dets_ets_lookup(State1, MsgId)) of
                                    0 -> ok == mnesia:delete(rabbit_disk_queue,
                                                             {Q, SeqId}, write);
                                    1 -> true
@@ -1622,13 +1633,13 @@ load_messages(Left, [File|Files],
     {ok, Messages} = scan_file_for_valid_messages(form_filename(File)),
     {ValidMessagesRev, ValidTotalSize} = lists:foldl(
         fun ({MsgId, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
-                case length(mnesia:dirty_index_match_object
-                            (rabbit_disk_queue,
-                             #dq_msg_loc { msg_id = MsgId,
-                                           queue_and_seq_id = '_',
-                                           is_delivered = '_'
-                                         },
-                             msg_id)) of
+                case erlang:length(mnesia:dirty_index_match_object
+                                   (rabbit_disk_queue,
+                                    #dq_msg_loc { msg_id = MsgId,
+                                                  queue_and_seq_id = '_',
+                                                  is_delivered = '_'
+                                                 },
+                                    msg_id)) of
                     0 -> {VMAcc, VTSAcc};
                     RefCount ->
                         true =
@@ -1662,13 +1673,13 @@ recover_crashed_compactions(Files, TmpFiles) ->
 verify_messages_in_mnesia(MsgIds) ->
     lists:foreach(
       fun (MsgId) ->
-              true = 0 < length(mnesia:dirty_index_match_object
-                                (rabbit_disk_queue,
-                                 #dq_msg_loc { msg_id = MsgId,
-                                               queue_and_seq_id = '_',
-                                               is_delivered = '_'
-                                              },
-                                 msg_id))
+              true = 0 < erlang:length(mnesia:dirty_index_match_object
+                                       (rabbit_disk_queue,
+                                        #dq_msg_loc { msg_id = MsgId,
+                                                      queue_and_seq_id = '_',
+                                                      is_delivered = '_'
+                                                     },
+                                        msg_id))
       end, MsgIds).
 
 recover_crashed_compactions1(Files, TmpFile) ->
