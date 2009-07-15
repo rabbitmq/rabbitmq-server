@@ -30,8 +30,7 @@ loop(Req, DocRoot) ->
                     Req:serve_file(Path, DocRoot)
             end;
         'POST' ->
-            %% TODO The path is hard coded to handle mod_http_test
-            case rfc4627_jsonrpc_mochiweb:handle("/mod_http_test/rpc", Req) of
+            case rfc4627_jsonrpc_mochiweb:handle("/rpc", Req) of
                  no_match ->
                      io:format("PROCESSING REQUEST ~p~n",[Req]),
                      Req:not_found();
@@ -41,7 +40,7 @@ loop(Req, DocRoot) ->
         _ ->
             Req:respond({501, [], []})
     end.
-    
+
 %% ----------------------------------------------------------------------
 %% NON-HTTP API - maybe this should go in some other module
 %% ----------------------------------------------------------------------
