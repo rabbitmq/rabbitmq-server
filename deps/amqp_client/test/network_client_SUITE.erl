@@ -84,7 +84,7 @@ hard_error_test() ->
 %% Common Functions
 
 new_connection() ->
-  amqp_connection:start("guest", "guest", "localhost").
+  lib_amqp:start_connection("localhost").
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
