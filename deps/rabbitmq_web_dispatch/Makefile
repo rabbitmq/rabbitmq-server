@@ -89,9 +89,10 @@ package: $(DIST_DIR)/$(PACKAGE_NAME)
 
 package_tests: $(DIST_DIR)/$(TEST_PACKAGE_NAME)
 
-install: package $(DEPS_DIR)/$(LIB_PACKAGE_NAME)
+install: clean package $(DEPS_DIR)/$(LIB_PACKAGE_NAME) $(JSON_APP)/$(JSON_APP_ARCHIVE)
 	mkdir -p $(PLUGINS_DIR)
 	mkdir -p $(PLUGINS_LIB_DIR)
+	cp $(JSON_APP)/$(JSON_APP_ARCHIVE) $(PLUGINS_DIR)
 	cp $(DIST_DIR)/$(PACKAGE_NAME) $(PLUGINS_DIR)
 	cp $(DEPS_DIR)/$(LIB_PACKAGE_NAME) $(PLUGINS_LIB_DIR)
 
