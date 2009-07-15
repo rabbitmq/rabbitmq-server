@@ -47,10 +47,18 @@ loop(Req, DocRoot) ->
 %% The idea here is for mod_http to put all static content into this
 %% directory when an application deploys a zip file containing static content
 %% and to key it based on the name of the app
-install_static(Module) when is_atom(Module) ->
-    install_static(atom_to_list(Module));
+install_static(Module) ->
+    {ok, Mode} = application:get_env(mod_http, production),
+    deploy(Module, Mode).
 
-install_static(Module) when is_list(Module) ->
+%% Don't unpack anything if this is being booted in development mode
+deploy(_Module, false) ->
+    ok;
+
+deploy(Module, Mode) when is_atom(Module) ->
+    deploy(atom_to_list(Module), Mode);
+
+deploy(Module, true) when is_list(Module) ->
     {ok, ServerRoot} = application:get_env(mod_http, docroot),
     %% TODO This should be cleaned down before any new stuff is deployed
     %% Might be an idea to do this on application startup though

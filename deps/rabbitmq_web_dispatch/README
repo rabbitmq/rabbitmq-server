@@ -1,22 +1,54 @@
-Testing
--------
+mod_http
+--------
 
-There is a module called mod_http_test.
+mod_http is thin veneer around mochiweb that provides dispatching to the JSON
+RPC handler module as well as managing static docroots.
 
-I symlinked the rfc4627_jsonrpc to the root of this directory, hence the
-ERL_LIBs path.
+Testing mod_http
+----------------
 
-This is how I am booting it ATM:
+There is a an OTP called mod_http_test which depends on mod_http and
+rfc4627_jsonrpc. To build and run the test, use the test target in this
+project's Makefile:
 
-$ make distclean package package_tests && ERL_LIBS=deps:dist:. erl -boot start_sasl -s crypto -s mod_http
-
-For some reason, you need to start rfc4627_jsonrpc programmically ATM,
-mod_http_test depends on this:
-
-1> application:start(rfc4627_jsonrpc).
-ok
-2> application:start(mod_http_test).
-ok
+$ make test
 
 And then go to http://localhost:8000/ in a browser.
 
+Environment Variables
+---------------------
+
+mod_http uses the standard OTP environment variables mechanism. It understands
+these variables:
+
+* docroot -    The path to the root of the htdocs tree;
+* port -       The port to listen on;
+* production - Whether mod_http should be run in prod or dev mode;
+
+Development Mode In Rabbit
+--------------------------
+
+During development, you don't want to have to deploy the web application to a
+running instance of mod_http inside of Rabbit.
+
+Instead, you would like to be able to point the mod_http at your own docroot.
+
+To do this, you need to tell mod_http to run in development mode and set the
+docroot environment value to point to where you are developing from.
+
+One easy way to do this when booting Rabbit is to create a small config
+file(*) with the following content:
+
+[{mod_http, [{production, false}, {docroot, "/path/to/your/stuff"}]}].
+
+Save it as mod_http.config for example, and then you can add this a start
+argument to the server:
+
+$ make run RABBITMQ_SERVER_START_ARGS="-config mod_http.config"
+
+If, successful, mod_http will be using the docroot you specified.
+
+------------
+*) The reason why I suggest this is because I was having trouble passing a
+string via make and the shell to erl as an argument - there's probably any
+easier way to do this if you think about it.
