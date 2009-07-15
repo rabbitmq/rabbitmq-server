@@ -90,6 +90,7 @@ process_docroot(ServerRoot, [Base, Archive, _Module, _Ebin_, _App]) ->
     end;
 
 process_docroot(ServerRoot, Path) ->
+    error_logger:error_msg("This docroot structure cannot be processed: ~n", [Path]),
     exit(could_not_find_doc_root, {ServerRoot, Path}).
 
 extract(Handle, Target, #zip_file{name = Name}) ->
