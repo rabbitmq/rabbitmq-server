@@ -32,7 +32,6 @@ loop(Req, DocRoot) ->
         'POST' ->
             case rfc4627_jsonrpc_mochiweb:handle("/rpc", Req) of
                  no_match ->
-                     io:format("PROCESSING REQUEST ~p~n",[Req]),
                      Req:not_found();
                  {ok, Response} ->
                      Req:respond(Response)
