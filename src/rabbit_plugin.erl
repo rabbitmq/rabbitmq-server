@@ -74,7 +74,19 @@ ensure_dependencies(Plugin) when is_atom(Plugin)->
     [case lists:member(App, Running) of
         true  -> ok;
         false -> application:start(App)
-    end || App <- Required].
+    end || App <- Required],
+    run_one_shot(Plugin).
+
+%% This allows an OTP to run a single shot function that it
+%% specifies in it's descriptor without having to run a process
+run_one_shot(Plugin) ->
+    case application:get_env(Plugin, one_shot) of
+        {ok, {M,F,A}} -> M:F(A);
+        undefined -> ok;
+        X ->
+            rabbit_log:error("Error loading one shot for ~p plugin: "
+                             "~p~n", [Plugin, X])
+    end.
 
 parse_plugin_config(Plugin) when is_list(Plugin)->
     Atom = list_to_atom(Plugin),
