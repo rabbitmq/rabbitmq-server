@@ -72,7 +72,7 @@ clean: cleandb
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
 	rm -f docs/*.[0-9].gz
 
-cleandb: stop-node
+cleandb:
 	rm -rf $(RABBITMQ_MNESIA_DIR)/*
 
 ############ various tasks to interact with RabbitMQ ###################
