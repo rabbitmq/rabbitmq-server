@@ -33,7 +33,7 @@
 
 -include("rabbit.hrl").
 
--export([init/3]).
+-export([init/2]).
 
 -export([publish/2, publish_delivered/2, deliver/1, ack/2,
          tx_publish/2, tx_commit/3, tx_cancel/2, requeue/2, purge/1,
@@ -70,7 +70,7 @@
 -type(acktag() :: ( 'noack' | { non_neg_integer(), non_neg_integer() })).
 -type(okmqs() :: {'ok', mqstate()}).
 
--spec(init/3 :: (queue_name(), bool(), mode()) -> okmqs()).
+-spec(init/2 :: (queue_name(), bool()) -> okmqs()).
 -spec(publish/2 :: (message(), mqstate()) -> okmqs()).
 -spec(publish_delivered/2 :: (message(), mqstate()) ->
              {'ok', acktag(), mqstate()}).
@@ -99,16 +99,18 @@
 
 -endif.
 
-init(Queue, IsDurable, disk) ->
+init(Queue, IsDurable) ->
     Len = rabbit_disk_queue:length(Queue),
     ok = rabbit_disk_queue:delete_queue(transient_queue(Queue)),
     MsgBuf = inc_queue_length(Queue, queue:new(), Len),
+    Size = rabbit_disk_queue:foldl(
+             fun ({Msg, _Size, _IsDelivered, _AckTag}, Acc) ->
+                     Acc + size_of_message(Msg)
+             end, 0, Queue),
     {ok, #mqstate { mode = disk, msg_buf = MsgBuf, queue = Queue,
                     is_durable = IsDurable, length = Len,
-                    memory_size = 0, memory_gain = 0, memory_loss = 0 }};
-init(Queue, IsDurable, mixed) ->
-    {ok, State} = init(Queue, IsDurable, disk),
-    to_mixed_mode([], State).
+                    memory_size = Size, memory_gain = undefined,
+                    memory_loss = undefined }}.
 
 size_of_message(
   #basic_message { content = #content { payload_fragments_rev = Payload }}) ->
@@ -214,7 +216,7 @@ to_mixed_mode(TxnMessages, State =
     %% load up a new queue with a token that says how many messages
     %% are on disk (this is already built for us by the disk mode)
     %% don't actually do anything to the disk
-    ok = maybe_prefetch(MsgBuf),
+    ok = maybe_prefetch(mixed, MsgBuf),
     %% remove txn messages from disk which are neither persistent and
     %% durable. This is necessary to avoid leaks. This is also pretty
     %% much the inverse behaviour of our own tx_cancel/2 which is why
@@ -248,10 +250,10 @@ inc_queue_length(Queue, MsgBuf, Count) ->
             queue:in({Queue, Count}, MsgBuf)
     end.
 
-dec_queue_length(MsgBuf) ->
+dec_queue_length(Mode, MsgBuf) ->
     {{value, {Queue, Len}}, MsgBuf1} = queue:out(MsgBuf),
     MsgBuf2 = case Len of
-                  1 -> ok = maybe_prefetch(MsgBuf1),
+                  1 -> ok = maybe_prefetch(Mode, MsgBuf1),
                        MsgBuf1;
                   _ -> queue:in_r({Queue, Len-1}, MsgBuf1)
               end,
@@ -327,7 +329,8 @@ publish_delivered(Msg, State =
 deliver(State = #mqstate { length = 0 }) ->
     {empty, State};
 deliver(State = #mqstate { msg_buf = MsgBuf, queue = Q,
-                           is_durable = IsDurable, length = Length }) ->
+                           is_durable = IsDurable, length = Length,
+                           mode = Mode }) ->
     {{value, Value}, MsgBuf1} = queue:out(MsgBuf),
     {Msg, IsDelivered, AckTag, MsgBuf2} =
         case Value of
@@ -343,10 +346,10 @@ deliver(State = #mqstate { msg_buf = MsgBuf, queue = Q,
                         false ->
                             noack
                     end,
-                ok = maybe_prefetch(MsgBuf1),
+                ok = maybe_prefetch(Mode, MsgBuf1),
                 {Msg1, IsDelivered1, AckTag1, MsgBuf1};
             _ ->
-                {ReadQ, MsgBuf3} = dec_queue_length(MsgBuf),
+                {ReadQ, MsgBuf3} = dec_queue_length(Mode, MsgBuf),
                 {Msg1 = #basic_message { is_persistent = IsPersistent },
                  _Size, IsDelivered1, AckTag1, _PersistRem}
                     = rabbit_disk_queue:deliver(ReadQ),
@@ -364,7 +367,9 @@ deliver(State = #mqstate { msg_buf = MsgBuf, queue = Q,
     {{Msg, IsDelivered, AckTag, Rem},
      State #mqstate { msg_buf = MsgBuf2, length = Rem }}.
 
-maybe_prefetch(MsgBuf) ->
+maybe_prefetch(disk, MsgBuf) ->
+    ok;
+maybe_prefetch(mixed, MsgBuf) ->
     case queue:peek(MsgBuf) of
         empty ->
             ok;

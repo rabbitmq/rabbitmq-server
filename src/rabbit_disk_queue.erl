@@ -42,7 +42,7 @@
          tx_publish/1, tx_commit/3, tx_cancel/1,
          requeue/2, purge/1, delete_queue/1,
          delete_non_durable_queues/1, auto_ack_next_message/1,
-         requeue_next_n/2, prefetch/2, length/1
+         requeue_next_n/2, prefetch/2, length/1, foldl/3
         ]).
 
 -export([filesync/0, cache_info/0]).
@@ -266,6 +266,9 @@
 -spec(delete_queue/1 :: (queue_name()) -> 'ok').
 -spec(delete_non_durable_queues/1 :: (set()) -> 'ok').
 -spec(length/1 :: (queue_name()) -> non_neg_integer()).
+-spec(foldl/3 :: (fun (({message(), non_neg_integer(),
+                         bool(), {msg_id(), seq_id()}}, A) ->
+                              A), A, queue_name()) -> A).
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
 -spec(to_disk_only_mode/0 :: () -> 'ok').
@@ -328,6 +331,9 @@ delete_non_durable_queues(DurableQueues) ->
 length(Q) ->
     gen_server2:call(?SERVER, {length, Q}, infinity).
 
+foldl(Fun, Init, Acc) ->
+    gen_server2:call(?SERVER, {foldl, Fun, Init, Acc}, infinity).
+
 stop() ->
     gen_server2:call(?SERVER, stop, infinity).
 
@@ -367,8 +373,8 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %%       brutal_kill.
     %% Otherwise, the gen_server will be immediately terminated.
     process_flag(trap_exit, true),
-    {ok, Mode} = rabbit_queue_mode_manager:register
-                   (self(), rabbit_disk_queue, set_mode, []),
+    ok = rabbit_queue_mode_manager:register
+           (self(), rabbit_disk_queue, set_mode, []),
     Node = node(),
     ok = 
         case mnesia:change_table_copy_type(rabbit_disk_queue, Node,
@@ -440,10 +446,13 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
             ok = preallocate(FileHdl, FileSizeLimit, Offset)
     end,
     State2 = State1 #dqstate { current_file_handle = FileHdl },
-    {ok, case Mode of
-             mixed -> State2;
-             disk -> to_disk_only_mode(State2)
-         end, {binary, ?HIBERNATE_AFTER_MIN}, 0}.
+    %% by reporting a memory use of 0, we guarantee the manager will
+    %% grant us to ram_disk mode. We have to start in ram_disk mode
+    %% because we can't find values for mnesia_bytes_per_record or
+    %% ets_bytes_per_record otherwise.
+    ok = rabbit_queue_mode_manager:report_memory(self(), 0, false),
+    ok = report_memory(false, State2),
+    {ok, State2, {binary, ?HIBERNATE_AFTER_MIN}, 0}.
 
 handle_call({deliver, Q}, _From, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, false, State),
@@ -464,6 +473,9 @@ handle_call({purge, Q}, _From, State) ->
 handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
     reply(WriteSeqId - ReadSeqId, State);
+handle_call({foldl, Fun, Init, Q}, _From, State) ->
+    {ok, Result, State1} = internal_foldl(Q, Fun, Init, State),
+    reply(Result, State1);
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}; %% gen_server now calls terminate
 handle_call(stop_vaporise, _From, State) ->
@@ -588,7 +600,7 @@ start_memory_timer() ->
     TRef.
 
 start_memory_timer(State = #dqstate { memory_report_timer = undefined }) ->
-    report_memory(false, State),
+    ok = report_memory(false, State),
     State #dqstate { memory_report_timer = start_memory_timer() };
 start_memory_timer(State) ->
     State.
@@ -898,6 +910,18 @@ internal_prefetch(Q, Count, State = #dqstate { sequences = Sequences }) ->
                   State2
           end, State, lists:seq(ReadSeqId, ReadSeqId + Count1 - 1)),
     {ok, StateN}.
+
+internal_foldl(Q, Fun, Init, State = #dqstate { sequences = Sequences }) ->
+    {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
+    internal_foldl(Q, WriteSeqId, Fun, State, Init, ReadSeqId).
+
+internal_foldl(_Q, SeqId, _Fun, State, Acc, SeqId) ->
+    {ok, Acc, State};
+internal_foldl(Q, WriteSeqId, Fun, State, Acc, ReadSeqId) ->
+    {ok, MsgStuff, State1}
+        = internal_read_message(Q, ReadSeqId, true, true, false, State),
+    Acc1 = Fun(MsgStuff, Acc),
+    internal_foldl(Q, WriteSeqId, Fun, State1, Acc1, ReadSeqId + 1).
 
 internal_read_message(Q, ReadSeqId, ReadMsg, FakeDeliver, ForceInCache, State) ->
     [Obj =

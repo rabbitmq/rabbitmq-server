@@ -990,11 +990,20 @@ rdq_test_purge() ->
     rdq_stop(),
     passed.    
 
+rdq_new_mixed_queue(Q, Durable, Disk) ->
+    {ok, MS} = rabbit_mixed_queue:init(Q, Durable),
+    MS1 = rabbit_mixed_queue:reset_counters(MS),
+    case Disk of
+        true -> {ok, MS2} = rabbit_mixed_queue:to_disk_only_mode([], MS1),
+                MS2;
+        false -> MS1
+    end.
+
 rdq_test_mixed_queue_modes() ->
     rdq_virgin(),
     rdq_start(),
     Payload = <<0:(8*256)>>,
-    {ok, MS} = rabbit_mixed_queue:init(q, true, mixed),
+    MS = rdq_new_mixed_queue(q, true, false),
     MS2 = lists:foldl(
             fun (_N, MS1) ->
                     Msg = rabbit_basic:message(x, <<>>, [], Payload),
@@ -1041,7 +1050,7 @@ rdq_test_mixed_queue_modes() ->
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
     rdq_start(),
-    {ok, MS12} = rabbit_mixed_queue:init(q, true, mixed),
+    MS12 = rdq_new_mixed_queue(q, true, false),
     10 = rabbit_mixed_queue:length(MS12),
     io:format("Recovered queue~n"),
     {MS14, AckTags} =
@@ -1061,7 +1070,7 @@ rdq_test_mixed_queue_modes() ->
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
     rdq_start(),
-    {ok, MS17} = rabbit_mixed_queue:init(q, true, mixed),
+    MS17 = rdq_new_mixed_queue(q, true, false),
     0 = rabbit_mixed_queue:length(MS17),
     {0,0,0} = rabbit_mixed_queue:estimate_queue_memory(MS17),
     io:format("Recovered queue~n"),
@@ -1081,23 +1090,23 @@ rdq_test_mode_conversion_mid_txn() ->
 
     rdq_virgin(),
     rdq_start(),
-    {ok, MS0} = rabbit_mixed_queue:init(q, true, mixed),
+    MS0 = rdq_new_mixed_queue(q, true, false),
     passed = rdq_tx_publish_mixed_alter_commit_get(
                MS0, MsgsA, MsgsB, fun rabbit_mixed_queue:to_disk_only_mode/2, commit),
 
     rdq_stop_virgin_start(),
-    {ok, MS1} = rabbit_mixed_queue:init(q, true, mixed),
+    MS1 = rdq_new_mixed_queue(q, true, false),
     passed = rdq_tx_publish_mixed_alter_commit_get(
                MS1, MsgsA, MsgsB, fun rabbit_mixed_queue:to_disk_only_mode/2, cancel),
 
 
     rdq_stop_virgin_start(),
-    {ok, MS2} = rabbit_mixed_queue:init(q, true, disk),
+    MS2 = rdq_new_mixed_queue(q, true, true),
     passed = rdq_tx_publish_mixed_alter_commit_get(
                MS2, MsgsA, MsgsB, fun rabbit_mixed_queue:to_mixed_mode/2, commit),
 
     rdq_stop_virgin_start(),
-    {ok, MS3} = rabbit_mixed_queue:init(q, true, disk),
+    MS3 = rdq_new_mixed_queue(q, true, true),
     passed = rdq_tx_publish_mixed_alter_commit_get(
                MS3, MsgsA, MsgsB, fun rabbit_mixed_queue:to_mixed_mode/2, cancel),
 

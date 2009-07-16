@@ -43,7 +43,6 @@
 
 -define(TOTAL_TOKENS, 10000000).
 -define(ACTIVITY_THRESHOLD, 25).
--define(INITIAL_TOKEN_ALLOCATION, 100).
 
 -define(SERVER, ?MODULE).
 
@@ -53,7 +52,7 @@
 
 -spec(start_link/0 :: () ->
               ({'ok', pid()} | 'ignore' | {'error', any()})).
--spec(register/4 :: (pid(), atom(), atom(), list()) -> {'ok', queue_mode()}).
+-spec(register/4 :: (pid(), atom(), atom(), list()) -> 'ok').
 -spec(report_memory/3 :: (pid(), non_neg_integer(), bool()) -> 'ok').
 -spec(report_memory/5 :: (pid(), non_neg_integer(),
                           non_neg_integer(), non_neg_integer(), bool()) ->
@@ -141,7 +140,7 @@ start_link() ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 register(Pid, Module, Function, Args) ->
-    gen_server2:call(?SERVER, {register, Pid, Module, Function, Args}).
+    gen_server2:cast(?SERVER, {register, Pid, Module, Function, Args}).
 
 pin_to_disk(Pid) ->
     gen_server2:call(?SERVER, {pin_to_disk, Pid}).
@@ -172,27 +171,6 @@ init([]) ->
                   hibernate = queue:new(),
                   disk_mode_pins = sets:new()
                 }}.
-
-handle_call({register, Pid, Module, Function, Args}, _From,
-            State = #state { callbacks = Callbacks }) ->
-    _MRef = erlang:monitor(process, Pid),
-    State1 = State #state { callbacks = dict:store
-                            (Pid, {Module, Function, Args}, Callbacks) },
-    State2 = #state { available_tokens = Avail,
-                      mixed_queues = Mixed } =
-        free_upto(Pid, ?INITIAL_TOKEN_ALLOCATION, State1),
-    {Result, State3} =
-        case ?INITIAL_TOKEN_ALLOCATION > Avail of
-            true ->
-                {disk, State2};
-            false ->
-                {mixed, State2 #state { 
-                          available_tokens =
-                          Avail - ?INITIAL_TOKEN_ALLOCATION,
-                          mixed_queues = dict:store
-                          (Pid, {?INITIAL_TOKEN_ALLOCATION, active}, Mixed) }}
-        end,
-    {reply, {ok, Result}, State3};
 
 handle_call({pin_to_disk, Pid}, _From,
             State = #state { mixed_queues = Mixed,
@@ -317,7 +295,13 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
             hibernate -> StateN #state { hibernate =
                                          queue:in(Pid, Sleepy) }
         end,
-    {noreply, StateN1}.
+    {noreply, StateN1};
+
+handle_cast({register, Pid, Module, Function, Args},
+            State = #state { callbacks = Callbacks }) ->
+    _MRef = erlang:monitor(process, Pid),
+    {noreply, State #state { callbacks = dict:store
+                   (Pid, {Module, Function, Args}, Callbacks) }}.
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state { available_tokens = Avail,

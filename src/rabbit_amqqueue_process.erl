@@ -100,19 +100,22 @@ start_link(Q) ->
 
 init(Q = #amqqueue { name = QName, durable = Durable }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    {ok, Mode} = rabbit_queue_mode_manager:register
-                   (self(), rabbit_amqqueue, set_mode, [self()]),
-    {ok, MS} = rabbit_mixed_queue:init(QName, Durable, Mode),
-    {ok, #q{q = Q,
-            owner = none,
-            exclusive_consumer = none,
-            has_had_consumers = false,
-            mixed_state = MS,
-            next_msg_id = 1,
-            active_consumers = queue:new(),
-            blocked_consumers = queue:new(),
-            memory_report_timer = start_memory_timer()
-           }, {binary, ?HIBERNATE_AFTER_MIN}}.
+    ok = rabbit_queue_mode_manager:register
+           (self(), rabbit_amqqueue, set_mode, [self()]),
+    {ok, MS} = rabbit_mixed_queue:init(QName, Durable),
+    State = #q{q = Q,
+               owner = none,
+               exclusive_consumer = none,
+               has_had_consumers = false,
+               mixed_state = MS,
+               next_msg_id = 1,
+               active_consumers = queue:new(),
+               blocked_consumers = queue:new(),
+               memory_report_timer = start_memory_timer()
+              },
+    %% first thing we must do is report_memory which will clear out
+    %% the 'undefined' values in gain and loss in mixed_queue state
+    {ok, report_memory(false, State), {binary, ?HIBERNATE_AFTER_MIN}}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
@@ -553,14 +556,10 @@ i(memory, _) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-report_memory(Hibernating, State = #q { mixed_state = MS }) ->
+report_memory(Hib, State = #q { mixed_state = MS }) ->
     {MSize, Gain, Loss} =
         rabbit_mixed_queue:estimate_queue_memory(MS),
-    NewMem = case MSize of
-                 0 -> 1; %% avoid / 0
-                 N -> N
-             end,
-    rabbit_queue_mode_manager:report_memory(self(), NewMem, Gain, Loss, Hibernating),
+    rabbit_queue_mode_manager:report_memory(self(), MSize, Gain, Loss, Hib),
     State #q { mixed_state = rabbit_mixed_queue:reset_counters(MS) }.
 
 %---------------------------------------------------------------------------
