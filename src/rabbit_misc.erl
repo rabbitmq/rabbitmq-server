@@ -446,10 +446,12 @@ unfold(Fun, Acc, Init) ->
         false -> {Acc, Init}
     end.
 
-ceil(N) when N - trunc(N) > 0 ->
-    1 + trunc(N);
 ceil(N) ->
-    N.
+    T = trunc(N),
+    case N - T of
+        0 -> N;
+        _ -> 1 + T
+    end.
 
 keygets(Keys, KeyList) ->
     lists:reverse(

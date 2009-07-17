@@ -311,7 +311,8 @@ publish_delivered(Msg =
             %% must call phantom_deliver otherwise the msg remains at
             %% the head of the queue. This is synchronous, but
             %% unavoidable as we need the AckTag
-            {MsgId, false, AckTag, 0} = rabbit_disk_queue:phantom_deliver(PubQ),
+            {MsgId, IsPersistent, false, AckTag, 0} =
+                rabbit_disk_queue:phantom_deliver(PubQ),
             {ok, AckTag, State1};
         false ->
             %% in this case, we don't actually care about the ack, so
@@ -340,7 +341,7 @@ deliver(State = #mqstate { msg_buf = MsgBuf, queue = Q,
                 AckTag1 =
                     case IsDurable andalso IsPersistent of
                         true ->
-                            {MsgId, IsDelivered1, AckTag2, _PersistRem}
+                            {MsgId, IsPersistent, IsDelivered1, AckTag2, _PRem}
                                 = rabbit_disk_queue:phantom_deliver(Q),
                             AckTag2;
                         false ->
