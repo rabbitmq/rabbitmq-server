@@ -1560,25 +1560,46 @@ load_from_disk(State) ->
     State1 = load_messages(undefined, Files, State),
     %% Finally, check there is nothing in mnesia which we haven't
     %% loaded
-    {atomic, true} = mnesia:transaction(
-             fun() ->
-                     ok = mnesia:read_lock_table(rabbit_disk_queue),
-                     mnesia:foldl(
-                       fun (#dq_msg_loc { msg_id = MsgId,
-                                          queue_and_seq_id = {Q, SeqId} },
-                            true) ->
-                               case erlang:length
-                                   (dets_ets_lookup(State1, MsgId)) of
-                                   0 -> ok == mnesia:delete(rabbit_disk_queue,
-                                                            {Q, SeqId}, write);
-                                   1 -> true
-                               end
-                       end,
-                       true, rabbit_disk_queue)
-             end),
-    State2 = extract_sequence_numbers(State1),
+    {atomic, State2} =
+        mnesia:transaction(
+          fun() ->
+                  ok = mnesia:write_lock_table(rabbit_disk_queue),
+                  {State6, FinalQ, MsgSeqIds2, _Len} =
+                      mnesia:foldl(
+                        fun (#dq_msg_loc { msg_id = MsgId,
+                                           queue_and_seq_id = {Q, SeqId} },
+                             {State3, OldQ, MsgSeqIds, Len}) ->
+                                {State4, MsgSeqIds1, Len1} =
+                                    case {OldQ == Q, MsgSeqIds} of
+                                        {true, _} when Len < 10000 ->
+                                            {State3, MsgSeqIds, Len};
+                                        {false, []} -> {State3, MsgSeqIds, Len};
+                                        {_, _} ->
+                                            {ok, State5} =
+                                                remove_messages(Q, MsgSeqIds,
+                                                                txn, State3),
+                                            {State5, [], 0}
+                                    end,
+                                case dets_ets_lookup(State4, MsgId) of
+                                    [] -> ok = mnesia:delete(rabbit_disk_queue,
+                                                             {Q, SeqId}, write),
+                                          {State4, Q, MsgSeqIds1, Len1};
+                                    [{MsgId, _RefCount, _File, _Offset,
+                                      _TotalSize, true}] ->
+                                        {State4, Q, MsgSeqIds1, Len1};
+                                    [{MsgId, _RefCount, _File, _Offset,
+                                      _TotalSize, false}] ->
+                                        {State4, Q,
+                                         [{MsgId, SeqId} | MsgSeqIds1], Len1+1}
+                                end
+                        end, {State1, undefined, [], 0}, rabbit_disk_queue),
+                  {ok, State7} =
+                      remove_messages(FinalQ, MsgSeqIds2, txn, State6),
+                  State7
+          end),
+    State8 = extract_sequence_numbers(State2),
     ok = del_index(),
-    {ok, State2}.
+    {ok, State8}.
 
 extract_sequence_numbers(State = #dqstate { sequences = Sequences }) ->
     {atomic, true} = mnesia:transaction(
