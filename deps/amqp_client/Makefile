@@ -29,6 +29,9 @@ export INCLUDE_SERV_DIR=$(BROKER_SYMLINK)/include
 TEST_DIR=test
 SOURCE_DIR=src
 DIST_DIR=rabbitmq-erlang-client
+PACKAGE=amqp_client
+PACKAGE_NAME=$(PACKAGE).ez
+BROKER_PLUGINS_LIB_DIR=$(BROKER_DIR)/plugins/lib
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
@@ -124,8 +127,10 @@ clean:
 	rm -fr cover dist tmp
 	$(MAKE) -C $(TEST_DIR) clean
 
-source_tarball:
-	mkdir -p dist/$(DIST_DIR)
+$(DIST_DIR):
+	mkdir -p $@
+
+source_tarball: $(DIST_DIR)
 	cp -a README Makefile dist/$(DIST_DIR)/
 	mkdir -p dist/$(DIST_DIR)/$(SOURCE_DIR)
 	cp -a $(SOURCE_DIR)/*.erl dist/$(DIST_DIR)/$(SOURCE_DIR)/
@@ -135,3 +140,12 @@ source_tarball:
 	cp -a $(TEST_DIR)/*.erl dist/$(DIST_DIR)/$(TEST_DIR)/
 	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
+
+package: clean $(DIST_DIR) $(TARGETS)
+	mkdir -p $(DIST_DIR)/$(PACKAGE)
+	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
+	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
+
+install: package
+	cp $(DIST_DIR)/$(PACKAGE_NAME) $(BROKER_PLUGINS_LIB_DIR)
