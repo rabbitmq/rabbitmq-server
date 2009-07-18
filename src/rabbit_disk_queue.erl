@@ -458,10 +458,10 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     {ok, State2, {binary, ?HIBERNATE_AFTER_MIN}, 0}.
 
 handle_call({deliver, Q}, _From, State) ->
-    {ok, Result, State1} = internal_deliver(Q, true, false, State),
+    {ok, Result, State1} = internal_deliver(Q, true, State),
     reply(Result, State1);
 handle_call({phantom_deliver, Q}, _From, State) ->
-    {ok, Result, State1} = internal_deliver(Q, false, false, State),
+    {ok, Result, State1} = internal_deliver(Q, false, State),
     reply(Result, State1);
 handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, From, State) ->
     {Reply, State1} =
@@ -887,7 +887,7 @@ cache_is_full(#dqstate { message_cache = Cache }) ->
 
 %% ---- INTERNAL RAW FUNCTIONS ----
 
-internal_deliver(Q, ReadMsg, FakeDeliver,
+internal_deliver(Q, ReadMsg,
                  State = #dqstate { sequences = Sequences }) ->
     case sequence_lookup(Sequences, Q) of
         {SeqId, SeqId} -> {ok, empty, State};
@@ -895,7 +895,7 @@ internal_deliver(Q, ReadMsg, FakeDeliver,
             Remaining = WriteSeqId - ReadSeqId - 1,
             {ok, Result, State1} =
                 internal_read_message(
-                  Q, ReadSeqId, ReadMsg, FakeDeliver, false, State),
+                  Q, ReadSeqId, ReadMsg, false, false, State),
             true = ets:insert(Sequences,
                               {Q, ReadSeqId+1, WriteSeqId}),
             {ok,
@@ -979,7 +979,7 @@ internal_read_message(Q, ReadSeqId, ReadMsg, FakeDeliver, ForceInCache, State) -
     end.
 
 internal_auto_ack(Q, State) ->
-    case internal_deliver(Q, false, true, State) of
+    case internal_deliver(Q, false, State) of
         {ok, empty, State1} -> {ok, State1};
         {ok, {_MsgId, _IsPersistent, _Delivered, MsgSeqId, _Remaining},
          State1} ->

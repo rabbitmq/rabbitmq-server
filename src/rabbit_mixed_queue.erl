@@ -282,7 +282,7 @@ publish_delivered(Msg =
                              memory_size = QSize, memory_gain = Gain })
   when Mode =:= disk orelse (IsDurable andalso IsPersistent) ->
     Persist = IsDurable andalso IsPersistent,
-    rabbit_disk_queue:publish(Q, Msg, false),
+    ok = rabbit_disk_queue:publish(Q, Msg, true),
     MsgSize = size_of_message(Msg),
     State1 = State #mqstate { memory_size = QSize + MsgSize,
                               memory_gain = Gain + MsgSize },
@@ -291,7 +291,7 @@ publish_delivered(Msg =
             %% must call phantom_deliver otherwise the msg remains at
             %% the head of the queue. This is synchronous, but
             %% unavoidable as we need the AckTag
-            {MsgId, IsPersistent, false, AckTag, 0} =
+            {MsgId, IsPersistent, true, AckTag, 0} =
                 rabbit_disk_queue:phantom_deliver(Q),
             {ok, AckTag, State1};
         false ->
