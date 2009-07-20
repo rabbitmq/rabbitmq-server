@@ -32,7 +32,7 @@ DIST_DIR=rabbitmq-erlang-client
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
-TARGETS=$(EBIN_DIR) $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
+TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
@@ -87,11 +87,8 @@ ifdef BROKER_DIR
 	ln -sf $(BROKER_DIR) $(BROKER_SYMLINK)
 endif
 
-$(EBIN_DIR):
-	mkdir -p $@
-
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
-	erlc $(ERLC_OPTS) $<
+	mkdir -p $(EBIN_DIR); erlc $(ERLC_OPTS) $<
 
 
 run: compile
