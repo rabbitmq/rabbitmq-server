@@ -66,7 +66,7 @@ $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN
 dialyze: $(BEAM_TARGETS)
 	dialyzer -c $?
 
-clean: cleandb
+clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
