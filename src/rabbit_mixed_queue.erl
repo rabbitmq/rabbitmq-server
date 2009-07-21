@@ -159,7 +159,7 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
             case IsDurable andalso IsPersistent of
                 true -> %% it's already in the Q
                     send_messages_to_disk(
-                      IsDurable, Q, Queue1, PublishCount, RequeueCount,
+                      IsDurable, Q, Queue1, PublishCount, RequeueCount + 1,
                       Commit, inc_queue_length(Q, MsgBuf, 1));
                 false ->
                     Commit1 = flush_requeue_to_disk_queue
@@ -181,7 +181,7 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
             end;
         {{value, {Q, Count}}, Queue1} ->
             send_messages_to_disk(IsDurable, Q, Queue1, PublishCount,
-                                  RequeueCount, Commit,
+                                  RequeueCount + Count, Commit,
                                   inc_queue_length(Q, MsgBuf, Count))
     end.
 
