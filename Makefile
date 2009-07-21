@@ -115,8 +115,10 @@ force-snapshot: all
 stop-node:
 	-$(ERL_CALL) -q
 
+COVER_DIR=$(EBIN_DIR)
+
 start-cover: all
-	echo "cover:start(), rabbit_misc:enable_cover()." | $(ERL_CALL)
+	echo "cover:start(), rabbit_misc:enable_cover([\"$(COVER_DIR)\"])." | $(ERL_CALL)
 
 stop-cover: all
 	echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL)

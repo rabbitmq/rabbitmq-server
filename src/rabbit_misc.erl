@@ -40,7 +40,7 @@
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
 -export([r/3, r/2, r_arg/4, rs/1]).
--export([enable_cover/0, report_cover/0]).
+-export([enable_cover/1, report_cover/0]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
@@ -87,7 +87,7 @@
 -spec(r_arg/4 :: (vhost() | r(atom()), K, amqp_table(), binary()) ->
              undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
--spec(enable_cover/0 :: () -> 'ok' | {'error', any()}).
+-spec(enable_cover/1 :: () -> 'ok' | {'error', any()}).
 -spec(report_cover/0 :: () -> 'ok').
 -spec(throw_on_error/2 ::
       (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
@@ -187,9 +187,12 @@ rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
                                 [Kind, Name, VHostPath])).
 
-enable_cover() ->
-    case cover:compile_beam_directory("ebin") of
-        {error,Reason} -> {error,Reason};
+
+
+enable_cover(Dirs) ->
+    Results = lists:map(fun cover:compile_beam_directory/1, Dirs),
+    case lists:filter(fun(X) -> X /= [] end, Results) of
+        [{error, Reason} | _] -> {error, Reason};
         _ -> ok
     end.
 
