@@ -66,13 +66,13 @@ $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN
 dialyze: $(BEAM_TARGETS)
 	dialyzer -c $?
 
-clean: cleandb
+clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
 	rm -f docs/*.[0-9].gz
 
-cleandb: stop-node
+cleandb:
 	rm -rf $(RABBITMQ_MNESIA_DIR)/*
 
 ############ various tasks to interact with RabbitMQ ###################
