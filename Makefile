@@ -20,10 +20,10 @@ PYTHON=python
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
-# only available in R12B-3 upwards
+# only available in R12B-5 upwards
 #
 # NB: the test assumes that version number will only contain single digits
-USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.6.2" ]; then echo "true"; else echo "false"; fi)
+USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.6.4" ]; then echo "true"; else echo "false"; fi)
 endif
 
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
