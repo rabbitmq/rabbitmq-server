@@ -53,14 +53,14 @@ start(User, Password, ProcLink) when is_boolean(ProcLink) ->
 %% Starts a networked conection to a remote AMQP server.
 start(User, Password, Host, Port) ->
     start(User, Password, Host, Port, <<"/">>, false).
-
 start(User, Password, Host, Port, SslOpts) when is_list(SslOpts)  -> 
     start(User,Password,Host,Port,<<"/">>,SslOpts,false);
+
 start(User, Password, Host, Port, VHost) ->
     start(User, Password, Host, Port, VHost, false).
-
 start(User, Password, Host, Port, VHost, SslOpts) when is_list(SslOpts) -> 
     start(User, Password, Host, Port, VHost, SslOpts, false);
+
 start(User, Password, Host, Port, VHost, ProcLink) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
@@ -69,11 +69,12 @@ start(User, Password, Host, Port, VHost, ProcLink) ->
                                      port = Port},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
-start(User, Password, Host, VHost, SslOpts, ProcLink) when is_list(SslOpts) ->
+start(User, Password, Host, Port, VHost, SslOpts, ProcLink) when is_list(SslOpts) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      serverhost = Host,
                                      vhostpath = VHost,
+                                     port = Port,
                                      sslopts=SslOpts},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
@@ -83,12 +84,11 @@ start_link(User, Password) ->
 
 start_link(User, Password, Host, Port) ->
     start(User, Password, Host, Port, <<"/">>, true).
-
 start_link(User, Password, Host, Port, SslOpts=[{_K,_V}|_T]) -> 
     start(User, Password, Host, Port, <<"/">>, SslOpts, true);
+
 start_link(User, Password, Host, Port, VHost) ->
     start(User, Password, Host, Port, VHost, true).
-
 start_link(User, Password, Host, Port, VHost, SslOpts=[{_K,_V}|_T]) -> 
     start(User, Password, Host, Port, VHost, SslOpts, true).
 
