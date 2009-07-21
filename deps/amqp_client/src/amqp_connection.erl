@@ -101,7 +101,6 @@ start_network_link(User, Password, Host, Port, VHost, SslOpts) when is_list(SslO
 
 start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
     gen_server:start_link(?MODULE, [InitialState, Driver], []);
-
 start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
     gen_server:start(?MODULE, [InitialState, Driver], []).
 
