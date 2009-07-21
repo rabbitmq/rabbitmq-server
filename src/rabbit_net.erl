@@ -45,7 +45,7 @@
 	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
 -type(error() :: {'error', any()}).
 
--spec(async_recv/3 :: (socket(), integer(), timeout()) -> {'ok', ref()}).
+-spec(async_recv/3 :: (socket(), integer(), timeout()) -> {'ok', any()}).
 -spec(close/1 :: (socket()) -> 'ok' | error()).
 -spec(controlling_process/2 :: (socket(), pid()) -> 'ok' | error()).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
@@ -73,7 +73,7 @@ async_recv(Sock, Length, Timeout) when is_record(Sock, ssl_socket) ->
     {ok, Ref};
 
 async_recv(Sock, Length, infinity) when is_port(Sock) ->
-    async_recv(Sock, Length, -1);
+    prim_inet:async_recv(Sock, Length, -1);
 
 async_recv(Sock, Length, Timeout) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, Timeout).
