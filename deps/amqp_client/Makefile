@@ -51,7 +51,8 @@ ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(EBIN_DIR) -Wall -v +debu
 LOG_BASE=/tmp
 LOG_IN_FILE=true
 ERL_WITH_BROKER=erl -pa $(LOAD_PATH) -mnesia dir tmp -boot start_sasl -s rabbit \
-	$(shell [ $(LOG_IN_FILE) = "true" ] && echo "-sasl sasl_error_logger '{file, \"'${LOG_BASE}'/rabbit-sasl.log\"}' -kernel error_logger '{file, \"'${LOG_BASE}'/rabbit.log\"}' -rabbit ssl_listeners '[{\"0.0.0.0\",5671}]' -rabbit ssl_options '[{cacertfile,\"examples/certs/ca/cacerts.pem\"},{certfile,\"examples/certs/server/cert.pem\"},{keyfile,\"examples/certs/server/key.pem\"}]'")
+	$(shell [ $(LOG_IN_FILE) = "true" ] && echo "-sasl sasl_error_logger '{file, \"'${LOG_BASE}'/rabbit-sasl.log\"}' -kernel error_logger '{file, \"'${LOG_BASE}'/rabbit.log\"}'") \
+	-rabbit ssl_listeners '[{"0.0.0.0",5671}]' -rabbit ssl_options '[{cacertfile,"examples/certs/ca/cacerts.pem"},{certfile,"examples/certs/server/cert.pem"},{keyfile,"examples/certs/server/key.pem"}]'
 
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
