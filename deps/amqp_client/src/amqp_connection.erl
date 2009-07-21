@@ -43,6 +43,7 @@
 %% Starts a direct connection to the Rabbit AMQP server, assuming that
 %% the server is running in the same process space.
 start(User, Password) -> start(User, Password, false).
+
 start(User, Password, ProcLink) when is_boolean(ProcLink) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
@@ -53,14 +54,14 @@ start(User, Password, ProcLink) when is_boolean(ProcLink) ->
 %% Starts a networked conection to a remote AMQP server.
 start(User, Password, Host, Port) ->
     start(User, Password, Host, Port, <<"/">>, false).
+
 start(User, Password, Host, Port, SslOpts) when is_list(SslOpts)  -> 
     start(User,Password,Host,Port,<<"/">>,SslOpts,false);
-
 start(User, Password, Host, Port, VHost) ->
     start(User, Password, Host, Port, VHost, false).
+
 start(User, Password, Host, Port, VHost, SslOpts) when is_list(SslOpts) -> 
     start(User, Password, Host, Port, VHost, SslOpts, false);
-
 start(User, Password, Host, Port, VHost, ProcLink) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
@@ -69,6 +70,7 @@ start(User, Password, Host, Port, VHost, ProcLink) ->
                                      port = Port},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
+
 start(User, Password, Host, Port, VHost, SslOpts, ProcLink) when is_list(SslOpts) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
@@ -84,17 +86,17 @@ start_link(User, Password) ->
 
 start_link(User, Password, Host, Port) ->
     start(User, Password, Host, Port, <<"/">>, true).
-start_link(User, Password, Host, Port, SslOpts=[{_K,_V}|_T]) -> 
-    start(User, Password, Host, Port, <<"/">>, SslOpts, true);
 
+start_link(User, Password, Host, Port, SslOpts) when is_list(SslOpts) -> 
+    start(User, Password, Host, Port, <<"/">>, SslOpts, true);
 start_link(User, Password, Host, Port, VHost) ->
     start(User, Password, Host, Port, VHost, true).
-start_link(User, Password, Host, Port, VHost, SslOpts=[{_K,_V}|_T]) -> 
+
+start_link(User, Password, Host, Port, VHost, SslOpts) when is_list(SslOpts) -> 
     start(User, Password, Host, Port, VHost, SslOpts, true).
 
 start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
     gen_server:start_link(?MODULE, [InitialState, Driver], []);
-
 start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
     gen_server:start(?MODULE, [InitialState, Driver], []).
 

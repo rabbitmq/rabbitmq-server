@@ -35,7 +35,7 @@
                            driver,
                            port,
                            channels = dict:new(),
-                           sslopts=nil }).
+                           sslopts}).
 
 -record(channel_state, {number,
                         parent_connection,
