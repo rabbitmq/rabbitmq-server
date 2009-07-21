@@ -39,7 +39,7 @@
 -export([register_direct_peer/2]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
--export([signal_closing/1, get_writer_status/1]).
+-export([signal_closing/1, is_waiting/1]).
 
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
@@ -129,8 +129,8 @@ signal_closing(Channel) ->
     gen_server:call(Channel, {signal_closing}).
 
 %% Returns writer status
-get_writer_status(Channel) ->
-    gen_server:call(Channel, {get_writer_status}).
+is_waiting(Channel) ->
+    gen_server:call(Channel, {is_waiting}).
 
 
 %%---------------------------------------------------------------------------
@@ -288,9 +288,9 @@ handle_method(Method, Content, State) ->
 init([InitialState]) ->
     {ok, InitialState}.
 
-%% Get writer status
-handle_call({get_writer_status}, _From,  State = #channel_state{writer_pid = Writer}) ->
-    {reply, erlang:process_info(Writer, status), State};
+%% See if the writer is in waiting state
+handle_call({is_waiting}, _From,  State = #channel_state{writer_pid = Writer}) ->
+    {reply, erlang:process_info(Writer, status) =:= {status, waiting}, State};
 
 %% Raise closing flag
 handle_call({signal_closing}, _From, State) ->

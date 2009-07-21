@@ -189,9 +189,7 @@ allocate_channel_number(Channels, _Max) ->
     MaxChannel + 1.
 
 get_channels_pids(#connection_state{channels = ChannelDict}) ->
-    ChannelNums = dict:fetch_keys(ChannelDict),
-    lists:map(fun(ChannelNum) ->dict:fetch(ChannelNum, ChannelDict) end,
-              ChannelNums).
+    dict:fold(fun(_Key, Value, AccIn) -> [Value | AccIn] end, [], ChannelDict).
 
 close_connection(Close, From, State = #connection_state{driver = Driver},
                  Timeout) ->
@@ -219,9 +217,9 @@ signal_back_when_no_channel_writing([], Parent) ->
 signal_back_when_no_channel_writing(ChannelPids = [ChanHead | ChanRem],
                                     Parent) ->
     Pass =
-        case catch amqp_channel:get_writer_status(ChanHead) of
+        case catch amqp_channel:is_waiting(ChanHead) of
             {'EXIT', _} -> true;
-            {status, waiting} -> true;
+            true -> true;
             _ -> false
         end,
     if
