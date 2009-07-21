@@ -25,8 +25,8 @@
 
 -module(test_util).
 
--include_lib("rabbitmq_server/include/rabbit.hrl").
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("amqp_client.hrl").
 
@@ -48,7 +48,7 @@
 %%
 %% This is an example of how the client interaction should work
 %%
-%%   Connection = amqp_connection:start_network(User, Password, Host),
+%%   Connection = amqp_connection:start(User, Password, Host),
 %%   Channel = amqp_connection:open_channel(Connection),
 %%   %%...do something useful
 %%   ChannelClose = #'channel.close'{ %% set the appropriate fields },

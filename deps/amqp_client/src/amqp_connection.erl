@@ -24,8 +24,8 @@
 
 -module(amqp_connection).
 
--include_lib("rabbitmq_server/include/rabbit.hrl").
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -behaviour(gen_server).
@@ -35,8 +35,8 @@
 -export([open_channel/1, open_channel/3]).
 -export([start_direct/2, start_direct/3]).
 -export([start_direct_link/2]).
--export([start_network/3, start_network/4]).
--export([start_network_link/3, start_network_link/4]).
+-export([start_network/4, start_network/5]).
+-export([start_network_link/4, start_network_link/5]).
 -export([close/2]).
 
 %%---------------------------------------------------------------------------
@@ -59,26 +59,26 @@ start_direct_link(User, Password) ->
 
 
 %% Starts a networked conection to a remote AMQP server.
-start_network(User, Password, Host) ->
-    start_network(User, Password, Host, <<"/">>, false).
+start_network(User, Password, Host, Port) ->
+    start_network(User, Password, Host, Port, <<"/">>, false).
 
-start_network(User, Password, Host, VHost) ->
-    start_network(User, Password, Host, VHost, false).
+start_network(User, Password, Host, Port, VHost) ->
+    start_network(User, Password, Host, Port, VHost, false).
 
-start_network(User, Password, Host, VHost, ProcLink) ->
+start_network(User, Password, Host, Port, VHost, ProcLink) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      serverhost = Host,
-                                     vhostpath = VHost},
+                                     vhostpath = VHost,
+                                     port = Port},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
 
-start_network_link(User, Password, Host) ->
-    start_network(User, Password, Host, <<"/">>, true).
+start_network_link(User, Password, Host, Port) ->
+    start_network(User, Password, Host, Port, <<"/">>, true).
 
-start_network_link(User, Password, Host, VHost) ->
-    start_network(User, Password, Host, VHost, true).
-
+start_network_link(User, Password, Host, Port, VHost) ->
+    start_network(User, Password, Host, Port, VHost, true).
 
 start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
     gen_server:start_link(?MODULE, [InitialState, Driver], []);
@@ -98,10 +98,10 @@ open_channel(ConnectionPid) ->
 open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
     gen_server:call(ConnectionPid,
                     {open_channel, ChannelNumber,
-                     amqp_util:binary(OutOfBand)}).
+                     amqp_util:binary(OutOfBand)}, infinity).
 
 %% Closes the AMQP connection
-close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close).
+close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close, infinity).
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -131,7 +131,6 @@ start_channel(ChannelNumber,
             do3               = fun(X, Y, Z) -> Driver:do(X, Y, Z) end,
             reader_pid        = ReaderPid,
             writer_pid        = WriterPid},
-    process_flag(trap_exit, true),
     {ok, ChannelPid} = gen_server:start_link(amqp_channel,
                                              [ChannelState], []),
     NewState = register_channel(Number, ChannelPid, State),
@@ -197,6 +196,7 @@ close_connection(Close, From, State = #connection_state{driver = Driver}) ->
 %%---------------------------------------------------------------------------
 
 init([InitialState, Driver]) when is_atom(Driver) ->
+    process_flag(trap_exit, true),
     State = Driver:handshake(InitialState),
     {ok, State#connection_state{driver = Driver} }.
 
@@ -245,6 +245,16 @@ handle_info( {'EXIT', Pid, normal}, State) ->
 %% This is a special case for abruptly closed socket connections
 handle_info( {'EXIT', _Pid, {socket_error, Reason}}, State) ->
     {stop, {socket_error, Reason}, State};
+
+handle_info( {'EXIT', _Pid, Reason = {unknown_message_type, _}}, State) ->
+    {stop, Reason, State};
+
+handle_info( {'EXIT', _Pid, Reason = connection_socket_closed_unexpectedly},
+             State) ->
+    {stop, Reason, State};
+
+handle_info( {'EXIT', _Pid, Reason = connection_timeout}, State) ->
+    {stop, Reason, State};
 
 handle_info( {'EXIT', Pid, Reason}, State) ->
     io:format("Connection: Handling exit from ~p --> ~p~n", [Pid, Reason]),
