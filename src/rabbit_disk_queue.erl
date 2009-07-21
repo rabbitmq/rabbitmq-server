@@ -260,8 +260,8 @@
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(auto_ack_next_message/1 :: (queue_name()) -> 'ok').
 -spec(tx_publish/1 :: (message()) -> 'ok').
--spec(tx_commit/3 :: (queue_name(), [msg_id()], [{msg_id(), seq_id()}]) ->
-             'ok').
+-spec(tx_commit/3 :: (queue_name(), [{msg_id(), bool()}],
+                      [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [{{msg_id(), seq_id()}, bool()}]) -> 'ok').
 -spec(requeue_next_n/2 :: (queue_name(), non_neg_integer()) -> 'ok').
@@ -1046,7 +1046,7 @@ internal_tx_commit(Q, PubMsgIds, AckSeqIds, From,
                                       last_sync_offset = SyncOffset
                                     }) ->
     NeedsSync = IsDirty andalso
-        lists:any(fun (MsgId) ->
+        lists:any(fun ({MsgId, _Delivered}) ->
                           [{MsgId, _RefCount, File, Offset,
                             _TotalSize, _IsPersistent}] =
                               dets_ets_lookup(State, MsgId),
@@ -1070,12 +1070,12 @@ internal_do_tx_commit({Q, PubMsgIds, AckSeqIds, From},
                   ok = mnesia:write_lock_table(rabbit_disk_queue),
                   {ok, WriteSeqId1} =
                       lists:foldl(
-                        fun (MsgId, {ok, SeqId}) ->
+                        fun ({MsgId, Delivered}, {ok, SeqId}) ->
                                 {mnesia:write(
                                    rabbit_disk_queue,
                                    #dq_msg_loc { queue_and_seq_id = {Q, SeqId},
                                                  msg_id = MsgId,
-                                                 is_delivered = false
+                                                 is_delivered = Delivered
                                                }, write),
                                  SeqId + 1}
                         end, {ok, InitWriteSeqId}, PubMsgIds),

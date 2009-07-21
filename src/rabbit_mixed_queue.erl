@@ -155,7 +155,7 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
             {ok, MsgBuf};
         {{value, {Msg = #basic_message { guid = MsgId,
                                          is_persistent = IsPersistent },
-                  _IsDelivered}}, Queue1} ->
+                  IsDelivered}}, Queue1} ->
             case IsDurable andalso IsPersistent of
                 true -> %% it's already in the Q
                     send_messages_to_disk(
@@ -164,17 +164,18 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
                 false ->
                     Commit1 = flush_requeue_to_disk_queue
                                 (Q, RequeueCount, Commit),
-                    ok = rabbit_disk_queue:tx_publish(Msg), %% TODO - this is resetting the delivered flag to false! (well, actually, in the commit, but nevertheless, it's wrong)
+                    ok = rabbit_disk_queue:tx_publish(Msg),
                     case PublishCount == ?TO_DISK_MAX_FLUSH_SIZE of
                         true ->
                             ok = flush_messages_to_disk_queue(Q, Commit1),
                             send_messages_to_disk(
-                              IsDurable, Q, Queue1, 1, 0, [MsgId],
+                              IsDurable, Q, Queue1, 1, 0,
+                              [{MsgId, IsDelivered}],
                               inc_queue_length(Q, MsgBuf, 1));
                         false ->
                             send_messages_to_disk(
                               IsDurable, Q, Queue1, PublishCount + 1, 0,
-                              [MsgId | Commit1],
+                              [{MsgId, IsDelivered} | Commit1],
                               inc_queue_length(Q, MsgBuf, 1))
                     end
             end;
@@ -387,7 +388,7 @@ tx_publish(Msg, State = #mqstate { mode = mixed, memory_size = QSize,
                           memory_gain = Gain + MsgSize }}.
 
 only_msg_ids(Pubs) ->
-    lists:map(fun (Msg) -> Msg #basic_message.guid end, Pubs).
+    lists:map(fun (Msg) -> {Msg #basic_message.guid, false} end, Pubs).
 
 tx_commit(Publishes, MsgsWithAcks,
           State = #mqstate { mode = disk, queue = Q, length = Length,
@@ -412,7 +413,8 @@ tx_commit(Publishes, MsgsWithAcks,
                          {Acc, MsgBuf2}) ->
                             Acc1 =
                                 case IsPersistent andalso IsDurable of
-                                    true -> [Msg #basic_message.guid | Acc];
+                                    true -> [ {Msg #basic_message.guid, false}
+                                            | Acc];
                                     false -> Acc
                                 end,
                             {Acc1, queue:in({Msg, false}, MsgBuf2)}
