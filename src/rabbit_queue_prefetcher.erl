@@ -72,15 +72,16 @@
 %%    This is a low priority cast
 %%
 %% 2) The disk_queue may pick up the cast, at which point it'll read
-%%    the next message invoke prefetcher:publish(Msg). Normal priority
-%%    cast. Note that in the mean time, the mixed_queue could have
-%%    come along, found the prefetcher empty, asked it to exit. This
-%%    means the effective "reply" from the disk_queue will go no
-%%    where. As a result, the disk_queue must perform no modification
-%%    to the status of the message *or the queue* - do not mark the
-%%    message delivered, and do not advance the queue. If it did
-%%    advance the queue and the msg was then lost, then the queue
-%%    would have lost a msg that the mixed_queue would not pick up.
+%%    the next message and invoke prefetcher:publish(Msg) - normal
+%%    priority cast. Note that in the mean time, the mixed_queue could
+%%    have come along, found the prefetcher empty, asked it to
+%%    exit. This means the effective "reply" from the disk_queue will
+%%    go no where. As a result, the disk_queue must perform no
+%%    modification to the status of the message *or the queue* - do
+%%    not mark the message delivered, and do not advance the queue. If
+%%    it did advance the queue and the msg was then lost, then the
+%%    queue would have lost a msg that the mixed_queue would not pick
+%%    up.
 %%
 %% 3) The prefetcher hopefully receives the cast from
 %%    prefetcher:publish(Msg). It then adds to its internal queue and
@@ -94,15 +95,15 @@
 %%    the same msg being delivered by the queue twice.
 %%
 %% 4) The disk_queue receives the set_delivered_and_advance(Q) cast,
-%% marks the msg at the head of the queue Q as delivered, and advances
-%% the Q to the next msg.
+%%    marks the msg at the head of the queue Q as delivered, and
+%%    advances the Q to the next msg.
 %%
 %% 5) If the prefetcher has not met its target then it goes back to
 %%    1). Otherwise it just sits and waits for the mixed_queue to
 %%    drain it.
 %%
 %% Now at some point, the mixed_queue will come along and will call
-%% prefetcher:drain(). Normal priority call. The prefetcher then
+%% prefetcher:drain() - normal priority call. The prefetcher then
 %% replies with its internal queue and the length of that queue. If
 %% the prefetch target was reached, the prefetcher stops normally at
 %% this point. If it hasn't been reached, then the prefetcher
