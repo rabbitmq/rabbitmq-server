@@ -42,7 +42,8 @@
          tx_publish/1, tx_commit/3, tx_cancel/1,
          requeue/2, purge/1, delete_queue/1,
          delete_non_durable_queues/1, auto_ack_next_message/1,
-         requeue_next_n/2, length/1, foldl/3
+         requeue_next_n/2, length/1, foldl/3, prefetch/1,
+         set_delivered_and_advance/2
         ]).
 
 -export([filesync/0, cache_info/0]).
@@ -257,12 +258,15 @@
 -spec(phantom_deliver/1 :: (queue_name()) ->
              ( 'empty' | {msg_id(), bool(), {msg_id(), seq_id()},
                           non_neg_integer()})).
+-spec(prefetch/1 :: (queue_name()) -> 'ok'). 
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
 -spec(auto_ack_next_message/1 :: (queue_name()) -> 'ok').
 -spec(tx_publish/1 :: (message()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [{msg_id(), bool()}],
                       [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
+-spec(set_delivered_and_advance/2 ::
+      (queue_name(), {msg_id(), seq_id()}) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [{{msg_id(), seq_id()}, bool()}]) -> 'ok').
 -spec(requeue_next_n/2 :: (queue_name(), non_neg_integer()) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
@@ -298,6 +302,9 @@ deliver(Q) ->
 phantom_deliver(Q) ->
     gen_server2:call(?SERVER, {phantom_deliver, Q}, infinity).
 
+prefetch(Q) ->
+    gen_server2:pcast(?SERVER, -1, {prefetch, Q, self()}).
+
 ack(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server2:cast(?SERVER, {ack, Q, MsgSeqIds}).
 
@@ -313,6 +320,9 @@ tx_commit(Q, PubMsgIds, AckSeqIds)
 
 tx_cancel(MsgIds) when is_list(MsgIds) ->
     gen_server2:cast(?SERVER, {tx_cancel, MsgIds}).
+
+set_delivered_and_advance(Q, MsgSeqId) ->
+    gen_server2:cast(?SERVER, {set_delivered_and_advance, Q, MsgSeqId}).
 
 requeue(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server2:cast(?SERVER, {requeue, Q, MsgSeqIds}).
@@ -454,10 +464,10 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     {ok, State2, {binary, ?HIBERNATE_AFTER_MIN}}.
 
 handle_call({deliver, Q}, _From, State) ->
-    {ok, Result, State1} = internal_deliver(Q, true, State),
+    {ok, Result, State1} = internal_deliver(Q, true, false, true, State),
     reply(Result, State1);
 handle_call({phantom_deliver, Q}, _From, State) ->
-    {ok, Result, State1} = internal_deliver(Q, false, State),
+    {ok, Result, State1} = internal_deliver(Q, false, false, true, State),
     reply(Result, State1);
 handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, From, State) ->
     State1 =
@@ -531,8 +541,20 @@ handle_cast(report_memory, State) ->
     %% call noreply1/2, not noreply/1/2, as we don't want to restart the
     %% memory_report_timer
     %% by unsetting the timer, we force a report on the next normal message
-    noreply1(State #dqstate { memory_report_timer = undefined }).
-
+    noreply1(State #dqstate { memory_report_timer = undefined });
+handle_cast({prefetch, Q, From}, State) ->
+    {ok, Result, State1} = internal_deliver(Q, true, true, false, State),
+    ok = rabbit_queue_prefetcher:publish(From, Result),
+    noreply(State1);
+handle_cast({set_delivered_and_advance, Q, MsgSeqId}, State) ->
+    State2 =
+        case internal_deliver(Q, false, false, true, State) of
+            {ok, empty, State1} -> State1;
+            {ok, {_MsgId, _IsPersistent, _Delivered, MsgSeqId, _Rem}, State1} ->
+                State1
+        end,
+    noreply(State2).
+        
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info(timeout, State = #dqstate { commit_timer_ref = undefined }) ->
@@ -866,7 +888,7 @@ cache_is_full(#dqstate { message_cache = Cache }) ->
 
 %% ---- INTERNAL RAW FUNCTIONS ----
 
-internal_deliver(Q, ReadMsg,
+internal_deliver(Q, ReadMsg, FakeDeliver, Advance,
                  State = #dqstate { sequences = Sequences }) ->
     case sequence_lookup(Sequences, Q) of
         {SeqId, SeqId} -> {ok, empty, State};
@@ -874,9 +896,12 @@ internal_deliver(Q, ReadMsg,
             Remaining = WriteSeqId - ReadSeqId - 1,
             {ok, Result, State1} =
                 internal_read_message(
-                  Q, ReadSeqId, ReadMsg, false, false, State),
-            true = ets:insert(Sequences,
-                              {Q, ReadSeqId+1, WriteSeqId}),
+                  Q, ReadSeqId, ReadMsg, FakeDeliver, false, State),
+            true = case Advance of
+                       true -> ets:insert(Sequences,
+                                          {Q, ReadSeqId+1, WriteSeqId});
+                       false -> true
+                   end,
             {ok,
              case Result of
                  {MsgId, IsPersistent, Delivered, {MsgId, ReadSeqId}} ->
@@ -941,7 +966,7 @@ internal_read_message(Q, ReadSeqId, ReadMsg, FakeDeliver, ForceInCache, State) -
     end.
 
 internal_auto_ack(Q, State) ->
-    case internal_deliver(Q, false, State) of
+    case internal_deliver(Q, false, false, true, State) of
         {ok, empty, State1} -> {ok, State1};
         {ok, {_MsgId, _IsPersistent, _Delivered, MsgSeqId, _Remaining},
          State1} ->

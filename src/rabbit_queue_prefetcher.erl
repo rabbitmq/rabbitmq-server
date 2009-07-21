@@ -38,6 +38,10 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-export([publish/2, drain/1, drain_and_stop/1]).
+
+-include("rabbit.hrl").
+
 -define(HIBERNATE_AFTER_MIN, 1000).
 
 -record(pstate,
@@ -45,7 +49,8 @@
           buf_length,
           target_count,
           fetched_count,
-          queue
+          queue,
+          queue_mref
         }).
 
 %% The design of the prefetcher is based on the following:
@@ -178,25 +183,77 @@
 %% mixed_queue when it wants to drain the prefetcher.
 
 start_link(Queue, Count) ->
-    gen_server2:start_link(?MODULE, [Queue, Count], []).
+    gen_server2:start_link(?MODULE, [Queue, Count, self()], []).
 
-init([Q, Count]) ->
+publish(Prefetcher, Obj = { #basic_message {}, _Size, _IsDelivered,
+                            _AckTag, _Remaining }) ->
+    gen_server2:cast(Prefetcher, {publish, Obj});
+publish(Prefetcher, empty) ->
+    gen_server2:cast(Prefetcher, publish_empty).
+
+drain(Prefetcher) ->
+    gen_server2:call(Prefetcher, drain, infinity).
+
+drain_and_stop(Prefetcher) ->
+    gen_server2:call(Prefetcher, drain_and_stop, infinity).
+
+init([Q, Count, QPid]) ->
+    %% link isn't enough because the signal will not appear if the
+    %% queue exits normally. Thus have to use monitor.
+    MRef = erlang:monitor(process, QPid),
     State = #pstate { msg_buf = queue:new(),
                       buf_length = 0,
                       target_count = Count,
                       fetched_count = 0,
-                      queue = Q
+                      queue = Q,
+                      queue_mref = MRef
                      },
+    ok = rabbit_disk_queue:prefetch(Q),
     {ok, State, {binary, ?HIBERNATE_AFTER_MIN}}.
 
-handle_call(_Msg, _From, State) ->
-    {reply, confused, State}.
+handle_call(drain, _From, State = #pstate { buf_length = 0 }) ->
+    {stop, normal, empty, State};
+handle_call(drain, _From, State = #pstate { fetched_count = Count,
+                                            target_count = Count,
+                                            msg_buf = MsgBuf,
+                                            buf_length = Length }) ->
+    {stop, normal, {MsgBuf, Length, finished}, State};
+handle_call(drain, _From, State = #pstate { msg_buf = MsgBuf,
+                                            buf_length = Length }) ->
+    {reply, {MsgBuf, Length, continuing},
+     State #pstate { msg_buf = queue:new(), buf_length = 0 }};
+handle_call(drain_and_stop, _From, State = #pstate { buf_length = 0 }) ->
+    {stop, normal, empty, State};
+handle_call(drain_and_stop, _From, State = #pstate { msg_buf = MsgBuf,
+                                                     buf_length = Length }) ->
+    {stop, normal, {MsgBuf, Length}, State}.
 
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(publish_empty, State) ->
+    %% Very odd. This could happen if the queue is deleted or purged
+    %% and the mixed queue fails to shut us down.
+    {noreply, State};
+handle_cast({publish, { Msg = #basic_message {},
+                        _Size, IsDelivered, AckTag, _Remaining }},
+            State = #pstate { fetched_count = Fetched, target_count = Target,
+                              msg_buf = MsgBuf, buf_length = Length, queue = Q
+                            }) ->
+    ok = rabbit_disk_queue:set_delivered_and_advance(Q, AckTag),
+    ok = case Fetched + 1 == Target of
+             true -> ok;
+             false -> rabbit_disk_queue:prefetch(Q)
+         end,
+    MsgBuf1 = queue:in({Msg, IsDelivered, AckTag}, MsgBuf),
+    {noreply, State #pstate { fetched_count = Fetched + 1,
+                              buf_length = Length + 1,
+                              msg_buf = MsgBuf1 }}.
 
 handle_info(timeout, State) ->
-    {noreply, State, hibernate}.
+    {noreply, State, hibernate};
+handle_info({'DOWN', MRef, process, _Pid, _Reason},
+            State = #pstate { queue_mref = MRef }) ->
+    %% this is the amqqueue_process going down, so we should go down
+    %% too
+    {stop, normal, State}.
 
 terminate(_Reason, _State) ->
     ok.

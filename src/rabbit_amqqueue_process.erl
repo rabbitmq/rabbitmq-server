@@ -857,8 +857,10 @@ handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
 
-handle_info(timeout, State) ->
-    State1 = stop_memory_timer(report_memory(true, State)),
+handle_info(timeout, State = #q { mixed_state = MS }) ->
+    MS1 = rabbit_mixed_queue:maybe_prefetch(MS),
+    State1 =
+        stop_memory_timer(report_memory(true, State #q { mixed_state = MS1 })),
     %% don't call noreply/1 as that'll restart the memory_report_timer
     {noreply, State1, hibernate};
 
