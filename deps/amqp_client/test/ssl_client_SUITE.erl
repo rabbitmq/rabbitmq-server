@@ -78,7 +78,7 @@ hard_error_test() ->
 %% Common Functions
 
 new_connection() ->
-  amqp_connection:start_network("guest", "guest", "localhost", 5673, [ 
+  amqp_connection:start_network("guest", "guest", "localhost", 5671, [ 
           {cacertfile, "examples/certs/ca/cacerts.pem"}, 
           {certfile, "examples/certs/client/cert.pem"}, 
           {keyfile, "examples/certs/client/key.pem"}, 
