@@ -33,8 +33,9 @@
                            channel_max,
                            heartbeat,
                            driver,
+                           port,
                            channels = dict:new(),
-                           sslopts=nil}).
+                           sslopts=nil }).
 
 -record(channel_state, {number,
                         parent_connection,

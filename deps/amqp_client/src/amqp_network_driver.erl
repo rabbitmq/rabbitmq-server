@@ -42,8 +42,8 @@
 % Driver API Methods
 %---------------------------------------------------------------------------
 
-handshake(State = #connection_state{serverhost = Host, sslopts=nil}) ->
-    case gen_tcp:connect(Host, 5672, ?RABBIT_TCP_OPTS) of
+handshake(State = #connection_state{serverhost = Host, port = Port, sslopts=nil}) ->
+    case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
             do_handshake(Sock, State);
         {error, Reason} ->
@@ -51,10 +51,10 @@ handshake(State = #connection_state{serverhost = Host, sslopts=nil}) ->
             exit(Reason)
     end;
 
-handshake(State = #connection_state{serverhost = Host, sslopts=SslOpts}) ->
+handshake(State = #connection_state{serverhost = Host, port = Port, sslopts=SslOpts}) ->
     rabbit_misc:start_applications([crypto, ssl]),
 
-    case gen_tcp:connect(Host, 5673, ?RABBIT_TCP_OPTS) of
+    case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
