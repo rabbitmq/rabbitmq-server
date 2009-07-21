@@ -31,3 +31,10 @@ start_server:
 		RABBITMQ_SERVER_START_ARGS='-pa '"$$(pwd)/$(EBIN_DIR)"' -rabbit \
 			stomp_listeners [{\"0.0.0.0\",61613}] \
 			extra_startup_steps [{\"STOMP-listeners\",rabbit_stomp,kickstart,[]}]'
+
+start-cover: all
+	$(MAKE) -C $(RABBIT_SERVER_SOURCE_ROOT) start-cover \
+		COVER_DIR=../rabbitmq-stomp/$(EBIN_DIR)
+
+stop-cover:
+	$(MAKE) -C $(RABBIT_SERVER_SOURCE_ROOT) stop-cover
