@@ -40,6 +40,10 @@
 handshake(ConnectionState = #connection_state{username = User,
                                               password = Pass,
                                               vhostpath = VHostPath}) ->
+    case lists:keymember(rabbit, 1, application:which_applications()) of
+        false -> throw(broker_not_found_in_vm);
+        true  -> ok
+    end,
     UserBin = amqp_util:binary(User),
     PassBin = amqp_util:binary(Pass),
     rabbit_access_control:user_pass_login(UserBin, PassBin),
@@ -72,4 +76,3 @@ do(Writer, Method, Content) ->
 
 handle_broker_close(_State) ->
     ok.
-
