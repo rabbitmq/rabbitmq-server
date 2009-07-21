@@ -42,7 +42,7 @@
          tx_publish/1, tx_commit/3, tx_cancel/1,
          requeue/2, purge/1, delete_queue/1,
          delete_non_durable_queues/1, auto_ack_next_message/1,
-         requeue_next_n/2, prefetch/2, length/1, foldl/3
+         requeue_next_n/2, length/1, foldl/3
         ]).
 
 -export([filesync/0, cache_info/0]).
@@ -280,7 +280,6 @@
 -spec(cache_info/0 :: () -> [{atom(), term()}]).
 -spec(report_memory/0 :: () -> 'ok').
 -spec(set_mode/1 :: ('disk' | 'mixed') -> 'ok').
--spec(prefetch/2 :: (queue_name(), non_neg_integer()) -> 'ok').
 
 -endif.
 
@@ -360,9 +359,6 @@ report_memory() ->
 
 set_mode(Mode) ->
     gen_server2:cast(?SERVER, {set_mode, Mode}).
-
-prefetch(Q, Count) ->
-    gen_server2:pcast(?SERVER, -1, {prefetch, Q, Count}).
 
 %% ---- GEN-SERVER INTERNAL API ----
 
@@ -455,7 +451,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %% ets_bytes_per_record otherwise.
     ok = rabbit_queue_mode_manager:report_memory(self(), 0, false),
     ok = report_memory(false, State2),
-    {ok, State2, {binary, ?HIBERNATE_AFTER_MIN}, 0}.
+    {ok, State2, {binary, ?HIBERNATE_AFTER_MIN}}.
 
 handle_call({deliver, Q}, _From, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, State),
@@ -535,25 +531,18 @@ handle_cast(report_memory, State) ->
     %% call noreply1/2, not noreply/1/2, as we don't want to restart the
     %% memory_report_timer
     %% by unsetting the timer, we force a report on the next normal message
-    noreply1(State #dqstate { memory_report_timer = undefined }, 0);
-handle_cast({prefetch, Q, Count}, State) ->
-    {ok, State1} = internal_prefetch(Q, Count, State),
-    noreply(State1, any). %% set minpri to any
+    noreply1(State #dqstate { memory_report_timer = undefined }).
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
-handle_info({timeout, 0}, State = #dqstate { commit_timer_ref = undefined }) ->
-    %% this is the binary timeout coming back, with minpri = 0
-    %% don't use noreply/1/2 or noreply1/2 as they'll restart the memory timer
-    %% set timeout to 0, and go pick up any low priority messages
-    {noreply, stop_memory_timer(State), 0, any};
-handle_info({timeout, 0}, State) ->
-    %% must have commit_timer set, so timeout was 0, and we're not hibernating
-    noreply(sync_current_file_handle(State));
-handle_info(timeout, State) ->
-    %% no minpri supplied, so it must have been 'any', so go hibernate
+handle_info(timeout, State = #dqstate { commit_timer_ref = undefined }) ->
+    %% this is the binary timeout coming back
+    %% don't use noreply/1 or noreply1/1 as they'll restart the memory timer
     ok = report_memory(true, State),
-    {noreply, State, hibernate, any}.
+    {noreply, stop_memory_timer(State), hibernate};
+handle_info(timeout, State) ->
+    %% must have commit_timer set, so timeout was 0, and we're not hibernating
+    noreply(sync_current_file_handle(State)).
 
 terminate(_Reason, State) ->
     shutdown(State).
@@ -675,36 +664,30 @@ to_ram_disk_mode(State = #dqstate { operation_mode = disk_only,
                      ets_bytes_per_record = undefined }.
 
 noreply(NewState) ->
-    noreply(NewState, 0).
-
-noreply(NewState, MinPri) ->
-    noreply1(start_memory_timer(NewState), MinPri).
+    noreply1(start_memory_timer(NewState)).
 
 noreply1(NewState = #dqstate { on_sync_txns = [],
-                               commit_timer_ref = undefined }, MinPri) ->
-    {noreply, NewState, binary, MinPri};
-noreply1(NewState = #dqstate { commit_timer_ref = undefined }, MinPri) ->
-    {noreply, start_commit_timer(NewState), 0, MinPri};
-noreply1(NewState = #dqstate { on_sync_txns = [] }, MinPri) ->
-    {noreply, stop_commit_timer(NewState), binary, MinPri};
-noreply1(NewState, MinPri) ->
-    {noreply, NewState, 0, MinPri}.
+                               commit_timer_ref = undefined }) ->
+    {noreply, NewState, binary};
+noreply1(NewState = #dqstate { commit_timer_ref = undefined }) ->
+    {noreply, start_commit_timer(NewState), 0};
+noreply1(NewState = #dqstate { on_sync_txns = [] }) ->
+    {noreply, stop_commit_timer(NewState), binary};
+noreply1(NewState) ->
+    {noreply, NewState, 0}.
 
 reply(Reply, NewState) ->
-    reply(Reply, NewState, 0).
-
-reply(Reply, NewState, MinPri) ->
-    reply1(Reply, start_memory_timer(NewState), MinPri).
+    reply1(Reply, start_memory_timer(NewState)).
 
 reply1(Reply, NewState = #dqstate { on_sync_txns = [],
-                                    commit_timer_ref = undefined }, MinPri) ->
-    {reply, Reply, NewState, binary, MinPri};
-reply1(Reply, NewState = #dqstate { commit_timer_ref = undefined }, MinPri) ->
-    {reply, Reply, start_commit_timer(NewState), 0, MinPri};
-reply1(Reply, NewState = #dqstate { on_sync_txns = [] }, MinPri) ->
-    {reply, Reply, stop_commit_timer(NewState), binary, MinPri};
-reply1(Reply, NewState, MinPri) ->
-    {reply, Reply, NewState, 0, MinPri}.
+                                    commit_timer_ref = undefined }) ->
+    {reply, Reply, NewState, binary};
+reply1(Reply, NewState = #dqstate { commit_timer_ref = undefined }) ->
+    {reply, Reply, start_commit_timer(NewState), 0};
+reply1(Reply, NewState = #dqstate { on_sync_txns = [] }) ->
+    {reply, Reply, stop_commit_timer(NewState), binary};
+reply1(Reply, NewState) ->
+    {reply, Reply, NewState, 0}.
 
 form_filename(Name) ->
     filename:join(base_directory(), Name).
@@ -903,23 +886,6 @@ internal_deliver(Q, ReadMsg,
                      {Message, BodySize, Delivered, {MsgId, ReadSeqId},
                       Remaining}
              end, State1}
-    end.
-
-internal_prefetch(Q, Count, State = #dqstate { sequences = Sequences }) ->
-    {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
-    Length = WriteSeqId - ReadSeqId,
-    Count1 = lists:min([Length, Count]),
-    StateN = internal_prefetch(Q, ReadSeqId + Count1 - 1, ReadSeqId, State),
-    {ok, StateN}.
-
-internal_prefetch(_Q, Target, Target, State) ->
-    State;
-internal_prefetch(Q, Target, ReadSeqId, State) ->
-    {ok, _MsgStuff, State1} =
-        internal_read_message(Q, ReadSeqId, true, true, true, State),
-    case cache_is_full(State1) of
-        true -> State1;
-        false -> internal_prefetch(Q, Target, ReadSeqId + 1, State1)
     end.
 
 internal_foldl(Q, Fun, Init, State = #dqstate { sequences = Sequences }) ->

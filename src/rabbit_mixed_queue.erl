@@ -348,17 +348,9 @@ deliver(State = #mqstate { msg_buf = MsgBuf, queue = Q,
     {{Msg, IsDelivered, AckTag, Rem},
      State #mqstate { msg_buf = MsgBuf2, length = Rem }}.
 
-maybe_prefetch(disk, _MsgBuf) ->
-    ok;
-maybe_prefetch(mixed, MsgBuf) ->
-    case queue:peek(MsgBuf) of
-        empty ->
-            ok;
-        {value, {#basic_message {}, _IsDelivered}} ->
-            ok;
-        {value, {Q, Count}} ->
-            rabbit_disk_queue:prefetch(Q, Count)
-    end.
+maybe_prefetch(_, _) ->
+    %% disable just for the time being
+    ok.
 
 remove_noacks(MsgsWithAcks) ->
     lists:foldl(
