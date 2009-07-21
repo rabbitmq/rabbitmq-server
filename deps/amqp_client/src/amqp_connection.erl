@@ -91,12 +91,12 @@ start_network(User, Password, Host, Port, VHost, SslOpts, ProcLink) when is_list
 start_network_link(User, Password, Host, Port) ->
     start_network(User, Password, Host, Port, <<"/">>, true).
 
-start_network_link(User, Password, Host, Port, SslOpts=[{_K,_V}|_T]) -> 
+start_network_link(User, Password, Host, Port, SslOpts) when is_list(SslOpts) -> 
     start_network(User, Password, Host, Port, <<"/">>, SslOpts, true);
 start_network_link(User, Password, Host, Port, VHost) ->
     start_network(User, Password, Host, Port, VHost, true).
 
-start_network_link(User, Password, Host, Port, VHost, SslOpts=[{_K,_V}|_T]) -> 
+start_network_link(User, Password, Host, Port, VHost, SslOpts) when is_list(SslOpts) -> 
     start_network(User, Password, Host, Port, VHost, SslOpts, true).
 
 start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
