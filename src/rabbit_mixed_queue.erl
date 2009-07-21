@@ -164,7 +164,7 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
                 false ->
                     Commit1 = flush_requeue_to_disk_queue
                                 (Q, RequeueCount, Commit),
-                    ok = rabbit_disk_queue:tx_publish(Msg),
+                    ok = rabbit_disk_queue:tx_publish(Msg), %% TODO - this is resetting the delivered flag to false! (well, actually, in the commit, but nevertheless, it's wrong)
                     case PublishCount == ?TO_DISK_MAX_FLUSH_SIZE of
                         true ->
                             ok = flush_messages_to_disk_queue(Q, Commit1),

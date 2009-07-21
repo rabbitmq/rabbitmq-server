@@ -153,7 +153,7 @@
 %%%=========================================================================
 
 -ifdef(use_specs).
--spec behaviour_info(atom()) -> 'undefined' | [{atom(), arity()}].
+-spec behaviour_info(atom()) -> 'undefined' | [{atom(), any()}].
 -endif.
 
 behaviour_info(callbacks) ->
