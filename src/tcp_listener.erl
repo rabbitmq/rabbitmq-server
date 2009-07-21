@@ -68,9 +68,9 @@ init({IPAddress, Port, SocketOpts,
             error_logger:info_msg("started ~s on ~s:~p~n",
                                   [Label, inet_parse:ntoa(LIPAddress), LPort]),
             apply(M, F, A ++ [IPAddress, Port]),
-            {ok, #state{sock=LSock,
+            {ok, #state{sock = LSock,
                         on_startup = OnStartup, on_shutdown = OnShutdown, 
-                        label=Label}};
+                        label = Label}};
         {error, Reason} ->
             error_logger:error_msg(
               "failed to start ~s on ~s:~p - ~p~n",

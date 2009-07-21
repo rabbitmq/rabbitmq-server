@@ -107,13 +107,16 @@ check_tcp_listener_address(NamePrefix, Host, Port) ->
     {IPAddress, Name}.
 
 start_tcp_listener(Host, Port) ->
-    start_listener(Host, Port, "TCP Listener", {?MODULE, start_client, []}).
+    start_listener(Host, Port, "TCP Listener",
+                   {?MODULE, start_client, []}).
 
 start_ssl_listener(Host, Port, SslOpts) ->
-    start_listener(Host, Port, "SSL Listener", {?MODULE, ssl_connection_upgrade, [SslOpts]}).
+    start_listener(Host, Port, "SSL Listener",
+                   {?MODULE, ssl_connection_upgrade, [SslOpts]}).
 
 start_listener(Host, Port, Label, OnConnect) ->
-    {IPAddress, Name} = check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
+    {IPAddress, Name} =
+        check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {Name,
@@ -139,7 +142,6 @@ tcp_listener_started(IPAddress, Port) ->
                      protocol = tcp,
                      host = tcp_host(IPAddress),
                      port = Port}).
-
 
 tcp_listener_stopped(IPAddress, Port) ->
     ok = mnesia:dirty_delete_object(
@@ -172,12 +174,12 @@ ssl_connection_upgrade(SslOpts, Sock) ->
         {ok, SslSock} ->
             rabbit_log:info("upgraded TCP connection from ~s:~p to SSL~n", 
                 [PeerIp, PeerPort]),
-            RabbitSslSock = #ssl_socket{tcp=Sock, ssl=SslSock},
+            RabbitSslSock = #ssl_socket{tcp = Sock, ssl = SslSock},
             start_client(RabbitSslSock);
         {error, Reason} ->
             gen_tcp:close(Sock),
-            rabbit_log:error("failed to upgrade TCP connection from ~s:~p to SSL: ~n~p~n", 
-                [PeerIp, PeerPort, Reason]),
+            rabbit_log:error("failed to upgrade TCP connection from ~s:~p "
+                             "to SSL: ~n~p~n", [PeerIp, PeerPort, Reason]),
             {error, Reason}
     end.
 
