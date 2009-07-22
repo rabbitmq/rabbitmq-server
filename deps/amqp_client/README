@@ -94,29 +94,36 @@ need to specify the path to this directory:
 
     $ make BROKER_DIR=PATH_TO_THE_SERVER
 
-Running the network client tests
---------------------------------
-In order to run the network client, you need to run the RabbitMQ
-server in a separate Erlang process (or use any other compliant AMQP
-server). Start your server as usual.
-
-After you have done this, you can run the unit tests:
+Running the network and direct client tests
+-------------------------------------------
+The direct client has to be run in the same Erlang VM instance as the
+RabbitMQ server. In order to use the makefile to run either the network or the
+direct client tests, you will need to shutdown any other running instance of
+RabbitMQ that you may have on your machine. This is because the Makefile targets
+for running the network or direct tests boot their own instance of RabbitMQ.
+To run these tests, use the either of the following targets:
 
     $ make test_network
-
-To get more examples of the API, look at the functions in the
-test_util module.
-
-Running the direct client tests
--------------------------------
-The direct client has to be run in the same Erlang VM instance as the
-RabbitMQ server. In order to use the makefile to run the direct client tests,
-you will need to shutdown any other running instance of RabbitMQ that you may
-have on your machine. This is because the Makefile target for running the
-direct tests boots its own instance of RabbitMQ. To run these tests, use the
-following target.
-
     $ make test_direct
+
+Or to run both:
+
+    $ make all_tests
+
+The network client test can also be run from a separate Erlang VM instance from
+RabbitMQ server. You can start an instance of the server and then, in the
+rabbitmq-erlang-client folder, type
+
+    rabbitmq-erlang-client $ make compile_tests
+    rabbitmq-erlang-client $ make run
+    erl -pa ebin rabbitmq_server/ebin tests
+    Erlang (BEAM) emulator version 5.6.5 [source] [64-bit] [smp:4] \
+    [async-threads:0] [hipe] [kernel-poll:false]
+
+    Eshell V5.6.5  (abort with ^G)
+    1> network_client_SUITE:test().
+
+To get more examples of the API, look at the functions in the test_util module.
 
 Running the channel flow tests
 ------------------------------
@@ -132,20 +139,23 @@ Both tests require that the memory alarms are turned on in the
 server. By default they are turned off. To turn them on, set the
 memory_alarms flag in the rabbit.app config file.
 
+First of all, in the *rabbitmq-erlang-client directory*, type
+
+    rabbitmq-erlang-client $ make compile_tests
+
+to make sure test modules are compiled.
+
 Because the unit test accesses memsup directly, it needs to use the
 direct API and hence needs to run in the same VM as the server. To do
-this from the rabbitmq-erlang-client directory, run the following
-commmand (where SOME_DIRECTORY is some directory where you want mnesia
-to log its files):
+this from the *rabbitmq-erlang-client directory*, type
 
-    $ erl -pa ebin rabbitmq_server/ebin -mnesia dir SOME_DIRECTORY \
-      -boot start_sasl -s rabbit
+    rabbitmq-erlang-client $ make LOG_IN_FILE=false run_with_broker
       
-When that has booted, you need to wait one minute for the memory
+When that has booted, you need to *wait one minute* for the memory
 alarms to become active. After that, you can run the following from
 the Erlang shell:
 
-    1> direct_client_test:test_channel_flow().
+    1> direct_client_SUITE:test_channel_flow().
 
     =INFO REPORT==== 17-Dec-2008::13:39:41 ===
     alarm_handler: {set,{system_memory_high_watermark,[]}}
@@ -160,10 +170,10 @@ network client driver. Whilst it can be run using the direct client,
 it produces log output which makes it difficult to enter in commands
 interactively (which you need to do to see the throttling).
 
-After having booted an instance of the server with alarms handlers
-turned on, run the following in the rabbitmq-erlang-client directory:
+After *having booted* an *instance of the server* with alarms handlers
+turned on, run the following in the *rabbitmq-erlang-client directory*:
 
-    rabbitmq-erlang-client $ erl -pa rabbitmq_server/ebin/ ebin/
+    rabbitmq-erlang-client $ make run
     Erlang (BEAM) emulator version 5.6.3 [source] [smp:2] \
     [async-threads:0][kernel-poll:false]
 
@@ -177,13 +187,13 @@ After having done this, you should see output similar to this:
     Producer (<0.39.0>) has sent about 5000 messages since it started
     Producer (<0.39.0>) has sent about 10000 messages since it started
       
-To throttle the producer, go to the server shell and turn the memory
+To throttle the producer, go to the *server shell* and turn the memory
 limit to some suitably low value:
     
     2> memsup:set_sysmem_high_watermark(0.01).
     ok
     
-Back in the client shell, you should see the following output:
+Back in the *client shell*, you should see the following output:
     .....
     Producer (<0.39.0>) has sent about 235000 messages since it started
     Producer throttling ON
@@ -196,3 +206,52 @@ wake up again:
     Producer (<0.39.0>) has woken up :-)
     Producer (<0.39.0>) has sent about 240000 messages since it started
     .....
+
+Make targets
+------------
+Interesting rabbitmq-erlang-client make targets include
+
+all
+    The default target. Builds the client (does not compile the tests).
+
+run
+    Builds the client and starts an Erlang shell with both the client and the
+    server in the load path.
+
+clean
+    Removes build products and wipes all files produced by any other
+    rabbitmq-erlang-client make targets or client errors.
+
+run_with_broker
+    Same as run, except that this make target also runs the broker when starting
+    the Erlang shell.
+
+dialyze
+    Analyses the client source code with dialyzer. Uses PLT file from default
+    location: ~/.dialyzer_plt. Use
+
+        $ make PLT=/path/to/plt dialyze
+
+    to override this. Add broker to PLT beforehand, otherwise you will a lot
+    of 'unknown function' warnings. See add_broker_to_plt make target.
+
+dialyze_all
+    Same as dialyze, except that this also analyses tests source code.
+
+add_broker_to_plt
+    Adds broker .beam files to default plt. Use
+
+        $ make PLT=/path/to/plt add_broker_to_plt
+
+    to override default plt location ( ~/.dialyzer_plt ).
+
+all_tests
+    Compiles client and client tests source code and runs network_client_SUITE
+    and direct_client_SUITE tests. During the testing, this make target runs an
+    instance of the broker, so make sure there is no other instance running.
+
+all_tests_coverage
+    Same as all_tests, except that the tests are run in coverage mode.
+
+source_tarball
+    Creates tarball of all the client source code.

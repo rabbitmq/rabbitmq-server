@@ -25,8 +25,8 @@
 
 -module(amqp_direct_driver).
 
--include_lib("rabbitmq_server/include/rabbit.hrl").
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
@@ -40,6 +40,10 @@
 handshake(ConnectionState = #connection_state{username = User,
                                               password = Pass,
                                               vhostpath = VHostPath}) ->
+    case lists:keymember(rabbit, 1, application:which_applications()) of
+        false -> throw(broker_not_found_in_vm);
+        true  -> ok
+    end,
     UserBin = amqp_util:binary(User),
     PassBin = amqp_util:binary(Pass),
     rabbit_access_control:user_pass_login(UserBin, PassBin),
@@ -72,4 +76,3 @@ do(Writer, Method, Content) ->
 
 handle_broker_close(_State) ->
     ok.
-

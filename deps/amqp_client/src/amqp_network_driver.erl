@@ -25,8 +25,8 @@
 
 -module(amqp_network_driver).
 
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
--include_lib("rabbitmq_server/include/rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
 -include("amqp_client.hrl").
 
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
@@ -40,8 +40,8 @@
 % Driver API Methods
 %---------------------------------------------------------------------------
 
-handshake(State = #connection_state{serverhost = Host}) ->
-    case gen_tcp:connect(Host, 5672, [binary, {packet, 0}, {active, false},
+handshake(State = #connection_state{serverhost = Host, port = Port}) ->
+    case gen_tcp:connect(Host, Port, [binary, {packet, 0}, {active, false},
                                       {nodelay, true}]) of
         {ok, Sock} ->
             ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
@@ -140,9 +140,7 @@ network_handshake(Writer,
     %% What happens if the following command reaches the server
     %% before the tune ok?
     %% Or doesn't get sent at all?
-    ConnectionOpen = #'connection.open'{virtual_host = VHostPath,
-                                        capabilities = <<"">>,
-                                        insist = false },
+    ConnectionOpen = #'connection.open'{virtual_host = VHostPath},
     do(Writer, ConnectionOpen),
     #'connection.open_ok'{} = recv(),
     %% TODO What should I do with the KnownHosts?
@@ -158,8 +156,7 @@ start_ok(#connection_state{username = Username, password = Password}) ->
                             {<<"platform">>, longstr, <<"Erlang">>}
                            ],
            mechanism = <<"AMQPLAIN">>,
-           response = rabbit_binary_generator:generate_table(LoginTable),
-           locale = <<"en_US">>}.
+           response = rabbit_binary_generator:generate_table(LoginTable)}.
 
 start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),

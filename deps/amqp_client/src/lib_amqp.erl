@@ -25,17 +25,20 @@
 
 -module(lib_amqp).
 
--include_lib("rabbitmq_server/include/rabbit.hrl").
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
+-include_lib("rabbit.hrl").
+-include_lib("rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -compile(export_all).
 
 start_connection() ->
-    amqp_connection:start("guest", "guest").
+    amqp_connection:start_direct("guest", "guest").
 
 start_connection(Host) ->
-    amqp_connection:start("guest", "guest", Host).
+    start_connection(Host, ?PROTOCOL_PORT).
+
+start_connection(Host, Port) ->
+    amqp_connection:start_network("guest", "guest", Host, Port).
 
 start_channel(Connection) ->
     amqp_connection:open_channel(Connection).
@@ -45,18 +48,11 @@ declare_exchange(Channel, X) ->
 
 declare_exchange(Channel, X, Type) ->
     ExchangeDeclare = #'exchange.declare'{exchange = X,
-                                          type = Type,
-                                          passive = false,
-                                          durable = false,
-                                          auto_delete = false,
-                                          internal = false,
-                                          nowait = false,
-                                          arguments = []},
+                                          type = Type},
     amqp_channel:call(Channel, ExchangeDeclare).
 
 delete_exchange(Channel, X) ->
-    ExchangeDelete = #'exchange.delete'{exchange = X,
-                                        if_unused = false, nowait = false},
+    ExchangeDelete = #'exchange.delete'{exchange = X},
     #'exchange.delete_ok'{} = amqp_channel:call(Channel, ExchangeDelete).
 
 %%---------------------------------------------------------------------------
@@ -88,8 +84,7 @@ publish_internal(Fun, Channel, X, RoutingKey,
                  Payload, Mandatory, Properties) ->
     BasicPublish = #'basic.publish'{exchange = X,
                                     routing_key = RoutingKey,
-                                    mandatory = Mandatory,
-                                    immediate = false},
+                                    mandatory = Mandatory},
     {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
     Content = #content{class_id = ClassId,
                        properties = Properties,
@@ -152,14 +147,13 @@ subscribe(Channel, Q, Consumer, Tag) ->
 subscribe(Channel, Q, Consumer, Tag, NoAck) ->
     BasicConsume = #'basic.consume'{queue = Q,
                                     consumer_tag = Tag,
-                                    no_local = false, no_ack = NoAck,
-                                    exclusive = false, nowait = false},
+                                    no_ack = NoAck},
     #'basic.consume_ok'{consumer_tag = ConsumerTag} =
         amqp_channel:subscribe(Channel, BasicConsume, Consumer),
     ConsumerTag.
 
 unsubscribe(Channel, Tag) ->
-    BasicCancel = #'basic.cancel'{consumer_tag = Tag, nowait = false},
+    BasicCancel = #'basic.cancel'{consumer_tag = Tag},
     #'basic.cancel_ok'{} = amqp_channel:call(Channel, BasicCancel),
     ok.
 
@@ -180,10 +174,7 @@ declare_queue(Channel, QueueDeclare = #'queue.declare'{}) ->
 declare_queue(Channel, Q) ->
     %% TODO Specifying these defaults is unecessary - this is already taken
     %% care of in the spec file
-    QueueDeclare = #'queue.declare'{queue = Q,
-                                    passive = false, durable = false,
-                                    exclusive = false, auto_delete = false,
-                                    nowait = false, arguments = []},
+    QueueDeclare = #'queue.declare'{queue = Q},
     declare_queue(Channel, QueueDeclare).
 
 %% Creates a queue that is exclusive and auto-delete
@@ -206,16 +197,12 @@ set_prefetch_count(Channel, Prefetch) ->
 %%---------------------------------------------------------------------------
 
 delete_queue(Channel, Q) ->
-    QueueDelete = #'queue.delete'{queue = Q,
-                                  if_unused = false,
-                                  if_empty = false,
-                                  nowait = false},
+    QueueDelete = #'queue.delete'{queue = Q},
     #'queue.delete_ok'{} = amqp_channel:call(Channel, QueueDelete).
 
 bind_queue(Channel, X, Q, Binding) ->
     QueueBind = #'queue.bind'{queue = Q, exchange = X,
-                              routing_key = Binding,
-                              nowait = false, arguments = []},
+                              routing_key = Binding},
     #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind).
 
 unbind_queue(Channel, X, Q, Binding) ->
