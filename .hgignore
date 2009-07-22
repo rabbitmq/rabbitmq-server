@@ -10,6 +10,7 @@ syntax: regexp
 ^src/rabbit_framing.erl$
 ^rabbit.plt$
 ^ebin/rabbit.app$
+^ebin/rabbit.rel$
 
 ^packaging/RPMS/Fedora/(BUILD|RPMS|SOURCES|SPECS|SRPMS)$
 ^packaging/debs/Debian/rabbitmq-server_.*\.(dsc|(diff|tar)\.gz|deb|changes)$
