@@ -11,6 +11,9 @@ syntax: regexp
 ^rabbit.plt$
 ^ebin/rabbit.app$
 ^ebin/rabbit.rel$
+^ebin/rabbit.boot$
+^ebin/rabbit.script$
+^plugins/
 
 ^packaging/RPMS/Fedora/(BUILD|RPMS|SOURCES|SPECS|SRPMS)$
 ^packaging/debs/Debian/rabbitmq-server_.*\.(dsc|(diff|tar)\.gz|deb|changes)$
