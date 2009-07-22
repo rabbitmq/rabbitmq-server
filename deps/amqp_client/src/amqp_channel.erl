@@ -39,7 +39,6 @@
 -export([register_direct_peer/2]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
--export([signal_closing/1, is_waiting/1]).
 
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
@@ -118,20 +117,6 @@ register_return_handler(Channel, ReturnHandler) ->
 %% Registers a handler to deal with flow control
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
-
-
-%%---------------------------------------------------------------------------
-%% Closing the connection
-%%---------------------------------------------------------------------------
-
-%% Signal close; will stop accepting RPCs and write requests
-signal_closing(Channel) ->
-    gen_server:call(Channel, {signal_closing}).
-
-%% Returns writer status
-is_waiting(Channel) ->
-    gen_server:call(Channel, {is_waiting}).
-
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -287,15 +272,6 @@ handle_method(Method, Content, State) ->
 
 init([InitialState]) ->
     {ok, InitialState}.
-
-%% See if the writer is in waiting state
-handle_call({is_waiting}, _From,  State = #channel_state{writer_pid = Writer}) ->
-    {reply, erlang:process_info(Writer, status) =:= {status, waiting}, State};
-
-%% Raise closing flag
-handle_call({signal_closing}, _From, State) ->
-    NewState = State#channel_state{closing = true},
-    {reply, ok, NewState};
 
 %% Standard implementation of top half of the call/2 command
 %% Do not accept any further RPCs when the channel is about to close
