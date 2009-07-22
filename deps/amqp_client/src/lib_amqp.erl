@@ -31,6 +31,10 @@
 
 -compile(export_all).
 
+%% The default timeout in seconds to wait for a connection to flush the
+%% channels when closing.
+-define(CONNECTION_CLOSING_TIMEOUT, 3).
+
 start_connection() ->
     amqp_connection:start_direct("guest", "guest").
 
@@ -104,7 +108,7 @@ close_channel(Channel) ->
 
 
 close_connection(Connection) ->
-    close_connection(Connection, 3000).
+    close_connection(Connection, ?CONNECTION_CLOSING_TIMEOUT * 1000).
 
 close_connection(Connection, Timeout) ->
     ConnectionClose = #'connection.close'{reply_code = 200,

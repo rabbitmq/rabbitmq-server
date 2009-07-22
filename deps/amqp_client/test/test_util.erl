@@ -309,10 +309,11 @@ basic_reject_test(Connection) ->
 %% but didn't allow further adding to the buffer).
 %% First connection is used for sending messages, second connection is used to
 %% get the messages.
-pub_and_close_test(Connection1, Connection2) ->
+pub_and_close_test() ->
     X = uuid(), Q = uuid(), Key = uuid(),
     Payload = <<"eggs">>, NMessages = 50000,
     SpamPayload = <<"spam">>, NSpamMessages = 300000,
+    Connection1 = lib_amqp:start_connection("localhost"),
     Channel1 = lib_amqp:start_channel(Connection1),
     Channel2 = lib_amqp:start_channel(Connection1),
     lib_amqp:declare_exchange(Channel1, X),
@@ -326,6 +327,7 @@ pub_and_close_test(Connection1, Connection2) ->
     %% Close connection without closing channels
     lib_amqp:close_connection(Connection1, infinity),
     %% Get sent messages back and count them
+    Connection2 = lib_amqp:start_connection("localhost"),
     Channel3 = lib_amqp:start_channel(Connection2),
     lib_amqp:subscribe(Channel3, Q, self(), true),
     ConsumeRes = pc_consumer_loop(Channel3, Payload, SpamPayload, NMessages,
@@ -346,12 +348,8 @@ pc_assert_consume_res_ok(ConsumeRes = {{_, NRemaining}, {_, NSpamRemaining}}) ->
 
 pc_producer_loop(_, _, _, _, 0) -> ok;
 pc_producer_loop(Channel, X, Key, Payload, NRemaining) ->
-    NewNRemaining =
-        case lib_amqp:publish(Channel, X, Key, Payload) of
-            ok -> NRemaining - 1;
-            _  -> NRemaining
-        end,
-    pc_producer_loop(Channel, X, Key, Payload, NewNRemaining).
+    ?assertMatch(ok, lib_amqp:publish(Channel, X, Key, Payload)),
+    pc_producer_loop(Channel, X, Key, Payload, NRemaining - 1).
 
 pc_spammer_loop(_, _, _, _, 0) -> ok;
 pc_spammer_loop(Channel, X, Key, Payload, NRemaining) ->

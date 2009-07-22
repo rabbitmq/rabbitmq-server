@@ -65,12 +65,6 @@ teardown_test() ->
 rpc_test() ->
     test_util:rpc_test(new_connection()).
 
-pub_and_close_test_() ->
-    {timeout, 60,
-        fun() ->
-            test_util:pub_and_close_test(new_connection(), new_connection())
-        end}.
-
 %%---------------------------------------------------------------------------
 %% Negative Tests
 

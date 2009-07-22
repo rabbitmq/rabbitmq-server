@@ -37,7 +37,7 @@
 -export([start_direct_link/2]).
 -export([start_network/4, start_network/5]).
 -export([start_network_link/4, start_network_link/5]).
--export([close/2]).
+-export([close/3]).
 -export([signal_back_when_no_channel_writing/2]).
 
 %%---------------------------------------------------------------------------
@@ -100,9 +100,6 @@ open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
     gen_server:call(ConnectionPid,
                     {open_channel, ChannelNumber,
                      amqp_util:binary(OutOfBand)}, infinity).
-
-close(ConnectionPid, Close) ->
-    close(ConnectionPid, Close, infinity).
 
 %% Closes the AMQP connection. Timeout can be an int or the atom 'infinity'
 close(ConnectionPid, Close, Timeout) ->
@@ -217,6 +214,9 @@ close_connection(Close, From, State = #connection_state{driver = Driver},
     Driver:close_connection(Close, From, State).
 
 signal_back_when_no_channel_writing([], Parent) ->
+    %% Signaling back the parent could fail if waiting for the channels to flush
+    %% times out and the connection closes before we get to send
+    %% no_channel_writing
     catch Parent ! no_channel_writing;
 
 signal_back_when_no_channel_writing(ChannelPids = [ChanHead | ChanRem],
@@ -231,6 +231,7 @@ signal_back_when_no_channel_writing(ChannelPids = [ChanHead | ChanRem],
         Pass ->
             signal_back_when_no_channel_writing(ChanRem, Parent);
         true ->
+            %% Sleep a bit to reduce overhead
             timer:sleep(3),
             signal_back_when_no_channel_writing(ChannelPids, Parent)
     end.

@@ -98,10 +98,12 @@ run_with_broker: compile
 	$(ERL_WITH_BROKER)
 
 
-all_tests: compile compile_tests
+all_tests: test_suites test_pub_and_close
+
+test_suites: compile compile_tests
 	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),direct_client_SUITE:test(),halt()'
 
-all_tests_coverage: compile compile_tests
+test_suites_coverage: compile compile_tests
 	$(ERL_WITH_BROKER) -eval 'rabbit_misc:enable_cover(),network_client_SUITE:test(),direct_client_SUITE:test(),rabbit_misc:report_cover(),halt()'
 
 test_network: compile compile_tests
@@ -115,6 +117,9 @@ test_direct: compile compile_tests
 
 test_direct_coverage: compile compile_tests
 	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test_coverage(),halt().'
+
+test_pub_and_close: compile compile_tests
+	$(ERL_WITH_BROKER) -eval 'eunit:test([{timeout, 60, {test_util, pub_and_close_test}}]),halt().'
 
 
 clean:
