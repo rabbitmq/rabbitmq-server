@@ -3,31 +3,50 @@
 -include_lib("kernel/include/file.hrl").
 -include_lib("stdlib/include/zip.hrl").
 
--export([start/1, stop/0, loop/2]).
+-export([start/1, stop/0, loop/1]).
 -export([install_static/1]).
+-export([register_docroot/2]).
+
+-define(DOCROOT, mod_http_docroot_mapping).
+
 
 %% ----------------------------------------------------------------------
 %% HTTPish API
 %% ----------------------------------------------------------------------
 
 start(_Options) ->
-    {ok, DocRoot} = application:get_env(docroot),
+    case ets:info(?DOCROOT) of
+        undefined ->
+            ets:new(?DOCROOT, [public, named_table]);
+        _ ->
+            ok
+    end,
     {ok, Port} = application:get_env(port),
     Loop = fun (Req) ->
-                   ?MODULE:loop(Req, DocRoot)
+                   ?MODULE:loop(Req)
            end,
     mochiweb_http:start([{name, ?MODULE}, {port, Port}, {loop, Loop}]).
 
 stop() ->
     mochiweb_http:stop(?MODULE).
 
-loop(Req, DocRoot) ->
+loop(Req) ->
     "/" ++ Path = Req:get(path),
     case Req:get(method) of
         Method when Method =:= 'GET'; Method =:= 'HEAD' ->
-            case Path of
-                _ ->
-                    Req:serve_file(Path, DocRoot)
+            %% TODO -  this is a bit hacky
+            [Mapping, RelativePath] =
+                case filename:split(Path) of
+                    [H|[]] -> [H, []];
+                    [H|T]  -> [H, filename:join(T)]
+                end,
+            case ets:lookup(?DOCROOT, Mapping) of
+                [{_,DocRoot}] ->
+                    Req:serve_file(RelativePath, DocRoot);
+                [] ->
+                    error_logger:error_msg("Lookup failed for ~p~n",
+                                           [Mapping]),
+                    Req:not_found()
             end;
         'POST' ->
             case rfc4627_jsonrpc_mochiweb:handle("/rpc", Req) of
@@ -43,6 +62,9 @@ loop(Req, DocRoot) ->
 %% ----------------------------------------------------------------------
 %% NON-HTTP API - maybe this should go in some other module
 %% ----------------------------------------------------------------------
+
+register_docroot(Context, Path) ->
+    ets:insert(?DOCROOT, {Context, Path}).
 
 %% The idea here is for mod_http to put all static content into this
 %% directory when an application deploys a zip file containing static content

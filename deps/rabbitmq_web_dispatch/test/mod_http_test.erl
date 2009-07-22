@@ -6,7 +6,7 @@
 -export([start/2,stop/1]).
 
 start(_Type, _StartArgs) ->
-    mod_http_web:install_static(?MODULE),    
+    mod_http_web:register_docroot("mod_http_test","priv/www"),
     {ok, Pid} = gen_server:start_link(mod_http_test_server, [], []),
     rfc4627_jsonrpc:register_service
       (Pid,

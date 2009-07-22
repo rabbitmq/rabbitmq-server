@@ -85,7 +85,7 @@ $(DIST_DIR)/$(TEST_PACKAGE_NAME): $(DIST_DIR) $(TEST_TARGETS)
 	cp -r $(PRIV_DIR) $(DIST_DIR)/$(TEST_PACKAGE)
 	(cd $(DIST_DIR); zip -r $(TEST_PACKAGE_NAME) $(TEST_PACKAGE))
 
-package: $(DIST_DIR)/$(PACKAGE_NAME)
+package: distclean $(DIST_DIR)/$(PACKAGE_NAME)
 
 package_tests: $(DIST_DIR)/$(TEST_PACKAGE_NAME)
 
