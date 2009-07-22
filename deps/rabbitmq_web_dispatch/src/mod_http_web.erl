@@ -5,7 +5,7 @@
 
 -export([start/1, stop/0, loop/1]).
 -export([install_static/1]).
--export([register_docroot/2]).
+-export([register_docroot/3]).
 
 -define(DOCROOT, mod_http_docroot_mapping).
 
@@ -63,8 +63,10 @@ loop(Req) ->
 %% NON-HTTP API - maybe this should go in some other module
 %% ----------------------------------------------------------------------
 
-register_docroot(Context, Path) ->
-    ets:insert(?DOCROOT, {Context, Path}).
+register_docroot(Context, Module, Path) ->
+    ModulePath = code:which(Module),
+    ModuleRoot = filename:join(filename:dirname(ModulePath), ".."),
+    ets:insert(?DOCROOT, {Context, filename:join(ModuleRoot, Path)}).
 
 %% The idea here is for mod_http to put all static content into this
 %% directory when an application deploys a zip file containing static content
