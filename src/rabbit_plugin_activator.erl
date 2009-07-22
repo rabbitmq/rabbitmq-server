@@ -37,6 +37,7 @@
 -define(DefaultUnpackedPluginDir, "priv/plugins").
 -define(DefaultRabbitEBin, "ebin").
 -define(BaseApps, [kernel, stdlib, sasl, mnesia, os_mon, rabbit]).
+-define(Debug(_F, _V), ok).
 
 %%----------------------------------------------------------------------------
 
@@ -68,7 +69,7 @@ start() ->
 			 AppVersions},
 	
 	% Write it out to ebin/rabbit.rel
-	io:format("Generated rabbit.rel: ~p.~n", [RDesc]),
+	?Debug("Generated rabbit.rel: ~p.~n", [RDesc]),
 	file:write_file(RabbitEBin ++ "/rabbit.rel", io_lib:format("~p.~n", [RDesc])),
 	
 	% Compile the script
