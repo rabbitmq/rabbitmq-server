@@ -77,8 +77,10 @@ RABBITMQ_START_RABBIT=
 
 if [ -f "`dirname $0`/../ebin/rabbit.boot" ]; then
 	RABBITMQ_BOOT_FILE="`dirname $0`/../ebin/rabbit"
+	RABBITMQ_EBIN_PATH=""
 else
 	RABBITMQ_BOOT_FILE=start_sasl
+	RABBITMQ_EBIN_PATH="-pa `dirname $0`/../ebin"
 fi
 
 # we need to turn off path expansion because some of the vars, notably
@@ -87,10 +89,10 @@ fi
 set -f
 
 exec erl \
-    -pa "`dirname $0`/../ebin" \
+	${RABBITMQ_EBIN_PATH} \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
-    -boot $RABBITMQ_BOOT_FILE \
+    -boot ${RABBITMQ_BOOT_FILE} \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \
     -rabbit tcp_listeners '[{"'${RABBITMQ_NODE_IP_ADDRESS}'", '${RABBITMQ_NODE_PORT}'}]' \
