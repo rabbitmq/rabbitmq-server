@@ -11,7 +11,6 @@
   {registered, []},
   {mod, {mod_http_app, []}},
   {env, [
-        {docroot, "priv/www"},
         {port, 8000},
         {production, true}
         ]},

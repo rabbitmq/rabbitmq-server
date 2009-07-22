@@ -2,7 +2,7 @@
  [{description, "mod_http_test"},
   {vsn, "0.01"},
   {modules, [
-	mod_http_test
+                mod_http_test
   ]},
   {registered, []},
   {mod, {mod_http_test, []}},
