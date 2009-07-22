@@ -36,6 +36,8 @@
 
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
 
+-define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
+
 %---------------------------------------------------------------------------
 % Driver API Methods
 %---------------------------------------------------------------------------
@@ -112,11 +114,13 @@ send_frame(Channel, Frame) ->
     ChPid = resolve_receiver(Channel),
     rabbit_framing_channel:process(ChPid, Frame).
 
-recv() ->
+recv(#connection_state{reader_pid = ReaderPid}) ->
     receive
-            {'$gen_cast', {method, Method, _Content}} ->
-            Method
-    after 60000 ->
+        {'$gen_cast', {method, Method, _Content}} ->
+            Method;
+        {'EXIT', ReaderPid, Reason} ->
+            exit({reader_exited, Reason})
+    after ?HANDSHAKE_RECEIVE_TIMEOUT ->
         exit(awaiting_response_from_server_timed_out)
     end.
 
@@ -125,12 +129,12 @@ recv() ->
 %---------------------------------------------------------------------------
 
 network_handshake(Writer,
-                  State = #connection_state{ vhostpath = VHostPath }) ->
-    #'connection.start'{} = recv(),
+                  State = #connection_state{vhostpath = VHostPath}) ->
+    #'connection.start'{} = recv(State),
     do(Writer, start_ok(State)),
     #'connection.tune'{channel_max = ChannelMax,
                        frame_max = FrameMax,
-                       heartbeat = Heartbeat} = recv(),
+                       heartbeat = Heartbeat} = recv(State),
     TuneOk = #'connection.tune_ok'{channel_max = ChannelMax,
                                    frame_max = FrameMax,
                                    heartbeat = Heartbeat},
@@ -142,7 +146,7 @@ network_handshake(Writer,
     %% Or doesn't get sent at all?
     ConnectionOpen = #'connection.open'{virtual_host = VHostPath},
     do(Writer, ConnectionOpen),
-    #'connection.open_ok'{} = recv(),
+    #'connection.open_ok'{} = recv(State),
     %% TODO What should I do with the KnownHosts?
     State#connection_state{channel_max = ChannelMax, heartbeat = Heartbeat}.
 
