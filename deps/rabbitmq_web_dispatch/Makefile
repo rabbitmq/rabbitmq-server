@@ -1,3 +1,5 @@
+include ../include.mk
+
 PACKAGE=mod_http
 PACKAGE_NAME=$(PACKAGE).ez
 
@@ -5,11 +7,7 @@ JSON_APP=rfc4627_jsonrpc
 JSON_APP_ARCHIVE=$(JSON_APP).ez
 JSON_DIR=../erlang-rfc4627
 
-EBIN_DIR=ebin
-INCLUDE_DIR=include
-SOURCE_DIR=src
 PRIV_DIR=priv
-DIST_DIR=dist
 
 TEST_DIR=test
 TEST_EBIN_DIR=test_ebin
@@ -30,12 +28,10 @@ LIB_PACKAGE=mochiweb
 LIB_PACKAGE_DIR=$(LIB_PACKAGE)
 LIB_PACKAGE_NAME=$(LIB_PACKAGE).ez
 
-ERLC_OPTS=-o $(EBIN_DIR) -Wall +debug_info
 TEST_ERLC_OPTS=-o $(TEST_EBIN_DIR) -I $(TEST_INCLUDE_DIR)
 
 ERL=ERL_LIBS=$(DEPS_DIR):$(DIST_DIR):$(JSON_APP) erl
 
-SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES)) $(DEPS_DIR)/$(LIB_PACKAGE_NAME)
 TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_EBIN_DIR)/%.beam, $(TEST_SOURCES))
