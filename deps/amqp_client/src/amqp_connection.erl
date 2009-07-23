@@ -33,8 +33,11 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([open_channel/1, open_channel/3]).
--export([start/2, start/4, start/5, close/2]).
--export([start_link/2, start_link/4, start_link/5]).
+-export([start_direct/2, start_direct/3]).
+-export([start_direct_link/2]).
+-export([start_network/4, start_network/5]).
+-export([start_network_link/4, start_network_link/5]).
+-export([close/2]).
 
 %%---------------------------------------------------------------------------
 %% AMQP Connection API Methods
@@ -42,22 +45,27 @@
 
 %% Starts a direct connection to the Rabbit AMQP server, assuming that
 %% the server is running in the same process space.
-start(User, Password) -> start(User, Password, false).
-start(User, Password, ProcLink) when is_boolean(ProcLink) ->
+start_direct(User, Password) -> start_direct(User, Password, false).
+
+start_direct(User, Password, ProcLink) when is_boolean(ProcLink) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      vhostpath = <<"/">>},
     {ok, Pid} = start_internal(InitialState, amqp_direct_driver, ProcLink),
     Pid.
 
+start_direct_link(User, Password) ->
+    start_direct(User, Password, true).
+
+
 %% Starts a networked conection to a remote AMQP server.
-start(User, Password, Host, Port) ->
-    start(User, Password, Host, Port, <<"/">>, false).
+start_network(User, Password, Host, Port) ->
+    start_network(User, Password, Host, Port, <<"/">>, false).
 
-start(User, Password, Host, Port, VHost) ->
-    start(User, Password, Host, Port, VHost, false).
+start_network(User, Password, Host, Port, VHost) ->
+    start_network(User, Password, Host, Port, VHost, false).
 
-start(User, Password, Host, Port, VHost, ProcLink) ->
+start_network(User, Password, Host, Port, VHost, ProcLink) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      serverhost = Host,
@@ -66,14 +74,11 @@ start(User, Password, Host, Port, VHost, ProcLink) ->
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
 
-start_link(User, Password) ->
-    start(User, Password, true).
+start_network_link(User, Password, Host, Port) ->
+    start_network(User, Password, Host, Port, <<"/">>, true).
 
-start_link(User, Password, Host, Port) ->
-    start(User, Password, Host, Port, <<"/">>, true).
-
-start_link(User, Password, Host, Port, VHost) ->
-    start(User, Password, Host, Port, VHost, true).
+start_network_link(User, Password, Host, Port, VHost) ->
+    start_network(User, Password, Host, Port, VHost, true).
 
 start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
     gen_server:start_link(?MODULE, [InitialState, Driver], []);
