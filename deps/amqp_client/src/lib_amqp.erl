@@ -35,7 +35,7 @@ start_connection() ->
     amqp_connection:start_direct("guest", "guest").
 
 start_connection(Host) ->
-    start_connection(Host, ?PROTOCOL_PORT).
+    amqp_connection:start_network("guest", "guest", Host).
 
 start_connection(Host, Port) ->
     amqp_connection:start_network("guest", "guest", Host, Port).

@@ -44,12 +44,7 @@ non_existent_exchange_test(Connection) ->
 
 hard_error_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
-    try
-        amqp_channel:call(Channel, #'basic.qos'{global = true})
-    catch
-        exit:_ -> ok;
-        _:_    -> exit(did_not_throw_error)
-    end,
+    ?assertExit(_, amqp_channel:call(Channel, #'basic.qos'{global = true})),
     wait_for_death(Channel),
     wait_for_death(Connection).
 
@@ -58,3 +53,18 @@ wait_for_death(Pid) ->
     receive {'DOWN', Ref, process, Pid, _Reason} -> ok
     after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
     end.
+
+non_existent_user_test() ->
+    ?assertError(_, amqp_connection:start_network("bum_user", "bum_password",
+                                                  "localhost")).
+
+invalid_password_test() ->
+    ?assertError(_, amqp_connection:start_network("guest", "bum_password",
+                                                  "localhost")).
+
+non_existent_vhost_test() ->
+    ?assertError(_, amqp_connection:start_network("guest", "guest", "localhost",
+                                                  <<"bum_vhost">>)).
+
+no_perms_user_test() ->
+    rabbit_control:action(list_users, rabbit, [], {io, format}).

@@ -74,6 +74,15 @@ non_existent_exchange_test() ->
 hard_error_test() ->
     negative_test_util:hard_error_test(new_connection()).
 
+non_existent_user_test() ->
+    negative_test_util:non_existent_user_test().
+
+invalid_password_test() ->
+    negative_test_util:invalid_password_test().
+
+non_existent_vhost_test() ->
+    negative_test_util:non_existent_vhost_test().
+
 %%---------------------------------------------------------------------------
 %% Common Functions
 

@@ -35,8 +35,8 @@
 -export([open_channel/1, open_channel/3]).
 -export([start_direct/2, start_direct/3]).
 -export([start_direct_link/2]).
--export([start_network/4, start_network/5]).
--export([start_network_link/4, start_network_link/5]).
+-export([start_network/3, start_network/4, start_network/5]).
+-export([start_network_link/3, start_network_link/4, start_network_link/5]).
 -export([close/2]).
 
 %%---------------------------------------------------------------------------
@@ -59,8 +59,14 @@ start_direct_link(User, Password) ->
 
 
 %% Starts a networked conection to a remote AMQP server.
-start_network(User, Password, Host, Port) ->
-    start_network(User, Password, Host, Port, <<"/">>, false).
+start_network(User, Password, Host) ->
+    start_network(User, Password, Host, ?PROTOCOL_PORT).
+
+start_network(User, Password, Host, Port) when is_number(Port) ->
+    start_network(User, Password, Host, Port, <<"/">>, false);
+
+start_network(User, Password, Host, VHost) ->
+    start_network(User, Password, Host, ?PROTOCOL_PORT, VHost).
 
 start_network(User, Password, Host, Port, VHost) ->
     start_network(User, Password, Host, Port, VHost, false).
@@ -74,8 +80,14 @@ start_network(User, Password, Host, Port, VHost, ProcLink) ->
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
 
-start_network_link(User, Password, Host, Port) ->
-    start_network(User, Password, Host, Port, <<"/">>, true).
+start_network_link(User, Password, Host) ->
+    start_network(User, Password, Host, ?PROTOCOL_PORT, <<"/">>, true).
+
+start_network_link(User, Password, Host, Port) when is_number(Port) ->
+    start_network(User, Password, Host, Port, <<"/">>, true);
+
+start_network_link(User, Password, Host, VHost) ->
+    start_network(User, Password, Host, ?PROTOCOL_PORT, VHost, true).
 
 start_network_link(User, Password, Host, Port, VHost) ->
     start_network(User, Password, Host, Port, VHost, true).
