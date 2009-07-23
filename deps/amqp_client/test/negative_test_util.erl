@@ -65,6 +65,3 @@ invalid_password_test() ->
 non_existent_vhost_test() ->
     ?assertError(_, amqp_connection:start_network("guest", "guest", "localhost",
                                                   <<"bum_vhost">>)).
-
-no_perms_user_test() ->
-    rabbit_control:action(list_users, rabbit, [], {io, format}).
