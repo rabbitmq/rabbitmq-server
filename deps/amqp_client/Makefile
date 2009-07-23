@@ -31,7 +31,6 @@ SOURCE_DIR=src
 DIST_DIR=rabbitmq-erlang-client
 PACKAGE=amqp_client
 PACKAGE_NAME=$(PACKAGE).ez
-BROKER_PLUGINS_LIB_DIR=$(BROKER_DIR)/plugins/lib
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
@@ -146,5 +145,3 @@ package: clean $(DIST_DIR) $(TARGETS)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
 	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
-install: package
-	cp $(DIST_DIR)/$(PACKAGE_NAME) $(BROKER_PLUGINS_LIB_DIR)
