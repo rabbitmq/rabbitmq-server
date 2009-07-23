@@ -36,8 +36,9 @@
 -define(DefaultPluginDir, "plugins").
 -define(DefaultUnpackedPluginDir, "priv/plugins").
 -define(DefaultRabbitEBin, "ebin").
--define(BaseApps, [kernel, stdlib, sasl, mnesia, os_mon, rabbit]).
+-define(BaseApps, [rabbit]).
 -define(Debug(_F, _V), ok).
+-define(Error(F, V), io:format("ERROR: " ++ F, V)).
 
 %%----------------------------------------------------------------------------
 
@@ -57,8 +58,13 @@ start() ->
 	RequiredApps = ?BaseApps ++ find_plugins(PluginDir) ++ find_plugins(UnpackedPluginDir),
 	
 	% Build the entire set of dependencies - this will load the applications along the way
-	AllApps = sets:to_list(fold_dependencies(undefined, RequiredApps)),
-	
+	AllApps = case catch sets:to_list(expand_dependencies(RequiredApps)) of
+		{unknown_app, _} -> 
+			?Error("Failed to expand dependencies.~n", []),
+			halt(1);
+		AppList ->
+			AppList
+	end,
 	AppVersions = [determine_version(App) || App <- AllApps],
 	{value, {rabbit, RabbitVersion}} = lists:keysearch(rabbit, 1, AppVersions),
 	
@@ -136,22 +142,26 @@ prepare_dir_plugin(PluginAppDescFn) ->
 	NameTokens = string:tokens(PluginAppDescFn,"/."),
 	PluginNameString = lists:nth(length(NameTokens) - 1, NameTokens),
 	list_to_atom(PluginNameString).
-	
-fold_dependencies(App, []) ->
-	sets:from_list([App]);
-fold_dependencies(App, AppList) ->
-	lists:foldl(fun(ChildApp, AccSet) ->
-					case application:load(ChildApp) of
-						ok -> ok;
-						{error, {already_loaded, _}} -> ok;
-						X -> io:format("Failed to load ~p: ~p~n", [ChildApp, X])
-					end,
-					{ok, Required} = application:get_key(ChildApp, applications),
-					DepSet = fold_dependencies(ChildApp, Required),
-					sets:union(AccSet, DepSet)
-				end,
-				case App of 
-					undefined -> sets:new();
-					_ 		  -> sets:from_list([App])
-				end,
-				AppList).
+
+expand_dependencies(Pending) ->
+	expand_dependencies(sets:new(), Pending).
+expand_dependencies(Current, []) ->
+	Current;
+expand_dependencies(Current, [Next|Rest]) ->
+	case sets:is_element(Next, Current) of
+		true ->
+			expand_dependencies(Current, Rest);
+		false ->
+			case application:load(Next) of
+				ok -> 
+					ok;
+				{error, {already_loaded, _}} -> 
+					ok;
+				X -> 
+					?Error("Failed to load ~s: ~p~n", [Next, X]),
+					throw({unknown_app, Next})
+			end,
+			{ok, Required} = application:get_key(Next, applications),
+			Unique = [A || A <- Required, not(sets:is_element(A, Current))],
+			expand_dependencies(sets:add_element(Next, Current), Rest ++ Unique)
+	end.
