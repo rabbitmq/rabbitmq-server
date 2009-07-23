@@ -186,8 +186,8 @@ start(normal, []) ->
 
                         {ok, SslOpts} = application:get_env(ssl_options),
 
-                        [rabbit_networking:start_ssl_listener(Host, Port, SslOpts) ||
-                            {Host, Port} <- SslListeners],
+                        [rabbit_networking:start_ssl_listener
+                         (Host, Port, SslOpts) || {Host, Port} <- SslListeners],
                         ok
                 end
         end}]
