@@ -129,14 +129,31 @@ assert_dir(Dir) ->
             ok = filelib:ensure_dir(Dir),
             ok = file:make_dir(Dir)
     end.
-	
+delete_dir(Dir) ->
+	case filelib:is_dir(Dir) of
+		true ->
+			case file:list_dir(Dir) of
+				{ok, Files} ->
+					Paths = [Dir ++ "/" ++ F || F <- Files],
+					[delete_dir(F) || F <- Paths, filelib:is_dir(F)],
+					[file:delete(F) || F <- Paths, filelib:is_file(F)]
+			end,
+			ok = file:del_dir(Dir);
+		false ->
+			ok
+	end.
+
 unpack_ez_plugins(PluginSrcDir, PluginDestDir) ->
+	% Eliminate the contents of the destination directory
+	delete_dir(PluginDestDir),
+	
 	assert_dir(PluginDestDir),
 	[unpack_ez_plugin(PluginName, PluginDestDir) || PluginName <- filelib:wildcard(PluginSrcDir ++ "/*.ez")].
 	
 unpack_ez_plugin(PluginFn, PluginDestDir) ->
 	zip:unzip(PluginFn, [{cwd, PluginDestDir}]),
 	ok.
+
 
 find_plugins(PluginDir) ->
 	[prepare_dir_plugin(PluginName) || PluginName <- filelib:wildcard(PluginDir ++ "/*/ebin/*.app")].
