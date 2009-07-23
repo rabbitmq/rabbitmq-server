@@ -28,7 +28,15 @@ export INCLUDE_DIR=include
 export INCLUDE_SERV_DIR=$(BROKER_SYMLINK)/include
 TEST_DIR=test
 SOURCE_DIR=src
-DIST_DIR=rabbitmq-erlang-client
+DIST_DIR=dist
+
+DEPS=rabbit_writer rabbit_reader rabbit_framing rabbit_framing_channel \
+     rabbit_binary_parser rabbit_binary_generator rabbit_channel \
+     gen_server2 rabbit_misc rabbit_heartbeat
+
+COMMON_PACKAGE=rabbitmq-common
+COMMON_PACKAGE_NAME=$(COMMON_PACKAGE).ez
+
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
@@ -134,3 +142,22 @@ source_tarball:
 	cp -a $(TEST_DIR)/*.erl dist/$(DIST_DIR)/$(TEST_DIR)/
 	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
+
+
+common_package: $(BROKER_SYMLINK)
+	$(MAKE) -C $(BROKER_SYMLINK)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	$(foreach DEP, $(DEPS), \
+        ( cp $(BROKER_SYMLINK)/$(EBIN_DIR)/$(DEP).beam \
+          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
+        );)
+	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
+
+# TODO When bug21990 lands, this target does not need to depend on $(TARGETS)
+test_common_package: common_package $(TARGETS) $(TEST_TARGETS)
+	@echo This target requires that you are already running an instance \
+        of the broker on the localhost.......
+# TODO When bug21190 lands, the non-common modules should be packaged in
+# in their own archive, so we should remove the ebin from the load path
+	ERL_LIBS=$(DIST_DIR) erl -pa ebin test -eval 'network_client_SUITE:test(),halt().'
+
