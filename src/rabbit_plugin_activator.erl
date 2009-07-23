@@ -37,7 +37,12 @@
 -define(DefaultUnpackedPluginDir, "priv/plugins").
 -define(DefaultRabbitEBin, "ebin").
 -define(BaseApps, [rabbit]).
+-ifdef(enable_debug).
+-define(Debug(F, V), io:format("DEBUG: " ++ F, V)).
+-endif.
+-ifndef(enable_debug).
 -define(Debug(_F, _V), ok).
+-endif.
 -define(Error(F, V), io:format("ERROR: " ++ F, V)).
 
 %%----------------------------------------------------------------------------
@@ -50,6 +55,9 @@ start() ->
 	PluginDir = get_env_or_default(plugins_dir, ?DefaultPluginDir),
 	UnpackedPluginDir = get_env_or_default(plugins_expand_dir, ?DefaultUnpackedPluginDir),
 	RabbitEBin = get_env_or_default(rabbit_ebin, ?DefaultRabbitEBin),
+	?Debug("Got Plugin Dir ~p~n", [PluginDir]),
+	?Debug("Got Unpacked Plugin Dir ~p~n", [UnpackedPluginDir]),
+	?Debug("Got Rabbit EBin Dir ~p~n", [RabbitEBin]),
 	
 	% Unpack any .ez plugins
 	unpack_ez_plugins(PluginDir, UnpackedPluginDir),
