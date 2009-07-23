@@ -30,11 +30,11 @@ TEST_DIR=test
 SOURCE_DIR=src
 DIST_DIR=dist
 
-DEPS=rabbit_writer rabbit_reader rabbit_framing rabbit_framing_channel \
-     rabbit_binary_parser rabbit_binary_generator rabbit_channel \
-     gen_server2 rabbit_misc rabbit_heartbeat
+DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
+                                 file:consult("rabbit_common.app"), \
+                                 [io:format("~p ",[M]) || M <- Mods], halt().')
 
-COMMON_PACKAGE=rabbitmq-common
+COMMON_PACKAGE=rabbit_common
 COMMON_PACKAGE_NAME=$(COMMON_PACKAGE).ez
 
 
@@ -147,6 +147,7 @@ source_tarball:
 common_package: $(BROKER_SYMLINK)
 	$(MAKE) -C $(BROKER_SYMLINK)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
 	$(foreach DEP, $(DEPS), \
         ( cp $(BROKER_SYMLINK)/$(EBIN_DIR)/$(DEP).beam \
           $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
