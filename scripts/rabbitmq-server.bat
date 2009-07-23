@@ -70,6 +70,9 @@ if "%RABBITMQ_MNESIA_BASE%"=="" (
 if "%RABBITMQ_LOG_BASE%"=="" (
     set RABBITMQ_LOG_BASE=%RABBITMQ_BASE_UNIX%/log
 )
+if "%RABBITMQ_LOAD_PATH%"=="" (
+    set RABBITMQ_LOAD_PATH=%~dp0..\ebin
+)
 
 
 rem We save the previous logs in their respective backup
@@ -106,7 +109,7 @@ if "%RABBITMQ_MNESIA_DIR%"=="" (
 )
 
 "%ERLANG_HOME%\bin\erl.exe" ^
--pa "%~dp0..\ebin" ^
+-pa %RABBITMQ_LOAD_PATH% ^
 -noinput ^
 -boot start_sasl ^
 -sname %RABBITMQ_NODENAME% ^
