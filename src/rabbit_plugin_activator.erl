@@ -37,7 +37,6 @@
 -define(DefaultUnpackedPluginDir, "priv/plugins").
 -define(DefaultRabbitEBin, "ebin").
 -define(BaseApps, [rabbit]).
--define(Error(F, V), io:format("ERROR: " ++ F, V)).
 
 %%----------------------------------------------------------------------------
 
@@ -61,8 +60,9 @@ start() ->
     %% Build the entire set of dependencies - this will load the
     %% applications along the way
     AllApps = case catch sets:to_list(expand_dependencies(RequiredApps)) of
-                  {unknown_app, _} -> 
-                      ?Error("Failed to expand dependencies.~n", []),
+                  {unknown_app, {App, Err}} -> 
+                      io:format("ERROR: Failed to load application " ++
+                                "~s: ~p~n", [App, Err]),
                       halt(1);
                   AppList ->
                       AppList
@@ -190,8 +190,7 @@ expand_dependencies(Current, [Next|Rest]) ->
                 {error, {already_loaded, _}} -> 
                     ok;
                 X -> 
-                    ?Error("Failed to load ~s: ~p~n", [Next, X]),
-                    throw({unknown_app, Next})
+                    throw({unknown_app, {Next, X}})
             end,
             {ok, Required} = application:get_key(Next, applications),
             Unique = [A || A <- Required, not(sets:is_element(A, Current))],
