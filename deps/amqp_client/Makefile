@@ -34,9 +34,10 @@ DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  file:consult("rabbit_common.app"), \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
+PACKAGE=amqp_client
+PACKAGE_NAME=$(PACKAGE).ez
 COMMON_PACKAGE=rabbit_common
 COMMON_PACKAGE_NAME=$(COMMON_PACKAGE).ez
-
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
@@ -131,8 +132,10 @@ clean:
 	rm -fr cover dist tmp
 	$(MAKE) -C $(TEST_DIR) clean
 
-source_tarball:
-	mkdir -p dist/$(DIST_DIR)
+$(DIST_DIR):
+	mkdir -p $@
+
+source_tarball: $(DIST_DIR)
 	cp -a README Makefile dist/$(DIST_DIR)/
 	mkdir -p dist/$(DIST_DIR)/$(SOURCE_DIR)
 	cp -a $(SOURCE_DIR)/*.erl dist/$(DIST_DIR)/$(SOURCE_DIR)/
@@ -142,6 +145,12 @@ source_tarball:
 	cp -a $(TEST_DIR)/*.erl dist/$(DIST_DIR)/$(TEST_DIR)/
 	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
+
+package: clean $(DIST_DIR) $(TARGETS)
+	mkdir -p $(DIST_DIR)/$(PACKAGE)
+	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
+	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
 
 common_package: $(BROKER_SYMLINK)
@@ -154,11 +163,8 @@ common_package: $(BROKER_SYMLINK)
         );)
 	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
 
-# TODO When bug21990 lands, this target does not need to depend on $(TARGETS)
-test_common_package: common_package $(TARGETS) $(TEST_TARGETS)
+test_common_package: package common_package $(TEST_TARGETS)
 	@echo This target requires that you are already running an instance \
         of the broker on the localhost.......
-# TODO When bug21190 lands, the non-common modules should be packaged in
-# in their own archive, so we should remove the ebin from the load path
-	ERL_LIBS=$(DIST_DIR) erl -pa ebin test -eval 'network_client_SUITE:test(),halt().'
+	ERL_LIBS=$(DIST_DIR) erl -pa test -eval 'network_client_SUITE:test(),halt().'
 
