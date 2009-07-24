@@ -54,8 +54,7 @@
             next_msg_id,
             message_buffer,
             active_consumers,
-            blocked_consumers
-           }).
+            blocked_consumers}).
 
 -record(consumer, {tag, ack_required}).
 
@@ -102,8 +101,7 @@ init(Q) ->
             next_msg_id = 1,
             message_buffer = queue:new(),
             active_consumers = queue:new(),
-            blocked_consumers = queue:new()
-           }, {binary, ?HIBERNATE_AFTER_MIN}}.
+            blocked_consumers = queue:new()}, {binary, ?HIBERNATE_AFTER_MIN}}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
@@ -118,11 +116,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-reply(Reply, NewState) ->
-    {reply, Reply, NewState, binary}.
+reply(Reply, NewState) -> {reply, Reply, NewState, binary}.
 
-noreply(NewState) ->
-    {noreply, NewState, binary}.
+noreply(NewState) -> {noreply, NewState, binary}.
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
