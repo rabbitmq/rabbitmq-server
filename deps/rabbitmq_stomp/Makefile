@@ -10,6 +10,9 @@ SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
 ERLC_OPTS=-I $(RABBIT_SERVER_INCLUDE_DIR) -I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall +debug_info # +native -v
 
+.PHONY: test
+
+
 all: $(EBIN_DIR) $(TARGETS)
 
 $(EBIN_DIR):
@@ -38,3 +41,10 @@ start-cover: all
 
 stop-cover:
 	$(MAKE) -C $(RABBIT_SERVER_SOURCE_ROOT) stop-cover
+
+test:
+	$(MAKE) start-cover
+	python test/test.py
+	$(MAKE) stop-cover
+
+
