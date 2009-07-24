@@ -988,9 +988,8 @@ name_to_pid(Name) ->
 %% Status information
 %%-----------------------------------------------------------------
 format_status(Opt, StatusData) ->
-    [PDict, SysState, Parent, Debug, [Name, State, Mod, _Time,
-                                      TimeoutState, Queue]] =
-        StatusData,
+    [PDict, SysState, Parent, Debug,
+     [Name, State, Mod, _Time, _TimeoutState, Queue]] = StatusData,
     NameTag = if is_pid(Name) ->
 		      pid_to_list(Name);
 		 is_atom(Name) ->
@@ -1008,15 +1007,9 @@ format_status(Opt, StatusData) ->
 	    _ ->
 		[{data, [{"State", State}]}]
 	end,
-    Specfic1 = case TimeoutState of
-                   undefined -> Specfic;
-                   {Current, Min, undefined} ->
-                       [ {"Binary Timeout Current and Min", {Current, Min}}
-                       | Specfic]
-               end,
     [{header, Header},
      {data, [{"Status", SysState},
 	     {"Parent", Parent},
 	     {"Logged events", Log},
              {"Queued messages", priority_queue:to_list(Queue)}]} |
-     Specfic1].
+     Specfic].
