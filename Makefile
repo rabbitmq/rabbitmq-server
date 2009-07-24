@@ -1,7 +1,12 @@
+ifndef TMPDIR
+TMPDIR := /tmp
+endif
+
 RABBITMQ_NODENAME=rabbit
 RABBITMQ_SERVER_START_ARGS=
-RABBITMQ_MNESIA_DIR=/tmp/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
-RABBITMQ_LOG_BASE=/tmp
+RABBITMQ_MNESIA_DIR=$(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
+RABBITMQ_LOG_BASE=$(TMPDIR)
+RABBITMQ_LOAD_PATH=ebin
 
 SOURCE_DIR=src
 EBIN_DIR=ebin
@@ -55,14 +60,14 @@ $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN
 dialyze: $(TARGETS)
 	dialyzer -c $?
 
-clean: cleandb
+clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
 	rm -f docs/*.[0-9].gz
 
-cleandb: stop-node
-	erl -mnesia dir '"$(RABBITMQ_MNESIA_DIR)"' -noshell -eval 'lists:foreach(fun file:delete/1, filelib:wildcard(mnesia:system_info(directory) ++ "/*")), halt().'
+cleandb:
+	rm -rf $(RABBITMQ_MNESIA_DIR)/*
 
 ############ various tasks to interact with RabbitMQ ###################
 
@@ -70,12 +75,13 @@ BASIC_SCRIPT_ENVIRONMENT_SETTINGS=\
 	RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
 	RABBITMQ_NODE_PORT="$(RABBITMQ_NODE_PORT)" \
 	RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
-	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)"
+	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)" \
+	RABBITMQ_LOAD_PATH="$(RABBITMQ_LOAD_PATH)"
 
 run: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
-		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -s rabbit" \
+		RABBITMQ_SERVER_START_ARGS="-s rabbit $(RABBITMQ_SERVER_START_ARGS)" \
 		./scripts/rabbitmq-server
 
 run-node: all

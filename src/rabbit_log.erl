@@ -75,7 +75,7 @@ debug(Fmt, Args) when is_list(Args) ->
 
 message(Direction, Channel, MethodRecord, Content) ->
     gen_server:cast(?SERVER,
-		    {message, Direction, Channel, MethodRecord, Content}).
+                    {message, Direction, Channel, MethodRecord, Content}).
 
 info(Fmt) ->
     gen_server:cast(?SERVER, {info, Fmt}).
@@ -112,11 +112,11 @@ handle_cast({debug, Fmt, Args}, State) ->
     {noreply, State};
 handle_cast({message, Direction, Channel, MethodRecord, Content}, State) ->
     io:format("~s ch~p ~p~n",
-	      [case Direction of
-		   in -> "-->";
-		   out -> "<--" end,
-	       Channel,
-	       {MethodRecord, Content}]),
+              [case Direction of
+                   in -> "-->";
+                   out -> "<--" end,
+               Channel,
+               {MethodRecord, Content}]),
     {noreply, State};
 handle_cast({info, Fmt}, State) ->
     error_logger:info_msg(Fmt),
