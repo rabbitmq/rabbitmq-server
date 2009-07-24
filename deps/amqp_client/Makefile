@@ -228,6 +228,6 @@ test_common_package_with_broker: package common_package compile_tests
 test_common_package: clean \
                      start_background_node_in_broker \
                      clean_test_error \
-		             test_common_package_with_broker \
+	                 test_common_package_with_broker \
                      stop_background_node_in_broker
 	$(CHECK_TEST_ERROR)
