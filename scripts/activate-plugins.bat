@@ -47,7 +47,7 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
 )
 
 set RABBITMQ_PLUGINS_DIR="%~dp0..\plugins"
-set RABBITMQ_PLUGINS_UNPACKED_DIR="%~dp0..\priv\plugins"
+set RABBITMQ_PLUGINS_EXPAND_DIR="%~dp0..\priv\plugins"
 set RABBITMQ_EBIN_DIR="%~dp0..\ebin"
 
 "%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden -s rabbit_plugin_activator -rabbit plugins_dir \"%RABBITMQ_PLUGINS_DIR:\=/%\" -rabbit plugins_expand_dir \"%RABBITMQ_PLUGINS_EXPAND_DIR:\=/%\" -rabbit rabbit_ebin  \"%RABBITMQ_EBIN_DIR:\=/%\" -extra %*
