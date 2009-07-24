@@ -32,14 +32,15 @@
 
 [ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
 
+RABBITMQ_EBIN=`dirname $0`/../ebin
 [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="`dirname $0`/../plugins"
 [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="`dirname $0`/../priv/plugins"
 
 exec erl \
-    -pa "`dirname $0`/../ebin" \
+    -pa "$RABBITMQ_EBIN" \
     -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
 	-rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
-	-rabbit rabbit_ebin "\"`dirname $0`/../ebin\"" \
+	-rabbit rabbit_ebin "\"$RABBITMQ_EBIN\"" \
 	-noinput \
     -hidden \
     -s rabbit_plugin_activator \
