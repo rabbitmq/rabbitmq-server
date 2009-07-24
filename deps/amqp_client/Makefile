@@ -66,25 +66,33 @@ ERL_CALL_BROKER=erl_call -sname $(RABBITMQ_NODENAME) -e
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
 
+define CHECK_TEST_ERROR
+@test -e .test_error || echo "All tests successful."
+@test ! -e .test_error || echo "*** One or more tests failed! See SASL log for details. ***"
+@test ! -e .test_error
+endef
+
 
 all: compile
 
-compile: $(TARGETS)
+compile: $(BROKER_DIR) $(TARGETS)
 
-compile_tests: $(TEST_DIR)
+compile_tests: $(BROKER_DIR) $(TEST_DIR)
 
 
 $(TEST_TARGETS): $(TEST_DIR)
 
 .PHONY: $(TEST_DIR)
-$(TEST_DIR): $(BROKER_DIR)
+$(TEST_DIR):
 	$(MAKE) -C $(TEST_DIR)
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_DIR)
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES)
 	mkdir -p $(EBIN_DIR); erlc $(ERLC_OPTS) $<
 
+.PHONY: $(BROKER_DIR)
 $(BROKER_DIR):
 	test -e $(BROKER_DIR)
+	$(MAKE_BROKER)
 
 
 run: compile
@@ -100,8 +108,8 @@ dialyze: $(TARGETS)
 dialyze_all: $(TARGETS) $(TEST_TARGETS)
 	$(DIALYZER_CALL) -c $^
 
-add_broker_to_plt: $(BROKER_DIR)/ebin
-	$(DIALYZER_CALL) --add_to_plt -r $<
+add_broker_to_plt: $(BROKER_DIR)
+	$(DIALYZER_CALL) --add_to_plt -r $</ebin
 
 
 .PHONY: start_background_node_in_broker
@@ -134,55 +142,46 @@ test_direct_on_node:
 clean_test_error:
 	rm -f .test_error
 
-all_tests: compile compile_tests \
+all_tests: clean compile compile_tests \
            start_background_node_in_broker \
            clean_test_error \
            test_direct_on_node \
            test_network_on_node \
+		   test_common_package_with_broker \
            stop_background_node_in_broker
-	test ! -e .test_error
+	$(CHECK_TEST_ERROR)
 
 test_network: compile compile_tests \
               start_background_node_in_broker \
               clean_test_error \
               test_network_on_node \
               stop_background_node_in_broker
-	test ! -e .test_error
+	$(CHECK_TEST_ERROR)
 
 test_direct: compile compile_tests \
-              start_background_node_in_broker \
-              clean_test_error \
-              test_direct_on_node \
-              stop_background_node_in_broker
-	test ! -e .test_error
-
-all_tests_coverage: compile compile_tests \
-           start_background_node_in_broker \
-           clean_test_error \
-           start_cover_on_node \
-           test_direct_on_node \
-           test_network_on_node \
-           stop_cover_on_node \
-           stop_background_node_in_broker
-	test ! -e .test_error
+             start_background_node_in_broker \
+             clean_test_error \
+             test_direct_on_node \
+             stop_background_node_in_broker
+	$(CHECK_TEST_ERROR)
 
 test_network_coverage: compile compile_tests \
-           start_background_node_in_broker \
-           clean_test_error \
-           start_cover_on_node \
-           test_network_on_node \
-           stop_cover_on_node \
-           stop_background_node_in_broker
-	test ! -e .test_error
+                       start_background_node_in_broker \
+                       clean_test_error \
+                       start_cover_on_node \
+                       test_network_on_node \
+                       stop_cover_on_node \
+                       stop_background_node_in_broker
+	$(CHECK_TEST_ERROR)
 
 test_direct_coverage: compile compile_tests \
-           start_background_node_in_broker \
-           clean_test_error \
-           start_cover_on_node \
-           test_direct_on_node \
-           stop_cover_on_node \
-           stop_background_node_in_broker
-	test ! -e .test_error
+                      start_background_node_in_broker \
+                      clean_test_error \
+                      start_cover_on_node \
+                      test_direct_on_node \
+                      stop_cover_on_node \
+                      stop_background_node_in_broker
+	$(CHECK_TEST_ERROR)
 
 
 clean:
@@ -191,6 +190,7 @@ clean:
 	rm -f .test_error
 	rm -fr dist tmp
 	$(MAKE) -C $(TEST_DIR) clean
+
 
 $(DIST_DIR):
 	mkdir -p $@
@@ -206,25 +206,28 @@ source_tarball: $(DIST_DIR)
 	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
 
-package: clean $(DIST_DIR) $(TARGETS)
+package: clean compile $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE)
 	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
 	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
-
-common_package: $(BROKER_SYMLINK)
-	$(MAKE) -C $(BROKER_SYMLINK)
+common_package: $(BROKER_DIR)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
 	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
 	$(foreach DEP, $(DEPS), \
-        ( cp $(BROKER_SYMLINK)/$(EBIN_DIR)/$(DEP).beam \
+        ( cp $(BROKER_DIR)/$(EBIN_DIR)/$(DEP).beam \
           $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
         );)
 	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
 
-test_common_package: package common_package $(TEST_TARGETS)
-	@echo This target requires that you are already running an instance \
-        of the broker on the localhost.......
-	ERL_LIBS=$(DIST_DIR) erl -pa test -eval 'network_client_SUITE:test(),halt().'
+.PHONY: test_common_package_with_broker
+test_common_package_with_broker: package common_package compile_tests
+	ERL_LIBS=$(DIST_DIR) erl -pa $(TEST_DIR) -eval 'network_client_SUITE:test(), halt().' | egrep 'All .* tests successful.' || touch .test_error
 
+test_common_package: clean \
+                     start_background_node_in_broker \
+                     clean_test_error \
+		             test_common_package_with_broker \
+                     stop_background_node_in_broker
+	$(CHECK_TEST_ERROR)
