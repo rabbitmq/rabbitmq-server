@@ -110,13 +110,16 @@ Or to run both:
 
     $ make all_tests
 
+If any test fails, the make command will return a non-zero exit code. Reason
+logged in /tmp/rabbit-sasl.log.
+
 The network client test can also be run from a separate Erlang VM instance from
 RabbitMQ server. You can start an instance of the server and then, in the
 rabbitmq-erlang-client folder, type
 
     rabbitmq-erlang-client $ make compile_tests
     rabbitmq-erlang-client $ make run
-    erl -pa ebin rabbitmq_server/ebin tests
+    erl -pa ebin ../rabbitmq-server/ebin tests
     Erlang (BEAM) emulator version 5.6.5 [source] [64-bit] [smp:4] \
     [async-threads:0] [hipe] [kernel-poll:false]
 
@@ -222,9 +225,8 @@ clean
     Removes build products and wipes all files produced by any other
     rabbitmq-erlang-client make targets or client errors.
 
-run_with_broker
-    Same as run, except that this make target also runs the broker when starting
-    the Erlang shell.
+run_in_broker
+    Runs the broker with the client included in the load path.
 
 dialyze
     Analyses the client source code with dialyzer. Uses PLT file from default
