@@ -48,18 +48,21 @@ endif
 
 ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
+ifndef SSL_CERT_DIR
+SSL_CERT_DIR := $(shell mktemp -d -q)
+endif
+
 LOG_BASE=/tmp
 LOG_IN_FILE=true
 ERL_WITH_BROKER=erl -pa $(LOAD_PATH) -mnesia dir tmp -boot start_sasl -s rabbit \
-	$(shell [ $(LOG_IN_FILE) = "true" ] && echo "-sasl sasl_error_logger '{file, \"'${LOG_BASE}'/rabbit-sasl.log\"}' -kernel error_logger '{file, \"'${LOG_BASE}'/rabbit.log\"}'") \
-	-rabbit ssl_listeners '[{"0.0.0.0",5671}]' -rabbit ssl_options '[{cacertfile,"examples/certs/ca/cacerts.pem"},{certfile,"examples/certs/server/cert.pem"},{keyfile,"examples/certs/server/key.pem"}]'
+	$(shell [ $(LOG_IN_FILE) = "true" ] && echo "-sasl sasl_error_logger '{file, \"'$(LOG_BASE)'/rabbit-sasl.log\"}' -kernel error_logger '{file, \"'$(LOG_BASE)'/rabbit.log\"}'") \
+	-rabbit ssl_listeners '[{"0.0.0.0",5671}]' -rabbit ssl_options '[{cacertfile,"'$(SSL_CERT_DIR)'/ca/cacerts.pem"},{certfile,"'$(SSL_CERT_DIR)'/server/cert.pem"},{keyfile,"'$(SSL_CERT_DIR)'/server/key.pem"}]'
 
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
 
 BROKER_DIR=../rabbitmq-server
 BROKER_SYMLINK=rabbitmq_server
-
 
 all: compile
 
@@ -98,23 +101,30 @@ run: compile
 run_with_broker: compile
 	$(ERL_WITH_BROKER)
 
-all_tests: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),ssl_client_SUITE:test(),direct_client_SUITE:test(),halt()'
+create_ssl_certs:
+	$(MAKE) -s -C certs DIR=$(SSL_CERT_DIR) all
 
-all_tests_coverage: compile compile_tests
+all_tests: compile compile_tests create_ssl_certs
+	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),ssl_client_SUITE:test(),direct_client_SUITE:test(),halt()'
+	rm -rf $(SSL_CERT_DIR)
+
+all_tests_coverage: compile compile_tests create_ssl_certs
 	$(ERL_WITH_BROKER) -eval 'rabbit_misc:enable_cover(),network_client_SUITE:test(),ssl_client_SUITE:test(),direct_client_SUITE:test(),rabbit_misc:report_cover(),halt()'
+	rm -rf $(SSL_CERT_DIR)
 
 test_network: compile compile_tests
 	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),halt().'
 
-test_ssl: compile compile_tests
+test_ssl: compile compile_tests create_ssl_certs
 	$(ERL_WITH_BROKER) -eval 'ssl_client_SUITE:test(),halt().'
+	rm -rf $(SSL_CERT_DIR)
 
 test_network_coverage: compile compile_tests
 	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test_coverage(),halt().'
 
-test_ssl_coverage: compile compile_tests
+test_ssl_coverage: compile compile_tests create_ssl_certs
 	$(ERL_WITH_BROKER) -eval 'ssl_client_SUITE:test_coverage(),halt().'
+	rm -rf $(SSL_CERT_DIR)
 
 test_direct: compile compile_tests
 	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test(),halt().'
