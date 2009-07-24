@@ -131,13 +131,22 @@ delete_dir(Dir) ->
         true ->
             case file:list_dir(Dir) of
                 {ok, Files} ->
-                    Paths = [Dir ++ "/" ++ F || F <- Files],
-                    [delete_dir(F) || F <- Paths, filelib:is_dir(F)],
-                    [file:delete(F) || F <- Paths, filelib:is_file(F)]
+                    [case Dir ++ "/" ++ F of
+                         Fn ->
+                             case filelib:is_dir(Fn) and not(is_symlink(Fn)) of
+                                 true  -> delete_dir(Fn);
+                                 false -> file:delete(Fn)
+                             end
+                     end || F <- Files]
             end,
             ok = file:del_dir(Dir);
         false ->
             ok
+    end.
+is_symlink(Name) ->
+    case file:read_link(Name) of
+        {ok, _} -> true;
+        _       -> false
     end.
 
 unpack_ez_plugins(PluginSrcDir, PluginDestDir) ->
