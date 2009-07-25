@@ -55,7 +55,8 @@ wait_for_death(Pid) ->
     end.
 
 non_existent_user_test() ->
-    ?assertError(_, amqp_connection:start_network("bum_user", "bum_password",
+    ?assertError(_, amqp_connection:start_network("test_user_bum",
+                                                  "bum_password",
                                                   "localhost")).
 
 invalid_password_test() ->
@@ -64,9 +65,9 @@ invalid_password_test() ->
 
 non_existent_vhost_test() ->
     ?assertError(_, amqp_connection:start_network("guest", "guest", "localhost",
-                                                  <<"bum_vhost">>)).
+                                                  <<"test_vhost_bum">>)).
 
-no_perm_user_test() ->
+no_permission_test() ->
     ?assertError(_, amqp_connection:start_network("test_user_no_perm",
                                                   "test_user_no_perm",
                                                   "localhost")).
