@@ -65,3 +65,8 @@ invalid_password_test() ->
 non_existent_vhost_test() ->
     ?assertError(_, amqp_connection:start_network("guest", "guest", "localhost",
                                                   <<"bum_vhost">>)).
+
+no_perm_user_test() ->
+    ?assertError(_, amqp_connection:start_network("test_user_no_perm",
+                                                  "test_user_no_perm",
+                                                  "localhost")).

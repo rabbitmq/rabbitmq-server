@@ -83,6 +83,9 @@ invalid_password_test() ->
 non_existent_vhost_test() ->
     negative_test_util:non_existent_vhost_test().
 
+no_perm_user_test() ->
+    negative_test_util:no_perm_user_test().
+
 %%---------------------------------------------------------------------------
 %% Common Functions
 
