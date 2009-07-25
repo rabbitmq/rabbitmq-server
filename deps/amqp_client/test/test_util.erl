@@ -314,15 +314,12 @@ pub_and_close_test(Connection1, Connection2) ->
     %% Get sent messages back and count them
     Channel2 = lib_amqp:start_channel(Connection2),
     lib_amqp:subscribe(Channel2, Q, self(), true),
-    NRemaining = pc_consumer_loop(Channel2, Payload, NMessages),
+    ?assert(pc_consumer_loop(Channel2, Payload, 0) == NMessages),
+    %% Make sure queue is empty
+    #'queue.declare_ok'{queue = Q, message_count = NRemaining} =
+        amqp_channel:call(Channel2, #'queue.declare'{queue = Q}),
+    ?assert(NRemaining == 0),
     lib_amqp:teardown(Connection2, Channel2),
-    if
-        NRemaining > 0 ->
-            exit({did_not_receive_all_messages, {unsent_messages, NRemaining}});
-        true ->
-            ok
-    end,
-    io:format("Test successful. All messages have been sent.~n", []),
     ok.
 
 pc_producer_loop(_, _, _, _, 0) -> ok;
@@ -330,21 +327,20 @@ pc_producer_loop(Channel, X, Key, Payload, NRemaining) ->
     ?assertMatch(ok, lib_amqp:publish(Channel, X, Key, Payload)),
     pc_producer_loop(Channel, X, Key, Payload, NRemaining - 1).
 
-pc_consumer_loop(_, _, 0) -> 0;
-pc_consumer_loop(Channel, Payload, NRemaining) ->
+pc_consumer_loop(Channel, Payload, NReceived) ->
     receive
         {#'basic.deliver'{},
          #content{payload_fragments_rev = [DeliveredPayload]}} ->
             case DeliveredPayload of
                 Payload ->
-                    pc_consumer_loop(Channel, Payload, NRemaining - 1);
+                    pc_consumer_loop(Channel, Payload, NReceived + 1);
                 _ ->
-                    pc_consumer_loop(Channel, Payload, NRemaining)
+                    exit(received_unexpected_content)
             end
-    after 3000 ->
-        NRemaining
+    after 1000 ->
+        NReceived
     end.
-    
+
 
 %%----------------------------------------------------------------------------
 %% Unit test for the direct client
