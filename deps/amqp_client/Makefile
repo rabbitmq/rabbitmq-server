@@ -25,10 +25,19 @@
 
 EBIN_DIR=ebin
 export INCLUDE_DIR=include
-export INCLUDE_SERV_DIR=$(BROKER_SYMLINK)/include
+export INCLUDE_SERV_DIR=$(BROKER_DIR)/include
 TEST_DIR=test
 SOURCE_DIR=src
-DIST_DIR=rabbitmq-erlang-client
+DIST_DIR=dist
+
+DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
+                                 file:consult("rabbit_common.app"), \
+                                 [io:format("~p ",[M]) || M <- Mods], halt().')
+
+PACKAGE=amqp_client
+PACKAGE_NAME=$(PACKAGE).ez
+COMMON_PACKAGE=rabbit_common
+COMMON_PACKAGE_NAME=$(COMMON_PACKAGE).ez
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
@@ -36,7 +45,7 @@ TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
-LOAD_PATH=$(EBIN_DIR) $(BROKER_SYMLINK)/ebin $(TEST_DIR)
+LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR)
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
@@ -48,24 +57,43 @@ endif
 
 ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
-LOG_BASE=/tmp
-LOG_IN_FILE=true
-ERL_WITH_BROKER=erl -pa $(LOAD_PATH) -mnesia dir tmp -boot start_sasl -s rabbit \
-	$(shell [ $(LOG_IN_FILE) = "true" ] && echo "-sasl sasl_error_logger '{file, \"'${LOG_BASE}'/rabbit-sasl.log\"}' -kernel error_logger '{file, \"'${LOG_BASE}'/rabbit.log\"}'")
+export BROKER_DIR=../rabbitmq-server
+RABBITMQ_NODENAME=rabbit
+BROKER_START_ARGS=-pa $(realpath $(LOAD_PATH))
+MAKE_BROKER=$(MAKE) RABBITMQ_SERVER_START_ARGS='$(BROKER_START_ARGS)' -C $(BROKER_DIR)
+ERL_CALL_BROKER=erl_call -sname $(RABBITMQ_NODENAME) -e
 
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
 
-BROKER_DIR=../rabbitmq-server
-BROKER_SYMLINK=rabbitmq_server
 
+###############################################################################
+##  Regular targets
+###############################################################################
 
 all: compile
 
-compile: $(TARGETS)
+compile: $(BROKER_DIR) $(TARGETS)
 
-compile_tests: $(TEST_DIR)
+compile_tests: $(BROKER_DIR) $(TEST_DIR)
 
+run: compile
+	erl -pa $(LOAD_PATH)
+
+run_in_broker: $(BROKER_DIR) compile
+	$(MAKE_BROKER) run
+
+clean:
+	rm -f $(EBIN_DIR)/*.beam
+	rm -f erl_crash.dump
+	rm -f .test_error
+	rm -fr dist tmp
+	$(MAKE) -C $(TEST_DIR) clean
+
+
+###############################################################################
+##  Utils
+###############################################################################
 
 dialyze: $(TARGETS)
 	$(DIALYZER_CALL) -c $^
@@ -73,58 +101,15 @@ dialyze: $(TARGETS)
 dialyze_all: $(TARGETS) $(TEST_TARGETS)
 	$(DIALYZER_CALL) -c $^
 
-add_broker_to_plt: $(BROKER_SYMLINK)/ebin
-	$(DIALYZER_CALL) --add_to_plt -r $<
-
-$(TEST_TARGETS): $(TEST_DIR)
-
-.PHONY: $(TEST_DIR)
-$(TEST_DIR): $(BROKER_SYMLINK)
-	$(MAKE) -C $(TEST_DIR)
-
-$(BROKER_SYMLINK):
-ifdef BROKER_DIR
-	ln -sf $(BROKER_DIR) $(BROKER_SYMLINK)
-endif
-
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
-	mkdir -p $(EBIN_DIR); erlc $(ERLC_OPTS) $<
+add_broker_to_plt: $(BROKER_DIR)
+	$(DIALYZER_CALL) --add_to_plt -r $</ebin
 
 
-run: compile
-	erl -pa $(LOAD_PATH)
+###############################################################################
+##  Packaging
+###############################################################################
 
-run_with_broker: compile
-	$(ERL_WITH_BROKER)
-
-
-all_tests: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),direct_client_SUITE:test(),halt()'
-
-all_tests_coverage: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'rabbit_misc:enable_cover(),network_client_SUITE:test(),direct_client_SUITE:test(),rabbit_misc:report_cover(),halt()'
-
-test_network: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),halt().'
-
-test_network_coverage: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test_coverage(),halt().'
-
-test_direct: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test(),halt().'
-
-test_direct_coverage: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test_coverage(),halt().'
-
-
-clean:
-	rm -f $(EBIN_DIR)/*.beam
-	rm -f rabbitmq_server erl_crash.dump
-	rm -fr cover dist tmp
-	$(MAKE) -C $(TEST_DIR) clean
-
-source_tarball:
-	mkdir -p dist/$(DIST_DIR)
+source_tarball: $(DIST_DIR)
 	cp -a README Makefile dist/$(DIST_DIR)/
 	mkdir -p dist/$(DIST_DIR)/$(SOURCE_DIR)
 	cp -a $(SOURCE_DIR)/*.erl dist/$(DIST_DIR)/$(SOURCE_DIR)/
@@ -134,3 +119,128 @@ source_tarball:
 	cp -a $(TEST_DIR)/*.erl dist/$(DIST_DIR)/$(TEST_DIR)/
 	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
+
+package: clean compile $(DIST_DIR)
+	mkdir -p $(DIST_DIR)/$(PACKAGE)
+	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
+	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
+
+common_package: $(BROKER_DIR)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	$(foreach DEP, $(DEPS), \
+        ( cp $(BROKER_DIR)/$(EBIN_DIR)/$(DEP).beam \
+          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
+        );)
+	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
+
+
+###############################################################################
+##  Testing
+###############################################################################
+
+all_tests: clean \
+           prepare_for_testing \
+           test_direct_on_node \
+           test_network_on_node \
+		   test_common_package_with_node \
+           cleanup_after_testing
+
+test_network: prepare_for_testing \
+              test_network_on_node \
+              cleanup_after_testing
+
+test_direct: prepare_for_testing \
+             test_direct_on_node \
+             cleanup_after_testing
+
+test_common_package: clean \
+                     prepare_for_testing \
+	                 test_common_package_with_node \
+                     cleanup_after_testing
+
+test_network_coverage: prepare_for_testing \
+                       start_cover_on_node \
+                       test_network_on_node \
+                       stop_cover_on_node \
+                       cleanup_after_testing
+
+test_direct_coverage: prepare_for_testing \
+                      start_cover_on_node \
+                      test_direct_on_node \
+                      stop_cover_on_node \
+                      cleanup_after_testing
+
+
+###############################################################################
+##  Internal targets
+###############################################################################
+
+$(TEST_TARGETS): $(TEST_DIR)
+
+.PHONY: $(TEST_DIR)
+$(TEST_DIR):
+	$(MAKE) -C $(TEST_DIR)
+
+$(EBIN_DIR):
+	mkdir -p $(EBIN_DIR)
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) | $(EBIN_DIR)
+	erlc $(ERLC_OPTS) $<
+
+.PHONY: $(BROKER_DIR)
+$(BROKER_DIR):
+	test -e $(BROKER_DIR)
+	$(MAKE_BROKER)
+
+
+$(DIST_DIR):
+	mkdir -p $@
+
+
+.PHONY: start_background_node_in_broker
+start_background_node_in_broker: $(BROKER_DIR) compile
+	$(MAKE_BROKER) start-background-node
+	$(MAKE_BROKER) start-rabbit-on-node
+
+.PHONY: stop_background_node_in_broker
+stop_background_node_in_broker: $(BROKER_DIR)
+	$(MAKE_BROKER) stop-rabbit-on-node
+	$(MAKE_BROKER) stop-node
+
+.PHONY: start_cover_on_node
+start_cover_on_node: $(BROKER_DIR)
+	$(MAKE_BROKER) start-cover
+
+.PHONY: stop_cover_on_node
+stop_cover_on_node: $(BROKER_DIR)
+	$(MAKE_BROKER) stop-cover
+
+.PHONY: test_network_on_node
+test_network_on_node:
+	echo 'network_client_SUITE:test().' | $(ERL_CALL_BROKER) | egrep '^\{ok, ok\}$$' || touch .test_error
+
+.PHONY: test_direct_on_node
+test_direct_on_node:
+	echo 'direct_client_SUITE:test().' | $(ERL_CALL_BROKER) | egrep '^\{ok, ok\}$$' || touch .test_error
+
+.PHONY: test_common_package_with_node
+test_common_package_with_node: package common_package compile_tests
+	ERL_LIBS=$(DIST_DIR) erl -pa $(TEST_DIR) -eval 'network_client_SUITE:test(), halt().' | egrep 'All .* tests successful.' || touch .test_error
+
+
+.PHONY: clean_test_error_flag
+clean_test_error_flag:
+	rm -f .test_error
+
+.PHONY: prepare_for_testing
+prepare_for_testing: compile compile_tests \
+                     start_background_node_in_broker \
+                     clean_test_error_flag
+
+.PHONY: cleanup_after_testing
+cleanup_after_testing: stop_background_node_in_broker
+	@test -e .test_error || echo "All tests successful."
+	@test ! -e .test_error || echo "*** One or more tests FAILED! See SASL log for details. ***"
+	@test ! -e .test_error

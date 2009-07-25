@@ -70,53 +70,47 @@ where $OTP_HOME is the location of your Erlang/OTP installation.
 
 Compiling the Erlang client
 -------------------------
-Go to the base directory of the AMQP Erlang client directory and run
-'make'.
-
-* If you have "installed" the RabbitMQ server:
-
-You will have a symlink to the rabbitmq-server directory in your OTP
-directory, so all you have to do is to run make:
-
-    $ make
-
-* If you don't have the RabbitMQ server installed:
-
 You will need to get a copy of the server in order to be able to use it's
 header files and runtime libraries. A good place to put this is in the sibling
-directory to the Erlang client, which is the default that Makefile expects.
-In this case, you can just run make:
+directory to the Erlang client (i.e: ../rabbitmq-server), which is the default
+that the Makefile expects. In this case, you can just run make:
 
     $ make
 
 If the source tree for the server is not in the sibling directory, you will
 need to specify the path to this directory:
 
-    $ make BROKER_DIR=PATH_TO_THE_SERVER
+    $ make BROKER_DIR=/path/to/server
 
-Running the network and direct client tests
--------------------------------------------
+In this case, make sure you specify BROKER_DIR every time you run a make target.
+
+Running the network client, direct client and packaging tests
+-------------------------------------------------------------
 The direct client has to be run in the same Erlang VM instance as the
-RabbitMQ server. In order to use the makefile to run either the network or the
-direct client tests, you will need to shutdown any other running instance of
-RabbitMQ that you may have on your machine. This is because the Makefile targets
-for running the network or direct tests boot their own instance of RabbitMQ.
-To run these tests, use the either of the following targets:
+RabbitMQ server. In order to use the makefile to run tests, you will need to
+shutdown any other running instance of RabbitMQ server that you may have on
+your machine. This is because the Makefile test targets boot their own instance
+of RabbitMQ with settings depending on the test.
+To run these tests, use either of the following targets:
 
     $ make test_network
     $ make test_direct
+    $ make test_common_package
 
-Or to run both:
+Or to run all tests:
 
     $ make all_tests
 
+If any test fails, the make command will return a non-zero exit code. The reason
+is logged by the server in /tmp/rabbit-sasl.log by default.
+
 The network client test can also be run from a separate Erlang VM instance from
-RabbitMQ server. You can start an instance of the server and then, in the
+RabbitMQ server. You can *start an instance of the server* and then, in the
 rabbitmq-erlang-client folder, type
 
     rabbitmq-erlang-client $ make compile_tests
     rabbitmq-erlang-client $ make run
-    erl -pa ebin rabbitmq_server/ebin tests
+    erl -pa ebin ../rabbitmq-server/ebin tests
     Erlang (BEAM) emulator version 5.6.5 [source] [64-bit] [smp:4] \
     [async-threads:0] [hipe] [kernel-poll:false]
 
@@ -149,21 +143,14 @@ Because the unit test accesses memsup directly, it needs to use the
 direct API and hence needs to run in the same VM as the server. To do
 this from the *rabbitmq-erlang-client directory*, type
 
-    rabbitmq-erlang-client $ make LOG_IN_FILE=false run_with_broker
+    rabbitmq-erlang-client $ make run_in_broker
       
 When that has booted, you need to *wait one minute* for the memory
 alarms to become active. After that, you can run the following from
 the Erlang shell:
 
     1> direct_client_SUITE:test_channel_flow().
-
-    =INFO REPORT==== 17-Dec-2008::13:39:41 ===
-    alarm_handler: {set,{system_memory_high_watermark,[]}}
-
-    =INFO REPORT==== 17-Dec-2008::13:39:42 ===
-    alarm_handler: {clear,system_memory_high_watermark}
     ok
-    2>
 
 The non-unit test can be run in separate VM, because it uses the
 network client driver. Whilst it can be run using the direct client,
@@ -173,6 +160,7 @@ interactively (which you need to do to see the throttling).
 After *having booted* an *instance of the server* with alarms handlers
 turned on, run the following in the *rabbitmq-erlang-client directory*:
 
+    rabbitmq-erlang-client $ make compile_tests
     rabbitmq-erlang-client $ make run
     Erlang (BEAM) emulator version 5.6.3 [source] [smp:2] \
     [async-threads:0][kernel-poll:false]
@@ -214,17 +202,22 @@ Interesting rabbitmq-erlang-client make targets include
 all
     The default target. Builds the client (does not compile the tests).
 
+compile
+    Builds the client.
+
+compile_tests
+    Builds the client test modules.
+
 run
     Builds the client and starts an Erlang shell with both the client and the
     server in the load path.
 
+run_in_broker
+    Runs the broker with the client included in the load path.
+
 clean
     Removes build products and wipes all files produced by any other
     rabbitmq-erlang-client make targets or client errors.
-
-run_with_broker
-    Same as run, except that this make target also runs the broker when starting
-    the Erlang shell.
 
 dialyze
     Analyses the client source code with dialyzer. Uses PLT file from default
@@ -245,13 +238,18 @@ add_broker_to_plt
 
     to override default plt location ( ~/.dialyzer_plt ).
 
-all_tests
-    Compiles client and client tests source code and runs network_client_SUITE
-    and direct_client_SUITE tests. During the testing, this make target runs an
-    instance of the broker, so make sure there is no other instance running.
-
-all_tests_coverage
-    Same as all_tests, except that the tests are run in coverage mode.
-
 source_tarball
     Creates tarball of all the client source code.
+
+package
+    Creates an erlang archive of the client.
+
+common_package
+    Creates an erlang archive of the server modules required by the erlang
+    client.
+
+all_tests
+    Clean compiles the client and client tests source code and runs
+    network_client_SUITE, direct_client_SUITE and packaging tests. During the
+    testing, this make target runs an instance of the broker, so make sure
+    there is no other instance of RabbitMQ server running.
