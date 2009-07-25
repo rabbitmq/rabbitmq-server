@@ -28,7 +28,16 @@ export INCLUDE_DIR=include
 export INCLUDE_SERV_DIR=$(BROKER_SYMLINK)/include
 TEST_DIR=test
 SOURCE_DIR=src
-DIST_DIR=rabbitmq-erlang-client
+DIST_DIR=dist
+
+DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
+                                 file:consult("rabbit_common.app"), \
+                                 [io:format("~p ",[M]) || M <- Mods], halt().')
+
+PACKAGE=amqp_client
+PACKAGE_NAME=$(PACKAGE).ez
+COMMON_PACKAGE=rabbit_common
+COMMON_PACKAGE_NAME=$(COMMON_PACKAGE).ez
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
@@ -124,8 +133,10 @@ clean:
 	rm -fr cover dist tmp
 	$(MAKE) -C $(TEST_DIR) clean
 
-source_tarball:
-	mkdir -p dist/$(DIST_DIR)
+$(DIST_DIR):
+	mkdir -p $@
+
+source_tarball: $(DIST_DIR)
 	cp -a README Makefile dist/$(DIST_DIR)/
 	mkdir -p dist/$(DIST_DIR)/$(SOURCE_DIR)
 	cp -a $(SOURCE_DIR)/*.erl dist/$(DIST_DIR)/$(SOURCE_DIR)/
@@ -135,3 +146,26 @@ source_tarball:
 	cp -a $(TEST_DIR)/*.erl dist/$(DIST_DIR)/$(TEST_DIR)/
 	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
+
+package: clean $(DIST_DIR) $(TARGETS)
+	mkdir -p $(DIST_DIR)/$(PACKAGE)
+	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
+	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
+
+
+common_package: $(BROKER_SYMLINK)
+	$(MAKE) -C $(BROKER_SYMLINK)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	$(foreach DEP, $(DEPS), \
+        ( cp $(BROKER_SYMLINK)/$(EBIN_DIR)/$(DEP).beam \
+          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
+        );)
+	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
+
+test_common_package: package common_package $(TEST_TARGETS)
+	@echo This target requires that you are already running an instance \
+        of the broker on the localhost.......
+	ERL_LIBS=$(DIST_DIR) erl -pa test -eval 'network_client_SUITE:test(),halt().'
+
