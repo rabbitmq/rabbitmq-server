@@ -141,36 +141,36 @@ common_package: $(BROKER_DIR)
 ###############################################################################
 
 all_tests: clean \
-           prepare_for_testing \
+           start_testing \
            test_direct_on_node \
            test_network_on_node \
 		   test_common_package_with_node \
-           cleanup_after_testing
+           end_testing
 
-test_network: prepare_for_testing \
+test_network: start_testing \
               test_network_on_node \
-              cleanup_after_testing
+              end_testing
 
-test_direct: prepare_for_testing \
+test_direct: start_testing \
              test_direct_on_node \
-             cleanup_after_testing
+             end_testing
 
 test_common_package: clean \
-                     prepare_for_testing \
+                     start_testing \
 	                 test_common_package_with_node \
-                     cleanup_after_testing
+                     end_testing
 
-test_network_coverage: prepare_for_testing \
+test_network_coverage: start_testing \
                        start_cover_on_node \
                        test_network_on_node \
                        stop_cover_on_node \
-                       cleanup_after_testing
+                       end_testing
 
-test_direct_coverage: prepare_for_testing \
+test_direct_coverage: start_testing \
                       start_cover_on_node \
                       test_direct_on_node \
                       stop_cover_on_node \
-                      cleanup_after_testing
+                      end_testing
 
 
 ###############################################################################
@@ -234,13 +234,16 @@ test_common_package_with_node: package common_package compile_tests
 clean_test_error_flag:
 	rm -f .test_error
 
-.PHONY: prepare_for_testing
-prepare_for_testing: compile compile_tests \
+.PHONY: start_testing
+start_testing: compile compile_tests \
                      start_background_node_in_broker \
                      clean_test_error_flag
 
 .PHONY: cleanup_after_testing
-cleanup_after_testing: stop_background_node_in_broker
+cleanup_after_testing:
+
+.PHONY: end_testing
+end_testing: cleanup_after_testing stop_background_node_in_broker
 	@test -e .test_error || echo "All tests successful."
 	@test ! -e .test_error || echo "*** One or more tests FAILED! See SASL log for details. ***"
 	@test ! -e .test_error
