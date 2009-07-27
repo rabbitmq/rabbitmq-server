@@ -23,10 +23,10 @@
 #   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 #
 
-EBIN_DIR=ebin
 export BROKER_DIR=../rabbitmq-server
 export INCLUDE_DIR=include
 export INCLUDE_SERV_DIR=$(BROKER_DIR)/include
+EBIN_DIR=ebin
 TEST_DIR=test
 SOURCE_DIR=src
 DIST_DIR=dist
@@ -60,25 +60,23 @@ ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(EBIN_DIR) -Wall -v +debu
 
 RABBITMQ_NODENAME=rabbit
 PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
-ALL_BASE := 'network_client_SUITE:test(),direct_client_SUITE:test(),'
 
 ifdef SSL_CERTS_DIR
 SSL := true
-ALL_SSL := $(ALL_BASE)'ssl_client_SUITE:test(),'
-SSL_BROKER_OPTIONS := -rabbit ssl_listeners '[{"0.0.0.0",5671}]' -rabbit ssl_options '[{cacertfile,"'$(SSL_CERTS_DIR)'/ca/cacerts.pem"},{certfile,"'$(SSL_CERTS_DIR)'/server/cert.pem"},{keyfile,"'$(SSL_CERTS_DIR)'/server/key.pem"}]'
+ALL_SSL := { $(MAKE) test_ssl || OK=false; }
+ALL_SSL_COVERAGE := { $(MAKE) test_ssl_coverage || OK=false; }
+CLIENT_CERTS_DIR:=$(shell mktemp -d -u)
+SSL_BROKER_ARGS := -rabbit ssl_listeners [{\\\"0.0.0.0\\\",5671}] \
+	-rabbit ssl_options [{cacertfile,\\\"$(SSL_CERTS_DIR)/ca/cacerts.pem\\\"},{certfile,\\\"$(SSL_CERTS_DIR)/server/cert.pem\\\"},{keyfile,\\\"$(SSL_CERTS_DIR)/server/key.pem\\\"}] \
+	-erlang_client_ssl_dir \"$(SSL_CERTS_DIR)\"
+SSL_POST := rm -rf $(CLIENT_CERTS_DIR)
 else
 SSL := @echo No SSL_CERTS_DIR defined. && false
-ALL_SSL := $(ALL_BASE)
-SSL_BROKER_OPTIONS :=
+ALL_SSL := true
+ALL_SSL_COVERAGE := true
+SSL_BROKER_ARGS :=
+SSL_POST := true
 endif
-ALL := $(ALL_SSL)'halt()'
-ALL_COVER := 'rabbit_misc:enable_cover(),'$(ALL_SSL)'rabbit_misc:report_cover(),halt()'
-
-LOG_BASE=/tmp
-LOG_IN_FILE=true
-ERL_WITH_BROKER=erl -pa $(LOAD_PATH) -mnesia dir tmp -boot start_sasl -s rabbit \
-	$(shell [ $(LOG_IN_FILE) = "true" ] && echo "-sasl sasl_error_logger '{file, \"'$(LOG_BASE)'/rabbit-sasl.log\"}' -kernel error_logger '{file, \"'$(LOG_BASE)'/rabbit.log\"}'") \
-	$(SSL_BROKER_OPTIONS)
 
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
@@ -86,7 +84,7 @@ DIALYZER_CALL=dialyzer --plt $(PLT)
 .PHONY: all compile compile_tests run dialyzer dialyze_all add_broker_to_plt \
 	prepare_tests all_tests all_tests_coverage run_test_broker \
 	run_test_broker_cover test_network test_direct test_network_coverage \
-	test_direct_coverage clean source_tarball
+	test_direct_coverage clean source_tarball ssl test_ssl test_ssl_coverage
 
 all: compile
 
@@ -114,20 +112,22 @@ add_broker_to_plt: $(BROKER_DIR)/ebin
 prepare_tests: compile compile_tests
 
 all_tests: prepare_tests
-	OK=true && \
-	{ $(MAKE) test_network || OK=false; } && \
-	$(MAKE) test_direct && $$OK
+	OK_ALL=true && \
+	{ $(MAKE) test_network || OK_ALL=false; } && \
+	$(ALL_SSL) && \
+	$(MAKE) test_direct && $$OK_ALL
 
 all_tests_coverage: prepare_tests
-	OK=true && \
-	{ $(MAKE) test_network_coverage || OK=false; } && \
-	$(MAKE) test_direct_coverage && $$OK
+	OK_ALL=true && \
+	{ $(MAKE) test_network_coverage || OK_ALL=false; } && \
+	$(ALL_SSL_COVERAGE) && \
+	$(MAKE) test_direct_coverage && $$OK_ALL
 
 run_test_broker:
 	OK=true && \
 	TMPFILE=$$(mktemp) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
-		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
+		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) $(SSL_BROKER_ARGS) \
 		-s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
 	tee $$TMPFILE || OK=false; } && \
 	{ grep "All .\+ tests passed." $$TMPFILE || OK=false; } && \
@@ -137,7 +137,7 @@ run_test_broker_cover:
 	OK=true && \
 	TMPFILE=$$(mktemp) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
-		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
+		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) $(SSL_BROKER_ARGS) \
 		-s rabbit -s cover start -s rabbit_misc enable_cover \
 		-s rabbit $(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
 		-s cover stop -s init stop" 2>&1 | \
@@ -145,36 +145,29 @@ run_test_broker_cover:
 	{ grep "All .\+ tests passed." $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && $$OK
 
+ssl:
+	$(SSL)
+	mkdir -p $(CLIENT_CERTS_DIR)
+	$(MAKE) -C $(SSL_CERTS_DIR) DIR=$(CLIENT_CERTS_DIR) all
+
+test_ssl: prepare_tests ssl
+	OK_SSL=true && \
+	{ $(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s ssl_client_SUITE test" \
+	|| OK_SSL=false; } && $(SSL_POST) && $$OK_SSL
+
 test_network: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
 
 test_direct: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
 
+test_ssl_coverage: prepare_tests ssl
+	OK_SSL=true && \
+	{ $(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s ssl_client_SUITE test" \
+	|| OK_SSL=false; } && $(SSL_POST) && $$OK_SSL
+
 test_network_coverage: prepare_tests
 	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
-all_tests_coverage: compile compile_tests
-	$(ERL_WITH_BROKER) -eval $(ALL_COVER)
-
-test_network: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test(),halt().'
-
-test_ssl: compile compile_tests
-	$(SSL)
-	$(ERL_WITH_BROKER) -eval 'ssl_client_SUITE:test(),halt().'
-
-test_network_coverage: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'network_client_SUITE:test_coverage(),halt().'
-
-test_ssl_coverage: compile compile_tests
-	$(SSL)
-	$(ERL_WITH_BROKER) -eval 'ssl_client_SUITE:test_coverage(),halt().'
-
-test_direct: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test(),halt().'
-
-test_direct_coverage: compile compile_tests
-	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test_coverage(),halt().'
 
 test_direct_coverage: prepare_tests
 	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"

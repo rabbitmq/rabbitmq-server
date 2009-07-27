@@ -78,11 +78,12 @@ hard_error_test() ->
 %% Common Functions
 
 new_connection() ->
-  amqp_connection:start_network("guest", "guest", "localhost", 5671, [ 
-          {cacertfile, "examples/certs/ca/cacerts.pem"}, 
-          {certfile, "examples/certs/client/cert.pem"}, 
-          {keyfile, "examples/certs/client/key.pem"}, 
-          {verify, verify_peer}]).
+    {ok, [[CertsDir]]} = init:get_argument(erlang_client_ssl_dir),
+    amqp_connection:start_network("guest", "guest", "localhost", 5671,
+                                  [{cacertfile, CertsDir ++ "/ca/cacerts.pem"},
+                                   {certfile, CertsDir ++ "/client/cert.pem"},
+                                   {keyfile, CertsDir ++ "/client/key.pem"},
+                                   {verify, verify_peer}]).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
