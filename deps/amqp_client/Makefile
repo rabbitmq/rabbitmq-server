@@ -24,8 +24,9 @@
 #
 
 EBIN_DIR=ebin
+export BROKER_DIR=../rabbitmq-server
 export INCLUDE_DIR=include
-export INCLUDE_SERV_DIR=$(BROKER_SYMLINK)/include
+export INCLUDE_SERV_DIR=$(BROKER_DIR)/include
 TEST_DIR=test
 SOURCE_DIR=src
 DIST_DIR=dist
@@ -45,7 +46,7 @@ TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
-LOAD_PATH=$(EBIN_DIR) $(BROKER_SYMLINK)/ebin $(TEST_DIR)
+LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR)
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
@@ -57,6 +58,8 @@ endif
 
 ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
+RABBITMQ_NODENAME=rabbit
+PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
 ALL_BASE := 'network_client_SUITE:test(),direct_client_SUITE:test(),'
 
 ifdef SSL_CERTS_DIR
@@ -80,15 +83,20 @@ ERL_WITH_BROKER=erl -pa $(LOAD_PATH) -mnesia dir tmp -boot start_sasl -s rabbit 
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
 
-BROKER_DIR=../rabbitmq-server
-BROKER_SYMLINK=rabbitmq_server
+.PHONY: all compile compile_tests run dialyzer dialyze_all add_broker_to_plt \
+	prepare_tests all_tests all_tests_coverage run_test_broker \
+	run_test_broker_cover test_network test_direct test_network_coverage \
+	test_direct_coverage clean source_tarball
 
 all: compile
 
 compile: $(TARGETS)
 
 compile_tests: $(TEST_DIR)
+	$(MAKE) -C $(TEST_DIR)
 
+run: compile
+	erl -pa $(LOAD_PATH)
 
 dialyze: $(TARGETS)
 	$(DIALYZER_CALL) -c $^
@@ -96,33 +104,55 @@ dialyze: $(TARGETS)
 dialyze_all: $(TARGETS) $(TEST_TARGETS)
 	$(DIALYZER_CALL) -c $^
 
-add_broker_to_plt: $(BROKER_SYMLINK)/ebin
+add_broker_to_plt: $(BROKER_DIR)/ebin
 	$(DIALYZER_CALL) --add_to_plt -r $<
 
-$(TEST_TARGETS): $(TEST_DIR)
+###############################################################################
+##  Testing
+###############################################################################
 
-.PHONY: $(TEST_DIR)
-$(TEST_DIR): $(BROKER_SYMLINK)
-	$(MAKE) -C $(TEST_DIR)
+prepare_tests: compile compile_tests
 
-$(BROKER_SYMLINK):
-ifdef BROKER_DIR
-	ln -sf $(BROKER_DIR) $(BROKER_SYMLINK)
-endif
+all_tests: prepare_tests
+	OK=true && \
+	{ $(MAKE) test_network || OK=false; } && \
+	$(MAKE) test_direct && $$OK
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
-	mkdir -p $(EBIN_DIR); erlc $(ERLC_OPTS) $<
+all_tests_coverage: prepare_tests
+	OK=true && \
+	{ $(MAKE) test_network_coverage || OK=false; } && \
+	$(MAKE) test_direct_coverage && $$OK
 
+run_test_broker:
+	OK=true && \
+	TMPFILE=$$(mktemp) && \
+	{ $(MAKE) -C $(BROKER_DIR) run-node \
+		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
+		-s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
+	tee $$TMPFILE || OK=false; } && \
+	{ grep "All .\+ tests passed." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && $$OK
 
-run: compile
-	erl -pa $(LOAD_PATH)
+run_test_broker_cover:
+	OK=true && \
+	TMPFILE=$$(mktemp) && \
+	{ $(MAKE) -C $(BROKER_DIR) run-node \
+		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
+		-s rabbit -s cover start -s rabbit_misc enable_cover \
+		-s rabbit $(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
+		-s cover stop -s init stop" 2>&1 | \
+	tee $$TMPFILE || OK=false; } && \
+	{ grep "All .\+ tests passed." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && $$OK
 
-run_with_broker: compile
-	$(ERL_WITH_BROKER)
+test_network: prepare_tests
+	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
 
-all_tests: compile compile_tests
-	$(ERL_WITH_BROKER) -eval $(ALL)
+test_direct: prepare_tests
+	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
 
+test_network_coverage: prepare_tests
+	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
 all_tests_coverage: compile compile_tests
 	$(ERL_WITH_BROKER) -eval $(ALL_COVER)
 
@@ -146,15 +176,19 @@ test_direct: compile compile_tests
 test_direct_coverage: compile compile_tests
 	$(ERL_WITH_BROKER) -eval 'direct_client_SUITE:test_coverage(),halt().'
 
+test_direct_coverage: prepare_tests
+	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
-	rm -f rabbitmq_server erl_crash.dump
-	rm -fr cover dist tmp
+	rm -f erl_crash.dump
+	rm -fr dist
 	$(MAKE) -C $(TEST_DIR) clean
 
-$(DIST_DIR):
-	mkdir -p $@
+
+###############################################################################
+##  Packaging
+###############################################################################
 
 source_tarball: $(DIST_DIR)
 	cp -a README Makefile dist/$(DIST_DIR)/
@@ -167,25 +201,33 @@ source_tarball: $(DIST_DIR)
 	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
 
-package: clean $(DIST_DIR) $(TARGETS)
+package: clean compile $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE)
 	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
 	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
-
-common_package: $(BROKER_SYMLINK)
-	$(MAKE) -C $(BROKER_SYMLINK)
+common_package: $(BROKER_DIR)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
 	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
 	$(foreach DEP, $(DEPS), \
-        ( cp $(BROKER_SYMLINK)/$(EBIN_DIR)/$(DEP).beam \
+        ( cp $(BROKER_DIR)/$(EBIN_DIR)/$(DEP).beam \
           $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
         );)
 	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
 
-test_common_package: package common_package $(TEST_TARGETS)
-	@echo This target requires that you are already running an instance \
-        of the broker on the localhost.......
-	ERL_LIBS=$(DIST_DIR) erl -pa test -eval 'network_client_SUITE:test(),halt().'
 
+###############################################################################
+##  Internal targets
+###############################################################################
+
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) | $(EBIN_DIR)
+	erlc $(ERLC_OPTS) $<
+
+$(BROKER_DIR):
+	test -e $(BROKER_DIR)
+	$(MAKE_BROKER)
+
+$(DIST_DIR):
+	mkdir -p $@

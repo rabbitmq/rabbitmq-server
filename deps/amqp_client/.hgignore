@@ -1,6 +1,5 @@
 \.beam$
-^rabbitmq_server$
-^cover/
 ^tmp/
 ^dist/
+^\.test_error$
 ^erl_crash.dump$
