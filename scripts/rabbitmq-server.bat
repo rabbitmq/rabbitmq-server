@@ -104,11 +104,20 @@ set CLUSTER_CONFIG=-rabbit cluster_config \""%RABBITMQ_CLUSTER_CONFIG_FILE:\=/%"
 if "%RABBITMQ_MNESIA_DIR%"=="" (
     set RABBITMQ_MNESIA_DIR=%RABBITMQ_MNESIA_BASE%/%RABBITMQ_NODENAME%-mnesia
 )
+set RABBITMQ_EBIN_ROOT=%~dp0..\ebin
+if exist "%RABBITMQ_EBIN_ROOT%\rabbit.boot" (
+	echo Using Custom Boot File "%RABBITMQ_EBIN_ROOT%\rabbit.boot"
+	set RABBITMQ_BOOT_FILE="%RABBITMQ_EBIN_ROOT%\rabbit"
+	set RABBITMQ_EBIN_PATH=
+) else (
+	set RABBITMQ_BOOT_FILE=start_sasl
+	set RABBITMQ_EBIN_PATH=-pa "%RABBITMQ_EBIN_ROOT%"
+)
 
 "%ERLANG_HOME%\bin\erl.exe" ^
--pa "%~dp0..\ebin" ^
+%RABBITMQ_EBIN_PATH% ^
 -noinput ^
--boot start_sasl ^
+-boot %RABBITMQ_BOOT_FILE% ^
 -sname %RABBITMQ_NODENAME% ^
 -s rabbit ^
 +W w ^
