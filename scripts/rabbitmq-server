@@ -75,12 +75,13 @@ fi
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT='-noinput -s rabbit'
 
-if [ -f "`dirname $0`/../ebin/rabbit.boot" ]; then
-	RABBITMQ_BOOT_FILE="`dirname $0`/../ebin/rabbit"
+RABBITMQ_EBIN_ROOT="`dirname $0`/../ebin"
+if [ -f "${RABBITMQ_EBIN_ROOT}/rabbit.boot" ]; then
+	RABBITMQ_BOOT_FILE="${RABBITMQ_EBIN_ROOT}/rabbit"
 	RABBITMQ_EBIN_PATH=""
 else
 	RABBITMQ_BOOT_FILE=start_sasl
-	RABBITMQ_EBIN_PATH="-pa `dirname $0`/../ebin"
+	RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_EBIN_ROOT}"
 fi
 
 # we need to turn off path expansion because some of the vars, notably
