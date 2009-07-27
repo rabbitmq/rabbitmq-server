@@ -24,6 +24,7 @@
 #
 
 EBIN_DIR=ebin
+export BROKER_DIR=../rabbitmq-server
 export INCLUDE_DIR=include
 export INCLUDE_SERV_DIR=$(BROKER_DIR)/include
 TEST_DIR=test
@@ -48,27 +49,22 @@ endif
 
 ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
-export BROKER_DIR=../rabbitmq-server
 RABBITMQ_NODENAME=rabbit
-BROKER_START_ARGS=-pa $(realpath $(LOAD_PATH))
-MAKE_BROKER=$(MAKE) RABBITMQ_SERVER_START_ARGS='$(BROKER_START_ARGS)' -C $(BROKER_DIR)
-ERL_CALL_BROKER=erl_call -sname $(RABBITMQ_NODENAME) -e
+PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
 
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
 
+.PHONY: all compile compile_tests run dialyzer dialyze_all add_broker_to_plt \
+	prepare_tests all_tests all_tests_coverage run_test_broker \
+	run_test_broker_cover test_network test_direct test_network_coverage \
+	test_direct_coverage clean source_tarball
 
 all: compile
 
 compile: $(TARGETS)
 
 compile_tests: $(TEST_DIR)
-
-
-$(TEST_TARGETS): $(TEST_DIR)
-
-.PHONY: $(TEST_DIR)
-$(TEST_DIR): $(BROKER_DIR)
 	$(MAKE) -C $(TEST_DIR)
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_DIR)
@@ -77,13 +73,8 @@ $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_DIR)
 $(BROKER_DIR):
 	test -e $(BROKER_DIR)
 
-
 run: compile
 	erl -pa $(LOAD_PATH)
-
-run_in_broker: $(BROKER_DIR) compile
-	$(MAKE_BROKER) run
-
 
 dialyze: $(TARGETS)
 	$(DIALYZER_CALL) -c $^
@@ -94,92 +85,55 @@ dialyze_all: $(TARGETS) $(TEST_TARGETS)
 add_broker_to_plt: $(BROKER_DIR)/ebin
 	$(DIALYZER_CALL) --add_to_plt -r $<
 
+prepare_tests: compile compile_tests
 
-.PHONY: start_background_node_in_broker
-start_background_node_in_broker: $(BROKER_DIR) compile
-	$(MAKE_BROKER) start-background-node
-	$(MAKE_BROKER) start-rabbit-on-node
+all_tests: prepare_tests
+	OK=true && \
+	{ $(MAKE) test_network || OK=false; } && \
+	$(MAKE) test_direct && $$OK
 
-.PHONY: stop_background_node_in_broker
-stop_background_node_in_broker: $(BROKER_DIR)
-	$(MAKE_BROKER) stop-rabbit-on-node
-	$(MAKE_BROKER) stop-node
+all_tests_coverage: prepare_tests
+	OK=true && \
+	{ $(MAKE) test_network_coverage || OK=false; } && \
+	$(MAKE) test_direct_coverage && $$OK
 
-.PHONY: start_cover_on_node
-start_cover_on_node: $(BROKER_DIR)
-	$(MAKE_BROKER) start-cover
+run_test_broker:
+	OK=true && \
+	TMPFILE=$$(mktemp) && \
+	{ $(MAKE) -C $(BROKER_DIR) run-node \
+		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
+		-s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
+	tee $$TMPFILE || OK=false; } && \
+	{ grep "All .\+ tests passed." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && $$OK
 
-.PHONY: stop_cover_on_node
-stop_cover_on_node: $(BROKER_DIR)
-	$(MAKE_BROKER) stop-cover
+run_test_broker_cover:
+	OK=true && \
+	TMPFILE=$$(mktemp) && \
+	{ $(MAKE) -C $(BROKER_DIR) run-node \
+		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
+		-s rabbit -s cover start -s rabbit_misc enable_cover \
+		-s rabbit $(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
+		-s cover stop -s init stop" 2>&1 | \
+	tee $$TMPFILE || OK=false; } && \
+	{ grep "All .\+ tests passed." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && $$OK
 
-.PHONY: test_network_on_node
-test_network_on_node:
-	echo 'network_client_SUITE:test().' | $(ERL_CALL_BROKER) | egrep '^\{ok, ok\}$$' || touch .test_error
+test_network: prepare_tests
+	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
 
-.PHONY: test_direct_on_node
-test_direct_on_node:
-	echo 'direct_client_SUITE:test().' | $(ERL_CALL_BROKER) | egrep '^\{ok, ok\}$$' || touch .test_error
+test_direct: prepare_tests
+	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
 
-.PHONY: clean_test_error
-clean_test_error:
-	rm -f .test_error
+test_network_coverage: prepare_tests
+	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
 
-all_tests: compile compile_tests \
-           start_background_node_in_broker \
-           clean_test_error \
-           test_direct_on_node \
-           test_network_on_node \
-           stop_background_node_in_broker
-	test ! -e .test_error
-
-test_network: compile compile_tests \
-              start_background_node_in_broker \
-              clean_test_error \
-              test_network_on_node \
-              stop_background_node_in_broker
-	test ! -e .test_error
-
-test_direct: compile compile_tests \
-              start_background_node_in_broker \
-              clean_test_error \
-              test_direct_on_node \
-              stop_background_node_in_broker
-	test ! -e .test_error
-
-all_tests_coverage: compile compile_tests \
-           start_background_node_in_broker \
-           clean_test_error \
-           start_cover_on_node \
-           test_direct_on_node \
-           test_network_on_node \
-           stop_cover_on_node \
-           stop_background_node_in_broker
-	test ! -e .test_error
-
-test_network_coverage: compile compile_tests \
-           start_background_node_in_broker \
-           clean_test_error \
-           start_cover_on_node \
-           test_network_on_node \
-           stop_cover_on_node \
-           stop_background_node_in_broker
-	test ! -e .test_error
-
-test_direct_coverage: compile compile_tests \
-           start_background_node_in_broker \
-           clean_test_error \
-           start_cover_on_node \
-           test_direct_on_node \
-           stop_cover_on_node \
-           stop_background_node_in_broker
-	test ! -e .test_error
-
+test_direct_coverage: prepare_tests
+	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f erl_crash.dump
-	rm -f .test_error
 	rm -fr dist tmp
 	$(MAKE) -C $(TEST_DIR) clean
 
