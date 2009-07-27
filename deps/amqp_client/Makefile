@@ -62,7 +62,7 @@ RABBITMQ_NODENAME=rabbit
 PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
 
 ifdef SSL_CERTS_DIR
-SSL := true
+SSL := $(MAKE) -C $(SSL_CERTS_DIR) all
 ALL_SSL := { $(MAKE) test_ssl || OK=false; }
 ALL_SSL_COVERAGE := { $(MAKE) test_ssl_coverage || OK=false; }
 CLIENT_CERTS_DIR:=$(shell mktemp -d -u)
