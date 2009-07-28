@@ -48,6 +48,9 @@ TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
 LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR)
 
+COVER_START := -s cover start -s rabbit_misc enable_cover
+COVER_STOP := -s rabbit_misc report_cover -s cover stop
+
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
 # only available in R12B-3 upwards
@@ -99,8 +102,7 @@ prepare_tests: compile compile_tests
 
 all_tests: prepare_tests
 	OK=true && \
-	{ $(MAKE) test_network || OK=false; } && \
-	{ $(MAKE) test_direct || OK=false; } && \
+	{ $(MAKE) test_suites || OK=false; } && \
 	{ $(MAKE) test_common_package || OK=false; } && \
 	$$OK
 
@@ -127,25 +129,11 @@ run_test_broker:
 	rm $$TMPFILE && \
 	$$OK
 
-run_test_broker_cover:
-	OK=true && \
-	TMPFILE=$$(mktemp) && \
-	{ $(MAKE) -C $(BROKER_DIR) run-node \
-		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
-		-noshell -s rabbit -s cover start -s rabbit_misc enable_cover \
-		$(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
-		-s cover stop -s init stop" 2>&1 | \
-		tee $$TMPFILE || OK=false; } && \
-	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
-	rm $$TMPFILE && \
-	$$OK
-
 start_test_broker_node:
 	$(MAKE) RABBITMQ_SERVER_START_ARGS='-s rabbit' -C $(BROKER_DIR) start-background-node
 
 stop_test_broker_node:
 	erl_call -sname $(RABBITMQ_NODENAME) -q
-
 
 test_network: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
@@ -154,10 +142,12 @@ test_direct: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
 
 test_network_coverage: prepare_tests
-	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
+	$(MAKE) run_test_broker_cover \
+	RUN_TEST_BROKER_ARGS="$(COVER_START) -s network_client_SUITE test $(COVER_STOP)"
 
 test_direct_coverage: prepare_tests
-	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
+	$(MAKE) run_test_broker_cover \
+	RUN_TEST_BROKER_ARGS="$(COVER_START) -s direct_client_SUITE test $(COVER_STOP)"
 
 test_common_package: package common_package prepare_tests
 	$(MAKE) start_test_broker_node
