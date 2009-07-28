@@ -48,6 +48,9 @@ TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
 LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR)
 
+COVER_START := -s cover start -s rabbit_misc enable_cover
+COVER_STOP := -s rabbit_misc report_cover -s cover stop
+
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
 # only available in R12B-3 upwards
@@ -78,10 +81,12 @@ endif
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
 
-.PHONY: all compile compile_tests run dialyzer dialyze_all add_broker_to_plt \
-	prepare_tests all_tests all_tests_coverage run_test_broker \
-	run_test_broker_cover test_network test_direct test_network_coverage \
-	test_direct_coverage clean source_tarball ssl test_ssl test_ssl_coverage
+.PHONY: all compile compile_tests run run_in_broker dialyzer dialyze_all \
+	add_broker_to_plt prepare_tests all_tests test_suites \
+	test_suites_coverage run_test_broker start_test_broker_node \
+	stop_test_broker_node test_network test_direct test_ssl \
+	test_network_coverage test_direct_coverage test_ssl_coverage \
+	test_common_package clean source_tarball package common_package
 
 all: compile
 
@@ -112,12 +117,10 @@ add_broker_to_plt: $(BROKER_DIR)/ebin
 prepare_tests: compile compile_tests
 
 all_tests: prepare_tests
-	OK_ALL=true && \
-	{ $(MAKE) test_network || OK_ALL=false; } && \
-	{ $(MAKE) test_direct || OK_ALL=false; } && \
-	$(ALL_SSL) && \
-	{ $(MAKE) test_common_package || OK_ALL=false; } && \
-	$$OK_ALL
+	OK=true && \
+	{ $(MAKE) test_suites || OK=false; } && \
+	{ $(MAKE) test_common_package || OK=false; } && \
+	$$OK
 
 test_suites: prepare_tests
 	OK_ALL=true && \
@@ -144,19 +147,6 @@ run_test_broker:
 	rm $$TMPFILE && \
 	$$OK
 
-run_test_broker_cover:
-	OK=true && \
-	TMPFILE=$$(mktemp) && \
-	{ $(MAKE) -C $(BROKER_DIR) run-node \
-		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) $(SSL_BROKER_ARGS) \
-		-noshell -s rabbit -s cover start -s rabbit_misc enable_cover \
-		$(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
-		-s cover stop -s init stop" 2>&1 | \
-		tee $$TMPFILE || OK=false; } && \
-	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
-	rm $$TMPFILE && \
-	$$OK
-
 start_test_broker_node:
 	$(MAKE) RABBITMQ_SERVER_START_ARGS="$(SSL_BROKER_ARGS) -s rabbit" -C $(BROKER_DIR) start-background-node
 
@@ -176,13 +166,16 @@ test_direct: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
 
 test_ssl_coverage: prepare_tests ssl
-	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s ssl_client_SUITE test"
+	$(MAKE) run_test_broker \
+	RUN_TEST_BROKER_ARGS="$(COVER_START) -s ssl_client_SUITE test $(COVER_STOP)"
 
 test_network_coverage: prepare_tests
-	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
+	$(MAKE) run_test_broker \
+	RUN_TEST_BROKER_ARGS="$(COVER_START) -s network_client_SUITE test $(COVER_STOP)"
 
 test_direct_coverage: prepare_tests
-	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
+	$(MAKE) run_test_broker \
+	RUN_TEST_BROKER_ARGS="$(COVER_START) -s direct_client_SUITE test $(COVER_STOP)"
 
 test_common_package: package common_package prepare_tests
 	$(MAKE) start_test_broker_node
