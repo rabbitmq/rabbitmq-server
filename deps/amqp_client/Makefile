@@ -69,7 +69,7 @@ DIALYZER_CALL=dialyzer --plt $(PLT)
 
 .PHONY: all compile compile_tests run dialyzer dialyze_all add_broker_to_plt \
 	prepare_tests all_tests all_tests_coverage run_test_broker \
-	run_test_broker_cover test_network test_direct test_network_coverage \
+	run_test_broker test_network test_direct test_network_coverage \
 	test_direct_coverage clean source_tarball
 
 all: compile
@@ -142,11 +142,11 @@ test_direct: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
 
 test_network_coverage: prepare_tests
-	$(MAKE) run_test_broker_cover \
+	$(MAKE) run_test_broker \
 	RUN_TEST_BROKER_ARGS="$(COVER_START) -s network_client_SUITE test $(COVER_STOP)"
 
 test_direct_coverage: prepare_tests
-	$(MAKE) run_test_broker_cover \
+	$(MAKE) run_test_broker \
 	RUN_TEST_BROKER_ARGS="$(COVER_START) -s direct_client_SUITE test $(COVER_STOP)"
 
 test_common_package: package common_package prepare_tests
