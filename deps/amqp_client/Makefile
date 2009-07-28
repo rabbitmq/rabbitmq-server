@@ -67,10 +67,12 @@ PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
 
-.PHONY: all compile compile_tests run dialyzer dialyze_all add_broker_to_plt \
-	prepare_tests all_tests all_tests_coverage run_test_broker \
-	run_test_broker test_network test_direct test_network_coverage \
-	test_direct_coverage clean source_tarball
+.PHONY: all compile compile_tests run run_in_broker dialyzer dialyze_all \
+	add_broker_to_plt prepare_tests all_tests test_suites \
+	test_suites_coverage run_test_broker start_test_broker_node \
+	stop_test_broker_node test_network test_direct test_network_coverage \
+	test_direct_coverage test_common_package clean source_tarball package \
+	common_package
 
 all: compile
 
