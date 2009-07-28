@@ -62,20 +62,17 @@ RABBITMQ_NODENAME=rabbit
 PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
 
 ifdef SSL_CERTS_DIR
-SSL := $(MAKE) -C $(SSL_CERTS_DIR) all
+SSL := true
 ALL_SSL := { $(MAKE) test_ssl || OK=false; }
 ALL_SSL_COVERAGE := { $(MAKE) test_ssl_coverage || OK=false; }
-CLIENT_CERTS_DIR:=$(shell mktemp -d -u)
 SSL_BROKER_ARGS := -rabbit ssl_listeners [{\\\"0.0.0.0\\\",5671}] \
 	-rabbit ssl_options [{cacertfile,\\\"$(SSL_CERTS_DIR)/ca/cacerts.pem\\\"},{certfile,\\\"$(SSL_CERTS_DIR)/server/cert.pem\\\"},{keyfile,\\\"$(SSL_CERTS_DIR)/server/key.pem\\\"}] \
 	-erlang_client_ssl_dir \"$(SSL_CERTS_DIR)\"
-SSL_POST := rm -rf $(CLIENT_CERTS_DIR)
 else
 SSL := @echo No SSL_CERTS_DIR defined. && false
 ALL_SSL := true
 ALL_SSL_COVERAGE := true
 SSL_BROKER_ARGS :=
-SSL_POST := true
 endif
 
 PLT=$(HOME)/.dialyzer_plt
@@ -147,13 +144,11 @@ run_test_broker_cover:
 
 ssl:
 	$(SSL)
-	mkdir -p $(CLIENT_CERTS_DIR)
-	$(MAKE) -C $(SSL_CERTS_DIR) DIR=$(CLIENT_CERTS_DIR) all
 
 test_ssl: prepare_tests ssl
 	OK_SSL=true && \
 	{ $(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s ssl_client_SUITE test" \
-	|| OK_SSL=false; } && $(SSL_POST) && $$OK_SSL
+	|| OK_SSL=false; } && $$OK_SSL
 
 test_network: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
@@ -164,7 +159,7 @@ test_direct: prepare_tests
 test_ssl_coverage: prepare_tests ssl
 	OK_SSL=true && \
 	{ $(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s ssl_client_SUITE test" \
-	|| OK_SSL=false; } && $(SSL_POST) && $$OK_SSL
+	|| OK_SSL=false; } && $$OK_SSL
 
 test_network_coverage: prepare_tests
 	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
