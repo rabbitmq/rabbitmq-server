@@ -63,8 +63,8 @@ PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
 
 ifdef SSL_CERTS_DIR
 SSL := true
-ALL_SSL := { $(MAKE) test_ssl || OK=false; }
-ALL_SSL_COVERAGE := { $(MAKE) test_ssl_coverage || OK=false; }
+ALL_SSL := { $(MAKE) test_ssl || OK_ALL=false; }
+ALL_SSL_COVERAGE := { $(MAKE) test_ssl_coverage || OK_ALL=false; }
 SSL_BROKER_ARGS := -rabbit ssl_listeners [{\\\"0.0.0.0\\\",5671}] \
 	-rabbit ssl_options [{cacertfile,\\\"$(SSL_CERTS_DIR)/ca/cacerts.pem\\\"},{certfile,\\\"$(SSL_CERTS_DIR)/server/cert.pem\\\"},{keyfile,\\\"$(SSL_CERTS_DIR)/server/key.pem\\\"}] \
 	-erlang_client_ssl_dir \"$(SSL_CERTS_DIR)\"
@@ -93,6 +93,9 @@ compile_tests: $(TEST_DIR)
 run: compile
 	erl -pa $(LOAD_PATH)
 
+run_in_broker: compile $(BROKER_DIR)
+	$(MAKE) RABBITMQ_SERVER_START_ARGS='$(PA_LOAD_PATH)' -C $(BROKER_DIR) run
+
 dialyze: $(TARGETS)
 	$(DIALYZER_CALL) -c $^
 
@@ -111,44 +114,60 @@ prepare_tests: compile compile_tests
 all_tests: prepare_tests
 	OK_ALL=true && \
 	{ $(MAKE) test_network || OK_ALL=false; } && \
+	{ $(MAKE) test_direct || OK_ALL=false; } && \
 	$(ALL_SSL) && \
-	$(MAKE) test_direct && $$OK_ALL
+	{ $(MAKE) test_common_package || OK_ALL=false; } && \
+	$$OK_ALL
 
-all_tests_coverage: prepare_tests
+test_suites: prepare_tests
+	OK_ALL=true && \
+	{ $(MAKE) test_network || OK_ALL=false; } && \
+	{ $(MAKE) test_direct || OK_ALL=false; } && \
+	$(ALL_SSL) && \
+	$$OK_ALL
+
+test_suites_coverage: prepare_tests
 	OK_ALL=true && \
 	{ $(MAKE) test_network_coverage || OK_ALL=false; } && \
+	{ $(MAKE) test_direct_coverage || OK_ALL=false; } && \
 	$(ALL_SSL_COVERAGE) && \
-	$(MAKE) test_direct_coverage && $$OK_ALL
+	$$OK_ALL
 
 run_test_broker:
 	OK=true && \
 	TMPFILE=$$(mktemp) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
 		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) $(SSL_BROKER_ARGS) \
-		-s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
-	tee $$TMPFILE || OK=false; } && \
-	{ grep "All .\+ tests passed." $$TMPFILE || OK=false; } && \
-	rm $$TMPFILE && $$OK
+		-noshell -s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
+		tee $$TMPFILE || OK=false; } && \
+	{ grep "All .\+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && \
+	$$OK
 
 run_test_broker_cover:
 	OK=true && \
 	TMPFILE=$$(mktemp) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
 		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) $(SSL_BROKER_ARGS) \
-		-s rabbit -s cover start -s rabbit_misc enable_cover \
-		-s rabbit $(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
+		-noshell -s rabbit -s cover start -s rabbit_misc enable_cover \
+		$(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
 		-s cover stop -s init stop" 2>&1 | \
-	tee $$TMPFILE || OK=false; } && \
-	{ grep "All .\+ tests passed." $$TMPFILE || OK=false; } && \
-	rm $$TMPFILE && $$OK
+		tee $$TMPFILE || OK=false; } && \
+	{ grep "All .\+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && \
+	$$OK
+
+start_test_broker_node:
+	$(MAKE) RABBITMQ_SERVER_START_ARGS='-s rabbit' -C $(BROKER_DIR) start-background-node
+
+stop_test_broker_node:
+	erl_call -sname $(RABBITMQ_NODENAME) -q
 
 ssl:
 	$(SSL)
 
 test_ssl: prepare_tests ssl
-	OK_SSL=true && \
-	{ $(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s ssl_client_SUITE test" \
-	|| OK_SSL=false; } && $$OK_SSL
+	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s ssl_client_SUITE test"
 
 test_network: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
@@ -157,15 +176,25 @@ test_direct: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
 
 test_ssl_coverage: prepare_tests ssl
-	OK_SSL=true && \
-	{ $(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s ssl_client_SUITE test" \
-	|| OK_SSL=false; } && $$OK_SSL
+	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s ssl_client_SUITE test"
 
 test_network_coverage: prepare_tests
 	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
 
 test_direct_coverage: prepare_tests
 	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
+
+test_common_package: package common_package prepare_tests
+	$(MAKE) start_test_broker_node
+	OK=true && \
+	TMPFILE=$$(mktemp) && \
+	    { ERL_LIBS=$(DIST_DIR) erl -noshell -pa $(TEST_DIR) \
+	    -eval 'network_client_SUITE:test(), halt().' 2>&1 | \
+		tee $$TMPFILE || OK=false; } && \
+	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && \
+	$(MAKE) stop_test_broker_node && \
+	$$OK
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
@@ -189,7 +218,8 @@ source_tarball: $(DIST_DIR)
 	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
 
-package: clean compile $(DIST_DIR)
+package: $(DIST_DIR)
+	$(MAKE) clean compile
 	mkdir -p $(DIST_DIR)/$(PACKAGE)
 	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)

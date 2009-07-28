@@ -1,5 +1,4 @@
 \.beam$
 ^tmp/
 ^dist/
-^\.test_error$
 ^erl_crash.dump$
