@@ -97,7 +97,7 @@ add_broker_to_plt: $(BROKER_DIR)/ebin
 
 prepare_tests: compile compile_tests
 
-all_tests: clean prepare_tests
+all_tests: prepare_tests
 	OK=true && \
 	{ $(MAKE) test_network || OK=false; } && \
 	{ $(MAKE) test_direct || OK=false; } && \
@@ -123,7 +123,7 @@ run_test_broker:
 		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
 		-noshell -s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
 		tee $$TMPFILE || OK=false; } && \
-	{ egrep "All .\+ tests |(successful)|(passed)." $$TMPFILE || OK=false; } && \
+	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
 	$$OK
 
@@ -136,7 +136,7 @@ run_test_broker_cover:
 		$(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
 		-s cover stop -s init stop" 2>&1 | \
 		tee $$TMPFILE || OK=false; } && \
-	{ egrep "All .\+ tests |(successful)|(passed)." $$TMPFILE || OK=false; } && \
+	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
 	$$OK
 
@@ -159,13 +159,14 @@ test_network_coverage: prepare_tests
 test_direct_coverage: prepare_tests
 	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
 
-test_common_package: package common_package prepare_tests start_test_broker_node
+test_common_package: package common_package prepare_tests
+	$(MAKE) start_test_broker_node
 	OK=true && \
 	TMPFILE=$$(mktemp) && \
 	    { ERL_LIBS=$(DIST_DIR) erl -noshell -pa $(TEST_DIR) \
 	    -eval 'network_client_SUITE:test(), halt().' 2>&1 | \
 		tee $$TMPFILE || OK=false; } && \
-	{ egrep "All .\+ tests |(successful)|(passed)." $$TMPFILE || OK=false; } && \
+	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
 	$(MAKE) stop_test_broker_node && \
 	$$OK
@@ -192,7 +193,8 @@ source_tarball: $(DIST_DIR)
 	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
 
-package: clean compile $(DIST_DIR)
+package: $(DIST_DIR)
+	$(MAKE) clean compile
 	mkdir -p $(DIST_DIR)/$(PACKAGE)
 	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
