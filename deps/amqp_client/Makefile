@@ -106,8 +106,8 @@ all_tests: prepare_tests
 
 test_suites: prepare_tests
 	OK=true && \
-	{ $(MAKE) test_network_coverage || OK=false; } && \
-	{ $(MAKE) test_direct_coverage || OK=false; } && \
+	{ $(MAKE) test_network || OK=false; } && \
+	{ $(MAKE) test_direct || OK=false; } && \
 	$$OK
 
 test_suites_coverage: prepare_tests
