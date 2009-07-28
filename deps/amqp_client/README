@@ -212,6 +212,10 @@ run
     Builds the client and starts an Erlang shell with both the client and the
     server in the load path.
 
+run_in_broker
+    Builds the client and starts RabbitMQ server with shell and the client
+    included in load path.
+
 clean
     Removes build products and wipes all files produced by any other
     rabbitmq-erlang-client make targets or client errors.

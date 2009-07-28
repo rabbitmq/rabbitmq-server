@@ -79,6 +79,9 @@ compile_tests: $(TEST_DIR)
 run: compile
 	erl -pa $(LOAD_PATH)
 
+run_in_broker: compile $(BROKER_DIR)
+	$(MAKE) RABBITMQ_SERVER_START_ARGS='$(PA_LOAD_PATH)' -C $(BROKER_DIR) run
+
 dialyze: $(TARGETS)
 	$(DIALYZER_CALL) -c $^
 
@@ -94,37 +97,55 @@ add_broker_to_plt: $(BROKER_DIR)/ebin
 
 prepare_tests: compile compile_tests
 
-all_tests: prepare_tests
+all_tests: clean prepare_tests
 	OK=true && \
 	{ $(MAKE) test_network || OK=false; } && \
-	$(MAKE) test_direct && $$OK
+	{ $(MAKE) test_direct || OK=false; } && \
+	{ $(MAKE) test_common_package || OK=false; } && \
+	$$OK
 
-all_tests_coverage: prepare_tests
+test_suites: prepare_tests
 	OK=true && \
 	{ $(MAKE) test_network_coverage || OK=false; } && \
-	$(MAKE) test_direct_coverage && $$OK
+	{ $(MAKE) test_direct_coverage || OK=false; } && \
+	$$OK
+
+test_suites_coverage: prepare_tests
+	OK=true && \
+	{ $(MAKE) test_network_coverage || OK=false; } && \
+	{ $(MAKE) test_direct_coverage || OK=false; } && \
+	$$OK
 
 run_test_broker:
 	OK=true && \
 	TMPFILE=$$(mktemp) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
 		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
-		-s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
-	tee $$TMPFILE || OK=false; } && \
-	{ grep "All .\+ tests passed." $$TMPFILE || OK=false; } && \
-	rm $$TMPFILE && $$OK
+		-noshell -s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
+		tee $$TMPFILE || OK=false; } && \
+	{ egrep "All .\+ tests |(successful)|(passed)." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && \
+	$$OK
 
 run_test_broker_cover:
 	OK=true && \
 	TMPFILE=$$(mktemp) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
 		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
-		-s rabbit -s cover start -s rabbit_misc enable_cover \
-		-s rabbit $(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
+		-noshell -s rabbit -s cover start -s rabbit_misc enable_cover \
+		$(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
 		-s cover stop -s init stop" 2>&1 | \
-	tee $$TMPFILE || OK=false; } && \
-	{ grep "All .\+ tests passed." $$TMPFILE || OK=false; } && \
-	rm $$TMPFILE && $$OK
+		tee $$TMPFILE || OK=false; } && \
+	{ egrep "All .\+ tests |(successful)|(passed)." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && \
+	$$OK
+
+start_test_broker_node:
+	$(MAKE) RABBITMQ_SERVER_START_ARGS='-s rabbit' -C $(BROKER_DIR) start-background-node
+
+stop_test_broker_node:
+	erl_call -sname $(RABBITMQ_NODENAME) -q
+
 
 test_network: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
@@ -137,6 +158,17 @@ test_network_coverage: prepare_tests
 
 test_direct_coverage: prepare_tests
 	$(MAKE) run_test_broker_cover RUN_TEST_BROKER_ARGS="-s direct_client_SUITE test"
+
+test_common_package: package common_package prepare_tests start_test_broker_node
+	OK=true && \
+	TMPFILE=$$(mktemp) && \
+	    { ERL_LIBS=$(DIST_DIR) erl -noshell -pa $(TEST_DIR) \
+	    -eval 'network_client_SUITE:test(), halt().' 2>&1 | \
+		tee $$TMPFILE || OK=false; } && \
+	{ egrep "All .\+ tests |(successful)|(passed)." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && \
+	$(MAKE) stop_test_broker_node && \
+	$$OK
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
