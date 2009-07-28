@@ -10,6 +10,7 @@
              rabbit_binary_generator,
              rabbit_channel,
              rabbit_misc,
+             rabbit_net,
              rabbit_heartbeat,
              gen_server2
   ]},

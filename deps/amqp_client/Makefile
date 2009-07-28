@@ -140,7 +140,7 @@ run_test_broker:
 		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) $(SSL_BROKER_ARGS) \
 		-noshell -s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
 		tee $$TMPFILE || OK=false; } && \
-	{ grep "All .\+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
+	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
 	$$OK
 
@@ -153,12 +153,12 @@ run_test_broker_cover:
 		$(RUN_TEST_BROKER_ARGS) -s rabbit_misc report_cover \
 		-s cover stop -s init stop" 2>&1 | \
 		tee $$TMPFILE || OK=false; } && \
-	{ grep "All .\+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
+	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
 	$$OK
 
 start_test_broker_node:
-	$(MAKE) RABBITMQ_SERVER_START_ARGS='-s rabbit' -C $(BROKER_DIR) start-background-node
+	$(MAKE) RABBITMQ_SERVER_START_ARGS="$(SSL_BROKER_ARGS) -s rabbit" -C $(BROKER_DIR) start-background-node
 
 stop_test_broker_node:
 	erl_call -sname $(RABBITMQ_NODENAME) -q
