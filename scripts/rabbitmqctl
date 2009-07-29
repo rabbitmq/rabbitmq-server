@@ -30,24 +30,12 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-SCRIPT_PATH="$0"
-while [ -h "$SCRIPT_PATH" ] ; do
-    ls=`ls -ld "$SCRIPT_PATH"`
-    link=`expr "$ls" : '.*-> \(.*\)$'`
-    if expr "$link" : '/.*' > /dev/null; then
-      SCRIPT_PATH="$link"
-    else
-      SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$link"
-    fi
-done
-SCRIPT_DIR=`dirname $SCRIPT_PATH`
-
-[ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
+. `dirname $0`/rabbitmq-env
 
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
 exec erl \
-    -pa "${SCRIPT_DIR}/../ebin" \
+    -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
     ${RABBITMQ_CTL_ERL_ARGS} \

@@ -30,24 +30,11 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-SCRIPT_PATH="$0"
-while [ -h "$SCRIPT_PATH" ] ; do
-    ls=`ls -ld "$SCRIPT_PATH"`
-    link=`expr "$ls" : '.*-> \(.*\)$'`
-    if expr "$link" : '/.*' > /dev/null; then
-      SCRIPT_PATH="$link"
-    else
-      SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$link"
-    fi
-done
-SCRIPT_DIR=`dirname $SCRIPT_PATH`
+. `dirname $0`/rabbitmq-env
 
-[ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
-
-RABBITMQ_EBIN=${SCRIPT_DIR}/../ebin
-echo $RABBITMQ_EBIN
-[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="${SCRIPT_DIR}/../plugins"
-[ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="${SCRIPT_DIR}/../priv/plugins"
+RABBITMQ_EBIN=${RABBITMQ_HOME}/ebin
+[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
+[ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="${RABBITMQ_HOME}/priv/plugins"
 
 exec erl \
     -pa "$RABBITMQ_EBIN" \

@@ -41,19 +41,7 @@ LOG_BASE=/var/log/rabbitmq
 MNESIA_BASE=/var/lib/rabbitmq/mnesia
 SERVER_START_ARGS=
 
-SCRIPT_PATH="$0"
-while [ -h "$SCRIPT_PATH" ] ; do
-    ls=`ls -ld "$SCRIPT_PATH"`
-    link=`expr "$ls" : '.*-> \(.*\)$'`
-    if expr "$link" : '/.*' > /dev/null; then
-      SCRIPT_PATH="$link"
-    else
-      SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$link"
-    fi
-done
-SCRIPT_DIR=`dirname $SCRIPT_PATH`
-
-[ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
+. `dirname $0`/rabbitmq-env
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=${NODE_IP_ADDRESS}
@@ -87,7 +75,7 @@ fi
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT='-noinput -s rabbit'
 
-RABBITMQ_EBIN_ROOT="${SCRIPT_DIR}/../ebin"
+RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 if [ -f "${RABBITMQ_EBIN_ROOT}/rabbit.boot" ]; then
 	RABBITMQ_BOOT_FILE="${RABBITMQ_EBIN_ROOT}/rabbit"
 	RABBITMQ_EBIN_PATH=""
