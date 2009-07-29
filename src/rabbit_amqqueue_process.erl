@@ -37,12 +37,14 @@
 
 -define(UNSENT_MESSAGE_LIMIT, 100).
 -define(HIBERNATE_AFTER_MIN, 1000).
+-define(DESIRED_HIBERNATE, 10000).
 -define(MEMORY_REPORT_TIME_INTERVAL, 10000). %% 10 seconds in milliseconds
 
 -export([start_link/1]).
 
--export([init/1, terminate/2, code_change/3,
-         handle_call/3, handle_cast/2, handle_info/2]).
+-export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
+         handle_info/2]).
+-export([handle_pre_hibernate/1, handle_post_hibernate/1]).
 
 -import(queue).
 -import(erlang).
@@ -115,7 +117,8 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
               },
     %% first thing we must do is report_memory which will clear out
     %% the 'undefined' values in gain and loss in mixed_queue state
-    {ok, report_memory(false, State), {binary, ?HIBERNATE_AFTER_MIN}}.
+    {ok, report_memory(false, State), hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
@@ -134,10 +137,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 reply(Reply, NewState) ->
-    {reply, Reply, start_memory_timer(NewState), binary}.
+    {reply, Reply, start_memory_timer(NewState), hibernate}.
 
 noreply(NewState) ->
-    {noreply, start_memory_timer(NewState), binary}.
+    {noreply, start_memory_timer(NewState), hibernate}.
 
 start_memory_timer() ->
     {ok, TRef} = timer:apply_after(?MEMORY_REPORT_TIME_INTERVAL,
@@ -857,13 +860,16 @@ handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
 
-handle_info(timeout, State = #q { mixed_state = MS }) ->
+handle_info(Info, State) ->
+    ?LOGDEBUG("Info in queue: ~p~n", [Info]),
+    {stop, {unhandled_info, Info}, State}.
+
+handle_pre_hibernate(State = #q { mixed_state = MS }) ->
     MS1 = rabbit_mixed_queue:maybe_prefetch(MS),
     State1 =
         stop_memory_timer(report_memory(true, State #q { mixed_state = MS1 })),
     %% don't call noreply/1 as that'll restart the memory_report_timer
-    {noreply, State1, hibernate};
+    {hibernate, State1}.
 
-handle_info(Info, State) ->
-    ?LOGDEBUG("Info in queue: ~p~n", [Info]),
-    {stop, {unhandled_info, Info}, State}.
+handle_post_hibernate(State) ->
+    {noreply, State, hibernate}.

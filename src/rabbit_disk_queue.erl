@@ -37,6 +37,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
+-export([handle_pre_hibernate/1, handle_post_hibernate/1]).
 
 -export([publish/3, deliver/1, phantom_deliver/1, ack/2,
          tx_publish/1, tx_commit/3, tx_cancel/1,
@@ -77,6 +78,7 @@
 
 -define(SYNC_INTERVAL, 5). %% milliseconds
 -define(HIBERNATE_AFTER_MIN, 1000).
+-define(DESIRED_HIBERNATE, 10000).
 
 -record(dqstate,
         {msg_location_dets,       %% where are messages?
@@ -461,7 +463,8 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %% ets_bytes_per_record otherwise.
     ok = rabbit_queue_mode_manager:report_memory(self(), 0, false),
     ok = report_memory(false, State2),
-    {ok, State2, {binary, ?HIBERNATE_AFTER_MIN}}.
+    {ok, State2, hibernate, {backoff, ?HIBERNATE_AFTER_MIN,
+                             ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({deliver, Q}, _From, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, false, true, State),
@@ -557,14 +560,17 @@ handle_cast({set_delivered_and_advance, Q, MsgSeqId}, State) ->
         
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
-handle_info(timeout, State = #dqstate { commit_timer_ref = undefined }) ->
-    %% this is the binary timeout coming back
-    %% don't use noreply/1 or noreply1/1 as they'll restart the memory timer
-    ok = report_memory(true, State),
-    {noreply, stop_memory_timer(State), hibernate};
 handle_info(timeout, State) ->
     %% must have commit_timer set, so timeout was 0, and we're not hibernating
     noreply(sync_current_file_handle(State)).
+
+handle_pre_hibernate(State) ->
+    %% don't use noreply/1 or noreply1/1 as they'll restart the memory timer
+    ok = report_memory(true, State),
+    {hibernate, stop_memory_timer(State)}.
+
+handle_post_hibernate(State) ->
+    noreply(State).
 
 terminate(_Reason, State) ->
     shutdown(State).
@@ -690,11 +696,11 @@ noreply(NewState) ->
 
 noreply1(NewState = #dqstate { on_sync_txns = [],
                                commit_timer_ref = undefined }) ->
-    {noreply, NewState, binary};
+    {noreply, NewState, hibernate};
 noreply1(NewState = #dqstate { commit_timer_ref = undefined }) ->
     {noreply, start_commit_timer(NewState), 0};
 noreply1(NewState = #dqstate { on_sync_txns = [] }) ->
-    {noreply, stop_commit_timer(NewState), binary};
+    {noreply, stop_commit_timer(NewState), hibernate};
 noreply1(NewState) ->
     {noreply, NewState, 0}.
 
@@ -703,11 +709,11 @@ reply(Reply, NewState) ->
 
 reply1(Reply, NewState = #dqstate { on_sync_txns = [],
                                     commit_timer_ref = undefined }) ->
-    {reply, Reply, NewState, binary};
+    {reply, Reply, NewState, hibernate};
 reply1(Reply, NewState = #dqstate { commit_timer_ref = undefined }) ->
     {reply, Reply, start_commit_timer(NewState), 0};
 reply1(Reply, NewState = #dqstate { on_sync_txns = [] }) ->
-    {reply, Reply, stop_commit_timer(NewState), binary};
+    {reply, Reply, stop_commit_timer(NewState), hibernate};
 reply1(Reply, NewState) ->
     {reply, Reply, NewState, 0}.
 
