@@ -22,7 +22,7 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
-%define _rabbit_erllibdir %{_libdir}/erlang/lib/rabbitmq_server-%{version}
+%define _rabbit_erllibdir %{_libdir}/rabbitmq/lib/rabbitmq_server-%{version}
 %define _rabbit_libdir %{_libdir}/rabbitmq
 %define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
 
@@ -51,6 +51,7 @@ install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmqctl
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-multi
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/activate-plugins
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 

@@ -3,7 +3,7 @@
 include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/class/makefile.mk
 
-RABBIT_LIB=$(DEB_DESTDIR)usr/lib/erlang/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSION)/
+RABBIT_LIB=$(DEB_DESTDIR)usr/lib/rabbitmq/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSION)/
 RABBIT_BIN=$(DEB_DESTDIR)usr/lib/rabbitmq/bin/
 
 DEB_MAKE_INSTALL_TARGET := install TARGET_DIR=$(RABBIT_LIB) SBIN_DIR=$(RABBIT_BIN) MAN_DIR=$(DEB_DESTDIR)usr/share/man/
@@ -14,6 +14,6 @@ DOCDIR=$(DEB_DESTDIR)usr/share/doc/rabbitmq-server/
 install/rabbitmq-server::
 	mkdir -p $(DOCDIR)
 	rm $(RABBIT_LIB)LICENSE*
-	for script in rabbitmqctl rabbitmq-server rabbitmq-multi; do \
+	for script in rabbitmqctl rabbitmq-server rabbitmq-multi activate-plugins; do \
 		install -p -D -m 0755 debian/rabbitmq-script-wrapper $(DEB_DESTDIR)usr/sbin/$$script; \
 	done
