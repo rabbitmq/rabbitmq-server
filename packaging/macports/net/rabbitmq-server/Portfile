@@ -42,7 +42,7 @@ use_parallel_build yes
 build.args      PYTHON=${prefix}/bin/python2.5
 
 destroot.destdir \
-    TARGET_DIR=${destroot}${prefix}/rabbitmq/erlang/lib/rabbitmq_server-${version} \
+    TARGET_DIR=${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version} \
     SBIN_DIR=${sbindir} \
     MAN_DIR=${destroot}${prefix}/share/man
 
@@ -88,6 +88,10 @@ post-destroot {
                 ${wrappersbin}/rabbitmq-multi
     reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:" \
                 ${wrappersbin}/rabbitmq-multi
+    reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:" \
+                ${wrappersbin}/rabbitmq-activate-plugins
+    reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:" \
+                ${wrappersbin}/rabbitmq-activate-plugins
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
 }
