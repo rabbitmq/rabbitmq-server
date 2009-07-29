@@ -37,6 +37,18 @@ PIDS_FILE=/var/lib/rabbitmq/pids
 MULTI_ERL_ARGS=
 MULTI_START_ARGS=
 
+SCRIPT_PATH="$0"
+while [ -h "$SCRIPT_PATH" ] ; do
+    ls=`ls -ld "$SCRIPT_PATH"`
+    link=`expr "$ls" : '.*-> \(.*\)$'`
+    if expr "$link" : '/.*' > /dev/null; then
+      SCRIPT_PATH="$link"
+    else
+      SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$link"
+    fi
+done
+SCRIPT_DIR=`dirname $SCRIPT_PATH`
+
 [ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
@@ -60,7 +72,7 @@ export \
 set -f
 
 exec erl \
-    -pa "`dirname $0`/../ebin" \
+    -pa "${SCRIPT_DIR}/../ebin" \
     -noinput \
     -hidden \
     ${RABBITMQ_MULTI_ERL_ARGS} \
