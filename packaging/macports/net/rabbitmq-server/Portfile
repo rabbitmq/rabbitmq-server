@@ -95,7 +95,7 @@ post-destroot {
                 ${wrappersbin}/rabbitmq-multi
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
-    file copy ${wrappersbin}/activate-plugins ${wrappersbin}/activate-plugins
+    file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/activate-plugins
 
 }
 
