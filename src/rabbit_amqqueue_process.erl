@@ -37,10 +37,12 @@
 
 -define(UNSENT_MESSAGE_LIMIT, 100).
 -define(HIBERNATE_AFTER_MIN, 1000).
+-define(DESIRED_HIBERNATE, 10000).
 
 -export([start_link/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
+-export([handle_pre_hibernate/1, handle_post_hibernate/1]).
 
 -import(queue).
 -import(erlang).
@@ -101,7 +103,8 @@ init(Q) ->
             next_msg_id = 1,
             message_buffer = queue:new(),
             active_consumers = queue:new(),
-            blocked_consumers = queue:new()}, {binary, ?HIBERNATE_AFTER_MIN}}.
+            blocked_consumers = queue:new()}, hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
@@ -116,9 +119,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-reply(Reply, NewState) -> {reply, Reply, NewState, binary}.
+reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 
-noreply(NewState) -> {noreply, NewState, binary}.
+noreply(NewState) -> {noreply, NewState, hibernate}.
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
@@ -813,9 +816,12 @@ handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
 
-handle_info(timeout, State) ->
-    {noreply, State, hibernate};
-
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
+
+handle_pre_hibernate(State) ->
+    {hibernate, State}.
+
+handle_post_hibernate(State) ->
+    {noreply, State, hibernate}.
