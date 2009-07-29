@@ -14,6 +14,9 @@ DOCDIR=$(DEB_DESTDIR)usr/share/doc/rabbitmq-server/
 install/rabbitmq-server::
 	mkdir -p $(DOCDIR)
 	rm $(RABBIT_LIB)LICENSE*
-	for script in rabbitmqctl rabbitmq-server rabbitmq-multi activate-plugins; do \
+	for script in rabbitmqctl rabbitmq-server rabbitmq-multi; do \
 		install -p -D -m 0755 debian/rabbitmq-script-wrapper $(DEB_DESTDIR)usr/sbin/$$script; \
+	done
+	for script in rabbitmq-activate-plugins; do \
+		install -p -D -m 0755 debian/rabbitmq-asroot-script-wrapper $(DEB_DESTDIR)usr/sbin/$$script; \
 	done

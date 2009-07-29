@@ -88,6 +88,8 @@ post-destroot {
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-multi
+    xinstall -m 555 ${filespath}/rabbitmq-asroot-script-wrapper \
+                ${wrappersbin}/rabbitmq-activate-plugins
 
     reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:" \
                 ${wrappersbin}/rabbitmq-multi
@@ -95,8 +97,6 @@ post-destroot {
                 ${wrappersbin}/rabbitmq-multi
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
-    file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/activate-plugins
-
 }
 
 pre-install {
