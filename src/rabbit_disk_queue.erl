@@ -370,7 +370,7 @@ report_memory() ->
     gen_server2:cast(?SERVER, report_memory).
 
 set_mode(Mode) ->
-    gen_server2:cast(?SERVER, {set_mode, Mode}).
+    gen_server2:pcast(?SERVER, 10, {set_mode, Mode}).
 
 %% ---- GEN-SERVER INTERNAL API ----
 
