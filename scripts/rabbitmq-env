@@ -33,12 +33,16 @@
 # Determine where this script is really located
 SCRIPT_PATH="$0"
 while [ -h "$SCRIPT_PATH" ] ; do
-    ls=`ls -ld "$SCRIPT_PATH"`
-    link=`expr "$ls" : '.*-> \(.*\)$'`
-    if expr "$link" : '/.*' > /dev/null; then
-      SCRIPT_PATH="$link"
+    FULL_PATH=`readlink -f $SCRIPT_PATH 2>/dev/null`
+    if [ "$?" != "0" ]; then
+      REL_PATH=`readlink $SCRIPT_PATH`
+      if expr "$REL_PATH" : '/.*' > /dev/null; then
+        SCRIPT_PATH="$link"
+      else
+        SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$REL_PATH"
+      fi
     else
-      SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$link"
+      SCRIPT_PATH=$FULL_PATH
     fi
 done
 
