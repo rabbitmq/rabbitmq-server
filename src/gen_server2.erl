@@ -436,6 +436,7 @@ unregister_name(Pid) when is_pid(Pid) ->
 extend_backoff(Mod, {backoff, CurrentTO, MinimumTimeout, DesiredHibPeriod}) ->
     Pre = erlang:function_exported(Mod, handle_pre_hibernate, 1),
     Post = erlang:function_exported(Mod, handle_post_hibernate, 1),
+    random:seed(now()), %% call before we get into the loop
     {backoff, CurrentTO, MinimumTimeout, DesiredHibPeriod, Pre, Post}.
 
 %%%========================================================================
@@ -449,11 +450,15 @@ loop(Parent, Name, State, Mod, hibernate, undefined, Queue, Debug) ->
                        [Parent, Name, State, Mod, undefined, Queue, Debug]);
 loop(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
     process_next_msg(Parent, Name, State, Mod, Time, TimeoutState,
-                     drain(Queue), Debug).
+                     drain(Queue, false), Debug).
 
-drain(Queue) ->
+drain(Queue, true) ->
     receive
-        Input -> drain(in(Input,Queue))
+        Input -> drain(in(Input, Queue), false)
+    end;
+drain(Queue, false) ->
+    receive
+        Input -> drain(in(Input, Queue), false)
     after 0 -> Queue
     end.
 
@@ -490,11 +495,11 @@ process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
 
 wake_hib(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
     process_next_msg(Parent, Name, State, Mod, hibernate, TimeoutState,
-                     drain(Queue), Debug).
+                     drain(Queue, true), Debug).
 
 wake_hib(Parent, Name, State, Mod, SleptAt, TimeoutState, Queue, Debug) ->
     backoff_post_hibernate(Parent, Name, State, Mod, SleptAt, now(),
-                           TimeoutState, drain(Queue), Debug).
+                           TimeoutState, drain(Queue, true), Debug).
 
 backoff_pre_hibernate(Parent, Name, State, Mod, TimeoutState =
                       {backoff, _Current, _Minimum, _Desired, Pre, _Post},
