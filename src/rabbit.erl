@@ -75,7 +75,12 @@ start() ->
     try
         ok = ensure_working_log_handlers(),
         ok = rabbit_mnesia:ensure_mnesia_dir(),
+<<<<<<< local
         ok = start_applications(?APPS)
+=======
+        ok = rabbit_misc:start_applications(?APPS),
+        ok = rabbit_plugin:start_plugins()
+>>>>>>> other
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
@@ -165,7 +170,6 @@ start(normal, []) ->
 
                 {ok, MemoryAlarms} = application:get_env(memory_alarms),
                 ok = rabbit_alarm:start(MemoryAlarms),
-                
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
 
