@@ -450,15 +450,11 @@ loop(Parent, Name, State, Mod, hibernate, undefined, Queue, Debug) ->
                        [Parent, Name, State, Mod, undefined, Queue, Debug]);
 loop(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
     process_next_msg(Parent, Name, State, Mod, Time, TimeoutState,
-                     drain(Queue, false), Debug).
+                     drain(Queue), Debug).
 
-drain(Queue, true) ->
+drain(Queue) ->
     receive
-        Input -> drain(in(Input, Queue), false)
-    end;
-drain(Queue, false) ->
-    receive
-        Input -> drain(in(Input, Queue), false)
+        Input -> drain(in(Input, Queue))
     after 0 -> Queue
     end.
 
@@ -473,6 +469,16 @@ process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
                       {hibernate,
                        {backoff, Current, _Min, _Desired, _Pre, _Post}} ->
                           {Current, true};
+                      {hibernate, _} ->
+                          %% wake_hib/7 will set Time to hibernate. If
+                          %% we were woken and didn't receive a msg
+                          %% then we will get here and need a sensible
+                          %% value for Time1, otherwise we crash.
+                          %% On the grounds that it's better to get
+                          %% control back to the user module sooner
+                          %% rather than later, 0 is more sensible
+                          %% than infinity here.
+                          {0, false};
                       _ -> {Time, false}
                   end,
             receive
@@ -495,11 +501,11 @@ process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
 
 wake_hib(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
     process_next_msg(Parent, Name, State, Mod, hibernate, TimeoutState,
-                     drain(Queue, true), Debug).
+                     drain(Queue), Debug).
 
 wake_hib(Parent, Name, State, Mod, SleptAt, TimeoutState, Queue, Debug) ->
     backoff_post_hibernate(Parent, Name, State, Mod, SleptAt, now(),
-                           TimeoutState, drain(Queue, true), Debug).
+                           TimeoutState, drain(Queue), Debug).
 
 backoff_pre_hibernate(Parent, Name, State, Mod, TimeoutState =
                       {backoff, _Current, _Minimum, _Desired, Pre, _Post},
