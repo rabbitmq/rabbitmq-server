@@ -282,6 +282,12 @@ handle_call({call, _Method, _Content}, _From,
             State = #channel_state{flow_control = true}) ->
     {reply, blocked, State};
 
+%% Do not accept any further messages for writer when the channel is about to
+%% close
+handle_call({call, _Method, _Content}, _From,
+            State = #channel_state{closing = true}) ->
+    {reply, blocked, State};
+
 handle_call({call, Method, Content}, _From,
             State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
     Do3(Writer, Method, Content),
@@ -306,6 +312,11 @@ handle_call({Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
     NewState = State#channel_state{tagged_sub_requests = NewSubs},
     rpc_top_half(Method, From, NewState).
 
+%% Do not accept any further messages for writer when the channel is about to
+%% close
+handle_cast({cast, _Method}, State = #channel_state{closing = true}) ->
+    {noreply, State};
+
 %% Standard implementation of the cast/2 command
 handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer,
                                                    do2 = Do2}) ->
@@ -318,6 +329,11 @@ handle_cast({cast, Method, _Content},
             State = #channel_state{flow_control = true}) ->
     % Discard the message and log it
     io:format("Discarding content bearing method (~p) ~n", [Method]),
+    {noreply, State};
+
+%% Do not accept any further messages for writer when the channel is about to
+%% close
+handle_cast({cast, _Method, _Content}, State = #channel_state{closing = true}) ->
     {noreply, State};
 
 %% Standard implementation of the cast/3 command

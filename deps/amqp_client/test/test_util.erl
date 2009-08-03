@@ -295,6 +295,53 @@ producer_loop(Channel, RoutingKey, N) ->
 basic_reject_test(Connection) ->
     lib_amqp:close_connection(Connection).
 
+%% ----------------------------------------------------------------------------
+%% Test for the network client
+%% Sends a bunch of messages and immediatly closes the connection without
+%% closing the channel. Then gets the messages back from the queue and expects
+%% all of them to have been sent.
+pub_and_close_test(Connection1, Connection2) ->
+    X = uuid(), Q = uuid(), Key = uuid(),
+    Payload = <<"eggs">>, NMessages = 50000,
+    Channel1 = lib_amqp:start_channel(Connection1),
+    lib_amqp:declare_exchange(Channel1, X),
+    lib_amqp:declare_queue(Channel1, Q),
+    lib_amqp:bind_queue(Channel1, X, Q, Key),
+    %% Send messages
+    pc_producer_loop(Channel1, X, Key, Payload, NMessages),
+    %% Close connection without closing channels
+    lib_amqp:close_connection(Connection1),
+    %% Get sent messages back and count them
+    Channel2 = lib_amqp:start_channel(Connection2),
+    lib_amqp:subscribe(Channel2, Q, self(), true),
+    ?assert(pc_consumer_loop(Channel2, Payload, 0) == NMessages),
+    %% Make sure queue is empty
+    #'queue.declare_ok'{queue = Q, message_count = NRemaining} =
+        amqp_channel:call(Channel2, #'queue.declare'{queue = Q}),
+    ?assert(NRemaining == 0),
+    lib_amqp:teardown(Connection2, Channel2),
+    ok.
+
+pc_producer_loop(_, _, _, _, 0) -> ok;
+pc_producer_loop(Channel, X, Key, Payload, NRemaining) ->
+    ?assertMatch(ok, lib_amqp:publish(Channel, X, Key, Payload)),
+    pc_producer_loop(Channel, X, Key, Payload, NRemaining - 1).
+
+pc_consumer_loop(Channel, Payload, NReceived) ->
+    receive
+        {#'basic.deliver'{},
+         #content{payload_fragments_rev = [DeliveredPayload]}} ->
+            case DeliveredPayload of
+                Payload ->
+                    pc_consumer_loop(Channel, Payload, NReceived + 1);
+                _ ->
+                    exit(received_unexpected_content)
+            end
+    after 1000 ->
+        NReceived
+    end.
+
+
 %%----------------------------------------------------------------------------
 %% Unit test for the direct client
 %% This just relies on the fact that a fresh Rabbit VM must consume more than
