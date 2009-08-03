@@ -43,6 +43,7 @@
 -include("rabbit.hrl").
 
 -define(HIBERNATE_AFTER_MIN, 1000).
+-define(DESIRED_HIBERNATE, 10000).
 
 -record(pstate,
         { msg_buf,
@@ -209,7 +210,8 @@ init([Q, Count, QPid]) ->
                       queue_mref = MRef
                      },
     ok = rabbit_disk_queue:prefetch(Q),
-    {ok, State, {binary, ?HIBERNATE_AFTER_MIN}}.
+    {ok, State, hibernate, {backoff, ?HIBERNATE_AFTER_MIN,
+                            ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(drain, _From, State = #pstate { buf_length = 0 }) ->
     {stop, normal, empty, State};
@@ -221,7 +223,7 @@ handle_call(drain, _From, State = #pstate { fetched_count = Count,
 handle_call(drain, _From, State = #pstate { msg_buf = MsgBuf,
                                             buf_length = Length }) ->
     {reply, {MsgBuf, Length, continuing},
-     State #pstate { msg_buf = queue:new(), buf_length = 0 }};
+     State #pstate { msg_buf = queue:new(), buf_length = 0 }, hibernate};
 handle_call(drain_and_stop, _From, State = #pstate { buf_length = 0 }) ->
     {stop, normal, empty, State};
 handle_call(drain_and_stop, _From, State = #pstate { msg_buf = MsgBuf,
@@ -231,7 +233,7 @@ handle_call(drain_and_stop, _From, State = #pstate { msg_buf = MsgBuf,
 handle_cast(publish_empty, State) ->
     %% Very odd. This could happen if the queue is deleted or purged
     %% and the mixed queue fails to shut us down.
-    {noreply, State};
+    {noreply, State, hibernate};
 handle_cast({publish, { Msg = #basic_message {},
                         _Size, IsDelivered, AckTag, _Remaining }},
             State = #pstate { fetched_count = Fetched, target_count = Target,
@@ -245,10 +247,8 @@ handle_cast({publish, { Msg = #basic_message {},
     MsgBuf1 = queue:in({Msg, IsDelivered, AckTag}, MsgBuf),
     {noreply, State #pstate { fetched_count = Fetched + 1,
                               buf_length = Length + 1,
-                              msg_buf = MsgBuf1 }}.
+                              msg_buf = MsgBuf1 }, hibernate}.
 
-handle_info(timeout, State) ->
-    {noreply, State, hibernate};
 handle_info({'DOWN', MRef, process, _Pid, _Reason},
             State = #pstate { queue_mref = MRef }) ->
     %% this is the amqqueue_process going down, so we should go down

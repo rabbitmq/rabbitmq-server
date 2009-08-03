@@ -43,8 +43,7 @@
 -export([start_link/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2]).
--export([handle_pre_hibernate/1, handle_post_hibernate/1]).
+         handle_info/2, handle_pre_hibernate/1]).
 
 -import(queue).
 -import(erlang).
@@ -842,7 +841,7 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
 handle_cast(report_memory, State) ->
     %% deliberately don't call noreply/2 as we don't want to restart the timer
     %% by unsetting the timer, we force a report on the next normal message
-    {noreply, State #q { memory_report_timer = undefined }, binary}.
+    {noreply, State #q { memory_report_timer = undefined }, hibernate}.
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -870,6 +869,3 @@ handle_pre_hibernate(State = #q { mixed_state = MS }) ->
         stop_memory_timer(report_memory(true, State #q { mixed_state = MS1 })),
     %% don't call noreply/1 as that'll restart the memory_report_timer
     {hibernate, State1}.
-
-handle_post_hibernate(State) ->
-    {noreply, State, hibernate}.

@@ -37,7 +37,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
--export([handle_pre_hibernate/1, handle_post_hibernate/1]).
+-export([handle_pre_hibernate/1]).
 
 -export([publish/3, deliver/1, phantom_deliver/1, ack/2,
          tx_publish/1, tx_commit/3, tx_cancel/1,
@@ -568,9 +568,6 @@ handle_pre_hibernate(State) ->
     %% don't use noreply/1 or noreply1/1 as they'll restart the memory timer
     ok = report_memory(true, State),
     {hibernate, stop_memory_timer(State)}.
-
-handle_post_hibernate(State) ->
-    noreply(State).
 
 terminate(_Reason, State) ->
     shutdown(State).
