@@ -13,7 +13,7 @@
 %% @spec start(_Type, _StartArgs) -> ServerRet
 %% @doc application start callback for mod_http.
 start(_Type, _StartArgs) ->
-    mod_http_deps:ensure(),
+    %mod_http_deps:ensure(),
     mod_http_sup:start_link().
 
 %% @spec stop(_State) -> ServerRet

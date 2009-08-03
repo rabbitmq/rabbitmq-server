@@ -46,9 +46,12 @@ init([]) ->
          {ip, Ip},
                  {port, 8000},
                  {docroot, mod_http_deps:local_path(["priv", "www"])}],
+    Registry = {mod_http_registry,
+                {mod_http_registry, start_link, []},
+                permanent, 5000, worker, dynamic},
     Web = {mod_http_web,
            {mod_http_web, start, [WebConfig]},
            permanent, 5000, worker, dynamic},
 
-    Processes = [Web],
+    Processes = [Registry, Web],
     {ok, {{one_for_one, 10, 10}, Processes}}.
