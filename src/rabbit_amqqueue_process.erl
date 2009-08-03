@@ -42,7 +42,6 @@
 -export([start_link/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
--export([handle_pre_hibernate/1, handle_post_hibernate/1]).
 
 -import(queue).
 -import(erlang).
@@ -819,9 +818,3 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
-
-handle_pre_hibernate(State) ->
-    {hibernate, State}.
-
-handle_post_hibernate(State) ->
-    {noreply, State, hibernate}.
