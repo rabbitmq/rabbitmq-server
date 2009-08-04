@@ -80,7 +80,7 @@ hard_error_test() ->
 new_connection() ->
     {ok, [[CertsDir]]} = init:get_argument(erlang_client_ssl_dir),
     amqp_connection:start_network("guest", "guest", "localhost", 5671,
-                                  [{cacertfile, CertsDir ++ "/ca/cacerts.pem"},
+                                  [{cacertfile, CertsDir ++ "/testca/cacert.pem"},
                                    {certfile, CertsDir ++ "/client/cert.pem"},
                                    {keyfile, CertsDir ++ "/client/key.pem"},
                                    {verify, verify_peer}]).
