@@ -1,10 +1,4 @@
-%% @author author <author@example.com>
-%% @copyright YYYY author.
-
-%% @doc Supervisor for the mod_http application.
-
 -module(mod_http_sup).
--author('author <author@example.com>').
 
 -behaviour(supervisor).
 
@@ -41,14 +35,12 @@ upgrade() ->
 %% @spec init([]) -> SupervisorTree
 %% @doc supervisor callback.
 init([]) ->
-    Ip = case os:getenv("MOCHIWEB_IP") of false -> "0.0.0.0"; Any -> Any end,   
-    WebConfig = [
-         {ip, Ip},
-                 {port, 8000},
-                 {docroot, mod_http_deps:local_path(["priv", "www"])}],
+    Registry = {mod_http_registry,
+                {mod_http_registry, start_link, []},
+                permanent, 5000, worker, dynamic},
     Web = {mod_http_web,
-           {mod_http_web, start, [WebConfig]},
+           {mod_http_web, start, []},
            permanent, 5000, worker, dynamic},
 
-    Processes = [Web],
+    Processes = [Registry, Web],
     {ok, {{one_for_one, 10, 10}, Processes}}.
