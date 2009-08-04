@@ -14,4 +14,4 @@
         {port, 8000},
         {production, true}
         ]},
-  {applications, [kernel, stdlib, crypto]}]}.
+  {applications, [kernel, stdlib]}]}.

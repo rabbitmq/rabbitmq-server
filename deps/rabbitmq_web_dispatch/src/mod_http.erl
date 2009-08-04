@@ -1,7 +1,9 @@
 -module(mod_http).
 
 -export([start/0, stop/0]).
--export([register_global_handler/1, register_static_context/2, register_static_context/3]).
+-export([register_handler/2]).
+-export([register_global_handler/1, register_context_handler/2,
+         register_static_context/2, register_static_context/3]).
 
 ensure_started(App) ->
     case application:start(App) of
@@ -24,11 +26,23 @@ stop() ->
     application:stop(crypto),
     Res.
 
+%% Handler Registration
+
+register_handler(Selector, Handler) ->
+    mod_http_registry:add(Selector, Handler).
 
 %% Utility Methods for standard use cases
 
 register_global_handler(Handler) ->
     mod_http_registry:add(fun(_) -> true end, Handler).
+
+register_context_handler(Context, Handler) ->
+    mod_http_registry:add(
+        fun(Req) ->
+            "/" ++ Path = Req:get(raw_path),
+            (Path == Context) or (string:str(Path, Context ++ "/") == 1)
+        end,
+        Handler).
 
 %% @spec register_static_context(Context, Module, Path) -> ok
 %% @doc Registers a static docroot under the given context path.
