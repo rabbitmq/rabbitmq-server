@@ -69,7 +69,7 @@ SSL := true
 ALL_SSL := { $(MAKE) test_ssl || OK_ALL=false; }
 ALL_SSL_COVERAGE := { $(MAKE) test_ssl_coverage || OK_ALL=false; }
 SSL_BROKER_ARGS := -rabbit ssl_listeners [{\\\"0.0.0.0\\\",5671}] \
-	-rabbit ssl_options [{cacertfile,\\\"$(SSL_CERTS_DIR)/testca/cacert.pem\\\"},{certfile,\\\"$(SSL_CERTS_DIR)/server/cert.pem\\\"},{keyfile,\\\"$(SSL_CERTS_DIR)/server/key.pem\\\"}] \
+	-rabbit ssl_options [{cacertfile,\\\"$(SSL_CERTS_DIR)/testca/cacert.pem\\\"},{certfile,\\\"$(SSL_CERTS_DIR)/server/cert.pem\\\"},{keyfile,\\\"$(SSL_CERTS_DIR)/server/key.pem\\\"},{verify,verify_peer},{fail_if_no_peer_cert,true}] \
 	-erlang_client_ssl_dir \"$(SSL_CERTS_DIR)\"
 else
 SSL := @echo No SSL_CERTS_DIR defined. && false

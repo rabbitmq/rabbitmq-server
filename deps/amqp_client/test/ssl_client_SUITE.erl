@@ -83,7 +83,8 @@ new_connection() ->
                                   [{cacertfile, CertsDir ++ "/testca/cacert.pem"},
                                    {certfile, CertsDir ++ "/client/cert.pem"},
                                    {keyfile, CertsDir ++ "/client/key.pem"},
-                                   {verify, verify_peer}]).
+                                   {verify, verify_peer},
+                                   {fail_if_no_peer_cert, true}]).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
