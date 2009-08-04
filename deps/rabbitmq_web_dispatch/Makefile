@@ -1,8 +1,8 @@
-PACKAGE=mod_http
+PACKAGE=rabbitmq-http-server
 DEPS=rabbitmq-server rabbitmq-erlang-client
 INTERNAL_DEPS=mochiweb
-TEST_APPS=mochiweb inets mod_http mod_http_test_app
-TEST_COMMANDS=mod_http_test:test()
+TEST_APPS=mochiweb inets rabbitmq_http_server rabbitmq_http_test
+TEST_COMMANDS=rabbitmq_http_server_test:test()
 START_RABBIT_IN_TESTS=true
 
 include ../include.mk

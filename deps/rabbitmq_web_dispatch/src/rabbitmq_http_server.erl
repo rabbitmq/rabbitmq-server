@@ -1,4 +1,4 @@
--module(mod_http).
+-module(rabbitmq_http_server).
 
 -export([start/0, stop/0]).
 -export([register_handler/2]).
@@ -14,30 +14,30 @@ ensure_started(App) ->
     end.
         
 %% @spec start() -> ok
-%% @doc Start the mod_http server.
+%% @doc Start the rabbitmq_http_server server.
 start() ->
     ensure_started(crypto),
-    application:start(mod_http).
+    application:start(rabbitmq_http_server).
 
 %% @spec stop() -> ok
-%% @doc Stop the mod_http server.
+%% @doc Stop the rabbitmq_http_server server.
 stop() ->
-    Res = application:stop(mod_http),
+    Res = application:stop(rabbitmq_http_server),
     application:stop(crypto),
     Res.
 
 %% Handler Registration
 
 register_handler(Selector, Handler) ->
-    mod_http_registry:add(Selector, Handler).
+    rabbitmq_http_server_registry:add(Selector, Handler).
 
 %% Utility Methods for standard use cases
 
 register_global_handler(Handler) ->
-    mod_http_registry:add(fun(_) -> true end, Handler).
+    rabbitmq_http_server_registry:add(fun(_) -> true end, Handler).
 
 register_context_handler(Context, Handler) ->
-    mod_http_registry:add(
+    rabbitmq_http_server_registry:add(
         fun(Req) ->
             "/" ++ Path = Req:get(raw_path),
             (Path == Context) or (string:str(Path, Context ++ "/") == 1)
@@ -53,7 +53,7 @@ register_static_context(Context, Module, Path) ->
     register_static_context(Context, LocalPath).
 
 register_static_context(Context, LocalPath) ->
-    mod_http_registry:add(
+    rabbitmq_http_server_registry:add(
         fun(Req) ->
             "/" ++ Path = Req:get(raw_path),
             case Req:get(method) of

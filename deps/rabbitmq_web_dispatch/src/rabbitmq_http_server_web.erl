@@ -1,8 +1,6 @@
--module(mod_http_web).
+-module(rabbitmq_http_server_web).
 
 -export([start/0, stop/0]).
-% -export([install_static/1]).
-% -export([register_docroot/3]).
 
 %% ----------------------------------------------------------------------
 %% HTTPish API
@@ -20,7 +18,7 @@ stop() ->
     mochiweb_http:stop(?MODULE).
 
 loop(Req) ->
-    case mod_http_registry:lookup(Req) of
+    case rabbitmq_http_server_registry:lookup(Req) of
 	    no_handler ->
 	        Req:not_found();
 	    {lookup_failure, Reason} ->

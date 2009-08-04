@@ -1,4 +1,4 @@
--module(mod_http_sup).
+-module(rabbitmq_http_server_sup).
 
 -behaviour(supervisor).
 
@@ -35,11 +35,11 @@ upgrade() ->
 %% @spec init([]) -> SupervisorTree
 %% @doc supervisor callback.
 init([]) ->
-    Registry = {mod_http_registry,
-                {mod_http_registry, start_link, []},
+    Registry = {rabbitmq_http_server_registry,
+                {rabbitmq_http_server_registry, start_link, []},
                 permanent, 5000, worker, dynamic},
-    Web = {mod_http_web,
-           {mod_http_web, start, []},
+    Web = {rabbitmq_http_server_web,
+           {rabbitmq_http_server_web, start, []},
            permanent, 5000, worker, dynamic},
 
     Processes = [Registry, Web],

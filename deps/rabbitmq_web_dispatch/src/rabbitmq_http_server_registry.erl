@@ -1,4 +1,4 @@
--module(mod_http_registry).
+-module(rabbitmq_http_server_registry).
 
 -behaviour(gen_server).
 
