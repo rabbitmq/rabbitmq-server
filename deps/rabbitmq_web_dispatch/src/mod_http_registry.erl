@@ -40,8 +40,8 @@ handle_call(Req, _From, State) ->
     io:format("Request was ~p~n", [Req]),
     {reply, unknown_request, State}.
     
-handle_cast(_, State) -> {reply, unknown_cast, State}.
-handle_info(_, State) -> {reply, unknown_info, State}.
+handle_cast(_, State) -> {noreply, State}.
+handle_info(_, State) -> {noreply, State}.
 terminate(_, _) -> ok.
 code_change(_, State, _) -> {ok, State}.
 

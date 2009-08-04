@@ -39,7 +39,9 @@ register_global_handler(Handler) ->
 %% @spec register_static_context(Context, Module, Path) -> ok
 %% @doc Registers a static docroot under the given context path.
 register_static_context(Context, Module, Path) ->
-    LocalPath = mod_http_deps:local_path(Path, Module),
+    {file, Here} = code:is_loaded(Module),
+    ModuleRoot = filename:dirname(filename:dirname(Here)),
+    LocalPath = filename:join(ModuleRoot, Path),
     register_static_context(Context, LocalPath).
 
 register_static_context(Context, LocalPath) ->
