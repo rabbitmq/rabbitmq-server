@@ -25,7 +25,6 @@
 
 EBIN_DIR=ebin
 export INCLUDE_DIR=include
-export INCLUDE_SERV_DIR=$(BROKER_SYMLINK)/include
 TEST_DIR=test
 SOURCE_DIR=src
 DIST_DIR=dist
@@ -46,6 +45,7 @@ TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
 LOAD_PATH=$(EBIN_DIR) $(BROKER_SYMLINK)/ebin $(TEST_DIR)
+LIBS_PATH=ERL_LIBS=$(DIST_DIR)
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
@@ -55,7 +55,7 @@ ifndef USE_SPECS
 export USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.6.2" ]; then echo "true"; else echo "false"; fi)
 endif
 
-ERLC_OPTS=-I $(INCLUDE_DIR) -I $(INCLUDE_SERV_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
+ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
 LOG_BASE=/tmp
 LOG_IN_FILE=true
@@ -74,7 +74,6 @@ all: compile
 compile: $(TARGETS)
 
 compile_tests: $(TEST_DIR)
-
 
 dialyze: $(TARGETS)
 	$(DIALYZER_CALL) -c $^
@@ -96,8 +95,21 @@ ifdef BROKER_DIR
 	ln -sf $(BROKER_DIR) $(BROKER_SYMLINK)
 endif
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(BROKER_SYMLINK)
-	mkdir -p $(EBIN_DIR); erlc $(ERLC_OPTS) $<
+$(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SYMLINK)
+	$(MAKE) -C $(BROKER_SYMLINK)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
+	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	$(foreach DEP, $(DEPS), \
+        ( cp $(BROKER_SYMLINK)/$(EBIN_DIR)/$(DEP).beam \
+          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
+        );)
+	cp $(BROKER_SYMLINK)/$(INCLUDE_DIR)/*.hrl \
+            $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
+	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+	mkdir -p $(EBIN_DIR); $(LIBS_PATH) erlc $(ERLC_OPTS) $<
 
 
 run: compile
@@ -152,19 +164,8 @@ package: clean $(DIST_DIR) $(TARGETS)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
 	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
-
-common_package: $(BROKER_SYMLINK)
-	$(MAKE) -C $(BROKER_SYMLINK)
-	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
-	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
-	$(foreach DEP, $(DEPS), \
-        ( cp $(BROKER_SYMLINK)/$(EBIN_DIR)/$(DEP).beam \
-          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
-        );)
-	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
-
-test_common_package: package common_package $(TEST_TARGETS)
+test_common_package: package $(DIST_DIR)/$(COMMON_PACKAGE_NAME) $(TEST_TARGETS)
 	@echo This target requires that you are already running an instance \
         of the broker on the localhost.......
-	ERL_LIBS=$(DIST_DIR) erl -pa test -eval 'network_client_SUITE:test(),halt().'
+	$(LIBS_PATH) erl -pa test -eval 'network_client_SUITE:test(),halt().'
 
