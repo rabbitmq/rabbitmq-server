@@ -28,7 +28,7 @@ TEST_TARGETS=$(patsubst %.erl, %.beam, $(TEST_SOURCES))
 INCLUDES=$(wildcard ../$(INCLUDE_DIR)/*.hrl)
 
 ERLC_OPTS=-I ../$(INCLUDE_DIR) -o ./ -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
-LIBS_PATH=ERL_LIBS=../dist
+LIBS_PATH=ERL_LIBS=../deps
 
 all: compile
 

@@ -28,6 +28,7 @@ export INCLUDE_DIR=include
 TEST_DIR=test
 SOURCE_DIR=src
 DIST_DIR=dist
+DEPS_DIR=deps
 
 DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  file:consult("rabbit_common.app"), \
@@ -45,7 +46,7 @@ TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
 LOAD_PATH=$(EBIN_DIR) $(BROKER_SYMLINK)/ebin $(TEST_DIR)
-LIBS_PATH=ERL_LIBS=$(DIST_DIR)
+LIBS_PATH=ERL_LIBS=$(DEPS_DIR):$(DIST_DIR)
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
@@ -95,20 +96,20 @@ ifdef BROKER_DIR
 	ln -sf $(BROKER_DIR) $(BROKER_SYMLINK)
 endif
 
-$(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SYMLINK)
+$(DEPS_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SYMLINK)
 	$(MAKE) -C $(BROKER_SYMLINK)
-	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
-	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
-	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
+	cp $(COMMON_PACKAGE).app $(DEPS_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
 	$(foreach DEP, $(DEPS), \
         ( cp $(BROKER_SYMLINK)/$(EBIN_DIR)/$(DEP).beam \
-          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
+          $(DEPS_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
         );)
 	cp $(BROKER_SYMLINK)/$(INCLUDE_DIR)/*.hrl \
-            $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
-	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
+            $(DEPS_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
+	(cd $(DEPS_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE_NAME)
 	mkdir -p $(EBIN_DIR); $(LIBS_PATH) erlc $(ERLC_OPTS) $<
 
 
@@ -164,7 +165,7 @@ package: clean $(DIST_DIR) $(TARGETS)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
 	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
-test_common_package: package $(DIST_DIR)/$(COMMON_PACKAGE_NAME) $(TEST_TARGETS)
+test_common_package: package $(DEPS_DIR)/$(COMMON_PACKAGE_NAME) $(TEST_TARGETS)
 	@echo This target requires that you are already running an instance \
         of the broker on the localhost.......
 	$(LIBS_PATH) erl -pa test -eval 'network_client_SUITE:test(),halt().'
