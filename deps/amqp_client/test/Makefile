@@ -34,8 +34,11 @@ all: compile
 
 compile: $(TEST_TARGETS)
 
-%.beam: %.erl $(INCLUDES)
+%.beam: %.erl ../$(BROKER_DIR) $(INCLUDES)
 	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
+
+../$(BROKER_DIR):
+	test -e ../$(BROKER_DIR)
 
 clean:
 	rm -f *.beam
