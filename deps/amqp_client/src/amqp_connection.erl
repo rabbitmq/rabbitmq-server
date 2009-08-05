@@ -22,6 +22,8 @@
 %%
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 
+%% @doc This module is responsible for maintaining a connection to an AMQP
+%% broker and manages channels within the connection.
 -module(amqp_connection).
 
 -include_lib("rabbit.hrl").
@@ -43,7 +45,10 @@
 %% AMQP Connection API Methods
 %%---------------------------------------------------------------------------
 
-%% Starts a direct connection to the Rabbit AMQP server, assuming that
+ 
+%% @spec (binary(), binary()) -> (pid())
+%%
+%% @doc Starts a direct connection to the AMQP server, assuming that
 %% the server is running in the same process space.
 start_direct(User, Password) -> start_direct(User, Password, false).
 
@@ -58,7 +63,7 @@ start_direct_link(User, Password) ->
     start_direct(User, Password, true).
 
 
-%% Starts a networked conection to a remote AMQP server.
+%% @doc Starts a networked conection to a remote AMQP server.
 start_network(User, Password, Host, Port) ->
     start_network(User, Password, Host, Port, <<"/">>, false).
 
@@ -86,7 +91,12 @@ start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
 start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
     gen_server:start(?MODULE, [InitialState, Driver], []).
 
-%% Opens a channel without having to specify a channel number.
+%% @spec (ConnectionPid) -> ChannelPid
+%% where
+%%      ConnectionPid = pid()
+%%      ChannelPid = pid()
+%%
+%% @doc Opens a channel without having to specify a channel number.
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
 open_channel(ConnectionPid) ->
@@ -195,15 +205,18 @@ close_connection(Close, From, State = #connection_state{driver = Driver}) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
+%% @private
 init([InitialState, Driver]) when is_atom(Driver) ->
     process_flag(trap_exit, true),
     State = Driver:handshake(InitialState),
     {ok, State#connection_state{driver = Driver} }.
 
+%% @private
 %% Starts a new channel
 handle_call({open_channel, ChannelNumber, OutOfBand}, _From, State) ->
     handle_open_channel({ChannelNumber, OutOfBand}, State);
 
+%% @private
 %% Shuts the AMQP connection down
 handle_call(Close = #'connection.close'{}, From, State) ->
     close_connection(Close, From, State),
@@ -213,6 +226,7 @@ handle_call(Close = #'connection.close'{}, From, State) ->
 %% Handle forced close from the broker
 %%---------------------------------------------------------------------------
 
+%% @private
 handle_cast({method, #'connection.close'{reply_code = Code,
                                          reply_text = Text}, _Content},
             State = #connection_state{driver = Driver}) ->
@@ -223,7 +237,7 @@ handle_cast({method, #'connection.close'{reply_code = Code,
 %%---------------------------------------------------------------------------
 %% Trap exits
 %%---------------------------------------------------------------------------
-
+%% @private
 handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
     io:format("Channel Peer ~p sent this message: ~p -> ~p~n",
               [Pid, Msg, Context]),
@@ -238,24 +252,30 @@ handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
             {stop, {hard_error, {Code, Text}}, State}
     end;
 
+%% @private
 %% Just the amqp channel shutting down, so unregister this channel
 handle_info( {'EXIT', Pid, normal}, State) ->
     {noreply, unregister_channel(Pid, State) };
 
+%% @private
 %% This is a special case for abruptly closed socket connections
 handle_info( {'EXIT', _Pid, {socket_error, Reason}}, State) ->
     {stop, {socket_error, Reason}, State};
 
+%% @private
 handle_info( {'EXIT', _Pid, Reason = {unknown_message_type, _}}, State) ->
     {stop, Reason, State};
 
+%% @private
 handle_info( {'EXIT', _Pid, Reason = connection_socket_closed_unexpectedly},
              State) ->
     {stop, Reason, State};
 
+%% @private
 handle_info( {'EXIT', _Pid, Reason = connection_timeout}, State) ->
     {stop, Reason, State};
 
+%% @private
 handle_info( {'EXIT', Pid, Reason}, State) ->
     io:format("Connection: Handling exit from ~p --> ~p~n", [Pid, Reason]),
     {noreply, unregister_channel(Pid, State) }.
@@ -264,9 +284,10 @@ handle_info( {'EXIT', Pid, Reason}, State) ->
 %% Rest of the gen_server callbacks
 %%---------------------------------------------------------------------------
 
+%% @private
 terminate(_Reason, _State) ->
     ok.
-
+    
+%% @private
 code_change(_OldVsn, State, _Extra) ->
     State.
-

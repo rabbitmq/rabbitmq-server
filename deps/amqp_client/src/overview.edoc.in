@@ -1,0 +1,15 @@
+@title AMQP Client for Erlang
+@author LShift Ltd. <query@lshift.net>
+@copyright 2009 LShift Ltd.
+
+@version %%VERSION%%
+
+@reference <a href="http://jira.amqp.org/confluence/download/attachments/720900/amqp0-8.pdf?version=1">AMQP</a>, the 0-8 version of the AMQP specification
+
+@doc <p>An implementation of AMQP for Erlang.</p>
+
+== Overview ==
+
+The main components are {@link amqp_connection} and {@link amqp_channel}.
+
+For more information, refer to the developer's guide.

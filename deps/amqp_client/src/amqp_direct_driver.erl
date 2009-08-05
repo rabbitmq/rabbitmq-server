@@ -23,6 +23,7 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
+%% @private
 -module(amqp_direct_driver).
 
 -include_lib("rabbit.hrl").

@@ -23,6 +23,7 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
+%% @private
 -module(amqp_network_driver).
 
 -include_lib("rabbit_framing.hrl").

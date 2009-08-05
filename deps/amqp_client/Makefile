@@ -30,11 +30,13 @@ export INCLUDE_SERV_DIR=$(BROKER_DIR)/include
 TEST_DIR=test
 SOURCE_DIR=src
 DIST_DIR=dist
+DOC_DIR=doc
 
 DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  file:consult("rabbit_common.app"), \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
+VERSION=1.7.0
 PACKAGE=amqp_client
 PACKAGE_NAME=$(PACKAGE).ez
 COMMON_PACKAGE=rabbit_common
@@ -95,6 +97,15 @@ dialyze_all: $(TARGETS) $(TEST_TARGETS)
 
 add_broker_to_plt: $(BROKER_DIR)/ebin
 	$(DIALYZER_CALL) --add_to_plt -r $<
+
+$(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
+	mkdir -p $(DOC_DIR)
+	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
+
+doc: $(DOC_DIR)/overview.edoc
+	erl -noshell -eval 'edoc:application(amqp_client, ".", [])' \
+		-run init stop
+
 
 ###############################################################################
 ##  Testing
@@ -167,6 +178,7 @@ clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f erl_crash.dump
 	rm -fr dist
+	rm -fr $(DOC_DIR)
 	$(MAKE) -C $(TEST_DIR) clean
 
 
