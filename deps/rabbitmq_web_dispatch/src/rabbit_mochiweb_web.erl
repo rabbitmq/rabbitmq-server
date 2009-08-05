@@ -1,4 +1,4 @@
--module(rabbitmq_http_server_web).
+-module(rabbit_mochiweb_web).
 
 -export([start/0, stop/0]).
 
@@ -18,7 +18,7 @@ stop() ->
     mochiweb_http:stop(?MODULE).
 
 loop(Req) ->
-    case rabbitmq_http_server_registry:lookup(Req) of
+    case rabbit_mochiweb_registry:lookup(Req) of
 	    no_handler ->
 	        Req:not_found();
 	    {lookup_failure, Reason} ->

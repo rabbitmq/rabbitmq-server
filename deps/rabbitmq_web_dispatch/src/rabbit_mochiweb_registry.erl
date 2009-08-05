@@ -1,4 +1,4 @@
--module(rabbitmq_http_server_registry).
+-module(rabbit_mochiweb_registry).
 
 -behaviour(gen_server).
 
