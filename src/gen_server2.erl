@@ -21,8 +21,8 @@
 %% higher priorities are processed before requests with lower
 %% priorities. The default priority is 0.
 %%
-%% 5) The module can optionally implement handle_pre_hibernate/1 and
-%% handle_post_hibernate/1. If they are implemented then they will be
+%% 5) The callback module can optionally implement
+%% handle_pre_hibernate/1 and handle_post_hibernate/1. These will be
 %% called immediately prior to and post hibernation, respectively. If
 %% handle_pre_hibernate returns {hibernate, NewState} then the process
 %% will hibernate. If the module does not implement
@@ -34,11 +34,11 @@
 %% (including init), timeout can be 'hibernate'. When this is the
 %% case, the current timeout value will be used (initially, the
 %% InitialTimeout supplied from init). After this timeout has
-%% occurred, hibernation will occur as normal (see (5) above). Upon
-%% awaking, a new current timeout value will be calculated, before
-%% handle_post_hibernate/1 is called (if available, see (5)
-%% above). The purpose is that the gen_server2 takes care of adjusting
-%% the current timeout value such that the process will increase the
+%% occurred, hibernation will occur as normal. Upon awaking, a new
+%% current timeout value will be calculated.
+%% 
+%% The purpose is that the gen_server2 takes care of adjusting the
+%% current timeout value such that the process will increase the
 %% timeout value repeatedly if it is unable to sleep for the
 %% DesiredHibernatePeriod. If it is able to sleep for the
 %% DesiredHibernatePeriod it will decrease the current timeout down to
@@ -55,11 +55,7 @@
 %% returning 'hibernate' from handle_info(timeout, State) will not
 %% hibernate the process immediately, as it would if backoff wasn't
 %% being used. Instead it'll wait for the current timeout as described
-%% above, before calling handle_pre_hibernate(State).
-%%
-%% When not using the this backoff mechanism, hibernate can still be
-%% returned as usual, to cause the process to immediately hibernate
-%% (though (5) still applies here).
+%% above.
 
 %% All modifications are (C) 2009 LShift Ltd.
 
