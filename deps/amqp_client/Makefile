@@ -51,6 +51,9 @@ TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
+BROKER_HEADERS=$(wildcard $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl)
+BROKER_SOURCES=$(wildcard $(BROKER_DIR)/$(SOURCE_DIR)/*.erl)
+
 LIBS_PATH=ERL_LIBS=$(DEPS_DIR):$(DIST_DIR)
 LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR)
 
@@ -113,7 +116,7 @@ all_tests: prepare_tests
 	{ $(MAKE) test_common_package || OK=false; } && \
 	$$OK
 
-$(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_DIR)
+$(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SOURCES) $(BROKER_HEADERS)
 	$(MAKE) -C $(BROKER_DIR)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
