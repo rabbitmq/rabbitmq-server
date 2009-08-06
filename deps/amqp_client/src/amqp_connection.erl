@@ -45,13 +45,19 @@
 %% AMQP Connection API Methods
 %%---------------------------------------------------------------------------
 
- 
-%% @spec (binary(), binary()) -> (pid())
+%% @doc Invokes start_network_link(User, Password, false).
+start_direct(User, Password) ->
+    start_direct(User, Password, false).
+
+%% @spec (User, Password, ProcLink) -> (Connection)
+%% where
+%%      User = binary()
+%%      Password = binary()
+%%      ProcLink = boolean()
+%%      Connection = pid()
 %%
 %% @doc Starts a direct connection to the AMQP server, assuming that
 %% the server is running in the same process space.
-start_direct(User, Password) -> start_direct(User, Password, false).
-
 start_direct(User, Password, ProcLink) when is_boolean(ProcLink) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
@@ -59,14 +65,18 @@ start_direct(User, Password, ProcLink) when is_boolean(ProcLink) ->
     {ok, Pid} = start_internal(InitialState, amqp_direct_driver, ProcLink),
     Pid.
 
+%%
+%%
 start_direct_link(User, Password) ->
     start_direct(User, Password, true).
 
 
+%%
 %% @doc Starts a networked conection to a remote AMQP server.
 start_network(User, Password, Host, Port) ->
     start_network(User, Password, Host, Port, <<"/">>, false).
 
+%%
 start_network(User, Password, Host, Port, VHost) ->
     start_network(User, Password, Host, Port, VHost, false).
 

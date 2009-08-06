@@ -36,9 +36,9 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3,
          handle_cast/2, handle_info/2]).
 
-%---------------------------------------------------------------------------
-% API
-%---------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%% API
+%%--------------------------------------------------------------------------
 
 start(Connection, Queue) ->
     {ok, Pid} = gen_server:start(?MODULE, [Connection, Queue], []),
@@ -50,23 +50,23 @@ stop(Pid) ->
 call(RpcClientPid, Payload) ->
     gen_server:call(RpcClientPid, {call, Payload}, infinity).
 
-%---------------------------------------------------------------------------
-% Plumbing
-%---------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%% Plumbing
+%%--------------------------------------------------------------------------
 
-% Sets up a reply queue for this client to listen on
+%% Sets up a reply queue for this client to listen on
 setup_reply_queue(State = #rpc_client_state{channel = Channel}) ->
     Q = lib_amqp:declare_private_queue(Channel),
     State#rpc_client_state{reply_queue = Q}.
 
-% Registers this RPC client instance as a consumer to handle rpc responses
+%% Registers this RPC client instance as a consumer to handle rpc responses
 setup_consumer(#rpc_client_state{channel = Channel,
                                  reply_queue = Q}) ->
     lib_amqp:subscribe(Channel, Q, self()).
 
-% Publishes to the broker, stores the From address against
-% the correlation id and increments the correlationid for
-% the next request
+%% Publishes to the broker, stores the From address against
+%% the correlation id and increments the correlationid for
+%% the next request
 publish(Payload, From,
         State = #rpc_client_state{channel = Channel,
                                   reply_queue = Q,
@@ -82,11 +82,12 @@ publish(Payload, From,
                            continuations
                            = dict:store(CorrelationId, From, Continuations)}.
 
-%---------------------------------------------------------------------------
-% gen_server callbacks
-%---------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%% gen_server callbacks
+%%--------------------------------------------------------------------------
 
-% Sets up a reply queue and consumer within an existing channel
+%% Sets up a reply queue and consumer within an existing channel
+%% @private
 init([Connection, RoutingKey]) ->
     Channel = lib_amqp:start_channel(Connection),
     InitialState = #rpc_client_state{channel = Channel,
@@ -96,28 +97,35 @@ init([Connection, RoutingKey]) ->
     setup_consumer(State),
     {ok, State}.
 
-% Closes the channel this gen_server instance started
+%% Closes the channel this gen_server instance started
+%% @private
 terminate(_Reason, #rpc_client_state{channel = Channel}) ->
     lib_amqp:close_channel(Channel),
     ok.
 
-% Handle the application initiated stop by just stopping this gen server
+%% Handle the application initiated stop by just stopping this gen server
+%% @private
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
+%% @private
 handle_call({call, Payload}, From, State) ->
     NewState = publish(Payload, From, State),
     {noreply, NewState}.
 
+%% @private
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+%% @private
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
+%% @private
 handle_info(#'basic.cancel_ok'{}, State) ->
     {stop, normal, State};
 
+%% @private
 handle_info({#'basic.deliver'{},
             {content, ClassId, _Props, PropertiesBin, [Payload] }},
             State = #rpc_client_state{continuations = Conts}) ->
@@ -128,6 +136,7 @@ handle_info({#'basic.deliver'{},
     gen_server:reply(From, Payload),
     {noreply, State#rpc_client_state{continuations = dict:erase(Id, Conts) }}.
 
+%% @private
 code_change(_OldVsn, State, _Extra) ->
     State.
 

@@ -23,6 +23,7 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
+%% @doc This module encapsulates the client's view of an AMQP channel.
 -module(amqp_channel).
 
 -include_lib("rabbit.hrl").
@@ -269,25 +270,29 @@ handle_method(Method, Content, State) ->
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
-
+%% @private
 init([InitialState]) ->
     {ok, InitialState}.
 
 %% Standard implementation of top half of the call/2 command
 %% Do not accept any further RPCs when the channel is about to close
+%% @private
 handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
     rpc_top_half(Method, From, State);
 
+%% @private
 handle_call({call, _Method, _Content}, _From,
             State = #channel_state{flow_control = true}) ->
     {reply, blocked, State};
 
 %% Do not accept any further messages for writer when the channel is about to
 %% close
+%% @private
 handle_call({call, _Method, _Content}, _From,
             State = #channel_state{closing = true}) ->
     {reply, blocked, State};
 
+%% @private
 handle_call({call, Method, Content}, _From,
             State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
     Do3(Writer, Method, Content),
@@ -295,6 +300,7 @@ handle_call({call, Method, Content}, _From,
 
 %% Top half of the basic consume process.
 %% Sets up the consumer for registration in the bottom half of this RPC.
+%% @private
 handle_call({Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
             From, State = #channel_state{anon_sub_requests = Subs})
             when Tag =:= undefined ; size(Tag) == 0 ->
@@ -303,6 +309,7 @@ handle_call({Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
     NewMethod =  Method#'basic.consume'{consumer_tag = <<"">>},
     rpc_top_half(NewMethod, From, NewState);
 
+%% @private
 handle_call({Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
             From, State = #channel_state{tagged_sub_requests = Subs})
             when is_binary(Tag) ->
@@ -314,10 +321,12 @@ handle_call({Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
 
 %% Do not accept any further messages for writer when the channel is about to
 %% close
+%% @private
 handle_cast({cast, _Method}, State = #channel_state{closing = true}) ->
     {noreply, State};
 
 %% Standard implementation of the cast/2 command
+%% @private
 handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer,
                                                    do2 = Do2}) ->
     Do2(Writer, Method),
@@ -325,6 +334,7 @@ handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer,
 
 %% This discards any message submitted to the channel when flow control is
 %% active
+%% @private
 handle_cast({cast, Method, _Content},
             State = #channel_state{flow_control = true}) ->
     % Discard the message and log it
@@ -333,16 +343,19 @@ handle_cast({cast, Method, _Content},
 
 %% Do not accept any further messages for writer when the channel is about to
 %% close
+%% @private
 handle_cast({cast, _Method, _Content}, State = #channel_state{closing = true}) ->
     {noreply, State};
 
 %% Standard implementation of the cast/3 command
+%% @private
 handle_cast({cast, Method, Content},
             State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
     Do3(Writer, Method, Content),
     {noreply, State};
 
 %% Registers the direct channel peer when using the direct client
+%% @private
 handle_cast({register_direct_peer, Peer}, State) ->
     link(Peer),
     process_flag(trap_exit, true),
@@ -350,15 +363,18 @@ handle_cast({register_direct_peer, Peer}, State) ->
     {noreply, NewState};
 
 %% Registers a handler to process return messages
+%% @private
 handle_cast({register_return_handler, ReturnHandler}, State) ->
     NewState = State#channel_state{return_handler_pid = ReturnHandler},
     {noreply, NewState};
 
 %% Registers a handler to process flow control messages
+%% @private
 handle_cast({register_flow_handler, FlowHandler}, State) ->
     NewState = State#channel_state{flow_handler_pid = FlowHandler},
     {noreply, NewState};
 
+%% @private
 handle_cast({notify_sent, _Peer}, State) ->
     {noreply, State};
 
@@ -368,9 +384,11 @@ handle_cast({notify_sent, _Peer}, State) ->
 %% to this gen_server instance.
 %%---------------------------------------------------------------------------
 
+%% @private
 handle_cast( {method, Method, none}, State) ->
     handle_method(Method, State);
 
+%% @private
 handle_cast( {method, Method, Content}, State) ->
     handle_method(Method, Content, State).
 
@@ -380,17 +398,21 @@ handle_cast( {method, Method, Content}, State) ->
 %% to this gen_server instance.
 %%---------------------------------------------------------------------------
 
+%% @private
 handle_info( {send_command, Method}, State) ->
     handle_method(Method, State);
 
+%% @private
 handle_info( {send_command, Method, Content}, State) ->
     handle_method(Method, Content, State);
 
+%% @private
 handle_info(shutdown, State) ->
     NewState = channel_cleanup(State),
     {stop, normal, NewState};
 
 %% Handles the delivery of a message from a direct channel
+%% @private
 handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     handle_method(Method, Content, State),
     rabbit_amqqueue:notify_sent(Q, ChPid),
@@ -401,12 +423,14 @@ handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
 %% In the direct case this is the local channel
 %% In the network case this is the process that writes to the socket
 %% on a per channel basis
+%% @private
 handle_info({'EXIT', _Pid, Reason},
             State = #channel_state{number = Number}) ->
     io:format("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
     {stop, normal, State};
 
 %% This is for a channel exception that can't be otherwise handled
+%% @private
 handle_info( {channel_exit, _Channel, Reason}, State) ->
    {stop, Reason, State}.
 
@@ -414,10 +438,12 @@ handle_info( {channel_exit, _Channel, Reason}, State) ->
 %% Rest of the gen_server callbacks
 %%---------------------------------------------------------------------------
 
+%% @private
 terminate(_Reason, State) ->
     channel_cleanup(State),
     ok.
 
+%% @private
 code_change(_OldVsn, State, _Extra) ->
     State.
 

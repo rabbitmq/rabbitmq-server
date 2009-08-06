@@ -102,7 +102,7 @@ $(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
 	mkdir -p $(DOC_DIR)
 	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
 
-doc: $(DOC_DIR)/overview.edoc
+doc: $(DOC_DIR)/overview.edoc $(SOURCES)
 	erl -noshell -eval 'edoc:application(amqp_client, ".", [])' \
 		-run init stop
 

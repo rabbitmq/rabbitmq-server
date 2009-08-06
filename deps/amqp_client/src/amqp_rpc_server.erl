@@ -37,9 +37,9 @@
 -export([stop/1]).
 
 
-%---------------------------------------------------------------------------
-% API
-%---------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%% API
+%%--------------------------------------------------------------------------
 
 start(Connection, Queue, Fun) ->
     {ok, Pid} = gen_server:start(?MODULE, [Connection, Queue, Fun], []),
@@ -48,25 +48,30 @@ start(Connection, Queue, Fun) ->
 stop(Pid) ->
     gen_server:call(Pid, stop, infinity).
 
-%---------------------------------------------------------------------------
-% gen_server callbacks
-%---------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%% gen_server callbacks
+%%--------------------------------------------------------------------------
 
+%% @private
 init([Connection, Queue, Fun]) ->
     Channel = lib_amqp:start_channel(Connection),
     lib_amqp:declare_private_queue(Channel, Queue),
     lib_amqp:subscribe(Channel, Queue, self()),
     {ok, #rpc_server_state{channel = Channel, handler = Fun} }.
 
+%% @private
 handle_info(shutdown, State) ->
     {stop, normal, State};
 
+%% @private
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
+%% @private
 handle_info(#'basic.cancel_ok'{}, State) ->
     {stop, normal, State};
 
+%% @private
 handle_info({#'basic.deliver'{},
             {content, ClassId, _Props, PropertiesBin, [Payload] }},
             State = #rpc_server_state{handler = Fun, channel = Channel}) ->
@@ -78,21 +83,25 @@ handle_info({#'basic.deliver'{},
     lib_amqp:publish(Channel, <<>>, Q, Response, Properties),
     {noreply, State}.
 
+%% @private
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
-%---------------------------------------------------------------------------
-% Rest of the gen_server callbacks
-%---------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%% Rest of the gen_server callbacks
+%%--------------------------------------------------------------------------
 
+%% @private
 handle_cast(_Message, State) ->
     {noreply, State}.
 
-% Closes the channel this gen_server instance started
+%% Closes the channel this gen_server instance started
+%% @private
 terminate(_Reason, #rpc_server_state{channel = Channel}) ->
     lib_amqp:close_channel(Channel),
     ok.
 
+%% @private
 code_change(_OldVsn, State, _Extra) ->
     State.
 
