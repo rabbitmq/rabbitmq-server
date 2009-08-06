@@ -23,6 +23,8 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
+-record(amqp_msg, {props, payload}).
+
 -record(connection_state, {username,
                            password,
                            serverhost,
