@@ -102,7 +102,6 @@ init(Q) ->
                   message_buffer = queue:new(),
                   active_consumers = queue:new(),
                   blocked_consumers = queue:new()},
-    rabbit_misc:emit_presence(qname(NewState), <<"startup">>),
     {ok, NewState, ?HIBERNATE_AFTER}.
 
 terminate(_Reason, State) ->

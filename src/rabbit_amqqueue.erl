@@ -157,6 +157,7 @@ declare(QueueName, Durable, AutoDelete, Args) ->
                                       auto_delete = AutoDelete,
                                       arguments = Args,
                                       pid = none}),
+    rabbit_misc:emit_presence(QueueName, <<"startup">>),
     internal_declare(Q, true).
 
 internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->

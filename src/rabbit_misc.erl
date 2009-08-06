@@ -396,8 +396,20 @@ emit_presence(Resource = #resource{kind = KindAtom, name = InstanceBin},
     RK = list_to_binary(["presence.", ClassBin,
                          ".", escape_routing_key(InstanceBin),
                          ".", EventBin]),
-    _Ignored = rabbit_exchange:simple_publish(
-                 false, false, XName, RK, undefined, <<>>),
+    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
+    Content = #content{class_id = ClassId,
+                       properties = #'P_basic'{},
+                       properties_bin = none,
+                       payload_fragments_rev = [<<>>]},
+    Message = #basic_message{exchange_name = XName,
+                             routing_key = RK,
+                             content = Content},
+    _Ignored = case rabbit_exchange:lookup(XName) of
+           {ok, Exchange} ->
+               rabbit_exchange:publish(Exchange,
+                                       #delivery{message = Message});
+           {error, Error} -> {error, Error}
+    end,
     ok.
 
 append_file(File, Suffix) ->
