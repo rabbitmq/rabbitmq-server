@@ -105,7 +105,7 @@ init(Q) ->
     {ok, NewState, ?HIBERNATE_AFTER}.
 
 terminate(_Reason, State) ->
-    rabbit_misc:emit_presence(qname(State), <<"shutdown">>),
+    rabbit_hooks:trigger(queue_shutdown, [qname(State)]),
     %% FIXME: How do we cancel active subscriptions?
     QName = qname(State),
     lists:foreach(fun (Txn) -> ok = rollback_work(Txn, QName) end,

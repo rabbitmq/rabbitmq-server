@@ -247,8 +247,8 @@ add_vhost(VHostPath) ->
                                    {<<"amq.topic">>,  topic},
                                    {<<"amq.match">>,  headers}, %% per 0-9-1 pdf
                                    {<<"amq.headers">>,  headers}, %% per 0-9-1 xml
-                                   {<<"amq.fanout">>, fanout},
-                                   {<<"amq.rabbitmq.presence">>, topic}]],
+                                   {<<"amq.fanout">>, fanout}]],
+                          rabbit_hooks:trigger(vhost_create, [VHostPath]),
                           ok;
                       [_] ->
                           mnesia:abort({vhost_already_exists, VHostPath})

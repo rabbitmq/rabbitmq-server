@@ -50,7 +50,6 @@
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([table_foreach/2]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([escape_routing_key/1, emit_presence/2]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
@@ -373,38 +372,6 @@ dirty_dump_log1(LH, {K, Terms}) ->
 dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
-
-escape_routing_key(K) when is_binary(K) ->
-    list_to_binary(escape_routing_key1(binary_to_list(K))).
-
-escape_routing_key1([]) ->
-    [];
-escape_routing_key1([Ch | Rest]) ->
-    Tail = escape_routing_key1(Rest),
-    case Ch of
-        $# -> "%23" ++ Tail;
-        $% -> "%25" ++ Tail;
-        $* -> "%2a" ++ Tail;
-        $. -> "%2e" ++ Tail;
-        _ -> [Ch | Tail]
-    end.
-
-emit_presence(Resource = #resource{kind = KindAtom, name = InstanceBin},
-              EventBin) ->
-    ClassBin = list_to_binary(atom_to_list(KindAtom)),
-    XName = r(Resource, exchange, <<"amq.rabbitmq.presence">>),
-    RK = list_to_binary(["presence.", ClassBin,
-                         ".", escape_routing_key(InstanceBin),
-                         ".", EventBin]),
-    Body = list_to_binary([EventBin, ".", escape_routing_key(InstanceBin)]),
-    Message = rabbit_basic:message(XName, RK, #'P_basic'{}, Body),
-    Delivery = rabbit_basic:delivery(false, false, none, Message),
-    _Ignored = case rabbit_exchange:lookup(XName) of
-           {ok, Exchange} ->
-               rabbit_exchange:publish(Exchange, Delivery);
-           {error, Error} -> {error, Error}
-    end,
-    ok.
 
 append_file(File, Suffix) ->
     case file:read_file_info(File) of
