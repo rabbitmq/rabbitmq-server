@@ -529,12 +529,12 @@ pre_hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
                     hibernate(Parent, Name, NState, Mod, TimeoutState, Queue,
                               Debug);
                 {stop, Reason, NState} ->
-                    terminate(Reason, Name, pre_hibernate, Mod, NState, []);
+                    terminate(Reason, Name, pre_hibernate, Mod, NState, Debug);
                 {'EXIT', What} ->
-                    terminate(What, Name, pre_hibernate, Mod, State, []);
+                    terminate(What, Name, pre_hibernate, Mod, State, Debug);
                 Reply ->
                     terminate({bad_return_value, Reply}, Name, pre_hibernate,
-                              Mod, State, [])
+                              Mod, State, Debug)
             end;
         false ->
             hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug)
@@ -551,12 +551,12 @@ post_hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
                     process_next_msg(Parent, Name, NState, Mod, Time,
                                      TimeoutState, Queue, Debug);
                 {stop, Reason, NState} ->
-                    terminate(Reason, Name, post_hibernate, Mod, NState, []);
+                    terminate(Reason, Name, post_hibernate, Mod, NState, Debug);
                 {'EXIT', What} ->
-                    terminate(What, Name, post_hibernate, Mod, State, []);
+                    terminate(What, Name, post_hibernate, Mod, State, Debug);
                 Reply ->
                     terminate({bad_return_value, Reply}, Name, post_hibernate,
-                              Mod, State, [])
+                              Mod, State, Debug)
             end;
         false ->
             %% use hibernate here, not infinity. This matches
