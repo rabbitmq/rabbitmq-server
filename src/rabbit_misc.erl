@@ -396,18 +396,12 @@ emit_presence(Resource = #resource{kind = KindAtom, name = InstanceBin},
     RK = list_to_binary(["presence.", ClassBin,
                          ".", escape_routing_key(InstanceBin),
                          ".", EventBin]),
-    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
-    Content = #content{class_id = ClassId,
-                       properties = #'P_basic'{},
-                       properties_bin = none,
-                       payload_fragments_rev = [<<>>]},
-    Message = #basic_message{exchange_name = XName,
-                             routing_key = RK,
-                             content = Content},
+    Body = list_to_binary([EventBin, ".", escape_routing_key(InstanceBin)]),
+    Message = rabbit_basic:message(XName, RK, #'P_basic'{}, Body),
+    Delivery = rabbit_basic:delivery(false, false, none, Message),
     _Ignored = case rabbit_exchange:lookup(XName) of
            {ok, Exchange} ->
-               rabbit_exchange:publish(Exchange,
-                                       #delivery{message = Message});
+               rabbit_exchange:publish(Exchange, Delivery);
            {error, Error} -> {error, Error}
     end,
     ok.
