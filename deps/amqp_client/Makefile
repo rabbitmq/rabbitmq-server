@@ -185,6 +185,7 @@ clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f erl_crash.dump
 	rm -fr dist
+	rm -fr $(DEPS_DIR)
 	$(MAKE) -C $(TEST_DIR) clean
 
 
