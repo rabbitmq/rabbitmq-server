@@ -21,39 +21,45 @@
 %% higher priorities are processed before requests with lower
 %% priorities. The default priority is 0.
 %%
-%% 5) init can return a 4th arg, {backoff, InitialTimeout,
+%% 5) The module can optionally implement handle_pre_hibernate/1 and
+%% handle_post_hibernate/1. If they are implemented then they will be
+%% called immediately prior to and post hibernation, respectively. If
+%% handle_pre_hibernate returns {hibernate, NewState} then the process
+%% will hibernate. If the module does not implement
+%% handle_pre_hibernate/1 then the default action is to hibernate.
+%%
+%% 6) init can return a 4th arg, {backoff, InitialTimeout,
 %% MinimumTimeout, DesiredHibernatePeriod} (all in
 %% milliseconds). Then, on all callbacks which can return a timeout
 %% (including init), timeout can be 'hibernate'. When this is the
 %% case, the current timeout value will be used (initially, the
 %% InitialTimeout supplied from init). After this timeout has
-%% occurred, handle_pre_hibernate/1 will be called. If that returns
-%% {hibernate, State} then the process will be hibernated. Upon
-%% awaking, a new current timeout value will be calculated, and then
-%% handle_post_hibernate/1 will be called. The purpose is that the
-%% gen_server2 takes care of adjusting the current timeout value such
-%% that the process will increase the timeout value repeatedly if it
-%% is unable to sleep for the DesiredHibernatePeriod. If it is able to
-%% sleep for the DesiredHibernatePeriod it will decrease the current
-%% timeout down to the MinimumTimeout, so that the process is put to
-%% sleep sooner (and hopefully stays asleep for longer). In short,
-%% should a process using this receive a burst of messages, it should
-%% not hibernate between those messages, but as the messages become
-%% less frequent, the process will not only hibernate, it will do so
-%% sooner after each message.
+%% occurred, hibernation will occur as normal (see (5) above). Upon
+%% awaking, a new current timeout value will be calculated, before
+%% handle_post_hibernate/1 is called (if available, see (5)
+%% above). The purpose is that the gen_server2 takes care of adjusting
+%% the current timeout value such that the process will increase the
+%% timeout value repeatedly if it is unable to sleep for the
+%% DesiredHibernatePeriod. If it is able to sleep for the
+%% DesiredHibernatePeriod it will decrease the current timeout down to
+%% the MinimumTimeout, so that the process is put to sleep sooner (and
+%% hopefully stays asleep for longer). In short, should a process
+%% using this receive a burst of messages, it should not hibernate
+%% between those messages, but as the messages become less frequent,
+%% the process will not only hibernate, it will do so sooner after
+%% each message.
 %%
-%% Normal timeout values (i.e. not 'hibernate') can still be used, and
-%% if they are used then the handle_info(timeout, State) will be
-%% called as normal. In this case, returning 'hibernate' from
-%% handle_info(timeout, State) will not hibernate the process
-%% immediately, as it would if backoff wasn't being used. Instead
-%% it'll wait for the current timeout as described above, before
-%% calling handle_pre_hibernate(State).
+%% When using this backoff mechanism, normal timeout values (i.e. not
+%% 'hibernate') can still be used, and if they are used then the
+%% handle_info(timeout, State) will be called as normal. In this case,
+%% returning 'hibernate' from handle_info(timeout, State) will not
+%% hibernate the process immediately, as it would if backoff wasn't
+%% being used. Instead it'll wait for the current timeout as described
+%% above, before calling handle_pre_hibernate(State).
 %%
-%% 6) When the backoff is not being used (see (5) above), the module
-%% can optionally implement handle_pre_hibernate/1 and
-%% handle_post_hibernate/1. If they are implemented then they will be
-%% called immediately prior to and post hibernation, respectively.
+%% When not using the this backoff mechanism, hibernate can still be
+%% returned as usual, to cause the process to immediately hibernate
+%% (though (5) still applies here).
 
 %% All modifications are (C) 2009 LShift Ltd.
 
