@@ -126,8 +126,8 @@ get_and_assert_empty(Channel, Q) ->
 
 get_and_assert_equals(Channel, Q, Payload) ->
     Content = lib_amqp:get(Channel, Q),
-    #content{payload_fragments_rev = PayloadFragments} = Content,
-    ?assertMatch([Payload], PayloadFragments).
+    #amqp_msg{payload = Payload2} = Content,
+    ?assertMatch(Payload, Payload2).
 
 basic_get_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
@@ -135,8 +135,8 @@ basic_get_test(Connection) ->
     %% TODO: This could be refactored to use get_and_assert_equals,
     %% get_and_assert_empty .... would require another bug though :-)
     Content = lib_amqp:get(Channel, Q),
-    #content{payload_fragments_rev = PayloadFragments} = Content,
-    ?assertMatch([<<"foobar">>], PayloadFragments),
+    #amqp_msg{payload = Payload} = Content,
+    ?assertMatch(<<"foobar">>, Payload),
     BasicGetEmpty = lib_amqp:get(Channel, Q, false),
     ?assertMatch('basic.get_empty', BasicGetEmpty),
     lib_amqp:teardown(Connection, Channel).
@@ -157,8 +157,8 @@ basic_return_test(Connection) ->
             #'basic.return'{reply_text = ReplyText,
                             exchange = X} = BasicReturn,
             ?assertMatch(<<"unroutable">>, ReplyText),
-            #content{payload_fragments_rev = Payload2} = Content,
-            ?assertMatch([Payload], Payload2);
+            #amqp_msg{payload = Payload2} = Content,
+            ?assertMatch(Payload, Payload2);
         WhatsThis ->
             %% TODO investigate where this comes from
             io:format("Spurious message ~p~n", [WhatsThis])
@@ -330,7 +330,7 @@ pc_producer_loop(Channel, X, Key, Payload, NRemaining) ->
 pc_consumer_loop(Channel, Payload, NReceived) ->
     receive
         {#'basic.deliver'{},
-         #content{payload_fragments_rev = [DeliveredPayload]}} ->
+         #amqp_msg{payload = DeliveredPayload}} ->
             case DeliveredPayload of
                 Payload ->
                     pc_consumer_loop(Channel, Payload, NReceived + 1);

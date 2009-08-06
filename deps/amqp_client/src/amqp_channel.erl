@@ -198,6 +198,10 @@ return_handler(State = #channel_state{return_handler_pid = undefined}) ->
 return_handler(State = #channel_state{return_handler_pid = ReturnHandler}) ->
     {ReturnHandler, State}.
 
+amqp_msg(Content) ->
+    {Props, Payload} = rabbit_basic:from_content(Content),
+    #amqp_msg{props = Props, payload = Payload}.
+
 handle_method(ConsumeOk = #'basic.consume_ok'{consumer_tag = ConsumerTag},
               State = #channel_state{anon_sub_requests = Anon,
                                      tagged_sub_requests = Tagged}) ->
@@ -250,7 +254,7 @@ handle_method(Method, State) ->
 handle_method(Deliver = #'basic.deliver'{consumer_tag = ConsumerTag},
               Content, State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
-    Consumer ! {Deliver, Content},
+    Consumer ! {Deliver, amqp_msg(Content)},
     {noreply, State};
 
 %% Why is the consumer a handle_method/3 call with the network driver,
@@ -260,11 +264,11 @@ handle_method('basic.consume_ok', ConsumerTag, State) ->
 
 handle_method(BasicReturn = #'basic.return'{}, Content, State) ->
     {ReturnHandler, NewState} = return_handler(State),
-    ReturnHandler ! {BasicReturn, Content},
+    ReturnHandler ! {BasicReturn, amqp_msg(Content)},
     {noreply, NewState};
 
 handle_method(Method, Content, State) ->
-    rpc_bottom_half( {Method, Content} , State).
+    rpc_bottom_half( {Method, amqp_msg(Content)} , State).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -288,8 +292,10 @@ handle_call({call, _Method, _Content}, _From,
             State = #channel_state{closing = true}) ->
     {reply, blocked, State};
 
-handle_call({call, Method, Content}, _From,
+handle_call({call, Method, #amqp_msg{props = Props,
+                                     payload = Payload}}, _From,
             State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
+    Content = rabbit_basic:build_content(Props, Payload),
     Do3(Writer, Method, Content),
     {reply, ok, State};
 
