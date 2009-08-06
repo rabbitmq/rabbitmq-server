@@ -41,6 +41,10 @@ PACKAGE_NAME=$(PACKAGE).ez
 COMMON_PACKAGE=rabbit_common
 COMMON_PACKAGE_NAME=$(COMMON_PACKAGE).ez
 
+COMPILE_DEPS=$(DEPS_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)/rabbit.hrl \
+             $(DEPS_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)/rabbit_framing.hrl \
+             $(DEPS_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
@@ -73,8 +77,7 @@ DIALYZER_CALL=dialyzer --plt $(PLT)
 	add_broker_to_plt prepare_tests all_tests test_suites \
 	test_suites_coverage run_test_broker start_test_broker_node \
 	stop_test_broker_node test_network test_direct test_network_coverage \
-	test_direct_coverage test_common_package clean source_tarball package \
-	common_package
+	test_direct_coverage test_common_package clean source_tarball package
 
 all: compile
 
@@ -110,21 +113,24 @@ all_tests: prepare_tests
 	{ $(MAKE) test_common_package || OK=false; } && \
 	$$OK
 
-$(DEPS_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_DIR)
+$(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_DIR)
 	$(MAKE) -C $(BROKER_DIR)
-	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
-	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
-	cp $(COMMON_PACKAGE).app $(DEPS_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
 	$(foreach DEP, $(DEPS), \
         ( cp $(BROKER_DIR)/$(EBIN_DIR)/$(DEP).beam \
-          $(DEPS_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
+          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
         );)
-	cp $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl \
-            $(DEPS_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
-	(cd $(DEPS_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
+	cp $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
+	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE_NAME)
-	mkdir -p $(EBIN_DIR); $(LIBS_PATH) erlc $(ERLC_OPTS) $<
+$(COMPILE_DEPS): $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+	mkdir -p $(DEPS_DIR)
+	unzip -o -d $(DEPS_DIR) $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(COMPILE_DEPS)
+	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
 
 test_suites: prepare_tests
 	OK=true && \
@@ -169,11 +175,11 @@ test_direct_coverage: prepare_tests
 	$(MAKE) run_test_broker \
 	RUN_TEST_BROKER_ARGS="$(COVER_START) -s direct_client_SUITE test $(COVER_STOP)"
 
-test_common_package: package common_package prepare_tests
+test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME) package prepare_tests
 	$(MAKE) start_test_broker_node
 	OK=true && \
 	TMPFILE=$$(mktemp) && \
-	    { ERL_LIBS=$(DIST_DIR) erl -noshell -pa $(TEST_DIR) \
+	    { $(LIBS_PATH) erl -noshell -pa $(TEST_DIR) \
 	    -eval 'network_client_SUITE:test(), halt().' 2>&1 | \
 		tee $$TMPFILE || OK=false; } && \
 	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
@@ -211,22 +217,9 @@ package: $(DIST_DIR)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
 	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
-common_package: $(BROKER_DIR)
-	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
-	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
-	$(foreach DEP, $(DEPS), \
-        ( cp $(BROKER_DIR)/$(EBIN_DIR)/$(DEP).beam \
-          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
-        );)
-	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
-
 ###############################################################################
 ##  Internal targets
 ###############################################################################
-
-
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) | $(EBIN_DIR)
-	erlc $(ERLC_OPTS) $<
 
 $(BROKER_DIR):
 	test -e $(BROKER_DIR)
