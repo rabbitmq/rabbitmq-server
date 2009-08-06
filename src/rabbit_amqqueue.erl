@@ -157,7 +157,7 @@ declare(QueueName, Durable, AutoDelete, Args) ->
                                       auto_delete = AutoDelete,
                                       arguments = Args,
                                       pid = none}),
-    rabbit_hooks:trigger(queue_startup, [QueueName]),
+    rabbit_hooks:trigger(queue_create, [QueueName]),
     internal_declare(Q, true).
 
 internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->

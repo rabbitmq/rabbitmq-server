@@ -47,7 +47,8 @@ start_link() ->
 %% Gen Server Implementation
 init([]) ->
     attach(sync, vhost_create),
-    attach(async, [queue_startup, queue_shutdown]),
+    attach(async, [exchange_create, exchange_delete]),
+    attach(async, [queue_create, queue_delete]),
     {ok, []}.
 
 handle_call({vhost_create, [VHostPath]}, _, State) ->
@@ -59,10 +60,16 @@ handle_call({vhost_create, [VHostPath]}, _, State) ->
 handle_call(_, _, State) ->
     {reply, ok, State}.
 
-handle_cast({queue_startup, [QName = #resource{}]}, State) ->
+handle_cast({queue_create, [QName = #resource{}]}, State) ->
     emit_presence(QName, <<"startup">>),
     {noreply, State};
-handle_cast({queue_shutdown, [QName = #resource{}]}, State) ->
+handle_cast({queue_delete, [QName = #resource{}]}, State) ->
+    emit_presence(QName, <<"shutdown">>),
+    {noreply, State};
+handle_cast({exchange_create, [QName = #resource{}]}, State) ->
+    emit_presence(QName, <<"startup">>),
+    {noreply, State};
+handle_cast({exchange_delete, [QName = #resource{}]}, State) ->
     emit_presence(QName, <<"shutdown">>),
     {noreply, State};
 handle_cast(_Msg, State) ->

@@ -117,6 +117,7 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                          durable = Durable,
                          auto_delete = AutoDelete,
                          arguments = Args},
+    rabbit_hooks:trigger(exchange_create, [ExchangeName]),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:wread({rabbit_exchange, ExchangeName}) of
@@ -299,7 +300,9 @@ delete_exchange_bindings(ExchangeName) ->
     [begin
          ok = mnesia:delete_object(rabbit_reverse_route,
                                    reverse_route(Route), write),
-         ok = delete_forward_routes(Route)
+         ok = delete_forward_routes(Route),
+         #route{binding = B} = Route,
+         trigger_delete_binding_hook(B)
      end || Route <- mnesia:match_object(
                        rabbit_route,
                        #route{binding = #binding{exchange_name = ExchangeName,
@@ -390,7 +393,9 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                  true -> ok = sync_binding(B, Q#amqqueue.durable,
                                            fun mnesia:write/3)
               end
-      end).
+      end),
+    rabbit_hooks:trigger(binding_create, [ExchangeName, QueueName, 
+                                          RoutingKey, Arguments]).
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
     binding_action(
@@ -401,6 +406,7 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                   [] -> {error, binding_not_found};
                   _  -> ok = sync_binding(B, Q#amqqueue.durable,
                                           fun mnesia:delete_object/3),
+                        trigger_delete_binding_hook(B),
                         maybe_auto_delete(X)
               end
       end).
@@ -581,8 +587,13 @@ conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
 
 unconditional_delete(#exchange{name = ExchangeName}) ->
     ok = delete_exchange_bindings(ExchangeName),
+    rabbit_hooks:trigger(exchange_delete, [ExchangeName]),
     ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
     ok = mnesia:delete({rabbit_exchange, ExchangeName}).
+
+trigger_delete_binding_hook(#binding{queue_name = Q, exchange_name = X,
+                                     key = RK, args = Args}) ->
+    rabbit_hooks:trigger(binding_delete, [X, Q, RK, Args]).
 
 %%----------------------------------------------------------------------------
 %% EXTENDED API
