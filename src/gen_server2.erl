@@ -36,11 +36,11 @@
 %% is unable to sleep for the DesiredHibernatePeriod. If it is able to
 %% sleep for the DesiredHibernatePeriod it will decrease the current
 %% timeout down to the MinimumTimeout, so that the process is put to
-%% sleep sooner (and hopefully for longer). In short, should a process
-%% using this receive a burst of messages, it should not hibernate
-%% between those messages, but as the messages become less frequent,
-%% the process will not only hibernate, it will do so sooner after
-%% each message.
+%% sleep sooner (and hopefully stays asleep for longer). In short,
+%% should a process using this receive a burst of messages, it should
+%% not hibernate between those messages, but as the messages become
+%% less frequent, the process will not only hibernate, it will do so
+%% sooner after each message.
 %%
 %% Normal timeout values (i.e. not 'hibernate') can still be used, and
 %% if they are used then the handle_info(timeout, State) will be
@@ -49,6 +49,11 @@
 %% immediately, as it would if backoff wasn't being used. Instead
 %% it'll wait for the current timeout as described above, before
 %% calling handle_pre_hibernate(State).
+%%
+%% 6) When the backoff is not being used (see (5) above), the module
+%% can optionally implement handle_pre_hibernate/1 and
+%% handle_post_hibernate/1. If they are implemented then they will be
+%% called immediately prior to and post hibernation, respectively.
 
 %% All modifications are (C) 2009 LShift Ltd.
 
