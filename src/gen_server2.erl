@@ -528,13 +528,9 @@ pre_hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
                 {hibernate, NState} ->
                     hibernate(Parent, Name, NState, Mod, TimeoutState, Queue,
                               Debug);
-                {stop, Reason, NState} ->
-                    terminate(Reason, Name, pre_hibernate, Mod, NState, Debug);
-                {'EXIT', What} ->
-                    terminate(What, Name, pre_hibernate, Mod, State, Debug);
                 Reply ->
-                    terminate({bad_return_value, Reply}, Name, pre_hibernate,
-                              Mod, State, Debug)
+                    handle_common_termination(Reply, Name, pre_hibernate,
+                                              Mod, State, Debug)
             end;
         false ->
             hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug)
@@ -550,13 +546,9 @@ post_hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
                 {noreply, NState, Time} ->
                     process_next_msg(Parent, Name, NState, Mod, Time,
                                      TimeoutState, Queue, Debug);
-                {stop, Reason, NState} ->
-                    terminate(Reason, Name, post_hibernate, Mod, NState, Debug);
-                {'EXIT', What} ->
-                    terminate(What, Name, post_hibernate, Mod, State, Debug);
                 Reply ->
-                    terminate({bad_return_value, Reply}, Name, post_hibernate,
-                              Mod, State, Debug)
+                    handle_common_termination(Reply, Name, post_hibernate,
+                                              Mod, State, Debug)
             end;
         false ->
             %% use hibernate here, not infinity. This matches
@@ -877,12 +869,8 @@ handle_common_reply(Reply, Parent, Name, Msg, Mod, State,
 	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue, []);
 	{noreply, NState, Time1} ->
 	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, []);
-	{stop, Reason, NState} ->
-	    terminate(Reason, Name, Msg, Mod, NState, []);
-	{'EXIT', What} ->
-	    terminate(What, Name, Msg, Mod, State, []);
-	_ ->
-	    terminate({bad_return_value, Reply}, Name, Msg, Mod, State, [])
+        _ ->
+            handle_common_termination(Reply, Name, Msg, Mod, State, [])
     end.
 
 handle_common_reply(Reply, Parent, Name, Msg, Mod, State, TimeoutState, Queue,
@@ -897,6 +885,12 @@ handle_common_reply(Reply, Parent, Name, Msg, Mod, State, TimeoutState, Queue,
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
 	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, Debug1);
+        _ ->
+            handle_common_termination(Reply, Name, Msg, Mod, State, Debug)
+    end.
+
+handle_common_termination(Reply, Name, Msg, Mod, State, Debug) ->
+    case Reply of
 	{stop, Reason, NState} ->
 	    terminate(Reason, Name, Msg, Mod, NState, Debug);
 	{'EXIT', What} ->
