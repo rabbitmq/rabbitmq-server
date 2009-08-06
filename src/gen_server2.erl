@@ -164,7 +164,7 @@
 	 cast/2, pcast/3, reply/2,
 	 abcast/2, abcast/3,
 	 multi_call/2, multi_call/3, multi_call/4,
-	 enter_loop/3, enter_loop/4, enter_loop/5, wake_hib/7, wake_hib/8]).
+	 enter_loop/3, enter_loop/4, enter_loop/5, wake_hib/7]).
 
 -export([behaviour_info/1]).
 
@@ -503,57 +503,53 @@ process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
             end
     end.
 
-wake_hib(Parent, Name, State, Mod, undefined, Queue, Debug) ->
-    post_hibernate(Parent, Name, State, Mod, undefined, undefined, undefined,
+wake_hib(Parent, Name, State, Mod, TS, Queue, Debug) ->
+    TimeoutState1 = case TS of
+                        undefined ->
+                            undefined;
+                        {SleptAt, TimeoutState} ->
+                            adjust_timeout_state(SleptAt, now(), TimeoutState)
+                    end,
+    post_hibernate(Parent, Name, State, Mod, TimeoutState1,
                    drain(Queue), Debug).
 
-wake_hib(Parent, Name, State, Mod, SleptAt, TimeoutState, Queue, Debug) ->
-    WokenAt = now(), %% enforce this gets called before drain/1
-    post_hibernate(Parent, Name, State, Mod, SleptAt, WokenAt,
-                   TimeoutState, drain(Queue), Debug).
+hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
+    TS = case TimeoutState of
+             undefined             -> undefined;
+             {backoff, _, _, _, _} -> {now(), TimeoutState}
+         end,
+    proc_lib:hibernate(?MODULE, wake_hib, [Parent, Name, State, Mod,
+                                           TS, Queue, Debug]).
 
 pre_hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
-    ArgsFun =
-        case TimeoutState of
-            undefined ->
-                fun (NState) ->
-                        [Parent, Name, NState, Mod, TimeoutState, Queue, Debug]
-                end;
-            {backoff, _, _, _, _} ->
-                fun (NState) ->
-                        [Parent, Name, NState, Mod, now(), TimeoutState, Queue,
-                         Debug]
-                end
-        end,
     case erlang:function_exported(Mod, handle_pre_hibernate, 1) of
         true ->
             case catch Mod:handle_pre_hibernate(State) of
                 {hibernate, NState} ->
-                    proc_lib:hibernate(?MODULE, wake_hib, ArgsFun(NState));
+                    hibernate(Parent, Name, NState, Mod, TimeoutState, Queue,
+                              Debug);
                 {stop, Reason, NState} ->
                     terminate(Reason, Name, pre_hibernate, Mod, NState, []);
                 {'EXIT', What} ->
                     terminate(What, Name, pre_hibernate, Mod, State, []);
                 Reply ->
-                    terminate({bad_return_value, Reply}, Name, pre_hibernate, Mod,
-                              State, [])
+                    terminate({bad_return_value, Reply}, Name, pre_hibernate,
+                              Mod, State, [])
             end;
         false ->
-            proc_lib:hibernate(?MODULE, wake_hib, ArgsFun(State))
+            hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug)
     end.
 
-post_hibernate(Parent, Name, State, Mod, SleptAt, AwokeAt, TimeoutState, Queue,
-               Debug) ->
-    TimeoutState1 = adjust_timeout_state(SleptAt, AwokeAt, TimeoutState),
+post_hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
     case erlang:function_exported(Mod, handle_post_hibernate, 1) of
         true ->
             case catch Mod:handle_post_hibernate(State) of
                 {noreply, NState} ->
                     process_next_msg(Parent, Name, NState, Mod, infinity,
-                                     TimeoutState1, Queue, Debug);
+                                     TimeoutState, Queue, Debug);
                 {noreply, NState, Time} ->
                     process_next_msg(Parent, Name, NState, Mod, Time,
-                                     TimeoutState1, Queue, Debug);
+                                     TimeoutState, Queue, Debug);
                 {stop, Reason, NState} ->
                     terminate(Reason, Name, post_hibernate, Mod, NState, []);
                 {'EXIT', What} ->
@@ -570,11 +566,9 @@ post_hibernate(Parent, Name, State, Mod, SleptAt, AwokeAt, TimeoutState, Queue,
             %% that woke us up (or the first msg we receive after
             %% waking up).
             process_next_msg(Parent, Name, State, Mod, hibernate,
-                             TimeoutState1, Queue, Debug)
+                             TimeoutState, Queue, Debug)
     end.
 
-adjust_timeout_state(undefined, undefined, undefined) ->
-    undefined;
 adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
                                         DesiredHibPeriod, RandomState}) ->
     NapLengthMicros = timer:now_diff(AwokeAt, SleptAt),
