@@ -126,8 +126,8 @@ get_and_assert_empty(Channel, Q) ->
 
 get_and_assert_equals(Channel, Q, Payload) ->
     Content = lib_amqp:get(Channel, Q),
-    #content{payload_fragments_rev = PayloadFragments} = Content,
-    ?assertMatch([Payload], PayloadFragments).
+    #amqp_msg{payload = Payload2} = Content,
+    ?assertMatch(Payload, Payload2).
 
 basic_get_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
@@ -135,8 +135,8 @@ basic_get_test(Connection) ->
     %% TODO: This could be refactored to use get_and_assert_equals,
     %% get_and_assert_empty .... would require another bug though :-)
     Content = lib_amqp:get(Channel, Q),
-    #content{payload_fragments_rev = PayloadFragments} = Content,
-    ?assertMatch([<<"foobar">>], PayloadFragments),
+    #amqp_msg{payload = Payload} = Content,
+    ?assertMatch(<<"foobar">>, Payload),
     BasicGetEmpty = lib_amqp:get(Channel, Q, false),
     ?assertMatch('basic.get_empty', BasicGetEmpty),
     lib_amqp:teardown(Connection, Channel).
@@ -157,8 +157,8 @@ basic_return_test(Connection) ->
             #'basic.return'{reply_text = ReplyText,
                             exchange = X} = BasicReturn,
             ?assertMatch(<<"unroutable">>, ReplyText),
-            #content{payload_fragments_rev = Payload2} = Content,
-            ?assertMatch([Payload], Payload2);
+            #amqp_msg{payload = Payload2} = Content,
+            ?assertMatch(Payload, Payload2);
         WhatsThis ->
             %% TODO investigate where this comes from
             io:format("Spurious message ~p~n", [WhatsThis])
@@ -294,6 +294,53 @@ producer_loop(Channel, RoutingKey, N) ->
 %% Reject is not yet implemented in RabbitMQ
 basic_reject_test(Connection) ->
     lib_amqp:close_connection(Connection).
+
+%% ----------------------------------------------------------------------------
+%% Test for the network client
+%% Sends a bunch of messages and immediatly closes the connection without
+%% closing the channel. Then gets the messages back from the queue and expects
+%% all of them to have been sent.
+pub_and_close_test(Connection1, Connection2) ->
+    X = uuid(), Q = uuid(), Key = uuid(),
+    Payload = <<"eggs">>, NMessages = 50000,
+    Channel1 = lib_amqp:start_channel(Connection1),
+    lib_amqp:declare_exchange(Channel1, X),
+    lib_amqp:declare_queue(Channel1, Q),
+    lib_amqp:bind_queue(Channel1, X, Q, Key),
+    %% Send messages
+    pc_producer_loop(Channel1, X, Key, Payload, NMessages),
+    %% Close connection without closing channels
+    lib_amqp:close_connection(Connection1),
+    %% Get sent messages back and count them
+    Channel2 = lib_amqp:start_channel(Connection2),
+    lib_amqp:subscribe(Channel2, Q, self(), true),
+    ?assert(pc_consumer_loop(Channel2, Payload, 0) == NMessages),
+    %% Make sure queue is empty
+    #'queue.declare_ok'{queue = Q, message_count = NRemaining} =
+        amqp_channel:call(Channel2, #'queue.declare'{queue = Q}),
+    ?assert(NRemaining == 0),
+    lib_amqp:teardown(Connection2, Channel2),
+    ok.
+
+pc_producer_loop(_, _, _, _, 0) -> ok;
+pc_producer_loop(Channel, X, Key, Payload, NRemaining) ->
+    ?assertMatch(ok, lib_amqp:publish(Channel, X, Key, Payload)),
+    pc_producer_loop(Channel, X, Key, Payload, NRemaining - 1).
+
+pc_consumer_loop(Channel, Payload, NReceived) ->
+    receive
+        {#'basic.deliver'{},
+         #amqp_msg{payload = DeliveredPayload}} ->
+            case DeliveredPayload of
+                Payload ->
+                    pc_consumer_loop(Channel, Payload, NReceived + 1);
+                _ ->
+                    exit(received_unexpected_content)
+            end
+    after 1000 ->
+        NReceived
+    end.
+
 
 %%----------------------------------------------------------------------------
 %% Unit test for the direct client

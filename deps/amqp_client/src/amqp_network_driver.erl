@@ -79,11 +79,11 @@ open_channel({ChannelNumber, _OutOfBand}, ChannelPid,
 close_channel(WriterPid) ->
     rabbit_writer:shutdown(WriterPid).
 
-%% This closes the writer down, waits for the confirmation from the
+%% This closes the writer down, waits for the confirmation from
 %% the channel and then returns the ack to the user
 close_connection(Close = #'connection.close'{}, From,
                  #connection_state{channel0_writer_pid = Writer}) ->
-    rabbit_writer:send_command(Writer, Close),
+    do(Writer, Close),
     rabbit_writer:shutdown(Writer),
     receive
         {'$gen_cast', {method, {'connection.close_ok'}, none }} ->
@@ -94,10 +94,18 @@ close_connection(Close = #'connection.close'{}, From,
     end.
 
 do(Writer, Method) ->
-    rabbit_writer:send_command(Writer, Method).
+    rabbit_writer:send_command_and_signal_back(Writer, Method, self()),
+    receive_writer_send_command_signal(Writer).
 
 do(Writer, Method, Content) ->
-    rabbit_writer:send_command(Writer, Method, Content).
+    rabbit_writer:send_command_and_signal_back(Writer, Method, Content, self()),
+    receive_writer_send_command_signal(Writer).
+
+receive_writer_send_command_signal(Writer) ->
+    receive
+        rabbit_writer_send_command_signal -> ok;
+        WriterExitMsg = {'EXIT', Writer, _} -> self() ! WriterExitMsg
+    end.
 
 handle_broker_close(#connection_state{channel0_writer_pid = Writer,
                                       reader_pid = Reader}) ->
@@ -170,7 +178,7 @@ start_reader(Sock, FramingPid) ->
     gen_tcp:close(Sock).
 
 start_writer(Sock, Channel) ->
-    rabbit_writer:start(Sock, Channel, ?FRAME_MIN_SIZE).
+    rabbit_writer:start_link(Sock, Channel, ?FRAME_MIN_SIZE).
 
 reader_loop(Sock, Type, Channel, Length) ->
     receive

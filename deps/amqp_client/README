@@ -213,7 +213,8 @@ run
     server in the load path.
 
 run_in_broker
-    Runs the broker with the client included in the load path.
+    Builds the client and starts RabbitMQ server with shell and the client
+    included in load path.
 
 clean
     Removes build products and wipes all files produced by any other

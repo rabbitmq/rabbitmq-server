@@ -85,11 +85,7 @@ publish_internal(Fun, Channel, X, RoutingKey,
     BasicPublish = #'basic.publish'{exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = Mandatory},
-    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
-    Content = #content{class_id = ClassId,
-                       properties = Properties,
-                       properties_bin = none,
-                       payload_fragments_rev = [Payload]},
+    Content = #amqp_msg{props = Properties, payload = Payload},
     Fun(Channel, BasicPublish, Content).
 
 %%---------------------------------------------------------------------------
