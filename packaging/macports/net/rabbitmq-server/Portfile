@@ -1,15 +1,15 @@
 # -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:filetype=tcl:et:sw=4:ts=4:sts=4
 # $Id$
 
-PortSystem      1.0
-
-name            rabbitmq-server
-version         1.5.3
-categories      net
-maintainers     tonyg@rabbitmq.com
-platforms       darwin
-description     The RabbitMQ AMQP Server
-long_description    \
+PortSystem 1.0
+name		rabbitmq-server
+version		1.6.0
+revision	0
+categories	net 
+maintainers	tonyg@rabbitmq.com
+platforms	darwin
+description	The RabbitMQ AMQP Server
+long_description	\
     RabbitMQ is an implementation of AMQP, the emerging standard for \
     high performance enterprise messaging. The RabbitMQ server is a \
     robust and scalable implementation of an AMQP broker.
@@ -19,9 +19,9 @@ homepage        http://www.rabbitmq.com/
 master_sites    http://www.rabbitmq.com/releases/rabbitmq-server/v${version}/
 
 checksums \
-    md5 3242a67885c2471b5ab62254bf024679 \
-    sha1 f4d6a01eaa2c74fa32f567fe410d21d9be1b43aa \
-    rmd160 1a1c4b97d765548028c161d1617905151ca9e040
+    md5 af3b0d868d58e5aefb4f0837b82ca010 \
+    sha1 1834c670d076fa9878223aacaa35a5a6528f1d86 \
+    rmd160 d6c9de4e1fb48c6ceb1cb5d717ca2afb5e3266fe
 
 depends_build   port:erlang port:py25-simplejson
 depends_run     port:erlang
@@ -32,6 +32,8 @@ set serverhome ${prefix}/var/lib/rabbitmq
 set logdir ${prefix}/var/log/rabbitmq
 set mnesiadbdir ${prefix}/var/lib/rabbitmq/mnesia
 set plistloc ${prefix}/etc/LaunchDaemons/org.macports.rabbitmq-server
+set sbindir ${destroot}${prefix}/lib/rabbitmq/bin
+set wrappersbin ${destroot}${prefix}/sbin
 
 use_configure   no
 
@@ -41,7 +43,7 @@ build.args      PYTHON=${prefix}/bin/python2.5
 
 destroot.destdir \
     TARGET_DIR=${destroot}${prefix}/lib/erlang/lib/rabbitmq_server-${version} \
-    SBIN_DIR=${destroot}${prefix}/sbin \
+    SBIN_DIR=${sbindir} \
     MAN_DIR=${destroot}${prefix}/share/man
 
 destroot.keepdirs \
@@ -59,32 +61,36 @@ post-destroot {
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
 
     reinplace -E "s:(/etc/rabbitmq/rabbitmq.conf):${prefix}\\1:g" \
-        ${destroot}${prefix}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/sbin/rabbitmqctl
-    reinplace -E "s:(RABBITMQ_CLUSTER_CONFIG_FILE)=/:\\1=${prefix}/:" \
-        ${destroot}${prefix}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/sbin/rabbitmqctl
-    reinplace -E "s:(RABBITMQ_LOG_BASE)=/:\\1=${prefix}/:" \
-        ${destroot}${prefix}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/sbin/rabbitmqctl
-    reinplace -E "s:(RABBITMQ_MNESIA_BASE)=/:\\1=${prefix}/:" \
-        ${destroot}${prefix}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/sbin/rabbitmqctl
-    reinplace -E "s:(RABBITMQ_PIDS_FILE)=/:\\1=${prefix}/:" \
-        ${destroot}${prefix}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/sbin/rabbitmqctl
+        ${sbindir}/rabbitmq-multi \
+        ${sbindir}/rabbitmq-server \
+        ${sbindir}/rabbitmqctl
+    reinplace -E "s:(CLUSTER_CONFIG_FILE)=/:\\1=${prefix}/:" \
+        ${sbindir}/rabbitmq-multi \
+        ${sbindir}/rabbitmq-server \
+        ${sbindir}/rabbitmqctl
+    reinplace -E "s:(LOG_BASE)=/:\\1=${prefix}/:" \
+        ${sbindir}/rabbitmq-multi \
+        ${sbindir}/rabbitmq-server \
+        ${sbindir}/rabbitmqctl
+    reinplace -E "s:(MNESIA_BASE)=/:\\1=${prefix}/:" \
+        ${sbindir}/rabbitmq-multi \
+        ${sbindir}/rabbitmq-server \
+        ${sbindir}/rabbitmqctl
+    reinplace -E "s:(PIDS_FILE)=/:\\1=${prefix}/:" \
+        ${sbindir}/rabbitmq-multi \
+        ${sbindir}/rabbitmq-server \
+        ${sbindir}/rabbitmqctl
 
-    file rename ${destroot}${prefix}/sbin/rabbitmqctl ${destroot}${prefix}/sbin/rabbitmqctl_real
-    xinstall -m 555 ${filespath}/rabbitmqctl_wrapper ${destroot}${prefix}/sbin
-    file rename ${destroot}${prefix}/sbin/rabbitmqctl_wrapper ${destroot}${prefix}/sbin/rabbitmqctl
+    xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
+                ${wrappersbin}/rabbitmq-multi
 
-    reinplace -E "s:@PREFIX@:${prefix}:" \
-        ${destroot}${prefix}/sbin/rabbitmqctl
+    reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:" \
+                ${wrappersbin}/rabbitmq-multi
+    reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:" \
+                ${wrappersbin}/rabbitmq-multi
+    file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
+    file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
+
 }
 
 pre-install {

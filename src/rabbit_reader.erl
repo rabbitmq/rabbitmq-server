@@ -231,7 +231,7 @@ start_connection(Parent, Deb, ClientSock) ->
                                     connection_state = pre_init},
                                 handshake, 8))
     catch
-	Ex -> (if Ex == connection_closed_abruptly ->
+        Ex -> (if Ex == connection_closed_abruptly ->
                        fun rabbit_log:warning/2;
                   true ->
                        fun rabbit_log:error/2

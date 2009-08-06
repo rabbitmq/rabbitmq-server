@@ -31,6 +31,7 @@
 
 -module(rabbit_error_logger).
 -include("rabbit.hrl").
+-include("rabbit_framing.hrl").
 
 -define(LOG_EXCH_NAME, <<"amq.rabbitmq.log">>).
 
@@ -74,7 +75,8 @@ publish(_Other, _Format, _Data, _State) ->
     ok.
 
 publish1(RoutingKey, Format, Data, LogExch) ->
-    {ok, _QueueNames} = rabbit_exchange:simple_publish(
-                          false, false, LogExch, RoutingKey, <<"text/plain">>,
-                          list_to_binary(io_lib:format(Format, Data))),
+    {ok, _RoutingRes, _DeliveredQPids} =
+        rabbit_basic:publish(LogExch, RoutingKey, false, false, none,
+                             #'P_basic'{content_type = <<"text/plain">>},
+                             list_to_binary(io_lib:format(Format, Data))),
     ok.
