@@ -157,7 +157,6 @@ declare(QueueName, Durable, AutoDelete, Args) ->
                                       auto_delete = AutoDelete,
                                       arguments = Args,
                                       pid = none}),
-    rabbit_hooks:trigger(queue_create, [QueueName]),
     internal_declare(Q, true).
 
 internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
@@ -173,7 +172,8 @@ internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
                        [ExistingQ] -> ExistingQ
                    end
            end) of
-        Q         -> Q;
+        Q         -> rabbit_hooks:trigger(queue_create, [QueueName]),
+                     Q;
         ExistingQ -> exit(Q#amqqueue.pid, shutdown),
                      ExistingQ
     end.
@@ -310,7 +310,7 @@ unblock(QPid, ChPid) ->
     gen_server2:cast(QPid, {unblock, ChPid}).
 
 internal_delete(QueueName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    case rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   []  -> {error, not_found};
@@ -320,7 +320,11 @@ internal_delete(QueueName) ->
                       ok = mnesia:delete({rabbit_durable_queue, QueueName}),
                       ok
               end
-      end).
+      end) of
+        ok    -> rabbit_hooks:trigger(queue_delete, [QueueName]),
+                 ok;
+        Error -> Error
+   end.
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(

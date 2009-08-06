@@ -31,65 +31,22 @@
 
 -module(rabbit_hooks).
 
--behaviour(gen_server).
-
--export([start_link/0]).
+-export([start/0]).
 -export([subscribe/2, unsubscribe/2, trigger/2]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3]).
 
 -define(TableName, rabbit_hooks).
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start() ->
+    ets:new(?TableName, [bag, public, named_table]),
+    ok.
 
 subscribe(Hook, Handler) ->
-    gen_server:call(?MODULE, {add_hook, Hook, Handler}).
+    ets:insert(?TableName, {Hook, Handler}).
 
 unsubscribe(Hook, Handler) ->
-    gen_server:call(?MODULE, {remove_hook, Hook, Handler}).
+    ets:delete_object(?TableName, {Hook, Handler}).
 
 trigger(Hook, Args) ->
-    Hooks = get_current_hooks(Hook),
-    [catch H(Args) || H <- Hooks],
+    Hooks = ets:lookup(?TableName, Hook),
+    [catch H(Args) || {_, H} <- Hooks],
     ok.
-
-
-%% Gen Server Implementation
-init([]) ->
-    ets:new(?TableName, [named_table]),
-    {ok, []}.
-
-handle_call({add_hook, Hook, Handler}, _, State) ->
-    Current = get_current_hooks(Hook),
-    Updated = Current ++ [Handler],
-    ets:insert(?TableName, {Hook, Updated}),
-    {reply, ok, State};
-
-handle_call({remove_hook, Hook, Handler}, _, State) ->
-    Current = get_current_hooks(Hook),
-    Updated = [H || H <- Current, not(H == Handler)],
-    ets:insert(?TableName, {Hook, Updated}),
-    {reply, ok, State};
- 
-handle_call(_, _, State) ->
-    {reply, ok, State}.
-
-handle_cast(_, State) ->
-    {noreply, State}.
-
-handle_info(_, State) ->
-    {noreply, State}.
-
-terminate(_, _) ->
-    ok.
-
-code_change(_, State, _) ->
-    {ok, State}.
-
-%% Helper Methods
-get_current_hooks(Hook) ->
-  case ets:lookup(?TableName, Hook) of
-      []          -> [];
-      [{Hook, C}] -> C
-  end.

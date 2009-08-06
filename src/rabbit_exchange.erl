@@ -117,8 +117,7 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                          durable = Durable,
                          auto_delete = AutoDelete,
                          arguments = Args},
-    rabbit_hooks:trigger(exchange_create, [ExchangeName]),
-    rabbit_misc:execute_mnesia_transaction(
+    case rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:wread({rabbit_exchange, ExchangeName}) of
                   [] -> ok = mnesia:write(rabbit_exchange, Exchange, write),
@@ -127,10 +126,16 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                                                   Exchange, write);
                            true -> ok
                         end,
-                        Exchange;
-                  [ExistingX] -> ExistingX
+                        {ok, Exchange};
+                  [ExistingX] -> {existing, ExistingX}
               end
-      end).
+      end) of
+      {ok, X} ->
+          rabbit_hooks:trigger(exchange_create, [ExchangeName]),
+          X;
+      {existing, X} ->
+          X
+    end.
 
 check_type(<<"fanout">>) ->
     fanout;
@@ -394,6 +399,7 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                                            fun mnesia:write/3)
               end
       end),
+    %% TODO: Need to check if a binding is already there
     rabbit_hooks:trigger(binding_create, [ExchangeName, QueueName, 
                                           RoutingKey, Arguments]).
 
@@ -406,6 +412,7 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                   [] -> {error, binding_not_found};
                   _  -> ok = sync_binding(B, Q#amqqueue.durable,
                                           fun mnesia:delete_object/3),
+                        %% TODO: Move outside of the tx
                         trigger_delete_binding_hook(B),
                         maybe_auto_delete(X)
               end

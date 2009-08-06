@@ -134,6 +134,7 @@ start(normal, []) ->
         fun () ->
                 ok = start_child(rabbit_log),
 
+                ok = rabbit_hooks:start(),
                 ok = rabbit_amqqueue:start(),
 
                 {ok, MemoryAlarms} = application:get_env(memory_alarms),
@@ -142,7 +143,6 @@ start(normal, []) ->
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
 
-                ok = start_child(rabbit_hooks),
                 ok = start_child(rabbit_presence),
                 ok = start_child(rabbit_router),
                 ok = start_child(rabbit_node_monitor)
