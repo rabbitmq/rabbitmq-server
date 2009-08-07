@@ -193,7 +193,7 @@ test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME) package prepare_tests
 clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f erl_crash.dump
-	rm -fr dist
+	rm -fr $(DIST_DIR)
 	rm -fr $(DEPS_DIR)
 	$(MAKE) -C $(TEST_DIR) clean
 
