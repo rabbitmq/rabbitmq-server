@@ -80,7 +80,8 @@ DIALYZER_CALL=dialyzer --plt $(PLT)
 	add_broker_to_plt prepare_tests all_tests test_suites \
 	test_suites_coverage run_test_broker start_test_broker_node \
 	stop_test_broker_node test_network test_direct test_network_coverage \
-	test_direct_coverage test_common_package clean source_tarball package
+	test_direct_coverage test_common_package clean source_tarball package \
+	common_package
 
 all: compile
 
@@ -104,7 +105,14 @@ dialyze_all: $(TARGETS) $(TEST_TARGETS)
 add_broker_to_plt: $(BROKER_DIR)/ebin
 	$(DIALYZER_CALL) --add_to_plt -r $<
 
-###############################################################################
+clean:
+	rm -f $(EBIN_DIR)/*.beam
+	rm -f erl_crash.dump
+	rm -fr $(DIST_DIR)
+	rm -fr $(DEPS_DIR)
+	$(MAKE) -C $(TEST_DIR) clean
+
+##############################################################################
 ##  Testing
 ###############################################################################
 
@@ -115,25 +123,6 @@ all_tests: prepare_tests
 	{ $(MAKE) test_suites || OK=false; } && \
 	{ $(MAKE) test_common_package || OK=false; } && \
 	$$OK
-
-$(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SOURCES) $(BROKER_HEADERS)
-	$(MAKE) -C $(BROKER_DIR)
-	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
-	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
-	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
-	$(foreach DEP, $(DEPS), \
-        ( cp $(BROKER_DIR)/$(EBIN_DIR)/$(DEP).beam \
-          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
-        );)
-	cp $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
-	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
-
-$(COMPILE_DEPS): $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
-	mkdir -p $(DEPS_DIR)
-	unzip -o -d $(DEPS_DIR) $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
-
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(COMPILE_DEPS)
-	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
 
 test_suites: prepare_tests
 	OK=true && \
@@ -178,7 +167,7 @@ test_direct_coverage: prepare_tests
 	$(MAKE) run_test_broker \
 	RUN_TEST_BROKER_ARGS="$(COVER_START) -s direct_client_SUITE test $(COVER_STOP)"
 
-test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME) package prepare_tests
+test_common_package: common_package package prepare_tests
 	$(MAKE) start_test_broker_node
 	OK=true && \
 	TMPFILE=$$(mktemp) && \
@@ -189,14 +178,6 @@ test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME) package prepare_tests
 	rm $$TMPFILE && \
 	$(MAKE) stop_test_broker_node && \
 	$$OK
-
-clean:
-	rm -f $(EBIN_DIR)/*.beam
-	rm -f erl_crash.dump
-	rm -fr $(DIST_DIR)
-	rm -fr $(DEPS_DIR)
-	$(MAKE) -C $(TEST_DIR) clean
-
 
 ###############################################################################
 ##  Packaging
@@ -220,9 +201,30 @@ package: $(DIST_DIR)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
 	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
+common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+
+$(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SOURCES) $(BROKER_HEADERS)
+	$(MAKE) -C $(BROKER_DIR)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	$(foreach DEP, $(DEPS), \
+        ( cp $(BROKER_DIR)/$(EBIN_DIR)/$(DEP).beam \
+          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
+        );)
+	cp $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
+	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
+
 ###############################################################################
 ##  Internal targets
 ###############################################################################
+
+$(COMPILE_DEPS): $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+	mkdir -p $(DEPS_DIR)
+	unzip -o -d $(DEPS_DIR) $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(COMPILE_DEPS)
+	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
 
 $(BROKER_DIR):
 	test -e $(BROKER_DIR)
