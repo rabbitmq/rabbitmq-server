@@ -25,8 +25,8 @@
 
 -module(test_util).
 
--include_lib("rabbit.hrl").
--include_lib("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("amqp_client.hrl").
 
@@ -275,8 +275,7 @@ sleeping_consumer(Channel, Sleep, Parent) ->
             after Sleep -> ok
             end,
             lib_amqp:ack(Channel, DeliveryTag),
-            sleeping_consumer(Channel, Sleep, Parent);
-        X -> io:format("Got some X factor ~p~n",[X])
+            sleeping_consumer(Channel, Sleep, Parent)
     end.
 
 do_stop(Channel, Parent) ->
