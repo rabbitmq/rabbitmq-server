@@ -36,7 +36,8 @@
 -behaviour(gen_server2).
 
 -define(UNSENT_MESSAGE_LIMIT, 100).
--define(HIBERNATE_AFTER, 1000).
+-define(HIBERNATE_AFTER_MIN, 1000).
+-define(DESIRED_HIBERNATE, 10000).
 
 -export([start_link/1]).
 
@@ -101,7 +102,8 @@ init(Q) ->
             next_msg_id = 1,
             message_buffer = queue:new(),
             active_consumers = queue:new(),
-            blocked_consumers = queue:new()}, ?HIBERNATE_AFTER}.
+            blocked_consumers = queue:new()}, hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
@@ -116,9 +118,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-reply(Reply, NewState) -> {reply, Reply, NewState, ?HIBERNATE_AFTER}.
+reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 
-noreply(NewState) -> {noreply, NewState, ?HIBERNATE_AFTER}.
+noreply(NewState) -> {noreply, NewState, hibernate}.
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
@@ -812,11 +814,6 @@ handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
     {stop, normal, NewState};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
-
-handle_info(timeout, State) ->
-    %% TODO: Once we drop support for R11B-5, we can change this to
-    %% {noreply, State, hibernate};
-    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State]);
 
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
