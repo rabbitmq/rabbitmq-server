@@ -207,8 +207,21 @@ log_location(Type) ->
 print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
-    io:format("~s ~s (AMQP ~p-~p)~n~s~n~s~n~n",
-              [Product, Version,
+    ProductLen = string:len(Product),
+    io:format("~n"
+              "+---+   +---+~n"
+              "|   |   |   |~n"
+              "|   |   |   |~n"
+              "|   |   |   |~n"
+              "|   +---+   +-------+~n"
+              "|                   |~n"
+              "| ~s  +---+   |~n"
+              "|           |   |   |~n"
+              "| ~s  +---+   |~n"
+              "|                   |~n"
+              "+-------------------+~n"
+              "AMQP ~p-~p~n~s~n~s~n~n",
+              [Product, string:right([$v|Version], ProductLen),
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     Settings = [{"node",         node()},
