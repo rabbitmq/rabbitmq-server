@@ -291,11 +291,9 @@ handle_call({call, _Method, _Content}, _From,
             State = #channel_state{closing = true}) ->
     {reply, blocked, State};
 
-handle_call({call, Method, #amqp_msg{props = Props,
-                                     payload = Payload}}, _From,
-            State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
-    Content = rabbit_basic:build_content(Props, Payload),
-    Do3(Writer, Method, Content),
+handle_call({call, Method, #amqp_msg{props = Props, payload = Payload}},
+            _From, State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
+    Do3(Writer, Method, rabbit_basic:build_content(Props, Payload)),
     {reply, ok, State};
 
 %% Top half of the basic consume process.
