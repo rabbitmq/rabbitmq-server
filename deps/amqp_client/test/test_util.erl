@@ -290,6 +290,16 @@ producer_loop(Channel, RoutingKey, N) ->
 basic_reject_test(Connection) ->
     lib_amqp:close_connection(Connection).
 
+large_content_test(Connection) ->
+    Channel = lib_amqp:start_channel(Connection),
+    Q = lib_amqp:declare_private_queue(Channel),
+    {A1,A2,A3} = now(), random:seed(A1, A2, A3),
+    F = list_to_binary([random:uniform(256)-1 || _ <- lists:seq(1, 1000)]),
+    Payload = list_to_binary([[F || _ <- lists:seq(1, 1000)]]),
+    lib_amqp:async_publish(Channel, <<"">>, Q, Payload),
+    get_and_assert_equals(Channel, Q, Payload),
+    lib_amqp:teardown(Connection, Channel).
+
 %% ----------------------------------------------------------------------------
 %% Test for the network client
 %% Sends a bunch of messages and immediatly closes the connection without
