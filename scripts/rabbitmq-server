@@ -77,11 +77,11 @@ RABBITMQ_START_RABBIT=
 
 RABBITMQ_EBIN_ROOT="`dirname $0`/../ebin"
 if [ -f "${RABBITMQ_EBIN_ROOT}/rabbit.boot" ]; then
-	RABBITMQ_BOOT_FILE="${RABBITMQ_EBIN_ROOT}/rabbit"
-	RABBITMQ_EBIN_PATH=""
+    RABBITMQ_BOOT_FILE="${RABBITMQ_EBIN_ROOT}/rabbit"
+    RABBITMQ_EBIN_PATH=""
 else
-	RABBITMQ_BOOT_FILE=start_sasl
-	RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_EBIN_ROOT}"
+    RABBITMQ_BOOT_FILE=start_sasl
+    RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_EBIN_ROOT}"
 fi
 
 # we need to turn off path expansion because some of the vars, notably
@@ -90,7 +90,7 @@ fi
 set -f
 
 exec erl \
-	${RABBITMQ_EBIN_PATH} \
+    ${RABBITMQ_EBIN_PATH} \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
     -boot ${RABBITMQ_BOOT_FILE} \
