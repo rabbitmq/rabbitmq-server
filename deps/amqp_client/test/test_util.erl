@@ -132,13 +132,8 @@ get_and_assert_equals(Channel, Q, Payload) ->
 basic_get_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
     {ok, Q} = setup_publish(Channel),
-    %% TODO: This could be refactored to use get_and_assert_equals,
-    %% get_and_assert_empty .... would require another bug though :-)
-    Content = lib_amqp:get(Channel, Q),
-    #amqp_msg{payload = Payload} = Content,
-    ?assertMatch(<<"foobar">>, Payload),
-    BasicGetEmpty = lib_amqp:get(Channel, Q, false),
-    ?assertMatch('basic.get_empty', BasicGetEmpty),
+    get_and_assert_equals(Channel, Q, <<"foobar">>),
+    get_and_assert_empty(Channel, Q),
     lib_amqp:teardown(Connection, Channel).
 
 basic_return_test(Connection) ->
