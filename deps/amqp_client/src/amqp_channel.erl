@@ -340,9 +340,9 @@ handle_cast({cast, _Method, _Content}, State = #channel_state{closing = true}) -
     {noreply, State};
 
 %% Standard implementation of the cast/3 command
-handle_cast({cast, Method, Content},
+handle_cast({cast, Method, #amqp_msg{props = Props, payload = Payload}},
             State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
-    Do3(Writer, Method, Content),
+    Do3(Writer, Method, rabbit_basic:build_content(Props, Payload)),
     {noreply, State};
 
 %% Registers the direct channel peer when using the direct client
