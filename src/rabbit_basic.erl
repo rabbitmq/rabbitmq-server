@@ -82,17 +82,13 @@ build_content(Properties, BodyBin) ->
              properties_bin = none,
              payload_fragments_rev = [BodyBin]}.
 
-from_content(#content{properties = Props,
-                      properties_bin = none,
-                      payload_fragments_rev = BodyList}) ->
-    {Props, list_to_binary(BodyList)};
-
-from_content(#content{properties = none,
-                      properties_bin = PropsBin,
-                      payload_fragments_rev = BodyList}) ->
+from_content(Content) ->
+    #content{class_id = ClassId,
+             properties = Props,
+             payload_fragments_rev = FragmentsRev} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
     {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
-    Props = rabbit_framing:decode_properties(ClassId, PropsBin),
-    {Props, list_to_binary(BodyList)}.
+    {Props, list_to_binary(lists:reverse(FragmentsRev))}.
 
 message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
     Properties = properties(RawProperties),
