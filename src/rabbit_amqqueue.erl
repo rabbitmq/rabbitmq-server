@@ -52,8 +52,6 @@
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--define(CALL_TIMEOUT, 5000).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).

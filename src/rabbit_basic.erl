@@ -35,6 +35,7 @@
 
 -export([publish/1, message/4, message/5, message/6, delivery/4]).
 -export([properties/1, publish/4, publish/7]).
+-export([build_content/2, from_content/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -57,6 +58,8 @@
 -spec(publish/7 :: (exchange_name(), routing_key(), bool(), bool(),
                     maybe(txn()), properties_input(), binary()) ->
              publish_result()).
+-spec(build_content/2 :: (amqp_properties(), binary()) -> content()).
+-spec(from_content/1 :: (content()) -> {amqp_properties(), binary()}).
 
 -endif.
 
@@ -76,6 +79,21 @@ delivery(Mandatory, Immediate, Txn, Message) ->
     #delivery{mandatory = Mandatory, immediate = Immediate, txn = Txn,
               sender = self(), message = Message}.
 
+build_content(Properties, BodyBin) ->
+    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
+    #content{class_id = ClassId,
+             properties = Properties,
+             properties_bin = none,
+             payload_fragments_rev = [BodyBin]}.
+
+from_content(Content) ->
+    #content{class_id = ClassId,
+             properties = Props,
+             payload_fragments_rev = FragmentsRev} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
+    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
+    {Props, list_to_binary(lists:reverse(FragmentsRev))}.
+
 message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
     message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, rabbit_guid:guid()).
 
@@ -84,14 +102,9 @@ message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, MsgId) ->
 
 message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, MsgId, IsPersistent) ->
     Properties = properties(RawProperties),
-    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
-    Content = #content{class_id = ClassId,
-                       properties = Properties,
-                       properties_bin = none,
-                       payload_fragments_rev = [BodyBin]},
     #basic_message{exchange_name  = ExchangeName,
                    routing_key    = RoutingKeyBin,
-                   content        = Content,
+                   content        = build_content(Properties, BodyBin),
                    guid           = MsgId,
                    is_persistent  = IsPersistent}.
 

@@ -21,34 +21,41 @@
 %% higher priorities are processed before requests with lower
 %% priorities. The default priority is 0.
 %%
-%% 5) init can return a 4th arg, {backoff, InitialTimeout,
+%% 5) The callback module can optionally implement
+%% handle_pre_hibernate/1 and handle_post_hibernate/1. These will be
+%% called immediately prior to and post hibernation, respectively. If
+%% handle_pre_hibernate returns {hibernate, NewState} then the process
+%% will hibernate. If the module does not implement
+%% handle_pre_hibernate/1 then the default action is to hibernate.
+%%
+%% 6) init can return a 4th arg, {backoff, InitialTimeout,
 %% MinimumTimeout, DesiredHibernatePeriod} (all in
 %% milliseconds). Then, on all callbacks which can return a timeout
 %% (including init), timeout can be 'hibernate'. When this is the
 %% case, the current timeout value will be used (initially, the
 %% InitialTimeout supplied from init). After this timeout has
-%% occurred, handle_pre_hibernate/1 will be called. If that returns
-%% {hibernate, State} then the process will be hibernated. Upon
-%% awaking, a new current timeout value will be calculated, and then
-%% handle_post_hibernate/1 will be called. The purpose is that the
-%% gen_server2 takes care of adjusting the current timeout value such
-%% that the process will increase the timeout value repeatedly if it
-%% is unable to sleep for the DesiredHibernatePeriod. If it is able to
-%% sleep for the DesiredHibernatePeriod it will decrease the current
-%% timeout down to the MinimumTimeout, so that the process is put to
-%% sleep sooner (and hopefully for longer). In short, should a process
+%% occurred, hibernation will occur as normal. Upon awaking, a new
+%% current timeout value will be calculated.
+%% 
+%% The purpose is that the gen_server2 takes care of adjusting the
+%% current timeout value such that the process will increase the
+%% timeout value repeatedly if it is unable to sleep for the
+%% DesiredHibernatePeriod. If it is able to sleep for the
+%% DesiredHibernatePeriod it will decrease the current timeout down to
+%% the MinimumTimeout, so that the process is put to sleep sooner (and
+%% hopefully stays asleep for longer). In short, should a process
 %% using this receive a burst of messages, it should not hibernate
 %% between those messages, but as the messages become less frequent,
 %% the process will not only hibernate, it will do so sooner after
 %% each message.
 %%
-%% Normal timeout values (i.e. not 'hibernate') can still be used, and
-%% if they are used then the handle_info(timeout, State) will be
-%% called as normal. In this case, returning 'hibernate' from
-%% handle_info(timeout, State) will not hibernate the process
-%% immediately, as it would if backoff wasn't being used. Instead
-%% it'll wait for the current timeout as described above, before
-%% calling handle_pre_hibernate(State).
+%% When using this backoff mechanism, normal timeout values (i.e. not
+%% 'hibernate') can still be used, and if they are used then the
+%% handle_info(timeout, State) will be called as normal. In this case,
+%% returning 'hibernate' from handle_info(timeout, State) will not
+%% hibernate the process immediately, as it would if backoff wasn't
+%% being used. Instead it'll wait for the current timeout as described
+%% above.
 
 %% All modifications are (C) 2009 LShift Ltd.
 
@@ -157,7 +164,7 @@
 	 cast/2, pcast/3, reply/2,
 	 abcast/2, abcast/3,
 	 multi_call/2, multi_call/3, multi_call/4,
-	 enter_loop/3, enter_loop/4, enter_loop/5, wake_hib/7, wake_hib/8]).
+	 enter_loop/3, enter_loop/4, enter_loop/5, wake_hib/7]).
 
 -export([behaviour_info/1]).
 
@@ -345,8 +352,7 @@ enter_loop(Mod, Options, State) ->
     enter_loop(Mod, Options, State, self(), infinity, undefined).
 
 enter_loop(Mod, Options, State, Backoff = {backoff, _, _ , _}) ->
-    Backoff1 = extend_backoff(Mod, Backoff),
-    enter_loop(Mod, Options, State, self(), infinity, Backoff1);
+    enter_loop(Mod, Options, State, self(), infinity, Backoff);
 
 enter_loop(Mod, Options, State, ServerName = {_, _}) ->
     enter_loop(Mod, Options, State, ServerName, infinity, undefined);
@@ -355,8 +361,7 @@ enter_loop(Mod, Options, State, Timeout) ->
     enter_loop(Mod, Options, State, self(), Timeout, undefined).
 
 enter_loop(Mod, Options, State, ServerName, Backoff = {backoff, _, _, _}) ->
-    Backoff1 = extend_backoff(Mod, Backoff),
-    enter_loop(Mod, Options, State, ServerName, infinity, Backoff1);
+    enter_loop(Mod, Options, State, ServerName, infinity, Backoff);
 
 enter_loop(Mod, Options, State, ServerName, Timeout) ->
     enter_loop(Mod, Options, State, ServerName, Timeout, undefined).
@@ -366,7 +371,8 @@ enter_loop(Mod, Options, State, ServerName, Timeout, Backoff) ->
     Parent = get_parent(),
     Debug = debug_options(Name, Options),
     Queue = priority_queue:new(),
-    loop(Parent, Name, State, Mod, Timeout, Backoff, Queue, Debug).
+    Backoff1 = extend_backoff(Backoff),
+    loop(Parent, Name, State, Mod, Timeout, Backoff1, Queue, Debug).
 
 %%%========================================================================
 %%% Gen-callback functions
@@ -393,8 +399,8 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
 	    proc_lib:init_ack(Starter, {ok, self()}),
 	    loop(Parent, Name, State, Mod, Timeout, undefined, Queue, Debug);
 	{ok, State, Timeout, Backoff = {backoff, _, _, _}} ->
+            Backoff1 = extend_backoff(Backoff),
 	    proc_lib:init_ack(Starter, {ok, self()}),
-            Backoff1 = extend_backoff(Mod, Backoff),
 	    loop(Parent, Name, State, Mod, Timeout, Backoff1, Queue, Debug);
 	{stop, Reason} ->
 	    %% For consistency, we must make sure that the
@@ -433,11 +439,10 @@ unregister_name({global,Name}) ->
 unregister_name(Pid) when is_pid(Pid) ->
     Pid.
 
-extend_backoff(Mod, {backoff, CurrentTO, MinimumTimeout, DesiredHibPeriod}) ->
-    Pre = erlang:function_exported(Mod, handle_pre_hibernate, 1),
-    Post = erlang:function_exported(Mod, handle_post_hibernate, 1),
-    random:seed(now()), %% call before we get into the loop
-    {backoff, CurrentTO, MinimumTimeout, DesiredHibPeriod, Pre, Post}.
+extend_backoff(undefined) ->
+    undefined;
+extend_backoff({backoff, InitialTimeout, MinimumTimeout, DesiredHibPeriod}) ->
+    {backoff, InitialTimeout, MinimumTimeout, DesiredHibPeriod, now()}.
 
 %%%========================================================================
 %%% Internal functions
@@ -446,8 +451,7 @@ extend_backoff(Mod, {backoff, CurrentTO, MinimumTimeout, DesiredHibPeriod}) ->
 %%% The MAIN loop.
 %%% ---------------------------------------------------
 loop(Parent, Name, State, Mod, hibernate, undefined, Queue, Debug) ->
-    proc_lib:hibernate(?MODULE,wake_hib,
-                       [Parent, Name, State, Mod, undefined, Queue, Debug]);
+    pre_hibernate(Parent, Name, State, Mod, undefined, Queue, Debug);
 loop(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
     process_next_msg(Parent, Name, State, Mod, Time, TimeoutState,
                      drain(Queue), Debug).
@@ -466,29 +470,29 @@ process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
         {empty, Queue1} ->
             {Time1, HibOnTimeout}
                 = case {Time, TimeoutState} of
-                      {hibernate,
-                       {backoff, Current, _Min, _Desired, _Pre, _Post}} ->
+                      {hibernate, {backoff, Current, _Min, _Desired, _RSt}} ->
                           {Current, true};
                       {hibernate, _} ->
                           %% wake_hib/7 will set Time to hibernate. If
                           %% we were woken and didn't receive a msg
                           %% then we will get here and need a sensible
                           %% value for Time1, otherwise we crash.
-                          %% On the grounds that it's better to get
-                          %% control back to the user module sooner
-                          %% rather than later, 0 is more sensible
-                          %% than infinity here.
-                          {0, false};
+                          %% R13B1 always waits infinitely when waking
+                          %% from hibernation, so that's what we do
+                          %% here too.
+                          {infinity, false};
                       _ -> {Time, false}
                   end,
             receive
                 Input ->
-                    loop(Parent, Name, State, Mod,
-                         Time, TimeoutState, in(Input, Queue1), Debug)
+                    %% Time could be 'hibernate' here, so *don't* call loop
+                    process_next_msg(
+                      Parent, Name, State, Mod, Time, TimeoutState,
+                      drain(in(Input, Queue1)), Debug)
             after Time1 ->
                     case HibOnTimeout of
                         true ->
-                            backoff_pre_hibernate(
+                            pre_hibernate(
                               Parent, Name, State, Mod, TimeoutState, Queue1,
                               Debug);
                         false ->
@@ -499,43 +503,66 @@ process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
             end
     end.
 
-wake_hib(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
-    process_next_msg(Parent, Name, State, Mod, hibernate, TimeoutState,
-                     drain(Queue), Debug).
+wake_hib(Parent, Name, State, Mod, TS, Queue, Debug) ->
+    TimeoutState1 = case TS of
+                        undefined ->
+                            undefined;
+                        {SleptAt, TimeoutState} ->
+                            adjust_timeout_state(SleptAt, now(), TimeoutState)
+                    end,
+    post_hibernate(Parent, Name, State, Mod, TimeoutState1,
+                   drain(Queue), Debug).
 
-wake_hib(Parent, Name, State, Mod, SleptAt, TimeoutState, Queue, Debug) ->
-    backoff_post_hibernate(Parent, Name, State, Mod, SleptAt, now(),
-                           TimeoutState, drain(Queue), Debug).
+hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
+    TS = case TimeoutState of
+             undefined             -> undefined;
+             {backoff, _, _, _, _} -> {now(), TimeoutState}
+         end,
+    proc_lib:hibernate(?MODULE, wake_hib, [Parent, Name, State, Mod,
+                                           TS, Queue, Debug]).
 
-backoff_pre_hibernate(Parent, Name, State, Mod, TimeoutState =
-                      {backoff, _Current, _Minimum, _Desired, Pre, _Post},
-                      Queue, Debug) ->
-    case Pre of
+pre_hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
+    case erlang:function_exported(Mod, handle_pre_hibernate, 1) of
         true ->
             case catch Mod:handle_pre_hibernate(State) of
                 {hibernate, NState} ->
-                    proc_lib:hibernate(?MODULE, wake_hib, [Parent, Name, NState,
-                                                           Mod, now(),
-                                                           TimeoutState, Queue,
-                                                           Debug]);
-                {stop, Reason, NState} ->
-                    terminate(Reason, Name, pre_hibernate, Mod, NState, []);
-                {'EXIT', What} ->
-                    terminate(What, Name, pre_hibernate, Mod, State, []);
+                    hibernate(Parent, Name, NState, Mod, TimeoutState, Queue,
+                              Debug);
                 Reply ->
-                    terminate({bad_return_value, Reply}, Name, pre_hibernate, Mod,
-                              State, [])
+                    handle_common_termination(Reply, Name, pre_hibernate,
+                                              Mod, State, Debug)
             end;
         false ->
-            proc_lib:hibernate(?MODULE, wake_hib, [Parent, Name, State, Mod,
-                                                   now(), TimeoutState, Queue,
-                                                   Debug])
+            hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug)
     end.
 
-backoff_post_hibernate(Parent, Name, State, Mod, SleptAt, AwokeAt,
-                       {backoff, CurrentTO, MinimumTO, DesiredHibPeriod,
-                        Pre, Post},
-                       Queue, Debug) ->
+post_hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
+    case erlang:function_exported(Mod, handle_post_hibernate, 1) of
+        true ->
+            case catch Mod:handle_post_hibernate(State) of
+                {noreply, NState} ->
+                    process_next_msg(Parent, Name, NState, Mod, infinity,
+                                     TimeoutState, Queue, Debug);
+                {noreply, NState, Time} ->
+                    process_next_msg(Parent, Name, NState, Mod, Time,
+                                     TimeoutState, Queue, Debug);
+                Reply ->
+                    handle_common_termination(Reply, Name, post_hibernate,
+                                              Mod, State, Debug)
+            end;
+        false ->
+            %% use hibernate here, not infinity. This matches
+            %% R13B. The key is that we should be able to get through
+            %% to process_msg calling sys:handle_system_msg with Time
+            %% still set to hibernate, iff that msg is the very msg
+            %% that woke us up (or the first msg we receive after
+            %% waking up).
+            process_next_msg(Parent, Name, State, Mod, hibernate,
+                             TimeoutState, Queue, Debug)
+    end.
+
+adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
+                                        DesiredHibPeriod, RandomState}) ->
     NapLengthMicros = timer:now_diff(AwokeAt, SleptAt),
     CurrentMicros = CurrentTO * 1000,
     MinimumMicros = MinimumTO * 1000,
@@ -548,29 +575,9 @@ backoff_post_hibernate(Parent, Name, State, Mod, SleptAt, AwokeAt,
             true -> lists:max([MinimumTO, CurrentTO div 2]);
             false -> CurrentTO
         end,
-    CurrentTO1 = Base + random:uniform(Base),
-    TimeoutState =
-        {backoff, CurrentTO1, MinimumTO, DesiredHibPeriod, Pre, Post},
-    case Post of
-        true ->
-            case catch Mod:handle_post_hibernate(State) of
-                {noreply, NState} ->
-                    loop(Parent, Name, NState, Mod, infinity, TimeoutState,
-                         Queue, Debug);
-                {noreply, NState, Time} ->
-                    loop(Parent, Name, NState, Mod, Time, TimeoutState, Queue,
-                         Debug);
-                {stop, Reason, NState} ->
-                    terminate(Reason, Name, post_hibernate, Mod, NState, []);
-                {'EXIT', What} ->
-                    terminate(What, Name, post_hibernate, Mod, State, []);
-                Reply ->
-                    terminate({bad_return_value, Reply}, Name, post_hibernate,
-                              Mod, State, [])
-            end;
-        false -> loop(Parent, Name, State, Mod, infinity, TimeoutState, Queue,
-                      Debug)
-    end.
+    {Extra, RandomState1} = random:uniform_s(Base, RandomState),
+    CurrentTO1 = Base + Extra,
+    {backoff, CurrentTO1, MinimumTO, DesiredHibPeriod, RandomState1}.
 
 in({'$gen_pcast', {Priority, Msg}}, Queue) ->
     priority_queue:in({'$gen_cast', Msg}, Priority, Queue);
@@ -862,12 +869,8 @@ handle_common_reply(Reply, Parent, Name, Msg, Mod, State,
 	    loop(Parent, Name, NState, Mod, infinity, TimeoutState, Queue, []);
 	{noreply, NState, Time1} ->
 	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, []);
-	{stop, Reason, NState} ->
-	    terminate(Reason, Name, Msg, Mod, NState, []);
-	{'EXIT', What} ->
-	    terminate(What, Name, Msg, Mod, State, []);
-	_ ->
-	    terminate({bad_return_value, Reply}, Name, Msg, Mod, State, [])
+        _ ->
+            handle_common_termination(Reply, Name, Msg, Mod, State, [])
     end.
 
 handle_common_reply(Reply, Parent, Name, Msg, Mod, State, TimeoutState, Queue,
@@ -882,6 +885,12 @@ handle_common_reply(Reply, Parent, Name, Msg, Mod, State, TimeoutState, Queue,
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
 	    loop(Parent, Name, NState, Mod, Time1, TimeoutState, Queue, Debug1);
+        _ ->
+            handle_common_termination(Reply, Name, Msg, Mod, State, Debug)
+    end.
+
+handle_common_termination(Reply, Name, Msg, Mod, State, Debug) ->
+    case Reply of
 	{stop, Reason, NState} ->
 	    terminate(Reason, Name, Msg, Mod, NState, Debug);
 	{'EXIT', What} ->
