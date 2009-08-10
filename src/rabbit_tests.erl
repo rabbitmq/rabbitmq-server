@@ -54,6 +54,7 @@ all_tests() ->
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
+    passed = test_hooks(),
     passed.
 
 test_priority_queue() ->
@@ -598,6 +599,40 @@ test_server_status() ->
             recv_oct, recv_cnt, send_oct, send_cnt, send_pend],
            false),
     ok = gen_tcp:close(C),
+
+    passed.
+
+test_hooks() ->
+    %% Firing of hooks calls all hooks in an isolated manner
+    rabbit_hooks:subscribe(test_hook, test, 
+                           fun(Args) -> 
+                               put(fired_testhook_handler, Args) 
+                           end),
+    rabbit_hooks:subscribe(test_hook, test2, 
+                           fun(Args) -> 
+                               put(fired_testhook_handler2, Args) 
+                           end),
+    rabbit_hooks:subscribe(test_hook2, test2,
+                           fun(Args) ->
+                               put(fired_testhook2_handler, Args)
+                           end),
+    rabbit_hooks:trigger(test_hook, [arg1, arg2]),
+    [arg1, arg2] = get(fired_testhook_handler),
+    [arg1, arg2] = get(fired_testhook_handler2),
+    undefined = get(fired_testhook2_handler),
+
+    %% Hook Deletion works
+    put(fired_testhook_handler, undefined),
+    put(fired_testhook_handler2, undefined),
+    rabbit_hooks:unsubscribe(test_hook, test),
+    rabbit_hooks:trigger(test_hook, [arg3, arg4]),
+    undefined = get(fired_testhook_handler),
+    [arg3, arg4] = get(fired_testhook_handler2),
+    undefined = get(fired_testhook2_handler),
+
+    %% Catches exceptions from bad hooks
+    rabbit_hooks:subscribe(test_hook3, test, fun(Args) -> bad:bad() end),
+    ok = rabbit_hooks:trigger(test_hook3, []),
 
     passed.
 
