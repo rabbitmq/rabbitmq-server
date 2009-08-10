@@ -157,6 +157,10 @@ handle_cast({conserve_memory, Conserve}, State) ->
            State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
     noreply(State).
 
+handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
+            State = #ch{writer_pid = WriterPid}) ->
+    State#ch.reader_pid ! {channel_unexpected_exit, Reason},
+    {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
