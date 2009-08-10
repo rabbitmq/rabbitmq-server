@@ -48,14 +48,13 @@
 
 -ifdef(use_specs).
 
--type(queue_mode() :: ( 'mixed' | 'disk' )).
-
 -spec(start_link/0 :: () ->
               ({'ok', pid()} | 'ignore' | {'error', any()})).
 -spec(register/4 :: (pid(), atom(), atom(), list()) -> 'ok').
 -spec(report_memory/3 :: (pid(), non_neg_integer(), bool()) -> 'ok').
 -spec(report_memory/5 :: (pid(), non_neg_integer(),
-                          non_neg_integer(), non_neg_integer(), bool()) ->
+                          (non_neg_integer() | 'undefined'),
+                          (non_neg_integer() | 'undefined'), bool()) ->
              'ok').
 -spec(pin_to_disk/1 :: (pid()) -> 'ok').
 -spec(unpin_to_disk/1 :: (pid()) -> 'ok').

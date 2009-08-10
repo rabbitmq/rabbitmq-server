@@ -79,7 +79,7 @@
 -spec(deliver/1 :: (mqstate()) ->
              {('empty' | {message(), bool(), acktag(), non_neg_integer()}),
               mqstate()}).
--spec(ack/2 :: ([acktag()], mqstate()) -> okmqs()).
+-spec(ack/2 :: ([{message(), acktag()}], mqstate()) -> okmqs()).
 -spec(tx_publish/2 :: (message(), mqstate()) -> okmqs()).
 -spec(tx_commit/3 :: ([message()], [acktag()], mqstate()) -> okmqs()).
 -spec(tx_cancel/2 :: ([message()], mqstate()) -> okmqs()).
@@ -95,7 +95,7 @@
 -spec(to_mixed_mode/2 :: ([message()], mqstate()) -> okmqs()).
 
 -spec(estimate_queue_memory/1 :: (mqstate()) ->
-             {non_neg_integer, non_neg_integer, non_neg_integer}).
+             {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -spec(reset_counters/1 :: (mqstate()) -> (mqstate())).
 -spec(info/1 :: (mqstate()) -> mode()).
 

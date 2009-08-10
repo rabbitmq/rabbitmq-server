@@ -258,7 +258,7 @@
              ('empty' | {message(), non_neg_integer(),
                          bool(), {msg_id(), seq_id()}, non_neg_integer()})).
 -spec(phantom_deliver/1 :: (queue_name()) ->
-             ( 'empty' | {msg_id(), bool(), {msg_id(), seq_id()},
+             ( 'empty' | {msg_id(), bool(), bool(), {msg_id(), seq_id()},
                           non_neg_integer()})).
 -spec(prefetch/1 :: (queue_name()) -> 'ok'). 
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
@@ -1673,7 +1673,7 @@ load_messages(Left, [File|Files],
     %% [{MsgId, TotalSize, FileOffset}]
     {ok, Messages} = scan_file_for_valid_messages(form_filename(File)),
     {ValidMessagesRev, ValidTotalSize} = lists:foldl(
-        fun ({MsgId, IsPersistent, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
+        fun (Obj = {MsgId, IsPersistent, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
                 case erlang:length(mnesia:dirty_index_match_object
                                    (rabbit_disk_queue,
                                     #dq_msg_loc { msg_id = MsgId,
@@ -1686,7 +1686,7 @@ load_messages(Left, [File|Files],
                         true = dets_ets_insert_new
                                  (State, {MsgId, RefCount, File,
                                           Offset, TotalSize, IsPersistent}),
-                        {[{MsgId, TotalSize, Offset}|VMAcc],
+                        {[Obj | VMAcc],
                          VTSAcc + TotalSize + ?FILE_PACKING_ADJUSTMENT
                         }
                 end
@@ -1790,7 +1790,7 @@ recover_crashed_compactions1(Files, TmpFile) ->
             %% we could have failed after the extending truncate.
             %% Remember the head of the list will be the highest entry
             %% in the file
-            [{_, TmpTopTotalSize, TmpTopOffset}|_] = UncorruptedMessagesTmp,
+            [{_, _, TmpTopTotalSize, TmpTopOffset}|_] = UncorruptedMessagesTmp,
             TmpSize = TmpTopOffset + TmpTopTotalSize + ?FILE_PACKING_ADJUSTMENT,
             ExpectedAbsPos = Top + TmpSize,
             {ok, ExpectedAbsPos} = file:position(MainHdl, {cur, TmpSize}),
@@ -1821,7 +1821,8 @@ recover_crashed_compactions1(Files, TmpFile) ->
 %% address is at the head of the list. This matches what
 %% scan_file_for_valid_messages produces
 find_contiguous_block_prefix([]) -> {0, []};
-find_contiguous_block_prefix([{MsgId, TotalSize, Offset}|Tail]) ->
+find_contiguous_block_prefix([ {MsgId, _IsPersistent, TotalSize, Offset}
+                             | Tail]) ->
     case find_contiguous_block_prefix(Tail, Offset, [MsgId]) of
         {ok, Acc} -> {Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT,
                       lists:reverse(Acc)};
@@ -1831,7 +1832,7 @@ find_contiguous_block_prefix([], 0, Acc) ->
     {ok, Acc};
 find_contiguous_block_prefix([], _N, _Acc) ->
     {0, []};
-find_contiguous_block_prefix([{MsgId, TotalSize, Offset}|Tail],
+find_contiguous_block_prefix([{MsgId, _IsPersistent, TotalSize, Offset} | Tail],
                              ExpectedOffset, Acc)
   when ExpectedOffset =:= Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT ->
     find_contiguous_block_prefix(Tail, Offset, [MsgId|Acc]);

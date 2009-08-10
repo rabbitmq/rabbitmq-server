@@ -102,7 +102,7 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
--spec(set_mode_pin/3 :: (vhost(), amqqueue(), bool) -> any()).
+-spec(set_mode_pin/3 :: (binary(), binary(), binary()) -> any()).
 -spec(set_mode/2 :: (pid(), ('disk' | 'mixed')) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), bool()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
