@@ -286,7 +286,7 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             %% since this termination is initiated by our parent it is
             %% probably more important to exit quickly.
             exit(Reason);
-        {channel_unexpected_exit, E = {writer, send_failed, _Error}} ->
+        {channel_exit, _Chan, E = {writer, send_failed, _Error}} ->
             throw(E);
         {channel_exit, Channel, Reason} ->
             mainloop(Parent, Deb, handle_channel_exit(Channel, Reason, State));
