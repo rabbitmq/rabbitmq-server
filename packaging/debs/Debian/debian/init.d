@@ -53,7 +53,10 @@ stop_rabbitmq () {
     if [ $RETVAL = 0 ] ; then
         $DAEMON stop_all > /var/log/rabbitmq/shutdown_log 2> /var/log/rabbitmq/shutdown_err
         RETVAL=$?
-        if [ $RETVAL != 0 ] ; then
+        if [ $RETVAL = 0 ] ; then
+            # Try to stop epmd if run by the rabbitmq user
+            pkill -u rabbitmq epmd || :
+        else
             echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
         fi
     else
