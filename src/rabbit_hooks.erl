@@ -38,10 +38,8 @@
 
 -ifdef(use_specs).
 
--type(hookfun() :: fun((list()) -> 'ok')).
-
 -spec(start/0 :: () -> 'ok').
--spec(subscribe/3 :: (atom(), atom(), hookfun()) -> 'ok').
+-spec(subscribe/3 :: (atom(), atom(), {atom(), atom(), list()}) -> 'ok').
 -spec(unsubscribe/2 :: (atom(), atom()) -> 'ok').
 -spec(trigger/2 :: (atom(), list()) -> 'ok').
 
@@ -61,10 +59,10 @@ unsubscribe(Hook, HandlerName) ->
 
 trigger(Hook, Args) ->
     Hooks = ets:lookup(?TableName, Hook),
-    [case catch H(Args) of
+    [case catch apply(M, F, [Hook, Name, Args | A]) of
         {'EXIT', Reason} -> 
             rabbit_log:warning("Failed to execute handler ~p for hook ~p: ~p", 
                                [Name, Hook, Reason]);
         _ -> ok
-     end || {_, Name, H} <- Hooks],
+     end || {_, Name, {M, F, A}} <- Hooks],
     ok.
