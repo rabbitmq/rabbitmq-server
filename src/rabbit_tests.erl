@@ -633,6 +633,22 @@ test_hooks() ->
     rabbit_hooks:trigger(arg_hook, [arg1, arg2]),
     {[arg1, arg2], 1, 3} = get(arg_hook_test_fired),
 
+    %% Invoking Pids
+    Remote = fun() -> 
+        receive 
+            {rabbitmq_hook,[remote_test,test,[],Target]} -> 
+                Target ! invoked
+        end 
+    end,
+    P = spawn(Remote),
+    rabbit_hooks:subscribe(remote_test, test, {rabbit_hooks, notify_remote, [P, [self()]]}),
+    rabbit_hooks:trigger(remote_test, []),
+    receive
+       invoked -> ok
+    after 100 ->
+       io:format("Remote hook not invoked"),
+       throw(timeout)
+    end,
     passed.
 
 %---------------------------------------------------------------------

@@ -32,7 +32,7 @@
 -module(rabbit_hooks).
 
 -export([start/0]).
--export([subscribe/3, unsubscribe/2, trigger/2]).
+-export([subscribe/3, unsubscribe/2, trigger/2, notify_remote/5]).
 
 -define(TableName, rabbit_hooks).
 
@@ -42,6 +42,7 @@
 -spec(subscribe/3 :: (atom(), atom(), {atom(), atom(), list()}) -> 'ok').
 -spec(unsubscribe/2 :: (atom(), atom()) -> 'ok').
 -spec(trigger/2 :: (atom(), list()) -> 'ok').
+-spec(notify_remote/5 :: (atom(), atom(), list(), pid(), list()) -> 'ok').
 
 -endif.
 
@@ -65,4 +66,8 @@ trigger(Hook, Args) ->
                                [Name, Hook, Reason]);
         _ -> ok
      end || {_, Name, {M, F, A}} <- Hooks],
+    ok.
+
+notify_remote(Hook, HandlerName, Args, Pid, PidArgs) ->
+    Pid ! {rabbitmq_hook, [Hook, HandlerName, Args | PidArgs]},
     ok.
