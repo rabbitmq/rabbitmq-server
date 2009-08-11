@@ -28,4 +28,4 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--record(stomp_frame, {command, headers, body}).
+-record(stomp_frame, {command, headers, body_iolist}).

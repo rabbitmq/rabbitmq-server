@@ -98,7 +98,7 @@ start_link() ->
 init(_Parent) ->
     receive
         {go, Sock} ->
-            ok = inet:setopts(Sock, [{active, true}]),
+            ok = inet:setopts(Sock, [{active, once}]),
             process_flag(trap_exit, true),
 
             {ok, {PeerAddress, PeerPort}} = inet:peername(Sock),
@@ -122,7 +122,8 @@ mainloop(State) ->
             handle_exit(Pid, Reason, State);
         {channel_exit, ChannelId, Reason} ->
             handle_exit(ChannelId, Reason, State);
-        {tcp, _Sock, Bytes} ->
+        {tcp, Sock, Bytes} ->
+            inet:setopts(Sock, [{active, once}]),
             process_received_bytes(Bytes, State);
         {tcp_closed, _Sock} ->
             case State#state.channel of
@@ -256,8 +257,7 @@ send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
       ++ maybe_header("correlation-id", CorrelationId)
       ++ maybe_header("reply-to", ReplyTo)
       ++ maybe_header("amqp-message-id", MessageId),
-      lists:concat(lists:reverse(lists:map(fun erlang:binary_to_list/1,
-                                           BodyFragmentsRev))),
+      lists:reverse(BodyFragmentsRev),
       State);
 send_reply(Command, Content, State) ->
     error_logger:error_msg("STOMP Reply command unhandled: ~p~n~p~n",
@@ -278,10 +278,10 @@ send_frame(Frame, State = #state{socket = Sock}) ->
     ok = gen_tcp:send(Sock, stomp_frame:serialize(Frame)),
     State.
 
-send_frame(Command, Headers, Body, State) ->
+send_frame(Command, Headers, BodyFragments, State) ->
     send_frame(#stomp_frame{command = Command,
                             headers = Headers,
-                            body = Body},
+                            body_iolist = BodyFragments},
                State).
 
 send_priv_error(Message, Detail, ServerPrivateDetail, State) ->
@@ -346,14 +346,14 @@ send_method(Method, State = #state{channel = ChPid}) ->
     ok = rabbit_channel:do(ChPid, Method),
     State.
 
-send_method(Method, Properties, Body, State = #state{channel = ChPid}) ->
+send_method(Method, Properties, BodyFragments, State = #state{channel = ChPid}) ->
     ok = rabbit_channel:do(
            ChPid,
            Method,
            #content{class_id = 60, %% basic
                     properties = Properties,
                     properties_bin = none,
-                    payload_fragments_rev = [list_to_binary(Body)]}),
+                    payload_fragments_rev = lists:reverse(BodyFragments)}),
     State.
 
 do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
@@ -441,13 +441,13 @@ abort_transaction(Transaction, State0) ->
 
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
-perform_transaction_action({Method, Props, Body}, State) ->
-    send_method(Method, Props, Body, State).
+perform_transaction_action({Method, Props, BodyFragments}, State) ->
+    send_method(Method, Props, BodyFragments, State).
 
 process_command("BEGIN", Frame, State) ->
     transactional_action(Frame, "BEGIN", fun begin_transaction/2, State);
 process_command("SEND",
-                Frame = #stomp_frame{headers = Headers, body = Body},
+                Frame = #stomp_frame{headers = Headers, body_iolist = BodyFragments},
                 State) ->
     BinH = fun(K, V) -> stomp_frame:binary_header(Frame, K, V) end,
     IntH = fun(K, V) -> stomp_frame:integer_header(Frame, K, V) end,
@@ -471,10 +471,10 @@ process_command("SEND",
               immediate = false},
             case transactional(Frame) of
                 {yes, Transaction} ->
-                    extend_transaction(Transaction, {Method, Props, Body},
+                    extend_transaction(Transaction, {Method, Props, BodyFragments},
                                        State);
                 no ->
-                    {ok, send_method(Method, Props, Body, State)}
+                    {ok, send_method(Method, Props, BodyFragments, State)}
             end;
         not_found ->
             {ok, send_error("Missing destination",
