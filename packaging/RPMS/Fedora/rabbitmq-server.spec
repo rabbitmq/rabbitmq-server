@@ -34,11 +34,7 @@ scalable implementation of an AMQP broker.
 %build
 cp %{S:2} %{_rabbit_wrapper}
 sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
-
-# The rabbitmq build needs escript, which is missing from /usr/bin in
-# some versions of the erlang RPM.  See
-# <https://bugzilla.redhat.com/show_bug.cgi?id=481302>
-PATH=%{_libdir}/erlang/bin:$PATH make %{?_smp_mflags}
+make %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}

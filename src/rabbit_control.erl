@@ -36,7 +36,7 @@
 
 -record(params, {quiet, node, command, args}).
 
--define(RPC_TIMEOUT, 30000).
+-define(RPC_TIMEOUT, infinity).
 
 %%----------------------------------------------------------------------------
 
