@@ -25,12 +25,12 @@
 
 -record(amqp_msg, {props, payload}).
 
--record(amqp_connection_parameters, {username = "guest",
-                                     password = "guest",
+-record(amqp_connection_parameters, {username     = "guest",
+                                     password     = "guest",
                                      virtual_host = "/",
-                                     host = "localhost",
+                                     host         = "localhost",
                                      %% TODO: replace with ?PROTOCOL_PORT
-                                     port = 5672}).
+                                     port         = 5672}).
 
 -record(connection_state, {username,
                            password,
