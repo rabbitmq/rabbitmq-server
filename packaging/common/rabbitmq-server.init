@@ -24,11 +24,13 @@ USER=rabbitmq
 NODE_COUNT=1
 ROTATE_SUFFIX=
 
+DEFAULTS_FILE= # This is filled in when building packages
+
 test -x $DAEMON || exit 0
 
 # Include rabbitmq defaults if available
-if [ -f /etc/default/rabbitmq ] ; then
-	. /etc/default/rabbitmq
+if [ -f "$DEFAULTS_FILE" ] ; then
+	. $DEFAULTS_FILE
 fi
 
 RETVAL=0

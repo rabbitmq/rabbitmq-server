@@ -28,8 +28,8 @@ prepare:
 	sed -i 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
 		SPECS/rabbitmq-server.spec
 
-	cp init.d SOURCES/rabbitmq-server.init
 	cp ${COMMON_DIR}/* SOURCES/
+	sed -i 's|^DEFAULTS_FILE=.*$$|DEFAULTS_FILE=/etc/sysconfig/rabbitmq|' SOURCES/rabbitmq-server.init
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare
