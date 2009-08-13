@@ -122,7 +122,7 @@ case "$1" in
         ;;
     *)
         echo "Usage: $0 {start|stop|status|rotate-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
-        RETVAL=2
+        RETVAL=1
         ;;
 esac
 
