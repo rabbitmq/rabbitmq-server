@@ -32,7 +32,7 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([open_channel/1, open_channel/3]).
--export([start_direct/2, start_direct/3]).
+-export([start_direct/2]).
 -export([start_direct_link/2]).
 -export([start_network/4, start_network/5]).
 -export([start_network_link/4, start_network_link/5]).
