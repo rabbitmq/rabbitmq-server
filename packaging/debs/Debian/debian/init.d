@@ -1,4 +1,11 @@
 #!/bin/sh
+#
+# rabbitmq-server RabbitMQ broker
+#
+# chkconfig: - 80 05
+# description: Enable AMQP service provided by RabbitMQ
+#
+
 ### BEGIN INIT INFO
 # Provides:          rabbitmq
 # Required-Start:    $remote_fs $network
