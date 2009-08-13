@@ -24,8 +24,6 @@ USER=rabbitmq
 NODE_COUNT=1
 ROTATE_SUFFIX=
 
-LOCK_FILE=/var/lock/subsys/$NAME
-
 test -x $DAEMON || exit 0
 
 # Include rabbitmq defaults if available
@@ -41,7 +39,7 @@ start_rabbitmq () {
     $DAEMON start_all ${NODE_COUNT} > /var/log/rabbitmq/startup_log 2> /var/log/rabbitmq/startup_err
     case "$?" in
       0)
-        echo SUCCESS && touch $LOCK_FILE
+        echo SUCCESS
         RETVAL=0
         ;;
       1)
@@ -52,7 +50,7 @@ start_rabbitmq () {
         echo FAILED - check /var/log/rabbitmq/startup_log, _err
         RETVAL=1
         ;;
-    esac 
+    esac
     set -e
 }
 
@@ -64,8 +62,6 @@ stop_rabbitmq () {
         RETVAL=$?
         if [ $RETVAL != 0 ] ; then
             echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
-        else
-            rm -rf $LOCK_FILE
         fi
     else
         echo No nodes running 
