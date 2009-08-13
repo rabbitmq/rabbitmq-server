@@ -46,15 +46,14 @@
 %% the server is running in the same process space.
 start_direct(User, Password) -> start_direct(User, Password, false).
 
+start_direct_link(User, Password) -> start_direct(User, Password, true).
+
 start_direct(User, Password, ProcLink) when is_boolean(ProcLink) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
                                      vhostpath = <<"/">>},
     {ok, Pid} = start_internal(InitialState, amqp_direct_driver, ProcLink),
     Pid.
-
-start_direct_link(User, Password) ->
-    start_direct(User, Password, true).
 
 
 %% Starts a networked conection to a remote AMQP server.
@@ -64,6 +63,12 @@ start_network(User, Password, Host, Port) ->
 start_network(User, Password, Host, Port, VHost) ->
     start_network(User, Password, Host, Port, VHost, false).
 
+start_network_link(User, Password, Host, Port) ->
+    start_network(User, Password, Host, Port, <<"/">>, true).
+
+start_network_link(User, Password, Host, Port, VHost) ->
+    start_network(User, Password, Host, Port, VHost, true).
+
 start_network(User, Password, Host, Port, VHost, ProcLink) ->
     InitialState = #connection_state{username = User,
                                      password = Password,
@@ -72,12 +77,6 @@ start_network(User, Password, Host, Port, VHost, ProcLink) ->
                                      port = Port},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
-
-start_network_link(User, Password, Host, Port) ->
-    start_network(User, Password, Host, Port, <<"/">>, true).
-
-start_network_link(User, Password, Host, Port, VHost) ->
-    start_network(User, Password, Host, Port, VHost, true).
 
 start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
     gen_server:start_link(?MODULE, [InitialState, Driver], []);
