@@ -115,13 +115,13 @@ case "$1" in
         echo -n "Rotating log files for $DESC: "
         rotate_logs_rabbitmq
         ;;
-    force-reload|restart)
+    force-reload|reload|restart|condrestart|try-restart)
         echo -n "Restarting $DESC: "
         restart_rabbitmq
         echo "$NAME."
         ;;
     *)
-        echo "Usage: $0 {start|stop|status|rotate-logs|restart|force-reload}" >&2
+        echo "Usage: $0 {start|stop|status|rotate-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
         RETVAL=1
         ;;
 esac

@@ -115,12 +115,7 @@ case "$1" in
         echo -n "Rotating log files for $DESC: "
         rotate_logs_rabbitmq
         ;;
-    force-reload|reload|restart)
-        echo -n "Restarting $DESC: "
-        restart_rabbitmq
-        echo "$NAME."
-        ;;
-    condrestart|try-restart)
+    force-reload|reload|restart|condrestart|try-restart)
         echo -n "Restarting $DESC: "
         restart_rabbitmq
         echo "$NAME."
