@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Escape spaces and quotes, because shell is revolting.
 for arg in "$@" ; do
 	# Escape quotes in parameters, so that they're passed through cleanly.
