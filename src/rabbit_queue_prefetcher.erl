@@ -213,10 +213,9 @@ handle_call({publish, { Msg = #basic_message {},
 		      msg_buf = MsgBuf, buf_length = Length, queue = Q
 		    }) ->
     gen_server2:reply(DiskQueue, ok),
-    Timeout = case Fetched + 1 == Target of
-                  true -> hibernate;
-                  false -> ok = rabbit_disk_queue:prefetch(Q),
-                           infinity
+    Timeout = if Fetched + 1 == Target -> hibernate;
+                 true -> ok = rabbit_disk_queue:prefetch(Q),
+                         infinity
               end,
     MsgBuf1 = queue:in({Msg, IsDelivered, AckTag}, MsgBuf),
     {noreply, State #pstate { fetched_count = Fetched + 1,
