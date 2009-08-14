@@ -90,10 +90,10 @@ compile: $(TARGETS)
 compile_tests: $(TEST_DIR)
 	$(MAKE) -C $(TEST_DIR)
 
-run: compile
+run: $(TARGETS)
 	erl -pa $(LOAD_PATH)
 
-run_in_broker: compile $(BROKER_DIR)
+run_in_broker: $(TARGETS) $(BROKER_DIR)
 	$(MAKE) RABBITMQ_SERVER_START_ARGS='$(PA_LOAD_PATH)' -C $(BROKER_DIR) run
 
 dialyze: $(TARGETS)
