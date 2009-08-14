@@ -40,7 +40,8 @@
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
 -export([r/3, r/2, r_arg/4, rs/1]).
--export([enable_cover/1, report_cover/0]).
+-export([enable_cover/0, report_cover/0]).
+-export([enable_cover/1, report_cover/1]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
@@ -87,8 +88,10 @@
 -spec(r_arg/4 :: (vhost() | r(atom()), K, amqp_table(), binary()) ->
              undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
--spec(enable_cover/1 :: () -> 'ok' | {'error', any()}).
+-spec(enable_cover/0 :: () -> 'ok' | {'error', any()}).
 -spec(report_cover/0 :: () -> 'ok').
+-spec(enable_cover/1 :: (string()) -> 'ok' | {'error', any()}).
+-spec(report_cover/1 :: (string()) -> 'ok').
 -spec(throw_on_error/2 ::
       (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
@@ -187,21 +190,28 @@ rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
                                 [Kind, Name, VHostPath])).
 
+enable_cover() ->
+    enable_cover(".").
 
-
-enable_cover(Dirs) ->
-    Results = lists:map(fun cover:compile_beam_directory/1, Dirs),
-    case lists:filter(fun(X) -> X /= [] end, Results) of
-        [{error, Reason} | _] -> {error, Reason};
+enable_cover([Root]) when is_atom(Root) ->
+    enable_cover(atom_to_list(Root));
+enable_cover(Root) ->
+    case cover:compile_beam_directory(filename:join(Root, "ebin")) of
+        {error,Reason} -> {error,Reason};
         _ -> ok
     end.
 
 report_cover() ->
-    Dir = "cover/",
-    ok = filelib:ensure_dir(Dir),
+    report_cover(".").
+
+report_cover([Root]) when is_atom(Root) ->
+    report_cover(atom_to_list(Root));
+report_cover(Root) ->
+    Dir = filename:join(Root, "cover"),
+    ok = filelib:ensure_dir(filename:join(Dir,"junk")),
     lists:foreach(fun(F) -> file:delete(F) end,
-                  filelib:wildcard(Dir ++ "*.html")),
-    {ok, SummaryFile} = file:open(Dir ++ "summary.txt", [write]),
+                  filelib:wildcard(filename:join(Dir, "*.html"))),
+    {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
     {CT, NCT} =
         lists:foldl(
           fun(M,{CovTot, NotCovTot}) ->
@@ -210,7 +220,7 @@ report_cover() ->
                                                   Cov, NotCov, M),
                   {ok,_} = cover:analyze_to_file(
                              M,
-                             Dir ++ atom_to_list(M) ++ ".html",
+                             filename:join(Dir, atom_to_list(M) ++ ".html"),
                              [html]),
                   {CovTot+Cov, NotCovTot+NotCov}
           end,
