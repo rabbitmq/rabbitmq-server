@@ -136,7 +136,7 @@ srcdist: distclean
 	sed -i.save 's/%%VSN%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in && rm -f $(TARGET_SRC_DIR)/ebin/rabbit_app.in.save
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
-	cp codegen.py Makefile generate_app $(TARGET_SRC_DIR)
+	cp codegen.py Makefile generate_app calculate-relative $(TARGET_SRC_DIR)
 
 	cp -r scripts $(TARGET_SRC_DIR)
 	cp -r docs $(TARGET_SRC_DIR)
@@ -162,7 +162,8 @@ distclean: clean
 
 docs_all: $(MANPAGES)
 
-install: all docs_all
+install: SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
+install: all docs_all install_dirs
 	@[ -n "$(TARGET_DIR)" ] || (echo "Please set TARGET_DIR."; false)
 	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
 	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
@@ -171,13 +172,17 @@ install: all docs_all
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
-	mkdir -p $(SBIN_DIR)
-	cp scripts/rabbitmq-server $(SBIN_DIR)
-	cp scripts/rabbitmqctl $(SBIN_DIR)
-	cp scripts/rabbitmq-multi $(SBIN_DIR)
+	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-multi rabbitmq-activate-plugins; do \
+		cp scripts/$$script $(TARGET_DIR)/sbin; \
+		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
+ 	done
 	for section in 1 5; do \
 		mkdir -p $(MAN_DIR)/man$$section; \
 		for manpage in docs/*.$$section.pod; do \
 			cp docs/`basename $$manpage .pod`.gz $(MAN_DIR)/man$$section; \
 		done; \
 	done
+
+install_dirs:
+	mkdir -p $(SBIN_DIR)
+	mkdir -p $(TARGET_DIR)/sbin
