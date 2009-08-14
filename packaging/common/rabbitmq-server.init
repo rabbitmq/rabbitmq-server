@@ -25,6 +25,7 @@ NODE_COUNT=1
 ROTATE_SUFFIX=
 
 DEFAULTS_FILE= # This is filled in when building packages
+LOCK_FILE= # This is filled in when building packages
 
 test -x $DAEMON || exit 0
 
@@ -42,6 +43,7 @@ start_rabbitmq () {
     case "$?" in
       0)
         echo SUCCESS
+        [ -n "$LOCK_FILE" ] && touch $LOCK_FILE
         RETVAL=0
         ;;
       1)
@@ -64,6 +66,8 @@ stop_rabbitmq () {
         RETVAL=$?
         if [ $RETVAL != 0 ] ; then
             echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
+        else
+            [ -n "$LOCK_FILE" ] && rm -rf $LOCK_FILE
         fi
     else
         echo No nodes running 

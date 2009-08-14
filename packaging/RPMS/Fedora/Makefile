@@ -29,7 +29,10 @@ prepare:
 		SPECS/rabbitmq-server.spec
 
 	cp ${COMMON_DIR}/* SOURCES/
-	sed -i 's|^DEFAULTS_FILE=.*$$|DEFAULTS_FILE=/etc/sysconfig/rabbitmq|' SOURCES/rabbitmq-server.init
+	sed -i \
+	    -e 's|^DEFAULTS_FILE=.*$$|DEFAULTS_FILE=/etc/sysconfig/rabbitmq|' \
+	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=/var/lock/subsys/$$NAME|' \
+	    SOURCES/rabbitmq-server.init
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare
