@@ -43,8 +43,7 @@
          tx_publish/1, tx_commit/3, tx_cancel/1,
          requeue/2, purge/1, delete_queue/1,
          delete_non_durable_queues/1, auto_ack_next_message/1,
-         requeue_next_n/2, length/1, foldl/3, prefetch/1,
-         set_delivered_and_advance/2
+         requeue_next_n/2, length/1, foldl/3, prefetch/1
         ]).
 
 -export([filesync/0, cache_info/0]).
@@ -267,8 +266,6 @@
 -spec(tx_commit/3 :: (queue_name(), [{msg_id(), bool()}],
                       [{msg_id(), seq_id()}]) -> 'ok').
 -spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
--spec(set_delivered_and_advance/2 ::
-      (queue_name(), {msg_id(), seq_id()}) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [{{msg_id(), seq_id()}, bool()}]) -> 'ok').
 -spec(requeue_next_n/2 :: (queue_name(), non_neg_integer()) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
@@ -322,9 +319,6 @@ tx_commit(Q, PubMsgIds, AckSeqIds)
 
 tx_cancel(MsgIds) when is_list(MsgIds) ->
     gen_server2:cast(?SERVER, {tx_cancel, MsgIds}).
-
-set_delivered_and_advance(Q, MsgSeqId) ->
-    gen_server2:cast(?SERVER, {set_delivered_and_advance, Q, MsgSeqId}).
 
 requeue(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server2:cast(?SERVER, {requeue, Q, MsgSeqIds}).
@@ -547,16 +541,24 @@ handle_cast(report_memory, State) ->
     noreply1(State #dqstate { memory_report_timer = undefined });
 handle_cast({prefetch, Q, From}, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, true, false, State),
-    ok = rabbit_queue_prefetcher:publish(From, Result),
-    noreply(State1);
-handle_cast({set_delivered_and_advance, Q, MsgSeqId}, State) ->
-    State2 =
-        case internal_deliver(Q, false, false, true, State) of
-            {ok, empty, State1} -> State1;
-            {ok, {_MsgId, _IsPersistent, _Delivered, MsgSeqId, _Rem}, State1} ->
-                State1
-        end,
-    noreply(State2).
+    Cont =
+	try
+	    ok = rabbit_queue_prefetcher:publish(From, Result),
+	    true
+	catch exit:{noproc, _} ->
+		false
+	end,
+    State3 =
+	case Cont of
+	    true ->
+		case internal_deliver(Q, false, false, true, State1) of
+		    {ok, empty, State2} -> State2;
+		    {ok, {_MsgId, _IsPersistent, _Delivered, _MsgSeqId, _Rem},
+		     State2} -> State2
+		end;
+	    false -> State1
+	end,
+    noreply(State3).
         
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
