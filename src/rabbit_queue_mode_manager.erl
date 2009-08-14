@@ -289,10 +289,10 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
         case ActivityNew of
             active -> StateN;
             disk -> StateN;
-            lowrate -> StateN #state { lowrate =
-                                       priority_queue:in(Pid, Req, Lazy) };
-            hibernate -> StateN #state { hibernate =
-                                         queue:in(Pid, Sleepy) }
+            lowrate ->
+                StateN #state { lowrate = add_to_lowrate(Pid, Req, Lazy) };
+            hibernate ->
+                StateN #state { hibernate = queue:in(Pid, Sleepy) }
         end,
     {noreply, StateN1};
 
@@ -324,6 +324,10 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+add_to_lowrate(Pid, Alloc, Lazy) ->
+    Bucket = trunc(math:log(Alloc)),
+    priority_queue:in({Pid, Bucket, Alloc}, Bucket, Lazy).
+
 find_queue(Pid, Mixed) ->
     case dict:find(Pid, Mixed) of
         {ok, Value} -> {mixed, Value};
@@ -331,96 +335,98 @@ find_queue(Pid, Mixed) ->
     end.
 
 tidy_and_sum_lazy(IgnorePid, Lazy, Mixed) ->
-    tidy_and_sum_lazy(sets:add_element(IgnorePid, sets:new()),
-                      Lazy, Mixed, 0, priority_queue:new()).
-
-tidy_and_sum_lazy(DupCheckSet, Lazy, Mixed, FreeAcc, LazyAcc) ->
-    case priority_queue:pout(Lazy) of
-        {empty, Lazy} -> {FreeAcc, LazyAcc};
-        {{value, Pid, Alloc}, Lazy1} ->
-            case sets:is_element(Pid, DupCheckSet) of
-                true ->
-                    tidy_and_sum_lazy(DupCheckSet, Lazy1, Mixed, FreeAcc,
-                                      LazyAcc);
-                false ->
-                    DupCheckSet1 = sets:add_element(Pid, DupCheckSet),
-                    case find_queue(Pid, Mixed) of
-                        {mixed, {Alloc, lowrate}} ->
-                            tidy_and_sum_lazy(DupCheckSet1, Lazy1, Mixed,
-                                              FreeAcc + Alloc, priority_queue:in
-                                              (Pid, Alloc, LazyAcc));
-                        _ ->
-                            tidy_and_sum_lazy(DupCheckSet1, Lazy1, Mixed,
-                                              FreeAcc, LazyAcc)
-                    end
-            end
-    end.
+    tidy_and_sum(IgnorePid, Mixed,
+                 fun (Lazy1) ->
+                         case priority_queue:out(Lazy1) of
+                             {empty, Lazy1} ->
+                                 {empty, Lazy1};
+                             {{value, {Pid, _Bucket, _Alloc}}, Lazy2} ->
+                                 {{value, Pid}, Lazy2}
+                         end
+                 end, fun add_to_lowrate/3, Lazy, priority_queue:new(),
+                 lowrate).
             
 tidy_and_sum_sleepy(IgnorePid, Sleepy, Mixed) ->
-    tidy_and_sum_sleepy(sets:add_element(IgnorePid, sets:new()),
-                        Sleepy, Mixed, 0, queue:new()).
+    tidy_and_sum(IgnorePid, Mixed, fun queue:out/1,
+                 fun (Pid, _Alloc, Queue) ->
+                         queue:in(Pid, Queue)
+                 end, Sleepy, queue:new(), hibernate).
 
-tidy_and_sum_sleepy(DupCheckSet, Sleepy, Mixed, FreeAcc, SleepyAcc) ->
-    case queue:out(Sleepy) of
-        {empty, Sleepy} -> {FreeAcc, SleepyAcc};
-        {{value, Pid}, Sleepy1} ->
-            case sets:is_element(Pid, DupCheckSet) of
-                true ->
-                    tidy_and_sum_sleepy(DupCheckSet, Sleepy1, Mixed, FreeAcc,
-                                        SleepyAcc);
-                false ->
-                    DupCheckSet1 = sets:add_element(Pid, DupCheckSet),
-                    case find_queue(Pid, Mixed) of
-                        {mixed, {Alloc, hibernate}} ->
-                            tidy_and_sum_sleepy(DupCheckSet1, Sleepy1, Mixed,
-                                                FreeAcc + Alloc, queue:in
-                                                (Pid, SleepyAcc));
-                        _ -> tidy_and_sum_sleepy(DupCheckSet1, Sleepy1, Mixed,
-                                                 FreeAcc, SleepyAcc)
-                    end
-            end
+tidy_and_sum(IgnorePid, Mixed, Catamorphism, Anamorphism, CataInit, AnaInit,
+             AtomExpected) ->
+    tidy_and_sum(sets:add_element(IgnorePid, sets:new()),
+                 Mixed, Catamorphism, Anamorphism, CataInit, AnaInit, 0,
+                 AtomExpected).
+
+tidy_and_sum(DupCheckSet, Mixed, Catamorphism, Anamorphism, CataInit, AnaInit,
+             AllocAcc, AtomExpected) ->
+    case Catamorphism(CataInit) of
+        {empty, CataInit} -> {AnaInit, AllocAcc};
+        {{value, Pid}, CataInit1} ->
+            {DupCheckSet2, AnaInit2, AllocAcc2} =
+                case sets:is_element(Pid, DupCheckSet) of
+                    true ->
+                        {DupCheckSet, AnaInit, AllocAcc};
+                    false ->
+                        {AnaInit1, AllocAcc1} =
+                            case find_queue(Pid, Mixed) of
+                                {mixed, {Alloc, AtomExpected}} ->
+                                    {Anamorphism(Pid, Alloc, AnaInit),
+                                     Alloc + AllocAcc};
+                                _ ->
+                                    {AnaInit, AllocAcc}
+                            end,
+                        {sets:add_element(Pid, DupCheckSet), AnaInit1,
+                         AllocAcc1}
+                end,
+            tidy_and_sum(DupCheckSet2, Mixed, Catamorphism, Anamorphism,
+                         CataInit1, AnaInit2, AllocAcc2, AtomExpected)
     end.
 
 free_upto_lazy(IgnorePid, Callbacks, Lazy, Mixed, Req) ->
-    free_upto_lazy(IgnorePid, Callbacks, Lazy, Mixed, Req,
-                   priority_queue:new()).
-
-free_upto_lazy(IgnorePid, Callbacks, Lazy, Mixed, Req, LazyAcc) ->
-    case priority_queue:pout(Lazy) of
-        {empty, Lazy} -> {priority_queue:join(Lazy, LazyAcc), Mixed, Req};
-        {{value, IgnorePid, Alloc}, Lazy1} ->
-            free_upto_lazy(IgnorePid, Callbacks, Lazy1, Mixed, Req,
-                           priority_queue:in(IgnorePid, Alloc, LazyAcc));
-        {{value, Pid, Alloc}, Lazy1} ->
-            {Module, Function, Args} = dict:fetch(Pid, Callbacks),
-            ok = erlang:apply(Module, Function, Args ++ [disk]),
-            Mixed1 = dict:erase(Pid, Mixed),
-            case Req > Alloc of
-                true -> free_upto_lazy(IgnorePid, Callbacks, Lazy1, Mixed1,
-                                       Req - Alloc, LazyAcc);
-                false -> {priority_queue:join(Lazy1, LazyAcc), Mixed1,
-                          Req - Alloc}
-            end
-    end.
+    free_from(Callbacks, Mixed,
+              fun(Lazy1, LazyAcc) ->
+                      case priority_queue:out(Lazy1) of
+                          {empty, Lazy1} ->
+                              empty;
+                          {{value, {IgnorePid, Bucket, Alloc}}, Lazy2} ->
+                              {skip, Lazy2,
+                               priority_queue:in({IgnorePid, Bucket, Alloc},
+                                                 Bucket, LazyAcc)};
+                          {{value, {Pid, _Bucket, Alloc}}, Lazy3} ->
+                              {value, Lazy3, Pid, Alloc}
+                      end
+              end, fun priority_queue:join/2, Lazy, priority_queue:new(), Req).
 
 free_upto_sleepy(IgnorePid, Callbacks, Sleepy, Mixed, Req) ->
-    free_upto_sleepy(IgnorePid, Callbacks, Sleepy, Mixed, Req, queue:new()).
+    free_from(Callbacks, Mixed,
+              fun(Sleepy1, SleepyAcc) ->
+                      case queue:out(Sleepy1) of
+                          {empty, Sleepy1} ->
+                              empty;
+                          {{value, IgnorePid}, Sleepy2} ->
+                              {skip, Sleepy2, queue:in(IgnorePid, SleepyAcc)};
+                          {{value, Pid}, Sleepy3} ->
+                              {Alloc, hibernate} = dict:fetch(Pid, Mixed),
+                              {value, Sleepy3, Pid, Alloc}
+                      end
+              end, fun queue:join/2, Sleepy, queue:new(), Req).
 
-free_upto_sleepy(IgnorePid, Callbacks, Sleepy, Mixed, Req, SleepyAcc) ->
-    case queue:out(Sleepy) of
-        {empty, Sleepy} -> {queue:join(Sleepy, SleepyAcc), Mixed, Req};
-        {{value, IgnorePid}, Sleepy1} ->
-            free_upto_sleepy(IgnorePid, Callbacks, Sleepy1, Mixed, Req,
-                             queue:in(IgnorePid, SleepyAcc));
-        {{value, Pid}, Sleepy1} ->
-            {Alloc, hibernate} = dict:fetch(Pid, Mixed),
+free_from(Callbacks, Mixed, Hylomorphism, BaseCase, CataInit, AnaInit, Req) ->
+    case Hylomorphism(CataInit, AnaInit) of
+        empty ->
+            {BaseCase(CataInit, AnaInit), Mixed, Req};
+        {skip, CataInit1, AnaInit1} ->
+            free_from(Callbacks, Mixed, Hylomorphism, BaseCase, CataInit1,
+                      AnaInit1, Req);
+        {value, CataInit1, Pid, Alloc} ->
             {Module, Function, Args} = dict:fetch(Pid, Callbacks),
             ok = erlang:apply(Module, Function, Args ++ [disk]),
             Mixed1 = dict:erase(Pid, Mixed),
             case Req > Alloc of
-                true -> free_upto_sleepy(IgnorePid, Callbacks, Sleepy1, Mixed1,
-                                         Req - Alloc, SleepyAcc);
-                false -> {queue:join(Sleepy1, SleepyAcc), Mixed1, Req - Alloc}
+                true -> free_from(Callbacks, Mixed1, Hylomorphism, BaseCase,
+                                  CataInit1, AnaInit, Req - Alloc);
+                false -> {BaseCase(CataInit1, AnaInit), Mixed1, Req - Alloc}
             end
     end.
 
@@ -431,10 +437,10 @@ free_upto(Pid, Req, State = #state { available_tokens = Avail,
                                      hibernate = Sleepy }) ->
     case Req > Avail of
         true ->
-            {SleepySum, Sleepy1} = tidy_and_sum_sleepy(Pid, Sleepy, Mixed),
+            {Sleepy1, SleepySum} = tidy_and_sum_sleepy(Pid, Sleepy, Mixed),
             case Req > Avail + SleepySum of
                 true -> %% not enough in sleepy, have a look in lazy too
-                    {LazySum, Lazy1} = tidy_and_sum_lazy(Pid, Lazy, Mixed),
+                    {Lazy1, LazySum} = tidy_and_sum_lazy(Pid, Lazy, Mixed),
                     case Req > Avail + SleepySum + LazySum of
                         true -> %% can't free enough, just return tidied state
                             State #state { lowrate = Lazy1,
