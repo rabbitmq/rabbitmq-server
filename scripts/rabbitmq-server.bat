@@ -84,10 +84,10 @@ set LOGS_BACKUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log%BACKUP_EXTENSION%"
 set SASL_LOGS_BAKCUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXTENSION%"
 
 if exist %LOGS% (
-	type %LOGS% >> %LOGS_BACKUP%
+   type %LOGS% >> %LOGS_BACKUP%
 )
 if exist %SASL_LOGS% (
-	type %SASL_LOGS% >> %SASL_LOGS_BAKCUP%
+   type %SASL_LOGS% >> %SASL_LOGS_BAKCUP%
 )
 
 rem End of log management
@@ -106,12 +106,12 @@ if "%RABBITMQ_MNESIA_DIR%"=="" (
 )
 set RABBITMQ_EBIN_ROOT=%~dp0..\ebin
 if exist "%RABBITMQ_EBIN_ROOT%\rabbit.boot" (
-	echo Using Custom Boot File "%RABBITMQ_EBIN_ROOT%\rabbit.boot"
-	set RABBITMQ_BOOT_FILE="%RABBITMQ_EBIN_ROOT%\rabbit"
-	set RABBITMQ_EBIN_PATH=
+    echo Using Custom Boot File "%RABBITMQ_EBIN_ROOT%\rabbit.boot"
+    set RABBITMQ_BOOT_FILE="%RABBITMQ_EBIN_ROOT%\rabbit"
+    set RABBITMQ_EBIN_PATH=
 ) else (
-	set RABBITMQ_BOOT_FILE=start_sasl
-	set RABBITMQ_EBIN_PATH=-pa "%RABBITMQ_EBIN_ROOT%"
+    set RABBITMQ_BOOT_FILE=start_sasl
+    set RABBITMQ_EBIN_PATH=-pa "%RABBITMQ_EBIN_ROOT%"
 )
 
 "%ERLANG_HOME%\bin\erl.exe" ^
