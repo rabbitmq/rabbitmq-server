@@ -115,7 +115,8 @@ force-snapshot: all
 stop-node:
 	-$(ERL_CALL) -q
 
-COVER_DIR=$(EBIN_DIR)
+# code coverage will be created for subdirectory "ebin" of COVER_DIR
+COVER_DIR=.
 
 start-cover: all
 	echo "cover:start(), rabbit_misc:enable_cover([\"$(COVER_DIR)\"])." | $(ERL_CALL)
