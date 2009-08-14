@@ -37,7 +37,7 @@ start_server:
 
 start-cover: all
 	$(MAKE) -C $(RABBIT_SERVER_SOURCE_ROOT) start-cover \
-		COVER_DIR=../rabbitmq-stomp/$(EBIN_DIR)
+		COVER_DIR=../rabbitmq-stomp/
 
 stop-cover:
 	$(MAKE) -C $(RABBIT_SERVER_SOURCE_ROOT) stop-cover
