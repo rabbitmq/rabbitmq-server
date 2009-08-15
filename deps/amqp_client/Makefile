@@ -62,6 +62,8 @@ LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR)
 COVER_START := -s cover start -s rabbit_misc enable_cover ../rabbitmq-erlang-client
 COVER_STOP := -s rabbit_misc report_cover ../rabbitmq-erlang-client -s cover stop
 
+MKTEMP=$$(mktemp /tmp/tmp.XXXXXXXXXX)
+
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
 # only available in R12B-3 upwards
@@ -150,7 +152,7 @@ test_suites_coverage: prepare_tests
 
 run_test_broker:
 	OK=true && \
-	TMPFILE=$$(mktemp) && \
+	TMPFILE=$(MKTEMP) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
 		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
 		-noshell -s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
@@ -182,7 +184,7 @@ test_direct_coverage: prepare_tests
 test_common_package: common_package package prepare_tests
 	$(MAKE) start_test_broker_node
 	OK=true && \
-	TMPFILE=$$(mktemp) && \
+	TMPFILE=$(MKTEMP) && \
 	    { $(LIBS_PATH) erl -noshell -pa $(TEST_DIR) \
 	    -eval 'network_client_SUITE:test(), halt().' 2>&1 | \
 		tee $$TMPFILE || OK=false; } && \
