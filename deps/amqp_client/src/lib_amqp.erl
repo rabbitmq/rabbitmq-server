@@ -26,20 +26,20 @@
 %% @private
 -module(lib_amqp).
 
--include_lib("rabbit.hrl").
--include_lib("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -compile(export_all).
 
 start_connection() ->
-    amqp_connection:start_direct("guest", "guest").
+    amqp_connection:start_direct(#amqp_params{}).
 
 start_connection(Host) ->
-    start_connection(Host, ?PROTOCOL_PORT).
+    amqp_connection:start_network(#amqp_params{host = Host}).
 
 start_connection(Host, Port) ->
-    amqp_connection:start_network("guest", "guest", Host, Port).
+    amqp_connection:start_network(#amqp_params{host = Host,
+                                               port = Port}).
 
 start_channel(Connection) ->
     amqp_connection:open_channel(Connection).
@@ -86,11 +86,7 @@ publish_internal(Fun, Channel, X, RoutingKey,
     BasicPublish = #'basic.publish'{exchange = X,
                                     routing_key = RoutingKey,
                                     mandatory = Mandatory},
-    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
-    Content = #content{class_id = ClassId,
-                       properties = Properties,
-                       properties_bin = none,
-                       payload_fragments_rev = [Payload]},
+    Content = #amqp_msg{props = Properties, payload = Payload},
     Fun(Channel, BasicPublish, Content).
 
 %%---------------------------------------------------------------------------

@@ -26,8 +26,7 @@
 %% broker and manages channels within the connection.
 -module(amqp_connection).
 
--include_lib("rabbit.hrl").
--include_lib("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -behaviour(gen_server).
@@ -35,10 +34,8 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([open_channel/1, open_channel/3]).
--export([start_direct/2,start_direct/3]).
--export([start_direct_link/2,start_direct_link/3]).
--export([start_network/4, start_network/5]).
--export([start_network_link/4, start_network_link/5]).
+-export([start_direct/1, start_direct_link/1]).
+-export([start_network/1, start_network_link/1]).
 -export([close/2]).
 
 %%---------------------------------------------------------------------------
@@ -55,91 +52,44 @@
 %% AMQP Connection API Methods
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes start_direct_link(Username, Password, "/").
-start_direct(Username, Password) ->
-    start_direct(Username, Password, <<"/">>).
-
-%% @spec (Username, Password, VHost) -> (Connection)
-%% where
-%%      Username = username() 
-%%      Password = password()
-%%      VHost = vhost()
-%%      Connection = pid()
-%%
-%% @doc Starts a direct connection to the AMQP server, assuming that
+%% Starts a direct connection to the Rabbit AMQP server, assuming that
 %% the server is running in the same process space.
-start_direct(Username, Password, VHost) ->
-    start_direct(Username, Password, VHost, false).
+start_direct(Params) -> start_direct_internal(Params, false).
 
-%% @doc Invokes start_direct_link(Username, Password, "/").
-start_direct_link(Username, Password) ->
-    start_direct(Username, Password, <<"/">>).
-
-%% @spec (Username, Password, VHost) -> (Connection)
-%% where
-%%      Username = username() 
-%%      Password = password()
-%%      VHost = vhost()
-%%      Connection = pid()
-%%
 %% @doc Starts a direct connection to the AMQP server, assuming that
 %% the server is running in the same process space. The resulting process
 %% is linked to the invoking process.
-start_direct_link(Username, Password, VHost) ->
-    start_direct(Username, Password, VHost, true).
+start_direct_link(Params) -> start_direct_internal(Params, true).
 
-%% @doc Invokes start_network(Username, Password, Host, Port, "/").
-start_network(Username, Password, Host, Port) ->
-    start_network(Username, Password, Host, Port, <<"/">>).
-
-%% @spec (Username, Password, Host, Port, VHost) -> (Connection)
-%% where
-%%      Username = username() 
-%%      Password = password()
-%%      Host = host()
-%%      Port = port_number()
-%%      VHost = vhost()
-%%      Connection = pid()
-%%
-%% @doc Starts a networked connection to the AMQP server.
-start_network(Username, Password, Host, Port, VHost) ->
-    start_network(Username, Password, Host, Port, VHost, false).
-    
-%% @doc Invokes start_network_link(Username, Password, Host, Port, "/").
-start_network_link(Username, Password, Host, Port) ->
-    start_network_link(Username, Password, Host, Port, <<"/">>).
-
-%% @spec (Username, Password, Host, Port, VHost) -> (Connection)
-%% where
-%%      Username = username() 
-%%      Password = password()
-%%      Host = host()
-%%      Port = port_number()
-%%      VHost = vhost()
-%%      Connection = pid()
-%%
-%% @doc Starts a networked connection to the AMQP server. The resulting 
-%% process is linked to the invoking process.
-start_network_link(Username, Password, Host, Port, VHost) ->
-    start_network(Username, Password, Host, Port, VHost, true).
-
-%%---------------------------------------------------------------------------
-%% Internal connection start functions
-%%---------------------------------------------------------------------------
-
-start_direct(Username, Password, VHost, ProcLink) ->
-    InitialState = #connection_state{username = Username,
-                                     password = Password,
-                                     vhostpath = VHost},
+start_direct_internal(#amqp_params{username     = User,
+                                   password     = Password,
+                                   virtual_host = VHost},
+                      ProcLink) ->
+    InitialState = #connection_state{username  = User,
+                                     password  = Password,
+                                     vhostpath = list_to_binary(VHost)},
     {ok, Pid} = start_internal(InitialState, amqp_direct_driver, ProcLink),
     Pid.
 
-start_network(Username, Password, Host, Port, VHost, ProcLink) ->
-    InitialState = #connection_state{username = Username,
-                                     password = Password,
+
+%% Starts a networked conection to a remote AMQP server.
+start_network(Params) -> start_network_internal(Params, false).
+
+%% @doc Starts a networked connection to the AMQP server. The resulting 
+%% process is linked to the invoking process.
+start_network_link(Params) -> start_network_internal(Params, true).
+
+start_network_internal(#amqp_params{username     = User,
+                                    password     = Password,
+                                    virtual_host = VHost,
+                                    host         = Host,
+                                    port         = Port},
+                       ProcLink) ->
+    InitialState = #connection_state{username   = User,
+                                     password   = Password,
                                      serverhost = Host,
-                                     vhostpath = VHost,
-                                     port = Port},
+                                     vhostpath  = list_to_binary(VHost),
+                                     port       = Port},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
 

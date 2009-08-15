@@ -27,8 +27,7 @@
 
 -behaviour(gen_server).
 
--include_lib("rabbit.hrl").
--include_lib("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -export([init/1, terminate/2, code_change/3, handle_call/3,
@@ -73,11 +72,10 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 
 %% @private
 handle_info({#'basic.deliver'{},
-            {content, ClassId, _Props, PropertiesBin, [Payload] }},
+             #amqp_msg{props = Props, payload = Payload}},
             State = #rpc_server_state{handler = Fun, channel = Channel}) ->
     #'P_basic'{correlation_id = CorrelationId,
-               reply_to = Q} =
-               rabbit_framing:decode_properties(ClassId, PropertiesBin),
+               reply_to = Q} = Props,
     Response = Fun(Payload),
     Properties = #'P_basic'{correlation_id = CorrelationId},
     lib_amqp:publish(Channel, <<>>, Q, Response, Properties),

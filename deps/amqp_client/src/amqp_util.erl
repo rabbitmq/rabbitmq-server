@@ -26,8 +26,8 @@
 %% @private
 -module(amqp_util).
 
--include_lib("rabbit.hrl").
--include_lib("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -export([message_payload/1]).
 -export([binary/1]).

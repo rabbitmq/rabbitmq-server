@@ -23,6 +23,15 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
+-record(amqp_msg, {props, payload}).
+
+-record(amqp_params, {username     = "guest",
+                      password     = "guest",
+                      virtual_host = "/",
+                      host         = "localhost",
+                      %% TODO: replace with ?PROTOCOL_PORT
+                      port         = 5672}).
+
 -record(connection_state, {username,
                            password,
                            serverhost,

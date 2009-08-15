@@ -25,8 +25,8 @@
 
 -module(test_util).
 
--include_lib("rabbit.hrl").
--include_lib("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("amqp_client.hrl").
 
@@ -48,7 +48,7 @@
 %%
 %% This is an example of how the client interaction should work
 %%
-%%   Connection = amqp_connection:start(User, Password, Host),
+%%   Connection = amqp_connection:start(#amqp_params{}),
 %%   Channel = amqp_connection:open_channel(Connection),
 %%   %%...do something useful
 %%   ChannelClose = #'channel.close'{ %% set the appropriate fields },
@@ -126,19 +126,14 @@ get_and_assert_empty(Channel, Q) ->
 
 get_and_assert_equals(Channel, Q, Payload) ->
     Content = lib_amqp:get(Channel, Q),
-    #content{payload_fragments_rev = PayloadFragments} = Content,
-    ?assertMatch([Payload], PayloadFragments).
+    #amqp_msg{payload = Payload2} = Content,
+    ?assertMatch(Payload, Payload2).
 
 basic_get_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
     {ok, Q} = setup_publish(Channel),
-    %% TODO: This could be refactored to use get_and_assert_equals,
-    %% get_and_assert_empty .... would require another bug though :-)
-    Content = lib_amqp:get(Channel, Q),
-    #content{payload_fragments_rev = PayloadFragments} = Content,
-    ?assertMatch([<<"foobar">>], PayloadFragments),
-    BasicGetEmpty = lib_amqp:get(Channel, Q, false),
-    ?assertMatch('basic.get_empty', BasicGetEmpty),
+    get_and_assert_equals(Channel, Q, <<"foobar">>),
+    get_and_assert_empty(Channel, Q),
     lib_amqp:teardown(Connection, Channel).
 
 basic_return_test(Connection) ->
@@ -157,8 +152,8 @@ basic_return_test(Connection) ->
             #'basic.return'{reply_text = ReplyText,
                             exchange = X} = BasicReturn,
             ?assertMatch(<<"unroutable">>, ReplyText),
-            #content{payload_fragments_rev = Payload2} = Content,
-            ?assertMatch([Payload], Payload2);
+            #amqp_msg{payload = Payload2} = Content,
+            ?assertMatch(Payload, Payload2);
         WhatsThis ->
             %% TODO investigate where this comes from
             io:format("Spurious message ~p~n", [WhatsThis])
@@ -295,6 +290,16 @@ producer_loop(Channel, RoutingKey, N) ->
 basic_reject_test(Connection) ->
     lib_amqp:close_connection(Connection).
 
+large_content_test(Connection) ->
+    Channel = lib_amqp:start_channel(Connection),
+    Q = lib_amqp:declare_private_queue(Channel),
+    {A1,A2,A3} = now(), random:seed(A1, A2, A3),
+    F = list_to_binary([random:uniform(256)-1 || _ <- lists:seq(1, 1000)]),
+    Payload = list_to_binary([[F || _ <- lists:seq(1, 1000)]]),
+    lib_amqp:async_publish(Channel, <<"">>, Q, Payload),
+    get_and_assert_equals(Channel, Q, Payload),
+    lib_amqp:teardown(Connection, Channel).
+
 %% ----------------------------------------------------------------------------
 %% Test for the network client
 %% Sends a bunch of messages and immediatly closes the connection without
@@ -330,7 +335,7 @@ pc_producer_loop(Channel, X, Key, Payload, NRemaining) ->
 pc_consumer_loop(Channel, Payload, NReceived) ->
     receive
         {#'basic.deliver'{},
-         #content{payload_fragments_rev = [DeliveredPayload]}} ->
+         #amqp_msg{payload = DeliveredPayload}} ->
             case DeliveredPayload of
                 Payload ->
                     pc_consumer_loop(Channel, Payload, NReceived + 1);
