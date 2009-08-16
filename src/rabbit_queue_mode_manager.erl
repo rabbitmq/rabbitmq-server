@@ -197,8 +197,9 @@ handle_call({pin_to_disk, Pid}, _From,
             false ->
                 case find_queue(Pid, Mixed) of
                     {mixed, {OAlloc, _OActivity}} ->
-                        Mixed1 = send_to_disk(Callbacks, Mixed, Pid),
-                        {ok, State #state { mixed_queues = Mixed1,
+                        ok = set_queue_mode(Callbacks, Pid, disk),
+                        {ok, State #state { mixed_queues =
+                                            dict:erase(Pid, Mixed),
                                             available_tokens = Avail + OAlloc,
                                             disk_mode_pins =
                                             sets:add_element(Pid, Pins)
@@ -257,8 +258,9 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
                                 State #state { available_tokens = Avail1 }),
                 case Req > Avail2 of
                     true -> %% nowt we can do, send to disk
-                        Mixed2 = send_to_disk(Callbacks, Mixed1, Pid),
-                        {State1 #state { mixed_queues = Mixed2 }, disk};
+                        ok = set_queue_mode(Callbacks, Pid, disk),
+                        {State1 #state { mixed_queues =
+                                         dict:erase(Pid, Mixed1) }, disk};
                     false -> %% keep mixed
                         {State1 #state
                          { mixed_queues =
@@ -280,10 +282,7 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
                                 %% reason, so stay as disk
                                 {State1, disk};
                             false -> %% can go to mixed mode
-                                {Module, Function, Args} =
-                                    dict:fetch(Pid, Callbacks),
-                                ok = erlang:apply(Module, Function,
-                                                  Args ++ [mixed]),
+                                set_queue_mode(Callbacks, Pid, mixed),
                                 {State1 #state {
                                    mixed_queues =
                                    dict:store(Pid, {Req, MixedActivity}, Mixed1),
@@ -348,10 +347,9 @@ find_queue(Pid, Mixed) ->
         error -> disk
     end.
 
-send_to_disk(Callbacks, Mixed, Pid) ->
+set_queue_mode(Callbacks, Pid, Mode) ->
     {Module, Function, Args} = dict:fetch(Pid, Callbacks),
-    ok = erlang:apply(Module, Function, Args ++ [disk]),
-    dict:erase(Pid, Mixed).
+    erlang:apply(Module, Function, Args ++ [Mode]).
 
 tidy_and_sum_lazy(IgnorePids, Lazy, Mixed) ->
     tidy_and_sum(lowrate, Mixed,
@@ -434,7 +432,8 @@ free_from(Callbacks, Hylomorphism, BaseCase, Mixed, CataInit, AnaInit, Req) ->
             free_from(Callbacks, Hylomorphism, BaseCase, Mixed, CataInit1,
                       AnaInit1, Req);
         {value, CataInit1, Pid, Alloc} ->
-            Mixed1 = send_to_disk(Callbacks, Mixed, Pid),
+            Mixed1 = dict:erase(Pid, Mixed),
+            ok = set_queue_mode(Callbacks, Pid, disk),
             case Req > Alloc of
                 true -> free_from(Callbacks, Hylomorphism, BaseCase, Mixed1,
                                   CataInit1, AnaInit, Req - Alloc);

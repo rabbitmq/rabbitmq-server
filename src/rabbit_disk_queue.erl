@@ -545,8 +545,14 @@ handle_cast({prefetch, Q, From}, State) ->
 	try
 	    ok = rabbit_queue_prefetcher:publish(From, Result),
 	    true
-	catch exit:{noproc, _} ->
-		false
+	catch
+            exit:{noproc, _} ->
+                %% prefetcher was stopped *before* we sent message
+		false;
+            exit:{normal, _} ->
+                %% prefetcher was stopped *after* our message was
+                %% sent, but before it was processed
+                false
 	end,
     State3 =
 	case Cont of

@@ -420,7 +420,7 @@ deliver(State = #mqstate { msg_buf = MsgBuf, queue = Q,
                             { msg_buf = queue:join(Fetched, MsgBuf2),
                               prefetcher = case Status of
                                                finished -> undefined;
-                                               _ -> Prefetcher
+                                               continuing -> Prefetcher
                                            end })
             end
     end.
@@ -595,7 +595,7 @@ purge(State = #mqstate { queue = Q, mode = mixed, length = Length,
     rabbit_disk_queue:purge(Q),
     {Length,
      State #mqstate { msg_buf = queue:new(), length = 0, memory_size = 0,
-                      memory_loss = Loss + QSize }}.
+                      memory_loss = Loss + QSize, prefetcher = undefined }}.
 
 delete_queue(State = #mqstate { queue = Q, memory_size = QSize,
                                 memory_loss = Loss, prefetcher = Prefetcher
@@ -606,7 +606,7 @@ delete_queue(State = #mqstate { queue = Q, memory_size = QSize,
     end,
     ok = rabbit_disk_queue:delete_queue(Q),
     {ok, State #mqstate { length = 0, memory_size = 0, msg_buf = queue:new(),
-                          memory_loss = Loss + QSize }}.
+                          memory_loss = Loss + QSize, prefetcher = undefined }}.
 
 length(#mqstate { length = Length }) ->
     Length.
