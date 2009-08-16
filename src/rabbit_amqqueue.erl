@@ -232,7 +232,7 @@ set_mode_pin(VHostPath, Queue, DiskBin)
          fun(Q) -> case Disk of
                        true -> rabbit_queue_mode_manager:pin_to_disk
                                  (Q #amqqueue.pid);
-                       false -> rabbit_queue_mode_manager:unpin_to_disk
+                       false -> rabbit_queue_mode_manager:unpin_from_disk
                                   (Q #amqqueue.pid)
                    end
          end).

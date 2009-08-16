@@ -102,7 +102,7 @@ start_link(Q) ->
 init(Q = #amqqueue { name = QName, durable = Durable }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     ok = rabbit_queue_mode_manager:register
-           (self(), rabbit_amqqueue, set_mode, [self()]),
+           (self(), false, rabbit_amqqueue, set_mode, [self()]),
     {ok, MS} = rabbit_mixed_queue:init(QName, Durable),
     State = #q{q = Q,
                owner = none,

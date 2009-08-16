@@ -379,7 +379,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %% Otherwise, the gen_server will be immediately terminated.
     process_flag(trap_exit, true),
     ok = rabbit_queue_mode_manager:register
-           (self(), rabbit_disk_queue, set_mode, []),
+           (self(), true, rabbit_disk_queue, set_mode, []),
     Node = node(),
     ok = 
         case mnesia:change_table_copy_type(rabbit_disk_queue, Node,
