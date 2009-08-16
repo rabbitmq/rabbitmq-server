@@ -23,11 +23,15 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
+%% @doc This is a utility module that is used to expose an arbitrary function
+%% via an asynchronous RPC over AMQP mechanism. It frees the implementor of
+%% a simple function from having to plumb this into AMQP. Note that the 
+%% RPC server does not handle any data encoding, so it is up to the callback
+%% function to marshall and unmarshall message payloads accordingly.
 -module(amqp_rpc_server).
 
 -behaviour(gen_server).
 
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -export([init/1, terminate/2, code_change/3, handle_call/3,
@@ -40,10 +44,24 @@
 %% API
 %%--------------------------------------------------------------------------
 
+%% @spec (Connection, Queue, RpcHandler) -> RpcServer
+%% where
+%%      Connection = pid()
+%%      Queue = binary()
+%%      RpcHandler = function()
+%%      RpcServer = pid()
+%% @doc Starts a new RPC server instance that receives requests via a
+%% specified queue and dispatches them to a specified handler function. This
+%% function returns the pid of the RPC server that can be used to stop the
+%% server.
 start(Connection, Queue, Fun) ->
     {ok, Pid} = gen_server:start(?MODULE, [Connection, Queue, Fun], []),
     Pid.
 
+%% @spec (RpcServer) -> ok
+%% where
+%%      RpcServer = pid()
+%% @doc Stops an exisiting RPC server.
 stop(Pid) ->
     gen_server:call(Pid, stop, infinity).
 

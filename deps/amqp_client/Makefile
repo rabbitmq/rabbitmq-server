@@ -37,7 +37,7 @@ DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  file:consult("rabbit_common.app"), \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
-VERSION=1.7.0
+VERSION=0.0.0
 PACKAGE=amqp_client
 PACKAGE_NAME=$(PACKAGE).ez
 COMMON_PACKAGE=rabbit_common
@@ -114,8 +114,8 @@ $(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
 	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
 
 doc: $(DOC_DIR)/overview.edoc $(SOURCES)
-	erl -noshell -eval 'edoc:application(amqp_client, ".", [])' \
-		-run init stop
+	$(LIBS_PATH) erl -noshell -eval 'edoc:application(amqp_client, ".", \
+	[{preprocess, true}])' -run init stop
 
 
 clean:

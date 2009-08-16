@@ -26,7 +26,6 @@
 %% @private
 -module(amqp_network_driver).
 
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).

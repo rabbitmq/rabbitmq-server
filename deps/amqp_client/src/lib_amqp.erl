@@ -26,7 +26,6 @@
 %% @private
 -module(lib_amqp).
 
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -compile(export_all).

@@ -23,10 +23,13 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 
 %% @doc This module is responsible for maintaining a connection to an AMQP
-%% broker and manages channels within the connection.
+%% broker and manages channels within the connection. This module is used to
+%% open and close connections to the broker as well as creating new channels
+%% within a connection. Each amqp_connection process maintains a mapping of
+%% the channels that were created by that connection process. Each resulting
+%% amqp_channel process is linked to the parent connection process.
 -module(amqp_connection).
 
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -behaviour(gen_server).
@@ -42,21 +45,35 @@
 %% Type Definitions
 %%---------------------------------------------------------------------------
 
-%% @type username() = binary(). The name of a user registered with the broker.
-%% @type password() = binary(). A user's password.
-%% @type vhost() = binary(). The name of a virtual host in the broker.
-%% @type host() = binary(). The hostname of the broker.
-%% @type port_number() = integer(). The port the broker is listening on.
+%% @type amqp_params() = #amqp_params{}.
+%% As defined in amqp_client.hrl. It contains the following fields:
+%% <ul>
+%% <li>username :: string() - The name of a user registered with the broker, 
+%%     defaults to "guest"</li>
+%% <li>password :: string() - The user's password, defaults to "guest"</li>
+%% <li>virtual_host :: string() - The name of a virtual host in the broker,
+%%     defaults to "/"</li>
+%% <li>host :: string() - The hostname of the broker,
+%%     defaults to "localhost"</li>
+%% <li>port :: integer() - The port the broker is listening on,
+%%     defaults to 5672</li>
+%% </ul>
 
 %%---------------------------------------------------------------------------
 %% AMQP Connection API Methods
 %%---------------------------------------------------------------------------
 
-%% Starts a direct connection to the Rabbit AMQP server, assuming that
+%% @spec (amqp_params()) -> [Connection]
+%% where
+%%      Connection = pid()
+%% @doc Starts a direct connection to an AMQP server, assuming that
 %% the server is running in the same process space.
 start_direct(Params) -> start_direct_internal(Params, false).
 
-%% @doc Starts a direct connection to the AMQP server, assuming that
+%% @spec (amqp_params()) -> [Connection]
+%% where
+%%      Connection = pid()
+%% @doc Starts a direct connection to an AMQP server, assuming that
 %% the server is running in the same process space. The resulting process
 %% is linked to the invoking process.
 start_direct_link(Params) -> start_direct_internal(Params, true).
@@ -71,11 +88,16 @@ start_direct_internal(#amqp_params{username     = User,
     {ok, Pid} = start_internal(InitialState, amqp_direct_driver, ProcLink),
     Pid.
 
-
-%% Starts a networked conection to a remote AMQP server.
+%% @spec (amqp_params()) -> [Connection]
+%% where
+%%      Connection = pid()
+%% @doc Starts a networked conection to a remote AMQP server.
 start_network(Params) -> start_network_internal(Params, false).
 
-%% @doc Starts a networked connection to the AMQP server. The resulting 
+%% @spec (amqp_params()) -> [Connection]
+%% where
+%%      Connection = pid()
+%% @doc Starts a networked connection to a remote AMQP server. The resulting 
 %% process is linked to the invoking process.
 start_network_link(Params) -> start_network_internal(Params, true).
 
@@ -103,7 +125,8 @@ start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
 %% Open and close channels API Methods
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none, "").
+%% @doc Invokes open_channel(ConnectionPid, none, ""). 
+%% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none, "").
 
@@ -113,8 +136,7 @@ open_channel(ConnectionPid) ->
 %%      OutOfBand = string()
 %%      ConnectionPid = pid()
 %%      ChannelPid = pid()
-%%
-%% @doc Opens a channel without having to specify a channel number.
+%% @doc Opens an AMQP channel.
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
 open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
@@ -122,7 +144,13 @@ open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
                     {open_channel, ChannelNumber,
                      amqp_util:binary(OutOfBand)}, infinity).
 
-%% Closes the AMQP connection
+%% @type close() = #'connection.close'{}.
+%% The fields of this record are defined in the AMQP specification.
+%% @spec (ConnectionPid, Close) -> ok
+%% where
+%%      ConnectionPid = pid()
+%%      Close = close()
+%% @doc Closes the AMQP connection
 close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close, infinity).
 
 %%---------------------------------------------------------------------------
@@ -180,7 +208,6 @@ register_channel(ChannelNumber, ChannelPid,
 %% This will be called when a channel process exits and needs to be
 %% deregistered
 %% This peforms the reverse mapping so that you can lookup a channel pid
-%% Let's hope that this lookup doesn't get too expensive .......
 unregister_channel(ChannelPid,
                    State = #connection_state{channels = Channels0} )
         when is_pid(ChannelPid)->

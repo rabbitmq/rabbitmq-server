@@ -23,9 +23,12 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
+
 -record(amqp_msg, {props, payload}).
 
--record(amqp_params, {username     = "guest",
+-record(amqp_params, {username     = "guest", 
                       password     = "guest",
                       virtual_host = "/",
                       host         = "localhost",

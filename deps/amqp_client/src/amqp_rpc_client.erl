@@ -23,9 +23,13 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
+%% @doc This module allows the simple execution of an asynchronous RPC over 
+%% AMQP. It frees a client programmer of the necessary having to AMQP
+%% plumbing. Note that the this module does not handle any data encoding,
+%% so it is up to the caller to marshall and unmarshall message payloads 
+%% accordingly.
 -module(amqp_rpc_client).
 
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -behaviour(gen_server).
@@ -39,15 +43,33 @@
 %% API
 %%--------------------------------------------------------------------------
 
+%% @spec (Connection, Queue) -> RpcClient
+%% where
+%%      Connection = pid()
+%%      Queue = binary()
+%%      RpcClient = pid()
+%% @doc Starts a new RPC client instance that sends requests to a
+%% specified queue. This function returns the pid of the RPC client process
+%% that can be used to invoke RPCs and stop the client.
 start(Connection, Queue) ->
     {ok, Pid} = gen_server:start(?MODULE, [Connection, Queue], []),
     Pid.
 
+%% @spec (RpcClient) -> ok
+%% where
+%%      RpcClient = pid()
+%% @doc Stops an exisiting RPC client.
 stop(Pid) ->
     gen_server:call(Pid, stop, infinity).
 
-call(RpcClientPid, Payload) ->
-    gen_server:call(RpcClientPid, {call, Payload}, infinity).
+%% @spec (RpcClient, Payload) -> ok
+%% where
+%%      RpcClient = pid()
+%%      Payload = binary()
+%% @doc Invokes an RPC. Note the caller of this function is responsible for
+%% encoding the request and decoding the response.
+call(RpcClient, Payload) ->
+    gen_server:call(RpcClient, {call, Payload}, infinity).
 
 %%--------------------------------------------------------------------------
 %% Plumbing
