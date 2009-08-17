@@ -622,7 +622,8 @@ start_memory_timer(State) ->
 
 report_memory(Hibernating, State) ->
     Bytes = memory_use(State),
-    rabbit_queue_mode_manager:report_memory(self(), 2.5 * Bytes, Hibernating).
+    rabbit_queue_mode_manager:report_memory(self(), trunc(2.5 * Bytes),
+                                            Hibernating).
 
 memory_use(#dqstate { operation_mode = ram_disk,
                       file_summary = FileSummary,

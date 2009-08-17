@@ -102,7 +102,7 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
--spec(set_mode_pin/3 :: (binary(), binary(), binary()) -> any()).
+-spec(set_mode_pin/3 :: (vhost(), resource_name(), ('disk'|'mixed')) -> any()).
 -spec(set_mode/2 :: (pid(), ('disk' | 'mixed')) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), bool()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
@@ -225,9 +225,8 @@ list(VHostPath) ->
 
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
-set_mode_pin(VHostPath, Queue, DiskBin)
+set_mode_pin(VHostPath, Queue, Disk)
   when is_binary(VHostPath) andalso is_binary(Queue) ->
-    Disk = list_to_atom(binary_to_list(DiskBin)),
     with(rabbit_misc:r(VHostPath, queue, Queue),
          fun(Q) -> case Disk of
                        true -> rabbit_queue_mode_manager:pin_to_disk

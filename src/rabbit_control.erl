@@ -289,12 +289,14 @@ action(Command, Node, Args, Inform) ->
 action(pin_queue_to_disk, Node, VHost, [Queue], Inform) ->
     Inform("Pinning queue ~p in vhost ~p to disk",
            [Queue, VHost]),
-    call(Node, {rabbit_amqqueue, set_mode_pin, [VHost, Queue, "true"]});
+    rpc_call(Node, rabbit_amqqueue, set_mode_pin,
+             [list_to_binary(VHost), list_to_binary(Queue), true]);
     
 action(unpin_queue_from_disk, Node, VHost, [Queue], Inform) ->
     Inform("Unpinning queue ~p in vhost ~p from disk",
            [Queue, VHost]),
-    call(Node, {rabbit_amqqueue, set_mode_pin, [VHost, Queue, "false"]});
+    rpc_call(Node, rabbit_amqqueue, set_mode_pin,
+             [list_to_binary(VHost), list_to_binary(Queue), false]);
     
 action(set_permissions, Node, VHost, [Username, CPerm, WPerm, RPerm], Inform) ->
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
