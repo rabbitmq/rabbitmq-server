@@ -39,7 +39,7 @@
          terminate/2, code_change/3]).
 
 -export([register/5, report_memory/3, report_memory/5, info/0,
-         pin_to_disk/1, unpin_from_disk/1]).
+         pin_to_disk/1, unpin_from_disk/1, conserve_memory/2]).
 
 -define(TOTAL_TOKENS, 10000000).
 -define(ACTIVITY_THRESHOLD, 25).
@@ -58,6 +58,8 @@
              'ok').
 -spec(pin_to_disk/1 :: (pid()) -> 'ok').
 -spec(unpin_from_disk/1 :: (pid()) -> 'ok').
+-spec(info/0 :: () -> [{atom(), any()}]).
+-spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
 
 -endif.
 
@@ -68,7 +70,8 @@
                  lowrate,
                  hibernate,
                  disk_mode_pins,
-                 unevictable
+                 unevictable,
+                 alarmed
                }).
 
 %% Token-credit based memory management
@@ -171,8 +174,12 @@ report_memory(Pid, Memory, Gain, Loss, Hibernating) ->
 info() ->
     gen_server2:call(?SERVER, info).
 
+conserve_memory(_Pid, Conserve) ->
+    gen_server2:pcast(?SERVER, 9, {conserve_memory, Conserve}).
+
 init([]) ->
     process_flag(trap_exit, true),
+    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
     %% todo, fix up this call as os_mon may not be running
     {MemTotal, MemUsed, _BigProc} = memsup:get_memory_data(),
     MemAvail = MemTotal - MemUsed,
@@ -183,7 +190,8 @@ init([]) ->
                   lowrate = priority_queue:new(),
                   hibernate = queue:new(),
                   disk_mode_pins = sets:new(),
-                  unevictable = sets:new()
+                  unevictable = sets:new(),
+                  alarmed = false
                 }}.
 
 handle_call({pin_to_disk, Pid}, _From,
@@ -236,7 +244,8 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
                              available_tokens = Avail,
                              callbacks = Callbacks,
                              disk_mode_pins = Pins,
-                             tokens_per_byte = TPB }) ->
+                             tokens_per_byte = TPB,
+                             alarmed = Alarmed }) ->
     Req = rabbit_misc:ceil(TPB * Memory),
     LowRate = case {BytesGained, BytesLost} of
                   {undefined, _} -> false;
@@ -269,7 +278,7 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
                          MixedActivity}
                 end;
             disk ->
-                case sets:is_element(Pid, Pins) of
+                case sets:is_element(Pid, Pins) orelse Alarmed of
                     true ->
                         {State, disk};
                     false ->
@@ -313,7 +322,10 @@ handle_cast({register, Pid, IsUnevictable, Module, Function, Args},
     {noreply, State #state { callbacks = dict:store
                              (Pid, {Module, Function, Args}, Callbacks),
                              unevictable = Unevictable1
-                           }}.
+                           }};
+
+handle_cast({conserve_memory, Conserve}, State) ->
+    {noreply, State #state { alarmed = Conserve }}.
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state { available_tokens = Avail,
