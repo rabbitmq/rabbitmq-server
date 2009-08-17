@@ -88,7 +88,7 @@ get_memory_data(State) ->
 
 %%----------------------------------------------------------------------------
 
-%% A line looks like "Foo bar: 123456"
+%% A line looks like "Foo bar: 123456."
 parse_line(Line) ->
     [Name, RHS | _Rest] = string:tokens(Line, ":"),
     case Name of
