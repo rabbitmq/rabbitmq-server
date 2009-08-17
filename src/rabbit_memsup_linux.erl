@@ -31,36 +31,74 @@
 
 -module(rabbit_memsup_linux).
 
--export([init/0, update/2, get_memory_data/1]).
+-behaviour(gen_server).
 
--record(state, {alarmed,
-                total_memory,
-                allocated_memory}).
+-export([start_link/0]).
+
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-export([update/0]).
+
+-define(SERVER, memsup). %% must be the same as the standard memsup
+
+-define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
+
+-record(state, {memory_fraction, alarmed, timeout, timer}).   
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(state() :: #state { alarmed :: boolean(),
-                          total_memory :: ('undefined' | non_neg_integer()),
-                          allocated_memory :: ('undefined' | non_neg_integer())
-                        }).
-
--spec(init/0 :: () -> state()).
--spec(update/2 :: (float(), state()) -> state()).
--spec(get_memory_data/1 :: (state()) -> {non_neg_integer(), non_neg_integer(),
-                                         ('undefined' | pid())}).
-
+-spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(update/0 :: () -> 'ok').
+     
 -endif.
 
 %%----------------------------------------------------------------------------
 
-init() -> 
-    #state{alarmed = false,
-           total_memory = undefined,
-           allocated_memory = undefined}.
+start_link() ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-update(MemoryFraction, State = #state { alarmed = Alarmed }) ->
+
+update() ->
+    gen_server:cast(?SERVER, update).
+
+%%----------------------------------------------------------------------------
+
+init(_Args) -> 
+    Fraction = os_mon:get_env(memsup, system_memory_high_watermark),
+    TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
+    {ok, #state{alarmed = false, 
+                memory_fraction = Fraction, 
+                timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
+                timer = TRef}}.
+
+start_timer(Timeout) ->
+    {ok, TRef} = timer:apply_interval(Timeout, ?MODULE, update, []),
+    TRef.
+
+%% Export the same API as the real memsup. Note that
+%% get_sysmem_high_watermark gives an int in the range 0 - 100, while
+%% set_sysmem_high_watermark takes a float in the range 0.0 - 1.0.
+handle_call(get_sysmem_high_watermark, _From, State) ->
+    {reply, trunc(100 * State#state.memory_fraction), State};
+
+handle_call({set_sysmem_high_watermark, Float}, _From, State) ->
+    {reply, ok, State#state{memory_fraction = Float}};
+
+handle_call(get_check_interval, _From, State) ->
+    {reply, State#state.timeout, State};
+
+handle_call({set_check_interval, Timeout}, _From, State) ->
+    {ok, cancel} = timer:cancel(State#state.timer),
+    {reply, ok, State#state{timeout = Timeout, timer = start_timer(Timeout)}};
+
+handle_call(_Request, _From, State) -> 
+    {noreply, State}.
+
+handle_cast(update, State = #state{alarmed = Alarmed,
+                                   memory_fraction = MemoryFraction}) -> 
     File = read_proc_file("/proc/meminfo"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line/1, Lines)),
@@ -78,11 +116,19 @@ update(MemoryFraction, State = #state { alarmed = Alarmed }) ->
         _ ->
             ok
     end,
-    State#state{alarmed = NewAlarmed,
-                total_memory = MemTotal, allocated_memory = MemUsed}.
+    {noreply,  State#state{alarmed = NewAlarmed}};
 
-get_memory_data(State) ->
-    {State#state.total_memory, State#state.allocated_memory, undefined}.
+handle_cast(_Request, State) -> 
+    {noreply, State}.
+
+handle_info(_Info, State) -> 
+    {noreply, State}.
+
+terminate(_Reason, _State) -> 
+    ok.
+
+code_change(_OldVsn, State, _Extra) -> 
+    {ok, State}.
 
 %%----------------------------------------------------------------------------
 
@@ -106,10 +152,5 @@ read_proc_file(IoDevice, Acc) ->
 
 %% A line looks like "FooBar: 123456 kB"
 parse_line(Line) ->
-    [Name, RHS | _Rest] = string:tokens(Line, ":"),
-    [Value | UnitsRest] = string:tokens(RHS, " "),
-    Value1 = case UnitsRest of
-                 [] -> list_to_integer(Value); %% no units
-                 ["kB"] -> list_to_integer(Value) * 1024
-             end,
-    {list_to_atom(Name), Value1}.
+    [Name, Value | _] = string:tokens(Line, ": "),   
+    {list_to_atom(Name), list_to_integer(Value)}.
