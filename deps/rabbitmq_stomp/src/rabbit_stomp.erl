@@ -274,9 +274,20 @@ adhoc_convert_headers(Headers) ->
                 end, [], Headers).
 
 send_frame(Frame, State = #state{socket = Sock}) ->
+    %% We ignore certain errors here, as we will be receiving an
+    %% asynchronous notification of the same (or a related) fault
+    %% shortly anyway. See bug 21365.
     %% io:format("Sending ~p~n", [Frame]),
-    ok = gen_tcp:send(Sock, stomp_frame:serialize(Frame)),
-    State.
+    case gen_tcp:send(Sock, stomp_frame:serialize(Frame)) of
+        ok -> State;
+        {error, closed} -> State;
+        {error, enotconn} -> State;
+        {error, Code} ->
+            error_logger:error_msg("Error sending STOMP frame ~p: ~p~n",
+                                   [Frame#stomp_frame.command,
+                                    Code]),
+            State
+    end.
 
 send_frame(Command, Headers, BodyFragments, State) ->
     send_frame(#stomp_frame{command = Command,
