@@ -183,10 +183,13 @@ init([]) ->
     %% todo, fix up this call as os_mon may not be running
     {MemTotal, MemUsed, _BigProc} = memsup:get_memory_data(),
     MemAvail = MemTotal - MemUsed,
+    TPB = if MemAvail == 0 -> 0;
+             true -> ?TOTAL_TOKENS / MemAvail
+          end,
     {ok, #state { available_tokens = ?TOTAL_TOKENS,
                   mixed_queues = dict:new(),
                   callbacks = dict:new(),
-                  tokens_per_byte = ?TOTAL_TOKENS / MemAvail,
+                  tokens_per_byte = TPB,
                   lowrate = priority_queue:new(),
                   hibernate = queue:new(),
                   disk_mode_pins = sets:new(),
@@ -350,7 +353,9 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 add_to_lowrate(Pid, Alloc, Lazy) ->
-    Bucket = trunc(math:log(Alloc)), %% log base e
+    Bucket = if Alloc == 0 -> 0; %% can't take log(0)
+                true -> trunc(math:log(Alloc)) %% log base e
+             end,
     priority_queue:in({Pid, Bucket, Alloc}, Bucket, Lazy).
 
 find_queue(Pid, Mixed) ->
