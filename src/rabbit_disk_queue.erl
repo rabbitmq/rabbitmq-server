@@ -541,19 +541,12 @@ handle_cast(report_memory, State) ->
     noreply1(State #dqstate { memory_report_timer = undefined });
 handle_cast({prefetch, Q, From}, State) ->
     {ok, Result, State1} = internal_deliver(Q, true, true, false, State),
-    Cont =
-	try
-	    ok = rabbit_queue_prefetcher:publish(From, Result),
-	    true
-	catch
-            exit:{noproc, _} ->
-                %% prefetcher was stopped *before* we sent message
-		false;
-            exit:{normal, _} ->
-                %% prefetcher was stopped *after* our message was
-                %% sent, but before it was processed
-                false
-	end,
+    Cont = rabbit_misc:with_exit_handler(
+             fun () -> false end,
+             fun () ->
+                     ok = rabbit_queue_prefetcher:publish(From, Result),
+                     true
+             end),
     State3 =
 	case Cont of
 	    true ->
