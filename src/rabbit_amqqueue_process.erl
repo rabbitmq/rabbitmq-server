@@ -38,12 +38,10 @@
 -define(UNSENT_MESSAGE_LIMIT, 100).
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
--define(MEMORY_REPORT_TIME_INTERVAL, 10000). %% 10 seconds in milliseconds
 
 -export([start_link/1]).
 
--export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1]).
+-export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
 -import(queue).
 -import(erlang).
@@ -54,12 +52,10 @@
             owner,
             exclusive_consumer,
             has_had_consumers,
-            mixed_state,
             next_msg_id,
+            message_buffer,
             active_consumers,
-            blocked_consumers,
-            memory_report_timer
-           }).
+            blocked_consumers}).
 
 -record(consumer, {tag, ack_required}).
 
@@ -88,9 +84,7 @@
          acks_uncommitted,
          consumers,
          transactions,
-         memory,
-         mode
-        ]).
+         memory]).
          
 %%----------------------------------------------------------------------------
 
@@ -99,35 +93,24 @@ start_link(Q) ->
 
 %%----------------------------------------------------------------------------
 
-init(Q = #amqqueue { name = QName, durable = Durable }) ->
+init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    ok = rabbit_queue_mode_manager:register
-           (self(), false, rabbit_amqqueue, set_mode, [self()]),
-    {ok, MS} = rabbit_mixed_queue:init(QName, Durable),
-    State = #q{q = Q,
-               owner = none,
-               exclusive_consumer = none,
-               has_had_consumers = false,
-               mixed_state = MS,
-               next_msg_id = 1,
-               active_consumers = queue:new(),
-               blocked_consumers = queue:new(),
-               memory_report_timer = undefined
-              },
-    %% first thing we must do is report_memory which will clear out
-    %% the 'undefined' values in gain and loss in mixed_queue state
-    {ok, start_memory_timer(State), hibernate,
+    {ok, #q{q = Q,
+            owner = none,
+            exclusive_consumer = none,
+            has_had_consumers = false,
+            next_msg_id = 1,
+            message_buffer = queue:new(),
+            active_consumers = queue:new(),
+            blocked_consumers = queue:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
     QName = qname(State),
-    NewState =
-        lists:foldl(fun (Txn, State1) ->
-                            rollback_transaction(Txn, State1)
-                    end, State, all_tx()),
-    rabbit_mixed_queue:delete_queue(NewState #q.mixed_state),
-    stop_memory_timer(NewState),
+    lists:foreach(fun (Txn) -> ok = rollback_work(Txn, QName) end,
+                  all_tx()),
+    ok = purge_message_buffer(QName, State#q.message_buffer),
     ok = rabbit_amqqueue:internal_delete(QName).
 
 code_change(_OldVsn, State, _Extra) ->
@@ -135,24 +118,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-reply(Reply, NewState) ->
-    {reply, Reply, start_memory_timer(NewState), hibernate}.
+reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 
-noreply(NewState) ->
-    {noreply, start_memory_timer(NewState), hibernate}.
-
-start_memory_timer(State = #q { memory_report_timer = undefined }) ->
-    {ok, TRef} = timer:apply_after(?MEMORY_REPORT_TIME_INTERVAL,
-                                   rabbit_amqqueue, report_memory, [self()]),
-    report_memory(false, State #q { memory_report_timer = TRef });
-start_memory_timer(State) ->
-    State.
-
-stop_memory_timer(State = #q { memory_report_timer = undefined }) ->
-    State;
-stop_memory_timer(State = #q { memory_report_timer = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
-    State #q { memory_report_timer = undefined }.
+noreply(NewState) -> {noreply, NewState, hibernate}.
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
@@ -199,11 +167,12 @@ record_current_channel_tx(ChPid, Txn) ->
     %% that wasn't happening already)
     store_ch_record((ch_record(ChPid))#cr{txn = Txn}).
     
-deliver_queue(Funs = {PredFun, DeliverFun}, FunAcc,
-              State = #q{q = #amqqueue{name = QName},
-                         active_consumers = ActiveConsumers,
-                         blocked_consumers = BlockedConsumers,
-                         next_msg_id = NextId}) ->
+deliver_immediately(Message, Delivered,
+                    State = #q{q = #amqqueue{name = QName},
+                               active_consumers = ActiveConsumers,
+                               blocked_consumers = BlockedConsumers,
+                               next_msg_id = NextId}) ->
+    ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Message]),
     case queue:out(ActiveConsumers) of
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
                                             ack_required = AckRequired}}},
@@ -211,21 +180,15 @@ deliver_queue(Funs = {PredFun, DeliverFun}, FunAcc,
             C = #cr{limiter_pid = LimiterPid,
                     unsent_message_count = Count,
                     unacked_messages = UAM} = ch_record(ChPid),
-            IsMsgReady = PredFun(FunAcc, State),
-            case (IsMsgReady andalso
-                  rabbit_limiter:can_send( LimiterPid, self(), AckRequired )) of
+            case rabbit_limiter:can_send(LimiterPid, self(), AckRequired) of
                 true ->
-                    {{Msg, IsDelivered, AckTag}, FunAcc1, State1} =
-                        DeliverFun(AckRequired, FunAcc, State),
-                    ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Msg]),
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
-                      {QName, self(), NextId, IsDelivered, Msg}),
-                    NewUAM =
-                        case AckRequired of
-                            true  -> dict:store(NextId, {Msg, AckTag}, UAM);
-                            false -> UAM
-                        end,
+                      {QName, self(), NextId, Delivered, Message}),
+                    NewUAM = case AckRequired of
+                                 true  -> dict:store(NextId, Message, UAM);
+                                 false -> UAM
+                             end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 unacked_messages = NewUAM},
                     store_ch_record(NewC),
@@ -241,113 +204,54 @@ deliver_queue(Funs = {PredFun, DeliverFun}, FunAcc,
                                 {ActiveConsumers1,
                                  queue:in(QEntry, BlockedConsumers1)}
                         end,
-                    State2 = State1 #q {
-                               active_consumers = NewActiveConsumers,
-                               blocked_consumers = NewBlockedConsumers,
-                               next_msg_id = NextId + 1
-                                       },
-                    deliver_queue(Funs, FunAcc1, State2);
-                %% if IsMsgReady then we've hit the limiter
-                false when IsMsgReady ->
+                    {offered, AckRequired,
+                     State#q{active_consumers = NewActiveConsumers,
+                             blocked_consumers = NewBlockedConsumers,
+                             next_msg_id = NextId + 1}};
+                false ->
                     store_ch_record(C#cr{is_limit_active = true}),
                     {NewActiveConsumers, NewBlockedConsumers} =
                         move_consumers(ChPid,
                                        ActiveConsumers,
                                        BlockedConsumers),
-                    deliver_queue(
-                      Funs, FunAcc,
+                    deliver_immediately(
+                      Message, Delivered,
                       State#q{active_consumers = NewActiveConsumers,
-                              blocked_consumers = NewBlockedConsumers});
-                false ->
-                    %% no message was ready, so we don't need to block anyone
-                    {FunAcc, State}
+                              blocked_consumers = NewBlockedConsumers})
             end;
         {empty, _} ->
-            {FunAcc, State}
+            {not_offered, State}
     end.
 
-deliver_from_queue_pred({IsEmpty, _AutoAcks}, _State) ->
-    not IsEmpty.
-deliver_from_queue_deliver(AckRequired, {false, AutoAcks},
-                           State = #q { mixed_state = MS }) ->
-    {{Msg, IsDelivered, AckTag, Remaining}, MS1} =
-        rabbit_mixed_queue:deliver(MS),
-    AutoAcks1 =
-        case AckRequired of
-            true -> AutoAcks;
-            false -> [{Msg, AckTag} | AutoAcks]
-        end,
-    {{Msg, IsDelivered, AckTag}, {0 == Remaining, AutoAcks1},
-     State #q { mixed_state = MS1 }}.
+attempt_delivery(none, _ChPid, Message, State) ->
+    case deliver_immediately(Message, false, State) of
+        {offered, false, State1} ->
+            {true, State1};
+        {offered, true, State1} ->
+            persist_message(none, qname(State), Message),
+            persist_delivery(qname(State), Message, false),
+            {true, State1};
+        {not_offered, State1} ->
+            {false, State1}
+    end;
+attempt_delivery(Txn, ChPid, Message, State) ->
+    persist_message(Txn, qname(State), Message),
+    record_pending_message(Txn, ChPid, Message),
+    {true, State}.
 
-run_message_queue(State = #q { mixed_state = MS }) ->
-    Funs = { fun deliver_from_queue_pred/2,
-             fun deliver_from_queue_deliver/3 },
-    IsEmpty = rabbit_mixed_queue:is_empty(MS),
-    {{_IsEmpty1, AutoAcks}, State1} =
-        deliver_queue(Funs, {IsEmpty, []}, State),
-    {ok, MS1} =
-        rabbit_mixed_queue:ack(AutoAcks, State1 #q.mixed_state),
-    State1 #q { mixed_state = MS1 }.
-
-attempt_immediate_delivery(none, _ChPid, Msg, State) ->
-    PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
-    DeliverFun =
-        fun (AckRequired, false, State1) ->
-                {AckTag, State2} =
-                    case AckRequired of
-                        true ->
-                            {ok, AckTag1, MS} =
-                                rabbit_mixed_queue:publish_delivered(
-                                  Msg, State1 #q.mixed_state),
-                            {AckTag1, State1 #q { mixed_state = MS }};
-                        false ->
-                            {noack, State1}
-                    end,
-                {{Msg, false, AckTag}, true, State2}
-        end,
-    deliver_queue({ PredFun, DeliverFun }, false, State);
-attempt_immediate_delivery(Txn, ChPid, Msg, State) ->
-    {ok, MS} = rabbit_mixed_queue:tx_publish(Msg, State #q.mixed_state),
-    record_pending_message(Txn, ChPid, Msg),
-    {true, State #q { mixed_state = MS }}.
-
-deliver_or_enqueue(Txn, ChPid, Msg, State) ->
-    case attempt_immediate_delivery(Txn, ChPid, Msg, State) of
+deliver_or_enqueue(Txn, ChPid, Message, State) ->
+    case attempt_delivery(Txn, ChPid, Message, State) of
         {true, NewState} ->
             {true, NewState};
         {false, NewState} ->
-            %% Txn is none and no unblocked channels with consumers
-            {ok, MS} = rabbit_mixed_queue:publish(Msg, State #q.mixed_state),
-            {false, NewState #q { mixed_state = MS }}
+            persist_message(Txn, qname(State), Message),
+            NewMB = queue:in({Message, false}, NewState#q.message_buffer),
+            {false, NewState#q{message_buffer = NewMB}}
     end.
 
-%% all these messages have already been delivered at least once and
-%% not ack'd, but need to be either redelivered or requeued
-deliver_or_requeue_n([], State) ->
-    run_message_queue(State);
-deliver_or_requeue_n(MsgsWithAcks, State) ->
-    Funs = { fun deliver_or_requeue_msgs_pred/2,
-             fun deliver_or_requeue_msgs_deliver/3 },
-    {{_RemainingLengthMinusOne, AutoAcks, OutstandingMsgs}, NewState} =
-        deliver_queue(Funs, {length(MsgsWithAcks) - 1, [], MsgsWithAcks},
-                      State),
-    {ok, MS} = rabbit_mixed_queue:ack(AutoAcks,
-                                      NewState #q.mixed_state),
-    case OutstandingMsgs of
-        [] -> run_message_queue(NewState #q { mixed_state = MS });
-        _ -> {ok, MS1} = rabbit_mixed_queue:requeue(OutstandingMsgs, MS),
-             NewState #q { mixed_state = MS1 }
-    end.
-
-deliver_or_requeue_msgs_pred({Len, _AcksAcc, _MsgsWithAcks}, _State) ->
-    -1 < Len.
-deliver_or_requeue_msgs_deliver(
-  false, {Len, AcksAcc, [(MsgAckTag = {Msg, _}) | MsgsWithAcks]}, State) ->
-    {{Msg, true, noack}, {Len - 1, [MsgAckTag | AcksAcc], MsgsWithAcks}, State};
-deliver_or_requeue_msgs_deliver(
-  true, {Len, AcksAcc, [{Msg, AckTag} | MsgsWithAcks]}, State) ->
-    {{Msg, true, AckTag}, {Len - 1, AcksAcc, MsgsWithAcks}, State}.
+deliver_or_enqueue_n(Messages, State = #q{message_buffer = MessageBuffer}) ->
+    run_poke_burst(queue:join(MessageBuffer, queue:from_list(Messages)),
+                   State).
 
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
@@ -381,7 +285,7 @@ possibly_unblock(State, ChPid, Update) ->
                                move_consumers(ChPid,
                                               State#q.blocked_consumers,
                                               State#q.active_consumers),
-                           run_message_queue(
+                           run_poke_burst(
                              State#q{active_consumers = NewActiveConsumers,
                                      blocked_consumers = NewBlockedeConsumers})
             end
@@ -398,27 +302,27 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
             unacked_messages = UAM} ->
             erlang:demonitor(MonitorRef),
             erase({ch, ChPid}),
-            State1 =
-                case Txn of
-                    none -> State;
-                    _    -> rollback_transaction(Txn, State)
-                end,
-            State2 =
-                deliver_or_requeue_n(
-                  [MsgWithAck ||
-                      {_MsgId, MsgWithAck} <- dict:to_list(UAM)],
-                  State1 #q {
+            case Txn of
+                none -> ok;
+                _    -> ok = rollback_work(Txn, qname(State)),
+                        erase_tx(Txn)
+            end,
+            NewState =
+                deliver_or_enqueue_n(
+                  [{Message, true} ||
+                      {_Messsage_id, Message} <- dict:to_list(UAM)],
+                  State#q{
                     exclusive_consumer = case Holder of
                                              {ChPid, _} -> none;
                                              Other -> Other
                                          end,
                     active_consumers = remove_consumers(
-                                         ChPid, State1#q.active_consumers),
+                                         ChPid, State#q.active_consumers),
                     blocked_consumers = remove_consumers(
-                                          ChPid, State1#q.blocked_consumers)}),
-            case should_auto_delete(State2) of
-                false -> noreply(State2);
-                true  -> {stop, normal, State2}
+                                          ChPid, State#q.blocked_consumers)}),
+            case should_auto_delete(NewState) of
+                false -> noreply(NewState);
+                true  -> {stop, normal, NewState}
             end
     end.
 
@@ -441,6 +345,26 @@ check_exclusive_access(none, true, State) ->
         false -> in_use
     end.
 
+run_poke_burst(State = #q{message_buffer = MessageBuffer}) ->
+    run_poke_burst(MessageBuffer, State).
+
+run_poke_burst(MessageBuffer, State) ->
+    case queue:out(MessageBuffer) of
+        {{value, {Message, Delivered}}, BufferTail} ->
+            case deliver_immediately(Message, Delivered, State) of
+                {offered, true, NewState} ->
+                    persist_delivery(qname(State), Message, Delivered),
+                    run_poke_burst(BufferTail, NewState);
+                {offered, false, NewState} ->
+                    persist_auto_ack(qname(State), Message),
+                    run_poke_burst(BufferTail, NewState);
+                {not_offered, NewState} ->
+                    NewState#q{message_buffer = MessageBuffer}
+            end;
+        {empty, _} ->
+            State#q{message_buffer = MessageBuffer}
+    end.
+
 is_unused(State) -> queue:is_empty(State#q.active_consumers) andalso
                         queue:is_empty(State#q.blocked_consumers).
 
@@ -448,6 +372,62 @@ maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
+
+persist_message(_Txn, _QName, #basic_message{persistent_key = none}) ->
+    ok;
+persist_message(Txn, QName, Message) ->
+    M = Message#basic_message{
+          %% don't persist any recoverable decoded properties, rebuild from properties_bin on restore
+          content = rabbit_binary_parser:clear_decoded_content(
+                      Message#basic_message.content)},
+    persist_work(Txn, QName,
+                 [{publish, M, {QName, M#basic_message.persistent_key}}]).
+
+persist_delivery(_QName, _Message,
+                 true) ->
+    ok;
+persist_delivery(_QName, #basic_message{persistent_key = none},
+                 _Delivered) ->
+    ok;
+persist_delivery(QName, #basic_message{persistent_key = PKey},
+                 _Delivered) ->
+    persist_work(none, QName, [{deliver, {QName, PKey}}]).
+
+persist_acks(Txn, QName, Messages) ->
+    persist_work(Txn, QName,
+                 [{ack, {QName, PKey}} ||
+                     #basic_message{persistent_key = PKey} <- Messages,
+                     PKey =/= none]).
+
+persist_auto_ack(_QName, #basic_message{persistent_key = none}) ->
+    ok;
+persist_auto_ack(QName, #basic_message{persistent_key = PKey}) ->
+    %% auto-acks are always non-transactional
+    rabbit_persister:dirty_work([{ack, {QName, PKey}}]).
+
+persist_work(_Txn,_QName, []) ->
+    ok;
+persist_work(none, _QName, WorkList) ->
+    rabbit_persister:dirty_work(WorkList);
+persist_work(Txn, QName, WorkList) ->
+    mark_tx_persistent(Txn),
+    rabbit_persister:extend_transaction({Txn, QName}, WorkList).
+
+commit_work(Txn, QName) ->
+    do_if_persistent(fun rabbit_persister:commit_transaction/1,
+                     Txn, QName).
+
+rollback_work(Txn, QName) ->
+    do_if_persistent(fun rabbit_persister:rollback_transaction/1,
+                     Txn, QName).
+
+%% optimisation: don't do unnecessary work
+%% it would be nice if this was handled by the persister
+do_if_persistent(F, Txn, QName) ->
+    case is_tx_persistent(Txn) of
+        false -> ok;
+        true  -> ok = F({Txn, QName})
+    end.
 
 lookup_tx(Txn) ->
     case get({txn, Txn}) of
@@ -470,14 +450,19 @@ all_tx_record() ->
 all_tx() ->
     [Txn || {{txn, Txn}, _} <- get()].
 
-record_pending_message(Txn, ChPid, Message =
-                       #basic_message { is_persistent = IsPersistent }) ->
-    Tx = #tx{pending_messages = Pending, is_persistent = IsPersistentTxn } =
-        lookup_tx(Txn),
+mark_tx_persistent(Txn) ->
+    Tx = lookup_tx(Txn),
+    store_tx(Txn, Tx#tx{is_persistent = true}).
+    
+is_tx_persistent(Txn) ->
+    #tx{is_persistent = Res} = lookup_tx(Txn),
+    Res.
+
+record_pending_message(Txn, ChPid, Message) ->
+    Tx = #tx{pending_messages = Pending} = lookup_tx(Txn),
     record_current_channel_tx(ChPid, Txn),
-    store_tx(Txn, Tx #tx { pending_messages = [Message | Pending],
-                           is_persistent = IsPersistentTxn orelse IsPersistent
-                         }).
+    store_tx(Txn, Tx#tx{pending_messages = [{Message, false} | Pending],
+                        ch_pid = ChPid}).
 
 record_pending_acks(Txn, ChPid, MsgIds) ->
     Tx = #tx{pending_acks = Pending} = lookup_tx(Txn),
@@ -485,40 +470,37 @@ record_pending_acks(Txn, ChPid, MsgIds) ->
     store_tx(Txn, Tx#tx{pending_acks = [MsgIds | Pending],
                         ch_pid = ChPid}).
 
-commit_transaction(Txn, State) ->
-    #tx { ch_pid = ChPid,
-          pending_messages = PendingMessages,
-          pending_acks = PendingAcks
-        } = lookup_tx(Txn),
-    PendingMessagesOrdered = lists:reverse(PendingMessages),
-    PendingAcksOrdered = lists:append(PendingAcks),
-    Acks =
-        case lookup_ch(ChPid) of
-            not_found -> [];
-            C = #cr { unacked_messages = UAM } ->
-                {MsgWithAcks, Remaining} =
-                    collect_messages(PendingAcksOrdered, UAM),
-                store_ch_record(C#cr{unacked_messages = Remaining}),
-                MsgWithAcks
-        end,
-    {ok, MS} = rabbit_mixed_queue:tx_commit(
-                 PendingMessagesOrdered, Acks, State #q.mixed_state),
-    State #q { mixed_state = MS }.
+process_pending(Txn, State) ->
+    #tx{ch_pid = ChPid,
+        pending_messages = PendingMessages,
+        pending_acks = PendingAcks} = lookup_tx(Txn),
+    case lookup_ch(ChPid) of
+        not_found -> ok;
+        C = #cr{unacked_messages = UAM} ->
+            {_Acked, Remaining} =
+                collect_messages(lists:append(PendingAcks), UAM),
+            store_ch_record(C#cr{unacked_messages = Remaining})
+    end,
+    deliver_or_enqueue_n(lists:reverse(PendingMessages), State).
 
-rollback_transaction(Txn, State) ->
-    #tx { pending_messages = PendingMessages
-        } = lookup_tx(Txn),
-    {ok, MS} = rabbit_mixed_queue:tx_cancel(PendingMessages,
-                                            State #q.mixed_state),
-    erase_tx(Txn),
-    State #q { mixed_state = MS }.
-
-%% {A, B} = collect_messages(C, D) %% A = C `intersect` D; B = D \\ C
-%% err, A = C `intersect` D , via projection through the dict that is C
 collect_messages(MsgIds, UAM) ->
     lists:mapfoldl(
       fun (MsgId, D) -> {dict:fetch(MsgId, D), dict:erase(MsgId, D)} end,
       UAM, MsgIds).
+
+purge_message_buffer(QName, MessageBuffer) ->
+    Messages =
+        [[Message || {Message, _Delivered} <-
+                         queue:to_list(MessageBuffer)] |
+         lists:map(
+           fun (#cr{unacked_messages = UAM}) ->
+                   [Message || {_MessageId, Message} <- dict:to_list(UAM)]
+           end,
+           all_ch_record())],
+    %% the simplest, though certainly not the most obvious or
+    %% efficient, way to purge messages from the persister is to
+    %% artifically ack them.
+    persist_acks(none, QName, lists:append(Messages)).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
@@ -526,12 +508,10 @@ i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
 i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
 i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
 i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
-i(mode, #q{ mixed_state = MS }) ->
-    rabbit_mixed_queue:info(MS);
 i(pid, _) ->
     self();
-i(messages_ready, #q { mixed_state = MS }) ->
-    rabbit_mixed_queue:length(MS);
+i(messages_ready, #q{message_buffer = MessageBuffer}) ->
+    queue:len(MessageBuffer);
 i(messages_unacknowledged, _) ->
     lists:sum([dict:size(UAM) ||
                   #cr{unacked_messages = UAM} <- all_ch_record()]);
@@ -554,12 +534,6 @@ i(memory, _) ->
     M;
 i(Item, _) ->
     throw({bad_argument, Item}).
-
-report_memory(Hib, State = #q { mixed_state = MS }) ->
-    {MS1, MSize, Gain, Loss} =
-        rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS),
-    rabbit_queue_mode_manager:report_memory(self(), MSize, Gain, Loss, Hib),
-    State #q { mixed_state = MS1 }.
 
 %---------------------------------------------------------------------------
 
@@ -586,8 +560,7 @@ handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
     %% just all ready-to-consume queues get the message, with unready
     %% queues discarding the message?
     %%
-    {Delivered, NewState} =
-        attempt_immediate_delivery(Txn, ChPid, Message, State),
+    {Delivered, NewState} = attempt_delivery(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
 handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
@@ -596,11 +569,12 @@ handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
     reply(Delivered, NewState);
 
 handle_call({commit, Txn}, From, State) ->
-    NewState = commit_transaction(Txn, State),
+    ok = commit_work(Txn, qname(State)),
     %% optimisation: we reply straight away so the sender can continue
     gen_server2:reply(From, ok),
+    NewState = process_pending(Txn, State),
     erase_tx(Txn),
-    noreply(run_message_queue(NewState));
+    noreply(NewState);
 
 handle_call({notify_down, ChPid}, From, State) ->
     %% optimisation: we reply straight away so the sender can continue
@@ -610,27 +584,25 @@ handle_call({notify_down, ChPid}, From, State) ->
 handle_call({basic_get, ChPid, NoAck}, _From,
             State = #q{q = #amqqueue{name = QName},
                        next_msg_id = NextId,
-                       mixed_state = MS
-                       }) ->
-    case rabbit_mixed_queue:deliver(MS) of
-        {empty, MS1} -> reply(empty, State #q { mixed_state = MS1 });
-        {{Msg, IsDelivered, AckTag, Remaining}, MS1} ->
+                       message_buffer = MessageBuffer}) ->
+    case queue:out(MessageBuffer) of
+        {{value, {Message, Delivered}}, BufferTail} ->
             AckRequired = not(NoAck),
-            {ok, MS3} =
-                case AckRequired of
-                    true ->
-                        C = #cr{unacked_messages = UAM} = ch_record(ChPid),
-                        NewUAM = dict:store(NextId, {Msg, AckTag}, UAM),
-                        store_ch_record(C#cr{unacked_messages = NewUAM}),
-                        {ok, MS1};
-                    false ->
-                        rabbit_mixed_queue:ack([{Msg, AckTag}], MS1)
-                end,
-            Message = {QName, self(), NextId, IsDelivered, Msg},
-            reply({ok, Remaining, Message},
-                  State #q { next_msg_id = NextId + 1,
-                             mixed_state = MS3
-                           })
+            case AckRequired of
+                true  ->
+                    persist_delivery(QName, Message, Delivered),
+                    C = #cr{unacked_messages = UAM} = ch_record(ChPid),
+                    NewUAM = dict:store(NextId, Message, UAM),
+                    store_ch_record(C#cr{unacked_messages = NewUAM});
+                false ->
+                    persist_auto_ack(QName, Message)
+            end,
+            Msg = {QName, self(), NextId, Delivered, Message},
+            reply({ok, queue:len(BufferTail), Msg},
+                  State#q{message_buffer = BufferTail,
+                          next_msg_id = NextId + 1});
+        {empty, _} ->
+            reply(empty, State)
     end;
 
 handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
@@ -651,14 +623,15 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                                          ack_required = not(NoAck)},
                     store_ch_record(C#cr{consumer_count = ConsumerCount +1,
                                          limiter_pid = LimiterPid}),
-                    case ConsumerCount of
-                        0 -> ok = rabbit_limiter:register(LimiterPid, self());
-                        _ -> ok
+                    if ConsumerCount == 0 ->
+                            ok = rabbit_limiter:register(LimiterPid, self());
+                       true ->
+                            ok
                     end,
-                    ExclusiveConsumer = case ExclusiveConsume of
-                                            true  -> {ChPid, ConsumerTag};
-                                            false -> ExistingHolder
-                                        end,
+                    ExclusiveConsumer =
+                        if ExclusiveConsume -> {ChPid, ConsumerTag};
+                           true             -> ExistingHolder
+                        end,
                     State1 = State#q{has_had_consumers = true,
                                      exclusive_consumer = ExclusiveConsumer},
                     ok = maybe_send_reply(ChPid, OkMsg),
@@ -669,7 +642,7 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                                        add_consumer(
                                          ChPid, Consumer,
                                          State1#q.blocked_consumers)};
-                            false -> run_message_queue(
+                            false -> run_poke_burst(
                                        State1#q{
                                          active_consumers =
                                          add_consumer(
@@ -688,10 +661,11 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             reply(ok, State);
         C = #cr{consumer_count = ConsumerCount, limiter_pid = LimiterPid} ->
             store_ch_record(C#cr{consumer_count = ConsumerCount - 1}),
-            ok = case ConsumerCount of
-                     1 -> rabbit_limiter:unregister(LimiterPid, self());
-                     _ -> ok
-                 end,
+            if ConsumerCount == 1 ->
+                    ok = rabbit_limiter:unregister(LimiterPid, self());
+               true ->
+                    ok
+            end,
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,
@@ -710,15 +684,14 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
     end;
 
 handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
-                                    mixed_state = MS,
+                                    message_buffer = MessageBuffer,
                                     active_consumers = ActiveConsumers}) ->
-    Length = rabbit_mixed_queue:length(MS),
-    reply({ok, Name, Length, queue:len(ActiveConsumers)}, State);
+    reply({ok, Name, queue:len(MessageBuffer), queue:len(ActiveConsumers)},
+          State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
-            State = #q { mixed_state = MS }) ->
-    Length = rabbit_mixed_queue:length(MS),
-    IsEmpty = Length == 0,
+            State = #q{message_buffer = MessageBuffer}) ->
+    IsEmpty = queue:is_empty(MessageBuffer),
     IsUnused = is_unused(State),
     if
         IfEmpty and not(IsEmpty) ->
@@ -726,16 +699,16 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
         IfUnused and not(IsUnused) ->
             reply({error, in_use}, State);
         true ->
-            {stop, normal, {ok, Length}, State}
+            {stop, normal, {ok, queue:len(MessageBuffer)}, State}
     end;
 
-handle_call(purge, _From, State) ->
-    {Count, MS} = rabbit_mixed_queue:purge(State #q.mixed_state),
-    reply({ok, Count},
-          State #q { mixed_state = MS });
+handle_call(purge, _From, State = #q{message_buffer = MessageBuffer}) ->
+    ok = purge_message_buffer(qname(State), MessageBuffer),
+    reply({ok, queue:len(MessageBuffer)},
+          State#q{message_buffer = queue:new()});
 
-handle_call({claim_queue, ReaderPid}, _From,
-            State = #q{owner = Owner, exclusive_consumer = Holder}) ->
+handle_call({claim_queue, ReaderPid}, _From, State = #q{owner = Owner,
+                                                        exclusive_consumer = Holder}) ->
     case Owner of
         none ->
             case check_exclusive_access(Holder, true, State) of
@@ -748,10 +721,7 @@ handle_call({claim_queue, ReaderPid}, _From,
                     %% pid...
                     reply(locked, State);
                 ok ->
-                    reply(ok, State #q { owner =
-                                         {ReaderPid,
-                                          erlang:monitor(process, ReaderPid)} })
-                                                 
+                    reply(ok, State#q{owner = {ReaderPid, erlang:monitor(process, ReaderPid)}})
             end;
         {ReaderPid, _MonitorRef} ->
             reply(ok, State);
@@ -769,21 +739,24 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
         not_found ->
             noreply(State);
         C = #cr{unacked_messages = UAM} ->
-            {MsgWithAcks, Remaining} = collect_messages(MsgIds, UAM),
+            {Acked, Remaining} = collect_messages(MsgIds, UAM),
+            persist_acks(Txn, qname(State), Acked),
             case Txn of
                 none ->
-                    {ok, MS} =
-                        rabbit_mixed_queue:ack(MsgWithAcks, State #q.mixed_state),
-                    store_ch_record(C#cr{unacked_messages = Remaining}),
-                    noreply(State #q { mixed_state = MS });
+                    store_ch_record(C#cr{unacked_messages = Remaining});
                 _  ->
-                    record_pending_acks(Txn, ChPid, MsgIds),
-                    noreply(State)
-            end
+                    record_pending_acks(Txn, ChPid, MsgIds)
+            end,
+            noreply(State)
     end;
 
 handle_cast({rollback, Txn}, State) ->
-    noreply(rollback_transaction(Txn, State));
+    ok = rollback_work(Txn, qname(State)),
+    erase_tx(Txn),
+    noreply(State);
+
+handle_cast({redeliver, Messages}, State) ->
+    noreply(deliver_or_enqueue_n(Messages, State));
 
 handle_cast({requeue, MsgIds, ChPid}, State) ->
     case lookup_ch(ChPid) of
@@ -792,9 +765,10 @@ handle_cast({requeue, MsgIds, ChPid}, State) ->
                                [ChPid]),
             noreply(State);
         C = #cr{unacked_messages = UAM} ->
-            {MsgWithAcks, NewUAM} = collect_messages(MsgIds, UAM),
+            {Messages, NewUAM} = collect_messages(MsgIds, UAM),
             store_ch_record(C#cr{unacked_messages = NewUAM}),
-            noreply(deliver_or_requeue_n(MsgWithAcks, State))
+            noreply(deliver_or_enqueue_n(
+                      [{Message, true} || Message <- Messages], State))
     end;
 
 handle_cast({unblock, ChPid}, State) ->
@@ -823,22 +797,7 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 end,
                 NewLimited = Limited andalso LimiterPid =/= undefined,
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
-        end));
-
-handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
-    PendingMessages =
-        lists:flatten([Pending || #tx { pending_messages = Pending}
-                                      <- all_tx_record()]),
-    {ok, MS1} = (case Mode of
-                    disk  -> fun rabbit_mixed_queue:to_disk_only_mode/2;
-                    mixed -> fun rabbit_mixed_queue:to_mixed_mode/2
-                 end)(PendingMessages, MS),
-    noreply(State #q { mixed_state = MS1 });
-
-handle_cast(report_memory, State) ->
-    %% deliberately don't call noreply/2 as we don't want to restart the timer
-    %% by unsetting the timer, we force a report on the next normal message
-    {noreply, State #q { memory_report_timer = undefined }, hibernate}.
+        end)).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -859,10 +818,3 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
-
-handle_pre_hibernate(State = #q { mixed_state = MS }) ->
-    MS1 = rabbit_mixed_queue:maybe_prefetch(MS),
-    State1 =
-        stop_memory_timer(report_memory(true, State #q { mixed_state = MS1 })),
-    %% don't call noreply/1 as that'll restart the memory_report_timer
-    {hibernate, State1}.
