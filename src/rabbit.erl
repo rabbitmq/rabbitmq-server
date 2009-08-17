@@ -116,8 +116,6 @@ start(normal, []) ->
 
     print_banner(),
 
-    {ok, ExtraSteps} = application:get_env(extra_startup_steps),
-
     lists:foreach(
       fun ({Msg, Thunk}) ->
               io:format("starting ~-20s ...", [Msg]),
@@ -176,8 +174,7 @@ start(normal, []) ->
                           ok = rabbit_networking:start_tcp_listener(Host, Port)
                   end,
                   TCPListeners)
-        end}]
-      ++ ExtraSteps),
+        end}]),
 
     io:format("~nbroker running~n"),
 
