@@ -39,8 +39,8 @@
          tx_publish/2, tx_commit/3, tx_cancel/2, requeue/2, purge/1,
          length/1, is_empty/1, delete_queue/1, maybe_prefetch/1]).
 
--export([to_disk_only_mode/2, to_mixed_mode/2, estimate_queue_memory/1,
-         reset_counters/1, info/1]).
+-export([to_disk_only_mode/2, to_mixed_mode/2, info/1,
+         estimate_queue_memory_and_reset_counters/1]).
 
 -record(mqstate, { mode,
                    msg_buf,
@@ -94,9 +94,9 @@
 -spec(to_disk_only_mode/2 :: ([message()], mqstate()) -> okmqs()).
 -spec(to_mixed_mode/2 :: ([message()], mqstate()) -> okmqs()).
 
--spec(estimate_queue_memory/1 :: (mqstate()) ->
-             {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
--spec(reset_counters/1 :: (mqstate()) -> (mqstate())).
+-spec(estimate_queue_memory_and_reset_counters/1 :: (mqstate()) ->
+             {mqstate(), non_neg_integer(), non_neg_integer(),
+              non_neg_integer()}).
 -spec(info/1 :: (mqstate()) -> mode()).
 
 -endif.
@@ -614,12 +614,9 @@ length(#mqstate { length = Length }) ->
 is_empty(#mqstate { length = Length }) ->
     0 == Length.
 
-estimate_queue_memory(#mqstate { memory_size = Size, memory_gain = Gain,
-                                 memory_loss = Loss }) ->
-    {4 * Size, Gain, Loss}.
-
-reset_counters(State) ->
-    State #mqstate { memory_gain = 0, memory_loss = 0 }.
+estimate_queue_memory_and_reset_counters(State =
+  #mqstate { memory_size = Size, memory_gain = Gain, memory_loss = Loss }) ->
+    {State #mqstate { memory_gain = 0, memory_loss = 0 }, 4 * Size, Gain, Loss}.
 
 info(#mqstate { mode = Mode }) ->
     Mode.

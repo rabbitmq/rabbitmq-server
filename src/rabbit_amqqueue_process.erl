@@ -112,11 +112,11 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
                next_msg_id = 1,
                active_consumers = queue:new(),
                blocked_consumers = queue:new(),
-               memory_report_timer = start_memory_timer()
+               memory_report_timer = undefined
               },
     %% first thing we must do is report_memory which will clear out
     %% the 'undefined' values in gain and loss in mixed_queue state
-    {ok, report_memory(false, State), hibernate,
+    {ok, start_memory_timer(State), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(_Reason, State) ->
@@ -141,13 +141,10 @@ reply(Reply, NewState) ->
 noreply(NewState) ->
     {noreply, start_memory_timer(NewState), hibernate}.
 
-start_memory_timer() ->
+start_memory_timer(State = #q { memory_report_timer = undefined }) ->
     {ok, TRef} = timer:apply_after(?MEMORY_REPORT_TIME_INTERVAL,
                                    rabbit_amqqueue, report_memory, [self()]),
-    TRef.
-start_memory_timer(State = #q { memory_report_timer = undefined }) ->
-    report_memory(false,
-                  State #q { memory_report_timer = start_memory_timer() });
+    report_memory(false, State #q { memory_report_timer = TRef });
 start_memory_timer(State) ->
     State.
 
@@ -529,8 +526,8 @@ i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
 i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
 i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
 i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
-i(mode,        #q{ mixed_state = MS })                      ->
-         rabbit_mixed_queue:info(MS);
+i(mode, #q{ mixed_state = MS }) ->
+    rabbit_mixed_queue:info(MS);
 i(pid, _) ->
     self();
 i(messages_ready, #q { mixed_state = MS }) ->
@@ -559,10 +556,10 @@ i(Item, _) ->
     throw({bad_argument, Item}).
 
 report_memory(Hib, State = #q { mixed_state = MS }) ->
-    {MSize, Gain, Loss} =
-        rabbit_mixed_queue:estimate_queue_memory(MS),
+    {MS1, MSize, Gain, Loss} =
+        rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS),
     rabbit_queue_mode_manager:report_memory(self(), MSize, Gain, Loss, Hib),
-    State #q { mixed_state = rabbit_mixed_queue:reset_counters(MS) }.
+    State #q { mixed_state = MS1 }.
 
 %---------------------------------------------------------------------------
 
