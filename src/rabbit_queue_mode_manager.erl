@@ -180,7 +180,6 @@ conserve_memory(_Pid, Conserve) ->
 init([]) ->
     process_flag(trap_exit, true),
     rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
-    %% todo, fix up this call as os_mon may not be running
     {MemTotal, MemUsed, _BigProc} = memsup:get_memory_data(),
     MemAvail = MemTotal - MemUsed,
     TPB = if MemAvail == 0 -> 0;
