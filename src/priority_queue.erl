@@ -73,7 +73,7 @@
 -spec(to_list/1 :: (pqueue()) -> [{priority(), any()}]).
 -spec(in/2 :: (any(), pqueue()) -> pqueue()).
 -spec(in/3 :: (any(), priority(), pqueue()) -> pqueue()).
--spec(out/1 :: (pqueue()) -> {(empty | {value, any()}), pqueue()}).
+-spec(out/1 :: (pqueue()) -> {empty | {value, any()}, pqueue()}).
 -spec(join/2 :: (pqueue(), pqueue()) -> pqueue()).
 
 -endif.
