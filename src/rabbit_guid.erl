@@ -69,7 +69,7 @@ update_disk_serial() ->
                  {ok, Content} ->
                      binary_to_term(Content);
                  {error, _} ->
-                     0
+                     rabbit_persister:serial()
              end,
     ok = file:write_file(Filename, term_to_binary(Serial + 1)),
     Serial.
