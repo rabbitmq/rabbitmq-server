@@ -360,7 +360,9 @@ dirty_foreach_key1(F, TableName, K) ->
     end.
 
 dirty_dump_log(FileName) ->
-    {ok, LH} = disk_log:open([{name, dirty_dump_log}, {mode, read_only}, {file, FileName}]),
+    {ok, LH} = disk_log:open([{name, dirty_dump_log},
+                              {mode, read_only},
+                              {file, FileName}]),
     dirty_dump_log1(LH, disk_log:chunk(LH, start)),
     disk_log:close(LH).
 
