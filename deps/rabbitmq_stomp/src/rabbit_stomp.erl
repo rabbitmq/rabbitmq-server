@@ -220,6 +220,10 @@ maybe_header(Key, Value) when is_integer(Value) ->
 maybe_header(_Key, _Value) ->
     [].
 
+send_reply(Method = #'basic.deliver'{},
+           Content = #content{properties = none},
+           State) ->
+    send_reply(Method, rabbit_binary_parser:ensure_content_decoded(Content), State);
 send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
                             delivery_tag = DeliveryTag,
                             exchange = Exchange,
