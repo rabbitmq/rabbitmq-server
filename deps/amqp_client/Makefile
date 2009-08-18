@@ -113,10 +113,10 @@ $(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
 	mkdir -p $(DOC_DIR)
 	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
 
-doc: $(DOC_DIR)/overview.edoc $(SOURCES)
-	$(LIBS_PATH) erl -noshell -eval 'edoc:application(amqp_client, ".", \
-	[{preprocess, true}])' -run init stop
+$(DOC_DIR)/index.html: $(COMPILE_DEPS) $(DOC_DIR)/overview.edoc $(SOURCES)
+	$(LIBS_PATH) erl -noshell -eval 'edoc:application(amqp_client, ".", [{preprocess, true}])' -run init stop
 
+doc: $(DOC_DIR)/index.html
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
