@@ -26,12 +26,15 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
+-define(PROTOCOL_HEADER,
+        <<"AMQP", 1, 1, ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR>>).
+
 -record(amqp_msg, {props, payload}).
 
--record(amqp_params, {username     = "guest",
-                      password     = "guest",
-                      virtual_host = "/",
-                      host         = "localhost",
+-record(amqp_params, {username     = <<"guest">>,
+                      password     = <<"guest">>,
+                      virtual_host = <<"/">>,
+                      host         = <<"localhost">>,
                       %% TODO: replace with ?PROTOCOL_PORT
                       port         = 5672}).
 

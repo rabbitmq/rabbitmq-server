@@ -44,7 +44,7 @@ handshake(State = #connection_state{serverhost = Host, port = Port}) ->
     case gen_tcp:connect(Host, Port, [binary, {packet, 0}, {active, false},
                                       {nodelay, true}]) of
         {ok, Sock} ->
-            ok = gen_tcp:send(Sock, amqp_util:protocol_header()),
+            ok = gen_tcp:send(Sock, ?PROTOCOL_HEADER),
             Parent = self(),
             FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end,
                                                            [Parent]),

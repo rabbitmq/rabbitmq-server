@@ -51,7 +51,7 @@ start_direct_internal(#amqp_params{username     = User,
                       ProcLink) ->
     InitialState = #connection_state{username  = User,
                                      password  = Password,
-                                     vhostpath = list_to_binary(VHost)},
+                                     vhostpath = VHost},
     {ok, Pid} = start_internal(InitialState, amqp_direct_driver, ProcLink),
     Pid.
 
@@ -70,7 +70,7 @@ start_network_internal(#amqp_params{username     = User,
     InitialState = #connection_state{username   = User,
                                      password   = Password,
                                      serverhost = Host,
-                                     vhostpath  = list_to_binary(VHost),
+                                     vhostpath  = VHost,
                                      port       = Port},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
@@ -85,15 +85,14 @@ start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
 open_channel(ConnectionPid) ->
-    open_channel(ConnectionPid, none, "").
+    open_channel(ConnectionPid, none, <<>>).
 
 %% Opens a channel with a specific channel number.
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
 open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
     gen_server:call(ConnectionPid,
-                    {open_channel, ChannelNumber,
-                     amqp_util:binary(OutOfBand)}, infinity).
+                    {open_channel, ChannelNumber, OutOfBand}, infinity).
 
 %% Closes the AMQP connection
 close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close, infinity).
