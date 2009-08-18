@@ -87,17 +87,17 @@ DIALYZER_CALL=dialyzer --plt $(PLT)
 	test_direct_coverage test_common_package clean source_tarball package \
 	common_package
 
-all: compile
+all: package
 
 compile: $(TARGETS)
 
 compile_tests: $(TEST_DIR)
 	$(MAKE) -C $(TEST_DIR)
 
-run: compile
+run: $(TARGETS)
 	erl -pa $(LOAD_PATH)
 
-run_in_broker: compile $(BROKER_DIR)
+run_in_broker: $(TARGETS) $(BROKER_DIR)
 	$(MAKE) RABBITMQ_SERVER_START_ARGS='$(PA_LOAD_PATH)' -C $(BROKER_DIR) run
 
 dialyze: $(TARGETS)
@@ -208,12 +208,14 @@ source_tarball: $(DIST_DIR)
 	cp -a $(TEST_DIR)/Makefile dist/$(DIST_DIR)/$(TEST_DIR)/
 	cd dist ; tar cvzf $(DIST_DIR).tar.gz $(DIST_DIR)
 
-package: $(DIST_DIR)
-	$(MAKE) clean compile
+$(DIST_DIR)/$(PACKAGE_NAME): $(TARGETS)
+	rm -rf $(DIST_DIR)/$(PACKAGE)
 	mkdir -p $(DIST_DIR)/$(PACKAGE)
 	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
-	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
+	(cd $(DIST_DIR); rm $(PACKAGE_NAME); zip -r $(PACKAGE_NAME) $(PACKAGE))
+
+package: $(DIST_DIR)/$(PACKAGE_NAME)
 
 common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 
