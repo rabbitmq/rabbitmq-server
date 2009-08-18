@@ -74,6 +74,7 @@ ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_
 
 RABBITMQ_NODENAME=rabbit
 PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
+RABBITMQCTL=$(BROKER_DIR)/scripts/rabbitmqctl
 
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
@@ -83,7 +84,7 @@ DIALYZER_CALL=dialyzer --plt $(PLT)
 	test_suites_coverage run_test_broker start_test_broker_node \
 	stop_test_broker_node test_network test_direct test_network_coverage \
 	test_direct_coverage test_common_package clean source_tarball package \
-	common_package
+	common_package boot_broker unboot_broker
 
 all: package
 
@@ -138,7 +139,9 @@ test_suites_coverage: prepare_tests
 	{ $(MAKE) test_direct_coverage || OK=false; } && \
 	$$OK
 
-run_test_broker:
+## This performs test setup and teardown procedures to ensure that
+## that the correct users are configured in the test instance
+run_test_broker: start_test_broker_node unboot_broker
 	OK=true && \
 	TMPFILE=$(MKTEMP) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
@@ -147,13 +150,25 @@ run_test_broker:
 		tee $$TMPFILE || OK=false; } && \
 	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
+	$(MAKE) boot_broker && \
+	$(MAKE) stop_test_broker_node && \
 	$$OK
 
-start_test_broker_node:
-	$(MAKE) RABBITMQ_SERVER_START_ARGS='-s rabbit' -C $(BROKER_DIR) start-background-node
+start_test_broker_node: boot_broker
+	$(RABBITMQCTL) delete_user test_user_no_perm 2>/dev/null || true
+	$(RABBITMQCTL) add_user test_user_no_perm test_user_no_perm
 
 stop_test_broker_node:
-	erl_call -sname $(RABBITMQ_NODENAME) -q
+	$(RABBITMQCTL) delete_user test_user_no_perm
+	$(MAKE) unboot_broker
+
+boot_broker:
+	$(MAKE) -C $(BROKER_DIR) start-background-node
+	$(MAKE) -C $(BROKER_DIR) start-rabbit-on-node
+
+unboot_broker:
+	$(MAKE) -C $(BROKER_DIR) stop-rabbit-on-node
+	$(MAKE) -C $(BROKER_DIR) stop-node
 
 test_network: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
