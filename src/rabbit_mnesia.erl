@@ -186,8 +186,7 @@ ensure_mnesia_not_running() ->
 
 check_schema_integrity() ->
     %%TODO: more thorough checks
-    case catch [mnesia:table_info(Tab, version)
-                || Tab <- table_names()] of
+    case catch [mnesia:table_info(Tab, version) || Tab <- table_names()] of
         {'EXIT', Reason} -> {error, Reason};
         _ -> ok
     end.
