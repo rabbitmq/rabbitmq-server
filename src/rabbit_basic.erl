@@ -33,8 +33,8 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/1, message/4, properties/1, delivery/4]).
--export([publish/4, publish/7]).
+-export([publish/1, message/4, message/5, message/6, delivery/4]).
+-export([properties/1, publish/4, publish/7]).
 -export([build_content/2, from_content/1]).
 
 %%----------------------------------------------------------------------------
@@ -48,6 +48,10 @@
 -spec(delivery/4 :: (bool(), bool(), maybe(txn()), message()) -> delivery()). 
 -spec(message/4 :: (exchange_name(), routing_key(), properties_input(),
                     binary()) -> message()).
+-spec(message/5 :: (exchange_name(), routing_key(), properties_input(),
+                    binary(), guid()) -> message()).
+-spec(message/6 :: (exchange_name(), routing_key(), properties_input(),
+                    binary(), guid(), bool()) -> message()).
 -spec(properties/1 :: (properties_input()) -> amqp_properties()).
 -spec(publish/4 :: (exchange_name(), routing_key(), properties_input(),
                     binary()) -> publish_result()).
@@ -91,11 +95,18 @@ from_content(Content) ->
     {Props, list_to_binary(lists:reverse(FragmentsRev))}.
 
 message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
+    message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, rabbit_guid:guid()).
+
+message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, MsgId) ->
+    message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, MsgId, false).
+
+message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, MsgId, IsPersistent) ->
     Properties = properties(RawProperties),
     #basic_message{exchange_name  = ExchangeName,
                    routing_key    = RoutingKeyBin,
                    content        = build_content(Properties, BodyBin),
-                   persistent_key = none}.
+                   guid           = MsgId,
+                   is_persistent  = IsPersistent}.
 
 properties(P = #'P_basic'{}) ->
     P;

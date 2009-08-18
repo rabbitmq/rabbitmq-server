@@ -175,8 +175,9 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -os_mon start_memsup false ^
 -os_mon start_os_sup false ^
 -os_mon memsup_system_only true ^
--os_mon system_memory_high_watermark 0.95 ^
+-os_mon system_memory_high_watermark 0.8 ^
 -mnesia dir \""%RABBITMQ_MNESIA_DIR%"\" ^
+-mnesia dump_log_write_threshold 10000 ^
 %CLUSTER_CONFIG% ^
 %RABBITMQ_SERVER_START_ARGS% ^
 %*

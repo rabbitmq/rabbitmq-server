@@ -42,6 +42,7 @@
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
+-export([set_mode_pin/3, set_mode/2, report_memory/1]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -62,7 +63,7 @@
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -spec(start/0 :: () -> 'ok').
--spec(recover/0 :: () -> 'ok').
+-spec(recover/0 :: () -> {'ok', [amqqueue()]}).
 -spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
              amqqueue()).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
@@ -101,10 +102,13 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
+-spec(set_mode_pin/3 :: (vhost(), resource_name(), ('disk'|'mixed')) -> any()).
+-spec(set_mode/2 :: (pid(), ('disk' | 'mixed')) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), bool()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
+-spec(report_memory/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -119,37 +123,42 @@ start() ->
     ok.
 
 recover() ->
-    ok = recover_durable_queues(),
-    ok.
+    {ok, DurableQueues} = recover_durable_queues(),
+    {ok, DurableQueues}.
 
 recover_durable_queues() ->
     Node = node(),
-    lists:foreach(
-      fun (RecoveredQ) ->
-              Q = start_queue_process(RecoveredQ),
-              %% We need to catch the case where a client connected to
-              %% another node has deleted the queue (and possibly
-              %% re-created it).
-              case rabbit_misc:execute_mnesia_transaction(
-                     fun () -> case mnesia:match_object(
-                                      rabbit_durable_queue, RecoveredQ, read) of
-                                   [_] -> ok = store_queue(Q),
-                                          true;
-                                   []  -> false
-                               end
-                     end) of
-                  true  -> ok;
-                  false -> exit(Q#amqqueue.pid, shutdown)
-              end
-      end,
-      %% TODO: use dirty ops instead
-      rabbit_misc:execute_mnesia_transaction(
-        fun () ->
-                qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
-                                        <- mnesia:table(rabbit_durable_queue),
-                                  node(Pid) == Node]))
-        end)),
-    ok.
+    DurableQueues =
+        lists:foldl(
+          fun (RecoveredQ, Acc) ->
+                  Q = start_queue_process(RecoveredQ),
+                  %% We need to catch the case where a client connected to
+                  %% another node has deleted the queue (and possibly
+                  %% re-created it).
+                  case rabbit_misc:execute_mnesia_transaction(
+                         fun () ->
+                                 Match =
+                                     mnesia:match_object(
+                                       rabbit_durable_queue, RecoveredQ, read),
+                                 case Match of
+                                     [_] -> ok = store_queue(Q),
+                                            true;
+                                     []  -> false
+                                 end
+                         end) of
+                      true  -> [Q|Acc];
+                      false -> exit(Q#amqqueue.pid, shutdown),
+                               Acc
+                  end
+          end, [],
+          %% TODO: use dirty ops instead
+          rabbit_misc:execute_mnesia_transaction(
+            fun () ->
+                    qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
+                                          <- mnesia:table(rabbit_durable_queue),
+                                      node(Pid) == Node]))
+            end)),
+    {ok, DurableQueues}.
 
 declare(QueueName, Durable, AutoDelete, Args) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
@@ -215,6 +224,23 @@ list(VHostPath) ->
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
 
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
+
+set_mode_pin(VHostPath, Queue, Disk)
+  when is_binary(VHostPath) andalso is_binary(Queue) ->
+    with(rabbit_misc:r(VHostPath, queue, Queue),
+         fun(Q) -> case Disk of
+                       true -> rabbit_queue_mode_manager:pin_to_disk
+                                 (Q #amqqueue.pid);
+                       false -> rabbit_queue_mode_manager:unpin_from_disk
+                                  (Q #amqqueue.pid)
+                   end
+         end).
+
+set_mode(QPid, Mode) ->
+    gen_server2:pcast(QPid, 10, {set_mode, Mode}).
+
+report_memory(QPid) ->
+    gen_server2:cast(QPid, report_memory).
 
 info(#amqqueue{ pid = QPid }) ->
     gen_server2:pcall(QPid, 9, info, infinity).

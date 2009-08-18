@@ -139,6 +139,8 @@ start(normal, []) ->
 
                 {ok, MemoryAlarms} = application:get_env(memory_alarms),
                 ok = rabbit_alarm:start(MemoryAlarms),
+
+                ok = start_child(rabbit_queue_mode_manager),
                 
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
@@ -146,15 +148,19 @@ start(normal, []) ->
                 ok = start_child(rabbit_router),
                 ok = start_child(rabbit_node_monitor)
         end},
+       {"disk queue",
+        fun () ->
+                ok = start_child(rabbit_disk_queue)
+        end},
        {"recovery",
         fun () ->
                 ok = maybe_insert_default_data(),
                 ok = rabbit_exchange:recover(),
-                ok = rabbit_amqqueue:recover()
-        end},
-       {"persister",
-        fun () ->
-                ok = start_child(rabbit_persister)
+                {ok, DurableQueues} = rabbit_amqqueue:recover(),
+                DurableQueueNames =
+                    sets:from_list([ Q #amqqueue.name || Q <- DurableQueues ]),
+                ok = rabbit_disk_queue:delete_non_durable_queues(
+                       DurableQueueNames)
         end},
        {"guid generator",
         fun () ->

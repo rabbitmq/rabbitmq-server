@@ -317,14 +317,11 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
-    PersistentKey = case is_message_persistent(DecodedContent) of
-                        true  -> rabbit_guid:guid();
-                        false -> none
-                    end,
     Message = #basic_message{exchange_name  = ExchangeName,
                              routing_key    = RoutingKey,
                              content        = DecodedContent,
-                             persistent_key = PersistentKey},
+                             guid           = rabbit_guid:guid(),
+                             is_persistent  = is_message_persistent(DecodedContent)},
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,

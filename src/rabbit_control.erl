@@ -137,6 +137,9 @@ Available commands:
   list_bindings  [-p <VHostPath>] 
   list_connections [<ConnectionInfoItem> ...]
 
+  pin_queue_to_disk <QueueName>
+  unpin_queue_from_disk <QueueName>
+
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
 
@@ -152,8 +155,8 @@ virtual host parameter for which to display results. The default value is \"/\".
 
 <QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
 arguments, node, messages_ready, messages_unacknowledged, messages_uncommitted, 
-messages, acks_uncommitted, consumers, transactions, memory]. The default is 
- to display name and (number of) messages.
+messages, acks_uncommitted, consumers, transactions, memory, mode]. The default 
+is to display name and (number of) messages.
 
 <ExchangeInfoItem> must be a member of the list [name, type, durable, 
 auto_delete, arguments]. The default is to display name and type.
@@ -166,6 +169,9 @@ peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
 recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
 user, peer_address and peer_port.
 
+pin_queue_to_disk will force a queue to be in disk mode.
+unpin_queue_from_disk will permit a queue that has been pinned to disk mode
+to be converted to mixed mode should there be enough memory available.
 "),
     halt(1).
 
@@ -280,6 +286,18 @@ action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
     action(Command, Node, VHost, RemainingArgs, Inform).
 
+action(pin_queue_to_disk, Node, VHost, [Queue], Inform) ->
+    Inform("Pinning queue ~p in vhost ~p to disk",
+           [Queue, VHost]),
+    rpc_call(Node, rabbit_amqqueue, set_mode_pin,
+             [list_to_binary(VHost), list_to_binary(Queue), true]);
+    
+action(unpin_queue_from_disk, Node, VHost, [Queue], Inform) ->
+    Inform("Unpinning queue ~p in vhost ~p from disk",
+           [Queue, VHost]),
+    rpc_call(Node, rabbit_amqqueue, set_mode_pin,
+             [list_to_binary(VHost), list_to_binary(Queue), false]);
+    
 action(set_permissions, Node, VHost, [Username, CPerm, WPerm, RPerm], Inform) ->
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
     call(Node, {rabbit_access_control, set_permissions,
