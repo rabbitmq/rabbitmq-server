@@ -10,6 +10,9 @@ SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
 ERLC_OPTS=-I $(RABBIT_SERVER_INCLUDE_DIR) -I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall +debug_info # +native -v
 
+.PHONY: test
+
+
 all: $(EBIN_DIR) $(TARGETS)
 
 $(EBIN_DIR):
@@ -31,3 +34,17 @@ start_server:
 		RABBITMQ_SERVER_START_ARGS='-pa '"$$(pwd)/$(EBIN_DIR)"' -rabbit \
 			stomp_listeners [{\"0.0.0.0\",61613}] \
 			extra_startup_steps [{\"STOMP-listeners\",rabbit_stomp,kickstart,[]}]'
+
+start-cover: all
+	$(MAKE) -C $(RABBIT_SERVER_SOURCE_ROOT) start-cover \
+		COVER_DIR=../rabbitmq-stomp/
+
+stop-cover:
+	$(MAKE) -C $(RABBIT_SERVER_SOURCE_ROOT) stop-cover
+
+test:
+	$(MAKE) start-cover
+	python test/test.py
+	$(MAKE) stop-cover
+
+
