@@ -66,14 +66,14 @@
 %% @spec (amqp_params()) -> [Connection]
 %% where
 %%      Connection = pid()
-%% @doc Starts a direct connection to an AMQP server, assuming that
+%% @doc Starts a direct connection to a RabbitMQ server, assuming that
 %% the server is running in the same process space.
 start_direct(Params) -> start_direct_internal(Params, false).
 
 %% @spec (amqp_params()) -> [Connection]
 %% where
 %%      Connection = pid()
-%% @doc Starts a direct connection to an AMQP server, assuming that
+%% @doc Starts a direct connection to a RabbitMQ server, assuming that
 %% the server is running in the same process space. The resulting process
 %% is linked to the invoking process.
 start_direct_link(Params) -> start_direct_internal(Params, true).
