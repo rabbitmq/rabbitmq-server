@@ -99,10 +99,14 @@ start_link(Q) ->
 
 %%----------------------------------------------------------------------------
 
-init(Q = #amqqueue { name = QName, durable = Durable }) ->
+init(Q = #amqqueue { name = QName, durable = Durable, pinned = Pinned }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     ok = rabbit_queue_mode_manager:register
            (self(), false, rabbit_amqqueue, set_mode, [self()]),
+    ok = case Pinned of
+             true -> rabbit_queue_mode_manager:pin_to_disk(self());
+             false -> ok
+         end,
     {ok, MS} = rabbit_mixed_queue:init(QName, Durable),
     State = #q{q = Q,
                owner = none,

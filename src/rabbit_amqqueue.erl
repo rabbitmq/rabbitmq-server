@@ -229,6 +229,10 @@ set_mode_pin(VHostPath, Queue, Disk)
   when is_binary(VHostPath) andalso is_binary(Queue) ->
     with(rabbit_misc:r(VHostPath, queue, Queue),
          fun(Q) ->
+                 rabbit_misc:execute_mnesia_transaction(
+                   fun () ->
+                           ok = store_queue(Q#amqqueue{pinned = Disk})
+                   end),
                  gen_server2:pcast(Q #amqqueue.pid, 10, {set_mode_pin, Disk})
          end).
 

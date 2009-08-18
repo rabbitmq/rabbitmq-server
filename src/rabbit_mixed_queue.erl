@@ -62,7 +62,7 @@
 -type(mqstate() :: #mqstate { mode :: mode(),
                               msg_buf :: queue(),
                               queue :: queue_name(),
-                              is_durable :: bool(),
+                              is_durable :: boolean(),
                               length :: non_neg_integer(),
                               memory_size :: (non_neg_integer() | 'undefined'),
                               memory_gain :: (non_neg_integer() | 'undefined'),
@@ -72,12 +72,12 @@
 -type(acktag() :: ( 'noack' | { non_neg_integer(), non_neg_integer() })).
 -type(okmqs() :: {'ok', mqstate()}).
 
--spec(init/2 :: (queue_name(), bool()) -> okmqs()).
+-spec(init/2 :: (queue_name(), boolean()) -> okmqs()).
 -spec(publish/2 :: (message(), mqstate()) -> okmqs()).
 -spec(publish_delivered/2 :: (message(), mqstate()) ->
              {'ok', acktag(), mqstate()}).
 -spec(deliver/1 :: (mqstate()) ->
-             {('empty' | {message(), bool(), acktag(), non_neg_integer()}),
+             {('empty' | {message(), boolean(), acktag(), non_neg_integer()}),
               mqstate()}).
 -spec(ack/2 :: ([{message(), acktag()}], mqstate()) -> okmqs()).
 -spec(tx_publish/2 :: (message(), mqstate()) -> okmqs()).
@@ -89,7 +89,7 @@
 -spec(delete_queue/1 :: (mqstate()) -> {'ok', mqstate()}).
              
 -spec(length/1 :: (mqstate()) -> non_neg_integer()).
--spec(is_empty/1 :: (mqstate()) -> bool()).
+-spec(is_empty/1 :: (mqstate()) -> boolean()).
 
 -spec(to_disk_only_mode/2 :: ([message()], mqstate()) -> okmqs()).
 -spec(to_mixed_mode/2 :: ([message()], mqstate()) -> okmqs()).
