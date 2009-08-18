@@ -99,14 +99,10 @@ start_link(Q) ->
 
 %%----------------------------------------------------------------------------
 
-init(Q = #amqqueue { name = QName, durable = Durable, pinned = Pinned }) ->
+init(Q = #amqqueue { name = QName, durable = Durable }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     ok = rabbit_queue_mode_manager:register
            (self(), false, rabbit_amqqueue, set_mode, [self()]),
-    ok = case Pinned of
-             true -> rabbit_queue_mode_manager:pin_to_disk(self());
-             false -> ok
-         end,
     {ok, MS} = rabbit_mixed_queue:init(QName, Durable),
     State = #q{q = Q,
                owner = none,
@@ -838,13 +834,6 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
                     mixed -> fun rabbit_mixed_queue:to_mixed_mode/2
                  end)(PendingMessages, MS),
     noreply(State #q { mixed_state = MS1 });
-
-handle_cast({set_mode_pin, Disk}, State) ->
-    case Disk of
-        true -> rabbit_queue_mode_manager:pin_to_disk(self());
-        false -> rabbit_queue_mode_manager:unpin_from_disk(self())
-    end,
-    noreply(State);
 
 handle_cast(report_memory, State) ->
     %% deliberately don't call noreply/2 as we don't want to restart the timer
