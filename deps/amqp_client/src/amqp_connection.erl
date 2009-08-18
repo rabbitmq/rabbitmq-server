@@ -24,7 +24,6 @@
 
 -module(amqp_connection).
 
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -behaviour(gen_server).

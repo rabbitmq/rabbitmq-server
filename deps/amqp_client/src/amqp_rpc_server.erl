@@ -27,7 +27,6 @@
 
 -behaviour(gen_server).
 
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -export([init/1, terminate/2, code_change/3, handle_call/3,

@@ -25,8 +25,7 @@
 
 -module(amqp_util).
 
--include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include("amqp_client.hrl").
 
 -export([message_payload/1]).
 -export([binary/1]).
