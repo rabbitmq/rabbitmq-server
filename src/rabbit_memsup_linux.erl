@@ -31,23 +31,21 @@
 
 -module(rabbit_memsup_linux).
 
--export([init/0, update/2, get_memory_data/1]).
+-export([init/0, update/1, get_memory_data/1]).
 
--record(state, {alarmed,
-                total_memory,
+-record(state, {total_memory,
                 allocated_memory}).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(state() :: #state { alarmed :: boolean(),
-                          total_memory :: ('undefined' | non_neg_integer()),
+-type(state() :: #state { total_memory :: ('undefined' | non_neg_integer()),
                           allocated_memory :: ('undefined' | non_neg_integer())
                         }).
 
 -spec(init/0 :: () -> state()).
--spec(update/2 :: (float(), state()) -> state()).
+-spec(update/1 :: (state()) -> state()).
 -spec(get_memory_data/1 :: (state()) -> {non_neg_integer(), non_neg_integer(),
                                          ('undefined' | pid())}).
 
@@ -56,30 +54,18 @@
 %%----------------------------------------------------------------------------
 
 init() -> 
-    #state{alarmed = false,
-           total_memory = undefined,
+    #state{total_memory = undefined,
            allocated_memory = undefined}.
 
-update(MemoryFraction, State = #state { alarmed = Alarmed }) ->
+update(State) ->
     File = read_proc_file("/proc/meminfo"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line/1, Lines)),
-    MemTotal = dict:fetch('MemTotal', Dict),
-    MemUsed = MemTotal
-        - dict:fetch('MemFree', Dict)
-        - dict:fetch('Buffers', Dict)
-        - dict:fetch('Cached', Dict),
-    NewAlarmed = MemUsed / MemTotal > MemoryFraction,
-    case {Alarmed, NewAlarmed} of
-        {false, true} ->
-            alarm_handler:set_alarm({system_memory_high_watermark, []});
-        {true, false} ->
-            alarm_handler:clear_alarm(system_memory_high_watermark);
-        _ ->
-            ok
-    end,
-    State#state{alarmed = NewAlarmed,
-                total_memory = MemTotal, allocated_memory = MemUsed}.
+    [MemTotal, MemFree, Buffers, Cached] =
+        [dict:fetch(Key, Dict) ||
+            Key <- ['MemTotal', 'MemFree', 'Buffers', 'Cached']],
+    MemUsed = MemTotal - MemFree - Buffers - Cached,
+    State#state{total_memory = MemTotal, allocated_memory = MemUsed}.
 
 get_memory_data(State) ->
     {State#state.total_memory, State#state.allocated_memory, undefined}.
