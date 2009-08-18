@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_memsup_linux).
+-module(rabbit_memsup_darwin).
 
 -export([init/0, update/2, get_memory_data/1]).
 
@@ -60,15 +60,17 @@ init() ->
            total_memory = undefined,
            allocated_memory = undefined}.
 
-update(MemoryFraction, State = #state { alarmed = Alarmed }) ->
-    File = read_proc_file("/proc/meminfo"),
+update(MemoryFraction, State = #state{ alarmed = Alarmed }) ->
+    File = os:cmd("/usr/bin/vm_stat"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line/1, Lines)),
-    MemTotal = dict:fetch('MemTotal', Dict),
-    MemUsed = MemTotal
-        - dict:fetch('MemFree', Dict)
-        - dict:fetch('Buffers', Dict)
-        - dict:fetch('Cached', Dict),
+    PageSize = dict:fetch(page_size, Dict),
+    Inactive = dict:fetch('Pages inactive', Dict),
+    Active = dict:fetch('Pages active', Dict),
+    Free = dict:fetch('Pages free', Dict),
+    Wired = dict:fetch('Pages wired down', Dict),
+    MemTotal = PageSize * (Inactive + Active + Free + Wired),
+    MemUsed = PageSize * (Active + Wired),
     NewAlarmed = MemUsed / MemTotal > MemoryFraction,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
@@ -86,30 +88,15 @@ get_memory_data(State) ->
 
 %%----------------------------------------------------------------------------
 
--define(BUFFER_SIZE, 1024).
-
-%% file:read_file does not work on files in /proc as it seems to get
-%% the size of the file first and then read that many bytes. But files
-%% in /proc always have length 0, we just have to read until we get
-%% eof.
-read_proc_file(File) ->
-    {ok, IoDevice} = file:open(File, [read, raw]),
-    Res = read_proc_file(IoDevice, []),
-    file:close(IoDevice),
-    lists:flatten(lists:reverse(Res)).
-    
-read_proc_file(IoDevice, Acc) ->
-    case file:read(IoDevice, ?BUFFER_SIZE) of
-        {ok, Res} -> read_proc_file(IoDevice, [Res | Acc]);
-        eof       -> Acc
-    end.
-
-%% A line looks like "FooBar: 123456 kB"
+%% A line looks like "Foo bar: 123456."
 parse_line(Line) ->
     [Name, RHS | _Rest] = string:tokens(Line, ":"),
-    [Value | UnitsRest] = string:tokens(RHS, " "),
-    Value1 = case UnitsRest of
-                 [] -> list_to_integer(Value); %% no units
-                 ["kB"] -> list_to_integer(Value) * 1024
-             end,
-    {list_to_atom(Name), Value1}.
+    case Name of
+        "Mach Virtual Memory Statistics" ->
+            ["(page", "size", "of", PageSize, "bytes)"] =
+                string:tokens(RHS, " "),
+            {page_size, list_to_integer(PageSize)};
+        _ ->
+            [Value | _Rest1] = string:tokens(RHS, " ."),
+            {list_to_atom(Name), list_to_integer(Value)}
+    end.
