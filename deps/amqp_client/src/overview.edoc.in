@@ -24,3 +24,9 @@ Many of the API functions take structured records as arguments. These records re
 == Programming Model ==
 
 For more information, refer to the Erlang AMQP client developer's guide on the RabbitMQ website.
+
+== RPC Components ==
+
+The {@link amqp_rpc_server} module provides a generic building block to expose
+Erlang functions via an RPC over AMQP mechanism. The {@link amqp_rpc_client}
+provides a simple client utility to submit RPC requests to a server via AMQP.
