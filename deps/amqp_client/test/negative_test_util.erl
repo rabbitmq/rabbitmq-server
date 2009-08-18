@@ -24,8 +24,7 @@
 %%
 -module(negative_test_util).
 
--include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
