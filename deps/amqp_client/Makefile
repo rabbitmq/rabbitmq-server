@@ -75,8 +75,6 @@ ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_
 RABBITMQ_NODENAME=rabbit
 PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
 RABBITMQCTL=$(BROKER_DIR)/scripts/rabbitmqctl
-PREPARE_BROKER_TEST_ENVIRONMENT=rabbit_control:action(delete_user,$(RABBITMQ_NODENAME),[atom_to_list(test_user_bum)],{io,format}),rabbit_control:action(delete_vhost,$(RABBITMQ_NODENAME),[atom_to_list(test_vhost_bum)],{io,format}),rabbit_control:action(delete_user,$(RABBITMQ_NODENAME),[atom_to_list(test_user_no_perm)],{io,format}),rabbit_control:action(add_user,$(RABBITMQ_NODENAME),[atom_to_list(test_user_no_perm),atom_to_list(test_user_no_perm)],{io,format}).
-CLEANUP_BROKER_TEST_ENVIRONMENT=rabbit_control:action(delete_user,$(RABBITMQ_NODENAME),[atom_to_list(test_user_no_perm)],{io,format}).
 
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
@@ -86,7 +84,7 @@ DIALYZER_CALL=dialyzer --plt $(PLT)
 	test_suites_coverage run_test_broker start_test_broker_node \
 	stop_test_broker_node test_network test_direct test_network_coverage \
 	test_direct_coverage test_common_package clean source_tarball package \
-	common_package
+	common_package boot_broker unboot_broker
 
 all: package
 
@@ -141,25 +139,25 @@ test_suites_coverage: prepare_tests
 	{ $(MAKE) test_direct_coverage || OK=false; } && \
 	$$OK
 
-run_test_broker:
+## This performs test setup and teardown procedures to ensure that
+## that the correct users are configured in the test instance
+run_test_broker: start_test_broker_node unboot_broker
 	OK=true && \
 	TMPFILE=$(MKTEMP) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
 		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
 		-noshell \
 		-s rabbit \
-		-eval $(PREPARE_BROKER_TEST_ENVIRONMENT) \
 		$(RUN_TEST_BROKER_ARGS) \
-		-eval $(CLEANUP_BROKER_TEST_ENVIRONMENT) \
 		-s init stop" 2>&1 | \
 		tee $$TMPFILE || OK=false; } && \
 	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
+	$(MAKE) boot_broker && \
+	$(MAKE) stop_test_broker_node && \
 	$$OK
 
-start_test_broker_node:
-	$(MAKE) -C $(BROKER_DIR) start-background-node
-	$(MAKE) -C $(BROKER_DIR) start-rabbit-on-node
+start_test_broker_node: boot_broker
 	$(RABBITMQCTL) delete_user test_user_bum 2>/dev/null || true
 	$(RABBITMQCTL) delete_vhost test_vhost_bum 2>/dev/null || true
 	$(RABBITMQCTL) delete_user test_user_no_perm 2>/dev/null || true
@@ -167,6 +165,13 @@ start_test_broker_node:
 
 stop_test_broker_node:
 	$(RABBITMQCTL) delete_user test_user_no_perm
+	$(MAKE) unboot_broker
+
+boot_broker:
+	$(MAKE) -C $(BROKER_DIR) start-background-node
+	$(MAKE) -C $(BROKER_DIR) start-rabbit-on-node
+
+unboot_broker:
 	$(MAKE) -C $(BROKER_DIR) stop-rabbit-on-node
 	$(MAKE) -C $(BROKER_DIR) stop-node
 
