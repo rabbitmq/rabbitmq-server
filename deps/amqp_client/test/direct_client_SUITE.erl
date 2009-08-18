@@ -48,6 +48,9 @@ basic_recover_test() ->
 basic_consume_test() ->
     test_util:basic_consume_test(new_connection()).
 
+large_content_test() ->
+    test_util:large_content_test(new_connection()).
+
 lifecycle_test() ->
     test_util:lifecycle_test(new_connection()).
 
