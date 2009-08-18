@@ -228,12 +228,8 @@ map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 set_mode_pin(VHostPath, Queue, Disk)
   when is_binary(VHostPath) andalso is_binary(Queue) ->
     with(rabbit_misc:r(VHostPath, queue, Queue),
-         fun(Q) -> case Disk of
-                       true -> rabbit_queue_mode_manager:pin_to_disk
-                                 (Q #amqqueue.pid);
-                       false -> rabbit_queue_mode_manager:unpin_from_disk
-                                  (Q #amqqueue.pid)
-                   end
+         fun(Q) ->
+                 gen_server2:pcast(Q #amqqueue.pid, 10, {set_mode_pin, Disk})
          end).
 
 set_mode(QPid, Mode) ->
