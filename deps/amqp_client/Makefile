@@ -158,8 +158,6 @@ run_test_broker: start_test_broker_node unboot_broker
 	$$OK
 
 start_test_broker_node: boot_broker
-	$(RABBITMQCTL) delete_user test_user_bum 2>/dev/null || true
-	$(RABBITMQCTL) delete_vhost test_vhost_bum 2>/dev/null || true
 	$(RABBITMQCTL) delete_user test_user_no_perm 2>/dev/null || true
 	$(RABBITMQCTL) add_user test_user_no_perm test_user_no_perm
 
