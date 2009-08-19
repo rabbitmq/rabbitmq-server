@@ -53,6 +53,7 @@
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
+-export([unfold/2, ceil/1]).
 
 -import(mnesia).
 -import(lists).
@@ -116,7 +117,9 @@
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
-
+-spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
+-spec(ceil/1 :: (number()) -> number()).
+              
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -446,3 +449,18 @@ stop_applications(Apps) ->
                         cannot_stop_application,
                         Apps).
 
+unfold(Fun, Init) ->
+    unfold(Fun, [], Init).
+
+unfold(Fun, Acc, Init) ->
+    case Fun(Init) of
+        {true, E, I} -> unfold(Fun, [E|Acc], I);
+        false -> {Acc, Init}
+    end.
+
+ceil(N) ->
+    T = trunc(N),
+    case N - T of
+        0 -> N;
+        _ -> 1 + T
+    end.
