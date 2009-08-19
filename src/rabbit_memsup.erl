@@ -44,7 +44,8 @@
                 timeout,
                 timer,
                 mod,
-                mod_state
+                mod_state,
+                alarmed
                }).
 
 -define(SERVER, memsup). %% must be the same as the standard memsup
@@ -78,8 +79,9 @@ init([Mod]) ->
                      timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
                      timer = TRef,
                      mod = Mod,
-                     mod_state = Mod:update(Fraction, InitState) },
-    {ok, State}.
+                     mod_state = InitState,
+                     alarmed = false },
+    {ok, internal_update(State)}.
 
 start_timer(Timeout) ->
     {ok, TRef} = timer:apply_interval(Timeout, ?MODULE, update, []),
@@ -108,10 +110,8 @@ handle_call(get_memory_data, _From,
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast(update, State = #state { memory_fraction = MemoryFraction,
-                                     mod = Mod, mod_state = ModState }) ->
-    ModState1 = Mod:update(MemoryFraction, ModState),
-    {noreply, State #state { mod_state = ModState1 }};
+handle_cast(update, State) ->
+    {noreply, internal_update(State)};
 
 handle_cast(_Request, State) -> 
     {noreply, State}.
@@ -124,3 +124,19 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) -> 
     {ok, State}.
+ 
+internal_update(State = #state { memory_fraction = MemoryFraction,
+                                 alarmed = Alarmed,
+                                 mod = Mod, mod_state = ModState }) ->
+    ModState1 = Mod:update(ModState),
+    {MemTotal, MemUsed, _BigProc} = Mod:get_memory_data(ModState1),
+    NewAlarmed = MemUsed / MemTotal > MemoryFraction,
+    case {Alarmed, NewAlarmed} of
+        {false, true} ->
+            alarm_handler:set_alarm({system_memory_high_watermark, []});
+        {true, false} ->
+            alarm_handler:clear_alarm(system_memory_high_watermark);
+        _ ->
+            ok
+    end,    
+    State #state { mod_state = ModState1, alarmed = NewAlarmed }.
