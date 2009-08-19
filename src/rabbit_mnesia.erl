@@ -192,28 +192,16 @@ cluster_nodes_config_filename() ->
 
 create_cluster_nodes_config(ClusterNodes) ->
     FileName = cluster_nodes_config_filename(),
-    Handle = case file:open(FileName, [write]) of
-                 {ok, Device} -> Device;
-                 {error, Reason} ->
-                     throw({error, {cannot_create_cluster_nodes_config,
-                                    FileName, Reason}})
-             end,
-    try
-        ok = io:write(Handle, ClusterNodes),
-        ok = io:put_chars(Handle, [$.])
-    after
-        case file:close(Handle) of
-            ok -> ok;
-            {error, Reason1} ->
-                throw({error, {cannot_close_cluster_nodes_config,
-                               FileName, Reason1}})
-        end
-    end,
-    ok.
+    case rabbit_misc:write_term_file(FileName, [ClusterNodes]) of
+        ok -> ok;
+        {error, Reason} ->
+            throw({error, {cannot_create_cluster_nodes_config,
+                           FileName, Reason}})
+    end.
 
 read_cluster_nodes_config() ->
     FileName = cluster_nodes_config_filename(),
-    case file:consult(FileName) of
+    case rabbit_misc:read_term_file(FileName) of
         {ok, [ClusterNodes]} -> ClusterNodes;
         {error, enoent} ->
             case application:get_env(cluster_config) of

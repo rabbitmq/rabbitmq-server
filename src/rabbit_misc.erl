@@ -50,9 +50,11 @@
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([table_foreach/2]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
+-export([read_term_file/1, write_term_file/2]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
+-export([unfold/2, ceil/1]).
 
 -import(mnesia).
 -import(lists).
@@ -64,6 +66,8 @@
 -ifdef(use_specs).
 
 -include_lib("kernel/include/inet.hrl").
+
+-type(ok_or_error() :: 'ok' | {'error', any()}).
 
 -spec(method_record_type/1 :: (tuple()) -> atom()).
 -spec(polite_pause/0 :: () -> 'done').
@@ -88,9 +92,9 @@
 -spec(r_arg/4 :: (vhost() | r(atom()), K, amqp_table(), binary()) ->
              undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
--spec(enable_cover/0 :: () -> 'ok' | {'error', any()}).
+-spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(report_cover/0 :: () -> 'ok').
--spec(enable_cover/1 :: (string()) -> 'ok' | {'error', any()}).
+-spec(enable_cover/1 :: (string()) -> ok_or_error()).
 -spec(report_cover/1 :: (string()) -> 'ok').
 -spec(throw_on_error/2 ::
       (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
@@ -100,7 +104,7 @@
 -spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
--spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
+-spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
 -spec(localnode/1 :: (atom()) -> erlang_node()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
@@ -110,12 +114,16 @@
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
--spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
--spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
+-spec(dirty_dump_log/1 :: (string()) -> ok_or_error()).
+-spec(read_term_file/1 :: (string()) -> {'ok', [any()]} | {'error', any()}).
+-spec(write_term_file/2 :: (string(), [any()]) -> ok_or_error()).
+-spec(append_file/2 :: (string(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
+-spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
+-spec(ceil/1 :: (number()) -> number()).
 
 -endif.
 
@@ -376,6 +384,12 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
 
 
+read_term_file(File) -> file:consult(File).
+
+write_term_file(File, Terms) ->
+    file:write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
+                                             Term <- Terms])).
+
 append_file(File, Suffix) ->
     case file:read_file_info(File) of
         {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
@@ -446,3 +460,18 @@ stop_applications(Apps) ->
                         cannot_stop_application,
                         Apps).
 
+unfold(Fun, Init) ->
+    unfold(Fun, [], Init).
+
+unfold(Fun, Acc, Init) ->
+    case Fun(Init) of
+        {true, E, I} -> unfold(Fun, [E|Acc], I);
+        false -> {Acc, Init}
+    end.
+
+ceil(N) ->
+    T = trunc(N),
+    case N - T of
+        0 -> N;
+        _ -> 1 + T
+    end.
