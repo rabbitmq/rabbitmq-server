@@ -39,9 +39,6 @@ AMQP_SPEC_JSON_PATH=$(AMQP_CODEGEN_DIR)/amqp-0.8.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
-# for the moment we don't use boot files because they introduce a
-# dependency on particular versions of OTP applications
-#all: $(EBIN_DIR)/rabbit.boot
 all: $(TARGETS)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
@@ -116,8 +113,11 @@ force-snapshot: all
 stop-node:
 	-$(ERL_CALL) -q
 
+# code coverage will be created for subdirectory "ebin" of COVER_DIR
+COVER_DIR=.
+
 start-cover: all
-	echo "cover:start(), rabbit_misc:enable_cover()." | $(ERL_CALL)
+	echo "cover:start(), rabbit_misc:enable_cover([\"$(COVER_DIR)\"])." | $(ERL_CALL)
 
 stop-cover: all
 	echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL)
@@ -176,7 +176,7 @@ install: all docs_all install_dirs
 	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-multi rabbitmq-activate-plugins; do \
 		cp scripts/$$script $(TARGET_DIR)/sbin; \
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
- 	done
+	done
 	for section in 1 5; do \
 		mkdir -p $(MAN_DIR)/man$$section; \
 		for manpage in docs/*.$$section.pod; do \

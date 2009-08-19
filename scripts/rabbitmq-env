@@ -37,7 +37,7 @@ while [ -h "$SCRIPT_PATH" ] ; do
     if [ "$?" != "0" ]; then
       REL_PATH=`readlink $SCRIPT_PATH`
       if expr "$REL_PATH" : '/.*' > /dev/null; then
-        SCRIPT_PATH="$link"
+        SCRIPT_PATH="$REL_PATH"
       else
         SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$REL_PATH"
       fi
