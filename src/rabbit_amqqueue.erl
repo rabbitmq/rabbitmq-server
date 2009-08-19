@@ -42,7 +42,7 @@
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([set_mode_pin/3, set_mode/2, report_memory/1]).
+-export([set_mode/2, report_memory/1]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -102,7 +102,6 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
--spec(set_mode_pin/3 :: (vhost(), resource_name(), ('disk'|'mixed')) -> any()).
 -spec(set_mode/2 :: (pid(), ('disk' | 'mixed')) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), bool()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
@@ -224,17 +223,6 @@ list(VHostPath) ->
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
 
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
-
-set_mode_pin(VHostPath, Queue, Disk)
-  when is_binary(VHostPath) andalso is_binary(Queue) ->
-    with(rabbit_misc:r(VHostPath, queue, Queue),
-         fun(Q) -> case Disk of
-                       true -> rabbit_queue_mode_manager:pin_to_disk
-                                 (Q #amqqueue.pid);
-                       false -> rabbit_queue_mode_manager:unpin_from_disk
-                                  (Q #amqqueue.pid)
-                   end
-         end).
 
 set_mode(QPid, Mode) ->
     gen_server2:pcast(QPid, 10, {set_mode, Mode}).
