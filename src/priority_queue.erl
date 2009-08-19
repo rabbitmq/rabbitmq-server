@@ -55,7 +55,8 @@
 
 -module(priority_queue).
 
--export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, in/2, in/3, out/1]).
+-export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, in/2, in/3,
+         out/1, join/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -73,6 +74,7 @@
 -spec(in/2 :: (any(), pqueue()) -> pqueue()).
 -spec(in/3 :: (any(), priority(), pqueue()) -> pqueue()).
 -spec(out/1 :: (pqueue()) -> {empty | {value, any()}, pqueue()}).
+-spec(join/2 :: (pqueue(), pqueue()) -> pqueue()).
 
 -endif.
 
@@ -146,6 +148,42 @@ out({pqueue, [{P, Q} | Queues]}) ->
                false -> {pqueue, [{P, Q1} | Queues]}
            end,
     {R, NewQ}.
+
+join(A, {queue, [], []}) ->
+    A;
+join({queue, [], []}, B) ->
+    B;
+join({queue, AIn, AOut}, {queue, BIn, BOut}) ->
+    {queue, BIn, AOut ++ lists:reverse(AIn, BOut)};
+join(A = {queue, _, _}, {pqueue, BPQ}) ->
+    {Pre, Post} = lists:splitwith(fun ({P, _}) -> P < 0 end, BPQ),
+    Post1 = case Post of
+                []                        -> [ {0, A} ];
+                [ {0, ZeroQueue} | Rest ] -> [ {0, join(A, ZeroQueue)} | Rest ];
+                _                         -> [ {0, A} | Post ]
+            end,
+    {pqueue, Pre ++ Post1};
+join({pqueue, APQ}, B = {queue, _, _}) ->
+    {Pre, Post} = lists:splitwith(fun ({P, _}) -> P < 0 end, APQ),
+    Post1 = case Post of
+                []                        -> [ {0, B} ];
+                [ {0, ZeroQueue} | Rest ] -> [ {0, join(ZeroQueue, B)} | Rest ];
+                _                         -> [ {0, B} | Post ]
+            end,
+    {pqueue, Pre ++ Post1};
+join({pqueue, APQ}, {pqueue, BPQ}) ->
+    {pqueue, merge(APQ, BPQ, [])}.
+
+merge([], BPQ, Acc) ->
+    lists:reverse(Acc, BPQ);
+merge(APQ, [], Acc) ->
+    lists:reverse(Acc, APQ);
+merge([{P, A}|As], [{P, B}|Bs], Acc) ->
+    merge(As, Bs, [ {P, join(A, B)} | Acc ]);
+merge([{PA, A}|As], Bs = [{PB, _}|_], Acc) when PA < PB ->
+    merge(As, Bs, [ {PA, A} | Acc ]);
+merge(As = [{_, _}|_], [{PB, B}|Bs], Acc) ->
+    merge(As, Bs, [ {PB, B} | Acc ]).
 
 r2f([])      -> {queue, [], []};
 r2f([_] = R) -> {queue, [], R};
