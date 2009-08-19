@@ -62,10 +62,12 @@ stop_rabbitmq () {
     if [ $RETVAL = 0 ] ; then
         $DAEMON stop_all > /var/log/rabbitmq/shutdown_log 2> /var/log/rabbitmq/shutdown_err
         RETVAL=$?
-        if [ $RETVAL != 0 ] ; then
-            echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
-        else
+        if [ $RETVAL = 0 ] ; then
+            # Try to stop epmd if run by the rabbitmq user
+            pkill -u rabbitmq epmd || :
             rm -rf $LOCK_FILE
+        else
+            echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
         fi
     else
         echo No nodes running 

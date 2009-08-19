@@ -41,6 +41,7 @@
 -export([dirty_read/1]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
+-export([enable_cover/1, report_cover/1]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
@@ -51,6 +52,7 @@
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
+-export([unfold/2, ceil/1]).
 
 -import(mnesia).
 -import(lists).
@@ -88,6 +90,8 @@
 -spec(rs/1 :: (r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> 'ok' | {'error', any()}).
 -spec(report_cover/0 :: () -> 'ok').
+-spec(enable_cover/1 :: (string()) -> 'ok' | {'error', any()}).
+-spec(report_cover/1 :: (string()) -> 'ok').
 -spec(throw_on_error/2 ::
       (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
@@ -115,8 +119,9 @@
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
->>>>>>> /tmp/rabbit_misc.erl~other.qjyLOB
-
+-spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
+-spec(ceil/1 :: (number()) -> number()).
+              
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -191,17 +196,27 @@ rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
                                 [Kind, Name, VHostPath])).
 
 enable_cover() ->
-    case cover:compile_beam_directory("ebin") of
+    enable_cover(".").
+
+enable_cover([Root]) when is_atom(Root) ->
+    enable_cover(atom_to_list(Root));
+enable_cover(Root) ->
+    case cover:compile_beam_directory(filename:join(Root, "ebin")) of
         {error,Reason} -> {error,Reason};
         _ -> ok
     end.
 
 report_cover() ->
-    Dir = "cover/",
-    ok = filelib:ensure_dir(Dir),
+    report_cover(".").
+
+report_cover([Root]) when is_atom(Root) ->
+    report_cover(atom_to_list(Root));
+report_cover(Root) ->
+    Dir = filename:join(Root, "cover"),
+    ok = filelib:ensure_dir(filename:join(Dir,"junk")),
     lists:foreach(fun(F) -> file:delete(F) end,
-                  filelib:wildcard(Dir ++ "*.html")),
-    {ok, SummaryFile} = file:open(Dir ++ "summary.txt", [write]),
+                  filelib:wildcard(filename:join(Dir, "*.html"))),
+    {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
     {CT, NCT} =
         lists:foldl(
           fun(M,{CovTot, NotCovTot}) ->
@@ -210,7 +225,7 @@ report_cover() ->
                                                   Cov, NotCov, M),
                   {ok,_} = cover:analyze_to_file(
                              M,
-                             Dir ++ atom_to_list(M) ++ ".html",
+                             filename:join(Dir, atom_to_list(M) ++ ".html"),
                              [html]),
                   {CovTot+Cov, NotCovTot+NotCov}
           end,
@@ -350,7 +365,9 @@ dirty_foreach_key1(F, TableName, K) ->
     end.
 
 dirty_dump_log(FileName) ->
-    {ok, LH} = disk_log:open([{name, dirty_dump_log}, {mode, read_only}, {file, FileName}]),
+    {ok, LH} = disk_log:open([{name, dirty_dump_log},
+                              {mode, read_only},
+                              {file, FileName}]),
     dirty_dump_log1(LH, disk_log:chunk(LH, start)),
     disk_log:close(LH).
 
@@ -439,4 +456,18 @@ stop_applications(Apps) ->
                         cannot_stop_application,
                         Apps).
 
->>>>>>> /tmp/rabbit_misc.erl~other.qjyLOB
+unfold(Fun, Init) ->
+    unfold(Fun, [], Init).
+
+unfold(Fun, Acc, Init) ->
+    case Fun(Init) of
+        {true, E, I} -> unfold(Fun, [E|Acc], I);
+        false -> {Acc, Init}
+    end.
+
+ceil(N) ->
+    T = trunc(N),
+    case N - T of
+        0 -> N;
+        _ -> 1 + T
+    end.

@@ -89,7 +89,7 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
 conserve_memory(Pid, Conserve) ->
-    gen_server2:cast(Pid, {conserve_memory, Conserve}).
+    gen_server2:pcast(Pid, 9, {conserve_memory, Conserve}).
 
 %%---------------------------------------------------------------------------
 
@@ -157,14 +157,16 @@ handle_cast({conserve_memory, Conserve}, State) ->
            State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
     noreply(State).
 
+handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
+            State = #ch{writer_pid = WriterPid}) ->
+    State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
+    {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
 handle_info(timeout, State) ->
     ok = clear_permission_cache(),
-    %% TODO: Once we drop support for R11B-5, we can change this to
-    %% {noreply, State, hibernate};
-    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State]).
+    {noreply, State, hibernate}.
 
 terminate(_Reason, #ch{writer_pid = WriterPid, limiter_pid = LimiterPid,
                        state = terminating}) ->

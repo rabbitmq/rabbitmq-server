@@ -1,0 +1,35 @@
+=head1 NAME
+
+rabbitmq-activate-plugins - command line tool for activating plugins in a RabbitMQ broker
+
+=head1 SYNOPSIS
+
+rabbitmq-activate-plugins
+
+=head1 DESCRIPTION
+
+RabbitMQ is an implementation of AMQP, the emerging standard for high
+performance enterprise messaging. The RabbitMQ server is a robust and
+scalable implementation of an AMQP broker.
+
+rabbitmq-activate-plugins is a command line tool for activating plugins installed
+into the broker's plugins directory.
+
+=head1 EXAMPLES
+
+To activate all of the installed plugins in the current RabbitMQ install,
+execute:
+
+    rabbitmq-activate-plugins
+
+=head1 SEE ALSO
+
+rabbitmq.conf(5), rabbitmq-multi(1), rabbitmq-server(1), rabbitmqctl(1)
+
+=head1 AUTHOR
+
+The RabbitMQ Team <info@rabbitmq.com>
+
+=head1 REFERENCES
+
+RabbitMQ Web Site: http://www.rabbitmq.com
