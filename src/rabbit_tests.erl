@@ -75,7 +75,8 @@ test_priority_queue() ->
 
     %% 1-element priority Q
     Q1 = priority_queue:in(foo, 1, priority_queue:new()),
-    {true, false, 1, [{1, foo}], [foo]} = test_priority_queue(Q1),
+    {true, false, 1, [{1, foo}], [foo]} =
+        test_priority_queue(Q1),
 
     %% 2-element same-priority Q
     Q2 = priority_queue:in(bar, 1, Q1),
@@ -90,6 +91,42 @@ test_priority_queue() ->
     %% 1-element negative priority Q
     Q4 = priority_queue:in(foo, -1, priority_queue:new()),
     {true, false, 1, [{-1, foo}], [foo]} = test_priority_queue(Q4),
+
+    %% merge 2 * 1-element no-priority Qs
+    Q5 = priority_queue:join(priority_queue:in(foo, Q),
+                             priority_queue:in(bar, Q)),
+    {true, false, 2, [{0, foo}, {0, bar}], [foo, bar]} =
+        test_priority_queue(Q5),
+
+    %% merge 1-element no-priority Q with 1-element priority Q
+    Q6 = priority_queue:join(priority_queue:in(foo, Q),
+                             priority_queue:in(bar, 1, Q)),
+    {true, false, 2, [{1, bar}, {0, foo}], [bar, foo]} =
+        test_priority_queue(Q6),
+
+    %% merge 1-element priority Q with 1-element no-priority Q 
+    Q7 = priority_queue:join(priority_queue:in(foo, 1, Q),
+                             priority_queue:in(bar, Q)),
+    {true, false, 2, [{1, foo}, {0, bar}], [foo, bar]} =
+        test_priority_queue(Q7),
+
+    %% merge 2 * 1-element same-priority Qs
+    Q8 = priority_queue:join(priority_queue:in(foo, 1, Q),
+                             priority_queue:in(bar, 1, Q)),
+    {true, false, 2, [{1, foo}, {1, bar}], [foo, bar]} =
+        test_priority_queue(Q8),
+
+    %% merge 2 * 1-element different-priority Qs
+    Q9 = priority_queue:join(priority_queue:in(foo, 1, Q),
+                             priority_queue:in(bar, 2, Q)),
+    {true, false, 2, [{2, bar}, {1, foo}], [bar, foo]} =
+        test_priority_queue(Q9),
+
+    %% merge 2 * 1-element different-priority Qs (other way around)
+    Q10 = priority_queue:join(priority_queue:in(bar, 2, Q),
+                              priority_queue:in(foo, 1, Q)),
+    {true, false, 2, [{2, bar}, {1, foo}], [bar, foo]} =
+        test_priority_queue(Q10),
 
     passed.
 
