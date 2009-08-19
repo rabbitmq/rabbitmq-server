@@ -42,7 +42,7 @@
          terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(SERIAL_FILENAME, "rabbit_guid").
+-define(SERIAL_FILENAME, "rabbit_serial").
 
 -record(state, {serial}).
 
@@ -69,12 +69,12 @@ update_disk_serial() ->
                  {ok, [Num]}     -> Num;
                  {error, enoent} -> rabbit_persister:serial();
                  {error, Reason} ->
-                     throw({error, {cannot_read_guid_file, Filename, Reason}})
+                     throw({error, {cannot_read_serial_file, Filename, Reason}})
              end,
     case rabbit_misc:write_term_file(Filename, [Serial + 1]) of
         ok -> ok;
         {error, Reason1} ->
-            throw({error, {cannot_write_guid_file, Filename, Reason1}})
+            throw({error, {cannot_write_serial_file, Filename, Reason1}})
     end,
     Serial.
 
