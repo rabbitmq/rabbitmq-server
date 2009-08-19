@@ -48,11 +48,12 @@
 %% @type amqp_params() = #amqp_params{}.
 %% As defined in amqp_client.hrl. It contains the following fields:
 %% <ul>
-%% <li>username :: string() - The name of a user registered with the broker, 
-%%     defaults to "guest"</li>
-%% <li>password :: string() - The user's password, defaults to "guest"</li>
-%% <li>virtual_host :: string() - The name of a virtual host in the broker,
-%%     defaults to "/"</li>
+%% <li>username :: binary() - The name of a user registered with the broker, 
+%%     defaults to &lt;&lt;guest"&gt;&gt;</li>
+%% <li>password :: binary() - The user's password, defaults to 
+%%     &lt;&lt;"guest"&gt;&gt;</li>
+%% <li>virtual_host :: binary() - The name of a virtual host in the broker,
+%%     defaults to &lt;&lt;"/"&gt;&gt;</li>
 %% <li>host :: string() - The hostname of the broker,
 %%     defaults to "localhost"</li>
 %% <li>port :: integer() - The port the broker is listening on,
@@ -84,7 +85,7 @@ start_direct_internal(#amqp_params{username     = User,
                       ProcLink) ->
     InitialState = #connection_state{username  = User,
                                      password  = Password,
-                                     vhostpath = list_to_binary(VHost)},
+                                     vhostpath = VHost},
     {ok, Pid} = start_internal(InitialState, amqp_direct_driver, ProcLink),
     Pid.
 
@@ -110,7 +111,7 @@ start_network_internal(#amqp_params{username     = User,
     InitialState = #connection_state{username   = User,
                                      password   = Password,
                                      serverhost = Host,
-                                     vhostpath  = list_to_binary(VHost),
+                                     vhostpath  = VHost,
                                      port       = Port},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
@@ -125,15 +126,15 @@ start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
 %% Open and close channels API Methods
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none, ""). 
+%% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;). 
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
-    open_channel(ConnectionPid, none, "").
+    open_channel(ConnectionPid, none, <<>>).
 
 %% @spec (ConnectionPid, ChannelNumber, OutOfBand) -> ChannelPid
 %% where
 %%      ChannelNumber = integer()
-%%      OutOfBand = string()
+%%      OutOfBand = binary()
 %%      ConnectionPid = pid()
 %%      ChannelPid = pid()
 %% @doc Opens an AMQP channel.
@@ -141,8 +142,7 @@ open_channel(ConnectionPid) ->
 %% has already been successfully established.
 open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
     gen_server:call(ConnectionPid,
-                    {open_channel, ChannelNumber,
-                     amqp_util:binary(OutOfBand)}, infinity).
+                    {open_channel, ChannelNumber, OutOfBand}, infinity).
 
 %% @type close() = #'connection.close'{}.
 %% The fields of this record are defined in the AMQP specification.

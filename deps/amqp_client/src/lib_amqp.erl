@@ -63,8 +63,7 @@ publish(Channel, X, RoutingKey, Payload) ->
 
 publish(Channel, X, RoutingKey, Payload, Mandatory)
         when is_boolean(Mandatory)->
-    publish(Channel, X, RoutingKey, Payload, Mandatory,
-            amqp_util:basic_properties());
+    publish(Channel, X, RoutingKey, Payload, Mandatory, #'P_basic'{});
 
 publish(Channel, X, RoutingKey, Payload, Properties) ->
     publish(Channel, X, RoutingKey, Payload, false, Properties).
@@ -78,7 +77,7 @@ async_publish(Channel, X, RoutingKey, Payload) ->
 
 async_publish(Channel, X, RoutingKey, Payload, Mandatory) ->
     publish_internal(fun amqp_channel:cast/3, Channel, X, RoutingKey,
-                      Payload, Mandatory, amqp_util:basic_properties()).
+                      Payload, Mandatory, #'P_basic'{}).
 
 publish_internal(Fun, Channel, X, RoutingKey,
                  Payload, Mandatory, Properties) ->
