@@ -128,6 +128,35 @@ test_priority_queue() ->
     {true, false, 2, [{2, bar}, {1, foo}], [bar, foo]} =
         test_priority_queue(Q10),
 
+    %% merge 2 * 2-element multi-different-priority Qs
+    Q11 = priority_queue:join(Q6, Q5),
+    {true, false, 4, [{1, bar}, {0, foo}, {0, foo}, {0, bar}],
+     [bar, foo, foo, bar]} = test_priority_queue(Q11),
+
+    %% and the other way around
+    Q12 = priority_queue:join(Q5, Q6),
+    {true, false, 4, [{1, bar}, {0, foo}, {0, bar}, {0, foo}],
+     [bar, foo, bar, foo]} = test_priority_queue(Q12),
+
+    %% merge with negative priorities
+    Q13 = priority_queue:join(Q4, Q5),
+    {true, false, 3, [{0, foo}, {0, bar}, {-1, foo}], [foo, bar, foo]} =
+        test_priority_queue(Q13),
+
+    %% and the other way around
+    Q14 = priority_queue:join(Q5, Q4),
+    {true, false, 3, [{0, foo}, {0, bar}, {-1, foo}], [foo, bar, foo]} =
+        test_priority_queue(Q14),
+
+    %% joins with empty queues:
+    Q1 = priority_queue:join(Q, Q1),
+    Q1 = priority_queue:join(Q1, Q),
+
+    %% insert with priority into non-empty zero-priority queue
+    Q15 = priority_queue:in(baz, 1, Q5),
+    {true, false, 3, [{1, baz}, {0, foo}, {0, bar}], [baz, foo, bar]} =
+        test_priority_queue(Q15),
+
     passed.
 
 priority_queue_in_all(Q, L) ->
