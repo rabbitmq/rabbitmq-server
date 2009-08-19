@@ -89,7 +89,8 @@
          consumers,
          transactions,
          memory,
-         mode
+         mode,
+         pinned
         ]).
          
 %%----------------------------------------------------------------------------
@@ -530,6 +531,7 @@ i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
 i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
 i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
 i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
+i(pinned,      #q{q = #amqqueue{pinned      = Pinned}})     -> Pinned;
 i(mode, #q{ mixed_state = MS }) ->
     rabbit_mixed_queue:info(MS);
 i(pid, _) ->
@@ -839,12 +841,12 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
                  end)(PendingMessages, MS),
     noreply(State #q { mixed_state = MS1 });
 
-handle_cast({set_mode_pin, Disk}, State) ->
+handle_cast({set_mode_pin, Disk}, State = #q { q = Q }) ->
     case Disk of
         true -> rabbit_queue_mode_manager:pin_to_disk(self());
         false -> rabbit_queue_mode_manager:unpin_from_disk(self())
     end,
-    noreply(State);
+    noreply(State #q { q = Q #amqqueue { pinned = Disk } });
 
 handle_cast(report_memory, State) ->
     %% deliberately don't call noreply/2 as we don't want to restart the timer

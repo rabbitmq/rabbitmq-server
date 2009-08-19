@@ -201,25 +201,23 @@ handle_call({pin_to_disk, Pid}, _From,
                              callbacks = Callbacks,
                              available_tokens = Avail,
                              disk_mode_pins = Pins }) ->
-    {Res, State1} =
+    State1 =
         case sets:is_element(Pid, Pins) of
-            true -> {ok, State};
+            true -> State;
             false ->
+                State2 = State #state { disk_mode_pins =
+                                        sets:add_element(Pid, Pins) },
                 case find_queue(Pid, Mixed) of
                     {mixed, {OAlloc, _OActivity}} ->
                         ok = set_queue_mode(Callbacks, Pid, disk),
-                        {ok, State #state { mixed_queues =
-                                            dict:erase(Pid, Mixed),
-                                            available_tokens = Avail + OAlloc,
-                                            disk_mode_pins =
-                                            sets:add_element(Pid, Pins)
-                                          }};
+                        State2 #state { mixed_queues = dict:erase(Pid, Mixed),
+                                        available_tokens = Avail + OAlloc
+                                      };
                     disk ->
-                        {ok, State #state { disk_mode_pins =
-                                            sets:add_element(Pid, Pins) }}
+                        State2
                 end
         end,
-    {reply, Res, State1};
+    {reply, ok, State1};
 
 handle_call({unpin_from_disk, Pid}, _From,
             State = #state { disk_mode_pins = Pins }) ->
