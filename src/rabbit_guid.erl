@@ -64,14 +64,26 @@ start_link() ->
                           [update_disk_serial()], []).
 
 update_disk_serial() ->
-    Filename = filename:join(mnesia:system_info(directory), ?SERIAL_FILENAME),
-    Serial = case file:read_file(Filename) of
-                 {ok, Content} ->
-                     binary_to_term(Content);
-                 {error, _} ->
-                     rabbit_persister:serial()
+    Filename = filename:join(rabbit_mnesia:dir(), ?SERIAL_FILENAME),
+    Serial = case file:consult(Filename) of
+                 {ok, [Num]} -> Num;
+                 {error, _} -> rabbit_persister:serial()
              end,
-    ok = file:write_file(Filename, term_to_binary(Serial + 1)),
+    Handle = case file:open(Filename, [write]) of
+                 {ok, Device} -> Device;
+                 {error, Reason} ->
+                     throw({error, {cannot_create_guid_file, Filename, Reason}})
+             end,
+    try
+        ok = io:write(Handle, Serial + 1),
+        ok = io:put_chars(Handle, [$.])
+    after
+        case file:close(Handle) of
+            ok -> ok;
+            {error, Reason1} ->
+                throw({error, {cannot_close_guid_file, Filename, Reason1}})
+        end
+    end,
     Serial.
 
 %% generate a guid that is monotonically increasing per process.
