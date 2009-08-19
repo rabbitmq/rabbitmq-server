@@ -53,25 +53,21 @@ wait_for_death(Pid) ->
     after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
     end.
 
-%% TODO Delete this when all parameters are passed as binaries
-uuid_as_list() ->
-    binary_to_list(test_util:uuid()).
-
 non_existent_user_test() ->
-    Params = #amqp_params{username = uuid_as_list(),
-                          password = uuid_as_list()},
+    Params = #amqp_params{username = test_util:uuid(),
+                          password = test_util:uuid()},
     ?assertError(_, amqp_connection:start_network(Params)).
 
 invalid_password_test() ->
-    Params = #amqp_params{username = "guest",
-                          password = uuid_as_list()},
+    Params = #amqp_params{username = <<"guest">>,
+                          password = test_util:uuid()},
     ?assertError(_, amqp_connection:start_network(Params)).
 
 non_existent_vhost_test() ->
-    Params = #amqp_params{virtual_host = uuid_as_list()},
+    Params = #amqp_params{virtual_host = test_util:uuid()},
     ?assertError(_, amqp_connection:start_network(Params)).
 
 no_permission_test() ->
-    Params = #amqp_params{username = "test_user_no_perm",
-                          password = "test_user_no_perm"},
+    Params = #amqp_params{username = <<"test_user_no_perm">>,
+                          password = <<"test_user_no_perm">>},
     ?assertError(_, amqp_connection:start_network(Params)).
