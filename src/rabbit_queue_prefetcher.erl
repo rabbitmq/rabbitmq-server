@@ -94,7 +94,7 @@
 %%    to its internal queue. A cast is not sufficient here because the
 %%    mixed_queue could come along, drain the prefetcher, thus
 %%    catching the msg just sent by the disk_queue and then call
-%%    disk_queue:deliver(Q) which is normal priority call, which could
+%%    disk_queue:fetch(Q) which is normal priority call, which could
 %%    overtake a reply cast from the prefetcher to the disk queue,
 %%    which would result in the same message being delivered
 %%    twice. Thus when the disk_queue calls prefetcher:publish(Msg),
@@ -146,7 +146,7 @@
 %% mixed_queue tries to drain the prefetcher. We must therefore ensure
 %% that this msg can't also be delivered to the mixed_queue directly
 %% by the disk_queue through the mixed_queue calling
-%% disk_queue:deliver(Q) which is why the prefetcher:publish function
+%% disk_queue:fetch(Q) which is why the prefetcher:publish function
 %% is a call and not a cast, thus blocking the disk_queue.
 %%
 %% Finally, the prefetcher is only created when the mixed_queue is
