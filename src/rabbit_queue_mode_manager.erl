@@ -39,7 +39,7 @@
          terminate/2, code_change/3]).
 
 -export([register/5, report_memory/3, report_memory/5, info/0,
-         conserve_memory/2]).
+         pin_to_disk/1, unpin_from_disk/1, conserve_memory/2]).
 
 -define(TOTAL_TOKENS, 10000000).
 -define(ACTIVITY_THRESHOLD, 25).
@@ -56,6 +56,8 @@
                           (non_neg_integer() | 'undefined'),
                           (non_neg_integer() | 'undefined'), bool()) ->
              'ok').
+-spec(pin_to_disk/1 :: (pid()) -> 'ok').
+-spec(unpin_from_disk/1 :: (pid()) -> 'ok').
 -spec(info/0 :: () -> [{atom(), any()}]).
 -spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
 
@@ -67,6 +69,7 @@
                  tokens_per_byte,
                  lowrate,
                  hibernate,
+                 disk_mode_pins,
                  unevictable,
                  alarmed
                }).
@@ -155,6 +158,12 @@ register(Pid, Unevictable, Module, Function, Args) ->
     gen_server2:cast(?SERVER, {register, Pid, Unevictable,
                                Module, Function, Args}).
 
+pin_to_disk(Pid) ->
+    gen_server2:call(?SERVER, {pin_to_disk, Pid}).
+
+unpin_from_disk(Pid) ->
+    gen_server2:call(?SERVER, {unpin_from_disk, Pid}).
+
 report_memory(Pid, Memory, Hibernating) ->
     report_memory(Pid, Memory, undefined, undefined, Hibernating).
 
@@ -182,21 +191,53 @@ init([]) ->
                   tokens_per_byte = TPB,
                   lowrate = priority_queue:new(),
                   hibernate = queue:new(),
+                  disk_mode_pins = sets:new(),
                   unevictable = sets:new(),
                   alarmed = false
                 }}.
+
+handle_call({pin_to_disk, Pid}, _From,
+            State = #state { mixed_queues = Mixed,
+                             callbacks = Callbacks,
+                             available_tokens = Avail,
+                             disk_mode_pins = Pins }) ->
+    {Res, State1} =
+        case sets:is_element(Pid, Pins) of
+            true -> {ok, State};
+            false ->
+                case find_queue(Pid, Mixed) of
+                    {mixed, {OAlloc, _OActivity}} ->
+                        ok = set_queue_mode(Callbacks, Pid, disk),
+                        {ok, State #state { mixed_queues =
+                                            dict:erase(Pid, Mixed),
+                                            available_tokens = Avail + OAlloc,
+                                            disk_mode_pins =
+                                            sets:add_element(Pid, Pins)
+                                          }};
+                    disk ->
+                        {ok, State #state { disk_mode_pins =
+                                            sets:add_element(Pid, Pins) }}
+                end
+        end,
+    {reply, Res, State1};
+
+handle_call({unpin_from_disk, Pid}, _From,
+            State = #state { disk_mode_pins = Pins }) ->
+    {reply, ok, State #state { disk_mode_pins = sets:del_element(Pid, Pins) }};
 
 handle_call(info, _From, State) ->
     State1 = #state { available_tokens = Avail,
                       mixed_queues = Mixed,
                       lowrate = Lazy,
                       hibernate = Sleepy,
+                      disk_mode_pins = Pins,
                       unevictable = Unevictable } =
         free_upto(undef, 1 + ?TOTAL_TOKENS, State), %% this'll just do tidying
     {reply, [{ available_tokens, Avail },
              { mixed_queues, dict:to_list(Mixed) },
              { lowrate_queues, priority_queue:to_list(Lazy) },
              { hibernated_queues, queue:to_list(Sleepy) },
+             { queues_pinned_to_disk, sets:to_list(Pins) },
              { unevictable_queues, sets:to_list(Unevictable) }], State1}.
 
 
@@ -204,6 +245,7 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
             State = #state { mixed_queues = Mixed,
                              available_tokens = Avail,
                              callbacks = Callbacks,
+                             disk_mode_pins = Pins,
                              tokens_per_byte = TPB,
                              alarmed = Alarmed }) ->
     Req = rabbit_misc:ceil(TPB * Memory),
@@ -238,7 +280,7 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
                          MixedActivity}
                 end;
             disk ->
-                case Alarmed of
+                case sets:is_element(Pid, Pins) orelse Alarmed of
                     true ->
                         {State, disk};
                     false ->
