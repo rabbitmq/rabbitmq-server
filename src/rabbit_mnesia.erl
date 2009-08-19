@@ -146,8 +146,21 @@ table_definitions() ->
       [{record_name, amqqueue},
        {attributes, record_info(fields, amqqueue)}]}].
 
+replicated_table_definitions() ->
+    [{Tab, Attrs} || {Tab, Attrs} <- table_definitions(),
+                     not lists:member({local_content, true}, Attrs)
+    ].
+
+non_replicated_table_definitions() ->
+    [{Tab, Attrs} || {Tab, Attrs} <- table_definitions(),
+                     lists:member({local_content, true}, Attrs)
+    ].
+
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
+
+replicated_table_names() ->
+    [Tab || {Tab, _} <- replicated_table_definitions()].
 
 dir() -> mnesia:system_info(directory).
     
@@ -253,9 +266,11 @@ init_db(ClusterNodes) ->
     WasDiskNode = mnesia:system_info(use_dir),
     IsDiskNode = ClusterNodes == [] orelse
         lists:member(node(), ClusterNodes),
-    case mnesia:change_config(extra_db_nodes, ClusterNodes -- [node()]) of
+    ExtraNodes = ClusterNodes -- [node()],
+    case mnesia:change_config(extra_db_nodes, ExtraNodes) of
         {ok, []} ->
-            if WasDiskNode and IsDiskNode ->
+            case WasDiskNode of
+                true ->
                     case check_schema_integrity() of
                         ok ->
                             ok;
@@ -270,22 +285,18 @@ init_db(ClusterNodes) ->
                             ok = move_db(),
                             ok = create_schema()
                     end;
-               WasDiskNode ->
-                    throw({error, {cannot_convert_disk_node_to_ram_node,
-                                   ClusterNodes}});
-               IsDiskNode ->
-                    ok = create_schema();
-               true ->
-                    throw({error, {unable_to_contact_cluster_nodes,
-                                   ClusterNodes}})
+                false ->
+                    ok = create_schema()
             end;
         {ok, [_|_]} ->
-            ok = wait_for_tables(),
-            ok = create_local_table_copies(
-                   case IsDiskNode of
-                       true  -> disc;
-                       false -> ram
-                   end);
+            TableCopyType = case IsDiskNode of
+                                true  -> disc;
+                                false -> ram
+                            end,
+            ok = wait_for_replicated_tables(),
+            ok = create_local_table_copy(schema, disc_copies),
+            ok = create_local_non_replicated_table_copies(disc),
+            ok = create_local_replicated_table_copies(TableCopyType);
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
@@ -336,16 +347,25 @@ create_tables() ->
                   table_definitions()),
     ok.
 
-create_local_table_copies(Type) ->
-    ok = if Type /= ram -> create_local_table_copy(schema, disc_copies);
-            true -> ok
-         end,
+create_local_replicated_table_copies(Type) ->
+    create_local_table_copies(Type, replicated_table_definitions()).
+
+create_local_non_replicated_table_copies(Type) ->
+    create_local_table_copies(Type, non_replicated_table_definitions()).
+
+create_local_table_copies(Type, TableDefinitions) ->
     lists:foreach(
       fun({Tab, TabDef}) ->
-              HasDiscCopies =
-                  lists:keymember(disc_copies, 1, TabDef),
-              HasDiscOnlyCopies =
-                  lists:keymember(disc_only_copies, 1, TabDef),
+              Fun = fun(DiscType) ->
+                            case lists:keysearch(DiscType, 1, TabDef) of
+                                false ->
+                                    false;
+                                {value, {DiscType, List}} -> 
+                                    lists:member(node(), List)
+                            end
+                    end,
+              HasDiscCopies = Fun(disc_copies),
+              HasDiscOnlyCopies = Fun(disc_only_copies),
               StorageType =
                   case Type of
                       disc ->
@@ -366,10 +386,7 @@ create_local_table_copies(Type) ->
                   end,
               ok = create_local_table_copy(Tab, StorageType)
       end,
-      table_definitions()),
-    ok = if Type == ram -> create_local_table_copy(schema, ram_copies);
-            true -> ok
-         end,
+      TableDefinitions),
     ok.
 
 create_local_table_copy(Tab, Type) ->
@@ -384,10 +401,16 @@ create_local_table_copy(Tab, Type) ->
         end,
     ok.
 
-wait_for_tables() -> 
+wait_for_replicated_tables() ->
+    wait_for_tables(replicated_table_names()).
+
+wait_for_tables() ->
+    wait_for_tables(table_names()).
+
+wait_for_tables(TableNames) -> 
     case check_schema_integrity() of
         ok ->
-            case mnesia:wait_for_tables(table_names(), 30000) of
+            case mnesia:wait_for_tables(TableNames, 30000) of
                 ok -> ok;
                 {timeout, BadTabs} ->
                     throw({error, {timeout_waiting_for_tables, BadTabs}});

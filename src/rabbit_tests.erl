@@ -408,19 +408,17 @@ test_cluster_management() ->
                   end,
                   ClusteringSequence),
 
-    %% attempt to convert a disk node into a ram node
+    %% convert a disk node into a ram node
     ok = control_action(reset, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
-    {error, {cannot_convert_disk_node_to_ram_node, _}} =
-        control_action(cluster, ["invalid1@invalid",
-                                 "invalid2@invalid"]),
+    ok = control_action(cluster, ["invalid1@invalid",
+                                  "invalid2@invalid"]),
 
-    %% attempt to join a non-existing cluster as a ram node
+    %% join a non-existing cluster as a ram node
     ok = control_action(reset, []),
-    {error, {unable_to_contact_cluster_nodes, _}} =
-        control_action(cluster, ["invalid1@invalid",
-                                 "invalid2@invalid"]),
+    ok = control_action(cluster, ["invalid1@invalid",
+                                  "invalid2@invalid"]),
 
     SecondaryNode = rabbit_misc:localnode(hare),
     case net_adm:ping(SecondaryNode) of
@@ -436,11 +434,12 @@ test_cluster_management2(SecondaryNode) ->
     NodeS = atom_to_list(node()),
     SecondaryNodeS = atom_to_list(SecondaryNode),
 
-    %% attempt to convert a disk node into a ram node
+    %% make a disk node
     ok = control_action(reset, []),
     ok = control_action(cluster, [NodeS]),
-    {error, {unable_to_join_cluster, _, _}} =
-        control_action(cluster, [SecondaryNodeS]),
+    %% make a ram node
+    ok = control_action(reset, []),
+    ok = control_action(cluster, [SecondaryNodeS]),
 
     %% join cluster as a ram node
     ok = control_action(reset, []),
@@ -453,21 +452,21 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
 
-    %% attempt to join non-existing cluster as a ram node
-    {error, _} = control_action(cluster, ["invalid1@invalid",
-                                          "invalid2@invalid"]),
-
+    %% join non-existing cluster as a ram node
+    ok = control_action(cluster, ["invalid1@invalid",
+                                  "invalid2@invalid"]),
     %% turn ram node into disk node
+    ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
     
-    %% attempt to convert a disk node into a ram node
-    {error, {cannot_convert_disk_node_to_ram_node, _}} =
-        control_action(cluster, ["invalid1@invalid",
-                                 "invalid2@invalid"]),
+    %% convert a disk node into a ram node
+    ok = control_action(cluster, ["invalid1@invalid",
+                                  "invalid2@invalid"]),
 
     %% turn a disk node into a ram node
+    ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
