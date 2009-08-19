@@ -364,18 +364,16 @@ create_local_non_replicated_table_copies(Type) ->
 create_local_table_copies(Type, TableDefinitions) ->
     lists:foreach(
       fun({Tab, TabDef}) ->
-              HasDiscCopies =
-                  case lists:keysearch(disc_copies, 1, TabDef) of
-                      false -> false;
-                      {value, {disc_copies, List1}} ->
-                          lists:member(node(), List1)
-                  end,
-              HasDiscOnlyCopies =
-                  case lists:keysearch(disc_only_copies, 1, TabDef) of
-                      false -> false;
-                      {value, {disc_only_copies, List2}} ->
-                          lists:member(node(), List2)
-                  end,
+              Fun = fun(DiscType) ->
+                            case lists:keysearch(DiscType, 1, TabDef) of
+                                false ->
+                                    false;
+                                {value, {DiscType, List}} -> 
+                                    lists:member(node(), List)
+                            end
+                    end,
+              HasDiscCopies = Fun(disc_copies),
+              HasDiscOnlyCopies = Fun(disc_only_copies),
               StorageType =
                   case Type of
                       disc ->
