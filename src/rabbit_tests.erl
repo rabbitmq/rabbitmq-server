@@ -184,7 +184,7 @@ test_simple_n_element_queue(N) ->
     passed.
 
 test_unfold() ->
-    {[], test} = rabbit_misc:unfold(fun (V) -> false end, test),
+    {[], test} = rabbit_misc:unfold(fun (_V) -> false end, test),
     List = lists:seq(2,20,2),
     {List, 0} = rabbit_misc:unfold(fun (0) -> false;
                                        (N) -> {true, N*2, N-1}
