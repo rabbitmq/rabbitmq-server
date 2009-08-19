@@ -49,6 +49,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     passed = test_priority_queue(),
+    passed = test_unfold(),
     passed = test_parsing(),
     passed = test_topic_matching(),
     passed = test_log_management(),
@@ -180,6 +181,14 @@ test_simple_n_element_queue(N) ->
     Q = priority_queue_in_all(priority_queue:new(), Items),
     ToListRes = [{0, X} || X <- Items],
     {true, false, N, ToListRes, Items} = test_priority_queue(Q),
+    passed.
+
+test_unfold() ->
+    {[], test} = rabbit_misc:unfold(fun (V) -> false end, test),
+    List = lists:seq(2,20,2),
+    {List, 0} = rabbit_misc:unfold(fun (0) -> false;
+                                       (N) -> {true, N*2, N-1}
+                                   end, 10),
     passed.
 
 test_parsing() ->
