@@ -39,9 +39,6 @@ AMQP_SPEC_JSON_PATH=$(AMQP_CODEGEN_DIR)/amqp-0.8.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
-# for the moment we don't use boot files because they introduce a
-# dependency on particular versions of OTP applications
-#all: $(EBIN_DIR)/rabbit.boot
 all: $(TARGETS)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
