@@ -49,10 +49,11 @@
 %% As defined in amqp_client.hrl. It contains the following fields:
 %% <ul>
 %% <li>username :: binary() - The name of a user registered with the broker, 
-%%     defaults to <<"guest">></li>
-%% <li>password :: binary() - The user's password, defaults to <<"guest">></li>
+%%     defaults to &lt;&lt;guest"&gt;&gt;</li>
+%% <li>password :: binary() - The user's password, defaults to 
+%%     &lt;&lt;"guest"&gt;&gt;</li>
 %% <li>virtual_host :: binary() - The name of a virtual host in the broker,
-%%     defaults to <<"/">></li>
+%%     defaults to &lt;&lt;"/"&gt;&gt;</li>
 %% <li>host :: string() - The hostname of the broker,
 %%     defaults to "localhost"</li>
 %% <li>port :: integer() - The port the broker is listening on,
@@ -125,7 +126,7 @@ start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
 %% Open and close channels API Methods
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none, <<>>). 
+%% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;). 
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none, <<>>).
