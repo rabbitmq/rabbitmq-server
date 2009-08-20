@@ -263,13 +263,9 @@ delete_cluster_nodes_config() ->
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.
 init_db(ClusterNodes) ->
-    WasDiskNode = mnesia:system_info(use_dir),
-    IsDiskNode = ClusterNodes == [] orelse
-        lists:member(node(), ClusterNodes),
-    ExtraNodes = ClusterNodes -- [node()],
-    case mnesia:change_config(extra_db_nodes, ExtraNodes) of
+    case mnesia:change_config(extra_db_nodes, ClusterNodes -- [node()]) of
         {ok, []} ->
-            case WasDiskNode of
+            case mnesia:system_info(use_dir) of
                 true ->
                     case check_schema_integrity() of
                         ok ->
@@ -289,14 +285,15 @@ init_db(ClusterNodes) ->
                     ok = create_schema()
             end;
         {ok, [_|_]} ->
-            TableCopyType = case IsDiskNode of
-                                true  -> disc;
-                                false -> ram
-                            end,
+            IsDiskNode = ClusterNodes == [] orelse
+                lists:member(node(), ClusterNodes),
             ok = wait_for_replicated_tables(),
             ok = create_local_table_copy(schema, disc_copies),
             ok = create_local_non_replicated_table_copies(disc),
-            ok = create_local_replicated_table_copies(TableCopyType);
+            ok = create_local_replicated_table_copies(case IsDiskNode of
+                                                          true  -> disc;
+                                                          false -> ram
+                                                      end);
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
