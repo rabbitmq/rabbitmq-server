@@ -67,10 +67,9 @@ stop_rabbitmq () {
         if [ $RETVAL = 0 ] ; then
             # Try to stop epmd if run by the rabbitmq user
             pkill -u rabbitmq epmd || :
+            [ -n "$LOCK_FILE" ] && rm -rf $LOCK_FILE
         else
             echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
-        else
-            [ -n "$LOCK_FILE" ] && rm -rf $LOCK_FILE
         fi
     else
         echo No nodes running 
