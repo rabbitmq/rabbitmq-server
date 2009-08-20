@@ -529,7 +529,7 @@ handle_cast({set_mode, Mode}, State) ->
                  mixed -> fun to_ram_disk_mode/1
              end)(State));
 handle_cast({prefetch, Q, From}, State) ->
-    {ok, Result, State1} = internal_fetch(Q, true, true, false, State),
+    {ok, Result, State1} = internal_fetch(Q, true, false, false, State),
     Cont = rabbit_misc:with_exit_handler(
              fun () -> false end,
              fun () ->
@@ -539,7 +539,7 @@ handle_cast({prefetch, Q, From}, State) ->
     State3 =
 	case Cont of
 	    true ->
-		case internal_fetch(Q, false, false, true, State1) of
+		case internal_fetch(Q, false, true, true, State1) of
 		    {ok, empty, State2} -> State2;
 		    {ok, {_MsgId, _IsPersistent, _Delivered, _MsgSeqId, _Rem},
 		     State2} -> State2
