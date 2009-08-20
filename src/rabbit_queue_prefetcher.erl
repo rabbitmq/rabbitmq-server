@@ -139,10 +139,10 @@
 %% disk_queue. This msg won't go away and the disk_queue will
 %% eventually find it. However, when it does, it'll simply read the
 %% next message from the queue (which could now be empty), possibly
-%% populate the cache (no harm done), mark the message as deleted (oh
-%% well, not a spec violation, and better than the alternative) and
-%% try and call prefetcher:publish(Msg) which will result in an error,
-%% which the disk_queue catches, as the publish call is to a
+%% populate the cache (no harm done), mark the message as delivered
+%% (oh well, not a spec violation, and better than the alternative)
+%% and try and call prefetcher:publish(Msg) which will result in an
+%% error, which the disk_queue catches, as the publish call is to a
 %% non-existant process. However, the state of the queue has not been
 %% altered so the mixed_queue will be able to fetch this message as if
 %% it had never been prefetched.
@@ -179,8 +179,8 @@
 start_link(Queue, Count) ->
     gen_server2:start_link(?MODULE, [Queue, Count, self()], []).
 
-publish(Prefetcher, Obj = { #basic_message {}, _Size, _IsDelivered,
-                            _AckTag, _Remaining }) ->
+publish(Prefetcher, Obj = {{ #basic_message {}, _Size, _IsDelivered, _AckTag},
+                           _Remaining }) ->
     gen_server2:call(Prefetcher, {publish, Obj}, infinity);
 publish(Prefetcher, empty) ->
     gen_server2:call(Prefetcher, publish_empty, infinity).
@@ -206,8 +206,8 @@ init([Q, Count, QPid]) ->
     {ok, State, infinity, {backoff, ?HIBERNATE_AFTER_MIN,
                            ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({publish, { Msg = #basic_message {},
-                        _Size, IsDelivered, AckTag, _Remaining }},
+handle_call({publish, { { Msg = #basic_message {}, _Size, IsDelivered, AckTag},
+                        _Remaining }},
 	    DiskQueue, State =
 	    #pstate { fetched_count = Fetched, target_count = Target,
 		      msg_buf = MsgBuf, buf_length = Length, queue = Q

@@ -327,7 +327,7 @@ publish_delivered(Msg =
             %% must call phantom_deliver otherwise the msg remains at
             %% the head of the queue. This is synchronous, but
             %% unavoidable as we need the AckTag
-            {MsgId, IsPersistent, true, AckTag, 0} =
+            {{MsgId, IsPersistent, true, AckTag}, 0} =
                 rabbit_disk_queue:phantom_fetch(Q),
             {ok, AckTag, State1};
         false ->
@@ -354,7 +354,7 @@ fetch(State = #mqstate { msg_buf = MsgBuf, queue = Q,
             AckTag =
                 case IsDurable andalso IsPersistent of
                     true ->
-                        {MsgId, IsPersistent, IsDelivered, AckTag1, _PRem}
+                        {{MsgId, IsPersistent, IsDelivered, AckTag1}, _PRem}
                             = rabbit_disk_queue:phantom_fetch(Q),
                         AckTag1;
                     false ->
@@ -372,8 +372,8 @@ fetch(State = #mqstate { msg_buf = MsgBuf, queue = Q,
              State1 #mqstate { msg_buf = MsgBuf1 }};
         _ when Prefetcher == undefined ->
             State2 = dec_queue_length(1, State1),
-            {Msg = #basic_message { is_persistent = IsPersistent },
-             _Size, IsDelivered, AckTag, _PersistRem}
+            {{Msg = #basic_message { is_persistent = IsPersistent },
+              _Size, IsDelivered, AckTag}, _PersistRem}
                 = rabbit_disk_queue:fetch(Q),
             AckTag1 = maybe_ack(Q, IsDurable, IsPersistent, AckTag),
             {{Msg, IsDelivered, AckTag1, Rem}, State2};

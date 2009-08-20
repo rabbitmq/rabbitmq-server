@@ -254,10 +254,10 @@
               ({'ok', pid()} | 'ignore' | {'error', any()})).
 -spec(publish/3 :: (queue_name(), message(), bool()) -> 'ok').
 -spec(fetch/1 :: (queue_name()) ->
-             ('empty' | {message(), non_neg_integer(),
-                         bool(), {msg_id(), seq_id()}, non_neg_integer()})).
+             ('empty' | {{message(), non_neg_integer(),
+                          bool(), {msg_id(), seq_id()}}, non_neg_integer()})).
 -spec(phantom_fetch/1 :: (queue_name()) ->
-             ( 'empty' | {msg_id(), bool(), bool(), {msg_id(), seq_id()},
+             ( 'empty' | {{msg_id(), bool(), bool(), {msg_id(), seq_id()}},
                           non_neg_integer()})).
 -spec(prefetch/1 :: (queue_name()) -> 'ok'). 
 -spec(ack/2 :: (queue_name(), [{msg_id(), seq_id()}]) -> 'ok').
@@ -541,7 +541,7 @@ handle_cast({prefetch, Q, From}, State) ->
 	    true ->
 		case internal_fetch(Q, false, true, true, State1) of
 		    {ok, empty, State2} -> State2;
-		    {ok, {_MsgId, _IsPersistent, _Delivered, _MsgSeqId, _Rem},
+		    {ok, {{_MsgId, _IsPersistent, _Delivered, _MsgSeqId}, _Rem},
 		     State2} -> State2
 		end;
 	    false -> State1
@@ -898,15 +898,7 @@ internal_fetch(Q, ReadMsg, FakeDeliver, Advance,
                                           {Q, ReadSeqId+1, WriteSeqId});
                        false -> true
                    end,
-            {ok,
-             case Result of
-                 {MsgId, IsPersistent, Delivered, {MsgId, ReadSeqId}} ->
-                     {MsgId, IsPersistent, Delivered, {MsgId, ReadSeqId},
-                      Remaining};
-                 {Message, BodySize, Delivered, {MsgId, ReadSeqId}} ->
-                     {Message, BodySize, Delivered, {MsgId, ReadSeqId},
-                      Remaining}
-             end, State1}
+            {ok, {Result, Remaining}, State1}
     end.
 
 internal_foldl(Q, Fun, Init, State) ->
@@ -966,7 +958,7 @@ internal_read_message(Q, ReadSeqId, ReadMsg, FakeDeliver, ForceInCache, State) -
 internal_auto_ack(Q, State) ->
     case internal_fetch(Q, false, false, true, State) of
         {ok, empty, State1} -> {ok, State1};
-        {ok, {_MsgId, _IsPersistent, _Delivered, MsgSeqId, _Remaining},
+        {ok, {{_MsgId, _IsPersistent, _Delivered, MsgSeqId}, _Remaining},
          State1} ->
             remove_messages(Q, [MsgSeqId], true, State1)
     end.        
