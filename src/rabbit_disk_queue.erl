@@ -354,7 +354,7 @@ to_ram_disk_mode() ->
     gen_server2:pcall(?SERVER, 9, to_ram_disk_mode, infinity).
 
 filesync() ->
-    gen_server2:pcast(?SERVER, 10, filesync).
+    gen_server2:pcall(?SERVER, 9, filesync).
 
 cache_info() ->
     gen_server2:call(?SERVER, cache_info, infinity).
@@ -467,6 +467,8 @@ handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, From, State) ->
 handle_call({purge, Q}, _From, State) ->
     {ok, Count, State1} = internal_purge(Q, State),
     reply(Count, State1);
+handle_call(filesync, _From, State) ->
+    reply(ok, sync_current_file_handle(State));
 handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
     reply(WriteSeqId - ReadSeqId, State);
@@ -521,8 +523,6 @@ handle_cast({requeue_next_n, Q, N}, State) ->
 handle_cast({delete_queue, Q}, State) ->
     {ok, State1} = internal_delete_queue(Q, State),
     noreply(State1);
-handle_cast(filesync, State) ->
-    noreply(sync_current_file_handle(State));
 handle_cast({set_mode, Mode}, State) ->
     noreply((case Mode of
                  disk -> fun to_disk_only_mode/1;
@@ -909,9 +909,11 @@ internal_fetch(Q, ReadMsg, FakeDeliver, Advance,
              end, State1}
     end.
 
-internal_foldl(Q, Fun, Init, State = #dqstate { sequences = Sequences }) ->
+internal_foldl(Q, Fun, Init, State) ->
+    State1 = #dqstate { sequences = Sequences } =
+        sync_current_file_handle(State),
     {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
-    internal_foldl(Q, WriteSeqId, Fun, State, Init, ReadSeqId).
+    internal_foldl(Q, WriteSeqId, Fun, State1, Init, ReadSeqId).
 
 internal_foldl(_Q, SeqId, _Fun, State, Acc, SeqId) ->
     {ok, Acc, State};
@@ -1118,11 +1120,12 @@ internal_publish(Q, Message = #basic_message { guid = MsgId },
     {ok, {MsgId, WriteSeqId}, State1}.
 
 internal_tx_cancel(MsgIds, State) ->
+    State1 = sync_current_file_handle(State),
     %% we don't need seq ids because we're not touching mnesia,
     %% because seqids were never assigned
     MsgSeqIds = lists:zip(MsgIds, lists:duplicate(erlang:length(MsgIds),
                                                   undefined)),
-    remove_messages(undefined, MsgSeqIds, false, State).
+    remove_messages(undefined, MsgSeqIds, false, State1).
 
 internal_requeue(_Q, [], State) ->
     {ok, State};
@@ -1218,8 +1221,9 @@ internal_purge(Q, State = #dqstate { sequences = Sequences }) ->
     end.
 
 internal_delete_queue(Q, State) ->
-    {ok, _Count, State1 = #dqstate { sequences = Sequences }} =
-        internal_purge(Q, State), %% remove everything undelivered
+    State1 = sync_current_file_handle(State),
+    {ok, _Count, State2 = #dqstate { sequences = Sequences }} =
+        internal_purge(Q, State1), %% remove everything undelivered
     true = ets:delete(Sequences, Q),
     %% now remove everything already delivered
     Objs = mnesia:dirty_match_object(
@@ -1233,7 +1237,7 @@ internal_delete_queue(Q, State) ->
           fun (#dq_msg_loc { queue_and_seq_id = {_Q, SeqId},
                              msg_id = MsgId }) ->
                   {MsgId, SeqId} end, Objs),
-    remove_messages(Q, MsgSeqIds, true, State1).
+    remove_messages(Q, MsgSeqIds, true, State2).
 
 internal_delete_non_durable_queues(
   DurableQueues, State = #dqstate { sequences = Sequences }) ->
