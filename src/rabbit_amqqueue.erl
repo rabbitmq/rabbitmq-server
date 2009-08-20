@@ -42,7 +42,7 @@
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([set_mode_pin/2, set_mode/2]).
+-export([set_mode_pin/2, set_mode/2, store_queue/1]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -108,6 +108,7 @@
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
+-spec(store_queue/1 :: (amqqueue()) -> 'ok').
 
 -endif.
 
@@ -225,9 +226,7 @@ list(VHostPath) ->
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
 set_mode_pin(Q, Disk) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> ok = store_queue(Q#amqqueue{pinned = Disk}) end),
-    gen_server2:pcast(Q#amqqueue.pid, 10, {set_mode_pin, Disk}).
+    gen_server2:pcast(Q#amqqueue.pid, 10, {set_mode_pin, Disk, Q}).
 
 set_mode(QPid, Mode) ->
     gen_server2:pcast(QPid, 10, {set_mode, Mode}).
