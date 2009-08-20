@@ -145,7 +145,7 @@ set_mode(disk, TxnMessages, State =
     %% Note we also batch together messages on disk so that we minimise
     %% the calls to requeue.
     {ok, MsgBuf3} =
-        send_messages_to_disk(IsDurable, Q, MsgBuf1, 0, 0, [], queue:new()),
+        send_messages_to_disk(IsDurable, Q, MsgBuf1, 0, 0, [], [], queue:new()),
     %% tx_publish txn messages. Some of these will have been already
     %% published if they really are durable and persistent which is
     %% why we can't just use our own tx_publish/2 function (would end
@@ -187,11 +187,11 @@ set_mode(mixed, TxnMessages, State = #mqstate { mode = disk, queue = Q,
     {ok, State #mqstate { mode = mixed }}.
 
 send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
-                      Commit, MsgBuf) ->
+                      Commit, Ack, MsgBuf) ->
     case queue:out(Queue) of
         {empty, _Queue} ->
-            ok = flush_messages_to_disk_queue(Q, Commit),
-            [] = flush_requeue_to_disk_queue(Q, RequeueCount, []),
+            ok = flush_messages_to_disk_queue(Q, Commit, Ack),
+            {[], []} = flush_requeue_to_disk_queue(Q, RequeueCount, [], []),
             {ok, MsgBuf};
         {{value, {Msg = #basic_message { is_persistent = IsPersistent },
                   IsDelivered}}, Queue1} ->
@@ -199,49 +199,51 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
                 true -> %% it's already in the Q
                     send_messages_to_disk(
                       IsDurable, Q, Queue1, PublishCount, RequeueCount + 1,
-                      Commit, inc_queue_length(Q, MsgBuf, 1));
+                      Commit, Ack, inc_queue_length(Q, MsgBuf, 1));
                 false ->
                     republish_message_to_disk_queue(
                       IsDurable, Q, Queue1, PublishCount, RequeueCount, Commit,
-                      MsgBuf, Msg, IsDelivered)
+                      Ack, MsgBuf, Msg, IsDelivered)
             end;
-        {{value, {Msg, IsDelivered, _AckTag}}, Queue1} ->
+        {{value, {Msg, IsDelivered, AckTag}}, Queue1} ->
             %% these have come via the prefetcher, so are no longer in
             %% the disk queue so they need to be republished
-            republish_message_to_disk_queue(IsDelivered, Q, Queue1,
-                                            PublishCount, RequeueCount, Commit,
-                                            MsgBuf, Msg, IsDelivered);
+            republish_message_to_disk_queue(
+              IsDurable, Q, Queue1, PublishCount, RequeueCount, Commit,
+              [AckTag | Ack], MsgBuf, Msg, IsDelivered);
         {{value, {Q, Count}}, Queue1} ->
             send_messages_to_disk(IsDurable, Q, Queue1, PublishCount,
-                                  RequeueCount + Count, Commit,
+                                  RequeueCount + Count, Commit, Ack,
                                   inc_queue_length(Q, MsgBuf, Count))
     end.
 
 republish_message_to_disk_queue(IsDurable, Q, Queue, PublishCount, RequeueCount,
-                                Commit, MsgBuf, Msg =
+                                Commit, Ack, MsgBuf, Msg =
                                 #basic_message { guid = MsgId }, IsDelivered) ->
-    Commit1 = flush_requeue_to_disk_queue(Q, RequeueCount, Commit),
+    {Commit1, Ack1} = flush_requeue_to_disk_queue(Q, RequeueCount, Commit, Ack),
     ok = rabbit_disk_queue:tx_publish(Msg),
-    {PublishCount1, Commit2} =
+    {PublishCount1, Commit2, Ack2} =
         case PublishCount == ?TO_DISK_MAX_FLUSH_SIZE of
-            true  -> ok = flush_messages_to_disk_queue(Q, Commit1),
-                     {1, [{MsgId, IsDelivered}]};
-            false -> {PublishCount + 1, [{MsgId, IsDelivered} | Commit1]}
+            true  -> ok = flush_messages_to_disk_queue(
+                            Q, [{MsgId, IsDelivered} | Commit1], Ack1),
+                     {0, [], []};
+            false -> {PublishCount + 1, [{MsgId, IsDelivered} | Commit1], Ack1}
         end,
     send_messages_to_disk(IsDurable, Q, Queue, PublishCount1, 0,
-                          Commit2, inc_queue_length(Q, MsgBuf, 1)).
+                          Commit2, Ack2, inc_queue_length(Q, MsgBuf, 1)).
 
-flush_messages_to_disk_queue(_Q, []) ->
+flush_messages_to_disk_queue(_Q, [], []) ->
     ok;
-flush_messages_to_disk_queue(Q, Commit) ->
-    rabbit_disk_queue:tx_commit(Q, lists:reverse(Commit), []).
+flush_messages_to_disk_queue(Q, Commit, Ack) ->
+    rabbit_disk_queue:tx_commit(Q, lists:reverse(Commit), Ack).
 
-flush_requeue_to_disk_queue(_Q, 0, Commit) ->
-    Commit;
-flush_requeue_to_disk_queue(Q, RequeueCount, Commit) ->
-    ok = flush_messages_to_disk_queue(Q, Commit),
+flush_requeue_to_disk_queue(_Q, 0, Commit, Ack) ->
+    {Commit, Ack};
+flush_requeue_to_disk_queue(Q, RequeueCount, Commit, Ack) ->
+    ok = flush_messages_to_disk_queue(Q, Commit, Ack),
+    ok = rabbit_disk_queue:filesync(),
     ok = rabbit_disk_queue:requeue_next_n(Q, RequeueCount),
-    [].
+    {[], []}.
 
 gain_memory(Inc, State = #mqstate { memory_size = QSize,
                                     memory_gain = Gain }) ->
