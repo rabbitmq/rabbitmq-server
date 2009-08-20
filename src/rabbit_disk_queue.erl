@@ -624,10 +624,9 @@ memory_use(#dqstate { operation_mode = ram_disk,
                       wordsize = WordSize
                      }) ->
     WordSize * (mnesia:table_info(rabbit_disk_queue, memory) +
-                ets:info(MsgLocationEts, memory) +
-                ets:info(FileSummary, memory) +
-                ets:info(Cache, memory) +
-                ets:info(Sequences, memory));
+                lists:sum([ets:info(Table, memory)
+                           || Table <- [MsgLocationEts, FileSummary, Cache,
+                                        Sequences]]));
 memory_use(#dqstate { operation_mode = disk_only,
                       file_summary = FileSummary,
                       sequences = Sequences,
@@ -640,9 +639,8 @@ memory_use(#dqstate { operation_mode = disk_only,
         mnesia:table_info(rabbit_disk_queue, size) * MnesiaBytesPerRecord,
     MsgLocationSizeEstimate =
         dets:info(MsgLocationDets, size) * EtsBytesPerRecord,
-    (WordSize * (ets:info(FileSummary, memory) +
-                 ets:info(Cache, memory) +
-                 ets:info(Sequences, memory))) +
+    (WordSize * (lists:sum([ets:info(Table, memory)
+                            || Table <- [FileSummary, Cache, Sequences]]))) +
         rabbit_misc:ceil(MnesiaSizeEstimate) +
         rabbit_misc:ceil(MsgLocationSizeEstimate).
 
