@@ -70,10 +70,10 @@ stop(Pid) ->
 %%--------------------------------------------------------------------------
 
 %% @private
-init([Connection, Queue, Fun]) ->
-    Channel = lib_amqp:start_channel(Connection),
-    lib_amqp:declare_private_queue(Channel, Queue),
-    lib_amqp:subscribe(Channel, Queue, self()),
+init([Connection, Q, Fun]) ->
+    Channel = amqp_connection:open_channel(Connection),
+    amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
     {ok, #rpc_server_state{channel = Channel, handler = Fun} }.
 
 %% @private
@@ -96,7 +96,11 @@ handle_info({#'basic.deliver'{},
                reply_to = Q} = Props,
     Response = Fun(Payload),
     Properties = #'P_basic'{correlation_id = CorrelationId},
-    lib_amqp:publish(Channel, <<>>, Q, Response, Properties),
+    Publish = #'basic.publish'{exchange = <<>>,
+                               routing_key = Q,
+                               mandatory = true},
+    amqp_channel:call(Channel, Publish, #amqp_msg{props = Properties,
+                                                  payload = Response}),
     {noreply, State}.
 
 %% @private
@@ -114,7 +118,7 @@ handle_cast(_Message, State) ->
 %% Closes the channel this gen_server instance started
 %% @private
 terminate(_Reason, #rpc_server_state{channel = Channel}) ->
-    lib_amqp:close_channel(Channel),
+    amqp_channel:call(Channel, #'channel.close'{}),
     ok.
 
 %% @private
