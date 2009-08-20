@@ -20,10 +20,10 @@ PYTHON=python
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
-# only available in R12B-3 upwards
+# only available in R13B upwards (R13B is eshell 5.7.1)
 #
 # NB: the test assumes that version number will only contain single digits
-USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.6.2" ]; then echo "true"; else echo "false"; fi)
+USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.0" ]; then echo "true"; else echo "false"; fi)
 endif
 
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
@@ -39,9 +39,6 @@ AMQP_SPEC_JSON_PATH=$(AMQP_CODEGEN_DIR)/amqp-0.8.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
-# for the moment we don't use boot files because they introduce a
-# dependency on particular versions of OTP applications
-#all: $(EBIN_DIR)/rabbit.boot
 all: $(TARGETS)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
@@ -101,7 +98,8 @@ run-tests: all
 start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
-		./scripts/rabbitmq-server -detached; sleep 1
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached" \
+		./scripts/rabbitmq-server ; sleep 1
 
 start-rabbit-on-node: all
 	echo "rabbit:start()." | $(ERL_CALL)
@@ -115,8 +113,11 @@ force-snapshot: all
 stop-node:
 	-$(ERL_CALL) -q
 
+# code coverage will be created for subdirectory "ebin" of COVER_DIR
+COVER_DIR=.
+
 start-cover: all
-	echo "cover:start(), rabbit_misc:enable_cover()." | $(ERL_CALL)
+	echo "cover:start(), rabbit_misc:enable_cover([\"$(COVER_DIR)\"])." | $(ERL_CALL)
 
 stop-cover: all
 	echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL)
@@ -136,7 +137,7 @@ srcdist: distclean
 	sed -i.save 's/%%VSN%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in && rm -f $(TARGET_SRC_DIR)/ebin/rabbit_app.in.save
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
-	cp codegen.py Makefile generate_app $(TARGET_SRC_DIR)
+	cp codegen.py Makefile generate_app calculate-relative $(TARGET_SRC_DIR)
 
 	cp -r scripts $(TARGET_SRC_DIR)
 	cp -r docs $(TARGET_SRC_DIR)
@@ -162,7 +163,8 @@ distclean: clean
 
 docs_all: $(MANPAGES)
 
-install: all docs_all
+install: SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
+install: all docs_all install_dirs
 	@[ -n "$(TARGET_DIR)" ] || (echo "Please set TARGET_DIR."; false)
 	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
 	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
@@ -171,13 +173,17 @@ install: all docs_all
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
-	mkdir -p $(SBIN_DIR)
-	cp scripts/rabbitmq-server $(SBIN_DIR)
-	cp scripts/rabbitmqctl $(SBIN_DIR)
-	cp scripts/rabbitmq-multi $(SBIN_DIR)
+	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-multi rabbitmq-activate-plugins; do \
+		cp scripts/$$script $(TARGET_DIR)/sbin; \
+		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
+	done
 	for section in 1 5; do \
 		mkdir -p $(MAN_DIR)/man$$section; \
 		for manpage in docs/*.$$section.pod; do \
 			cp docs/`basename $$manpage .pod`.gz $(MAN_DIR)/man$$section; \
 		done; \
 	done
+
+install_dirs:
+	mkdir -p $(SBIN_DIR)
+	mkdir -p $(TARGET_DIR)/sbin

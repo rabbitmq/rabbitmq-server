@@ -29,42 +29,19 @@
 ##
 ##   Contributor(s): ______________________________________.
 ##
-NODENAME=rabbit
-NODE_IP_ADDRESS=0.0.0.0
-NODE_PORT=5672
-SCRIPT_HOME=$(dirname $0)
-PIDS_FILE=/var/lib/rabbitmq/pids
-MULTI_ERL_ARGS=
-MULTI_START_ARGS=
 
 . `dirname $0`/rabbitmq-env
 
-[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
-[ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=${NODE_IP_ADDRESS}
-[ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=${NODE_PORT}
-[ "x" = "x$RABBITMQ_SCRIPT_HOME" ] && RABBITMQ_SCRIPT_HOME=${SCRIPT_HOME}
-[ "x" = "x$RABBITMQ_PIDS_FILE" ] && RABBITMQ_PIDS_FILE=${PIDS_FILE}
-[ "x" = "x$RABBITMQ_MULTI_ERL_ARGS" ] && RABBITMQ_MULTI_ERL_ARGS=${MULTI_ERL_ARGS}
-[ "x" = "x$RABBITMQ_MULTI_START_ARGS" ] && RABBITMQ_MULTI_START_ARGS=${MULTI_START_ARGS}
-
-export \
-    RABBITMQ_NODENAME \
-    RABBITMQ_NODE_IP_ADDRESS \
-    RABBITMQ_NODE_PORT \
-    RABBITMQ_SCRIPT_HOME \
-    RABBITMQ_PIDS_FILE
-
-# we need to turn off path expansion because some of the vars, notably
-# RABBITMQ_MULTI_ERL_ARGS, may contain terms that look like globs and
-# there is no other way of preventing their expansion.
-set -f
+RABBITMQ_EBIN=${RABBITMQ_HOME}/ebin
+[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
+[ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="${RABBITMQ_HOME}/priv/plugins"
 
 exec erl \
-    -pa "${RABBITMQ_HOME}/ebin" \
+    -pa "$RABBITMQ_EBIN" \
+    -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
+    -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
+    -rabbit rabbit_ebin "\"$RABBITMQ_EBIN\"" \
     -noinput \
     -hidden \
-    ${RABBITMQ_MULTI_ERL_ARGS} \
-    -sname rabbitmq_multi$$ \
-    -s rabbit_multi \
-    ${RABBITMQ_MULTI_START_ARGS} \
+    -s rabbit_plugin_activator \
     -extra "$@"

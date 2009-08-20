@@ -1,7 +1,8 @@
-VERSION=0.0.0
-SOURCE_TARBALL_DIR=../../../dist
+TARBALL_DIR=../../../dist
+TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.gz))
 COMMON_DIR=../../common
-TARBALL=$(SOURCE_TARBALL_DIR)/rabbitmq-server-$(VERSION).tar.gz
+VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
+
 TOP_DIR=$(shell pwd)
 #Under debian we do not want to check build dependencies, since that
 #only checks build-dependencies using rpms, not debs
@@ -23,7 +24,7 @@ rpms:   clean server
 
 prepare:
 	mkdir -p BUILD SOURCES SPECS SRPMS RPMS tmp
-	cp $(TOP_DIR)/$(TARBALL) SOURCES
+	cp $(TARBALL_DIR)/$(TARBALL) SOURCES
 	cp rabbitmq-server.spec SPECS
 	sed -i 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
 		SPECS/rabbitmq-server.spec

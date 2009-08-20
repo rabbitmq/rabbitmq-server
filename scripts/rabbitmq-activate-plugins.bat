@@ -30,10 +30,6 @@ REM
 REM   Contributor(s): ______________________________________.
 REM
 
-if "%ERLANG_HOME%"=="" (
-    set ERLANG_HOME=%~dp0%..\..\..
-)
-
 if not exist "%ERLANG_HOME%\bin\erl.exe" (
     echo.
     echo ******************************
