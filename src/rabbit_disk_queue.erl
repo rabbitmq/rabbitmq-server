@@ -39,7 +39,7 @@
          terminate/2, code_change/3]).
 -export([handle_pre_hibernate/1]).
 
--export([publish/3, deliver/1, phantom_deliver/1, ack/2,
+-export([publish/3, fetch/1, phantom_fetch/1, ack/2,
          tx_publish/1, tx_commit/3, tx_cancel/1,
          requeue/2, purge/1, delete_queue/1,
          delete_non_durable_queues/1, auto_ack_next_message/1,
@@ -48,27 +48,27 @@
 
 -export([filesync/0, cache_info/0]).
 
--export([stop/0, stop_and_obliterate/0, report_memory/0,
-         set_mode/1, to_disk_only_mode/0, to_ram_disk_mode/0]).
+-export([stop/0, stop_and_obliterate/0, set_mode/1, to_disk_only_mode/0,
+         to_ram_disk_mode/0]).
 
 -include("rabbit.hrl").
 
--define(WRITE_OK_SIZE_BITS,          8).
--define(WRITE_OK_TRANSIENT,        255).
--define(WRITE_OK_PERSISTENT,       254).
--define(INTEGER_SIZE_BYTES,          8).
--define(INTEGER_SIZE_BITS,           (8 * ?INTEGER_SIZE_BYTES)).
--define(MSG_LOC_NAME,                rabbit_disk_queue_msg_location).
--define(FILE_SUMMARY_ETS_NAME,       rabbit_disk_queue_file_summary).
--define(SEQUENCE_ETS_NAME,           rabbit_disk_queue_sequences).
--define(CACHE_ETS_NAME,              rabbit_disk_queue_cache).
--define(FILE_EXTENSION,              ".rdq").
--define(FILE_EXTENSION_TMP,          ".rdt").
--define(FILE_EXTENSION_DETS,         ".dets").
--define(FILE_PACKING_ADJUSTMENT,     (1 + (2* (?INTEGER_SIZE_BYTES)))).
--define(MEMORY_REPORT_TIME_INTERVAL, 10000). %% 10 seconds in milliseconds
--define(BATCH_SIZE,                  10000).
--define(CACHE_MAX_SIZE,              10485760).
+-define(WRITE_OK_SIZE_BITS,                  8).
+-define(WRITE_OK_TRANSIENT,                255).
+-define(WRITE_OK_PERSISTENT,               254).
+-define(INTEGER_SIZE_BYTES,                  8).
+-define(INTEGER_SIZE_BITS,                   (8 * ?INTEGER_SIZE_BYTES)).
+-define(MSG_LOC_NAME,                        rabbit_disk_queue_msg_location).
+-define(FILE_SUMMARY_ETS_NAME,               rabbit_disk_queue_file_summary).
+-define(SEQUENCE_ETS_NAME,                   rabbit_disk_queue_sequences).
+-define(CACHE_ETS_NAME,                      rabbit_disk_queue_cache).
+-define(FILE_EXTENSION,                      ".rdq").
+-define(FILE_EXTENSION_TMP,                  ".rdt").
+-define(FILE_EXTENSION_DETS,                 ".dets").
+-define(FILE_PACKING_ADJUSTMENT,             (1 + (2* (?INTEGER_SIZE_BYTES)))).
+-define(MINIMUM_MEMORY_REPORT_TIME_INTERVAL, 10000). %% 10 seconds in millisecs
+-define(BATCH_SIZE,                          10000).
+-define(CACHE_MAX_SIZE,                      10485760).
 
 -define(SERVER, ?MODULE).
 
@@ -94,11 +94,11 @@
          file_size_limit,         %% how big can our files get?
          read_file_handles,       %% file handles for reading (LRU)
          read_file_handles_limit, %% how many file handles can we open?
-         on_sync_txns,           %% list of commiters to run on sync (reversed)
+         on_sync_txns,            %% list of commiters to run on sync (reversed)
          commit_timer_ref,        %% TRef for our interval timer
          last_sync_offset,        %% current_offset at the last time we sync'd
          message_cache,           %% ets message cache
-         memory_report_timer,     %% TRef for the memory report timer
+         memory_report_timer_ref, %% TRef for the memory report timer
          wordsize,                %% bytes in a word on this platform
          mnesia_bytes_per_record, %% bytes per record in mnesia in ram_disk mode
          ets_bytes_per_record     %% bytes per record in msg_location_ets
@@ -253,10 +253,10 @@
 -spec(start_link/0 :: () ->
               ({'ok', pid()} | 'ignore' | {'error', any()})).
 -spec(publish/3 :: (queue_name(), message(), bool()) -> 'ok').
--spec(deliver/1 :: (queue_name()) ->
+-spec(fetch/1 :: (queue_name()) ->
              ('empty' | {message(), non_neg_integer(),
                          bool(), {msg_id(), seq_id()}, non_neg_integer()})).
--spec(phantom_deliver/1 :: (queue_name()) ->
+-spec(phantom_fetch/1 :: (queue_name()) ->
              ( 'empty' | {msg_id(), bool(), bool(), {msg_id(), seq_id()},
                           non_neg_integer()})).
 -spec(prefetch/1 :: (queue_name()) -> 'ok'). 
@@ -281,7 +281,6 @@
 -spec(to_ram_disk_mode/0 :: () -> 'ok').
 -spec(filesync/0 :: () -> 'ok').
 -spec(cache_info/0 :: () -> [{atom(), term()}]).
--spec(report_memory/0 :: () -> 'ok').
 -spec(set_mode/1 :: ('disk' | 'mixed') -> 'ok').
 
 -endif.
@@ -295,11 +294,11 @@ start_link() ->
 publish(Q, Message = #basic_message {}, IsDelivered) ->
     gen_server2:cast(?SERVER, {publish, Q, Message, IsDelivered}).
 
-deliver(Q) ->
-    gen_server2:call(?SERVER, {deliver, Q}, infinity).
+fetch(Q) ->
+    gen_server2:call(?SERVER, {fetch, Q}, infinity).
 
-phantom_deliver(Q) ->
-    gen_server2:call(?SERVER, {phantom_deliver, Q}, infinity).
+phantom_fetch(Q) ->
+    gen_server2:call(?SERVER, {phantom_fetch, Q}, infinity).
 
 prefetch(Q) ->
     gen_server2:pcast(?SERVER, -1, {prefetch, Q, self()}).
@@ -360,9 +359,6 @@ filesync() ->
 cache_info() ->
     gen_server2:call(?SERVER, cache_info, infinity).
 
-report_memory() ->
-    gen_server2:cast(?SERVER, report_memory).
-
 set_mode(Mode) ->
     gen_server2:pcast(?SERVER, 10, {set_mode, Mode}).
 
@@ -406,8 +402,6 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %% seems to blow up if it is set private
     MsgLocationEts = ets:new(?MSG_LOC_NAME, [set, protected]),
 
-    TRef = start_memory_timer(),
-
     InitName = "0" ++ ?FILE_EXTENSION,
     State =
         #dqstate { msg_location_dets       = MsgLocationDets,
@@ -430,7 +424,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                    last_sync_offset        = 0,
                    message_cache           = ets:new(?CACHE_ETS_NAME,
                                                      [set, private]),
-                   memory_report_timer     = TRef,
+                   memory_report_timer_ref = undefined,
                    wordsize                = erlang:system_info(wordsize),
                    mnesia_bytes_per_record = undefined,
                    ets_bytes_per_record    = undefined
@@ -457,14 +451,14 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %% ets_bytes_per_record otherwise.
     ok = rabbit_queue_mode_manager:report_memory(self(), 0, false),
     ok = report_memory(false, State2),
-    {ok, State2, hibernate, {backoff, ?HIBERNATE_AFTER_MIN,
-                             ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+    {ok, start_memory_timer(State2), hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({deliver, Q}, _From, State) ->
-    {ok, Result, State1} = internal_deliver(Q, true, false, true, State),
+handle_call({fetch, Q}, _From, State) ->
+    {ok, Result, State1} = internal_fetch(Q, true, false, true, State),
     reply(Result, State1);
-handle_call({phantom_deliver, Q}, _From, State) ->
-    {ok, Result, State1} = internal_deliver(Q, false, false, true, State),
+handle_call({phantom_fetch, Q}, _From, State) ->
+    {ok, Result, State1} = internal_fetch(Q, false, false, true, State),
     reply(Result, State1);
 handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, From, State) ->
     State1 =
@@ -534,13 +528,8 @@ handle_cast({set_mode, Mode}, State) ->
                  disk -> fun to_disk_only_mode/1;
                  mixed -> fun to_ram_disk_mode/1
              end)(State));
-handle_cast(report_memory, State) ->
-    %% call noreply1/2, not noreply/1/2, as we don't want to restart the
-    %% memory_report_timer
-    %% by unsetting the timer, we force a report on the next normal message
-    noreply1(State #dqstate { memory_report_timer = undefined });
 handle_cast({prefetch, Q, From}, State) ->
-    {ok, Result, State1} = internal_deliver(Q, true, true, false, State),
+    {ok, Result, State1} = internal_fetch(Q, true, true, false, State),
     Cont = rabbit_misc:with_exit_handler(
              fun () -> false end,
              fun () ->
@@ -550,7 +539,7 @@ handle_cast({prefetch, Q, From}, State) ->
     State3 =
 	case Cont of
 	    true ->
-		case internal_deliver(Q, false, false, true, State1) of
+		case internal_fetch(Q, false, false, true, State1) of
 		    {ok, empty, State2} -> State2;
 		    {ok, {_MsgId, _IsPersistent, _Delivered, _MsgSeqId, _Rem},
 		     State2} -> State2
@@ -559,6 +548,11 @@ handle_cast({prefetch, Q, From}, State) ->
 	end,
     noreply(State3).
         
+handle_info(report_memory, State) ->
+    %% call noreply1/2, not noreply/1/2, as we don't want to restart the
+    %% memory_report_timer_ref.
+    %% By unsetting the timer, we force a report on the next normal message
+    noreply1(State #dqstate { memory_report_timer_ref = undefined });
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info(timeout, State) ->
@@ -595,7 +589,7 @@ shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
     State1 #dqstate { current_file_handle = undefined,
                       current_dirty = false,
                       read_file_handles = {dict:new(), gb_trees:empty()},
-                      memory_report_timer = undefined
+                      memory_report_timer_ref = undefined
                     }.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -603,20 +597,17 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% ---- UTILITY FUNCTIONS ----
 
-stop_memory_timer(State = #dqstate { memory_report_timer = undefined }) ->
+stop_memory_timer(State = #dqstate { memory_report_timer_ref = undefined }) ->
     State;
-stop_memory_timer(State = #dqstate { memory_report_timer = TRef }) ->
+stop_memory_timer(State = #dqstate { memory_report_timer_ref = TRef }) ->
     {ok, cancel} = timer:cancel(TRef),
-    State #dqstate { memory_report_timer = undefined }.
+    State #dqstate { memory_report_timer_ref = undefined }.
 
-start_memory_timer() ->
-    {ok, TRef} = timer:apply_after(?MEMORY_REPORT_TIME_INTERVAL,
-                                   rabbit_disk_queue, report_memory, []),
-    TRef.
-
-start_memory_timer(State = #dqstate { memory_report_timer = undefined }) ->
+start_memory_timer(State = #dqstate { memory_report_timer_ref = undefined }) ->
     ok = report_memory(false, State),
-    State #dqstate { memory_report_timer = start_memory_timer() };
+    {ok, TRef} = timer:send_after(?MINIMUM_MEMORY_REPORT_TIME_INTERVAL,
+                                  report_memory),
+    State #dqstate { memory_report_timer_ref = TRef };
 start_memory_timer(State) ->
     State.
 
@@ -893,7 +884,7 @@ cache_is_full(#dqstate { message_cache = Cache }) ->
 
 %% ---- INTERNAL RAW FUNCTIONS ----
 
-internal_deliver(Q, ReadMsg, FakeDeliver, Advance,
+internal_fetch(Q, ReadMsg, FakeDeliver, Advance,
                  State = #dqstate { sequences = Sequences }) ->
     case sequence_lookup(Sequences, Q) of
         {SeqId, SeqId} -> {ok, empty, State};
@@ -971,7 +962,7 @@ internal_read_message(Q, ReadSeqId, ReadMsg, FakeDeliver, ForceInCache, State) -
     end.
 
 internal_auto_ack(Q, State) ->
-    case internal_deliver(Q, false, false, true, State) of
+    case internal_fetch(Q, false, false, true, State) of
         {ok, empty, State1} -> {ok, State1};
         {ok, {_MsgId, _IsPersistent, _Delivered, MsgSeqId, _Remaining},
          State1} ->

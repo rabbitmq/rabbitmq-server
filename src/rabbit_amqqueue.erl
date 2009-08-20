@@ -42,7 +42,7 @@
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([set_mode_pin/2, set_mode/2, report_memory/1]).
+-export([set_mode_pin/2, set_mode/2]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -108,7 +108,6 @@
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
--spec(report_memory/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -232,9 +231,6 @@ set_mode_pin(Q, Disk) ->
 
 set_mode(QPid, Mode) ->
     gen_server2:pcast(QPid, 10, {set_mode, Mode}).
-
-report_memory(QPid) ->
-    gen_server2:cast(QPid, report_memory).
 
 info(#amqqueue{ pid = QPid }) ->
     gen_server2:pcall(QPid, 9, info, infinity).
