@@ -1120,12 +1120,11 @@ internal_publish(Q, Message = #basic_message { guid = MsgId },
     {ok, {MsgId, WriteSeqId}, State1}.
 
 internal_tx_cancel(MsgIds, State) ->
-    State1 = sync_current_file_handle(State),
     %% we don't need seq ids because we're not touching mnesia,
     %% because seqids were never assigned
     MsgSeqIds = lists:zip(MsgIds, lists:duplicate(erlang:length(MsgIds),
                                                   undefined)),
-    remove_messages(undefined, MsgSeqIds, false, State1).
+    remove_messages(undefined, MsgSeqIds, false, State).
 
 internal_requeue(_Q, [], State) ->
     {ok, State};
