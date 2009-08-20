@@ -32,7 +32,7 @@
 -module(rabbit_amqqueue).
 
 -export([start/0, recover/0, declare/4, delete/3, purge/1]).
--export([internal_declare/2, internal_delete/1]).
+-export([internal_declare/2, internal_delete/1, internal_store/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/2, redeliver/2, requeue/3, ack/4]).
@@ -42,7 +42,7 @@
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([set_mode_pin/2, set_mode/2, internal_store/1]).
+-export([set_mode_pin/2, set_mode/2]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -106,9 +106,9 @@
 -spec(set_mode/2 :: (pid(), ('disk' | 'mixed')) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), bool()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
+-spec(internal_store/1 :: (amqqueue()) -> 'ok').
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
--spec(internal_store/1 :: (amqqueue()) -> 'ok').
 
 -endif.
 
