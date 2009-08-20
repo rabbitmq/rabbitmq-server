@@ -838,15 +838,12 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
     noreply(State #q { mixed_state = MS1 });
 
 handle_cast({set_mode_pin, Disk, Q}, State = #q { q = PQ }) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              ok = rabbit_amqqueue:store_queue(Q#amqqueue{pinned = Disk})
-      end),
+    ok = rabbit_amqqueue:internal_store(Q#amqqueue{pinned = Disk}),
     case Disk of
         true -> rabbit_queue_mode_manager:pin_to_disk(self());
         false -> rabbit_queue_mode_manager:unpin_from_disk(self())
     end,
-    noreply(State #q { q = PQ #amqqueue { pinned = Disk } }).
+    noreply(State #q { q = PQ#amqqueue{ pinned = Disk } }).
 
 handle_info(report_memory, State) ->
     %% deliberately don't call noreply/2 as we don't want to restart the timer.

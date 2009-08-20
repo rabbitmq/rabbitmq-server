@@ -42,7 +42,7 @@
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([set_mode_pin/2, set_mode/2, store_queue/1]).
+-export([set_mode_pin/2, set_mode/2, internal_store/1]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -108,7 +108,7 @@
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
--spec(store_queue/1 :: (amqqueue()) -> 'ok').
+-spec(internal_store/1 :: (amqqueue()) -> 'ok').
 
 -endif.
 
@@ -193,6 +193,10 @@ store_queue(Q = #amqqueue{durable = true}) ->
 store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
+
+internal_store(Q) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun () -> ok = store_queue(Q) end).
 
 start_queue_process(Q) ->
     {ok, Pid} = supervisor:start_child(rabbit_amqqueue_sup, [Q]),
