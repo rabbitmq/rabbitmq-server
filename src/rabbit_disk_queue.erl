@@ -867,15 +867,10 @@ decrement_cache(MsgId, #dqstate { message_cache = Cache }) ->
     ok.
 
 insert_into_cache(Message = #basic_message { guid = MsgId }, MsgSize,
-                  Forced, State = #dqstate { message_cache = Cache }) ->
+                  State = #dqstate { message_cache = Cache }) ->
     case cache_is_full(State) of
         true -> ok;
-        false -> Count = case Forced of
-                             true -> 0;
-                             false -> 1
-                         end,
-                 true = ets:insert_new(Cache, {MsgId, Message,
-                                               MsgSize, Count}),
+        false -> true = ets:insert_new(Cache, {MsgId, Message, MsgSize, 1}),
                  ok
     end.
 
@@ -892,7 +887,7 @@ internal_fetch(Q, ReadMsg, FakeDeliver, Advance,
             Remaining = WriteSeqId - ReadSeqId - 1,
             {ok, Result, State1} =
                 internal_read_message(
-                  Q, ReadSeqId, ReadMsg, FakeDeliver, false, State),
+                  Q, ReadSeqId, ReadMsg, FakeDeliver, State),
             true = case Advance of
                        true -> ets:insert(Sequences,
                                           {Q, ReadSeqId+1, WriteSeqId});
@@ -911,11 +906,11 @@ internal_foldl(_Q, SeqId, _Fun, State, Acc, SeqId) ->
     {ok, Acc, State};
 internal_foldl(Q, WriteSeqId, Fun, State, Acc, ReadSeqId) ->
     {ok, MsgStuff, State1}
-        = internal_read_message(Q, ReadSeqId, true, true, false, State),
+        = internal_read_message(Q, ReadSeqId, true, true, State),
     Acc1 = Fun(MsgStuff, Acc),
     internal_foldl(Q, WriteSeqId, Fun, State1, Acc1, ReadSeqId + 1).
 
-internal_read_message(Q, ReadSeqId, ReadMsg, FakeDeliver, ForceInCache, State) ->
+internal_read_message(Q, ReadSeqId, ReadMsg, FakeDeliver, State) ->
     [Obj =
      #dq_msg_loc {is_delivered = Delivered, msg_id = MsgId}] =
         mnesia:dirty_read(rabbit_disk_queue, {Q, ReadSeqId}),
@@ -936,9 +931,8 @@ internal_read_message(Q, ReadSeqId, ReadMsg, FakeDeliver, ForceInCache, State) -
                         read_message_at_offset(FileHdl, Offset, TotalSize),
                     #basic_message { is_persistent=IsPersistent, guid=MsgId } =
                         Message = bin_to_msg(MsgBody),
-                    ok = if RefCount > 1 orelse ForceInCache ->
-                                 insert_into_cache
-                                   (Message, BodySize, ForceInCache, State1);
+                    ok = if RefCount > 1 ->
+                                 insert_into_cache(Message, BodySize, State1);
                             true -> ok
                                  %% it's not in the cache and we only
                                  %% have 1 queue with the message. So
