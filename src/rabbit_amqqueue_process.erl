@@ -839,10 +839,10 @@ handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
 
 handle_cast({set_mode_pin, Disk, Q}, State = #q { q = PQ }) ->
     ok = rabbit_amqqueue:internal_store(Q#amqqueue{pinned = Disk}),
-    case Disk of
-        true -> rabbit_queue_mode_manager:pin_to_disk(self());
-        false -> rabbit_queue_mode_manager:unpin_from_disk(self())
-    end,
+    ok = (case Disk of
+              true -> fun rabbit_queue_mode_manager:pin_to_disk/1;
+              false -> fun rabbit_queue_mode_manager:unpin_from_disk/1
+          end)(self()),
     noreply(State #q { q = PQ#amqqueue{ pinned = Disk } }).
 
 handle_info(report_memory, State) ->
