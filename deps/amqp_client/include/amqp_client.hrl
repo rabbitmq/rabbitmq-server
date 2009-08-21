@@ -34,7 +34,7 @@
 -record(amqp_params, {username     = <<"guest">>,
                       password     = <<"guest">>,
                       virtual_host = <<"/">>,
-                      host         = <<"localhost">>,
+                      host         = "localhost",
                       port         = ?PROTOCOL_PORT}).
 
 -record(connection_state, {username,
