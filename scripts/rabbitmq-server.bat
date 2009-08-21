@@ -46,10 +46,6 @@ if "%RABBITMQ_NODE_PORT%"=="" (
     set RABBITMQ_NODE_PORT=5672
 )
 
-if "%ERLANG_HOME%"=="" (
-    set ERLANG_HOME=%~dp0%..\..\..
-)
-
 if not exist "%ERLANG_HOME%\bin\erl.exe" (
     echo.
     echo ******************************
