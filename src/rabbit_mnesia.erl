@@ -283,7 +283,7 @@ init_db(ClusterNodes) ->
             IsDiskNode = ClusterNodes == [] orelse
                 lists:member(node(), ClusterNodes),
             ok = wait_for_replicated_tables(),
-            ok = create_local_table_copy(schema, disc_copies),
+            ok = create_local_table_copy(schema, false, disc_copies),
             ok = create_local_table_copies(case IsDiskNode of
                                                true  -> disc;
                                                false -> ram
@@ -344,6 +344,12 @@ table_has_copy_type(TabDef, DiscType) ->
         {value, {DiscType, List}} -> lists:member(node(), List)
     end.
 
+is_local_content_table(TabDef) ->
+    case lists:keysearch(local_content, 1, TabDef) of
+        false -> false;
+        {value, {local_content, Bool}} -> Bool
+    end.
+
 create_local_table_copies(Type) ->
     lists:foreach(
       fun({Tab, TabDef}) ->
@@ -367,18 +373,20 @@ create_local_table_copies(Type) ->
                       ram ->
                           ram_copies
                   end,
-              ok = create_local_table_copy(Tab, StorageType)
+              IsLocalTab = is_local_content_table(TabDef),
+              ok = create_local_table_copy(Tab, IsLocalTab, StorageType)
       end,
       table_definitions()),
     ok.
 
-create_local_table_copy(Tab, Type) ->
+create_local_table_copy(Tab, IsLocal, Type) ->
     StorageType = mnesia:table_info(Tab, storage_type),
     {atomic, ok} =
         if
             StorageType == unknown ->
                 mnesia:add_table_copy(Tab, node(), Type);
-            StorageType /= Type ->
+            StorageType /= Type andalso
+            ((not IsLocal) orelse (Type /= ram_copies))->
                 mnesia:change_table_copy_type(Tab, node(), Type);
             true -> {atomic, ok}
         end,
