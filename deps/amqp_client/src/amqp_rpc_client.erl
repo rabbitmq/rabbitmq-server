@@ -126,7 +126,7 @@ init([Connection, RoutingKey]) ->
 %% Closes the channel this gen_server instance started
 %% @private
 terminate(_Reason, #rpc_client_state{channel = Channel}) ->
-    amqp_channel:call(Channel, #'channel.close'{}),
+    amqp_channel:close(Channel),
     ok.
 
 %% Handle the application initiated stop by just stopping this gen server

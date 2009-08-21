@@ -36,11 +36,11 @@ non_existent_exchange_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     %% Deliberately mix up the routingkey and exchange arguments
-    Publish = #'basic.publish'{exchange = X, routing_key = RoutingKey},
+    Publish = #'basic.publish'{exchange = RoutingKey, routing_key = X},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
     wait_for_death(Channel),
     ?assertMatch(true, is_process_alive(Connection)),
-    amqp_connection:close(Connection, #'connection.close'{}).
+    amqp_connection:close(Connection).
 
 hard_error_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),

@@ -118,7 +118,7 @@ handle_cast(_Message, State) ->
 %% Closes the channel this gen_server instance started
 %% @private
 terminate(_Reason, #rpc_server_state{channel = Channel}) ->
-    amqp_channel:call(Channel, #'channel.close'{}),
+    amqp_channel:close(Channel),
     ok.
 
 %% @private

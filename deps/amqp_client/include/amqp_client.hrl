@@ -29,7 +29,7 @@
 -define(PROTOCOL_HEADER,
         <<"AMQP", 1, 1, ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR>>).
 
--record(amqp_msg, {props, payload}).
+-record(amqp_msg, {props = #'P_basic'{}, payload}).
 
 -record(amqp_params, {username     = <<"guest">>,
                       password     = <<"guest">>,
