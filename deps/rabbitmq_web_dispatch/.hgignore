@@ -7,6 +7,7 @@ erl_crash.dump
 syntax: regexp
 ^mochiweb/
 ^deps/
+^build/
 ^dist/
 ^include/rabbit_framing.hrl$
 ^src/rabbit_framing.erl$
