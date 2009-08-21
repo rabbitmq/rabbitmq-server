@@ -22,6 +22,10 @@ package: clean
 	tar -zxvf $(DEBIAN_ORIG_TARBALL)
 	cp -r debian $(UNPACKED_DIR)
 	cp $(COMMON_DIR)/* $(UNPACKED_DIR)/debian/
+	sed -i \
+	    -e 's|^DEFAULTS_FILE=.*$$|DEFAULTS_FILE=/etc/default/rabbitmq|' \
+	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=|' \
+	    $(UNPACKED_DIR)/debian/rabbitmq-server.init
 	chmod a+x $(UNPACKED_DIR)/debian/rules
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
 	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -rfakeroot $(SIGNING)

@@ -8,10 +8,10 @@
 
 ### BEGIN INIT INFO
 # Provides:          rabbitmq-server
-# Default-Start:
-# Default-Stop:
 # Required-Start:    $remote_fs $network
 # Required-Stop:     $remote_fs $network
+# Default-Start:
+# Default-Stop:
 # Description:       RabbitMQ broker
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
@@ -24,13 +24,14 @@ USER=rabbitmq
 NODE_COUNT=1
 ROTATE_SUFFIX=
 
-LOCK_FILE=/var/lock/subsys/$NAME
+DEFAULTS_FILE= # This is filled in when building packages
+LOCK_FILE= # This is filled in when building packages
 
 test -x $DAEMON || exit 0
 
 # Include rabbitmq defaults if available
-if [ -f /etc/sysconfig/rabbitmq ] ; then
-	. /etc/sysconfig/rabbitmq
+if [ -f "$DEFAULTS_FILE" ] ; then
+	. $DEFAULTS_FILE
 fi
 
 RETVAL=0
@@ -41,7 +42,8 @@ start_rabbitmq () {
     $DAEMON start_all ${NODE_COUNT} > /var/log/rabbitmq/startup_log 2> /var/log/rabbitmq/startup_err
     case "$?" in
       0)
-        echo SUCCESS && touch $LOCK_FILE
+        echo SUCCESS
+        [ -n "$LOCK_FILE" ] && touch $LOCK_FILE
         RETVAL=0
         ;;
       1)
@@ -52,7 +54,7 @@ start_rabbitmq () {
         echo FAILED - check /var/log/rabbitmq/startup_log, _err
         RETVAL=1
         ;;
-    esac 
+    esac
     set -e
 }
 
@@ -65,7 +67,7 @@ stop_rabbitmq () {
         if [ $RETVAL = 0 ] ; then
             # Try to stop epmd if run by the rabbitmq user
             pkill -u rabbitmq epmd || :
-            rm -rf $LOCK_FILE
+            [ -n "$LOCK_FILE" ] && rm -rf $LOCK_FILE
         else
             echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
         fi
@@ -121,19 +123,14 @@ case "$1" in
         echo -n "Rotating log files for $DESC: "
         rotate_logs_rabbitmq
         ;;
-    force-reload|reload|restart)
-        echo -n "Restarting $DESC: "
-        restart_rabbitmq
-        echo "$NAME."
-        ;;
-    condrestart|try-restart)
+    force-reload|reload|restart|condrestart|try-restart)
         echo -n "Restarting $DESC: "
         restart_rabbitmq
         echo "$NAME."
         ;;
     *)
         echo "Usage: $0 {start|stop|status|rotate-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
-        RETVAL=2
+        RETVAL=1
         ;;
 esac
 
