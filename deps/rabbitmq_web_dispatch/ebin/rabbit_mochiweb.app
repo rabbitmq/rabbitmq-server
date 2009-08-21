@@ -10,6 +10,6 @@
   {registered, []},
   {mod, {rabbit_mochiweb_app, []}},
   {env, [
-        {port, 8000}
+        {port, 55672}
         ]},
   {applications, [kernel, stdlib]}]}.

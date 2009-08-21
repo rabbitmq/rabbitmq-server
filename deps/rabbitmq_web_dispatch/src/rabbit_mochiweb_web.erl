@@ -9,7 +9,7 @@
 start() ->
     Port = case application:get_env(port) of
         {ok, P} -> P;
-        _       -> 8000
+        _       -> 55672
     end,
     Loop = fun loop/1,
     mochiweb_http:start([{name, ?MODULE}, {port, Port}, {loop, Loop}]).
