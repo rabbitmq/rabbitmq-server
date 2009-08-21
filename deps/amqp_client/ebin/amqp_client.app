@@ -7,8 +7,7 @@
              amqp_direct_driver,
              amqp_network_driver,
              amqp_rpc_client,
-             amqp_rpc_server,
-             lib_amqp
+             amqp_rpc_server
   ]},
   {registered, []},
   {env, []},

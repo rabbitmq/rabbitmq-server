@@ -166,7 +166,8 @@ turned on, run the following in the *rabbitmq-erlang-client directory*:
     [async-threads:0][kernel-poll:false]
 
     Eshell V5.6.3  (abort with ^G)
-    1> test_util:channel_flow_sync(lib_amqp:start_connection("localhost")).
+    1> P = #amqp_params{}.
+    2> test_util:channel_flow_sync(amqp_connection:start_network(P)).
     {<0.39.0>,<0.40.0>}
 
 After having done this, you should see output similar to this:

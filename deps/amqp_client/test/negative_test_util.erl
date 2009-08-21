@@ -33,16 +33,17 @@ non_existent_exchange_test(Connection) ->
     X = test_util:uuid(),
     RoutingKey = <<"a">>, 
     Payload = <<"foobar">>,
-    Channel = lib_amqp:start_channel(Connection),
-    lib_amqp:declare_exchange(Channel, X),
+    Channel = amqp_connection:open_channel(Connection),
+    amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     %% Deliberately mix up the routingkey and exchange arguments
-    lib_amqp:publish(Channel, RoutingKey, X, Payload),
+    Publish = #'basic.publish'{exchange = X, routing_key = RoutingKey},
+    amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
     wait_for_death(Channel),
     ?assertMatch(true, is_process_alive(Connection)),
-    lib_amqp:close_connection(Connection).
+    amqp_connection:close(Connection, #'connection.close'{}).
 
 hard_error_test(Connection) ->
-    Channel = lib_amqp:start_channel(Connection),
+    Channel = amqp_connection:open_channel(Connection),
     ?assertExit(_, amqp_channel:call(Channel, #'basic.qos'{global = true})),
     wait_for_death(Channel),
     wait_for_death(Connection).
