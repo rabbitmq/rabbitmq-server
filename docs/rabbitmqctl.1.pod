@@ -186,6 +186,14 @@ memory
     bytes of memory consumed by the Erlang process for the queue,
     including stack, heap and internal structures
 
+mode
+    whether the queue is currently in disk mode, in which all messages
+are stored only on disk, or in mixed mode, where messages are stored
+in memory and on disk only if necessary
+
+pinned
+    whether the queue has been pinned to disk only mode or not.
+
 =back
 
 list_exchanges [-p I<vhostpath>] [I<exchangeinfoitem> ...]
@@ -281,6 +289,24 @@ The list_queues, list_exchanges and list_bindings commands accept an
 optional virtual host parameter for which to display results, defaulting
 to I<"/">. The default can be overridden with the B<-p> flag. Result
 columns for these commands and list_connections are tab-separated.
+
+=head2 QUEUE MANAGEMENT
+
+pin_queue_to_disk [-p I<vhostpath>] <queuename>
+
+unpin_queue_from_disk [-p I<vhostpath>] <queuename>
+
+Controls the pinning of queues. Queues which are pinned to disk are
+always in disk only mode, keeping all their messages only on disk, and
+not in RAM. Pinning a queue to disk immediately forces it to flush its
+contents to disk and will free up any memory it is using to hold
+messages. Unpinning a queue from disk will allow the queue to move
+back into mixed mode when enough memory is available to hold the
+queue's contents in RAM. If a queue is not pinned to disk then it will
+be automatically moved to disk only mode when the server detects that
+available RAM is running low.
+
+This setting survives server restarts when applied to durable queues.
 
 =head1 EXAMPLES
 

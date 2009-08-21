@@ -137,8 +137,8 @@ Available commands:
   list_bindings  [-p <VHostPath>] 
   list_connections [<ConnectionInfoItem> ...]
 
-  pin_queue_to_disk <QueueName>
-  unpin_queue_from_disk <QueueName>
+  pin_queue_to_disk     [-p <VHostPath>] <QueueName>
+  unpin_queue_from_disk [-p <VHostPath>] <QueueName>
 
 Quiet output mode is selected with the \"-q\" flag. Informational messages
 are suppressed when quiet mode is in effect.
