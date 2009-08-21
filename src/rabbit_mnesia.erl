@@ -344,6 +344,12 @@ create_tables() ->
                   table_definitions()),
     ok.
 
+table_has_copy_type(TabDef, DiscType) ->
+    case lists:keysearch(DiscType, 1, TabDef) of
+        false -> false;
+        {value, {DiscType, List}} -> lists:member(node(), List)
+    end.
+
 create_local_replicated_table_copies(Type) ->
     create_local_table_copies(Type, replicated_table_definitions()).
 
@@ -353,16 +359,8 @@ create_local_non_replicated_table_copies(Type) ->
 create_local_table_copies(Type, TableDefinitions) ->
     lists:foreach(
       fun({Tab, TabDef}) ->
-              Fun = fun(DiscType) ->
-                            case lists:keysearch(DiscType, 1, TabDef) of
-                                false ->
-                                    false;
-                                {value, {DiscType, List}} -> 
-                                    lists:member(node(), List)
-                            end
-                    end,
-              HasDiscCopies = Fun(disc_copies),
-              HasDiscOnlyCopies = Fun(disc_only_copies),
+              HasDiscCopies = table_has_copy_type(TabDef, disc_copies),
+              HasDiscOnlyCopies = table_has_copy_type(TabDef, disc_only_copies),
               StorageType =
                   case Type of
                       disc ->
