@@ -89,7 +89,7 @@
          consumers,
          transactions,
          memory,
-         mode
+         storage_mode
         ]).
          
 %%----------------------------------------------------------------------------
@@ -102,7 +102,7 @@ start_link(Q) ->
 init(Q = #amqqueue { name = QName, durable = Durable }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     ok = rabbit_queue_mode_manager:register
-           (self(), false, rabbit_amqqueue, set_mode, [self()]),
+           (self(), false, rabbit_amqqueue, set_storage_mode, [self()]),
     {ok, MS} = rabbit_mixed_queue:init(QName, Durable),
     State = #q{q = Q,
                owner = none,
@@ -527,8 +527,8 @@ i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
 i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
 i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
 i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
-i(mode, #q{ mixed_state = MS }) ->
-    rabbit_mixed_queue:info(MS);
+i(storage_mode, #q{ mixed_state = MS }) ->
+    rabbit_mixed_queue:storage_mode(MS);
 i(pid, _) ->
     self();
 i(messages_ready, #q { mixed_state = MS }) ->
@@ -824,11 +824,11 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
         end));
 
-handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
+handle_cast({set_storage_mode, Mode}, State = #q { mixed_state = MS }) ->
     PendingMessages =
         lists:flatten([Pending || #tx { pending_messages = Pending}
                                       <- all_tx_record()]),
-    {ok, MS1} = rabbit_mixed_queue:set_mode(Mode, PendingMessages, MS),
+    {ok, MS1} = rabbit_mixed_queue:set_storage_mode(Mode, PendingMessages, MS),
     noreply(State #q { mixed_state = MS1 }).
 
 handle_info(report_memory, State) ->

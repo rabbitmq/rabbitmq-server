@@ -152,8 +152,8 @@ virtual host parameter for which to display results. The default value is \"/\".
 
 <QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
 arguments, node, messages_ready, messages_unacknowledged, messages_uncommitted, 
-messages, acks_uncommitted, consumers, transactions, memory, mode]. The default 
-is to display name and (number of) messages.
+messages, acks_uncommitted, consumers, transactions, memory, storage_mode]. The
+default is to display name and (number of) messages.
 
 <ExchangeInfoItem> must be a member of the list [name, type, durable, 
 auto_delete, arguments]. The default is to display name and type.

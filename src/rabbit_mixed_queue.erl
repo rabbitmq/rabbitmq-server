@@ -39,7 +39,7 @@
          tx_publish/2, tx_commit/3, tx_cancel/2, requeue/2, purge/1,
          length/1, is_empty/1, delete_queue/1, maybe_prefetch/1]).
 
--export([set_mode/3, info/1,
+-export([set_storage_mode/3, storage_mode/1,
          estimate_queue_memory_and_reset_counters/1]).
 
 -record(mqstate, { mode,
@@ -91,12 +91,12 @@
 -spec(length/1 :: (mqstate()) -> non_neg_integer()).
 -spec(is_empty/1 :: (mqstate()) -> boolean()).
 
--spec(set_mode/3 :: (mode(), [message()], mqstate()) -> okmqs()).
+-spec(set_storage_mode/3 :: (mode(), [message()], mqstate()) -> okmqs()).
 
 -spec(estimate_queue_memory_and_reset_counters/1 :: (mqstate()) ->
              {mqstate(), non_neg_integer(), non_neg_integer(),
               non_neg_integer()}).
--spec(info/1 :: (mqstate()) -> mode()).
+-spec(storage_mode/1 :: (mqstate()) -> mode()).
 
 -endif.
 
@@ -119,12 +119,11 @@ size_of_message(
                         SumAcc + size(Frag)
                 end, 0, Payload).
 
-set_mode(Mode, _TxnMessages, State = #mqstate { mode = Mode }) ->
+set_storage_mode(Mode, _TxnMessages, State = #mqstate { mode = Mode }) ->
     {ok, State};
-set_mode(disk, TxnMessages, State =
+set_storage_mode(disk, TxnMessages, State =
          #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf,
                     is_durable = IsDurable, prefetcher = Prefetcher }) ->
-    rabbit_log:info("Converting queue to disk only mode: ~p~n", [Q]),
     State1 = State #mqstate { mode = disk },
     {MsgBuf1, State2} =
         case Prefetcher of
@@ -159,15 +158,14 @@ set_mode(disk, TxnMessages, State =
       end, TxnMessages),
     garbage_collect(),
     {ok, State2 #mqstate { msg_buf = MsgBuf3, prefetcher = undefined }};
-set_mode(mixed, TxnMessages, State = #mqstate { mode = disk, queue = Q,
-                                                is_durable = IsDurable }) ->
-    rabbit_log:info("Converting queue to mixed mode: ~p~n", [Q]),
+set_storage_mode(mixed, TxnMessages, State =
+                 #mqstate { mode = disk, is_durable = IsDurable }) ->
     %% The queue has a token just saying how many msgs are on disk
     %% (this is already built for us when in disk mode).
     %% Don't actually do anything to the disk
     %% Don't start prefetcher just yet because the queue maybe busy -
     %% wait for hibernate timeout in the amqqueue_process.
-
+    
     %% Remove txn messages from disk which are neither persistent and
     %% durable. This is necessary to avoid leaks. This is also pretty
     %% much the inverse behaviour of our own tx_cancel/2 which is why
@@ -575,5 +573,5 @@ estimate_queue_memory_and_reset_counters(State =
   #mqstate { memory_size = Size, memory_gain = Gain, memory_loss = Loss }) ->
     {State #mqstate { memory_gain = 0, memory_loss = 0 }, 4 * Size, Gain, Loss}.
 
-info(#mqstate { mode = Mode }) ->
+storage_mode(#mqstate { mode = Mode }) ->
     Mode.

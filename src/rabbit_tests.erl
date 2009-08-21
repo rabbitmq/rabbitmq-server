@@ -1080,7 +1080,7 @@ rdq_new_mixed_queue(Q, Durable, Disk) ->
     {MS1, _, _, _} =
         rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS),
     case Disk of
-        true -> {ok, MS2} = rabbit_mixed_queue:set_mode(disk, [], MS1),
+        true -> {ok, MS2} = rabbit_mixed_queue:set_storage_mode(disk, [], MS1),
                 MS2;
         false -> MS1
     end.
@@ -1112,11 +1112,11 @@ rdq_test_mixed_queue_modes() ->
     30 = rabbit_mixed_queue:length(MS6),
     io:format("Published a mixture of messages; ~w~n",
               [rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS6)]),
-    {ok, MS7} = rabbit_mixed_queue:set_mode(disk, [], MS6),
+    {ok, MS7} = rabbit_mixed_queue:set_storage_mode(disk, [], MS6),
     30 = rabbit_mixed_queue:length(MS7),
     io:format("Converted to disk only mode; ~w~n",
              [rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS7)]),
-    {ok, MS8} = rabbit_mixed_queue:set_mode(mixed, [], MS7),
+    {ok, MS8} = rabbit_mixed_queue:set_storage_mode(mixed, [], MS7),
     30 = rabbit_mixed_queue:length(MS8),
     io:format("Converted to mixed mode; ~w~n",
               [rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS8)]),
@@ -1131,7 +1131,7 @@ rdq_test_mixed_queue_modes() ->
           end, MS8, lists:seq(1,10)),
     20 = rabbit_mixed_queue:length(MS10),
     io:format("Delivered initial non persistent messages~n"),
-    {ok, MS11} = rabbit_mixed_queue:set_mode(disk, [], MS10),
+    {ok, MS11} = rabbit_mixed_queue:set_storage_mode(disk, [], MS10),
     20 = rabbit_mixed_queue:length(MS11),
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
@@ -1151,7 +1151,7 @@ rdq_test_mixed_queue_modes() ->
     0 = rabbit_mixed_queue:length(MS14),
     {ok, MS15} = rabbit_mixed_queue:ack(AckTags, MS14),
     io:format("Delivered and acked all messages~n"),
-    {ok, MS16} = rabbit_mixed_queue:set_mode(disk, [], MS15),
+    {ok, MS16} = rabbit_mixed_queue:set_storage_mode(disk, [], MS15),
     0 = rabbit_mixed_queue:length(MS16),
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
@@ -1214,7 +1214,7 @@ rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) -
                     MS3a
             end, MS2, MsgsB),
     Len0 = rabbit_mixed_queue:length(MS4),
-    {ok, MS5} = rabbit_mixed_queue:set_mode(Mode, MsgsB, MS4),
+    {ok, MS5} = rabbit_mixed_queue:set_storage_mode(Mode, MsgsB, MS4),
     Len0 = rabbit_mixed_queue:length(MS5),
     {ok, MS9} =
         case CommitOrCancel of
