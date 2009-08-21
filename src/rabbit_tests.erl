@@ -876,8 +876,8 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
           [[fun() -> [begin SeqIds =
                                 [begin
                                      Remaining = MsgCount - N,
-                                     {{Message, _TSize, false, SeqId},
-                                      Remaining} = rabbit_disk_queue:fetch(Q),
+                                     {Message, false, SeqId, Remaining}
+                                         = rabbit_disk_queue:fetch(Q),
                                      ok = rdq_match_message(Message, N, Msg, MsgSizeBytes),
                                      SeqId
                                  end || N <- List],
@@ -923,7 +923,7 @@ rdq_stress_gc(MsgCount) ->
         lists:foldl(
           fun (MsgId, Acc) ->
                   Remaining = MsgCount - MsgId,
-                  {{Message, _TSize, false, SeqId}, Remaining} =
+                  {Message, false, SeqId, Remaining} =
                       rabbit_disk_queue:fetch(q),
                   ok = rdq_match_message(Message, MsgId, Msg, MsgSizeBytes),
                   dict:store(MsgId, SeqId, Acc)
@@ -951,8 +951,8 @@ rdq_test_startup_with_queue_gaps() ->
     %% deliver first half
     Seqs = [begin
                 Remaining = Total - N,
-                {{Message, _TSize, false, SeqId}, Remaining} =
-                    rabbit_disk_queue:fetch(q),
+                {Message, false, SeqId, Remaining}
+                    = rabbit_disk_queue:fetch(q),
                 ok = rdq_match_message(Message, N, Msg, 256),
                 SeqId
             end || N <- lists:seq(1,Half)],
@@ -973,7 +973,7 @@ rdq_test_startup_with_queue_gaps() ->
     %% lists:seq(2,500,2) already delivered
     Seqs2 = [begin
                  Remaining = round(Total - ((Half + N)/2)),
-                 {{Message, _TSize, true, SeqId}, Remaining} =
+                 {Message, true, SeqId, Remaining} =
                      rabbit_disk_queue:fetch(q),
                  ok = rdq_match_message(Message, N, Msg, 256),
                  SeqId
@@ -983,7 +983,7 @@ rdq_test_startup_with_queue_gaps() ->
     %% and now fetch the rest
     Seqs3 = [begin
                  Remaining = Total - N,
-                 {{Message, _TSize, false, SeqId}, Remaining} =
+                 {Message, false, SeqId, Remaining} =
                      rabbit_disk_queue:fetch(q),
                  ok = rdq_match_message(Message, N, Msg, 256),
                  SeqId
@@ -1008,7 +1008,7 @@ rdq_test_redeliver() ->
     %% deliver first half
     Seqs = [begin
                 Remaining = Total - N,
-                {{Message, _TSize, false, SeqId}, Remaining} =
+                {Message, false, SeqId, Remaining} =
                     rabbit_disk_queue:fetch(q),
                 ok = rdq_match_message(Message, N, Msg, 256),
                 SeqId
@@ -1029,7 +1029,7 @@ rdq_test_redeliver() ->
     %% every-other-from-the-first-half
     Seqs2 = [begin
                  Remaining = round(Total - N + (Half/2)),
-                 {{Message, _TSize, false, SeqId}, Remaining} =
+                 {Message, false, SeqId, Remaining} =
                      rabbit_disk_queue:fetch(q),
                  ok = rdq_match_message(Message, N, Msg, 256),
                  SeqId
@@ -1037,7 +1037,7 @@ rdq_test_redeliver() ->
     rabbit_disk_queue:tx_commit(q, [], Seqs2),
     Seqs3 = [begin
                  Remaining = round((Half - N) / 2) - 1,
-                 {{Message, _TSize, true, SeqId}, Remaining} =
+                 {Message, true, SeqId, Remaining} =
                      rabbit_disk_queue:fetch(q),
                  ok = rdq_match_message(Message, N, Msg, 256),
                  SeqId
@@ -1061,7 +1061,7 @@ rdq_test_purge() ->
     %% deliver first half
     Seqs = [begin
                 Remaining = Total - N,
-                {{Message, _TSize, false, SeqId}, Remaining} =
+                {Message, false, SeqId, Remaining} =
                     rabbit_disk_queue:fetch(q),
                 ok = rdq_match_message(Message, N, Msg, 256),
                 SeqId
@@ -1272,7 +1272,7 @@ rdq_test_disk_queue_modes() ->
     ok = rabbit_disk_queue:tx_commit(q, CommitHalf2, []),
     Seqs = [begin
                 Remaining = Total - N,
-                {{Message, _TSize, false, SeqId}, Remaining} =
+                {Message, false, SeqId, Remaining} =
                     rabbit_disk_queue:fetch(q),
                 ok = rdq_match_message(Message, N, Msg, 256),
                 SeqId
@@ -1282,7 +1282,7 @@ rdq_test_disk_queue_modes() ->
     io:format("To RAM Disk done~n", []),
     Seqs2 = [begin
                  Remaining = Total - N,
-                 {{Message, _TSize, false, SeqId}, Remaining} =
+                 {Message, false, SeqId, Remaining} =
                      rabbit_disk_queue:fetch(q),
                  ok = rdq_match_message(Message, N, Msg, 256),
                  SeqId

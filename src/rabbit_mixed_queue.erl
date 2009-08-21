@@ -104,8 +104,8 @@ init(Queue, IsDurable) ->
     Len = rabbit_disk_queue:length(Queue),
     MsgBuf = inc_queue_length(Queue, queue:new(), Len),
     Size = rabbit_disk_queue:foldl(
-             fun ({Msg = #basic_message { is_persistent = true },
-                   _Size, _IsDelivered, _AckTag}, Acc) ->
+             fun (Msg = #basic_message { is_persistent = true },
+                  _AckTag, _IsDelivered, Acc) ->
                      Acc + size_of_message(Msg)
              end, 0, Queue),
     {ok, #mqstate { mode = disk, msg_buf = MsgBuf, queue = Queue,
@@ -324,10 +324,10 @@ publish_delivered(Msg =
     State1 = gain_memory(MsgSize, State),
     case IsDurable andalso IsPersistent of
         true ->
-            %% must call phantom_deliver otherwise the msg remains at
+            %% must call phantom_fetch otherwise the msg remains at
             %% the head of the queue. This is synchronous, but
             %% unavoidable as we need the AckTag
-            {{MsgId, IsPersistent, true, AckTag}, 0} =
+            {MsgId, IsPersistent, true, AckTag, 0} =
                 rabbit_disk_queue:phantom_fetch(Q),
             {ok, AckTag, State1};
         false ->
@@ -354,7 +354,7 @@ fetch(State = #mqstate { msg_buf = MsgBuf, queue = Q,
             AckTag =
                 case IsDurable andalso IsPersistent of
                     true ->
-                        {{MsgId, IsPersistent, IsDelivered, AckTag1}, _PRem}
+                        {MsgId, IsPersistent, IsDelivered, AckTag1, _PRem}
                             = rabbit_disk_queue:phantom_fetch(Q),
                         AckTag1;
                     false ->
@@ -372,8 +372,8 @@ fetch(State = #mqstate { msg_buf = MsgBuf, queue = Q,
              State1 #mqstate { msg_buf = MsgBuf1 }};
         _ when Prefetcher == undefined ->
             State2 = dec_queue_length(1, State1),
-            {{Msg = #basic_message { is_persistent = IsPersistent },
-              _Size, IsDelivered, AckTag}, _PersistRem}
+            {Msg = #basic_message { is_persistent = IsPersistent },
+             IsDelivered, AckTag, _PersistRem}
                 = rabbit_disk_queue:fetch(Q),
             AckTag1 = maybe_ack(Q, IsDurable, IsPersistent, AckTag),
             {{Msg, IsDelivered, AckTag1, Rem}, State2};

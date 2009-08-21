@@ -179,8 +179,8 @@
 start_link(Queue, Count) ->
     gen_server2:start_link(?MODULE, [Queue, Count, self()], []).
 
-publish(Prefetcher, Obj = {{ #basic_message {}, _Size, _IsDelivered, _AckTag},
-                           _Remaining }) ->
+publish(Prefetcher,
+        Obj = { #basic_message {}, _IsDelivered, _AckTag, _Remaining }) ->
     gen_server2:call(Prefetcher, {publish, Obj}, infinity);
 publish(Prefetcher, empty) ->
     gen_server2:call(Prefetcher, publish_empty, infinity).
@@ -206,12 +206,12 @@ init([Q, Count, QPid]) ->
     {ok, State, infinity, {backoff, ?HIBERNATE_AFTER_MIN,
                            ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({publish, { { Msg = #basic_message {}, _Size, IsDelivered, AckTag},
-                        _Remaining }},
-	    DiskQueue, State =
-	    #pstate { fetched_count = Fetched, target_count = Target,
-		      msg_buf = MsgBuf, buf_length = Length, queue = Q
-		    }) ->
+handle_call({publish,
+             {Msg = #basic_message {}, IsDelivered, AckTag, _Remaining}},
+	    DiskQueue,
+            State = #pstate { fetched_count = Fetched, target_count = Target,
+                              msg_buf = MsgBuf, buf_length = Length, queue = Q
+                            }) ->
     gen_server2:reply(DiskQueue, ok),
     Timeout = if Fetched + 1 == Target -> hibernate;
                  true -> ok = rabbit_disk_queue:prefetch(Q),
