@@ -151,11 +151,6 @@ replicated_table_definitions() ->
                      not lists:member({local_content, true}, Attrs)
     ].
 
-non_replicated_table_definitions() ->
-    [{Tab, Attrs} || {Tab, Attrs} <- table_definitions(),
-                     lists:member({local_content, true}, Attrs)
-    ].
-
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
 
@@ -289,11 +284,10 @@ init_db(ClusterNodes) ->
                 lists:member(node(), ClusterNodes),
             ok = wait_for_replicated_tables(),
             ok = create_local_table_copy(schema, disc_copies),
-            ok = create_local_non_replicated_table_copies(disc),
-            ok = create_local_replicated_table_copies(case IsDiskNode of
-                                                          true  -> disc;
-                                                          false -> ram
-                                                      end);
+            ok = create_local_table_copies(case IsDiskNode of
+                                               true  -> disc;
+                                               false -> ram
+                                           end);
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
@@ -350,13 +344,7 @@ table_has_copy_type(TabDef, DiscType) ->
         {value, {DiscType, List}} -> lists:member(node(), List)
     end.
 
-create_local_replicated_table_copies(Type) ->
-    create_local_table_copies(Type, replicated_table_definitions()).
-
-create_local_non_replicated_table_copies(Type) ->
-    create_local_table_copies(Type, non_replicated_table_definitions()).
-
-create_local_table_copies(Type, TableDefinitions) ->
+create_local_table_copies(Type) ->
     lists:foreach(
       fun({Tab, TabDef}) ->
               HasDiscCopies = table_has_copy_type(TabDef, disc_copies),
@@ -381,7 +369,7 @@ create_local_table_copies(Type, TableDefinitions) ->
                   end,
               ok = create_local_table_copy(Tab, StorageType)
       end,
-      TableDefinitions),
+      table_definitions()),
     ok.
 
 create_local_table_copy(Tab, Type) ->
