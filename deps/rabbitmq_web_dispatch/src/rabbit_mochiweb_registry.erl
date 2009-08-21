@@ -2,10 +2,10 @@
 
 -behaviour(gen_server).
 
--record(state, {selectors}).
+-record(state, {selectors, fallback}).
 
 -export([start_link/0]).
--export([add/2, lookup/1]).
+-export([add/2, set_fallback/1, lookup/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -15,25 +15,36 @@ start_link() ->
 add(Selector, Handler) ->
     gen_server:call(?MODULE, {add, Selector, Handler}).
 
+set_fallback(FallbackHandler) ->
+    gen_server:call(?MODULE, {set_fallback, FallbackHandler}).
+
 lookup(Req) ->
     gen_server:call(?MODULE, {lookup, Req}).
     
 %% Callback Methods
 
 init([]) ->
-    {ok, #state{selectors = []}}.
+    {ok, #state{selectors = [], fallback = no_handler}}.
 
 handle_call({add, Selector, Handler}, _From, 
             State = #state{selectors = Selectors}) ->
     UpdatedState =  State#state{selectors = Selectors ++ [{Selector, Handler}]},
     {reply, ok, UpdatedState};
+handle_call({set_fallback, FallbackHandler}, _From,
+            State) ->
+    {reply, ok, State#state{fallback = FallbackHandler}};
 handle_call({lookup, Req}, _From,
-            State = #state{ selectors = Selectors }) ->
+            State = #state{ selectors = Selectors, fallback = FallbackHandler }) ->
     case catch match_request(Selectors, Req) of
         {'EXIT', Reason} ->
             {reply, {lookup_failure, Reason}, State};
         no_handler ->
-            {reply, no_handler, State};
+            case FallbackHandler of
+                no_handler ->
+                    {reply, no_handler, State};
+                Handler ->
+                    {reply, {handler, Handler}, State}
+            end;
         Handler ->
             {reply, {handler, Handler}, State}
     end;
