@@ -89,7 +89,7 @@
          consumers,
          transactions,
          memory,
-         mode,
+         storage_mode,
          pinned
         ]).
          
@@ -103,7 +103,7 @@ start_link(Q) ->
 init(Q = #amqqueue { name = QName, durable = Durable, pinned = Pinned }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     ok = rabbit_queue_mode_manager:register
-           (self(), false, rabbit_amqqueue, set_mode, [self()]),
+           (self(), false, rabbit_amqqueue, set_storage_mode, [self()]),
     ok = case Pinned of
              true -> rabbit_queue_mode_manager:pin_to_disk(self());
              false -> ok
@@ -533,8 +533,8 @@ i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
 i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
 i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
 i(pinned,      #q{q = #amqqueue{pinned      = Pinned}})     -> Pinned;
-i(mode, #q{ mixed_state = MS }) ->
-    rabbit_mixed_queue:info(MS);
+i(storage_mode, #q{ mixed_state = MS }) ->
+    rabbit_mixed_queue:storage_mode(MS);
 i(pid, _) ->
     self();
 i(messages_ready, #q { mixed_state = MS }) ->
@@ -830,14 +830,14 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
         end));
 
-handle_cast({set_mode, Mode}, State = #q { mixed_state = MS }) ->
+handle_cast({set_storage_mode, Mode}, State = #q { mixed_state = MS }) ->
     PendingMessages =
         lists:flatten([Pending || #tx { pending_messages = Pending}
                                       <- all_tx_record()]),
-    {ok, MS1} = rabbit_mixed_queue:set_mode(Mode, PendingMessages, MS),
+    {ok, MS1} = rabbit_mixed_queue:set_storage_mode(Mode, PendingMessages, MS),
     noreply(State #q { mixed_state = MS1 });
 
-handle_cast({set_mode_pin, Disk, Q}, State = #q { q = PQ }) ->
+handle_cast({set_storage_mode_pin, Disk, Q}, State = #q { q = PQ }) ->
     ok = rabbit_amqqueue:internal_store(Q#amqqueue{pinned = Disk}),
     ok = (case Disk of
               true -> fun rabbit_queue_mode_manager:pin_to_disk/1;

@@ -155,8 +155,8 @@ virtual host parameter for which to display results. The default value is \"/\".
 
 <QueueInfoItem> must be a member of the list [name, durable, auto_delete,
 arguments, node, messages_ready, messages_unacknowledged, messages_uncommitted,
-messages, acks_uncommitted, consumers, transactions, memory, mode, pinned]. The
-default is to display name and (number of) messages.
+messages, acks_uncommitted, consumers, transactions, memory, storage_mode,
+pinned]. The default is to display name and (number of) messages.
 
 <ExchangeInfoItem> must be a member of the list [name, type, durable, 
 auto_delete, arguments]. The default is to display name and type.
@@ -169,9 +169,9 @@ peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
 recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
 user, peer_address and peer_port.
 
-pin_queue_to_disk will force a queue to be in disk mode.
-unpin_queue_from_disk will permit a queue that has been pinned to disk mode
-to be converted to mixed mode should there be enough memory available.
+pin_queue_to_disk will force a queue to be in disk storage mode.
+unpin_queue_from_disk will permit a queue that has been pinned to disk storage
+mode to be converted to mixed mode should there be enough memory available.
 "),
     halt(1).
 
@@ -289,12 +289,12 @@ action(Command, Node, Args, Inform) ->
 action(pin_queue_to_disk, Node, VHost, [Queue], Inform) ->
     Inform("Pinning queue ~p in vhost ~p to disk",
            [Queue, VHost]),
-    set_queue_mode_pin(Node, VHost, Queue, true);
+    set_queue_storage_mode_pin(Node, VHost, Queue, true);
     
 action(unpin_queue_from_disk, Node, VHost, [Queue], Inform) ->
     Inform("Unpinning queue ~p in vhost ~p from disk",
            [Queue, VHost]),
-    set_queue_mode_pin(Node, VHost, Queue, false);
+    set_queue_storage_mode_pin(Node, VHost, Queue, false);
 
 action(set_permissions, Node, VHost, [Username, CPerm, WPerm, RPerm], Inform) ->
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
@@ -310,12 +310,12 @@ action(list_permissions, Node, VHost, [], Inform) ->
     display_list(call(Node, {rabbit_access_control, list_vhost_permissions,
                              [VHost]})).
 
-set_queue_mode_pin(Node, VHost, Queue, Disk) ->
+set_queue_storage_mode_pin(Node, VHost, Queue, Disk) ->
     VHostPath = list_to_binary(VHost),
     QBin = list_to_binary(Queue),
     rpc_call(Node, rabbit_amqqueue, with,
              [rabbit_misc:r(VHostPath, queue, QBin),
-              fun(Q) -> rabbit_amqqueue:set_mode_pin(Q, Disk) end]).
+              fun(Q) -> rabbit_amqqueue:set_storage_mode_pin(Q, Disk) end]).
 
 parse_vhost_flag(Args) when is_list(Args) ->
     case Args of 
