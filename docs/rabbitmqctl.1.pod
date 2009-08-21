@@ -308,6 +308,10 @@ server detects that available RAM is running low.
 
 This setting survives server restarts when applied to durable queues.
 
+The pin_queue_to_disk and unpin_queue_from_disk commands accept an
+optional virtual host parameter for which to manage queues, defaulting
+to I<"/">. The default can be overridden with the B<-p> flag.
+
 =head1 EXAMPLES
 
 Create a user named foo with (initial) password bar at the Erlang node
