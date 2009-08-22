@@ -761,18 +761,17 @@ get_read_handle(File, Offset, TotalSize, State =
                            current_dirty = IsDirty,
                            last_sync_offset = SyncOffset
                          }) ->
-    State1 = if CurName =:= File andalso IsDirty andalso Offset >= SyncOffset ->
+    NewOffset = Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT,
+    State1 = if CurName =:= File andalso IsDirty andalso NewOffset > SyncOffset ->
                      sync_current_file_handle(State);
                 true -> State
              end,
     Now = now(),
-    NewOffset = Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT,
     {FileHdl, OldOffset, ReadHdls1, ReadHdlsAge1} =
         case dict:find(File, ReadHdls) of
             error ->
                 {ok, Hdl} = file:open(form_filename(File),
-                                      [read, raw, binary,
-                                       read_ahead]),
+                                      [read, raw, binary]),
                 case dict:size(ReadHdls) < ReadFileHandlesLimit of
                     true ->
                         {Hdl, 0, ReadHdls, ReadHdlsAge};
