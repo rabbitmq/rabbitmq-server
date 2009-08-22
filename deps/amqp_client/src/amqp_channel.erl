@@ -357,11 +357,6 @@ init([InitialState]) ->
 %% Do not accept any further RPCs when the channel is about to close
 %% @private
 handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
-    io:format("GOING HERE........~p~n",[Method]),
-    rpc_top_half(Method, From, State);
-
-handle_call({call, Method}, From, State) ->
-    io:format("GOING HERE 2........~p~n",[Method]),
     rpc_top_half(Method, From, State);
 
 %% @private
