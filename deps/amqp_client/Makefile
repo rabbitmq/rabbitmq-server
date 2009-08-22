@@ -27,16 +27,34 @@ DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  file:consult("rabbit_common.app"), \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
-COMMON_PACKAGE=rabbit_common
-COMMON_PACKAGE_NAME=$(COMMON_PACKAGE).ez
-
-VERSION=1.7.0
+VERSION=0.0.0
 SOURCE_PACKAGE_NAME=$(PACKAGE)-$(VERSION)-src
+
+.PHONY: common_package
 
 include include.mk
 
-BROKER_HEADERS=$(wildcard $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl)
-BROKER_SOURCES=$(wildcard $(BROKER_DIR)/$(SOURCE_DIR)/*.erl)
+##############################################################################
+##  Testing
+###############################################################################
+
+test_common_package: common_package package prepare_tests
+	$(MAKE) start_test_broker_node
+	OK=true && \
+	TMPFILE=$(MKTEMP) && \
+	    { $(LIBS_PATH) erl -noshell -pa $(TEST_DIR) \
+	    -eval 'network_client_SUITE:test(), halt().' 2>&1 | \
+		tee $$TMPFILE || OK=false; } && \
+	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
+	rm $$TMPFILE && \
+	$(MAKE) stop_test_broker_node && \
+	$$OK
+
+###############################################################################
+##  Packaging
+###############################################################################
+
+common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 
 $(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SOURCES) $(BROKER_HEADERS)
 	$(MAKE) -C $(BROKER_DIR)
@@ -49,23 +67,6 @@ $(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SOURCES) $(BROKER_HEADERS)
         );)
 	cp $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
 	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
-
-test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME) package prepare_tests
-	$(MAKE) start_test_broker_node
-	OK=true && \
-	TMPFILE=$$(mktemp) && \
-	    { $(LIBS_PATH) erl -noshell -pa $(TEST_DIR) \
-	    -eval 'network_client_SUITE:test(), halt().' 2>&1 | \
-		tee $$TMPFILE || OK=false; } && \
-	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
-	rm $$TMPFILE && \
-	$(MAKE) stop_test_broker_node && \
-	$$OK
-
-
-###############################################################################
-##  Packaging
-###############################################################################
 
 source_tarball: clean $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(DIST_DIR)
@@ -82,4 +83,3 @@ source_tarball: clean $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 	cp -a $(TEST_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)/
 	cp -a $(TEST_DIR)/Makefile $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)/
 	cd $(DIST_DIR) ; tar cvzf $(SOURCE_PACKAGE_NAME).tar.gz $(SOURCE_PACKAGE_NAME)
-

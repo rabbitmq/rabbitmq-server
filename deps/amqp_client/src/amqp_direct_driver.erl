@@ -23,10 +23,9 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
+%% @private
 -module(amqp_direct_driver).
 
--include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqp_client.hrl").
 
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
@@ -44,21 +43,18 @@ handshake(ConnectionState = #connection_state{username = User,
         false -> throw(broker_not_found_in_vm);
         true  -> ok
     end,
-    UserBin = amqp_util:binary(User),
-    PassBin = amqp_util:binary(Pass),
-    rabbit_access_control:user_pass_login(UserBin, PassBin),
-    rabbit_access_control:check_vhost_access(#user{username = UserBin,
-                                                   password = PassBin},
+    rabbit_access_control:user_pass_login(User, Pass),
+    rabbit_access_control:check_vhost_access(#user{username = User,
+                                                   password = Pass},
                                              VHostPath),
     ConnectionState.
 
 open_channel({Channel, _OutOfBand}, ChannelPid,
              State = #connection_state{username = User,
                                        vhostpath = VHost}) ->
-    UserBin = amqp_util:binary(User),
     ReaderPid = WriterPid = ChannelPid,
     Peer = rabbit_channel:start_link(Channel, ReaderPid, WriterPid,
-                                     UserBin, VHost),
+                                     User, VHost),
     amqp_channel:register_direct_peer(ChannelPid, Peer),
     State.
 

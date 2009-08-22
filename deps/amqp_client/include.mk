@@ -31,6 +31,7 @@ TEST_DIR=test
 SOURCE_DIR=src
 DIST_DIR=dist
 DEPS_DIR=deps
+DOC_DIR=doc
 
 DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  file:consult("rabbit_common.app"), \
@@ -60,6 +61,8 @@ LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR)
 COVER_START := -s cover start -s rabbit_misc enable_cover ../rabbitmq-erlang-client
 COVER_STOP := -s rabbit_misc report_cover ../rabbitmq-erlang-client -s cover stop
 
+MKTEMP=$$(mktemp /tmp/tmp.XXXXXXXXXX)
+
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
 # only available in R12B-3 upwards
@@ -72,6 +75,7 @@ ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_
 
 RABBITMQ_NODENAME=rabbit
 PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
+RABBITMQCTL=$(BROKER_DIR)/scripts/rabbitmqctl
 
 PLT=$(HOME)/.dialyzer_plt
 DIALYZER_CALL=dialyzer --plt $(PLT)
@@ -80,9 +84,18 @@ DIALYZER_CALL=dialyzer --plt $(PLT)
 	add_broker_to_plt prepare_tests all_tests test_suites \
 	test_suites_coverage run_test_broker start_test_broker_node \
 	stop_test_broker_node test_network test_direct test_network_coverage \
-	test_direct_coverage test_common_package clean source_tarball package
+	test_direct_coverage test_common_package clean source_tarball package \
+	boot_broker unboot_broker
 
-all: compile
+all: package
+
+clean:
+	rm -f $(EBIN_DIR)/*.beam
+	rm -f erl_crash.dump
+	rm -fr $(DIST_DIR)
+	rm -fr $(DEPS_DIR)
+	rm -fr $(DOC_DIR)
+	$(MAKE) -C $(TEST_DIR) clean
 
 compile: $(TARGETS)
 
@@ -103,6 +116,15 @@ dialyze_all: $(TARGETS) $(TEST_TARGETS)
 
 add_broker_to_plt: $(BROKER_DIR)/ebin
 	$(DIALYZER_CALL) --add_to_plt -r $<
+	
+$(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
+	mkdir -p $(DOC_DIR)
+	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
+
+$(DOC_DIR)/index.html: $(COMPILE_DEPS) $(DOC_DIR)/overview.edoc $(SOURCES)
+	$(LIBS_PATH) erl -noshell -eval 'edoc:application(amqp_client, ".", [{preprocess, true}])' -run init stop
+
+doc: $(DOC_DIR)/index.html
 
 ###############################################################################
 ##  Testing
@@ -116,13 +138,6 @@ all_tests: prepare_tests
 	{ $(MAKE) test_common_package || OK=false; } && \
 	$$OK
 
-$(COMPILE_DEPS): $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
-	mkdir -p $(DEPS_DIR)
-	unzip -o -d $(DEPS_DIR) $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
-
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(COMPILE_DEPS)
-	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
-
 test_suites: prepare_tests
 	OK=true && \
 	{ $(MAKE) test_network || OK=false; } && \
@@ -135,22 +150,36 @@ test_suites_coverage: prepare_tests
 	{ $(MAKE) test_direct_coverage || OK=false; } && \
 	$$OK
 
-run_test_broker:
+## This performs test setup and teardown procedures to ensure that
+## that the correct users are configured in the test instance
+run_test_broker: start_test_broker_node unboot_broker
 	OK=true && \
-	TMPFILE=$$(mktemp) && \
+	TMPFILE=$(MKTEMP) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
 		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) \
 		-noshell -s rabbit $(RUN_TEST_BROKER_ARGS) -s init stop" 2>&1 | \
 		tee $$TMPFILE || OK=false; } && \
 	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
+	$(MAKE) boot_broker && \
+	$(MAKE) stop_test_broker_node && \
 	$$OK
 
-start_test_broker_node:
-	$(MAKE) RABBITMQ_SERVER_START_ARGS='-s rabbit' -C $(BROKER_DIR) start-background-node
+start_test_broker_node: boot_broker
+	$(RABBITMQCTL) delete_user test_user_no_perm 2>/dev/null || true
+	$(RABBITMQCTL) add_user test_user_no_perm test_user_no_perm
 
 stop_test_broker_node:
-	erl_call -sname $(RABBITMQ_NODENAME) -q
+	$(RABBITMQCTL) delete_user test_user_no_perm
+	$(MAKE) unboot_broker
+
+boot_broker:
+	$(MAKE) -C $(BROKER_DIR) start-background-node
+	$(MAKE) -C $(BROKER_DIR) start-rabbit-on-node
+
+unboot_broker:
+	$(MAKE) -C $(BROKER_DIR) stop-rabbit-on-node
+	$(MAKE) -C $(BROKER_DIR) stop-node
 
 test_network: prepare_tests
 	$(MAKE) run_test_broker RUN_TEST_BROKER_ARGS="-s network_client_SUITE test"
@@ -166,28 +195,29 @@ test_direct_coverage: prepare_tests
 	$(MAKE) run_test_broker \
 	RUN_TEST_BROKER_ARGS="$(COVER_START) -s direct_client_SUITE test $(COVER_STOP)"
 
-clean:
-	rm -f $(EBIN_DIR)/*.beam
-	rm -f erl_crash.dump
-	rm -fr $(DIST_DIR)
-	rm -fr $(DEPS_DIR)
-	$(MAKE) -C $(TEST_DIR) clean
-
-
 ###############################################################################
 ##  Packaging
 ###############################################################################
 
-package: $(DIST_DIR)
-	$(MAKE) clean compile
+$(DIST_DIR)/$(PACKAGE_NAME): $(TARGETS)
+	rm -rf $(DIST_DIR)/$(PACKAGE)
 	mkdir -p $(DIST_DIR)/$(PACKAGE)
 	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
 	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
 	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
+package: $(DIST_DIR)/$(PACKAGE_NAME)
+
 ###############################################################################
 ##  Internal targets
 ###############################################################################
+
+$(COMPILE_DEPS): $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+	mkdir -p $(DEPS_DIR)
+	unzip -o -d $(DEPS_DIR) $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(COMPILE_DEPS)
+	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
 
 $(BROKER_DIR):
 	test -e $(BROKER_DIR)

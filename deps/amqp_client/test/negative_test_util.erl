@@ -24,15 +24,13 @@
 %%
 -module(negative_test_util).
 
--include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
 non_existent_exchange_test(Connection) ->
-    {A,B,C} = now(),
-    X = <<A:32,B:32,C:32>>,
+    X = test_util:uuid(),
     RoutingKey = <<"a">>, 
     Payload = <<"foobar">>,
     Channel = lib_amqp:start_channel(Connection),
@@ -45,12 +43,7 @@ non_existent_exchange_test(Connection) ->
 
 hard_error_test(Connection) ->
     Channel = lib_amqp:start_channel(Connection),
-    try
-        amqp_channel:call(Channel, #'basic.qos'{global = true})
-    catch
-        exit:_ -> ok;
-        _:_    -> exit(did_not_throw_error)
-    end,
+    ?assertExit(_, amqp_channel:call(Channel, #'basic.qos'{global = true})),
     wait_for_death(Channel),
     wait_for_death(Connection).
 
@@ -59,3 +52,22 @@ wait_for_death(Pid) ->
     receive {'DOWN', Ref, process, Pid, _Reason} -> ok
     after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
     end.
+
+non_existent_user_test() ->
+    Params = #amqp_params{username = test_util:uuid(),
+                          password = test_util:uuid()},
+    ?assertError(_, amqp_connection:start_network(Params)).
+
+invalid_password_test() ->
+    Params = #amqp_params{username = <<"guest">>,
+                          password = test_util:uuid()},
+    ?assertError(_, amqp_connection:start_network(Params)).
+
+non_existent_vhost_test() ->
+    Params = #amqp_params{virtual_host = test_util:uuid()},
+    ?assertError(_, amqp_connection:start_network(Params)).
+
+no_permission_test() ->
+    Params = #amqp_params{username = <<"test_user_no_perm">>,
+                          password = <<"test_user_no_perm">>},
+    ?assertError(_, amqp_connection:start_network(Params)).
