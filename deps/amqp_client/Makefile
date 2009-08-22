@@ -34,9 +34,15 @@ SOURCE_PACKAGE_NAME=$(PACKAGE)-$(VERSION)-src
 
 include include.mk
 
+clean: common_clean
+	rm -fr $(DIST_DIR)
+	rm -fr $(DEPS_DIR)
+
 ##############################################################################
 ##  Testing
 ###############################################################################
+
+include test.mk
 
 test_common_package: common_package package prepare_tests
 	$(MAKE) start_test_broker_node
@@ -54,6 +60,8 @@ test_common_package: common_package package prepare_tests
 ##  Packaging
 ###############################################################################
 
+COPY=cp -pR
+
 common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 
 $(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SOURCES) $(BROKER_HEADERS)
@@ -70,16 +78,17 @@ $(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SOURCES) $(BROKER_HEADERS)
 
 source_tarball: clean $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(DIST_DIR)
-	cp -a $(DIST_DIR)/$(COMMON_PACKAGE_NAME) $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(DIST_DIR)/
-	cp -a README $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/
-	cp -a include.mk $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/Makefile
+	$(COPY) $(DIST_DIR)/$(COMMON_PACKAGE_NAME) $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(DIST_DIR)/
+	$(COPY) README $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/
+	$(COPY) include.mk $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/
+	$(COPY) Makefile.in $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/Makefile
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(SOURCE_DIR)
-	cp -a $(SOURCE_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(SOURCE_DIR)/
+	$(COPY) $(SOURCE_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(SOURCE_DIR)/
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(EBIN_DIR)
-	cp -a $(EBIN_DIR)/*.app $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(EBIN_DIR)/
+	$(COPY) $(EBIN_DIR)/*.app $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(EBIN_DIR)/
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(INCLUDE_DIR)
-	cp -a $(INCLUDE_DIR)/*.hrl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(INCLUDE_DIR)/
+	$(COPY) $(INCLUDE_DIR)/*.hrl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(INCLUDE_DIR)/
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)
-	cp -a $(TEST_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)/
-	cp -a $(TEST_DIR)/Makefile $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)/
+	$(COPY) $(TEST_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)/
+	$(COPY) $(TEST_DIR)/Makefile $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)/
 	cd $(DIST_DIR) ; tar cvzf $(SOURCE_PACKAGE_NAME).tar.gz $(SOURCE_PACKAGE_NAME)
