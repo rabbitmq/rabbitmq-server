@@ -280,7 +280,7 @@ init_db(ClusterNodes) ->
             IsDiskNode = ClusterNodes == [] orelse
                 lists:member(node(), ClusterNodes),
             ok = wait_for_replicated_tables(),
-            ok = create_local_table_copy(schema, false, undefined, disc_copies),
+            ok = create_local_table_copy(schema, disc_copies),
             ok = create_local_table_copies(case IsDiskNode of
                                                true  -> disc;
                                                false -> ram
@@ -336,27 +336,21 @@ create_tables() ->
     ok.
 
 table_has_copy_type(TabDef, DiscType) ->
-    case proplists:get_value(DiscType, TabDef, false) of
-        false -> false;
-        List -> lists:member(node(), List)
-    end.
-
-is_local_content_table(TabDef) ->
-    proplists:get_bool(local_content, TabDef).
+    lists:member(node(), proplists:get_value(DiscType, TabDef, [])).
 
 create_local_table_copies(Type) ->
     lists:foreach(
       fun({Tab, TabDef}) ->
-              HasDiscCopies = table_has_copy_type(TabDef, disc_copies),
+              HasDiscCopies     = table_has_copy_type(TabDef, disc_copies),
               HasDiscOnlyCopies = table_has_copy_type(TabDef, disc_only_copies),
-              LocalTab = is_local_content_table(TabDef),
+              LocalTab          = proplists:get_bool(local_content, TabDef),
               StorageType =
                   if
                       Type =:= disc orelse LocalTab ->
                           if
-                              HasDiscCopies -> disc_copies;
+                              HasDiscCopies     -> disc_copies;
                               HasDiscOnlyCopies -> disc_only_copies;
-                              true -> ram_copies
+                              true              -> ram_copies
                           end;
 %% unused code - commented out to keep dialyzer happy
 %%                      Type =:= disc_only ->
@@ -368,12 +362,12 @@ create_local_table_copies(Type) ->
                       Type =:= ram ->
                           ram_copies
                   end,
-              ok = create_local_table_copy(Tab, TabDef, LocalTab, StorageType)
+              ok = create_local_table_copy(Tab, StorageType)
       end,
       table_definitions()),
     ok.
 
-create_local_table_copy(Tab, TabDef, LocalTab, Type) ->
+create_local_table_copy(Tab, Type) ->
     StorageType = mnesia:table_info(Tab, storage_type),
     {atomic, ok} =
         if
