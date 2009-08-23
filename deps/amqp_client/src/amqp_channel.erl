@@ -98,12 +98,15 @@
 call(Channel, Method) ->
     gen_server:call(Channel, {call, Method}, infinity).
 
-%% @spec (Channel, amqp_command(), content()) -> ok
+%% @spec (Channel, amqp_command(), content()) -> ok | blocked
 %% where
 %%      Channel = pid()
 %% @doc This sends an AMQP command with content and waits for a synchronous
-%% response. Generally this is used with the #basic.publish{} command. Note
-%% that the synchronicity only means that the client has transmitted the
+%% response. Generally this is used with the #basic.publish{} command.
+%% This will return a blocked atom if either the server has throttled the
+%% client for flow control reasons or if the channel is shutting down due to a
+%% broker initiated close.
+%% Note that the synchronicity only means that the client has transmitted the
 %% command to the broker. It does not imply that the broker has accepted
 %% responsibility for the message. To acheive guaranteed delivery, this
 %% function would have to be called within the context of a transaction.
