@@ -379,11 +379,9 @@ create_local_table_copy(Tab, Type) ->
         end,
     ok.
 
-wait_for_replicated_tables() ->
-    wait_for_tables(replicated_table_names()).
+wait_for_replicated_tables() -> wait_for_tables(replicated_table_names()).
 
-wait_for_tables() ->
-    wait_for_tables(table_names()).
+wait_for_tables() -> wait_for_tables(table_names()).
 
 wait_for_tables(TableNames) -> 
     case check_schema_integrity() of
