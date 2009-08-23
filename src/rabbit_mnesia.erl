@@ -147,10 +147,9 @@ table_definitions() ->
        {attributes, record_info(fields, amqqueue)}]},
      {rabbit_disk_queue,
       [{record_name, dq_msg_loc},
-       {type, set},
-       {local_content, true},
        {attributes, record_info(fields, dq_msg_loc)},
-       {disc_copies, [node()]}]}
+       {disc_copies, [node()]},
+       {local_content, true}]}
     ].
 
 replicated_table_definitions() ->
