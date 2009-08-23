@@ -1546,7 +1546,7 @@ load_from_disk(State) ->
     ok = del_index(),
     {ok, State3}.
 
-prune_mnesia(State, DeleteAcc, RemoveAcc) ->
+prune_mnesia_flush_batch(State, DeleteAcc, RemoveAcc) ->
     ok = lists:foldl(fun (Key, ok) ->
                              mnesia:dirty_delete(rabbit_disk_queue, Key)
                      end, ok, DeleteAcc),
@@ -1558,7 +1558,7 @@ prune_mnesia(State, DeleteAcc, RemoveAcc) ->
 prune_mnesia(State, '$end_of_table', _DeleteAcc, _RemoveAcc, 0) ->
     {ok, State};
 prune_mnesia(State, '$end_of_table', DeleteAcc, RemoveAcc, _Len) ->
-    prune_mnesia(State, DeleteAcc, RemoveAcc);
+    prune_mnesia_flush_batch(State, DeleteAcc, RemoveAcc);
 prune_mnesia(State, Key, DeleteAcc, RemoveAcc, Len) ->
     [#dq_msg_loc { msg_id = MsgId, queue_and_seq_id = {Q, SeqId} }] =
         mnesia:dirty_read(rabbit_disk_queue, Key),
@@ -1590,7 +1590,8 @@ prune_mnesia(State, Key, DeleteAcc, RemoveAcc, Len) ->
                 %% so have no choice but to start again. Although this
                 %% will make recovery slower for large queues, we
                 %% guarantee we can start up in constant memory
-                {ok, State2} = prune_mnesia(State, DeleteAcc1, RemoveAcc2),
+                {ok, State2} =
+                    prune_mnesia_flush_batch(State, DeleteAcc1, RemoveAcc2),
                 Key2 = mnesia:dirty_first(rabbit_disk_queue),
                 {State2, Key2, [], [], 0};
             true ->
