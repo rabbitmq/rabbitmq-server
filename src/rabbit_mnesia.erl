@@ -146,16 +146,13 @@ table_definitions() ->
       [{record_name, amqqueue},
        {attributes, record_info(fields, amqqueue)}]}].
 
-replicated_table_definitions() ->
-    [{Tab, Attrs} || {Tab, Attrs} <- table_definitions(),
-                     not lists:member({local_content, true}, Attrs)
-    ].
-
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
 
 replicated_table_names() ->
-    [Tab || {Tab, _} <- replicated_table_definitions()].
+    [Tab || {Tab, Attrs} <- table_definitions(),
+            not lists:member({local_content, true}, Attrs)
+    ].
 
 dir() -> mnesia:system_info(directory).
     
@@ -339,16 +336,13 @@ create_tables() ->
     ok.
 
 table_has_copy_type(TabDef, DiscType) ->
-    case lists:keysearch(DiscType, 1, TabDef) of
+    case proplists:get_value(DiscType, TabDef, false) of
         false -> false;
-        {value, {DiscType, List}} -> lists:member(node(), List)
+        List -> lists:member(node(), List)
     end.
 
 is_local_content_table(TabDef) ->
-    case lists:keysearch(local_content, 1, TabDef) of
-        false -> false;
-        {value, {local_content, Bool}} -> Bool
-    end.
+    proplists:get_bool(local_content, TabDef).
 
 create_local_table_copies(Type) ->
     lists:foreach(
@@ -385,8 +379,6 @@ create_local_table_copy(Tab, TabDef, LocalTab, Type) ->
         if
             StorageType == unknown ->
                 mnesia:add_table_copy(Tab, node(), Type);
-            LocalTab andalso StorageType /= Type andalso Tab /= schema ->
-                mnesia:create_table(Tab, TabDef);
             StorageType /= Type ->
                 mnesia:change_table_copy_type(Tab, node(), Type);
             true -> {atomic, ok}
