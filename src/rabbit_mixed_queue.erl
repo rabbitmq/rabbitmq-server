@@ -294,9 +294,9 @@ publish(Msg, State = #mqstate { mode = disk, queue = Q, length = Length,
                                 msg_buf = MsgBuf }) ->
     MsgBuf1 = inc_queue_length(Q, MsgBuf, 1),
     ok = rabbit_disk_queue:publish(Q, Msg, false),
-    MsgSize = size_of_message(Msg),
-    {ok, gain_memory(MsgSize, State #mqstate { msg_buf = MsgBuf1,
-                                               length = Length + 1 })};
+    {ok, gain_memory(size_of_message(Msg),
+                     State #mqstate { msg_buf = MsgBuf1,
+                                      length = Length + 1 })};
 publish(Msg = #basic_message { is_persistent = IsPersistent }, State = 
         #mqstate { queue = Q, mode = mixed, is_durable = IsDurable,
                    msg_buf = MsgBuf, length = Length }) ->
@@ -304,8 +304,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent }, State =
              true -> rabbit_disk_queue:publish(Q, Msg, false);
              false -> ok
          end,
-    MsgSize = size_of_message(Msg),
-    {ok, gain_memory(MsgSize,
+    {ok, gain_memory(size_of_message(Msg),
                      State #mqstate { msg_buf = queue:in({Msg, false}, MsgBuf),
                                       length = Length + 1 })}.
 
