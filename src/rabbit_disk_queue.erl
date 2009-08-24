@@ -1861,8 +1861,7 @@ read_message_from_disk(FileHdl, TotalSize) ->
     end.
 
 scan_file_for_valid_messages(File) ->
-    FilePath = form_filename(File),
-    case file:open(FilePath, [raw, binary, read]) of
+    case file:open(form_filename(File), [raw, binary, read]) of
         {ok, Hdl} ->
             Valid = scan_file_for_valid_messages(Hdl, 0, []),
             %% if something really bad's happened, the close could fail, but ignore

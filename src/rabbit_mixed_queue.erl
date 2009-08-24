@@ -317,8 +317,7 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
                                      length = 0 })
   when IsDurable andalso IsPersistent ->
     ok = rabbit_disk_queue:publish(Q, Msg, true),
-    MsgSize = size_of_message(Msg),
-    State1 = gain_memory(MsgSize, State),
+    State1 = gain_memory(size_of_message(Msg), State),
     %% must call phantom_fetch otherwise the msg remains at the head
     %% of the queue. This is synchronous, but unavoidable as we need
     %% the AckTag
