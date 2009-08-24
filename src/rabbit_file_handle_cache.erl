@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_handle_cache).
+-module(rabbit_file_handle_cache).
 
 -export([init/2, close_all/1, close_file/2, with_file_handle_at/4]).
 
