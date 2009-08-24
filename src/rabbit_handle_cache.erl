@@ -74,7 +74,7 @@ with_file_handle_at(File, Offset, Fun, State = #hcstate { handles = Handles,
             error ->
                 {ok, Hdl} = file:open(File, Mode),
                 case dict:size(Handles) < Limit of
-                    true ->
+                    true  ->
                         {Hdl, 0, Handles, Ages};
                     false ->
                         {Then, OldFile, Ages2} = gb_trees:take_smallest(Ages),
@@ -87,15 +87,15 @@ with_file_handle_at(File, Offset, Fun, State = #hcstate { handles = Handles,
                 {Hdl, OldOffset1, Handles, gb_trees:delete(Then, Ages)}
         end,
     SeekRes = case Offset == OldOffset of
-                  true -> ok;
+                  true  -> ok;
                   false -> case file:position(FileHdl, {bof, Offset}) of
                                {ok, Offset} -> ok;
-                               KO -> KO
+                               KO           -> KO
                            end
               end,
     {NewOffset, Result} = case SeekRes of
-                              ok -> Fun(FileHdl);
-                              KO1 -> {Offset, KO1}
+                              ok  -> Fun(FileHdl);
+                              KO1 -> {OldOffset, KO1}
                           end,
     Now = now(),
     Handles2 = dict:store(File, {FileHdl, NewOffset, Now}, Handles1),
