@@ -152,16 +152,13 @@ table_definitions() ->
        {local_content, true}]}
     ].
 
-replicated_table_definitions() ->
-    [{Tab, Attrs} || {Tab, Attrs} <- table_definitions(),
-                     not lists:member({local_content, true}, Attrs)
-    ].
-
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
 
 replicated_table_names() ->
-    [Tab || {Tab, _} <- replicated_table_definitions()].
+    [Tab || {Tab, Attrs} <- table_definitions(),
+            not lists:member({local_content, true}, Attrs)
+    ].
 
 dir() -> mnesia:system_info(directory).
     
@@ -278,7 +275,7 @@ init_db(ClusterNodes) ->
             IsDiskNode = ClusterNodes == [] orelse
                 lists:member(node(), ClusterNodes),
             ok = wait_for_replicated_tables(),
-            ok = create_local_table_copy(schema, false, undefined, disc_copies),
+            ok = create_local_table_copy(schema, disc_copies),
             ok = create_local_table_copies(case IsDiskNode of
                                                true  -> disc;
                                                false -> ram
@@ -334,30 +331,21 @@ create_tables() ->
     ok.
 
 table_has_copy_type(TabDef, DiscType) ->
-    case lists:keysearch(DiscType, 1, TabDef) of
-        false -> false;
-        {value, {DiscType, List}} -> lists:member(node(), List)
-    end.
-
-is_local_content_table(TabDef) ->
-    case lists:keysearch(local_content, 1, TabDef) of
-        false -> false;
-        {value, {local_content, Bool}} -> Bool
-    end.
+    lists:member(node(), proplists:get_value(DiscType, TabDef, [])).
 
 create_local_table_copies(Type) ->
     lists:foreach(
       fun({Tab, TabDef}) ->
-              HasDiscCopies = table_has_copy_type(TabDef, disc_copies),
+              HasDiscCopies     = table_has_copy_type(TabDef, disc_copies),
               HasDiscOnlyCopies = table_has_copy_type(TabDef, disc_only_copies),
-              LocalTab = is_local_content_table(TabDef),
+              LocalTab          = proplists:get_bool(local_content, TabDef),
               StorageType =
                   if
                       Type =:= disc orelse LocalTab ->
                           if
-                              HasDiscCopies -> disc_copies;
+                              HasDiscCopies     -> disc_copies;
                               HasDiscOnlyCopies -> disc_only_copies;
-                              true -> ram_copies
+                              true              -> ram_copies
                           end;
 %% unused code - commented out to keep dialyzer happy
 %%                      Type =:= disc_only ->
@@ -369,30 +357,26 @@ create_local_table_copies(Type) ->
                       Type =:= ram ->
                           ram_copies
                   end,
-              ok = create_local_table_copy(Tab, TabDef, LocalTab, StorageType)
+              ok = create_local_table_copy(Tab, StorageType)
       end,
       table_definitions()),
     ok.
 
-create_local_table_copy(Tab, TabDef, LocalTab, Type) ->
+create_local_table_copy(Tab, Type) ->
     StorageType = mnesia:table_info(Tab, storage_type),
     {atomic, ok} =
         if
             StorageType == unknown ->
                 mnesia:add_table_copy(Tab, node(), Type);
-            LocalTab andalso StorageType /= Type andalso Tab /= schema ->
-                mnesia:create_table(Tab, TabDef);
             StorageType /= Type ->
                 mnesia:change_table_copy_type(Tab, node(), Type);
             true -> {atomic, ok}
         end,
     ok.
 
-wait_for_replicated_tables() ->
-    wait_for_tables(replicated_table_names()).
+wait_for_replicated_tables() -> wait_for_tables(replicated_table_names()).
 
-wait_for_tables() ->
-    wait_for_tables(table_names()).
+wait_for_tables() -> wait_for_tables(table_names()).
 
 wait_for_tables(TableNames) -> 
     case check_schema_integrity() of

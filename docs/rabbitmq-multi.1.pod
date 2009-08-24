@@ -21,7 +21,7 @@ See also rabbitmq-server(1) for configuration information.
 
 start_all I<count>
     start count nodes with unique names, listening on all IP addresses
-    and on sequential ports starting from 5672.
+and on sequential ports starting from 5672.
 
 status
     print the status of all running RabbitMQ nodes
