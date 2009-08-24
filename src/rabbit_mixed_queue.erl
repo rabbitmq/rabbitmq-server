@@ -311,32 +311,21 @@ publish(Msg = #basic_message { is_persistent = IsPersistent }, State =
 
 %% Assumption here is that the queue is empty already (only called via
 %% attempt_immediate_delivery).
-publish_delivered(Msg =
-                  #basic_message { guid = MsgId, is_persistent = IsPersistent},
-                  State =
-                  #mqstate { mode = Mode, is_durable = IsDurable,
-                             queue = Q, length = 0 })
-  when Mode =:= disk orelse (IsDurable andalso IsPersistent) ->
+publish_delivered(Msg = #basic_message { guid = MsgId,
+                                         is_persistent = IsPersistent},
+                  State = #mqstate { is_durable = IsDurable, queue = Q,
+                                     length = 0 })
+  when IsDurable andalso IsPersistent ->
     ok = rabbit_disk_queue:publish(Q, Msg, true),
     MsgSize = size_of_message(Msg),
     State1 = gain_memory(MsgSize, State),
-    case IsDurable andalso IsPersistent of
-        true ->
-            %% must call phantom_fetch otherwise the msg remains at
-            %% the head of the queue. This is synchronous, but
-            %% unavoidable as we need the AckTag
-            {MsgId, IsPersistent, true, AckTag, 0} =
-                rabbit_disk_queue:phantom_fetch(Q),
-            {ok, AckTag, State1};
-        false ->
-            %% in this case, we don't actually care about the ack, so
-            %% auto ack it (asynchronously).
-            ok = rabbit_disk_queue:auto_ack_next_message(Q),
-            {ok, noack, State1}
-    end;
-publish_delivered(Msg, State = #mqstate { mode = mixed, length = 0 }) ->
-    MsgSize = size_of_message(Msg),
-    {ok, noack, gain_memory(MsgSize, State)}.
+    %% must call phantom_fetch otherwise the msg remains at the head
+    %% of the queue. This is synchronous, but unavoidable as we need
+    %% the AckTag
+    {MsgId, IsPersistent, true, AckTag, 0} = rabbit_disk_queue:phantom_fetch(Q),
+    {ok, AckTag, State1};
+publish_delivered(Msg, State = #mqstate { length = 0 }) ->
+    {ok, noack, gain_memory(size_of_message(Msg), State)}.
 
 fetch(State = #mqstate { length = 0 }) ->
     {empty, State};

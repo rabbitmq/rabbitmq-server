@@ -39,11 +39,10 @@
          terminate/2, code_change/3]).
 -export([handle_pre_hibernate/1]).
 
--export([publish/3, fetch/1, phantom_fetch/1, ack/2,
-         tx_publish/1, tx_commit/3, tx_cancel/1,
-         requeue/2, purge/1, delete_queue/1,
-         delete_non_durable_queues/1, auto_ack_next_message/1,
-         requeue_next_n/2, len/1, foldl/3, prefetch/1
+-export([publish/3, fetch/1, phantom_fetch/1, ack/2, tx_publish/1, tx_commit/3,
+         tx_cancel/1, requeue/2, purge/1, delete_queue/1,
+         delete_non_durable_queues/1, requeue_next_n/2, len/1, foldl/3,
+         prefetch/1
         ]).
 
 -export([filesync/0, cache_info/0]).
@@ -264,7 +263,6 @@
               {msg_id(), boolean(), boolean(), ack_tag(), non_neg_integer()})).
 -spec(prefetch/1 :: (queue_name()) -> 'ok'). 
 -spec(ack/2 :: (queue_name(), [ack_tag()]) -> 'ok').
--spec(auto_ack_next_message/1 :: (queue_name()) -> 'ok').
 -spec(tx_publish/1 :: (message()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [{msg_id(), boolean()}], [ack_tag()]) ->
              'ok').
@@ -307,9 +305,6 @@ prefetch(Q) ->
 
 ack(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server2:cast(?SERVER, {ack, Q, MsgSeqIds}).
-
-auto_ack_next_message(Q) ->
-    gen_server2:cast(?SERVER, {auto_ack_next_message, Q}).
 
 tx_publish(Message = #basic_message {}) ->
     gen_server2:cast(?SERVER, {tx_publish, Message}).
@@ -509,9 +504,6 @@ handle_cast({publish, Q, Message, IsDelivered}, State) ->
     noreply(State1);
 handle_cast({ack, Q, MsgSeqIds}, State) ->
     {ok, State1} = internal_ack(Q, MsgSeqIds, State),
-    noreply(State1);
-handle_cast({auto_ack_next_message, Q}, State) ->
-    {ok, State1} = internal_auto_ack(Q, State),
     noreply(State1);
 handle_cast({tx_publish, Message}, State) ->
     {ok, State1} = internal_tx_publish(Message, State),
@@ -939,15 +931,6 @@ internal_foldl(Q, WriteSeqId, Fun, State, Acc, ReadSeqId) ->
     {Message, State1} = read_stored_message(StoreEntry, State),
     Acc1 = Fun(Message, AckTag, IsDelivered, Acc),
     internal_foldl(Q, WriteSeqId, Fun, State1, Acc1, ReadSeqId + 1).
-
-internal_auto_ack(Q, State) ->
-    case internal_fetch_attributes(Q, ignore_delivery, pop_queue, State) of
-        {ok, empty, State1} ->
-            {ok, State1};
-        {ok, {_MsgId, _IsPersistent, _IsDelivered, AckTag, _Remaining},
-         State1} ->
-            remove_messages(Q, [AckTag], true, State1)
-    end.        
 
 internal_ack(Q, MsgSeqIds, State) ->
     remove_messages(Q, MsgSeqIds, true, State).
@@ -1950,8 +1933,8 @@ read_next_file_entry(FileHdl, Offset) ->
                                     eof; 
                                 KO -> KO
                             end;
-                        KO -> KO
+                        Other -> Other
                     end
             end;
-        KO -> KO
+        Other -> Other
     end.

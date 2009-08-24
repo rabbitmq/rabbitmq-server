@@ -63,7 +63,7 @@
 
 -record(consumer, {tag, ack_required}).
 
--record(tx, {ch_pid, is_persistent, pending_messages, pending_acks}).
+-record(tx, {ch_pid, pending_messages, pending_acks}).
 
 %% These are held in our process dictionary
 -record(cr, {consumer_count,
@@ -453,7 +453,6 @@ qname(#q{q = #amqqueue{name = QName}}) -> QName.
 lookup_tx(Txn) ->
     case get({txn, Txn}) of
         undefined -> #tx{ch_pid = none,
-                         is_persistent = false,
                          pending_messages = [],
                          pending_acks = []};
         V -> V
@@ -471,14 +470,10 @@ all_tx_record() ->
 all_tx() ->
     [Txn || {{txn, Txn}, _} <- get()].
 
-record_pending_message(Txn, ChPid, Message =
-                       #basic_message { is_persistent = IsPersistent }) ->
-    Tx = #tx{pending_messages = Pending, is_persistent = IsPersistentTxn } =
-        lookup_tx(Txn),
+record_pending_message(Txn, ChPid, Message) ->
+    Tx = #tx{pending_messages = Pending} = lookup_tx(Txn),
     record_current_channel_tx(ChPid, Txn),
-    store_tx(Txn, Tx #tx { pending_messages = [Message | Pending],
-                           is_persistent = IsPersistentTxn orelse IsPersistent
-                         }).
+    store_tx(Txn, Tx #tx { pending_messages = [Message | Pending] }).
 
 record_pending_acks(Txn, ChPid, MsgIds) ->
     Tx = #tx{pending_acks = Pending} = lookup_tx(Txn),
