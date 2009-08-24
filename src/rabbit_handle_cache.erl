@@ -61,7 +61,7 @@ close_file(File, State = #hcstate { handles = Handles,
         {ok, {Hdl, _Offset, Then}} ->
             ok = file:close(Hdl),
             State #hcstate { handles = dict:erase(File, Handles),
-                             ages = gb_trees:delete(Then, Ages)
+                             ages    = gb_trees:delete(Then, Ages)
                            }
     end.
 
