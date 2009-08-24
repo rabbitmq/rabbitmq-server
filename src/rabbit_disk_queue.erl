@@ -1803,9 +1803,9 @@ recover_crashed_compactions1(Files, TmpFile) ->
     end,
     ok.
 
-%% takes the list in *ascending* order (i.e. oldest message
-%% first). This is the opposite of whach scan_file_for_valid_messages
-%% produces. The list of msgs that is produced is youngest first
+%% Takes the list in *ascending* order (i.e. eldest message
+%% first). This is the opposite of what scan_file_for_valid_messages
+%% produces. The list of msgs that is produced is youngest first.
 find_contiguous_block_prefix([]) -> {0, []};
 find_contiguous_block_prefix(List) ->
     find_contiguous_block_prefix(List, 0, []).
