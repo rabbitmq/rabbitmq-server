@@ -118,7 +118,7 @@ Change the password for the user named I<username> to I<newpassword>.
 
 =item list_users
 
-List all users.
+List all users, one per line.
 
 =back
 
@@ -137,12 +137,12 @@ exchanges, queues and user mappings.
 
 =item list_vhosts
 
-List all virtual hosts.
+List all virtual hosts, one per line.
 
 =item set_permissions [-p I<vhostpath>] I<username> I<regexp> I<regexp> I<regexp>
 
 Set the permissions for the user named I<username> in the virtual host
-I<vhostpath>, granting 'configure', 'write' and 'read' access to
+I<vhostpath>, granting I<configure>, I<write> and I<read> access to
 resources with names matching the first, second and third I<regexp>,
 respectively.
 
@@ -154,7 +154,9 @@ host I<vhostpath>.
 =item list_permissions [-p I<vhostpath>]
 
 List all the users and their permissions in the virtual host
-I<vhostpath>.
+I<vhostpath>.  Each output line contains the username and their
+I<configure>, I<write> and I<read> access regexps, separated by tab
+characters.
 
 =item list_user_permissions I<username> 
 
@@ -169,9 +171,10 @@ hosts.
 
 =item list_queues [-p I<vhostpath>] [I<queueinfoitem> ...]
 
-List queue information by virtual host. If no I<queueinfoitem>s are
-specified then then name and number of messages is displayed for each
-queue.
+List queue information by virtual host. Each line printed
+describes a queue, with the requested I<queueinfoitem> values
+separated by tab characters.  If no I<queueinfoitem>s are
+specified then I<name> and I<messages> are assumed.
 
 =back
 
@@ -181,7 +184,7 @@ queue.
 
 =item name
 
-URL-encoded name of the queue
+name of the queue
 
 =item durable
 
@@ -238,8 +241,10 @@ including stack, heap and internal structures
 
 =item list_exchanges [-p I<vhostpath>] [I<exchangeinfoitem> ...]
 
-List exchange information by virtual host. If no I<exchangeinfoitem>s
-are specified then name and type is displayed for each exchange.
+List queue information by virtual host. Each line printed describes an
+exchange, with the requested I<exchangeinfoitem> values separated by
+tab characters.  If no I<exchangeinfoitem>s are specified then I<name>
+and I<type> are assumed.
 
 =back
 
@@ -249,7 +254,7 @@ are specified then name and type is displayed for each exchange.
 
 =item name 
 
-URL-encoded name of the exchange
+name of the exchange
 
 =item type
 
@@ -273,13 +278,16 @@ exchange arguments
 
 =item list_bindings [-p I<vhostpath>]
 
-List bindings by virtual host. Each line contains exchange name,
-routing key and queue name (all URL encoded) and arguments.
+List bindings by virtual host. Each line printed describes a binding,
+with the exchange name, routing key, queue name and arguments,
+separated by tab characters.
 
 =item list_connections [I<connectioninfoitem> ...]
 
-List connection information. If no I<connectioninfoitem>s are
-specified then the user, peer address and peer port are displayed.
+List queue information by virtual host. Each line printed describes an
+connection, with the requested I<connectioninfoitem> values separated
+by tab characters.  If no I<connectioninfoitem>s are specified then
+I<user>, I<peer_address> and I<peer_port> are assumed.
 
 =back
 
@@ -322,7 +330,7 @@ username associated with the connection
 
 =item vhost
 
-URL-encoded virtual host
+virtual host
 
 =item timeout
 
@@ -355,9 +363,43 @@ send queue size
 =back
 
 The list_queues, list_exchanges and list_bindings commands accept an
-optional virtual host parameter for which to display results, defaulting
-to I<"/">. The default can be overridden with the B<-p> flag. Result
-columns for these commands and list_connections are tab-separated.
+optional virtual host parameter for which to display results,
+defaulting to I<"/">. The default can be overridden with the B<-p>
+flag.
+
+=head1 OUTPUT ESCAPING
+
+Various items that may appear in the output of rabbitmqctl can contain
+arbitrary octets.  If a octet corresponds to a non-printing ASCII
+character (values 0 to 31, and 127), it will be escaped in the output,
+using a sequence consisting of a backslash character followed by three
+octal digits giving the octet's value (i.e., as used in string
+literals in the C programming language).  An octet corresponding to
+the backslash character (i.e. with value 92) will be escaped using a
+sequence of two backslash characters.  Octets with a value of 128 or
+above are not escaped, in order to preserve strings encoded with
+UTF-8.
+
+The items to which this escaping scheme applies are:
+
+=over
+
+=item *
+Usernames
+
+=item *
+Virtual host names
+
+=item *
+Queue names
+
+=item *
+Exchange names
+
+=item *
+Regular expressions used for access control
+
+=back
 
 =head1 EXAMPLES
 
