@@ -101,7 +101,7 @@
 -endif.
 
 init(Queue, IsDurable) ->
-    Len = rabbit_disk_queue:length(Queue),
+    Len = rabbit_disk_queue:len(Queue),
     MsgBuf = inc_queue_length(Queue, queue:new(), Len),
     Size = rabbit_disk_queue:foldl(
              fun (Msg = #basic_message { is_persistent = true },
