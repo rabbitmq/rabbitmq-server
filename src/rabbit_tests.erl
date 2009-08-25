@@ -33,6 +33,9 @@
 
 -export([all_tests/0, test_parsing/0]).
 
+%% Exported so the hook mechanism can call back
+-export([handle_hook/3, bad_handle_hook/3, extra_arg_hook/5]).
+
 -import(lists).
 
 -include("rabbit.hrl").
@@ -46,6 +49,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     passed = test_priority_queue(),
+    passed = test_unfold(),
     passed = test_parsing(),
     passed = test_topic_matching(),
     passed = test_log_management(),
@@ -54,6 +58,7 @@ all_tests() ->
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
+    passed = test_hooks(),
     passed.
 
 test_priority_queue() ->
@@ -71,7 +76,8 @@ test_priority_queue() ->
 
     %% 1-element priority Q
     Q1 = priority_queue:in(foo, 1, priority_queue:new()),
-    {true, false, 1, [{1, foo}], [foo]} = test_priority_queue(Q1),
+    {true, false, 1, [{1, foo}], [foo]} =
+        test_priority_queue(Q1),
 
     %% 2-element same-priority Q
     Q2 = priority_queue:in(bar, 1, Q1),
@@ -86,6 +92,71 @@ test_priority_queue() ->
     %% 1-element negative priority Q
     Q4 = priority_queue:in(foo, -1, priority_queue:new()),
     {true, false, 1, [{-1, foo}], [foo]} = test_priority_queue(Q4),
+
+    %% merge 2 * 1-element no-priority Qs
+    Q5 = priority_queue:join(priority_queue:in(foo, Q),
+                             priority_queue:in(bar, Q)),
+    {true, false, 2, [{0, foo}, {0, bar}], [foo, bar]} =
+        test_priority_queue(Q5),
+
+    %% merge 1-element no-priority Q with 1-element priority Q
+    Q6 = priority_queue:join(priority_queue:in(foo, Q),
+                             priority_queue:in(bar, 1, Q)),
+    {true, false, 2, [{1, bar}, {0, foo}], [bar, foo]} =
+        test_priority_queue(Q6),
+
+    %% merge 1-element priority Q with 1-element no-priority Q 
+    Q7 = priority_queue:join(priority_queue:in(foo, 1, Q),
+                             priority_queue:in(bar, Q)),
+    {true, false, 2, [{1, foo}, {0, bar}], [foo, bar]} =
+        test_priority_queue(Q7),
+
+    %% merge 2 * 1-element same-priority Qs
+    Q8 = priority_queue:join(priority_queue:in(foo, 1, Q),
+                             priority_queue:in(bar, 1, Q)),
+    {true, false, 2, [{1, foo}, {1, bar}], [foo, bar]} =
+        test_priority_queue(Q8),
+
+    %% merge 2 * 1-element different-priority Qs
+    Q9 = priority_queue:join(priority_queue:in(foo, 1, Q),
+                             priority_queue:in(bar, 2, Q)),
+    {true, false, 2, [{2, bar}, {1, foo}], [bar, foo]} =
+        test_priority_queue(Q9),
+
+    %% merge 2 * 1-element different-priority Qs (other way around)
+    Q10 = priority_queue:join(priority_queue:in(bar, 2, Q),
+                              priority_queue:in(foo, 1, Q)),
+    {true, false, 2, [{2, bar}, {1, foo}], [bar, foo]} =
+        test_priority_queue(Q10),
+
+    %% merge 2 * 2-element multi-different-priority Qs
+    Q11 = priority_queue:join(Q6, Q5),
+    {true, false, 4, [{1, bar}, {0, foo}, {0, foo}, {0, bar}],
+     [bar, foo, foo, bar]} = test_priority_queue(Q11),
+
+    %% and the other way around
+    Q12 = priority_queue:join(Q5, Q6),
+    {true, false, 4, [{1, bar}, {0, foo}, {0, bar}, {0, foo}],
+     [bar, foo, bar, foo]} = test_priority_queue(Q12),
+
+    %% merge with negative priorities
+    Q13 = priority_queue:join(Q4, Q5),
+    {true, false, 3, [{0, foo}, {0, bar}, {-1, foo}], [foo, bar, foo]} =
+        test_priority_queue(Q13),
+
+    %% and the other way around
+    Q14 = priority_queue:join(Q5, Q4),
+    {true, false, 3, [{0, foo}, {0, bar}, {-1, foo}], [foo, bar, foo]} =
+        test_priority_queue(Q14),
+
+    %% joins with empty queues:
+    Q1 = priority_queue:join(Q, Q1),
+    Q1 = priority_queue:join(Q1, Q),
+
+    %% insert with priority into non-empty zero-priority queue
+    Q15 = priority_queue:in(baz, 1, Q5),
+    {true, false, 3, [{1, baz}, {0, foo}, {0, bar}], [baz, foo, bar]} =
+        test_priority_queue(Q15),
 
     passed.
 
@@ -110,6 +181,14 @@ test_simple_n_element_queue(N) ->
     Q = priority_queue_in_all(priority_queue:new(), Items),
     ToListRes = [{0, X} || X <- Items],
     {true, false, N, ToListRes, Items} = test_priority_queue(Q),
+    passed.
+
+test_unfold() ->
+    {[], test} = rabbit_misc:unfold(fun (_V) -> false end, test),
+    List = lists:seq(2,20,2),
+    {List, 0} = rabbit_misc:unfold(fun (0) -> false;
+                                       (N) -> {true, N*2, N-1}
+                                   end, 10),
     passed.
 
 test_parsing() ->
@@ -404,19 +483,17 @@ test_cluster_management() ->
                   end,
                   ClusteringSequence),
 
-    %% attempt to convert a disk node into a ram node
+    %% convert a disk node into a ram node
     ok = control_action(reset, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
-    {error, {cannot_convert_disk_node_to_ram_node, _}} =
-        control_action(cluster, ["invalid1@invalid",
-                                 "invalid2@invalid"]),
+    ok = control_action(cluster, ["invalid1@invalid",
+                                  "invalid2@invalid"]),
 
-    %% attempt to join a non-existing cluster as a ram node
+    %% join a non-existing cluster as a ram node
     ok = control_action(reset, []),
-    {error, {unable_to_contact_cluster_nodes, _}} =
-        control_action(cluster, ["invalid1@invalid",
-                                 "invalid2@invalid"]),
+    ok = control_action(cluster, ["invalid1@invalid",
+                                  "invalid2@invalid"]),
 
     SecondaryNode = rabbit_misc:localnode(hare),
     case net_adm:ping(SecondaryNode) of
@@ -432,11 +509,12 @@ test_cluster_management2(SecondaryNode) ->
     NodeS = atom_to_list(node()),
     SecondaryNodeS = atom_to_list(SecondaryNode),
 
-    %% attempt to convert a disk node into a ram node
+    %% make a disk node
     ok = control_action(reset, []),
     ok = control_action(cluster, [NodeS]),
-    {error, {unable_to_join_cluster, _, _}} =
-        control_action(cluster, [SecondaryNodeS]),
+    %% make a ram node
+    ok = control_action(reset, []),
+    ok = control_action(cluster, [SecondaryNodeS]),
 
     %% join cluster as a ram node
     ok = control_action(reset, []),
@@ -449,21 +527,21 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
 
-    %% attempt to join non-existing cluster as a ram node
-    {error, _} = control_action(cluster, ["invalid1@invalid",
-                                          "invalid2@invalid"]),
-
+    %% join non-existing cluster as a ram node
+    ok = control_action(cluster, ["invalid1@invalid",
+                                  "invalid2@invalid"]),
     %% turn ram node into disk node
+    ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
     
-    %% attempt to convert a disk node into a ram node
-    {error, {cannot_convert_disk_node_to_ram_node, _}} =
-        control_action(cluster, ["invalid1@invalid",
-                                 "invalid2@invalid"]),
+    %% convert a disk node into a ram node
+    ok = control_action(cluster, ["invalid1@invalid",
+                                  "invalid2@invalid"]),
 
     %% turn a disk node into a ram node
+    ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
@@ -601,6 +679,52 @@ test_server_status() ->
 
     passed.
 
+test_hooks() ->
+    %% Firing of hooks calls all hooks in an isolated manner
+    rabbit_hooks:subscribe(test_hook, test, {rabbit_tests, handle_hook, []}),
+    rabbit_hooks:subscribe(test_hook, test2, {rabbit_tests, handle_hook, []}),
+    rabbit_hooks:subscribe(test_hook2, test2, {rabbit_tests, handle_hook, []}),
+    rabbit_hooks:trigger(test_hook, [arg1, arg2]),
+    [arg1, arg2] = get(test_hook_test_fired),
+    [arg1, arg2] = get(test_hook_test2_fired),
+    undefined = get(test_hook2_test2_fired),
+
+    %% Hook Deletion works
+    put(test_hook_test_fired, undefined),
+    put(test_hook_test2_fired, undefined),
+    rabbit_hooks:unsubscribe(test_hook, test),
+    rabbit_hooks:trigger(test_hook, [arg3, arg4]),
+    undefined = get(test_hook_test_fired),
+    [arg3, arg4] = get(test_hook_test2_fired),
+    undefined = get(test_hook2_test2_fired),
+
+    %% Catches exceptions from bad hooks
+    rabbit_hooks:subscribe(test_hook3, test, {rabbit_tests, bad_handle_hook, []}),
+    ok = rabbit_hooks:trigger(test_hook3, []),
+
+    %% Passing extra arguments to hooks
+    rabbit_hooks:subscribe(arg_hook, test, {rabbit_tests, extra_arg_hook, [1, 3]}),
+    rabbit_hooks:trigger(arg_hook, [arg1, arg2]),
+    {[arg1, arg2], 1, 3} = get(arg_hook_test_fired),
+
+    %% Invoking Pids
+    Remote = fun() -> 
+        receive 
+            {rabbitmq_hook,[remote_test,test,[],Target]} -> 
+                Target ! invoked
+        end 
+    end,
+    P = spawn(Remote),
+    rabbit_hooks:subscribe(remote_test, test, {rabbit_hooks, notify_remote, [P, [self()]]}),
+    rabbit_hooks:trigger(remote_test, []),
+    receive
+       invoked -> ok
+    after 100 ->
+       io:format("Remote hook not invoked"),
+       throw(timeout)
+    end,
+    passed.
+
 %---------------------------------------------------------------------
 
 control_action(Command, Args) -> control_action(Command, node(), Args).
@@ -684,3 +808,11 @@ delete_log_handlers(Handlers) ->
     [[] = error_logger:delete_report_handler(Handler) ||
         Handler <- Handlers],
     ok.
+
+handle_hook(HookName, Handler, Args) ->
+    A = atom_to_list(HookName) ++ "_" ++ atom_to_list(Handler) ++ "_fired",
+    put(list_to_atom(A), Args).
+bad_handle_hook(_, _, _) ->
+    bad:bad().
+extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
+    handle_hook(Hookname, Handler, {Args, Extra1, Extra2}).

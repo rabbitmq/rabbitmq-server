@@ -304,10 +304,10 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
                           infinity).
 
 notify_sent(QPid, ChPid) ->
-    gen_server2:cast(QPid, {notify_sent, ChPid}).
+    gen_server2:pcast(QPid, 8, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
-    gen_server2:cast(QPid, {unblock, ChPid}).
+    gen_server2:pcast(QPid, 8, {unblock, ChPid}).
 
 internal_delete(QueueName) ->
     case rabbit_misc:execute_mnesia_transaction(
