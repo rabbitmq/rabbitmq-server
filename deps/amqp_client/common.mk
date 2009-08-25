@@ -42,6 +42,10 @@
 # helps keep the Makefile maintenence well factored.
 
 
+ifndef TMPDIR
+TMPDIR := /tmp
+endif
+
 EBIN_DIR=ebin
 export BROKER_DIR=../rabbitmq-server
 export INCLUDE_DIR=include
@@ -82,7 +86,7 @@ LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR)
 COVER_START := -s cover start -s rabbit_misc enable_cover ../rabbitmq-erlang-client
 COVER_STOP := -s rabbit_misc report_cover ../rabbitmq-erlang-client -s cover stop
 
-MKTEMP=$$(mktemp /tmp/tmp.XXXXXXXXXX)
+MKTEMP=$$(mktemp $(TMPDIR)/tmp.XXXXXXXXXX)
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
@@ -135,7 +139,7 @@ dialyze_all: $(TARGETS) $(TEST_TARGETS)
 
 add_broker_to_plt: $(BROKER_DIR)/ebin
 	$(DIALYZER_CALL) --add_to_plt -r $<
-	
+
 $(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
 	mkdir -p $(DOC_DIR)
 	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
