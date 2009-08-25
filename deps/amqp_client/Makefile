@@ -30,13 +30,15 @@ DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
 VERSION=0.0.0
 SOURCE_PACKAGE_NAME=$(PACKAGE)-$(VERSION)-src
 
-.PHONY: common_package
+.PHONY: common_package dist
 
 include common.mk
 
 clean: common_clean
 	rm -fr $(DIST_DIR)
 	rm -fr $(DEPS_DIR)
+
+dist: doc source_tarball package
 
 ##############################################################################
 ##  Testing
