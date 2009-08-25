@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Few tests for a rabbitmq-stomp adaptor. They intend to increase code coverage
 of the erlang stomp code.
