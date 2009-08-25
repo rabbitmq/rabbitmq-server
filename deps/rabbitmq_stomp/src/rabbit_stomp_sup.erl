@@ -34,14 +34,18 @@
 -export([start/0, stop/0, start/2, stop/1]).
 
 start() -> 
+    start(normal, []),
     ok.
 
 stop() -> 
     ok.
 
 start(normal, []) ->
-    rabbit_stomp:start([{"0.0.0.0", 61613}]),
-    rabbit_stomp:start_link().
+     case application:get_env(rabbit, stomp_listeners) of
+         undefined -> throw({error, {stomp_configuration_not_found}});
+         {ok, StompListeners} -> 
+                         rabbit_stomp:start(StompListeners)
+     end.
 
 stop(_State) ->
     ok.

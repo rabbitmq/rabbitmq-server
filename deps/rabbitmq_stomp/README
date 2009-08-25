@@ -142,7 +142,6 @@ add the following text to `/etc/rabbitmq/rabbitmq.conf`:
       -pa /path/to/rabbitmq-stomp/ebin 
       -rabbit
          stomp_listeners [{"0.0.0.0",61613}]
-         extra_startup_steps [{"STOMP-listeners",rabbit_stomp,kickstart,[]}]'
 
 making sure to update the `/path/to/rabbitmq-stomp/ebin` appropriately
 for your system. Then restart the server with

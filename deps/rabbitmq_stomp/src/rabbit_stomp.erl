@@ -34,8 +34,7 @@
 
 -module(rabbit_stomp).
 
--export([kickstart/0,
-         start/1,
+-export([start/1,
          listener_started/2, listener_stopped/2, start_client/1,
          start_link/0, init/1, mainloop/1]).
 
@@ -45,12 +44,8 @@
 
 -record(state, {socket, session_id, channel, parse_state}).
 
-kickstart() ->
-    {ok, StompListeners} = application:get_env(stomp_listeners),
-    ok = start(StompListeners).
-
 start(Listeners) ->
-    {ok,_} = supervisor:start_child(
+    {ok, Pid} = supervisor:start_child(
                rabbit_sup,
                {rabbit_stomp_client_sup,
                 {tcp_client_sup, start_link,
@@ -58,7 +53,7 @@ start(Listeners) ->
                   {rabbit_stomp,start_link,[]}]},
                 transient, infinity, supervisor, [tcp_client_sup]}),
     ok = start_listeners(Listeners),
-    ok.
+    {ok, Pid}.
 
 start_listeners([]) ->
     ok;
