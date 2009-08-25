@@ -4,10 +4,10 @@ TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_TARBALL=rabbitmq-server-generic-unix-$(VERSION)
 
 dist:
-	make -C ../.. VERSION=$(VERSION) srcdist
+	$(MAKE) -C ../.. VERSION=$(VERSION) srcdist
 	tar -zxvf ../../dist/$(SOURCE_DIR).tar.gz
 
-	make -C $(SOURCE_DIR) \
+	$(MAKE) -C $(SOURCE_DIR) \
 		TARGET_DIR=`pwd`/$(TARGET_DIR) \
 		SBIN_DIR=`pwd`/$(TARGET_DIR)/sbin \
 		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \

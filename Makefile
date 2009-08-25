@@ -148,7 +148,7 @@ srcdist: distclean
 	rm -rf $(TARGET_SRC_DIR)
 
 distclean: clean
-	make -C $(AMQP_CODEGEN_DIR) distclean
+	$(MAKE) -C $(AMQP_CODEGEN_DIR) distclean
 	rm -rf dist
 	find . -regex '.*\(~\|#\|\.swp\|\.dump\)' -exec rm {} \;
 

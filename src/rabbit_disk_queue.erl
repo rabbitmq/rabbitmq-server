@@ -39,11 +39,10 @@
          terminate/2, code_change/3]).
 -export([handle_pre_hibernate/1]).
 
--export([publish/3, fetch/1, phantom_fetch/1, ack/2,
-         tx_publish/1, tx_commit/3, tx_cancel/1,
-         requeue/2, purge/1, delete_queue/1,
-         delete_non_durable_queues/1, auto_ack_next_message/1,
-         requeue_next_n/2, length/1, foldl/3, prefetch/1
+-export([publish/3, fetch/1, phantom_fetch/1, ack/2, tx_publish/1, tx_commit/3,
+         tx_cancel/1, requeue/2, purge/1, delete_queue/1,
+         delete_non_durable_queues/1, requeue_next_n/2, len/1, foldl/3,
+         prefetch/1
         ]).
 
 -export([filesync/0, cache_info/0]).
@@ -92,8 +91,7 @@
          current_dirty,           %% has the current file been written to
                                   %% since the last fsync?
          file_size_limit,         %% how big can our files get?
-         read_file_handles,       %% file handles for reading (LRU)
-         read_file_handles_limit, %% how many file handles can we open?
+         read_file_hc_cache,      %% file handle cache for reading
          on_sync_txns,            %% list of commiters to run on sync (reversed)
          commit_timer_ref,        %% TRef for our interval timer
          last_sync_offset,        %% current_offset at the last time we sync'd
@@ -265,7 +263,6 @@
               {msg_id(), boolean(), boolean(), ack_tag(), non_neg_integer()})).
 -spec(prefetch/1 :: (queue_name()) -> 'ok'). 
 -spec(ack/2 :: (queue_name(), [ack_tag()]) -> 'ok').
--spec(auto_ack_next_message/1 :: (queue_name()) -> 'ok').
 -spec(tx_publish/1 :: (message()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [{msg_id(), boolean()}], [ack_tag()]) ->
              'ok').
@@ -275,7 +272,7 @@
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
 -spec(delete_queue/1 :: (queue_name()) -> 'ok').
 -spec(delete_non_durable_queues/1 :: (set()) -> 'ok').
--spec(length/1 :: (queue_name()) -> non_neg_integer()).
+-spec(len/1 :: (queue_name()) -> non_neg_integer()).
 -spec(foldl/3 :: (fun ((message(), ack_tag(), boolean(), A) -> A),
                   A, queue_name()) -> A).
 -spec(stop/0 :: () -> 'ok').
@@ -309,9 +306,6 @@ prefetch(Q) ->
 ack(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server2:cast(?SERVER, {ack, Q, MsgSeqIds}).
 
-auto_ack_next_message(Q) ->
-    gen_server2:cast(?SERVER, {auto_ack_next_message, Q}).
-
 tx_publish(Message = #basic_message {}) ->
     gen_server2:cast(?SERVER, {tx_publish, Message}).
 
@@ -338,8 +332,8 @@ delete_non_durable_queues(DurableQueues) ->
     gen_server2:call(?SERVER, {delete_non_durable_queues, DurableQueues},
                      infinity).
 
-length(Q) ->
-    gen_server2:call(?SERVER, {length, Q}, infinity).
+len(Q) ->
+    gen_server2:call(?SERVER, {len, Q}, infinity).
 
 foldl(Fun, Init, Acc) ->
     gen_server2:call(?SERVER, {foldl, Fun, Init, Acc}, infinity).
@@ -398,12 +392,13 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                         {min_no_slots, 1024*1024},
                         %% man says this should be <= 32M. But it works...
                         {max_no_slots, 30*1024*1024},
-                        {type, set}
+                        {type, set},
+                        {keypos, 2}
                        ]),
 
     %% it would be better to have this as private, but dets:from_ets/2
     %% seems to blow up if it is set private
-    MsgLocationEts = ets:new(?MSG_LOC_NAME, [set, protected]),
+    MsgLocationEts = ets:new(?MSG_LOC_NAME, [set, protected, {keypos, 2}]),
 
     InitName = "0" ++ ?FILE_EXTENSION,
     State =
@@ -420,8 +415,9 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                    current_offset          = 0,
                    current_dirty           = false,
                    file_size_limit         = FileSizeLimit,
-                   read_file_handles       = {dict:new(), gb_trees:empty()},
-                   read_file_handles_limit = ReadFileHandlesLimit,
+                   read_file_hc_cache      = rabbit_file_handle_cache:init(
+                                               ReadFileHandlesLimit,
+                                               [read, raw, binary, read_ahead]),
                    on_sync_txns           = [],
                    commit_timer_ref        = undefined,
                    last_sync_offset        = 0,
@@ -474,7 +470,7 @@ handle_call({purge, Q}, _From, State) ->
     reply(Count, State1);
 handle_call(filesync, _From, State) ->
     reply(ok, sync_current_file_handle(State));
-handle_call({length, Q}, _From, State = #dqstate { sequences = Sequences }) ->
+handle_call({len, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
     reply(WriteSeqId - ReadSeqId, State);
 handle_call({foldl, Fun, Init, Q}, _From, State) ->
@@ -491,8 +487,7 @@ handle_call(stop_vaporise, _From, State) ->
     true = ets:delete(Sequences),
     lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
     {stop, normal, ok,
-     State1 #dqstate { current_file_handle = undefined,
-                       read_file_handles = {dict:new(), gb_trees:empty()}}};
+     State1 #dqstate { current_file_handle = undefined }};
     %% gen_server now calls terminate, which then calls shutdown
 handle_call(to_disk_only_mode, _From, State) ->
     reply(ok, to_disk_only_mode(State));
@@ -509,9 +504,6 @@ handle_cast({publish, Q, Message, IsDelivered}, State) ->
     noreply(State1);
 handle_cast({ack, Q, MsgSeqIds}, State) ->
     {ok, State1} = internal_ack(Q, MsgSeqIds, State),
-    noreply(State1);
-handle_cast({auto_ack_next_message, Q}, State) ->
-    {ok, State1} = internal_auto_ack(Q, State),
     noreply(State1);
 handle_cast({tx_publish, Message}, State) ->
     {ok, State1} = internal_tx_publish(Message, State),
@@ -576,7 +568,7 @@ terminate(_Reason, State) ->
 shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
                             msg_location_ets = MsgLocationEts,
                             current_file_handle = FileHdl,
-                            read_file_handles = {ReadHdls, _ReadHdlsAge}
+                            read_file_hc_cache = HC
                           }) ->
     %% deliberately ignoring return codes here
     State1 = stop_commit_timer(stop_memory_timer(State)),
@@ -589,12 +581,10 @@ shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
         _ -> sync_current_file_handle(State),
              file:close(FileHdl)
     end,
-    dict:fold(fun (_File, Hdl, _Acc) ->
-                     file:close(Hdl)
-              end, ok, ReadHdls),
+    HC1 = rabbit_file_handle_cache:close_all(HC),
     State1 #dqstate { current_file_handle = undefined,
                       current_dirty = false,
-                      read_file_handles = {dict:new(), gb_trees:empty()},
+                      read_file_hc_cache = HC1,
                       memory_report_timer_ref = undefined
                     }.
 
@@ -754,42 +744,20 @@ dets_ets_match_object(#dqstate { msg_location_ets = MsgLocationEts,
                                  operation_mode = ram_disk }, Obj) ->
     ets:match_object(MsgLocationEts, Obj).
 
-get_read_handle(File, Offset, TotalSize, State =
-                #dqstate { read_file_handles = {ReadHdls, ReadHdlsAge},
-                           read_file_handles_limit = ReadFileHandlesLimit,
-                           current_file_name = CurName,
-                           current_dirty = IsDirty,
-                           last_sync_offset = SyncOffset
-                         }) ->
-    NewOffset = Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT,
-    State1 = if CurName =:= File andalso IsDirty andalso NewOffset > SyncOffset ->
+with_read_handle_at(File, Offset, Fun, State =
+                    #dqstate { read_file_hc_cache = HC,
+                               current_file_name = CurName,
+                               current_dirty = IsDirty,
+                               last_sync_offset = SyncOffset
+                              }) ->
+    State1 = if CurName =:= File andalso IsDirty andalso Offset >= SyncOffset ->
                      sync_current_file_handle(State);
                 true -> State
              end,
-    Now = now(),
-    {FileHdl, OldOffset, ReadHdls1, ReadHdlsAge1} =
-        case dict:find(File, ReadHdls) of
-            error ->
-                {ok, Hdl} = file:open(form_filename(File),
-                                      [read, raw, binary]),
-                case dict:size(ReadHdls) < ReadFileHandlesLimit of
-                    true ->
-                        {Hdl, 0, ReadHdls, ReadHdlsAge};
-                    false ->
-                        {Then, OldFile, ReadHdlsAge2} =
-                            gb_trees:take_smallest(ReadHdlsAge),
-                        {ok, {OldHdl, _Offset, Then}} =
-                            dict:find(OldFile, ReadHdls),
-                        ok = file:close(OldHdl),
-                        {Hdl, 0, dict:erase(OldFile, ReadHdls), ReadHdlsAge2}
-                end;
-            {ok, {Hdl, OldOffset1, Then}} ->
-                {Hdl, OldOffset1, ReadHdls, gb_trees:delete(Then, ReadHdlsAge)}
-        end,
-    ReadHdls2 = dict:store(File, {FileHdl, NewOffset, Now}, ReadHdls1),
-    ReadHdlsAge3 = gb_trees:enter(Now, File, ReadHdlsAge1),
-    {FileHdl, Offset /= OldOffset,
-     State1 #dqstate { read_file_handles = {ReadHdls2, ReadHdlsAge3} }}.
+    FilePath = form_filename(File),
+    {Result, HC1} =
+        rabbit_file_handle_cache:with_file_handle_at(FilePath, Offset, Fun, HC),
+    {Result, State1 #dqstate { read_file_hc_cache = HC1 }}.
 
 sequence_lookup(Sequences, Q) ->
     case ets:lookup(Sequences, Q) of
@@ -842,13 +810,13 @@ fetch_and_increment_cache(MsgId, #dqstate { message_cache = Cache }) ->
     case ets:lookup(Cache, MsgId) of
         [] ->
             not_found;
-        [{MsgId, Message, MsgSize, _RefCount}] ->
-            NewRefCount = ets:update_counter(Cache, MsgId, {4, 1}),
-            {Message, MsgSize, NewRefCount}
+        [{MsgId, Message, _RefCount}] ->
+            NewRefCount = ets:update_counter(Cache, MsgId, {3, 1}),
+            {Message, NewRefCount}
     end.
 
 decrement_cache(MsgId, #dqstate { message_cache = Cache }) ->
-    true = try case ets:update_counter(Cache, MsgId, {4, -1}) of
+    true = try case ets:update_counter(Cache, MsgId, {3, -1}) of
                    N when N =< 0 -> true = ets:delete(Cache, MsgId);
                    _N -> true
                end
@@ -860,15 +828,15 @@ decrement_cache(MsgId, #dqstate { message_cache = Cache }) ->
            end,
     ok.
 
-insert_into_cache(Message = #basic_message { guid = MsgId }, MsgSize,
-                  State = #dqstate { message_cache = Cache }) ->
-    case cache_is_full(State) of
+insert_into_cache(Message = #basic_message { guid = MsgId },
+                  #dqstate { message_cache = Cache }) ->
+    case cache_is_full(Cache) of
         true -> ok;
-        false -> true = ets:insert_new(Cache, {MsgId, Message, MsgSize, 1}),
+        false -> true = ets:insert_new(Cache, {MsgId, Message, 1}),
                  ok
     end.
 
-cache_is_full(#dqstate { message_cache = Cache }) ->
+cache_is_full(Cache) ->
     ets:info(Cache, memory) > ?CACHE_MAX_SIZE.
 
 %% ---- INTERNAL RAW FUNCTIONS ----
@@ -913,20 +881,24 @@ read_stored_message(#message_store_entry { msg_id = MsgId, ref_count = RefCount,
                                            total_size = TotalSize }, State) ->
     case fetch_and_increment_cache(MsgId, State) of
         not_found ->
-            {FileHdl, SeekReq, State1} =
-                get_read_handle(File, Offset, TotalSize, State),
-            {ok, {MsgBody, _IsPersistent, EncodedBodySize}} =
-                read_message_at_offset(FileHdl, Offset, TotalSize, SeekReq),
+            {{ok, {MsgBody, _IsPersistent, _BodySize}}, State1} =
+                with_read_handle_at(
+                  File, Offset,
+                  fun(Hdl) ->
+                          {ok, _} = Res =
+                              read_message_from_disk(Hdl, TotalSize),
+                          {Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT, Res}
+                  end, State),
             Message = #basic_message {} = bin_to_msg(MsgBody),
             ok = if RefCount > 1 ->
-                         insert_into_cache(Message, EncodedBodySize, State1);
+                         insert_into_cache(Message, State1);
                     true -> ok
                             %% it's not in the cache and we only have
                             %% 1 queue with the message. So don't
                             %% bother putting it in the cache.
                  end,
             {Message, State1};
-        {Message, _EncodedBodySize, _RefCount} ->
+        {Message, _RefCount} ->
             {Message, State}
     end.
 
@@ -934,7 +906,7 @@ update_message_attributes(Q, SeqId, MarkDelivered, State) ->
     [Obj =
      #dq_msg_loc {is_delivered = IsDelivered, msg_id = MsgId}] =
         mnesia:dirty_read(rabbit_disk_queue, {Q, SeqId}),
-    [{MsgId, RefCount, File, Offset, TotalSize, IsPersistent}] =
+    [StoreEntry = #message_store_entry { msg_id = MsgId }] =
         dets_ets_lookup(State, MsgId),
     ok = case {IsDelivered, MarkDelivered} of
              {true, _} -> ok;
@@ -943,10 +915,7 @@ update_message_attributes(Q, SeqId, MarkDelivered, State) ->
                  mnesia:dirty_write(rabbit_disk_queue,
                                     Obj #dq_msg_loc {is_delivered = true})
          end,
-    {{MsgId, SeqId}, IsDelivered,
-     #message_store_entry { msg_id = MsgId, ref_count = RefCount, file = File,
-                            offset = Offset, total_size = TotalSize,
-                            is_persistent = IsPersistent }}.
+    {{MsgId, SeqId}, IsDelivered, StoreEntry}.
 
 internal_foldl(Q, Fun, Init, State) ->
     State1 = #dqstate { sequences = Sequences } =
@@ -963,63 +932,54 @@ internal_foldl(Q, WriteSeqId, Fun, State, Acc, ReadSeqId) ->
     Acc1 = Fun(Message, AckTag, IsDelivered, Acc),
     internal_foldl(Q, WriteSeqId, Fun, State1, Acc1, ReadSeqId + 1).
 
-internal_auto_ack(Q, State) ->
-    case internal_fetch_attributes(Q, ignore_delivery, pop_queue, State) of
-        {ok, empty, State1} ->
-            {ok, State1};
-        {ok, {_MsgId, _IsPersistent, _IsDelivered, AckTag, _Remaining},
-         State1} ->
-            remove_messages(Q, [AckTag], true, State1)
-    end.        
-
 internal_ack(Q, MsgSeqIds, State) ->
     remove_messages(Q, MsgSeqIds, true, State).
 
 %% Q is only needed if MnesiaDelete /= false
-remove_messages(Q, MsgSeqIds, MnesiaDelete,
-                State = #dqstate { file_summary = FileSummary,
-                                   current_file_name = CurName
-                                 }) ->
+remove_messages(Q, MsgSeqIds, MnesiaDelete, State) ->
     Files =
         lists:foldl(
           fun ({MsgId, SeqId}, Files1) ->
-                  [{MsgId, RefCount, File, Offset, TotalSize, IsPersistent}] =
-                      dets_ets_lookup(State, MsgId),
-                  Files2 =
-                      case RefCount of
-                          1 ->
-                              ok = dets_ets_delete(State, MsgId),
-                              ok = remove_cache_entry(MsgId, State),
-                              [{File, ValidTotalSize, ContiguousTop,
-                                Left, Right}] = ets:lookup(FileSummary, File),
-                              ContiguousTop1 =
-                                  lists:min([ContiguousTop, Offset]),
-                              true =
-                                  ets:insert(FileSummary,
-                                             {File, (ValidTotalSize-TotalSize-
-                                                     ?FILE_PACKING_ADJUSTMENT),
-                                                 ContiguousTop1, Left, Right}),
-                              if CurName =:= File -> Files1;
-                                 true -> sets:add_element(File, Files1)
-                              end;
-                          _ when 1 < RefCount ->
-                              ok = decrement_cache(MsgId, State),
-                              ok = dets_ets_insert(
-                                     State, {MsgId, RefCount - 1, File, Offset,
-                                             TotalSize, IsPersistent}),
-                              Files1
-                      end,
+                  Files2 = remove_message(MsgId, Files1, State),
                   ok = case MnesiaDelete of
                            true -> mnesia:dirty_delete(rabbit_disk_queue,
                                                        {Q, SeqId});
-                           txn -> mnesia:delete(rabbit_disk_queue,
-                                                {Q, SeqId}, write);
                            _ -> ok
                        end,
                   Files2
           end, sets:new(), MsgSeqIds),
     State1 = compact(Files, State),
     {ok, State1}.
+
+remove_message(MsgId, Files,
+               State = #dqstate { file_summary = FileSummary,
+                                  current_file_name = CurName
+                                }) ->
+    [StoreEntry =
+     #message_store_entry { msg_id = MsgId, ref_count = RefCount, file = File,
+                            offset = Offset, total_size = TotalSize }] =
+        dets_ets_lookup(State, MsgId),
+    case RefCount of
+        1 ->
+            ok = dets_ets_delete(State, MsgId),
+            ok = remove_cache_entry(MsgId, State),
+            [{File, ValidTotalSize, ContiguousTop, Left, Right}] =
+                ets:lookup(FileSummary, File),
+            ContiguousTop1 = lists:min([ContiguousTop, Offset]),
+            true =
+                ets:insert(FileSummary,
+                           {File,
+                            (ValidTotalSize-TotalSize-?FILE_PACKING_ADJUSTMENT),
+                            ContiguousTop1, Left, Right}),
+            if CurName =:= File -> Files;
+               true -> sets:add_element(File, Files)
+            end;
+        _ when 1 < RefCount ->
+            ok = decrement_cache(MsgId, State),
+            ok = dets_ets_insert(State, StoreEntry #message_store_entry
+                                 { ref_count = RefCount - 1 }),
+            Files
+    end.
 
 internal_tx_publish(Message = #basic_message { is_persistent = IsPersistent,
                                                guid = MsgId },
@@ -1034,8 +994,10 @@ internal_tx_publish(Message = #basic_message { is_persistent = IsPersistent,
             {ok, TotalSize} = append_message(CurHdl, MsgId, msg_to_bin(Message),
                                              IsPersistent),
             true = dets_ets_insert_new
-                     (State, {MsgId, 1, CurName,
-                              CurOffset, TotalSize, IsPersistent}),
+                     (State, #message_store_entry
+                      { msg_id = MsgId, ref_count = 1, file = CurName,
+                        offset = CurOffset, total_size = TotalSize,
+                        is_persistent = IsPersistent }),
             [{CurName, ValidTotalSize, ContiguousTop, Left, undefined}] =
                 ets:lookup(FileSummary, CurName),
             ValidTotalSize1 = ValidTotalSize + TotalSize +
@@ -1051,10 +1013,11 @@ internal_tx_publish(Message = #basic_message { is_persistent = IsPersistent,
             maybe_roll_to_new_file(
               NextOffset, State #dqstate {current_offset = NextOffset,
                                           current_dirty = true});
-        [{MsgId, RefCount, File, Offset, TotalSize, IsPersistent}] ->
+        [StoreEntry =
+         #message_store_entry { msg_id = MsgId, ref_count = RefCount }] ->
             %% We already know about it, just update counter
-            ok = dets_ets_insert(State, {MsgId, RefCount + 1, File,
-                                         Offset, TotalSize, IsPersistent}),
+            ok = dets_ets_insert(State, StoreEntry #message_store_entry
+                                 { ref_count = RefCount + 1 }),
             {ok, State}
     end.
 
@@ -1066,8 +1029,8 @@ internal_tx_commit(Q, PubMsgIds, AckSeqIds, From,
                                     }) ->
     NeedsSync = IsDirty andalso
         lists:any(fun ({MsgId, _IsDelivered}) ->
-                          [{MsgId, _RefCount, File, Offset,
-                            _TotalSize, _IsPersistent}] =
+                          [#message_store_entry { msg_id = MsgId, file = File,
+                                                  offset = Offset }] =
                               dets_ets_lookup(State, MsgId),
                           File =:= CurFile andalso Offset >= SyncOffset
                   end, PubMsgIds),
@@ -1123,8 +1086,7 @@ internal_publish(Q, Message = #basic_message { guid = MsgId },
 internal_tx_cancel(MsgIds, State) ->
     %% we don't need seq ids because we're not touching mnesia,
     %% because seqids were never assigned
-    MsgSeqIds = lists:zip(MsgIds, lists:duplicate(erlang:length(MsgIds),
-                                                  undefined)),
+    MsgSeqIds = lists:zip(MsgIds, lists:duplicate(length(MsgIds), undefined)),
     remove_messages(undefined, MsgSeqIds, false, State).
 
 internal_requeue(_Q, [], State) ->
@@ -1229,8 +1191,7 @@ internal_delete_queue(Q, State) ->
     Objs = mnesia:dirty_match_object(
              rabbit_disk_queue,
              #dq_msg_loc { queue_and_seq_id = {Q, '_'},
-                           msg_id = '_',
-                           is_delivered = '_'
+                           _ = '_'
                          }),
     MsgSeqIds =
         lists:map(
@@ -1295,6 +1256,12 @@ compact(FilesSet, State) ->
                                  end, [], Files),
     lists:foldl(fun combine_file/2, State, lists:reverse(RemainingFiles)).
 
+%% At this stage, we simply know that the file has had msgs removed
+%% from it. However, we don't know if we need to merge it left (which
+%% is what we would prefer), or merge it right. If we merge left, then
+%% this file is the source, and the left file is the destination. If
+%% we merge right then this file is the destination and the right file
+%% is the source.
 combine_file(File, State = #dqstate { file_summary = FileSummary,
                                       current_file_name = CurName
                                     }) ->
@@ -1348,12 +1315,13 @@ adjust_meta_and_combine(
        true -> {false, State}
     end.
 
-sort_msg_locations_by_offset(Asc, List) ->
-    Comp = case Asc of
-               true  -> fun erlang:'<'/2;
-               false -> fun erlang:'>'/2
+sort_msg_locations_by_offset(Dir, List) ->
+    Comp = case Dir of
+               asc  -> fun erlang:'<'/2;
+               desc -> fun erlang:'>'/2
            end,
-    lists:sort(fun ({_, _, _, OffA, _, _}, {_, _, _, OffB, _, _}) ->
+    lists:sort(fun (#message_store_entry { offset = OffA },
+                    #message_store_entry { offset = OffB }) ->
                        Comp(OffA, OffB)
                end, List).
 
@@ -1392,7 +1360,7 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
                            read_ahead, delayed_write]),
             Worklist =
                 lists:dropwhile(
-                  fun ({_, _, _, Offset, _, _})
+                  fun (#message_store_entry { offset = Offset })
                       when Offset /= DestinationContiguousTop ->
                           %% it cannot be that Offset ==
                           %% DestinationContiguousTop because if it
@@ -1404,9 +1372,9 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
                           %% as we require, however, we need to
                           %% enforce it anyway
                   end, sort_msg_locations_by_offset(
-                         true, dets_ets_match_object(State,
-                                                     {'_', '_', Destination,
-                                                      '_', '_', '_'}))),
+                         asc, dets_ets_match_object(
+                                 State, #message_store_entry
+                                 { file = Destination, _ = '_' }))),
             ok = copy_messages(
                    Worklist, DestinationContiguousTop, DestinationValid,
                    DestinationHdl, TmpHdl, Destination, State),
@@ -1426,9 +1394,8 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
     end,
     SourceWorkList =
         sort_msg_locations_by_offset(
-          true, dets_ets_match_object(State,
-                                      {'_', '_', Source,
-                                       '_', '_', '_'})),
+          asc, dets_ets_match_object(State, #message_store_entry
+                                      { file = Source, _ = '_' })),
     ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
                        SourceHdl, DestinationHdl, Destination, State),
     %% tidy up
@@ -1442,15 +1409,16 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
               Destination, State) ->
     {FinalOffset, BlockStart1, BlockEnd1} =
         lists:foldl(
-          fun ({MsgId, RefCount, _Source, Offset, TotalSize, IsPersistent},
+          fun (StoreEntry = #message_store_entry { offset = Offset,
+                                                   total_size = TotalSize },
                {CurOffset, BlockStart, BlockEnd}) ->
                   %% CurOffset is in the DestinationFile.
                   %% Offset, BlockStart and BlockEnd are in the SourceFile
                   Size = TotalSize + ?FILE_PACKING_ADJUSTMENT,
                   %% update MsgLocationDets to reflect change of file and offset
-                  ok = dets_ets_insert
-                         (State, {MsgId, RefCount, Destination,
-                                  CurOffset, TotalSize, IsPersistent}),
+                  ok = dets_ets_insert (State, StoreEntry #message_store_entry
+                                        { file = Destination,
+                                          offset = CurOffset }),
                   NextOffset = CurOffset + Size,
                   if BlockStart =:= undefined ->
                           %% base case, called only for the first list elem
@@ -1476,17 +1444,9 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
     {ok, BSize1} = file:copy(SourceHdl, DestinationHdl, BSize1),
     ok.
 
-close_file(File, State = #dqstate { read_file_handles =
-                                   {ReadHdls, ReadHdlsAge} }) ->
-    case dict:find(File, ReadHdls) of
-        error ->
-            State;
-        {ok, {Hdl, _Offset, Then}} ->
-            ok = file:close(Hdl),
-            State #dqstate { read_file_handles =
-                             { dict:erase(File, ReadHdls),
-                               gb_trees:delete(Then, ReadHdlsAge) } }
-    end.
+close_file(File, State = #dqstate { read_file_hc_cache = HC }) ->
+    HC1 = rabbit_file_handle_cache:close_file(form_filename(File), HC),
+    State #dqstate { read_file_hc_cache = HC1 }.
 
 delete_empty_files(File, Acc, #dqstate { file_summary = FileSummary }) ->
     [{File, ValidData, _ContiguousTop, Left, Right}] =
@@ -1539,74 +1499,93 @@ load_from_disk(State) ->
     ok = recover_crashed_compactions(Files, TmpFiles),
     %% There should be no more tmp files now, so go ahead and load the
     %% whole lot
-    State1 = load_messages(undefined, Files, State),
+    Files1 = case Files of
+                 [] -> [State #dqstate.current_file_name];
+                 _ -> Files
+             end,
+    State1 = load_messages(undefined, Files1, State),
     %% Finally, check there is nothing in mnesia which we haven't
     %% loaded
-    State2 =
-        rabbit_misc:execute_mnesia_transaction(
-          fun() ->
-                  ok = mnesia:write_lock_table(rabbit_disk_queue),
-                  {State6, FinalQ, MsgSeqIds2, _Len} =
-                      mnesia:foldl(
-                        fun (#dq_msg_loc { msg_id = MsgId,
-                                           queue_and_seq_id = {Q, SeqId} },
-                             {State3, OldQ, MsgSeqIds, Len}) ->
-                                {State4, MsgSeqIds1, Len1} =
-                                    case {OldQ == Q, MsgSeqIds} of
-                                        {true, _} when Len < ?BATCH_SIZE ->
-                                            {State3, MsgSeqIds, Len};
-                                        {false, []} -> {State3, MsgSeqIds, Len};
-                                        {_, _} ->
-                                            {ok, State5} =
-                                                remove_messages(Q, MsgSeqIds,
-                                                                txn, State3),
-                                            {State5, [], 0}
-                                    end,
-                                case dets_ets_lookup(State4, MsgId) of
-                                    [] -> ok = mnesia:delete(rabbit_disk_queue,
-                                                             {Q, SeqId}, write),
-                                          {State4, Q, MsgSeqIds1, Len1};
-                                    [{MsgId, _RefCount, _File, _Offset,
-                                      _TotalSize, true}] ->
-                                        {State4, Q, MsgSeqIds1, Len1};
-                                    [{MsgId, _RefCount, _File, _Offset,
-                                      _TotalSize, false}] ->
-                                        {State4, Q,
-                                         [{MsgId, SeqId} | MsgSeqIds1], Len1+1}
-                                end
-                        end, {State1, undefined, [], 0}, rabbit_disk_queue),
-                  {ok, State7} =
-                      remove_messages(FinalQ, MsgSeqIds2, txn, State6),
-                  State7
-          end),
-    State8 = extract_sequence_numbers(State2),
+    Key = mnesia:dirty_first(rabbit_disk_queue),
+    {ok, AlteredFiles} = prune_mnesia(State1, Key, sets:new(), [], 0),
+    State2 = compact(AlteredFiles, State1),
+    ok = extract_sequence_numbers(State2 #dqstate.sequences),
     ok = del_index(),
-    {ok, State8}.
+    {ok, State2}.
 
-extract_sequence_numbers(State = #dqstate { sequences = Sequences }) ->
-    true = rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              ok = mnesia:read_lock_table(rabbit_disk_queue),
-              mnesia:foldl(
-                fun (#dq_msg_loc { queue_and_seq_id = {Q, SeqId} }, true) ->
-                        NextWrite = SeqId + 1,
-                        case ets:lookup(Sequences, Q) of
-                            [] -> ets:insert_new(Sequences,
-                                                 {Q, SeqId, NextWrite});
-                            [Orig = {Q, Read, Write}] ->
-                                Repl = {Q, lists:min([Read, SeqId]),
-                                        lists:max([Write, NextWrite])},
-                                case Orig == Repl of
-                                    true -> true;
-                                    false -> ets:insert(Sequences, Repl)
-                                end
-                        end
-                end, true, rabbit_disk_queue)
-      end),
-    ok = remove_gaps_in_sequences(State),
-    State.
+prune_mnesia_flush_batch(DeleteAcc) ->
+    lists:foldl(fun (Key, ok) ->
+                        mnesia:dirty_delete(rabbit_disk_queue, Key)
+                end, ok, DeleteAcc).
+    
+prune_mnesia(_State, '$end_of_table', Files, _DeleteAcc, 0) ->
+    {ok, Files};
+prune_mnesia(_State, '$end_of_table', Files, DeleteAcc, _Len) ->
+    ok = prune_mnesia_flush_batch(DeleteAcc),
+    {ok, Files};
+prune_mnesia(State, Key, Files, DeleteAcc, Len) ->
+    [#dq_msg_loc { msg_id = MsgId, queue_and_seq_id = {Q, SeqId} }] =
+        mnesia:dirty_read(rabbit_disk_queue, Key),
+    {DeleteAcc1, Files1, Len1} =
+        case dets_ets_lookup(State, MsgId) of
+            [] ->
+                %% msg hasn't been found on disk, delete it
+                {[{Q, SeqId} | DeleteAcc], Files, Len + 1};
+            [#message_store_entry { msg_id = MsgId, is_persistent = true }] ->
+                %% msg is persistent, keep it
+                {DeleteAcc, Files, Len};
+            [#message_store_entry { msg_id = MsgId, is_persistent = false}] ->
+                %% msg is not persistent, delete it
+                Files2 = remove_message(MsgId, Files, State),
+                {[{Q, SeqId} | DeleteAcc], Files2, Len + 1}
+        end,
+    {Key1, DeleteAcc2, Len2} =
+        if
+            Len1 >= ?BATCH_SIZE ->
+                %% We have no way of knowing how flushing the batch
+                %% will affect ordering of records within the table,
+                %% so have no choice but to start again. Although this
+                %% will make recovery slower for large queues, we
+                %% guarantee we can start up in constant memory
+                ok = prune_mnesia_flush_batch(DeleteAcc1),
+                Key2 = mnesia:dirty_first(rabbit_disk_queue),
+                {Key2, [], 0};
+            true ->
+                Key2 = mnesia:dirty_next(rabbit_disk_queue, Key),
+                {Key2, DeleteAcc1, Len1}
+        end,
+    prune_mnesia(State, Key1, Files1, DeleteAcc2, Len2).
 
-remove_gaps_in_sequences(#dqstate { sequences = Sequences }) ->
+extract_sequence_numbers(Sequences) ->
+    true =
+        rabbit_misc:execute_mnesia_transaction(
+          %% the ets manipulation within this transaction is
+          %% idempotent, in particular we're only reading from mnesia,
+          %% and combining what we read with what we find in
+          %% ets. Should the transaction restart, the non-rolledback
+          %% data in ets can still be successfully combined with what
+          %% we find in mnesia
+          fun() ->
+                  ok = mnesia:read_lock_table(rabbit_disk_queue),
+                  mnesia:foldl(
+                    fun (#dq_msg_loc { queue_and_seq_id = {Q, SeqId} }, true) ->
+                            NextWrite = SeqId + 1,
+                            case ets:lookup(Sequences, Q) of
+                                [] -> ets:insert_new(Sequences,
+                                                     {Q, SeqId, NextWrite});
+                                [Orig = {Q, Read, Write}] ->
+                                    Repl = {Q, lists:min([Read, SeqId]),
+                                            lists:max([Write, NextWrite])},
+                                    case Orig == Repl of
+                                        true -> true;
+                                        false -> ets:insert(Sequences, Repl)
+                                    end
+                            end
+                    end, true, rabbit_disk_queue)
+          end),
+    ok = remove_gaps_in_sequences(Sequences).
+
+remove_gaps_in_sequences(Sequences) ->
     %% read the comments at internal_requeue.
 
     %% Because we are at startup, we know that no sequence ids have
@@ -1616,17 +1595,18 @@ remove_gaps_in_sequences(#dqstate { sequences = Sequences }) ->
     %% we could shuffle downwards. However, I think there's greater
     %% likelihood of gaps being at the bottom rather than the top of
     %% the queue, so shuffling up should be the better bet.
-    rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              ok = mnesia:write_lock_table(rabbit_disk_queue),
-              lists:foreach(
-                fun ({Q, ReadSeqId, WriteSeqId}) ->
-                        Gap = shuffle_up(Q, ReadSeqId-1, WriteSeqId-1, 0),
-                        ReadSeqId1 = ReadSeqId + Gap,
-                        true = ets:insert(Sequences,
-                                          {Q, ReadSeqId1, WriteSeqId})
-                end, ets:match_object(Sequences, '_'))
-      end),
+    QueueBoundaries =
+        rabbit_misc:execute_mnesia_transaction(
+          fun() ->
+                  ok = mnesia:write_lock_table(rabbit_disk_queue),
+                  lists:foldl(
+                    fun ({Q, ReadSeqId, WriteSeqId}, Acc) ->
+                            Gap = shuffle_up(Q, ReadSeqId-1, WriteSeqId-1, 0),
+                            [{Q, ReadSeqId + Gap, WriteSeqId} | Acc]
+                    end, [], ets:match_object(Sequences, '_'))
+          end),
+    true = lists:foldl(fun (Obj, true) -> ets:insert(Sequences, Obj) end,
+                       true, QueueBoundaries),
     ok.
 
 shuffle_up(_Q, SeqId, SeqId, Gap) ->
@@ -1648,19 +1628,17 @@ shuffle_up(Q, BaseSeqId, SeqId, Gap) ->
         end,
     shuffle_up(Q, BaseSeqId, SeqId - 1, Gap + GapInc).
 
-load_messages(undefined, [],
-              State = #dqstate { file_summary = FileSummary,
-                                 current_file_name = CurName }) ->
-    true = ets:insert_new(FileSummary, {CurName, 0, 0, undefined, undefined}),
-    State;
 load_messages(Left, [], State) ->
     Num = list_to_integer(filename:rootname(Left)),
     Offset =
-        case dets_ets_match_object(State, {'_', '_', Left, '_', '_', '_'}) of
+        case dets_ets_match_object(State, #message_store_entry
+                                   { file = Left, _ = '_' }) of
             [] -> 0;
             L ->
-                [ {_MsgId, _RefCount, Left, MaxOffset, TotalSize, _IsPersistent}
-                | _ ] = sort_msg_locations_by_offset(false, L),
+                [ #message_store_entry {file = Left,
+                                        offset = MaxOffset,
+                                        total_size = TotalSize} | _ ] =
+                    sort_msg_locations_by_offset(desc, L),
                 MaxOffset + TotalSize + ?FILE_PACKING_ADJUSTMENT
              end,
     State #dqstate { current_file_num = Num, current_file_name = Left,
@@ -1668,30 +1646,31 @@ load_messages(Left, [], State) ->
 load_messages(Left, [File|Files],
               State = #dqstate { file_summary = FileSummary }) ->
     %% [{MsgId, TotalSize, FileOffset}]
-    {ok, Messages} = scan_file_for_valid_messages(form_filename(File)),
-    {ValidMessagesRev, ValidTotalSize} = lists:foldl(
+    {ok, Messages} = scan_file_for_valid_messages(File),
+    {ValidMessages, ValidTotalSize} = lists:foldl(
         fun (Obj = {MsgId, IsPersistent, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
-                case erlang:length(mnesia:dirty_index_match_object
-                                   (rabbit_disk_queue,
-                                    #dq_msg_loc { msg_id = MsgId,
-                                                  queue_and_seq_id = '_',
-                                                  is_delivered = '_'
-                                                 },
-                                    msg_id)) of
+                case length(mnesia:dirty_index_match_object
+                            (rabbit_disk_queue,
+                             #dq_msg_loc { msg_id = MsgId,
+                                           _ = '_'
+                                         },
+                             msg_id)) of
                     0 -> {VMAcc, VTSAcc};
                     RefCount ->
                         true = dets_ets_insert_new
-                                 (State, {MsgId, RefCount, File,
-                                          Offset, TotalSize, IsPersistent}),
+                                 (State, #message_store_entry
+                                  { msg_id = MsgId, ref_count = RefCount,
+                                    file = File, offset = Offset,
+                                    total_size = TotalSize,
+                                    is_persistent = IsPersistent }),
                         {[Obj | VMAcc],
                          VTSAcc + TotalSize + ?FILE_PACKING_ADJUSTMENT
                         }
                 end
         end, {[], 0}, Messages),
-    %% foldl reverses lists and find_contiguous_block_prefix needs
-    %% elems in the same order as from scan_file_for_valid_messages
-    {ContiguousTop, _} = find_contiguous_block_prefix(
-                           lists:reverse(ValidMessagesRev)),
+    %% foldl reverses lists, find_contiguous_block_prefix needs
+    %% msgs eldest first, so, ValidMessages is the right way round
+    {ContiguousTop, _} = find_contiguous_block_prefix(ValidMessages),
     Right = case Files of
                 [] -> undefined;
                 [F|_] -> F
@@ -1711,31 +1690,32 @@ recover_crashed_compactions(Files, TmpFiles) ->
 verify_messages_in_mnesia(MsgIds) ->
     lists:foreach(
       fun (MsgId) ->
-              true = 0 < erlang:length(mnesia:dirty_index_match_object
-                                       (rabbit_disk_queue,
-                                        #dq_msg_loc { msg_id = MsgId,
-                                                      queue_and_seq_id = '_',
-                                                      is_delivered = '_'
-                                                     },
-                                        msg_id))
+              true = 0 < length(mnesia:dirty_index_match_object
+                                (rabbit_disk_queue,
+                                 #dq_msg_loc { msg_id = MsgId,
+                                               _ = '_'
+                                             },
+                                 msg_id))
       end, MsgIds).
 
 grab_msg_id({MsgId, _IsPersistent, _TotalSize, _FileOffset}) ->
     MsgId.
 
+scan_file_for_valid_messages_msg_ids(File) ->
+    {ok, Messages} = scan_file_for_valid_messages(File),
+    {ok, Messages, lists:map(fun grab_msg_id/1, Messages)}.
+
 recover_crashed_compactions1(Files, TmpFile) ->
     NonTmpRelatedFile = filename:rootname(TmpFile) ++ ?FILE_EXTENSION,
     true = lists:member(NonTmpRelatedFile, Files),
     %% [{MsgId, TotalSize, FileOffset}]
-    {ok, UncorruptedMessagesTmp} =
-        scan_file_for_valid_messages(form_filename(TmpFile)),
-    MsgIdsTmp = lists:map(fun grab_msg_id/1, UncorruptedMessagesTmp),
+    {ok, UncorruptedMessagesTmp, MsgIdsTmp} =
+        scan_file_for_valid_messages_msg_ids(TmpFile),
     %% all of these messages should appear in the mnesia table,
     %% otherwise they wouldn't have been copied out
     verify_messages_in_mnesia(MsgIdsTmp),
-    {ok, UncorruptedMessages} =
-        scan_file_for_valid_messages(form_filename(NonTmpRelatedFile)),
-    MsgIds = lists:map(fun grab_msg_id/1, UncorruptedMessages),
+    {ok, UncorruptedMessages, MsgIds} =
+        scan_file_for_valid_messages_msg_ids(NonTmpRelatedFile),
     %% 1) It's possible that everything in the tmp file is also in the
     %%    main file such that the main file is (prefix ++
     %%    tmpfile). This means that compaction failed immediately
@@ -1772,7 +1752,8 @@ recover_crashed_compactions1(Files, TmpFile) ->
             %% main file is a valid message in mnesia
             verify_messages_in_mnesia(MsgIds),
             %% The main file should be contiguous
-            {Top, MsgIds} = find_contiguous_block_prefix(UncorruptedMessages),
+            {Top, MsgIds} = find_contiguous_block_prefix(
+                              lists:reverse(UncorruptedMessages)),
             %% we should have that none of the messages in the prefix
             %% are in the tmp file
             true = lists:all(fun (MsgId) ->
@@ -1802,9 +1783,8 @@ recover_crashed_compactions1(Files, TmpFile) ->
             ok = file:close(TmpHdl),
             ok = file:delete(TmpFile),
 
-            {ok, MainMessages} =
-                scan_file_for_valid_messages(form_filename(NonTmpRelatedFile)),
-            MsgIdsMain = lists:map(fun grab_msg_id/1, MainMessages),
+            {ok, _MainMessages, MsgIdsMain} =
+                scan_file_for_valid_messages_msg_ids(NonTmpRelatedFile),
             %% check that everything in MsgIds is in MsgIdsMain
             true = lists:all(fun (MsgId) -> lists:member(MsgId, MsgIdsMain) end,
                              MsgIds),
@@ -1814,28 +1794,22 @@ recover_crashed_compactions1(Files, TmpFile) ->
     end,
     ok.
 
-%% this assumes that the messages are ordered such that the highest
-%% address is at the head of the list. This matches what
-%% scan_file_for_valid_messages produces
+%% Takes the list in *ascending* order (i.e. eldest message
+%% first). This is the opposite of what scan_file_for_valid_messages
+%% produces. The list of msgs that is produced is youngest first.
 find_contiguous_block_prefix([]) -> {0, []};
-find_contiguous_block_prefix([ {MsgId, _IsPersistent, TotalSize, Offset}
-                             | Tail]) ->
-    case find_contiguous_block_prefix(Tail, Offset, [MsgId]) of
-        {ok, Acc} -> {Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT,
-                      lists:reverse(Acc)};
-        Res -> Res
-    end.
-find_contiguous_block_prefix([], 0, Acc) ->
-    {ok, Acc};
-find_contiguous_block_prefix([], _N, _Acc) ->
-    {0, []};
-find_contiguous_block_prefix([{MsgId, _IsPersistent, TotalSize, Offset} | Tail],
-                             ExpectedOffset, Acc)
-  when ExpectedOffset =:= Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT ->
-    find_contiguous_block_prefix(Tail, Offset, [MsgId|Acc]);
-find_contiguous_block_prefix(List, _ExpectedOffset, _Acc) ->
-    find_contiguous_block_prefix(List).
-    
+find_contiguous_block_prefix(List) ->
+    find_contiguous_block_prefix(List, 0, []).
+
+find_contiguous_block_prefix([], ExpectedOffset, MsgIds) ->
+    {ExpectedOffset, MsgIds};
+find_contiguous_block_prefix([{MsgId, _IsPersistent, TotalSize, ExpectedOffset}
+                             | Tail], ExpectedOffset, MsgIds) ->
+    ExpectedOffset1 = ExpectedOffset + TotalSize + ?FILE_PACKING_ADJUSTMENT,
+    find_contiguous_block_prefix(Tail, ExpectedOffset1, [MsgId | MsgIds]);
+find_contiguous_block_prefix([_MsgAfterGap | _Tail], ExpectedOffset, MsgIds) ->
+    {ExpectedOffset, MsgIds}.
+
 file_name_sort(A, B) ->
     ANum = list_to_integer(filename:rootname(A)),
     BNum = list_to_integer(filename:rootname(B)),
@@ -1868,48 +1842,41 @@ append_message(FileHdl, MsgId, MsgBody, IsPersistent) when is_binary(MsgBody) ->
         KO -> KO
     end.
 
-read_message_at_offset(FileHdl, Offset, TotalSize, SeekReq) ->
+read_message_from_disk(FileHdl, TotalSize) ->
     TotalSizeWriteOkBytes = TotalSize + 1,
-    SeekRes = case SeekReq of
-                  true -> case file:position(FileHdl, {bof, Offset}) of
-                              {ok, Offset} -> ok;
-                              KO -> KO
-                          end;
-                  false -> ok
-              end,
-    case SeekRes of
-        ok ->
-            case file:read(FileHdl, TotalSize + ?FILE_PACKING_ADJUSTMENT) of
-                {ok, <<TotalSize:?INTEGER_SIZE_BITS,
-                       MsgIdBinSize:?INTEGER_SIZE_BITS,
-                       Rest:TotalSizeWriteOkBytes/binary>>} ->
-                    BodySize = TotalSize - MsgIdBinSize,
-                    case Rest of
-                        <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
-                         ?WRITE_OK_TRANSIENT:?WRITE_OK_SIZE_BITS>> ->
-                            {ok, {MsgBody, false, BodySize}};
-                        <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
-                         ?WRITE_OK_PERSISTENT:?WRITE_OK_SIZE_BITS>> ->
-                            {ok, {MsgBody, true, BodySize}}
-                    end;
-                KO1 -> KO1
+    case file:read(FileHdl, TotalSize + ?FILE_PACKING_ADJUSTMENT) of
+        {ok, <<TotalSize:?INTEGER_SIZE_BITS,
+               MsgIdBinSize:?INTEGER_SIZE_BITS,
+               Rest:TotalSizeWriteOkBytes/binary>>} ->
+            BodySize = TotalSize - MsgIdBinSize,
+            case Rest of
+                <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
+                 ?WRITE_OK_TRANSIENT:?WRITE_OK_SIZE_BITS>> ->
+                    {ok, {MsgBody, false, BodySize}};
+                <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
+                 ?WRITE_OK_PERSISTENT:?WRITE_OK_SIZE_BITS>> ->
+                    {ok, {MsgBody, true, BodySize}}
             end;
-        KO2 -> KO2
+        KO -> KO
     end.
 
 scan_file_for_valid_messages(File) ->
-    {ok, Hdl} = file:open(File, [raw, binary, read]),
-    Valid = scan_file_for_valid_messages(Hdl, 0, []),
-    %% if something really bad's happened, the close could fail, but ignore
-    file:close(Hdl),
-    Valid.
+    case file:open(form_filename(File), [raw, binary, read]) of
+        {ok, Hdl} ->
+            Valid = scan_file_for_valid_messages(Hdl, 0, []),
+            %% if something really bad's happened, the close could fail, but ignore
+            file:close(Hdl),
+            Valid;
+        {error, enoent} -> {ok, []};
+        {error, Reason} -> throw({error, {unable_to_scan_file, File, Reason}})
+    end.
 
 scan_file_for_valid_messages(FileHdl, Offset, Acc) ->
     case read_next_file_entry(FileHdl, Offset) of
-        {ok, eof} -> {ok, Acc};
-        {ok, {corrupted, NextOffset}} ->
+        eof -> {ok, Acc};
+        {corrupted, NextOffset} ->
             scan_file_for_valid_messages(FileHdl, NextOffset, Acc);
-        {ok, {ok, MsgId, IsPersistent, TotalSize, NextOffset}} ->
+        {ok, {MsgId, IsPersistent, TotalSize, NextOffset}} ->
             scan_file_for_valid_messages(
               FileHdl, NextOffset,
               [{MsgId, IsPersistent, TotalSize, Offset} | Acc]);
@@ -1924,16 +1891,16 @@ read_next_file_entry(FileHdl, Offset) ->
         {ok,
          <<TotalSize:?INTEGER_SIZE_BITS, MsgIdBinSize:?INTEGER_SIZE_BITS>>} ->
             case {TotalSize =:= 0, MsgIdBinSize =:= 0} of
-                {true, _} -> {ok, eof}; %% Nothing we can do other than stop
+                {true, _} -> eof; %% Nothing we can do other than stop
                 {false, true} ->
                     %% current message corrupted, try skipping past it
                     ExpectedAbsPos =
                         Offset + ?FILE_PACKING_ADJUSTMENT + TotalSize,
                     case file:position(FileHdl, {cur, TotalSize + 1}) of
                         {ok, ExpectedAbsPos} ->
-                            {ok, {corrupted, ExpectedAbsPos}};
+                            {corrupted, ExpectedAbsPos};
                         {ok, _SomeOtherPos} ->
-                            {ok, eof}; %% seek failed, so give up
+                            eof; %% seek failed, so give up
                         KO -> KO
                     end;
                 {false, false} -> %% all good, let's continue
@@ -1950,27 +1917,23 @@ read_next_file_entry(FileHdl, Offset) ->
                                     case file:read(FileHdl, 1) of
                                         {ok,
                                          <<?WRITE_OK_TRANSIENT:?WRITE_OK_SIZE_BITS>>} ->
-                                            {ok,
-                                             {ok, binary_to_term(MsgId),
-                                              false, TotalSize, NextOffset}};
+                                             {ok, {binary_to_term(MsgId),
+                                                   false, TotalSize, NextOffset}};
                                         {ok,
                                          <<?WRITE_OK_PERSISTENT:?WRITE_OK_SIZE_BITS>>} ->
-                                            {ok,
-                                             {ok, binary_to_term(MsgId),
-                                              true, TotalSize, NextOffset}};
+                                             {ok, {binary_to_term(MsgId),
+                                                   true, TotalSize, NextOffset}};
                                         {ok, _SomeOtherData} ->
-                                            {ok, {corrupted, NextOffset}};
+                                            {corrupted, NextOffset};
                                         KO -> KO
                                     end;
                                 {ok, _SomeOtherPos} ->
                                     %% seek failed, so give up
-                                    {ok, eof}; 
+                                    eof; 
                                 KO -> KO
                             end;
-                        eof -> {ok, eof};
-                        KO -> KO
+                        Other -> Other
                     end
             end;
-        eof -> {ok, eof};
-        KO -> KO
+        Other -> Other
     end.
