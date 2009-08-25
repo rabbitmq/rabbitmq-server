@@ -39,6 +39,7 @@
          handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
 -export([subscribe/3]).
+-export([close/1, close/3]).
 -export([register_direct_peer/2]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
@@ -123,6 +124,27 @@ cast(Channel, Method) ->
 cast(Channel, Method, Content) ->
     gen_server:cast(Channel, {cast, Method, Content}).
 
+%% @spec (Channel) -> ok
+%% where
+%%      Channel = pid()
+%% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye">>).
+close(Channel) ->
+    close(Channel, 200, <<"Goodbye">>).
+
+%% @spec (Channel, Code, Text) -> ok
+%% where
+%%      Channel = pid()
+%%      Code = integer()
+%%      Text = binary()
+%% @doc Closes the channel, allowing the caller to supply a reply code and
+%% text.
+close(Channel, Code, Text) ->
+    Close = #'channel.close'{reply_text =  Text,
+                             reply_code = Code,
+                             class_id   = 0,
+                             method_id  = 0},
+    #'channel.close_ok'{} = call(Channel, Close),
+    ok.
 %%---------------------------------------------------------------------------
 %% Consumer registration
 %%---------------------------------------------------------------------------

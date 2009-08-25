@@ -1,0 +1,7 @@
+include common.mk
+
+clean: common_clean
+
+test: compile
+	$(MAKE) -C test
+	$(LIBS_PATH) erl -pa ebin test -eval 'network_client_SUITE:test(), halt()'

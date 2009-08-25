@@ -39,7 +39,7 @@
 -export([open_channel/1, open_channel/3]).
 -export([start_direct/1, start_direct_link/1]).
 -export([start_network/1, start_network_link/1]).
--export([close/2]).
+-export([close/1, close/3]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -145,14 +145,27 @@ open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
     gen_server:call(ConnectionPid,
                     {open_channel, ChannelNumber, OutOfBand}, infinity).
 
-%% @type close() = #'connection.close'{}.
-%% The fields of this record are defined in the AMQP specification.
-%% @spec (ConnectionPid, Close) -> ok
+%% @spec (ConnectionPid) -> ok
 %% where
 %%      ConnectionPid = pid()
-%%      Close = close()
-%% @doc Closes the AMQP connection
-close(ConnectionPid, Close) -> gen_server:call(ConnectionPid, Close, infinity).
+%% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye">>).
+close(ConnectionPid) ->
+    close(ConnectionPid, 200, <<"Goodbye">>).
+
+%% @spec (ConnectionPid, Code, Text) -> ok
+%% where
+%%      ConnectionPid = pid()
+%%      Code = integer()
+%%      Text = binary()
+%% @doc Closes the AMQP connection, allowing the caller to set the reply
+%% code and text.
+close(ConnectionPid, Code, Text) -> 
+    Close = #'connection.close'{reply_text =  Text,
+                                reply_code = Code,
+                                class_id   = 0,
+                                method_id  = 0},
+    #'connection.close_ok'{} = gen_server:call(ConnectionPid, Close, infinity),
+    ok.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing

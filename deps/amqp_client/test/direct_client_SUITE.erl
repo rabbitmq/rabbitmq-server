@@ -31,6 +31,7 @@
 -export([test_coverage/0]).
 -export([test_channel_flow/0]).
 
+-include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 basic_get_test() -> 
@@ -84,7 +85,7 @@ hard_error_test() ->
 %%---------------------------------------------------------------------------
 
 new_connection() ->
-    lib_amqp:start_connection().
+    amqp_connection:start_direct(#amqp_params{}).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

@@ -26,19 +26,18 @@
 TEST_SOURCES=$(wildcard *.erl)
 TEST_TARGETS=$(patsubst %.erl, %.beam, $(TEST_SOURCES))
 INCLUDES=$(wildcard ../$(INCLUDE_DIR)/*.hrl)
+DEPS_DIR=../deps
+COMMON_PACKAGE=rabbit_common
 
-ERLC_OPTS=-I ../$(INCLUDE_DIR) -o ./ -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
-LIBS_PATH=ERL_LIBS=../deps
+ERLC_OPTS=-I ../include -o ./ -Wall -v +debug_info
+LIBS_PATH=ERL_LIBS=$(DEPS_DIR)
 
 all: compile
 
 compile: $(TEST_TARGETS)
 
-%.beam: %.erl ../$(BROKER_DIR) $(INCLUDES)
+%.beam: %.erl $(DEPS_DIR)/$(COMMON_PACKAGE) $(INCLUDES)
 	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
-
-../$(BROKER_DIR):
-	test -e ../$(BROKER_DIR)
 
 clean:
 	rm -f *.beam
