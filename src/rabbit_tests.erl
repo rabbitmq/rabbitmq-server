@@ -1109,15 +1109,15 @@ rdq_test_mixed_queue_modes() ->
                     {ok, MS5a} = rabbit_mixed_queue:publish(Msg, MS5),
                     MS5a
             end, MS4, lists:seq(1,10)),
-    30 = rabbit_mixed_queue:length(MS6),
+    30 = rabbit_mixed_queue:len(MS6),
     io:format("Published a mixture of messages; ~w~n",
               [rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS6)]),
     {ok, MS7} = rabbit_mixed_queue:set_storage_mode(disk, [], MS6),
-    30 = rabbit_mixed_queue:length(MS7),
+    30 = rabbit_mixed_queue:len(MS7),
     io:format("Converted to disk only mode; ~w~n",
              [rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS7)]),
     {ok, MS8} = rabbit_mixed_queue:set_storage_mode(mixed, [], MS7),
-    30 = rabbit_mixed_queue:length(MS8),
+    30 = rabbit_mixed_queue:len(MS8),
     io:format("Converted to mixed mode; ~w~n",
               [rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS8)]),
     MS10 =
@@ -1129,15 +1129,15 @@ rdq_test_mixed_queue_modes() ->
                    MS9a} = rabbit_mixed_queue:fetch(MS9),
                   MS9a
           end, MS8, lists:seq(1,10)),
-    20 = rabbit_mixed_queue:length(MS10),
+    20 = rabbit_mixed_queue:len(MS10),
     io:format("Delivered initial non persistent messages~n"),
     {ok, MS11} = rabbit_mixed_queue:set_storage_mode(disk, [], MS10),
-    20 = rabbit_mixed_queue:length(MS11),
+    20 = rabbit_mixed_queue:len(MS11),
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
     rdq_start(),
     MS12 = rdq_new_mixed_queue(q, true, false),
-    10 = rabbit_mixed_queue:length(MS12),
+    10 = rabbit_mixed_queue:len(MS12),
     io:format("Recovered queue~n"),
     {MS14, AckTags} =
         lists:foldl(
@@ -1148,16 +1148,16 @@ rdq_test_mixed_queue_modes() ->
                    MS13a} = rabbit_mixed_queue:fetch(MS13),
                   {MS13a, [{Msg, AckTag} | AcksAcc]}
           end, {MS12, []}, lists:seq(1,10)),
-    0 = rabbit_mixed_queue:length(MS14),
+    0 = rabbit_mixed_queue:len(MS14),
     {ok, MS15} = rabbit_mixed_queue:ack(AckTags, MS14),
     io:format("Delivered and acked all messages~n"),
     {ok, MS16} = rabbit_mixed_queue:set_storage_mode(disk, [], MS15),
-    0 = rabbit_mixed_queue:length(MS16),
+    0 = rabbit_mixed_queue:len(MS16),
     io:format("Converted to disk only mode~n"),
     rdq_stop(),
     rdq_start(),
     MS17 = rdq_new_mixed_queue(q, true, false),
-    0 = rabbit_mixed_queue:length(MS17),
+    0 = rabbit_mixed_queue:len(MS17),
     {MS17,0,0,0} = rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS17),
     io:format("Recovered queue~n"),
     rdq_stop(),
@@ -1200,28 +1200,28 @@ rdq_test_mode_conversion_mid_txn() ->
     passed.
 
 rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) ->
-    0 = rabbit_mixed_queue:length(MS0),
+    0 = rabbit_mixed_queue:len(MS0),
     MS2 = lists:foldl(
             fun (Msg, MS1) ->
                     {ok, MS1a} = rabbit_mixed_queue:publish(Msg, MS1),
                     MS1a
             end, MS0, MsgsA),
     Len0 = length(MsgsA),
-    Len0 = rabbit_mixed_queue:length(MS2),
+    Len0 = rabbit_mixed_queue:len(MS2),
     MS4 = lists:foldl(
             fun (Msg, MS3) ->
                     {ok, MS3a} = rabbit_mixed_queue:tx_publish(Msg, MS3),
                     MS3a
             end, MS2, MsgsB),
-    Len0 = rabbit_mixed_queue:length(MS4),
+    Len0 = rabbit_mixed_queue:len(MS4),
     {ok, MS5} = rabbit_mixed_queue:set_storage_mode(Mode, MsgsB, MS4),
-    Len0 = rabbit_mixed_queue:length(MS5),
+    Len0 = rabbit_mixed_queue:len(MS5),
     {ok, MS9} =
         case CommitOrCancel of
             commit ->
                 {ok, MS6} = rabbit_mixed_queue:tx_commit(MsgsB, [], MS5),
                 Len1 = Len0 + length(MsgsB),
-                Len1 = rabbit_mixed_queue:length(MS6),
+                Len1 = rabbit_mixed_queue:len(MS6),
                 {AckTags, MS8} =
                     lists:foldl(
                       fun (Msg, {Acc, MS7}) ->
@@ -1230,11 +1230,11 @@ rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) -
                                   rabbit_mixed_queue:fetch(MS7),
                               {[{Msg, AckTag} | Acc], MS7a}
                       end, {[], MS6}, MsgsA ++ MsgsB),
-                0 = rabbit_mixed_queue:length(MS8),
+                0 = rabbit_mixed_queue:len(MS8),
                 rabbit_mixed_queue:ack(AckTags, MS8);
             cancel ->
                 {ok, MS6} = rabbit_mixed_queue:tx_cancel(MsgsB, MS5),
-                Len0 = rabbit_mixed_queue:length(MS6),
+                Len0 = rabbit_mixed_queue:len(MS6),
                 {AckTags, MS8} =
                     lists:foldl(
                       fun (Msg, {Acc, MS7}) ->
@@ -1243,14 +1243,14 @@ rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) -
                                   rabbit_mixed_queue:fetch(MS7),
                               {[{Msg, AckTag} | Acc], MS7a}
                       end, {[], MS6}, MsgsA),
-                0 = rabbit_mixed_queue:length(MS8),
+                0 = rabbit_mixed_queue:len(MS8),
                 rabbit_mixed_queue:ack(AckTags, MS8)
         end,
-    0 = rabbit_mixed_queue:length(MS9),
+    0 = rabbit_mixed_queue:len(MS9),
     Msg = rdq_message(0, <<0:256>>, false),
     {ok, AckTag, MS10} = rabbit_mixed_queue:publish_delivered(Msg, MS9),
     {ok,MS11} = rabbit_mixed_queue:ack([{Msg, AckTag}], MS10),
-    0 = rabbit_mixed_queue:length(MS11),
+    0 = rabbit_mixed_queue:len(MS11),
     passed.
 
 rdq_test_disk_queue_modes() ->

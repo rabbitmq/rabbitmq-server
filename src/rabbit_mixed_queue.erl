@@ -37,7 +37,7 @@
 
 -export([publish/2, publish_delivered/2, fetch/1, ack/2,
          tx_publish/2, tx_commit/3, tx_cancel/2, requeue/2, purge/1,
-         length/1, is_empty/1, delete_queue/1, maybe_prefetch/1]).
+         len/1, is_empty/1, delete_queue/1, maybe_prefetch/1]).
 
 -export([set_storage_mode/3, storage_mode/1,
          estimate_queue_memory_and_reset_counters/1]).
@@ -88,7 +88,7 @@
              
 -spec(delete_queue/1 :: (mqstate()) -> {'ok', mqstate()}).
              
--spec(length/1 :: (mqstate()) -> non_neg_integer()).
+-spec(len/1 :: (mqstate()) -> non_neg_integer()).
 -spec(is_empty/1 :: (mqstate()) -> boolean()).
 
 -spec(set_storage_mode/3 :: (mode(), [message()], mqstate()) -> okmqs()).
@@ -553,7 +553,7 @@ delete_queue(State = #mqstate { queue = Q, memory_size = QSize,
     {ok, lose_memory(QSize, State #mqstate { length = 0, msg_buf = queue:new(),
                                              prefetcher = undefined })}.
 
-length(#mqstate { length = Length }) ->
+len(#mqstate { length = Length }) ->
     Length.
 
 is_empty(#mqstate { length = Length }) ->

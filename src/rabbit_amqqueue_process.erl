@@ -527,7 +527,7 @@ i(storage_mode, #q{ mixed_state = MS }) ->
 i(pid, _) ->
     self();
 i(messages_ready, #q { mixed_state = MS }) ->
-    rabbit_mixed_queue:length(MS);
+    rabbit_mixed_queue:len(MS);
 i(messages_unacknowledged, _) ->
     lists:sum([dict:size(UAM) ||
                   #cr{unacked_messages = UAM} <- all_ch_record()]);
@@ -706,12 +706,12 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
 handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
                                     mixed_state = MS,
                                     active_consumers = ActiveConsumers}) ->
-    Length = rabbit_mixed_queue:length(MS),
+    Length = rabbit_mixed_queue:len(MS),
     reply({ok, Name, Length, queue:len(ActiveConsumers)}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q { mixed_state = MS }) ->
-    Length = rabbit_mixed_queue:length(MS),
+    Length = rabbit_mixed_queue:len(MS),
     IsEmpty = Length == 0,
     IsUnused = is_unused(State),
     if
