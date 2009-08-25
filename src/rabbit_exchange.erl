@@ -327,7 +327,7 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
     BindingCleanup = [begin
          ok = FwdDeleteFun(reverse_route(Route)),
          ok = mnesia:delete_object(rabbit_reverse_route, Route, write),
-         #route{binding = B} = Route,
+         #reverse_route{reverse_binding = B} = Route,
          fun() -> trigger_delete_binding_hook(B) end
      end || Route <- mnesia:match_object(
                        rabbit_reverse_route,
@@ -407,15 +407,16 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                       true -> ok = sync_binding(B, Q#amqqueue.durable,
                                                 fun mnesia:write/3)
                   end;
-              _ -> ok
+              _ -> already_exists
           end
       end),
     case R of
         ok -> rabbit_hooks:trigger(binding_create, [ExchangeName, QueueName, 
-                                          RoutingKey, Arguments]);
+                                          RoutingKey, Arguments]),
+              ok;
+        already_exists -> ok;
         _ -> ok
-    end,
-    R.
+    end.
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
     case binding_action(
@@ -625,6 +626,9 @@ unconditional_delete(#exchange{name = ExchangeName}) ->
     ok = mnesia:delete({rabbit_exchange, ExchangeName}),
     {ok, fun() -> Post(), rabbit_hooks:trigger(exchange_delete, [ExchangeName]) end}.
 
+trigger_delete_binding_hook(#reverse_binding{queue_name = Q, exchange_name = X,
+                                     key = RK, args = Args}) ->
+    rabbit_hooks:trigger(binding_delete, [X, Q, RK, Args]);
 trigger_delete_binding_hook(#binding{queue_name = Q, exchange_name = X,
                                      key = RK, args = Args}) ->
     rabbit_hooks:trigger(binding_delete, [X, Q, RK, Args]).

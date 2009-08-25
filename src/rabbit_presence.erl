@@ -37,23 +37,26 @@
 -include("rabbit_framing.hrl").
 
 -export([start_link/0]).
--export([fire_presence_sync/3, fire_presence_async/3]).
+-export([fire_presence_sync/3, fire_presence_async/3, fire_presence_async/6]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-fire_presence_sync(HookName, presence, Args) ->
-    gen_server:call(?MODULE, {HookName, Args}).
-fire_presence_async(HookName, presence, Args) ->
-    gen_server:cast(?MODULE, {HookName, Args}).
+fire_presence_sync(HookName, presence, Object) ->
+    gen_server:call(?MODULE, {HookName, Object}).
+fire_presence_async(HookName, presence, Object) ->
+    gen_server:cast(?MODULE, {HookName, Object}).
+fire_presence_async(HookName, presence, Queue, Exchange, RoutingKey, Args) ->
+    gen_server:cast(?MODULE, {HookName, Queue, Exchange, RoutingKey, Args}).
 
 %% Gen Server Implementation
 init([]) ->
     attach(sync, vhost_create),
     attach(async, [exchange_create, exchange_delete]),
     attach(async, [queue_create, queue_delete]),
+    attach(async, [binding_create, binding_delete]),
     {ok, []}.
 
 handle_call({vhost_create, [VHostPath]}, _, State) ->
@@ -77,6 +80,12 @@ handle_cast({exchange_create, [QName = #resource{}]}, State) ->
 handle_cast({exchange_delete, [QName = #resource{}]}, State) ->
     emit_presence(QName, <<"shutdown">>),
     {noreply, State};
+handle_cast({binding_create, [QName, XName, RK, _Args]}, State) ->
+    emit_presence(QName, XName, RK, <<"startup">>),
+    {noreply, State};
+handle_cast({binding_delete, [QName, XName, RK, _Args]}, State) ->
+    emit_presence(QName, XName, RK, <<"shutdown">>),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     io:format("Unknown cast ~p~n", [_Msg]),
     {noreply, State}.
@@ -94,12 +103,12 @@ code_change(_, State, _) ->
 attach(InvokeMethod, Hooks) when is_list(Hooks) ->
     [attach(InvokeMethod, Hook) || Hook <- Hooks];
 attach(InvokeMethod, HookName) when is_atom(HookName) ->
-    rabbit_hooks:subscribe(HookName, presence, handler(InvokeMethod, HookName)).
+    rabbit_hooks:subscribe(HookName, presence, handler(InvokeMethod)).
 
-handler(async, HookName) ->
+handler(async) ->
     {?MODULE, fire_presence_async, []};
 
-handler(sync, HookName) ->
+handler(sync) ->
     {?MODULE, fire_presence_sync, []}.
 
 escape_for_routing_key(K) when is_binary(K) ->
@@ -117,15 +126,25 @@ escape_for_routing_key1([Ch | Rest]) ->
         _ -> [Ch | Tail]
     end.
 
-emit_presence(Resource = #resource{kind = KindAtom, name = InstanceBin},
+emit_presence(#resource{virtual_host = VHost, kind = KindAtom, name = InstanceBin},
               EventBin) ->
     ClassBin = list_to_binary(atom_to_list(KindAtom)),
-    XName = rabbit_misc:r(Resource, exchange, <<"amq.rabbitmq.presence">>),
     EscapedInstance = escape_for_routing_key(InstanceBin),
-    RK = list_to_binary(["presence.", ClassBin, ".", EscapedInstance,
-                         ".", EventBin]),
-    Body = list_to_binary([ClassBin, ".", EventBin, ".", EscapedInstance]),
-    Message = rabbit_basic:message(XName, RK, #'P_basic'{}, Body),
+    EventKey = list_to_binary([ClassBin, ".", EscapedInstance, ".", EventBin]),
+    emit_event(VHost, EventKey).
+
+emit_presence(#resource{virtual_host = VHost, name = QName}, #resource{name = XName}, BindingRK, EventBin) ->
+    EscapedQName = escape_for_routing_key(QName),
+    EscapedXName = escape_for_routing_key(XName),
+    EscapedRK = escape_for_routing_key(BindingRK),
+    EventKey = list_to_binary(["binding.", EscapedQName, ".", EscapedXName, ".",
+                               EscapedRK, ".", EventBin]),
+    emit_event(VHost, EventKey).
+
+emit_event(VHost, Event) ->
+    RK = list_to_binary(["presence." ++ binary_to_list(Event)]),
+    XName = rabbit_misc:r(VHost, exchange, <<"amq.rabbitmq.presence">>),
+    Message = rabbit_basic:message(XName, RK, #'P_basic'{}, Event),
     Delivery = rabbit_basic:delivery(false, false, none, Message),
     _Ignored = case rabbit_exchange:lookup(XName) of
            {ok, Exchange} ->
