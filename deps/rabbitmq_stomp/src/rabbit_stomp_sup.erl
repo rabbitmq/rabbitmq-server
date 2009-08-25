@@ -41,10 +41,10 @@ stop() ->
     ok.
 
 start(normal, []) ->
-     case application:get_env(rabbit, stomp_listeners) of
+     case application:get_env(listeners) of
          undefined -> throw({error, {stomp_configuration_not_found}});
-         {ok, StompListeners} -> 
-                         rabbit_stomp:start(StompListeners)
+         {ok, Listeners} -> 
+                         rabbit_stomp:start(Listeners)
      end.
 
 stop(_State) ->
