@@ -23,10 +23,9 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
+%% @private
 -module(amqp_network_driver).
 
--include_lib("rabbit_framing.hrl").
--include_lib("rabbit.hrl").
 -include("amqp_client.hrl").
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0},{active,false}, {nodelay, true}]).
@@ -38,12 +37,14 @@
 
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
 
+-define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
+
 %---------------------------------------------------------------------------
 % Driver API Methods
 %---------------------------------------------------------------------------
 
 handshake(State = #connection_state{serverhost = Host, port = Port,
-                                    sslopts = undefined}) ->
+                                    ssl_options = undefined}) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
             do_handshake(Sock, State);
@@ -53,7 +54,7 @@ handshake(State = #connection_state{serverhost = Host, port = Port,
     end;
 
 handshake(State = #connection_state{serverhost = Host, port = Port,
-                                    sslopts = SslOpts}) ->
+                                    ssl_options = SslOpts}) ->
     rabbit_misc:start_applications([crypto, ssl]),
 
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
@@ -88,11 +89,11 @@ open_channel({ChannelNumber, _OutOfBand}, ChannelPid,
 close_channel(WriterPid) ->
     rabbit_writer:shutdown(WriterPid).
 
-%% This closes the writer down, waits for the confirmation from the
+%% This closes the writer down, waits for the confirmation from
 %% the channel and then returns the ack to the user
 close_connection(Close = #'connection.close'{}, From,
                  #connection_state{channel0_writer_pid = Writer}) ->
-    rabbit_writer:send_command(Writer, Close),
+    do(Writer, Close),
     rabbit_writer:shutdown(Writer),
     receive
         {'$gen_cast', {method, {'connection.close_ok'}, none }} ->
@@ -103,10 +104,18 @@ close_connection(Close = #'connection.close'{}, From,
     end.
 
 do(Writer, Method) ->
-    rabbit_writer:send_command(Writer, Method).
+    rabbit_writer:send_command_and_signal_back(Writer, Method, self()),
+    receive_writer_send_command_signal(Writer).
 
 do(Writer, Method, Content) ->
-    rabbit_writer:send_command(Writer, Method, Content).
+    rabbit_writer:send_command_and_signal_back(Writer, Method, Content, self()),
+    receive_writer_send_command_signal(Writer).
+
+receive_writer_send_command_signal(Writer) ->
+    receive
+        rabbit_writer_send_command_signal -> ok;
+        WriterExitMsg = {'EXIT', Writer, _} -> self() ! WriterExitMsg
+    end.
 
 handle_broker_close(#connection_state{channel0_writer_pid = Writer,
                                       reader_pid = Reader}) ->
@@ -123,10 +132,14 @@ send_frame(Channel, Frame) ->
     ChPid = resolve_receiver(Channel),
     rabbit_framing_channel:process(ChPid, Frame).
 
-recv() ->
+recv(#connection_state{reader_pid = ReaderPid}) ->
     receive
-            {'$gen_cast', {method, Method, _Content}} ->
-            Method
+        {'$gen_cast', {method, Method, _Content}} ->
+            Method;
+        {'EXIT', ReaderPid, Reason} ->
+            exit({reader_exited, Reason})
+    after ?HANDSHAKE_RECEIVE_TIMEOUT ->
+        exit(awaiting_response_from_server_timed_out)
     end.
 
 %---------------------------------------------------------------------------
@@ -134,12 +147,12 @@ recv() ->
 %---------------------------------------------------------------------------
 
 network_handshake(Writer,
-                  State = #connection_state{ vhostpath = VHostPath }) ->
-    #'connection.start'{} = recv(),
+                  State = #connection_state{vhostpath = VHostPath}) ->
+    #'connection.start'{} = recv(State),
     do(Writer, start_ok(State)),
     #'connection.tune'{channel_max = ChannelMax,
                        frame_max = FrameMax,
-                       heartbeat = Heartbeat} = recv(),
+                       heartbeat = Heartbeat} = recv(State),
     TuneOk = #'connection.tune_ok'{channel_max = ChannelMax,
                                    frame_max = FrameMax,
                                    heartbeat = Heartbeat},
@@ -151,7 +164,7 @@ network_handshake(Writer,
     %% Or doesn't get sent at all?
     ConnectionOpen = #'connection.open'{virtual_host = VHostPath},
     do(Writer, ConnectionOpen),
-    #'connection.open_ok'{} = recv(),
+    #'connection.open_ok'{} = recv(State),
     %% TODO What should I do with the KnownHosts?
     State#connection_state{channel_max = ChannelMax, heartbeat = Heartbeat}.
 
@@ -175,7 +188,7 @@ start_reader(Sock, FramingPid) ->
     rabbit_net:close(Sock).
 
 start_writer(Sock, Channel) ->
-    rabbit_writer:start(Sock, Channel, ?FRAME_MIN_SIZE).
+    rabbit_writer:start_link(Sock, Channel, ?FRAME_MIN_SIZE).
 
 reader_loop(Sock, Type, Channel, Length) ->
     receive
@@ -250,7 +263,7 @@ resolve_receiver(Channel) ->
    end.
 
 do_handshake(Sock, State) ->
-    ok = rabbit_net:send(Sock, amqp_util:protocol_header()),
+    ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
     Parent = self(),
     FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
     ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),

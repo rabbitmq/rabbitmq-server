@@ -27,6 +27,7 @@
 
 -export([test_coverage/0]).
 
+-include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 basic_get_test() ->
@@ -79,12 +80,14 @@ hard_error_test() ->
 
 new_connection() ->
     {ok, [[CertsDir]]} = init:get_argument(erlang_client_ssl_dir),
-    amqp_connection:start_network("guest", "guest", "localhost", 5671,
-                                  [{cacertfile, CertsDir ++ "/testca/cacert.pem"},
-                                   {certfile, CertsDir ++ "/client/cert.pem"},
-                                   {keyfile, CertsDir ++ "/client/key.pem"},
-                                   {verify, verify_peer},
-                                   {fail_if_no_peer_cert, true}]).
+    Params = #amqp_params
+      {port = 5671,
+       ssl_options = [{cacertfile, CertsDir ++ "/testca/cacert.pem"},
+                      {certfile, CertsDir ++ "/client/cert.pem"},
+                      {keyfile, CertsDir ++ "/client/key.pem"},
+                      {verify, verify_peer},
+                      {fail_if_no_peer_cert, true}]},
+    amqp_connection:start_network(Params).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

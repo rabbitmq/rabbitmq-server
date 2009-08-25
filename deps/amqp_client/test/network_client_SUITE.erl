@@ -44,6 +44,9 @@ basic_recover_test() ->
 basic_consume_test() -> 
     test_util:basic_consume_test(new_connection()).
 
+large_content_test() ->
+    test_util:large_content_test(new_connection()).
+
 lifecycle_test() ->
     test_util:lifecycle_test(new_connection()).
 
@@ -65,6 +68,12 @@ teardown_test() ->
 rpc_test() ->
     test_util:rpc_test(new_connection()).
 
+pub_and_close_test_() ->
+    {timeout, 50,
+        fun() ->
+            test_util:pub_and_close_test(new_connection(), new_connection())
+        end}.
+
 %%---------------------------------------------------------------------------
 %% Negative Tests
 
@@ -73,6 +82,18 @@ non_existent_exchange_test() ->
 
 hard_error_test() ->
     negative_test_util:hard_error_test(new_connection()).
+
+non_existent_user_test() ->
+    negative_test_util:non_existent_user_test().
+
+invalid_password_test() ->
+    negative_test_util:invalid_password_test().
+
+non_existent_vhost_test() ->
+    negative_test_util:non_existent_vhost_test().
+
+no_permission_test() ->
+    negative_test_util:no_permission_test().
 
 %%---------------------------------------------------------------------------
 %% Common Functions
