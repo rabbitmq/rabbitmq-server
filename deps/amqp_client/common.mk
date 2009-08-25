@@ -57,13 +57,15 @@ DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
 PACKAGE=amqp_client
-PACKAGE_NAME=$(PACKAGE).ez
+PACKAGE_VSN=$(PACKAGE)-$(VERSION)
+PACKAGE_NAME=$(PACKAGE_VSN).ez
 COMMON_PACKAGE=rabbit_common
-COMMON_PACKAGE_NAME=$(COMMON_PACKAGE).ez
+COMMON_PACKAGE_VSN=$(COMMON_PACKAGE)-$(VERSION)
+COMMON_PACKAGE_NAME=$(COMMON_PACKAGE_VSN).ez
 
-COMPILE_DEPS=$(DEPS_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)/rabbit.hrl \
-             $(DEPS_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)/rabbit_framing.hrl \
-             $(DEPS_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+COMPILE_DEPS=$(DEPS_DIR)/$(COMMON_PACKAGE_VSN)/$(INCLUDE_DIR)/rabbit.hrl \
+             $(DEPS_DIR)/$(COMMON_PACKAGE_VSN)/$(INCLUDE_DIR)/rabbit_framing.hrl \
+             $(DEPS_DIR)/$(COMMON_PACKAGE_VSN)/$(EBIN_DIR)
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
@@ -117,7 +119,7 @@ common_clean:
 compile: $(TARGETS)
 
 compile_tests: $(TEST_DIR) $(COMPILE_DEPS)
-	$(MAKE) -C $(TEST_DIR)
+	$(MAKE) -C $(TEST_DIR) VERSION=$(VERSION)
 
 run: compile
 	erl -pa $(LOAD_PATH)
@@ -148,11 +150,11 @@ doc: $(DOC_DIR)/index.html
 ###############################################################################
 
 $(DIST_DIR)/$(PACKAGE_NAME): $(TARGETS)
-	rm -rf $(DIST_DIR)/$(PACKAGE)
-	mkdir -p $(DIST_DIR)/$(PACKAGE)
-	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE)
-	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE)
-	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
+	rm -rf $(DIST_DIR)/$(PACKAGE_VSN)
+	mkdir -p $(DIST_DIR)/$(PACKAGE_VSN)
+	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE_VSN)
+	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE_VSN)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE_VSN))
 
 package: $(DIST_DIR)/$(PACKAGE_NAME)
 

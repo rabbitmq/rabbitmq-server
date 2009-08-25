@@ -27,7 +27,7 @@ TEST_SOURCES=$(wildcard *.erl)
 TEST_TARGETS=$(patsubst %.erl, %.beam, $(TEST_SOURCES))
 INCLUDES=$(wildcard ../$(INCLUDE_DIR)/*.hrl)
 DEPS_DIR=../deps
-COMMON_PACKAGE=rabbit_common
+COMMON_PACKAGE=rabbit_common-$(VERSION)
 
 ERLC_OPTS=-I ../include -o ./ -Wall -v +debug_info
 LIBS_PATH=ERL_LIBS=$(DEPS_DIR)
