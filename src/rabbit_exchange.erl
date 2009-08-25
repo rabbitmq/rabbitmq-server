@@ -396,18 +396,26 @@ call_with_exchange_and_queue(Exchange, Queue, Fun) ->
       end).
 
 add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
-    binding_action(
+    R = binding_action(
       ExchangeName, QueueName, RoutingKey, Arguments,
       fun (X, Q, B) ->
-              if Q#amqqueue.durable and not(X#exchange.durable) ->
-                      {error, durability_settings_incompatible};
-                 true -> ok = sync_binding(B, Q#amqqueue.durable,
-                                           fun mnesia:write/3)
-              end
+          case mnesia:match_object(rabbit_route, #route{binding = B},
+                                   write) of
+              [] ->
+                  if Q#amqqueue.durable and not(X#exchange.durable) ->
+                              {error, durability_settings_incompatible};
+                      true -> ok = sync_binding(B, Q#amqqueue.durable,
+                                                fun mnesia:write/3)
+                  end;
+              _ -> ok
+          end
       end),
-    %% TODO: Need to check if a binding is already there
-    rabbit_hooks:trigger(binding_create, [ExchangeName, QueueName, 
-                                          RoutingKey, Arguments]).
+    case R of
+        ok -> rabbit_hooks:trigger(binding_create, [ExchangeName, QueueName, 
+                                          RoutingKey, Arguments]);
+        _ -> ok
+    end,
+    R.
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
     case binding_action(

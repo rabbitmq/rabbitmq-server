@@ -37,16 +37,16 @@
 -include("rabbit_framing.hrl").
 
 -export([start_link/0]).
--export([fire_presence_sync/2, fire_presence_async/2]).
+-export([fire_presence_sync/3, fire_presence_async/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-fire_presence_sync(HookName, Args) ->
+fire_presence_sync(HookName, presence, Args) ->
     gen_server:call(?MODULE, {HookName, Args}).
-fire_presence_async(HookName, Args) ->
+fire_presence_async(HookName, presence, Args) ->
     gen_server:cast(?MODULE, {HookName, Args}).
 
 %% Gen Server Implementation
@@ -97,10 +97,10 @@ attach(InvokeMethod, HookName) when is_atom(HookName) ->
     rabbit_hooks:subscribe(HookName, presence, handler(InvokeMethod, HookName)).
 
 handler(async, HookName) ->
-    {?MODULE, fire_presence_async, [HookName]};
+    {?MODULE, fire_presence_async, []};
 
 handler(sync, HookName) ->
-    {?MODULE, [HookName]}.
+    {?MODULE, fire_presence_sync, []}.
 
 escape_for_routing_key(K) when is_binary(K) ->
     list_to_binary(escape_for_routing_key1(binary_to_list(K))).
