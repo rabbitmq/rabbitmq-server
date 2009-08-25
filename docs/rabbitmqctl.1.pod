@@ -18,58 +18,69 @@ It performs all actions by connecting to one of the broker's nodes.
 
 =head1 OPTIONS
 
-B<-n> I<node>
-    default node is C<rabbit@server>, where server is the local host.
-On a host named C<server.example.com>, the node name of the RabbitMQ
+=over 
+
+=item B<-n> I<node>
+
+Default node is C<rabbit@server>, where server is the local host.  On
+a host named C<server.example.com>, the node name of the RabbitMQ
 Erlang node will usually be rabbit@server (unless RABBITMQ_NODENAME
 has been set to some non-default value at broker startup time).  The
 output of hostname -s is usually the correct suffix to use after the
 "@" sign. See rabbitmq-server(1) for details of configuring the
 RabbitMQ broker.
 
-B<-q>
-    quiet output mode is selected with the B<-q> flag. Informational
+=item B<-q>
+
+Quiet output mode is selected with the B<-q> flag. Informational
 messages are suppressed when quiet mode is in effect.
+
+=back
 
 =head1 COMMANDS
 
 =head2 APPLICATION AND CLUSTER MANAGEMENT
 
-stop
-    stop the Erlang node on which RabbitMQ broker is running.
+=over
 
-stop_app
-    stop the RabbitMQ application, leaving the Erlang node running.
-This command is typically run prior to performing other management
-actions that require the RabbitMQ application to be stopped,
-e.g. I<reset>.
+=item stop
 
-start_app
-    start the RabbitMQ application.
-    This command is typically run prior to performing other management
-actions that require the RabbitMQ application to be stopped,
-e.g. I<reset>.
+Stop the Erlang node on which RabbitMQ broker is running.
 
-status
-    display various information about the RabbitMQ broker, such as
-whether the RabbitMQ application on the current node, its version
-number, what nodes are part of the broker, which of these are running.
+=item stop_app
 
-reset
-    return a RabbitMQ node to its virgin state.
-    Removes the node from any cluster it belongs to, removes all data
-from the management database, such as configured users, vhosts and
-deletes all persistent messages.
+Stop the RabbitMQ application, leaving the Erlang node running.  This
+command is typically run prior to performing other management actions
+that require the RabbitMQ application to be stopped, e.g. I<reset>.
 
-force_reset
-    the same as I<reset> command, but resets the node unconditionally,
+=item start_app
+
+Start the RabbitMQ application.  This command is typically run prior
+to performing other management actions that require the RabbitMQ
+application to be stopped, e.g. I<reset>.
+
+=item status
+
+Display various information about the RabbitMQ broker, such as whether
+the RabbitMQ application on the current node, its version number, what
+nodes are part of the broker, which of these are running.
+
+=item reset
+
+Return a RabbitMQ node to its virgin state.  Removes the node from any
+cluster it belongs to, removes all data from the management database,
+such as configured users, vhosts and deletes all persistent messages.
+
+=item force_reset
+
+The same as I<reset> command, but resets the node unconditionally,
 regardless of the current management database state and cluster
-configuration.
-    It should only be used as a last resort if the database or cluster
-configuration has been corrupted.
+configuration.  It should only be used as a last resort if the
+database or cluster configuration has been corrupted.
 
-rotate_logs [suffix]
-    instruct the RabbitMQ node to rotate the log files. The RabbitMQ
+=item rotate_logs [suffix]
+
+Instruct the RabbitMQ node to rotate the log files. The RabbitMQ
 broker will attempt to append the current contents of the log file to
 the file with the name composed of the original name and the
 suffix. It will create a new file if such a file does not already
@@ -77,207 +88,318 @@ exist. When no I<suffix> is specified, the empty log file is simply
 created at the original location; no rotation takes place.  When an
 error occurs while appending the contents of the old log file, the
 operation behaves in the same way as if no I<suffix> was specified.
-    This command might be helpful when you are e.g. writing your own
+This command might be helpful when you are e.g. writing your own
 logrotate script and you do not want to restart the RabbitMQ node.
 
-cluster I<clusternode> ...
-    instruct the node to become member of a cluster with the specified
+=item cluster I<clusternode> ...
+
+Instruct the node to become member of a cluster with the specified
 nodes determined by I<clusternode> option(s). See
-http://www.rabbitmq.com/clustering.html for more information about
+L<http://www.rabbitmq.com/clustering.html> for more information about
 clustering.
+
+=back
 
 =head2 USER MANAGEMENT
 
-add_user I<username> I<password>
-    create a user named I<username> with (initial) password I<password>.
+=over
 
-delete_user I<username>
-    delete the user named I<username>.
+=item add_user I<username> I<password>
 
-change_password I<username> I<newpassword>
-    change the password for the user named I<username> to I<newpassword>.
+Create a user named I<username> with (initial) password I<password>.
 
-list_users
-    list all users.
+=item delete_user I<username>
+
+Delete the user named I<username>.
+
+=item change_password I<username> I<newpassword>
+
+Change the password for the user named I<username> to I<newpassword>.
+
+=item list_users
+
+List all users, one per line.
+
+=back
 
 =head2 ACCESS CONTROL
 
-add_vhost I<vhostpath>
-    create a new virtual host called I<vhostpath>.
+=over
 
-delete_vhost I<vhostpath>
-    delete a virtual host I<vhostpath>.
-    That command deletes also all its exchanges, queues and user
-mappings.
-    
-list_vhosts
-    list all virtual hosts.
+=item add_vhost I<vhostpath>
 
-set_permissions [-p I<vhostpath>] I<username> I<regexp> I<regexp> I<regexp>
-    set the permissions for the user named I<username> in the virtual
-host I<vhostpath>, granting 'configure', 'write' and 'read' access to
+Create a new virtual host called I<vhostpath>.
+
+=item delete_vhost I<vhostpath>
+
+Delete a virtual host I<vhostpath>.  This command deletes also all its
+exchanges, queues and user mappings.  
+
+=item list_vhosts
+
+List all virtual hosts, one per line.
+
+=item set_permissions [-p I<vhostpath>] I<username> I<regexp> I<regexp> I<regexp>
+
+Set the permissions for the user named I<username> in the virtual host
+I<vhostpath>, granting I<configure>, I<write> and I<read> access to
 resources with names matching the first, second and third I<regexp>,
 respectively.
 
-clear_permissions [-p I<vhostpath>] I<username>
-    remove the permissions for the user named I<username> in the
-virtual host I<vhostpath>.
+=item clear_permissions [-p I<vhostpath>] I<username>
 
-list_permissions [-p I<vhostpath>]
-    list all the users and their permissions in the virtual host
-I<vhostpath>.
+Remove the permissions for the user named I<username> in the virtual
+host I<vhostpath>.
 
-list_user_permissions I<username> 
-    list the permissions of the user named I<username> across all
-virtual hosts.
+=item list_permissions [-p I<vhostpath>]
+
+List all the users and their permissions in the virtual host
+I<vhostpath>.  Each output line contains the username and their
+I<configure>, I<write> and I<read> access regexps, separated by tab
+characters.
+
+=item list_user_permissions I<username> 
+
+List the permissions of the user named I<username> across all virtual
+hosts.
+
+=back
 
 =head2 SERVER STATUS
 
-list_queues [-p I<vhostpath>] [I<queueinfoitem> ...]
-    list queue information by virtual host. If no I<queueinfoitem>s
-are specified then then name and number of messages is displayed for
-each queue.
+=over
+
+=item list_queues [-p I<vhostpath>] [I<queueinfoitem> ...]
+
+List queue information by virtual host. Each line printed
+describes a queue, with the requested I<queueinfoitem> values
+separated by tab characters.  If no I<queueinfoitem>s are
+specified then I<name> and I<messages> are assumed.
+
+=back
 
 =head3 Queue information items
 
-=over 4
+=over
 
-name 
-    URL-encoded name of the queue
+=item name
 
-durable 
-    whether the queue survives server restarts
+name of the queue
 
-auto_delete
-    whether the queue will be deleted when no longer used
+=item durable
 
-arguments
-    queue arguments
+whether the queue survives server restarts
 
-node
-    node on which the process associated with the queue resides
+=item auto_delete
 
-messages_ready
-    number of messages ready to be delivered to clients
+whether the queue will be deleted when no longer used
 
-messages_unacknowledged
-    number of messages delivered to clients but not yet acknowledged
+=item arguments
 
-messages_uncommitted
-    number of messages published in as yet uncommitted transactions
+queue arguments
 
-messages
-    sum of ready, unacknowledged and uncommitted messages
+=item node
 
-acks_uncommitted
-    number of acknowledgements received in as yet uncommitted
-transactions
+node on which the process associated with the queue resides
 
-consumers
-    number of consumers
+=item messages_ready
 
-transactions
-    number of transactions
+number of messages ready to be delivered to clients
 
-memory
-    bytes of memory consumed by the Erlang process for the queue,
+=item messages_unacknowledged
+
+number of messages delivered to clients but not yet acknowledged
+
+=item messages_uncommitted
+
+number of messages published in as yet uncommitted transactions
+
+=item messages
+
+sum of ready, unacknowledged and uncommitted messages
+
+=item acks_uncommitted
+
+number of acknowledgements received in as yet uncommitted transactions
+
+=item consumers
+
+number of consumers
+
+=item transactions
+
+number of transactions
+
+=item memory
+
+bytes of memory consumed by the Erlang process for the queue,
 including stack, heap and internal structures
 
 =back
 
-list_exchanges [-p I<vhostpath>] [I<exchangeinfoitem> ...]
-    list exchange information by virtual host. If no
-I<exchangeinfoitem>s are specified then name and type is displayed for
-each exchange.
+=over
 
-=head3 Exchange information items
+=item list_exchanges [-p I<vhostpath>] [I<exchangeinfoitem> ...]
 
-=over 4
-
-name 
-    URL-encoded name of the exchange
-
-type
-    exchange type (B<direct>, B<topic>, B<fanout>, or B<headers>)
-
-durable
-    whether the exchange survives server restarts
-
-auto_delete
-    whether the exchange is deleted when no longer used
-
-arguments
-    exchange arguments
+List queue information by virtual host. Each line printed describes an
+exchange, with the requested I<exchangeinfoitem> values separated by
+tab characters.  If no I<exchangeinfoitem>s are specified then I<name>
+and I<type> are assumed.
 
 =back
 
-list_bindings [-p I<vhostpath>]
-    list bindings by virtual host. Each line contains exchange name,
-routing key and queue name (all URL encoded) and arguments.
+=head3 Exchange information items
 
-list_connections [I<connectioninfoitem> ...]
-    list connection information. If no I<connectioninfoitem>s are
-specified then the user, peer address and peer port are displayed.
+=over
+
+=item name 
+
+name of the exchange
+
+=item type
+
+exchange type (B<direct>, B<topic>, B<fanout>, or B<headers>)
+
+=item durable
+
+whether the exchange survives server restarts
+
+=item auto_delete
+
+whether the exchange is deleted when no longer used
+
+=item arguments
+
+exchange arguments
+
+=back
+
+=over
+
+=item list_bindings [-p I<vhostpath>]
+
+List bindings by virtual host. Each line printed describes a binding,
+with the exchange name, routing key, queue name and arguments,
+separated by tab characters.
+
+=item list_connections [I<connectioninfoitem> ...]
+
+List queue information by virtual host. Each line printed describes an
+connection, with the requested I<connectioninfoitem> values separated
+by tab characters.  If no I<connectioninfoitem>s are specified then
+I<user>, I<peer_address> and I<peer_port> are assumed.
+
+=back
 
 =head3 Connection information items
 
-=over 4
+=over
 
-node
-    node on which the process associated with the connection resides
+=item node
 
-address
-    server IP number
+node on which the process associated with the connection resides
 
-port
-    server port
+=item address
 
-peer_address
-    peer address
+server IP number
 
-peer_port
-    peer port
+=item port
 
-state
-    connection state (B<pre-init>, B<starting>, B<tuning>, B<opening>,
+server port
+
+=item peer_address
+
+peer address
+
+=item peer_port
+
+peer port
+
+=item state
+
+connection state (B<pre-init>, B<starting>, B<tuning>, B<opening>,
 B<running>, B<closing>, B<closed>)
 
-channels
-    number of channels using the connection
+=item channels
 
-user
-    username associated with the connection
+number of channels using the connection
 
-vhost
-    URL-encoded virtual host
+=item user
 
-timeout
-    connection timeout
+username associated with the connection
 
-frame_max
-    maximum frame size (bytes)
+=item vhost
 
-recv_oct
-    octets received
+virtual host
 
-recv_cnt
-    packets received
+=item timeout
 
-send_oct
-    octets sent
+connection timeout
 
-send_cnt
-    packets sent
+=item frame_max
 
-send_pend
-    send queue size
+maximum frame size (bytes)
+
+=item recv_oct
+
+octets received
+
+=item recv_cnt
+
+packets received
+
+=item send_oct
+
+octets sent
+
+=item send_cnt
+
+packets sent
+
+=item send_pend
+
+send queue size
 
 =back
 
 The list_queues, list_exchanges and list_bindings commands accept an
-optional virtual host parameter for which to display results, defaulting
-to I<"/">. The default can be overridden with the B<-p> flag. Result
-columns for these commands and list_connections are tab-separated.
+optional virtual host parameter for which to display results,
+defaulting to I<"/">. The default can be overridden with the B<-p>
+flag.
+
+=head1 OUTPUT ESCAPING
+
+Various items that may appear in the output of rabbitmqctl can contain
+arbitrary octets.  If a octet corresponds to a non-printing ASCII
+character (values 0 to 31, and 127), it will be escaped in the output,
+using a sequence consisting of a backslash character followed by three
+octal digits giving the octet's value (i.e., as used in string
+literals in the C programming language).  An octet corresponding to
+the backslash character (i.e. with value 92) will be escaped using a
+sequence of two backslash characters.  Octets with a value of 128 or
+above are not escaped, in order to preserve strings encoded with
+UTF-8.
+
+The items to which this escaping scheme applies are:
+
+=over
+
+=item *
+Usernames
+
+=item *
+Virtual host names
+
+=item *
+Queue names
+
+=item *
+Exchange names
+
+=item *
+Regular expressions used for access control
+
+=back
 
 =head1 EXAMPLES
 
@@ -306,4 +428,4 @@ The RabbitMQ Team <info@rabbitmq.com>
 
 =head1 REFERENCES
 
-RabbitMQ Web Site: http://www.rabbitmq.com
+RabbitMQ Web Site: L<http://www.rabbitmq.com>
