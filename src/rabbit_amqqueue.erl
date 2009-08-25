@@ -315,32 +315,39 @@ internal_delete(QueueName) ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   []  -> {error, not_found};
                   [_] ->
-                      ok = rabbit_exchange:delete_queue_bindings(QueueName),
+                      {ok, Post} = rabbit_exchange:delete_queue_bindings(QueueName),
                       ok = mnesia:delete({rabbit_queue, QueueName}),
                       ok = mnesia:delete({rabbit_durable_queue, QueueName}),
-                      ok
+                      {ok, Post}
               end
       end) of
-        ok    -> rabbit_hooks:trigger(queue_delete, [QueueName]),
-                 ok;
+        {ok, Post}    -> Post(),
+                         rabbit_hooks:trigger(queue_delete, [QueueName]),
+                         ok;
         Error -> Error
    end.
 
 on_node_down(Node) ->
-    rabbit_misc:execute_mnesia_transaction(
+    Post = rabbit_misc:execute_mnesia_transaction(
       fun () ->
               qlc:fold(
                 fun (QueueName, Acc) ->
-                        ok = rabbit_exchange:delete_transient_queue_bindings(
+                        {ok, Post} = 
+                          rabbit_exchange:delete_transient_queue_bindings(
                                QueueName),
                         ok = mnesia:delete({rabbit_queue, QueueName}),
-                        Acc
+                        fun() -> Acc(), 
+                                 Post(), 
+                                 rabbit_hooks:trigger(queue_delete, [QueueName])
+                                 end
                 end,
-                ok,
+                fun() -> ok end,
                 qlc:q([QueueName || #amqqueue{name = QueueName, pid = Pid}
                                         <- mnesia:table(rabbit_queue),
                                     node(Pid) == Node]))
-      end).
+      end),
+    Post(),
+    ok.
 
 pseudo_queue(QueueName, Pid) ->
     #amqqueue{name = QueueName,

@@ -32,21 +32,33 @@
 -module(rabbit_hooks).
 
 -export([start/0]).
--export([subscribe/2, unsubscribe/2, trigger/2]).
+-export([subscribe/3, unsubscribe/2, trigger/2]).
 
 -define(TableName, rabbit_hooks).
+
+-ifdef(use_specs).
+
+-type(hookfun() :: fun((list()) -> 'ok')).
+
+-spec(start/0 :: () -> 'ok').
+-spec(subscribe/3 :: (atom(), atom(), hookfun()) -> 'ok').
+-spec(unsubscribe/2 :: (atom(), atom()) -> 'ok').
+-spec(trigger/2 :: (atom(), list()) -> 'ok').
+
+-endif.
 
 start() ->
     ets:new(?TableName, [bag, public, named_table]),
     ok.
 
-subscribe(Hook, Handler) ->
-    ets:insert(?TableName, {Hook, Handler}).
+subscribe(Hook, HandlerName, Handler) ->
+    ets:insert(?TableName, {Hook, HandlerName, Handler}).
 
-unsubscribe(Hook, Handler) ->
-    ets:delete_object(?TableName, {Hook, Handler}).
+unsubscribe(Hook, HandlerName) ->
+    ets:match_delete(?TableName, {Hook, HandlerName, '_'}).
 
 trigger(Hook, Args) ->
+    io:format("Hook: ~p(~p)~n", [Hook, Args]),
     Hooks = ets:lookup(?TableName, Hook),
-    [catch H(Args) || {_, H} <- Hooks],
+    [catch H(Args) || {_, _, H} <- Hooks],
     ok.

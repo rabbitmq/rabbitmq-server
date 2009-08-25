@@ -89,7 +89,7 @@ code_change(_, State, _) ->
 attach(InvokeMethod, Hooks) when is_list(Hooks) ->
     [attach(InvokeMethod, Hook) || Hook <- Hooks];
 attach(InvokeMethod, HookName) when is_atom(HookName) ->
-    rabbit_hooks:subscribe(HookName, handler(InvokeMethod, HookName)).
+    rabbit_hooks:subscribe(HookName, presence, handler(InvokeMethod, HookName)).
 
 handler(async, HookName) ->
     fun(Args) -> gen_server:cast(?MODULE, {HookName, Args}) end;

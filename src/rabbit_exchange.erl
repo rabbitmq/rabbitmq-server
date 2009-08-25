@@ -302,18 +302,19 @@ lookup_qpids(Queues) ->
 %% to be implemented for 0.91 ?
 
 delete_exchange_bindings(ExchangeName) ->
-    [begin
+    Bindings = [begin
          ok = mnesia:delete_object(rabbit_reverse_route,
                                    reverse_route(Route), write),
          ok = delete_forward_routes(Route),
          #route{binding = B} = Route,
-         trigger_delete_binding_hook(B)
+         B
      end || Route <- mnesia:match_object(
                        rabbit_route,
                        #route{binding = #binding{exchange_name = ExchangeName,
                                                  _ = '_'}},
                        write)],
-    ok.
+    
+    {ok, fun() -> [trigger_delete_binding_hook(B) || B <- Bindings] end}.
 
 delete_queue_bindings(QueueName) ->
     delete_queue_bindings(QueueName, fun delete_forward_routes/1).
@@ -323,20 +324,25 @@ delete_transient_queue_bindings(QueueName) ->
 
 delete_queue_bindings(QueueName, FwdDeleteFun) ->
     Exchanges = exchanges_for_queue(QueueName),
-    [begin
+    BindingCleanup = [begin
          ok = FwdDeleteFun(reverse_route(Route)),
-         ok = mnesia:delete_object(rabbit_reverse_route, Route, write)
+         ok = mnesia:delete_object(rabbit_reverse_route, Route, write),
+         #route{binding = B} = Route,
+         fun() -> trigger_delete_binding_hook(B) end
      end || Route <- mnesia:match_object(
                        rabbit_reverse_route,
                        reverse_route(
                          #route{binding = #binding{queue_name = QueueName, 
                                                    _ = '_'}}),
                        write)],
-    [begin
+    ExchangeCleanup = [begin
          [X] = mnesia:read({rabbit_exchange, ExchangeName}),
-         ok = maybe_auto_delete(X)
+         {ok, Post} = maybe_auto_delete(X),
+         Post
      end || ExchangeName <- Exchanges],
-    ok.
+    {ok, fun() -> 
+                 [Cleanup() || Cleanup <- BindingCleanup ++ ExchangeCleanup] 
+         end}.
 
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
@@ -404,7 +410,7 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                                           RoutingKey, Arguments]).
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
-    binding_action(
+    case binding_action(
       ExchangeName, QueueName, RoutingKey, Arguments,
       fun (X, Q, B) ->
               case mnesia:match_object(rabbit_route, #route{binding = B},
@@ -412,11 +418,14 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                   [] -> {error, binding_not_found};
                   _  -> ok = sync_binding(B, Q#amqqueue.durable,
                                           fun mnesia:delete_object/3),
-                        %% TODO: Move outside of the tx
-                        trigger_delete_binding_hook(B),
-                        maybe_auto_delete(X)
+                        {ok, Post} = maybe_auto_delete(X),
+                        {ok, fun() -> trigger_delete_binding_hook(B), Post() end}
               end
-      end).
+      end) of
+        {ok, Post} -> Post(),
+                      ok;
+        Error -> Error
+    end.
 
 binding_action(ExchangeName, QueueName, RoutingKey, Arguments, Fun) ->
     call_with_exchange_and_queue(
@@ -572,15 +581,25 @@ last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
     topic_matches1(P, R) or last_topic_match(P, [BacktrackNext | R], BacktrackList).
 
 delete(ExchangeName, _IfUnused = true) ->
-    call_with_exchange(ExchangeName, fun conditional_delete/1);
+    case call_with_exchange(ExchangeName, fun conditional_delete/1) of
+        {ok, Post} -> Post(),
+                      ok;
+        Error      -> Error
+    end;
 delete(ExchangeName, _IfUnused = false) ->
-    call_with_exchange(ExchangeName, fun unconditional_delete/1).
+    case call_with_exchange(ExchangeName, fun unconditional_delete/1) of
+        {ok, Post} -> Post(),
+                      ok;
+        Error      -> Error
+    end.
 
 maybe_auto_delete(#exchange{auto_delete = false}) ->
-    ok;
+    {ok, fun() -> ok end};
 maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
-    conditional_delete(Exchange),
-    ok.
+    case conditional_delete(Exchange) of
+        {ok, Post} -> {ok, Post};
+        _          -> {ok, fun() -> ok end}
+    end.
 
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     Match = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
@@ -593,10 +612,10 @@ conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     end.
 
 unconditional_delete(#exchange{name = ExchangeName}) ->
-    ok = delete_exchange_bindings(ExchangeName),
-    rabbit_hooks:trigger(exchange_delete, [ExchangeName]),
+    {ok, Post} = delete_exchange_bindings(ExchangeName),
     ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
-    ok = mnesia:delete({rabbit_exchange, ExchangeName}).
+    ok = mnesia:delete({rabbit_exchange, ExchangeName}),
+    {ok, fun() -> Post(), rabbit_hooks:trigger(exchange_delete, [ExchangeName]) end}.
 
 trigger_delete_binding_hook(#binding{queue_name = Q, exchange_name = X,
                                      key = RK, args = Args}) ->
