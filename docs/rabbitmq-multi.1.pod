@@ -15,22 +15,30 @@ scalable implementation of an AMQP broker.
 rabbitmq-multi scripts allows for easy set-up of a cluster on a single
 machine.
 
-See also rabbitmq-server(1) for configuration information.
+See also L<rabbitmq-server(1)> for configuration information.
 
 =head1 COMMANDS
 
-start_all I<count>
-    start count nodes with unique names, listening on all IP addresses
-and on sequential ports starting from 5672.
+=over
 
-status
-    print the status of all running RabbitMQ nodes
+=item start_all I<count>
 
-stop_all
-    stop all local RabbitMQ nodes
+Start count nodes with unique names, listening on all IP addresses and
+on sequential ports starting from 5672.
 
-rotate_logs
-    rotate log files for all local and running RabbitMQ nodes
+=item status
+
+Print the status of all running RabbitMQ nodes.
+
+=item stop_all
+
+Stop all local RabbitMQ nodes,
+
+=item rotate_logs
+
+Rotate log files for all local and running RabbitMQ nodes.
+
+=back
 
 =head1 EXAMPLES
 
@@ -40,7 +48,7 @@ Start 3 local RabbitMQ nodes with unique, sequential port numbers:
 
 =head1 SEE ALSO
 
-rabbitmq.conf(5), rabbitmq-server(1), rabbitmqctl(1)
+L<rabbitmq.conf(5)>, L<rabbitmq-server(1)>, L<rabbitmqctl(1)>
 
 =head1 AUTHOR
 
@@ -48,4 +56,4 @@ The RabbitMQ Team <info@rabbitmq.com>
 
 =head1 REFERENCES
 
-RabbitMQ Web Site: http://www.rabbitmq.com
+RabbitMQ Web Site: L<http://www.rabbitmq.com>
