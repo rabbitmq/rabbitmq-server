@@ -27,6 +27,7 @@
 
 -export([test_coverage/0]).
 
+-include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 basic_get_test() ->
@@ -99,7 +100,7 @@ no_permission_test() ->
 %% Common Functions
 
 new_connection() ->
-  lib_amqp:start_connection("localhost").
+    amqp_connection:start_network(#amqp_params{}).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
