@@ -133,8 +133,8 @@ start(normal, []) ->
        {"core processes",
         fun () ->
                 ok = start_child(rabbit_log),
-
                 ok = rabbit_hooks:start(),
+
                 ok = rabbit_amqqueue:start(),
 
                 {ok, MemoryAlarms} = application:get_env(memory_alarms),

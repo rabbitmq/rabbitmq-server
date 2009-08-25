@@ -248,12 +248,15 @@ add_vhost(VHostPath) ->
                                    {<<"amq.match">>,  headers}, %% per 0-9-1 pdf
                                    {<<"amq.headers">>,  headers}, %% per 0-9-1 xml
                                    {<<"amq.fanout">>, fanout}]],
-                          rabbit_hooks:trigger(vhost_create, [VHostPath]),
                           ok;
                       [_] ->
                           mnesia:abort({vhost_already_exists, VHostPath})
                   end
           end),
+    case R of
+      ok -> rabbit_hooks:trigger(vhost_create, [VHostPath]);
+      _ -> ok
+    end,
     rabbit_log:info("Added vhost ~p~n", [VHostPath]),
     R.
 
