@@ -426,8 +426,8 @@ tx_commit(Publishes, MsgsWithAcks,
          end,
     Len = length(Publishes),
     {ok, lose_memory(ASize, State #mqstate
-                     { length = Length + Len,
-                       msg_buf = inc_queue_length(MsgBuf, Len) })};
+                     { msg_buf = inc_queue_length(MsgBuf, Len),
+                       length = Length + Len })};
 tx_commit(Publishes, MsgsWithAcks,
           State = #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf,
                              is_durable = IsDurable, length = Length }) ->
@@ -503,8 +503,8 @@ requeue(MessagesWithAckTags, State = #mqstate { mode = disk, queue = Q,
             end, [], MessagesWithAckTags),
     ok = rabbit_disk_queue:requeue(Q, lists:reverse(Requeue)),
     Len = length(MessagesWithAckTags),
-    {ok, State #mqstate { length = Length + Len,
-                          msg_buf = inc_queue_length(MsgBuf, Len) }};
+    {ok, State #mqstate { msg_buf = inc_queue_length(MsgBuf, Len),
+                          length = Length + Len }};
 requeue(MessagesWithAckTags, State = #mqstate { mode = mixed, queue = Q,
                                                 msg_buf = MsgBuf,
                                                 is_durable = IsDurable,
