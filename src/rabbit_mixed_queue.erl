@@ -424,7 +424,7 @@ tx_commit(Publishes, MsgsWithAcks,
             true -> rabbit_disk_queue:tx_commit(Q, only_msg_ids(Publishes),
                                                 RealAcks)
          end,
-    Len = erlang:length(Publishes),
+    Len = length(Publishes),
     {ok, lose_memory(ASize, State #mqstate
                      { length = Length + Len,
                        msg_buf = inc_queue_length(MsgBuf, Len) })};
@@ -450,7 +450,7 @@ tx_commit(Publishes, MsgsWithAcks,
          end,
     {ok, lose_memory(ASize, State #mqstate
                      { msg_buf = MsgBuf1,
-                       length = Length + erlang:length(Publishes) })}.
+                       length = Length + length(Publishes) })}.
 
 tx_cancel(Publishes, State = #mqstate { mode = disk }) ->
     {MsgIds, CSize} =
@@ -502,7 +502,7 @@ requeue(MessagesWithAckTags, State = #mqstate { mode = disk, queue = Q,
                     []
             end, [], MessagesWithAckTags),
     ok = rabbit_disk_queue:requeue(Q, lists:reverse(Requeue)),
-    Len = erlang:length(MessagesWithAckTags),
+    Len = length(MessagesWithAckTags),
     {ok, State #mqstate { length = Length + Len,
                           msg_buf = inc_queue_length(MsgBuf, Len) }};
 requeue(MessagesWithAckTags, State = #mqstate { mode = mixed, queue = Q,
@@ -525,7 +525,7 @@ requeue(MessagesWithAckTags, State = #mqstate { mode = mixed, queue = Q,
              _  -> rabbit_disk_queue:requeue(Q, lists:reverse(PersistentPubs))
          end,
     {ok, State #mqstate {msg_buf = MsgBuf1,
-                         length = Length + erlang:length(MessagesWithAckTags)}}.
+                         length = Length + length(MessagesWithAckTags)}}.
 
 purge(State = #mqstate { queue = Q, mode = disk, length = Count,
                          memory_size = QSize }) ->
