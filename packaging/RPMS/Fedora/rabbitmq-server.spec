@@ -9,6 +9,7 @@ Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{v
 Source1: rabbitmq-server.init
 Source2: rabbitmq-script-wrapper
 Source3: rabbitmq-server.logrotate
+Source4: rabbitmq-asroot-script-wrapper
 URL: http://www.rabbitmq.com/
 BuildRequires: erlang, python-simplejson
 Requires: erlang, logrotate
@@ -22,9 +23,10 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
-%define _rabbit_erllibdir %{_libdir}/erlang/lib/rabbitmq_server-%{version}
+%define _rabbit_erllibdir %{_libdir}/rabbitmq/lib/rabbitmq_server-%{version}
 %define _rabbit_libdir %{_libdir}/rabbitmq
 %define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
+%define _rabbit_asroot_wrapper %{_builddir}/`basename %{S:4}`
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
 
@@ -34,11 +36,9 @@ scalable implementation of an AMQP broker.
 %build
 cp %{S:2} %{_rabbit_wrapper}
 sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
-
-# The rabbitmq build needs escript, which is missing from /usr/bin in
-# some versions of the erlang RPM.  See
-# <https://bugzilla.redhat.com/show_bug.cgi?id=481302>
-PATH=%{_libdir}/erlang/bin:$PATH make %{?_smp_mflags}
+cp %{S:4} %{_rabbit_asroot_wrapper}
+sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_asroot_wrapper}
+make %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}
@@ -55,6 +55,7 @@ install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmqctl
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-multi
+install -p -D -m 0755 %{_rabbit_asroot_wrapper} %{buildroot}%{_sbindir}/rabbitmq-activate-plugins
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 

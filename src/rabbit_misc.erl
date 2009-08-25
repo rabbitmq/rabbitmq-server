@@ -41,6 +41,7 @@
 -export([dirty_read/1]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
+-export([enable_cover/1, report_cover/1]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
@@ -49,9 +50,11 @@
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([table_foreach/2]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
+-export([read_term_file/1, write_term_file/2]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
+-export([unfold/2, ceil/1]).
 
 -import(mnesia).
 -import(lists).
@@ -63,6 +66,8 @@
 -ifdef(use_specs).
 
 -include_lib("kernel/include/inet.hrl").
+
+-type(ok_or_error() :: 'ok' | {'error', any()}).
 
 -spec(method_record_type/1 :: (tuple()) -> atom()).
 -spec(polite_pause/0 :: () -> 'done').
@@ -87,8 +92,10 @@
 -spec(r_arg/4 :: (vhost() | r(atom()), K, amqp_table(), binary()) ->
              undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
--spec(enable_cover/0 :: () -> 'ok' | {'error', any()}).
+-spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(report_cover/0 :: () -> 'ok').
+-spec(enable_cover/1 :: (string()) -> ok_or_error()).
+-spec(report_cover/1 :: (string()) -> 'ok').
 -spec(throw_on_error/2 ::
       (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
@@ -97,7 +104,7 @@
 -spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
--spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
+-spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
 -spec(localnode/1 :: (atom()) -> erlang_node()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
@@ -107,12 +114,16 @@
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
--spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
--spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
+-spec(dirty_dump_log/1 :: (string()) -> ok_or_error()).
+-spec(read_term_file/1 :: (string()) -> {'ok', [any()]} | {'error', any()}).
+-spec(write_term_file/2 :: (string(), [any()]) -> ok_or_error()).
+-spec(append_file/2 :: (string(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
+-spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
+-spec(ceil/1 :: (number()) -> number()).
 
 -endif.
 
@@ -188,17 +199,27 @@ rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
                                 [Kind, Name, VHostPath])).
 
 enable_cover() ->
-    case cover:compile_beam_directory("ebin") of
+    enable_cover(".").
+
+enable_cover([Root]) when is_atom(Root) ->
+    enable_cover(atom_to_list(Root));
+enable_cover(Root) ->
+    case cover:compile_beam_directory(filename:join(Root, "ebin")) of
         {error,Reason} -> {error,Reason};
         _ -> ok
     end.
 
 report_cover() ->
-    Dir = "cover/",
-    ok = filelib:ensure_dir(Dir),
+    report_cover(".").
+
+report_cover([Root]) when is_atom(Root) ->
+    report_cover(atom_to_list(Root));
+report_cover(Root) ->
+    Dir = filename:join(Root, "cover"),
+    ok = filelib:ensure_dir(filename:join(Dir,"junk")),
     lists:foreach(fun(F) -> file:delete(F) end,
-                  filelib:wildcard(Dir ++ "*.html")),
-    {ok, SummaryFile} = file:open(Dir ++ "summary.txt", [write]),
+                  filelib:wildcard(filename:join(Dir, "*.html"))),
+    {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
     {CT, NCT} =
         lists:foldl(
           fun(M,{CovTot, NotCovTot}) ->
@@ -207,7 +228,7 @@ report_cover() ->
                                                   Cov, NotCov, M),
                   {ok,_} = cover:analyze_to_file(
                              M,
-                             Dir ++ atom_to_list(M) ++ ".html",
+                             filename:join(Dir, atom_to_list(M) ++ ".html"),
                              [html]),
                   {CovTot+Cov, NotCovTot+NotCov}
           end,
@@ -347,7 +368,9 @@ dirty_foreach_key1(F, TableName, K) ->
     end.
 
 dirty_dump_log(FileName) ->
-    {ok, LH} = disk_log:open([{name, dirty_dump_log}, {mode, read_only}, {file, FileName}]),
+    {ok, LH} = disk_log:open([{name, dirty_dump_log},
+                              {mode, read_only},
+                              {file, FileName}]),
     dirty_dump_log1(LH, disk_log:chunk(LH, start)),
     disk_log:close(LH).
 
@@ -360,6 +383,12 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
 
+
+read_term_file(File) -> file:consult(File).
+
+write_term_file(File, Terms) ->
+    file:write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
+                                             Term <- Terms])).
 
 append_file(File, Suffix) ->
     case file:read_file_info(File) of
@@ -431,3 +460,18 @@ stop_applications(Apps) ->
                         cannot_stop_application,
                         Apps).
 
+unfold(Fun, Init) ->
+    unfold(Fun, [], Init).
+
+unfold(Fun, Acc, Init) ->
+    case Fun(Init) of
+        {true, E, I} -> unfold(Fun, [E|Acc], I);
+        false -> {Acc, Init}
+    end.
+
+ceil(N) ->
+    T = trunc(N),
+    case N - T of
+        0 -> N;
+        _ -> 1 + T
+    end.
