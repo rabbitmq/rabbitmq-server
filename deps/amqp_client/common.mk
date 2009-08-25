@@ -23,6 +23,25 @@
 #   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 #
 
+# The client library can either be built from source control or by downloading
+# a source tarball from the RabbitMQ site. The intention behind the source tarball is
+# to be able to unpack this anywhere and just run a simple a test, under the
+# assumption that you have a running broker. This provides the simplest
+# possible way of building and running the client.
+#
+# The source control version, on the other hand, contains far more infrastructure
+# to start and stop brokers, package modules from the server, run embedded tests
+# and so forth.
+#
+# This means that the Makefile of the source control version contains a lot of
+# functionality that just wouldn't work with the source tarball version.
+#
+# The purpose of this common Makefile is to define as many commonalities
+# between the build requirements of the source control version and the source
+# tarball version. This avoids duplicating make definitions and rules and
+# helps keep the Makefile maintenence well factored.
+
+
 EBIN_DIR=ebin
 export BROKER_DIR=../rabbitmq-server
 export INCLUDE_DIR=include

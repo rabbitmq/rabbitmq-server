@@ -1,4 +1,4 @@
-include include.mk
+include common.mk
 
 clean: common_clean
 

@@ -32,7 +32,7 @@ SOURCE_PACKAGE_NAME=$(PACKAGE)-$(VERSION)-src
 
 .PHONY: common_package
 
-include include.mk
+include common.mk
 
 clean: common_clean
 	rm -fr $(DIST_DIR)
@@ -80,7 +80,7 @@ source_tarball: clean $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(DIST_DIR)
 	$(COPY) $(DIST_DIR)/$(COMMON_PACKAGE_NAME) $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(DIST_DIR)/
 	$(COPY) README $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/
-	$(COPY) include.mk $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/
+	$(COPY) common.mk $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/
 	$(COPY) Makefile.in $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/Makefile
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(SOURCE_DIR)
 	$(COPY) $(SOURCE_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(SOURCE_DIR)/
