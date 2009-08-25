@@ -8,6 +8,8 @@ LIB_PACKAGE=mochiweb
 LIB_PACKAGE_DIR=$(LIB_PACKAGE)
 LIB_PACKAGE_NAME=$(LIB_PACKAGE).ez
 
+CHECKOUT_DIR=$(LIB_PACKAGE_DIR)-svn
+
 TARGETS=$(LIB_PACKAGE_NAME)
 
 all: $(TARGETS)
@@ -17,11 +19,16 @@ clean:
 	rm -rf $(INCLUDE_DIR)
 	rm -rf $(LIB_PACKAGE_DIR) $(TARGETS)
 
-$(LIB_PACKAGE_DIR):
-	svn co $(SVN_ROOT) $@
+squeakyclean: clean
+	rm -rf $(CHECKOUT_DIR)
+
+$(LIB_PACKAGE_DIR): $(CHECKOUT_DIR)
+	cp -r $< $@
+
+$(CHECKOUT_DIR):
+	svn co -r $(REVISION) $(SVN_ROOT) $@
 
 %.ez: $(LIB_PACKAGE_DIR)
-	(cd $(LIB_PACKAGE_DIR); svn up -r $(REVISION))
 	$(MAKE) -C $(LIB_PACKAGE_DIR) clean all
 	rm -rf ebin include
 	cp -r $(LIB_PACKAGE_DIR)/ebin $(EBIN_DIR)
