@@ -38,7 +38,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([publish/2, drain/1, drain_and_stop/1]).
+-export([publish/2, drain/1, drain_and_stop/1, stop/1]).
 
 -include("rabbit.hrl").
 
@@ -191,6 +191,9 @@ drain(Prefetcher) ->
 drain_and_stop(Prefetcher) ->
     gen_server2:call(Prefetcher, drain_and_stop, infinity).
 
+stop(Prefetcher) ->
+    gen_server2:call(Prefetcher, stop, infinity).
+
 init([Q, Count, QPid]) ->
     %% link isn't enough because the signal will not appear if the
     %% queue exits normally. Thus have to use monitor.
@@ -240,7 +243,9 @@ handle_call(drain_and_stop, _From, State = #pstate { buf_length = 0 }) ->
     {stop, normal, empty, State};
 handle_call(drain_and_stop, _From, State = #pstate { msg_buf = MsgBuf,
                                                      buf_length = Length }) ->
-    {stop, normal, {MsgBuf, Length}, State}.
+    {stop, normal, {MsgBuf, Length}, State};
+handle_call(stop, _From, State) ->
+    {stop, normal, ok, State}.
 
 handle_cast(Msg, State) ->
     exit({unexpected_message_cast_to_prefetcher, Msg, State}).

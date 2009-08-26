@@ -1233,7 +1233,7 @@ rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) -
                 0 = rabbit_mixed_queue:len(MS8),
                 rabbit_mixed_queue:ack(AckTags, MS8);
             cancel ->
-                {ok, MS6} = rabbit_mixed_queue:tx_cancel(MsgsB, MS5),
+                {ok, MS6} = rabbit_mixed_queue:tx_rollback(MsgsB, MS5),
                 Len0 = rabbit_mixed_queue:len(MS6),
                 {AckTags, MS8} =
                     lists:foldl(

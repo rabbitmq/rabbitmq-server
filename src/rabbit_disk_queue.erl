@@ -40,7 +40,7 @@
 -export([handle_pre_hibernate/1]).
 
 -export([publish/3, fetch/1, phantom_fetch/1, ack/2, tx_publish/1, tx_commit/3,
-         tx_cancel/1, requeue/2, purge/1, delete_queue/1,
+         tx_rollback/1, requeue/2, purge/1, delete_queue/1,
          delete_non_durable_queues/1, requeue_next_n/2, len/1, foldl/3,
          prefetch/1
         ]).
@@ -266,7 +266,7 @@
 -spec(tx_publish/1 :: (message()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [{msg_id(), boolean()}], [ack_tag()]) ->
              'ok').
--spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
+-spec(tx_rollback/1 :: ([msg_id()]) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [{ack_tag(), boolean()}]) -> 'ok').
 -spec(requeue_next_n/2 :: (queue_name(), non_neg_integer()) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
@@ -313,8 +313,8 @@ tx_commit(Q, PubMsgIds, AckSeqIds)
   when is_list(PubMsgIds) andalso is_list(AckSeqIds) ->
     gen_server2:call(?SERVER, {tx_commit, Q, PubMsgIds, AckSeqIds}, infinity).
 
-tx_cancel(MsgIds) when is_list(MsgIds) ->
-    gen_server2:cast(?SERVER, {tx_cancel, MsgIds}).
+tx_rollback(MsgIds) when is_list(MsgIds) ->
+    gen_server2:cast(?SERVER, {tx_rollback, MsgIds}).
 
 requeue(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server2:cast(?SERVER, {requeue, Q, MsgSeqIds}).
@@ -508,8 +508,8 @@ handle_cast({ack, Q, MsgSeqIds}, State) ->
 handle_cast({tx_publish, Message}, State) ->
     {ok, State1} = internal_tx_publish(Message, State),
     noreply(State1);
-handle_cast({tx_cancel, MsgIds}, State) ->
-    {ok, State1} = internal_tx_cancel(MsgIds, State),
+handle_cast({tx_rollback, MsgIds}, State) ->
+    {ok, State1} = internal_tx_rollback(MsgIds, State),
     noreply(State1);
 handle_cast({requeue, Q, MsgSeqIds}, State) ->
     {ok, State1} = internal_requeue(Q, MsgSeqIds, State),
@@ -1090,7 +1090,7 @@ internal_publish(Q, Message = #basic_message { guid = MsgId },
     true = ets:insert(Sequences, {Q, ReadSeqId, WriteSeqId + 1}),
     {ok, {MsgId, WriteSeqId}, State1}.
 
-internal_tx_cancel(MsgIds, State) ->
+internal_tx_rollback(MsgIds, State) ->
     %% we don't need seq ids because we're not touching mnesia,
     %% because seqids were never assigned
     MsgSeqIds = lists:zip(MsgIds, lists:duplicate(length(MsgIds), undefined)),

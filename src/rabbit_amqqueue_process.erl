@@ -122,12 +122,8 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
     QName = qname(State),
-    NewState =
-        lists:foldl(fun (Txn, State1) ->
-                            rollback_transaction(Txn, State1)
-                    end, State, all_tx()),
-    rabbit_mixed_queue:delete_queue(NewState #q.mixed_state),
-    stop_memory_timer(NewState),
+    rabbit_mixed_queue:delete_queue(State #q.mixed_state),
+    stop_memory_timer(State),
     ok = rabbit_amqqueue:internal_delete(QName).
 
 code_change(_OldVsn, State, _Extra) ->
@@ -467,9 +463,6 @@ erase_tx(Txn) ->
 all_tx_record() ->
     [T || {{txn, _}, T} <- get()].
 
-all_tx() ->
-    [Txn || {{txn, Txn}, _} <- get()].
-
 record_pending_message(Txn, ChPid, Message) ->
     Tx = #tx{pending_messages = Pending} = lookup_tx(Txn),
     record_current_channel_tx(ChPid, Txn),
@@ -504,8 +497,8 @@ commit_transaction(Txn, State) ->
 rollback_transaction(Txn, State) ->
     #tx { pending_messages = PendingMessages
         } = lookup_tx(Txn),
-    {ok, MS} = rabbit_mixed_queue:tx_cancel(PendingMessages,
-                                            State #q.mixed_state),
+    {ok, MS} = rabbit_mixed_queue:tx_rollback(PendingMessages,
+                                              State #q.mixed_state),
     erase_tx(Txn),
     State #q { mixed_state = MS }.
 
