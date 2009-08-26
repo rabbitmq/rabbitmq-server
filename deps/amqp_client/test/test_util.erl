@@ -71,6 +71,16 @@ lifecycle_test(Connection) ->
     teardown(Connection, Channel),
     ok.
 
+nowait_exchange_declare_test(Connection) ->
+    X = <<"x">>,
+    Channel = amqp_connection:open_channel(Connection),
+    ?assertEqual(
+      ok,
+      amqp_channel:call(Channel,
+                        #'exchange.declare'{exchange = X,
+                                            type = <<"topic">>,
+                                            nowait = true })).
+
 queue_exchange_binding(Channel, X, Parent, Tag) ->
     receive
         nothing -> ok
@@ -183,6 +193,14 @@ basic_ack_test(Connection) ->
     {#'basic.get_ok'{delivery_tag = Tag}, _} 
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
     amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag}),
+    teardown(Connection, Channel).
+
+basic_ack_call_test(Connection) ->
+    Channel = amqp_connection:open_channel(Connection),
+    {ok, Q} = setup_publish(Channel),
+    {#'basic.get_ok'{delivery_tag = Tag}, _}
+        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
+    amqp_channel:call(Channel, #'basic.ack'{delivery_tag = Tag}),
     teardown(Connection, Channel).
 
 basic_consume_test(Connection) ->
