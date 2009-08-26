@@ -122,8 +122,8 @@ size_of_message(
                                  end, 0, Payload).
 
 ensure_binary_properties(Msg = #basic_message { content = Content }) ->
-    Msg #basic_message
-      { content = rabbit_binary_generator:ensure_content_encoded(Content) }.
+    Msg #basic_message {
+      content = rabbit_binary_generator:ensure_content_encoded(Content) }.
 
 set_storage_mode(Mode, _TxnMessages, State = #mqstate { mode = Mode }) ->
     {ok, State};
