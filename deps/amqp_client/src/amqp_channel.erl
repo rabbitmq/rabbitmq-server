@@ -359,8 +359,13 @@ init([InitialState]) ->
 %% Standard implementation of top half of the call/2 command
 %% Do not accept any further RPCs when the channel is about to close
 %% @private
-handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
-    rpc_top_half(Method, From, State);
+handle_call({call, Method}, From, State = #channel_state{closing = false,
+                                                         writer_pid = Writer,
+                                                         do2 = Do2}) ->
+    case rabbit_framing:is_method_synchronous(Method) of
+        true -> rpc_top_half(Method, From, State);
+        false -> Do2(Writer, Method), {reply, ok, State}
+    end;
 
 %% @private
 handle_call({call, _Method, _Content}, _From,
