@@ -170,12 +170,27 @@ start(normal, []) ->
        {"TCP listeners",
         fun () ->
                 ok = rabbit_networking:start(),
-                {ok, TCPListeners} = application:get_env(tcp_listeners),
+                {ok, TcpListeners} = application:get_env(tcp_listeners),
                 lists:foreach(
                   fun ({Host, Port}) ->
                           ok = rabbit_networking:start_tcp_listener(Host, Port)
                   end,
-                  TCPListeners)
+                  TcpListeners)
+        end},
+       {"SSL listeners",
+        fun () ->
+                case application:get_env(ssl_listeners) of
+                    {ok, []} ->
+                        ok;
+                    {ok, SslListeners} ->
+                        ok = rabbit_misc:start_applications([crypto, ssl]),
+
+                        {ok, SslOpts} = application:get_env(ssl_options),
+
+                        [rabbit_networking:start_ssl_listener
+                         (Host, Port, SslOpts) || {Host, Port} <- SslListeners],
+                        ok
+                end
         end}]
       ++ ExtraSteps),
 
