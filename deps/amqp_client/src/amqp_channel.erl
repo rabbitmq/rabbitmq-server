@@ -206,9 +206,9 @@ rpc_top_half(Method, From, State) ->
 
 rpc_top_half(Method, Content, From, 
              State = #channel_state{writer_pid = Writer,
-									rpc_requests = RequestQueue,
+                                    rpc_requests = RequestQueue,
                                     do2 = Do2,
-									do3 = Do3}) ->
+                                    do3 = Do3}) ->
     % Enqueue the incoming RPC request to serialize RPC dispatching
     NewRequestQueue = queue:in({From, Method}, RequestQueue),
     NewState = State#channel_state{rpc_requests = NewRequestQueue},
@@ -222,12 +222,6 @@ rpc_top_half(Method, Content, From,
             ok
         end,
     {noreply, NewState}.
-
-rpc_bottom_half(#'channel.close'{reply_code = ReplyCode,
-                                 reply_text = ReplyText}, State) ->
-    ?LOG_WARN("Channel received close from peer, code: ~p , message: ~p~n",
-              [ReplyCode,ReplyText]),
-    {stop, normal, State};
 
 rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                                               rpc_requests = RequestQueue,
@@ -320,6 +314,14 @@ handle_method(CancelOk = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
 handle_method(CloseOk = #'channel.close_ok'{}, State) ->
     {noreply, NewState} = rpc_bottom_half(CloseOk, State),
     {stop, normal, NewState};
+
+%% Handles the scenario when the broker intiates a channel.close
+handle_method(#'channel.close'{reply_code = ReplyCode,
+                               reply_text = ReplyText},
+              State = #channel_state{do2 = Do2,
+                                     writer_pid = Writer}) ->
+    Do2(Writer, #'channel.close_ok'{}),
+    {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
 
 %% This handles the flow control flag that the broker initiates.
 %% If defined, it informs the flow control handler to suspend submitting

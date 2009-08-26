@@ -86,6 +86,9 @@ non_existent_exchange_test() ->
 hard_error_test() ->
     negative_test_util:hard_error_test(new_connection()).
 
+bogus_rpc_test() ->
+  negative_test_util:bogus_rpc_test(new_connection()).
+
 %%---------------------------------------------------------------------------
 %% Common Functions
 %%---------------------------------------------------------------------------

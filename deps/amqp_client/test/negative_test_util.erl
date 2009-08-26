@@ -42,6 +42,23 @@ non_existent_exchange_test(Connection) ->
     ?assertMatch(true, is_process_alive(Connection)),
     amqp_connection:close(Connection).
 
+bogus_rpc_test(Connection) ->
+    X = test_util:uuid(),
+    Q = test_util:uuid(),
+    R = test_util:uuid(),
+    Channel = amqp_connection:open_channel(Connection),
+    amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
+    %% Deliberately bind to a non-existent queue
+    Bind = #'queue.bind'{exchange = X, queue = Q, routing_key = R},
+    try amqp_channel:call(Channel, Bind) of
+        _ -> exit(expected_to_exit)
+    catch
+        exit:Why -> ok
+    end,
+    wait_for_death(Channel),
+    ?assertMatch(true, is_process_alive(Connection)),
+    amqp_connection:close(Connection).
+
 hard_error_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
     ?assertExit(_, amqp_channel:call(Channel, #'basic.qos'{global = true})),

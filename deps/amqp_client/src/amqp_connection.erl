@@ -311,6 +311,10 @@ handle_info( {'EXIT', Pid, normal}, State) ->
     {noreply, unregister_channel(Pid, State) };
 
 %% @private
+handle_info( {'EXIT', Pid, {server_initiated_close, _, _}}, State) ->
+    {noreply, unregister_channel(Pid, State) };
+
+%% @private
 %% This is a special case for abruptly closed socket connections
 handle_info( {'EXIT', _Pid, {socket_error, Reason}}, State) ->
     {stop, {socket_error, Reason}, State};
