@@ -47,7 +47,10 @@ $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 $(EBIN_DIR)/gen_server2.beam: $(SOURCE_DIR)/gen_server2.erl
 	erlc $(ERLC_OPTS) $<
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit.hrl $(EBIN_DIR)/gen_server2.beam
+$(EBIN_DIR)/rabbit_queue_backing_store.beam: $(SOURCE_DIR)/rabbit_queue_backing_store.erl
+	erlc $(ERLC_OPTS) $<
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit.hrl $(EBIN_DIR)/gen_server2.beam $(EBIN_DIR)/rabbit_queue_backing_store.beam
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 #	ERLC_EMULATOR="erl -smp" erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 

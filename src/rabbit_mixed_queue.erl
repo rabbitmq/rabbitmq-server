@@ -31,6 +31,8 @@
 
 -module(rabbit_mixed_queue).
 
+-behaviour(rabbit_queue_backing_store).
+
 -include("rabbit.hrl").
 
 -export([init/2]).
