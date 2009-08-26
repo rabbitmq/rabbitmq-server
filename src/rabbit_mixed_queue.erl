@@ -367,11 +367,11 @@ fetch(State = #mqstate { msg_buf = MsgBuf, queue = Q,
             {{Msg, IsDelivered, AckTag1, Rem},
              State1 #mqstate { msg_buf = MsgBuf2 }};
         _ ->
+            %% use State, not State1 as we've not dec'd length
             fetch(case rabbit_queue_prefetcher:drain(Prefetcher) of
                       empty -> State #mqstate { prefetcher = undefined };
                       {Fetched, Len, Status} ->
                           MsgBuf2 = dec_queue_length(MsgBuf, Len),
-                          %% use State, not State1 as we've not dec'd length
                           State #mqstate
                             { msg_buf = queue:join(Fetched, MsgBuf2),
                               prefetcher = case Status of
