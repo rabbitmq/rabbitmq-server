@@ -993,11 +993,11 @@ internal_tx_publish(Message = #basic_message { is_persistent = IsPersistent,
             %% New message, lots to do
             {ok, TotalSize} = append_message(CurHdl, MsgId, msg_to_bin(Message),
                                              IsPersistent),
-            true = dets_ets_insert_new
-                     (State, #message_store_entry
-                      { msg_id = MsgId, ref_count = 1, file = CurName,
-                        offset = CurOffset, total_size = TotalSize,
-                        is_persistent = IsPersistent }),
+            true = dets_ets_insert_new(
+                     State, #message_store_entry
+                     { msg_id = MsgId, ref_count = 1, file = CurName,
+                       offset = CurOffset, total_size = TotalSize,
+                       is_persistent = IsPersistent }),
             [{CurName, ValidTotalSize, ContiguousTop, Left, undefined}] =
                 ets:lookup(FileSummary, CurName),
             ValidTotalSize1 = ValidTotalSize + TotalSize +
@@ -1414,9 +1414,9 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                   %% Offset, BlockStart and BlockEnd are in the SourceFile
                   Size = TotalSize + ?FILE_PACKING_ADJUSTMENT,
                   %% update MsgLocationDets to reflect change of file and offset
-                  ok = dets_ets_insert (State, StoreEntry #message_store_entry
-                                        { file = Destination,
-                                          offset = CurOffset }),
+                  ok = dets_ets_insert(State, StoreEntry #message_store_entry
+                                       { file = Destination,
+                                         offset = CurOffset }),
                   NextOffset = CurOffset + Size,
                   if BlockStart =:= undefined ->
                           %% base case, called only for the first list elem
@@ -1653,12 +1653,12 @@ load_messages(Left, [File|Files],
                              msg_id)) of
                     0 -> {VMAcc, VTSAcc};
                     RefCount ->
-                        true = dets_ets_insert_new
-                                 (State, #message_store_entry
-                                  { msg_id = MsgId, ref_count = RefCount,
-                                    file = File, offset = Offset,
-                                    total_size = TotalSize,
-                                    is_persistent = IsPersistent }),
+                        true = dets_ets_insert_new(
+                                 State, #message_store_entry
+                                 { msg_id = MsgId, ref_count = RefCount,
+                                   file = File, offset = Offset,
+                                   total_size = TotalSize,
+                                   is_persistent = IsPersistent }),
                         {[Obj | VMAcc],
                          VTSAcc + TotalSize + ?FILE_PACKING_ADJUSTMENT
                         }
@@ -1686,10 +1686,10 @@ recover_crashed_compactions(Files, TmpFiles) ->
 verify_messages_in_mnesia(MsgIds) ->
     lists:foreach(
       fun (MsgId) ->
-              true = 0 < length(mnesia:dirty_index_match_object
-                                (rabbit_disk_queue,
-                                 #dq_msg_loc { msg_id = MsgId, _ = '_' },
-                                 msg_id))
+              true = 0 < length(mnesia:dirty_index_match_object(
+                                  rabbit_disk_queue,
+                                  #dq_msg_loc { msg_id = MsgId, _ = '_' },
+                                  msg_id))
       end, MsgIds).
 
 grab_msg_id({MsgId, _IsPersistent, _TotalSize, _FileOffset}) ->
