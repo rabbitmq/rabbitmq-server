@@ -1190,9 +1190,7 @@ internal_delete_queue(Q, State) ->
     %% now remove everything already delivered
     Objs = mnesia:dirty_match_object(
              rabbit_disk_queue,
-             #dq_msg_loc { queue_and_seq_id = {Q, '_'},
-                           _ = '_'
-                         }),
+             #dq_msg_loc { queue_and_seq_id = {Q, '_'}, _ = '_' }),
     MsgSeqIds =
         lists:map(
           fun (#dq_msg_loc { queue_and_seq_id = {_Q, SeqId},
@@ -1651,9 +1649,7 @@ load_messages(Left, [File|Files],
         fun (Obj = {MsgId, IsPersistent, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
                 case length(mnesia:dirty_index_match_object
                             (rabbit_disk_queue,
-                             #dq_msg_loc { msg_id = MsgId,
-                                           _ = '_'
-                                         },
+                             #dq_msg_loc { msg_id = MsgId, _ = '_' },
                              msg_id)) of
                     0 -> {VMAcc, VTSAcc};
                     RefCount ->
@@ -1692,9 +1688,7 @@ verify_messages_in_mnesia(MsgIds) ->
       fun (MsgId) ->
               true = 0 < length(mnesia:dirty_index_match_object
                                 (rabbit_disk_queue,
-                                 #dq_msg_loc { msg_id = MsgId,
-                                               _ = '_'
-                                             },
+                                 #dq_msg_loc { msg_id = MsgId, _ = '_' },
                                  msg_id))
       end, MsgIds).
 
