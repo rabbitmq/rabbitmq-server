@@ -222,7 +222,7 @@ rpc_top_half(Method, Content, From,
 
 rpc_bottom_half(#'channel.close'{reply_code = ReplyCode,
                                  reply_text = ReplyText}, State) ->
-    io:format("Channel received close from peer, code: ~p , message: ~p~n",
+    ?LOG_WARN("Channel received close from peer, code: ~p , message: ~p~n",
               [ReplyCode,ReplyText]),
     {stop, normal, State};
 
@@ -433,7 +433,7 @@ handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer,
 handle_cast({cast, Method, _Content},
             State = #channel_state{flow_control = true}) ->
     % Discard the message and log it
-    io:format("Discarding content bearing method (~p) ~n", [Method]),
+    ?LOG_INFO("Discarding content bearing method (~p) ~n", [Method]),
     {noreply, State};
 
 %% Do not accept any further messages for writer when the channel is about to
@@ -521,7 +521,7 @@ handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
 %% @private
 handle_info({'EXIT', _Pid, Reason},
             State = #channel_state{number = Number}) ->
-    io:format("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
+    ?LOG_WARN("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
     {stop, normal, State};
 
 %% This is for a channel exception that can't be otherwise handled

@@ -181,7 +181,7 @@ basic_return_test(Connection) ->
             ?assertMatch(Payload, Payload2);
         WhatsThis ->
             %% TODO investigate where this comes from
-            io:format("Spurious message ~p~n", [WhatsThis])
+            ?LOG_INFO("Spurious message ~p~n", [WhatsThis])
     after 2000 ->
         exit(no_return_received)
     end,
@@ -450,7 +450,7 @@ channel_flow_test(Connection) ->
     receive
         ok -> ok
     after 10000 ->
-        io:format("Are you sure that you have waited 1 minute?~n"),
+        ?LOG_DEBUG("Are you sure that you have waited 1 minute?~n"),
         exit(did_not_receive_channel_flow)
     end.
 
@@ -508,7 +508,7 @@ cf_consumer_loop(Channel, Tag) ->
 
 cf_producer_loop(Channel, X, Key, PublishFun, Payload, N)
         when N rem 5000 =:= 0 ->
-    io:format("Producer (~p) has sent about ~p messages since it started~n",
+    ?LOG_INFO("Producer (~p) has sent about ~p messages since it started~n",
               [self(), N]),
     cf_producer_loop(Channel, X, Key, PublishFun, Payload, N + 1);
 
@@ -516,11 +516,11 @@ cf_producer_loop(Channel, X, Key, PublishFun, Payload, N) ->
     Publish = #'basic.publish'{exchange = X, routing_key = Key},
     case PublishFun(Channel, Publish, #amqp_msg{payload = Payload}) of
         blocked ->
-            io:format("Producer (~p) is blocked, will go to sleep.....ZZZ~n",
+            ?LOG_INFO("Producer (~p) is blocked, will go to sleep.....ZZZ~n",
                       [self()]),
             receive
                 resume ->
-                    io:format("Producer (~p) has woken up :-)~n", [self()]),
+                    ?LOG_INFO("Producer (~p) has woken up :-)~n", [self()]),
                     cf_producer_loop(Channel, X, Key,
                                      PublishFun, Payload, N + 1)
             end;
@@ -531,10 +531,10 @@ cf_producer_loop(Channel, X, Key, PublishFun, Payload, N) ->
 cf_handler_loop(Producer) ->
     receive
         #'channel.flow'{active = false} ->
-            io:format("Producer throttling ON~n"),
+            ?LOG_DEBUG("Producer throttling ON~n"),
             cf_handler_loop(Producer);
         #'channel.flow'{active = true} ->
-            io:format("Producer throttling OFF, waking up producer (~p)~n",
+            ?LOG_INFO("Producer throttling OFF, waking up producer (~p)~n",
                       [Producer]),
             Producer ! resume,
             cf_handler_loop(Producer);
