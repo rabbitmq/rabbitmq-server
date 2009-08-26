@@ -35,7 +35,8 @@
                       password     = <<"guest">>,
                       virtual_host = <<"/">>,
                       host         = "localhost",
-                      port         = ?PROTOCOL_PORT}).
+                      port         = ?PROTOCOL_PORT,
+                      ssl_options  = undefined}).
 
 -record(connection_state, {username,
                            password,
@@ -48,7 +49,8 @@
                            heartbeat,
                            driver,
                            port,
-                           channels = dict:new() }).
+                           channels = dict:new(),
+                           ssl_options}).
 
 -record(channel_state, {number,
                         parent_connection,
@@ -75,3 +77,6 @@
 -record(rpc_server_state, {channel,
                            handler}).
 
+-define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
+-define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).
+-define(LOG_WARN(Format, Args), error_logger:warning_msg(Format, Args)).

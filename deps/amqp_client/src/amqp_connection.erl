@@ -106,19 +106,20 @@ start_network_internal(#amqp_params{username     = User,
                                     password     = Password,
                                     virtual_host = VHost,
                                     host         = Host,
-                                    port         = Port},
+                                    port         = Port,
+                                    ssl_options  = SSLOpts},
                        ProcLink) ->
-    InitialState = #connection_state{username   = User,
-                                     password   = Password,
-                                     serverhost = Host,
-                                     vhostpath  = VHost,
-                                     port       = Port},
+    InitialState = #connection_state{username    = User,
+                                     password    = Password,
+                                     serverhost  = Host,
+                                     vhostpath   = VHost,
+                                     port        = Port,
+                                     ssl_options = SSLOpts},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
 
 start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
     gen_server:start_link(?MODULE, [InitialState, Driver], []);
-
 start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
     gen_server:start(?MODULE, [InitialState, Driver], []).
 
@@ -290,7 +291,7 @@ handle_cast({method, #'connection.close'{reply_code = Code,
 %%---------------------------------------------------------------------------
 %% @private
 handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
-    io:format("Channel Peer ~p sent this message: ~p -> ~p~n",
+    ?LOG_WARN("Channel Peer ~p sent this message: ~p -> ~p~n",
               [Pid, Msg, Context]),
     {_, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
     {stop, {server_initiated_close, {Code, Text}}, State};
@@ -320,7 +321,7 @@ handle_info( {'EXIT', _Pid, Reason = connection_timeout}, State) ->
 
 %% @private
 handle_info( {'EXIT', Pid, Reason}, State) ->
-    io:format("Connection: Handling exit from ~p --> ~p~n", [Pid, Reason]),
+    ?LOG_WARN("Connection: Handling exit from ~p --> ~p~n", [Pid, Reason]),
     {noreply, unregister_channel(Pid, State) }.
 
 %%---------------------------------------------------------------------------
