@@ -40,7 +40,7 @@
 -export([handle_pre_hibernate/1]).
 
 -export([publish/3, fetch/1, phantom_fetch/1, ack/2, tx_publish/1, tx_commit/3,
-         tx_cancel/1, requeue/2, purge/1, delete_queue/1,
+         tx_rollback/1, requeue/2, purge/1, delete_queue/1,
          delete_non_durable_queues/1, requeue_next_n/2, len/1, foldl/3,
          prefetch/1
         ]).
@@ -266,7 +266,7 @@
 -spec(tx_publish/1 :: (message()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [{msg_id(), boolean()}], [ack_tag()]) ->
              'ok').
--spec(tx_cancel/1 :: ([msg_id()]) -> 'ok').
+-spec(tx_rollback/1 :: ([msg_id()]) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [{ack_tag(), boolean()}]) -> 'ok').
 -spec(requeue_next_n/2 :: (queue_name(), non_neg_integer()) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
@@ -313,8 +313,8 @@ tx_commit(Q, PubMsgIds, AckSeqIds)
   when is_list(PubMsgIds) andalso is_list(AckSeqIds) ->
     gen_server2:call(?SERVER, {tx_commit, Q, PubMsgIds, AckSeqIds}, infinity).
 
-tx_cancel(MsgIds) when is_list(MsgIds) ->
-    gen_server2:cast(?SERVER, {tx_cancel, MsgIds}).
+tx_rollback(MsgIds) when is_list(MsgIds) ->
+    gen_server2:cast(?SERVER, {tx_rollback, MsgIds}).
 
 requeue(Q, MsgSeqIds) when is_list(MsgSeqIds) ->
     gen_server2:cast(?SERVER, {requeue, Q, MsgSeqIds}).
@@ -417,7 +417,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                    file_size_limit         = FileSizeLimit,
                    read_file_hc_cache      = rabbit_file_handle_cache:init(
                                                ReadFileHandlesLimit,
-                                               [read, raw, binary, read_ahead]),
+                                               [read, raw, binary]),
                    on_sync_txns           = [],
                    commit_timer_ref        = undefined,
                    last_sync_offset        = 0,
@@ -508,8 +508,8 @@ handle_cast({ack, Q, MsgSeqIds}, State) ->
 handle_cast({tx_publish, Message}, State) ->
     {ok, State1} = internal_tx_publish(Message, State),
     noreply(State1);
-handle_cast({tx_cancel, MsgIds}, State) ->
-    {ok, State1} = internal_tx_cancel(MsgIds, State),
+handle_cast({tx_rollback, MsgIds}, State) ->
+    {ok, State1} = internal_tx_rollback(MsgIds, State),
     noreply(State1);
 handle_cast({requeue, Q, MsgSeqIds}, State) ->
     {ok, State1} = internal_requeue(Q, MsgSeqIds, State),
@@ -885,8 +885,15 @@ read_stored_message(#message_store_entry { msg_id = MsgId, ref_count = RefCount,
                 with_read_handle_at(
                   File, Offset,
                   fun(Hdl) ->
-                          {ok, _} = Res =
-                              read_message_from_disk(Hdl, TotalSize),
+                          Res = case read_message_from_disk(Hdl, TotalSize) of
+                                    {ok, {_, _, _}} = Obj -> Obj;
+                                    {ok, Rest} ->
+                                        throw({error,
+                                               {misread, [{old_state, State},
+                                                          {file, File},
+                                                          {offset, Offset},
+                                                          {read, Rest}]}})
+                                end,
                           {Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT, Res}
                   end, State),
             Message = #basic_message {} = bin_to_msg(MsgBody),
@@ -993,11 +1000,11 @@ internal_tx_publish(Message = #basic_message { is_persistent = IsPersistent,
             %% New message, lots to do
             {ok, TotalSize} = append_message(CurHdl, MsgId, msg_to_bin(Message),
                                              IsPersistent),
-            true = dets_ets_insert_new
-                     (State, #message_store_entry
-                      { msg_id = MsgId, ref_count = 1, file = CurName,
-                        offset = CurOffset, total_size = TotalSize,
-                        is_persistent = IsPersistent }),
+            true = dets_ets_insert_new(
+                     State, #message_store_entry
+                     { msg_id = MsgId, ref_count = 1, file = CurName,
+                       offset = CurOffset, total_size = TotalSize,
+                       is_persistent = IsPersistent }),
             [{CurName, ValidTotalSize, ContiguousTop, Left, undefined}] =
                 ets:lookup(FileSummary, CurName),
             ValidTotalSize1 = ValidTotalSize + TotalSize +
@@ -1083,7 +1090,7 @@ internal_publish(Q, Message = #basic_message { guid = MsgId },
     true = ets:insert(Sequences, {Q, ReadSeqId, WriteSeqId + 1}),
     {ok, {MsgId, WriteSeqId}, State1}.
 
-internal_tx_cancel(MsgIds, State) ->
+internal_tx_rollback(MsgIds, State) ->
     %% we don't need seq ids because we're not touching mnesia,
     %% because seqids were never assigned
     MsgSeqIds = lists:zip(MsgIds, lists:duplicate(length(MsgIds), undefined)),
@@ -1190,9 +1197,7 @@ internal_delete_queue(Q, State) ->
     %% now remove everything already delivered
     Objs = mnesia:dirty_match_object(
              rabbit_disk_queue,
-             #dq_msg_loc { queue_and_seq_id = {Q, '_'},
-                           _ = '_'
-                         }),
+             #dq_msg_loc { queue_and_seq_id = {Q, '_'}, _ = '_' }),
     MsgSeqIds =
         lists:map(
           fun (#dq_msg_loc { queue_and_seq_id = {_Q, SeqId},
@@ -1416,9 +1421,9 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                   %% Offset, BlockStart and BlockEnd are in the SourceFile
                   Size = TotalSize + ?FILE_PACKING_ADJUSTMENT,
                   %% update MsgLocationDets to reflect change of file and offset
-                  ok = dets_ets_insert (State, StoreEntry #message_store_entry
-                                        { file = Destination,
-                                          offset = CurOffset }),
+                  ok = dets_ets_insert(State, StoreEntry #message_store_entry
+                                       { file = Destination,
+                                         offset = CurOffset }),
                   NextOffset = CurOffset + Size,
                   if BlockStart =:= undefined ->
                           %% base case, called only for the first list elem
@@ -1651,18 +1656,16 @@ load_messages(Left, [File|Files],
         fun (Obj = {MsgId, IsPersistent, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
                 case length(mnesia:dirty_index_match_object
                             (rabbit_disk_queue,
-                             #dq_msg_loc { msg_id = MsgId,
-                                           _ = '_'
-                                         },
+                             #dq_msg_loc { msg_id = MsgId, _ = '_' },
                              msg_id)) of
                     0 -> {VMAcc, VTSAcc};
                     RefCount ->
-                        true = dets_ets_insert_new
-                                 (State, #message_store_entry
-                                  { msg_id = MsgId, ref_count = RefCount,
-                                    file = File, offset = Offset,
-                                    total_size = TotalSize,
-                                    is_persistent = IsPersistent }),
+                        true = dets_ets_insert_new(
+                                 State, #message_store_entry
+                                 { msg_id = MsgId, ref_count = RefCount,
+                                   file = File, offset = Offset,
+                                   total_size = TotalSize,
+                                   is_persistent = IsPersistent }),
                         {[Obj | VMAcc],
                          VTSAcc + TotalSize + ?FILE_PACKING_ADJUSTMENT
                         }
@@ -1690,12 +1693,10 @@ recover_crashed_compactions(Files, TmpFiles) ->
 verify_messages_in_mnesia(MsgIds) ->
     lists:foreach(
       fun (MsgId) ->
-              true = 0 < length(mnesia:dirty_index_match_object
-                                (rabbit_disk_queue,
-                                 #dq_msg_loc { msg_id = MsgId,
-                                               _ = '_'
-                                             },
-                                 msg_id))
+              true = 0 < length(mnesia:dirty_index_match_object(
+                                  rabbit_disk_queue,
+                                  #dq_msg_loc { msg_id = MsgId, _ = '_' },
+                                  msg_id))
       end, MsgIds).
 
 grab_msg_id({MsgId, _IsPersistent, _TotalSize, _FileOffset}) ->

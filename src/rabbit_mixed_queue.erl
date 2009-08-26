@@ -36,8 +36,8 @@
 -export([init/2]).
 
 -export([publish/2, publish_delivered/2, fetch/1, ack/2,
-         tx_publish/2, tx_commit/3, tx_cancel/2, requeue/2, purge/1,
-         length/1, is_empty/1, delete_queue/1, maybe_prefetch/1]).
+         tx_publish/2, tx_commit/3, tx_rollback/2, requeue/2, purge/1,
+         len/1, is_empty/1, delete_queue/1, maybe_prefetch/1]).
 
 -export([set_storage_mode/3, storage_mode/1,
          estimate_queue_memory_and_reset_counters/1]).
@@ -69,7 +69,7 @@
                               memory_loss :: (non_neg_integer() | 'undefined'),
                               prefetcher :: (pid() | 'undefined')
                             }).
--type(acktag() :: ( 'noack' | { non_neg_integer(), non_neg_integer() })).
+-type(acktag() :: ( 'no_on_disk' | { non_neg_integer(), non_neg_integer() })).
 -type(okmqs() :: {'ok', mqstate()}).
 
 -spec(init/2 :: (queue_name(), boolean()) -> okmqs()).
@@ -82,13 +82,13 @@
 -spec(ack/2 :: ([{message(), acktag()}], mqstate()) -> okmqs()).
 -spec(tx_publish/2 :: (message(), mqstate()) -> okmqs()).
 -spec(tx_commit/3 :: ([message()], [acktag()], mqstate()) -> okmqs()).
--spec(tx_cancel/2 :: ([message()], mqstate()) -> okmqs()).
+-spec(tx_rollback/2 :: ([message()], mqstate()) -> okmqs()).
 -spec(requeue/2 :: ([{message(), acktag()}], mqstate()) -> okmqs()).
 -spec(purge/1 :: (mqstate()) -> okmqs()).
              
 -spec(delete_queue/1 :: (mqstate()) -> {'ok', mqstate()}).
              
--spec(length/1 :: (mqstate()) -> non_neg_integer()).
+-spec(len/1 :: (mqstate()) -> non_neg_integer()).
 -spec(is_empty/1 :: (mqstate()) -> boolean()).
 
 -spec(set_storage_mode/3 :: (mode(), [message()], mqstate()) -> okmqs()).
@@ -102,7 +102,7 @@
 
 init(Queue, IsDurable) ->
     Len = rabbit_disk_queue:len(Queue),
-    MsgBuf = inc_queue_length(Queue, queue:new(), Len),
+    MsgBuf = inc_queue_length(queue:new(), Len),
     Size = rabbit_disk_queue:foldl(
              fun (Msg = #basic_message { is_persistent = true },
                   _AckTag, _IsDelivered, Acc) ->
@@ -114,10 +114,16 @@ init(Queue, IsDurable) ->
                     memory_loss = undefined, prefetcher = undefined }}.
 
 size_of_message(
-  #basic_message { content = #content { payload_fragments_rev = Payload }}) ->
-    lists:foldl(fun (Frag, SumAcc) ->
-                        SumAcc + size(Frag)
-                end, 0, Payload).
+  #basic_message { content = #content { payload_fragments_rev = Payload,
+                                        properties_bin = PropsBin }})
+  when is_binary(PropsBin) ->
+    size(PropsBin) + lists:foldl(fun (Frag, SumAcc) ->
+                                         SumAcc + size(Frag)
+                                 end, 0, Payload).
+
+ensure_binary_properties(Msg = #basic_message { content = Content }) ->
+    Msg #basic_message { content = rabbit_binary_generator:
+                         ensure_content_encoded(Content) }.
 
 set_storage_mode(Mode, _TxnMessages, State = #mqstate { mode = Mode }) ->
     {ok, State};
@@ -125,16 +131,15 @@ set_storage_mode(disk, TxnMessages, State =
          #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf,
                     is_durable = IsDurable, prefetcher = Prefetcher }) ->
     State1 = State #mqstate { mode = disk },
-    {MsgBuf1, State2} =
+    MsgBuf1 =
         case Prefetcher of
-            undefined -> {MsgBuf, State1};
+            undefined -> MsgBuf;
             _ ->
                 case rabbit_queue_prefetcher:drain_and_stop(Prefetcher) of
-                    empty -> {MsgBuf, State1};
+                    empty -> MsgBuf;
                     {Fetched, Len} ->
-                        State3 = #mqstate { msg_buf = MsgBuf2 } =
-                            dec_queue_length(Len, State1),
-                        {queue:join(Fetched, MsgBuf2), State3}
+                        MsgBuf2 = dec_queue_length(MsgBuf, Len),
+                        queue:join(Fetched, MsgBuf2)
                 end
         end,
     %% We enqueue _everything_ here. This means that should a message
@@ -157,7 +162,7 @@ set_storage_mode(disk, TxnMessages, State =
                    end
       end, TxnMessages),
     garbage_collect(),
-    {ok, State2 #mqstate { msg_buf = MsgBuf3, prefetcher = undefined }};
+    {ok, State1 #mqstate { msg_buf = MsgBuf3, prefetcher = undefined }};
 set_storage_mode(mixed, TxnMessages, State =
                  #mqstate { mode = disk, is_durable = IsDurable }) ->
     %% The queue has a token just saying how many msgs are on disk
@@ -168,7 +173,7 @@ set_storage_mode(mixed, TxnMessages, State =
     
     %% Remove txn messages from disk which are neither persistent and
     %% durable. This is necessary to avoid leaks. This is also pretty
-    %% much the inverse behaviour of our own tx_cancel/2 which is why
+    %% much the inverse behaviour of our own tx_rollback/2 which is why
     %% we're not using it.
     Cancel =
         lists:foldl(
@@ -179,7 +184,7 @@ set_storage_mode(mixed, TxnMessages, State =
                   end
           end, [], TxnMessages),
     ok = if Cancel == [] -> ok;
-            true -> rabbit_disk_queue:tx_cancel(Cancel)
+            true -> rabbit_disk_queue:tx_rollback(Cancel)
          end,
     garbage_collect(),
     {ok, State #mqstate { mode = mixed }}.
@@ -197,7 +202,7 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
                 true -> %% it's already in the Q
                     send_messages_to_disk(
                       IsDurable, Q, Queue1, PublishCount, RequeueCount + 1,
-                      Commit, Ack, inc_queue_length(Q, MsgBuf, 1));
+                      Commit, Ack, inc_queue_length(MsgBuf, 1));
                 false ->
                     republish_message_to_disk_queue(
                       IsDurable, Q, Queue1, PublishCount, RequeueCount, Commit,
@@ -209,10 +214,10 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
             republish_message_to_disk_queue(
               IsDurable, Q, Queue1, PublishCount, RequeueCount, Commit,
               [AckTag | Ack], MsgBuf, Msg, IsDelivered);
-        {{value, {Q, Count}}, Queue1} ->
+        {{value, {on_disk, Count}}, Queue1} ->
             send_messages_to_disk(IsDurable, Q, Queue1, PublishCount,
                                   RequeueCount + Count, Commit, Ack,
-                                  inc_queue_length(Q, MsgBuf, Count))
+                                  inc_queue_length(MsgBuf, Count))
     end.
 
 republish_message_to_disk_queue(IsDurable, Q, Queue, PublishCount, RequeueCount,
@@ -228,7 +233,7 @@ republish_message_to_disk_queue(IsDurable, Q, Queue, PublishCount, RequeueCount,
             false -> {PublishCount + 1, [{MsgId, IsDelivered} | Commit1], Ack1}
         end,
     send_messages_to_disk(IsDurable, Q, Queue, PublishCount1, 0,
-                          Commit2, Ack2, inc_queue_length(Q, MsgBuf, 1)).
+                          Commit2, Ack2, inc_queue_length(MsgBuf, 1)).
 
 flush_messages_to_disk_queue(_Q, [], []) ->
     ok;
@@ -253,28 +258,27 @@ lose_memory(Dec, State = #mqstate { memory_size = QSize,
     State #mqstate { memory_size = QSize - Dec,
                      memory_loss = Loss + Dec }.
 
-inc_queue_length(_Q, MsgBuf, 0) ->
+inc_queue_length(MsgBuf, 0) ->
     MsgBuf;
-inc_queue_length(Q, MsgBuf, Count) ->
+inc_queue_length(MsgBuf, Count) ->
     {NewCount, MsgBufTail} =
         case queue:out_r(MsgBuf) of
-            {empty, MsgBuf1}             -> {Count, MsgBuf1};
-            {{value, {Q, Len}}, MsgBuf1} -> {Len + Count, MsgBuf1};
-            {{value, _}, _MsgBuf1}       -> {Count, MsgBuf}
+            {empty, MsgBuf1}                   -> {Count, MsgBuf1};
+            {{value, {on_disk, Len}}, MsgBuf1} -> {Len + Count, MsgBuf1};
+            {{value, _}, _MsgBuf1}             -> {Count, MsgBuf}
         end,
-    queue:in({Q, NewCount}, MsgBufTail).
+    queue:in({on_disk, NewCount}, MsgBufTail).
 
-dec_queue_length(Count, State = #mqstate { queue = Q, msg_buf = MsgBuf }) ->
+dec_queue_length(MsgBuf, Count) ->
     case queue:out(MsgBuf) of
-        {{value, {Q, Len}}, MsgBuf1} ->
+        {{value, {on_disk, Len}}, MsgBuf1} ->
             case Len of
                 Count ->
-                    State #mqstate { msg_buf = MsgBuf1 };
+                    MsgBuf1;
                 _ when Len > Count ->
-                    State #mqstate { msg_buf = queue:in_r({Q, Len-Count},
-                                                          MsgBuf1)}
+                    queue:in_r({on_disk, Len-Count}, MsgBuf1)
             end;
-        _ -> State
+        _ -> MsgBuf
     end.
 
 maybe_prefetch(State = #mqstate { prefetcher = undefined,
@@ -282,30 +286,36 @@ maybe_prefetch(State = #mqstate { prefetcher = undefined,
                                   msg_buf = MsgBuf,
                                   queue = Q }) ->
     case queue:peek(MsgBuf) of
-        {value, {Q, Count}} -> {ok, Prefetcher} =
-                                   rabbit_queue_prefetcher:start_link(Q, Count),
-                               State #mqstate { prefetcher = Prefetcher };
+        {value, {on_disk, Count}} ->
+            %% only prefetch for the next contiguous block on
+            %% disk. Beyond there, we either hit the end of the queue,
+            %% or the next msg is already in RAM, held by us, the
+            %% mixed queue
+            {ok, Prefetcher} = rabbit_queue_prefetcher:start_link(Q, Count),
+            State #mqstate { prefetcher = Prefetcher };
         _ -> State
     end;
 maybe_prefetch(State) ->
     State.
 
-publish(Msg, State = #mqstate { mode = disk, queue = Q, length = Length,
-                                msg_buf = MsgBuf }) ->
-    MsgBuf1 = inc_queue_length(Q, MsgBuf, 1),
-    ok = rabbit_disk_queue:publish(Q, Msg, false),
-    {ok, gain_memory(size_of_message(Msg),
-                     State #mqstate { msg_buf = MsgBuf1,
-                                      length = Length + 1 })};
+on_disk(disk, _IsDurable, _IsPersistent)  -> true;
+on_disk(mixed, true, true)                -> true;
+on_disk(mixed, _IsDurable, _IsPersistent) -> false.
+
 publish(Msg = #basic_message { is_persistent = IsPersistent }, State = 
-        #mqstate { queue = Q, mode = mixed, is_durable = IsDurable,
+        #mqstate { queue = Q, mode = Mode, is_durable = IsDurable,
                    msg_buf = MsgBuf, length = Length }) ->
-    ok = case IsDurable andalso IsPersistent of
-             true -> rabbit_disk_queue:publish(Q, Msg, false);
+    Msg1 = ensure_binary_properties(Msg),
+    ok = case on_disk(Mode, IsDurable, IsPersistent) of
+             true  -> rabbit_disk_queue:publish(Q, Msg1, false);
              false -> ok
          end,
-    {ok, gain_memory(size_of_message(Msg),
-                     State #mqstate { msg_buf = queue:in({Msg, false}, MsgBuf),
+    MsgBuf1 = case Mode of
+                  disk  -> inc_queue_length(MsgBuf, 1);
+                  mixed -> queue:in({Msg1, false}, MsgBuf)
+              end,
+    {ok, gain_memory(size_of_message(Msg1),
+                     State #mqstate { msg_buf = MsgBuf1,
                                       length = Length + 1 })}.
 
 %% Assumption here is that the queue is empty already (only called via
@@ -315,15 +325,17 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
                   State = #mqstate { is_durable = IsDurable, queue = Q,
                                      length = 0 })
   when IsDurable andalso IsPersistent ->
-    ok = rabbit_disk_queue:publish(Q, Msg, true),
-    State1 = gain_memory(size_of_message(Msg), State),
+    Msg1 = ensure_binary_properties(Msg),
+    ok = rabbit_disk_queue:publish(Q, Msg1, true),
+    State1 = gain_memory(size_of_message(Msg1), State),
     %% must call phantom_fetch otherwise the msg remains at the head
     %% of the queue. This is synchronous, but unavoidable as we need
     %% the AckTag
     {MsgId, IsPersistent, true, AckTag, 0} = rabbit_disk_queue:phantom_fetch(Q),
     {ok, AckTag, State1};
 publish_delivered(Msg, State = #mqstate { length = 0 }) ->
-    {ok, noack, gain_memory(size_of_message(Msg), State)}.
+    Msg1 = ensure_binary_properties(Msg),
+    {ok, not_on_disk, gain_memory(size_of_message(Msg1), State)}.
 
 fetch(State = #mqstate { length = 0 }) ->
     {empty, State};
@@ -343,56 +355,59 @@ fetch(State = #mqstate { msg_buf = MsgBuf, queue = Q,
                             = rabbit_disk_queue:phantom_fetch(Q),
                         AckTag1;
                     false ->
-                        noack
+                        not_on_disk
                 end,
             {{Msg, IsDelivered, AckTag, Rem},
              State1 #mqstate { msg_buf = MsgBuf1 }};
         {Msg = #basic_message { is_persistent = IsPersistent },
          IsDelivered, AckTag} ->
             %% message has come via the prefetcher, thus it's been
-            %% delivered. If it's not persistent+durable, we should
-            %% ack it now
+            %% marked delivered. If it's not persistent+durable, we
+            %% should ack it now
             AckTag1 = maybe_ack(Q, IsDurable, IsPersistent, AckTag),
             {{Msg, IsDelivered, AckTag1, Rem},
              State1 #mqstate { msg_buf = MsgBuf1 }};
         _ when Prefetcher == undefined ->
-            State2 = dec_queue_length(1, State1),
+            MsgBuf2 = dec_queue_length(MsgBuf, 1),
             {Msg = #basic_message { is_persistent = IsPersistent },
              IsDelivered, AckTag, _PersistRem}
                 = rabbit_disk_queue:fetch(Q),
             AckTag1 = maybe_ack(Q, IsDurable, IsPersistent, AckTag),
-            {{Msg, IsDelivered, AckTag1, Rem}, State2};
+            {{Msg, IsDelivered, AckTag1, Rem},
+             State1 #mqstate { msg_buf = MsgBuf2 }};
         _ ->
-            case rabbit_queue_prefetcher:drain(Prefetcher) of
-                empty -> fetch(State #mqstate { prefetcher = undefined });
-                {Fetched, Len, Status} ->
-                    State2 = #mqstate { msg_buf = MsgBuf2 } =
-                        dec_queue_length(Len, State),
-                    fetch(State2 #mqstate
-                          { msg_buf = queue:join(Fetched, MsgBuf2),
-                            prefetcher = case Status of
-                                             finished -> undefined;
-                                             continuing -> Prefetcher
-                                         end })
-            end
+            %% use State, not State1 as we've not dec'd length
+            fetch(case rabbit_queue_prefetcher:drain(Prefetcher) of
+                      empty -> State #mqstate { prefetcher = undefined };
+                      {Fetched, Len, Status} ->
+                          MsgBuf2 = dec_queue_length(MsgBuf, Len),
+                          State #mqstate
+                            { msg_buf = queue:join(Fetched, MsgBuf2),
+                              prefetcher = case Status of
+                                               finished -> undefined;
+                                               continuing -> Prefetcher
+                                           end }
+                  end)
     end.
 
 maybe_ack(_Q, true, true, AckTag) ->
     AckTag;
 maybe_ack(Q, _, _, AckTag) ->
     ok = rabbit_disk_queue:ack(Q, [AckTag]),
-    noack.
+    not_on_disk.
 
-remove_noacks(MsgsWithAcks) ->
+remove_diskless(MsgsWithAcks) ->
     lists:foldl(
-      fun ({Msg, noack}, {AccAckTags, AccSize}) ->
-              {AccAckTags, size_of_message(Msg) + AccSize};
-          ({Msg, AckTag}, {AccAckTags, AccSize}) ->
-              {[AckTag | AccAckTags], size_of_message(Msg) + AccSize}
+      fun ({Msg, AckTag}, {AccAckTags, AccSize}) ->
+              Msg1 = ensure_binary_properties(Msg),
+              {case AckTag of
+                   not_on_disk -> AccAckTags;
+                   _ -> [AckTag | AccAckTags]
+               end, size_of_message(Msg1) + AccSize}
       end, {[], 0}, MsgsWithAcks).
 
 ack(MsgsWithAcks, State = #mqstate { queue = Q }) ->
-    {AckTags, ASize} = remove_noacks(MsgsWithAcks),
+    {AckTags, ASize} = remove_diskless(MsgsWithAcks),
     ok = case AckTags of
              [] -> ok;
              _ -> rabbit_disk_queue:ack(Q, AckTags)
@@ -400,157 +415,122 @@ ack(MsgsWithAcks, State = #mqstate { queue = Q }) ->
     {ok, lose_memory(ASize, State)}.
                                                    
 tx_publish(Msg = #basic_message { is_persistent = IsPersistent },
-           State = #mqstate { mode = Mode, is_durable = IsDurable })
-  when Mode =:= disk orelse (IsDurable andalso IsPersistent) ->
-    ok = rabbit_disk_queue:tx_publish(Msg),
-    MsgSize = size_of_message(Msg),
-    {ok, gain_memory(MsgSize, State)};
-tx_publish(Msg, State = #mqstate { mode = mixed }) ->
-    %% this message will reappear in the tx_commit, so ignore for now
-    MsgSize = size_of_message(Msg),
-    {ok, gain_memory(MsgSize, State)}.
-
-only_msg_ids(Pubs) ->
-    lists:map(fun (Msg) -> {Msg #basic_message.guid, false} end, Pubs).
-
-tx_commit(Publishes, MsgsWithAcks,
-          State = #mqstate { mode = disk, queue = Q, length = Length,
-                             msg_buf = MsgBuf }) ->
-    {RealAcks, ASize} = remove_noacks(MsgsWithAcks),
-    ok = if ([] == Publishes) andalso ([] == RealAcks) -> ok;
-            true -> rabbit_disk_queue:tx_commit(Q, only_msg_ids(Publishes),
-                                                RealAcks)
+           State = #mqstate { mode = Mode, is_durable = IsDurable }) ->
+    Msg1 = ensure_binary_properties(Msg),
+    ok = case on_disk(Mode, IsDurable, IsPersistent) of
+             true  -> rabbit_disk_queue:tx_publish(Msg1);
+             false -> ok
          end,
-    Len = erlang:length(Publishes),
-    {ok, lose_memory(ASize, State #mqstate
-                     { length = Length + Len,
-                       msg_buf = inc_queue_length(Q, MsgBuf, Len) })};
+    {ok, gain_memory(size_of_message(Msg1), State)}.
+
 tx_commit(Publishes, MsgsWithAcks,
-          State = #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf,
+          State = #mqstate { mode = Mode, queue = Q, msg_buf = MsgBuf,
                              is_durable = IsDurable, length = Length }) ->
-    {PersistentPubs, MsgBuf1} =
-        lists:foldl(fun (Msg = #basic_message { is_persistent = IsPersistent },
-                         {Acc, MsgBuf2}) ->
-                            Acc1 =
-                                case IsPersistent andalso IsDurable of
-                                    true -> [ {Msg #basic_message.guid, false}
-                                            | Acc];
-                                    false -> Acc
-                                end,
-                            {Acc1, queue:in({Msg, false}, MsgBuf2)}
-                    end, {[], MsgBuf}, Publishes),
-    {RealAcks, ASize} = remove_noacks(MsgsWithAcks),
-    ok = case ([] == PersistentPubs) andalso ([] == RealAcks) of
-             true -> ok;
-             false -> rabbit_disk_queue:tx_commit(
-                        Q, lists:reverse(PersistentPubs), RealAcks)
+    PersistentPubs =
+        [{MsgId, false} ||
+            #basic_message { guid = MsgId,
+                             is_persistent = IsPersistent } <- Publishes,
+            on_disk(Mode, IsDurable, IsPersistent)],
+    {RealAcks, ASize} = remove_diskless(MsgsWithAcks),
+    ok = case {PersistentPubs, RealAcks} of
+             {[], []} -> ok;
+             _        -> rabbit_disk_queue:tx_commit(
+                           Q, PersistentPubs, RealAcks)
          end,
-    {ok, lose_memory(ASize, State #mqstate
-                     { msg_buf = MsgBuf1,
-                       length = Length + erlang:length(Publishes) })}.
+    Len = length(Publishes),
+    MsgBuf1 = case Mode of
+                  disk  -> inc_queue_length(MsgBuf, Len);
+                  mixed -> ToAdd = [{Msg, false} || Msg <- Publishes],
+                           queue:join(MsgBuf, queue:from_list(ToAdd))
+              end,
+    {ok, lose_memory(ASize, State #mqstate { msg_buf = MsgBuf1,
+                                             length = Length + Len })}.
 
-tx_cancel(Publishes, State = #mqstate { mode = disk }) ->
-    {MsgIds, CSize} =
-        lists:foldl(
-          fun (Msg = #basic_message { guid = MsgId }, {MsgIdsAcc, CSizeAcc}) ->
-                  {[MsgId | MsgIdsAcc], CSizeAcc + size_of_message(Msg)}
-          end, {[], 0}, Publishes),
-    ok = rabbit_disk_queue:tx_cancel(MsgIds),
-    {ok, lose_memory(CSize, State)};
-tx_cancel(Publishes,
-          State = #mqstate { mode = mixed, is_durable = IsDurable }) ->
+tx_rollback(Publishes,
+            State = #mqstate { mode = Mode, is_durable = IsDurable }) ->
     {PersistentPubs, CSize} =
         lists:foldl(
           fun (Msg = #basic_message { is_persistent = IsPersistent,
                                       guid = MsgId }, {Acc, CSizeAcc}) ->
-                  CSizeAcc1 = CSizeAcc + size_of_message(Msg),
-                  {case IsPersistent of
+                  Msg1 = ensure_binary_properties(Msg),
+                  CSizeAcc1 = CSizeAcc + size_of_message(Msg1),
+                  {case on_disk(Mode, IsDurable, IsPersistent) of
                        true -> [MsgId | Acc];
                        _    -> Acc
                    end, CSizeAcc1}
           end, {[], 0}, Publishes),
-    ok =
-        if IsDurable ->
-                rabbit_disk_queue:tx_cancel(PersistentPubs);
-           true -> ok
-        end,
+    ok = case PersistentPubs of
+             [] -> ok;
+             _  -> rabbit_disk_queue:tx_rollback(PersistentPubs)
+         end,
     {ok, lose_memory(CSize, State)}.
 
 %% [{Msg, AckTag}]
-requeue(MessagesWithAckTags, State = #mqstate { mode = disk, queue = Q,
-                                                is_durable = IsDurable,
-                                                length = Length,
-                                                msg_buf = MsgBuf }) ->
-    %% here, we may have messages with no ack tags, because of the
-    %% fact they are not persistent, but nevertheless we want to
-    %% requeue them. This means publishing them delivered.
-    Requeue
-        = lists:foldl(
-            fun ({#basic_message { is_persistent = IsPersistent }, AckTag}, RQ)
-                when IsDurable andalso IsPersistent ->
-                    [{AckTag, true} | RQ];
-                ({Msg, noack}, RQ) ->
-                    ok = case RQ == [] of
-                             true  -> ok;
-                             false -> rabbit_disk_queue:requeue(
-                                        Q, lists:reverse(RQ))
-                         end,
-                    ok = rabbit_disk_queue:publish(Q, Msg, true),
-                    []
-            end, [], MessagesWithAckTags),
-    ok = rabbit_disk_queue:requeue(Q, lists:reverse(Requeue)),
-    Len = erlang:length(MessagesWithAckTags),
-    {ok, State #mqstate { length = Length + Len,
-                          msg_buf = inc_queue_length(Q, MsgBuf, Len) }};
-requeue(MessagesWithAckTags, State = #mqstate { mode = mixed, queue = Q,
-                                                msg_buf = MsgBuf,
-                                                is_durable = IsDurable,
-                                                length = Length }) ->
-    {PersistentPubs, MsgBuf1} =
-        lists:foldl(
-          fun ({Msg = #basic_message { is_persistent = IsPersistent }, AckTag},
-               {Acc, MsgBuf2}) ->
-                  Acc1 =
-                      case IsDurable andalso IsPersistent of
-                          true -> [{AckTag, true} | Acc];
-                          false -> Acc
-                      end,
-                  {Acc1, queue:in({Msg, true}, MsgBuf2)}
-          end, {[], MsgBuf}, MessagesWithAckTags),
-    ok = case PersistentPubs of
+requeue(MsgsWithAckTags,
+        State = #mqstate { mode = Mode, queue = Q, msg_buf = MsgBuf,
+                           is_durable = IsDurable, length = Length }) ->
+    RQ = lists:foldl(
+           fun ({Msg = #basic_message { is_persistent = IsPersistent }, AckTag},
+                RQAcc) ->
+                   case IsDurable andalso IsPersistent of
+                       true ->
+                           [{AckTag, true} | RQAcc];
+                       false ->
+                           case Mode of
+                               mixed ->
+                                   RQAcc;
+                               disk when not_on_disk =:= AckTag ->
+                                   ok = case RQAcc of
+                                            [] -> ok;
+                                            _  -> rabbit_disk_queue:requeue
+                                                    (Q, lists:reverse(RQAcc))
+                                        end,
+                                   ok = rabbit_disk_queue:publish(Q, Msg, true),
+                                   []
+                           end
+                   end
+           end, [], MsgsWithAckTags),
+    ok = case RQ of
              [] -> ok;
-             _  -> rabbit_disk_queue:requeue(Q, lists:reverse(PersistentPubs))
+             _  -> rabbit_disk_queue:requeue(Q, lists:reverse(RQ))
          end,
-    {ok, State #mqstate {msg_buf = MsgBuf1,
-                         length = Length + erlang:length(MessagesWithAckTags)}}.
+    Len = length(MsgsWithAckTags),
+    MsgBuf1 = case Mode of
+                  mixed -> ToAdd = [{Msg, true} || {Msg, _} <- MsgsWithAckTags],
+                           queue:join(MsgBuf, queue:from_list(ToAdd));
+                  disk  -> inc_queue_length(MsgBuf, Len)
+              end,
+    {ok, State #mqstate { msg_buf = MsgBuf1, length = Length + Len }}.
 
-purge(State = #mqstate { queue = Q, mode = disk, length = Count,
-                         memory_size = QSize }) ->
-    Count = rabbit_disk_queue:purge(Q),
-    {Count, lose_memory(QSize, State)};
-purge(State = #mqstate { queue = Q, mode = mixed, length = Length,
-                         memory_size = QSize, prefetcher = Prefetcher }) ->
-    case Prefetcher of
-        undefined -> ok;
-        _ -> rabbit_queue_prefetcher:drain_and_stop(Prefetcher)
-    end,
-    rabbit_disk_queue:purge(Q),
-    {Length, lose_memory(QSize, State #mqstate { msg_buf = queue:new(),
-                                                 length = 0,
-                                                 prefetcher = undefined })}.
+purge(State = #mqstate { queue = Q, mode = Mode, length = Count,
+                         prefetcher = Prefetcher, memory_size = QSize }) ->
+    PurgedFromDisk = rabbit_disk_queue:purge(Q),
+    Count = case Mode of
+                disk ->
+                    PurgedFromDisk;
+                mixed ->
+                    ok = case Prefetcher of
+                             undefined -> ok;
+                             _ -> rabbit_queue_prefetcher:stop(Prefetcher)
+                         end,
+                    Count
+            end,
+    {Count, lose_memory(QSize, State #mqstate { msg_buf = queue:new(),
+                                                length = 0,
+                                                prefetcher = undefined })}.
 
 delete_queue(State = #mqstate { queue = Q, memory_size = QSize,
                                 prefetcher = Prefetcher
                               }) ->
-    case Prefetcher of
-        undefined -> ok;
-        _ -> rabbit_queue_prefetcher:drain_and_stop(Prefetcher)
-    end,
+    ok = case Prefetcher of
+             undefined -> ok;
+             _ -> rabbit_queue_prefetcher:stop(Prefetcher)
+         end,
     ok = rabbit_disk_queue:delete_queue(Q),
     {ok, lose_memory(QSize, State #mqstate { length = 0, msg_buf = queue:new(),
                                              prefetcher = undefined })}.
 
-length(#mqstate { length = Length }) ->
+len(#mqstate { length = Length }) ->
     Length.
 
 is_empty(#mqstate { length = Length }) ->

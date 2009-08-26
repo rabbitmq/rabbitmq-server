@@ -127,12 +127,8 @@ init(Q = #amqqueue { name = QName, durable = Durable, pinned = Pinned }) ->
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
     QName = qname(State),
-    NewState =
-        lists:foldl(fun (Txn, State1) ->
-                            rollback_transaction(Txn, State1)
-                    end, State, all_tx()),
-    rabbit_mixed_queue:delete_queue(NewState #q.mixed_state),
-    stop_memory_timer(NewState),
+    rabbit_mixed_queue:delete_queue(State #q.mixed_state),
+    stop_memory_timer(State),
     ok = rabbit_amqqueue:internal_delete(QName).
 
 code_change(_OldVsn, State, _Extra) ->
@@ -141,10 +137,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 reply(Reply, NewState) ->
+    assert_invariant(NewState),
     {reply, Reply, start_memory_timer(NewState), hibernate}.
 
 noreply(NewState) ->
+    assert_invariant(NewState),
     {noreply, start_memory_timer(NewState), hibernate}.
+
+assert_invariant(#q { active_consumers = AC, mixed_state = MS }) ->
+    true = (queue:is_empty(AC) orelse rabbit_mixed_queue:is_empty(MS)).
 
 start_memory_timer(State = #q { memory_report_timer = undefined }) ->
     {ok, TRef} = timer:send_after(?MINIMUM_MEMORY_REPORT_TIME_INTERVAL,
@@ -331,17 +332,16 @@ deliver_or_enqueue(Txn, ChPid, Msg, State) ->
 %% all these messages have already been delivered at least once and
 %% not ack'd, but need to be either redelivered or requeued
 deliver_or_requeue_n([], State) ->
-    run_message_queue(State);
+    State;
 deliver_or_requeue_n(MsgsWithAcks, State) ->
     Funs = { fun deliver_or_requeue_msgs_pred/2,
              fun deliver_or_requeue_msgs_deliver/3 },
     {{_RemainingLengthMinusOne, AutoAcks, OutstandingMsgs}, NewState} =
         deliver_msgs_to_consumers(
           Funs, {length(MsgsWithAcks), [], MsgsWithAcks}, State),
-    {ok, MS} = rabbit_mixed_queue:ack(AutoAcks,
-                                      NewState #q.mixed_state),
+    {ok, MS} = rabbit_mixed_queue:ack(AutoAcks, NewState #q.mixed_state),
     case OutstandingMsgs of
-        [] -> run_message_queue(NewState #q { mixed_state = MS });
+        [] -> NewState #q { mixed_state = MS };
         _ -> {ok, MS1} = rabbit_mixed_queue:requeue(OutstandingMsgs, MS),
              NewState #q { mixed_state = MS1 }
     end.
@@ -472,9 +472,6 @@ erase_tx(Txn) ->
 all_tx_record() ->
     [T || {{txn, _}, T} <- get()].
 
-all_tx() ->
-    [Txn || {{txn, Txn}, _} <- get()].
-
 record_pending_message(Txn, ChPid, Message) ->
     Tx = #tx{pending_messages = Pending} = lookup_tx(Txn),
     record_current_channel_tx(ChPid, Txn),
@@ -509,8 +506,8 @@ commit_transaction(Txn, State) ->
 rollback_transaction(Txn, State) ->
     #tx { pending_messages = PendingMessages
         } = lookup_tx(Txn),
-    {ok, MS} = rabbit_mixed_queue:tx_cancel(PendingMessages,
-                                            State #q.mixed_state),
+    {ok, MS} = rabbit_mixed_queue:tx_rollback(PendingMessages,
+                                              State #q.mixed_state),
     erase_tx(Txn),
     State #q { mixed_state = MS }.
 
@@ -533,7 +530,7 @@ i(storage_mode, #q{ mixed_state = MS }) ->
 i(pid, _) ->
     self();
 i(messages_ready, #q { mixed_state = MS }) ->
-    rabbit_mixed_queue:length(MS);
+    rabbit_mixed_queue:len(MS);
 i(messages_unacknowledged, _) ->
     lists:sum([dict:size(UAM) ||
                   #cr{unacked_messages = UAM} <- all_ch_record()]);
@@ -712,12 +709,12 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
 handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
                                     mixed_state = MS,
                                     active_consumers = ActiveConsumers}) ->
-    Length = rabbit_mixed_queue:length(MS),
+    Length = rabbit_mixed_queue:len(MS),
     reply({ok, Name, Length, queue:len(ActiveConsumers)}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q { mixed_state = MS }) ->
-    Length = rabbit_mixed_queue:length(MS),
+    Length = rabbit_mixed_queue:len(MS),
     IsEmpty = Length == 0,
     IsUnused = is_unused(State),
     if
