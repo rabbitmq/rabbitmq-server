@@ -417,7 +417,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                    file_size_limit         = FileSizeLimit,
                    read_file_hc_cache      = rabbit_file_handle_cache:init(
                                                ReadFileHandlesLimit,
-                                               [read, raw, binary, read_ahead]),
+                                               [read, raw, binary]),
                    on_sync_txns           = [],
                    commit_timer_ref        = undefined,
                    last_sync_offset        = 0,
@@ -885,8 +885,15 @@ read_stored_message(#message_store_entry { msg_id = MsgId, ref_count = RefCount,
                 with_read_handle_at(
                   File, Offset,
                   fun(Hdl) ->
-                          {ok, _} = Res =
-                              read_message_from_disk(Hdl, TotalSize),
+                          Res = case read_message_from_disk(Hdl, TotalSize) of
+                                    {ok, {_, _, _}} = Obj -> Obj;
+                                    {ok, Rest} ->
+                                        throw({error,
+                                               {misread, [{old_state, State},
+                                                          {file, File},
+                                                          {offset, Offset},
+                                                          {read, Rest}]}})
+                                end,
                           {Offset + TotalSize + ?FILE_PACKING_ADJUSTMENT, Res}
                   end, State),
             Message = #basic_message {} = bin_to_msg(MsgBody),
