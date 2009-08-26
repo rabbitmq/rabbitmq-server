@@ -85,7 +85,7 @@ hard_error_test() ->
 %%---------------------------------------------------------------------------
 
 new_connection() ->
-    amqp_connection:start_direct(#amqp_params{}).
+    amqp_connection:start_direct().
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
