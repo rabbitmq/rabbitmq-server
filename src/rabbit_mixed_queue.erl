@@ -389,9 +389,8 @@ set_storage_mode(mixed, TxnMessages, State =
     %% durable). This is necessary to avoid leaks. This is also pretty
     %% much the inverse behaviour of our own tx_rollback/2 which is
     %% why we're not using that.
-    Cancel =
-        [ MsgId || #basic_message { is_persistent = IsPersistent,
-                                    guid = MsgId } <- TxnMessages,
+    Cancel = [ MsgId || #basic_message { is_persistent = IsPersistent,
+                                         guid = MsgId } <- TxnMessages,
                    not (IsDurable andalso IsPersistent) ],
     ok = case Cancel of
              [] -> ok;
