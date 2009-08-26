@@ -107,9 +107,8 @@ receive_writer_send_command_signal(Writer) ->
     end.
 
 handle_broker_close(#connection_state{channel0_writer_pid = Writer,
-                                      reader_pid = Reader}) ->
-    CloseOk = #'connection.close_ok'{},
-    rabbit_writer:send_command(Writer, CloseOk),
+                                      reader_pid          = Reader}) ->
+    do(Writer, #'connection.close_ok'{}),
     rabbit_writer:shutdown(Writer),
     erlang:send_after(?SOCKET_CLOSING_TIMEOUT, Reader, close).
 
@@ -236,8 +235,8 @@ handle_frame(Type, Channel, Payload) ->
             heartbeat;
         trace ->
             trace;
-        {method, 'connection.close_ok', Content} ->
-            send_frame(Channel, {method, 'connection.close_ok', Content}),
+        {method, Method = 'connection.close_ok', none} ->
+            send_frame(Channel, {method, Method}),
             closed_ok;
         AnalyzedFrame ->
             send_frame(Channel, AnalyzedFrame)

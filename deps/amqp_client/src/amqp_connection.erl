@@ -280,11 +280,10 @@ handle_call(Close = #'connection.close'{}, From, State) ->
 
 %% @private
 handle_cast({method, #'connection.close'{reply_code = Code,
-                                         reply_text = Text}, _Content},
+                                         reply_text = Text}, none},
             State = #connection_state{driver = Driver}) ->
-    io:format("Broker forced connection: ~p -> ~p~n", [Code, Text]),
     Driver:handle_broker_close(State),
-    {stop, normal, State}.
+    {stop, {server_initiated_close, Code, Text}, State}.
 
 %%---------------------------------------------------------------------------
 %% Trap exits
@@ -293,16 +292,8 @@ handle_cast({method, #'connection.close'{reply_code = Code,
 handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
     io:format("Channel Peer ~p sent this message: ~p -> ~p~n",
               [Pid, Msg, Context]),
-    {HardError, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
-    case HardError of
-        false ->
-            io:format("Just trapping this exit and proceding to trap an "
-                      "exit from the client channel process~n"),
-            {noreply, State};
-        true ->
-            io:format("Hard error: (Code = ~p, Text = ~p)~n", [Code, Text]),
-            {stop, {hard_error, {Code, Text}}, State}
-    end;
+    {_, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
+    {stop, {server_initiated_close, {Code, Text}}, State};
 
 %% @private
 %% Just the amqp channel shutting down, so unregister this channel

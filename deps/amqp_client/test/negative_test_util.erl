@@ -44,7 +44,11 @@ non_existent_exchange_test(Connection) ->
 
 hard_error_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
-    ?assertExit(_, amqp_channel:call(Channel, #'basic.qos'{global = true})),
+    try amqp_channel:call(Channel, #'basic.qos'{global = true})
+    catch
+        exit:{{server_initiated_close, Code, _Text}, _} ->
+            ?assertMatch(?NOT_IMPLEMENTED, Code)
+    end,
     wait_for_death(Channel),
     wait_for_death(Connection).
 
