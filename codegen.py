@@ -119,7 +119,11 @@ def genErl(spec):
         print "method_has_content(%s) -> %s;" % (m.erlangName(), str(m.hasContent).lower())
     
     def genMethodIsSynchronous(m):
-        print "is_method_synchronous(%s) -> %s;" % (m.erlangName(), str(m.isSynchronous).lower())
+        hasNoWait = "nowait" in fieldNameList(m.arguments)
+        if m.isSynchronous and hasNoWait:
+          print "is_method_synchronous(#%s{nowait = NoWait}) -> not(NoWait);" % (m.erlangName())
+        else:
+          print "is_method_synchronous(#%s{}) -> %s;" % (m.erlangName(), str(m.isSynchronous).lower())
 
     def genMethodFieldTypes(m):
         """Not currently used - may be useful in future?"""
