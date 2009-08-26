@@ -121,14 +121,9 @@ size_of_message(
                                          SumAcc + size(Frag)
                                  end, 0, Payload).
 
-ensure_binary_properties(Msg = #basic_message {
-                           content = Content = #content {
-                                       properties = Props,
-                                       properties_bin = none }}) ->
-    Msg #basic_message { content = Content #content {
-      properties_bin = rabbit_framing:encode_properties(Props) }};
-ensure_binary_properties(Msg) ->
-    Msg.
+ensure_binary_properties(Msg = #basic_message { content = Content }) ->
+    Msg #basic_message { content = rabbit_binary_generator:
+                         ensure_content_encoded(Content) }.
 
 set_storage_mode(Mode, _TxnMessages, State = #mqstate { mode = Mode }) ->
     {ok, State};
