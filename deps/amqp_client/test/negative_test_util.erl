@@ -53,7 +53,7 @@ bogus_rpc_test(Connection) ->
     try amqp_channel:call(Channel, Bind) of
         _ -> exit(expected_to_exit)
     catch
-        exit:Why -> ok
+        exit:_Why -> ok
     end,
     wait_for_death(Channel),
     ?assertMatch(true, is_process_alive(Connection)),
