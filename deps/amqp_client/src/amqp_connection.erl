@@ -106,19 +106,20 @@ start_network_internal(#amqp_params{username     = User,
                                     password     = Password,
                                     virtual_host = VHost,
                                     host         = Host,
-                                    port         = Port},
+                                    port         = Port,
+                                    ssl_options  = SSLOpts},
                        ProcLink) ->
-    InitialState = #connection_state{username   = User,
-                                     password   = Password,
-                                     serverhost = Host,
-                                     vhostpath  = VHost,
-                                     port       = Port},
+    InitialState = #connection_state{username    = User,
+                                     password    = Password,
+                                     serverhost  = Host,
+                                     vhostpath   = VHost,
+                                     port        = Port,
+                                     ssl_options = SSLOpts},
     {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
     Pid.
 
 start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
     gen_server:start_link(?MODULE, [InitialState, Driver], []);
-
 start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
     gen_server:start(?MODULE, [InitialState, Driver], []).
 

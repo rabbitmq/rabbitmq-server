@@ -35,7 +35,8 @@
                       password     = <<"guest">>,
                       virtual_host = <<"/">>,
                       host         = "localhost",
-                      port         = ?PROTOCOL_PORT}).
+                      port         = ?PROTOCOL_PORT,
+                      ssl_options  = undefined}).
 
 -record(connection_state, {username,
                            password,
@@ -48,7 +49,8 @@
                            heartbeat,
                            driver,
                            port,
-                           channels = dict:new() }).
+                           channels = dict:new(),
+                           ssl_options}).
 
 -record(channel_state, {number,
                         parent_connection,
