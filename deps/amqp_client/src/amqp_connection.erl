@@ -282,7 +282,7 @@ handle_call(Close = #'connection.close'{}, From, State) ->
 handle_cast({method, #'connection.close'{reply_code = Code,
                                          reply_text = Text}, _Content},
             State = #connection_state{driver = Driver}) ->
-    io:format("Broker forced connection: ~p -> ~p~n", [Code, Text]),
+    ?LOG_WARN("Broker forced connection: ~p -> ~p~n", [Code, Text]),
     Driver:handle_broker_close(State),
     {stop, normal, State}.
 
@@ -291,16 +291,16 @@ handle_cast({method, #'connection.close'{reply_code = Code,
 %%---------------------------------------------------------------------------
 %% @private
 handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
-    io:format("Channel Peer ~p sent this message: ~p -> ~p~n",
+    ?LOG_WARN("Channel Peer ~p sent this message: ~p -> ~p~n",
               [Pid, Msg, Context]),
     {HardError, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
     case HardError of
         false ->
-            io:format("Just trapping this exit and proceding to trap an "
-                      "exit from the client channel process~n"),
+            ?LOG_DEBUG("Just trapping this exit and proceding to trap an "
+                       "exit from the client channel process~n"),
             {noreply, State};
         true ->
-            io:format("Hard error: (Code = ~p, Text = ~p)~n", [Code, Text]),
+            ?LOG_WARN("Hard error: (Code = ~p, Text = ~p)~n", [Code, Text]),
             {stop, {hard_error, {Code, Text}}, State}
     end;
 
@@ -329,7 +329,7 @@ handle_info( {'EXIT', _Pid, Reason = connection_timeout}, State) ->
 
 %% @private
 handle_info( {'EXIT', Pid, Reason}, State) ->
-    io:format("Connection: Handling exit from ~p --> ~p~n", [Pid, Reason]),
+    ?LOG_WARN("Connection: Handling exit from ~p --> ~p~n", [Pid, Reason]),
     {noreply, unregister_channel(Pid, State) }.
 
 %%---------------------------------------------------------------------------
