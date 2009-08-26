@@ -365,6 +365,9 @@ set_storage_mode(disk, TxnMessages, State =
     %% published if they really are durable and persistent which is
     %% why we can't just use our own tx_publish/2 function (would end
     %% up publishing twice, so refcount would go wrong in disk_queue).
+    %% The order of msgs within a txn is determined only at tx_commit
+    %% time, so it doesn't matter if we're publishing msgs to the disk
+    %% queue in a different order from that which we received them in.
     lists:foreach(
       fun (Msg = #basic_message { is_persistent = IsPersistent }) ->
               ok = case IsDurable andalso IsPersistent of
@@ -382,20 +385,17 @@ set_storage_mode(mixed, TxnMessages, State =
     %% Don't start prefetcher just yet because the queue maybe busy -
     %% wait for hibernate timeout in the amqqueue_process.
     
-    %% Remove txn messages from disk which are neither persistent and
-    %% durable. This is necessary to avoid leaks. This is also pretty
-    %% much the inverse behaviour of our own tx_rollback/2 which is why
-    %% we're not using it.
+    %% Remove txn messages from disk which are not (persistent and
+    %% durable). This is necessary to avoid leaks. This is also pretty
+    %% much the inverse behaviour of our own tx_rollback/2 which is
+    %% why we're not using that.
     Cancel =
-        lists:foldl(
-          fun (Msg = #basic_message { is_persistent = IsPersistent }, Acc) ->
-                  case IsDurable andalso IsPersistent of
-                      true  -> Acc;
-                      false -> [Msg #basic_message.guid | Acc]
-                  end
-          end, [], TxnMessages),
-    ok = if Cancel == [] -> ok;
-            true -> rabbit_disk_queue:tx_rollback(Cancel)
+        [ MsgId || #basic_message { is_persistent = IsPersistent,
+                                    guid = MsgId } <- TxnMessages,
+                   not (IsDurable andalso IsPersistent) ],
+    ok = case Cancel of
+             [] -> ok;
+             _  -> rabbit_disk_queue:tx_rollback(Cancel)
          end,
     garbage_collect(),
     {ok, State #mqstate { mode = mixed }}.
