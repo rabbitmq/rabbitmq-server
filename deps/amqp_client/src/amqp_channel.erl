@@ -201,15 +201,20 @@ register_direct_peer(Channel, Peer) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
-                                                  rpc_requests = RequestQueue,
-                                                  do2 = Do2}) ->
+rpc_top_half(Method, From, State) ->
+    rpc_top_half(Method, undefined, From, State).
+rpc_top_half(Method, Content, From, 
+             State = #channel_state{writer_pid = Writer, rpc_requests = RequestQueue,
+                                    do2 = Do2, do3 = Do3}) ->
     % Enqueue the incoming RPC request to serialize RPC dispatching
     NewRequestQueue = queue:in({From, Method}, RequestQueue),
     NewState = State#channel_state{rpc_requests = NewRequestQueue},
     case queue:len(NewRequestQueue) of
         1 ->
-            Do2(Writer,Method);
+            case Content of
+                undefined -> Do2(Writer,Method);
+                _         -> Do3(writer,Method,Content)
+            end;
         _ ->
             ok
         end,
@@ -381,9 +386,12 @@ handle_call({call, _Method, _Content}, _From,
 
 %% @private
 handle_call({call, Method, #amqp_msg{props = Props, payload = Payload}},
-            _From, State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
-    Do3(Writer, Method, rabbit_basic:build_content(Props, Payload)),
-    {reply, ok, State};
+            From, State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
+    Content = rabbit_basic:build_content(Props, Payload),
+    case rabbit_framing:is_method_synchronous(Method) of
+        true -> rpc_top_half(Method, Content, From, State);
+        false -> Do3(Writer, Method, Content), {reply, ok, State}
+    end;
 
 %% Top half of the basic consume process.
 %% Sets up the consumer for registration in the bottom half of this RPC.
