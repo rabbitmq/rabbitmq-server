@@ -23,7 +23,7 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 %%
 
--module(network_client_SUITE).
+-module(ssl_client_SUITE).
 
 -export([test_coverage/0]).
 
@@ -45,20 +45,11 @@ basic_recover_test() ->
 basic_consume_test() -> 
     test_util:basic_consume_test(new_connection()).
 
-large_content_test() ->
-    test_util:large_content_test(new_connection()).
-
 lifecycle_test() ->
     test_util:lifecycle_test(new_connection()).
 
-nowait_exchange_declare_test() ->
-    test_util:nowait_exchange_declare_test(new_connection()).
-
 basic_ack_test() ->
     test_util:basic_ack_test(new_connection()).
-
-basic_ack_call_test() ->
-    test_util:basic_ack_call_test(new_connection()).
 
 channel_lifecycle_test() ->
     test_util:channel_lifecycle_test(new_connection()).
@@ -75,12 +66,6 @@ teardown_test() ->
 rpc_test() ->
     test_util:rpc_test(new_connection()).
 
-pub_and_close_test_() ->
-    {timeout, 50,
-        fun() ->
-            test_util:pub_and_close_test(new_connection(), new_connection())
-        end}.
-
 %%---------------------------------------------------------------------------
 %% Negative Tests
 
@@ -90,23 +75,19 @@ non_existent_exchange_test() ->
 hard_error_test() ->
     negative_test_util:hard_error_test(new_connection()).
 
-non_existent_user_test() ->
-    negative_test_util:non_existent_user_test().
-
-invalid_password_test() ->
-    negative_test_util:invalid_password_test().
-
-non_existent_vhost_test() ->
-    negative_test_util:non_existent_vhost_test().
-
-no_permission_test() ->
-    negative_test_util:no_permission_test().
-
 %%---------------------------------------------------------------------------
 %% Common Functions
 
 new_connection() ->
-    amqp_connection:start_network().
+    {ok, [[CertsDir]]} = init:get_argument(erlang_client_ssl_dir),
+    Params = #amqp_params
+      {port = 5671,
+       ssl_options = [{cacertfile, CertsDir ++ "/testca/cacert.pem"},
+                      {certfile, CertsDir ++ "/client/cert.pem"},
+                      {keyfile, CertsDir ++ "/client/key.pem"},
+                      {verify, verify_peer},
+                      {fail_if_no_peer_cert, true}]},
+    amqp_connection:start_network(Params).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
