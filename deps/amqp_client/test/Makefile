@@ -23,6 +23,13 @@
 #   Contributor(s): ________________________
 #
 
+ifndef OTP_HOME
+  ERLC=erlc
+endif
+ifdef OTP_HOME
+  ERLC=$(OTP_HOME)/bin/erlc
+endif
+
 TEST_SOURCES=$(wildcard *.erl)
 TEST_TARGETS=$(patsubst %.erl, %.beam, $(TEST_SOURCES))
 INCLUDES=$(wildcard ../$(INCLUDE_DIR)/*.hrl)
@@ -37,7 +44,7 @@ all: compile
 compile: $(TEST_TARGETS)
 
 %.beam: %.erl $(DEPS_DIR)/$(COMMON_PACKAGE) $(INCLUDES)
-	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
+	$(LIBS_PATH) $(ERLC) $(ERLC_OPTS) $<
 
 clean:
 	rm -f *.beam

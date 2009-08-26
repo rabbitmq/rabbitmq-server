@@ -46,6 +46,15 @@ ifndef TMPDIR
 TMPDIR := /tmp
 endif
 
+ifndef OTP_HOME
+  ERL=erl
+  ERLC=erlc
+endif
+ifdef OTP_HOME
+  ERL=$(OTP_HOME)/bin/erl
+  ERLC=$(OTP_HOME)/bin/erlc
+endif
+
 EBIN_DIR=ebin
 export BROKER_DIR=../rabbitmq-server
 export INCLUDE_DIR=include
@@ -56,7 +65,7 @@ DIST_DIR=dist
 DEPS_DIR=deps
 DOC_DIR=doc
 
-DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
+DEPS=$(shell $(ERL) -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  file:consult("rabbit_common.app"), \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
@@ -93,7 +102,7 @@ ifndef USE_SPECS
 # only available in R12B-3 upwards
 #
 # NB: the test assumes that version number will only contain single digits
-export USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.6.2" ]; then echo "true"; else echo "false"; fi)
+export USE_SPECS=$(shell if [ $$($(ERL) -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.6.2" ]; then echo "true"; else echo "false"; fi)
 endif
 
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
@@ -126,7 +135,7 @@ compile_tests: $(TEST_DIR) $(COMPILE_DEPS)
 	$(MAKE) -C $(TEST_DIR) VERSION=$(VERSION)
 
 run: compile
-	erl -pa $(LOAD_PATH)
+	$(ERL) -pa $(LOAD_PATH)
 
 run_in_broker: compile $(BROKER_DIR)
 	$(MAKE) RABBITMQ_SERVER_START_ARGS='$(PA_LOAD_PATH)' -C $(BROKER_DIR) run
@@ -145,7 +154,7 @@ $(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
 	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
 
 $(DOC_DIR)/index.html: $(COMPILE_DEPS) $(DOC_DIR)/overview.edoc $(SOURCES)
-	$(LIBS_PATH) erl -noshell -eval 'edoc:application(amqp_client, ".", [{preprocess, true}])' -run init stop
+	$(LIBS_PATH) $(ERL) -noshell -eval 'edoc:application(amqp_client, ".", [{preprocess, true}])' -run init stop
 
 doc: $(DOC_DIR)/index.html
 
@@ -171,7 +180,7 @@ $(COMPILE_DEPS): $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 	unzip -o -d $(DEPS_DIR) $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(COMPILE_DEPS)
-	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
+	$(LIBS_PATH) $(ERLC) $(ERLC_OPTS) $<
 
 $(TEST_DIR)/%.beam: compile_tests
 
