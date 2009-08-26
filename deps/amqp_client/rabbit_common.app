@@ -11,6 +11,7 @@
              rabbit_binary_parser,
              rabbit_channel,
              rabbit_misc,
+             rabbit_net,
              rabbit_heartbeat,
              gen_server2
   ]},

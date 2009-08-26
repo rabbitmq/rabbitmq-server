@@ -28,6 +28,8 @@
 
 -include("amqp_client.hrl").
 
+-define(RABBIT_TCP_OPTS, [binary, {packet, 0},{active,false}, {nodelay, true}]).
+
 -export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
 -export([start_reader/2, start_writer/2]).
 -export([do/2, do/3]).
@@ -41,28 +43,37 @@
 % Driver API Methods
 %---------------------------------------------------------------------------
 
-handshake(State = #connection_state{serverhost = Host, port = Port}) ->
-    case gen_tcp:connect(Host, Port, [binary, {packet, 0}, {active, false},
-                                      {nodelay, true}]) of
+handshake(State = #connection_state{serverhost = Host, port = Port,
+                                    ssl_options = undefined}) ->
+    case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
-            ok = gen_tcp:send(Sock, ?PROTOCOL_HEADER),
-            Parent = self(),
-            FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end,
-                                                           [Parent]),
-            ReaderPid = spawn_link(?MODULE, start_reader,
-                                   [Sock, FramingPid]),
-            WriterPid = start_writer(Sock, 0),
-            State1 = State#connection_state{channel0_writer_pid = WriterPid,
-                                            reader_pid = ReaderPid,
-                                            sock = Sock},
-            State2 = network_handshake(WriterPid, State1),
-            #connection_state{heartbeat = Heartbeat} = State2,
-            ReaderPid ! {heartbeat, Heartbeat},
-            State2;
+            do_handshake(Sock, State);
+        {error, Reason} ->
+            io:format("Could not start the network driver: ~p~n",[Reason]),
+            exit(Reason)
+    end;
+
+handshake(State = #connection_state{serverhost = Host, port = Port,
+                                    ssl_options = SslOpts}) ->
+    rabbit_misc:start_applications([crypto, ssl]),
+
+    case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
+        {ok, Sock} ->
+            case ssl:connect(Sock, SslOpts) of
+                {ok, SslSock} ->
+                    RabbitSslSock = #ssl_socket{ssl = SslSock, tcp = Sock},
+                    do_handshake(RabbitSslSock, State);
+                {error, Reason} ->
+                    io:format("Could not upgrade the network driver to ssl: "
+                              "~p~n", [Reason]),
+                    exit(Reason)
+            end;
         {error, Reason} ->
             ?LOG_WARN("Could not start the network driver: ~p~n", [Reason]),
             exit(Reason)
     end.
+
+
 
 %% The reader runs unaware of the channel number that it is bound to
 %% because this will be parsed out of the frames received off the socket.
@@ -171,10 +182,10 @@ start_ok(#connection_state{username = Username, password = Password}) ->
 
 start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
-    put({channel, 0}, {chpid, FramingPid}),
-    {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
+    put({channel, 0},{chpid, FramingPid}),
+    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
     ok = reader_loop(Sock, undefined, undefined, undefined),
-    gen_tcp:close(Sock).
+    rabbit_net:close(Sock).
 
 start_writer(Sock, Channel) ->
     rabbit_writer:start_link(Sock, Channel, ?FRAME_MIN_SIZE).
@@ -186,12 +197,12 @@ reader_loop(Sock, Type, Channel, Length) ->
                 closed_ok ->
                     ok;
                 _ ->
-                    {ok, _Ref} = prim_inet:async_recv(Sock, 7, -1),
+                    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
                     reader_loop(Sock, undefined, undefined, undefined)
             end;
-        {inet_async, Sock, _, {ok, <<_Type:8, _Chan:16, PayloadSize:32>>}} ->
-            {ok, _Ref} = prim_inet:async_recv(Sock, PayloadSize + 1, -1),
-            reader_loop(Sock, _Type, _Chan, PayloadSize);
+        {inet_async, Sock, _, {ok, <<NewType:8,NewChannel:16,NewLength:32>>}} ->
+            {ok, _Ref} = rabbit_net:async_recv(Sock, NewLength + 1, infinity),
+            reader_loop(Sock, NewType, NewChannel, NewLength);
         {inet_async, Sock, _Ref, {error, closed}} ->
             exit(connection_socket_closed_unexpectedly);
         {inet_async, Sock, _Ref, {error, Reason}} ->
@@ -251,3 +262,16 @@ resolve_receiver(Channel) ->
             exit(unknown_channel)
    end.
 
+do_handshake(Sock, State) ->
+    ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
+    Parent = self(),
+    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
+    ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
+    WriterPid = start_writer(Sock, 0),
+    State1 = State#connection_state{channel0_writer_pid = WriterPid,
+                                    reader_pid = ReaderPid,
+                                    sock = Sock},
+    State2 = network_handshake(WriterPid, State1),
+    #connection_state{heartbeat = Heartbeat} = State2,
+    ReaderPid ! {heartbeat, Heartbeat},
+    State2.
