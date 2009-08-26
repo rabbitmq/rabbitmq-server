@@ -64,6 +64,15 @@
 %% AMQP Connection API Methods
 %%---------------------------------------------------------------------------
 
+%% @spec () -> [Connection]
+%% where
+%%     Connection = pid()
+%% @doc Starts a direct connection to a RabbitMQ server, assuming that
+%% the server is running in the same process space, and with a default
+%% set of amqp_params. If a different vhost or credential set is required,
+%% start_direct/1 or start_direct/2 should be used.
+start_direct() -> start_direct(#amqp_params()).
+
 %% @spec (amqp_params()) -> [Connection]
 %% where
 %%      Connection = pid()
