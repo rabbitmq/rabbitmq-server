@@ -856,6 +856,10 @@ rdq_match_message(
   MsgId, MsgBody, Size) when size(MsgBody) =:= Size ->
     ok.
 
+rdq_match_messages(#basic_message { guid = MsgId, content = #content { payload_fragments_rev = MsgBody }},
+                   #basic_message { guid = MsgId, content = #content { payload_fragments_rev = MsgBody }}) ->
+    ok.
+
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
     Startup = rdq_virgin(),
     rdq_start(),
@@ -1226,9 +1230,10 @@ rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) -
                     lists:foldl(
                       fun (Msg, {Acc, MS7}) ->
                               Rem = Len1 - (Msg #basic_message.guid) - 1,
-                              {{Msg, false, AckTag, Rem}, MS7a} =
+                              {{Msg1, false, AckTag, Rem}, MS7a} =
                                   rabbit_mixed_queue:fetch(MS7),
-                              {[{Msg, AckTag} | Acc], MS7a}
+                              ok = rdq_match_messages(Msg, Msg1),
+                              {[{Msg1, AckTag} | Acc], MS7a}
                       end, {[], MS6}, MsgsA ++ MsgsB),
                 0 = rabbit_mixed_queue:len(MS8),
                 rabbit_mixed_queue:ack(AckTags, MS8);
@@ -1239,9 +1244,10 @@ rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) -
                     lists:foldl(
                       fun (Msg, {Acc, MS7}) ->
                               Rem = Len0 - (Msg #basic_message.guid) - 1,
-                              {{Msg, false, AckTag, Rem}, MS7a} =
+                              {{Msg1, false, AckTag, Rem}, MS7a} =
                                   rabbit_mixed_queue:fetch(MS7),
-                              {[{Msg, AckTag} | Acc], MS7a}
+                              ok = rdq_match_messages(Msg, Msg1),
+                              {[{Msg1, AckTag} | Acc], MS7a}
                       end, {[], MS6}, MsgsA),
                 0 = rabbit_mixed_queue:len(MS8),
                 rabbit_mixed_queue:ack(AckTags, MS8)
