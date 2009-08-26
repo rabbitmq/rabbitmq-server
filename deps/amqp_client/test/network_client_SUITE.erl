@@ -51,8 +51,14 @@ large_content_test() ->
 lifecycle_test() ->
     test_util:lifecycle_test(new_connection()).
 
+nowait_exchange_declare_test() ->
+    test_util:nowait_exchange_declare_test(new_connection()).
+
 basic_ack_test() ->
     test_util:basic_ack_test(new_connection()).
+
+basic_ack_call_test() ->
+    test_util:basic_ack_call_test(new_connection()).
 
 channel_lifecycle_test() ->
     test_util:channel_lifecycle_test(new_connection()).

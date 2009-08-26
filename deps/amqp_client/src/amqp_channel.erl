@@ -201,15 +201,23 @@ register_direct_peer(Channel, Peer) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
-                                                  rpc_requests = RequestQueue,
-                                                  do2 = Do2}) ->
+rpc_top_half(Method, From, State) ->
+    rpc_top_half(Method, undefined, From, State).
+
+rpc_top_half(Method, Content, From, 
+             State = #channel_state{writer_pid = Writer,
+									rpc_requests = RequestQueue,
+                                    do2 = Do2,
+									do3 = Do3}) ->
     % Enqueue the incoming RPC request to serialize RPC dispatching
     NewRequestQueue = queue:in({From, Method}, RequestQueue),
     NewState = State#channel_state{rpc_requests = NewRequestQueue},
     case queue:len(NewRequestQueue) of
         1 ->
-            Do2(Writer,Method);
+            case Content of
+                undefined -> Do2(Writer, Method);
+                _         -> Do3(writer, Method, Content)
+            end;
         _ ->
             ok
         end,
@@ -217,7 +225,7 @@ rpc_top_half(Method, From, State = #channel_state{writer_pid = Writer,
 
 rpc_bottom_half(#'channel.close'{reply_code = ReplyCode,
                                  reply_text = ReplyText}, State) ->
-    io:format("Channel received close from peer, code: ~p , message: ~p~n",
+    ?LOG_WARN("Channel received close from peer, code: ~p , message: ~p~n",
               [ReplyCode,ReplyText]),
     {stop, normal, State};
 
@@ -359,8 +367,13 @@ init([InitialState]) ->
 %% Standard implementation of top half of the call/2 command
 %% Do not accept any further RPCs when the channel is about to close
 %% @private
-handle_call({call, Method}, From, State = #channel_state{closing = false}) ->
-    rpc_top_half(Method, From, State);
+handle_call({call, Method}, From, State = #channel_state{closing    = false,
+                                                         writer_pid = Writer,
+                                                         do2 = Do2}) ->
+    case rabbit_framing:is_method_synchronous(Method) of
+        true  -> rpc_top_half(Method, From, State);
+        false -> Do2(Writer, Method), {reply, ok, State}
+    end;
 
 %% @private
 handle_call({call, _Method, _Content}, _From,
@@ -376,9 +389,14 @@ handle_call({call, _Method, _Content}, _From,
 
 %% @private
 handle_call({call, Method, #amqp_msg{props = Props, payload = Payload}},
-            _From, State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
-    Do3(Writer, Method, rabbit_basic:build_content(Props, Payload)),
-    {reply, ok, State};
+            From, State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
+    Content = rabbit_basic:build_content(Props, Payload),
+    case rabbit_framing:is_method_synchronous(Method) of
+        true  -> rpc_top_half(Method, Content, From, State);
+        false -> 
+			Do3(Writer, Method, Content),
+			{reply, ok, State}
+    end;
 
 %% Top half of the basic consume process.
 %% Sets up the consumer for registration in the bottom half of this RPC.
@@ -420,7 +438,7 @@ handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer,
 handle_cast({cast, Method, _Content},
             State = #channel_state{flow_control = true}) ->
     % Discard the message and log it
-    io:format("Discarding content bearing method (~p) ~n", [Method]),
+    ?LOG_INFO("Discarding content bearing method (~p) ~n", [Method]),
     {noreply, State};
 
 %% Do not accept any further messages for writer when the channel is about to
@@ -508,7 +526,7 @@ handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
 %% @private
 handle_info({'EXIT', _Pid, Reason},
             State = #channel_state{number = Number}) ->
-    io:format("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
+    ?LOG_WARN("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
     {stop, normal, State};
 
 %% This is for a channel exception that can't be otherwise handled

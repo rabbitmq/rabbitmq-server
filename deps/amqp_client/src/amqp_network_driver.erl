@@ -69,7 +69,7 @@ handshake(State = #connection_state{serverhost = Host, port = Port,
                     exit(Reason)
             end;
         {error, Reason} ->
-            io:format("Could not start the network driver: ~p~n", [Reason]),
+            ?LOG_WARN("Could not start the network driver: ~p~n", [Reason]),
             exit(Reason)
     end.
 
@@ -206,7 +206,7 @@ reader_loop(Sock, Type, Channel, Length) ->
         {inet_async, Sock, _Ref, {error, closed}} ->
             exit(connection_socket_closed_unexpectedly);
         {inet_async, Sock, _Ref, {error, Reason}} ->
-            io:format("Socket error: ~p~n", [Reason]),
+            ?LOG_WARN("Socket error: ~p~n", [Reason]),
             exit({socket_error, Reason});
         {heartbeat, Heartbeat} ->
             rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
@@ -215,11 +215,11 @@ reader_loop(Sock, Type, Channel, Length) ->
             start_framing_channel(ChannelPid, ChannelNumber),
             reader_loop(Sock, Type, Channel, Length);
         timeout ->
-            io:format("Reader (~p) received timeout from heartbeat, "
+            ?LOG_WARN("Reader (~p) received timeout from heartbeat, "
                       "exiting ~n", [self()]),
             exit(connection_timeout);
         close ->
-            io:format("Reader (~p) received close command, "
+            ?LOG_WARN("Reader (~p) received close command, "
                       "exiting ~n", [self()]),
             ok;
         {'EXIT', Pid, _Reason} ->
@@ -227,7 +227,7 @@ reader_loop(Sock, Type, Channel, Length) ->
             erase(H),
             reader_loop(Sock, Type, Channel, Length);
         Other ->
-            io:format("Unknown message type: ~p~n", [Other]),
+            ?LOG_WARN("Unknown message type: ~p~n", [Other]),
             exit({unknown_message_type, Other})
     end.
 
