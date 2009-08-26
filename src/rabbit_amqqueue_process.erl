@@ -322,7 +322,7 @@ deliver_or_enqueue(Txn, ChPid, Msg, State) ->
 %% all these messages have already been delivered at least once and
 %% not ack'd, but need to be either redelivered or requeued
 deliver_or_requeue_n([], State) ->
-    run_message_queue(State);
+    State;
 deliver_or_requeue_n(MsgsWithAcks, State) ->
     Funs = { fun deliver_or_requeue_msgs_pred/2,
              fun deliver_or_requeue_msgs_deliver/3 },
@@ -332,7 +332,7 @@ deliver_or_requeue_n(MsgsWithAcks, State) ->
     {ok, MS} = rabbit_mixed_queue:ack(AutoAcks,
                                       NewState #q.mixed_state),
     case OutstandingMsgs of
-        [] -> run_message_queue(NewState #q { mixed_state = MS });
+        [] -> NewState #q { mixed_state = MS };
         _ -> {ok, MS1} = rabbit_mixed_queue:requeue(OutstandingMsgs, MS),
              NewState #q { mixed_state = MS1 }
     end.
