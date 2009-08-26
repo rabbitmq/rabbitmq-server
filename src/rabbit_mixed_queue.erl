@@ -353,8 +353,8 @@ fetch(State = #mqstate { msg_buf = MsgBuf, queue = Q,
         {Msg = #basic_message { is_persistent = IsPersistent },
          IsDelivered, AckTag} ->
             %% message has come via the prefetcher, thus it's been
-            %% delivered. If it's not persistent+durable, we should
-            %% ack it now
+            %% marked delivered. If it's not persistent+durable, we
+            %% should ack it now
             AckTag1 = maybe_ack(Q, IsDurable, IsPersistent, AckTag),
             {{Msg, IsDelivered, AckTag1, Rem},
              State1 #mqstate { msg_buf = MsgBuf1 }};
