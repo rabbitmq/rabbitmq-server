@@ -549,9 +549,8 @@ i(Item, _) ->
     throw({bad_argument, Item}).
 
 report_memory(Hib, State = #q { mixed_state = MS }) ->
-    {MS1, MSize, Gain, Loss} =
-        rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS),
-    rabbit_memory_manager:report_memory(self(), MSize, Gain, Loss, Hib),
+    {MS1, MSize} = rabbit_mixed_queue:estimate_queue_memory(MS),
+    rabbit_memory_manager:report_memory(self(), MSize, Hib),
     State #q { mixed_state = MS1 }.
 
 %---------------------------------------------------------------------------

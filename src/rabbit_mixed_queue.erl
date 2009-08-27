@@ -40,7 +40,7 @@
          len/1, is_empty/1, delete_queue/1, maybe_prefetch/1]).
 
 -export([set_storage_mode/3, storage_mode/1,
-         estimate_queue_memory_and_reset_counters/1]).
+         estimate_queue_memory/1]).
 
 -record(mqstate, { mode,
                    msg_buf,
@@ -48,8 +48,6 @@
                    is_durable,
                    length,
                    memory_size,
-                   memory_gain,
-                   memory_loss,
                    prefetcher
                  }
        ).
@@ -67,8 +65,6 @@
                               is_durable :: boolean(),
                               length :: non_neg_integer(),
                               memory_size :: (non_neg_integer() | 'undefined'),
-                              memory_gain :: (non_neg_integer() | 'undefined'),
-                              memory_loss :: (non_neg_integer() | 'undefined'),
                               prefetcher :: (pid() | 'undefined')
                             }).
 -type(acktag() :: ( 'no_on_disk' | { non_neg_integer(), non_neg_integer() })).
@@ -92,9 +88,8 @@
 -spec(is_empty/1 :: (mqstate()) -> boolean()).
 
 -spec(set_storage_mode/3 :: (mode(), [message()], mqstate()) -> okmqs()).
--spec(estimate_queue_memory_and_reset_counters/1 :: (mqstate()) ->
-             {mqstate(), non_neg_integer(), non_neg_integer(),
-              non_neg_integer()}).
+-spec(estimate_queue_memory/1 :: (mqstate()) ->
+             {mqstate(), non_neg_integer()}).
 -spec(storage_mode/1 :: (mqstate()) -> mode()).
 
 -endif.
@@ -126,8 +121,7 @@ init(Queue, IsDurable) ->
     MsgBuf = inc_queue_length(queue:new(), Len1),
     {ok, #mqstate { mode = disk, msg_buf = MsgBuf, queue = Queue,
                     is_durable = IsDurable, length = Len1,
-                    memory_size = Size, memory_gain = undefined,
-                    memory_loss = undefined, prefetcher = undefined }}.
+                    memory_size = Size, prefetcher = undefined }}.
 
 publish(Msg = #basic_message { is_persistent = IsPersistent }, State = 
         #mqstate { queue = Q, mode = Mode, is_durable = IsDurable,
@@ -492,9 +486,8 @@ flush_requeue_to_disk_queue(Q, RequeueCount, Commit, Ack) ->
     ok = rabbit_disk_queue:requeue_next_n(Q, RequeueCount),
     {[], []}.
 
-estimate_queue_memory_and_reset_counters(State =
-  #mqstate { memory_size = Size, memory_gain = Gain, memory_loss = Loss }) ->
-    {State #mqstate { memory_gain = 0, memory_loss = 0 }, 4 * Size, Gain, Loss}.
+estimate_queue_memory(State = #mqstate { memory_size = Size }) ->
+    {State, 4 * Size}.
 
 storage_mode(#mqstate { mode = Mode }) ->
     Mode.
@@ -515,15 +508,11 @@ ensure_binary_properties(Msg = #basic_message { content = Content }) ->
     Msg #basic_message {
       content = rabbit_binary_generator:ensure_content_encoded(Content) }.
 
-gain_memory(Inc, State = #mqstate { memory_size = QSize,
-                                    memory_gain = Gain }) ->
-    State #mqstate { memory_size = QSize + Inc,
-                     memory_gain = Gain + Inc }.
+gain_memory(Inc, State = #mqstate { memory_size = QSize }) ->
+    State #mqstate { memory_size = QSize + Inc }.
 
-lose_memory(Dec, State = #mqstate { memory_size = QSize,
-                                    memory_loss = Loss }) ->
-    State #mqstate { memory_size = QSize - Dec,
-                     memory_loss = Loss + Dec }.
+lose_memory(Dec, State = #mqstate { memory_size = QSize }) ->
+    State #mqstate { memory_size = QSize - Dec }.
 
 inc_queue_length(MsgBuf, 0) ->
     MsgBuf;
