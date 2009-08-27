@@ -106,7 +106,7 @@ no_permission_test() ->
 %% Common Functions
 
 new_connection() ->
-    amqp_connection:start_network(#amqp_params{}).
+    amqp_connection:start_network().
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
