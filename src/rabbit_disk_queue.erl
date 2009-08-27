@@ -53,8 +53,8 @@
 -include("rabbit.hrl").
 
 -define(WRITE_OK_SIZE_BITS,                  8).
--define(WRITE_OK_TRANSIENT,                255).
--define(WRITE_OK_PERSISTENT,               254).
+-define(WRITE_OK_TRANSIENT,                  255).
+-define(WRITE_OK_PERSISTENT,                 254).
 -define(INTEGER_SIZE_BYTES,                  8).
 -define(INTEGER_SIZE_BITS,                   (8 * ?INTEGER_SIZE_BYTES)).
 -define(MSG_LOC_NAME,                        rabbit_disk_queue_msg_location).
@@ -68,6 +68,7 @@
 -define(MINIMUM_MEMORY_REPORT_TIME_INTERVAL, 10000). %% 10 seconds in millisecs
 -define(BATCH_SIZE,                          10000).
 -define(CACHE_MAX_SIZE,                      10485760).
+-define(WRITE_HANDLE_OPEN_MODE,           [append, raw, binary, delayed_write]).
 
 -define(SERVER, ?MODULE).
 
@@ -431,22 +432,14 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     {ok, State1 = #dqstate { current_file_name = CurrentName,
                              current_offset = Offset } } =
         load_from_disk(State),
-    Path = form_filename(CurrentName),
-    Exists = case file:read_file_info(Path) of
-                 {error,enoent} -> false;
-                 {ok, _} -> true
-             end,
     %% read is only needed so that we can seek
-    {ok, FileHdl} = file:open(Path, [read, write, raw, binary, delayed_write]),
-    case Exists of
-        true -> {ok, Offset} = file:position(FileHdl, {bof, Offset});
-        false -> %% new file, so preallocate
-            ok = preallocate(FileHdl, FileSizeLimit, Offset)
-    end,
+    {ok, FileHdl} = file:open(form_filename(CurrentName),
+                              [read, write, raw, binary, delayed_write]),
+    {ok, Offset} = file:position(FileHdl, {bof, Offset}),
     State2 = State1 #dqstate { current_file_handle = FileHdl },
     %% by reporting a memory use of 0, we guarantee the manager will
-    %% grant us to ram_disk mode. We have to start in ram_disk mode
-    %% because we can't find values for mnesia_bytes_per_record or
+    %% not oppress us. We have to start in ram_disk mode because we
+    %% can't find values for mnesia_bytes_per_record or
     %% ets_bytes_per_record otherwise.
     ok = rabbit_memory_manager:report_memory(self(), 0, false),
     ok = report_memory(false, State2),
@@ -1231,7 +1224,6 @@ maybe_roll_to_new_file(Offset,
     NextName = integer_to_list(NextNum) ++ ?FILE_EXTENSION,
     {ok, NextHdl} = file:open(form_filename(NextName),
                               [write, raw, binary, delayed_write]),
-    ok = preallocate(NextHdl, FileSizeLimit, 0),
     true = ets:update_element(FileSummary, CurName, {5, NextName}),%% 5 is Right
     true = ets:insert_new(FileSummary, {NextName, 0, 0, CurName, undefined}),
     State2 = State1 #dqstate { current_file_name = NextName,
@@ -1243,12 +1235,6 @@ maybe_roll_to_new_file(Offset,
     {ok, compact(sets:from_list([CurName]), State2)};
 maybe_roll_to_new_file(_, State) ->
     {ok, State}.
-
-preallocate(Hdl, FileSizeLimit, FinalPos) ->
-    {ok, FileSizeLimit} = file:position(Hdl, {bof, FileSizeLimit}),
-    ok = file:truncate(Hdl),
-    {ok, FinalPos} = file:position(Hdl, {bof, FinalPos}),
-    ok.
 
 %% ---- GARBAGE COLLECTION / COMPACTION / AGGREGATION ----
 
@@ -1330,6 +1316,12 @@ sort_msg_locations_by_offset(Dir, List) ->
                        Comp(OffA, OffB)
                end, List).
 
+preallocate(Hdl, FileSizeLimit, FinalPos) ->
+    {ok, FileSizeLimit} = file:position(Hdl, {bof, FileSizeLimit}),
+    ok = file:truncate(Hdl),
+    {ok, FinalPos} = file:position(Hdl, {bof, FinalPos}),
+    ok.
+
 truncate_and_extend_file(FileHdl, Lowpoint, Highpoint) ->
     {ok, Lowpoint} = file:position(FileHdl, {bof, Lowpoint}),
     ok = file:truncate(FileHdl),
@@ -1339,11 +1331,11 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
               _SourceLeft, _SourceRight},
              {Destination, DestinationValid, DestinationContiguousTop,
               _DestinationLeft, _DestinationRight},
-             State1) ->
-    State = close_file(Source, close_file(Destination, State1)),
+             State) ->
+    State1 = close_file(Source, close_file(Destination, State)),
     {ok, SourceHdl} =
         file:open(form_filename(Source),
-                  [read, write, raw, binary, read_ahead, delayed_write]),
+                  [read, raw, binary, read_ahead]),
     {ok, DestinationHdl} =
         file:open(form_filename(Destination),
                   [read, write, raw, binary, read_ahead, delayed_write]),
@@ -1378,11 +1370,11 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
                           %% enforce it anyway
                   end, sort_msg_locations_by_offset(
                          asc, dets_ets_match_object(
-                                 State, #message_store_entry
+                                 State1, #message_store_entry
                                  { file = Destination, _ = '_' }))),
             ok = copy_messages(
                    Worklist, DestinationContiguousTop, DestinationValid,
-                   DestinationHdl, TmpHdl, Destination, State),
+                   DestinationHdl, TmpHdl, Destination, State1),
             TmpSize = DestinationValid - DestinationContiguousTop,
             %% so now Tmp contains everything we need to salvage from
             %% Destination, and MsgLocationDets has been updated to
@@ -1399,16 +1391,16 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
     end,
     SourceWorkList =
         sort_msg_locations_by_offset(
-          asc, dets_ets_match_object(State, #message_store_entry
+          asc, dets_ets_match_object(State1, #message_store_entry
                                       { file = Source, _ = '_' })),
     ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
-                       SourceHdl, DestinationHdl, Destination, State),
+                       SourceHdl, DestinationHdl, Destination, State1),
     %% tidy up
     ok = file:sync(DestinationHdl),
     ok = file:close(SourceHdl),
     ok = file:close(DestinationHdl),
     ok = file:delete(form_filename(Source)),
-    State.
+    State1.
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
               Destination, State) ->
@@ -1748,7 +1740,7 @@ recover_crashed_compactions1(Files, TmpFile) ->
                 %% note this also catches the case when the tmp file
                 %% is empty
             ok = file:delete(TmpFile);
-        _False ->
+        false ->
             %% we're in case 4 above. Check that everything in the
             %% main file is a valid message in mnesia
             verify_messages_in_mnesia(MsgIds),
@@ -1760,8 +1752,10 @@ recover_crashed_compactions1(Files, TmpFile) ->
             true = lists:all(fun (MsgId) ->
                                      not (lists:member(MsgId, MsgIdsTmp))
                              end, MsgIds),
-            {ok, MainHdl} = file:open(form_filename(NonTmpRelatedFile),
-                                      [write, raw, binary, delayed_write]),
+            %% must open with read flag, otherwise will stomp over contents
+            {ok, MainHdl} = 
+                file:open(form_filename(NonTmpRelatedFile),
+                          [read, write, raw, binary, delayed_write]),
             {ok, Top} = file:position(MainHdl, Top),
             %% wipe out any rubbish at the end of the file
             ok = file:truncate(MainHdl),
@@ -1780,6 +1774,7 @@ recover_crashed_compactions1(Files, TmpFile) ->
             {ok, TmpHdl} = file:open(form_filename(TmpFile),
                                      [read, raw, binary, read_ahead]),
             {ok, TmpSize} = file:copy(TmpHdl, MainHdl, TmpSize),
+            ok = file:sync(MainHdl),
             ok = file:close(MainHdl),
             ok = file:close(TmpHdl),
             ok = file:delete(TmpFile),
@@ -1862,7 +1857,7 @@ read_message_from_disk(FileHdl, TotalSize) ->
     end.
 
 scan_file_for_valid_messages(File) ->
-    case file:open(form_filename(File), [raw, binary, read]) of
+    case file:open(form_filename(File), [raw, binary, read, read_ahead]) of
         {ok, Hdl} ->
             Valid = scan_file_for_valid_messages(Hdl, 0, []),
             %% if something really bad's happened, the close could fail, but ignore

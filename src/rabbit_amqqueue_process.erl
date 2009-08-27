@@ -114,8 +114,7 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
                blocked_consumers = queue:new(),
                memory_report_timer = undefined
               },
-    %% first thing we must do is report_memory which will clear out
-    %% the 'undefined' values in gain and loss in mixed_queue state
+    %% first thing we must do is report_memory.
     {ok, start_memory_timer(State), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -721,8 +720,7 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
 
 handle_call(purge, _From, State) ->
     {Count, MS} = rabbit_mixed_queue:purge(State #q.mixed_state),
-    reply({ok, Count},
-          State #q { mixed_state = MS });
+    reply({ok, Count}, State #q { mixed_state = MS });
 
 handle_call({claim_queue, ReaderPid}, _From,
             State = #q{owner = Owner, exclusive_consumer = Holder}) ->
@@ -738,10 +736,9 @@ handle_call({claim_queue, ReaderPid}, _From,
                     %% pid...
                     reply(locked, State);
                 ok ->
-                    reply(ok, State #q { owner =
-                                         {ReaderPid,
-                                          erlang:monitor(process, ReaderPid)} })
-                                                 
+                    reply(ok,
+                          State#q{ owner = {ReaderPid, erlang:monitor(
+                                                         process, ReaderPid)} })
             end;
         {ReaderPid, _MonitorRef} ->
             reply(ok, State);
@@ -827,8 +824,8 @@ handle_cast({set_storage_mode, Mode}, State = #q { mixed_state = MS }) ->
     noreply(State #q { mixed_state = MS1 }).
 
 handle_info(report_memory, State) ->
-    %% deliberately don't call noreply/2 as we don't want to restart the timer.
-    %% By unsetting the timer, we force a report on the next normal message
+    %% deliberately don't call noreply/2/3 as we don't want to start the timer.
+    %% By unsetting the timer, we force a report on the next normal message.
     {noreply, State #q { memory_report_timer = undefined }, hibernate};
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},

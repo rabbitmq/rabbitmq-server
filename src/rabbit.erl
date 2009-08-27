@@ -148,6 +148,10 @@ start(normal, []) ->
                 ok = start_child(rabbit_router),
                 ok = start_child(rabbit_node_monitor)
         end},
+       {"guid generator",
+        fun () ->
+                ok = start_child(rabbit_guid)
+        end},
        {"disk queue",
         fun () ->
                 ok = start_child(rabbit_disk_queue)
@@ -161,10 +165,6 @@ start(normal, []) ->
                     sets:from_list([ Q #amqqueue.name || Q <- DurableQueues ]),
                 ok = rabbit_disk_queue:delete_non_durable_queues(
                        DurableQueueNames)
-        end},
-       {"guid generator",
-        fun () ->
-                ok = start_child(rabbit_guid)
         end},
        {"builtin applications",
         fun () ->

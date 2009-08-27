@@ -56,7 +56,7 @@
 -endif.
 
 -record(state, { available_tokens,
-                 liberated_processes,
+                 processes,
                  callbacks,
                  tokens_per_byte,
                  hibernate,
@@ -166,7 +166,7 @@ init([]) ->
              true -> ?TOTAL_TOKENS / MemAvail
           end,
     {ok, #state { available_tokens    = ?TOTAL_TOKENS,
-                  liberated_processes = dict:new(),
+                  processes           = dict:new(),
                   callbacks           = dict:new(),
                   tokens_per_byte     = TPB,
                   hibernate           = queue:new(),
@@ -176,64 +176,65 @@ init([]) ->
 
 handle_call(info, _From, State) ->
     State1 = #state { available_tokens    = Avail,
-                      liberated_processes = Libre,
+                      processes           = Procs,
                       hibernate           = Sleepy,
                       unoppressable       = Unoppressable } =
         free_upto(undef, 1 + ?TOTAL_TOKENS, State), %% this'll just do tidying
     {reply, [{ available_tokens,        Avail                       },
-             { liberated_processes,     dict:to_list(Libre)         },
+             { processes,               dict:to_list(Procs)         },
              { hibernated_processes,    queue:to_list(Sleepy)       },
              { unoppressable_processes, sets:to_list(Unoppressable) }], State1}.
 
 handle_cast({report_memory, Pid, Memory, Hibernating},
-            State = #state { liberated_processes = Libre,
+            State = #state { processes           = Procs,
                              available_tokens    = Avail,
                              callbacks           = Callbacks,
                              tokens_per_byte     = TPB,
                              alarmed             = Alarmed }) ->
     Req = rabbit_misc:ceil(TPB * Memory),
     LibreActivity = if Hibernating -> hibernate;
-                       true -> active
-                    end,
+                      true -> active
+                   end,
     {StateN = #state { hibernate = Sleepy }, ActivityNew} =
-        case find_process(Pid, Libre) of
+        case find_process(Pid, Procs) of
             {libre, {OAlloc, _OActivity}} ->
                 Avail1 = Avail + OAlloc,
                 State1 = #state { available_tokens = Avail2,
-                                  liberated_processes = Libre1 }
+                                  processes = Procs1 }
                     = free_upto(Pid, Req,
                                 State #state { available_tokens = Avail1 }),
                 case Req > Avail2 of
                     true -> %% nowt we can do, oppress the process
                         ok = set_process_mode(Callbacks, Pid, oppressed),
-                        {State1 #state { liberated_processes =
-                                         dict:erase(Pid, Libre1) }, oppressed};
+                        {State1 #state { processes =
+                                         dict:store(Pid, {Req, oppressed},
+                                                    Procs1) }, oppressed};
                     false -> %% keep liberated
                         {State1 #state
-                         { liberated_processes =
-                           dict:store(Pid, {Req, LibreActivity}, Libre1),
+                         { processes =
+                           dict:store(Pid, {Req, LibreActivity}, Procs1),
                            available_tokens = Avail2 - Req },
                          LibreActivity}
                 end;
-            oppressed ->
-                case Alarmed of
+            {oppressed, OrigReq} ->
+                case Alarmed orelse Hibernating orelse
+                    (Req > OrigReq * 0.95 andalso Req < OrigReq * 1.05) of
                     true ->
                         {State, oppressed};
                     false ->
                         State1 = #state { available_tokens = Avail1,
-                                          liberated_processes = Libre1 } =
+                                          processes = Procs1 } =
                             free_upto(Pid, Req, State),
-                        case Req > Avail1 orelse Hibernating of
+                        case Req > Avail1 of
                             true ->
-                                %% not enough space, or no compelling
-                                %% reason, so stay oppressed
+                                %% not enough space, so stay oppressed
                                 {State1, oppressed};
                             false -> %% can liberate the process
                                 set_process_mode(Callbacks, Pid, liberated),
                                 {State1 #state {
-                                   liberated_processes =
+                                   processes =
                                    dict:store(Pid, {Req, LibreActivity},
-                                              Libre1),
+                                              Procs1),
                                    available_tokens = Avail1 - Req },
                                  LibreActivity}
                         end
@@ -266,16 +267,14 @@ handle_cast({conserve_memory, Conserve}, State) ->
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state { available_tokens = Avail,
-                             liberated_processes = Libre }) ->
-    State1 = case find_process(Pid, Libre) of
-                 oppressed ->
-                     State;
-                 {libre, {Alloc, _Activity}} ->
-                     State #state { available_tokens = Avail + Alloc,
-                                    liberated_processes = 
-                                    dict:erase(Pid, Libre) }
-             end,
-    {noreply, State1};
+                             processes = Procs }) ->
+    State1 = State #state { processes = dict:erase(Pid, Procs) },
+    {noreply, case find_process(Pid, Procs) of
+                  {oppressed, _OrigReq} ->
+                      State1;
+                  {libre, {Alloc, _Activity}} ->
+                      State1 #state { available_tokens = Avail + Alloc }
+              end};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info(_Info, State) ->
@@ -287,22 +286,23 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-find_process(Pid, Libre) ->
-    case dict:find(Pid, Libre) of
-        {ok, Value} -> {libre, Value};
-        error -> oppressed
+find_process(Pid, Procs) ->
+    case dict:find(Pid, Procs) of
+        {ok, {OrigReq, oppressed}}        -> {oppressed, OrigReq};
+        {ok, Value = {_Alloc, _Activity}} -> {libre, Value};
+        error                             -> {oppressed, -9999}
     end.
 
 set_process_mode(Callbacks, Pid, Mode) ->
     {Module, Function, Args} = dict:fetch(Pid, Callbacks),
     erlang:apply(Module, Function, Args ++ [Mode]).
 
-tidy_and_sum_sleepy(IgnorePids, Sleepy, Libre) ->
-    tidy_and_sum(hibernate, Libre, fun queue:out/1,
+tidy_and_sum_sleepy(IgnorePids, Sleepy, Procs) ->
+    tidy_and_sum(hibernate, Procs, fun queue:out/1,
                  fun (Pid, _Alloc, Queue) -> queue:in(Pid, Queue) end,
                  IgnorePids, Sleepy, queue:new(), 0).
 
-tidy_and_sum(AtomExpected, Libre, Catamorphism, Anamorphism, DupCheckSet,
+tidy_and_sum(AtomExpected, Procs, Catamorphism, Anamorphism, DupCheckSet,
              CataInit, AnaInit, AllocAcc) ->
     case Catamorphism(CataInit) of
         {empty, _CataInit} -> {AnaInit, AllocAcc};
@@ -312,7 +312,7 @@ tidy_and_sum(AtomExpected, Libre, Catamorphism, Anamorphism, DupCheckSet,
                     true ->
                         {DupCheckSet, AnaInit, AllocAcc};
                     false ->
-                        case find_process(Pid, Libre) of
+                        case find_process(Pid, Procs) of
                             {libre, {Alloc, AtomExpected}} ->
                                 {sets:add_element(Pid, DupCheckSet),
                                  Anamorphism(Pid, Alloc, AnaInit),
@@ -321,13 +321,13 @@ tidy_and_sum(AtomExpected, Libre, Catamorphism, Anamorphism, DupCheckSet,
                                 {DupCheckSet, AnaInit, AllocAcc}
                         end
                 end,
-            tidy_and_sum(AtomExpected, Libre, Catamorphism, Anamorphism,
+            tidy_and_sum(AtomExpected, Procs, Catamorphism, Anamorphism,
                           DupCheckSet1, CataInit1, AnaInit1, AllocAcc1)
     end.
 
-free_upto_sleepy(IgnorePids, Callbacks, Sleepy, Libre, Req) ->
+free_upto_sleepy(IgnorePids, Callbacks, Sleepy, Procs, Req) ->
     free_from(Callbacks,
-              fun(Libre1, Sleepy1, SleepyAcc) ->
+              fun(Procs1, Sleepy1, SleepyAcc) ->
                       case queue:out(Sleepy1) of
                           {empty, _Sleepy2} ->
                               empty;
@@ -336,37 +336,37 @@ free_upto_sleepy(IgnorePids, Callbacks, Sleepy, Libre, Req) ->
                                   true  -> {skip, Sleepy2,
                                             queue:in(Pid, SleepyAcc)};
                                   false -> {Alloc, hibernate} =
-                                               dict:fetch(Pid, Libre1),
+                                               dict:fetch(Pid, Procs1),
                                            {value, Sleepy2, Pid, Alloc}
                               end
                       end
-              end, fun queue:join/2, Libre, Sleepy, queue:new(), Req).
+              end, fun queue:join/2, Procs, Sleepy, queue:new(), Req).
 
-free_from(Callbacks, Hylomorphism, BaseCase, Libre, CataInit, AnaInit, Req) ->
-    case Hylomorphism(Libre, CataInit, AnaInit) of
+free_from(Callbacks, Hylomorphism, BaseCase, Procs, CataInit, AnaInit, Req) ->
+    case Hylomorphism(Procs, CataInit, AnaInit) of
         empty ->
-            {AnaInit, Libre, Req};
+            {AnaInit, Procs, Req};
         {skip, CataInit1, AnaInit1} ->
-            free_from(Callbacks, Hylomorphism, BaseCase, Libre, CataInit1,
+            free_from(Callbacks, Hylomorphism, BaseCase, Procs, CataInit1,
                       AnaInit1, Req);
         {value, CataInit1, Pid, Alloc} ->
-            Libre1 = dict:erase(Pid, Libre),
+            Procs1 = dict:store(Pid, {Alloc, oppressed}, Procs),
             ok = set_process_mode(Callbacks, Pid, oppressed),
             case Req > Alloc of
-                true -> free_from(Callbacks, Hylomorphism, BaseCase, Libre1,
+                true -> free_from(Callbacks, Hylomorphism, BaseCase, Procs1,
                                   CataInit1, AnaInit, Req - Alloc);
-                false -> {BaseCase(CataInit1, AnaInit), Libre1, Req - Alloc}
+                false -> {BaseCase(CataInit1, AnaInit), Procs1, Req - Alloc}
             end
     end.
 
 free_upto(Pid, Req, State = #state { available_tokens    = Avail,
-                                     liberated_processes = Libre,
+                                     processes           = Procs,
                                      callbacks           = Callbacks,
                                      hibernate           = Sleepy,
                                      unoppressable       = Unoppressable })
   when Req > Avail ->
     Unoppressable1 = sets:add_element(Pid, Unoppressable),
-    {Sleepy1, SleepySum} = tidy_and_sum_sleepy(Unoppressable1, Sleepy, Libre),
+    {Sleepy1, SleepySum} = tidy_and_sum_sleepy(Unoppressable1, Sleepy, Procs),
     case Req > Avail + SleepySum of
         true -> %% not enough in sleepy, just return tidied state
             State #state { hibernate = Sleepy1 };
@@ -374,11 +374,11 @@ free_upto(Pid, Req, State = #state { available_tokens    = Avail,
             %% ReqRem1 will be <= 0 because it's likely we'll have
             %% freed more than we need, thus Req - ReqRem1 is total
             %% freed
-            {Sleepy2, Libre1, ReqRem} =
+            {Sleepy2, Procs1, ReqRem} =
                 free_upto_sleepy(Unoppressable1, Callbacks,
-                                 Sleepy1, Libre, Req),
+                                 Sleepy1, Procs, Req),
             State #state { available_tokens = Avail + (Req - ReqRem),
-                           liberated_processes = Libre1,
+                           processes = Procs1,
                            hibernate = Sleepy2 }
     end;
 free_upto(_Pid, _Req, State) ->
