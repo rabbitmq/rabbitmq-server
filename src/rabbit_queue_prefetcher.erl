@@ -47,12 +47,14 @@
 
 -record(pstate,
         { msg_buf,
-          buf_length,
           target_count,
-          fetched_count,
           queue,
           queue_mref
         }).
+
+%%----------------------------------------------------------------------------
+%% Novel
+%%----------------------------------------------------------------------------
 
 %% The design of the prefetcher is based on the following:
 %%
@@ -119,12 +121,12 @@
 %%
 %% Now at some point, the mixed_queue will come along and will call
 %% prefetcher:drain() - normal priority call. The prefetcher then
-%% replies with its internal queue and the length of that queue. If
-%% the prefetch target was reached, the prefetcher stops normally at
-%% this point. If it hasn't been reached, then the prefetcher
-%% continues to hang around (it almost certainly has issued a
-%% disk_queue:prefetch(Q) cast and is waiting for a reply from the
-%% disk_queue).
+%% replies with its internal queue and a flag saying if the prefetcher
+%% has finished or is continuing; if the prefetch target was reached,
+%% the prefetcher stops normally at this point. If it hasn't been
+%% reached, then the prefetcher continues to hang around (it almost
+%% certainly has issued a disk_queue:prefetch(Q) cast and is waiting
+%% for a reply from the disk_queue).
 %%
 %% If the mixed_queue calls prefetcher:drain() and the prefetcher's
 %% internal queue is empty then the prefetcher replies with 'empty',
@@ -176,6 +178,21 @@
 %% redelivered bit set false really are guaranteed to have not been
 %% delivered already.
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/2 :: (queue_name(), non_neg_integer()) ->
+             ({'ok', pid()} | 'ignore' | {'error', any()})).
+-spec(publish/2 :: (pid(), (message()| 'empty')) -> 'ok').
+-spec(drain/1 :: (pid()) -> ('empty' | {queue(), ('finished' | 'continuing')})).
+-spec(drain_and_stop/1 :: (pid()) -> ('empty' | queue())).
+-spec(stop/1 :: (pid()) -> 'ok').
+             
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(Queue, Count) ->
     gen_server2:start_link(?MODULE, [Queue, Count, self()], []).
 
@@ -194,14 +211,14 @@ drain_and_stop(Prefetcher) ->
 stop(Prefetcher) ->
     gen_server2:call(Prefetcher, stop, infinity).
 
-init([Q, Count, QPid]) ->
+%%----------------------------------------------------------------------------
+
+init([Q, Count, QPid]) when Count > 0 andalso is_pid(QPid) ->
     %% link isn't enough because the signal will not appear if the
     %% queue exits normally. Thus have to use monitor.
     MRef = erlang:monitor(process, QPid),
     State = #pstate { msg_buf = queue:new(),
-                      buf_length = 0,
                       target_count = Count,
-                      fetched_count = 0,
                       queue = Q,
                       queue_mref = MRef
                      },
@@ -211,39 +228,37 @@ init([Q, Count, QPid]) ->
 
 handle_call({publish,
              {Msg = #basic_message {}, IsDelivered, AckTag, _Remaining}},
-	    DiskQueue,
-            State = #pstate { fetched_count = Fetched, target_count = Target,
-                              msg_buf = MsgBuf, buf_length = Length, queue = Q
-                            }) ->
+	    DiskQueue, State = #pstate {
+                         target_count = Target, msg_buf = MsgBuf, queue = Q}) ->
     gen_server2:reply(DiskQueue, ok),
-    Timeout = if Fetched + 1 == Target -> hibernate;
-                 true -> ok = rabbit_disk_queue:prefetch(Q),
-                         infinity
+    Timeout = case Target of
+                  1 -> hibernate;
+                  _ -> ok = rabbit_disk_queue:prefetch(Q),
+                       infinity
               end,
     MsgBuf1 = queue:in({Msg, IsDelivered, AckTag}, MsgBuf),
-    {noreply, State #pstate { fetched_count = Fetched + 1,
-                              buf_length = Length + 1,
-                              msg_buf = MsgBuf1 }, Timeout};
+    {noreply, State #pstate { target_count = Target - 1, msg_buf = MsgBuf1 },
+     Timeout};
 handle_call(publish_empty, _From, State) ->
     %% Very odd. This could happen if the queue is deleted or purged
     %% and the mixed queue fails to shut us down.
     {reply, ok, State, hibernate};
-handle_call(drain, _From, State = #pstate { buf_length = 0 }) ->
-    {stop, normal, empty, State};
-handle_call(drain, _From, State = #pstate { fetched_count = Count,
-                                            target_count = Count,
-                                            msg_buf = MsgBuf,
-                                            buf_length = Length }) ->
-    {stop, normal, {MsgBuf, Length, finished}, State};
-handle_call(drain, _From, State = #pstate { msg_buf = MsgBuf,
-                                            buf_length = Length }) ->
-    {reply, {MsgBuf, Length, continuing},
-     State #pstate { msg_buf = queue:new(), buf_length = 0 }, infinity};
-handle_call(drain_and_stop, _From, State = #pstate { buf_length = 0 }) ->
-    {stop, normal, empty, State};
-handle_call(drain_and_stop, _From, State = #pstate { msg_buf = MsgBuf,
-                                                     buf_length = Length }) ->
-    {stop, normal, {MsgBuf, Length}, State};
+handle_call(drain, _From, State = #pstate { target_count = 0,
+                                            msg_buf = MsgBuf }) ->
+    Res = case queue:is_empty(MsgBuf) of
+              true  -> empty;
+              false -> {MsgBuf, finished}
+          end,
+    {stop, normal, Res, State};
+handle_call(drain, _From, State = #pstate { msg_buf = MsgBuf }) ->
+    {reply, {MsgBuf, continuing}, State #pstate { msg_buf = queue:new() },
+     infinity};
+handle_call(drain_and_stop, _From, State = #pstate { msg_buf = MsgBuf }) ->
+    Res = case queue:is_empty(MsgBuf) of
+              true -> empty;
+              false -> MsgBuf
+          end,
+    {stop, normal, Res, State};
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 

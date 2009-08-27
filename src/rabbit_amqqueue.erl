@@ -103,7 +103,7 @@
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(set_storage_mode_pin/2 :: (amqqueue(), boolean()) -> any()).
--spec(set_storage_mode/2 :: (pid(), ('disk' | 'mixed')) -> 'ok').
+-spec(set_storage_mode/2 :: (pid(), ('oppressed' | 'liberated')) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), bool()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(internal_store/1 :: (amqqueue()) -> 'ok').

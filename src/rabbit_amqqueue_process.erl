@@ -102,10 +102,10 @@ start_link(Q) ->
 
 init(Q = #amqqueue { name = QName, durable = Durable, pinned = Pinned }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    ok = rabbit_queue_mode_manager:register
+    ok = rabbit_memory_manager:register
            (self(), false, rabbit_amqqueue, set_storage_mode, [self()]),
     ok = case Pinned of
-             true -> rabbit_queue_mode_manager:pin_to_disk(self());
+             true -> rabbit_memory_manager:oppress(self());
              false -> ok
          end,
     {ok, MS} = rabbit_mixed_queue:init(QName, Durable),
@@ -404,27 +404,27 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
             unacked_messages = UAM} ->
             erlang:demonitor(MonitorRef),
             erase({ch, ChPid}),
-            State1 =
-                case Txn of
-                    none -> State;
-                    _    -> rollback_transaction(Txn, State)
-                end,
-            State2 =
-                deliver_or_requeue_n(
-                  [MsgWithAck ||
-                      {_MsgId, MsgWithAck} <- dict:to_list(UAM)],
-                  State1 #q {
-                    exclusive_consumer = case Holder of
-                                             {ChPid, _} -> none;
-                                             Other -> Other
-                                         end,
-                    active_consumers = remove_consumers(
-                                         ChPid, State1#q.active_consumers),
-                    blocked_consumers = remove_consumers(
-                                          ChPid, State1#q.blocked_consumers)}),
-            case should_auto_delete(State2) of
-                false -> noreply(State2);
-                true  -> {stop, normal, State2}
+            State1 = State#q{
+                       exclusive_consumer = case Holder of
+                                                {ChPid, _} -> none;
+                                                Other -> Other
+                                            end,
+                       active_consumers = remove_consumers(
+                                            ChPid, State#q.active_consumers),
+                       blocked_consumers = remove_consumers(
+                                             ChPid, State#q.blocked_consumers)},
+            case should_auto_delete(State1) of
+                true  ->
+                    {stop, normal, State1};
+                false -> 
+                    State2 = case Txn of
+                                 none -> State1;
+                                 _    -> rollback_transaction(Txn, State1)
+                             end,
+                    noreply(
+                      deliver_or_requeue_n(
+                        [MsgWithAck ||
+                            {_MsgId, MsgWithAck} <- dict:to_list(UAM)], State2))
             end
     end.
 
@@ -557,7 +557,7 @@ i(Item, _) ->
 report_memory(Hib, State = #q { mixed_state = MS }) ->
     {MS1, MSize, Gain, Loss} =
         rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS),
-    rabbit_queue_mode_manager:report_memory(self(), MSize, Gain, Loss, Hib),
+    rabbit_memory_manager:report_memory(self(), MSize, Gain, Loss, Hib),
     State #q { mixed_state = MS1 }.
 
 %---------------------------------------------------------------------------
@@ -826,14 +826,18 @@ handle_cast({set_storage_mode, Mode}, State = #q { mixed_state = MS }) ->
     PendingMessages =
         lists:flatten([Pending || #tx { pending_messages = Pending}
                                       <- all_tx_record()]),
-    {ok, MS1} = rabbit_mixed_queue:set_storage_mode(Mode, PendingMessages, MS),
+    Mode1 = case Mode of
+                liberated -> mixed;
+                oppressed -> disk
+            end,
+    {ok, MS1} = rabbit_mixed_queue:set_storage_mode(Mode1, PendingMessages, MS),
     noreply(State #q { mixed_state = MS1 });
 
 handle_cast({set_storage_mode_pin, Disk, Q}, State = #q { q = PQ }) ->
     ok = rabbit_amqqueue:internal_store(Q#amqqueue{pinned = Disk}),
     ok = (case Disk of
-              true -> fun rabbit_queue_mode_manager:pin_to_disk/1;
-              false -> fun rabbit_queue_mode_manager:unpin_from_disk/1
+              true -> fun rabbit_memory_manager:oppress/1;
+              false -> fun rabbit_memory_manager:liberate/1
           end)(self()),
     noreply(State #q { q = PQ#amqqueue{ pinned = Disk } }).
 

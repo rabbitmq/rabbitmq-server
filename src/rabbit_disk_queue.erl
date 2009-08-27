@@ -281,7 +281,7 @@
 -spec(to_ram_disk_mode/0 :: () -> 'ok').
 -spec(filesync/0 :: () -> 'ok').
 -spec(cache_info/0 :: () -> [{atom(), term()}]).
--spec(set_mode/1 :: ('disk' | 'mixed') -> 'ok').
+-spec(set_mode/1 :: ('oppressed' | 'liberated') -> 'ok').
 
 -endif.
 
@@ -371,7 +371,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %%       brutal_kill.
     %% Otherwise, the gen_server will be immediately terminated.
     process_flag(trap_exit, true),
-    ok = rabbit_queue_mode_manager:register
+    ok = rabbit_memory_manager:register
            (self(), true, rabbit_disk_queue, set_mode, []),
     Node = node(),
     ok = 
@@ -448,7 +448,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %% grant us to ram_disk mode. We have to start in ram_disk mode
     %% because we can't find values for mnesia_bytes_per_record or
     %% ets_bytes_per_record otherwise.
-    ok = rabbit_queue_mode_manager:report_memory(self(), 0, false),
+    ok = rabbit_memory_manager:report_memory(self(), 0, false),
     ok = report_memory(false, State2),
     {ok, start_memory_timer(State2), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -522,8 +522,8 @@ handle_cast({delete_queue, Q}, State) ->
     noreply(State1);
 handle_cast({set_mode, Mode}, State) ->
     noreply((case Mode of
-                 disk -> fun to_disk_only_mode/1;
-                 mixed -> fun to_ram_disk_mode/1
+                 oppressed -> fun to_disk_only_mode/1;
+                 liberated -> fun to_ram_disk_mode/1
              end)(State));
 handle_cast({prefetch, Q, From}, State) ->
     {ok, Result, State1} =
@@ -609,7 +609,7 @@ start_memory_timer(State) ->
 
 report_memory(Hibernating, State) ->
     Bytes = memory_use(State),
-    rabbit_queue_mode_manager:report_memory(self(), trunc(2.5 * Bytes),
+    rabbit_memory_manager:report_memory(self(), trunc(2.5 * Bytes),
                                             Hibernating).
 
 memory_use(#dqstate { operation_mode = ram_disk,
