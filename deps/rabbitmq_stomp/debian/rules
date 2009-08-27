@@ -12,7 +12,8 @@ TARGET_DIR=usr/lib/erlang/lib/rabbitmq-stomp-$(DEB_UPSTREAM_VERSION)
 
 build: build-stamp
 build-stamp:
-	dh build
+	dh build --before auto_test
+	dh build --after auto_test
 	touch build-stamp
 
 clean:

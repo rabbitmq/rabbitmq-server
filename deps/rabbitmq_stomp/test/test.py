@@ -275,7 +275,7 @@ class TestConnected(unittest.TestCase):
 
         recv_messages = [self.match(resp, cd.recv(4096))[0] \
                             for cd in [self.cd1, self.cd2]]
-        self.assertTrue(messages == recv_messages, \
+        self.assertTrue(sorted(messages) == sorted(recv_messages), \
                                         '%r != %r ' % (messages, recv_messages))
 
 
@@ -344,6 +344,54 @@ class TestConnected(unittest.TestCase):
                 'receipt-id:1\n'
                 '\n\x00')
         self.match(resp, self.cd.recv(4096))
+
+
+    @connect(['cd'])
+    def test_huge_message(self):
+        ''' Test sending/receiving huge (92MB) message. '''
+        subscribe=( 'SUBSCRIBE\n'
+                    'id: xxx\n'
+                    'destination:\n'
+                    'exchange: amq.topic\n'
+                    'routing_key: test_huge_message\n'
+                    '\n\0')
+        self.cd.sendall(subscribe)
+
+        # Instead of 92MB, let's use 16, so that the test can finish in
+        # reasonable time.
+        ##message = 'x' * 1024*1024*92
+        message = 'x' * 1024*1024*16
+
+        self.cd.sendall('SEND\n'
+                        'destination: test_huge_message\n'
+                        'exchange: amq.topic\n'
+                        '\n'
+                        '%s'
+                        '\0' % message)
+
+        resp=('MESSAGE\n'
+            'destination:test_huge_message\n'
+            'exchange:amq.topic\n'
+            'message-id:(.*)\n'
+            'content-type:text/plain\n'
+            'subscription:(.*)\n'
+            'content-length:%i\n'
+            '\n'
+            '%s(.*)'
+             % (len(message), message[:8000]) )
+
+        recv = []
+        s = 0
+        while len(recv) < 1 or recv[-1][-1] != '\0':
+            buf =  self.cd.recv(4096*16)
+            s += len(buf)
+            recv.append( buf )
+        buf = ''.join(recv)
+
+        # matching 100MB regexp is way too expensive.
+        self.match(resp, buf[:8192])
+        self.assertEqual(len(buf) > len(message), True)
+
 
 
 

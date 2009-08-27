@@ -71,7 +71,7 @@ start_listeners([{Host, Port} | More]) ->
                    {reuseaddr, true}],
                   {?MODULE, listener_started, []},
                   {?MODULE, listener_stopped, []},
-                  {?MODULE, start_client, []}]},
+                  {?MODULE, start_client, []}, "STOMP Listener"]},
                 transient, infinity, supervisor, [tcp_listener_sup]}),
     start_listeners(More).
 
