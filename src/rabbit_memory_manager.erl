@@ -238,12 +238,12 @@ handle_call(info, _From, State) ->
                       oppressive_pins = Pins,
                       unoppressable = Unoppressable } =
         free_upto(undef, 1 + ?TOTAL_TOKENS, State), %% this'll just do tidying
-    {reply, [{ available_tokens, Avail },
-             { liberated_processes, dict:to_list(Libre) },
-             { lowrate_queues, priority_queue:to_list(Lazy) },
-             { hibernated_queues, queue:to_list(Sleepy) },
-             { oppressive_pins, sets:to_list(Pins) },
-             { unoppressable_queues, sets:to_list(Unoppressable) }], State1}.
+    {reply, [{ available_tokens,        Avail                       },
+             { liberated_processes,     dict:to_list(Libre)         },
+             { lowrate_processes,       priority_queue:to_list(Lazy)},
+             { hibernated_processes,    queue:to_list(Sleepy)       },
+             { oppressive_pins,         sets:to_list(Pins)          },
+             { unoppressable_processes, sets:to_list(Unoppressable) }], State1}.
 
 handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
             State = #state { liberated_processes = Libre,
