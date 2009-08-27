@@ -274,7 +274,7 @@ class TestConnected(unittest.TestCase):
 
         recv_messages = [self.match(resp, cd.recv(4096))[0] \
                             for cd in [self.cd1, self.cd2]]
-        self.assertTrue(messages == recv_messages, \
+        self.assertTrue(sorted(messages) == sorted(recv_messages), \
                                         '%r != %r ' % (messages, recv_messages))
 
 
