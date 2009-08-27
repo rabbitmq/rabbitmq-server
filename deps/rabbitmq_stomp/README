@@ -42,7 +42,7 @@ download and compile the dependencies. The simplest way is to run:
 
 This will download and compile all the rabbitmq related packages. Actually
 you don't have to compile everything, the required packages are only
-rabbitmq-codegen, rabbitmq-server and rabbitmq-stomp.
+rabbitmq-erlang-client, rabbitmq-codegen, rabbitmq-server and rabbitmq-stomp.
 
 
 If you want to compile a plugin for a specific release of the broker,
@@ -68,6 +68,7 @@ To install and activate package, please follow the instructions from
 Plugin Development Guide:
     http://www.rabbitmq.com/plugin-development.html#activating-a-plugin
 
+You need to install amqp_client.ez and rabbitmq-stomp.ez packages.
 
 ## Running the STOMP adapter
 
