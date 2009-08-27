@@ -49,7 +49,7 @@ handshake(State = #connection_state{serverhost = Host, port = Port,
         {ok, Sock} ->
             do_handshake(Sock, State);
         {error, Reason} ->
-            io:format("Could not start the network driver: ~p~n",[Reason]),
+            ?LOG_INFO("Could not start the network driver: ~p~n",[Reason]),
             exit(Reason)
     end;
 
@@ -64,7 +64,7 @@ handshake(State = #connection_state{serverhost = Host, port = Port,
                     RabbitSslSock = #ssl_socket{ssl = SslSock, tcp = Sock},
                     do_handshake(RabbitSslSock, State);
                 {error, Reason} ->
-                    io:format("Could not upgrade the network driver to ssl: "
+                    ?LOG_INFO("Could not upgrade the network driver to ssl: "
                               "~p~n", [Reason]),
                     exit(Reason)
             end;
