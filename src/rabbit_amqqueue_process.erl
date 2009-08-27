@@ -101,7 +101,7 @@ start_link(Q) ->
 
 init(Q = #amqqueue { name = QName, durable = Durable }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    ok = rabbit_queue_mode_manager:register
+    ok = rabbit_memory_manager:register
            (self(), false, rabbit_amqqueue, set_storage_mode, [self()]),
     {ok, MS} = rabbit_mixed_queue:init(QName, Durable),
     State = #q{q = Q,
@@ -551,7 +551,7 @@ i(Item, _) ->
 report_memory(Hib, State = #q { mixed_state = MS }) ->
     {MS1, MSize, Gain, Loss} =
         rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS),
-    rabbit_queue_mode_manager:report_memory(self(), MSize, Gain, Loss, Hib),
+    rabbit_memory_manager:report_memory(self(), MSize, Gain, Loss, Hib),
     State #q { mixed_state = MS1 }.
 
 %---------------------------------------------------------------------------
@@ -820,7 +820,11 @@ handle_cast({set_storage_mode, Mode}, State = #q { mixed_state = MS }) ->
     PendingMessages =
         lists:flatten([Pending || #tx { pending_messages = Pending}
                                       <- all_tx_record()]),
-    {ok, MS1} = rabbit_mixed_queue:set_storage_mode(Mode, PendingMessages, MS),
+    Mode1 = case Mode of
+                liberated -> mixed;
+                oppressed -> disk
+            end,
+    {ok, MS1} = rabbit_mixed_queue:set_storage_mode(Mode1, PendingMessages, MS),
     noreply(State #q { mixed_state = MS1 }).
 
 handle_info(report_memory, State) ->

@@ -140,7 +140,7 @@ start(normal, []) ->
                 {ok, MemoryAlarms} = application:get_env(memory_alarms),
                 ok = rabbit_alarm:start(MemoryAlarms),
 
-                ok = start_child(rabbit_queue_mode_manager),
+                ok = start_child(rabbit_memory_manager),
                 
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
