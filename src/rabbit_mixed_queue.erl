@@ -425,9 +425,9 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
               IsDurable, Q, Queue1, PublishCount, RequeueCount, Commit,
               [AckTag | Ack], MsgBuf, Msg, IsDelivered);
         {{value, {on_disk, Count}}, Queue1} ->
-            send_messages_to_disk(IsDurable, Q, Queue1, PublishCount,
-                                  RequeueCount + Count, Commit, Ack,
-                                  inc_queue_length(MsgBuf, Count))
+            send_messages_to_disk(
+              IsDurable, Q, Queue1, PublishCount, RequeueCount + Count,
+              Commit, Ack, inc_queue_length(MsgBuf, Count))
     end.
 
 republish_message_to_disk_queue(IsDurable, Q, Queue, PublishCount, RequeueCount,
@@ -435,15 +435,15 @@ republish_message_to_disk_queue(IsDurable, Q, Queue, PublishCount, RequeueCount,
                                 #basic_message { guid = MsgId }, IsDelivered) ->
     {Commit1, Ack1} = flush_requeue_to_disk_queue(Q, RequeueCount, Commit, Ack),
     ok = rabbit_disk_queue:tx_publish(Msg),
-    {PublishCount1, Commit2, Ack2} =
+    Commit2 = [{MsgId, IsDelivered} | Commit1],
+    {PublishCount1, Commit3, Ack2} =
         case PublishCount == ?TO_DISK_MAX_FLUSH_SIZE of
-            true  -> ok = flush_messages_to_disk_queue(
-                            Q, [{MsgId, IsDelivered} | Commit1], Ack1),
+            true  -> ok = flush_messages_to_disk_queue(Q, Commit2, Ack1),
                      {0, [], []};
-            false -> {PublishCount + 1, [{MsgId, IsDelivered} | Commit1], Ack1}
+            false -> {PublishCount + 1, Commit2, Ack1}
         end,
     send_messages_to_disk(IsDurable, Q, Queue, PublishCount1, 0,
-                          Commit2, Ack2, inc_queue_length(MsgBuf, 1)).
+                          Commit3, Ack2, inc_queue_length(MsgBuf, 1)).
 
 flush_messages_to_disk_queue(_Q, [], []) ->
     ok;
