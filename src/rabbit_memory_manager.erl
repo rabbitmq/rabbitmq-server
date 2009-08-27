@@ -182,22 +182,22 @@ init([]) ->
     TPB = if MemAvail == 0 -> 0;
              true -> ?TOTAL_TOKENS / MemAvail
           end,
-    {ok, #state { available_tokens = ?TOTAL_TOKENS,
+    {ok, #state { available_tokens    = ?TOTAL_TOKENS,
                   liberated_processes = dict:new(),
-                  callbacks = dict:new(),
-                  tokens_per_byte = TPB,
-                  lowrate = priority_queue:new(),
-                  hibernate = queue:new(),
-                  unoppressable = sets:new(),
-                  alarmed = false
+                  callbacks           = dict:new(),
+                  tokens_per_byte     = TPB,
+                  lowrate             = priority_queue:new(),
+                  hibernate           = queue:new(),
+                  unoppressable       = sets:new(),
+                  alarmed             = false
                 }}.
 
 handle_call(info, _From, State) ->
-    State1 = #state { available_tokens = Avail,
+    State1 = #state { available_tokens    = Avail,
                       liberated_processes = Libre,
-                      lowrate = Lazy,
-                      hibernate = Sleepy,
-                      unoppressable = Unoppressable } =
+                      lowrate             = Lazy,
+                      hibernate           = Sleepy,
+                      unoppressable       = Unoppressable } =
         free_upto(undef, 1 + ?TOTAL_TOKENS, State), %% this'll just do tidying
     {reply, [{ available_tokens,        Avail                       },
              { liberated_processes,     dict:to_list(Libre)         },
@@ -207,10 +207,10 @@ handle_call(info, _From, State) ->
 
 handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
             State = #state { liberated_processes = Libre,
-                             available_tokens = Avail,
-                             callbacks = Callbacks,
-                             tokens_per_byte = TPB,
-                             alarmed = Alarmed }) ->
+                             available_tokens    = Avail,
+                             callbacks           = Callbacks,
+                             tokens_per_byte     = TPB,
+                             alarmed             = Alarmed }) ->
     Req = rabbit_misc:ceil(TPB * Memory),
     LowRate = case {BytesGained, BytesLost} of
                   {undefined, _} -> false;
@@ -259,7 +259,8 @@ handle_cast({report_memory, Pid, Memory, BytesGained, BytesLost, Hibernating},
                                 set_process_mode(Callbacks, Pid, liberated),
                                 {State1 #state {
                                    liberated_processes =
-                                   dict:store(Pid, {Req, LibreActivity}, Libre1),
+                                   dict:store(Pid, {Req, LibreActivity},
+                                              Libre1),
                                    available_tokens = Avail1 - Req },
                                  LibreActivity}
                         end
@@ -300,7 +301,8 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
                      State;
                  {libre, {Alloc, _Activity}} ->
                      State #state { available_tokens = Avail + Alloc,
-                                    liberated_processes = dict:erase(Pid, Libre) }
+                                    liberated_processes = 
+                                    dict:erase(Pid, Libre) }
              end,
     {noreply, State1};
 handle_info({'EXIT', _Pid, Reason}, State) ->
@@ -420,12 +422,12 @@ free_from(Callbacks, Hylomorphism, BaseCase, Libre, CataInit, AnaInit, Req) ->
             end
     end.
 
-free_upto(Pid, Req, State = #state { available_tokens = Avail,
+free_upto(Pid, Req, State = #state { available_tokens    = Avail,
                                      liberated_processes = Libre,
-                                     callbacks = Callbacks,
-                                     lowrate = Lazy,
-                                     hibernate = Sleepy,
-                                     unoppressable = Unoppressable })
+                                     callbacks           = Callbacks,
+                                     lowrate             = Lazy,
+                                     hibernate           = Sleepy,
+                                     unoppressable       = Unoppressable })
   when Req > Avail ->
     Unoppressable1 = sets:add_element(Pid, Unoppressable),
     {Sleepy1, SleepySum} = tidy_and_sum_sleepy(Unoppressable1, Sleepy, Libre),
@@ -446,14 +448,17 @@ free_upto(Pid, Req, State = #state { available_tokens = Avail,
                     %% likely we'll have freed more than we
                     %% need, thus Req - ReqRem1 is total freed
                     State #state { available_tokens = Avail + (Req - ReqRem1),
-                                   liberated_processes = Libre2, lowrate = Lazy2,
+                                   liberated_processes = Libre2,
+                                   lowrate = Lazy2,
                                    hibernate = Sleepy2 }
             end;
         false -> %% enough available in sleepy, don't touch lazy
             {Sleepy2, Libre1, ReqRem} =
-                free_upto_sleepy(Unoppressable1, Callbacks, Sleepy1, Libre, Req),
+                free_upto_sleepy(Unoppressable1, Callbacks,
+                                 Sleepy1, Libre, Req),
             State #state { available_tokens = Avail + (Req - ReqRem),
-                           liberated_processes = Libre1, hibernate = Sleepy2 }
+                           liberated_processes = Libre1,
+                           hibernate = Sleepy2 }
     end;
 free_upto(_Pid, _Req, State) ->
     State.
