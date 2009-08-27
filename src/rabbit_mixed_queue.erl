@@ -110,8 +110,8 @@ init(Queue, IsDurable) ->
                      SizeAcc1 = SizeAcc + size_of_message(Msg),
                      case {MFound, is_magic_marker_message(Msg)} of
                          {false, false} -> {SizeAcc1, false, MCount + 1};
-                         {false, true}  -> {SizeAcc1, true, MCount};
-                         {true, false}  -> {SizeAcc1, true, MCount}
+                         {false, true}  -> {SizeAcc,  true,  MCount};
+                         {true, false}  -> {SizeAcc1, true,  MCount}
                      end
              end, {0, false, 0}, Queue),
     Len1 = case MarkerFound of
