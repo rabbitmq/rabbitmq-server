@@ -103,7 +103,6 @@
 
 init(Queue, IsDurable) ->
     Len = rabbit_disk_queue:len(Queue),
-    MsgBuf = inc_queue_length(queue:new(), Len),
     {Size, MarkerFound, MarkerCount} = rabbit_disk_queue:foldl(
              fun (Msg = #basic_message { is_persistent = true },
                   _AckTag, _IsDelivered, {SizeAcc, MFound, MCount}) ->
@@ -122,6 +121,7 @@ init(Queue, IsDurable) ->
                    {ok, Len2} = fetch_ack_magic_marker_message(Queue),
                    Len2
            end,
+    MsgBuf = inc_queue_length(queue:new(), Len1),
     {ok, #mqstate { mode = disk, msg_buf = MsgBuf, queue = Queue,
                     is_durable = IsDurable, length = Len1,
                     memory_size = Size, memory_gain = undefined,
