@@ -489,7 +489,6 @@ flush_requeue_to_disk_queue(_Q, 0, Commit, Ack) ->
     {Commit, Ack};
 flush_requeue_to_disk_queue(Q, RequeueCount, Commit, Ack) ->
     ok = flush_messages_to_disk_queue(Q, Commit, Ack),
-    ok = rabbit_disk_queue:filesync(),
     ok = rabbit_disk_queue:requeue_next_n(Q, RequeueCount),
     {[], []}.
 
