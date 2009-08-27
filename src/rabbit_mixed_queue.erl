@@ -104,13 +104,26 @@
 init(Queue, IsDurable) ->
     Len = rabbit_disk_queue:len(Queue),
     MsgBuf = inc_queue_length(queue:new(), Len),
-    Size = rabbit_disk_queue:foldl(
+    {Size, MarkerFound, MarkerCount} = rabbit_disk_queue:foldl(
              fun (Msg = #basic_message { is_persistent = true },
-                  _AckTag, _IsDelivered, Acc) ->
-                     Acc + size_of_message(Msg)
-             end, 0, Queue),
+                  _AckTag, _IsDelivered, {SizeAcc, MFound, MCount}) ->
+                     SizeAcc1 = SizeAcc + size_of_message(Msg),
+                     case {MFound, is_magic_marker_message(Msg)} of
+                         {false, false} -> {SizeAcc1, false, MCount + 1};
+                         {false, true}  -> {SizeAcc1, true, MCount};
+                         {true, false}  -> {SizeAcc1, true, MCount}
+                     end
+             end, {0, false, 0}, Queue),
+    Len1 = case MarkerFound of
+               false -> Len;
+               true ->
+                   ok = rabbit_disk_queue:requeue_next_n(Queue, MarkerCount),
+                   Len2 = Len - 1,
+                   {ok, Len2} = fetch_ack_magic_marker_message(Queue),
+                   Len2
+           end,
     {ok, #mqstate { mode = disk, msg_buf = MsgBuf, queue = Queue,
-                    is_durable = IsDurable, length = Len,
+                    is_durable = IsDurable, length = Len1,
                     memory_size = Size, memory_gain = undefined,
                     memory_loss = undefined, prefetcher = undefined }}.
 
@@ -339,7 +352,7 @@ is_empty(#mqstate { length = Length }) ->
 set_storage_mode(Mode, _TxnMessages, State = #mqstate { mode = Mode }) ->
     {ok, State};
 set_storage_mode(disk, TxnMessages, State =
-         #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf,
+         #mqstate { mode = mixed, queue = Q, msg_buf = MsgBuf, length = Length,
                     is_durable = IsDurable, prefetcher = Prefetcher }) ->
     State1 = State #mqstate { mode = disk },
     MsgBuf1 =
@@ -359,8 +372,10 @@ set_storage_mode(disk, TxnMessages, State =
     %% message on disk.
     %% Note we also batch together messages on disk so that we minimise
     %% the calls to requeue.
+    ok = publish_magic_marker_message(Q),
     {ok, MsgBuf3} =
         send_messages_to_disk(IsDurable, Q, MsgBuf1, 0, 0, [], [], queue:new()),
+    {ok, Length} = fetch_ack_magic_marker_message(Q),
     %% tx_publish txn messages. Some of these will have been already
     %% published if they really are durable and persistent which is
     %% why we can't just use our own tx_publish/2 function (would end
@@ -551,3 +566,21 @@ on_disk(disk, _IsDurable, _IsPersistent)  -> true;
 on_disk(mixed, true, true)                -> true;
 on_disk(mixed, _IsDurable, _IsPersistent) -> false.
 
+publish_magic_marker_message(Q) ->
+    Msg = rabbit_basic:message(
+            none, internal, [], <<>>, rabbit_guid:guid(), true),
+    ok = rabbit_disk_queue:publish(Q, ensure_binary_properties(Msg), false).
+
+fetch_ack_magic_marker_message(Q) ->
+    {#basic_message { exchange_name = none, routing_key = internal,
+                      is_persistent = true },
+     false, AckTag, Length} = rabbit_disk_queue:fetch(Q),
+    ok = rabbit_disk_queue:ack(Q, [AckTag]),
+    {ok, Length}.
+
+is_magic_marker_message(
+  #basic_message { exchange_name = none, routing_key = internal,
+                   is_persistent = true }) ->
+    true;
+is_magic_marker_message(_) ->
+    false.
