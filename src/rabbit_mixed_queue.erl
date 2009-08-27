@@ -572,9 +572,8 @@ publish_magic_marker_message(Q) ->
     ok = rabbit_disk_queue:publish(Q, ensure_binary_properties(Msg), false).
 
 fetch_ack_magic_marker_message(Q) ->
-    {#basic_message { exchange_name = none, routing_key = internal,
-                      is_persistent = true },
-     false, AckTag, Length} = rabbit_disk_queue:fetch(Q),
+    {Msg, false, AckTag, Length} = rabbit_disk_queue:fetch(Q),
+    true = is_magic_marker_message(Msg),
     ok = rabbit_disk_queue:ack(Q, [AckTag]),
     {ok, Length}.
 

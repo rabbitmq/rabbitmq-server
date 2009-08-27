@@ -399,27 +399,27 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
             unacked_messages = UAM} ->
             erlang:demonitor(MonitorRef),
             erase({ch, ChPid}),
-            State1 =
-                case Txn of
-                    none -> State;
-                    _    -> rollback_transaction(Txn, State)
-                end,
-            State2 =
-                deliver_or_requeue_n(
-                  [MsgWithAck ||
-                      {_MsgId, MsgWithAck} <- dict:to_list(UAM)],
-                  State1 #q {
-                    exclusive_consumer = case Holder of
-                                             {ChPid, _} -> none;
-                                             Other -> Other
-                                         end,
-                    active_consumers = remove_consumers(
-                                         ChPid, State1#q.active_consumers),
-                    blocked_consumers = remove_consumers(
-                                          ChPid, State1#q.blocked_consumers)}),
-            case should_auto_delete(State2) of
-                false -> noreply(State2);
-                true  -> {stop, normal, State2}
+            State1 = State#q{
+                       exclusive_consumer = case Holder of
+                                                {ChPid, _} -> none;
+                                                Other -> Other
+                                            end,
+                       active_consumers = remove_consumers(
+                                            ChPid, State#q.active_consumers),
+                       blocked_consumers = remove_consumers(
+                                             ChPid, State#q.blocked_consumers)},
+            case should_auto_delete(State1) of
+                true  ->
+                    {stop, normal, State1};
+                false -> 
+                    State2 = case Txn of
+                                 none -> State1;
+                                 _    -> rollback_transaction(Txn, State1)
+                             end,
+                    noreply(
+                      deliver_or_requeue_n(
+                        [MsgWithAck ||
+                            {_MsgId, MsgWithAck} <- dict:to_list(UAM)], State2))
             end
     end.
 
