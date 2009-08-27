@@ -103,16 +103,17 @@
 
 init(Queue, IsDurable) ->
     Len = rabbit_disk_queue:len(Queue),
-    {Size, MarkerFound, MarkerPreludeCount} = rabbit_disk_queue:foldl(
-             fun (Msg = #basic_message { is_persistent = true },
-                  _AckTag, _IsDelivered, {SizeAcc, MFound, MPCount}) ->
-                     SizeAcc1 = SizeAcc + size_of_message(Msg),
-                     case {MFound, is_magic_marker_message(Msg)} of
-                         {false, false} -> {SizeAcc1, false, MPCount + 1};
-                         {false, true}  -> {SizeAcc,  true,  MPCount};
-                         {true, false}  -> {SizeAcc1, true,  MPCount}
-                     end
-             end, {0, false, 0}, Queue),
+    {Size, MarkerFound, MarkerPreludeCount} =
+        rabbit_disk_queue:foldl(
+          fun (Msg = #basic_message { is_persistent = true },
+               _AckTag, _IsDelivered, {SizeAcc, MFound, MPCount}) ->
+                  SizeAcc1 = SizeAcc + size_of_message(Msg),
+                  case {MFound, is_magic_marker_message(Msg)} of
+                      {false, false} -> {SizeAcc1, false, MPCount + 1};
+                      {false, true}  -> {SizeAcc,  true,  MPCount};
+                      {true, false}  -> {SizeAcc1, true,  MPCount}
+                  end
+          end, {0, false, 0}, Queue),
     Len1 = case MarkerFound of
                false -> Len;
                true ->
