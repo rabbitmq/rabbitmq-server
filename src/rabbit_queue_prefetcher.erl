@@ -52,6 +52,10 @@
           queue_mref
         }).
 
+%%----------------------------------------------------------------------------
+%% Novel
+%%----------------------------------------------------------------------------
+
 %% The design of the prefetcher is based on the following:
 %%
 %% a) It must issue low-priority (-ve) requests to the disk queue for
@@ -117,12 +121,12 @@
 %%
 %% Now at some point, the mixed_queue will come along and will call
 %% prefetcher:drain() - normal priority call. The prefetcher then
-%% replies with its internal queue and the length of that queue. If
-%% the prefetch target was reached, the prefetcher stops normally at
-%% this point. If it hasn't been reached, then the prefetcher
-%% continues to hang around (it almost certainly has issued a
-%% disk_queue:prefetch(Q) cast and is waiting for a reply from the
-%% disk_queue).
+%% replies with its internal queue and a flag saying if the prefetcher
+%% has finished or is continuing; if the prefetch target was reached,
+%% the prefetcher stops normally at this point. If it hasn't been
+%% reached, then the prefetcher continues to hang around (it almost
+%% certainly has issued a disk_queue:prefetch(Q) cast and is waiting
+%% for a reply from the disk_queue).
 %%
 %% If the mixed_queue calls prefetcher:drain() and the prefetcher's
 %% internal queue is empty then the prefetcher replies with 'empty',
@@ -174,16 +178,20 @@
 %% redelivered bit set false really are guaranteed to have not been
 %% delivered already.
 
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
 
 -spec(start_link/2 :: (queue_name(), non_neg_integer()) ->
              ({'ok', pid()} | 'ignore' | {'error', any()})).
--spec(publish/2 :: (pid(), message()) -> 'ok').
+-spec(publish/2 :: (pid(), (message()| 'empty')) -> 'ok').
 -spec(drain/1 :: (pid()) -> ('empty' | {queue(), ('finished' | 'continuing')})).
 -spec(drain_and_stop/1 :: (pid()) -> ('empty' | queue())).
 -spec(stop/1 :: (pid()) -> 'ok').
              
 -endif.
+
+%%----------------------------------------------------------------------------
 
 start_link(Queue, Count) ->
     gen_server2:start_link(?MODULE, [Queue, Count, self()], []).
@@ -202,6 +210,8 @@ drain_and_stop(Prefetcher) ->
 
 stop(Prefetcher) ->
     gen_server2:call(Prefetcher, stop, infinity).
+
+%%----------------------------------------------------------------------------
 
 init([Q, Count, QPid]) when Count > 0 andalso is_pid(QPid) ->
     %% link isn't enough because the signal will not appear if the
