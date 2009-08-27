@@ -37,8 +37,8 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([open_channel/1, open_channel/3]).
--export([start_direct/1, start_direct_link/1]).
--export([start_network/1, start_network_link/1]).
+-export([start_direct/0, start_direct/1, start_direct_link/0, start_direct_link/1]).
+-export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
 -export([close/1, close/3]).
 
 %%---------------------------------------------------------------------------
@@ -64,12 +64,31 @@
 %% AMQP Connection API Methods
 %%---------------------------------------------------------------------------
 
+%% @spec () -> [Connection]
+%% where
+%%     Connection = pid()
+%% @doc Starts a direct connection to a RabbitMQ server, assuming that
+%% the server is running in the same process space, and with a default
+%% set of amqp_params. If a different vhost or credential set is required,
+%% start_direct/1 should be used.
+start_direct() -> start_direct(#amqp_params{}).
+
 %% @spec (amqp_params()) -> [Connection]
 %% where
 %%      Connection = pid()
 %% @doc Starts a direct connection to a RabbitMQ server, assuming that
 %% the server is running in the same process space.
 start_direct(Params) -> start_direct_internal(Params, false).
+
+%% @spec () -> [Connection]
+%% where
+%%     Connection = pid()
+%% @doc Starts a direct connection to a RabbitMQ server, assuming that
+%% the server is running in the same process space, and with a default
+%% set of amqp_params. If a different vhost or credential set is required,
+%% start_direct_link/1 should be used. The resulting
+%% process is linked to the invoking process.
+start_direct_link() -> start_direct_link(#amqp_params{}).
 
 %% @spec (amqp_params()) -> [Connection]
 %% where
@@ -89,11 +108,29 @@ start_direct_internal(#amqp_params{username     = User,
     {ok, Pid} = start_internal(InitialState, amqp_direct_driver, ProcLink),
     Pid.
 
+%% @spec () -> [Connection]
+%% where
+%%      Connection = pid()
+%% @doc Starts a networked conection to a remote AMQP server. Default
+%% connection settings are used, meaning that the server is expected
+%% to be at localhost:5672, with a vhost of "/" authorising a user
+%% guest/guest.
+start_network() -> start_network(#amqp_params{}).
+
 %% @spec (amqp_params()) -> [Connection]
 %% where
 %%      Connection = pid()
 %% @doc Starts a networked conection to a remote AMQP server.
 start_network(Params) -> start_network_internal(Params, false).
+
+%% @spec () -> [Connection]
+%% where
+%%      Connection = pid()
+%% @doc Starts a networked conection to a remote AMQP server. Default
+%% connection settings are used, meaning that the server is expected
+%% to be at localhost:5672, with a vhost of "/" authorising a user
+%% guest/guest. The resulting process is linked to the invoking process.
+start_network_link() -> start_network_link(#amqp_params{}).
 
 %% @spec (amqp_params()) -> [Connection]
 %% where
