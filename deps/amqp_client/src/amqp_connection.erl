@@ -285,7 +285,12 @@ handle_cast({method, #'connection.close'{reply_code = Code,
             State = #connection_state{driver = Driver}) ->
     ?LOG_WARN("Broker forced connection: ~p -> ~p~n", [Code, Text]),
     Driver:handle_broker_close(State),
-    {stop, normal, State}.
+    {stop, {server_initiated_close, Code, Text}, State}.
+
+%% This can be sent by the channel process in the direct case
+%% when it receives an amqp exception from it's corresponding channel process
+handle_info({connection_level_error, Code, Text}, State) ->
+    {stop, {server_initiated_close, Code, Text}, State};
 
 %%---------------------------------------------------------------------------
 %% Trap exits

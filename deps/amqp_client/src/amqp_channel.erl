@@ -528,13 +528,20 @@ handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
 %% @private
 handle_info({'EXIT', _Pid, Reason},
             State = #channel_state{number = Number}) ->
-    ?LOG_WARN("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
-    {stop, normal, State};
+    {stop, {server_initiated_close, Number, Reason}, State};
 
-%% This is for a channel exception that can't be otherwise handled
+%% This is for a channel exception that is sent by the direct
+%% rabbit_channel process - in this case this process needs to tell
+%% the connection process whether this is a hard error or not
 %% @private
-handle_info( {channel_exit, _Channel, Reason}, State) ->
-   {stop, Reason, State}.
+handle_info({channel_exit, _Channel, {amqp, Reason, _Msg, _Context}},
+            State = #channel_state{parent_connection = Connection}) ->
+    {ConError, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
+    case ConError of
+        true  -> Connection ! {connection_level_error, Code, Text};
+        false -> ok
+    end,
+    {stop, {server_initiated_close, Code, Text}, State}.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks

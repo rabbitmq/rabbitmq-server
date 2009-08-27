@@ -54,7 +54,7 @@ bogus_rpc_test(Connection) ->
         _ -> exit(expected_to_exit)
     catch
         exit:{{server_initiated_close, Code, _},_} ->
-            ?assertMatch(404, Code)
+            ?assertMatch(?NOT_FOUND, Code)
     end,
     wait_for_death(Channel),
     ?assertMatch(true, is_process_alive(Connection)),
@@ -62,7 +62,13 @@ bogus_rpc_test(Connection) ->
 
 hard_error_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
-    ?assertExit(_, amqp_channel:call(Channel, #'basic.qos'{global = true})),
+    Qos = #'basic.qos'{global = true},
+    try amqp_channel:call(Channel, Qos) of
+        _ -> exit(expected_to_exit)
+    catch
+        exit:{{server_initiated_close, Code, _},_} ->
+            ?assertMatch(?NOT_IMPLEMENTED, Code)
+    end,
     wait_for_death(Channel),
     wait_for_death(Connection).
 
