@@ -206,8 +206,8 @@ fetch(State = #mqstate { msg_buf = MsgBuf, queue = Q,
             %% use State, not State1 as we've not dec'd length
             fetch(case rabbit_queue_prefetcher:drain(Prefetcher) of
                       empty -> State #mqstate { prefetcher = undefined };
-                      {Fetched, Len, Status} ->
-                          MsgBuf2 = dec_queue_length(MsgBuf, Len),
+                      {Fetched, Status} ->
+                          MsgBuf2 = dec_queue_length(MsgBuf, queue:len(Fetched)),
                           State #mqstate
                             { msg_buf = queue:join(Fetched, MsgBuf2),
                               prefetcher = case Status of
@@ -363,8 +363,8 @@ set_storage_mode(disk, TxnMessages, State =
             _ ->
                 case rabbit_queue_prefetcher:drain_and_stop(Prefetcher) of
                     empty -> MsgBuf;
-                    {Fetched, Len} ->
-                        MsgBuf2 = dec_queue_length(MsgBuf, Len),
+                    Fetched ->
+                        MsgBuf2 = dec_queue_length(MsgBuf, queue:len(Fetched)),
                         queue:join(Fetched, MsgBuf2)
                 end
         end,
