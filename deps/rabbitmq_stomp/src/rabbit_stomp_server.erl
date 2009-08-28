@@ -32,7 +32,7 @@
 %% rabbit_stomp implements STOMP messaging semantics, as per protocol
 %% "version 1.0", at http://stomp.codehaus.org/Protocol
 
--module(stomp_server).
+-module(rabbit_stomp_server).
 
 -export([start/1,
          listener_started/2, listener_stopped/2, start_client/1,
@@ -40,17 +40,17 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
--include("stomp_frame.hrl").
+-include("rabbit_stomp_frame.hrl").
 
 -record(state, {socket, session_id, channel, parse_state}).
 
 start(Listeners) ->
     {ok, Pid} = supervisor:start_child(
-               rabbitmq_stomp_sup,
+               rabbit_stomp_sup,
                {rabbit_stomp_client_sup,
                 {tcp_client_sup, start_link,
                  [{local, rabbit_stomp_client_sup},
-                  {stomp_server,start_link,[]}]},
+                  {?MODULE, start_link,[]}]},
                 transient, infinity, supervisor, [tcp_client_sup]}),
     ok = start_listeners(Listeners),
     {ok, Pid}.
@@ -63,7 +63,7 @@ start_listeners([{Host, Port} | More]) ->
                           Host,
                           Port),
     {ok,_} = supervisor:start_child(
-               rabbitmq_stomp_sup,
+               rabbit_stomp_sup,
                {Name,
                 {tcp_listener_sup, start_link,
                  [IPAddress, Port,
@@ -100,7 +100,7 @@ init(_Parent) ->
             PeerAddressS = inet_parse:ntoa(PeerAddress),
             error_logger:info_msg("starting STOMP connection ~p from ~s:~p~n",
                                   [self(), PeerAddressS, PeerPort]),
-            ParseState = stomp_frame:initial_state(),
+            ParseState = rabbit_stomp_frame:initial_state(),
             try
                 ?MODULE:mainloop(#state{socket = Sock,
                                         channel = none,
@@ -171,11 +171,11 @@ handle_exit(Who, Reason, State) ->
 process_received_bytes([], State) ->
     ?MODULE:mainloop(State);
 process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
-    case stomp_frame:parse(Bytes, ParseState) of
+    case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
             ?MODULE:mainloop(State#state{parse_state = ParseState1});
         {ok, Frame = #stomp_frame{command = Command}, Rest} ->
-            PS = stomp_frame:initial_state(),
+            PS = rabbit_stomp_frame:initial_state(),
             case catch process_frame(Command, Frame,
                                      State#state{parse_state = PS}) of
                 {'EXIT', {amqp, Code, Explanation, Method}} ->
@@ -276,7 +276,7 @@ send_frame(Frame, State = #state{socket = Sock}) ->
     %% asynchronous notification of the same (or a related) fault
     %% shortly anyway. See bug 21365.
     %% io:format("Sending ~p~n", [Frame]),
-    case gen_tcp:send(Sock, stomp_frame:serialize(Frame)) of
+    case gen_tcp:send(Sock, rabbit_stomp_frame:serialize(Frame)) of
         ok -> State;
         {error, closed} -> State;
         {error, enotconn} -> State;
@@ -314,12 +314,12 @@ send_error(Message, Format, Args, State) ->
 
 process_frame("CONNECT", Frame, State = #state{channel = none}) ->
     {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
-    {ok, State1} = do_login(stomp_frame:header(Frame, "login"),
-                            stomp_frame:header(Frame, "passcode"),
-                            stomp_frame:header(Frame, "virtual-host",
+    {ok, State1} = do_login(rabbit_stomp_frame:header(Frame, "login"),
+                            rabbit_stomp_frame:header(Frame, "passcode"),
+                            rabbit_stomp_frame:header(Frame, "virtual-host",
                                                binary_to_list(DefaultVHost)),
                             State),
-    State2 = case stomp_frame:integer_header(Frame, "prefetch") of
+    State2 = case rabbit_stomp_frame:integer_header(Frame, "prefetch") of
                  {ok, PrefetchCount} ->
                      {ok, #'basic.qos_ok'{}, S} =
                          simple_method_sync_rpc(
@@ -340,7 +340,7 @@ process_frame(_Command, _Frame, State = #state{channel = none}) ->
 process_frame(Command, Frame, State) ->
     case process_command(Command, Frame, State) of
         {ok, State1} ->
-            {ok, case stomp_frame:header(Frame, "receipt") of
+            {ok, case rabbit_stomp_frame:header(Frame, "receipt") of
                      {ok, Id} ->
                          send_frame("RECEIPT", [{"receipt-id", Id}], "",
                                     State1);
@@ -389,7 +389,7 @@ longstr_field(K, V) ->
     {list_to_binary(K), longstr, list_to_binary(V)}.
 
 transactional(Frame) ->
-    case stomp_frame:header(Frame, "transaction") of
+    case rabbit_stomp_frame:header(Frame, "transaction") of
         {ok, Transaction} ->
             {yes, Transaction};
         not_found ->
@@ -458,11 +458,11 @@ process_command("BEGIN", Frame, State) ->
 process_command("SEND",
                 Frame = #stomp_frame{headers = Headers, body_iolist = BodyFragments},
                 State) ->
-    BinH = fun(K, V) -> stomp_frame:binary_header(Frame, K, V) end,
-    IntH = fun(K, V) -> stomp_frame:integer_header(Frame, K, V) end,
-    case stomp_frame:header(Frame, "destination") of
+    BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
+    IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
+    case rabbit_stomp_frame:header(Frame, "destination") of
         {ok, RoutingKeyStr} ->
-            ExchangeStr = stomp_frame:header(Frame, "exchange", ""),
+            ExchangeStr = rabbit_stomp_frame:header(Frame, "exchange", ""),
             Props = #'P_basic'{
               content_type     = BinH("content-type",     <<"text/plain">>),
               content_encoding = BinH("content-encoding", undefined),
@@ -492,7 +492,7 @@ process_command("SEND",
                             State)}
     end;
 process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
-    case stomp_frame:header(Frame, "message-id") of
+    case rabbit_stomp_frame:header(Frame, "message-id") of
         {ok, IdStr} ->
             IdPrefix = SessionId ++ "_",
             case string:substr(IdStr, 1, length(IdPrefix)) of
@@ -523,20 +523,20 @@ process_command("ABORT", Frame, State) ->
 process_command("SUBSCRIBE",
                 Frame = #stomp_frame{headers = Headers},
                 State) ->
-    AckMode = case stomp_frame:header(Frame, "ack", "auto") of
+    AckMode = case rabbit_stomp_frame:header(Frame, "ack", "auto") of
                   "auto" -> auto;
                   "client" -> client
               end,
-    case stomp_frame:header(Frame, "destination") of
+    case rabbit_stomp_frame:header(Frame, "destination") of
         {ok, QueueStr} ->
-            ConsumerTag = case stomp_frame:header(Frame, "id") of
+            ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
                               {ok, Str} ->
                                   list_to_binary("T_" ++ Str);
                               not_found ->
                                   list_to_binary("Q_" ++ QueueStr)
                           end,
             Queue = list_to_binary(QueueStr),
-            BoolH = fun(K, V) -> stomp_frame:boolean_header(Frame, K, V) end,
+            BoolH = fun(K, V) -> rabbit_stomp_frame:boolean_header(Frame, K, V) end,
             State1 = send_method(
                        #'queue.declare'{
                            queue       = Queue,
@@ -555,11 +555,11 @@ process_command("SUBSCRIBE",
                                                   exclusive = false,
                                                   nowait = true},
                                  State1),
-            State3 = case stomp_frame:header(Frame, "exchange") of
+            State3 = case rabbit_stomp_frame:header(Frame, "exchange") of
                          {ok, ExchangeStr } ->
                              Exchange = list_to_binary(ExchangeStr),
                              RoutingKey = list_to_binary(
-                                            stomp_frame:header(
+                                            rabbit_stomp_frame:header(
                                               Frame, "routing_key", "")),
                              send_method(
                                #'queue.bind'{
@@ -579,11 +579,11 @@ process_command("SUBSCRIBE",
                             State)}
     end;
 process_command("UNSUBSCRIBE", Frame, State) ->
-    ConsumerTag = case stomp_frame:header(Frame, "id") of
+    ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
                       {ok, IdStr} ->
                           list_to_binary("T_" ++ IdStr);
                       not_found ->
-                          case stomp_frame:header(Frame, "destination") of
+                          case rabbit_stomp_frame:header(Frame, "destination") of
                               {ok, QueueStr} ->
                                   list_to_binary("Q_" ++ QueueStr);
                               not_found ->

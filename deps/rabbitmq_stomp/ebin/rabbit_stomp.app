@@ -1,13 +1,13 @@
-{application, rabbitmq_stomp,
+{application, rabbit_stomp,
  [{description, "Embedded Rabbit Stomp Adapter"},
   {vsn, "0.01"},
   {modules, [
-    rabbitmq_stomp,
-    rabbitmq_stomp_sup,
-    stomp_server,
-    stomp_frame
+    rabbit_stomp,
+    rabbit_stomp_sup,
+    rabbit_stomp_server,
+    rabbit_stomp_frame
   ]},
   {registered, []},
-  {mod, {rabbitmq_stomp, []}},
+  {mod, {rabbit_stomp, []}},
   {env, [{listeners, [{"127.0.0.1", 61613}]}]},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
