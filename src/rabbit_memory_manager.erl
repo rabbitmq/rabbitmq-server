@@ -360,10 +360,11 @@ free_from(
         {value, CataInit1, Pid, Alloc} ->
             Procs1 = set_process_mode(
                        Procs, Callbacks, Pid, oppressed, {oppressed, Avail}),
-            case Req > Alloc of
+            Req1 = Req - Alloc,
+            case Req1 > 0 of
                 true -> free_from(Callbacks, Hylomorphism, BaseCase, Procs1,
-                                  CataInit1, AnaInit, Req - Alloc, Avail);
-                false -> {BaseCase(CataInit1, AnaInit), Procs1, Req - Alloc}
+                                  CataInit1, AnaInit, Req1, Avail);
+                false -> {BaseCase(CataInit1, AnaInit), Procs1, Req1}
             end
     end.
 
@@ -379,8 +380,8 @@ free_upto(Pid, Req, State = #state { available_tokens = Avail,
         true -> %% not enough in sleepy, just return tidied state
             State #state { hibernate = Sleepy1 };
         false -> 
-            %% ReqRem1 will be <= 0 because it's likely we'll have
-            %% freed more than we need, thus Req - ReqRem1 is total
+            %% ReqRem will be <= 0 because it's likely we'll have
+            %% freed more than we need, thus Req - ReqRem is total
             %% freed
             {Sleepy2, Procs1, ReqRem} =
                 free_upto_sleepy(Unoppressable1, Callbacks,
