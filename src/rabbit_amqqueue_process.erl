@@ -120,10 +120,10 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
-    QName = qname(State),
-    rabbit_mixed_queue:delete_queue(State #q.mixed_state),
-    stop_memory_timer(State),
-    ok = rabbit_amqqueue:internal_delete(QName).
+    State1 = stop_memory_timer(State),
+    QName = qname(State1),
+    ok = rabbit_amqqueue:internal_delete(QName),
+    {ok, _MS} = rabbit_mixed_queue:delete_queue(State1 #q.mixed_state).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
