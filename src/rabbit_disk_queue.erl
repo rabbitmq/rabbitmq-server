@@ -398,7 +398,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                        ]),
 
     %% it would be better to have this as private, but dets:from_ets/2
-    %% seems to blow up if it is set private
+    %% seems to blow up if it is set private - see bug21489
     MsgLocationEts = ets:new(?MSG_LOC_NAME, [set, protected, {keypos, 2}]),
 
     InitName = "0" ++ ?FILE_EXTENSION,
