@@ -824,7 +824,7 @@ handle_cast({set_storage_mode, Mode}, State = #q { mixed_state = MS }) ->
     noreply(State #q { mixed_state = MS1 }).
 
 handle_info(report_memory, State) ->
-    %% deliberately don't call noreply/2/3 as we don't want to start the timer.
+    %% deliberately don't call noreply/1 as we don't want to start the timer.
     %% By unsetting the timer, we force a report on the next normal message.
     {noreply, State #q { memory_report_timer = undefined }, hibernate};
 
