@@ -381,6 +381,17 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     ok = rabbit_memory_manager:register
            (self(), true, rabbit_disk_queue, set_mode, []),
     ok = filelib:ensure_dir(form_filename("nothing")),
+
+    Node = node(),
+    ok = 
+        case mnesia:change_table_copy_type(rabbit_disk_queue, Node,
+                                           disc_copies) of
+            {atomic, ok} -> ok;
+            {aborted, {already_exists, rabbit_disk_queue, Node,
+                       disc_copies}} -> ok;
+            E -> E
+        end,
+
     file:delete(form_filename(atom_to_list(?MSG_LOC_NAME) ++
                               ?FILE_EXTENSION_DETS)),
     {ok, MsgLocationDets} =
@@ -429,15 +440,6 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     {ok, State1 = #dqstate { current_file_name = CurrentName,
                              current_offset = Offset } } =
         load_from_disk(State),
-    Node = node(),
-    ok = 
-        case mnesia:change_table_copy_type(rabbit_disk_queue, Node,
-                                           disc_copies) of
-            {atomic, ok} -> ok;
-            {aborted, {already_exists, rabbit_disk_queue, Node,
-                       disc_copies}} -> ok;
-            E -> E
-        end,
     %% read is only needed so that we can seek
     {ok, FileHdl} = file:open(form_filename(CurrentName),
                               [read, write, raw, binary, delayed_write]),
