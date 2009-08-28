@@ -401,12 +401,11 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
 
     ok = detect_shutdown_state_and_adjust_delivered_flags(),
 
-    file:delete(form_filename(atom_to_list(?MSG_LOC_NAME) ++
-                              ?FILE_EXTENSION_DETS)),
+    file:delete(msg_location_dets_file()),
+
     {ok, MsgLocationDets} =
         dets:open_file(?MSG_LOC_NAME,
-                       [{file, form_filename(atom_to_list(?MSG_LOC_NAME) ++
-                                             ?FILE_EXTENSION_DETS)},
+                       [{file, msg_location_dets_file()},
                         {min_no_slots, 1024*1024},
                         %% man says this should be <= 32M. But it works...
                         {max_no_slots, 30*1024*1024},
@@ -583,8 +582,7 @@ shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
     %% deliberately ignoring return codes here
     State1 = stop_commit_timer(stop_memory_timer(State)),
     dets:close(MsgLocationDets),
-    file:delete(form_filename(atom_to_list(?MSG_LOC_NAME) ++
-                              ?FILE_EXTENSION_DETS)),
+    file:delete(msg_location_dets_file()),
     true = ets:delete_all_objects(MsgLocationEts),
     case FileHdl of
         undefined -> ok;
@@ -805,6 +803,9 @@ form_filename(Name) ->
 
 base_directory() ->
     filename:join(rabbit_mnesia:dir(), "rabbit_disk_queue/").
+
+msg_location_dets_file() ->
+    form_filename(atom_to_list(?MSG_LOC_NAME) ++ ?FILE_EXTENSION_DETS).
 
 with_read_handle_at(File, Offset, Fun, State =
                     #dqstate { read_file_hc_cache = HC,
