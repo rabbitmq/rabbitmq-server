@@ -94,7 +94,7 @@
 %% those processes and then going "whoops, didn't help after all"),
 %% then we oppress the reporting process. When a process registers, it
 %% can declare itself "unoppressable". If a process is unoppressable
-%% then it will not be sent to disk as a result of other processes
+%% then it will not be oppressed as a result of other processes
 %% needing more tokens. However, if it itself needs additional tokens
 %% which aren't available then it is still oppressed as before. This
 %% feature is only used by the disk_queue, because if the disk queue
@@ -102,14 +102,17 @@
 %% tight, the disk_queue would typically be one of the first processes
 %% to be oppressed (sent to disk_only mode), which cripples
 %% performance. Thus by setting it unoppressable, it is only possible
-%% for the disk_queue to be oppressed when it is active and
-%% attempting to increase its memory allocation.
+%% for the disk_queue to be oppressed when it is active and attempting
+%% to increase its memory allocation.
 %%
 %% If a process has been oppressed, it continues making memory
 %% reports, as if it was liberated. As soon as a reported amount of
 %% memory can be satisfied (and this can include oppressing other
-%% processes in the way described above), it will be liberated. We do
-%% not keep any information about oppressed processes.
+%% processes in the way described above), *and* the number of
+%% available tokens has changed by ?THRESHOLD_MULTIPLIER since the
+%% processes was oppressed, it will be liberated. This later condition
+%% prevents processes from continually oppressing each other if they
+%% themselves can be liberated by oppressing other processes.
 %%
 %% Note that the hibernate group can get very out of date. This is
 %% fine, and somewhat unavoidable given the absence of useful APIs for
