@@ -66,7 +66,7 @@ hard_error_test(Connection) ->
     try amqp_channel:call(Channel, Qos) of
         _ -> exit(expected_to_exit)
     catch
-        exit:{{server_initiated_close, Code, _},_} ->
+        exit:{{server_initiated_close, Code, _Text}, _} ->
             ?assertMatch(?NOT_IMPLEMENTED, Code)
     end,
     wait_for_death(Channel),
