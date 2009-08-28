@@ -121,7 +121,6 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
     State1 = stop_memory_timer(State),
-    QName = qname(State1),
     %% Delete from disk queue first. If we crash at this point, when a
     %% durable queue, we will be recreated at startup, possibly with
     %% partial content. The alternative is much worse however - if we
@@ -129,7 +128,7 @@ terminate(_Reason, State) ->
     %% the disk_queue delete and a new queue with the same name being
     %% created and published to.
     {ok, _MS} = rabbit_mixed_queue:delete_queue(State1 #q.mixed_state),
-    ok = rabbit_amqqueue:internal_delete(QName).
+    ok = rabbit_amqqueue:internal_delete(qname(State1)).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
