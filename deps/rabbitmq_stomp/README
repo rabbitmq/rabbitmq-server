@@ -24,110 +24,51 @@ RabbitMQ mailing list and on LShift's blog.
  - <http://www.lshift.net/blog/category/lshift-sw/rabbitmq/>
 
 
-## Compiling
-
-Once you have the RabbitMQ STOMP adapter code, you will need to
-compile it against the RabbitMQ server before configuring it.
-
-### Compiling from released server binary packages
-
-(Please make sure that you have a version of the STOMP plugin code
-that is compatible with the version of the server you're using. See
-below for more information on this topic.)
-
-Usually, the server packages are installed to
-`/usr/lib/erlang/lib/rabbitmq_server-X.Y.Z`. From within the
-`rabbitmq-stomp` directory, issue the command
-
-    make RABBIT_SERVER_INCLUDE_DIR=/usr/lib/erlang/lib/rabbitmq_server-X.Y.Z/include
-
-### Compiling from released server source code tarballs
-
-(Please make sure that you have a version of the STOMP plugin code
-that is compatible with the version of the server you're using. See
-below for more information on this topic.)
-
-If you've downloaded a server source code tarball named
-`rabbitmq-server-X.Y.Z.zip`, unzip it and create a symbolic link that
-aliases the resulting `rabbitmq-server-X.Y.Z` directory to plain old
-`rabbitmq-server`:
-
-    unzip rabbitmq-server-X.Y.Z.zip
-    ln -s rabbitmq-server-X.Y.Z rabbitmq-server
-
-You will then need to compile the RabbitMQ server code:
-
-    (cd rabbitmq-server; make)
-
-Finally, from within the `rabbitmq-stomp` directory, issue the command
-
-    make
-
-### Making sure the STOMP plugin version matches the server version
-
-Generally, the STOMP plugin's source code repository is tagged when a
-new version of the RabbitMQ server is released.
-
-For example, if you are using RabbitMQ server version 1.5.3, then
-examine the output of `hg tags` in your local copy of
-`rabbitmq-stomp`:
-
-    $ hg tags
-    tip                               93:9cd7eba4269c
-    rabbitmq_v1_5_3                   91:5ee5e2c0b64a
-    rabbitmq_v1_5_1                   65:2eba20816126
-    rabbitmq_v1_5_0                   60:1a1ff5067bb6
-    rabbitmq_v1_4_0                   49:71b922193057
-    Migrated to mercurial             11:a28eea2c2a2b
-
-To make sure your checkout is at the `rabbitmq_v1_5_3` tag, use `hg
-update`:
-
-    hg update rabbitmq_v1_5_3
-
-Then proceed with compiling the plugin as explained above.
-
-If there is no specific tag for the version of the server you are
-using, try using the newest tag that has the same major and minor
-version number. For instance, if you were running RabbitMQ server
-version 1.5.4, but no corresponding tag on `rabbitmq-stomp` was
-available, you should try using tag `rabbitmq_v1_5_3`. Another
-alternative for this hypothetical situation would be to use the tip of
-the 1.5.x branch:
-
-    $ hg branches
-    default                        93:9cd7eba4269c
-    rabbitmq_v1_3_0_branch         45:90dd1726fe0b
-    v1_5                           92:0ba97fbaea1f (inactive)
-    $ hg update v1_5
-    4 files updated, 0 files merged, 5 files removed, 0 files unresolved
-    $ 
-
 ### Compiling from a Mercurial checkout
 
-If you want to use the bleeding-edge features of the broker and/or the
-STOMP adapter, you will need to clone and compile three separate
-repositories that work together:
+(This instructions work only for RabbitMQ 1.7.0 or newer.)
 
-    hg clone http://hg.rabbitmq.com/rabbitmq-server
-    hg clone http://hg.rabbitmq.com/rabbitmq-codegen
-    hg clone http://hg.rabbitmq.com/rabbitmq-stomp
-    (cd rabbitmq-server; make)
-    (cd rabbitmq-stomp; make)
+To compile RabbitMQ STOMP adapter plugin, you will need to download
+rabbitmq-public-umbrella package:
 
-### Compiling from anywhere else
+    hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella
 
-If you have a file system layout not covered above, you can
-investigate setting the Makefile variables `RABBIT_SOURCE_ROOT`,
-`RABBIT_SERVER_SOURCE_ROOT`, and/or `RABBIT_SERVER_INCLUDE_DIR`. For
-example, if you had a particular version of `rabbit.hrl` and
-`rabbit_framing.hrl` you wanted to use, you might say
+Umbrella is a placeholder for various packages. You need to actually
+download and compile the dependencies. The simplest way is to run:
 
-    make RABBIT_SERVER_INCLUDE_DIR=/path/to/include
+    cd rabbitmq-public-umbrella
+    make co
+    make
 
-so that the STOMP adapter source code can find the `rabbit.hrl` and
-`rabbit_framing.hrl` files in the `/path/to/include` directory.
+This will download and compile all the rabbitmq related packages. Actually
+you don't have to compile everything, the required packages are only
+rabbitmq-codegen, rabbitmq-server and rabbitmq-stomp.
 
+
+If you want to compile a plugin for a specific release of the broker,
+you just need to update mercurial repository to a proper tag. To do
+that you can say from the umbrella directory:
+
+    hg -R rabbitmq-codegen  up rabbitmq_v1_X_X
+    hg -R rabbitmq-server   up rabbitmq_v1_X_X
+    hg -R rabbitmq-stomp    up rabbitmq_v1_X_X
+
+
+### Building plugin package
+
+To build a plugin package (*.ez file), run 'make package' from the
+rabbitmq-stomp directory. Package should appear in 'dist' directory.
+
+    cd rabbitmq-stomp
+    make package
+    ls dist/rabbitmq_stomp.ez
+
+
+To install and activate package, please follow the instructions from
+Plugin Development Guide:
+    http://www.rabbitmq.com/plugin-development.html#activating-a-plugin
+
+You need to install rabbit_stomp.ez package.
 
 ## Running the STOMP adapter
 
@@ -138,16 +79,15 @@ up configuration from `/etc/rabbitmq/rabbitmq.conf`. To tell the
 server to start your plugin, first make sure it is compiled, and then
 add the following text to `/etc/rabbitmq/rabbitmq.conf`:
 
-    SERVER_START_ARGS='
-      -pa /path/to/rabbitmq-stomp/ebin 
-      -rabbit
-         stomp_listeners [{"0.0.0.0",61613}]
-         extra_startup_steps [{"STOMP-listeners",rabbit_stomp,kickstart,[]}]'
+    SERVER_START_ARGS='-rabbit_stomp listeners [{"0.0.0.0",61613}]'
 
-making sure to update the `/path/to/rabbitmq-stomp/ebin` appropriately
-for your system. Then restart the server with
+Then restart the server with
 
     sudo /etc/init.d/rabbitmq-server restart
+
+
+When no configuration is specified STOMP Adapter will listen on localhost by
+default.
 
 ### Checking that the adapter is running
 
@@ -175,50 +115,42 @@ adapter -- see below.
 ### Running the adapter during development
 
 If you are working with the full source code for the RabbitMQ server,
-and you either have the `../rabbitmq-server` directory or
-`RABBIT_SERVER_SOURCE_ROOT` Makefile variable set up correctly, you
-can simply say `make run`:
+and you have the `../rabbitmq-server` directory you can simply say `make run`:
 
     make run
 
-or
-
-    make RABBIT_SERVER_SOURCE_ROOT=/some/other/path/to/rabbitmq-server run
-
 If this is successful, you should end up with `starting
-STOMP-listeners ...done` and `broker running` in your terminal.
+STOMP Adapter ...done` and `broker running` in your terminal.
 
 
 ## Running tests and code coverage
 
-First, run the adapter as described above:
+To run simplistic test suite and see the code coverage type:
 
-    make run
-
-Using another console, run tests:
-
-    make test
+    make cover
 
 After successfull run, you should be able to see output similar to:
 
-    python test/test.py
     ............
     ----------------------------------------------------------------------
     Ran 12 tests in 0.300s
     [...]
-    {ok, ok}cat cover/summary.txt
-     71.73 rabbit_stomp
-     74.19 stomp_frame
-     72.33 'TOTAL'
+    **** Code coverage ****
+     54.55 rabbit_stomp
+     80.88 rabbit_stomp_frame
+     74.87 rabbit_stomp_server
+    100.00 rabbit_stomp_sup
+     75.72 'TOTAL'
 
-The view the code coverage, see html files in ../rabbitmq-server/cover:
+The view the code coverage, see html files in .cover:
 
-    ls ../rabbitmq-server/cover
+    ls ./cover
 
+    rabbit_stomp_frame.html
     rabbit_stomp.html
-    stomp_frame.html
+    rabbit_stomp_server.html
+    rabbit_stomp_sup.html
     summary.txt
-
 
 
 ## Running the examples

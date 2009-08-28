@@ -8,7 +8,7 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is the RabbitMQ Stomp Plugin
+%%   The Original Code is the RabbitMQ BQL Module
 %%
 %%   The Initial Developers of the Original Code are LShift Ltd.,
 %%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
@@ -22,27 +22,14 @@
 %%
 %%   Contributor(s): ___________________________
 %%
--module(rabbit_stomp).
+-module(rabbit_stomp_sup).
+-behaviour(supervisor).
 
--export([start/0, stop/0, start/2, stop/1]).
+-export([start_link/0, init/1]).
 
-start() ->
-    start(normal,[]),
-    ok.
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-stop() ->
-    ok.
+init([]) ->
+    {ok, {{one_for_all, 10, 10}, []}}.
 
-start(normal, []) ->
-    {ok, SupPid} = rabbit_stomp_sup:start_link(),
-    case application:get_env(listeners) of
-         undefined -> throw({error, {stomp_configuration_not_found}});
-         {ok, Listeners} -> 
-                         io:format("starting ~s (binding to ~p)  ...", ["STOMP Adapter", Listeners]),
-                         {ok, _} = rabbit_stomp_server:start(Listeners),
-                         io:format("done~n")
-    end,
-    {ok, SupPid}.
-
-stop(_State) ->
-    ok.

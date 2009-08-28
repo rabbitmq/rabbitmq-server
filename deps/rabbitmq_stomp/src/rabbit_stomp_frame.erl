@@ -32,9 +32,9 @@
 %% stomp_frame implements the STOMP framing protocol "version 1.0", as
 %% per http://stomp.codehaus.org/Protocol
 
--module(stomp_frame).
+-module(rabbit_stomp_frame).
 
--include("stomp_frame.hrl").
+-include("rabbit_stomp_frame.hrl").
 
 -export([parse_headers/2, initial_headers_state/0]).
 -export([parse_body/2, initial_body_state/1]).
