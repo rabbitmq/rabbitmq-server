@@ -10,4 +10,4 @@
   {registered, []},
   {mod, {rabbit_stomp, []}},
   {env, [{listeners, [{"127.0.0.1", 61613}]}]},
-  {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
+  {applications, [kernel, stdlib, rabbit]}]}.
