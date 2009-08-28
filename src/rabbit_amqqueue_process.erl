@@ -119,17 +119,21 @@ init(Q = #amqqueue { name = QName, durable = Durable, pinned = Pinned }) ->
                blocked_consumers = queue:new(),
                memory_report_timer = undefined
               },
-    %% first thing we must do is report_memory which will clear out
-    %% the 'undefined' values in gain and loss in mixed_queue state
+    %% first thing we must do is report_memory.
     {ok, start_memory_timer(State), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
-    QName = qname(State),
-    rabbit_mixed_queue:delete_queue(State #q.mixed_state),
-    stop_memory_timer(State),
-    ok = rabbit_amqqueue:internal_delete(QName).
+    State1 = stop_memory_timer(State),
+    %% Delete from disk queue first. If we crash at this point, when a
+    %% durable queue, we will be recreated at startup, possibly with
+    %% partial content. The alternative is much worse however - if we
+    %% called internal_delete first, we would then have a race between
+    %% the disk_queue delete and a new queue with the same name being
+    %% created and published to.
+    {ok, _MS} = rabbit_mixed_queue:delete_queue(State1 #q.mixed_state),
+    ok = rabbit_amqqueue:internal_delete(qname(State1)).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -555,9 +559,8 @@ i(Item, _) ->
     throw({bad_argument, Item}).
 
 report_memory(Hib, State = #q { mixed_state = MS }) ->
-    {MS1, MSize, Gain, Loss} =
-        rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS),
-    rabbit_memory_manager:report_memory(self(), MSize, Gain, Loss, Hib),
+    {MS1, MSize} = rabbit_mixed_queue:estimate_queue_memory(MS),
+    rabbit_memory_manager:report_memory(self(), MSize, Hib),
     State #q { mixed_state = MS1 }.
 
 %---------------------------------------------------------------------------
@@ -728,8 +731,7 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
 
 handle_call(purge, _From, State) ->
     {Count, MS} = rabbit_mixed_queue:purge(State #q.mixed_state),
-    reply({ok, Count},
-          State #q { mixed_state = MS });
+    reply({ok, Count}, State #q { mixed_state = MS });
 
 handle_call({claim_queue, ReaderPid}, _From,
             State = #q{owner = Owner, exclusive_consumer = Holder}) ->
@@ -745,10 +747,9 @@ handle_call({claim_queue, ReaderPid}, _From,
                     %% pid...
                     reply(locked, State);
                 ok ->
-                    reply(ok, State #q { owner =
-                                         {ReaderPid,
-                                          erlang:monitor(process, ReaderPid)} })
-                                                 
+                    reply(ok,
+                          State#q{ owner = {ReaderPid, erlang:monitor(
+                                                         process, ReaderPid)} })
             end;
         {ReaderPid, _MonitorRef} ->
             reply(ok, State);
@@ -842,8 +843,8 @@ handle_cast({set_storage_mode_pin, Disk, Q}, State = #q { q = PQ }) ->
     noreply(State #q { q = PQ#amqqueue{ pinned = Disk } }).
 
 handle_info(report_memory, State) ->
-    %% deliberately don't call noreply/2 as we don't want to restart the timer.
-    %% By unsetting the timer, we force a report on the next normal message
+    %% deliberately don't call noreply/1 as we don't want to start the timer.
+    %% By unsetting the timer, we force a report on the next normal message.
     {noreply, State #q { memory_report_timer = undefined }, hibernate};
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},

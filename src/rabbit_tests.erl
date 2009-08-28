@@ -1081,8 +1081,8 @@ rdq_test_purge() ->
 
 rdq_new_mixed_queue(Q, Durable, Disk) ->
     {ok, MS} = rabbit_mixed_queue:init(Q, Durable),
-    {MS1, _, _, _} =
-        rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS),
+    {MS1, _} =
+        rabbit_mixed_queue:estimate_queue_memory(MS),
     case Disk of
         true -> {ok, MS2} = rabbit_mixed_queue:set_storage_mode(disk, [], MS1),
                 MS2;
@@ -1115,15 +1115,15 @@ rdq_test_mixed_queue_modes() ->
             end, MS4, lists:seq(1,10)),
     30 = rabbit_mixed_queue:len(MS6),
     io:format("Published a mixture of messages; ~w~n",
-              [rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS6)]),
+              [rabbit_mixed_queue:estimate_queue_memory(MS6)]),
     {ok, MS7} = rabbit_mixed_queue:set_storage_mode(disk, [], MS6),
     30 = rabbit_mixed_queue:len(MS7),
     io:format("Converted to disk only mode; ~w~n",
-             [rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS7)]),
+             [rabbit_mixed_queue:estimate_queue_memory(MS7)]),
     {ok, MS8} = rabbit_mixed_queue:set_storage_mode(mixed, [], MS7),
     30 = rabbit_mixed_queue:len(MS8),
     io:format("Converted to mixed mode; ~w~n",
-              [rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS8)]),
+              [rabbit_mixed_queue:estimate_queue_memory(MS8)]),
     MS10 =
         lists:foldl(
           fun (N, MS9) ->
@@ -1162,7 +1162,7 @@ rdq_test_mixed_queue_modes() ->
     rdq_start(),
     MS17 = rdq_new_mixed_queue(q, true, false),
     0 = rabbit_mixed_queue:len(MS17),
-    {MS17,0,0,0} = rabbit_mixed_queue:estimate_queue_memory_and_reset_counters(MS17),
+    {MS17,0} = rabbit_mixed_queue:estimate_queue_memory(MS17),
     io:format("Recovered queue~n"),
     rdq_stop(),
     passed.

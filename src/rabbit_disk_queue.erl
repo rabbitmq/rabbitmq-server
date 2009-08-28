@@ -50,11 +50,13 @@
 -export([stop/0, stop_and_obliterate/0, set_mode/1, to_disk_only_mode/0,
          to_ram_disk_mode/0]).
 
+%%----------------------------------------------------------------------------
+
 -include("rabbit.hrl").
 
 -define(WRITE_OK_SIZE_BITS,                  8).
--define(WRITE_OK_TRANSIENT,                255).
--define(WRITE_OK_PERSISTENT,               254).
+-define(WRITE_OK_TRANSIENT,                  255).
+-define(WRITE_OK_PERSISTENT,                 254).
 -define(INTEGER_SIZE_BYTES,                  8).
 -define(INTEGER_SIZE_BITS,                   (8 * ?INTEGER_SIZE_BYTES)).
 -define(MSG_LOC_NAME,                        rabbit_disk_queue_msg_location).
@@ -68,6 +70,7 @@
 -define(MINIMUM_MEMORY_REPORT_TIME_INTERVAL, 10000). %% 10 seconds in millisecs
 -define(BATCH_SIZE,                          10000).
 -define(CACHE_MAX_SIZE,                      10485760).
+-define(WRITE_HANDLE_OPEN_MODE,           [append, raw, binary, delayed_write]).
 
 -define(SERVER, ?MODULE).
 
@@ -245,7 +248,7 @@
 %% alternating full files and files with only one tiny message in
 %% them).
 
-%% ---- SPECS ----
+%%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
@@ -285,7 +288,9 @@
 
 -endif.
 
-%% ---- PUBLIC API ----
+%%----------------------------------------------------------------------------
+%% public API
+%%----------------------------------------------------------------------------
 
 start_link() ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE,
@@ -359,7 +364,9 @@ cache_info() ->
 set_mode(Mode) ->
     gen_server2:pcast(?SERVER, 10, {set_mode, Mode}).
 
-%% ---- GEN-SERVER INTERNAL API ----
+%%----------------------------------------------------------------------------
+%% gen_server behaviour
+%%----------------------------------------------------------------------------
 
 init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %% If the gen_server is part of a supervision tree and is ordered
@@ -373,6 +380,8 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     process_flag(trap_exit, true),
     ok = rabbit_memory_manager:register
            (self(), true, rabbit_disk_queue, set_mode, []),
+    ok = filelib:ensure_dir(form_filename("nothing")),
+
     Node = node(),
     ok = 
         case mnesia:change_table_copy_type(rabbit_disk_queue, Node,
@@ -382,7 +391,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                        disc_copies}} -> ok;
             E -> E
         end,
-    ok = filelib:ensure_dir(form_filename("nothing")),
+
     file:delete(form_filename(atom_to_list(?MSG_LOC_NAME) ++
                               ?FILE_EXTENSION_DETS)),
     {ok, MsgLocationDets} =
@@ -397,7 +406,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                        ]),
 
     %% it would be better to have this as private, but dets:from_ets/2
-    %% seems to blow up if it is set private
+    %% seems to blow up if it is set private - see bug21489
     MsgLocationEts = ets:new(?MSG_LOC_NAME, [set, protected, {keypos, 2}]),
 
     InitName = "0" ++ ?FILE_EXTENSION,
@@ -431,22 +440,14 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     {ok, State1 = #dqstate { current_file_name = CurrentName,
                              current_offset = Offset } } =
         load_from_disk(State),
-    Path = form_filename(CurrentName),
-    Exists = case file:read_file_info(Path) of
-                 {error,enoent} -> false;
-                 {ok, _} -> true
-             end,
     %% read is only needed so that we can seek
-    {ok, FileHdl} = file:open(Path, [read, write, raw, binary, delayed_write]),
-    case Exists of
-        true -> {ok, Offset} = file:position(FileHdl, {bof, Offset});
-        false -> %% new file, so preallocate
-            ok = preallocate(FileHdl, FileSizeLimit, Offset)
-    end,
+    {ok, FileHdl} = file:open(form_filename(CurrentName),
+                              [read, write, raw, binary, delayed_write]),
+    {ok, Offset} = file:position(FileHdl, {bof, Offset}),
     State2 = State1 #dqstate { current_file_handle = FileHdl },
     %% by reporting a memory use of 0, we guarantee the manager will
-    %% grant us to ram_disk mode. We have to start in ram_disk mode
-    %% because we can't find values for mnesia_bytes_per_record or
+    %% not oppress us. We have to start in ram_disk mode because we
+    %% can't find values for mnesia_bytes_per_record or
     %% ets_bytes_per_record otherwise.
     ok = rabbit_memory_manager:report_memory(self(), 0, false),
     ok = report_memory(false, State2),
@@ -591,7 +592,9 @@ shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%% ---- UTILITY FUNCTIONS ----
+%%----------------------------------------------------------------------------
+%% memory management helper functions
+%%----------------------------------------------------------------------------
 
 stop_memory_timer(State = #dqstate { memory_report_timer_ref = undefined }) ->
     State;
@@ -675,132 +678,9 @@ to_ram_disk_mode(State = #dqstate { operation_mode = disk_only,
                      mnesia_bytes_per_record = undefined,
                      ets_bytes_per_record = undefined }.
 
-noreply(NewState) ->
-    noreply1(start_memory_timer(NewState)).
-
-noreply1(NewState = #dqstate { on_sync_txns = [],
-                               commit_timer_ref = undefined }) ->
-    {noreply, NewState, hibernate};
-noreply1(NewState = #dqstate { commit_timer_ref = undefined }) ->
-    {noreply, start_commit_timer(NewState), 0};
-noreply1(NewState = #dqstate { on_sync_txns = [] }) ->
-    {noreply, stop_commit_timer(NewState), hibernate};
-noreply1(NewState) ->
-    {noreply, NewState, 0}.
-
-reply(Reply, NewState) ->
-    reply1(Reply, start_memory_timer(NewState)).
-
-reply1(Reply, NewState = #dqstate { on_sync_txns = [],
-                                    commit_timer_ref = undefined }) ->
-    {reply, Reply, NewState, hibernate};
-reply1(Reply, NewState = #dqstate { commit_timer_ref = undefined }) ->
-    {reply, Reply, start_commit_timer(NewState), 0};
-reply1(Reply, NewState = #dqstate { on_sync_txns = [] }) ->
-    {reply, Reply, stop_commit_timer(NewState), hibernate};
-reply1(Reply, NewState) ->
-    {reply, Reply, NewState, 0}.
-
-form_filename(Name) ->
-    filename:join(base_directory(), Name).
-
-base_directory() ->
-    filename:join(rabbit_mnesia:dir(), "rabbit_disk_queue/").
-
-dets_ets_lookup(#dqstate { msg_location_dets = MsgLocationDets,
-                           operation_mode = disk_only }, Key) ->
-    dets:lookup(MsgLocationDets, Key);
-dets_ets_lookup(#dqstate { msg_location_ets = MsgLocationEts,
-                           operation_mode = ram_disk }, Key) ->
-    ets:lookup(MsgLocationEts, Key).
-
-dets_ets_delete(#dqstate { msg_location_dets = MsgLocationDets,
-                           operation_mode = disk_only }, Key) ->
-    ok = dets:delete(MsgLocationDets, Key);
-dets_ets_delete(#dqstate { msg_location_ets = MsgLocationEts,
-                           operation_mode = ram_disk }, Key) ->
-    true = ets:delete(MsgLocationEts, Key),
-    ok.
-
-dets_ets_insert(#dqstate { msg_location_dets = MsgLocationDets,
-                           operation_mode = disk_only }, Obj) ->
-    ok = dets:insert(MsgLocationDets, Obj);
-dets_ets_insert(#dqstate { msg_location_ets = MsgLocationEts,
-                           operation_mode = ram_disk }, Obj) ->
-    true = ets:insert(MsgLocationEts, Obj),
-    ok.
-
-dets_ets_insert_new(#dqstate { msg_location_dets = MsgLocationDets,
-                               operation_mode = disk_only }, Obj) ->
-    true = dets:insert_new(MsgLocationDets, Obj);
-dets_ets_insert_new(#dqstate { msg_location_ets = MsgLocationEts,
-                               operation_mode = ram_disk }, Obj) ->
-    true = ets:insert_new(MsgLocationEts, Obj).
-
-dets_ets_match_object(#dqstate { msg_location_dets = MsgLocationDets,
-                                 operation_mode = disk_only }, Obj) ->
-    dets:match_object(MsgLocationDets, Obj);
-dets_ets_match_object(#dqstate { msg_location_ets = MsgLocationEts,
-                                 operation_mode = ram_disk }, Obj) ->
-    ets:match_object(MsgLocationEts, Obj).
-
-with_read_handle_at(File, Offset, Fun, State =
-                    #dqstate { read_file_hc_cache = HC,
-                               current_file_name = CurName,
-                               current_dirty = IsDirty,
-                               last_sync_offset = SyncOffset
-                              }) ->
-    State1 = if CurName =:= File andalso IsDirty andalso Offset >= SyncOffset ->
-                     sync_current_file_handle(State);
-                true -> State
-             end,
-    FilePath = form_filename(File),
-    {Result, HC1} =
-        rabbit_file_handle_cache:with_file_handle_at(FilePath, Offset, Fun, HC),
-    {Result, State1 #dqstate { read_file_hc_cache = HC1 }}.
-
-sequence_lookup(Sequences, Q) ->
-    case ets:lookup(Sequences, Q) of
-        [] ->
-            {0, 0};
-        [{Q, ReadSeqId, WriteSeqId}] ->
-            {ReadSeqId, WriteSeqId}
-    end.
-
-start_commit_timer(State = #dqstate { commit_timer_ref = undefined }) ->
-    {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, filesync, []),
-    State #dqstate { commit_timer_ref = TRef }.
-
-stop_commit_timer(State = #dqstate { commit_timer_ref = undefined }) ->
-    State;
-stop_commit_timer(State = #dqstate { commit_timer_ref = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
-    State #dqstate { commit_timer_ref = undefined }.
-
-sync_current_file_handle(State = #dqstate { current_dirty = false,
-                                            on_sync_txns = [] }) ->
-    State;
-sync_current_file_handle(State = #dqstate { current_file_handle = CurHdl,
-                                            current_dirty = IsDirty,
-                                            current_offset = CurOffset,
-                                            on_sync_txns = Txns,
-                                            last_sync_offset = SyncOffset
-                                          }) ->
-    SyncOffset1 = case IsDirty of
-                      true -> ok = file:sync(CurHdl),
-                              CurOffset;
-                      false -> SyncOffset
-                  end,
-    State1 = lists:foldl(fun internal_do_tx_commit/2, State, lists:reverse(Txns)),
-    State1 #dqstate { current_dirty = false, on_sync_txns = [],
-                      last_sync_offset = SyncOffset1 }.
-
-msg_to_bin(Msg = #basic_message { content = Content }) ->
-    ClearedContent = rabbit_binary_parser:clear_decoded_content(Content),
-    term_to_binary(Msg #basic_message { content = ClearedContent }).
-
-bin_to_msg(MsgBin) ->
-    binary_to_term(MsgBin).
+%%----------------------------------------------------------------------------
+%% message cache helper functions
+%%----------------------------------------------------------------------------
 
 remove_cache_entry(MsgId, #dqstate { message_cache = Cache }) ->
     true = ets:delete(Cache, MsgId),
@@ -839,7 +719,144 @@ insert_into_cache(Message = #basic_message { guid = MsgId },
 cache_is_full(Cache) ->
     ets:info(Cache, memory) > ?CACHE_MAX_SIZE.
 
-%% ---- INTERNAL RAW FUNCTIONS ----
+%%----------------------------------------------------------------------------
+%% dets/ets agnosticism
+%%----------------------------------------------------------------------------
+
+dets_ets_lookup(#dqstate { msg_location_dets = MsgLocationDets,
+                           operation_mode = disk_only }, Key) ->
+    dets:lookup(MsgLocationDets, Key);
+dets_ets_lookup(#dqstate { msg_location_ets = MsgLocationEts,
+                           operation_mode = ram_disk }, Key) ->
+    ets:lookup(MsgLocationEts, Key).
+
+dets_ets_delete(#dqstate { msg_location_dets = MsgLocationDets,
+                           operation_mode = disk_only }, Key) ->
+    ok = dets:delete(MsgLocationDets, Key);
+dets_ets_delete(#dqstate { msg_location_ets = MsgLocationEts,
+                           operation_mode = ram_disk }, Key) ->
+    true = ets:delete(MsgLocationEts, Key),
+    ok.
+
+dets_ets_insert(#dqstate { msg_location_dets = MsgLocationDets,
+                           operation_mode = disk_only }, Obj) ->
+    ok = dets:insert(MsgLocationDets, Obj);
+dets_ets_insert(#dqstate { msg_location_ets = MsgLocationEts,
+                           operation_mode = ram_disk }, Obj) ->
+    true = ets:insert(MsgLocationEts, Obj),
+    ok.
+
+dets_ets_insert_new(#dqstate { msg_location_dets = MsgLocationDets,
+                               operation_mode = disk_only }, Obj) ->
+    true = dets:insert_new(MsgLocationDets, Obj);
+dets_ets_insert_new(#dqstate { msg_location_ets = MsgLocationEts,
+                               operation_mode = ram_disk }, Obj) ->
+    true = ets:insert_new(MsgLocationEts, Obj).
+
+dets_ets_match_object(#dqstate { msg_location_dets = MsgLocationDets,
+                                 operation_mode = disk_only }, Obj) ->
+    dets:match_object(MsgLocationDets, Obj);
+dets_ets_match_object(#dqstate { msg_location_ets = MsgLocationEts,
+                                 operation_mode = ram_disk }, Obj) ->
+    ets:match_object(MsgLocationEts, Obj).
+
+%%----------------------------------------------------------------------------
+%% general helper functions
+%%----------------------------------------------------------------------------
+
+noreply(NewState) ->
+    noreply1(start_memory_timer(NewState)).
+
+noreply1(NewState = #dqstate { on_sync_txns = [],
+                               commit_timer_ref = undefined }) ->
+    {noreply, NewState, hibernate};
+noreply1(NewState = #dqstate { commit_timer_ref = undefined }) ->
+    {noreply, start_commit_timer(NewState), 0};
+noreply1(NewState = #dqstate { on_sync_txns = [] }) ->
+    {noreply, stop_commit_timer(NewState), hibernate};
+noreply1(NewState) ->
+    {noreply, NewState, 0}.
+
+reply(Reply, NewState) ->
+    reply1(Reply, start_memory_timer(NewState)).
+
+reply1(Reply, NewState = #dqstate { on_sync_txns = [],
+                                    commit_timer_ref = undefined }) ->
+    {reply, Reply, NewState, hibernate};
+reply1(Reply, NewState = #dqstate { commit_timer_ref = undefined }) ->
+    {reply, Reply, start_commit_timer(NewState), 0};
+reply1(Reply, NewState = #dqstate { on_sync_txns = [] }) ->
+    {reply, Reply, stop_commit_timer(NewState), hibernate};
+reply1(Reply, NewState) ->
+    {reply, Reply, NewState, 0}.
+
+form_filename(Name) ->
+    filename:join(base_directory(), Name).
+
+base_directory() ->
+    filename:join(rabbit_mnesia:dir(), "rabbit_disk_queue/").
+
+with_read_handle_at(File, Offset, Fun, State =
+                    #dqstate { read_file_hc_cache = HC,
+                               current_file_name = CurName,
+                               current_dirty = IsDirty,
+                               last_sync_offset = SyncOffset
+                              }) ->
+    State1 = if CurName =:= File andalso IsDirty andalso Offset >= SyncOffset ->
+                     sync_current_file_handle(State);
+                true -> State
+             end,
+    FilePath = form_filename(File),
+    {Result, HC1} =
+        rabbit_file_handle_cache:with_file_handle_at(FilePath, Offset, Fun, HC),
+    {Result, State1 #dqstate { read_file_hc_cache = HC1 }}.
+
+sync_current_file_handle(State = #dqstate { current_dirty = false,
+                                            on_sync_txns = [] }) ->
+    State;
+sync_current_file_handle(State = #dqstate { current_file_handle = CurHdl,
+                                            current_dirty = IsDirty,
+                                            current_offset = CurOffset,
+                                            on_sync_txns = Txns,
+                                            last_sync_offset = SyncOffset
+                                          }) ->
+    SyncOffset1 = case IsDirty of
+                      true -> ok = file:sync(CurHdl),
+                              CurOffset;
+                      false -> SyncOffset
+                  end,
+    State1 = lists:foldl(fun internal_do_tx_commit/2, State, lists:reverse(Txns)),
+    State1 #dqstate { current_dirty = false, on_sync_txns = [],
+                      last_sync_offset = SyncOffset1 }.
+
+sequence_lookup(Sequences, Q) ->
+    case ets:lookup(Sequences, Q) of
+        [] ->
+            {0, 0};
+        [{Q, ReadSeqId, WriteSeqId}] ->
+            {ReadSeqId, WriteSeqId}
+    end.
+
+start_commit_timer(State = #dqstate { commit_timer_ref = undefined }) ->
+    {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, filesync, []),
+    State #dqstate { commit_timer_ref = TRef }.
+
+stop_commit_timer(State = #dqstate { commit_timer_ref = undefined }) ->
+    State;
+stop_commit_timer(State = #dqstate { commit_timer_ref = TRef }) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State #dqstate { commit_timer_ref = undefined }.
+
+msg_to_bin(Msg = #basic_message { content = Content }) ->
+    ClearedContent = rabbit_binary_parser:clear_decoded_content(Content),
+    term_to_binary(Msg #basic_message { content = ClearedContent }).
+
+bin_to_msg(MsgBin) ->
+    binary_to_term(MsgBin).
+
+%%----------------------------------------------------------------------------
+%% internal functions
+%%----------------------------------------------------------------------------
 
 internal_fetch_body(Q, MarkDelivered, Advance, State) ->
     case queue_head(Q, MarkDelivered, Advance, State) of
@@ -1215,7 +1232,9 @@ internal_delete_non_durable_queues(
               end
       end, {ok, State}, Sequences).
 
-%% ---- ROLLING OVER THE APPEND FILE ----
+%%----------------------------------------------------------------------------
+%% garbage collection / compaction / aggregation
+%%----------------------------------------------------------------------------
 
 maybe_roll_to_new_file(Offset,
                        State = #dqstate { file_size_limit = FileSizeLimit,
@@ -1231,7 +1250,6 @@ maybe_roll_to_new_file(Offset,
     NextName = integer_to_list(NextNum) ++ ?FILE_EXTENSION,
     {ok, NextHdl} = file:open(form_filename(NextName),
                               [write, raw, binary, delayed_write]),
-    ok = preallocate(NextHdl, FileSizeLimit, 0),
     true = ets:update_element(FileSummary, CurName, {5, NextName}),%% 5 is Right
     true = ets:insert_new(FileSummary, {NextName, 0, 0, CurName, undefined}),
     State2 = State1 #dqstate { current_file_name = NextName,
@@ -1243,14 +1261,6 @@ maybe_roll_to_new_file(Offset,
     {ok, compact(sets:from_list([CurName]), State2)};
 maybe_roll_to_new_file(_, State) ->
     {ok, State}.
-
-preallocate(Hdl, FileSizeLimit, FinalPos) ->
-    {ok, FileSizeLimit} = file:position(Hdl, {bof, FileSizeLimit}),
-    ok = file:truncate(Hdl),
-    {ok, FinalPos} = file:position(Hdl, {bof, FinalPos}),
-    ok.
-
-%% ---- GARBAGE COLLECTION / COMPACTION / AGGREGATION ----
 
 compact(FilesSet, State) ->
     %% smallest number, hence eldest, hence left-most, first
@@ -1330,6 +1340,12 @@ sort_msg_locations_by_offset(Dir, List) ->
                        Comp(OffA, OffB)
                end, List).
 
+preallocate(Hdl, FileSizeLimit, FinalPos) ->
+    {ok, FileSizeLimit} = file:position(Hdl, {bof, FileSizeLimit}),
+    ok = file:truncate(Hdl),
+    {ok, FinalPos} = file:position(Hdl, {bof, FinalPos}),
+    ok.
+
 truncate_and_extend_file(FileHdl, Lowpoint, Highpoint) ->
     {ok, Lowpoint} = file:position(FileHdl, {bof, Lowpoint}),
     ok = file:truncate(FileHdl),
@@ -1339,11 +1355,11 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
               _SourceLeft, _SourceRight},
              {Destination, DestinationValid, DestinationContiguousTop,
               _DestinationLeft, _DestinationRight},
-             State1) ->
-    State = close_file(Source, close_file(Destination, State1)),
+             State) ->
+    State1 = close_file(Source, close_file(Destination, State)),
     {ok, SourceHdl} =
         file:open(form_filename(Source),
-                  [read, write, raw, binary, read_ahead, delayed_write]),
+                  [read, raw, binary, read_ahead]),
     {ok, DestinationHdl} =
         file:open(form_filename(Destination),
                   [read, write, raw, binary, read_ahead, delayed_write]),
@@ -1378,11 +1394,11 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
                           %% enforce it anyway
                   end, sort_msg_locations_by_offset(
                          asc, dets_ets_match_object(
-                                 State, #message_store_entry
+                                 State1, #message_store_entry
                                  { file = Destination, _ = '_' }))),
             ok = copy_messages(
                    Worklist, DestinationContiguousTop, DestinationValid,
-                   DestinationHdl, TmpHdl, Destination, State),
+                   DestinationHdl, TmpHdl, Destination, State1),
             TmpSize = DestinationValid - DestinationContiguousTop,
             %% so now Tmp contains everything we need to salvage from
             %% Destination, and MsgLocationDets has been updated to
@@ -1399,16 +1415,16 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
     end,
     SourceWorkList =
         sort_msg_locations_by_offset(
-          asc, dets_ets_match_object(State, #message_store_entry
+          asc, dets_ets_match_object(State1, #message_store_entry
                                       { file = Source, _ = '_' })),
     ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
-                       SourceHdl, DestinationHdl, Destination, State),
+                       SourceHdl, DestinationHdl, Destination, State1),
     %% tidy up
     ok = file:sync(DestinationHdl),
     ok = file:close(SourceHdl),
     ok = file:close(DestinationHdl),
     ok = file:delete(form_filename(Source)),
-    State.
+    State1.
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
               Destination, State) ->
@@ -1478,7 +1494,9 @@ delete_empty_files(File, Acc, #dqstate { file_summary = FileSummary }) ->
         _ -> [File|Acc]
     end.
 
-%% ---- DISK RECOVERY ----
+%%----------------------------------------------------------------------------
+%% disk recovery
+%%----------------------------------------------------------------------------
 
 add_index() ->
     case mnesia:add_table_index(rabbit_disk_queue, msg_id) of
@@ -1682,8 +1700,6 @@ load_messages(Left, [File|Files],
                           {File, ValidTotalSize, ContiguousTop, Left, Right}),
     load_messages(File, Files, State).
 
-%% ---- DISK RECOVERY OF FAILED COMPACTION ----
-
 recover_crashed_compactions(Files, TmpFiles) ->
     lists:foreach(fun (TmpFile) ->
                           ok = recover_crashed_compactions1(Files, TmpFile) end,
@@ -1743,12 +1759,13 @@ recover_crashed_compactions1(Files, TmpFile) ->
     %%    consist only of valid messages. Plan: Truncate the main file
     %%    back to before any of the files in the tmp file and copy
     %%    them over again
+    TmpPath = form_filename(TmpFile),
     case lists:all(fun (MsgId) -> lists:member(MsgId, MsgIds) end, MsgIdsTmp) of
         true -> %% we're in case 1, 2 or 3 above. Just delete the tmp file
                 %% note this also catches the case when the tmp file
                 %% is empty
-            ok = file:delete(TmpFile);
-        _False ->
+            ok = file:delete(TmpPath);
+        false ->
             %% we're in case 4 above. Check that everything in the
             %% main file is a valid message in mnesia
             verify_messages_in_mnesia(MsgIds),
@@ -1760,8 +1777,10 @@ recover_crashed_compactions1(Files, TmpFile) ->
             true = lists:all(fun (MsgId) ->
                                      not (lists:member(MsgId, MsgIdsTmp))
                              end, MsgIds),
-            {ok, MainHdl} = file:open(form_filename(NonTmpRelatedFile),
-                                      [write, raw, binary, delayed_write]),
+            %% must open with read flag, otherwise will stomp over contents
+            {ok, MainHdl} = 
+                file:open(form_filename(NonTmpRelatedFile),
+                          [read, write, raw, binary, delayed_write]),
             {ok, Top} = file:position(MainHdl, Top),
             %% wipe out any rubbish at the end of the file
             ok = file:truncate(MainHdl),
@@ -1777,12 +1796,12 @@ recover_crashed_compactions1(Files, TmpFile) ->
             %% single move if we run out of disk space, this truncate
             %% could fail, but we still aren't risking losing data
             ok = file:truncate(MainHdl),
-            {ok, TmpHdl} = file:open(form_filename(TmpFile),
-                                     [read, raw, binary, read_ahead]),
+            {ok, TmpHdl} = file:open(TmpPath, [read, raw, binary, read_ahead]),
             {ok, TmpSize} = file:copy(TmpHdl, MainHdl, TmpSize),
+            ok = file:sync(MainHdl),
             ok = file:close(MainHdl),
             ok = file:close(TmpHdl),
-            ok = file:delete(TmpFile),
+            ok = file:delete(TmpPath),
 
             {ok, _MainMessages, MsgIdsMain} =
                 scan_file_for_valid_messages_msg_ids(NonTmpRelatedFile),
@@ -1823,7 +1842,9 @@ get_disk_queue_files() ->
     DQTFilesSorted = lists:sort(fun file_name_sort/2, DQTFiles),
     {DQFilesSorted, DQTFilesSorted}.
 
-%% ---- RAW READING AND WRITING OF FILES ----
+%%----------------------------------------------------------------------------
+%% raw reading and writing of files
+%%----------------------------------------------------------------------------
 
 append_message(FileHdl, MsgId, MsgBody, IsPersistent) when is_binary(MsgBody) ->
     BodySize = size(MsgBody),
@@ -1862,7 +1883,7 @@ read_message_from_disk(FileHdl, TotalSize) ->
     end.
 
 scan_file_for_valid_messages(File) ->
-    case file:open(form_filename(File), [raw, binary, read]) of
+    case file:open(form_filename(File), [raw, binary, read, read_ahead]) of
         {ok, Hdl} ->
             Valid = scan_file_for_valid_messages(Hdl, 0, []),
             %% if something really bad's happened, the close could fail, but ignore
@@ -1891,7 +1912,7 @@ read_next_file_entry(FileHdl, Offset) ->
     case file:read(FileHdl, TwoIntegers) of
         {ok,
          <<TotalSize:?INTEGER_SIZE_BITS, MsgIdBinSize:?INTEGER_SIZE_BITS>>} ->
-            case {TotalSize =:= 0, MsgIdBinSize =:= 0} of
+            case {TotalSize =< 0, MsgIdBinSize =< 0} of
                 {true, _} -> eof; %% Nothing we can do other than stop
                 {false, true} ->
                     %% current message corrupted, try skipping past it
