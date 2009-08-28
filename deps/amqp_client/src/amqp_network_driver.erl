@@ -169,13 +169,25 @@ network_handshake(Writer,
     State#connection_state{channel_max = ChannelMax, heartbeat = Heartbeat}.
 
 start_ok(#connection_state{username = Username, password = Password}) ->
+    %% TODO This eagerly starts the amqp_client application in order to
+    %% to get the version from the app descriptor, which may be
+    %% overkill - maybe there is a more suitable point to boot the app
+    rabbit_misc:start_applications([amqp_client]),
+    {ok, Vsn} = application:get_key(amqp_client, vsn),
     LoginTable = [ {<<"LOGIN">>, longstr, Username },
                    {<<"PASSWORD">>, longstr, Password }],
     #'connection.start_ok'{
            client_properties = [
-                            {<<"product">>, longstr, <<"Erlang-AMQC">>},
-                            {<<"version">>, longstr, <<"0.1">>},
-                            {<<"platform">>, longstr, <<"Erlang">>}
+                            {<<"product">>,   longstr, <<"RabbitMQ">>},
+                            {<<"version">>,   longstr, list_to_binary(Vsn)},
+                            {<<"platform">>,  longstr, <<"Erlang">>},
+                            {<<"copyright">>, longstr,
+                             <<"Copyright (C) 2007-2009 LShift Ltd., "
+                               "Cohesive Financial Technologies LLC., "
+                               "and Rabbit Technologies Ltd.">>},
+                            {<<"information">>, longstr,
+                             <<"Licensed under the MPL.  "
+                               "See http://www.rabbitmq.com/">>}
                            ],
            mechanism = <<"AMQPLAIN">>,
            response = rabbit_binary_generator:generate_table(LoginTable)}.
