@@ -1,6 +1,6 @@
 {application, rabbit_common,
  [{description, "RabbitMQ Common Libraries"},
-  {vsn, "1.6.0"},
+  {vsn, "%%VSN%%"},
   {modules, [
              rabbit_writer,
              rabbit_reader,
