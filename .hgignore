@@ -1,6 +1,8 @@
 syntax: glob
 *.beam
 *~
+*.swp
+*.patch
 erl_crash.dump
 
 syntax: regexp
