@@ -87,6 +87,9 @@ pub_and_close_test_() ->
 non_existent_exchange_test() -> 
   negative_test_util:non_existent_exchange_test(new_connection()).
 
+bogus_rpc_test() ->
+  negative_test_util:bogus_rpc_test(new_connection()).
+
 hard_error_test() ->
     negative_test_util:hard_error_test(new_connection()).
 
@@ -106,7 +109,7 @@ no_permission_test() ->
 %% Common Functions
 
 new_connection() ->
-    amqp_connection:start_network(#amqp_params{}).
+    amqp_connection:start_network().
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
