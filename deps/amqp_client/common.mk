@@ -134,7 +134,7 @@ common_clean:
 
 compile: $(TARGETS)
 
-compile_tests: $(TEST_DIR) $(COMPILE_DEPS)
+compile_tests: $(TEST_DIR) $(COMPILE_DEPS) $(EBIN_DIR)/$(PACKAGE).app
 	$(MAKE) -C $(TEST_DIR)
 
 run: compile $(EBIN_DIR)/$(PACKAGE).app
