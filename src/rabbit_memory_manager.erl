@@ -187,15 +187,15 @@ handle_call(info, _From, State) ->
              { unoppressable_processes, sets:to_list(Unoppressable) }], State1}.
 
 handle_cast({report_memory, Pid, Memory, Hibernating},
-            State = #state { processes           = Procs,
-                             available_tokens    = Avail,
-                             callbacks           = Callbacks,
-                             tokens_per_byte     = TPB,
-                             alarmed             = Alarmed }) ->
+            State = #state { processes        = Procs,
+                             available_tokens = Avail,
+                             callbacks        = Callbacks,
+                             tokens_per_byte  = TPB,
+                             alarmed          = Alarmed }) ->
     Req = rabbit_misc:ceil(TPB * Memory),
     LibreActivity = if Hibernating -> hibernate;
-                      true -> active
-                   end,
+                       true -> active
+                    end,
     {StateN = #state { hibernate = Sleepy }, ActivityNew} =
         case find_process(Pid, Procs) of
             {libre, OAlloc, _OActivity} ->
@@ -220,8 +220,7 @@ handle_cast({report_memory, Pid, Memory, Hibernating},
             {oppressed, OrigAvail} ->
                 case Alarmed orelse Hibernating orelse
                     (Avail > (OrigAvail / ?THRESHOLD_MULTIPLIER) andalso
-                     Avail < (OrigAvail * ?THRESHOLD_MULTIPLIER))
-                    of
+                     Avail < (OrigAvail * ?THRESHOLD_MULTIPLIER)) of
                     true ->
                         {State, oppressed};
                     false ->
@@ -270,8 +269,8 @@ handle_cast({conserve_memory, Conserve}, State) ->
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state { available_tokens = Avail,
-                             processes = Procs,
-                             callbacks = Callbacks }) ->
+                             processes        = Procs,
+                             callbacks        = Callbacks }) ->
     State1 = State #state { processes = dict:erase(Pid, Procs),
                             callbacks = dict:erase(Pid, Callbacks) },
     {noreply, case find_process(Pid, Procs) of
@@ -327,7 +326,7 @@ tidy_and_sum(AtomExpected, Procs, Catamorphism, Anamorphism, DupCheckSet,
                         end
                 end,
             tidy_and_sum(AtomExpected, Procs, Catamorphism, Anamorphism,
-                          DupCheckSet1, CataInit1, AnaInit1, AllocAcc1)
+                         DupCheckSet1, CataInit1, AnaInit1, AllocAcc1)
     end.
 
 free_upto_sleepy(IgnorePids, Callbacks, Sleepy, Procs, Req, Avail) ->
@@ -384,8 +383,8 @@ free_upto(Pid, Req, State = #state { available_tokens = Avail,
                 free_upto_sleepy(Unoppressable1, Callbacks,
                                  Sleepy1, Procs, Req, Avail),
             State #state { available_tokens = Avail + (Req - ReqRem),
-                           processes = Procs1,
-                           hibernate = Sleepy2 }
+                           processes        = Procs1,
+                           hibernate        = Sleepy2 }
     end;
 free_upto(_Pid, _Req, State) ->
     State.
