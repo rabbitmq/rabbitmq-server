@@ -183,7 +183,7 @@ handle_call(info, _From, State) ->
                       processes           = Procs,
                       hibernate           = Sleepy,
                       unoppressable       = Unoppressable } =
-        free_upto(undef, 1 + ?TOTAL_TOKENS, State), %% this'll just do tidying
+        free_upto(undefined, 1 + ?TOTAL_TOKENS, State), %% just tidy
     {reply, [{ available_tokens,        Avail                       },
              { processes,               dict:to_list(Procs)         },
              { hibernated_processes,    queue:to_list(Sleepy)       },
