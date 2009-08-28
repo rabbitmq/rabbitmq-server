@@ -32,7 +32,7 @@
 %% rabbit_stomp implements STOMP messaging semantics, as per protocol
 %% "version 1.0", at http://stomp.codehaus.org/Protocol
 
--module(rabbit_stomp).
+-module(stomp_server).
 
 -export([start/1,
          listener_started/2, listener_stopped/2, start_client/1,
@@ -46,11 +46,11 @@
 
 start(Listeners) ->
     {ok, Pid} = supervisor:start_child(
-               rabbit_sup,
+               rabbitmq_stomp_sup,
                {rabbit_stomp_client_sup,
                 {tcp_client_sup, start_link,
                  [{local, rabbit_stomp_client_sup},
-                  {rabbit_stomp,start_link,[]}]},
+                  {stomp_server,start_link,[]}]},
                 transient, infinity, supervisor, [tcp_client_sup]}),
     ok = start_listeners(Listeners),
     {ok, Pid}.
@@ -63,7 +63,7 @@ start_listeners([{Host, Port} | More]) ->
                           Host,
                           Port),
     {ok,_} = supervisor:start_child(
-               rabbit_sup,
+               rabbitmq_stomp_sup,
                {Name,
                 {tcp_listener_sup, start_link,
                  [IPAddress, Port,
@@ -175,7 +175,6 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
         {more, ParseState1} ->
             ?MODULE:mainloop(State#state{parse_state = ParseState1});
         {ok, Frame = #stomp_frame{command = Command}, Rest} ->
-            %% io:format("Frame: ~p~n", [Frame]),
             PS = stomp_frame:initial_state(),
             case catch process_frame(Command, Frame,
                                      State#state{parse_state = PS}) of
@@ -314,7 +313,7 @@ send_error(Message, Format, Args, State) ->
     send_priv_error(Message, Format, Args, none, State).
 
 process_frame("CONNECT", Frame, State = #state{channel = none}) ->
-    {ok, DefaultVHost} = application:get_env(default_vhost),
+    {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
     {ok, State1} = do_login(stomp_frame:header(Frame, "login"),
                             stomp_frame:header(Frame, "passcode"),
                             stomp_frame:header(Frame, "virtual-host",

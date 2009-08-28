@@ -61,14 +61,14 @@ rabbitmq-stomp directory. Package should appear in 'dist' directory.
 
     cd rabbitmq-stomp
     make package
-    ls dist/rabbitmq-stomp.ez
+    ls dist/rabbitmq_stomp.ez
 
 
 To install and activate package, please follow the instructions from
 Plugin Development Guide:
     http://www.rabbitmq.com/plugin-development.html#activating-a-plugin
 
-You need to install amqp_client.ez and rabbitmq-stomp.ez packages.
+You need to install rabbitmq_stomp.ez package.
 
 ## Running the STOMP adapter
 
@@ -79,7 +79,7 @@ up configuration from `/etc/rabbitmq/rabbitmq.conf`. To tell the
 server to start your plugin, first make sure it is compiled, and then
 add the following text to `/etc/rabbitmq/rabbitmq.conf`:
 
-    SERVER_START_ARGS='-rabbit_stomp listeners [{"0.0.0.0",61613}]'
+    SERVER_START_ARGS='-rabbitmq_stomp listeners [{"0.0.0.0",61613}]'
 
 Then restart the server with
 
