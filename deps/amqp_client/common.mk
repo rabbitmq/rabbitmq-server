@@ -171,6 +171,7 @@ $(DIST_DIR)/$(PACKAGE_NAME): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app
 	cp -r $(EBIN_DIR)/*.beam $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
 	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE)/$(INCLUDE_DIR)
+	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE)/$(INCLUDE_DIR)
 	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
 package: $(DIST_DIR)/$(PACKAGE_NAME)
