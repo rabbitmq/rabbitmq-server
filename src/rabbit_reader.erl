@@ -200,7 +200,7 @@ inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 peername(Sock) ->   
     try
-        {Address, Port} = inet_op(fun () -> inet:peername(Sock) end),
+        {Address, Port} = inet_op(fun () -> rabbit_net:peername(Sock) end),
         AddressS = inet_parse:ntoa(Address),
         {AddressS, Port}
     catch
@@ -286,7 +286,7 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             %% since this termination is initiated by our parent it is
             %% probably more important to exit quickly.
             exit(Reason);
-        {'EXIT', _Pid, E = {writer, send_failed, _Error}} ->
+        {channel_exit, _Chan, E = {writer, send_failed, _Error}} ->
             throw(E);
         {channel_exit, Channel, Reason} ->
             mainloop(Parent, Deb, handle_channel_exit(Channel, Reason, State));
@@ -323,8 +323,8 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
     end.
 
 switch_callback(OldState, NewCallback, Length) ->
-    Ref = inet_op(fun () -> prim_inet:async_recv(
-                              OldState#v1.sock, Length, -1) end),
+    Ref = inet_op(fun () -> rabbit_net:async_recv(
+                              OldState#v1.sock, Length, infinity) end),
     OldState#v1{callback = NewCallback,
                 recv_ref = Ref}.
 
@@ -539,7 +539,7 @@ handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
     end;
 
 handle_input(handshake, Other, #v1{sock = Sock}) ->
-    ok = inet_op(fun () -> gen_tcp:send(
+    ok = inet_op(fun () -> rabbit_net:send(
                              Sock, <<"AMQP",1,1,
                                     ?PROTOCOL_VERSION_MAJOR,
                                     ?PROTOCOL_VERSION_MINOR>>) end),
@@ -675,23 +675,23 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 i(pid, #v1{}) ->
     self();
 i(address, #v1{sock = Sock}) ->
-    {ok, {A, _}} = inet:sockname(Sock),
+    {ok, {A, _}} = rabbit_net:sockname(Sock),
     A;
 i(port, #v1{sock = Sock}) ->
-    {ok, {_, P}} = inet:sockname(Sock),
+    {ok, {_, P}} = rabbit_net:sockname(Sock),
     P;
 i(peer_address, #v1{sock = Sock}) ->
-    {ok, {A, _}} = inet:peername(Sock),
+    {ok, {A, _}} = rabbit_net:peername(Sock),
     A;
 i(peer_port, #v1{sock = Sock}) ->
-    {ok, {_, P}} = inet:peername(Sock),
+    {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
 i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= recv_cnt; 
                                    SockStat =:= send_oct;
                                    SockStat =:= send_cnt;
                                    SockStat =:= send_pend ->
-    case inet:getstat(Sock, [SockStat]) of
+    case rabbit_net:getstat(Sock, [SockStat]) of
         {ok, [{SockStat, StatVal}]} -> StatVal;
         {error, einval}             -> undefined;
         {error, Error}              -> throw({cannot_get_socket_stats, Error})

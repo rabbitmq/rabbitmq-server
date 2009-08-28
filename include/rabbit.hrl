@@ -64,6 +64,7 @@
 
 -record(basic_message, {exchange_name, routing_key, content, persistent_key}).
 
+-record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
 
 %%----------------------------------------------------------------------------
@@ -74,7 +75,8 @@
 
 -type(maybe(T) :: T | 'none').
 -type(erlang_node() :: atom()).
--type(socket() :: port()).
+-type(ssl_socket() :: #ssl_socket{}).
+-type(socket() :: port() | ssl_socket()).
 -type(thunk(T) :: fun(() -> T)).
 -type(info_key() :: atom()).
 -type(info() :: {info_key(), any()}).

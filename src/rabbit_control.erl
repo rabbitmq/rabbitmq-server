@@ -329,22 +329,23 @@ format_info_item(Items, Key) ->
     {value, Info = {Key, Value}} = lists:keysearch(Key, 1, Items),
     case Info of
         {_, #resource{name = Name}} ->
-            url_encode(Name);
+            escape(Name);
         _ when Key =:= address; Key =:= peer_address andalso is_tuple(Value) ->
             inet_parse:ntoa(Value);
         _ when is_pid(Value) ->
             atom_to_list(node(Value));
         _ when is_binary(Value) -> 
-            url_encode(Value);
+            escape(Value);
         _ -> 
             io_lib:format("~w", [Value])
     end.
 
 display_list(L) when is_list(L) ->
     lists:foreach(fun (I) when is_binary(I) ->
-                          io:format("~s~n", [url_encode(I)]);
+                          io:format("~s~n", [escape(I)]);
                       (I) when is_tuple(I) ->
-                          display_row([url_encode(V) || V <- tuple_to_list(I)])
+                          display_row([escape(V)
+                                       || V <- tuple_to_list(I)])
                   end,
                   lists:sort(L)),
     ok;
@@ -356,31 +357,22 @@ call(Node, {Mod, Fun, Args}) ->
 rpc_call(Node, Mod, Fun, Args) ->
     rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
 
-%% url_encode is lifted from ibrowse, modified to preserve some characters
-url_encode(Bin) when binary(Bin) ->
-    url_encode_char(lists:reverse(binary_to_list(Bin)), []).
+%% escape does C-style backslash escaping of non-printable ASCII
+%% characters.  We don't escape characters above 127, since they may
+%% form part of UTF-8 strings.
 
-url_encode_char([X | T], Acc) when X >= $a, X =< $z ->
-    url_encode_char(T, [X | Acc]);
-url_encode_char([X | T], Acc) when X >= $A, X =< $Z ->
-    url_encode_char(T, [X | Acc]);
-url_encode_char([X | T], Acc) when X >= $0, X =< $9 ->
-    url_encode_char(T, [X | Acc]);
-url_encode_char([X | T], Acc)
-  when X == $-; X == $_; X == $.; X == $~;
-       X == $!; X == $*; X == $'; X == $(;
-       X == $); X == $;; X == $:; X == $@;
-       X == $&; X == $=; X == $+; X == $$;
-       X == $,; X == $/; X == $?; X == $%;
-       X == $#; X == $[; X == $] ->
-    url_encode_char(T, [X | Acc]);
-url_encode_char([X | T], Acc) ->
-    url_encode_char(T, [$%, d2h(X bsr 4), d2h(X band 16#0f) | Acc]);
-url_encode_char([], Acc) ->
+escape(Bin) when binary(Bin) ->
+    escape_char(lists:reverse(binary_to_list(Bin)), []).
+
+escape_char([$\\ | T], Acc) ->
+    escape_char(T, [$\\, $\\ | Acc]);
+escape_char([X | T], Acc) when X > 32, X /= 127 ->
+    escape_char(T, [X | Acc]);
+escape_char([X | T], Acc) ->
+    escape_char(T, [$\\, $0 + (X bsr 6), $0 + (X band 8#070 bsr 3),
+                    $0 + (X band 7) | Acc]);
+escape_char([], Acc) ->
     Acc.
-
-d2h(N) when N<10 -> N+$0;
-d2h(N) -> N+$a-10.
 
 list_replace(Find, Replace, List) ->
     [case X of Find -> Replace; _ -> X end || X <- List].

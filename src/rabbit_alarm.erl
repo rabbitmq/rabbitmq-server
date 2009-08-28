@@ -41,7 +41,7 @@
 -define(MEMSUP_CHECK_INTERVAL, 1000).
 
 %% OSes on which we know memory alarms to be trustworthy
--define(SUPPORTED_OS, [{unix, linux}]).
+-define(SUPPORTED_OS, [{unix, linux}, {unix, darwin}]).
 
 -record(alarms, {alertees, system_memory_high_watermark = false}).
 
@@ -136,33 +136,35 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 start_memsup() ->
-    Mod = case os:type() of
-              %% memsup doesn't take account of buffers or cache when
-              %% considering "free" memory - therefore on Linux we can
-              %% get memory alarms very easily without any pressure
-              %% existing on memory at all. Therefore we need to use
-              %% our own simple memory monitor.
-              %%
-              {unix, linux} -> rabbit_memsup_linux;
+    {Mod, Args} =
+        case os:type() of
+            %% memsup doesn't take account of buffers or cache when
+            %% considering "free" memory - therefore on Linux we can
+            %% get memory alarms very easily without any pressure
+            %% existing on memory at all. Therefore we need to use
+            %% our own simple memory monitor.
+            %%
+            {unix, linux}  -> {rabbit_memsup, [rabbit_memsup_linux]};
+            {unix, darwin} -> {rabbit_memsup, [rabbit_memsup_darwin]};
 
-              %% Start memsup programmatically rather than via the
-              %% rabbitmq-server script. This is not quite the right
-              %% thing to do as os_mon checks to see if memsup is
-              %% available before starting it, but as memsup is
-              %% available everywhere (even on VXWorks) it should be
-              %% ok.
-              %%
-              %% One benefit of the programmatic startup is that we
-              %% can add our alarm_handler before memsup is running,
-              %% thus ensuring that we notice memory alarms that go
-              %% off on startup.
-              %%
-              _             -> memsup
-          end,
+            %% Start memsup programmatically rather than via the
+            %% rabbitmq-server script. This is not quite the right
+            %% thing to do as os_mon checks to see if memsup is
+            %% available before starting it, but as memsup is
+            %% available everywhere (even on VXWorks) it should be
+            %% ok.
+            %%
+            %% One benefit of the programmatic startup is that we
+            %% can add our alarm_handler before memsup is running,
+            %% thus ensuring that we notice memory alarms that go
+            %% off on startup.
+            %%
+            _              -> {memsup, []}
+        end,
     %% This is based on os_mon:childspec(memsup, true)
     {ok, _} = supervisor:start_child(
                 os_mon_sup,
-                {memsup, {Mod, start_link, []},
+                {memsup, {Mod, start_link, Args},
                  permanent, 2000, worker, [Mod]}),
     ok.
 

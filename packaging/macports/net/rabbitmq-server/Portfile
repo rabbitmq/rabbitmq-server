@@ -42,7 +42,7 @@ use_parallel_build yes
 build.args      PYTHON=${prefix}/bin/python2.5
 
 destroot.destdir \
-    TARGET_DIR=${destroot}${prefix}/lib/erlang/lib/rabbitmq_server-${version} \
+    TARGET_DIR=${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version} \
     SBIN_DIR=${sbindir} \
     MAN_DIR=${destroot}${prefix}/share/man
 
@@ -61,9 +61,7 @@ post-destroot {
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
 
     reinplace -E "s:(/etc/rabbitmq/rabbitmq.conf):${prefix}\\1:g" \
-        ${sbindir}/rabbitmq-multi \
-        ${sbindir}/rabbitmq-server \
-        ${sbindir}/rabbitmqctl
+        ${sbindir}/rabbitmq-env
     reinplace -E "s:(CLUSTER_CONFIG_FILE)=/:\\1=${prefix}/:" \
         ${sbindir}/rabbitmq-multi \
         ${sbindir}/rabbitmq-server \
@@ -83,14 +81,19 @@ post-destroot {
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-multi
+    xinstall -m 555 ${filespath}/rabbitmq-asroot-script-wrapper \
+                ${wrappersbin}/rabbitmq-activate-plugins
 
     reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:" \
                 ${wrappersbin}/rabbitmq-multi
     reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:" \
                 ${wrappersbin}/rabbitmq-multi
+    reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:" \
+                ${wrappersbin}/rabbitmq-activate-plugins
+    reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:" \
+                ${wrappersbin}/rabbitmq-activate-plugins
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
-
 }
 
 pre-install {
