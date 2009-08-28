@@ -99,7 +99,7 @@
 call(Channel, Method) ->
     gen_server:call(Channel, {call, Method}, infinity).
 
-%% @spec (Channel, amqp_command(), content()) -> ok | blocked
+%% @spec (Channel, amqp_command(), content()) -> ok | blocked | closing
 %% where
 %%      Channel = pid()
 %% @doc This sends an AMQP command with content and waits for a synchronous
@@ -107,6 +107,8 @@ call(Channel, Method) ->
 %% This will return a blocked atom if either the server has throttled the
 %% client for flow control reasons or if the channel is shutting down due to a
 %% broker initiated close.
+%% It will return a closing atom if the channel is in the process of shutting
+%% down.
 %% Note that the synchronicity only means that the client has transmitted the
 %% command to the broker. It does not imply that the broker has accepted
 %% responsibility for the message. To acheive guaranteed delivery, this
@@ -256,19 +258,10 @@ unregister_consumer(ConsumerTag,
     Consumers1 = dict:erase(ConsumerTag, Consumers0),
     State#channel_state{consumers = Consumers1}.
 
-shutdown_writer(State = #channel_state{close_fun = CloseFun,
+shutdown_writer(State = #channel_state{close_fun  = CloseFun,
                                        writer_pid = WriterPid}) ->
     CloseFun(WriterPid),
     State.
-
-channel_cleanup(State = #channel_state{consumers = []}) ->
-    shutdown_writer(State);
-
-channel_cleanup(State = #channel_state{consumers = Consumers}) ->
-    Terminator = fun(_ConsumerTag, Consumer) -> Consumer ! shutdown end,
-    dict:map(Terminator, Consumers),
-    NewState = State#channel_state{closing = true, consumers = []},
-    shutdown_writer(NewState).
 
 return_handler(State = #channel_state{return_handler_pid = undefined}) ->
     %% TODO what about trapping exits??
@@ -369,12 +362,22 @@ init([InitialState]) ->
 %% Standard implementation of top half of the call/2 command
 %% Do not accept any further RPCs when the channel is about to close
 %% @private
-handle_call({call, Method}, From, State = #channel_state{closing    = false,
-                                                         writer_pid = Writer,
+handle_call(_, _, State = #channel_state{closing = true}) ->
+    {reply, closing, State};
+
+%% @private
+handle_call({call, Method = #'channel.close'{}}, From, State) ->
+    rpc_top_half(Method, From, State#channel_state{closing = true});
+
+%% @private
+handle_call({call, Method}, From, State = #channel_state{writer_pid = Writer,
                                                          do2 = Do2}) ->
     case rabbit_framing:is_method_synchronous(Method) of
-        true  -> rpc_top_half(Method, From, State);
-        false -> Do2(Writer, Method), {reply, ok, State}
+        true  ->
+            rpc_top_half(Method, From, State);
+        false ->
+            Do2(Writer, Method),
+            {reply, ok, State}
     end;
 
 %% @private
@@ -382,22 +385,16 @@ handle_call({call, _Method, _Content}, _From,
             State = #channel_state{flow_control = true}) ->
     {reply, blocked, State};
 
-%% Do not accept any further messages for writer when the channel is about to
-%% close
-%% @private
-handle_call({call, _Method, _Content}, _From,
-            State = #channel_state{closing = true}) ->
-    {reply, blocked, State};
-
 %% @private
 handle_call({call, Method, #amqp_msg{props = Props, payload = Payload}},
             From, State = #channel_state{writer_pid = Writer, do3 = Do3}) ->
     Content = rabbit_basic:build_content(Props, Payload),
     case rabbit_framing:is_method_synchronous(Method) of
-        true  -> rpc_top_half(Method, Content, From, State);
-        false -> 
-			Do3(Writer, Method, Content),
-			{reply, ok, State}
+        true  ->
+            rpc_top_half(Method, Content, From, State);
+        false ->
+            Do3(Writer, Method, Content),
+            {reply, ok, State}
     end;
 
 %% Top half of the basic consume process.
@@ -510,8 +507,7 @@ handle_info( {send_command, Method, Content}, State) ->
 
 %% @private
 handle_info(shutdown, State) ->
-    NewState = channel_cleanup(State),
-    {stop, normal, NewState};
+    {stop, normal, State};
 
 %% Handles the delivery of a message from a direct channel
 %% @private
@@ -549,7 +545,7 @@ handle_info({channel_exit, _Channel, {amqp, Reason, _Msg, _Context}},
 
 %% @private
 terminate(_Reason, State) ->
-    channel_cleanup(State),
+    shutdown_writer(State),
     ok.
 
 %% @private
