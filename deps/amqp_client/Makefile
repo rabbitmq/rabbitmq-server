@@ -32,11 +32,17 @@ SOURCE_PACKAGE_NAME=$(PACKAGE)-$(VERSION)-src
 
 .PHONY: common_package dist
 
+INFILES=$(shell find . -name '*.app.in')
+INTARGETS=$(patsubst %.in, %, $(INFILES))
+
 include common.mk
 
 clean: common_clean
+	rm -f $(INTARGETS)
 	rm -fr $(DIST_DIR)
-	rm -fr $(DEPS_DIR)
+
+%.app: %.app.in
+	sed -e 's:%%VSN%%:$(VERSION):g' < $< > $@
 
 dist: doc source_tarball package
 
@@ -66,7 +72,7 @@ COPY=cp -pR
 
 common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 
-$(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SOURCES) $(BROKER_HEADERS)
+$(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SOURCES) $(BROKER_HEADERS) $(COMMON_PACKAGE).app
 	$(MAKE) -C $(BROKER_DIR)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE_VSN)/$(INCLUDE_DIR)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE_VSN)/$(EBIN_DIR)
@@ -94,3 +100,4 @@ source_tarball: $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
 	$(COPY) $(TEST_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)/
 	$(COPY) $(TEST_DIR)/Makefile $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)/
 	cd $(DIST_DIR) ; tar cvzf $(SOURCE_PACKAGE_NAME).tar.gz $(SOURCE_PACKAGE_NAME)
+

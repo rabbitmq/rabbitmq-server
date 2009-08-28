@@ -148,10 +148,9 @@ compile: $(TARGETS)
 compile_tests: $(TEST_DIR) $(COMPILE_DEPS)
 	$(MAKE) -C $(TEST_DIR) VERSION=$(VERSION)
 
-run: compile
-	$(ERL) -pa $(LOAD_PATH)
+run: compile $(EBIN_DIR)/$(PACKAGE).app
 
-run_in_broker: compile $(BROKER_DIR)
+run_in_broker: compile $(BROKER_DIR) $(EBIN_DIR)/$(PACKAGE).app
 	$(MAKE) RABBITMQ_SERVER_START_ARGS='$(PA_LOAD_PATH)' -C $(BROKER_DIR) run
 
 dialyze: $(TARGETS)
@@ -176,11 +175,13 @@ doc: $(DOC_DIR)/index.html
 ##  Packaging
 ###############################################################################
 
-$(DIST_DIR)/$(PACKAGE_NAME): $(TARGETS)
+$(DIST_DIR)/$(PACKAGE_NAME): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app
 	rm -rf $(DIST_DIR)/$(PACKAGE_VSN)
-	mkdir -p $(DIST_DIR)/$(PACKAGE_VSN)
-	cp -r $(EBIN_DIR) $(DIST_DIR)/$(PACKAGE_VSN)
-	cp -r $(INCLUDE_DIR) $(DIST_DIR)/$(PACKAGE_VSN)
+	mkdir -p $(DIST_DIR)/$(PACKAGE_VSN)/$(EBIN_DIR)
+	mkdir -p $(DIST_DIR)/$(PACKAGE_VSN)/$(INCLUDE_DIR)
+	cp -r $(EBIN_DIR)/*.beam $(DIST_DIR)/$(PACKAGE_VSN)/$(EBIN_DIR)
+	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE_VSN)/$(EBIN_DIR)
+	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE_VSN)/$(INCLUDE_DIR)
 	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE_VSN))
 
 package: $(DIST_DIR)/$(PACKAGE_NAME)
