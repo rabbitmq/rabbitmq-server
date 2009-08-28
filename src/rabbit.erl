@@ -146,14 +146,8 @@ start(normal, []) ->
                 ok = rabbit_amqqueue:start(),
 
                 ok = start_child(rabbit_router),
-                ok = start_child(rabbit_node_monitor)
-        end},
-       {"guid generator",
-        fun () ->
-                ok = start_child(rabbit_guid)
-        end},
-       {"disk queue",
-        fun () ->
+                ok = start_child(rabbit_node_monitor),
+                ok = start_child(rabbit_guid),
                 ok = start_child(rabbit_disk_queue)
         end},
        {"recovery",
