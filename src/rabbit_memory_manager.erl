@@ -45,6 +45,8 @@
 
 -define(SERVER, ?MODULE).
 
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () ->
@@ -55,6 +57,8 @@
 -spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
 
 -endif.
+
+%%----------------------------------------------------------------------------
 
 -record(state, { available_tokens,
                  processes,
@@ -160,6 +164,8 @@ info() ->
 
 conserve_memory(_Pid, Conserve) ->
     gen_server2:pcast(?SERVER, 9, {conserve_memory, Conserve}).
+
+%%----------------------------------------------------------------------------
 
 init([]) ->
     process_flag(trap_exit, true),
@@ -292,6 +298,8 @@ terminate(_Reason, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%----------------------------------------------------------------------------
 
 find_process(Pid, Procs) ->
     case dict:find(Pid, Procs) of
