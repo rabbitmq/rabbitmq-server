@@ -1,5 +1,5 @@
 {application, amqp_client,
- [{description, "AMQP Client"},
+ [{description, "RabbitMQ AMQP Client"},
   {vsn, "%%VSN%%"},
   {modules, [
              amqp_channel,
