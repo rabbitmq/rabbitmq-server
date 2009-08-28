@@ -206,9 +206,9 @@ rpc_top_half(Method, From, State) ->
 
 rpc_top_half(Method, Content, From, 
              State = #channel_state{writer_pid = Writer,
-									rpc_requests = RequestQueue,
+                                    rpc_requests = RequestQueue,
                                     do2 = Do2,
-									do3 = Do3}) ->
+                                    do3 = Do3}) ->
     % Enqueue the incoming RPC request to serialize RPC dispatching
     NewRequestQueue = queue:in({From, Method}, RequestQueue),
     NewState = State#channel_state{rpc_requests = NewRequestQueue},
@@ -222,12 +222,6 @@ rpc_top_half(Method, Content, From,
             ok
         end,
     {noreply, NewState}.
-
-rpc_bottom_half(#'channel.close'{reply_code = ReplyCode,
-                                 reply_text = ReplyText}, State) ->
-    ?LOG_WARN("Channel received close from peer, code: ~p , message: ~p~n",
-              [ReplyCode,ReplyText]),
-    {stop, normal, State};
 
 rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
                                               rpc_requests = RequestQueue,
@@ -320,6 +314,14 @@ handle_method(CancelOk = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
 handle_method(CloseOk = #'channel.close_ok'{}, State) ->
     {noreply, NewState} = rpc_bottom_half(CloseOk, State),
     {stop, normal, NewState};
+
+%% Handles the scenario when the broker intiates a channel.close
+handle_method(#'channel.close'{reply_code = ReplyCode,
+                               reply_text = ReplyText},
+              State = #channel_state{do2 = Do2,
+                                     writer_pid = Writer}) ->
+    Do2(Writer, #'channel.close_ok'{}),
+    {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
 
 %% This handles the flow control flag that the broker initiates.
 %% If defined, it informs the flow control handler to suspend submitting
@@ -526,13 +528,20 @@ handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
 %% @private
 handle_info({'EXIT', _Pid, Reason},
             State = #channel_state{number = Number}) ->
-    ?LOG_WARN("Channel ~p is shutting down due to: ~p~n",[Number, Reason]),
-    {stop, normal, State};
+    {stop, {server_initiated_close, Number, Reason}, State};
 
-%% This is for a channel exception that can't be otherwise handled
+%% This is for a channel exception that is sent by the direct
+%% rabbit_channel process - in this case this process needs to tell
+%% the connection process whether this is a hard error or not
 %% @private
-handle_info( {channel_exit, _Channel, Reason}, State) ->
-   {stop, Reason, State}.
+handle_info({channel_exit, _Channel, {amqp, Reason, _Msg, _Context}},
+            State = #channel_state{parent_connection = Connection}) ->
+    {ConError, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
+    case ConError of
+        true  -> Connection ! {connection_level_error, Code, Text};
+        false -> ok
+    end,
+    {stop, {server_initiated_close, Code, Text}, State}.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks
