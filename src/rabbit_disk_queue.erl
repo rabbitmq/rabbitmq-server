@@ -2009,7 +2009,7 @@ read_next_file_entry(FileHdl, Offset) ->
                                                   TotalSize, NextOffset}};
                                         corrupted ->
                                             {corrupted, NextOffset};
-                                        Other -> Other
+                                        KO -> KO
                                     end;
                                 {ok, _SomeOtherPos} ->
                                     %% seek failed, so give up
