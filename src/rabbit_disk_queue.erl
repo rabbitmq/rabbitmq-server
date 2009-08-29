@@ -1995,26 +1995,21 @@ read_next_file_entry(FileHdl, Offset) ->
                     end;
                 {_, _} -> %% all good, let's continue
                     case file:read(FileHdl, MsgIdBinSize) of
-                        {ok, <<MsgId:MsgIdBinSize/binary>>} ->
+                        {ok, <<MsgIdBin:MsgIdBinSize/binary>>} ->
                             ExpectedAbsPos = Offset + ?FILE_PACKING_ADJUSTMENT +
                                 TotalSize - 1,
                             case file:position(
                                    FileHdl, {cur, TotalSize - MsgIdBinSize}) of
                                 {ok, ExpectedAbsPos} ->
-                                    NextOffset = Offset + TotalSize +
-                                        ?FILE_PACKING_ADJUSTMENT,
-                                    case file:read(FileHdl, 1) of
-                                        {ok,
-                                         <<?WRITE_OK_TRANSIENT:?WRITE_OK_SIZE_BITS>>} ->
-                                             {ok, {binary_to_term(MsgId),
-                                                   false, TotalSize, NextOffset}};
-                                        {ok,
-                                         <<?WRITE_OK_PERSISTENT:?WRITE_OK_SIZE_BITS>>} ->
-                                             {ok, {binary_to_term(MsgId),
-                                                   true, TotalSize, NextOffset}};
-                                        {ok, _SomeOtherData} ->
+                                    NextOffset = ExpectedAbsPos + 1,
+                                    case read_stop_byte(FileHdl) of
+                                        {ok, Persistent} ->
+                                            MsgId = binary_to_term(MsgIdBin),
+                                            {ok, {MsgId, Persistent,
+                                                  TotalSize, NextOffset}};
+                                        corrupted ->
                                             {corrupted, NextOffset};
-                                        KO -> KO
+                                        Other -> Other
                                     end;
                                 {ok, _SomeOtherPos} ->
                                     %% seek failed, so give up
@@ -2025,4 +2020,12 @@ read_next_file_entry(FileHdl, Offset) ->
                     end
             end;
         Other -> Other
+    end.
+
+read_stop_byte(FileHdl) ->
+    case file:read(FileHdl, 1) of
+        {ok, <<?WRITE_OK_TRANSIENT:?WRITE_OK_SIZE_BITS>>}  -> {ok, false};
+        {ok, <<?WRITE_OK_PERSISTENT:?WRITE_OK_SIZE_BITS>>} -> {ok, true};
+        {ok, _SomeOtherData}                               -> corrupted;
+        KO                                                 -> KO
     end.
