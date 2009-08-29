@@ -1989,11 +1989,9 @@ read_next_file_entry(FileHdl, Offset) ->
                     ExpectedAbsPos =
                         Offset + ?FILE_PACKING_ADJUSTMENT + TotalSize,
                     case file:position(FileHdl, {cur, TotalSize + 1}) of
-                        {ok, ExpectedAbsPos} ->
-                            {corrupted, ExpectedAbsPos};
-                        {ok, _SomeOtherPos} ->
-                            eof; %% seek failed, so give up
-                        KO -> KO
+                        {ok, ExpectedAbsPos} -> {corrupted, ExpectedAbsPos};
+                        {ok, _SomeOtherPos}  -> eof; %% seek failed, so give up
+                        KO                   -> KO
                     end;
                 {_, _} -> %% all good, let's continue
                     case file:read(FileHdl, MsgIdBinSize) of
