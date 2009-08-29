@@ -1998,9 +1998,8 @@ read_next_file_entry(FileHdl, Offset) ->
                         {ok, <<MsgId:MsgIdBinSize/binary>>} ->
                             ExpectedAbsPos = Offset + ?FILE_PACKING_ADJUSTMENT +
                                 TotalSize - 1,
-                            case file:position(FileHdl,
-                                               {cur, TotalSize - MsgIdBinSize}
-                                              ) of
+                            case file:position(
+                                   FileHdl, {cur, TotalSize - MsgIdBinSize}) of
                                 {ok, ExpectedAbsPos} ->
                                     NextOffset = Offset + TotalSize +
                                         ?FILE_PACKING_ADJUSTMENT,
