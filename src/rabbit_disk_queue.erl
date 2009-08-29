@@ -273,7 +273,7 @@
 -spec(phantom_fetch/1 :: (queue_name()) ->
              ('empty' |
               {msg_id(), boolean(), boolean(), ack_tag(), non_neg_integer()})).
--spec(prefetch/1 :: (queue_name()) -> 'ok'). 
+-spec(prefetch/1 :: (queue_name()) -> 'ok').
 -spec(ack/2 :: (queue_name(), [ack_tag()]) -> 'ok').
 -spec(tx_publish/1 :: (message()) -> 'ok').
 -spec(tx_commit/3 :: (queue_name(), [{msg_id(), boolean()}], [ack_tag()]) ->
@@ -392,14 +392,13 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     ok = filelib:ensure_dir(form_filename("nothing")),
 
     Node = node(),
-    ok = 
-        case mnesia:change_table_copy_type(rabbit_disk_queue, Node,
-                                           disc_copies) of
-            {atomic, ok} -> ok;
-            {aborted, {already_exists, rabbit_disk_queue, Node,
-                       disc_copies}} -> ok;
-            E -> E
-        end,
+    ok = case mnesia:change_table_copy_type(rabbit_disk_queue, Node,
+                                            disc_copies) of
+             {atomic, ok} -> ok;
+             {aborted, {already_exists, rabbit_disk_queue, Node,
+                        disc_copies}} -> ok;
+             E -> E
+         end,
 
     ok = detect_shutdown_state_and_adjust_delivered_flags(),
 
@@ -464,7 +463,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({fetch, Q}, _From, State) ->
-    {ok, Result, State1} = 
+    {ok, Result, State1} =
         internal_fetch_body(Q, record_delivery, pop_queue, State),
     reply(Result, State1);
 handle_call({phantom_fetch, Q}, _From, State) ->
@@ -555,7 +554,7 @@ handle_cast({prefetch, Q, From}, State) ->
 	    false -> State1
 	end,
     noreply(State3).
-        
+
 handle_info(report_memory, State) ->
     %% call noreply1/2, not noreply/1/2, as we don't want to restart the
     %% memory_report_timer_ref.
@@ -709,7 +708,7 @@ decrement_cache(MsgId, #dqstate { message_cache = Cache }) ->
                    N when N =< 0 -> true = ets:delete(Cache, MsgId);
                    _N -> true
                end
-           catch error:badarg -> 
+           catch error:badarg ->
                    %% MsgId is not in there because although it's been
                    %% delivered, it's never actually been read (think:
                    %% persistent message in mixed queue)
@@ -885,7 +884,7 @@ internal_fetch_body(Q, MarkDelivered, Advance, State) ->
 internal_fetch_attributes(Q, MarkDelivered, Advance, State) ->
     case queue_head(Q, MarkDelivered, Advance, State) of
         E = {ok, empty, _} -> E;
-        {ok, AckTag, IsDelivered, 
+        {ok, AckTag, IsDelivered,
          #message_store_entry { msg_id = MsgId, is_persistent = IsPersistent },
          Remaining, State1} ->
             {ok, {MsgId, IsPersistent, IsDelivered, AckTag, Remaining}, State1}
@@ -1076,11 +1075,9 @@ internal_tx_commit(Q, PubMsgIds, AckSeqIds, From,
                   end, PubMsgIds),
     TxnDetails = {Q, PubMsgIds, AckSeqIds, From},
     case NeedsSync of
-        true -> 
-            Txns1 = [TxnDetails | Txns],
-            State #dqstate { on_sync_txns = Txns1 };
-        false ->
-            internal_do_tx_commit(TxnDetails, State)
+        true  -> Txns1 = [TxnDetails | Txns],
+                 State #dqstate { on_sync_txns = Txns1 };
+        false -> internal_do_tx_commit(TxnDetails, State)
     end.
 
 internal_do_tx_commit({Q, PubMsgIds, AckSeqIds, From},
@@ -1613,7 +1610,7 @@ prune_mnesia_flush_batch(DeleteAcc) ->
     lists:foldl(fun (Key, ok) ->
                         mnesia:dirty_delete(rabbit_disk_queue, Key)
                 end, ok, DeleteAcc).
-    
+
 prune_mnesia(_State, '$end_of_table', Files, _DeleteAcc, 0) ->
     {ok, Files};
 prune_mnesia(_State, '$end_of_table', Files, DeleteAcc, _Len) ->
@@ -1976,7 +1973,7 @@ scan_file_for_valid_messages(FileHdl, Offset, Acc) ->
             %% bad message, but we may still have recovered some valid messages
             {ok, Acc}
     end.
-            
+
 read_next_file_entry(FileHdl, Offset) ->
     TwoIntegers = 2 * ?INTEGER_SIZE_BYTES,
     case file:read(FileHdl, TwoIntegers) of
@@ -2013,7 +2010,7 @@ read_next_file_entry(FileHdl, Offset) ->
                                     end;
                                 {ok, _SomeOtherPos} ->
                                     %% seek failed, so give up
-                                    eof; 
+                                    eof;
                                 KO -> KO
                             end;
                         Other -> Other
