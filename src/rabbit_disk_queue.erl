@@ -104,7 +104,7 @@
          current_dirty,           %% has the current file been written to
                                   %% since the last fsync?
          file_size_limit,         %% how big can our files get?
-         read_file_hc_cache,      %% file handle cache for reading
+         read_file_handle_cache,  %% file handle cache for reading
          on_sync_txns,            %% list of commiters to run on sync (reversed)
          commit_timer_ref,        %% TRef for our interval timer
          last_sync_offset,        %% current_offset at the last time we sync'd
@@ -436,8 +436,8 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
                    current_offset          = 0,
                    current_dirty           = false,
                    file_size_limit         = FileSizeLimit,
-                   read_file_hc_cache      = HandleCache,
-                   on_sync_txns           = [],
+                   read_file_handle_cache  = HandleCache,
+                   on_sync_txns            = [],
                    commit_timer_ref        = undefined,
                    last_sync_offset        = 0,
                    message_cache           = ets:new(?CACHE_ETS_NAME,
@@ -578,7 +578,7 @@ terminate(_Reason, State) ->
 shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
                             msg_location_ets = MsgLocationEts,
                             current_file_handle = FileHdl,
-                            read_file_hc_cache = HC
+                            read_file_handle_cache = HC
                           }) ->
     %% deliberately ignoring return codes here
     State1 = stop_commit_timer(stop_memory_timer(State)),
@@ -594,7 +594,7 @@ shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
     HC1 = rabbit_file_handle_cache:close_all(HC),
     State1 #dqstate { current_file_handle = undefined,
                       current_dirty = false,
-                      read_file_hc_cache = HC1,
+                      read_file_handle_cache = HC1,
                       memory_report_timer_ref = undefined
                     }.
 
@@ -811,7 +811,7 @@ msg_location_dets_file() ->
 open_file(File, Mode) -> file:open(form_filename(File), ?BINARY_MODE ++ Mode).
 
 with_read_handle_at(File, Offset, Fun, State =
-                    #dqstate { read_file_hc_cache = HC,
+                    #dqstate { read_file_handle_cache = HC,
                                current_file_name = CurName,
                                current_dirty = IsDirty,
                                last_sync_offset = SyncOffset
@@ -823,7 +823,7 @@ with_read_handle_at(File, Offset, Fun, State =
     FilePath = form_filename(File),
     {Result, HC1} =
         rabbit_file_handle_cache:with_file_handle_at(FilePath, Offset, Fun, HC),
-    {Result, State1 #dqstate { read_file_hc_cache = HC1 }}.
+    {Result, State1 #dqstate { read_file_handle_cache = HC1 }}.
 
 sync_current_file_handle(State = #dqstate { current_dirty = false,
                                             on_sync_txns = [] }) ->
@@ -1469,9 +1469,9 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
     {ok, BSize1} = file:copy(SourceHdl, DestinationHdl, BSize1),
     ok.
 
-close_file(File, State = #dqstate { read_file_hc_cache = HC }) ->
+close_file(File, State = #dqstate { read_file_handle_cache = HC }) ->
     HC1 = rabbit_file_handle_cache:close_file(form_filename(File), HC),
-    State #dqstate { read_file_hc_cache = HC1 }.
+    State #dqstate { read_file_handle_cache = HC1 }.
 
 delete_empty_files(File, Acc, #dqstate { file_summary = FileSummary }) ->
     [{File, ValidData, _ContiguousTop, Left, Right}] =
