@@ -74,8 +74,8 @@
 -define(FILE_SIZE_LIMIT,         (256*1024*1024)).
 
 -define(BINARY_MODE, [raw, binary]).
--define(READ_MODE, [read, read_ahead]).
--define(WRITE_MODE, [write, delayed_write]).
+-define(READ_MODE,   [read, read_ahead]).
+-define(WRITE_MODE,  [write, delayed_write]).
 
 -define(SHUTDOWN_MESSAGE_KEY, shutdown_token).
 -define(SHUTDOWN_MESSAGE,
