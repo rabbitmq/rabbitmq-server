@@ -69,7 +69,6 @@
 -define(FILE_PACKING_ADJUSTMENT, (1 + (2* (?INTEGER_SIZE_BYTES)))).
 -define(BATCH_SIZE,              10000).
 -define(CACHE_MAX_SIZE,          10485760).
--define(WRITE_HANDLE_OPEN_MODE,  [append, raw, binary, delayed_write]).
 -define(MAX_READ_FILE_HANDLES,   256).
 -define(FILE_SIZE_LIMIT,         (256*1024*1024)).
 
