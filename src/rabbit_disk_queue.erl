@@ -1942,14 +1942,13 @@ read_message_from_disk(FileHdl, TotalSize) ->
                MsgIdBinSize:?INTEGER_SIZE_BITS,
                Rest:TotalSizeWriteOkBytes/binary>>} ->
             BodySize = TotalSize - MsgIdBinSize,
-            case Rest of
-                <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
-                 ?WRITE_OK_TRANSIENT:?WRITE_OK_SIZE_BITS>> ->
-                    {ok, {MsgBody, false, BodySize}};
-                <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
-                 ?WRITE_OK_PERSISTENT:?WRITE_OK_SIZE_BITS>> ->
-                    {ok, {MsgBody, true, BodySize}}
-            end;
+            <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
+             StopByte:?WRITE_OK_SIZE_BITS>> = Rest,
+            Persistent = case StopByte of
+                             ?WRITE_OK_TRANSIENT  -> false;
+                             ?WRITE_OK_PERSISTENT -> true
+                         end,
+            {ok, {MsgBody, Persistent, BodySize}};
         KO -> KO
     end.
 
