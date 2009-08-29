@@ -624,68 +624,66 @@ report_memory(Hibernating, State) ->
     rabbit_memory_manager:report_memory(self(), trunc(2.5 * Bytes),
                                             Hibernating).
 
-memory_use(#dqstate { operation_mode = ram_disk,
-                      file_summary = FileSummary,
-                      sequences = Sequences,
+memory_use(#dqstate { operation_mode   = ram_disk,
+                      file_summary     = FileSummary,
+                      sequences        = Sequences,
                       msg_location_ets = MsgLocationEts,
-                      message_cache = Cache,
-                      wordsize = WordSize
+                      message_cache    = Cache,
+                      wordsize         = WordSize
                      }) ->
     WordSize * (mnesia:table_info(rabbit_disk_queue, memory) +
                 lists:sum([ets:info(Table, memory)
                            || Table <- [MsgLocationEts, FileSummary, Cache,
                                         Sequences]]));
-memory_use(#dqstate { operation_mode = disk_only,
-                      file_summary = FileSummary,
-                      sequences = Sequences,
-                      msg_location_dets = MsgLocationDets,
-                      message_cache = Cache,
-                      wordsize = WordSize,
+memory_use(#dqstate { operation_mode          = disk_only,
+                      file_summary            = FileSummary,
+                      sequences               = Sequences,
+                      msg_location_dets       = MsgLocationDets,
+                      message_cache           = Cache,
+                      wordsize                = WordSize,
                       mnesia_bytes_per_record = MnesiaBytesPerRecord,
-                      ets_bytes_per_record = EtsBytesPerRecord }) ->
-    MnesiaSizeEstimate =
-        mnesia:table_info(rabbit_disk_queue, size) * MnesiaBytesPerRecord,
-    MsgLocationSizeEstimate =
-        dets:info(MsgLocationDets, size) * EtsBytesPerRecord,
+                      ets_bytes_per_record    = EtsBytesPerRecord }) ->
     (WordSize * (lists:sum([ets:info(Table, memory)
                             || Table <- [FileSummary, Cache, Sequences]]))) +
-        rabbit_misc:ceil(MnesiaSizeEstimate) +
-        rabbit_misc:ceil(MsgLocationSizeEstimate).
+        rabbit_misc:ceil(
+          mnesia:table_info(rabbit_disk_queue, size) * MnesiaBytesPerRecord) +
+        rabbit_misc:ceil(
+          dets:info(MsgLocationDets, size) * EtsBytesPerRecord).
 
 to_disk_only_mode(State = #dqstate { operation_mode = disk_only }) ->
     State;
-to_disk_only_mode(State = #dqstate { operation_mode = ram_disk,
+to_disk_only_mode(State = #dqstate { operation_mode    = ram_disk,
                                      msg_location_dets = MsgLocationDets,
-                                     msg_location_ets = MsgLocationEts,
-                                     wordsize = WordSize }) ->
+                                     msg_location_ets  = MsgLocationEts,
+                                     wordsize          = WordSize }) ->
     rabbit_log:info("Converting disk queue to disk only mode~n", []),
-    MnesiaMemoryBytes = WordSize * mnesia:table_info(rabbit_disk_queue, memory),
-    MnesiaSize = lists:max([1, mnesia:table_info(rabbit_disk_queue, size)]),
-    EtsMemoryBytes = WordSize * ets:info(MsgLocationEts, memory),
-    EtsSize = lists:max([1, ets:info(MsgLocationEts, size)]),
+    MnesiaMemBytes = WordSize * mnesia:table_info(rabbit_disk_queue, memory),
+    EtsMemBytes    = WordSize * ets:info(MsgLocationEts, memory),
+    MnesiaSize     = lists:max([1, mnesia:table_info(rabbit_disk_queue, size)]),
+    EtsSize        = lists:max([1, ets:info(MsgLocationEts, size)]),
     {atomic, ok} = mnesia:change_table_copy_type(rabbit_disk_queue, node(),
                                                  disc_only_copies),
     ok = dets:from_ets(MsgLocationDets, MsgLocationEts),
     true = ets:delete_all_objects(MsgLocationEts),
     garbage_collect(),
-    State #dqstate { operation_mode = disk_only,
-                     mnesia_bytes_per_record = MnesiaMemoryBytes / MnesiaSize,
-                     ets_bytes_per_record = EtsMemoryBytes / EtsSize }.
+    State #dqstate { operation_mode          = disk_only,
+                     mnesia_bytes_per_record = MnesiaMemBytes / MnesiaSize,
+                     ets_bytes_per_record    = EtsMemBytes / EtsSize }.
 
 to_ram_disk_mode(State = #dqstate { operation_mode = ram_disk }) ->
     State;
-to_ram_disk_mode(State = #dqstate { operation_mode = disk_only,
+to_ram_disk_mode(State = #dqstate { operation_mode    = disk_only,
                                     msg_location_dets = MsgLocationDets,
-                                    msg_location_ets = MsgLocationEts }) ->
+                                    msg_location_ets  = MsgLocationEts }) ->
     rabbit_log:info("Converting disk queue to ram disk mode~n", []),
     {atomic, ok} = mnesia:change_table_copy_type(rabbit_disk_queue, node(),
                                                  disc_copies),
     true = ets:from_dets(MsgLocationEts, MsgLocationDets),
     ok = dets:delete_all_objects(MsgLocationDets),
     garbage_collect(),
-    State #dqstate { operation_mode = ram_disk,
+    State #dqstate { operation_mode          = ram_disk,
                      mnesia_bytes_per_record = undefined,
-                     ets_bytes_per_record = undefined }.
+                     ets_bytes_per_record    = undefined }.
 
 %%----------------------------------------------------------------------------
 %% message cache helper functions
