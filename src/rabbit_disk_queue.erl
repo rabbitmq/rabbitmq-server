@@ -1982,9 +1982,9 @@ read_next_file_entry(FileHdl, Offset) ->
     case file:read(FileHdl, TwoIntegers) of
         {ok,
          <<TotalSize:?INTEGER_SIZE_BITS, MsgIdBinSize:?INTEGER_SIZE_BITS>>} ->
-            case {TotalSize =< 0, MsgIdBinSize =< 0} of
-                {true, _} -> eof; %% Nothing we can do other than stop
-                {false, true} ->
+            case {TotalSize, MsgIdBinSize} of
+                {0, _} -> eof; %% Nothing we can do other than stop
+                {_, 0} ->
                     %% current message corrupted, try skipping past it
                     ExpectedAbsPos =
                         Offset + ?FILE_PACKING_ADJUSTMENT + TotalSize,
@@ -1995,7 +1995,7 @@ read_next_file_entry(FileHdl, Offset) ->
                             eof; %% seek failed, so give up
                         KO -> KO
                     end;
-                {false, false} -> %% all good, let's continue
+                {_, _} -> %% all good, let's continue
                     case file:read(FileHdl, MsgIdBinSize) of
                         {ok, <<MsgId:MsgIdBinSize/binary>>} ->
                             ExpectedAbsPos = Offset + ?FILE_PACKING_ADJUSTMENT +
