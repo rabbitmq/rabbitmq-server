@@ -74,9 +74,8 @@ echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm
 %pre
 
 if [ $1 -gt 1 ]; then
-  #Upgrade - stop and remove previous instance of rabbitmq-server init.d script
+  # Upgrade - stop previous instance of rabbitmq-server init.d script
   /sbin/service rabbitmq-server stop
-  /sbin/chkconfig --del rabbitmq-server
 fi
 
 # create rabbitmq group
