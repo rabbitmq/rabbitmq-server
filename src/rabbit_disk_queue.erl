@@ -903,12 +903,12 @@ read_stored_message(#message_store_entry { msg_id = MsgId, ref_count = RefCount,
                                            total_size = TotalSize }, State) ->
     case fetch_and_increment_cache(MsgId, State) of
         not_found ->
-            {{ok, {MsgBody, _IsPersistent, _BodySize}}, State1} =
+            {{ok, {MsgId, MsgBody, _IsPersistent, _BodySize}}, State1} =
                 with_read_handle_at(
                   File, Offset,
                   fun(Hdl) ->
                           Res = case rabbit_msg_file:read(Hdl, TotalSize) of
-                                    {ok, {_, _, _}} = Obj -> Obj;
+                                    {ok, {MsgId, _, _, _}} = Obj -> Obj;
                                     {ok, Rest} ->
                                         throw({error,
                                                {misread, [{old_state, State},
@@ -1725,7 +1725,6 @@ load_messages(Left, [], State) ->
                      current_offset = Offset };
 load_messages(Left, [File|Files],
               State = #dqstate { file_summary = FileSummary }) ->
-    %% [{MsgId, TotalSize, FileOffset}]
     {ok, Messages} = scan_file_for_valid_messages(File),
     {ValidMessages, ValidTotalSize} = lists:foldl(
         fun (Obj = {MsgId, IsPersistent, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
@@ -1741,9 +1740,7 @@ load_messages(Left, [File|Files],
                                    file = File, offset = Offset,
                                    total_size = TotalSize,
                                    is_persistent = IsPersistent }),
-                        {[Obj | VMAcc],
-                         VTSAcc + TotalSize
-                        }
+                        {[Obj | VMAcc], VTSAcc + TotalSize}
                 end
         end, {[], 0}, Messages),
     %% foldl reverses lists, find_contiguous_block_prefix needs
@@ -1782,7 +1779,6 @@ scan_file_for_valid_messages_msg_ids(File) ->
 recover_crashed_compactions1(Files, TmpFile) ->
     NonTmpRelatedFile = filename:rootname(TmpFile) ++ ?FILE_EXTENSION,
     true = lists:member(NonTmpRelatedFile, Files),
-    %% [{MsgId, TotalSize, FileOffset}]
     {ok, UncorruptedMessagesTmp, MsgIdsTmp} =
         scan_file_for_valid_messages_msg_ids(TmpFile),
     %% all of these messages should appear in the mnesia table,

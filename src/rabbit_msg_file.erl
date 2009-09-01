@@ -70,13 +70,13 @@ read(FileHdl, TotalSize) ->
                MsgIdBinSize:?INTEGER_SIZE_BITS,
                Rest:SizeWriteOkBytes/binary>>} ->
             BodySize = Size - MsgIdBinSize,
-            <<_MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
+            <<MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
              StopByte:?WRITE_OK_SIZE_BITS>> = Rest,
             Persistent = case StopByte of
                              ?WRITE_OK_TRANSIENT  -> false;
                              ?WRITE_OK_PERSISTENT -> true
                          end,
-            {ok, {MsgBody, Persistent, BodySize}};
+            {ok, {binary_to_term(MsgId), MsgBody, Persistent, BodySize}};
         KO -> KO
     end.
 
