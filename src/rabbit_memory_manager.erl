@@ -41,7 +41,8 @@
 -export([register/5, report_memory/3, info/0, conserve_memory/2]).
 
 -define(TOTAL_TOKENS, 10000000).
--define(THRESHOLD_MULTIPLIER, 1.05).
+-define(THRESHOLD_MULTIPLIER, 0.05).
+-define(THRESHOLD_OFFSET, ?TOTAL_TOKENS * ?THRESHOLD_MULTIPLIER).
 
 -define(SERVER, ?MODULE).
 
@@ -228,8 +229,8 @@ handle_cast({report_memory, Pid, Memory, Hibernating},
                 end;
             {oppressed, OrigAvail} ->
                 case Alarmed orelse Hibernating orelse
-                    (Avail > (OrigAvail / ?THRESHOLD_MULTIPLIER) andalso
-                     Avail < (OrigAvail * ?THRESHOLD_MULTIPLIER)) of
+                    (Avail > (OrigAvail - ?THRESHOLD_OFFSET) andalso
+                     Avail < (OrigAvail + ?THRESHOLD_OFFSET)) of
                     true ->
                         {State, oppressed};
                     false ->
