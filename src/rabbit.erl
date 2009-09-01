@@ -116,8 +116,6 @@ start(normal, []) ->
 
     print_banner(),
 
-    {ok, ExtraSteps} = application:get_env(extra_startup_steps),
-
     lists:foreach(
       fun ({Msg, Thunk}) ->
               io:format("starting ~-20s ...", [Msg]),
@@ -191,8 +189,7 @@ start(normal, []) ->
                          (Host, Port, SslOpts) || {Host, Port} <- SslListeners],
                         ok
                 end
-        end}]
-      ++ ExtraSteps),
+        end}]),
 
     io:format("~nbroker running~n"),
 
