@@ -211,7 +211,7 @@ handle_call({oppress, Pid}, _From,
                     {libre, OAlloc, _OActivity} ->
                         Procs1 = 
                             set_process_mode(Procs, Callbacks, Pid, oppressed,
-                                             {oppressed, Avail}),
+                                             {oppressed, 0}),
                         State2 #state { processes = Procs1,
                                         available_tokens = Avail + OAlloc };
                     {oppressed, _OrigAvail} ->
