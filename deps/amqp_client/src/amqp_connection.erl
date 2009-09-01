@@ -288,9 +288,6 @@ allocate_channel_number(Channels, _Max) ->
     %% TODO check channel max and reallocate appropriately
     MaxChannel + 1.
 
-close_connection(Close, From, State = #connection_state{driver = Driver}) ->
-    Driver:close_connection(Close, From, State).
-
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
@@ -308,20 +305,26 @@ handle_call({open_channel, ChannelNumber, OutOfBand}, _From, State) ->
 
 %% @private
 %% Shuts the AMQP connection down
-handle_call(Close = #'connection.close'{}, From, State) ->
-    close_connection(Close, From, State),
+handle_call(Close = #'connection.close'{},
+            From, State = #connection_state{driver = Driver}) ->
+    Driver:close_connection(Close, From, State),
     {stop, normal, State}.
 
 %%---------------------------------------------------------------------------
 %% Handle forced close from the broker
 %%---------------------------------------------------------------------------
 
+%% Don't just exit here, rather, save the close message and wait for the
+%% the server to close the socket (or timeout) and have the reader process
+%% send an EXIT signal to this process.
 %% @private
 handle_cast({method, #'connection.close'{reply_code = Code,
                                          reply_text = Text}, none},
             State = #connection_state{driver = Driver}) ->
     Driver:handle_broker_close(State),
-    {stop, {server_initiated_close, Code, Text}, State}.
+    Reason = {server_initiated_close, Code, Text},
+    {noreply, State#connection_state{close_reason = Reason,
+                                     closing      = true}}.
 
 %% This can be sent by the channel process in the direct case
 %% when it receives an amqp exception from it's corresponding channel process
@@ -331,7 +334,15 @@ handle_info({connection_level_error, Code, Text}, State) ->
 %%---------------------------------------------------------------------------
 %% Trap exits
 %%---------------------------------------------------------------------------
+
+%% This EXIT is received from the socket reader process after having
+%% processed the connection.close command from the server
 %% @private
+handle_info( {'EXIT', _Pid, _Reason},
+             State = #connection_state{closing      = true,
+                                       close_reason = Reason}) ->
+    {stop, Reason, State};
+
 handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
     ?LOG_WARN("Channel Peer ~p sent this message: ~p -> ~p~n",
               [Pid, Msg, Context]),
@@ -357,8 +368,8 @@ handle_info( {'EXIT', _Pid, Reason = {unknown_message_type, _}}, State) ->
     {stop, Reason, State};
 
 %% @private
-handle_info( {'EXIT', _Pid, Reason = connection_socket_closed_unexpectedly},
-             State) ->
+handle_info( {'EXIT', _Pid, socket_closed},
+             State = #connection_state{close_reason = Reason}) ->
     {stop, Reason, State};
 
 %% @private

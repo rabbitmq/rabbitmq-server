@@ -36,7 +36,7 @@
 -export([handle_broker_close/1]).
 
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
-
+-define(CLIENT_CLOSE_TIMEOUT, 5000).
 -define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
 
 %---------------------------------------------------------------------------
@@ -99,8 +99,7 @@ close_connection(Close = #'connection.close'{}, From,
         {'$gen_cast', {method, {'connection.close_ok'}, none }} ->
             gen_server:reply(From, #'connection.close_ok'{})
     after
-        5000 ->
-            exit(timeout_on_exit)
+        ?CLIENT_CLOSE_TIMEOUT -> exit(timeout_on_exit)
     end.
 
 do(Writer, Method) ->
@@ -215,7 +214,7 @@ reader_loop(Sock, Type, Channel, Length) ->
             {ok, _Ref} = rabbit_net:async_recv(Sock, NewLength + 1, infinity),
             reader_loop(Sock, NewType, NewChannel, NewLength);
         {inet_async, Sock, _Ref, {error, closed}} ->
-            exit(connection_socket_closed_unexpectedly);
+            exit(socket_closed);
         {inet_async, Sock, _Ref, {error, Reason}} ->
             ?LOG_WARN("Socket error: ~p~n", [Reason]),
             exit({socket_error, Reason});
@@ -243,7 +242,7 @@ reader_loop(Sock, Type, Channel, Length) ->
     end.
 
 start_framing_channel(ChannelPid, ChannelNumber) ->
-    FramingPid = rabbit_framing_channel:start_link(fun(X) -> link(X), X end,
+    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end,
                                                    [ChannelPid]),
     put({channel, ChannelNumber}, {chpid, FramingPid}).
 

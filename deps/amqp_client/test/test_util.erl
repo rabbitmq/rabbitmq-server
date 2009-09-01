@@ -581,7 +581,9 @@ setup_publish(Channel, #publish{routing_key = RoutingKey,
 
 teardown(Connection, Channel) ->
     amqp_channel:close(Channel),
-    amqp_connection:close(Connection).
+    wait_for_death(Channel),
+    amqp_connection:close(Connection),
+    wait_for_death(Connection).
 
 teardown_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
@@ -600,6 +602,12 @@ setup_exchange(Channel, Q, X, Binding) ->
                           routing_key = Binding},
     amqp_channel:call(Channel, Route),
     ok.
+
+wait_for_death(Pid) ->
+    Ref = erlang:monitor(process, Pid),
+    receive {'DOWN', Ref, process, Pid, _Reason} -> ok
+    after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
+    end.
 
 latch_loop(0) ->
     ok;

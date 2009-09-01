@@ -38,7 +38,7 @@ non_existent_exchange_test(Connection) ->
     %% Deliberately mix up the routingkey and exchange arguments
     Publish = #'basic.publish'{exchange = RoutingKey, routing_key = X},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
-    wait_for_death(Channel),
+    test_util:wait_for_death(Channel),
     ?assertMatch(true, is_process_alive(Connection)),
     amqp_connection:close(Connection).
 
@@ -56,7 +56,7 @@ bogus_rpc_test(Connection) ->
         exit:{{server_initiated_close, Code, _},_} ->
             ?assertMatch(?NOT_FOUND, Code)
     end,
-    wait_for_death(Channel),
+    test_util:wait_for_death(Channel),
     ?assertMatch(true, is_process_alive(Connection)),
     amqp_connection:close(Connection).
 
@@ -69,14 +69,9 @@ hard_error_test(Connection) ->
         exit:{{server_initiated_close, Code, _Text}, _} ->
             ?assertMatch(?NOT_IMPLEMENTED, Code)
     end,
-    wait_for_death(Channel),
-    wait_for_death(Connection).
+    test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Connection).
 
-wait_for_death(Pid) ->
-    Ref = erlang:monitor(process, Pid),
-    receive {'DOWN', Ref, process, Pid, _Reason} -> ok
-    after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
-    end.
 
 non_existent_user_test() ->
     Params = #amqp_params{username = test_util:uuid(),
