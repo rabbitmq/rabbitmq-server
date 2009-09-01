@@ -40,6 +40,27 @@
           mode     %% the mode to open the files as
         }).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-type(hcstate() :: #hcstate { limit   :: non_neg_integer(),
+                              handles :: dict(),
+                              ages    :: gb_tree(),
+                              mode    :: [any()]
+                            }).
+
+-spec(init/2 :: (non_neg_integer(), [any()]) -> hcstate()).
+-spec(close_all/1 :: (hcstate()) -> hcstate()).
+-spec(close_file/2 :: (any(), hcstate()) -> hcstate()).
+-spec(with_file_handle_at/4 :: (any(), non_neg_integer(),
+                                fun ((any()) -> {non_neg_integer(), A}),
+                                    hcstate()) ->
+             {A, hcstate()}).
+-endif.
+
+%%----------------------------------------------------------------------------
+
 init(Limit, OpenMode) ->
     #hcstate { limit   = Limit,
                handles = dict:new(),
