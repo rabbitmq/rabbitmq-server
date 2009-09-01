@@ -762,31 +762,29 @@ dets_ets_match_object(#dqstate { msg_location_ets = MsgLocationEts,
 %% general helper functions
 %%----------------------------------------------------------------------------
 
-noreply(NewState) ->
-    noreply1(start_memory_timer(NewState)).
+noreply(State) ->
+    noreply1(start_memory_timer(State)).
 
-noreply1(NewState = #dqstate { on_sync_txns = [],
-                               commit_timer_ref = undefined }) ->
-    {noreply, NewState, hibernate};
-noreply1(NewState = #dqstate { commit_timer_ref = undefined }) ->
-    {noreply, start_commit_timer(NewState), 0};
-noreply1(NewState = #dqstate { on_sync_txns = [] }) ->
-    {noreply, stop_commit_timer(NewState), hibernate};
-noreply1(NewState) ->
-    {noreply, NewState, 0}.
+noreply1(State) ->
+    {State1, Timeout} = next_state(State),
+    {noreply, State1, Timeout}.
 
-reply(Reply, NewState) ->
-    reply1(Reply, start_memory_timer(NewState)).
+reply(Reply, State) ->
+    reply1(Reply, start_memory_timer(State)).
 
-reply1(Reply, NewState = #dqstate { on_sync_txns = [],
-                                    commit_timer_ref = undefined }) ->
-    {reply, Reply, NewState, hibernate};
-reply1(Reply, NewState = #dqstate { commit_timer_ref = undefined }) ->
-    {reply, Reply, start_commit_timer(NewState), 0};
-reply1(Reply, NewState = #dqstate { on_sync_txns = [] }) ->
-    {reply, Reply, stop_commit_timer(NewState), hibernate};
-reply1(Reply, NewState) ->
-    {reply, Reply, NewState, 0}.
+reply1(Reply, State) ->
+    {State1, Timeout} = next_state(State),
+    {reply, Reply, State1, Timeout}.
+
+next_state(State = #dqstate { on_sync_txns = [],
+                              commit_timer_ref = undefined }) ->
+    {State, hibernate};
+next_state(State = #dqstate { commit_timer_ref = undefined }) ->
+    {start_commit_timer(State), 0};
+next_state(State = #dqstate { on_sync_txns = [] }) ->
+    {stop_commit_timer(State), hibernate};
+next_state(State) ->
+    {State, 0}.
 
 form_filename(Name) ->
     filename:join(base_directory(), Name).
