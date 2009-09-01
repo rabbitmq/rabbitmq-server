@@ -99,8 +99,13 @@ $(PLT): $(BEAM_TARGETS)
 	fi
 
 $(BASIC_PLT): $(ERL_HOME)
-	-dialyzer --plt $@ --build_plt -r \
-	    $(shell bash -c "ls -d $(ERL_HOME)/lib/{stdlib,kernel,mnesia,os_mon,ssl,eunit,tools,sasl}-*/ebin")
+	OTP_APPS='$(shell bash -c "ls -d $(ERL_HOME)/lib/{stdlib,kernel,mnesia,os_mon,ssl,eunit,tools,sasl}-*/ebin")'; \
+	if [ ! "$$OTP_APPS" ]; then \
+	    echo "Did not find required OTP applications. Check ERL_HOME variable." && \
+	    false; \
+	else \
+	    dialyzer --plt $@ --build_plt -r $$OTP_APPS || true; \
+	fi
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
