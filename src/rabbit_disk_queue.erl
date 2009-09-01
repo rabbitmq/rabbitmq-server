@@ -447,12 +447,6 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     {ok, FileHdl} = open_file(CurrentName, ?WRITE_MODE ++ [read]),
     {ok, Offset} = file:position(FileHdl, Offset),
     State2 = State1 #dqstate { current_file_handle = FileHdl },
-    %% by reporting a memory use of 0, we guarantee the manager will
-    %% not oppress us. We have to start in ram_disk mode because we
-    %% can't find values for mnesia_bytes_per_record or
-    %% ets_bytes_per_record otherwise.
-    ok = rabbit_memory_manager:report_memory(self(), 0, false),
-    ok = report_memory(false, State2),
     {ok, start_memory_timer(State2), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -612,6 +606,10 @@ start_memory_timer(State = #dqstate { memory_report_timer_ref = undefined }) ->
 start_memory_timer(State) ->
     State.
 
+%% Scaling this by 2.5 is a magic number. Found by trial and error to
+%% work ok. We are deliberately over reporting so that we run out of
+%% memory sooner rather than later, because the transition to disk
+%% only modes transiently can take quite a lot of memory.
 report_memory(Hibernating, State) ->
     Bytes = memory_use(State),
     rabbit_memory_manager:report_memory(self(), trunc(2.5 * Bytes),
