@@ -11,6 +11,8 @@ syntax: regexp
 ^include/rabbit_framing.hrl$
 ^src/rabbit_framing.erl$
 ^rabbit.plt$
+^basic.plt$
+^\.last_valid_dialysis$
 ^ebin/rabbit.app$
 ^ebin/rabbit.rel$
 ^ebin/rabbit.boot$

@@ -2,6 +2,10 @@ ifndef TMPDIR
 TMPDIR := /tmp
 endif
 
+ifndef ERL_HOME
+ERL_HOME := /usr/local/lib/erlang
+endif
+
 RABBITMQ_NODENAME=rabbit
 RABBITMQ_SERVER_START_ARGS=
 RABBITMQ_MNESIA_DIR=$(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
@@ -17,6 +21,9 @@ WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.pod, %.gz, $(wildcard docs/*.[0-9].pod))
 
 PYTHON=python
+
+BASIC_PLT=basic.plt
+PLT=rabbit.plt
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
@@ -60,14 +67,54 @@ $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py
 $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.rel $(TARGETS)
 	erl -noshell -eval 'systools:make_script("ebin/rabbit", [{path, ["ebin"]}]), halt().'
 
-dialyze: $(BEAM_TARGETS)
-	dialyzer -c $?
+dialyze: $(BASIC_PLT) $(PLT) .last_valid_dialysis
+
+create_plt: $(BASIC_PLT) $(PLT)
+
+$(PLT): $(BEAM_TARGETS)
+	if [ -f $@ -a $(BASIC_PLT) -ot $@ ]; then \
+	    DIALYZER_INPUT_FILES="$?"; \
+	else \
+	    cp $(BASIC_PLT) $@ && \
+	    DIALYZER_INPUT_FILES="$(BEAM_TARGETS)"; \
+	fi; \
+	DIALYZER_OUTPUT=$$(dialyzer --plt $@ --add_to_plt -c $$DIALYZER_INPUT_FILES); \
+	echo "$$DIALYZER_OUTPUT"; \
+	echo "$$DIALYZER_OUTPUT" | grep "done (passed successfully)"
+
+.last_valid_dialysis: $(BEAM_TARGETS)
+	DIALYZER_OUTPUT=$$(erl -noinput -eval \
+        "{ok, Files} = regexp:split(\"$?\", \" \"), \
+		 lists:foreach( \
+	         fun(Warning) -> io:format(\"~s\", [dialyzer:format_warning(Warning)]) end, \
+             dialyzer:run([{init_plt, \"$(PLT)\"}, {files, Files}])), \
+         halt()."); \
+	if [ ! "$$DIALYZER_OUTPUT" ]; then \
+	    echo "Ok, dialyzer returned no warnings." && \
+	    touch .last_valid_dialysis; \
+	else \
+	    echo "dialyzer returned the following warnings:" && \
+	    echo "$$DIALYZER_OUTPUT" && \
+	    false; \
+	fi
+
+$(BASIC_PLT): $(ERL_HOME)
+	-dialyzer --plt $@ --build_plt -r \
+	    $(shell ls -d $(ERL_HOME)/lib/stdlib-*/ebin \
+	                  $(ERL_HOME)/lib/kernel-*/ebin \
+	                  $(ERL_HOME)/lib/mnesia-*/ebin \
+	                  $(ERL_HOME)/lib/os_mon-*/ebin \
+	                  $(ERL_HOME)/lib/ssl-*/ebin \
+	                  $(ERL_HOME)/lib/eunit-*/ebin \
+	                  $(ERL_HOME)/lib/tools-*/ebin \
+	                  $(ERL_HOME)/lib/sasl-*/ebin)
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
 	rm -f docs/*.[0-9].gz
+	rm -f $(PLT) .last_valid_dialysis
 
 cleandb:
 	rm -rf $(RABBITMQ_MNESIA_DIR)/*
