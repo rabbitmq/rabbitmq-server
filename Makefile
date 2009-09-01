@@ -100,14 +100,7 @@ $(PLT): $(BEAM_TARGETS)
 
 $(BASIC_PLT): $(ERL_HOME)
 	-dialyzer --plt $@ --build_plt -r \
-	    $(shell ls -d $(ERL_HOME)/lib/stdlib-*/ebin \
-	                  $(ERL_HOME)/lib/kernel-*/ebin \
-	                  $(ERL_HOME)/lib/mnesia-*/ebin \
-	                  $(ERL_HOME)/lib/os_mon-*/ebin \
-	                  $(ERL_HOME)/lib/ssl-*/ebin \
-	                  $(ERL_HOME)/lib/eunit-*/ebin \
-	                  $(ERL_HOME)/lib/tools-*/ebin \
-	                  $(ERL_HOME)/lib/sasl-*/ebin)
+	    $(shell bash -c "ls -d $(ERL_HOME)/lib/{stdlib,kernel,mnesia,os_mon,ssl,eunit,tools,sasl}-*/ebin")
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
