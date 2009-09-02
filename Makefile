@@ -2,10 +2,6 @@ ifndef TMPDIR
 TMPDIR := /tmp
 endif
 
-ifndef ERL_HOME
-ERL_HOME := /usr/local/lib/erlang
-endif
-
 RABBITMQ_NODENAME=rabbit
 RABBITMQ_SERVER_START_ARGS=
 RABBITMQ_MNESIA_DIR=$(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
@@ -69,7 +65,7 @@ $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN
 
 dialyze: $(BASIC_PLT) $(PLT) .last_valid_dialysis
 
-create_plt: $(BASIC_PLT) $(PLT)
+create-plt: $(BASIC_PLT) $(PLT)
 
 $(PLT): $(BEAM_TARGETS)
 	if [ -f $@ -a $(BASIC_PLT) -ot $@ ]; then \
@@ -98,14 +94,16 @@ $(PLT): $(BEAM_TARGETS)
 	    false; \
 	fi
 
-$(BASIC_PLT): $(ERL_HOME)
-	OTP_APPS='$(shell bash -c "ls -d $(ERL_HOME)/lib/{stdlib,kernel,mnesia,os_mon,ssl,eunit,tools,sasl}-*/ebin")'; \
-	if [ ! "$$OTP_APPS" ]; then \
-	    echo "Did not find required OTP applications. Check ERL_HOME variable." && \
-	    false; \
-	else \
-	    dialyzer --plt $@ --build_plt -r $$OTP_APPS || true; \
-	fi
+$(BASIC_PLT):
+	erl -noinput -eval \
+	    "OptsRecord = dialyzer_options:build([ \
+	         {analysis_type, plt_build}, \
+	         {init_plt, \"$(BASIC_PLT)\"}, \
+	         {files_rec, lists:map( \
+	             fun(App) -> code:lib_dir(App) ++ \"/ebin\" end, \
+	             [stdlib, kernel, mnesia, os_mon, ssl, eunit, tools, sasl])}]), \
+	     dialyzer_cl:start(OptsRecord), \
+	     halt()."
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
