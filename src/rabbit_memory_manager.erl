@@ -209,6 +209,14 @@ handle_call({oppress, Pid}, _From,
                                         sets:add_element(Pid, Pins) },
                 case find_process(Pid, Procs) of
                     {libre, OAlloc, _OActivity} ->
+                        %% Store 0 here. This simulates the process
+                        %% being oppressed when there is no memory
+                        %% available, which is sensible as it
+                        %% encourages the process to be liberated when
+                        %% the pin goes away, assuming there is memory
+                        %% available. And if there isn't memory
+                        %% available then it will stay oppressed which
+                        %% is the right thing.
                         Procs1 = 
                             set_process_mode(Procs, Callbacks, Pid, oppressed,
                                              {oppressed, 0}),
