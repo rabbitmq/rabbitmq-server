@@ -480,16 +480,8 @@ handle_call({foldl, Fun, Init, Q}, _From, State) ->
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}; %% gen_server now calls terminate
 handle_call(stop_vaporise, _From, State) ->
-    State1 = #dqstate { file_summary = FileSummary,
-                        sequences = Sequences } =
-        shutdown(State), %% tidy up file handles early
-    {atomic, ok} = mnesia:clear_table(rabbit_disk_queue),
-    true = ets:delete(FileSummary),
-    true = ets:delete(Sequences),
-    lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
-    {stop, normal, ok,
-     State1 #dqstate { current_file_handle = undefined }};
-    %% gen_server now calls terminate, which then calls shutdown
+    {ok, State1} = vaporise(State),
+    {stop, normal, ok, State1}; %% gen_server now calls terminate
 handle_call(to_disk_only_mode, _From, State) ->
     reply(ok, to_disk_only_mode(State));
 handle_call(to_ram_disk_mode, _From, State) ->
@@ -560,31 +552,47 @@ handle_pre_hibernate(State) ->
     ok = report_memory(true, State),
     {hibernate, stop_memory_timer(State)}.
 
-terminate(_Reason, State) ->
-    shutdown(State).
-
-shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
-                            msg_location_ets = MsgLocationEts,
-                            current_file_handle = FileHdl,
-                            read_file_handle_cache = HC
-                          }) ->
-    %% deliberately ignoring return codes here
+terminate(_Reason, State = #dqstate { sequences = undefined }) ->
+    State;
+terminate(_Reason, State = #dqstate { msg_location_dets = MsgLocationDets,
+                                      msg_location_ets = MsgLocationEts,
+                                      file_summary = FileSummary,
+                                      sequences = Sequences,
+                                      current_file_handle = FileHdl,
+                                      read_file_handle_cache = HC
+                                    }) ->
     State1 = stop_commit_timer(stop_memory_timer(State)),
+    case FileHdl of
+        undefined -> ok;
+        _ -> sync_current_file_handle(State1),
+             file:close(FileHdl)
+    end,
+    store_safe_shutdown(),
+    HC1 = rabbit_file_handle_cache:close_all(HC),
     dets:close(MsgLocationDets),
     file:delete(msg_location_dets_file()),
-    true = ets:delete_all_objects(MsgLocationEts),
+    ets:delete(MsgLocationEts),
+    ets:delete(FileSummary),
+    ets:delete(Sequences),
+    State1 #dqstate { msg_location_dets = undefined,
+                      msg_location_ets = undefined,
+                      file_summary = undefined,
+                      sequences = undefined,
+                      current_file_handle = undefined,
+                      current_dirty = false,
+                      read_file_handle_cache = HC1
+                     }.
+
+vaporise(State = #dqstate { current_file_handle = FileHdl }) ->
     case FileHdl of
         undefined -> ok;
         _ -> sync_current_file_handle(State),
              file:close(FileHdl)
     end,
-    store_safe_shutdown(),
-    HC1 = rabbit_file_handle_cache:close_all(HC),
-    State1 #dqstate { current_file_handle = undefined,
-                      current_dirty = false,
-                      read_file_handle_cache = HC1,
-                      memory_report_timer_ref = undefined
-                    }.
+    {atomic, ok} = mnesia:clear_table(rabbit_disk_queue),
+    lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
+    {ok, terminate(normal, State #dqstate { current_file_handle = undefined,
+                                            current_dirty = false })}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -1766,12 +1774,10 @@ verify_messages_in_mnesia(MsgIds) ->
                                   msg_id))
       end, MsgIds).
 
-grab_msg_id({MsgId, _IsPersistent, _TotalSize, _FileOffset}) ->
-    MsgId.
-
 scan_file_for_valid_messages_msg_ids(File) ->
     {ok, Messages} = scan_file_for_valid_messages(File),
-    {ok, Messages, lists:map(fun grab_msg_id/1, Messages)}.
+    {ok, Messages,
+     [MsgId || {MsgId, _IsPersistent, _TotalSize, _FileOffset} <- Messages]}.
 
 recover_crashed_compactions1(Files, TmpFile) ->
     NonTmpRelatedFile = filename:rootname(TmpFile) ++ ?FILE_EXTENSION,
@@ -1825,7 +1831,7 @@ recover_crashed_compactions1(Files, TmpFile) ->
             {MsgIds1, UncorruptedMessages1}
                 = case lists:splitwith(
                          fun (MsgId) -> MsgId /= EldestTmpMsgId end, MsgIds) of
-                      {MsgIds, []} -> %% no msgs from tmp in main
+                      {_MsgIds, []} -> %% no msgs from tmp in main
                           {MsgIds, UncorruptedMessages};
                       {Dropped, [EldestTmpMsgId | Rest]} ->
                           %% Msgs in Dropped are in tmp, so forget them.
