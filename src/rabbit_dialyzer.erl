@@ -88,6 +88,5 @@ print_warnings(DialyzerWarnings) ->
     ok.
 
 otp_apps_dependencies_paths() ->
-    lists:map(
-        fun(App) -> code:lib_dir(App, ebin) end,
-        [stdlib, kernel, mnesia, os_mon, ssl, eunit, tools, sasl]).
+    [code:lib_dir(App, ebin) ||
+        App <- [stdlib, kernel, mnesia, os_mon, ssl, eunit, tools, sasl]].
