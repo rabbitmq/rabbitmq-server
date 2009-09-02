@@ -334,7 +334,7 @@ purge(Q) ->
     gen_server2:call(?SERVER, {purge, Q}, infinity).
 
 delete_queue(Q) ->
-    gen_server2:cast(?SERVER, {delete_queue, Q}).
+    gen_server2:call(?SERVER, {delete_queue, Q}, infinity).
 
 delete_non_durable_queues(DurableQueues) ->
     gen_server2:call(?SERVER, {delete_non_durable_queues, DurableQueues},
@@ -467,6 +467,10 @@ handle_call({purge, Q}, _From, State) ->
     reply(Count, State1);
 handle_call(filesync, _From, State) ->
     reply(ok, sync_current_file_handle(State));
+handle_call({delete_queue, Q}, From, State) ->
+    gen_server2:reply(From, ok),
+    {ok, State1} = internal_delete_queue(Q, State),
+    noreply(State1);
 handle_call({len, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
     reply(WriteSeqId - ReadSeqId, State);
@@ -476,16 +480,8 @@ handle_call({foldl, Fun, Init, Q}, _From, State) ->
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}; %% gen_server now calls terminate
 handle_call(stop_vaporise, _From, State) ->
-    State1 = #dqstate { file_summary = FileSummary,
-                        sequences = Sequences } =
-        shutdown(State), %% tidy up file handles early
-    {atomic, ok} = mnesia:clear_table(rabbit_disk_queue),
-    true = ets:delete(FileSummary),
-    true = ets:delete(Sequences),
-    lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
-    {stop, normal, ok,
-     State1 #dqstate { current_file_handle = undefined }};
-    %% gen_server now calls terminate, which then calls shutdown
+    {ok, State1} = vaporise(State),
+    {stop, normal, ok, State1}; %% gen_server now calls terminate
 handle_call(to_disk_only_mode, _From, State) ->
     reply(ok, to_disk_only_mode(State));
 handle_call(to_ram_disk_mode, _From, State) ->
@@ -513,9 +509,6 @@ handle_cast({requeue, Q, MsgSeqIds}, State) ->
     noreply(State1);
 handle_cast({requeue_next_n, Q, N}, State) ->
     {ok, State1} = internal_requeue_next_n(Q, N, State),
-    noreply(State1);
-handle_cast({delete_queue, Q}, State) ->
-    {ok, State1} = internal_delete_queue(Q, State),
     noreply(State1);
 handle_cast({set_mode, Mode}, State) ->
     noreply((case Mode of
@@ -560,30 +553,45 @@ handle_pre_hibernate(State) ->
     {hibernate, stop_memory_timer(State)}.
 
 terminate(_Reason, State) ->
-    shutdown(State).
+    State1 = shutdown(State),
+    store_safe_shutdown(),
+    State1.
 
+shutdown(State = #dqstate { sequences = undefined }) ->
+    State;
 shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
                             msg_location_ets = MsgLocationEts,
+                            file_summary = FileSummary,
+                            sequences = Sequences,
                             current_file_handle = FileHdl,
                             read_file_handle_cache = HC
                           }) ->
-    %% deliberately ignoring return codes here
     State1 = stop_commit_timer(stop_memory_timer(State)),
-    dets:close(MsgLocationDets),
-    file:delete(msg_location_dets_file()),
-    true = ets:delete_all_objects(MsgLocationEts),
     case FileHdl of
         undefined -> ok;
-        _ -> sync_current_file_handle(State),
+        _ -> sync_current_file_handle(State1),
              file:close(FileHdl)
     end,
-    store_safe_shutdown(),
     HC1 = rabbit_file_handle_cache:close_all(HC),
-    State1 #dqstate { current_file_handle = undefined,
+    dets:close(MsgLocationDets),
+    file:delete(msg_location_dets_file()),
+    ets:delete(MsgLocationEts),
+    ets:delete(FileSummary),
+    ets:delete(Sequences),
+    State1 #dqstate { msg_location_dets = undefined,
+                      msg_location_ets = undefined,
+                      file_summary = undefined,
+                      sequences = undefined,
+                      current_file_handle = undefined,
                       current_dirty = false,
-                      read_file_handle_cache = HC1,
-                      memory_report_timer_ref = undefined
-                    }.
+                      read_file_handle_cache = HC1
+                     }.
+
+vaporise(State) ->
+    State1 = shutdown(State),
+    {atomic, ok} = mnesia:clear_table(rabbit_disk_queue),
+    lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
+    {ok, State1}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -1765,12 +1773,10 @@ verify_messages_in_mnesia(MsgIds) ->
                                   msg_id))
       end, MsgIds).
 
-grab_msg_id({MsgId, _IsPersistent, _TotalSize, _FileOffset}) ->
-    MsgId.
-
 scan_file_for_valid_messages_msg_ids(File) ->
     {ok, Messages} = scan_file_for_valid_messages(File),
-    {ok, Messages, lists:map(fun grab_msg_id/1, Messages)}.
+    {ok, Messages,
+     [MsgId || {MsgId, _IsPersistent, _TotalSize, _FileOffset} <- Messages]}.
 
 recover_crashed_compactions1(Files, TmpFile) ->
     NonTmpRelatedFile = filename:rootname(TmpFile) ++ ?FILE_EXTENSION,
@@ -1815,34 +1821,46 @@ recover_crashed_compactions1(Files, TmpFile) ->
                 %% is empty
             ok = file:delete(TmpPath);
         false ->
-            %% we're in case 4 above. Check that everything in the
-            %% main file is a valid message in mnesia
-            verify_messages_in_mnesia(MsgIds),
-            %% The main file should be contiguous
-            {Top, MsgIds} = find_contiguous_block_prefix(
-                              lists:reverse(UncorruptedMessages)),
+            %% We're in case 4 above. We only care about the inital
+            %% msgs in main file that are not in the tmp file. If
+            %% there are no msgs in the tmp file then we would be in
+            %% the 'true' branch of this case, so we know the
+            %% lists:last call is safe.
+            EldestTmpMsgId = lists:last(MsgIdsTmp),
+            {MsgIds1, UncorruptedMessages1}
+                = case lists:splitwith(
+                         fun (MsgId) -> MsgId /= EldestTmpMsgId end, MsgIds) of
+                      {_MsgIds, []} -> %% no msgs from tmp in main
+                          {MsgIds, UncorruptedMessages};
+                      {Dropped, [EldestTmpMsgId | Rest]} ->
+                          %% Msgs in Dropped are in tmp, so forget them.
+                          %% *cry*. Lists indexed from 1.
+                          {Rest, lists:sublist(UncorruptedMessages,
+                                               2 + length(Dropped),
+                                               length(Rest))}
+                  end,
+            %% Check that everything in the main file prefix is a
+            %% valid message in mnesia
+            verify_messages_in_mnesia(MsgIds1),
+            %% The main file prefix should be contiguous
+            {Top, MsgIds1} = find_contiguous_block_prefix(
+                               lists:reverse(UncorruptedMessages1)),
             %% we should have that none of the messages in the prefix
             %% are in the tmp file
             true = lists:all(fun (MsgId) ->
                                      not (lists:member(MsgId, MsgIdsTmp))
-                             end, MsgIds),
+                             end, MsgIds1),
             %% must open with read flag, otherwise will stomp over contents
             {ok, MainHdl} = open_file(NonTmpRelatedFile, ?WRITE_MODE ++ [read]),
-            {ok, Top} = file:position(MainHdl, Top),
-            %% wipe out any rubbish at the end of the file
-            ok = file:truncate(MainHdl),
-            %% there really could be rubbish at the end of the file -
-            %% we could have failed after the extending truncate.
-            %% Remember the head of the list will be the highest entry
-            %% in the file
+            %% Wipe out any rubbish at the end of the file. Remember
+            %% the head of the list will be the highest entry in the
+            %% file.
             [{_, _, TmpTopTotalSize, TmpTopOffset}|_] = UncorruptedMessagesTmp,
             TmpSize = TmpTopOffset + TmpTopTotalSize,
-            ExpectedAbsPos = Top + TmpSize,
-            {ok, ExpectedAbsPos} = file:position(MainHdl, {cur, TmpSize}),
-            %% and now extend the main file as big as necessary in a
-            %% single move if we run out of disk space, this truncate
-            %% could fail, but we still aren't risking losing data
-            ok = file:truncate(MainHdl),
+            %% Extend the main file as big as necessary in a single
+            %% move. If we run out of disk space, this truncate could
+            %% fail, but we still aren't risking losing data
+            ok = truncate_and_extend_file(MainHdl, Top, Top + TmpSize),
             {ok, TmpHdl} = open_file(TmpFile, ?READ_MODE),
             {ok, TmpSize} = file:copy(TmpHdl, MainHdl, TmpSize),
             ok = file:sync(MainHdl),
@@ -1852,9 +1870,9 @@ recover_crashed_compactions1(Files, TmpFile) ->
 
             {ok, _MainMessages, MsgIdsMain} =
                 scan_file_for_valid_messages_msg_ids(NonTmpRelatedFile),
-            %% check that everything in MsgIds is in MsgIdsMain
+            %% check that everything in MsgIds1 is in MsgIdsMain
             true = lists:all(fun (MsgId) -> lists:member(MsgId, MsgIdsMain) end,
-                             MsgIds),
+                             MsgIds1),
             %% check that everything in MsgIdsTmp is in MsgIdsMain
             true = lists:all(fun (MsgId) -> lists:member(MsgId, MsgIdsMain) end,
                              MsgIdsTmp)

@@ -361,27 +361,27 @@ tidy_and_sum_sleepy(IgnorePids, Sleepy, Procs) ->
                  fun (Pid, _Alloc, Queue) -> queue:in(Pid, Queue) end,
                  IgnorePids, Sleepy, queue:new(), 0).
 
-tidy_and_sum(AtomExpected, Procs, Catamorphism, Anamorphism, DupCheckSet,
-             CataInit, AnaInit, AllocAcc) ->
-    case Catamorphism(CataInit) of
-        {empty, _CataInit} -> {AnaInit, AllocAcc};
-        {{value, Pid}, CataInit1} ->
-            {DupCheckSet1, AnaInit1, AllocAcc1} =
+tidy_and_sum(AtomExpected, Procs, Generator, Consumer, DupCheckSet,
+             GenInit, ConInit, AllocAcc) ->
+    case Generator(GenInit) of
+        {empty, _GetInit} -> {ConInit, AllocAcc};
+        {{value, Pid}, GenInit1} ->
+            {DupCheckSet1, ConInit1, AllocAcc1} =
                 case sets:is_element(Pid, DupCheckSet) of
                     true ->
-                        {DupCheckSet, AnaInit, AllocAcc};
+                        {DupCheckSet, ConInit, AllocAcc};
                     false ->
                         case find_process(Pid, Procs) of
                             {libre, Alloc, AtomExpected} ->
                                 {sets:add_element(Pid, DupCheckSet),
-                                 Anamorphism(Pid, Alloc, AnaInit),
+                                 Consumer(Pid, Alloc, ConInit),
                                  Alloc + AllocAcc};
                             _ ->
-                                {DupCheckSet, AnaInit, AllocAcc}
+                                {DupCheckSet, ConInit, AllocAcc}
                         end
                 end,
-            tidy_and_sum(AtomExpected, Procs, Catamorphism, Anamorphism,
-                         DupCheckSet1, CataInit1, AnaInit1, AllocAcc1)
+            tidy_and_sum(AtomExpected, Procs, Generator, Consumer,
+                         DupCheckSet1, GenInit1, ConInit1, AllocAcc1)
     end.
 
 free_upto_sleepy(IgnorePids, Callbacks, Sleepy, Procs, Req, Avail) ->
@@ -402,21 +402,21 @@ free_upto_sleepy(IgnorePids, Callbacks, Sleepy, Procs, Req, Avail) ->
               end, fun queue:join/2, Procs, Sleepy, queue:new(), Req, Avail).
 
 free_from(
-  Callbacks, Hylomorphism, BaseCase, Procs, CataInit, AnaInit, Req, Avail) ->
-    case Hylomorphism(Procs, CataInit, AnaInit) of
+  Callbacks, Transformer, BaseCase, Procs, DestroyMe, CreateMe, Req, Avail) ->
+    case Transformer(Procs, DestroyMe, CreateMe) of
         empty ->
-            {AnaInit, Procs, Req};
-        {skip, CataInit1, AnaInit1} ->
-            free_from(Callbacks, Hylomorphism, BaseCase, Procs, CataInit1,
-                      AnaInit1, Req, Avail);
-        {value, CataInit1, Pid, Alloc} ->
+            {CreateMe, Procs, Req};
+        {skip, DestroyMe1, CreateMe1} ->
+            free_from(Callbacks, Transformer, BaseCase, Procs, DestroyMe1,
+                      CreateMe1, Req, Avail);
+        {value, DestroyMe1, Pid, Alloc} ->
             Procs1 = set_process_mode(
                        Procs, Callbacks, Pid, oppressed, {oppressed, Avail}),
             Req1 = Req - Alloc,
             case Req1 > 0 of
-                true -> free_from(Callbacks, Hylomorphism, BaseCase, Procs1,
-                                  CataInit1, AnaInit, Req1, Avail);
-                false -> {BaseCase(CataInit1, AnaInit), Procs1, Req1}
+                true -> free_from(Callbacks, Transformer, BaseCase, Procs1,
+                                  DestroyMe1, CreateMe, Req1, Avail);
+                false -> {BaseCase(DestroyMe1, CreateMe), Procs1, Req1}
             end
     end.
 
