@@ -35,12 +35,29 @@
 
 %%----------------------------------------------------------------------------
 
+-include("rabbit.hrl").
+
 -define(INTEGER_SIZE_BYTES,      8).
 -define(INTEGER_SIZE_BITS,       (8 * ?INTEGER_SIZE_BYTES)).
 -define(WRITE_OK_SIZE_BITS,      8).
 -define(WRITE_OK_TRANSIENT,      255).
 -define(WRITE_OK_PERSISTENT,     254).
 -define(FILE_PACKING_ADJUSTMENT, (1 + (2* (?INTEGER_SIZE_BYTES)))).
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(append/4 :: (io_device(), msg_id(), binary(), boolean()) ->
+             ({'ok', non_neg_integer()} | {'error', any()})).
+-spec(read/2 :: (io_device(), non_neg_integer()) ->
+             ({'ok', {msg_id(), binary(), boolean(), non_neg_integer()}} |
+              {'error', any()})).
+-spec(scan/1 :: (io_device()) ->
+             {'ok', [{msg_id(), boolean(), non_neg_integer(),
+                      non_neg_integer()}]}).
+
+-endif.
 
 %%----------------------------------------------------------------------------
 

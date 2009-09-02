@@ -84,6 +84,9 @@
 -type(info_key() :: atom()).
 -type(info() :: {info_key(), any()}).
 -type(regexp() :: binary()).
+-type(file_path() :: any()).
+-type(io_device() :: any()).
+-type(file_open_mode() :: any()).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: any()).

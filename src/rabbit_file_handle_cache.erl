@@ -33,12 +33,37 @@
 
 -export([init/2, close_all/1, close_file/2, with_file_handle_at/4]).
 
+%%----------------------------------------------------------------------------
+
+-include("rabbit.hrl").
+
 -record(hcstate,
         { limit,   %% how many file handles can we open?
           handles, %% dict of the files to their handles, age and offset
           ages,    %% gb_tree of the files, keyed by age
           mode     %% the mode to open the files as
         }).
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-type(hcstate() :: #hcstate { limit   :: non_neg_integer(),
+                              handles :: dict(),
+                              ages    :: gb_tree(),
+                              mode    :: [file_open_mode()]
+                            }).
+
+-spec(init/2 :: (non_neg_integer(), [file_open_mode()]) -> hcstate()).
+-spec(close_all/1 :: (hcstate()) -> hcstate()).
+-spec(close_file/2 :: (file_path(), hcstate()) -> hcstate()).
+-spec(with_file_handle_at/4 :: (file_path(), non_neg_integer(),
+                                fun ((io_device()) -> {non_neg_integer(), A}),
+                                    hcstate()) ->
+             {A, hcstate()}).
+-endif.
+
+%%----------------------------------------------------------------------------
 
 init(Limit, OpenMode) ->
     #hcstate { limit   = Limit,
