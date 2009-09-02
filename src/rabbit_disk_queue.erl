@@ -1815,34 +1815,46 @@ recover_crashed_compactions1(Files, TmpFile) ->
                 %% is empty
             ok = file:delete(TmpPath);
         false ->
-            %% we're in case 4 above. Check that everything in the
-            %% main file is a valid message in mnesia
-            verify_messages_in_mnesia(MsgIds),
-            %% The main file should be contiguous
-            {Top, MsgIds} = find_contiguous_block_prefix(
-                              lists:reverse(UncorruptedMessages)),
+            %% We're in case 4 above. We only care about the inital
+            %% msgs in main file that are not in the tmp file. If
+            %% there are no msgs in the tmp file then we would be in
+            %% the 'true' branch of this case, so we know the
+            %% lists:last call is safe.
+            EldestTmpMsgId = lists:last(MsgIdsTmp),
+            {MsgIds1, UncorruptedMessages1}
+                = case lists:splitwith(
+                         fun (MsgId) -> MsgId /= EldestTmpMsgId end, MsgIds) of
+                      {MsgIds, []} -> %% no msgs from tmp in main
+                          {MsgIds, UncorruptedMessages};
+                      {Dropped, [EldestTmpMsgId | Rest]} ->
+                          %% Msgs in Dropped are in tmp, so forget them.
+                          %% *cry*. Lists indexed from 1.
+                          {Rest, lists:sublist(UncorruptedMessages,
+                                               2 + length(Dropped),
+                                               length(Rest))}
+                  end,
+            %% Check that everything in the main file prefix is a
+            %% valid message in mnesia
+            verify_messages_in_mnesia(MsgIds1),
+            %% The main file prefix should be contiguous
+            {Top, MsgIds1} = find_contiguous_block_prefix(
+                               lists:reverse(UncorruptedMessages1)),
             %% we should have that none of the messages in the prefix
             %% are in the tmp file
             true = lists:all(fun (MsgId) ->
                                      not (lists:member(MsgId, MsgIdsTmp))
-                             end, MsgIds),
+                             end, MsgIds1),
             %% must open with read flag, otherwise will stomp over contents
             {ok, MainHdl} = open_file(NonTmpRelatedFile, ?WRITE_MODE ++ [read]),
-            {ok, Top} = file:position(MainHdl, Top),
-            %% wipe out any rubbish at the end of the file
-            ok = file:truncate(MainHdl),
-            %% there really could be rubbish at the end of the file -
-            %% we could have failed after the extending truncate.
-            %% Remember the head of the list will be the highest entry
-            %% in the file
+            %% Wipe out any rubbish at the end of the file. Remember
+            %% the head of the list will be the highest entry in the
+            %% file.
             [{_, _, TmpTopTotalSize, TmpTopOffset}|_] = UncorruptedMessagesTmp,
             TmpSize = TmpTopOffset + TmpTopTotalSize,
-            ExpectedAbsPos = Top + TmpSize,
-            {ok, ExpectedAbsPos} = file:position(MainHdl, {cur, TmpSize}),
-            %% and now extend the main file as big as necessary in a
-            %% single move if we run out of disk space, this truncate
-            %% could fail, but we still aren't risking losing data
-            ok = file:truncate(MainHdl),
+            %% Extend the main file as big as necessary in a single
+            %% move. If we run out of disk space, this truncate could
+            %% fail, but we still aren't risking losing data
+            ok = truncate_and_extend_file(MainHdl, Top, Top + TmpSize),
             {ok, TmpHdl} = open_file(TmpFile, ?READ_MODE),
             {ok, TmpSize} = file:copy(TmpHdl, MainHdl, TmpSize),
             ok = file:sync(MainHdl),
@@ -1852,9 +1864,9 @@ recover_crashed_compactions1(Files, TmpFile) ->
 
             {ok, _MainMessages, MsgIdsMain} =
                 scan_file_for_valid_messages_msg_ids(NonTmpRelatedFile),
-            %% check that everything in MsgIds is in MsgIdsMain
+            %% check that everything in MsgIds1 is in MsgIdsMain
             true = lists:all(fun (MsgId) -> lists:member(MsgId, MsgIdsMain) end,
-                             MsgIds),
+                             MsgIds1),
             %% check that everything in MsgIdsTmp is in MsgIdsMain
             true = lists:all(fun (MsgId) -> lists:member(MsgId, MsgIdsMain) end,
                              MsgIdsTmp)
