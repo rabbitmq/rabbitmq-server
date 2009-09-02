@@ -334,7 +334,7 @@ purge(Q) ->
     gen_server2:call(?SERVER, {purge, Q}, infinity).
 
 delete_queue(Q) ->
-    gen_server2:cast(?SERVER, {delete_queue, Q}).
+    gen_server2:call(?SERVER, {delete_queue, Q}, infinity).
 
 delete_non_durable_queues(DurableQueues) ->
     gen_server2:call(?SERVER, {delete_non_durable_queues, DurableQueues},
@@ -467,6 +467,10 @@ handle_call({purge, Q}, _From, State) ->
     reply(Count, State1);
 handle_call(filesync, _From, State) ->
     reply(ok, sync_current_file_handle(State));
+handle_call({delete_queue, Q}, From, State) ->
+    gen_server2:reply(From, ok),
+    {ok, State1} = internal_delete_queue(Q, State),
+    noreply(State1);
 handle_call({len, Q}, _From, State = #dqstate { sequences = Sequences }) ->
     {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
     reply(WriteSeqId - ReadSeqId, State);
@@ -513,9 +517,6 @@ handle_cast({requeue, Q, MsgSeqIds}, State) ->
     noreply(State1);
 handle_cast({requeue_next_n, Q, N}, State) ->
     {ok, State1} = internal_requeue_next_n(Q, N, State),
-    noreply(State1);
-handle_cast({delete_queue, Q}, State) ->
-    {ok, State1} = internal_delete_queue(Q, State),
     noreply(State1);
 handle_cast({set_mode, Mode}, State) ->
     noreply((case Mode of
