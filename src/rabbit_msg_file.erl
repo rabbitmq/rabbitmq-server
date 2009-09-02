@@ -48,13 +48,14 @@
 
 -ifdef(use_specs).
 
--spec(append/4 :: (any(), msg_id(), binary(), boolean()) ->
-             ({'ok', non_neg_integer()} | any())).
--spec(read/2 :: (any(), non_neg_integer()) ->
+-spec(append/4 :: (io_device(), msg_id(), binary(), boolean()) ->
+             ({'ok', non_neg_integer()} | {'error', any()})).
+-spec(read/2 :: (io_device(), non_neg_integer()) ->
              ({'ok', {msg_id(), binary(), boolean(), non_neg_integer()}} |
-              any())).
--spec(scan/1 :: (any()) -> {'ok', [{msg_id(), boolean(), non_neg_integer(),
-                                    non_neg_integer()}]}).
+              {'error', any()})).
+-spec(scan/1 :: (io_device()) ->
+             {'ok', [{msg_id(), boolean(), non_neg_integer(),
+                      non_neg_integer()}]}).
 
 -endif.
 
