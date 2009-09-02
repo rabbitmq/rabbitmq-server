@@ -228,9 +228,10 @@ handle_cast({report_memory, Pid, Memory, Hibernating},
                          LibreActivity}
                 end;
             {oppressed, OrigAvail} ->
-                case Alarmed orelse Hibernating orelse
-                    (Avail > (OrigAvail - ?THRESHOLD_OFFSET) andalso
-                     Avail < (OrigAvail + ?THRESHOLD_OFFSET)) of
+                case Req > 0 andalso
+                    ( Alarmed orelse Hibernating orelse
+                      (Avail > (OrigAvail - ?THRESHOLD_OFFSET) andalso
+                       Avail < (OrigAvail + ?THRESHOLD_OFFSET)) ) of
                     true ->
                         {State, oppressed};
                     false ->
