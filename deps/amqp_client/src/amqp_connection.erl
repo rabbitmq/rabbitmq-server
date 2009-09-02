@@ -213,10 +213,10 @@ close(ConnectionPid, Code, Text) ->
 %% starts the AMQP ChannelOpen handshake.
 handle_open_channel({ChannelNumber, OutOfBand},
                     #connection_state{driver = Driver} = State) ->
-    {ChannelPid, Number, NewState} = start_channel(ChannelNumber, State),
-    Driver:open_channel({Number, OutOfBand}, ChannelPid, NewState),
+    {ChannelPid, Number} = start_channel(ChannelNumber, State),
+    Driver:open_channel({Number, OutOfBand}, ChannelPid, State),
     #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
-    {reply, ChannelPid, NewState}.
+    {reply, ChannelPid, State}.
 
 %% Creates a new channel process
 start_channel(ChannelNumber,
@@ -234,59 +234,45 @@ start_channel(ChannelNumber,
             writer_pid        = WriterPid},
     {ok, ChannelPid} = gen_server:start_link(amqp_channel,
                                              [ChannelState], []),
-    NewState = register_channel(Number, ChannelPid, State),
-    {ChannelPid, Number, NewState}.
+    register_channel(Number, ChannelPid),
+    {ChannelPid, Number}.
 
-assign_channel_number(none, #connection_state{channels = Channels,
-                                              channel_max = Max}) ->
-    allocate_channel_number(dict:fetch_keys(Channels), Max);
-
+assign_channel_number(none, #connection_state{channel_max = Max}) ->
+    allocate_channel_number(Max);
 assign_channel_number(ChannelNumber, _State) ->
-    %% TODO bug: check whether this is already taken
-    ChannelNumber.
+    case resolve_channel(ChannelNumber) of
+        undefined -> ChannelNumber;
+        _         -> exit({already_registered, ChannelNumber})
+    end.
 
-register_channel(ChannelNumber, ChannelPid,
-                 State = #connection_state{channels = Channels0}) ->
-    Channels1 =
-    case dict:is_key(ChannelNumber, Channels0) of
-        true ->
-            exit({channel_already_registered, ChannelNumber});
-        false ->
-            dict:store(ChannelNumber, ChannelPid, Channels0)
+register_channel(ChannelNumber, ChannelPid) ->
+    case resolve_channel(ChannelNumber) of
+        undefined ->
+            put({channel, ChannelNumber}, ChannelPid),
+            put({chpid, ChannelPid}, ChannelNumber);
+        _ ->
+            exit({already_registered, ChannelNumber})
+    end.
+
+unregister_channel(ChannelPid) ->
+    case get_keys(ChannelPid) of
+        []    -> ok;
+        [H|_] -> erase(H)
     end,
-    State#connection_state{channels = Channels1}.
+    erase({chpid, ChannelPid}).
 
-%% This will be called when a channel process exits and needs to be
-%% deregistered
-%% This peforms the reverse mapping so that you can lookup a channel pid
-unregister_channel(ChannelPid,
-                   State = #connection_state{channels = Channels0} )
-        when is_pid(ChannelPid)->
-    ReverseMapping = fun(_Number, Pid) -> Pid == ChannelPid end,
-    Projection = dict:filter(ReverseMapping, Channels0),
-    %% TODO This differentiation is only necessary for the direct channel,
-    %% look into preventing the invocation of this method
-    Channels1 = case dict:fetch_keys(Projection) of
-                    [] ->
-                        Channels0;
-                    [ChannelNumber|_] ->
-                        dict:erase(ChannelNumber, Channels0)
-                end,
-    State#connection_state{channels = Channels1};
+resolve_channel(ChannelNumber) ->
+    get({channel, ChannelNumber}).
 
-%% This will be called when a channel process exits and needs to be
-%% deregistered
-unregister_channel(ChannelNumber,
-                   State = #connection_state{channels = Channels0}) ->
-    Channels1 = dict:erase(ChannelNumber, Channels0),
-    State#connection_state{channels = Channels1}.
-
-allocate_channel_number([], _Max)-> 1;
-
-allocate_channel_number(Channels, _Max) ->
-    MaxChannel = lists:max(Channels),
-    %% TODO check channel max and reallocate appropriately
-    MaxChannel + 1.
+allocate_channel_number(0) ->
+    allocate_channel_number(1);
+allocate_channel_number(Max) when Max > ?MAX_CHANNELS ->
+    exit({channel_maximum, Max});
+allocate_channel_number(Max) ->
+    case resolve_channel(Max) of
+        undefined -> Max;
+        _         -> allocate_channel_number(Max + 1)
+    end.
 
 close_connection(Close, From, State = #connection_state{driver = Driver}) ->
     Driver:close_connection(Close, From, State).
@@ -341,11 +327,13 @@ handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
 %% @private
 %% Just the amqp channel shutting down, so unregister this channel
 handle_info( {'EXIT', Pid, normal}, State) ->
-    {noreply, unregister_channel(Pid, State) };
+    unregister_channel(Pid),
+    {noreply, State};
 
 %% @private
 handle_info( {'EXIT', Pid, {server_initiated_close, _, _}}, State) ->
-    {noreply, unregister_channel(Pid, State) };
+    unregister_channel(Pid),
+    {noreply, State};
 
 %% @private
 %% This is a special case for abruptly closed socket connections
@@ -366,9 +354,19 @@ handle_info( {'EXIT', _Pid, Reason = connection_timeout}, State) ->
     {stop, Reason, State};
 
 %% @private
+%% This is when a channel exits on the client side without any engaging
+%% the server at all -> do not unregister the pid, because the server will not
+%% not know that the channel is dead. Thus if the client were to reuse the
+%% same channel number, the server would not know that it is being recycled
+%% because it won't have seen the channel.close command for this.
+%% I guess an alternative way of handling this is catch this EXIT and then
+%% send a fake channel.close command, but that doesn't seem right, hence we'll
+%% leave it allocated. It indicates a bug in the client code - all we are
+%% trying to do is to stop such a bug putting the whole connection process
+%% into an unuseable state.
 handle_info( {'EXIT', Pid, Reason}, State) ->
-    ?LOG_WARN("Connection: Handling exit from ~p --> ~p~n", [Pid, Reason]),
-    {noreply, unregister_channel(Pid, State) }.
+    ?LOG_WARN("Channel (~p) exiting: ~p~n", [Pid, Reason]),
+    {noreply, State}.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks

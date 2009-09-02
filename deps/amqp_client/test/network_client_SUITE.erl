@@ -105,6 +105,9 @@ non_existent_vhost_test() ->
 no_permission_test() ->
     negative_test_util:no_permission_test().
 
+channel_death_test() ->
+    negative_test_util:channel_death_test(new_connection()).
+    
 %%---------------------------------------------------------------------------
 %% Common Functions
 

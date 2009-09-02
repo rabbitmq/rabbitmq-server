@@ -78,6 +78,22 @@ wait_for_death(Pid) ->
     after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
     end.
 
+%% Refer to bug 21172 to find out how this is caused
+channel_death_test(Connection) ->
+    C1 = amqp_connection:open_channel(Connection),
+    ok = amqp_channel:close(C1),
+    C2 = amqp_connection:open_channel(Connection),
+    Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
+    Message = #amqp_msg{props = <<>>, payload = <<>>},
+    %ok = amqp_channel:call(C2, Publish, Message),
+    %?assertNot(is_process_alive(C2)),
+    %?assert(is_process_alive(Connection)),
+    ok.
+    %C3 = amqp_connection:open_channel(Connection),
+    %?assert(is_process_alive(C3)),
+    %test_util:teardown(Connection, C3).
+    
+
 non_existent_user_test() ->
     Params = #amqp_params{username = test_util:uuid(),
                           password = test_util:uuid()},

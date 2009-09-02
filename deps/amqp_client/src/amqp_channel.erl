@@ -456,8 +456,8 @@ handle_cast({cast, Method, #amqp_msg{props = Props, payload = Payload}},
 %% Registers the direct channel peer when using the direct client
 %% @private
 handle_cast({register_direct_peer, Peer}, State) ->
-    link(Peer),
-    process_flag(trap_exit, true),
+    %%link(Peer),
+    %%process_flag(trap_exit, true),
     NewState = State#channel_state{writer_pid = Peer},
     {noreply, NewState};
 
