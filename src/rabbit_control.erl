@@ -32,7 +32,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/4]).
+-export([start/0, stop/0, action/4, set_queue_storage_mode_pin/3]).
 
 -record(params, {quiet, node, command, args}).
 
@@ -46,6 +46,8 @@
 -spec(stop/0 :: () -> 'ok').
 -spec(action/4 :: (atom(), erlang_node(), [string()],
                    fun ((string(), [any()]) -> 'ok')) -> 'ok').
+-spec(set_queue_storage_mode_pin/3 ::
+      (binary(), binary(), boolean()) -> 'ok').
 
 -endif.
 
@@ -313,9 +315,13 @@ action(list_permissions, Node, VHost, [], Inform) ->
 set_queue_storage_mode_pin(Node, VHost, Queue, Disk) ->
     VHostPath = list_to_binary(VHost),
     QBin = list_to_binary(Queue),
-    rpc_call(Node, rabbit_amqqueue, with,
-             [rabbit_misc:r(VHostPath, queue, QBin),
-              fun(Q) -> rabbit_amqqueue:set_storage_mode_pin(Q, Disk) end]).
+    rpc_call(Node, rabbit_control, set_queue_storage_mode_pin,
+             [VHostPath, QBin, Disk]).
+
+set_queue_storage_mode_pin(VHostPath, QBin, Disk) ->
+    rabbit_amqqueue:with(
+      rabbit_misc:r(VHostPath, queue, QBin),
+      fun(Q) -> rabbit_amqqueue:set_storage_mode_pin(Q, Disk) end).
 
 parse_vhost_flag(Args) when is_list(Args) ->
     case Args of 
