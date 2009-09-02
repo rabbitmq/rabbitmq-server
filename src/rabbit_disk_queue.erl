@@ -552,22 +552,26 @@ handle_pre_hibernate(State) ->
     ok = report_memory(true, State),
     {hibernate, stop_memory_timer(State)}.
 
-terminate(_Reason, State = #dqstate { sequences = undefined }) ->
+terminate(_Reason, State) ->
+    State1 = shutdown(State),
+    store_safe_shutdown(),
+    State1.
+
+shutdown(State = #dqstate { sequences = undefined }) ->
     State;
-terminate(_Reason, State = #dqstate { msg_location_dets = MsgLocationDets,
-                                      msg_location_ets = MsgLocationEts,
-                                      file_summary = FileSummary,
-                                      sequences = Sequences,
-                                      current_file_handle = FileHdl,
-                                      read_file_handle_cache = HC
-                                    }) ->
+shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
+                            msg_location_ets = MsgLocationEts,
+                            file_summary = FileSummary,
+                            sequences = Sequences,
+                            current_file_handle = FileHdl,
+                            read_file_handle_cache = HC
+                          }) ->
     State1 = stop_commit_timer(stop_memory_timer(State)),
     case FileHdl of
         undefined -> ok;
         _ -> sync_current_file_handle(State1),
              file:close(FileHdl)
     end,
-    store_safe_shutdown(),
     HC1 = rabbit_file_handle_cache:close_all(HC),
     dets:close(MsgLocationDets),
     file:delete(msg_location_dets_file()),
@@ -583,16 +587,11 @@ terminate(_Reason, State = #dqstate { msg_location_dets = MsgLocationDets,
                       read_file_handle_cache = HC1
                      }.
 
-vaporise(State = #dqstate { current_file_handle = FileHdl }) ->
-    case FileHdl of
-        undefined -> ok;
-        _ -> sync_current_file_handle(State),
-             file:close(FileHdl)
-    end,
+vaporise(State) ->
+    State1 = shutdown(State),
     {atomic, ok} = mnesia:clear_table(rabbit_disk_queue),
     lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
-    {ok, terminate(normal, State #dqstate { current_file_handle = undefined,
-                                            current_dirty = false })}.
+    {ok, State1}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
