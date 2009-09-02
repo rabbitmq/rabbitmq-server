@@ -1811,7 +1811,7 @@ recover_crashed_compactions1(Files, TmpFile) ->
     %%    back to before any of the files in the tmp file and copy
     %%    them over again
     TmpPath = form_filename(TmpFile),
-    case lists:all(fun (MsgId) -> lists:member(MsgId, MsgIds) end, MsgIdsTmp) of
+    case is_sublist(MsgIdsTmp, MsgIds) of
         true -> %% we're in case 1, 2 or 3 above. Just delete the tmp file
                 %% note this also catches the case when the tmp file
                 %% is empty
@@ -1843,9 +1843,7 @@ recover_crashed_compactions1(Files, TmpFile) ->
                                lists:reverse(UncorruptedMessages1)),
             %% we should have that none of the messages in the prefix
             %% are in the tmp file
-            true = lists:all(fun (MsgId) ->
-                                     not (lists:member(MsgId, MsgIdsTmp))
-                             end, MsgIds1),
+            true = is_disjoint(MsgIds1, MsgIdsTmp),
             %% must open with read flag, otherwise will stomp over contents
             {ok, MainHdl} = open_file(NonTmpRelatedFile, ?WRITE_MODE ++ [read]),
             %% Wipe out any rubbish at the end of the file. Remember
@@ -1867,13 +1865,17 @@ recover_crashed_compactions1(Files, TmpFile) ->
             {ok, _MainMessages, MsgIdsMain} =
                 scan_file_for_valid_messages_msg_ids(NonTmpRelatedFile),
             %% check that everything in MsgIds1 is in MsgIdsMain
-            true = lists:all(fun (MsgId) -> lists:member(MsgId, MsgIdsMain) end,
-                             MsgIds1),
+            true = is_sublist(MsgIds1, MsgIdsMain),
             %% check that everything in MsgIdsTmp is in MsgIdsMain
-            true = lists:all(fun (MsgId) -> lists:member(MsgId, MsgIdsMain) end,
-                             MsgIdsTmp)
+            true = is_sublist(MsgIdsTmp, MsgIdsMain)
     end,
     ok.
+
+is_sublist(SmallerList, BiggerList) ->
+    lists:all(fun (Item) -> lists:member(Item, BiggerList) end, SmallerList).
+
+is_disjoint(SmallerList, BiggerList) ->
+    lists:all(fun (Item) -> not lists:member(Item, BiggerList) end, SmallerList).
 
 %% Takes the list in *ascending* order (i.e. eldest message
 %% first). This is the opposite of what scan_file_for_valid_messages
