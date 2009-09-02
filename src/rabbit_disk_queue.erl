@@ -480,7 +480,9 @@ handle_call({foldl, Fun, Init, Q}, _From, State) ->
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}; %% gen_server now calls terminate
 handle_call(stop_vaporise, _From, State) ->
-    {ok, State1} = vaporise(State),
+    State1 = shutdown(State),
+    {atomic, ok} = mnesia:clear_table(rabbit_disk_queue),
+    lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
     {stop, normal, ok, State1}; %% gen_server now calls terminate
 handle_call(to_disk_only_mode, _From, State) ->
     reply(ok, to_disk_only_mode(State));
@@ -586,12 +588,6 @@ shutdown(State = #dqstate { msg_location_dets = MsgLocationDets,
                       current_dirty = false,
                       read_file_handle_cache = HC1
                      }.
-
-vaporise(State) ->
-    State1 = shutdown(State),
-    {atomic, ok} = mnesia:clear_table(rabbit_disk_queue),
-    lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
-    {ok, State1}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
