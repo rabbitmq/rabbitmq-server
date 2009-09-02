@@ -42,6 +42,8 @@ AMQP_SPEC_JSON_PATH=$(AMQP_CODEGEN_DIR)/amqp-0.8.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
+ERL_RABBIT_DIALYZER=erl -noinput -eval "code:load_abs(\"$(EBIN_DIR)/rabbit_dialyzer\")."
+
 all: $(TARGETS)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
@@ -72,38 +74,21 @@ $(PLT): $(BEAM_TARGETS)
 	    DIALYZER_INPUT_FILES="$?"; \
 	else \
 	    cp $(BASIC_PLT) $@ && \
+		rm -f .last_valid_dialysis && \
 	    DIALYZER_INPUT_FILES="$(BEAM_TARGETS)"; \
 	fi; \
-	DIALYZER_OUTPUT=$$(dialyzer --plt $@ --add_to_plt -c $$DIALYZER_INPUT_FILES); \
-	echo "$$DIALYZER_OUTPUT"; \
-	echo "$$DIALYZER_OUTPUT" | grep "done (passed successfully)"
+	$(ERL_RABBIT_DIALYZER) -eval \
+	    "rabbit_dialyzer:update_plt(\"$@\", \"$$DIALYZER_INPUT_FILES\"), halt()."
 
 .last_valid_dialysis: $(BEAM_TARGETS)
-	DIALYZER_OUTPUT=$$(erl -noinput -eval \
-        "{ok, Files} = regexp:split(\"$?\", \" \"), \
-		 lists:foreach( \
-	         fun(Warning) -> io:format(\"~s\", [dialyzer:format_warning(Warning)]) end, \
-             dialyzer:run([{init_plt, \"$(PLT)\"}, {files, Files}])), \
-         halt()."); \
-	if [ ! "$$DIALYZER_OUTPUT" ]; then \
-	    echo "Ok, dialyzer returned no warnings." && \
-	    touch .last_valid_dialysis; \
-	else \
-	    echo "dialyzer returned the following warnings:" && \
-	    echo "$$DIALYZER_OUTPUT" && \
-	    false; \
-	fi
+	$(ERL_RABBIT_DIALYZER) -eval \
+	    "rabbit_dialyzer:dialyze_files(\"$(PLT)\", \"$?\"), halt()." && \
+	touch $@
 
 $(BASIC_PLT):
-	erl -noinput -eval \
-	    "OptsRecord = dialyzer_options:build([ \
-	         {analysis_type, plt_build}, \
-	         {init_plt, \"$(BASIC_PLT)\"}, \
-	         {files_rec, lists:map( \
-	             fun(App) -> code:lib_dir(App) ++ \"/ebin\" end, \
-	             [stdlib, kernel, mnesia, os_mon, ssl, eunit, tools, sasl])}]), \
-	     dialyzer_cl:start(OptsRecord), \
-	     halt()."
+	$(MAKE) $(EBIN_DIR)/rabbit_dialyzer.beam
+	$(ERL_RABBIT_DIALYZER) -eval \
+	    "rabbit_dialyzer:create_basic_plt(\"$@\"), halt()."
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
