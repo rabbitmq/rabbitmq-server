@@ -1445,7 +1445,6 @@ combine_files({Source, SourceValid, _SourceContiguousTop,
     ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
                        SourceHdl, DestinationHdl, Destination, State1),
     %% tidy up
-    ok = file:sync(DestinationHdl),
     ok = file:close(SourceHdl),
     ok = file:close(DestinationHdl),
     ok = file:delete(form_filename(Source)),
@@ -1487,6 +1486,7 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
     BSize1 = BlockEnd1 - BlockStart1,
     {ok, BlockStart1} = file:position(SourceHdl, BlockStart1),
     {ok, BSize1} = file:copy(SourceHdl, DestinationHdl, BSize1),
+    ok = file:sync(DestinationHdl),
     ok.
 
 close_file(File, State = #dqstate { read_file_handle_cache = HC }) ->
