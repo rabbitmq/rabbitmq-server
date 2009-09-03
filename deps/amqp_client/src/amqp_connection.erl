@@ -335,11 +335,12 @@ handle_info({connection_level_error, Code, Text}, State) ->
 %% Trap exits
 %%---------------------------------------------------------------------------
 
-%% This EXIT is received from the socket reader process after having
-%% processed the connection.close command from the server
+%% This EXIT is received from the channel0 process after having
+%% processed the connection.close_ok command from the server
 %% @private
-handle_info( {'EXIT', _Pid, _Reason},
-             State = #connection_state{closing      = true,
+handle_info( {'EXIT', Writer, normal},
+             State = #connection_state{channel0_writer_pid = Writer,
+                                       closing      = true,
                                        close_reason = Reason}) ->
     {stop, Reason, State};
 
