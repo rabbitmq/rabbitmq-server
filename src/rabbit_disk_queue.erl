@@ -1285,7 +1285,7 @@ maybe_roll_to_new_file(_, State) ->
 
 compact(FilesSet, State) ->
     %% smallest number, hence eldest, hence left-most, first
-    Files = lists:sort(sets:to_list(FilesSet)),
+    Files = lists:sort(fun file_name_sort/2, sets:to_list(FilesSet)),
     %% foldl reverses, so now youngest/right-most first
     RemainingFiles = lists:foldl(fun (File, Acc) ->
                                          delete_empty_files(File, Acc, State)
