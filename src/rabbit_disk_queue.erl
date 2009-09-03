@@ -705,6 +705,17 @@ to_ram_disk_mode(State = #dqstate { operation_mode    = disk_only,
 %% message cache helper functions
 %%----------------------------------------------------------------------------
 
+%% The purpose of the cache is not especially performance, though it
+%% can help there too. The main purpose is to ensure that individual
+%% messages that are sent to multiple queues, and then to disk, are
+%% read back as the same binary object rather than multiples of
+%% identical binary objects. This prevents memory explosion.
+%%
+%% We limit the cache in size. If we didn't, then we could have two
+%% queues coming off the same exchange, receiving the same millions of
+%% messages, then one queue gets drained, which would pull the entire
+%% queue into the cache, which would potentially explode memory.
+
 remove_cache_entry(MsgId, #dqstate { message_cache = Cache }) ->
     true = ets:delete(Cache, MsgId),
     ok.
