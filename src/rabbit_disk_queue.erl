@@ -112,7 +112,7 @@
 -record(msg_location,
         {msg_id, ref_count, file, offset, total_size, is_persistent}).
 
--record(file_summary_entry,
+-record(file_summary,
         {file, valid_total_size, contiguous_top, left, right}).
 
 %% The components:
@@ -1036,12 +1036,12 @@ remove_message(MsgId, Files,
         1 ->
             ok = dets_ets_delete(State, MsgId),
             ok = remove_cache_entry(MsgId, State),
-            [FSEntry = #file_summary_entry { valid_total_size = ValidTotalSize,
-                                             contiguous_top = ContiguousTop }] =
+            [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
+                                       contiguous_top = ContiguousTop }] =
                 ets:lookup(FileSummary, File),
             ContiguousTop1 = lists:min([ContiguousTop, Offset]),
             ValidTotalSize1 = ValidTotalSize - TotalSize,
-            true = ets:insert(FileSummary, FSEntry #file_summary_entry { 
+            true = ets:insert(FileSummary, FSEntry #file_summary { 
                                              valid_total_size = ValidTotalSize1,
                                              contiguous_top = ContiguousTop1 }),
             if CurName =:= File -> Files;
@@ -1072,9 +1072,9 @@ internal_tx_publish(Message = #basic_message { is_persistent = IsPersistent,
                        msg_id = MsgId, ref_count = 1, file = CurName,
                        offset = CurOffset, total_size = TotalSize,
                        is_persistent = IsPersistent }),
-            [FSEntry = #file_summary_entry { valid_total_size = ValidTotalSize,
-                                             contiguous_top = ContiguousTop,
-                                             right = undefined }] =
+            [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
+                                       contiguous_top = ContiguousTop,
+                                       right = undefined }] =
                 ets:lookup(FileSummary, CurName),
             ValidTotalSize1 = ValidTotalSize + TotalSize,
             ContiguousTop1 = if CurOffset =:= ContiguousTop ->
@@ -1082,7 +1082,7 @@ internal_tx_publish(Message = #basic_message { is_persistent = IsPersistent,
                                      ValidTotalSize1;
                                 true -> ContiguousTop
                              end,
-            true = ets:insert(FileSummary, FSEntry #file_summary_entry {
+            true = ets:insert(FileSummary, FSEntry #file_summary {
                                              valid_total_size = ValidTotalSize1,
                                              contiguous_top = ContiguousTop1 }),
             NextOffset = CurOffset + TotalSize,
@@ -1300,9 +1300,9 @@ maybe_roll_to_new_file(Offset,
     NextName = integer_to_list(NextNum) ++ ?FILE_EXTENSION,
     {ok, NextHdl} = open_file(NextName, ?WRITE_MODE),
     true = ets:update_element(FileSummary, CurName,
-                              {#file_summary_entry.right, NextName}),
+                              {#file_summary.right, NextName}),
     true = ets:insert_new(
-             FileSummary, #file_summary_entry {
+             FileSummary, #file_summary {
                file = NextName, valid_total_size = 0, contiguous_top = 0,
                left = CurName, right = undefined }),
     State2 = State1 #dqstate { current_file_name = NextName,
@@ -1337,7 +1337,7 @@ combine_file(File, State = #dqstate { file_summary = FileSummary,
     %% been deleted within the current GC run
     case ets:lookup(FileSummary, File) of
         [] -> State;
-        [FSEntry = #file_summary_entry { left = Left, right = Right }] ->
+        [FSEntry = #file_summary { left = Left, right = Right }] ->
             GoRight =
                 fun() ->
                         case Right of
@@ -1362,9 +1362,9 @@ combine_file(File, State = #dqstate { file_summary = FileSummary,
     end.
 
 adjust_meta_and_combine(
-  LeftObj = #file_summary_entry {
+  LeftObj = #file_summary {
     file = LeftFile, valid_total_size = LeftValidData, right = RightFile },
-  RightObj = #file_summary_entry { 
+  RightObj = #file_summary { 
     file = RightFile, valid_total_size = RightValidData, left = LeftFile,
     right = RightRight },
   State = #dqstate { file_size_limit = FileSizeLimit,
@@ -1374,8 +1374,8 @@ adjust_meta_and_combine(
             State1 = combine_files(RightObj, LeftObj, State),
             %% this could fail if RightRight is undefined
             ets:update_element(FileSummary, RightRight,
-                               {#file_summary_entry.left, LeftFile}),
-            true = ets:insert(FileSummary, LeftObj #file_summary_entry {
+                               {#file_summary.left, LeftFile}),
+            true = ets:insert(FileSummary, LeftObj #file_summary {
                                              valid_total_size = TotalValidData,
                                              contiguous_top = TotalValidData,
                                              right = RightRight }),
@@ -1405,13 +1405,13 @@ truncate_and_extend_file(FileHdl, Lowpoint, Highpoint) ->
     ok = file:truncate(FileHdl),
     ok = preallocate(FileHdl, Highpoint, Lowpoint).
 
-combine_files(#file_summary_entry { file = Source,
-                                    valid_total_size = SourceValid,
-                                    left = Destination },
-              #file_summary_entry { file = Destination,
-                                    valid_total_size = DestinationValid,
-                                    contiguous_top = DestinationContiguousTop,
-                                    right = Source },
+combine_files(#file_summary { file = Source,
+                              valid_total_size = SourceValid,
+                              left = Destination },
+              #file_summary { file = Destination,
+                              valid_total_size = DestinationValid,
+                              contiguous_top = DestinationContiguousTop,
+                              right = Source },
               State) ->
     State1 = close_file(Source, close_file(Destination, State)),
     {ok, SourceHdl} = open_file(Source, ?READ_MODE),
@@ -1519,8 +1519,8 @@ close_file(File, State = #dqstate { read_file_handle_cache = HC }) ->
     State #dqstate { read_file_handle_cache = HC1 }.
 
 delete_empty_files(File, Acc, #dqstate { file_summary = FileSummary }) ->
-    [#file_summary_entry { valid_total_size = ValidData,
-                           left = Left, right = Right }] =
+    [#file_summary { valid_total_size = ValidData,
+                     left = Left, right = Right }] =
         ets:lookup(FileSummary, File),
     case ValidData of
         %% we should NEVER find the current file in here hence right
@@ -1531,13 +1531,13 @@ delete_empty_files(File, Acc, #dqstate { file_summary = FileSummary }) ->
                     %% the eldest file is empty.
                     true = ets:update_element(
                              FileSummary, Right,
-                             {#file_summary_entry.left, undefined});
+                             {#file_summary.left, undefined});
                 {_, _} when not (is_atom(Right)) ->
                     true = ets:update_element(FileSummary, Right,
-                                              {#file_summary_entry.left, Left}),
+                                              {#file_summary.left, Left}),
                     true =
                         ets:update_element(FileSummary, Left,
-                                           {#file_summary_entry.right, Right})
+                                           {#file_summary.right, Right})
             end,
             true = ets:delete(FileSummary, File),
             ok = file:delete(form_filename(File)),
@@ -1809,10 +1809,10 @@ load_messages(Left, [File|Files],
                 [] -> undefined;
                 [F|_] -> F
             end,
-    true = ets:insert_new(FileSummary, #file_summary_entry {
+    true = ets:insert_new(FileSummary, #file_summary {
                             file = File, valid_total_size = ValidTotalSize,
-                            contiguous_top = ContiguousTop, left = Left,
-                            right = Right }),
+                            contiguous_top = ContiguousTop,
+                            left = Left, right = Right }),
     load_messages(File, Files, State).
 
 recover_crashed_compactions(Files, TmpFiles) ->
