@@ -252,7 +252,7 @@ print_banner() ->
 start_child(Mod) ->
     {ok,_} = supervisor:start_child(rabbit_sup,
                                     {Mod, {Mod, start_link, []},
-                                     transient, 1000, worker, [Mod]}),
+                                     transient, 5000, worker, [Mod]}),
     ok.
 
 ensure_working_log_handlers() ->
