@@ -30,6 +30,8 @@
 -include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-define(ITERATIONS, 100).
+
 basic_get_test() ->
     test_util:basic_get_test(new_connection()).
 
@@ -70,7 +72,7 @@ command_serialization_test() ->
     test_util:command_serialization_test(new_connection()).
 
 teardown_test() ->
-    test_util:teardown_test(new_connection()).
+    repeat(fun test_util:teardown_test/1, ?ITERATIONS).
 
 rpc_test() ->
     test_util:rpc_test(new_connection()).
@@ -85,13 +87,13 @@ pub_and_close_test_() ->
 %% Negative Tests
 
 non_existent_exchange_test() -> 
-  negative_test_util:non_existent_exchange_test(new_connection()).
+    negative_test_util:non_existent_exchange_test(new_connection()).
 
 bogus_rpc_test() ->
-  negative_test_util:bogus_rpc_test(new_connection()).
+    repeat(fun negative_test_util:bogus_rpc_test/1, ?ITERATIONS).
 
 hard_error_test() ->
-    negative_test_util:hard_error_test(new_connection()).
+    repeat(fun negative_test_util:hard_error_test/1, ?ITERATIONS).
 
 non_existent_user_test() ->
     negative_test_util:non_existent_user_test().
@@ -107,6 +109,10 @@ no_permission_test() ->
 
 %%---------------------------------------------------------------------------
 %% Common Functions
+
+repeat(Fun, Times) ->
+    [ Fun(new_connection()) || _ <- lists:seq(1, Times)].
+
 
 new_connection() ->
     amqp_connection:start_network().
