@@ -280,7 +280,7 @@ basic_qos_test(Con) ->
     FudgeFactor = 2, %% account for timing variations
     ?assertMatch(true, Qos / NoQos < ExpectedRatio * FudgeFactor),
     amqp_connection:close(Con),
-    negative_test_util:wait_for_death(Con).
+    test_util:wait_for_death(Con).
 
 basic_qos_test(Connection, Prefetch) ->
     Messages = 100,
@@ -307,7 +307,7 @@ basic_qos_test(Connection, Prefetch) ->
     [Kid ! stop || Kid <- Kids],
     latch_loop(length(Kids)),
     amqp_channel:close(Chan),
-    negative_test_util:wait_for_death(Chan),
+    test_util:wait_for_death(Chan),
     Res.
 
 sleeping_consumer(Channel, Sleep, Parent) ->
@@ -331,12 +331,12 @@ sleeping_consumer(Channel, Sleep, Parent) ->
 do_stop(Channel, Parent) ->
     Parent ! finished,
     amqp_channel:close(Channel),
-    negative_test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Channel),
     exit(normal).
 
 producer_loop(Channel, _RoutingKey, 0) ->
     amqp_channel:close(Channel),
-    negative_test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Channel),
     ok;
 
 producer_loop(Channel, RoutingKey, N) ->
@@ -564,7 +564,7 @@ rpc_test(Connection) ->
     amqp_rpc_client:stop(Client),
     amqp_rpc_server:stop(Server),
     amqp_connection:close(Connection),
-    negative_test_util:wait_for_death(Connection),
+    test_util:wait_for_death(Connection),
     ok.
 
 %%---------------------------------------------------------------------------
