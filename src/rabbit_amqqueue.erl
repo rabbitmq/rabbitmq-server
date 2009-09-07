@@ -56,6 +56,8 @@
 
 -ifdef(use_specs).
 
+-type(msg_id() :: non_neg_integer()).
+-type(msg() :: {queue_name(), pid(), msg_id(), bool(), message()}).
 -type(qstats() :: {'ok', queue_name(), non_neg_integer(), non_neg_integer()}).
 -type(qlen() :: {'ok', non_neg_integer()}).
 -type(qfun(A) :: fun ((amqqueue()) -> A)).

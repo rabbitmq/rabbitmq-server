@@ -67,21 +67,23 @@
                               memory_size :: (non_neg_integer() | 'undefined'),
                               prefetcher :: (pid() | 'undefined')
                             }).
--type(acktag() :: ( 'no_on_disk' | { non_neg_integer(), non_neg_integer() })).
+-type(msg_id() :: guid()).
+-type(seq_id() :: non_neg_integer()).
+-type(ack_tag() :: ( 'no_on_disk' | {msg_id(), seq_id()} )).
 -type(okmqs() :: {'ok', mqstate()}).
 
 -spec(init/2 :: (queue_name(), boolean()) -> okmqs()).
 -spec(publish/2 :: (message(), mqstate()) -> okmqs()).
 -spec(publish_delivered/2 :: (message(), mqstate()) ->
-             {'ok', acktag(), mqstate()}).
+             {'ok', ack_tag(), mqstate()}).
 -spec(fetch/1 :: (mqstate()) ->
-             {('empty' | {message(), boolean(), acktag(), non_neg_integer()}),
+             {('empty' | {message(), boolean(), ack_tag(), non_neg_integer()}),
               mqstate()}).
--spec(ack/2 :: ([{message(), acktag()}], mqstate()) -> okmqs()).
+-spec(ack/2 :: ([{message(), ack_tag()}], mqstate()) -> okmqs()).
 -spec(tx_publish/2 :: (message(), mqstate()) -> okmqs()).
--spec(tx_commit/3 :: ([message()], [acktag()], mqstate()) -> okmqs()).
+-spec(tx_commit/3 :: ([message()], [ack_tag()], mqstate()) -> okmqs()).
 -spec(tx_rollback/2 :: ([message()], mqstate()) -> okmqs()).
--spec(requeue/2 :: ([{message(), acktag()}], mqstate()) -> okmqs()).
+-spec(requeue/2 :: ([{message(), ack_tag()}], mqstate()) -> okmqs()).
 -spec(purge/1 :: (mqstate()) -> okmqs()).
 -spec(delete_queue/1 :: (mqstate()) -> {'ok', mqstate()}).
 -spec(len/1 :: (mqstate()) -> non_neg_integer()).

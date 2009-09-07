@@ -54,6 +54,9 @@
 
 -ifdef(use_specs).
 
+-type(msg_id() :: non_neg_integer()).
+-type(msg() :: {queue_name(), pid(), msg_id(), bool(), message()}).
+
 -spec(start_link/5 ::
       (channel_number(), pid(), pid(), username(), vhost()) -> pid()).
 -spec(do/2 :: (pid(), amqp_method()) -> 'ok').

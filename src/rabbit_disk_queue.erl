@@ -89,6 +89,7 @@
 
 -ifdef(use_specs).
 
+-type(msg_id() :: guid()).
 -type(seq_id() :: non_neg_integer()).
 -type(ack_tag() :: {msg_id(), seq_id()}).
 
