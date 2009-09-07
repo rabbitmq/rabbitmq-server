@@ -544,7 +544,7 @@ internal_fetch_attributes(Q, MarkDelivered, Advance,
     case next(Q, MarkDelivered, Advance, State) of
         empty -> empty;
         {MsgId, IsDelivered, AckTag, Remaining} ->
-            IsPersistent = rabbit_msg_store:is_persistent(MsgId, Store),
+            IsPersistent = rabbit_msg_store:attrs(MsgId, Store),
             {MsgId, IsPersistent, IsDelivered, AckTag, Remaining}
     end.
 
@@ -902,7 +902,7 @@ prune_mnesia(Store, Key, DeleteAcc, RemoveAcc, Len) ->
     [#dq_msg_loc { msg_id = MsgId, queue_and_seq_id = {Q, SeqId} }] =
         mnesia:dirty_read(rabbit_disk_queue, Key),
     {DeleteAcc1, RemoveAcc1, Len1} =
-        case rabbit_msg_store:is_persistent(MsgId, Store) of
+        case rabbit_msg_store:attrs(MsgId, Store) of
             not_found ->
                 %% msg hasn't been found on disk, delete it
                 {[{Q, SeqId} | DeleteAcc], RemoveAcc, Len + 1};
