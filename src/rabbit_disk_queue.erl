@@ -249,7 +249,7 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     Store = rabbit_msg_store:init(Mode, base_directory(),
                                   FileSizeLimit, ReadFileHandlesLimit,
                                   fun ref_count/1, EtsBPR),
-    Store1 = prune_mnesia(Store),
+    Store1 = prune(Store),
     ok = del_index(),
 
     Sequences = ets:new(?SEQUENCE_ETS_NAME, [set, private]),
@@ -885,20 +885,20 @@ del_index() ->
         E1 -> E1
     end.
 
-prune_mnesia_flush_batch(DeleteAcc, RemoveAcc, Store) ->
+prune_flush_batch(DeleteAcc, RemoveAcc, Store) ->
     lists:foldl(fun (Key, ok) ->
                         mnesia:dirty_delete(rabbit_disk_queue, Key)
                 end, ok, DeleteAcc),
     rabbit_msg_store:remove(RemoveAcc, Store).
 
-prune_mnesia(Store) ->
-    prune_mnesia(Store, mnesia:dirty_first(rabbit_disk_queue), [], [], 0).
+prune(Store) ->
+    prune(Store, mnesia:dirty_first(rabbit_disk_queue), [], [], 0).
 
-prune_mnesia(Store, '$end_of_table', _DeleteAcc, _RemoveAcc, 0) ->
+prune(Store, '$end_of_table', _DeleteAcc, _RemoveAcc, 0) ->
     Store;
-prune_mnesia(Store, '$end_of_table', DeleteAcc, RemoveAcc, _Len) ->
-    prune_mnesia_flush_batch(DeleteAcc, RemoveAcc, Store);
-prune_mnesia(Store, Key, DeleteAcc, RemoveAcc, Len) ->
+prune(Store, '$end_of_table', DeleteAcc, RemoveAcc, _Len) ->
+    prune_flush_batch(DeleteAcc, RemoveAcc, Store);
+prune(Store, Key, DeleteAcc, RemoveAcc, Len) ->
     [#dq_msg_loc { msg_id = MsgId, queue_and_seq_id = {Q, SeqId} }] =
         mnesia:dirty_read(rabbit_disk_queue, Key),
     {DeleteAcc1, RemoveAcc1, Len1} =
@@ -921,7 +921,7 @@ prune_mnesia(Store, Key, DeleteAcc, RemoveAcc, Len) ->
                 %% so have no choice but to start again. Although this
                 %% will make recovery slower for large queues, we
                 %% guarantee we can start up in constant memory
-                Store2 = prune_mnesia_flush_batch(DeleteAcc1, RemoveAcc1,
+                Store2 = prune_flush_batch(DeleteAcc1, RemoveAcc1,
                                                   Store),
                 Key2 = mnesia:dirty_first(rabbit_disk_queue),
                 {Store2, Key2, [], [], 0};
@@ -929,7 +929,7 @@ prune_mnesia(Store, Key, DeleteAcc, RemoveAcc, Len) ->
                 Key2 = mnesia:dirty_next(rabbit_disk_queue, Key),
                 {Store, Key2, DeleteAcc1, RemoveAcc1, Len1}
         end,
-    prune_mnesia(Store1, Key1, DeleteAcc2, RemoveAcc2, Len2).
+    prune(Store1, Key1, DeleteAcc2, RemoveAcc2, Len2).
 
 extract_sequence_numbers(Sequences) ->
     true =
