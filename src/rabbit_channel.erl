@@ -873,9 +873,9 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
     end.
 
 rollback_and_notify(State = #ch{transaction_id = none}) ->
-    notify_queues(internal_rollback(State));
+    notify_queues(State);
 rollback_and_notify(State) ->
-    notify_queues(State).
+    notify_queues(internal_rollback(State)).
 
 fold_per_queue(F, Acc0, UAQ) ->
     D = lists:foldl(
