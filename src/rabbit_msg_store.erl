@@ -907,9 +907,13 @@ compact(Files, State) ->
     %% smallest number, hence eldest, hence left-most, first
     SortedFiles = sort_file_names(Files),
     %% foldl reverses, so now youngest/right-most first
-    RemainingFiles = lists:foldl(fun (File, Acc) ->
-                                         delete_empty_files(File, Acc, State)
-                                 end, [], SortedFiles),
+    RemainingFiles =
+        lists:foldl(fun (File, Acc) ->
+                            case delete_file_if_empty(File, State) of
+                                true  -> Acc;
+                                false -> [File | Acc]
+                            end
+                    end, [], SortedFiles),
     lists:foldl(fun combine_file/2, State, lists:reverse(RemainingFiles)).
 
 %% At this stage, we simply know that the file has had msgs removed
@@ -1095,30 +1099,29 @@ close_file(File, State = #msstate { dir = Dir, read_file_handle_cache = HC }) ->
     HC1 = rabbit_file_handle_cache:close_file(form_filename(Dir, File), HC),
     State #msstate { read_file_handle_cache = HC1 }.
 
-delete_empty_files(File, Acc,
-                   #msstate { dir = Dir, file_summary = FileSummary }) ->
+delete_file_if_empty(File,
+                     #msstate { dir = Dir, file_summary = FileSummary }) ->
     [#file_summary { valid_total_size = ValidData,
                      left = Left, right = Right }] =
         ets:lookup(FileSummary, File),
     case ValidData of
         %% we should NEVER find the current file in here hence right
         %% should always be a file, not undefined
-        0 ->
-            case {Left, Right} of
-                {undefined, _} when not is_atom(Right) ->
-                    %% the eldest file is empty.
-                    true = ets:update_element(
-                             FileSummary, Right,
-                             {#file_summary.left, undefined});
-                {_, _} when not (is_atom(Right)) ->
-                    true = ets:update_element(FileSummary, Right,
-                                              {#file_summary.left, Left}),
-                    true =
-                        ets:update_element(FileSummary, Left,
-                                           {#file_summary.right, Right})
-            end,
-            true = ets:delete(FileSummary, File),
-            ok = file:delete(form_filename(Dir, File)),
-            Acc;
-        _ -> [File|Acc]
+        0 -> case {Left, Right} of
+                 {undefined, _} when not is_atom(Right) ->
+                     %% the eldest file is empty.
+                     true = ets:update_element(
+                              FileSummary, Right,
+                              {#file_summary.left, undefined});
+                 {_, _} when not (is_atom(Right)) ->
+                     true = ets:update_element(FileSummary, Right,
+                                               {#file_summary.left, Left}),
+                     true =
+                         ets:update_element(FileSummary, Left,
+                                            {#file_summary.right, Right})
+             end,
+             true = ets:delete(FileSummary, File),
+             ok = file:delete(form_filename(Dir, File)),
+             true;
+        _ -> false
     end.
