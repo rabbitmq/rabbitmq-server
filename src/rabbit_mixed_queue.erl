@@ -53,6 +53,7 @@
        ).
 
 -define(TO_DISK_MAX_FLUSH_SIZE, 100000).
+-define(MAGIC_MARKER, <<"$magic_marker">>).
 
 %%----------------------------------------------------------------------------
 
@@ -654,7 +655,8 @@ on_disk(mixed, _IsDurable, _IsPersistent) -> false.
 
 publish_magic_marker_message(Q) ->
     Msg = rabbit_basic:message(
-            none, internal, [], <<>>, rabbit_guid:guid(), true),
+            rabbit_misc:r(<<"/">>, exchange, <<>>), ?MAGIC_MARKER,
+            [], <<>>, rabbit_guid:guid(), true),
     ok = rabbit_disk_queue:publish(Q, ensure_binary_properties(Msg), false).
 
 fetch_ack_magic_marker_message(Q) ->
@@ -664,8 +666,7 @@ fetch_ack_magic_marker_message(Q) ->
     {ok, Length}.
 
 is_magic_marker_message(
-  #basic_message { exchange_name = none, routing_key = internal,
-                   is_persistent = true }) ->
+  #basic_message { routing_key = ?MAGIC_MARKER, is_persistent = true }) ->
     true;
 is_magic_marker_message(_) ->
     false.
