@@ -369,13 +369,13 @@ read(MsgId, State) ->
                          total_size = TotalSize }] ->
             case fetch_and_increment_cache(MsgId, State) of
                 not_found ->
-                    {{ok, {MsgId, MsgBody, _IsPersistent, _BodySize}}, State1} =
+                    {{ok, {MsgId, MsgBody, _IsPersistent}}, State1} =
                         with_read_handle_at(
                           File, Offset,
                           fun(Hdl) ->
                                   Res = case rabbit_msg_file:read(
                                                Hdl, TotalSize) of
-                                            {ok, {MsgId, _, _, _}} = Obj -> Obj;
+                                            {ok, {MsgId, _, _}} = Obj -> Obj;
                                             {ok, Rest} ->
                                                 throw({error,
                                                        {misread, 

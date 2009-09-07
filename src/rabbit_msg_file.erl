@@ -35,8 +35,6 @@
 
 %%----------------------------------------------------------------------------
 
--include("rabbit.hrl").
-
 -define(INTEGER_SIZE_BYTES,      8).
 -define(INTEGER_SIZE_BITS,       (8 * ?INTEGER_SIZE_BYTES)).
 -define(WRITE_OK_SIZE_BITS,      8).
@@ -48,14 +46,19 @@
 
 -ifdef(use_specs).
 
--spec(append/4 :: (io_device(), msg_id(), binary(), boolean()) ->
-             ({'ok', non_neg_integer()} | {'error', any()})).
--spec(read/2 :: (io_device(), non_neg_integer()) ->
-             ({'ok', {msg_id(), binary(), boolean(), non_neg_integer()}} |
-              {'error', any()})).
+-type(io_device() :: any()).
+-type(msg_id() :: any()).
+-type(msg() :: binary()).
+-type(msg_attrs() :: boolean()).
+-type(position() :: non_neg_integer()).
+-type(msg_size() :: non_neg_integer()).
+
+-spec(append/4 :: (io_device(), msg_id(), msg(), msg_attrs()) ->
+             ({'ok', msg_size()} | {'error', any()})).
+-spec(read/2 :: (io_device(), msg_size()) ->
+             ({'ok', {msg_id(), msg(), msg_attrs()}} | {'error', any()})).
 -spec(scan/1 :: (io_device()) ->
-             {'ok', [{msg_id(), boolean(), non_neg_integer(),
-                      non_neg_integer()}]}).
+             {'ok', [{msg_id(), msg_attrs(), msg_size(), position()}]}).
 
 -endif.
 
@@ -93,7 +96,7 @@ read(FileHdl, TotalSize) ->
                              ?WRITE_OK_TRANSIENT  -> false;
                              ?WRITE_OK_PERSISTENT -> true
                          end,
-            {ok, {binary_to_term(MsgId), MsgBody, Persistent, BodySize}};
+            {ok, {binary_to_term(MsgId), MsgBody, Persistent}};
         KO -> KO
     end.
 
