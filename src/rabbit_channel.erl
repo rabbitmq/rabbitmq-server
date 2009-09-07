@@ -126,7 +126,7 @@ handle_cast({method, Method, Content}, State) ->
             {stop, normal, State#ch{state = terminating}}
     catch
         exit:{amqp, Error, Explanation, none} ->
-            ok = notify_queues(internal_rollback(State)),
+            ok = rollback_and_notify(State),
             Reason = {amqp, Error, Explanation,
                       rabbit_misc:method_record_type(Method)},
             State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
@@ -175,7 +175,7 @@ terminate(_Reason, #ch{writer_pid = WriterPid, limiter_pid = LimiterPid,
 
 terminate(Reason, State = #ch{writer_pid = WriterPid,
                               limiter_pid = LimiterPid}) ->
-    Res = notify_queues(internal_rollback(State)),
+    Res = rollback_and_notify(State),
     case Reason of
         normal -> ok = Res;
         _      -> ok
@@ -297,7 +297,7 @@ handle_method(_Method, _, #ch{state = starting}) ->
     rabbit_misc:protocol_error(channel_error, "expected 'channel.open'", []);
 
 handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
-    ok = notify_queues(internal_rollback(State)),
+    ok = rollback_and_notify(State),
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
     stop;
 
@@ -871,6 +871,11 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
         {error, Errors} -> rabbit_misc:protocol_error(
                              internal_error, "rollback failed: ~w", [Errors])
     end.
+
+rollback_and_notify(State = #ch{transaction_id = none}) ->
+    notify_queues(internal_rollback(State));
+rollback_and_notify(State) ->
+    notify_queues(State).
 
 fold_per_queue(F, Acc0, UAQ) ->
     D = lists:foldl(
