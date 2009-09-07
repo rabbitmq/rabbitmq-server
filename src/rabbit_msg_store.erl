@@ -827,16 +827,12 @@ load_messages(RefCountFun, Files, State) ->
 load_messages(_RefCountFun, Left, [], State) ->
     Num = list_to_integer(filename:rootname(Left)),
     Offset =
-        case dets_ets_match_object(State, #msg_location {
-                                     file = Left, _ = '_' }) of
+        case sort_msg_locations_by_offset(desc, Left, State) of
             [] -> 0;
-            L ->
-                [ #msg_location { file = Left,
-                                  offset = MaxOffset,
-                                  total_size = TotalSize} | _ ] =
-                    sort_msg_locations_by_offset(desc, L),
+            [#msg_location { offset = MaxOffset,
+                             total_size = TotalSize } | _] ->
                 MaxOffset + TotalSize
-             end,
+        end,
     State #msstate { current_file_num = Num, current_file_name = Left,
                      current_offset = Offset };
 load_messages(RefCountFun, Left, [File|Files],
@@ -975,7 +971,7 @@ adjust_meta_and_combine(
        true -> {false, State}
     end.
 
-sort_msg_locations_by_offset(Dir, List) ->
+sort_msg_locations_by_offset(Dir, File, State) ->
     Comp = case Dir of
                asc  -> fun erlang:'<'/2;
                desc -> fun erlang:'>'/2
@@ -983,7 +979,8 @@ sort_msg_locations_by_offset(Dir, List) ->
     lists:sort(fun (#msg_location { offset = OffA },
                     #msg_location { offset = OffB }) ->
                        Comp(OffA, OffB)
-               end, List).
+               end, dets_ets_match_object(
+                      State, #msg_location { file = File, _ = '_' })).
 
 combine_files(#file_summary { file = Source,
                               valid_total_size = SourceValid,
@@ -1023,10 +1020,7 @@ combine_files(#file_summary { file = Source,
                           %% that the list should be naturally sorted
                           %% as we require, however, we need to
                           %% enforce it anyway
-                  end, sort_msg_locations_by_offset(
-                         asc, dets_ets_match_object(
-                                 State1, #msg_location {
-                                   file = Destination, _ = '_' }))),
+                  end, sort_msg_locations_by_offset(asc, Destination, State1)),
             ok = copy_messages(
                    Worklist, DestinationContiguousTop, DestinationValid,
                    DestinationHdl, TmpHdl, Destination, State1),
@@ -1044,10 +1038,7 @@ combine_files(#file_summary { file = Source,
             ok = file:close(TmpHdl),
             ok = file:delete(form_filename(Dir, Tmp))
     end,
-    SourceWorkList =
-        sort_msg_locations_by_offset(
-          asc, dets_ets_match_object(State1, #msg_location {
-                                       file = Source, _ = '_' })),
+    SourceWorkList = sort_msg_locations_by_offset(asc, Source, State1),
     ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
                        SourceHdl, DestinationHdl, Destination, State1),
     %% tidy up
