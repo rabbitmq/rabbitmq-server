@@ -326,8 +326,7 @@ write(MsgId, Msg, IsPersistent,
         [] ->
             %% New message, lots to do
             {ok, TotalSize} = rabbit_msg_file:append(
-                                CurHdl, MsgId, term_to_binary(Msg),
-                                IsPersistent),
+                                CurHdl, MsgId, Msg, IsPersistent),
             true = dets_ets_insert_new(
                      State, #msg_location {
                        msg_id = MsgId, ref_count = 1, file = CurName,
@@ -369,7 +368,7 @@ read(MsgId, State) ->
                          total_size = TotalSize }] ->
             case fetch_and_increment_cache(MsgId, State) of
                 not_found ->
-                    {{ok, {MsgId, MsgBody, _IsPersistent}}, State1} =
+                    {{ok, {MsgId, Msg, _IsPersistent}}, State1} =
                         with_read_handle_at(
                           File, Offset,
                           fun(Hdl) ->
@@ -386,18 +385,17 @@ read(MsgId, State) ->
                                         end,
                                   {Offset + TotalSize, Res}
                           end, State),
-                    Message = binary_to_term(MsgBody),
                     ok = if RefCount > 1 ->
-                                 insert_into_cache(MsgId, Message, State1);
+                                 insert_into_cache(MsgId, Msg, State1);
                             true -> ok
                                     %% it's not in the cache and we
                                     %% only have one reference to the
                                     %% message. So don't bother
                                     %% putting it in the cache.
                          end,
-                    {Message, State1};
-                {Message, _RefCount} ->
-                    {Message, State}
+                    {Msg, State1};
+                {Msg, _RefCount} ->
+                    {Msg, State}
             end
     end.
 
@@ -602,9 +600,9 @@ fetch_and_increment_cache(MsgId, #msstate { message_cache = Cache }) ->
     case ets:lookup(Cache, MsgId) of
         [] ->
             not_found;
-        [{MsgId, Message, _RefCount}] ->
+        [{MsgId, Msg, _RefCount}] ->
             NewRefCount = ets:update_counter(Cache, MsgId, {3, 1}),
-            {Message, NewRefCount}
+            {Msg, NewRefCount}
     end.
 
 decrement_cache(MsgId, #msstate { message_cache = Cache }) ->
@@ -620,10 +618,10 @@ decrement_cache(MsgId, #msstate { message_cache = Cache }) ->
            end,
     ok.
 
-insert_into_cache(MsgId, Message, #msstate { message_cache = Cache }) ->
+insert_into_cache(MsgId, Msg, #msstate { message_cache = Cache }) ->
     case cache_is_full(Cache) of
         true -> ok;
-        false -> true = ets:insert_new(Cache, {MsgId, Message, 1}),
+        false -> true = ets:insert_new(Cache, {MsgId, Msg, 1}),
                  ok
     end.
 

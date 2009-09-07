@@ -48,7 +48,7 @@
 
 -type(io_device() :: any()).
 -type(msg_id() :: any()).
--type(msg() :: binary()).
+-type(msg() :: any()).
 -type(msg_attrs() :: boolean()).
 -type(position() :: non_neg_integer()).
 -type(msg_size() :: non_neg_integer()).
@@ -64,11 +64,12 @@
 
 %%----------------------------------------------------------------------------
 
-append(FileHdl, MsgId, MsgBody, IsPersistent) when is_binary(MsgBody) ->
-    BodySize = size(MsgBody),
-    MsgIdBin = term_to_binary(MsgId),
+append(FileHdl, MsgId, MsgBody, IsPersistent) ->
+    MsgBodyBin   = term_to_binary(MsgBody),
+    BodyBinSize  = size(MsgBodyBin),
+    MsgIdBin     = term_to_binary(MsgId),
     MsgIdBinSize = size(MsgIdBin),
-    Size = BodySize + MsgIdBinSize,
+    Size = BodyBinSize + MsgIdBinSize,
     StopByte = case IsPersistent of
                    true -> ?WRITE_OK_PERSISTENT;
                    false -> ?WRITE_OK_TRANSIENT
@@ -76,7 +77,7 @@ append(FileHdl, MsgId, MsgBody, IsPersistent) when is_binary(MsgBody) ->
     case file:write(FileHdl, <<Size:?INTEGER_SIZE_BITS,
                                MsgIdBinSize:?INTEGER_SIZE_BITS,
                                MsgIdBin:MsgIdBinSize/binary,
-                               MsgBody:BodySize/binary,
+                               MsgBodyBin:BodyBinSize/binary,
                                StopByte:?WRITE_OK_SIZE_BITS>>) of
         ok -> {ok, Size + ?FILE_PACKING_ADJUSTMENT};
         KO -> KO
@@ -89,14 +90,15 @@ read(FileHdl, TotalSize) ->
         {ok, <<Size:?INTEGER_SIZE_BITS,
                MsgIdBinSize:?INTEGER_SIZE_BITS,
                Rest:SizeWriteOkBytes/binary>>} ->
-            BodySize = Size - MsgIdBinSize,
-            <<MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
+            BodyBinSize = Size - MsgIdBinSize,
+            <<MsgIdBin:MsgIdBinSize/binary, MsgBodyBin:BodyBinSize/binary,
              StopByte:?WRITE_OK_SIZE_BITS>> = Rest,
             Persistent = case StopByte of
                              ?WRITE_OK_TRANSIENT  -> false;
                              ?WRITE_OK_PERSISTENT -> true
                          end,
-            {ok, {binary_to_term(MsgId), MsgBody, Persistent}};
+            {ok, {binary_to_term(MsgIdBin), binary_to_term(MsgBodyBin),
+                  Persistent}};
         KO -> KO
     end.
 
