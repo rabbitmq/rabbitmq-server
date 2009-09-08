@@ -207,40 +207,39 @@ rpc_top_half(Method, From, State) ->
     rpc_top_half(Method, undefined, From, State).
 
 rpc_top_half(Method, Content, From, 
-             State = #channel_state{writer_pid = Writer,
-                                    rpc_requests = RequestQueue,
-                                    do2 = Do2,
-                                    do3 = Do3}) ->
+             State = #channel_state{rpc_requests = RequestQueue}) ->
     % Enqueue the incoming RPC request to serialize RPC dispatching
-    NewRequestQueue = queue:in({From, Method}, RequestQueue),
-    NewState = State#channel_state{rpc_requests = NewRequestQueue},
-    case queue:len(NewRequestQueue) of
-        1 ->
-            case Content of
-                undefined -> Do2(Writer, Method);
-                _         -> Do3(writer, Method, Content)
-            end;
-        _ ->
-            ok
-        end,
+    NewState = State#channel_state{
+        rpc_requests = queue:in({From, Method, Content}, RequestQueue)},
+    IsFirstElement = queue:is_empty(RequestQueue),
+    if IsFirstElement -> do_rpc(NewState);
+       true           -> ok
+    end,
     {noreply, NewState}.
 
-rpc_bottom_half(Reply, State = #channel_state{writer_pid = Writer,
-                                              rpc_requests = RequestQueue,
-                                              do2 = Do2}) ->
-    NewRequestQueue =
-        case queue:out(RequestQueue) of
-            {empty, _}              -> exit(empty_rpc_bottom_half);
-            {{value, {From, _}}, Q} -> gen_server:reply(From, Reply),
-                                       Q
-        end,
-    case queue:is_empty(NewRequestQueue) of
-        true  -> ok;
-        false -> {_NewFrom, Method} = queue:head(NewRequestQueue),
-                 Do2(Writer, Method)
-    end,
-    {noreply, State#channel_state{rpc_requests = NewRequestQueue}}.
+rpc_bottom_half(Reply, State = #channel_state{rpc_requests = RequestQueue}) ->
+    case queue:out(RequestQueue) of
+        {empty, _} ->
+            exit(empty_rpc_bottom_half);
+        {{value, {From, _Method, _Content}}, NewRequestQueue} ->
+            gen_server:reply(From, Reply),
+            NewState = State#channel_state{rpc_requests = NewRequestQueue},
+            do_rpc(NewState),
+            {noreply, NewState}
+    end.
 
+do_rpc(#channel_state{writer_pid = Writer,
+                      rpc_requests = RequestQueue,
+                      do2 = Do2,
+                      do3 = Do3}) ->
+    case queue:peek(RequestQueue) of
+        {value, {_From, Method, undefined}} ->
+            Do2(Writer, Method);
+        {value, {_From, Method, Content}} ->
+            Do3(Writer, Method, Content);
+        empty ->
+            empty
+    end.
 
 resolve_consumer(_ConsumerTag, #channel_state{consumers = []}) ->
     exit(no_consumers_registered);
