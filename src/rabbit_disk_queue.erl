@@ -112,7 +112,7 @@
 -spec(requeue_next_n/2 :: (queue_name(), non_neg_integer()) -> 'ok').
 -spec(purge/1 :: (queue_name()) -> non_neg_integer()).
 -spec(delete_queue/1 :: (queue_name()) -> 'ok').
--spec(delete_non_durable_queues/1 :: (set()) -> 'ok').
+-spec(delete_non_durable_queues/1 :: ([queue_name()]) -> 'ok').
 -spec(len/1 :: (queue_name()) -> non_neg_integer()).
 -spec(foldl/3 :: (fun ((message(), ack_tag(), boolean(), A) -> A),
                   A, queue_name()) -> A).
@@ -792,9 +792,10 @@ internal_delete_queue(Q, State) ->
 
 internal_delete_non_durable_queues(
   DurableQueues, State = #dqstate { sequences = Sequences }) ->
+    DurableQueueSet =  sets:from_list(DurableQueues),
     ets:foldl(
       fun ({Q, _Read, _Write}, {ok, State1}) ->
-              case sets:is_element(Q, DurableQueues) of
+              case sets:is_element(Q, DurableQueueSet) of
                   true -> {ok, State1};
                   false -> internal_delete_queue(Q, State1)
               end

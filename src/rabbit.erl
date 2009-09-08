@@ -155,10 +155,8 @@ start(normal, []) ->
                 ok = maybe_insert_default_data(),
                 ok = rabbit_exchange:recover(),
                 {ok, DurableQueues} = rabbit_amqqueue:recover(),
-                DurableQueueNames =
-                    sets:from_list([ Q #amqqueue.name || Q <- DurableQueues ]),
                 ok = rabbit_disk_queue:delete_non_durable_queues(
-                       DurableQueueNames)
+                       [ Q #amqqueue.name || Q <- DurableQueues ])
         end},
        {"builtin applications",
         fun () ->
