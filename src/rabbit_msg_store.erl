@@ -270,24 +270,26 @@ init(Mode, Dir, FileSizeLimit, ReadFileHandlesLimit, RefCountFun,
                         %% man says this should be <= 32M. But it works...
                         {max_no_slots, 30*1024*1024},
                         {type, set},
-                        {keypos, 2}
+                        {keypos, #msg_location.msg_id}
                        ]),
 
     %% it would be better to have this as private, but dets:from_ets/2
     %% seems to blow up if it is set private - see bug21489
-    MsgLocationEts = ets:new(?MSG_LOC_NAME, [set, protected, {keypos, 2}]),
+    MsgLocationEts = ets:new(?MSG_LOC_NAME,
+                             [set, protected, {keypos, #msg_location.msg_id}]),
 
     InitName = "0" ++ ?FILE_EXTENSION,
     HandleCache = rabbit_file_handle_cache:init(ReadFileHandlesLimit,
                                                 ?BINARY_MODE ++ [read]),
+    FileSummary = ets:new(?FILE_SUMMARY_ETS_NAME,
+                          [set, private, {keypos, #file_summary.file}]),
+    MessageCache = ets:new(?CACHE_ETS_NAME, [set, private]),
     State =
         #msstate { operation_mode         = Mode,
                    dir                    = Dir,
                    msg_location_dets      = MsgLocationDets,
                    msg_location_ets       = MsgLocationEts,
-                   file_summary           = ets:new(
-                                              ?FILE_SUMMARY_ETS_NAME,
-                                              [set, private, {keypos, 2}]),
+                   file_summary           = FileSummary,
                    current_file_num       = 0,
                    current_file_name      = InitName,
                    current_file_handle    = undefined,
@@ -296,8 +298,7 @@ init(Mode, Dir, FileSizeLimit, ReadFileHandlesLimit, RefCountFun,
                    file_size_limit        = FileSizeLimit,
                    read_file_handle_cache = HandleCache,
                    last_sync_offset       = 0,
-                   message_cache          = ets:new(?CACHE_ETS_NAME,
-                                                    [set, private]),
+                   message_cache          = MessageCache,
                    ets_bytes_per_record   = EtsBytesPerRecord
                   },
     
