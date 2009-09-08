@@ -46,7 +46,7 @@
 -ifdef(use_specs).
 
 -type(io_device() :: any()).
--type(msg_id() :: any()).
+-type(msg_id() :: binary()).
 -type(msg() :: any()).
 -type(msg_attrs() :: any()).
 -type(position() :: non_neg_integer()).
@@ -63,16 +63,16 @@
 
 %%----------------------------------------------------------------------------
 
-append(FileHdl, MsgId, MsgBody, MsgAttrs) ->
-    [MsgIdBin, MsgBodyBin, MsgAttrsBin] = Bins =
-        [term_to_binary(X) || X <- [MsgId, MsgBody, MsgAttrs]],
-    [MsgIdBinSize, MsgBodyBinSize, MsgAttrsBinSize] = Sizes =
-        [size(B) || B <- Bins],
+append(FileHdl, MsgId, MsgBody, MsgAttrs) when is_binary(MsgId) ->
+    MsgBodyBin  = term_to_binary(MsgBody),
+    MsgAttrsBin = term_to_binary(MsgAttrs),
+    [MsgIdSize, MsgBodyBinSize, MsgAttrsBinSize] = Sizes =
+        [size(B) || B <- [MsgId, MsgBodyBin, MsgAttrsBin]],
     Size = lists:sum(Sizes),
     case file:write(FileHdl, <<Size:?INTEGER_SIZE_BITS,
-                               MsgIdBinSize:?INTEGER_SIZE_BITS,
+                               MsgIdSize:?INTEGER_SIZE_BITS,
                                MsgAttrsBinSize:?INTEGER_SIZE_BITS,
-                               MsgIdBin:MsgIdBinSize/binary,
+                               MsgId:MsgIdSize/binary,
                                MsgAttrsBin:MsgAttrsBinSize/binary,
                                MsgBodyBin:MsgBodyBinSize/binary,
                                ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
@@ -85,17 +85,16 @@ read(FileHdl, TotalSize) ->
     SizeWriteOkBytes = Size + 1,
     case file:read(FileHdl, TotalSize) of
         {ok, <<Size:?INTEGER_SIZE_BITS,
-               MsgIdBinSize:?INTEGER_SIZE_BITS,
+               MsgIdSize:?INTEGER_SIZE_BITS,
                MsgAttrsBinSize:?INTEGER_SIZE_BITS,
                Rest:SizeWriteOkBytes/binary>>} ->
-            BodyBinSize = Size - MsgIdBinSize - MsgAttrsBinSize,
-            <<MsgIdBin:MsgIdBinSize/binary,
+            BodyBinSize = Size - MsgIdSize - MsgAttrsBinSize,
+            <<MsgId:MsgIdSize/binary,
               MsgAttrsBin:MsgAttrsBinSize/binary,
               MsgBodyBin:BodyBinSize/binary,
               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>> = Rest,
-            [MsgId, MsgBody, MsgAttrs] =
-                [binary_to_term(B) || B <- [MsgIdBin, MsgBodyBin, MsgAttrsBin]],
-            {ok, {MsgId, MsgBody, MsgAttrs}};
+            {ok, {MsgId,
+                  binary_to_term(MsgBodyBin), binary_to_term(MsgAttrsBin)}};
         KO -> KO
     end.
 
@@ -119,10 +118,10 @@ read_next(FileHdl, Offset) ->
     case file:read(FileHdl, ThreeIntegers) of
         {ok,
          <<Size:?INTEGER_SIZE_BITS,
-           MsgIdBinSize:?INTEGER_SIZE_BITS,
+           MsgIdSize:?INTEGER_SIZE_BITS,
            MsgAttrsBinSize:?INTEGER_SIZE_BITS>>} ->
             if Size == 0 -> eof; %% Nothing we can do other than stop
-               MsgIdBinSize == 0 orelse MsgAttrsBinSize == 0 ->
+               MsgIdSize == 0 orelse MsgAttrsBinSize == 0 ->
                     %% current message corrupted, try skipping past it
                     ExpectedAbsPos = Offset + Size + ?FILE_PACKING_ADJUSTMENT,
                     case file:position(FileHdl, {cur, Size + 1}) of
@@ -131,9 +130,9 @@ read_next(FileHdl, Offset) ->
                         KO                   -> KO
                     end;
                true -> %% all good, let's continue
-                    HeaderSize = MsgIdBinSize + MsgAttrsBinSize,
+                    HeaderSize = MsgIdSize + MsgAttrsBinSize,
                     case file:read(FileHdl, HeaderSize) of
-                        {ok, <<MsgIdBin:MsgIdBinSize/binary,
+                        {ok, <<MsgId:MsgIdSize/binary,
                                MsgAttrsBin:MsgAttrsBinSize/binary>>} ->
                             TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
                             ExpectedAbsPos = Offset + TotalSize - 1,
@@ -144,7 +143,7 @@ read_next(FileHdl, Offset) ->
                                     case file:read(FileHdl, 1) of
                                         {ok, <<?WRITE_OK_MARKER:
                                                ?WRITE_OK_SIZE_BITS>>} ->
-                                            {ok, {binary_to_term(MsgIdBin),
+                                            {ok, {MsgId,
                                                   binary_to_term(MsgAttrsBin),
                                                   TotalSize, NextOffset}};
                                         {ok, _SomeOtherData} ->

@@ -82,7 +82,7 @@
 -type(mode() :: 'ram_disk' | 'disk_only').
 -type(dets_table() :: any()).
 -type(ets_table() :: any()).
--type(msg_id() :: any()).
+-type(msg_id() :: binary()).
 -type(msg() :: any()).
 -type(msg_attrs() :: any()).
 -type(file_path() :: any()).

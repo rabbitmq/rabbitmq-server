@@ -848,8 +848,11 @@ benchmark_disk_queue() ->
     passed.
 
 rdq_message(MsgId, MsgBody, IsPersistent) ->
-    rabbit_basic:message(x, <<>>, [], MsgBody, MsgId, IsPersistent).
+    rabbit_basic:message(x, <<>>, [], MsgBody, term_to_binary(MsgId),
+                         IsPersistent).
 
+rdq_match_message(Msg, MsgId, MsgBody, Size) when is_number(MsgId) ->
+    rdq_match_message(Msg, term_to_binary(MsgId), MsgBody, Size);
 rdq_match_message(
   #basic_message { guid = MsgId, content =
                    #content { payload_fragments_rev = [MsgBody] }},
@@ -860,13 +863,17 @@ rdq_match_messages(#basic_message { guid = MsgId, content = #content { payload_f
                    #basic_message { guid = MsgId, content = #content { payload_fragments_rev = MsgBody }}) ->
     ok.
 
+commit_list(List, MsgCount) ->
+    lists:zip([term_to_binary(MsgId) || MsgId <- List],
+              lists:duplicate(MsgCount, false)).
+
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
     Startup = rdq_virgin(),
     rdq_start(),
     QCount = length(Qs),
     Msg = <<0:(8*MsgSizeBytes)>>,
     List = lists:seq(1, MsgCount),
-    CommitList = lists:zip(List, lists:duplicate(MsgCount, false)),
+    CommitList = commit_list(List, MsgCount),
     {Publish, ok} =
         timer:tc(?MODULE, rdq_time_commands,
                  [[fun() -> [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false))
@@ -905,7 +912,7 @@ rdq_stress_gc(MsgCount) ->
     MsgSizeBytes = 256*1024,
     Msg = <<0:(8*MsgSizeBytes)>>, % 256KB
     List = lists:seq(1, MsgCount),
-    CommitList = lists:zip(List, lists:duplicate(MsgCount, false)),
+    CommitList = commit_list(List, MsgCount),
     [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- List],
     rabbit_disk_queue:tx_commit(q, CommitList, []),
     StartChunk = round(MsgCount / 20), % 5%
@@ -948,7 +955,7 @@ rdq_test_startup_with_queue_gaps() ->
     Total = 1000,
     Half = round(Total/2),
     All = lists:seq(1,Total),
-    CommitAll = lists:zip(All, lists:duplicate(Total, false)),
+    CommitAll = commit_list(All, Total),
     [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, true)) || N <- All],
     rabbit_disk_queue:tx_commit(q, CommitAll, []),
     io:format("Publish done~n", []),
@@ -1005,7 +1012,7 @@ rdq_test_redeliver() ->
     Total = 1000,
     Half = round(Total/2),
     All = lists:seq(1,Total),
-    CommitAll = lists:zip(All, lists:duplicate(Total, false)),
+    CommitAll = commit_list(All, Total),
     [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- All],
     rabbit_disk_queue:tx_commit(q, CommitAll, []),
     io:format("Publish done~n", []),
@@ -1058,7 +1065,7 @@ rdq_test_purge() ->
     Total = 1000,
     Half = round(Total/2),
     All = lists:seq(1,Total),
-    CommitAll = lists:zip(All, lists:duplicate(Total, false)),
+    CommitAll = commit_list(All, Total),
     [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- All],
     rabbit_disk_queue:tx_commit(q, CommitAll, []),
     io:format("Publish done~n", []),
@@ -1170,12 +1177,10 @@ rdq_test_mixed_queue_modes() ->
 rdq_test_mode_conversion_mid_txn() ->
     Payload = <<0:(8*256)>>,
     MsgIdsA = lists:seq(0,9),
-    MsgsA = [ rabbit_basic:message(x, <<>>, [], Payload, MsgId,
-                                   (0 == MsgId rem 2))
-            || MsgId <- MsgIdsA ],
+    MsgsA = [ rdq_message(MsgId, Payload, (0 == MsgId rem 2))
+              || MsgId <- MsgIdsA ],
     MsgIdsB = lists:seq(10,20),
-    MsgsB = [ rabbit_basic:message(x, <<>>, [], Payload, MsgId,
-                                   (0 == MsgId rem 2))
+    MsgsB = [ rdq_message(MsgId, Payload, (0 == MsgId rem 2))
             || MsgId <- MsgIdsB ],
 
     rdq_virgin(),
@@ -1229,7 +1234,8 @@ rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) -
                 {AckTags, MS8} =
                     lists:foldl(
                       fun (Msg, {Acc, MS7}) ->
-                              Rem = Len1 - (Msg #basic_message.guid) - 1,
+                              MsgId = binary_to_term(Msg #basic_message.guid),
+                              Rem = Len1 - MsgId - 1,
                               {{Msg1, false, AckTag, Rem}, MS7a} =
                                   rabbit_mixed_queue:fetch(MS7),
                               ok = rdq_match_messages(Msg, Msg1),
@@ -1243,7 +1249,8 @@ rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) -
                 {AckTags, MS8} =
                     lists:foldl(
                       fun (Msg, {Acc, MS7}) ->
-                              Rem = Len0 - (Msg #basic_message.guid) - 1,
+                              MsgId = binary_to_term(Msg #basic_message.guid),
+                              Rem = Len0 - MsgId - 1,
                               {{Msg1, false, AckTag, Rem}, MS7a} =
                                   rabbit_mixed_queue:fetch(MS7),
                               ok = rdq_match_messages(Msg, Msg1),
@@ -1266,9 +1273,8 @@ rdq_test_disk_queue_modes() ->
     Total = 1000,
     Half1 = lists:seq(1,round(Total/2)),
     Half2 = lists:seq(1 + round(Total/2), Total),
-    CommitHalf1 = lists:zip(Half1, lists:duplicate(round(Total/2), false)),
-    CommitHalf2 = lists:zip(Half2, lists:duplicate
-                            (Total - round(Total/2), false)),
+    CommitHalf1 = commit_list(Half1, round(Total/2)),
+    CommitHalf2 = commit_list(Half2, Total - round(Total/2)),
     [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- Half1],
     ok = rabbit_disk_queue:tx_commit(q, CommitHalf1, []),
     io:format("Publish done~n", []),

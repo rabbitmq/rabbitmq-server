@@ -89,7 +89,7 @@
 -type(file_open_mode() :: any()).
 
 %% this is really an abstract type, but dialyzer does not support them
--type(guid() :: any()).
+-type(guid() :: binary()).
 -type(txn() :: guid()).
 -type(pkey() :: guid()).
 -type(r(Kind) ::
