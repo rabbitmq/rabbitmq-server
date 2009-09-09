@@ -49,7 +49,7 @@
 create_basic_plt(BasicPltPath) ->
     OptsRecord = dialyzer_options:build([
         {analysis_type, plt_build},
-        {init_plt, BasicPltPath},
+        {output_plt, BasicPltPath},
         {files_rec, otp_apps_dependencies_paths()}]),
     dialyzer_cl:start(OptsRecord),
     ok.
@@ -59,6 +59,7 @@ update_plt(PltPath, ModifiedFiles) ->
     DialyzerWarnings = dialyzer:run([
         {analysis_type, plt_add},
         {init_plt, PltPath},
+        {output_plt, PltPath},
         {files, Files}]),
     print_warnings(DialyzerWarnings),
     ok.
