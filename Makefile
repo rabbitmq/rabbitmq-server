@@ -11,7 +11,7 @@ SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
-BEAM_TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
+BEAM_TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(BEAM_TARGETS)
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.pod, %.gz, $(wildcard docs/*.[0-9].pod))
@@ -65,24 +65,23 @@ $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py
 $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.rel $(TARGETS)
 	erl -noshell -eval 'systools:make_script("ebin/rabbit", [{path, ["ebin"]}]), halt().'
 
-dialyze: $(BASIC_PLT) $(PLT) .last_valid_dialysis
+dialyze: .last_valid_dialysis
 
-create-plt: $(BASIC_PLT) $(PLT)
+create-plt: $(PLT)
 
-$(PLT): $(BEAM_TARGETS)
-	if [ -f $@ -a $(BASIC_PLT) -ot $@ ]; then \
-	    DIALYZER_INPUT_FILES="$?"; \
+$(PLT): $(BEAM_TARGETS) $(BASIC_PLT)
+	test -f $@ -a $(BASIC_PLT) -ot $@ || cp $(BASIC_PLT) $@
+	$(ERL_RABBIT_DIALYZER) -eval \
+	    "rabbit_dialyzer:update_plt(\"$@\", \"$(BEAM_TARGETS)\"), halt()."
+
+.last_valid_dialysis: $(BEAM_TARGETS) $(PLT)
+	if [ $(PLT) -ot $@ ]; then \
+	    DIALYZER_INPUT_FILES="$(filter %.beam, $?)"; \
 	else \
-	    cp $(BASIC_PLT) $@ && \
-		rm -f .last_valid_dialysis && \
 	    DIALYZER_INPUT_FILES="$(BEAM_TARGETS)"; \
 	fi; \
 	$(ERL_RABBIT_DIALYZER) -eval \
-	    "rabbit_dialyzer:update_plt(\"$@\", \"$$DIALYZER_INPUT_FILES\"), halt()."
-
-.last_valid_dialysis: $(BEAM_TARGETS)
-	$(ERL_RABBIT_DIALYZER) -eval \
-	    "rabbit_dialyzer:dialyze_files(\"$(PLT)\", \"$?\"), halt()." && \
+	    "rabbit_dialyzer:dialyze_files(\"$(PLT)\", \"$$DIALYZER_INPUT_FILES\"), halt()." && \
 	touch $@
 
 $(BASIC_PLT):
