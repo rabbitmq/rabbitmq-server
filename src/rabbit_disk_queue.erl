@@ -245,12 +245,11 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
 
     ok = detect_shutdown_state_and_adjust_delivered_flags(),
 
-    ok = add_index(),
     Store = rabbit_msg_store:init(Mode, base_directory(),
                                   FileSizeLimit, ReadFileHandlesLimit,
-                                  fun ref_count/1, EtsBPR),
+                                  fun msg_ref_gen/1, msg_ref_gen_init(),
+                                  EtsBPR),
     Store1 = prune(Store),
-    ok = del_index(),
 
     Sequences = ets:new(?SEQUENCE_ETS_NAME, [set, private]),
     ok = extract_sequence_numbers(Sequences),
@@ -870,21 +869,12 @@ mark_message_delivered(Key, N) ->
         end,
     mark_message_delivered(mnesia:next(rabbit_disk_queue, Key), M).
 
-add_index() ->
-    case mnesia:add_table_index(rabbit_disk_queue, msg_id) of
-        {atomic, ok} -> ok;
-        {aborted,{already_exists,rabbit_disk_queue,_}} -> ok;
-        E -> E
-    end.
+msg_ref_gen_init() -> mnesia:dirty_first(rabbit_disk_queue).
 
-del_index() ->
-    case mnesia:del_table_index(rabbit_disk_queue, msg_id) of
-        {atomic, ok} -> ok;
-        %% hmm, something weird must be going on, but it's probably
-        %% not the end of the world
-        {aborted, {no_exists, rabbit_disk_queue,_}} -> ok;
-        E1 -> E1
-    end.
+msg_ref_gen('$end_of_table') -> finished;
+msg_ref_gen(Key) ->
+    [Obj] = mnesia:dirty_read(rabbit_disk_queue, Key),
+    {Obj #dq_msg_loc.msg_id, 1, mnesia:dirty_next(rabbit_disk_queue, Key)}.
 
 prune_flush_batch(DeleteAcc, RemoveAcc, Store) ->
     lists:foldl(fun (Key, ok) ->
@@ -1003,9 +993,3 @@ shuffle_up(Q, BaseSeqId, SeqId, Gap) ->
                 0
         end,
     shuffle_up(Q, BaseSeqId, SeqId - 1, Gap + GapInc).
-
-ref_count(MsgId) ->
-    length(mnesia:dirty_index_match_object(
-             rabbit_disk_queue,
-             #dq_msg_loc { msg_id = MsgId, _ = '_' },
-             msg_id)).
