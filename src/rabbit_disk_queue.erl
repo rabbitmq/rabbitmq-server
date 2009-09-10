@@ -37,7 +37,6 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
--export([handle_pre_hibernate/1]).
 
 -export([publish/3, fetch/1, phantom_fetch/1, ack/2, tx_publish/1, tx_commit/3,
          tx_rollback/1, requeue/2, purge/1, delete_queue/1,
@@ -45,10 +44,9 @@
          prefetch/1
         ]).
 
--export([filesync/0, cache_info/0]).
+-export([filesync/0]).
 
--export([stop/0, stop_and_obliterate/0, set_mode/1, to_disk_only_mode/0,
-         to_ram_disk_mode/0]).
+-export([stop/0, stop_and_obliterate/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -59,7 +57,6 @@
 
 -define(SEQUENCE_ETS_NAME,       rabbit_disk_queue_sequences).
 -define(BATCH_SIZE,              10000).
--define(DISK_ONLY_MODE_FILE,     "disk_only_stats.dat").
 
 -define(SHUTDOWN_MESSAGE_KEY, {internal_token, shutdown}).
 -define(SHUTDOWN_MESSAGE,
@@ -68,7 +65,6 @@
                       is_delivered = never
                     }).
 
--define(MINIMUM_MEMORY_REPORT_TIME_INTERVAL, 10000). %% 10 seconds in millisecs
 -define(SYNC_INTERVAL, 5). %% milliseconds
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
@@ -76,13 +72,10 @@
 -define(SERVER, ?MODULE).
 
 -record(dqstate,
-        {operation_mode,          %% ram_disk | disk_only
-         store,                   %% message store
+        {store,                   %% message store
          sequences,               %% next read and write for each q
          on_sync_txns,            %% list of commiters to run on sync (reversed)
-         commit_timer_ref,        %% TRef for our interval timer
-         memory_report_timer_ref, %% TRef for the memory report timer
-         mnesia_bytes_per_record  %% bytes per record in mnesia in ram_disk mode
+         commit_timer_ref         %% TRef for our interval timer
         }).
 
 %%----------------------------------------------------------------------------
@@ -118,11 +111,7 @@
                   A, queue_name()) -> A).
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
--spec(to_disk_only_mode/0 :: () -> 'ok').
--spec(to_ram_disk_mode/0 :: () -> 'ok').
 -spec(filesync/0 :: () -> 'ok').
--spec(cache_info/0 :: () -> [{atom(), term()}]).
--spec(set_mode/1 :: ('oppressed' | 'liberated') -> 'ok').
 
 -endif.
 
@@ -187,20 +176,8 @@ stop() ->
 stop_and_obliterate() ->
     gen_server2:call(?SERVER, stop_vaporise, infinity).
 
-to_disk_only_mode() ->
-    gen_server2:pcall(?SERVER, 9, to_disk_only_mode, infinity).
-
-to_ram_disk_mode() ->
-    gen_server2:pcall(?SERVER, 9, to_ram_disk_mode, infinity).
-
 filesync() ->
     gen_server2:pcall(?SERVER, 9, filesync).
-
-cache_info() ->
-    gen_server2:call(?SERVER, cache_info, infinity).
-
-set_mode(Mode) ->
-    gen_server2:pcast(?SERVER, 10, {set_mode, Mode}).
 
 %%----------------------------------------------------------------------------
 %% gen_server behaviour
@@ -216,54 +193,23 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     %%       brutal_kill.
     %% Otherwise, the gen_server will be immediately terminated.
     process_flag(trap_exit, true),
-    ok = rabbit_memory_manager:register
-           (self(), true, rabbit_disk_queue, set_mode, []),
-    ok = filelib:ensure_dir(form_filename("nothing")),
 
-    Node = node(),
-    {Mode, MnesiaBPR, EtsBPR} =
-        case lists:member(Node, mnesia:table_info(rabbit_disk_queue,
-                                                  disc_copies)) of
-            true ->
-                %% memory manager assumes we start oppressed. As we're
-                %% not, make sure it knows about it, by reporting zero
-                %% memory usage, which ensures it'll tell us to become
-                %% liberated
-                rabbit_memory_manager:report_memory(
-                  self(), 0, false),
-                {ram_disk, undefined, undefined};
-            false ->
-                Path = form_filename(?DISK_ONLY_MODE_FILE),
-                case rabbit_misc:read_term_file(Path) of
-                    {ok, [{MnesiaBPR1, EtsBPR1}]} ->
-                        {disk_only, MnesiaBPR1, EtsBPR1};
-                    {error, Reason} ->
-                        throw({error, {cannot_read_disk_only_mode_file, Path,
-                                       Reason}})
-                end
-        end,
+    ok = filelib:ensure_dir(form_filename("nothing")),
 
     ok = detect_shutdown_state_and_adjust_delivered_flags(),
 
-    Store = rabbit_msg_store:init(Mode, base_directory(),
-                                  FileSizeLimit, ReadFileHandlesLimit,
-                                  fun msg_ref_gen/1, msg_ref_gen_init(),
-                                  EtsBPR),
-    Store1 = prune(Store),
+    Store = prune(rabbit_msg_store:init(base_directory(),
+                                        FileSizeLimit, ReadFileHandlesLimit,
+                                        fun msg_ref_gen/1, msg_ref_gen_init())),
 
     Sequences = ets:new(?SEQUENCE_ETS_NAME, [set, private]),
     ok = extract_sequence_numbers(Sequences),
 
-    State =
-        #dqstate { operation_mode          = Mode,
-                   store                   = Store1,
-                   sequences               = Sequences,
-                   on_sync_txns            = [],
-                   commit_timer_ref        = undefined,
-                   memory_report_timer_ref = undefined,
-                   mnesia_bytes_per_record = MnesiaBPR
-                 },
-    {ok, start_memory_timer(State), hibernate,
+    State = #dqstate { store            = Store,
+                       sequences        = Sequences,
+                       on_sync_txns     = [],
+                       commit_timer_ref = undefined },
+    {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({fetch, Q}, _From, State) ->
@@ -294,25 +240,14 @@ handle_call({foldl, Fun, Init, Q}, _From, State) ->
     reply(Result, State1);
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}; %% gen_server now calls terminate
-handle_call(stop_vaporise, _From, State = #dqstate { operation_mode = Mode }) ->
+handle_call(stop_vaporise, _From, State) ->
     State1 = shutdown(State),
     {atomic, ok} = mnesia:clear_table(rabbit_disk_queue),
-    {atomic, ok} = case Mode of
-                       ram_disk -> {atomic, ok};
-                       disk_only -> mnesia:change_table_copy_type(
-                                      rabbit_disk_queue, node(), disc_copies)
-                   end,
     lists:foreach(fun file:delete/1, filelib:wildcard(form_filename("*"))),
     {stop, normal, ok, State1}; %% gen_server now calls terminate
-handle_call(to_disk_only_mode, _From, State) ->
-    reply(ok, to_disk_only_mode(State));
-handle_call(to_ram_disk_mode, _From, State) ->
-    reply(ok, to_ram_disk_mode(State));
 handle_call({delete_non_durable_queues, DurableQueues}, _From, State) ->
     {ok, State1} = internal_delete_non_durable_queues(DurableQueues, State),
-    reply(ok, State1);
-handle_call(cache_info, _From, State = #dqstate { store = Store }) ->
-    reply(rabbit_msg_store:cache_info(Store), State).
+    reply(ok, State1).
 
 handle_cast({publish, Q, Message, IsDelivered}, State) ->
     {ok, _MsgSeqId, State1} = internal_publish(Q, Message, IsDelivered, State),
@@ -332,11 +267,6 @@ handle_cast({requeue, Q, MsgSeqIds}, State) ->
 handle_cast({requeue_next_n, Q, N}, State) ->
     {ok, State1} = internal_requeue_next_n(Q, N, State),
     noreply(State1);
-handle_cast({set_mode, Mode}, State) ->
-    noreply((case Mode of
-                 oppressed -> fun to_disk_only_mode/1;
-                 liberated -> fun to_ram_disk_mode/1
-             end)(State));
 handle_cast({prefetch, Q, From}, State) ->
     {Result, State1} =
         internal_fetch_body(Q, record_delivery, peek_queue, State),
@@ -352,21 +282,11 @@ handle_cast({prefetch, Q, From}, State) ->
     end,
     noreply(State1).
 
-handle_info(report_memory, State) ->
-    %% call noreply1/2, not noreply/1/2, as we don't want to restart the
-    %% memory_report_timer_ref.
-    %% By unsetting the timer, we force a report on the next normal message
-    noreply1(State #dqstate { memory_report_timer_ref = undefined });
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info(timeout, State) ->
     %% must have commit_timer set, so timeout was 0, and we're not hibernating
     noreply(sync(State)).
-
-handle_pre_hibernate(State) ->
-    %% don't use noreply/1 or noreply1/1 as they'll restart the memory timer
-    ok = report_memory(true, State),
-    {hibernate, stop_memory_timer(State)}.
 
 terminate(_Reason, State) ->
     State1 = shutdown(State),
@@ -376,7 +296,7 @@ terminate(_Reason, State) ->
 shutdown(State = #dqstate { sequences = undefined }) ->
     State;
 shutdown(State = #dqstate { sequences = Sequences, store = Store }) ->
-    State1 = stop_commit_timer(stop_memory_timer(State)),
+    State1 = stop_commit_timer(State),
     Store1 = rabbit_msg_store:cleanup(Store),
     ets:delete(Sequences),
     State1 #dqstate { sequences = undefined, store = Store1 }.
@@ -385,99 +305,18 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
-%% memory management helper functions
-%%----------------------------------------------------------------------------
-
-stop_memory_timer(State = #dqstate { memory_report_timer_ref = undefined }) ->
-    State;
-stop_memory_timer(State = #dqstate { memory_report_timer_ref = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
-    State #dqstate { memory_report_timer_ref = undefined }.
-
-start_memory_timer(State = #dqstate { memory_report_timer_ref = undefined }) ->
-    ok = report_memory(false, State),
-    {ok, TRef} = timer:send_after(?MINIMUM_MEMORY_REPORT_TIME_INTERVAL,
-                                  report_memory),
-    State #dqstate { memory_report_timer_ref = TRef };
-start_memory_timer(State) ->
-    State.
-
-%% Scaling this by 2.5 is a magic number. Found by trial and error to
-%% work ok. We are deliberately over reporting so that we run out of
-%% memory sooner rather than later, because the transition to disk
-%% only modes transiently can take quite a lot of memory.
-report_memory(Hibernating, State) ->
-    Bytes = memory_use(State),
-    rabbit_memory_manager:report_memory(self(), trunc(2.5 * Bytes),
-                                        Hibernating).
-
-memory_use(#dqstate { operation_mode = ram_disk,
-                      store          = Store,
-                      sequences      = Sequences }) ->
-    WordSize = erlang:system_info(wordsize),
-    rabbit_msg_store:memory(Store) +
-        WordSize * ets:info(Sequences, memory) +
-        WordSize * mnesia:table_info(rabbit_disk_queue, memory);
-memory_use(#dqstate { operation_mode          = disk_only,
-                      store                   = Store,
-                      sequences               = Sequences,
-                      mnesia_bytes_per_record = MnesiaBytesPerRecord }) ->
-    WordSize = erlang:system_info(wordsize),
-    rabbit_msg_store:memory(Store) +
-        WordSize * ets:info(Sequences, memory) +
-        rabbit_misc:ceil(
-          mnesia:table_info(rabbit_disk_queue, size) * MnesiaBytesPerRecord).
-
-to_disk_only_mode(State = #dqstate { operation_mode = disk_only }) ->
-    State;
-to_disk_only_mode(State = #dqstate { operation_mode = ram_disk,
-                                     store          = Store }) ->
-    rabbit_log:info("Converting disk queue to disk only mode~n", []),
-    MnesiaBPR = erlang:system_info(wordsize) *
-        mnesia:table_info(rabbit_disk_queue, memory) /
-        lists:max([1, mnesia:table_info(rabbit_disk_queue, size)]),
-    EtsBPR = rabbit_msg_store:ets_bpr(Store),
-    {atomic, ok} = mnesia:change_table_copy_type(rabbit_disk_queue, node(),
-                                                 disc_only_copies),
-    Store1 = rabbit_msg_store:to_disk_only_mode(Store),
-    Path = form_filename(?DISK_ONLY_MODE_FILE),
-    case rabbit_misc:write_term_file(Path, [{MnesiaBPR, EtsBPR}]) of
-        ok -> ok;
-        {error, Reason} ->
-            throw({error, {cannot_create_disk_only_mode_file, Path, Reason}})
-    end,
-    garbage_collect(),
-    State #dqstate { operation_mode          = disk_only,
-                     store                   = Store1,
-                     mnesia_bytes_per_record = MnesiaBPR }.
-
-to_ram_disk_mode(State = #dqstate { operation_mode = ram_disk }) ->
-    State;
-to_ram_disk_mode(State = #dqstate { operation_mode = disk_only,
-                                    store          = Store }) ->
-    rabbit_log:info("Converting disk queue to ram disk mode~n", []),
-    {atomic, ok} = mnesia:change_table_copy_type(rabbit_disk_queue, node(),
-                                                 disc_copies),
-    Store1 = rabbit_msg_store:to_ram_disk_mode(Store),
-    ok = file:delete(form_filename(?DISK_ONLY_MODE_FILE)),
-    garbage_collect(),
-    State #dqstate { operation_mode          = ram_disk,
-                     store                   = Store1,
-                     mnesia_bytes_per_record = undefined }.
-
-%%----------------------------------------------------------------------------
 %% general helper functions
 %%----------------------------------------------------------------------------
 
 noreply(State) ->
-    noreply1(start_memory_timer(State)).
+    noreply1(State).
 
 noreply1(State) ->
     {State1, Timeout} = next_state(State),
     {noreply, State1, Timeout}.
 
 reply(Reply, State) ->
-    reply1(Reply, start_memory_timer(State)).
+    reply1(Reply, State).
 
 reply1(Reply, State) ->
     {State1, Timeout} = next_state(State),

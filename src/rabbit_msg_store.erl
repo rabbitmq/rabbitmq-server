@@ -31,17 +31,14 @@
 
 -module(rabbit_msg_store).
 
--export([init/7, write/4, read/2, attrs/2, remove/2, release/2,
-         needs_sync/2, sync/1, cleanup/1, cache_info/1, memory/1,
-         ets_bpr/1, to_disk_only_mode/1, to_ram_disk_mode/1]).
+-export([init/5, write/4, read/2, attrs/2, remove/2, release/2,
+         needs_sync/2, sync/1, cleanup/1]).
 
 %%----------------------------------------------------------------------------
 
 -record(msstate,
-        {operation_mode,         %% ram_disk | disk_only
-         dir,                    %% store directory
-         msg_location_dets,      %% where are messages?
-         msg_location_ets,       %% as above, but for ets version
+        {dir,                    %% store directory
+         msg_locations,          %% where are messages?
          file_summary,           %% what's in the files?
          current_file,           %% current file name as number
          current_file_handle,    %% current file handle
@@ -51,8 +48,7 @@
          file_size_limit,        %% how big can our files get?
          read_file_handle_cache, %% file handle cache for reading
          last_sync_offset,       %% current_offset at the last time we sync'd
-         message_cache,          %% ets message cache
-         ets_bytes_per_record    %% bytes per record in msg_location_ets
+         message_cache           %% ets message cache
          }).
 
 -record(msg_location,
@@ -78,8 +74,6 @@
 
 -ifdef(use_specs).
 
--type(mode() :: 'ram_disk' | 'disk_only').
--type(dets_table() :: any()).
 -type(ets_table() :: any()).
 -type(msg_id() :: binary()).
 -type(msg() :: any()).
@@ -88,10 +82,8 @@
 -type(io_device() :: any()).
 
 -type(msstate() :: #msstate {
-               operation_mode         :: mode(),
                dir                    :: file_path(),
-               msg_location_dets      :: dets_table(),
-               msg_location_ets       :: ets_table(),
+               msg_locations          :: ets_table(),
                file_summary           :: ets_table(),
                current_file           :: non_neg_integer(),
                current_file_handle    :: io_device(),
@@ -100,15 +92,13 @@
                file_size_limit        :: non_neg_integer(),
                read_file_handle_cache :: any(),
                last_sync_offset       :: non_neg_integer(),
-               message_cache          :: ets_table(),
-               ets_bytes_per_record   :: non_neg_integer()
+               message_cache          :: ets_table()
                }).
 
--spec(init/7 :: ('ram_disk' | 'disk_only', file_path(),
+-spec(init/5 :: (file_path(),
                  non_neg_integer(), non_neg_integer(),
                  (fun ((A) -> 'finished' | {msg_id(), non_neg_integer(), A})),
-                 A, non_neg_integer()) ->
-             msstate()).
+                 A) -> msstate()).
 -spec(write/4 :: (msg_id(), msg(), msg_attrs(), msstate()) -> msstate()).
 -spec(read/2 :: (msg_id(), msstate()) -> {msg(), msstate()} | 'not_found').
 -spec(attrs/2 :: (msg_id(), msstate()) -> msg_attrs() | 'not_found').
@@ -117,11 +107,6 @@
 -spec(needs_sync/2 :: ([msg_id()], msstate()) -> boolean()).
 -spec(sync/1 :: (msstate()) -> msstate()).
 -spec(cleanup/1 :: (msstate()) -> msstate()).
--spec(cache_info/1 :: (msstate()) -> [{atom(), term()}]).
--spec(memory/1 :: (msstate()) -> non_neg_integer()).
--spec(ets_bpr/1 :: (msstate()) -> non_neg_integer()).
--spec(to_disk_only_mode/1 :: (msstate()) -> msstate()).
--spec(to_ram_disk_mode/1 :: (msstate()) -> msstate()).
 
 -endif.
 
@@ -129,7 +114,7 @@
 
 %% The components:
 %%
-%% MsgLocation: this is a (d)ets table which contains:
+%% MsgLocation: this is a ets table which contains:
 %%              {MsgId, RefCount, File, Offset, TotalSize, Attrs}
 %% FileSummary: this is an ets table which contains:
 %%              {File, ValidTotalSize, ContiguousTop, Left, Right}
@@ -171,15 +156,7 @@
 %% possibilites of a crash have occured during a compaction (this
 %% consists of tidyup - the compaction is deliberately designed such
 %% that data is duplicated on disk rather than risking it being lost),
-%% and rebuild the dets and ets tables (MsgLocation, FileSummary).
-%%
-%% MsgLocation is deliberately a dets table in order to ensure that we
-%% are not RAM constrained. However, for performance reasons, it is
-%% possible to call to_ram_disk_mode/0 which will convert MsgLocation
-%% to an ets table. This results in a massive performance improvement,
-%% at the expense of greater RAM usage. The idea is that when memory
-%% gets tight, we switch to disk_only mode but otherwise try to run in
-%% ram_disk mode.
+%% and rebuild the ets tables (MsgLocation, FileSummary).
 %%
 %% So, with this design, messages move to the left. Eventually, they
 %% should end up in a contiguous block on the left and are then never
@@ -257,25 +234,11 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-init(Mode, Dir, FileSizeLimit, ReadFileHandlesLimit,
-     MsgRefDeltaGen, MsgRefDeltaGenInit, EtsBytesPerRecord) ->
+init(Dir, FileSizeLimit, ReadFileHandlesLimit,
+     MsgRefDeltaGen, MsgRefDeltaGenInit) ->
 
-    file:delete(msg_location_dets_file(Dir)),
-
-    {ok, MsgLocationDets} =
-        dets:open_file(?MSG_LOC_NAME,
-                       [{file, msg_location_dets_file(Dir)},
-                        {min_no_slots, 1024*1024},
-                        %% man says this should be <= 32M. But it works...
-                        {max_no_slots, 30*1024*1024},
-                        {type, set},
-                        {keypos, #msg_location.msg_id}
-                       ]),
-
-    %% it would be better to have this as private, but dets:from_ets/2
-    %% seems to blow up if it is set private - see bug21489
-    MsgLocationEts = ets:new(?MSG_LOC_NAME,
-                             [set, protected, {keypos, #msg_location.msg_id}]),
+    MsgLocations = ets:new(?MSG_LOC_NAME,
+                           [set, private, {keypos, #msg_location.msg_id}]),
 
     InitFile = 0,
     HandleCache = rabbit_file_handle_cache:init(ReadFileHandlesLimit,
@@ -284,10 +247,8 @@ init(Mode, Dir, FileSizeLimit, ReadFileHandlesLimit,
                           [set, private, {keypos, #file_summary.file}]),
     MessageCache = ets:new(?CACHE_ETS_NAME, [set, private]),
     State =
-        #msstate { operation_mode         = Mode,
-                   dir                    = Dir,
-                   msg_location_dets      = MsgLocationDets,
-                   msg_location_ets       = MsgLocationEts,
+        #msstate { dir                    = Dir,
+                   msg_locations          = MsgLocations,
                    file_summary           = FileSummary,
                    current_file           = InitFile,
                    current_file_handle    = undefined,
@@ -296,8 +257,7 @@ init(Mode, Dir, FileSizeLimit, ReadFileHandlesLimit,
                    file_size_limit        = FileSizeLimit,
                    read_file_handle_cache = HandleCache,
                    last_sync_offset       = 0,
-                   message_cache          = MessageCache,
-                   ets_bytes_per_record   = EtsBytesPerRecord
+                   message_cache          = MessageCache
                   },
 
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
@@ -324,15 +284,14 @@ write(MsgId, Msg, Attrs,
                          current_file        = CurFile,
                          current_offset      = CurOffset,
                          file_summary        = FileSummary }) ->
-    case dets_ets_lookup(State, MsgId) of
-        [] ->
+    case index_lookup(MsgId, State) of
+        not_found ->
             %% New message, lots to do
             {ok, TotalSize} = rabbit_msg_file:append(CurHdl, MsgId, Msg, Attrs),
-            true = dets_ets_insert_new(
-                     State, #msg_location {
-                       msg_id = MsgId, ref_count = 1, file = CurFile,
-                       offset = CurOffset, total_size = TotalSize,
-                       attrs = Attrs }),
+            ok = index_insert(#msg_location {
+                                msg_id = MsgId, ref_count = 1, file = CurFile,
+                                offset = CurOffset, total_size = TotalSize,
+                                attrs = Attrs }, State),
             [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
                                        contiguous_top = ContiguousTop,
                                        right = undefined }] =
@@ -350,23 +309,20 @@ write(MsgId, Msg, Attrs,
             maybe_roll_to_new_file(
               NextOffset, State #msstate {current_offset = NextOffset,
                                           current_dirty = true});
-        [StoreEntry =
-         #msg_location { msg_id = MsgId, ref_count = RefCount }] ->
+        StoreEntry = #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter
-            ok = dets_ets_insert(State, StoreEntry #msg_location {
-                                          ref_count = RefCount + 1 }),
+            ok = index_update(StoreEntry #msg_location {
+                                ref_count = RefCount + 1 }, State),
             State
     end.
 
 read(MsgId, State) ->
-    Objs = dets_ets_lookup(State, MsgId),
-    case Objs of
-        [] ->
-            not_found;
-        [#msg_location { ref_count  = RefCount,
-                         file       = File,
-                         offset     = Offset,
-                         total_size = TotalSize }] ->
+    case index_lookup(MsgId, State) of
+        not_found -> not_found;
+        #msg_location { ref_count  = RefCount,
+                        file       = File,
+                        offset     = Offset,
+                        total_size = TotalSize } ->
             case fetch_and_increment_cache(MsgId, State) of
                 not_found ->
                     {{ok, {MsgId, Msg, _Attrs}}, State1} =
@@ -401,10 +357,9 @@ read(MsgId, State) ->
     end.
 
 attrs(MsgId, State) ->
-    Objs = dets_ets_lookup(State, MsgId),
-    case Objs of
-        [] -> not_found;
-        [#msg_location { msg_id = MsgId, attrs = Attrs }] -> Attrs
+    case index_lookup(MsgId, State) of
+        not_found -> not_found;
+        #msg_location { attrs = Attrs } -> Attrs
     end.
 
 remove(MsgIds, State = #msstate { current_file = CurFile }) ->
@@ -430,9 +385,8 @@ needs_sync(_MsgIds, #msstate { current_dirty = false }) ->
 needs_sync(MsgIds, State = #msstate { current_file     = CurFile,
                                       last_sync_offset = SyncOffset }) ->
     lists:any(fun (MsgId) ->
-                      [#msg_location { msg_id = MsgId, file = File,
-                                       offset = Offset }] =
-                          dets_ets_lookup(State, MsgId),
+                      #msg_location { file = File, offset = Offset } =
+                          index_lookup(MsgId, State),
                       File =:= CurFile andalso Offset >= SyncOffset
               end, MsgIds).
 
@@ -443,9 +397,7 @@ sync(State = #msstate { current_file_handle = CurHdl,
     ok = file:sync(CurHdl),
     State #msstate { current_dirty = false, last_sync_offset = CurOffset }.
 
-cleanup(State = #msstate { dir                    = Dir,
-                           msg_location_dets      = MsgLocationDets,
-                           msg_location_ets       = MsgLocationEts,
+cleanup(State = #msstate { msg_locations          = MsgLocations,
                            file_summary           = FileSummary,
                            current_file_handle    = FileHdl,
                            read_file_handle_cache = HC }) ->
@@ -456,65 +408,14 @@ cleanup(State = #msstate { dir                    = Dir,
                       State2
              end,
     HC1 = rabbit_file_handle_cache:close_all(HC),
-    dets:close(MsgLocationDets),
-    file:delete(msg_location_dets_file(Dir)),
-    ets:delete(MsgLocationEts),
+    ets:delete(MsgLocations),
     ets:delete(FileSummary),
-    State1 #msstate { msg_location_dets      = undefined,
-                      msg_location_ets       = undefined,
+    State1 #msstate { msg_locations          = undefined,
                       file_summary           = undefined,
                       current_file_handle    = undefined,
                       current_dirty          = false,
                       read_file_handle_cache = HC1
                      }.
-
-cache_info(#msstate { message_cache = Cache }) ->
-    ets:info(Cache).
-
-memory(#msstate { operation_mode   = ram_disk,
-                  file_summary     = FileSummary,
-                  msg_location_ets = MsgLocationEts,
-                  message_cache    = Cache }) ->
-    erlang:system_info(wordsize) *
-        lists:sum([ets:info(Table, memory) ||
-                      Table <- [FileSummary, MsgLocationEts, Cache]]);
-memory(#msstate { operation_mode       = disk_only,
-                  file_summary         = FileSummary,
-                  msg_location_dets    = MsgLocationDets,
-                  message_cache        = Cache,
-                  ets_bytes_per_record = EtsBytesPerRecord }) ->
-    erlang:system_info(wordsize) *
-        lists:sum([ets:info(Table, memory) ||
-                      Table <- [FileSummary, Cache]]) +
-        rabbit_misc:ceil(dets:info(MsgLocationDets, size) * EtsBytesPerRecord).
-
-ets_bpr(#msstate { operation_mode = disk_only,
-                   ets_bytes_per_record = EtsBytesPerRecord }) ->
-    EtsBytesPerRecord;
-ets_bpr(#msstate { operation_mode = ram_disk,
-                   msg_location_ets = MsgLocationEts }) ->
-    erlang:system_info(wordsize) * ets:info(MsgLocationEts, memory) /
-        lists:max([1, ets:info(MsgLocationEts, size)]).
-
-to_disk_only_mode(State = #msstate { operation_mode = disk_only }) ->
-    State;
-to_disk_only_mode(State = #msstate { operation_mode = ram_disk,
-                                     msg_location_dets = MsgLocationDets,
-                                     msg_location_ets = MsgLocationEts }) ->
-    ok = dets:from_ets(MsgLocationDets, MsgLocationEts),
-    true = ets:delete_all_objects(MsgLocationEts),
-    State #msstate { operation_mode       = disk_only,
-                     ets_bytes_per_record = ets_bpr(State) }.
-
-to_ram_disk_mode(State = #msstate { operation_mode = ram_disk }) ->
-    State;
-to_ram_disk_mode(State = #msstate { operation_mode = disk_only,
-                                    msg_location_dets = MsgLocationDets,
-                                    msg_location_ets = MsgLocationEts }) ->
-    true = ets:from_dets(MsgLocationEts, MsgLocationDets),
-    ok = dets:delete_all_objects(MsgLocationDets),
-    State #msstate { operation_mode       = ram_disk,
-                     ets_bytes_per_record = undefined }.
 
 %%----------------------------------------------------------------------------
 %% general helper functions
@@ -525,9 +426,6 @@ form_filename(Dir, Name) -> filename:join(Dir, Name).
 filenum_to_name(File) -> integer_to_list(File) ++ ?FILE_EXTENSION.
 
 filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
-
-msg_location_dets_file(Dir) ->
-    form_filename(Dir, atom_to_list(?MSG_LOC_NAME) ++ ?FILE_EXTENSION_DETS).
 
 open_file(Dir, FileName, Mode) ->
     file:open(form_filename(Dir, FileName), ?BINARY_MODE ++ Mode).
@@ -563,13 +461,12 @@ with_read_handle_at(File, Offset, Fun,
     {Result, State1 #msstate { read_file_handle_cache = HC1 }}.
 
 remove_message(MsgId, State = #msstate { file_summary = FileSummary }) ->
-    [StoreEntry =
-     #msg_location { msg_id = MsgId, ref_count = RefCount, file = File,
-                     offset = Offset, total_size = TotalSize }] =
-        dets_ets_lookup(State, MsgId),
+    StoreEntry = #msg_location { ref_count = RefCount, file = File,
+                                 offset = Offset, total_size = TotalSize } =
+        index_lookup(MsgId, State),
     case RefCount of
         1 ->
-            ok = dets_ets_delete(State, MsgId),
+            ok = index_delete(MsgId, State),
             ok = remove_cache_entry(MsgId, State),
             [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
                                        contiguous_top = ContiguousTop }] =
@@ -582,8 +479,8 @@ remove_message(MsgId, State = #msstate { file_summary = FileSummary }) ->
             {compact, File};
         _ when 1 < RefCount ->
             ok = decrement_cache(MsgId, State),
-            ok = dets_ets_insert(State, StoreEntry #msg_location {
-                                          ref_count = RefCount - 1 }),
+            ok = index_update(StoreEntry #msg_location {
+                                ref_count = RefCount - 1 }, State),
             no_compact
     end.
 
@@ -628,52 +525,39 @@ cache_is_full(Cache) ->
     ets:info(Cache, memory) > ?CACHE_MAX_SIZE.
 
 %%----------------------------------------------------------------------------
-%% dets/ets agnosticism
+%% index
 %%----------------------------------------------------------------------------
 
-dets_ets_lookup(#msstate { msg_location_dets = MsgLocationDets,
-                           operation_mode = disk_only }, Key) ->
-    dets:lookup(MsgLocationDets, Key);
-dets_ets_lookup(#msstate { msg_location_ets = MsgLocationEts,
-                           operation_mode = ram_disk }, Key) ->
-    ets:lookup(MsgLocationEts, Key).
+index_lookup(Key, #msstate { msg_locations = MsgLocations }) ->
+    case ets:lookup(MsgLocations, Key) of
+        []      -> not_found;
+        [Entry] -> Entry
+    end.
 
-dets_ets_delete(#msstate { msg_location_dets = MsgLocationDets,
-                           operation_mode = disk_only }, Key) ->
-    ok = dets:delete(MsgLocationDets, Key);
-dets_ets_delete(#msstate { msg_location_ets = MsgLocationEts,
-                           operation_mode = ram_disk }, Key) ->
-    true = ets:delete(MsgLocationEts, Key),
+index_insert(Obj, #msstate { msg_locations = MsgLocations }) ->
+    true = ets:insert_new(MsgLocations, Obj),
     ok.
 
-dets_ets_insert(#msstate { msg_location_dets = MsgLocationDets,
-                           operation_mode = disk_only }, Obj) ->
-    ok = dets:insert(MsgLocationDets, Obj);
-dets_ets_insert(#msstate { msg_location_ets = MsgLocationEts,
-                           operation_mode = ram_disk }, Obj) ->
-    true = ets:insert(MsgLocationEts, Obj),
+index_update(Obj, #msstate { msg_locations = MsgLocations }) ->
+    true = ets:insert(MsgLocations, Obj),
     ok.
 
-dets_ets_insert_new(#msstate { msg_location_dets = MsgLocationDets,
-                               operation_mode = disk_only }, Obj) ->
-    true = dets:insert_new(MsgLocationDets, Obj);
-dets_ets_insert_new(#msstate { msg_location_ets = MsgLocationEts,
-                               operation_mode = ram_disk }, Obj) ->
-    true = ets:insert_new(MsgLocationEts, Obj).
+index_delete(Key, #msstate { msg_locations = MsgLocations }) ->
+    true = ets:delete(MsgLocations, Key),
+    ok.
 
-dets_ets_match_object(#msstate { msg_location_dets = MsgLocationDets,
-                                 operation_mode = disk_only }, Obj) ->
-    dets:match_object(MsgLocationDets, Obj);
-dets_ets_match_object(#msstate { msg_location_ets = MsgLocationEts,
-                                 operation_mode = ram_disk }, Obj) ->
-    ets:match_object(MsgLocationEts, Obj).
+index_search_by_file(File, #msstate { msg_locations = MsgLocations }) ->
+    lists:sort(fun (#msg_location { offset = OffA },
+                    #msg_location { offset = OffB }) ->
+                       OffA < OffB
+               end, ets:match_object(MsgLocations,
+                                     #msg_location { file = File, _ = '_' })).
 
-dets_ets_select_delete(#msstate { msg_location_dets = MsgLocationDets,
-                                  operation_mode = disk_only }, MatchSpec) ->
-    dets:select_delete(MsgLocationDets, MatchSpec);
-dets_ets_select_delete(#msstate { msg_location_ets = MsgLocationEts,
-                                  operation_mode = ram_disk }, MatchSpec) ->
-    ets:select_delete(MsgLocationEts, MatchSpec).
+    
+index_delete_by_file(File, #msstate { msg_locations = MsgLocations }) ->
+    MatchHead = #msg_location { file = File, _ = '_' },
+    ets:select_delete(MsgLocations, [{MatchHead, [], [true]}]),
+    ok.
 
 %%----------------------------------------------------------------------------
 %% recovery
@@ -684,33 +568,27 @@ count_msg_refs(Gen, Seed, State) ->
         finished -> ok;
         {_MsgId, 0, Next} -> count_msg_refs(Gen, Next, State);
         {MsgId, Delta, Next} ->
-            case dets_ets_lookup(State, MsgId) of
-                [] -> true = dets_ets_insert_new(
-                               State, #msg_location { msg_id = MsgId,
-                                                      ref_count = Delta });
-                [StoreEntry = #msg_location { msg_id = MsgId,
-                                              ref_count = RefCount }] ->
+            case index_lookup(MsgId, State) of
+                not_found ->
+                    ok = index_insert(#msg_location { msg_id = MsgId,
+                                                      ref_count = Delta },
+                                      State);
+                StoreEntry = #msg_location { ref_count = RefCount } ->
                     NewRefCount = RefCount + Delta,
                     case NewRefCount of
-                        0 -> ok = dets_ets_delete(State, MsgId);
-                        _ -> ok = dets_ets_insert(
-                                    State, StoreEntry #msg_location {
-                                             ref_count = NewRefCount })
+                        0 -> ok = index_delete(MsgId, State);
+                        _ -> ok = index_update(StoreEntry #msg_location {
+                                                 ref_count = NewRefCount },
+                                               State)
                     end
             end,
             count_msg_refs(Gen, Next, State)
     end.
 
 verify_messages_referenced(State, MsgIds) ->
-    lists:foreach(fun (MsgId) -> [_] = dets_ets_lookup(State, MsgId) end,
-                  MsgIds).
-
-prune_stale_refs(State) ->
-    MatchHead = #msg_location { file = undefined, _ = '_' },
-    case dets_ets_select_delete(State, [{MatchHead, [], [true]}]) of
-        N when is_number(N) -> ok;
-        Other -> Other
-    end.
+    lists:foreach(fun (MsgId) ->
+                          #msg_location {} = index_lookup(MsgId, State)
+                  end, MsgIds).
 
 recover_crashed_compactions(Dir, FileNames, TmpFileNames, State) ->
     lists:foreach(fun (TmpFileName) ->
@@ -865,9 +743,9 @@ load_messages(Files, State) ->
     load_messages(undefined, Files, State).
 
 load_messages(Left, [], State) ->
-    ok = prune_stale_refs(State),
+    ok = index_delete_by_file(undefined, State),
     Offset =
-        case sort_msg_locations_by_offset(desc, Left, State) of
+        case lists:reverse(index_search_by_file(Left, State)) of
             [] -> 0;
             [#msg_location { offset = MaxOffset,
                              total_size = TotalSize } | _] ->
@@ -879,14 +757,13 @@ load_messages(Left, [File|Files],
     {ok, Messages} = scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     {ValidMessages, ValidTotalSize} = lists:foldl(
         fun (Obj = {MsgId, Attrs, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
-                case dets_ets_lookup(State, MsgId) of
-                    [] -> {VMAcc, VTSAcc};
-                    [StoreEntry] ->
-                        ok = dets_ets_insert(
-                               State, StoreEntry #msg_location {
-                                        file = File, offset = Offset,
-                                        total_size = TotalSize,
-                                        attrs = Attrs }),
+                case index_lookup(MsgId, State) of
+                    not_found -> {VMAcc, VTSAcc};
+                    StoreEntry ->
+                        ok = index_update(StoreEntry #msg_location {
+                                            file = File, offset = Offset,
+                                            total_size = TotalSize,
+                                            attrs = Attrs }, State),
                         {[Obj | VMAcc], VTSAcc + TotalSize}
                 end
         end, {[], 0}, Messages),
@@ -1004,17 +881,6 @@ adjust_meta_and_combine(
        true -> {false, State}
     end.
 
-sort_msg_locations_by_offset(Dir, File, State) ->
-    Comp = case Dir of
-               asc  -> fun erlang:'<'/2;
-               desc -> fun erlang:'>'/2
-           end,
-    lists:sort(fun (#msg_location { offset = OffA },
-                    #msg_location { offset = OffB }) ->
-                       Comp(OffA, OffB)
-               end, dets_ets_match_object(
-                      State, #msg_location { file = File, _ = '_' })).
-
 combine_files(#file_summary { file = Source,
                               valid_total_size = SourceValid,
                               left = Destination },
@@ -1055,7 +921,7 @@ combine_files(#file_summary { file = Source,
                           %% that the list should be naturally sorted
                           %% as we require, however, we need to
                           %% enforce it anyway
-                  end, sort_msg_locations_by_offset(asc, Destination, State1)),
+                  end, index_search_by_file(Destination, State1)),
             ok = copy_messages(
                    Worklist, DestinationContiguousTop, DestinationValid,
                    DestinationHdl, TmpHdl, Destination, State1),
@@ -1073,7 +939,7 @@ combine_files(#file_summary { file = Source,
             ok = file:close(TmpHdl),
             ok = file:delete(form_filename(Dir, Tmp))
     end,
-    SourceWorkList = sort_msg_locations_by_offset(asc, Source, State1),
+    SourceWorkList = index_search_by_file(Source, State1),
     ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
                        SourceHdl, DestinationHdl, Destination, State1),
     %% tidy up
@@ -1092,9 +958,9 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                   %% CurOffset is in the DestinationFile.
                   %% Offset, BlockStart and BlockEnd are in the SourceFile
                   %% update MsgLocationDets to reflect change of file and offset
-                  ok = dets_ets_insert(State, StoreEntry #msg_location {
-                                                file = Destination,
-                                                offset = CurOffset }),
+                  ok = index_update(StoreEntry #msg_location {
+                                      file = Destination,
+                                      offset = CurOffset }, State),
                   NextOffset = CurOffset + TotalSize,
                   if BlockStart =:= undefined ->
                           %% base case, called only for the first list elem

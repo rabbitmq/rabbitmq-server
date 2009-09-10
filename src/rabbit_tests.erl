@@ -828,7 +828,6 @@ test_disk_queue() ->
     passed = rdq_test_purge(),
     passed = rdq_test_mixed_queue_modes(),
     passed = rdq_test_mode_conversion_mid_txn(),
-    passed = rdq_test_disk_queue_modes(),
     rdq_virgin(),
     passed.
 
@@ -1266,47 +1265,6 @@ rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) -
     0 = rabbit_mixed_queue:len(MS11),
     passed.
 
-rdq_test_disk_queue_modes() ->
-    rdq_virgin(),
-    rdq_start(),
-    Msg = <<0:(8*256)>>,
-    Total = 1000,
-    Half1 = lists:seq(1,round(Total/2)),
-    Half2 = lists:seq(1 + round(Total/2), Total),
-    CommitHalf1 = commit_list(Half1, round(Total/2)),
-    CommitHalf2 = commit_list(Half2, Total - round(Total/2)),
-    [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- Half1],
-    ok = rabbit_disk_queue:tx_commit(q, CommitHalf1, []),
-    io:format("Publish done~n", []),
-    ok = rabbit_disk_queue:to_disk_only_mode(),
-    io:format("To Disk Only done~n", []),
-    [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- Half2],
-    ok = rabbit_disk_queue:tx_commit(q, CommitHalf2, []),
-    Seqs = [begin
-                Remaining = Total - N,
-                {Message, false, SeqId, Remaining} =
-                    rabbit_disk_queue:fetch(q),
-                ok = rdq_match_message(Message, N, Msg, 256),
-                SeqId
-            end || N <- Half1],
-    io:format("Deliver first half done~n", []),
-    ok = rabbit_disk_queue:to_ram_disk_mode(),
-    io:format("To RAM Disk done~n", []),
-    Seqs2 = [begin
-                 Remaining = Total - N,
-                 {Message, false, SeqId, Remaining} =
-                     rabbit_disk_queue:fetch(q),
-                 ok = rdq_match_message(Message, N, Msg, 256),
-                 SeqId
-             end || N <- Half2],
-    io:format("Deliver second half done~n", []),
-    ok = rabbit_disk_queue:tx_commit(q, [], Seqs),
-    ok = rabbit_disk_queue:to_disk_only_mode(),
-    ok = rabbit_disk_queue:tx_commit(q, [], Seqs2),
-    empty = rabbit_disk_queue:fetch(q),
-    rdq_stop(),
-    passed.
-
 rdq_time_commands(Funcs) ->
     lists:foreach(fun (F) -> F() end, Funcs).
 
@@ -1319,7 +1277,6 @@ rdq_virgin() ->
 
 rdq_start() ->
     {ok, _} = rabbit_disk_queue:start_link(),
-    ok = rabbit_disk_queue:to_ram_disk_mode(),
     ok.
 
 rdq_stop() ->
