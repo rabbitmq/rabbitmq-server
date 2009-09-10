@@ -516,14 +516,24 @@ handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     {noreply, State};
 
 
-%% Handle a trapped exit, e.g. from the direct peer
-%% In the direct case this is the local channel
-%% In the network case this is the process that writes to the socket
-%% on a per channel basis
+%% Handle writer exit
 %% @private
+handle_info({'EXIT', WriterPid, Reason},
+            State = #channel_state{writer_pid = WriterPid}) ->
+    {stop, {writer_died, WriterPid, Reason}, State};
+
+%% This happens when the reader dies and the EXIT signal gets propagated to
+%% the channel through both channel framing and connection. This EXIT is
+%% expected to be from the framing channel. So don't do anything and wait for
+%% the connection's exit, which contains the correct reason.
+%% TODO match the Pid with the framing channel's pid
+%% @private
+handle_info({'EXIT', _Pid, socket_closed}, State) ->
+    {noreply, State};
+
 handle_info({'EXIT', _Pid, Reason},
             State = #channel_state{number = Number}) ->
-    {stop, {server_initiated_close, Number, Reason}, State};
+    {stop, {unexpected_exit, Number, Reason}, State};
 
 %% This is for a channel exception that is sent by the direct
 %% rabbit_channel process - in this case this process needs to tell
