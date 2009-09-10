@@ -51,6 +51,9 @@
                            heartbeat,
                            driver,
                            port,
+                           closing = false,
+                           close_reason,
+                           channels = dict:new(),
                            ssl_options}).
 
 -record(channel_state, {number,

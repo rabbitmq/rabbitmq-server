@@ -79,7 +79,8 @@ nowait_exchange_declare_test(Connection) ->
       amqp_channel:call(Channel,
                         #'exchange.declare'{exchange = X,
                                             type = <<"topic">>,
-                                            nowait = true })).
+                                            nowait = true })),
+    teardown(Connection, Channel).
 
 queue_exchange_binding(Channel, X, Parent, Tag) ->
     receive
@@ -277,7 +278,9 @@ basic_qos_test(Con) ->
     [NoQos, Qos] = [basic_qos_test(Con, Prefetch) || Prefetch <- [0,1]],
     ExpectedRatio = (1+1) / (1+50/5),
     FudgeFactor = 2, %% account for timing variations
-    ?assertMatch(true, Qos / NoQos < ExpectedRatio * FudgeFactor).
+    ?assertMatch(true, Qos / NoQos < ExpectedRatio * FudgeFactor),
+    amqp_connection:close(Con),
+    test_util:wait_for_death(Con).
 
 basic_qos_test(Connection, Prefetch) ->
     Messages = 100,
@@ -304,6 +307,7 @@ basic_qos_test(Connection, Prefetch) ->
     [Kid ! stop || Kid <- Kids],
     latch_loop(length(Kids)),
     amqp_channel:close(Chan),
+    test_util:wait_for_death(Chan),
     Res.
 
 sleeping_consumer(Channel, Sleep, Parent) ->
@@ -327,10 +331,12 @@ sleeping_consumer(Channel, Sleep, Parent) ->
 do_stop(Channel, Parent) ->
     Parent ! finished,
     amqp_channel:close(Channel),
+    test_util:wait_for_death(Channel),
     exit(normal).
 
 producer_loop(Channel, _RoutingKey, 0) ->
     amqp_channel:close(Channel),
+    test_util:wait_for_death(Channel),
     ok;
 
 producer_loop(Channel, RoutingKey, N) ->
@@ -557,6 +563,8 @@ rpc_test(Connection) ->
     ?assertMatch(Expected, DecodedReply),
     amqp_rpc_client:stop(Client),
     amqp_rpc_server:stop(Server),
+    amqp_connection:close(Connection),
+    test_util:wait_for_death(Connection),
     ok.
 
 %%---------------------------------------------------------------------------
@@ -581,7 +589,9 @@ setup_publish(Channel, #publish{routing_key = RoutingKey,
 
 teardown(Connection, Channel) ->
     amqp_channel:close(Channel),
-    amqp_connection:close(Connection).
+    wait_for_death(Channel),
+    amqp_connection:close(Connection),
+    wait_for_death(Connection).
 
 teardown_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
@@ -600,6 +610,12 @@ setup_exchange(Channel, Q, X, Binding) ->
                           routing_key = Binding},
     amqp_channel:call(Channel, Route),
     ok.
+
+wait_for_death(Pid) ->
+    Ref = erlang:monitor(process, Pid),
+    receive {'DOWN', Ref, process, Pid, _Reason} -> ok
+    after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
+    end.
 
 latch_loop(0) ->
     ok;
