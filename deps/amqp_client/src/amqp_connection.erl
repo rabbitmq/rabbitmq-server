@@ -36,7 +36,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
--export([open_channel/1, open_channel/3]).
+-export([open_channel/1, open_channel/2]).
 -export([start_direct/0, start_direct/1, start_direct_link/0, start_direct_link/1]).
 -export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
 -export([close/1, close/3]).
@@ -167,20 +167,18 @@ start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
 %% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;). 
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
-    open_channel(ConnectionPid, none, <<>>).
+    open_channel(ConnectionPid, none).
 
-%% @spec (ConnectionPid, ChannelNumber, OutOfBand) -> ChannelPid
+%% @spec (ConnectionPid, ChannelNumber) -> ChannelPid
 %% where
 %%      ChannelNumber = integer()
-%%      OutOfBand = binary()
 %%      ConnectionPid = pid()
 %%      ChannelPid = pid()
 %% @doc Opens an AMQP channel.
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
-open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
-    gen_server:call(ConnectionPid,
-                    {open_channel, ChannelNumber, OutOfBand}, infinity).
+open_channel(ConnectionPid, ChannelNumber) ->
+    gen_server:call(ConnectionPid, {open_channel, ChannelNumber}, infinity).
 
 %% @spec (ConnectionPid) -> ok
 %% where
@@ -211,31 +209,18 @@ close(ConnectionPid, Code, Text) ->
 %% Starts a new channel process, invokes the correct driver
 %% (network or direct) to perform any environment specific channel setup and
 %% starts the AMQP ChannelOpen handshake.
-handle_open_channel({ChannelNumber, OutOfBand},
-                    #connection_state{driver = Driver} = State) ->
-    {ChannelPid, Number, NewState} = start_channel(ChannelNumber, State),
-    Driver:open_channel({Number, OutOfBand}, ChannelPid, NewState),
+handle_open_channel(ProposedNumber,
+                    ConnectionState = #connection_state{driver = Driver}) ->
+    ChannelNumber = assign_channel_number(ProposedNumber, ConnectionState),
+    ChannelState = #channel_state{parent_connection = self(),
+                                  number = ChannelNumber,
+                                  driver = Driver},
+    {ok, ChannelPid} =
+        gen_server:start_link(amqp_channel, {ChannelState, ConnectionState}, []),
+    NewConnectionState =
+        register_channel(ChannelNumber, ChannelPid, ConnectionState),
     #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
-    {reply, ChannelPid, NewState}.
-
-%% Creates a new channel process
-start_channel(ChannelNumber,
-              State = #connection_state{driver = Driver,
-                                        reader_pid = ReaderPid,
-                                        channel0_writer_pid = WriterPid}) ->
-    ChannelState =
-        #channel_state{
-            parent_connection = self(),
-            number = Number   = assign_channel_number(ChannelNumber, State),
-            close_fun         = fun(X)       -> Driver:close_channel(X) end,
-            do2               = fun(X, Y)    -> Driver:do(X, Y) end,
-            do3               = fun(X, Y, Z) -> Driver:do(X, Y, Z) end,
-            reader_pid        = ReaderPid,
-            writer_pid        = WriterPid},
-    {ok, ChannelPid} = gen_server:start_link(amqp_channel,
-                                             [ChannelState], []),
-    NewState = register_channel(Number, ChannelPid, State),
-    {ChannelPid, Number, NewState}.
+    {reply, ChannelPid, NewConnectionState}.
 
 assign_channel_number(none, #connection_state{channels = Channels,
                                               channel_max = Max}) ->
@@ -300,8 +285,8 @@ init([InitialState, Driver]) when is_atom(Driver) ->
 
 %% @private
 %% Starts a new channel
-handle_call({open_channel, ChannelNumber, OutOfBand}, _From, State) ->
-    handle_open_channel({ChannelNumber, OutOfBand}, State);
+handle_call({open_channel, ChannelNumber}, _From, State) ->
+    handle_open_channel(ChannelNumber, State);
 
 %% @private
 %% Shuts the AMQP connection down

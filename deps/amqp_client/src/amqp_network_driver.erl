@@ -30,7 +30,7 @@
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0},{active,false}, {nodelay, true}]).
 
--export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
+-export([handshake/1, open_channel/2, close_channel/2, close_connection/3]).
 -export([start_reader/2, start_writer/2]).
 -export([do/2, do/3]).
 -export([handle_broker_close/1]).
@@ -79,15 +79,15 @@ handshake(State = #connection_state{serverhost = Host, port = Port,
 %% because this will be parsed out of the frames received off the socket.
 %% Hence, you have tell the singelton reader which Pids are intended to
 %% process messages for a particular channel
-open_channel({ChannelNumber, _OutOfBand}, ChannelPid,
-             #connection_state{reader_pid = ReaderPid,
-                               sock = Sock}) ->
-    ReaderPid ! {ChannelPid, ChannelNumber},
+open_channel(ChannelState = #channel_state{number = ChannelNumber},
+             #connection_state{main_reader_pid = MainReaderPid, sock = Sock}) ->
+    MainReaderPid ! {self(), ChannelNumber},
     WriterPid = start_writer(Sock, ChannelNumber),
-    amqp_channel:register_direct_peer(ChannelPid, WriterPid ).
+    ChannelState#channel_state{writer_pid = WriterPid}.
 
-close_channel(WriterPid) ->
-    rabbit_writer:shutdown(WriterPid).
+close_channel(_Reason, #channel_state{writer_pid = WriterPid}) ->
+    rabbit_writer:shutdown(WriterPid),
+    ok.
 
 %% This closes the writer down, waits for the confirmation from
 %% the channel and then returns the ack to the user
@@ -117,10 +117,10 @@ receive_writer_send_command_signal(Writer) ->
     end.
 
 handle_broker_close(#connection_state{channel0_writer_pid = Writer,
-                                      reader_pid          = Reader}) ->
+                                      main_reader_pid     = MainReader}) ->
     do(Writer, #'connection.close_ok'{}),
     rabbit_writer:shutdown(Writer),
-    erlang:send_after(?SOCKET_CLOSING_TIMEOUT, Reader, close).
+    erlang:send_after(?SOCKET_CLOSING_TIMEOUT, MainReader, close).
 
 %---------------------------------------------------------------------------
 % AMQP message sending and receiving
@@ -130,11 +130,11 @@ send_frame(Channel, Frame) ->
     ChPid = resolve_receiver(Channel),
     rabbit_framing_channel:process(ChPid, Frame).
 
-recv(#connection_state{reader_pid = ReaderPid}) ->
+recv(#connection_state{main_reader_pid = MainReaderPid}) ->
     receive
         {'$gen_cast', {method, Method, _Content}} ->
             Method;
-        {'EXIT', ReaderPid, Reason} ->
+        {'EXIT', MainReaderPid, Reason} ->
             exit({reader_exited, Reason})
     after ?HANDSHAKE_RECEIVE_TIMEOUT ->
         exit(awaiting_response_from_server_timed_out)
@@ -276,12 +276,12 @@ do_handshake(Sock, State) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
     Parent = self(),
     FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
-    ReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
+    MainReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
     WriterPid = start_writer(Sock, 0),
     State1 = State#connection_state{channel0_writer_pid = WriterPid,
-                                    reader_pid = ReaderPid,
+                                    main_reader_pid = MainReaderPid,
                                     sock = Sock},
     State2 = network_handshake(WriterPid, State1),
     #connection_state{heartbeat = Heartbeat} = State2,
-    ReaderPid ! {heartbeat, Heartbeat},
+    MainReaderPid ! {heartbeat, Heartbeat},
     State2.
