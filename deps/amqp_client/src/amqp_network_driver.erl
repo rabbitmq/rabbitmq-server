@@ -127,8 +127,8 @@ handle_broker_close(#connection_state{channel0_writer_pid = Writer,
 %---------------------------------------------------------------------------
 
 send_frame(Channel, Frame) ->
-    ChPid = resolve_receiver(Channel),
-    rabbit_framing_channel:process(ChPid, Frame).
+    {framing_channel_pid, FramingPid} = resolve_framing_channel({channel, Channel}),
+    rabbit_framing_channel:process(FramingPid, Frame).
 
 recv(#connection_state{main_reader_pid = MainReaderPid}) ->
     receive
@@ -192,7 +192,7 @@ start_ok(#connection_state{username = Username, password = Password}) ->
 
 start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
-    put({channel, 0},{chpid, FramingPid}),
+    register_framing_channel(0, FramingPid),
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
     ok = reader_loop(Sock, undefined, undefined, undefined),
     rabbit_net:close(Sock).
@@ -232,9 +232,15 @@ reader_loop(Sock, Type, Channel, Length) ->
             ?LOG_WARN("Reader (~p) received close command, "
                       "exiting ~n", [self()]),
             ok;
-        {'EXIT', Pid, _Reason} ->
-            [H|_] = get_keys({chpid, Pid}),
-            erase(H),
+        {'EXIT', Pid, Reason} ->
+            case unregister_framing_channel({framing_channel_pid, Pid}) of
+                {channel, _} ->
+                    ok;
+                undefined ->
+                    ?LOG_WARN("Reader received unexpected exit signal from "
+                              "(~p). Reason: ~p~n", [Pid, Reason]),
+                     exit({unexpected_exit_signal, Pid, Reason})
+            end,
             reader_loop(Sock, Type, Channel, Length);
         Other ->
             ?LOG_WARN("Unknown message type: ~p~n", [Other]),
@@ -242,9 +248,9 @@ reader_loop(Sock, Type, Channel, Length) ->
     end.
 
 start_framing_channel(ChannelPid, ChannelNumber) ->
-    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end,
+    FramingPid = rabbit_framing_channel:start_link(fun(X) -> link(X), X end,
                                                    [ChannelPid]),
-    put({channel, ChannelNumber}, {chpid, FramingPid}).
+    register_framing_channel(ChannelNumber, FramingPid).
 
 handle_frame(Type, Channel, Payload) ->
     case rabbit_reader:analyze_frame(Type, Payload) of
@@ -264,13 +270,23 @@ handle_frame(Type, Channel, Payload) ->
             send_frame(Channel, AnalyzedFrame)
     end.
 
-resolve_receiver(Channel) ->
-   case get({channel, Channel}) of
-       {chpid, ChPid} ->
-           ChPid;
-       undefined ->
-            exit(unknown_channel)
-   end.
+register_framing_channel(ChannelNumber, FramingPid) ->
+    put({channel, ChannelNumber}, {framing_channel_pid, FramingPid}),
+    put({framing_channel_pid, FramingPid}, {channel, ChannelNumber}).
+
+%% Unregister framing channel by passing either {channel, ChannelNumber} or
+%% {framing_channel_pid, FramingPid}
+unregister_framing_channel(Channel) ->
+    case erase(Channel) of
+        Val = {channel, _}             -> erase(Val), Val;
+        Val = {framing_channel_pid, _} -> erase(Val), Val;
+        undefined                      -> undefined
+    end.
+
+%% Resolve framing channel by passing either {channel, ChannelNumber} or
+%% {framing_channel_pid, FramingPid}
+resolve_framing_channel(Channel) ->
+    get(Channel).
 
 do_handshake(Sock, State) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
