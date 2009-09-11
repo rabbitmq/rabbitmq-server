@@ -223,6 +223,8 @@ handle_open_channel(ProposedNumber,
     {reply, ChannelPid, NewConnectionState}.
 
 assign_channel_number(none, #connection_state{channels = Channels}) ->
+    %% TODO Implement support for channel_max from 'connection.tune'
+    %% TODO Make it possible for channel numbers to be reused properly
     lists:foldl(
         fun
             ({channel, N},  Max) when Max >= N -> Max;

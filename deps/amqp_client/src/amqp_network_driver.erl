@@ -87,22 +87,27 @@ open_channel(ChannelState = #channel_state{number = ChannelNumber},
     link(WriterPid),
     ChannelState#channel_state{writer_pid = WriterPid, reader_pid = FramingPid}.
 
-close_channel(_Reason, #channel_state{writer_pid = WriterPid}) ->
+close_channel(_Reason, #channel_state{writer_pid = WriterPid,
+                                      reader_pid = FramingPid}) ->
     rabbit_writer:shutdown(WriterPid),
+    rabbit_framing_channel:shutdown(FramingPid),
     ok.
 
 %% This closes the writer down, waits for the confirmation from
 %% the channel and then returns the ack to the user
 close_connection(Close = #'connection.close'{}, From,
-                 #connection_state{channel0_writer_pid = Writer}) ->
-    do(Writer, Close),
-    rabbit_writer:shutdown(Writer),
+                 #connection_state{channel0_writer_pid = WriterPid,
+                                   channel0_reader_pid = FramingPid}) ->
+    do(WriterPid, Close),
+    rabbit_writer:shutdown(WriterPid),
     receive
         {'$gen_cast', {method, {'connection.close_ok'}, none }} ->
             gen_server:reply(From, #'connection.close_ok'{})
     after
         ?CLIENT_CLOSE_TIMEOUT -> exit(timeout_on_exit)
-    end.
+    end,
+    rabbit_framing_channel:shutdown(FramingPid),
+    ok.
 
 do(Writer, Method) ->
     rabbit_writer:send_command_and_signal_back(Writer, Method, self()),
