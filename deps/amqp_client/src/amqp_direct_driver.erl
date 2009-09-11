@@ -53,7 +53,6 @@ open_channel(ChannelState = #channel_state{number = ChannelNumber},
              #connection_state{username = User, vhostpath = VHost}) ->
     Peer = rabbit_channel:start_link(ChannelNumber, self(), self(),
                                      User, VHost),
-    link(Peer),
     ChannelState#channel_state{reader_pid = Peer,
                                writer_pid = Peer}.
 
