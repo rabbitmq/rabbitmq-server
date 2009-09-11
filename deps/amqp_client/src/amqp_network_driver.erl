@@ -81,9 +81,11 @@ handshake(State = #connection_state{serverhost = Host, port = Port,
 %% process messages for a particular channel
 open_channel(ChannelState = #channel_state{number = ChannelNumber},
              #connection_state{main_reader_pid = MainReaderPid, sock = Sock}) ->
-    MainReaderPid ! {self(), ChannelNumber},
+    FramingPid = start_framing_channel(),
+    MainReaderPid ! {register_framing_channel, ChannelNumber, FramingPid},
     WriterPid = start_writer(Sock, ChannelNumber),
-    ChannelState#channel_state{writer_pid = WriterPid}.
+    link(WriterPid),
+    ChannelState#channel_state{writer_pid = WriterPid, reader_pid = FramingPid}.
 
 close_channel(_Reason, #channel_state{writer_pid = WriterPid}) ->
     rabbit_writer:shutdown(WriterPid),
@@ -127,7 +129,7 @@ handle_broker_close(#connection_state{channel0_writer_pid = Writer,
 %---------------------------------------------------------------------------
 
 send_frame(Channel, Frame) ->
-    {framing_channel_pid, FramingPid} = resolve_framing_channel({channel, Channel}),
+    {framing_pid, FramingPid} = resolve_framing_channel({channel, Channel}),
     rabbit_framing_channel:process(FramingPid, Frame).
 
 recv(#connection_state{main_reader_pid = MainReaderPid}) ->
@@ -143,6 +145,20 @@ recv(#connection_state{main_reader_pid = MainReaderPid}) ->
 %---------------------------------------------------------------------------
 % Internal plumbing
 %---------------------------------------------------------------------------
+
+do_handshake(Sock, State) ->
+    ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
+    FramingPid = start_framing_channel(),
+    MainReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
+    WriterPid = start_writer(Sock, 0),
+    State1 = State#connection_state{channel0_writer_pid = WriterPid,
+                                    channel0_reader_pid = FramingPid,
+                                    main_reader_pid = MainReaderPid,
+                                    sock = Sock},
+    State2 = network_handshake(WriterPid, State1),
+    #connection_state{heartbeat = Heartbeat} = State2,
+    MainReaderPid ! {heartbeat, Heartbeat},
+    State2.
 
 network_handshake(Writer,
                   State = #connection_state{vhostpath = VHostPath}) ->
@@ -190,17 +206,17 @@ start_ok(#connection_state{username = Username, password = Password}) ->
            mechanism = <<"AMQPLAIN">>,
            response = rabbit_binary_generator:generate_table(LoginTable)}.
 
+start_writer(Sock, Channel) ->
+    rabbit_writer:start_link(Sock, Channel, ?FRAME_MIN_SIZE).
+
 start_reader(Sock, FramingPid) ->
     process_flag(trap_exit, true),
     register_framing_channel(0, FramingPid),
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
-    ok = reader_loop(Sock, undefined, undefined, undefined),
+    ok = main_reader_loop(Sock, undefined, undefined, undefined),
     rabbit_net:close(Sock).
 
-start_writer(Sock, Channel) ->
-    rabbit_writer:start_link(Sock, Channel, ?FRAME_MIN_SIZE).
-
-reader_loop(Sock, Type, Channel, Length) ->
+main_reader_loop(Sock, Type, Channel, Length) ->
     receive
         {inet_async, Sock, _, {ok, <<Payload:Length/binary, ?FRAME_END>>} } ->
             case handle_frame(Type, Channel, Payload) of
@@ -208,11 +224,11 @@ reader_loop(Sock, Type, Channel, Length) ->
                     ok;
                 _ ->
                     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
-                    reader_loop(Sock, undefined, undefined, undefined)
+                    main_reader_loop(Sock, undefined, undefined, undefined)
             end;
         {inet_async, Sock, _, {ok, <<NewType:8,NewChannel:16,NewLength:32>>}} ->
             {ok, _Ref} = rabbit_net:async_recv(Sock, NewLength + 1, infinity),
-            reader_loop(Sock, NewType, NewChannel, NewLength);
+            main_reader_loop(Sock, NewType, NewChannel, NewLength);
         {inet_async, Sock, _Ref, {error, closed}} ->
             exit(socket_closed);
         {inet_async, Sock, _Ref, {error, Reason}} ->
@@ -220,10 +236,10 @@ reader_loop(Sock, Type, Channel, Length) ->
             exit({socket_error, Reason});
         {heartbeat, Heartbeat} ->
             rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
-            reader_loop(Sock, Type, Channel, Length);
-        {ChannelPid, ChannelNumber} ->
-            start_framing_channel(ChannelPid, ChannelNumber),
-            reader_loop(Sock, Type, Channel, Length);
+            main_reader_loop(Sock, Type, Channel, Length);
+        {register_framing_channel, ChannelNumber, FramingPid} ->
+            register_framing_channel(ChannelNumber, FramingPid),
+            main_reader_loop(Sock, Type, Channel, Length);
         timeout ->
             ?LOG_WARN("Reader (~p) received timeout from heartbeat, "
                       "exiting ~n", [self()]),
@@ -232,25 +248,24 @@ reader_loop(Sock, Type, Channel, Length) ->
             ?LOG_WARN("Reader (~p) received close command, "
                       "exiting ~n", [self()]),
             ok;
-        {'EXIT', Pid, Reason} ->
-            case unregister_framing_channel({framing_channel_pid, Pid}) of
+        {'DOWN', _MonitorRef, process, Pid, Info} ->
+            case unregister_framing_channel({framing_pid, Pid}) of
                 {channel, _} ->
                     ok;
                 undefined ->
-                    ?LOG_WARN("Reader received unexpected exit signal from "
-                              "(~p). Reason: ~p~n", [Pid, Reason]),
-                     exit({unexpected_exit_signal, Pid, Reason})
+                    ?LOG_WARN("Reader received unexpected DOWN signal from "
+                              "(~p). Info: ~p~n", [Pid, Info]),
+                    exit({unexpected_down_signal, Pid, Info})
             end,
-            reader_loop(Sock, Type, Channel, Length);
+            main_reader_loop(Sock, Type, Channel, Length);
+        {'EXIT', Pid, Reason} ->
+            ?LOG_WARN("Reader received unexpected exit signal from "
+                      "(~p). Reason: ~p~n", [Pid, Reason]),
+            exit({unexpected_exit_signal, Pid, Reason});
         Other ->
             ?LOG_WARN("Unknown message type: ~p~n", [Other]),
             exit({unknown_message_type, Other})
     end.
-
-start_framing_channel(ChannelPid, ChannelNumber) ->
-    FramingPid = rabbit_framing_channel:start_link(fun(X) -> link(X), X end,
-                                                   [ChannelPid]),
-    register_framing_channel(ChannelNumber, FramingPid).
 
 handle_frame(Type, Channel, Payload) ->
     case rabbit_reader:analyze_frame(Type, Payload) of
@@ -270,34 +285,24 @@ handle_frame(Type, Channel, Payload) ->
             send_frame(Channel, AnalyzedFrame)
     end.
 
+start_framing_channel() ->
+    rabbit_framing_channel:start_link(fun(X) -> link(X), X end, [self()]).
+
 register_framing_channel(ChannelNumber, FramingPid) ->
-    put({channel, ChannelNumber}, {framing_channel_pid, FramingPid}),
-    put({framing_channel_pid, FramingPid}, {channel, ChannelNumber}).
+    put({channel, ChannelNumber}, {framing_pid, FramingPid}),
+    put({framing_pid, FramingPid}, {channel, ChannelNumber}),
+    erlang:monitor(process, FramingPid).
 
 %% Unregister framing channel by passing either {channel, ChannelNumber} or
-%% {framing_channel_pid, FramingPid}
+%% {framing_pid, FramingPid}
 unregister_framing_channel(Channel) ->
     case erase(Channel) of
-        Val = {channel, _}             -> erase(Val), Val;
-        Val = {framing_channel_pid, _} -> erase(Val), Val;
-        undefined                      -> undefined
+        Val = {channel, _}     -> erase(Val), Val;
+        Val = {framing_pid, _} -> erase(Val), Val;
+        undefined              -> undefined
     end.
 
 %% Resolve framing channel by passing either {channel, ChannelNumber} or
-%% {framing_channel_pid, FramingPid}
+%% {framing_pid, FramingPid}
 resolve_framing_channel(Channel) ->
     get(Channel).
-
-do_handshake(Sock, State) ->
-    ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
-    Parent = self(),
-    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [Parent]),
-    MainReaderPid = spawn_link(?MODULE, start_reader, [Sock, FramingPid]),
-    WriterPid = start_writer(Sock, 0),
-    State1 = State#connection_state{channel0_writer_pid = WriterPid,
-                                    main_reader_pid = MainReaderPid,
-                                    sock = Sock},
-    State2 = network_handshake(WriterPid, State1),
-    #connection_state{heartbeat = Heartbeat} = State2,
-    MainReaderPid ! {heartbeat, Heartbeat},
-    State2.

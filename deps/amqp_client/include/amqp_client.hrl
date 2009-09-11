@@ -45,6 +45,7 @@
                            vhostpath,
                            main_reader_pid,
                            channel0_writer_pid,
+                           channel0_reader_pid,
                            channel_max,
                            heartbeat,
                            driver,
