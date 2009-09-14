@@ -42,7 +42,7 @@ AMQP_SPEC_JSON_PATH=$(AMQP_CODEGEN_DIR)/amqp-0.8.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
-ERL_RABBIT_DIALYZER=erl -noinput -eval "code:load_abs(\"$(EBIN_DIR)/rabbit_dialyzer\")."
+ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
 all: $(TARGETS)
 
@@ -71,7 +71,7 @@ create-plt: $(PLT)
 
 $(PLT): $(BEAM_TARGETS) $(BASIC_PLT)
 	test -f $@ -a $(BASIC_PLT) -ot $@ || cp $(BASIC_PLT) $@
-	$(ERL_RABBIT_DIALYZER) -eval \
+	$(ERL_EBIN) -eval \
 	    "rabbit_dialyzer:update_plt(\"$@\", \"$(BEAM_TARGETS)\"), halt()."
 
 .last_valid_dialysis: $(BEAM_TARGETS) $(PLT)
@@ -80,13 +80,13 @@ $(PLT): $(BEAM_TARGETS) $(BASIC_PLT)
 	else \
 	    DIALYZER_INPUT_FILES="$(BEAM_TARGETS)"; \
 	fi; \
-	$(ERL_RABBIT_DIALYZER) -eval \
+	$(ERL_EBIN) -eval \
 	    "rabbit_dialyzer:dialyze_files(\"$(PLT)\", \"$$DIALYZER_INPUT_FILES\"), halt()." && \
 	touch $@
 
 $(BASIC_PLT):
-	$(MAKE) $(EBIN_DIR)/rabbit_dialyzer.beam
-	$(ERL_RABBIT_DIALYZER) -eval \
+	$(MAKE) all
+	$(ERL_EBIN) -eval \
 	    "rabbit_dialyzer:create_basic_plt(\"$@\"), halt()."
 
 clean:
