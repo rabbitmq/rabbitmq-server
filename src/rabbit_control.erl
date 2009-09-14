@@ -271,7 +271,7 @@ action(list_bindings, Node, Args, Inform) ->
 action(list_connections, Node, Args, Inform) ->
     Inform("Listing connections", []),
     ArgAtoms = list_replace(node, pid, 
-                            default_if_empty(Args, [user, peer_address, peer_port])),
+                            default_if_empty(Args, [user, peer_address, peer_port, state])),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
@@ -330,14 +330,14 @@ format_info_item(Items, Key) ->
     case Info of
         {_, #resource{name = Name}} ->
             escape(Name);
-        {_, '$none'} ->
-            "(none)";
         _ when Key =:= address; Key =:= peer_address andalso is_tuple(Value) ->
             inet_parse:ntoa(Value);
         _ when is_pid(Value) ->
             atom_to_list(node(Value));
         _ when is_binary(Value) -> 
             escape(Value);
+        _ when is_atom(Value) ->
+            io_lib:format("~s", [Value]);
         _ -> 
             io_lib:format("~w", [Value])
     end.

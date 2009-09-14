@@ -703,7 +703,7 @@ i(channels, #v1{}) ->
 i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
     Username;
 i(user, #v1{connection = #connection{user = none}}) ->
-    '$none';
+    '';
 i(vhost, #v1{connection = #connection{vhost = VHost}}) ->
     VHost;
 i(timeout, #v1{connection = #connection{timeout_sec = Timeout}}) ->
