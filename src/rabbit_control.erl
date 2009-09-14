@@ -330,6 +330,8 @@ format_info_item(Items, Key) ->
     case Info of
         {_, #resource{name = Name}} ->
             escape(Name);
+        {_, '$none'} ->
+            "(none)";
         _ when Key =:= address; Key =:= peer_address andalso is_tuple(Value) ->
             inet_parse:ntoa(Value);
         _ when is_pid(Value) ->
