@@ -70,7 +70,7 @@ dialyze: .last_valid_dialysis
 create-plt: $(PLT)
 
 $(PLT): $(BEAM_TARGETS) $(BASIC_PLT)
-	test -f $@ -a $(BASIC_PLT) -ot $@ || cp $(BASIC_PLT) $@
+	test -f $@ || cp $(BASIC_PLT) $@
 	$(ERL_EBIN) -eval \
 	    "rabbit_dialyzer:update_plt(\"$@\", \"$(BEAM_TARGETS)\"), halt()."
 
@@ -84,10 +84,13 @@ $(PLT): $(BEAM_TARGETS) $(BASIC_PLT)
 	    "rabbit_dialyzer:dialyze_files(\"$(PLT)\", \"$$DIALYZER_INPUT_FILES\"), halt()." && \
 	touch $@
 
-$(BASIC_PLT):
-	$(MAKE) all
-	$(ERL_EBIN) -eval \
-	    "rabbit_dialyzer:create_basic_plt(\"$@\"), halt()."
+$(BASIC_PLT): $(BEAM_TARGETS)
+	if [ -f $@ ]; then \
+	    touch $@; \
+	else \
+	    $(ERL_EBIN) -eval \
+	        "rabbit_dialyzer:create_basic_plt(\"$@\"), halt()."; \
+	fi
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
