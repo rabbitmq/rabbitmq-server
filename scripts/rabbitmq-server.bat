@@ -127,10 +127,10 @@ if exist "%RABBITMQ_EBIN_ROOT%\rabbit.boot" (
 -sasl sasl_error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%-sasl.log"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
--os_mon start_memsup false ^
+-os_mon start_memsup true ^
 -os_mon start_os_sup false ^
--os_mon memsup_system_only true ^
--os_mon system_memory_high_watermark 0.95 ^
+-os_mon memsup_system_only false ^
+-os_mon system_memory_high_watermark 1.0 ^
 -mnesia dir \""%RABBITMQ_MNESIA_DIR%"\" ^
 %CLUSTER_CONFIG% ^
 %RABBITMQ_SERVER_START_ARGS% ^

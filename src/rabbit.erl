@@ -136,8 +136,12 @@ start(normal, []) ->
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
 
-                {ok, MemoryAlarms} = application:get_env(memory_alarms),
-                ok = rabbit_alarm:start(MemoryAlarms),
+                ok = rabbit_alarm:start(),
+                case application:get_env(memory_high_watermark) of
+                    {ok, false} -> ok;
+                    {ok, off} -> ok;
+                    {ok, Float} -> start_child(rabbit_memguard, [Float])
+                end,
                 
                 ok = rabbit_amqqueue:start(),
 
@@ -251,6 +255,13 @@ start_child(Mod) ->
                                     {Mod, {Mod, start_link, []},
                                      transient, 100, worker, [Mod]}),
     ok.
+
+start_child(Mod, Args) ->
+    {ok,_} = supervisor:start_child(rabbit_sup,
+                                    {Mod, {Mod, start_link, Args},
+                                     transient, 100, worker, [Mod]}),
+    ok.
+
 
 ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),

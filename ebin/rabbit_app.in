@@ -22,4 +22,4 @@
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},
          {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-         {memory_alarms, auto}]}]}.
+         {memory_high_watermark, 0.85}]}]}.
