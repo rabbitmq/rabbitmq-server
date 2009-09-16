@@ -114,12 +114,13 @@ action(status, [], RpcTimeout) ->
     io:format("Status of all running nodes...~n", []),
     call_all_nodes(
       fun({Node, Pid}) ->
-              Status = rpc:call(Node, rabbit, status, [], RpcTimeout),
+              RabbitRunning =
+                  case is_rabbit_running(Node, RpcTimeout) of
+                      false -> not_running;
+                      true  -> running
+                  end,
               io:format("Node '~p' with Pid ~p: ~p~n",
-                        [Node, Pid, case parse_status(Status) of
-                                        false -> not_running;
-                                        true  -> running
-                                    end])
+                        [Node, Pid, RabbitRunning])
       end);
 
 action(stop_all, [], RpcTimeout) ->
@@ -197,7 +198,7 @@ start_node(NodeName, NodePort, RpcTimeout) ->
 wait_for_rabbit_to_start(_ , RpcTimeout, _) when RpcTimeout < 0 ->
     false;
 wait_for_rabbit_to_start(Node, RpcTimeout, Port) ->
-    case parse_status(rpc:call(Node, rabbit, status, [])) of
+    case is_rabbit_running(Node, RpcTimeout) of
         true  -> true;
         false -> receive
                      {'EXIT', Port, PosixCode} ->
@@ -211,22 +212,24 @@ wait_for_rabbit_to_start(Node, RpcTimeout, Port) ->
 run_cmd(FullPath) ->
     erlang:open_port({spawn, FullPath}, [nouse_stdio]).
 
-parse_status({badrpc, _}) ->
-    false;
-
-parse_status(Status) ->
-    case lists:keysearch(running_applications, 1, Status) of
-        {value, {running_applications, Apps}} ->
-            lists:keymember(rabbit, 1, Apps);
-        _ ->
-            false
+is_rabbit_running(Node, RpcTimeout) ->
+    case rpc:call(Node, rabbit, status, [], RpcTimeout) of
+        {badrpc, _} ->
+            false;
+        Status ->
+            case proplists:lookup(running_applications, Status) of
+                {running_applications, Apps} ->
+                    proplists:is_defined(rabbit, Apps);
+                none ->
+                    false
+            end
     end.
 
 with_os(Handlers) ->
     {OsFamily, _} = os:type(),
-    case lists:keysearch(OsFamily, 1, Handlers) of
-        {value, {_, Handler}} -> Handler();
-        false -> throw({unsupported_os, OsFamily})
+    case proplists:lookup(OsFamily, Handlers) of
+        {_, Handler} -> Handler();
+        none         -> throw({unsupported_os, OsFamily})
     end.
 
 script_filename() ->

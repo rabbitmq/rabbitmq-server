@@ -314,7 +314,7 @@ default_if_empty(List, Default) when is_list(List) ->
     end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
-    lists:foreach(fun (Result) -> display_row([format_info_item(Result, X) ||
+    lists:foreach(fun (Result) -> display_row([format_info_item(X, Result) ||
                                                   X <- InfoItemKeys])
                   end, Results),
     ok;
@@ -325,8 +325,8 @@ display_row(Row) ->
     io:fwrite(lists:flatten(rabbit_misc:intersperse("\t", Row))),
     io:nl().
 
-format_info_item(Items, Key) ->
-    {value, Info = {Key, Value}} = lists:keysearch(Key, 1, Items),
+format_info_item(Key, Items) ->
+    Info = {Key, Value} = proplists:lookup(Key, Items),
     case Info of
         {_, #resource{name = Name}} ->
             escape(Name);
