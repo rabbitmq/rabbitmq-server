@@ -269,12 +269,10 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             throw({inet_error, Reason});
         {'EXIT', Parent, Reason} ->
             if State#v1.connection_state =:= running ->
-                    send_exception(
-                      State, 0,
-                      {amqp, connection_forced,
-                       io_lib:format(
-                         "broker forced connection closure with reason '~w'",
-                         [Reason]), none});
+                    send_exception(State, 0,
+                        rabbit_misc:amqp_error(connection_forced,
+                            "broker forced connection closure with reason '~w'",
+                            [Reason], none));
                true -> ok
             end,
             %% this is what we are expected to do according to 
@@ -567,12 +565,13 @@ handle_method0(MethodName, FieldsBin, State) ->
                          MethodName, FieldsBin),
                        State)
     catch exit:Reason ->
-            CompleteReason =
-                case Reason of
-                    {amqp, Error, Explanation, none} ->
-                        {amqp, Error, Explanation, MethodName};
-                    OtherReason -> OtherReason
-                end,
+        CompleteReason =
+            case Reason of
+                #amqp_error{method = none} ->
+                    Reason#amqp_error{method = MethodName};
+                _ ->
+                    Reason
+            end,
             case State#v1.connection_state of
                 running -> send_exception(State, 0, CompleteReason);
                 Other   -> throw({channel0_error, Other, CompleteReason})
@@ -793,18 +792,21 @@ map_exception(Channel, Reason) ->
         end,
     {ShouldClose, CloseChannel, CloseMethod}.
 
-lookup_amqp_exception({amqp, {ShouldClose, Code, Text}, Expl, Method}) ->
+lookup_amqp_exception(#amqp_error{name = Name,
+                                  expl = Expl,
+                                  method = Method}) ->
+    {ShouldClose, Code, Text} = rabbit_framing:lookup_amqp_exception(Name),
     ExplBin = list_to_binary(Expl),
     CompleteTextBin = <<Text/binary, " - ", ExplBin/binary>>,
-    SafeTextBin = if size(CompleteTextBin) > 255 ->
-                          <<CompleteTextBin:252/binary, "...">>;
-                     true ->
-                          CompleteTextBin
-                  end,
-    {ShouldClose, Code, SafeTextBin, Method};
-lookup_amqp_exception({amqp, ErrorName, Expl, Method}) ->
-    Details = rabbit_framing:lookup_amqp_exception(ErrorName), 
-    lookup_amqp_exception({amqp, Details, Expl, Method});
+    SafeTextBin =
+        if
+            size(CompleteTextBin) > 255 ->
+                <<CompleteTextBin:252/binary, "...">>;
+            true ->
+                CompleteTextBin
+       end,
+   {ShouldClose, Code, SafeTextBin, Method};
+
 lookup_amqp_exception(Other) ->
     rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
-    {true, ?INTERNAL_ERROR, <<"INTERNAL_ERROR">>, none}.
+    lookup_amqp_exception(#amqp_error{name = internal_error}).
