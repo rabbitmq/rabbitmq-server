@@ -214,22 +214,18 @@ run_cmd(FullPath) ->
 
 is_rabbit_running(Node, RpcTimeout) ->
     case rpc:call(Node, rabbit, status, [], RpcTimeout) of
-        {badrpc, _} ->
-            false;
-        Status ->
-            case proplists:get_value(running_applications, Status) of
-                undefined ->
-                    false;
-                Apps ->
-                    lists:keymember(rabbit, 1, Apps)
-            end
+        {badrpc, _} -> false;
+        Status      -> case proplists:get_value(running_applications, Status) of
+                           undefined -> false;
+                           Apps      -> lists:keymember(rabbit, 1, Apps)
+                       end
     end.
 
 with_os(Handlers) ->
     {OsFamily, _} = os:type(),
     case proplists:get_value(OsFamily, Handlers) of
-        Handler   -> Handler();
-        undefined -> throw({unsupported_os, OsFamily})
+        undefined -> throw({unsupported_os, OsFamily});
+        Handler   -> Handler()
     end.
 
 script_filename() ->
