@@ -344,7 +344,9 @@ handle_info( {'EXIT', Writer, normal},
                                        close_reason = Reason}) ->
     {stop, Reason, State};
 
-handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
+handle_info( {'EXIT', Pid, #amqp_error{name = Reason,
+                                       expl = Msg,
+                                       method = Context}}, State) ->
     ?LOG_WARN("Channel Peer ~p sent this message: ~p -> ~p~n",
               [Pid, Msg, Context]),
     {_, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
