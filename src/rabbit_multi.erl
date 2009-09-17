@@ -217,19 +217,19 @@ is_rabbit_running(Node, RpcTimeout) ->
         {badrpc, _} ->
             false;
         Status ->
-            case proplists:lookup(running_applications, Status) of
-                {running_applications, Apps} ->
-                    proplists:is_defined(rabbit, Apps);
-                none ->
-                    false
+            case proplists:get_value(running_applications, Status) of
+                undefined ->
+                    false;
+                Apps ->
+                    lists:keymember(rabbit, 1, Apps)
             end
     end.
 
 with_os(Handlers) ->
     {OsFamily, _} = os:type(),
-    case proplists:lookup(OsFamily, Handlers) of
-        {_, Handler} -> Handler();
-        none         -> throw({unsupported_os, OsFamily})
+    case proplists:get_value(OsFamily, Handlers) of
+        Handler   -> Handler();
+        undefined -> throw({unsupported_os, OsFamily})
     end.
 
 script_filename() ->

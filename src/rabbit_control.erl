@@ -326,8 +326,8 @@ display_row(Row) ->
     io:nl().
 
 format_info_item(Key, Items) ->
-    Info = {Key, Value} = proplists:lookup(Key, Items),
-    case Info of
+    Value = proplists:get_value(Key, Items),
+    case {Key, Value} of
         {_, #resource{name = Name}} ->
             escape(Name);
         _ when Key =:= address; Key =:= peer_address andalso is_tuple(Value) ->

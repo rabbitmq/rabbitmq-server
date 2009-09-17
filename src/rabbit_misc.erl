@@ -189,9 +189,9 @@ r(VHostPath, Kind) when is_binary(VHostPath) ->
 r_arg(#resource{virtual_host = VHostPath}, Kind, Table, Key) ->
     r_arg(VHostPath, Kind, Table, Key);
 r_arg(VHostPath, Kind, Table, Key) ->
-    case proplists:lookup(Key, Table) of
-        {_, longstr, NameBin} -> r(VHostPath, Kind, NameBin);
-        none                  -> undefined
+    case lists:keysearch(Key, 1, Table) of
+        {value, {_, longstr, NameBin}} -> r(VHostPath, Kind, NameBin);
+        false                          -> undefined
     end.
 
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
