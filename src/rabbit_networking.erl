@@ -101,7 +101,7 @@ check_tcp_listener_address(NamePrefix, Host, Port) ->
     if is_integer(Port) andalso (Port >= 0) andalso (Port =< 65535) -> ok;
        true -> error_logger:error_msg("invalid port ~p - not 0..65535~n",
                                       [Port]),
-               throw({error, invalid_port, Port})
+               throw({error, {invalid_port, Port}})
     end,
     Name = rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
     {IPAddress, Name}.
@@ -117,7 +117,7 @@ start_ssl_listener(Host, Port, SslOpts) ->
 start_listener(Host, Port, Label, OnConnect) ->
     {IPAddress, Name} =
         check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
-    {ok,_} = supervisor:start_child(
+    case supervisor:start_child(
                rabbit_sup,
                {Name,
                 {tcp_listener_sup, start_link,
@@ -125,7 +125,12 @@ start_listener(Host, Port, Label, OnConnect) ->
                   {?MODULE, tcp_listener_started, []},
                   {?MODULE, tcp_listener_stopped, []},
                   OnConnect, Label]},
-                transient, infinity, supervisor, [tcp_listener_sup]}),
+                transient, infinity, supervisor, [tcp_listener_sup]}) of
+    {ok, _} -> ok;
+    {error, _Reason} -> error_logger:error_msg("failed to bind ~p to ~p:~p~n",
+                    [Label, Host, Port]),
+        throw({error, {failed_to_bind, Host, Port}})
+    end,
     ok.
 
 stop_tcp_listener(Host, Port) ->

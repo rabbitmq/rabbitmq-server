@@ -110,7 +110,24 @@ rotate_logs(BinarySuffix) ->
 
 %%--------------------------------------------------------------------
 
+fatal(Reason) ->
+    io:format("~n~n"),
+    io:format(" [*] Startup failed: ~p~n", [Reason]),
+    io:format(" [*] QUITTING!~n"),
+    timer:sleep(100), % higher chances to flush i/o
+    halt(255).
+
 start(normal, []) ->
+    try do_start() of
+        X -> X
+    catch 
+        {error, Reason, Args} -> 
+            fatal({Reason, Args});
+        {error, Reason} -> 
+            fatal(Reason)
+    end.
+
+do_start() ->
 
     {ok, SupPid} = rabbit_sup:start_link(),
 
