@@ -326,17 +326,17 @@ display_row(Row) ->
     io:nl().
 
 format_info_item(Key, Items) ->
-    Value = proplists:get_value(Key, Items),
-    case {Key, Value} of
-        {_, #resource{name = Name}} ->
+    case proplists:get_value(Key, Items) of
+        #resource{name = Name} ->
             escape(Name);
-        _ when Key =:= address; Key =:= peer_address andalso is_tuple(Value) ->
+        Value when Key =:= address; Key =:= peer_address andalso
+                   is_tuple(Value) ->
             inet_parse:ntoa(Value);
-        _ when is_pid(Value) ->
+        Value when is_pid(Value) ->
             atom_to_list(node(Value));
-        _ when is_binary(Value) -> 
+        Value when is_binary(Value) -> 
             escape(Value);
-        _ -> 
+        Value -> 
             io_lib:format("~w", [Value])
     end.
 
