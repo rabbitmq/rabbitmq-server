@@ -38,8 +38,8 @@
          listener_started/2, listener_stopped/2, start_client/1,
          start_link/0, init/1, mainloop/1]).
 
--include_lib("../rabbitmq-server/include/rabbit.hrl").
--include_lib("../rabbitmq-server/include/rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("rabbit_stomp_frame.hrl").
 
 -record(state, {socket, session_id, channel, parse_state}).
