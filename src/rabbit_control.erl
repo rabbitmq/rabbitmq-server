@@ -338,7 +338,7 @@ format_info_item(Key, Items) ->
         Value when is_binary(Value) -> 
             escape(Value);
         Value when is_atom(Value) ->
-            io_lib:format("~s", [Value]);
+             escape(atom_to_list(Value));
         Value -> 
             io_lib:format("~w", [Value])
     end.
@@ -365,7 +365,9 @@ rpc_call(Node, Mod, Fun, Args) ->
 %% form part of UTF-8 strings.
 
 escape(Bin) when binary(Bin) ->
-    escape_char(lists:reverse(binary_to_list(Bin)), []).
+    escape(binary_to_list(Bin));
+escape(L) when is_list(L) ->
+    escape_char(lists:reverse(L), []).
 
 escape_char([$\\ | T], Acc) ->
     escape_char(T, [$\\, $\\ | Acc]);
