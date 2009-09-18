@@ -164,7 +164,7 @@ exchange name, routing key, queue name and arguments, in that order.
 <ConnectionInfoItem> must be a member of the list [node, address, port, 
 peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
 recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
-user, peer_address and peer_port.
+user, peer_address, peer_port and state.
 
 "),
     halt(1).
@@ -270,8 +270,9 @@ action(list_bindings, Node, Args, Inform) ->
 
 action(list_connections, Node, Args, Inform) ->
     Inform("Listing connections", []),
-    ArgAtoms = list_replace(node, pid, 
-                            default_if_empty(Args, [user, peer_address, peer_port])),
+    ArgAtoms = list_replace(node, pid,
+                            default_if_empty(Args, [user, peer_address,
+                                                    peer_port, state])),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
@@ -336,6 +337,8 @@ format_info_item(Key, Items) ->
             atom_to_list(node(Value));
         Value when is_binary(Value) -> 
             escape(Value);
+        Value when is_atom(Value) ->
+             escape(atom_to_list(Value));
         Value -> 
             io_lib:format("~w", [Value])
     end.
@@ -362,7 +365,9 @@ rpc_call(Node, Mod, Fun, Args) ->
 %% form part of UTF-8 strings.
 
 escape(Bin) when binary(Bin) ->
-    escape_char(lists:reverse(binary_to_list(Bin)), []).
+    escape(binary_to_list(Bin));
+escape(L) when is_list(L) ->
+    escape_char(lists:reverse(L), []).
 
 escape_char([$\\ | T], Acc) ->
     escape_char(T, [$\\, $\\ | Acc]);
