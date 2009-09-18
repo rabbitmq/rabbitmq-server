@@ -42,6 +42,7 @@
          terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(SERIAL_FILENAME, "rabbit_serial").
 
 -record(state, {serial}).
 
@@ -59,17 +60,28 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    %% The persister can get heavily loaded, and we don't want that to
-    %% impact guid generation.  We therefore keep the serial in a
-    %% separate process rather than calling rabbit_persister:serial/0
-    %% directly in the functions below.
     gen_server:start_link({local, ?SERVER}, ?MODULE,
-                          [rabbit_persister:serial()], []).
+                          [update_disk_serial()], []).
+
+update_disk_serial() ->
+    Filename = filename:join(rabbit_mnesia:dir(), ?SERIAL_FILENAME),
+    Serial = case rabbit_misc:read_term_file(Filename) of
+                 {ok, [Num]}     -> Num;
+                 {error, enoent} -> rabbit_persister:serial();
+                 {error, Reason} ->
+                     throw({error, {cannot_read_serial_file, Filename, Reason}})
+             end,
+    case rabbit_misc:write_term_file(Filename, [Serial + 1]) of
+        ok -> ok;
+        {error, Reason1} ->
+            throw({error, {cannot_write_serial_file, Filename, Reason1}})
+    end,
+    Serial.
 
 %% generate a guid that is monotonically increasing per process.
 %%
 %% The id is only unique within a single cluster and as long as the
-%% persistent message store hasn't been deleted.
+%% serial store hasn't been deleted.
 guid() ->
     %% We don't use erlang:now() here because a) it may return
     %% duplicates when the system clock has been rewound prior to a
@@ -77,7 +89,7 @@ guid() ->
     %% now() to move ahead of the system time), and b) it is really
     %% slow since it takes a global lock and makes a system call.
     %%
-    %% rabbit_persister:serial/0, in combination with self/0 (which
+    %% A persisted serial number, in combination with self/0 (which
     %% includes the node name) uniquely identifies a process in space
     %% and time. We combine that with a process-local counter to give
     %% us a GUID that is monotonically increasing per process.

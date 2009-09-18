@@ -4,15 +4,16 @@ TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_ZIP=rabbitmq-server-windows-$(VERSION)
 
 dist:
-	make -C ../.. VERSION=$(VERSION) srcdist
+	$(MAKE) -C ../.. VERSION=$(VERSION) srcdist
 	tar -zxvf ../../dist/$(SOURCE_DIR).tar.gz
-	make -C $(SOURCE_DIR)
+	$(MAKE) -C $(SOURCE_DIR)
 
 	mkdir $(SOURCE_DIR)/sbin
 	mv $(SOURCE_DIR)/scripts/rabbitmq-server.bat $(SOURCE_DIR)/sbin
 	mv $(SOURCE_DIR)/scripts/rabbitmq-service.bat $(SOURCE_DIR)/sbin
 	mv $(SOURCE_DIR)/scripts/rabbitmqctl.bat $(SOURCE_DIR)/sbin
 	mv $(SOURCE_DIR)/scripts/rabbitmq-multi.bat $(SOURCE_DIR)/sbin
+	mv $(SOURCE_DIR)/scripts/rabbitmq-activate-plugins.bat $(SOURCE_DIR)/sbin
 	rm -rf $(SOURCE_DIR)/scripts
 	rm -rf $(SOURCE_DIR)/codegen* $(SOURCE_DIR)/Makefile
 	rm -f $(SOURCE_DIR)/README

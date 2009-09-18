@@ -116,8 +116,6 @@ start(normal, []) ->
 
     print_banner(),
 
-    {ok, ExtraSteps} = application:get_env(extra_startup_steps),
-
     lists:foreach(
       fun ({Msg, Thunk}) ->
               io:format("starting ~-20s ...", [Msg]),
@@ -135,13 +133,13 @@ start(normal, []) ->
                 ok = start_child(rabbit_log),
                 ok = rabbit_hooks:start(),
 
-                ok = rabbit_amqqueue:start(),
+                ok = rabbit_binary_generator:
+                    check_empty_content_body_frame_size(),
 
                 {ok, MemoryAlarms} = application:get_env(memory_alarms),
                 ok = rabbit_alarm:start(MemoryAlarms),
                 
-                ok = rabbit_binary_generator:
-                    check_empty_content_body_frame_size(),
+                ok = rabbit_amqqueue:start(),
 
                 ok = start_child(rabbit_router),
                 ok = start_child(rabbit_node_monitor)
@@ -170,14 +168,28 @@ start(normal, []) ->
        {"TCP listeners",
         fun () ->
                 ok = rabbit_networking:start(),
-                {ok, TCPListeners} = application:get_env(tcp_listeners),
+                {ok, TcpListeners} = application:get_env(tcp_listeners),
                 lists:foreach(
                   fun ({Host, Port}) ->
                           ok = rabbit_networking:start_tcp_listener(Host, Port)
                   end,
-                  TCPListeners)
-        end}]
-      ++ ExtraSteps),
+                  TcpListeners)
+        end},
+       {"SSL listeners",
+        fun () ->
+                case application:get_env(ssl_listeners) of
+                    {ok, []} ->
+                        ok;
+                    {ok, SslListeners} ->
+                        ok = rabbit_misc:start_applications([crypto, ssl]),
+
+                        {ok, SslOpts} = application:get_env(ssl_options),
+
+                        [rabbit_networking:start_ssl_listener
+                         (Host, Port, SslOpts) || {Host, Port} <- SslListeners],
+                        ok
+                end
+        end}]),
 
     io:format("~nbroker running~n"),
 
