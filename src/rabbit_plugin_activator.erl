@@ -68,7 +68,7 @@ start() ->
                       AppList
               end,
     AppVersions = [determine_version(App) || App <- AllApps],
-    {value, {rabbit, RabbitVersion}} = lists:keysearch(rabbit, 1, AppVersions),
+    {rabbit, RabbitVersion} = proplists:lookup(rabbit, AppVersions),
 
     %% Build the overall release descriptor
     RDesc = {release, 

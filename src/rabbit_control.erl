@@ -315,7 +315,7 @@ default_if_empty(List, Default) when is_list(List) ->
     end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
-    lists:foreach(fun (Result) -> display_row([format_info_item(Result, X) ||
+    lists:foreach(fun (Result) -> display_row([format_info_item(X, Result) ||
                                                   X <- InfoItemKeys])
                   end, Results),
     ok;
@@ -326,20 +326,20 @@ display_row(Row) ->
     io:fwrite(lists:flatten(rabbit_misc:intersperse("\t", Row))),
     io:nl().
 
-format_info_item(Items, Key) ->
-    {value, Info = {Key, Value}} = lists:keysearch(Key, 1, Items),
-    case Info of
-        {_, #resource{name = Name}} ->
+format_info_item(Key, Items) ->
+    case proplists:get_value(Key, Items) of
+        #resource{name = Name} ->
             escape(Name);
-        _ when Key =:= address; Key =:= peer_address andalso is_tuple(Value) ->
+        Value when Key =:= address; Key =:= peer_address andalso
+                   is_tuple(Value) ->
             inet_parse:ntoa(Value);
-        _ when is_pid(Value) ->
+        Value when is_pid(Value) ->
             atom_to_list(node(Value));
-        _ when is_binary(Value) -> 
+        Value when is_binary(Value) -> 
             escape(Value);
-        _ when is_atom(Value) ->
+        Value when is_atom(Value) ->
             io_lib:format("~s", [Value]);
-        _ -> 
+        Value -> 
             io_lib:format("~w", [Value])
     end.
 
