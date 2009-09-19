@@ -127,10 +127,9 @@ handle_cast({method, Method, Content}, State) ->
     catch
         exit:Reason = #amqp_error{} ->
             ok = rollback_and_notify(State),
-            CompleteReason = Reason#amqp_error{method =
-                rabbit_misc:method_record_type(Method)},
-            State#ch.reader_pid !
-                {channel_exit, State#ch.channel, CompleteReason},
+            MethodName = rabbit_misc:method_record_type(Method),
+            State#ch.reader_pid ! {channel_exit, State#ch.channel,
+                                   Reason#amqp_error{method = MethodName}},
             {stop, normal, State#ch{state = terminating}};
         exit:normal ->
             {stop, normal, State};

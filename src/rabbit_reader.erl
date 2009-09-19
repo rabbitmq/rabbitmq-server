@@ -565,18 +565,17 @@ handle_method0(MethodName, FieldsBin, State) ->
                          MethodName, FieldsBin),
                        State)
     catch exit:Reason ->
-        CompleteReason =
-            case Reason of
-                #amqp_error{method = none} ->
-                    Reason#amqp_error{method = MethodName};
-                _ ->
-                    Reason
-            end,
+            CompleteReason = case Reason of
+                                 #amqp_error{method = none} ->
+                                     Reason#amqp_error{method = MethodName};
+                                 OtherReason -> OtherReason
+                             end,
             case State#v1.connection_state of
                 running -> send_exception(State, 0, CompleteReason);
                 Other   -> throw({channel0_error, Other, CompleteReason})
             end
     end.
+
 handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                                       response = Response},
                State = #v1{connection_state = starting,
@@ -792,21 +791,18 @@ map_exception(Channel, Reason) ->
         end,
     {ShouldClose, CloseChannel, CloseMethod}.
 
-lookup_amqp_exception(#amqp_error{name = Name,
-                                  expl = Expl,
-                                  method = Method}) ->
+lookup_amqp_exception(
+  #amqp_error{name = Name, expl = Expl, method = Method}) ->
     {ShouldClose, Code, Text} = rabbit_framing:lookup_amqp_exception(Name),
     ExplBin = list_to_binary(Expl),
     CompleteTextBin = <<Text/binary, " - ", ExplBin/binary>>,
-    SafeTextBin =
-        if
-            size(CompleteTextBin) > 255 ->
-                <<CompleteTextBin:252/binary, "...">>;
-            true ->
-                CompleteTextBin
-       end,
-   {ShouldClose, Code, SafeTextBin, Method};
-
+    SafeTextBin = if size(CompleteTextBin) > 255 ->
+                          <<CompleteTextBin:252/binary, "...">>;
+                     true -> CompleteTextBin
+                  end,
+    {ShouldClose, Code, SafeTextBin, Method};
 lookup_amqp_exception(Other) ->
     rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
-    lookup_amqp_exception(#amqp_error{name = internal_error}).
+    {ShouldClose, Code, Text} =
+        rabbit_framing:lookup_amqp_exception(internal_error),
+    {ShouldClose, Code, Text, none}.

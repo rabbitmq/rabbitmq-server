@@ -35,7 +35,8 @@
 -include_lib("kernel/include/file.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
--export([die/1, frame_error/2, amqp_error/4, protocol_error/3, protocol_error/4]).
+-export([die/1, frame_error/2, amqp_error/4,
+         protocol_error/3, protocol_error/4]).
 -export([not_found/1]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
@@ -145,15 +146,15 @@ die(Error) ->
 frame_error(MethodName, BinaryFields) ->
     protocol_error(frame_error, "cannot decode ~w", [BinaryFields], MethodName).
 
-amqp_error(Name, Explanation, Params, Method) ->
-    #amqp_error{name = Name,
-                expl = lists:flatten(io_lib:format(Explanation, Params)),
-                method = Method}.
+amqp_error(Name, ExplanationFormat, Params, Method) ->
+    Explanation = lists:flatten(io_lib:format(ExplanationFormat, Params)),
+    #amqp_error{name = Name, expl = Explanation, method = Method}.
 
-protocol_error(Name, Explanation, Params) ->
-    protocol_error(Name, Explanation, Params, none).
-protocol_error(Name, Explanation, Params, Method) ->
-    exit(amqp_error(Name, Explanation, Params, Method)).
+protocol_error(Name, ExplanationFormat, Params) ->
+    protocol_error(Name, ExplanationFormat, Params, none).
+
+protocol_error(Name, ExplanationFormat, Params, Method) ->
+    exit(amqp_error(Name, ExplanationFormat, Params, Method)).
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
