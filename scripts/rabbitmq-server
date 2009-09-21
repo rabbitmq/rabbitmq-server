@@ -40,6 +40,7 @@ CLUSTER_CONFIG_FILE=/etc/rabbitmq/rabbitmq_cluster.config
 LOG_BASE=/var/log/rabbitmq
 MNESIA_BASE=/var/lib/rabbitmq/mnesia
 SERVER_START_ARGS=
+[ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=/etc/rabbitmq/rabbitmq
 
 . `dirname $0`/rabbitmq-env
 
@@ -83,6 +84,8 @@ else
     RABBITMQ_BOOT_FILE=start_sasl
     RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_EBIN_ROOT}"
 fi
+RABBITMQ_CONFIG_ARG=
+[ -f "${RABBITMQ_CONFIG_FILE}.config" ] && RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
 
 # we need to turn off path expansion because some of the vars, notably
 # RABBITMQ_SERVER_ERL_ARGS, contain terms that look like globs and
@@ -94,6 +97,7 @@ exec erl \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
     -boot ${RABBITMQ_BOOT_FILE} \
+    ${RABBITMQ_CONFIG_ARG} \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \
     -rabbit tcp_listeners '[{"'${RABBITMQ_NODE_IP_ADDRESS}'", '${RABBITMQ_NODE_PORT}'}]' \
