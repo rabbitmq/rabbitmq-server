@@ -451,7 +451,7 @@ handle_frame(_Type, _Channel, _Payload, State = #v1{connection_state = CS})
     State;
 handle_frame(Type, 0, Payload, State) ->
     case analyze_frame(Type, Payload) of
-        error     -> throw({unknown_frame, Type, Payload});
+        error     -> throw({unknown_frame, 0, Type, Payload});
         heartbeat -> State;
         trace     -> State;
         {method, MethodName, FieldsBin} ->
@@ -460,7 +460,7 @@ handle_frame(Type, 0, Payload, State) ->
     end;
 handle_frame(Type, Channel, Payload, State) ->
     case analyze_frame(Type, Payload) of
-        error         -> throw({unknown_frame, Type, Payload});
+        error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
         trace         -> throw({unexpected_trace_frame, Channel});
         AnalyzedFrame ->
