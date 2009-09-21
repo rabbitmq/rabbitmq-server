@@ -109,11 +109,17 @@ if exist "%RABBITMQ_EBIN_ROOT%\rabbit.boot" (
     set RABBITMQ_BOOT_FILE=start_sasl
     set RABBITMQ_EBIN_PATH=-pa "%RABBITMQ_EBIN_ROOT%"
 )
+set RABBITMQ_ETC_ROOT=%~dp0..\etc
+if exist "%RABBITMQ_ETC_ROOT%\rabbitmq.config" (
+    set RABBITMQ_CONFIG_ARG=-config "%RABBITMQ_ETC_ROOT%\rabbitmq"
+) else (
+    set RABBITMQ_CONFIG_ARG=""
+)
 
 "%ERLANG_HOME%\bin\erl.exe" ^
 %RABBITMQ_EBIN_PATH% ^
 -noinput ^
--boot %RABBITMQ_BOOT_FILE% ^
+-boot %RABBITMQ_BOOT_FILE% %RABBITMQ_CONFIG_ARG% ^
 -sname %RABBITMQ_NODENAME% ^
 -s rabbit ^
 +W w ^
