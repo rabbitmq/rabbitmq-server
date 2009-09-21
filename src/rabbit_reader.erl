@@ -341,7 +341,6 @@ handle_channel_exit(Channel, Reason, State) ->
 
 handle_dependent_exit(Pid, normal, State) ->
     erase({chpid, Pid}),
-    erase({closing_chpid, Pid}),
     maybe_close(State);
 handle_dependent_exit(Pid, Reason, State) ->
     case channel_cleanup(Pid) of
@@ -351,17 +350,10 @@ handle_dependent_exit(Pid, Reason, State) ->
 
 channel_cleanup(Pid) ->
     case get({chpid, Pid}) of
-        undefined ->
-            case get({closing_chpid, Pid}) of
-                undefined -> undefined;
-                {channel, Channel} ->
-                    erase({closing_chpid, Pid}),
-                    Channel
-            end;
-        {channel, Channel} ->
-            erase({channel, Channel}),
-            erase({chpid, Pid}),
-            Channel
+        undefined          -> undefined;
+        {channel, Channel} -> erase({channel, Channel}),
+                              erase({chpid, Pid}),
+                              Channel
     end.
 
 all_channels() -> [Pid || {{chpid, Pid},_} <- get()].
@@ -442,7 +434,11 @@ handle_frame(Type, Channel, Payload, State) ->
             %%?LOGDEBUG("Ch ~p Frame ~p~n", [Channel, AnalyzedFrame]),
             case get({channel, Channel}) of
                 {chpid, ChPid} ->
-                    ok = check_for_close(Channel, ChPid, AnalyzedFrame),
+                    case AnalyzedFrame of
+                        {method, 'channel.close', _} ->
+                            erase({channel, Channel});
+                        _ -> ok
+                    end,
                     ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame),
                     State;
                 closing ->
@@ -712,13 +708,6 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
     put({channel, Channel}, {chpid, ChPid}),
     put({chpid, ChPid}, {channel, Channel}),
     ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame).
-
-check_for_close(Channel, ChPid, {method, 'channel.close', _}) ->
-    channel_cleanup(ChPid),
-    put({closing_chpid, ChPid}, {channel, Channel}),
-    ok;
-check_for_close(_Channel, _ChPid, _Frame) ->
-    ok.
 
 log_channel_error(ConnectionState, Channel, Reason) ->
     rabbit_log:error("connection ~p (~p), channel ~p - error:~n~p~n",
