@@ -94,6 +94,7 @@ post-destroot {
                 ${wrappersbin}/rabbitmq-activate-plugins
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
+    file copy ${wrappersbin}/rabbitmq-activate-plugins ${wrappersbin}/rabbitmq-deactivate-plugins
 }
 
 pre-install {
