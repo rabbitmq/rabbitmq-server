@@ -344,12 +344,12 @@ handle_info( {'EXIT', Writer, normal},
                                        close_reason = Reason}) ->
     {stop, Reason, State};
 
-handle_info( {'EXIT', Pid, #amqp_error{name = Reason,
-                                       expl = Msg,
+handle_info( {'EXIT', Pid, #amqp_error{name = ErrorName,
+                                       explanation = Explanation,
                                        method = Context}}, State) ->
     ?LOG_WARN("Channel Peer ~p sent this message: ~p -> ~p~n",
-              [Pid, Msg, Context]),
-    {_, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
+              [Pid, Explanation, Context]),
+    {_, Code, Text} = rabbit_framing:lookup_amqp_exception(ErrorName),
     {stop, {server_initiated_close, {Code, Text}}, State};
 
 %% @private
