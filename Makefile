@@ -62,9 +62,6 @@ $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.p
 $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_PATH) $@
 
-$(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.rel $(TARGETS)
-	erl -noshell -eval 'systools:make_script("ebin/rabbit", [{path, ["ebin"]}]), halt().'
-
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
 		"rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(BEAM_TARGETS)\"))."
@@ -86,7 +83,7 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
-	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
+	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
 	rm -f docs/*.[0-9].gz
 	rm -f $(RABBIT_PLT)
@@ -104,13 +101,14 @@ BASIC_SCRIPT_ENVIRONMENT_SETTINGS=\
 
 run: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
-		RABBITMQ_NODE_ONLY=true \
+		RABBITMQ_ALLOW_INPUT=true \
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -s rabbit" \
 		./scripts/rabbitmq-server
 
 run-node: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
+		RABBITMQ_ALLOW_INPUT=true \
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
 		./scripts/rabbitmq-server
 
