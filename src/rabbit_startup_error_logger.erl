@@ -36,9 +36,9 @@
 -behaviour(gen_event).
 
 -export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2, 
-	handle_info/2, get_first_error/0]).
+	handle_info/2, get_errors/0]).
 
-init([]) -> {ok, {}}.
+init([]) -> {ok, []}.
 
 terminate(_Arg, _State) ->
     terminated_ok.
@@ -46,28 +46,30 @@ terminate(_Arg, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-get_first_error() ->
-    gen_event:call(error_logger, ?MODULE, get_first_error).
+get_errors() ->
+    Events = get_events(),
+    Errors = [string:strip(lists:flatten(
+                    io_lib:format(Format, Data)), both, $\n)
+                || {Kind, Format, Data} <- Events,
+                       Kind == error],
+    {ok, Errors}.
 
-handle_call(get_first_error, State) ->
-    Ret = case State of
-	{error, Res} -> {ok, Res};
-	_ -> {error}
-    end,
-    {ok, Ret, State};
+%% returns list of {Kind, Format, Data}
+get_events() ->
+    {ok, Events} = gen_event:call(error_logger, ?MODULE, get_events),
+    Events.
+    
+
+handle_call(get_events, State) ->
+    {ok, {ok, State}, State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 
-handle_event({Kind, _Gleader, {_Pid, Format, Data}}, State={}) ->
-    case Kind of 
-	error -> Res = string:strip(
-		    lists:flatten(io_lib:format(Format, Data)),
-			both, $\n),
-		{ok, {error, Res}};
-	_ -> {ok, State}
-    end;
+handle_event({Kind, _Gleader, {_Pid, Format, Data}}, State) ->
+    Msg = {Kind, Format, Data},
+    {ok, [Msg|State]};
 
 handle_event(_Event, State) ->
     {ok, State}.

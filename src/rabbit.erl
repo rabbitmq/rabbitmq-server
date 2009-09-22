@@ -70,31 +70,7 @@
 -endif.
 
 %%----------------------------------------------------------------------------
-
-fatal(Reason) ->
-    io:format("~n~n"),
-    io:format(" [*] Startup failed: ~p~n", [Reason]),
-    io:format(" [*] QUITTING!~n"),
-    timer:sleep(100), % higher chances to flush i/o correctly
-    halt(255).
-
-start() -> 
-    ok = error_logger:add_report_handler(rabbit_startup_error_logger, []),
-    R = try do_start() of
-        X -> X
-    catch 
-        {error, TracebackReason} -> 
-	    Reason = case rabbit_startup_error_logger:get_first_error() of
-		{ok, ErrorReason} -> string:strip(ErrorReason);
-		_ -> TracebackReason
-	    end,
-            fatal(Reason)
-    end,
-    terminated_ok = error_logger:delete_report_handler(
-						rabbit_startup_error_logger),
-    R.
-
-do_start() ->
+start() ->
     try
         ok = ensure_working_log_handlers(),
         ok = rabbit_mnesia:ensure_mnesia_dir(),
@@ -133,7 +109,33 @@ rotate_logs(BinarySuffix) ->
 
 %%--------------------------------------------------------------------
 
+fatal(Reason) ->
+    io:format("~n~n"),
+    io:format(" [*] Startup error: ~p~n", [Reason]),
+    io:format(" [*] QUITTING!~n~n"),
+    timer:sleep(100). % higher chances to flush i/o correctly
+
+error_catcher(Callback) -> 
+    ok = error_logger:add_report_handler(rabbit_startup_error_logger, []),
+    R = try Callback() of
+        X -> X
+    catch 
+        {error, TracebackReason} -> 
+            Reason = case rabbit_startup_error_logger:get_errors() of
+                {ok, []} -> TracebackReason;
+                {ok, ErrorReason} -> ErrorReason
+            end,
+            fatal(Reason),
+            throw({fatal_error})
+    end,
+    terminated_ok = error_logger:delete_report_handler(
+                                                rabbit_startup_error_logger),
+    R.
+
 start(normal, []) ->
+    error_catcher(fun () -> do_start() end ).
+
+do_start() ->
     {ok, SupPid} = rabbit_sup:start_link(),
 
     print_banner(),
