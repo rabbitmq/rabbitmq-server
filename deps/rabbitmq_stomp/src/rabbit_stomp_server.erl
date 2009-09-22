@@ -196,10 +196,12 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
             done
     end.
 
-explain_amqp_death(#amqp_error{name = Code, expl = Explanation, method = Method},
+explain_amqp_death(#amqp_error{name = ErrorName,
+                               explanation = Explanation,
+                               method = Method},
                    State) ->
-    send_error(atom_to_list(Code), "~s~nMethod was ~p\n", [Explanation, Method],
-               State).
+    send_error(atom_to_list(ErrorName), "~s~nMethod was ~p\n",
+               [Explanation, Method], State).
 
 send_reply(#'channel.close_ok'{}, State) ->
     State;
