@@ -287,7 +287,7 @@ separated by tab characters.
 List queue information by virtual host. Each line printed describes an
 connection, with the requested I<connectioninfoitem> values separated
 by tab characters.  If no I<connectioninfoitem>s are specified then
-I<user>, I<peer_address> and I<peer_port> are assumed.
+I<user>, I<peer_address>, I<peer_port> and I<state> are assumed.
 
 =back
 
