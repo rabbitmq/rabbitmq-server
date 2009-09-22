@@ -127,9 +127,7 @@ start_listener(Host, Port, Label, OnConnect) ->
                   OnConnect, Label]},
                 transient, infinity, supervisor, [tcp_listener_sup]}) of
     {ok, _} -> ok;
-    {error, _Reason} -> error_logger:error_msg("failed to bind ~p to ~p:~p~n",
-                    [Label, Host, Port]),
-        throw({error, {failed_to_bind, Host, Port}})
+    {error, Reason} -> throw({error, {failed_to_bind, Host, Port, Reason}})
     end,
     ok.
 
