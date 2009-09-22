@@ -67,7 +67,7 @@
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
 
--record(amqp_error, {name, expl, method = none}).
+-record(amqp_error, {name, explanation, method = none}).
 
 %%----------------------------------------------------------------------------
 
@@ -157,9 +157,9 @@
 -type(not_found() :: {'error', 'not_found'}).
 -type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
 -type(amqp_error() ::
-      #amqp_error{name   :: atom(),
-                  expl   :: string(),
-                  method :: atom()}).
+      #amqp_error{name        :: atom(),
+                  explanation :: string(),
+                  method      :: atom()}).
 -endif.
 
 %%----------------------------------------------------------------------------

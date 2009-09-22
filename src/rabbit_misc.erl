@@ -148,7 +148,7 @@ frame_error(MethodName, BinaryFields) ->
 
 amqp_error(Name, ExplanationFormat, Params, Method) ->
     Explanation = lists:flatten(io_lib:format(ExplanationFormat, Params)),
-    #amqp_error{name = Name, expl = Explanation, method = Method}.
+    #amqp_error{name = Name, explanation = Explanation, method = Method}.
 
 protocol_error(Name, ExplanationFormat, Params) ->
     protocol_error(Name, ExplanationFormat, Params, none).

@@ -792,7 +792,7 @@ map_exception(Channel, Reason) ->
     {ShouldClose, CloseChannel, CloseMethod}.
 
 lookup_amqp_exception(
-  #amqp_error{name = Name, expl = Expl, method = Method}) ->
+  #amqp_error{name = Name, explanation = Expl, method = Method}) ->
     {ShouldClose, Code, Text} = rabbit_framing:lookup_amqp_exception(Name),
     ExplBin = list_to_binary(Expl),
     CompleteTextBin = <<Text/binary, " - ", ExplBin/binary>>,
