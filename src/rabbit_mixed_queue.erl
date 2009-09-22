@@ -70,7 +70,7 @@
                             }).
 -type(msg_id() :: guid()).
 -type(seq_id() :: non_neg_integer()).
--type(ack_tag() :: ( 'no_on_disk' | {msg_id(), seq_id()} )).
+-type(ack_tag() :: ( 'not_on_disk' | {msg_id(), seq_id()} )).
 -type(okmqs() :: {'ok', mqstate()}).
 
 -spec(init/2 :: (queue_name(), boolean()) -> okmqs()).
