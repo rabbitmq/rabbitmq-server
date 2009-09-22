@@ -19,7 +19,7 @@ MANPAGES=$(patsubst %.pod, %.gz, $(wildcard docs/*.[0-9].pod))
 PYTHON=python
 
 BASIC_PLT=basic.plt
-PLT=rabbit.plt
+RABBIT_PLT=rabbit.plt
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
@@ -65,31 +65,23 @@ $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py
 $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script: $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.rel $(TARGETS)
 	erl -noshell -eval 'systools:make_script("ebin/rabbit", [{path, ["ebin"]}]), halt().'
 
-dialyze: .last_valid_dialysis
-
-create-plt: $(PLT)
-
-$(PLT): $(BEAM_TARGETS) $(BASIC_PLT)
-	test -f $@ || cp $(BASIC_PLT) $@
+dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
-	    "rabbit_dialyzer:update_plt(\"$@\", \"$(BEAM_TARGETS)\"), halt()."
+		"rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(BEAM_TARGETS)\"))."
 
-.last_valid_dialysis: $(BEAM_TARGETS) $(PLT)
-	if [ $(PLT) -ot $@ ]; then \
-	    DIALYZER_INPUT_FILES="$(filter %.beam, $?)"; \
-	else \
-	    DIALYZER_INPUT_FILES="$(BEAM_TARGETS)"; \
-	fi; \
+create-plt: $(RABBIT_PLT)
+
+$(RABBIT_PLT): $(BEAM_TARGETS) $(BASIC_PLT)
+	cp $(BASIC_PLT) $@
 	$(ERL_EBIN) -eval \
-	    "rabbit_dialyzer:dialyze_files(\"$(PLT)\", \"$$DIALYZER_INPUT_FILES\"), halt()." && \
-	touch $@
+	    "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:add_to_plt(\"$@\", \"$(BEAM_TARGETS)\"))."
 
 $(BASIC_PLT): $(BEAM_TARGETS)
 	if [ -f $@ ]; then \
 	    touch $@; \
 	else \
 	    $(ERL_EBIN) -eval \
-	        "rabbit_dialyzer:create_basic_plt(\"$@\"), halt()."; \
+	        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:create_basic_plt(\"$@\"))."; \
 	fi
 
 clean:
@@ -97,7 +89,7 @@ clean:
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
 	rm -f docs/*.[0-9].gz
-	rm -f $(PLT) .last_valid_dialysis
+	rm -f $(RABBIT_PLT)
 
 cleandb:
 	rm -rf $(RABBITMQ_MNESIA_DIR)/*

@@ -32,15 +32,16 @@
 -module(rabbit_dialyzer).
 -include("rabbit.hrl").
 
--export([create_basic_plt/1, update_plt/2, dialyze_files/2]).
+-export([create_basic_plt/1, add_to_plt/2, dialyze_files/2, halt_with_code/1]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
 -spec(create_basic_plt/1 :: (string()) -> 'ok').
--spec(update_plt/2 :: (string(), string()) -> 'ok').
+-spec(add_to_plt/2 :: (string(), string()) -> 'ok').
 -spec(dialyze_files/2 :: (string(), string()) -> 'ok').
+-spec(halt_with_code/1 :: (atom()) -> no_return()).
 
 -endif.
 
@@ -54,8 +55,8 @@ create_basic_plt(BasicPltPath) ->
     dialyzer_cl:start(OptsRecord),
     ok.
 
-update_plt(PltPath, ModifiedFiles) ->
-    {ok, Files} = regexp:split(ModifiedFiles, " "),
+add_to_plt(PltPath, FilesString) ->
+    {ok, Files} = regexp:split(FilesString, " "),
     DialyzerWarnings = dialyzer:run([
         {analysis_type, plt_add},
         {init_plt, PltPath},
@@ -76,7 +77,7 @@ dialyze_files(PltPath, ModifiedFiles) ->
         _ ->
             io:format("~nFAILED! dialyzer returned the following warnings:~n", []),
             print_warnings(DialyzerWarnings),
-            erlang:error({dialyzer_warnings, DialyzerWarnings})
+            fail
     end.
 
 print_warnings(DialyzerWarnings) ->
@@ -91,3 +92,8 @@ print_warnings(DialyzerWarnings) ->
 otp_apps_dependencies_paths() ->
     [code:lib_dir(App, ebin) ||
         App <- [stdlib, kernel, mnesia, os_mon, ssl, eunit, tools, sasl]].
+
+halt_with_code(ok) ->
+    halt();
+halt_with_code(fail) ->
+    halt(1).
