@@ -333,10 +333,12 @@ handle_method(Method, Content, State) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 %% @private
-init({ChannelState = #channel_state{driver = Driver}, ConnectionState}) ->
+init({ChannelState = #channel_state{driver = Driver, number = ChannelNumber},
+      ConnectionState}) ->
     process_flag(trap_exit, true),
-    InitialState = Driver:open_channel(ChannelState, ConnectionState),
-    {ok, InitialState}.
+    {WriterPid, ReaderPid} = Driver:open_channel(ChannelNumber, ConnectionState),
+    {ok, ChannelState#channel_state{writer_pid = WriterPid,
+                                    reader_pid = ReaderPid}}.
 
 %% Standard implementation of top half of the call/2 command
 %% Do not accept any further RPCs when the channel is about to close

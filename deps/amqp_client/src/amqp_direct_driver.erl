@@ -49,12 +49,11 @@ handshake(ConnectionState = #connection_state{username = User,
                                              VHostPath),
     ConnectionState.
 
-open_channel(ChannelState = #channel_state{number = ChannelNumber},
+open_channel(ChannelNumber,
              #connection_state{username = User, vhostpath = VHost}) ->
     Peer = rabbit_channel:start_link(ChannelNumber, self(), self(),
                                      User, VHost),
-    ChannelState#channel_state{reader_pid = Peer,
-                               writer_pid = Peer}.
+    {Peer, Peer}.
 
 close_channel(_Reason, _ChannelState) ->
     ok.

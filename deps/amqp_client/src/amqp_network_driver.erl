@@ -79,12 +79,12 @@ handshake(State = #connection_state{serverhost = Host, port = Port,
 %% because this will be parsed out of the frames received off the socket.
 %% Hence, you have tell the main reader which Pids are intended to
 %% process messages for a particular channel
-open_channel(ChannelState = #channel_state{number = ChannelNumber},
+open_channel(ChannelNumber,
              #connection_state{main_reader_pid = MainReaderPid, sock = Sock}) ->
     FramingPid = start_framing_channel(),
     MainReaderPid ! {register_framing_channel, ChannelNumber, FramingPid},
     WriterPid = start_writer(Sock, ChannelNumber),
-    ChannelState#channel_state{writer_pid = WriterPid, reader_pid = FramingPid}.
+    {WriterPid, FramingPid}.
 
 close_channel(_Reason, #channel_state{writer_pid = WriterPid,
                                       reader_pid = FramingPid}) ->
