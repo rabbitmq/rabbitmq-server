@@ -263,7 +263,7 @@ init(Dir, FileSizeLimit, ReadFileHandlesLimit,
         sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION, Dir)),
     TmpFileNames =
         sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION_TMP, Dir)),
-    ok = recover_crashed_compactions(Dir, FileNames, TmpFileNames, State),
+    ok = recover_crashed_compactions(Dir, FileNames, TmpFileNames),
     %% There should be no more tmp files now, so go ahead and load the
     %% whole lot
     Files = [filename_to_num(FileName) || FileName <- FileNames],
@@ -577,27 +577,18 @@ count_msg_refs(Gen, Seed, State) ->
             count_msg_refs(Gen, Next, State)
     end.
 
-verify_messages_referenced(State, MsgIds) ->
-    lists:foreach(fun (MsgId) ->
-                          #msg_location {} = index_lookup(MsgId, State)
-                  end, MsgIds).
-
-recover_crashed_compactions(Dir, FileNames, TmpFileNames, State) ->
+recover_crashed_compactions(Dir, FileNames, TmpFileNames) ->
     lists:foreach(fun (TmpFileName) ->
                           ok = recover_crashed_compactions1(
-                                 Dir, FileNames, TmpFileName, State)
-                  end,
-                  TmpFileNames),
+                                 Dir, FileNames, TmpFileName)
+                  end, TmpFileNames),
     ok.
 
-recover_crashed_compactions1(Dir, FileNames, TmpFileName, State) ->
+recover_crashed_compactions1(Dir, FileNames, TmpFileName) ->
     NonTmpRelatedFileName = filename:rootname(TmpFileName) ++ ?FILE_EXTENSION,
     true = lists:member(NonTmpRelatedFileName, FileNames),
     {ok, UncorruptedMessagesTmp, MsgIdsTmp} =
         scan_file_for_valid_messages_msg_ids(Dir, TmpFileName),
-    %% all of these messages should be referenced
-    %% otherwise they wouldn't have been copied out
-    verify_messages_referenced(State, MsgIdsTmp),
     {ok, UncorruptedMessages, MsgIds} =
         scan_file_for_valid_messages_msg_ids(Dir, NonTmpRelatedFileName),
     %% 1) It's possible that everything in the tmp file is also in the
@@ -651,8 +642,6 @@ recover_crashed_compactions1(Dir, FileNames, TmpFileName, State) ->
                                                2 + length(Dropped),
                                                length(Rest))}
                   end,
-            %% Check that everything in the main file prefix is referenced
-            verify_messages_referenced(State, MsgIds1),
             %% The main file prefix should be contiguous
             {Top, MsgIds1} = find_contiguous_block_prefix(
                                lists:reverse(UncorruptedMessages1)),
