@@ -535,8 +535,10 @@ handle_info({channel_exit, _Channel, {amqp, Reason, _Msg, _Context}},
 %%---------------------------------------------------------------------------
 
 %% @private
-terminate(Reason, State = #channel_state{driver = Driver}) ->
-    Driver:close_channel(Reason, State).
+terminate(Reason, State = #channel_state{driver = Driver,
+                                         writer_pid = WriterPid,
+                                         reader_pid = ReaderPid}) ->
+    Driver:close_channel(Reason, WriterPid, ReaderPid).
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->

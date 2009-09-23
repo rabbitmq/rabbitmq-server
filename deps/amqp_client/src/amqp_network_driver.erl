@@ -30,7 +30,7 @@
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0},{active,false}, {nodelay, true}]).
 
--export([handshake/1, open_channel/2, close_channel/2, close_connection/3]).
+-export([handshake/1, open_channel/2, close_channel/3, close_connection/3]).
 -export([start_reader/2, start_writer/2]).
 -export([do/2, do/3]).
 -export([handle_broker_close/1]).
@@ -86,10 +86,9 @@ open_channel(ChannelNumber,
     WriterPid = start_writer(Sock, ChannelNumber),
     {WriterPid, FramingPid}.
 
-close_channel(_Reason, #channel_state{writer_pid = WriterPid,
-                                      reader_pid = FramingPid}) ->
+close_channel(_Reason, WriterPid, ReaderPid) ->
     rabbit_writer:shutdown(WriterPid),
-    rabbit_framing_channel:shutdown(FramingPid),
+    rabbit_framing_channel:shutdown(ReaderPid),
     ok.
 
 %% This closes the writer down, waits for the confirmation from
