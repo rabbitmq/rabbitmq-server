@@ -62,9 +62,7 @@
 -define(FILE_EXTENSION,        ".rdq").
 -define(FILE_EXTENSION_TMP,    ".rdt").
 -define(FILE_EXTENSION_DETS,   ".dets").
-
 -define(CACHE_ETS_NAME,        rabbit_disk_queue_cache).
--define(CACHE_MAX_SIZE,        10485760).
 
 -define(BINARY_MODE, [raw, binary]).
 -define(READ_MODE,   [read, read_ahead]).
@@ -515,14 +513,8 @@ decrement_cache(MsgId, #msstate { message_cache = Cache }) ->
     ok.
 
 insert_into_cache(MsgId, Msg, #msstate { message_cache = Cache }) ->
-    case cache_is_full(Cache) of
-        true -> ok;
-        false -> true = ets:insert_new(Cache, {MsgId, Msg, 1}),
-                 ok
-    end.
-
-cache_is_full(Cache) ->
-    ets:info(Cache, memory) > ?CACHE_MAX_SIZE.
+    true = ets:insert_new(Cache, {MsgId, Msg, 1}),
+    ok.
 
 %%----------------------------------------------------------------------------
 %% index
