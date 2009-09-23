@@ -656,7 +656,7 @@ on_disk(mixed, _IsDurable, _IsPersistent) -> false.
 publish_magic_marker_message(Q) ->
     Msg = rabbit_basic:message(
             rabbit_misc:r(<<"/">>, exchange, <<>>), ?MAGIC_MARKER,
-            [], <<>>, rabbit_guid:guid(), true),
+            [], <<>>, <<>>, true),
     ok = rabbit_disk_queue:publish(Q, ensure_binary_properties(Msg), false).
 
 fetch_ack_magic_marker_message(Q) ->
@@ -665,8 +665,8 @@ fetch_ack_magic_marker_message(Q) ->
     ok = rabbit_disk_queue:ack(Q, [AckTag]),
     {ok, Length}.
 
-is_magic_marker_message(
-  #basic_message { routing_key = ?MAGIC_MARKER, is_persistent = true }) ->
+is_magic_marker_message(#basic_message { routing_key = ?MAGIC_MARKER,
+                                         is_persistent = true, guid = <<>> }) ->
     true;
 is_magic_marker_message(_) ->
     false.
