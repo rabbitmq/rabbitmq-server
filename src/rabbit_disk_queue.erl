@@ -439,13 +439,12 @@ remove_messages(Q, MsgSeqIds, State = #dqstate { store = Store } ) ->
     Store1 = rabbit_msg_store:remove(MsgIds, Store),
     {ok, State #dqstate { store = Store1 }}.
 
-internal_tx_publish(Message = #basic_message { is_persistent = IsPersistent,
-                                               guid = MsgId,
+internal_tx_publish(Message = #basic_message { guid = MsgId,
                                                content = Content },
                     State = #dqstate { store = Store }) ->
     ClearedContent = rabbit_binary_parser:clear_decoded_content(Content),
     Message1 = Message #basic_message { content = ClearedContent },
-    Store1 = rabbit_msg_store:write(MsgId, Message1, IsPersistent, Store),
+    Store1 = rabbit_msg_store:write(MsgId, Message1, Store),
     {ok, State #dqstate { store = Store1 }}.
 
 internal_tx_commit(Q, PubMsgIds, AckSeqIds, From,

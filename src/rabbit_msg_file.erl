@@ -31,7 +31,7 @@
 
 -module(rabbit_msg_file).
 
--export([append/4, read/2, scan/1]).
+-export([append/3, read/2, scan/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -39,7 +39,7 @@
 -define(INTEGER_SIZE_BITS,       (8 * ?INTEGER_SIZE_BYTES)).
 -define(WRITE_OK_SIZE_BITS,      8).
 -define(WRITE_OK_MARKER,         255).
--define(FILE_PACKING_ADJUSTMENT, (1 + (3 * (?INTEGER_SIZE_BYTES)))).
+-define(FILE_PACKING_ADJUSTMENT, (1 + (2 * (?INTEGER_SIZE_BYTES)))).
 
 %%----------------------------------------------------------------------------
 
@@ -48,32 +48,27 @@
 -type(io_device() :: any()).
 -type(msg_id() :: binary()).
 -type(msg() :: any()).
--type(msg_attrs() :: any()).
 -type(position() :: non_neg_integer()).
 -type(msg_size() :: non_neg_integer()).
 
--spec(append/4 :: (io_device(), msg_id(), msg(), msg_attrs()) ->
+-spec(append/3 :: (io_device(), msg_id(), msg()) ->
              ({'ok', msg_size()} | {'error', any()})).
 -spec(read/2 :: (io_device(), msg_size()) ->
-             ({'ok', {msg_id(), msg(), msg_attrs()}} | {'error', any()})).
+             ({'ok', {msg_id(), msg()}} | {'error', any()})).
 -spec(scan/1 :: (io_device()) ->
-             {'ok', [{msg_id(), msg_attrs(), msg_size(), position()}]}).
+             {'ok', [{msg_id(), msg_size(), position()}]}).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-append(FileHdl, MsgId, MsgBody, MsgAttrs) when is_binary(MsgId) ->
+append(FileHdl, MsgId, MsgBody) when is_binary(MsgId) ->
     MsgBodyBin  = term_to_binary(MsgBody),
-    MsgAttrsBin = term_to_binary(MsgAttrs),
-    [MsgIdSize, MsgBodyBinSize, MsgAttrsBinSize] = Sizes =
-        [size(B) || B <- [MsgId, MsgBodyBin, MsgAttrsBin]],
+    [MsgIdSize, MsgBodyBinSize] = Sizes = [size(B) || B <- [MsgId, MsgBodyBin]],
     Size = lists:sum(Sizes),
     case file:write(FileHdl, <<Size:?INTEGER_SIZE_BITS,
                                MsgIdSize:?INTEGER_SIZE_BITS,
-                               MsgAttrsBinSize:?INTEGER_SIZE_BITS,
                                MsgId:MsgIdSize/binary,
-                               MsgAttrsBin:MsgAttrsBinSize/binary,
                                MsgBodyBin:MsgBodyBinSize/binary,
                                ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
         ok -> {ok, Size + ?FILE_PACKING_ADJUSTMENT};
@@ -86,15 +81,12 @@ read(FileHdl, TotalSize) ->
     case file:read(FileHdl, TotalSize) of
         {ok, <<Size:?INTEGER_SIZE_BITS,
                MsgIdSize:?INTEGER_SIZE_BITS,
-               MsgAttrsBinSize:?INTEGER_SIZE_BITS,
                Rest:SizeWriteOkBytes/binary>>} ->
-            BodyBinSize = Size - MsgIdSize - MsgAttrsBinSize,
+            BodyBinSize = Size - MsgIdSize,
             <<MsgId:MsgIdSize/binary,
-              MsgAttrsBin:MsgAttrsBinSize/binary,
               MsgBodyBin:BodyBinSize/binary,
               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>> = Rest,
-            {ok, {MsgId,
-                  binary_to_term(MsgBodyBin), binary_to_term(MsgAttrsBin)}};
+            {ok, {MsgId, binary_to_term(MsgBodyBin)}};
         KO -> KO
     end.
 
@@ -105,23 +97,19 @@ scan(FileHdl, Offset, Acc) ->
         eof -> {ok, Acc};
         {corrupted, NextOffset} ->
             scan(FileHdl, NextOffset, Acc);
-        {ok, {MsgId, MsgAttrs, TotalSize, NextOffset}} ->
-            scan(FileHdl, NextOffset,
-                 [{MsgId, MsgAttrs, TotalSize, Offset} | Acc]);
+        {ok, {MsgId, TotalSize, NextOffset}} ->
+            scan(FileHdl, NextOffset, [{MsgId, TotalSize, Offset} | Acc]);
         _KO ->
             %% bad message, but we may still have recovered some valid messages
             {ok, Acc}
     end.
 
 read_next(FileHdl, Offset) ->
-    ThreeIntegers = 3 * ?INTEGER_SIZE_BYTES,
-    case file:read(FileHdl, ThreeIntegers) of
-        {ok,
-         <<Size:?INTEGER_SIZE_BITS,
-           MsgIdSize:?INTEGER_SIZE_BITS,
-           MsgAttrsBinSize:?INTEGER_SIZE_BITS>>} ->
+    TwoIntegers = 2 * ?INTEGER_SIZE_BYTES,
+    case file:read(FileHdl, TwoIntegers) of
+        {ok, <<Size:?INTEGER_SIZE_BITS, MsgIdSize:?INTEGER_SIZE_BITS>>} ->
             if Size == 0 -> eof; %% Nothing we can do other than stop
-               MsgIdSize == 0 orelse MsgAttrsBinSize == 0 ->
+               MsgIdSize == 0 ->
                     %% current message corrupted, try skipping past it
                     ExpectedAbsPos = Offset + Size + ?FILE_PACKING_ADJUSTMENT,
                     case file:position(FileHdl, {cur, Size + 1}) of
@@ -130,21 +118,18 @@ read_next(FileHdl, Offset) ->
                         KO                   -> KO
                     end;
                true -> %% all good, let's continue
-                    HeaderSize = MsgIdSize + MsgAttrsBinSize,
-                    case file:read(FileHdl, HeaderSize) of
-                        {ok, <<MsgId:MsgIdSize/binary,
-                               MsgAttrsBin:MsgAttrsBinSize/binary>>} ->
+                    case file:read(FileHdl, MsgIdSize) of
+                        {ok, <<MsgId:MsgIdSize/binary>>} ->
                             TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
                             ExpectedAbsPos = Offset + TotalSize - 1,
                             case file:position(
-                                   FileHdl, {cur, Size - HeaderSize}) of
+                                   FileHdl, {cur, Size - MsgIdSize}) of
                                 {ok, ExpectedAbsPos} ->
                                     NextOffset = ExpectedAbsPos + 1,
                                     case file:read(FileHdl, 1) of
                                         {ok, <<?WRITE_OK_MARKER:
                                                ?WRITE_OK_SIZE_BITS>>} ->
                                             {ok, {MsgId,
-                                                  binary_to_term(MsgAttrsBin),
                                                   TotalSize, NextOffset}};
                                         {ok, _SomeOtherData} ->
                                             {corrupted, NextOffset};

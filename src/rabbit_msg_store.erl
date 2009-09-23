@@ -31,7 +31,7 @@
 
 -module(rabbit_msg_store).
 
--export([init/5, write/4, read/2, contains/2, remove/2, release/2,
+-export([init/5, write/3, read/2, contains/2, remove/2, release/2,
          needs_sync/2, sync/1, cleanup/1]).
 
 %%----------------------------------------------------------------------------
@@ -52,7 +52,7 @@
          }).
 
 -record(msg_location,
-        {msg_id, ref_count, file, offset, total_size, attrs}).
+        {msg_id, ref_count, file, offset, total_size}).
 
 -record(file_summary,
         {file, valid_total_size, contiguous_top, left, right}).
@@ -75,7 +75,6 @@
 -type(ets_table() :: any()).
 -type(msg_id() :: binary()).
 -type(msg() :: any()).
--type(msg_attrs() :: any()).
 -type(file_path() :: any()).
 -type(io_device() :: any()).
 
@@ -97,7 +96,7 @@
                  non_neg_integer(), non_neg_integer(),
                  (fun ((A) -> 'finished' | {msg_id(), non_neg_integer(), A})),
                  A) -> msstate()).
--spec(write/4 :: (msg_id(), msg(), msg_attrs(), msstate()) -> msstate()).
+-spec(write/3 :: (msg_id(), msg(), msstate()) -> msstate()).
 -spec(read/2 :: (msg_id(), msstate()) -> {msg(), msstate()} | 'not_found').
 -spec(contains/2 :: (msg_id(), msstate()) -> boolean()).
 -spec(remove/2 :: ([msg_id()], msstate()) -> msstate()).
@@ -113,7 +112,7 @@
 %% The components:
 %%
 %% MsgLocation: this is an ets table which contains:
-%%              {MsgId, RefCount, File, Offset, TotalSize, Attrs}
+%%              {MsgId, RefCount, File, Offset, TotalSize}
 %% FileSummary: this is an ets table which contains:
 %%              {File, ValidTotalSize, ContiguousTop, Left, Right}
 %%
@@ -277,19 +276,18 @@ init(Dir, FileSizeLimit, ReadFileHandlesLimit,
 
     State1 #msstate { current_file_handle = FileHdl }.
 
-write(MsgId, Msg, Attrs,
-      State = #msstate { current_file_handle = CurHdl,
-                         current_file        = CurFile,
-                         current_offset      = CurOffset,
-                         file_summary        = FileSummary }) ->
+write(MsgId, Msg, State = #msstate { current_file_handle = CurHdl,
+                                     current_file        = CurFile,
+                                     current_offset      = CurOffset,
+                                     file_summary        = FileSummary }) ->
     case index_lookup(MsgId, State) of
         not_found ->
             %% New message, lots to do
-            {ok, TotalSize} = rabbit_msg_file:append(CurHdl, MsgId, Msg, Attrs),
+            {ok, TotalSize} = rabbit_msg_file:append(CurHdl, MsgId, Msg),
             ok = index_insert(#msg_location {
                                 msg_id = MsgId, ref_count = 1, file = CurFile,
-                                offset = CurOffset, total_size = TotalSize,
-                                attrs = Attrs }, State),
+                                offset = CurOffset, total_size = TotalSize },
+                              State),
             [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
                                        contiguous_top = ContiguousTop,
                                        right = undefined }] =
@@ -323,13 +321,13 @@ read(MsgId, State) ->
                         total_size = TotalSize } ->
             case fetch_and_increment_cache(MsgId, State) of
                 not_found ->
-                    {{ok, {MsgId, Msg, _Attrs}}, State1} =
+                    {{ok, {MsgId, Msg}}, State1} =
                         with_read_handle_at(
                           File, Offset,
                           fun(Hdl) ->
                                   Res = case rabbit_msg_file:read(
                                                Hdl, TotalSize) of
-                                            {ok, {MsgId, _, _}} = Obj -> Obj;
+                                            {ok, {MsgId, _}} = Obj -> Obj;
                                             {ok, Rest} ->
                                                 throw({error,
                                                        {misread, 
@@ -654,7 +652,7 @@ recover_crashed_compactions1(Dir, FileNames, TmpFileName) ->
             %% Wipe out any rubbish at the end of the file. Remember
             %% the head of the list will be the highest entry in the
             %% file.
-            [{_, _, TmpTopTotalSize, TmpTopOffset}|_] = UncorruptedMessagesTmp,
+            [{_, TmpTopTotalSize, TmpTopOffset}|_] = UncorruptedMessagesTmp,
             TmpSize = TmpTopOffset + TmpTopTotalSize,
             %% Extend the main file as big as necessary in a single
             %% move. If we run out of disk space, this truncate could
@@ -685,8 +683,7 @@ is_disjoint(SmallerL, BiggerL) ->
 
 scan_file_for_valid_messages_msg_ids(Dir, FileName) ->
     {ok, Messages} = scan_file_for_valid_messages(Dir, FileName),
-    {ok, Messages,
-     [MsgId || {MsgId, _Attrs, _TotalSize, _FileOffset} <- Messages]}.
+    {ok, Messages, [MsgId || {MsgId, _TotalSize, _FileOffset} <- Messages]}.
 
 scan_file_for_valid_messages(Dir, FileName) ->
     case open_file(Dir, FileName, ?READ_MODE) of
@@ -710,8 +707,8 @@ find_contiguous_block_prefix(List) ->
 
 find_contiguous_block_prefix([], ExpectedOffset, MsgIds) ->
     {ExpectedOffset, MsgIds};
-find_contiguous_block_prefix([{MsgId, _Attrs, TotalSize, ExpectedOffset}
-                             | Tail], ExpectedOffset, MsgIds) ->
+find_contiguous_block_prefix([{MsgId, TotalSize, ExpectedOffset} | Tail],
+                             ExpectedOffset, MsgIds) ->
     ExpectedOffset1 = ExpectedOffset + TotalSize,
     find_contiguous_block_prefix(Tail, ExpectedOffset1, [MsgId | MsgIds]);
 find_contiguous_block_prefix([_MsgAfterGap | _Tail], ExpectedOffset, MsgIds) ->
@@ -738,15 +735,15 @@ build_index(Left, [File|Files], FilesToCompact,
     {ok, Messages} = scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     {ValidMessages, ValidTotalSize, AllValid} =
         lists:foldl(
-          fun (Obj = {MsgId, Attrs, TotalSize, Offset},
+          fun (Obj = {MsgId, TotalSize, Offset},
                {VMAcc, VTSAcc, AVAcc}) ->
                   case index_lookup(MsgId, State) of
                       not_found -> {VMAcc, VTSAcc, false};
                       StoreEntry ->
                           ok = index_update(StoreEntry #msg_location {
                                               file = File, offset = Offset,
-                                              total_size = TotalSize,
-                                              attrs = Attrs }, State),
+                                              total_size = TotalSize },
+                                            State),
                           {[Obj | VMAcc], VTSAcc + TotalSize, AVAcc}
                   end
           end, {[], 0, Messages =/= []}, Messages),
