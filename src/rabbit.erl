@@ -217,8 +217,7 @@ log_location(Type) ->
 
 app_location() ->
     {ok, Application} = application:get_application(),
-    rabbit_misc:absolute_path(
-        code:where_is_file(atom_to_list(Application) ++ ".app")).
+    filename:absname(code:where_is_file(atom_to_list(Application) ++ ".app")).
 
 %---------------------------------------------------------------------------
 

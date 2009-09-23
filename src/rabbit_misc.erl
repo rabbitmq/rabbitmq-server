@@ -55,7 +55,6 @@
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1]).
--export([absolute_path/1]).
 
 -import(mnesia).
 -import(lists).
@@ -125,7 +124,6 @@
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
--spec(absolute_path/1 :: (string()) -> string()).
 
 -endif.
 
@@ -477,17 +475,3 @@ ceil(N) ->
         0 -> N;
         _ -> 1 + T
     end.
-
-absolute_path(RelPath) ->
-    filename:join(absolute_path([], filename:split(filename:absname(RelPath)))).
-
-absolute_path([_ | ResultParts], [".." | Parts]) ->
-    absolute_path(ResultParts, Parts);
-absolute_path([], [".." | Parts]) ->
-    absolute_path([], Parts);
-absolute_path(ResultParts, ["." | Parts]) ->
-    absolute_path(ResultParts, Parts);
-absolute_path(ResultParts, [Part | Parts]) ->
-    absolute_path([Part | ResultParts], Parts);
-absolute_path(ResultParts, []) ->
-    lists:reverse(ResultParts).
