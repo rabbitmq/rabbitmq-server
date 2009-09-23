@@ -213,7 +213,6 @@ start_writer(Sock, Channel) ->
     rabbit_writer:start_link(Sock, Channel, ?FRAME_MIN_SIZE).
 
 start_reader(Sock, FramingPid) ->
-    process_flag(trap_exit, true),
     register_framing_channel(0, FramingPid),
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
     ok = main_reader_loop(Sock, undefined, undefined, undefined),
@@ -261,10 +260,6 @@ main_reader_loop(Sock, Type, Channel, Length) ->
                     exit({unexpected_down_signal, Pid, Info})
             end,
             main_reader_loop(Sock, Type, Channel, Length);
-        {'EXIT', Pid, Reason} ->
-            ?LOG_WARN("Reader received unexpected exit signal from "
-                      "(~p). Reason: ~p~n", [Pid, Reason]),
-            exit({unexpected_exit_signal, Pid, Reason});
         Other ->
             ?LOG_WARN("Unknown message type: ~p~n", [Other]),
             exit({unknown_message_type, Other})
