@@ -112,7 +112,7 @@
 
 %% The components:
 %%
-%% MsgLocation: this is a ets table which contains:
+%% MsgLocation: this is an ets table which contains:
 %%              {MsgId, RefCount, File, Offset, TotalSize, Attrs}
 %% FileSummary: this is an ets table which contains:
 %%              {File, ValidTotalSize, ContiguousTop, Left, Right}
