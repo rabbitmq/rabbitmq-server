@@ -862,9 +862,10 @@ rdq_match_messages(#basic_message { guid = MsgId, content = #content { payload_f
                    #basic_message { guid = MsgId, content = #content { payload_fragments_rev = MsgBody }}) ->
     ok.
 
-commit_list(List, MsgCount) ->
-    lists:zip([term_to_binary(MsgId) || MsgId <- List],
-              lists:duplicate(MsgCount, false)).
+commit_list(List, MsgCount, IsPersistent) ->
+    lists:zip3([term_to_binary(MsgId) || MsgId <- List],
+               lists:duplicate(MsgCount, false),
+               lists:duplicate(MsgCount, IsPersistent)).
 
 rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
     Startup = rdq_virgin(),
@@ -872,7 +873,7 @@ rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
     QCount = length(Qs),
     Msg = <<0:(8*MsgSizeBytes)>>,
     List = lists:seq(1, MsgCount),
-    CommitList = commit_list(List, MsgCount),
+    CommitList = commit_list(List, MsgCount, false),
     {Publish, ok} =
         timer:tc(?MODULE, rdq_time_commands,
                  [[fun() -> [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false))
@@ -911,7 +912,7 @@ rdq_stress_gc(MsgCount) ->
     MsgSizeBytes = 256*1024,
     Msg = <<0:(8*MsgSizeBytes)>>, % 256KB
     List = lists:seq(1, MsgCount),
-    CommitList = commit_list(List, MsgCount),
+    CommitList = commit_list(List, MsgCount, false),
     [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- List],
     rabbit_disk_queue:tx_commit(q, CommitList, []),
     StartChunk = round(MsgCount / 20), % 5%
@@ -954,7 +955,7 @@ rdq_test_startup_with_queue_gaps() ->
     Total = 1000,
     Half = round(Total/2),
     All = lists:seq(1,Total),
-    CommitAll = commit_list(All, Total),
+    CommitAll = commit_list(All, Total, true),
     [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, true)) || N <- All],
     rabbit_disk_queue:tx_commit(q, CommitAll, []),
     io:format("Publish done~n", []),
@@ -1011,7 +1012,7 @@ rdq_test_redeliver() ->
     Total = 1000,
     Half = round(Total/2),
     All = lists:seq(1,Total),
-    CommitAll = commit_list(All, Total),
+    CommitAll = commit_list(All, Total, false),
     [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- All],
     rabbit_disk_queue:tx_commit(q, CommitAll, []),
     io:format("Publish done~n", []),
@@ -1064,7 +1065,7 @@ rdq_test_purge() ->
     Total = 1000,
     Half = round(Total/2),
     All = lists:seq(1,Total),
-    CommitAll = commit_list(All, Total),
+    CommitAll = commit_list(All, Total, false),
     [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- All],
     rabbit_disk_queue:tx_commit(q, CommitAll, []),
     io:format("Publish done~n", []),

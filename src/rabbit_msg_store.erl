@@ -31,7 +31,7 @@
 
 -module(rabbit_msg_store).
 
--export([init/5, write/4, read/2, attrs/2, remove/2, release/2,
+-export([init/5, write/4, read/2, contains/2, remove/2, release/2,
          needs_sync/2, sync/1, cleanup/1]).
 
 %%----------------------------------------------------------------------------
@@ -99,7 +99,7 @@
                  A) -> msstate()).
 -spec(write/4 :: (msg_id(), msg(), msg_attrs(), msstate()) -> msstate()).
 -spec(read/2 :: (msg_id(), msstate()) -> {msg(), msstate()} | 'not_found').
--spec(attrs/2 :: (msg_id(), msstate()) -> msg_attrs() | 'not_found').
+-spec(contains/2 :: (msg_id(), msstate()) -> boolean()).
 -spec(remove/2 :: ([msg_id()], msstate()) -> msstate()).
 -spec(release/2 :: ([msg_id()], msstate()) -> msstate()).
 -spec(needs_sync/2 :: ([msg_id()], msstate()) -> boolean()).
@@ -354,10 +354,10 @@ read(MsgId, State) ->
             end
     end.
 
-attrs(MsgId, State) ->
+contains(MsgId, State) ->
     case index_lookup(MsgId, State) of
-        not_found -> not_found;
-        #msg_location { attrs = Attrs } -> Attrs
+        not_found        -> false;
+        #msg_location {} -> true
     end.
 
 remove(MsgIds, State = #msstate { current_file = CurFile }) ->

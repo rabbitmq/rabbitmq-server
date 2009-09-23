@@ -235,7 +235,7 @@ tx_commit(Publishes, MsgsWithAcks,
           State = #mqstate { mode = Mode, queue = Q, msg_buf = MsgBuf,
                              is_durable = IsDurable, length = Length }) ->
     PersistentPubs =
-        [{MsgId, false} ||
+        [{MsgId, false, IsPersistent} ||
             #basic_message { guid = MsgId,
                              is_persistent = IsPersistent } <- Publishes,
             on_disk(Mode, IsDurable, IsPersistent)],
@@ -534,12 +534,13 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
               Commit, Ack, inc_queue_length(MsgBuf, Count))
     end.
 
-republish_message_to_disk_queue(IsDurable, Q, Queue, PublishCount, RequeueCount,
-                                Commit, Ack, MsgBuf, Msg =
-                                #basic_message { guid = MsgId }, IsDelivered) ->
+republish_message_to_disk_queue(
+  IsDurable, Q, Queue, PublishCount, RequeueCount, Commit, Ack, MsgBuf,
+  Msg = #basic_message { guid = MsgId, is_persistent = IsPersistent },
+  IsDelivered) ->
     {Commit1, Ack1} = flush_requeue_to_disk_queue(Q, RequeueCount, Commit, Ack),
     ok = rabbit_disk_queue:tx_publish(Msg),
-    Commit2 = [{MsgId, IsDelivered} | Commit1],
+    Commit2 = [{MsgId, IsDelivered, IsPersistent} | Commit1],
     {PublishCount1, Commit3, Ack2} =
         case PublishCount == ?TO_DISK_MAX_FLUSH_SIZE of
             true  -> ok = flush_messages_to_disk_queue(Q, Commit2, Ack1),

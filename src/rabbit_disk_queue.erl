@@ -62,7 +62,8 @@
 -define(SHUTDOWN_MESSAGE,
         #dq_msg_loc { queue_and_seq_id = ?SHUTDOWN_MESSAGE_KEY,
                       msg_id = infinity_and_beyond,
-                      is_delivered = never
+                      is_delivered = never,
+                      is_persistent = true
                     }).
 
 -define(SYNC_INTERVAL, 5). %% milliseconds
@@ -98,7 +99,8 @@
 -spec(prefetch/1 :: (queue_name()) -> 'ok').
 -spec(ack/2 :: (queue_name(), [ack_tag()]) -> 'ok').
 -spec(tx_publish/1 :: (message()) -> 'ok').
--spec(tx_commit/3 :: (queue_name(), [{msg_id(), boolean()}], [ack_tag()]) ->
+-spec(tx_commit/3 :: (queue_name(), [{msg_id(), boolean(), boolean()}],
+                      [ack_tag()]) ->
              'ok').
 -spec(tx_rollback/1 :: ([msg_id()]) -> 'ok').
 -spec(requeue/2 :: (queue_name(), [{ack_tag(), boolean()}]) -> 'ok').
@@ -198,9 +200,10 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
 
     ok = detect_shutdown_state_and_adjust_delivered_flags(),
 
-    Store = prune(rabbit_msg_store:init(base_directory(),
-                                        FileSizeLimit, ReadFileHandlesLimit,
-                                        fun msg_ref_gen/1, msg_ref_gen_init())),
+    Store = rabbit_msg_store:init(base_directory(),
+                                  FileSizeLimit, ReadFileHandlesLimit,
+                                  fun msg_ref_gen/1, msg_ref_gen_init()),
+    ok = prune(Store),
 
     Sequences = ets:new(?SEQUENCE_ETS_NAME, [set, private]),
     ok = extract_sequence_numbers(Sequences),
@@ -449,7 +452,8 @@ internal_tx_commit(Q, PubMsgIds, AckSeqIds, From,
                    State = #dqstate { store = Store, on_sync_txns = Txns }) ->
     TxnDetails = {Q, PubMsgIds, AckSeqIds, From},
     case rabbit_msg_store:needs_sync(
-           [MsgId || {MsgId, _IsDelivered} <- PubMsgIds], Store) of
+           [MsgId || {MsgId, _IsDelivered, _IsPersistent} <- PubMsgIds],
+           Store) of
         true  -> Txns1 = [TxnDetails | Txns],
                  State #dqstate { on_sync_txns = Txns1 };
         false -> internal_do_tx_commit(TxnDetails, State)
@@ -464,12 +468,13 @@ internal_do_tx_commit({Q, PubMsgIds, AckSeqIds, From},
                   ok = mnesia:write_lock_table(rabbit_disk_queue),
                   {ok, WriteSeqId1} =
                       lists:foldl(
-                        fun ({MsgId, IsDelivered}, {ok, SeqId}) ->
+                        fun ({MsgId, IsDelivered, IsPersistent}, {ok, SeqId}) ->
                                 {mnesia:write(
                                    rabbit_disk_queue,
                                    #dq_msg_loc { queue_and_seq_id = {Q, SeqId},
                                                  msg_id = MsgId,
-                                                 is_delivered = IsDelivered
+                                                 is_delivered = IsDelivered,
+                                                 is_persistent = IsPersistent
                                                }, write),
                                  SeqId + 1}
                         end, {ok, InitWriteSeqId}, PubMsgIds),
@@ -483,7 +488,8 @@ internal_do_tx_commit({Q, PubMsgIds, AckSeqIds, From},
     gen_server2:reply(From, ok),
     State1.
 
-internal_publish(Q, Message = #basic_message { guid = MsgId },
+internal_publish(Q, Message = #basic_message { guid = MsgId,
+                                               is_persistent = IsPersistent },
                  IsDelivered, State) ->
     {ok, State1 = #dqstate { sequences = Sequences }} =
         internal_tx_publish(Message, State),
@@ -491,7 +497,8 @@ internal_publish(Q, Message = #basic_message { guid = MsgId },
     ok = mnesia:dirty_write(rabbit_disk_queue,
                             #dq_msg_loc { queue_and_seq_id = {Q, WriteSeqId},
                                           msg_id = MsgId,
-                                          is_delivered = IsDelivered}),
+                                          is_delivered = IsDelivered,
+                                          is_persistent = IsPersistent }),
     true = ets:insert(Sequences, {Q, ReadSeqId, WriteSeqId + 1}),
     {ok, {MsgId, WriteSeqId}, State1}.
 
@@ -694,54 +701,42 @@ msg_ref_gen_init() -> mnesia:dirty_first(rabbit_disk_queue).
 
 msg_ref_gen('$end_of_table') -> finished;
 msg_ref_gen(Key) ->
-    [Obj] = mnesia:dirty_read(rabbit_disk_queue, Key),
-    {Obj #dq_msg_loc.msg_id, 1, mnesia:dirty_next(rabbit_disk_queue, Key)}.
+    [#dq_msg_loc { msg_id = MsgId, is_persistent = IsPersistent }] =
+        mnesia:dirty_read(rabbit_disk_queue, Key),
+    NextKey = mnesia:dirty_next(rabbit_disk_queue, Key),
+    {MsgId, case IsPersistent of true -> 1; false -> 0 end, NextKey}.
 
-prune_flush_batch(DeleteAcc, RemoveAcc, Store) ->
+prune_flush_batch(DeleteAcc) ->
     lists:foldl(fun (Key, ok) ->
                         mnesia:dirty_delete(rabbit_disk_queue, Key)
-                end, ok, DeleteAcc),
-    rabbit_msg_store:remove(RemoveAcc, Store).
+                end, ok, DeleteAcc).
 
 prune(Store) ->
-    prune(Store, mnesia:dirty_first(rabbit_disk_queue), [], [], 0).
+    prune(Store, mnesia:dirty_first(rabbit_disk_queue), [], 0).
 
-prune(Store, '$end_of_table', _DeleteAcc, _RemoveAcc, 0) ->
-    Store;
-prune(Store, '$end_of_table', DeleteAcc, RemoveAcc, _Len) ->
-    prune_flush_batch(DeleteAcc, RemoveAcc, Store);
-prune(Store, Key, DeleteAcc, RemoveAcc, Len) ->
+prune(_Store, '$end_of_table', DeleteAcc, _Len) ->
+    prune_flush_batch(DeleteAcc);
+prune(Store, Key, DeleteAcc, Len) ->
     [#dq_msg_loc { msg_id = MsgId, queue_and_seq_id = {Q, SeqId} }] =
         mnesia:dirty_read(rabbit_disk_queue, Key),
-    {DeleteAcc1, RemoveAcc1, Len1} =
-        case rabbit_msg_store:attrs(MsgId, Store) of
-            not_found ->
-                %% msg hasn't been found on disk, delete it
-                {[{Q, SeqId} | DeleteAcc], RemoveAcc, Len + 1};
-            true ->
-                %% msg is persistent, keep it
-                {DeleteAcc, RemoveAcc, Len};
-            false ->
-                %% msg is not persistent, delete it
-                {[{Q, SeqId} | DeleteAcc], [MsgId | RemoveAcc], Len + 1}
+    {DeleteAcc1, Len1} =
+        case rabbit_msg_store:contains(MsgId, Store) of
+            true  -> {DeleteAcc, Len};
+            false -> {[{Q, SeqId} | DeleteAcc], Len + 1}
         end,
-    {Store1, Key1, DeleteAcc2, RemoveAcc2, Len2} =
-        if
-            Len1 >= ?BATCH_SIZE ->
-                %% We have no way of knowing how flushing the batch
-                %% will affect ordering of records within the table,
-                %% so have no choice but to start again. Although this
-                %% will make recovery slower for large queues, we
-                %% guarantee we can start up in constant memory
-                Store2 = prune_flush_batch(DeleteAcc1, RemoveAcc1,
-                                                  Store),
-                Key2 = mnesia:dirty_first(rabbit_disk_queue),
-                {Store2, Key2, [], [], 0};
-            true ->
-                Key2 = mnesia:dirty_next(rabbit_disk_queue, Key),
-                {Store, Key2, DeleteAcc1, RemoveAcc1, Len1}
-        end,
-    prune(Store1, Key1, DeleteAcc2, RemoveAcc2, Len2).
+    if Len1 >= ?BATCH_SIZE ->
+            %% We have no way of knowing how flushing the batch will
+            %% affect ordering of records within the table, so have no
+            %% choice but to start again. Although this will make
+            %% recovery slower for large queues, we guarantee we can
+            %% start up in constant memory
+            ok = prune_flush_batch(DeleteAcc1),
+            NextKey = mnesia:dirty_first(rabbit_disk_queue),
+            prune(Store, NextKey, [], 0);
+       true ->
+            NextKey = mnesia:dirty_next(rabbit_disk_queue, Key),
+            prune(Store, NextKey, DeleteAcc1, Len1)
+    end.
 
 extract_sequence_numbers(Sequences) ->
     true =
