@@ -271,7 +271,8 @@ init(Dir, FileSizeLimit, ReadFileHandlesLimit,
         build_index(Files, State),
 
     %% read is only needed so that we can seek
-    {ok, FileHdl} = open_file(Dir, CurFile, ?WRITE_MODE ++ [read]),
+    {ok, FileHdl} = open_file(Dir, filenum_to_name(CurFile),
+                              ?WRITE_MODE ++ [read]),
     {ok, Offset} = file:position(FileHdl, Offset),
 
     State1 #msstate { current_file_handle = FileHdl }.
@@ -424,8 +425,6 @@ filenum_to_name(File) -> integer_to_list(File) ++ ?FILE_EXTENSION.
 
 filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
 
-open_file(Dir, FileNum, Mode) when is_integer(FileNum) ->
-    open_file(Dir, filenum_to_name(FileNum), Mode);
 open_file(Dir, FileName, Mode) ->
     file:open(form_filename(Dir, FileName), ?BINARY_MODE ++ Mode).
 
@@ -775,7 +774,7 @@ maybe_roll_to_new_file(Offset,
     State1 = sync(State),
     ok = file:close(CurHdl),
     NextFile = CurFile + 1,
-    {ok, NextHdl} = open_file(Dir, NextFile, ?WRITE_MODE),
+    {ok, NextHdl} = open_file(Dir, filenum_to_name(NextFile), ?WRITE_MODE),
     true = ets:update_element(FileSummary, CurFile,
                               {#file_summary.right, NextFile}),
     true = ets:insert_new(
