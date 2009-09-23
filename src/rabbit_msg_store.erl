@@ -749,7 +749,7 @@ build_index(Left, [File|Files], FilesToCompact,
                                               attrs = Attrs }, State),
                           {[Obj | VMAcc], VTSAcc + TotalSize, AVAcc}
                   end
-          end, {[], 0, true}, Messages),
+          end, {[], 0, Messages =/= []}, Messages),
     %% foldl reverses lists, find_contiguous_block_prefix needs
     %% msgs eldest first, so, ValidMessages is the right way round
     {ContiguousTop, _} = find_contiguous_block_prefix(ValidMessages),
