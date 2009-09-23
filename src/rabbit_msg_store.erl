@@ -719,11 +719,11 @@ find_contiguous_block_prefix([_MsgAfterGap | _Tail], ExpectedOffset, MsgIds) ->
 
 build_index([], State) ->
     CurFile = State #msstate.current_file,
-    build_index(undefined, [CurFile], State);
+    build_index(undefined, [CurFile], [], State);
 build_index(Files, State) ->
-    build_index(undefined, Files, State).
+    build_index(undefined, Files, [], State).
 
-build_index(Left, [], State) ->
+build_index(Left, [], FilesToCompact, State) ->
     ok = index_delete_by_file(undefined, State),
     Offset = case lists:reverse(index_search_by_file(Left, State)) of
                  [] -> 0;
@@ -731,22 +731,25 @@ build_index(Left, [], State) ->
                                   total_size = TotalSize } | _] ->
                      MaxOffset + TotalSize
              end,
-    State #msstate { current_file = Left, current_offset = Offset };
-build_index(Left, [File|Files],
-              State = #msstate { dir = Dir, file_summary = FileSummary }) ->
+    compact(FilesToCompact, %% this never includes the current file
+            State #msstate { current_file = Left, current_offset = Offset });
+build_index(Left, [File|Files], FilesToCompact,
+            State = #msstate { dir = Dir, file_summary = FileSummary }) ->
     {ok, Messages} = scan_file_for_valid_messages(Dir, filenum_to_name(File)),
-    {ValidMessages, ValidTotalSize} = lists:foldl(
-        fun (Obj = {MsgId, Attrs, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
-                case index_lookup(MsgId, State) of
-                    not_found -> {VMAcc, VTSAcc};
-                    StoreEntry ->
-                        ok = index_update(StoreEntry #msg_location {
-                                            file = File, offset = Offset,
-                                            total_size = TotalSize,
-                                            attrs = Attrs }, State),
-                        {[Obj | VMAcc], VTSAcc + TotalSize}
-                end
-        end, {[], 0}, Messages),
+    {ValidMessages, ValidTotalSize, AllValid} =
+        lists:foldl(
+          fun (Obj = {MsgId, Attrs, TotalSize, Offset},
+               {VMAcc, VTSAcc, AVAcc}) ->
+                  case index_lookup(MsgId, State) of
+                      not_found -> {VMAcc, VTSAcc, false};
+                      StoreEntry ->
+                          ok = index_update(StoreEntry #msg_location {
+                                              file = File, offset = Offset,
+                                              total_size = TotalSize,
+                                              attrs = Attrs }, State),
+                          {[Obj | VMAcc], VTSAcc + TotalSize, AVAcc}
+                  end
+          end, {[], 0, true}, Messages),
     %% foldl reverses lists, find_contiguous_block_prefix needs
     %% msgs eldest first, so, ValidMessages is the right way round
     {ContiguousTop, _} = find_contiguous_block_prefix(ValidMessages),
@@ -758,7 +761,11 @@ build_index(Left, [File|Files],
                             file = File, valid_total_size = ValidTotalSize,
                             contiguous_top = ContiguousTop,
                             left = Left, right = Right }),
-    build_index(File, Files, State).
+    FilesToCompact1 = case AllValid orelse Right =:= undefined of
+                          true  -> FilesToCompact;
+                          false -> [File | FilesToCompact]
+                      end,
+    build_index(File, Files, FilesToCompact1, State).
 
 %%----------------------------------------------------------------------------
 %% garbage collection / compaction / aggregation
