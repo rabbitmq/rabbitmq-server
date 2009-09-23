@@ -268,7 +268,7 @@ init(Dir, FileSizeLimit, ReadFileHandlesLimit,
     %% whole lot
     Files = [filename_to_num(FileName) || FileName <- FileNames],
     State1 = #msstate { current_file = CurFile, current_offset = Offset } =
-        load_messages(Files, State),
+        build_index(Files, State),
 
     %% read is only needed so that we can seek
     {ok, FileHdl} = open_file(Dir, filenum_to_name(CurFile),
@@ -717,23 +717,22 @@ find_contiguous_block_prefix([{MsgId, _Attrs, TotalSize, ExpectedOffset}
 find_contiguous_block_prefix([_MsgAfterGap | _Tail], ExpectedOffset, MsgIds) ->
     {ExpectedOffset, MsgIds}.
 
-load_messages([], State) ->
+build_index([], State) ->
     CurFile = State #msstate.current_file,
-    load_messages(undefined, [CurFile], State);
-load_messages(Files, State) ->
-    load_messages(undefined, Files, State).
+    build_index(undefined, [CurFile], State);
+build_index(Files, State) ->
+    build_index(undefined, Files, State).
 
-load_messages(Left, [], State) ->
+build_index(Left, [], State) ->
     ok = index_delete_by_file(undefined, State),
-    Offset =
-        case lists:reverse(index_search_by_file(Left, State)) of
-            [] -> 0;
-            [#msg_location { offset = MaxOffset,
-                             total_size = TotalSize } | _] ->
-                MaxOffset + TotalSize
-        end,
+    Offset = case lists:reverse(index_search_by_file(Left, State)) of
+                 [] -> 0;
+                 [#msg_location { offset = MaxOffset,
+                                  total_size = TotalSize } | _] ->
+                     MaxOffset + TotalSize
+             end,
     State #msstate { current_file = Left, current_offset = Offset };
-load_messages(Left, [File|Files],
+build_index(Left, [File|Files],
               State = #msstate { dir = Dir, file_summary = FileSummary }) ->
     {ok, Messages} = scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     {ValidMessages, ValidTotalSize} = lists:foldl(
@@ -752,14 +751,14 @@ load_messages(Left, [File|Files],
     %% msgs eldest first, so, ValidMessages is the right way round
     {ContiguousTop, _} = find_contiguous_block_prefix(ValidMessages),
     Right = case Files of
-                [] -> undefined;
+                []    -> undefined;
                 [F|_] -> F
             end,
     true = ets:insert_new(FileSummary, #file_summary {
                             file = File, valid_total_size = ValidTotalSize,
                             contiguous_top = ContiguousTop,
                             left = Left, right = Right }),
-    load_messages(File, Files, State).
+    build_index(File, Files, State).
 
 %%----------------------------------------------------------------------------
 %% garbage collection / compaction / aggregation
