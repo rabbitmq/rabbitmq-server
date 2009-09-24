@@ -61,23 +61,23 @@ post-destroot {
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
 
     reinplace -E "s:(/etc/rabbitmq/rabbitmq.conf):${prefix}\\1:g" \
-        ${sbindir}/rabbitmq-env
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-env
     reinplace -E "s:(CLUSTER_CONFIG_FILE)=/:\\1=${prefix}/:" \
-        ${sbindir}/rabbitmq-multi \
-        ${sbindir}/rabbitmq-server \
-        ${sbindir}/rabbitmqctl
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-multi \
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-server \
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmqctl
     reinplace -E "s:(LOG_BASE)=/:\\1=${prefix}/:" \
-        ${sbindir}/rabbitmq-multi \
-        ${sbindir}/rabbitmq-server \
-        ${sbindir}/rabbitmqctl
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-multi \
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-server \
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmqctl
     reinplace -E "s:(MNESIA_BASE)=/:\\1=${prefix}/:" \
-        ${sbindir}/rabbitmq-multi \
-        ${sbindir}/rabbitmq-server \
-        ${sbindir}/rabbitmqctl
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-multi \
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-server \
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmqctl
     reinplace -E "s:(PIDS_FILE)=/:\\1=${prefix}/:" \
-        ${sbindir}/rabbitmq-multi \
-        ${sbindir}/rabbitmq-server \
-        ${sbindir}/rabbitmqctl
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-multi \
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-server \
+        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmqctl
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-multi
