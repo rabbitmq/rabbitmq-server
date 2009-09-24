@@ -472,11 +472,11 @@ handle_cast( {method, Method, Content}, State) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-handle_info( {send_command, Method}, State) ->
+handle_info({send_command, Method}, State) ->
     handle_method(Method, State);
 
 %% @private
-handle_info( {send_command, Method, Content}, State) ->
+handle_info({send_command, Method, Content}, State) ->
     handle_method(Method, Content, State);
 
 %% @private
@@ -485,7 +485,7 @@ handle_info(shutdown, State) ->
 
 %% Handles the delivery of a message from a direct channel
 %% @private
-handle_info( {send_command_and_notify, Q, ChPid, Method, Content}, State) ->
+handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     handle_method(Method, Content, State),
     rabbit_amqqueue:notify_sent(Q, ChPid),
     {noreply, State};
@@ -535,12 +535,11 @@ handle_info({channel_exit, _Channel, {amqp, Reason, _Msg, _Context}},
 %%---------------------------------------------------------------------------
 
 %% @private
-terminate(Reason, State = #channel_state{driver = Driver,
-                                         writer_pid = WriterPid,
-                                         reader_pid = ReaderPid}) ->
+terminate(Reason, #channel_state{driver = Driver,
+                                 writer_pid = WriterPid,
+                                 reader_pid = ReaderPid}) ->
     Driver:close_channel(Reason, WriterPid, ReaderPid).
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
     State.
-

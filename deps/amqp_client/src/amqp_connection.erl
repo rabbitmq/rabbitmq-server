@@ -317,13 +317,13 @@ handle_info({connection_level_error, Code, Text}, State) ->
 %% @private
 handle_info({'EXIT', Writer0Pid, Reason},
             State = #connection_state{channel0_writer_pid = Writer0Pid,
-                                      closing      = Closing,
-                                      close_reason = ClosingReason}) ->
+                                      closing = Closing}) ->
     case {Closing, Reason} of
-        %% This EXIT is received from the writer0 process after having
-        %% processed the connection.close_ok command from the server
+        %% This EXIT is received from writer0, after a connection.close from
+        %% the server. Don't exit yet, wait for the server to close the socket,
+        %% which determines the main reader to die
         {true, normal} ->
-            {stop, ClosingReason, State};
+            {noreply, State};
         %% Unexpected exit from writer0
         {_, _} ->
             ?LOG_WARN("Connection ~p closing: received exit signal from writer. "
@@ -345,10 +345,21 @@ handle_info({'EXIT', Reader0Pid, Reason},
 %% connection_timeout, {socket_error, _}]
 %% @private
 handle_info({'EXIT', MainReaderPid, Reason},
-            State = #connection_state{main_reader_pid = MainReaderPid}) ->
-    ?LOG_WARN("Connection (~p) closing: received exit signal from main "
+            State = #connection_state{main_reader_pid = MainReaderPid,
+                                      closing = Closing,
+                                      close_reason = CloseReason}) ->
+    case {Closing, Reason} of
+        %% This EXIT signal is expected after the server initiated
+        %% connection.close and the main reader died because the server closed
+        %% the socket. The connection process can now close normally, returning
+        %% the server's reply code.
+        {true, socket_closed} ->
+            {stop, CloseReason, State};
+        {_, _} ->
+            ?LOG_WARN("Connection (~p) closing: received exit signal from main "
               "reader. Reason: ~p~n", [self(), Reason]),
-    {stop, {main_reader_died, Reason}, State};
+            {stop, {main_reader_died, Reason}, State}
+    end;
 
 %% Handle exit from other pid
 %% @private
@@ -360,11 +371,11 @@ handle_info({'EXIT', Pid, Reason}, State) ->
         %% amqp_channel server forced shutdown (soft error)
         {true, {server_initiated_close, _, _}} ->
             {noreply, unregister_channel({chpid, Pid}, State)};
-        %% amqp_channel server (?) forced shutdown (hard error (?))
-        {true, {amqp, SubReason, Msg, Context}} ->
+        %% amqp_channel server forced shutdown (hard error)
+        {true, {amqp, ErrorName, Explanation, Method}} ->
             ?LOG_WARN("Channel peer (~p) sent this message: ~p -> ~p~n",
-                      [Pid, Msg, Context]),
-            {_, Code, Text} = rabbit_framing:lookup_amqp_exception(SubReason),
+                      [Pid, Explanation, Method]),
+            {_, Code, Text} = rabbit_framing:lookup_amqp_exception(ErrorName),
             {stop, {server_initiated_close, Code, Text}, State};
         %% amqp_channel dies with internal reason (soft error)
         {true, _} ->
