@@ -122,10 +122,11 @@ receive_writer_send_command_signal(Writer) ->
     end.
 
 handle_broker_close(#connection_state{channel0_writer_pid = Writer,
-                                      main_reader_pid     = MainReader}) ->
+                                      main_reader_pid = MainReader}) ->
     do(Writer, #'connection.close_ok'{}),
     rabbit_writer:shutdown(Writer),
-    erlang:send_after(?SOCKET_CLOSING_TIMEOUT, MainReader, close).
+    erlang:send_after(?SOCKET_CLOSING_TIMEOUT, MainReader,
+                      socket_closing_timeout).
 
 %---------------------------------------------------------------------------
 % AMQP message sending and receiving
@@ -246,6 +247,10 @@ main_reader_loop(Sock, Type, Channel, Length) ->
             ?LOG_WARN("Reader (~p) received timeout from heartbeat, "
                       "exiting ~n", [self()]),
             exit(connection_timeout);
+        socket_closing_timeout ->
+            ?LOG_WARN("Reader (~p) received socket_closing_timeout, exiting ~n",
+                      [self()]),
+            exit(socket_closing_timeout);
         close ->
             ?LOG_WARN("Reader (~p) received close command, "
                       "exiting ~n", [self()]),

@@ -317,53 +317,32 @@ handle_info({connection_level_error, Code, Text}, State) ->
 %% @private
 handle_info({'EXIT', Writer0Pid, Reason},
             State = #connection_state{channel0_writer_pid = Writer0Pid,
-                                      closing = Closing}) ->
-    case {Closing, Reason} of
-        %% This EXIT is received from writer0, after a connection.close from
-        %% the server. Don't exit yet, wait for the server to close the socket,
-        %% which determines the main reader to die
-        {true, normal} ->
-            {noreply, State};
-        %% Unexpected exit from writer0
-        {_, _} ->
-            ?LOG_WARN("Connection ~p closing: received exit signal from writer. "
-                      "Reason: ~p~n", [self(), Reason]),
-            {stop, {writer0_died, Reason}, State}
-    end;
+                                      closing = false}) ->
+    ?LOG_WARN("Connection ~p closing: received exit signal from writer. "
+              "Reason: ~p~n", [self(), Reason]),
+    {stop, {writer0_died, Reason}, State};
 
 %% Handle exit from reader0
 %% @private
 handle_info({'EXIT', Reader0Pid, Reason},
-            State = #connection_state{channel0_reader_pid = Reader0Pid}) ->
+            State = #connection_state{channel0_reader_pid = Reader0Pid,
+                                      closing = false}) ->
     ?LOG_WARN("Connection ~p closing: received exit signal from reader. "
               "Reason: ~p~n", [self(), Reason]),
     {stop, {reader0_died, Reason}, State};
 
 %% Handle exit from main reader
-%% Expected reasons: [socket_closed, {unexpeced_exit_signal, _, _},
-%% {unexpected_down_signal, _, _}, {unknown_message_type, _},
-%% connection_timeout, {socket_error, _}]
 %% @private
 handle_info({'EXIT', MainReaderPid, Reason},
             State = #connection_state{main_reader_pid = MainReaderPid,
-                                      closing = Closing,
-                                      close_reason = CloseReason}) ->
-    case {Closing, Reason} of
-        %% This EXIT signal is expected after the server initiated
-        %% connection.close and the main reader died because the server closed
-        %% the socket. The connection process can now close normally, returning
-        %% the server's reply code.
-        {true, socket_closed} ->
-            {stop, CloseReason, State};
-        {_, _} ->
-            ?LOG_WARN("Connection (~p) closing: received exit signal from main "
+                                      closing = false}) ->
+    ?LOG_WARN("Connection (~p) closing: received exit signal from main "
               "reader. Reason: ~p~n", [self(), Reason]),
-            {stop, {main_reader_died, Reason}, State}
-    end;
+    {stop, {main_reader_died, Reason}, State};
 
 %% Handle exit from other pid
 %% @private
-handle_info({'EXIT', Pid, Reason}, State) ->
+handle_info({'EXIT', Pid, Reason}, State = #connection_state{closing = false}) ->
     case {is_registered_channel({chpid, Pid}, State), Reason} of
         %% Normal amqp_channel shutdown
         {true, normal} ->
@@ -386,8 +365,32 @@ handle_info({'EXIT', Pid, Reason}, State) ->
         {false, _} ->
             ?LOG_WARN("Connection (~p) closing: received unexpected exit signal "
                       "from (~p). Reason: ~p~n", [self(), Pid, Reason])
-    end.
+    end;
 
+%% Handle exit from main reader, when closing:
+%% @private
+handle_info({'EXIT', MainReaderPid, Reason},
+            State = #connection_state{main_reader_pid = MainReaderPid,
+                                      closing = true,
+                                      close_reason = CloseReason}) ->
+    case Reason of
+        socket_closed ->
+            {stop, CloseReason, State};
+        socket_closing_timeout ->
+            {stop, {socket_closing_timeout, CloseReason}, State};
+        _ ->
+            {stop,
+             {main_reader_died_while_closing_connection, Reason, CloseReason},
+             State}
+    end;
+
+%% Handle exit from some other process, when closing:
+%% Just ignore all other exit signals. Wait for main reader to die due to
+%% the server closing the socket or the socket_closing_timeout
+%% @private
+handle_info({'EXIT', _Pid, _Reason},
+            State = #connection_state{closing = true}) ->
+    {noreply, State}.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks

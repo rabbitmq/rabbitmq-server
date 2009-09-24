@@ -458,11 +458,11 @@ handle_cast({notify_sent, _Peer}, State) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-handle_cast( {method, Method, none}, State) ->
+handle_cast({method, Method, none}, State) ->
     handle_method(Method, State);
 
 %% @private
-handle_cast( {method, Method, Content}, State) ->
+handle_cast({method, Method, Content}, State) ->
     handle_method(Method, Content, State).
 
 %%---------------------------------------------------------------------------
