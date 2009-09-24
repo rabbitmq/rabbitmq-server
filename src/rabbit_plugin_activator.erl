@@ -102,6 +102,12 @@ start() ->
                       [Module:format_error(Error)]),
             halt(1)
     end,
+
+    case catch include_rabbit_prepare(RabbitEBin ++ "/rabbit") of
+        ok -> ok;
+        {error, Message} -> io:format("~s~n", [Message]),
+                            halt(1)
+    end,
     halt(),
     ok.
 
@@ -196,3 +202,33 @@ expand_dependencies(Current, [Next|Rest]) ->
             Unique = [A || A <- Required, not(sets:is_element(A, Current))],
             expand_dependencies(sets:add_element(Next, Current), Rest ++ Unique)
     end.
+
+include_rabbit_prepare(RootName) ->
+    ScriptFile = RootName ++ ".script",
+    {SName, SNewEntries} = case file:consult(RootName ++ ".script") of
+        {ok, [{script, Name, Entries}]} ->
+            NewEntries = process_entries(Entries),
+            {Name, NewEntries};
+        {error, Reason} ->
+            throw({error, io_lib:format("Failed to load script: ~p", [Reason])})
+    end,
+
+    case file:open(ScriptFile, [write]) of
+        {ok, Fd} ->
+            io:format(Fd, "%% script generated at ~w ~w\n~p.\n",
+                      [date(), time(), {script, SName, SNewEntries}]),
+            file:close(Fd),
+            ok;
+        {error, OReason} ->
+            throw({error, io_lib:format("Failed to open script file for writing - ~p", [OReason])})
+    end,
+    case systools:script2boot(RootName) of
+        ok -> ok;
+        error -> "Failed to compile script file to boot file"
+    end.
+
+process_entries([]) -> [];
+process_entries([Entry = {apply,{application,start_boot,[stdlib,permanent]}}|Rest]) ->
+    [Entry, {apply,{rabbit,prepare,[]}}] ++ process_entries(Rest);
+process_entries([Entry|Rest]) ->
+    [Entry] ++ process_entries(Rest).

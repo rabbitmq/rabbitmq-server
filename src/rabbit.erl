@@ -33,7 +33,7 @@
 
 -behaviour(application).
 
--export([start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
 
 -export([start/2, stop/1]).
 
@@ -71,10 +71,13 @@
 
 %%----------------------------------------------------------------------------
 
+prepare() ->
+    ok = ensure_working_log_handlers(),
+    ok = rabbit_mnesia:ensure_mnesia_dir().
+
 start() ->
     try
-        ok = ensure_working_log_handlers(),
-        ok = rabbit_mnesia:ensure_mnesia_dir(),
+        prepare(),
         ok = rabbit_misc:start_applications(?APPS)
     after
         %%give the error loggers some time to catch up
