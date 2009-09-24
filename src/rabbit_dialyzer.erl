@@ -48,50 +48,42 @@
 %%----------------------------------------------------------------------------
 
 create_basic_plt(BasicPltPath) ->
-    OptsRecord = dialyzer_options:build([
-        {analysis_type, plt_build},
-        {output_plt, BasicPltPath},
-        {files_rec, otp_apps_dependencies_paths()}]),
+    OptsRecord = dialyzer_options:build(
+                   [{analysis_type, plt_build},
+                    {output_plt, BasicPltPath},
+                    {files_rec, otp_apps_dependencies_paths()}]),
     dialyzer_cl:start(OptsRecord),
     ok.
 
 add_to_plt(PltPath, FilesString) ->
     {ok, Files} = regexp:split(FilesString, " "),
-    DialyzerWarnings = dialyzer:run([
-        {analysis_type, plt_add},
-        {init_plt, PltPath},
-        {output_plt, PltPath},
-        {files, Files}]),
+    DialyzerWarnings = dialyzer:run([{analysis_type, plt_add},
+                                     {init_plt, PltPath},
+                                     {output_plt, PltPath},
+                                     {files, Files}]),
     print_warnings(DialyzerWarnings),
     ok.
 
 dialyze_files(PltPath, ModifiedFiles) ->
     {ok, Files} = regexp:split(ModifiedFiles, " "),
-    DialyzerWarnings = dialyzer:run([
-        {init_plt, PltPath},
-        {files, Files}]),
+    DialyzerWarnings = dialyzer:run([{init_plt, PltPath},
+                                     {files, Files}]),
     case DialyzerWarnings of
-        [] ->
-            io:format("Ok, dialyzer returned no warnings.~n", []),
-            ok;
-        _ ->
-            io:format("~nFAILED! dialyzer returned the following warnings:~n", []),
-            print_warnings(DialyzerWarnings),
-            fail
+        [] -> io:format("~nOk~n"),
+              ok;
+        _  -> io:format("~nFAILED with the following warnings:~n"),
+              print_warnings(DialyzerWarnings),
+              fail
     end.
 
-print_warnings(DialyzerWarnings) ->
-    lists:foreach(
-        fun
-            (Warning) -> io:format("~s", [dialyzer:format_warning(Warning)])
-        end,
-        DialyzerWarnings),
-    io:format("~n", []),
+print_warnings(Warnings) ->
+    [io:format("~s", [dialyzer:format_warning(W)]) || W <- Warnings],
+    io:format("~n"),
     ok.
 
 otp_apps_dependencies_paths() ->
     [code:lib_dir(App, ebin) ||
-        App <- [stdlib, kernel, mnesia, os_mon, ssl, eunit, tools, sasl]].
+        App <- [kernel, stdlib, sasl, mnesia, os_mon, ssl, eunit, tools]].
 
 halt_with_code(ok) ->
     halt();
