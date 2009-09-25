@@ -31,13 +31,43 @@
 
 -module(rabbit_msg_store).
 
--export([init/3, write/3, read/2, contains/2, remove/2, release/2,
-         needs_sync/2, sync/1, cleanup/1]).
+-behaviour(gen_server2).
 
-%%----------------------------------------------------------------------------
+-export([start_link/3, write/2, read/1, contains/1, remove/1, release/1,
+         needs_sync/1, sync/0, stop/0]).
+
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-define(SERVER, ?MODULE).
 
 -define(MAX_READ_FILE_HANDLES, 256).
 -define(FILE_SIZE_LIMIT,       (256*1024*1024)).
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-type(msg_id() :: binary()).
+-type(msg() :: any()).
+-type(file_path() :: any()).
+
+-spec(start_link/3 ::
+      (file_path(),
+       (fun ((A) -> 'finished' | {msg_id(), non_neg_integer(), A})), A) ->
+             {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(write/2 :: (msg_id(), msg()) -> 'ok').
+-spec(read/1 :: (msg_id()) -> {'ok', msg()} | 'not_found').
+-spec(contains/1 :: (msg_id()) -> boolean()).
+-spec(remove/1 :: ([msg_id()]) -> 'ok').
+-spec(release/1 :: ([msg_id()]) -> 'ok').
+-spec(needs_sync/1 :: ([msg_id()]) -> boolean()).
+-spec(sync/0 :: () -> 'ok').
+-spec(stop/0 :: () -> 'ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
 
 -record(msstate,
         {dir,                    %% store directory
@@ -64,52 +94,11 @@
 -define(FILE_SUMMARY_ETS_NAME, rabbit_disk_queue_file_summary).
 -define(FILE_EXTENSION,        ".rdq").
 -define(FILE_EXTENSION_TMP,    ".rdt").
--define(FILE_EXTENSION_DETS,   ".dets").
 -define(CACHE_ETS_NAME,        rabbit_disk_queue_cache).
 
 -define(BINARY_MODE, [raw, binary]).
 -define(READ_MODE,   [read, read_ahead]).
 -define(WRITE_MODE,  [write, delayed_write]).
-
-%%----------------------------------------------------------------------------
-
--ifdef(use_specs).
-
--type(ets_table() :: any()).
--type(msg_id() :: binary()).
--type(msg() :: any()).
--type(file_path() :: any()).
--type(io_device() :: any()).
-
--type(msstate() :: #msstate {
-               dir                    :: file_path(),
-               msg_locations          :: ets_table(),
-               file_summary           :: ets_table(),
-               current_file           :: non_neg_integer(),
-               current_file_handle    :: io_device(),
-               current_offset         :: non_neg_integer(),
-               current_dirty          :: boolean(),
-               file_size_limit        :: non_neg_integer(),
-               read_file_handle_cache :: any(),
-               last_sync_offset       :: non_neg_integer(),
-               message_cache          :: ets_table()
-               }).
-
--spec(init/3 :: (file_path(),
-                 (fun ((A) -> 'finished' | {msg_id(), non_neg_integer(), A})),
-                 A) -> msstate()).
--spec(write/3 :: (msg_id(), msg(), msstate()) -> msstate()).
--spec(read/2 :: (msg_id(), msstate()) -> {msg(), msstate()} | 'not_found').
--spec(contains/2 :: (msg_id(), msstate()) -> boolean()).
--spec(remove/2 :: ([msg_id()], msstate()) -> msstate()).
--spec(release/2 :: ([msg_id()], msstate()) -> msstate()).
--spec(needs_sync/2 :: ([msg_id()], msstate()) -> boolean()).
--spec(sync/1 :: (msstate()) -> msstate()).
--spec(cleanup/1 :: (msstate()) -> msstate()).
-
--endif.
-
-%%----------------------------------------------------------------------------
 
 %% The components:
 %%
@@ -233,7 +222,25 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-init(Dir, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
+start_link(Dir, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
+    gen_server2:start_link({local, ?SERVER}, ?MODULE,
+                           [Dir, MsgRefDeltaGen, MsgRefDeltaGenInit],
+                           [{timeout, infinity}]).
+
+write(MsgId, Msg)  -> gen_server2:cast(?SERVER, {write, MsgId, Msg}).
+read(MsgId)        -> gen_server2:call(?SERVER, {read, MsgId}, infinity).
+contains(MsgId)    -> gen_server2:call(?SERVER, {contains, MsgId}, infinity).
+remove(MsgIds)     -> gen_server2:cast(?SERVER, {remove, MsgIds}).
+release(MsgIds)    -> gen_server2:cast(?SERVER, {release, MsgIds}).
+needs_sync(MsgIds) -> gen_server2:call(?SERVER, {needs_sync, MsgIds}, infinity).
+sync()             -> gen_server2:call(?SERVER, sync, infinity).
+stop()             -> gen_server2:call(?SERVER, stop, infinity).
+
+%%----------------------------------------------------------------------------
+%% gen_server callbacks
+%%----------------------------------------------------------------------------
+
+init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
 
     MsgLocations = ets:new(?MSG_LOC_NAME,
                            [set, private, {keypos, #msg_location.msg_id}]),
@@ -275,47 +282,11 @@ init(Dir, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
                               ?WRITE_MODE ++ [read]),
     {ok, Offset} = file:position(FileHdl, Offset),
 
-    State1 #msstate { current_file_handle = FileHdl }.
+    {ok, State1 #msstate { current_file_handle = FileHdl }}.
 
-write(MsgId, Msg, State = #msstate { current_file_handle = CurHdl,
-                                     current_file        = CurFile,
-                                     current_offset      = CurOffset,
-                                     file_summary        = FileSummary }) ->
+handle_call({read, MsgId}, _From, State) ->
     case index_lookup(MsgId, State) of
-        not_found ->
-            %% New message, lots to do
-            {ok, TotalSize} = rabbit_msg_file:append(CurHdl, MsgId, Msg),
-            ok = index_insert(#msg_location {
-                                msg_id = MsgId, ref_count = 1, file = CurFile,
-                                offset = CurOffset, total_size = TotalSize },
-                              State),
-            [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
-                                       contiguous_top = ContiguousTop,
-                                       right = undefined }] =
-                ets:lookup(FileSummary, CurFile),
-            ValidTotalSize1 = ValidTotalSize + TotalSize,
-            ContiguousTop1 = if CurOffset =:= ContiguousTop ->
-                                     %% can't be any holes in this file
-                                     ValidTotalSize1;
-                                true -> ContiguousTop
-                             end,
-            true = ets:insert(FileSummary, FSEntry #file_summary {
-                                             valid_total_size = ValidTotalSize1,
-                                             contiguous_top = ContiguousTop1 }),
-            NextOffset = CurOffset + TotalSize,
-            maybe_roll_to_new_file(
-              NextOffset, State #msstate {current_offset = NextOffset,
-                                          current_dirty = true});
-        StoreEntry = #msg_location { ref_count = RefCount } ->
-            %% We already know about it, just update counter
-            ok = index_update(StoreEntry #msg_location {
-                                ref_count = RefCount + 1 }, State),
-            State
-    end.
-
-read(MsgId, State) ->
-    case index_lookup(MsgId, State) of
-        not_found -> not_found;
+        not_found -> reply(not_found, State);
         #msg_location { ref_count  = RefCount,
                         file       = File,
                         offset     = Offset,
@@ -347,57 +318,100 @@ read(MsgId, State) ->
                                     %% message. So don't bother
                                     %% putting it in the cache.
                          end,
-                    {Msg, State1};
+                    reply({ok, Msg}, State1);
                 {Msg, _RefCount} ->
-                    {Msg, State}
+                    reply({ok, Msg}, State)
             end
-    end.
+    end;
 
-contains(MsgId, State) ->
+handle_call({contains, MsgId}, _From, State) ->
+    reply(case index_lookup(MsgId, State) of
+              not_found        -> false;
+              #msg_location {} -> true
+          end, State);
+
+handle_call({needs_sync, _MsgIds}, _From,
+            State = #msstate { current_dirty = false }) ->
+    reply(false, State);
+handle_call({needs_sync, MsgIds}, _From,
+            State = #msstate { current_file     = CurFile,
+                               last_sync_offset = SyncOffset }) ->
+    reply(lists:any(fun (MsgId) ->
+                            #msg_location { file = File, offset = Offset } =
+                                index_lookup(MsgId, State),
+                            File =:= CurFile andalso Offset >= SyncOffset
+                    end, MsgIds), State);
+
+handle_call(sync, _From, State) ->
+    reply(ok, sync(State));
+
+handle_call(stop, _From, State) ->
+    {stop, normal, ok, State}.
+
+handle_cast({write, MsgId, Msg},
+            State = #msstate { current_file_handle = CurHdl,
+                               current_file        = CurFile,
+                               current_offset      = CurOffset,
+                               file_summary        = FileSummary }) ->
     case index_lookup(MsgId, State) of
-        not_found        -> false;
-        #msg_location {} -> true
-    end.
+        not_found ->
+            %% New message, lots to do
+            {ok, TotalSize} = rabbit_msg_file:append(CurHdl, MsgId, Msg),
+            ok = index_insert(#msg_location {
+                                msg_id = MsgId, ref_count = 1, file = CurFile,
+                                offset = CurOffset, total_size = TotalSize },
+                              State),
+            [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
+                                       contiguous_top = ContiguousTop,
+                                       right = undefined }] =
+                ets:lookup(FileSummary, CurFile),
+            ValidTotalSize1 = ValidTotalSize + TotalSize,
+            ContiguousTop1 = if CurOffset =:= ContiguousTop ->
+                                     %% can't be any holes in this file
+                                     ValidTotalSize1;
+                                true -> ContiguousTop
+                             end,
+            true = ets:insert(FileSummary, FSEntry #file_summary {
+                                             valid_total_size = ValidTotalSize1,
+                                             contiguous_top = ContiguousTop1 }),
+            NextOffset = CurOffset + TotalSize,
+            noreply(
+              maybe_roll_to_new_file(
+                NextOffset, State #msstate {current_offset = NextOffset,
+                                            current_dirty = true}));
+        StoreEntry = #msg_location { ref_count = RefCount } ->
+            %% We already know about it, just update counter
+            ok = index_update(StoreEntry #msg_location {
+                                ref_count = RefCount + 1 }, State),
+            noreply(State)
+    end;
 
-remove(MsgIds, State = #msstate { current_file = CurFile }) ->
-    compact(sets:to_list(
-              lists:foldl(
-                fun (MsgId, Files1) ->
-                        case remove_message(MsgId, State) of
-                            {compact, File} ->
-                                if CurFile =:= File -> Files1;
-                                   true -> sets:add_element(File, Files1)
-                                end;
-                            no_compact -> Files1
+handle_cast({remove, MsgIds}, State = #msstate { current_file = CurFile }) ->
+    noreply(
+      compact(sets:to_list(
+                lists:foldl(
+                  fun (MsgId, Files1) ->
+                          case remove_message(MsgId, State) of
+                              {compact, File} ->
+                                  if CurFile =:= File -> Files1;
+                                     true -> sets:add_element(File, Files1)
+                                  end;
+                              no_compact -> Files1
                         end
-                end, sets:new(), MsgIds)),
-            State).
+                  end, sets:new(), MsgIds)),
+              State));
 
-release(MsgIds, State) ->
+handle_cast({release, MsgIds}, State) ->
     lists:foreach(fun (MsgId) -> decrement_cache(MsgId, State) end, MsgIds),
-    State.
+    noreply(State).
 
-needs_sync(_MsgIds, #msstate { current_dirty = false }) ->
-    false;    
-needs_sync(MsgIds, State = #msstate { current_file     = CurFile,
-                                      last_sync_offset = SyncOffset }) ->
-    lists:any(fun (MsgId) ->
-                      #msg_location { file = File, offset = Offset } =
-                          index_lookup(MsgId, State),
-                      File =:= CurFile andalso Offset >= SyncOffset
-              end, MsgIds).
+handle_info(_Info, State) ->
+    noreply(State).
 
-sync(State = #msstate { current_dirty = false }) ->
-    State;
-sync(State = #msstate { current_file_handle = CurHdl,
-                        current_offset = CurOffset }) ->
-    ok = file:sync(CurHdl),
-    State #msstate { current_dirty = false, last_sync_offset = CurOffset }.
-
-cleanup(State = #msstate { msg_locations          = MsgLocations,
-                           file_summary           = FileSummary,
-                           current_file_handle    = FileHdl,
-                           read_file_handle_cache = HC }) ->
+terminate(_Reason, State = #msstate { msg_locations          = MsgLocations,
+                                      file_summary           = FileSummary,
+                                      current_file_handle    = FileHdl,
+                                      read_file_handle_cache = HC }) ->
     State1 = case FileHdl of
                  undefined -> State;
                  _ -> State2 = sync(State),
@@ -411,12 +425,18 @@ cleanup(State = #msstate { msg_locations          = MsgLocations,
                       file_summary           = undefined,
                       current_file_handle    = undefined,
                       current_dirty          = false,
-                      read_file_handle_cache = HC1
-                     }.
+                      read_file_handle_cache = HC1 }.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 %%----------------------------------------------------------------------------
 %% general helper functions
 %%----------------------------------------------------------------------------
+
+noreply(State) -> {noreply, State}.
+
+reply(Reply, State) -> {reply, Reply, State}.
 
 form_filename(Dir, Name) -> filename:join(Dir, Name).
 
@@ -441,6 +461,13 @@ truncate_and_extend_file(FileHdl, Lowpoint, Highpoint) ->
     {ok, Lowpoint} = file:position(FileHdl, Lowpoint),
     ok = file:truncate(FileHdl),
     ok = preallocate(FileHdl, Highpoint, Lowpoint).
+
+sync(State = #msstate { current_dirty = false }) ->
+    State;
+sync(State = #msstate { current_file_handle = CurHdl,
+                        current_offset = CurOffset }) ->
+    ok = file:sync(CurHdl),
+    State #msstate { current_dirty = false, last_sync_offset = CurOffset }.
 
 with_read_handle_at(File, Offset, Fun,
                     State = #msstate { dir                    = Dir,
