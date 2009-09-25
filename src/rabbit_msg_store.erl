@@ -31,10 +31,13 @@
 
 -module(rabbit_msg_store).
 
--export([init/5, write/3, read/2, contains/2, remove/2, release/2,
+-export([init/3, write/3, read/2, contains/2, remove/2, release/2,
          needs_sync/2, sync/1, cleanup/1]).
 
 %%----------------------------------------------------------------------------
+
+-define(MAX_READ_FILE_HANDLES, 256).
+-define(FILE_SIZE_LIMIT,       (256*1024*1024)).
 
 -record(msstate,
         {dir,                    %% store directory
@@ -92,8 +95,7 @@
                message_cache          :: ets_table()
                }).
 
--spec(init/5 :: (file_path(),
-                 non_neg_integer(), non_neg_integer(),
+-spec(init/3 :: (file_path(),
                  (fun ((A) -> 'finished' | {msg_id(), non_neg_integer(), A})),
                  A) -> msstate()).
 -spec(write/3 :: (msg_id(), msg(), msstate()) -> msstate()).
@@ -231,14 +233,13 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-init(Dir, FileSizeLimit, ReadFileHandlesLimit,
-     MsgRefDeltaGen, MsgRefDeltaGenInit) ->
+init(Dir, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
 
     MsgLocations = ets:new(?MSG_LOC_NAME,
                            [set, private, {keypos, #msg_location.msg_id}]),
 
     InitFile = 0,
-    HandleCache = rabbit_file_handle_cache:init(ReadFileHandlesLimit,
+    HandleCache = rabbit_file_handle_cache:init(?MAX_READ_FILE_HANDLES,
                                                 ?BINARY_MODE ++ [read]),
     FileSummary = ets:new(?FILE_SUMMARY_ETS_NAME,
                           [set, private, {keypos, #file_summary.file}]),
@@ -251,7 +252,7 @@ init(Dir, FileSizeLimit, ReadFileHandlesLimit,
                    current_file_handle    = undefined,
                    current_offset         = 0,
                    current_dirty          = false,
-                   file_size_limit        = FileSizeLimit,
+                   file_size_limit        = ?FILE_SIZE_LIMIT,
                    read_file_handle_cache = HandleCache,
                    last_sync_offset       = 0,
                    message_cache          = MessageCache

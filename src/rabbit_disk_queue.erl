@@ -52,9 +52,6 @@
 
 -include("rabbit.hrl").
 
--define(MAX_READ_FILE_HANDLES, 256).
--define(FILE_SIZE_LIMIT,       (256*1024*1024)).
-
 -define(SEQUENCE_ETS_NAME,       rabbit_disk_queue_sequences).
 -define(BATCH_SIZE,              10000).
 
@@ -122,8 +119,7 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE,
-                           [?FILE_SIZE_LIMIT, ?MAX_READ_FILE_HANDLES], []).
+    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 publish(Q, Message = #basic_message {}, IsDelivered) ->
     gen_server2:cast(?SERVER, {publish, Q, Message, IsDelivered}).
@@ -185,7 +181,7 @@ filesync() ->
 %% gen_server behaviour
 %%----------------------------------------------------------------------------
 
-init([FileSizeLimit, ReadFileHandlesLimit]) ->
+init([]) ->
     %% If the gen_server is part of a supervision tree and is ordered
     %% by its supervisor to terminate, terminate will be called with
     %% Reason=shutdown if the following conditions apply:
@@ -201,7 +197,6 @@ init([FileSizeLimit, ReadFileHandlesLimit]) ->
     ok = detect_shutdown_state_and_adjust_delivered_flags(),
 
     Store = rabbit_msg_store:init(base_directory(),
-                                  FileSizeLimit, ReadFileHandlesLimit,
                                   fun msg_ref_gen/1, msg_ref_gen_init()),
     ok = prune(Store),
 
