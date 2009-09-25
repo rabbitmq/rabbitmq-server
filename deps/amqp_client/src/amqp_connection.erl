@@ -36,7 +36,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
--export([open_channel/1, open_channel/3]).
+-export([open_channel/1, open_channel/2]).
 -export([start_direct/0, start_direct/1, start_direct_link/0, start_direct_link/1]).
 -export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
 -export([close/1, close/3]).
@@ -156,9 +156,9 @@ start_network_internal(#amqp_params{username     = User,
     Pid.
 
 start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
-    gen_server:start_link(?MODULE, [InitialState, Driver], []);
+    gen_server:start_link(?MODULE, {InitialState, Driver}, []);
 start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
-    gen_server:start(?MODULE, [InitialState, Driver], []).
+    gen_server:start(?MODULE, {InitialState, Driver}, []).
 
 %%---------------------------------------------------------------------------
 %% Open and close channels API Methods
@@ -167,20 +167,18 @@ start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
 %% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;). 
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
-    open_channel(ConnectionPid, none, <<>>).
+    open_channel(ConnectionPid, none).
 
-%% @spec (ConnectionPid, ChannelNumber, OutOfBand) -> ChannelPid
+%% @spec (ConnectionPid, ChannelNumber) -> ChannelPid
 %% where
 %%      ChannelNumber = integer()
-%%      OutOfBand = binary()
 %%      ConnectionPid = pid()
 %%      ChannelPid = pid()
 %% @doc Opens an AMQP channel.
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
-open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
-    gen_server:call(ConnectionPid,
-                    {open_channel, ChannelNumber, OutOfBand}, infinity).
+open_channel(ConnectionPid, ChannelNumber) ->
+    gen_server:call(ConnectionPid, {open_channel, ChannelNumber}, infinity).
 
 %% @spec (ConnectionPid) -> ok
 %% where
@@ -211,83 +209,77 @@ close(ConnectionPid, Code, Text) ->
 %% Starts a new channel process, invokes the correct driver
 %% (network or direct) to perform any environment specific channel setup and
 %% starts the AMQP ChannelOpen handshake.
-handle_open_channel({ChannelNumber, OutOfBand},
-                    #connection_state{driver = Driver} = State) ->
-    {ChannelPid, Number} = start_channel(ChannelNumber, State),
-    Driver:open_channel({Number, OutOfBand}, ChannelPid, State),
+handle_open_channel(ProposedNumber,
+                    ConnectionState = #connection_state{driver = Driver}) ->
+    ChannelNumber = assign_channel_number(ProposedNumber, ConnectionState),
+    ChannelState = #channel_state{parent_connection = self(),
+                                  number = ChannelNumber,
+                                  driver = Driver},
+    {ok, ChannelPid} =
+        gen_server:start_link(amqp_channel, {ChannelState, ConnectionState}, []),
+    NewConnectionState =
+        register_channel(ChannelNumber, ChannelPid, ConnectionState),
     #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
-    {reply, ChannelPid, State}.
+    {reply, ChannelPid, NewConnectionState}.
 
-%% Creates a new channel process
-start_channel(ChannelNumber,
-              State = #connection_state{driver = Driver,
-                                        reader_pid = ReaderPid,
-                                        channel0_writer_pid = WriterPid}) ->
-    ChannelState =
-        #channel_state{
-            parent_connection = self(),
-            number = Number   = assign_channel_number(ChannelNumber, State),
-            close_fun         = fun(X)       -> Driver:close_channel(X) end,
-            do2               = fun(X, Y)    -> Driver:do(X, Y) end,
-            do3               = fun(X, Y, Z) -> Driver:do(X, Y, Z) end,
-            reader_pid        = ReaderPid,
-            writer_pid        = WriterPid},
-    {ok, ChannelPid} = gen_server:start_link(amqp_channel,
-                                             [ChannelState], []),
-    register_channel(Number, ChannelPid),
-    {ChannelPid, Number}.
+assign_channel_number(none, #connection_state{channels = Channels}) ->
+    %% TODO Implement support for channel_max from 'connection.tune'
+    %% TODO Make it possible for channel numbers to be reused properly
+    lists:foldl(
+        fun
+            ({channel, N},  Max) when Max >= N -> Max;
+            ({channel, N}, _Max)               -> N;
+            ({chpid, _},    Max)               -> Max
+        end, 0, dict:fetch_keys(Channels)) + 1;
 
-assign_channel_number(none, #connection_state{channel_max = Max}) ->
-    allocate_channel_number(Max);
-assign_channel_number(ChannelNumber, _State) ->
-    case resolve_channel(ChannelNumber) of
-        undefined -> ChannelNumber;
-        _         -> exit({already_registered, ChannelNumber})
+assign_channel_number(ChannelNumber, State = #connection_state{channels = Channels}) ->
+    case dict:is_key({channel, ChannelNumber}, Channels) of
+        true  -> assign_channel_number(none, State);
+        false -> ChannelNumber
     end.
 
-register_channel(ChannelNumber, ChannelPid) ->
-    case resolve_channel(ChannelNumber) of
-        undefined ->
-            put({channel, ChannelNumber}, ChannelPid),
-            put({chpid, ChannelPid}, ChannelNumber);
-        _ ->
-            exit({already_registered, ChannelNumber})
+register_channel(ChannelNumber, ChannelPid,
+                 State = #connection_state{channels = Channels0}) ->
+    case dict:is_key({channel, ChannelNumber}, Channels0) of
+        true ->
+            exit({channel_already_registered, ChannelNumber});
+        false ->
+            Channels1 = dict:store({channel, ChannelNumber},
+                                   {chpid, ChannelPid}, Channels0),
+            Channels2 = dict:store({chpid, ChannelPid},
+                                   {channel, ChannelNumber}, Channels1),
+            State#connection_state{channels = Channels2}
     end.
 
-unregister_channel(ChannelPid) ->
-    case get_keys(ChannelPid) of
-        []    -> ok;
-        [H|_] -> erase(H)
-    end,
-    erase({chpid, ChannelPid}).
+%% This will be called when a channel process exits and needs to be
+%% deregistered. Can be called with either {channel, ChannelNumber} or
+%% {chpid, ChannelPid}
+unregister_channel(Channel,
+                   State = #connection_state{channels = Channels0} ) ->
+    Val = dict:fetch(Channel, Channels0),
+    Channels1 = dict:erase(Val, dict:erase(Channel, Channels0)),
+    State#connection_state{channels = Channels1}.
 
-resolve_channel(ChannelNumber) ->
-    get({channel, ChannelNumber}).
+%% Returns true iff channel defined either by {channel, ChannelNumber} or
+%% {chpid, ChannelPid} is registered within the connection
+is_registered_channel(Channel, #connection_state{channels = Channels}) ->
+    dict:is_key(Channel, Channels).
 
-allocate_channel_number(0) ->
-    allocate_channel_number(1);
-allocate_channel_number(Max) when Max > ?MAX_CHANNELS ->
-    exit({channel_maximum, Max});
-allocate_channel_number(Max) ->
-    case resolve_channel(Max) of
-        undefined -> Max;
-        _         -> allocate_channel_number(Max + 1)
-    end.
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
 %% @private
-init([InitialState, Driver]) when is_atom(Driver) ->
+init({InitialState, Driver}) when is_atom(Driver) ->
     process_flag(trap_exit, true),
     State = Driver:handshake(InitialState),
     {ok, State#connection_state{driver = Driver} }.
 
 %% @private
 %% Starts a new channel
-handle_call({open_channel, ChannelNumber, OutOfBand}, _From, State) ->
-    handle_open_channel({ChannelNumber, OutOfBand}, State);
+handle_call({open_channel, ChannelNumber}, _From, State) ->
+    handle_open_channel(ChannelNumber, State);
 
 %% @private
 %% Shuts the AMQP connection down
@@ -321,63 +313,83 @@ handle_info({connection_level_error, Code, Text}, State) ->
 %% Trap exits
 %%---------------------------------------------------------------------------
 
-%% This EXIT is received from the channel0 process after having
-%% processed the connection.close_ok command from the server
+%% Handle exit from writer0
 %% @private
-handle_info( {'EXIT', Writer, normal},
-             State = #connection_state{channel0_writer_pid = Writer,
-                                       closing      = true,
-                                       close_reason = Reason}) ->
-    {stop, Reason, State};
+handle_info({'EXIT', Writer0Pid, Reason},
+            State = #connection_state{channel0_writer_pid = Writer0Pid,
+                                      closing = false}) ->
+    ?LOG_WARN("Connection ~p closing: received exit signal from writer. "
+              "Reason: ~p~n", [self(), Reason]),
+    {stop, {writer0_died, Reason}, State};
 
-handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
-    ?LOG_WARN("Channel Peer ~p sent this message: ~p -> ~p~n",
-              [Pid, Msg, Context]),
-    {_, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
-    {stop, {server_initiated_close, {Code, Text}}, State};
-
+%% Handle exit from reader0
 %% @private
-%% Just the amqp channel shutting down, so unregister this channel
-handle_info( {'EXIT', Pid, normal}, State) ->
-    unregister_channel(Pid),
-    {noreply, State};
+handle_info({'EXIT', Reader0Pid, Reason},
+            State = #connection_state{channel0_reader_pid = Reader0Pid,
+                                      closing = false}) ->
+    ?LOG_WARN("Connection ~p closing: received exit signal from reader. "
+              "Reason: ~p~n", [self(), Reason]),
+    {stop, {reader0_died, Reason}, State};
 
+%% Handle exit from main reader
 %% @private
-handle_info( {'EXIT', Pid, {server_initiated_close, _, _}}, State) ->
-    unregister_channel(Pid),
-    {noreply, State};
+handle_info({'EXIT', MainReaderPid, Reason},
+            State = #connection_state{main_reader_pid = MainReaderPid,
+                                      closing = false}) ->
+    ?LOG_WARN("Connection (~p) closing: received exit signal from main "
+              "reader. Reason: ~p~n", [self(), Reason]),
+    {stop, {main_reader_died, Reason}, State};
 
+%% Handle exit from other pid
 %% @private
-%% This is a special case for abruptly closed socket connections
-handle_info( {'EXIT', _Pid, {socket_error, Reason}}, State) ->
-    {stop, {socket_error, Reason}, State};
+handle_info({'EXIT', Pid, Reason}, State = #connection_state{closing = false}) ->
+    case {is_registered_channel({chpid, Pid}, State), Reason} of
+        %% Normal amqp_channel shutdown
+        {true, normal} ->
+            {noreply, unregister_channel({chpid, Pid}, State)};
+        %% amqp_channel server forced shutdown (soft error)
+        {true, {server_initiated_close, _, _}} ->
+            {noreply, unregister_channel({chpid, Pid}, State)};
+        %% amqp_channel server forced shutdown (hard error)
+        {true, {amqp, ErrorName, Explanation, Method}} ->
+            ?LOG_WARN("Channel peer (~p) sent this message: ~p -> ~p~n",
+                      [Pid, Explanation, Method]),
+            {_, Code, Text} = rabbit_framing:lookup_amqp_exception(ErrorName),
+            {stop, {server_initiated_close, Code, Text}, State};
+        %% amqp_channel dies with internal reason (soft error)
+        {true, _} ->
+            ?LOG_WARN("Connection: Handling exit from channel (~p). "
+                      "Reason: ~p~n", [Pid, Reason]),
+            {noreply, unregister_channel({chpid, Pid}, State)};
+        %% Exit signal from unknown pid
+        {false, _} ->
+            ?LOG_WARN("Connection (~p) closing: received unexpected exit signal "
+                      "from (~p). Reason: ~p~n", [self(), Pid, Reason])
+    end;
 
+%% Handle exit from main reader, when closing:
 %% @private
-handle_info( {'EXIT', _Pid, Reason = {unknown_message_type, _}}, State) ->
-    {stop, Reason, State};
+handle_info({'EXIT', MainReaderPid, Reason},
+            State = #connection_state{main_reader_pid = MainReaderPid,
+                                      closing = true,
+                                      close_reason = CloseReason}) ->
+    case Reason of
+        socket_closed ->
+            {stop, CloseReason, State};
+        socket_closing_timeout ->
+            {stop, {socket_closing_timeout, CloseReason}, State};
+        _ ->
+            {stop,
+             {main_reader_died_while_closing_connection, Reason, CloseReason},
+             State}
+    end;
 
+%% Handle exit from some other process, when closing:
+%% Just ignore all other exit signals. Wait for main reader to die due to
+%% the server closing the socket or the socket_closing_timeout
 %% @private
-handle_info( {'EXIT', _Pid, socket_closed},
-             State = #connection_state{close_reason = Reason}) ->
-    {stop, Reason, State};
-
-%% @private
-handle_info( {'EXIT', _Pid, Reason = connection_timeout}, State) ->
-    {stop, Reason, State};
-
-%% @private
-%% This is when a channel exits on the client side without any engaging
-%% the server at all -> do not unregister the pid, because the server will not
-%% not know that the channel is dead. Thus if the client were to reuse the
-%% same channel number, the server would not know that it is being recycled
-%% because it won't have seen the channel.close command for this.
-%% I guess an alternative way of handling this is catch this EXIT and then
-%% send a fake channel.close command, but that doesn't seem right, hence we'll
-%% leave it allocated. It indicates a bug in the client code - all we are
-%% trying to do is to stop such a bug putting the whole connection process
-%% into an unuseable state.
-handle_info( {'EXIT', Pid, Reason}, State) ->
-    ?LOG_WARN("Channel (~p) exiting: ~p~n", [Pid, Reason]),
+handle_info({'EXIT', _Pid, _Reason},
+            State = #connection_state{closing = true}) ->
     {noreply, State}.
 
 %%---------------------------------------------------------------------------

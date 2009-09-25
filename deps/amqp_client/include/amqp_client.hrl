@@ -26,8 +26,6 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--define(MAX_CHANNELS, 65535).
-
 -define(PROTOCOL_HEADER,
         <<"AMQP", 1, 1, ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR>>).
 
@@ -45,9 +43,10 @@
                            serverhost,
                            sock,
                            vhostpath,
-                           reader_pid,
+                           main_reader_pid,
                            channel0_writer_pid,
-                           channel_max = 0,
+                           channel0_reader_pid,
+                           channel_max,
                            heartbeat,
                            driver,
                            port,
@@ -60,8 +59,7 @@
                         parent_connection,
                         reader_pid,
                         writer_pid,
-                        do2, do3,
-                        close_fun,
+                        driver,
                         rpc_requests = queue:new(),
                         anon_sub_requests = queue:new(),
                         tagged_sub_requests = dict:new(),

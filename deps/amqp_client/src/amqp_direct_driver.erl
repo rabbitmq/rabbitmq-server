@@ -28,7 +28,7 @@
 
 -include("amqp_client.hrl").
 
--export([handshake/1, open_channel/3, close_channel/1, close_connection/3]).
+-export([handshake/1, open_channel/2, close_channel/3, close_connection/3]).
 -export([do/2, do/3]).
 -export([handle_broker_close/1]).
 
@@ -49,16 +49,13 @@ handshake(ConnectionState = #connection_state{username = User,
                                              VHostPath),
     ConnectionState.
 
-open_channel({Channel, _OutOfBand}, ChannelPid,
-             State = #connection_state{username = User,
-                                       vhostpath = VHost}) ->
-    ReaderPid = WriterPid = ChannelPid,
-    Peer = rabbit_channel:start_link(Channel, ReaderPid, WriterPid,
+open_channel(ChannelNumber,
+             #connection_state{username = User, vhostpath = VHost}) ->
+    Peer = rabbit_channel:start_link(ChannelNumber, self(), self(),
                                      User, VHost),
-    amqp_channel:register_direct_peer(ChannelPid, Peer),
-    State.
+    {Peer, Peer}.
 
-close_channel(_WriterPid) ->
+close_channel(_Reason, _WriterPid, _ReaderPid) ->
     ok.
 
 close_connection(_Close, From, _State) ->
