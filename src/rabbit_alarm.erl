@@ -38,7 +38,7 @@
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(alarms, {alertees, memory_high_watermark = false}).
+-record(alarms, {alertees, vm_memory_high_watermark = false}).
 
 %%----------------------------------------------------------------------------
 
@@ -72,7 +72,7 @@ init([]) ->
 handle_call({register, Pid, HighMemMFA},
             State = #alarms{alertees = Alertess}) ->
     _MRef = erlang:monitor(process, Pid),
-    case State#alarms.memory_high_watermark of
+    case State#alarms.vm_memory_high_watermark of
         true  -> {M, F, A} = HighMemMFA,
                  ok = erlang:apply(M, F, A ++ [Pid, true]);
         false -> ok
@@ -83,13 +83,13 @@ handle_call({register, Pid, HighMemMFA},
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event({set_alarm, {memory_high_watermark, []}}, State) ->
+handle_event({set_alarm, {vm_memory_high_watermark, []}}, State) ->
     ok = alert(true, State#alarms.alertees),
-    {ok, State#alarms{memory_high_watermark = true}};
+    {ok, State#alarms{vm_memory_high_watermark = true}};
 
-handle_event({clear_alarm, memory_high_watermark}, State) ->
+handle_event({clear_alarm, vm_memory_high_watermark}, State) ->
     ok = alert(false, State#alarms.alertees),
-    {ok, State#alarms{memory_high_watermark = false}};
+    {ok, State#alarms{vm_memory_high_watermark = false}};
 
 handle_event(_Event, State) ->
     {ok, State}.

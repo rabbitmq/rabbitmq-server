@@ -21,5 +21,4 @@
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},
-         {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-         {memory_high_watermark, 0.85}]}]}.
+         {default_permissions, [<<".*">>, <<".*">>, <<".*">>]}]}]}.
