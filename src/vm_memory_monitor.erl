@@ -43,7 +43,7 @@
 %% causes a side effect of setting the interval on Memsup.
 %% This should rarely be an issue.
 
--module(rabbit_memguard).
+-module(vm_memory_monitor).
 
 -behaviour(gen_server2).
 
@@ -57,7 +57,7 @@
         get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1]).
 
 
--define(SERVER, rabbit_memguard).
+-define(SERVER, ?MODULE).
 -define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
 
 %% For unknown OS, we assume that we have 512 MB of memory, which is pretty 

@@ -142,7 +142,7 @@ start(normal, []) ->
                 case MemoryWatermark of
                     {ok, false} -> ok;
                     {ok, off} -> ok;
-                    {ok, Float} -> start_child(rabbit_memguard, [Float])
+                    {ok, Float} -> start_child(vm_memory_monitor, [Float])
                 end,
                 
                 ok = rabbit_amqqueue:start(),
