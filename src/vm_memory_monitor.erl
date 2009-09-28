@@ -124,8 +124,6 @@ get_total_memory({unix, linux}) ->
 get_total_memory(_OsType) ->
     unknown.
 
--define(BUFFER_SIZE, 1024).
-    
 %% A line looks like "Foo bar: 123456."
 parse_line_mach(Line) ->
     [Name, RHS | _Rest] = string:tokens(Line, ":"),
@@ -152,6 +150,7 @@ read_proc_file(File) ->
     file:close(IoDevice),
     lists:flatten(lists:reverse(Res)).
 
+-define(BUFFER_SIZE, 1024).
 read_proc_file(IoDevice, Acc) ->
     case file:read(IoDevice, ?BUFFER_SIZE) of
         {ok, Res} -> read_proc_file(IoDevice, [Res | Acc]);

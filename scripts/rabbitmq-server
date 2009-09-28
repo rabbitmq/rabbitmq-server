@@ -100,8 +100,10 @@ exec erl \
     -sasl errlog_type error \
     -kernel error_logger '{file,"'${RABBITMQ_LOGS}'"}' \
     -sasl sasl_error_logger '{file,"'${RABBITMQ_SASL_LOGS}'"}' \
+    -os_mon start_cpu_sup true \
+    -os_mon start_disksup false \
     -os_mon start_memsup false \
-    -os_mon system_memory_high_watermark 0.70 \
+    -os_mon system_memory_high_watermark 0.7 \
     -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
     ${RABBITMQ_CLUSTER_CONFIG_OPTION} \
     ${RABBITMQ_SERVER_START_ARGS} \
