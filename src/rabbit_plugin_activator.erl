@@ -108,6 +108,10 @@ start() ->
         {error, Message} -> io:format("~s~n", [Message]),
                             halt(1)
     end,
+	case systools:script2boot(RabbitEBin ++ "/rabbit") of
+		ok -> ok;
+		error -> io:format("Failed to compile updated rabbit.script~n")
+	end,
     halt(),
     ok.
 
@@ -204,31 +208,35 @@ expand_dependencies(Current, [Next|Rest]) ->
     end.
 
 include_rabbit_prepare(RootName) ->
-    ScriptFile = RootName ++ ".script",
-    {SName, SNewEntries} = case file:consult(RootName ++ ".script") of
-        {ok, [{script, Name, Entries}]} ->
-            NewEntries = process_entries(Entries),
-            {Name, NewEntries};
-        {error, Reason} ->
-            throw({error, io_lib:format("Failed to load script: ~p", [Reason])})
-    end,
-
-    case file:open(ScriptFile, [write]) of
-        {ok, Fd} ->
-            io:format(Fd, "%% script generated at ~w ~w\n~p.\n",
-                      [date(), time(), {script, SName, SNewEntries}]),
-            file:close(Fd),
-            ok;
-        {error, OReason} ->
-            throw({error, io_lib:format("Failed to open script file for writing - ~p", [OReason])})
-    end,
-    case systools:script2boot(RootName) of
-        ok -> ok;
-        error -> "Failed to compile script file to boot file"
+	ScriptFile = RootName ++ ".script",
+	case file:consult(ScriptFile) of
+		{ok, [{script, Name, Entries}]} ->
+			NewEntries = process_entries(Entries),
+			case file:open(ScriptFile, [write]) of
+		        {ok, Fd} ->
+		            io:format(Fd, "%% script generated at ~w ~w\n~p.\n",
+		                      [date(), time(), {script, Name, NewEntries}]),
+		            file:close(Fd),
+		            ok;
+		        {error, OReason} ->
+		            {error, {failed_to_open_boot_for_writing, OReason}}
+		    end;
+		{error, Reason} ->
+			{error, {failed_to_load_script, Reason}}
     end.
 
-process_entries([]) -> [];
+process_entries([]) -> 
+	[];
 process_entries([Entry = {apply,{application,start_boot,[stdlib,permanent]}}|Rest]) ->
-    [Entry, {apply,{rabbit,prepare,[]}}] ++ process_entries(Rest);
+	{Apps, RestBoot} = select_apps(Rest),
+	[Entry, {apply,{rabbit,boot,[Apps]}} | RestBoot];
 process_entries([Entry|Rest]) ->
-    [Entry] ++ process_entries(Rest).
+	[Entry | process_entries(Rest)].
+
+select_apps([]) ->
+	{[], []};
+select_apps([{apply,{application,start_boot,[Name,_]}}|Rest]) ->
+	{RestApps, RestRest} = select_apps(Rest),
+	{[Name|RestApps], RestRest};
+select_apps(RestEntries) ->
+	{[], RestEntries}.
