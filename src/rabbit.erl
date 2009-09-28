@@ -120,7 +120,7 @@ error_catcher(Callback) ->
     R = try Callback() of
         X -> X
     catch 
-        {error, TracebackReason} -> 
+        TracebackReason -> 
             Reason = case rabbit_startup_error_logger:get_errors() of
                 {ok, []} -> TracebackReason;
                 {ok, ErrorReason} -> ErrorReason
