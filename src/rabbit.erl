@@ -133,7 +133,7 @@ error_catcher(Callback) ->
     R.
 
 start(normal, []) ->
-    error_catcher(fun () -> do_start() end ).
+    error_catcher(fun do_start/0).
 
 do_start() ->
     {ok, SupPid} = rabbit_sup:start_link(),
