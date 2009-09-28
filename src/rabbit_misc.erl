@@ -35,7 +35,8 @@
 -include_lib("kernel/include/file.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
--export([die/1, frame_error/2, protocol_error/3, protocol_error/4]).
+-export([die/1, frame_error/2, amqp_error/4,
+         protocol_error/3, protocol_error/4]).
 -export([not_found/1]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
@@ -74,10 +75,9 @@
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
 -spec(die/1 :: (atom()) -> no_return()).
 -spec(frame_error/2 :: (atom(), binary()) -> no_return()).
--spec(protocol_error/3 ::
-      (atom() | amqp_error(), string(), [any()]) -> no_return()).
--spec(protocol_error/4 ::
-      (atom() | amqp_error(), string(), [any()], atom()) -> no_return()).
+-spec(amqp_error/4 :: (atom(), string(), [any()], atom()) -> amqp_error()).
+-spec(protocol_error/3 :: (atom(), string(), [any()]) -> no_return()).
+-spec(protocol_error/4 :: (atom(), string(), [any()], atom()) -> no_return()).
 -spec(not_found/1 :: (r(atom())) -> no_return()).
 -spec(get_config/1 :: (atom()) -> {'ok', any()} | not_found()).
 -spec(get_config/2 :: (atom(), A) -> A).
@@ -144,15 +144,17 @@ die(Error) ->
     protocol_error(Error, "~w", [Error]).
 
 frame_error(MethodName, BinaryFields) ->
-    protocol_error(frame_error, "cannot decode ~w",
-                   [BinaryFields], MethodName).
+    protocol_error(frame_error, "cannot decode ~w", [BinaryFields], MethodName).
 
-protocol_error(Error, Explanation, Params) ->
-    protocol_error(Error, Explanation, Params, none).
+amqp_error(Name, ExplanationFormat, Params, Method) ->
+    Explanation = lists:flatten(io_lib:format(ExplanationFormat, Params)),
+    #amqp_error{name = Name, explanation = Explanation, method = Method}.
 
-protocol_error(Error, Explanation, Params, Method) ->
-    CompleteExplanation = lists:flatten(io_lib:format(Explanation, Params)),
-    exit({amqp, Error, CompleteExplanation, Method}).
+protocol_error(Name, ExplanationFormat, Params) ->
+    protocol_error(Name, ExplanationFormat, Params, none).
+
+protocol_error(Name, ExplanationFormat, Params, Method) ->
+    exit(amqp_error(Name, ExplanationFormat, Params, Method)).
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
