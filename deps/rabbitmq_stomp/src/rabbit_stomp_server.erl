@@ -161,8 +161,8 @@ handle_exit(_Who, normal, _State) ->
     %% Normal exits (it'll be the channel we're linked to in our roles
     %% as reader and writer) are fine
     done;
-handle_exit(_Who, {amqp, Code, Explanation, Method}, State) ->
-    explain_amqp_death(Code, Explanation, Method, State),
+handle_exit(_Who, AmqpError = #amqp_error{}, State) ->
+    explain_amqp_death(AmqpError, State),
     done;
 handle_exit(Who, Reason, State) ->
     send_priv_error("Error", "~p exited\n", [Who], Reason, State),
@@ -178,8 +178,8 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
             PS = rabbit_stomp_frame:initial_state(),
             case catch process_frame(Command, Frame,
                                      State#state{parse_state = PS}) of
-                {'EXIT', {amqp, Code, Explanation, Method}} ->
-                    explain_amqp_death(Code, Explanation, Method, State),
+                {'EXIT', AmqpError = #amqp_error{}} ->
+                    explain_amqp_death(AmqpError, State),
                     done;
                 {'EXIT', Reason} ->
                     send_priv_error("Processing error", "Processing error\n",
@@ -196,8 +196,12 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
             done
     end.
 
-explain_amqp_death(Code, Explanation, Method, State) ->
-    send_error(atom_to_list(Code), "~s~nMethod was ~p\n", [Explanation, Method], State).
+explain_amqp_death(#amqp_error{name = ErrorName,
+                               explanation = Explanation,
+                               method = Method},
+                   State) ->
+    send_error(atom_to_list(ErrorName), "~s~nMethod was ~p\n",
+               [Explanation, Method], State).
 
 send_reply(#'channel.close_ok'{}, State) ->
     State;
