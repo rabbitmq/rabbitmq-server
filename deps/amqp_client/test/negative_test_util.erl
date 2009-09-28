@@ -72,22 +72,17 @@ hard_error_test(Connection) ->
     test_util:wait_for_death(Channel),
     test_util:wait_for_death(Connection).
 
-
-%% Refer to bug 21172 to find out how this is caused
+%% An error in a channel should result in the death of the entire connection
 channel_death_test(Connection) ->
-    C1 = amqp_connection:open_channel(Connection),
-    ok = amqp_channel:close(C1),
-    C2 = amqp_connection:open_channel(Connection),
+    Channel = amqp_connection:open_channel(Connection),
     Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
     Message = #amqp_msg{props = <<>>, payload = <<>>},
-    %ok = amqp_channel:call(C2, Publish, Message),
-    %?assertNot(is_process_alive(C2)),
-    %?assert(is_process_alive(Connection)),
+    ok = amqp_channel:call(Channel, Publish, Message),
+    timer:sleep(100),
+    ?assertNot(is_process_alive(Channel)),
+    ?assertNot(is_process_alive(Connection)),
     ok.
-    %C3 = amqp_connection:open_channel(Connection),
-    %?assert(is_process_alive(C3)),
-    %test_util:teardown(Connection, C3).
-    
+
 
 non_existent_user_test() ->
     Params = #amqp_params{username = test_util:uuid(),
