@@ -219,6 +219,12 @@ app_location() ->
     {ok, Application} = application:get_application(),
     filename:absname(code:where_is_file(atom_to_list(Application) ++ ".app")).
 
+home_dir() ->
+    case init:get_argument(home) of
+        {ok, [[Home]]} -> Home;
+        Other          -> Other
+    end.
+
 %---------------------------------------------------------------------------
 
 print_banner() ->
@@ -243,6 +249,8 @@ print_banner() ->
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     Settings = [{"node",           node()},
                 {"app descriptor", app_location()},
+                {"home dir",       home_dir()},
+                {"cookie hash",    rabbit_misc:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
                 {"database dir",   rabbit_mnesia:dir()}],
