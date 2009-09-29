@@ -351,9 +351,9 @@ handle_info({'EXIT', Pid, Reason}, State = #connection_state{closing = false}) -
         {true, {server_initiated_close, _, _}} ->
             {noreply, unregister_channel({chpid, Pid}, State)};
         %% amqp_channel server forced shutdown (hard error)
-        {true, {amqp, ErrorName, Explanation, Method}} ->
-            ?LOG_WARN("Channel peer (~p) sent this message: ~p -> ~p~n",
-                      [Pid, Explanation, Method]),
+        {true, Error = #amqp_error{name = ErrorName}} ->
+            ?LOG_WARN("Channel peer (~p) sent this message: ~p~n",
+                      [Pid, Error]),
             {_, Code, Text} = rabbit_framing:lookup_amqp_exception(ErrorName),
             {stop, {server_initiated_close, Code, Text}, State};
         %% amqp_channel dies with internal reason - this takes the entire

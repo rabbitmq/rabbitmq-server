@@ -521,9 +521,9 @@ handle_info({'EXIT', Pid, Reason},
 %% rabbit_channel process - in this case this process needs to tell
 %% the connection process whether this is a hard error or not
 %% @private
-handle_info({channel_exit, _Channel, {amqp, Reason, _Msg, _Context}},
+handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName}},
             State = #channel_state{parent_connection = Connection}) ->
-    {ConError, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
+    {ConError, Code, Text} = rabbit_framing:lookup_amqp_exception(ErrorName),
     case ConError of
         true  -> Connection ! {connection_level_error, Code, Text};
         false -> ok
