@@ -73,10 +73,11 @@ else
 fi
 
 RABBITMQ_START_RABBIT=
-[ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT='-noinput -s rabbit'
+[ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT='-noinput' 
+[ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="${RABBITMQ_START_RABBIT} -s rabbit"
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-if [ -f "${RABBITMQ_EBIN_ROOT}/rabbit.boot" ]; then
+if [ -f "${RABBITMQ_EBIN_ROOT}/rabbit.boot" ] && [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
     RABBITMQ_BOOT_FILE="${RABBITMQ_EBIN_ROOT}/rabbit"
     RABBITMQ_EBIN_PATH=""
 else

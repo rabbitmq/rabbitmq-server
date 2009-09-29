@@ -1,11 +1,11 @@
 =head1 NAME
 
-rabbitmq-activate-plugins - command line tool for activating plugins
+rabbitmq-deactivate-plugins - command line tool for deactivating plugins
 in a RabbitMQ broker
 
 =head1 SYNOPSIS
 
-rabbitmq-activate-plugins
+rabbitmq-deactivate-plugins
 
 =head1 DESCRIPTION
 
@@ -13,20 +13,20 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
-rabbitmq-activate-plugins is a command line tool for activating
-plugins installed into the broker's plugins directory.
+rabbitmq-deactivate-plugins is a command line tool for deactivating
+plugins installed into the broker.
 
 =head1 EXAMPLES
 
-To activate all of the installed plugins in the current RabbitMQ install,
+To deactivate all of the installed plugins in the current RabbitMQ install,
 execute:
 
-    rabbitmq-activate-plugins
+    rabbitmq-deactivate-plugins
 
 =head1 SEE ALSO
 
 L<rabbitmq.conf(5)>, L<rabbitmq-multi(1)>, L<rabbitmq-server(1)>,
-L<rabbitmqctl(1)>, L<rabbitmq-deactivate-plugins(1)>
+L<rabbitmqctl(1)>, L<rabbitmq-activate-plugins(1)>
 
 =head1 AUTHOR
 

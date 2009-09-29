@@ -101,7 +101,7 @@ check_tcp_listener_address(NamePrefix, Host, Port) ->
     if is_integer(Port) andalso (Port >= 0) andalso (Port =< 65535) -> ok;
        true -> error_logger:error_msg("invalid port ~p - not 0..65535~n",
                                       [Port]),
-               throw({error, invalid_port, Port})
+               throw({error, {invalid_port, Port}})
     end,
     Name = rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
     {IPAddress, Name}.
