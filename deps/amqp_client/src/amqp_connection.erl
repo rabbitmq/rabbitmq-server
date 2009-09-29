@@ -365,7 +365,8 @@ handle_info({'EXIT', Pid, Reason}, State = #connection_state{closing = false}) -
         %% Exit signal from unknown pid
         {false, _} ->
             ?LOG_WARN("Connection (~p) closing: received unexpected exit signal "
-                      "from (~p). Reason: ~p~n", [self(), Pid, Reason])
+                      "from (~p). Reason: ~p~n", [self(), Pid, Reason]),
+            {stop, {unexpected_exit_signal, Pid}, State}
     end;
 
 %% Handle exit from main reader, when closing:
