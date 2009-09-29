@@ -515,7 +515,7 @@ handle_info({'EXIT', Pid, Reason},
             State = #channel_state{number = ChannelNumber}) ->
     ?LOG_WARN("Channel ~p closing: received unexpected exit signal from (~p). "
               "Reason: ~p~n", [ChannelNumber, Pid, Reason]),
-    {stop, {unexpected_exit, Pid, Reason}, State};
+    {stop, {unexpected_exit_signal, Pid, Reason}, State};
 
 %% This is for a channel exception that is sent by the direct
 %% rabbit_channel process - in this case this process needs to tell
