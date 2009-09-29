@@ -197,9 +197,11 @@ action(cluster, Node, ClusterNodeSs, Inform) ->
 
 action(status, Node, [], Inform) ->
     Inform("Status of node ~p", [Node]),
-    Res = call(Node, {rabbit, status, []}),
-    io:format("~p~n", [Res]),
-    ok;
+    case call(Node, {rabbit, status, []}) of
+        {badrpc, _} = Res -> Res;
+        Res               -> io:format("~p~n", [Res]),
+                             ok
+    end;
 
 action(rotate_logs, Node, [], Inform) ->
     Inform("Reopening logs for node ~p", [Node]),
