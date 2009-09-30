@@ -399,6 +399,17 @@ handle_info({'EXIT', _Pid, _Reason},
 %%---------------------------------------------------------------------------
 
 %% @private
+terminate({Error, _Pid, _Reason}, State = #connection_state{driver = Driver}) 
+    when Error == channel_died;
+         Error == unexpected_exit_signal ->
+    Close = #'connection.close'{reply_text = <<>>,
+                                reply_code = ?INTERNAL_ERROR,
+                                class_id   = 0,
+                                method_id  = 0},
+    Driver:close_connection(Close, State),
+    ok;
+
+%% @private
 terminate(_Reason, _State) ->
     ok.
     

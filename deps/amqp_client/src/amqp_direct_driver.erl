@@ -28,7 +28,8 @@
 
 -include("amqp_client.hrl").
 
--export([handshake/1, open_channel/2, close_channel/3, close_connection/3]).
+-export([handshake/1, open_channel/2, close_channel/3]).
+-export([close_connection/2, close_connection/3]).
 -export([do/2, do/3]).
 -export([handle_broker_close/1]).
 
@@ -56,6 +57,9 @@ open_channel(ChannelNumber,
     {Peer, Peer}.
 
 close_channel(_Reason, _WriterPid, _ReaderPid) ->
+    ok.
+
+close_connection(_Close, _State) ->
     ok.
 
 close_connection(_Close, From, _State) ->
