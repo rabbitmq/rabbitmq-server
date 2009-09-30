@@ -52,12 +52,12 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    {ok, [[Nodenamestr|_]|_]} = init:get_argument(nodename),
-    Nodename = list_to_atom(Nodenamestr),
+    {ok, [[NodeNameStr|_]|_]} = init:get_argument(nodename),
+    NodeName = list_to_atom(NodeNameStr),
     FullCommand = init:get_plain_arguments(),
     #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
         parse_args(FullCommand, #params{quiet = false,
-                                        node = rabbit_misc:localnode(Nodename)}),
+                                        node = rabbit_misc:localnode(NodeName)}),
     Inform = case Quiet of
                  true  -> fun(_Format, _Args1) -> ok end;
                  false -> fun(Format, Args1) ->
