@@ -50,7 +50,7 @@
 -ifdef(use_specs).
 
 -type(mfa_tuple() :: {atom(), atom(), list()}).
--spec(start/1 :: (bool() | 'auto') -> 'ok').
+-spec(start/1 :: (boolean() | 'auto') -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), mfa_tuple()) -> 'ok').
 
