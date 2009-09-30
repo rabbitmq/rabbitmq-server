@@ -86,11 +86,11 @@ channel_writer_death_test(Connection) ->
     ok.
 
 %% An error in the channel process should result in the death of the entire
-%% connection. The death of the channel si caused by making a call with an
+%% connection. The death of the channel is caused by making a call with an
 %% invalid message to the channel process
 channel_death_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
-    ?assertExit(_, amqp_channel:call(Channel, bum_message)),
+    ?assertExit(_, amqp_channel:call(Channel, bogus_message)),
     timer:sleep(100),
     ?assertNot(is_process_alive(Channel)),
     ?assertNot(is_process_alive(Connection)),
