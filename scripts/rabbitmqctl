@@ -30,8 +30,11 @@
 ##   Contributor(s): ______________________________________.
 ##
 
+NODENAME=rabbit
+
 . `dirname $0`/rabbitmq-env
 
+[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
 exec erl \
@@ -41,4 +44,6 @@ exec erl \
     ${RABBITMQ_CTL_ERL_ARGS} \
     -sname rabbitmqctl$$ \
     -s rabbit_control \
+    -nodename $RABBITMQ_NODENAME \
     -extra "$@"
+	
