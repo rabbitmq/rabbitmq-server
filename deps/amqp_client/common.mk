@@ -88,10 +88,10 @@ MKTEMP=$$(mktemp $(TMPDIR)/tmp.XXXXXXXXXX)
 
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
-# only available in R13B upwards (R13B is eshell 5.7.1)
+# only available in R13B01 upwards (R13B is eshell 5.7.2)
 #
 # NB: the test assumes that version number will only contain single digits
-export USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.0" ]; then echo "true"; else echo "false"; fi)
+export USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.1" ]; then echo "true"; else echo "false"; fi)
 endif
 
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
