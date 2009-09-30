@@ -57,9 +57,9 @@
 -type(log_location() :: 'tty' | 'undefined' | string()).
 -type(file_suffix() :: binary()).
 
+-spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(prepare/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
 -spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
 -spec(status/0 :: () ->
@@ -73,19 +73,13 @@
 %%----------------------------------------------------------------------------
 
 prepare() ->
-	try
-		ok = ensure_working_log_handlers(),
-		ok = rabbit_mnesia:ensure_mnesia_dir()
-	catch
-		{error, Reason} ->
-			io:format("Failed to prepare Rabbit: ~p~n", [Reason]),
-			halt(1)
-	end.
+    ok = ensure_working_log_handlers(),
+    ok = rabbit_mnesia:ensure_mnesia_dir().
 
 start() ->
     try
-		prepare(),
-        rabbit_misc:start_applications(?APPS) 
+        ok = prepare(),
+        ok = rabbit_misc:start_applications(?APPS) 
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
