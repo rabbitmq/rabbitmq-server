@@ -586,20 +586,20 @@ count_msg_refs(Gen, Seed, State) ->
         finished -> ok;
         {_MsgId, 0, Next} -> count_msg_refs(Gen, Next, State);
         {MsgId, Delta, Next} ->
-            case index_lookup(MsgId, State) of
-                not_found ->
-                    ok = index_insert(#msg_location { msg_id = MsgId,
+            ok = case index_lookup(MsgId, State) of
+                     not_found ->
+                         index_insert(#msg_location { msg_id = MsgId,
                                                       ref_count = Delta },
                                       State);
-                StoreEntry = #msg_location { ref_count = RefCount } ->
-                    NewRefCount = RefCount + Delta,
-                    case NewRefCount of
-                        0 -> ok = index_delete(MsgId, State);
-                        _ -> ok = index_update(StoreEntry #msg_location {
+                     StoreEntry = #msg_location { ref_count = RefCount } ->
+                         NewRefCount = RefCount + Delta,
+                         case NewRefCount of
+                             0 -> index_delete(MsgId, State);
+                             _ -> index_update(StoreEntry #msg_location {
                                                  ref_count = NewRefCount },
                                                State)
-                    end
-            end,
+                         end
+                 end,
             count_msg_refs(Gen, Next, State)
     end.
 
