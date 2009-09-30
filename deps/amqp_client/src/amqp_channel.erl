@@ -497,7 +497,7 @@ handle_info({'EXIT', WriterPid, Reason},
             State = #channel_state{number = ChannelNumber,
                                    writer_pid = WriterPid}) ->
     ?LOG_WARN("Channel ~p closing: received exit signal from writer. "
-             "Reason: ~p~n", [ChannelNumber, Reason]),
+              "Reason: ~p~n", [ChannelNumber, Reason]),
     {stop, {writer_died, WriterPid, Reason}, State};
 
 %% Handle reader exit
@@ -506,7 +506,7 @@ handle_info({'EXIT', ReaderPid, Reason},
             State = #channel_state{number = ChannelNumber,
                                    reader_pid = ReaderPid}) ->
     ?LOG_WARN("Channel ~p closing: received exit signal from reader. "
-             "Reason: ~p~n", [ChannelNumber, Reason]),
+              "Reason: ~p~n", [ChannelNumber, Reason]),
     {stop, {reader_died, ReaderPid, Reason}, State};
 
 %% Handle other exit
@@ -514,8 +514,8 @@ handle_info({'EXIT', ReaderPid, Reason},
 handle_info({'EXIT', Pid, Reason},
             State = #channel_state{number = ChannelNumber}) ->
     ?LOG_WARN("Channel ~p closing: received unexpected exit signal from (~p). "
-             "Reason: ~p~n", [ChannelNumber, Pid, Reason]),
-    {stop, {unexpected_exit, Pid, Reason}, State};
+              "Reason: ~p~n", [ChannelNumber, Pid, Reason]),
+    {stop, {unexpected_exit_signal, Pid, Reason}, State};
 
 %% This is for a channel exception that is sent by the direct
 %% rabbit_channel process - in this case this process needs to tell

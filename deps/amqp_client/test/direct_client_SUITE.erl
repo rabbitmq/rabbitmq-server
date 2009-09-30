@@ -89,6 +89,9 @@ hard_error_test() ->
 bogus_rpc_test() ->
   negative_test_util:bogus_rpc_test(new_connection()).
 
+channel_death_test() ->
+    negative_test_util:channel_death_test(new_connection()).
+
 %%---------------------------------------------------------------------------
 %% Common Functions
 %%---------------------------------------------------------------------------

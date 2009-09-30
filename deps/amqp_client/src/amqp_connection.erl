@@ -356,16 +356,17 @@ handle_info({'EXIT', Pid, Reason}, State = #connection_state{closing = false}) -
                       [Pid, Error]),
             {_, Code, Text} = rabbit_framing:lookup_amqp_exception(ErrorName),
             {stop, {server_initiated_close, Code, Text}, State};
-        %% amqp_channel dies with internal reason (soft error)
+        %% amqp_channel dies with internal reason - this takes the entire
+        %% connection down
         {true, _} ->
-            ?LOG_WARN("Connection: Handling exit from channel (~p). "
-                      "Reason: ~p~n", [Pid, Reason]),
-            {noreply, unregister_channel({chpid, Pid}, State)};
+            ?LOG_WARN("Connection (~p) closing: channel (~p) died. Reason: ~p~n",
+                      [self(), Pid, Reason]),
+            {stop, {channel_died, Pid, Reason}, State};
         %% Exit signal from unknown pid
         {false, _} ->
             ?LOG_WARN("Connection (~p) closing: received unexpected exit signal "
                       "from (~p). Reason: ~p~n", [self(), Pid, Reason]),
-            {stop, {unexpected_exit_signal, Pid}, State}
+            {stop, {unexpected_exit_signal, Pid, Reason}, State}
     end;
 
 %% Handle exit from main reader, when closing:
