@@ -33,7 +33,7 @@
 
 -behaviour(application).
 
--export([boot/1, start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
 
 -export([start/2, stop/1]).
 
@@ -59,7 +59,7 @@
 
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(boot/1 :: ([atom()]) -> 'ok').
+-spec(prepare/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
 -spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
 -spec(status/0 :: () ->
@@ -72,26 +72,19 @@
 
 %%----------------------------------------------------------------------------
 
-boot(Apps) ->
+prepare() ->
 	try
 		ok = ensure_working_log_handlers(),
-		ok = rabbit_mnesia:ensure_mnesia_dir(),
-	
-		ok = rabbit_misc:start_applications(Apps)
+		ok = rabbit_mnesia:ensure_mnesia_dir()
 	catch
 		{error, Reason} ->
-			io:format("Failed to start Rabbit: ~p~n", [Reason]),
-			halt(1);
-		{'EXIT', Reason} ->
-			io:format("Component crashed whilst starting Rabbit: ~p~n", [Reason]),
-			halt(1);
-		Unknown ->
-			io:format("Unknown failure type whilst starting Rabbit: ~p~n", [Unknown]),
+			io:format("Failed to prepare Rabbit: ~p~n", [Reason]),
 			halt(1)
 	end.
 
 start() ->
     try
+		prepare(),
         rabbit:boot(?APPS) 
     after
         %%give the error loggers some time to catch up

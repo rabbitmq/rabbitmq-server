@@ -228,15 +228,6 @@ include_rabbit_prepare(RootName) ->
 process_entries([]) -> 
 	[];
 process_entries([Entry = {apply,{application,start_boot,[stdlib,permanent]}}|Rest]) ->
-	{Apps, RestBoot} = select_apps(Rest),
-	[Entry, {apply,{rabbit,boot,[Apps]}} | RestBoot];
+	[Entry, {apply,{rabbit,prepare,[]}} | Rest];
 process_entries([Entry|Rest]) ->
 	[Entry | process_entries(Rest)].
-
-select_apps([]) ->
-	{[], []};
-select_apps([{apply,{application,start_boot,[Name,_]}}|Rest]) ->
-	{RestApps, RestRest} = select_apps(Rest),
-	{[Name|RestApps], RestRest};
-select_apps(RestEntries) ->
-	{[], RestEntries}.
