@@ -61,7 +61,7 @@
                             'exchange_not_found' |
                             'exchange_and_queue_not_found'}).
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 :: (exchange_name(), exchange_type(), bool(), bool(),
+-spec(declare/5 :: (exchange_name(), exchange_type(), boolean(), boolean(),
                     amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
 -spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
@@ -83,9 +83,9 @@
              [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
 -spec(delete_queue_bindings/1 :: (queue_name()) -> 'ok').
 -spec(delete_transient_queue_bindings/1 :: (queue_name()) -> 'ok').
--spec(topic_matches/2 :: (binary(), binary()) -> bool()).
--spec(headers_match/2 :: (amqp_table(), amqp_table()) -> bool()).
--spec(delete/2 :: (exchange_name(), bool()) ->
+-spec(topic_matches/2 :: (binary(), binary()) -> boolean()).
+-spec(headers_match/2 :: (amqp_table(), amqp_table()) -> boolean()).
+-spec(delete/2 :: (exchange_name(), boolean()) ->
              'ok' | not_found() | {'error', 'in_use'}).
 -spec(list_queue_bindings/1 :: (queue_name()) -> 
               [{exchange_name(), routing_key(), amqp_table()}]).
