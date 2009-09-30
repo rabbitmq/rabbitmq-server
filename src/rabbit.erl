@@ -85,7 +85,7 @@ prepare() ->
 start() ->
     try
 		prepare(),
-        rabbit:boot(?APPS) 
+        rabbit_misc:start_applications(?APPS) 
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
