@@ -63,8 +63,8 @@
 -spec(do/3 :: (pid(), amqp_method(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
--spec(deliver/4 :: (pid(), ctag(), bool(), msg()) -> 'ok').
--spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
+-spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 
 -endif.
 
@@ -128,11 +128,11 @@ handle_cast({method, Method, Content}, State) ->
         stop ->
             {stop, normal, State#ch{state = terminating}}
     catch
-        exit:{amqp, Error, Explanation, none} ->
+        exit:Reason = #amqp_error{} ->
             ok = rollback_and_notify(State),
-            Reason = {amqp, Error, Explanation,
-                      rabbit_misc:method_record_type(Method)},
-            State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
+            MethodName = rabbit_misc:method_record_type(Method),
+            State#ch.reader_pid ! {channel_exit, State#ch.channel,
+                                   Reason#amqp_error{method = MethodName}},
             {stop, normal, State#ch{state = terminating}};
         exit:normal ->
             {stop, normal, State};

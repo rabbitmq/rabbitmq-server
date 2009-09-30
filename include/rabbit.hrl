@@ -70,6 +70,8 @@
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
 
+-record(amqp_error, {name, explanation, method = none}).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -107,15 +109,15 @@
                   read      :: regexp()}).
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
-                durable       :: bool(),
-                auto_delete   :: bool(),
+                durable       :: boolean(),
+                auto_delete   :: boolean(),
                 arguments     :: amqp_table(),
                 pid           :: maybe(pid())}).
 -type(exchange() ::
       #exchange{name        :: exchange_name(),
                 type        :: exchange_type(),
-                durable     :: bool(),
-                auto_delete :: bool(),
+                durable     :: boolean(),
+                auto_delete :: boolean(),
                 arguments   :: amqp_table()}).
 -type(binding() ::
       #binding{exchange_name    :: exchange_name(),
@@ -149,11 +151,11 @@
                      routing_key    :: routing_key(),
                      content        :: content(),
                      guid           :: guid(),
-                     is_persistent  :: bool()}).
+                     is_persistent  :: boolean()}).
 -type(message() :: basic_message()).
 -type(delivery() ::
-      #delivery{mandatory :: bool(),
-                immediate :: bool(),
+      #delivery{mandatory :: boolean(),
+                immediate :: boolean(),
                 txn       :: maybe(txn()),
                 sender    :: pid(),
                 message   :: message()}).
@@ -164,7 +166,10 @@
                 port     :: non_neg_integer()}).
 -type(not_found() :: {'error', 'not_found'}).
 -type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
-
+-type(amqp_error() ::
+      #amqp_error{name        :: atom(),
+                  explanation :: string(),
+                  method      :: atom()}).
 -endif.
 
 %%----------------------------------------------------------------------------

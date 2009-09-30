@@ -57,7 +57,7 @@
 -ifdef(use_specs).
 
 -type(msg_id() :: non_neg_integer()).
--type(msg() :: {queue_name(), pid(), msg_id(), bool(), message()}).
+-type(msg() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
 -type(qstats() :: {'ok', queue_name(), non_neg_integer(), non_neg_integer()}).
 -type(qlen() :: {'ok', non_neg_integer()}).
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
@@ -66,7 +66,7 @@
 
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> {'ok', [amqqueue()]}).
--spec(declare/4 :: (queue_name(), bool(), bool(), amqp_table()) ->
+-spec(declare/4 :: (queue_name(), boolean(), boolean(), amqp_table()) ->
              amqqueue()).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
@@ -86,8 +86,8 @@
                                             {'error', 'in_use'} |
                                             {'error', 'not_empty'}).
 -spec(purge/1 :: (amqqueue()) -> qlen()).
--spec(deliver/2 :: (pid(), delivery()) -> bool()).
--spec(redeliver/2 :: (pid(), [{message(), bool()}]) -> 'ok').
+-spec(deliver/2 :: (pid(), delivery()) -> boolean()).
+-spec(redeliver/2 :: (pid(), [{message(), boolean()}]) -> 'ok').
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
 -spec(commit_all/2 :: ([pid()], txn()) -> ok_or_errors()).
@@ -95,17 +95,17 @@
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
--spec(basic_get/3 :: (amqqueue(), pid(), bool()) ->
+-spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
 -spec(basic_consume/8 ::
-      (amqqueue(), bool(), pid(), pid(), pid(), ctag(), bool(), any()) ->
+      (amqqueue(), boolean(), pid(), pid(), pid(), ctag(), boolean(), any()) ->
              'ok' | {'error', 'queue_owned_by_another_connection' |
                      'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(set_storage_mode/2 :: (pid(), ('oppressed' | 'liberated')) -> 'ok').
--spec(internal_declare/2 :: (amqqueue(), bool()) -> amqqueue()).
+-spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
