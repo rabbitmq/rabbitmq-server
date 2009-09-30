@@ -34,6 +34,7 @@ set mnesiadbdir ${prefix}/var/lib/rabbitmq/mnesia
 set plistloc ${prefix}/etc/LaunchDaemons/org.macports.rabbitmq-server
 set sbindir ${destroot}${prefix}/lib/rabbitmq/bin
 set wrappersbin ${destroot}${prefix}/sbin
+set realsbin ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin
 
 use_configure   no
 
@@ -61,23 +62,23 @@ post-destroot {
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
 
     reinplace -E "s:(/etc/rabbitmq/rabbitmq.conf):${prefix}\\1:g" \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-env
+        ${realsbin}/rabbitmq-env
     reinplace -E "s:(CLUSTER_CONFIG_FILE)=/:\\1=${prefix}/:" \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmqctl
+        ${realsbin}/rabbitmq-multi \
+        ${realsbin}/rabbitmq-server \
+        ${realsbin}/rabbitmqctl
     reinplace -E "s:(LOG_BASE)=/:\\1=${prefix}/:" \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmqctl
+        ${realsbin}/rabbitmq-multi \
+        ${realsbin}/rabbitmq-server \
+        ${realsbin}/rabbitmqctl
     reinplace -E "s:(MNESIA_BASE)=/:\\1=${prefix}/:" \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmqctl
+        ${realsbin}/rabbitmq-multi \
+        ${realsbin}/rabbitmq-server \
+        ${realsbin}/rabbitmqctl
     reinplace -E "s:(PIDS_FILE)=/:\\1=${prefix}/:" \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-multi \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmq-server \
-        ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin/rabbitmqctl
+        ${realsbin}/rabbitmq-multi \
+        ${realsbin}/rabbitmq-server \
+        ${realsbin}/rabbitmqctl
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-multi
