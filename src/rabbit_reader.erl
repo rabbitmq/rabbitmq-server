@@ -754,7 +754,7 @@ map_exception(Channel, Reason) ->
 %% FIXME: this clause can go when we move to AMQP spec >=8.1
 lookup_amqp_exception(#amqp_error{name        = precondition_failed,
                                   explanation = Expl,
-                                  method       = Method}) ->
+                                  method      = Method}) ->
     ExplBin = amqp_exception_explanation(<<"PRECONDITION_FAILED">>, Expl),
     {false, 406, ExplBin, Method};
 lookup_amqp_exception(#amqp_error{name        = Name,
