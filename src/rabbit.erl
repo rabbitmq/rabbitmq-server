@@ -215,6 +215,16 @@ log_location(Type) ->
         _                  -> undefined
     end.
 
+app_location() ->
+    {ok, Application} = application:get_application(),
+    filename:absname(code:where_is_file(atom_to_list(Application) ++ ".app")).
+
+home_dir() ->
+    case init:get_argument(home) of
+        {ok, [[Home]]} -> Home;
+        Other          -> Other
+    end.
+
 %---------------------------------------------------------------------------
 
 print_banner() ->
@@ -237,10 +247,13 @@ print_banner() ->
               [Product, string:right([$v|Version], ProductLen),
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
-    Settings = [{"node",         node()},
-                {"log",          log_location(kernel)},
-                {"sasl log",     log_location(sasl)},
-                {"database dir", rabbit_mnesia:dir()}],
+    Settings = [{"node",           node()},
+                {"app descriptor", app_location()},
+                {"home dir",       home_dir()},
+                {"cookie hash",    rabbit_misc:cookie_hash()},
+                {"log",            log_location(kernel)},
+                {"sasl log",       log_location(sasl)},
+                {"database dir",   rabbit_mnesia:dir()}],
     DescrLen = lists:max([length(K) || {K, _V} <- Settings]),
     Format = "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
     lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
