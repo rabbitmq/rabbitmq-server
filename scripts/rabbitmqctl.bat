@@ -30,6 +30,10 @@ REM
 REM   Contributor(s): ______________________________________.
 REM
 
+if "%RABBITMQ_NODENAME%"=="" (
+    set RABBITMQ_NODENAME=rabbit
+)
+
 if not exist "%ERLANG_HOME%\bin\erl.exe" (
     echo.
     echo ******************************
@@ -42,4 +46,4 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
     exit /B
 )
 
-"%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden %RABBITMQ_CTL_ERL_ARGS% -sname rabbitmqctl -s rabbit_control -extra %*
+"%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden %RABBITMQ_CTL_ERL_ARGS% -sname rabbitmqctl -s rabbit_control -nodename %RABBITMQ_NODENAME% -extra %*
