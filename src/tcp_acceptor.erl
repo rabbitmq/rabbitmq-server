@@ -67,15 +67,20 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
     {ok, Mod} = inet_db:lookup_socket(LSock),
     inet_db:register_socket(Sock, Mod),
 
-    %% report
-    {ok, {Address, Port}} = inet:sockname(LSock),
-    {ok, {PeerAddress, PeerPort}} = inet:peername(Sock),
-    error_logger:info_msg("accepted TCP connection on ~s:~p from ~s:~p~n",
-                          [inet_parse:ntoa(Address), Port,
-                           inet_parse:ntoa(PeerAddress), PeerPort]),
-
-    %% handle
-    apply(M, F, A ++ [Sock]),
+    try
+        %% report
+        {Address, Port}         = inet_op(fun () -> inet:sockname(LSock) end),
+        {PeerAddress, PeerPort} = inet_op(fun () -> inet:peername(Sock) end),
+        error_logger:info_msg("accepted TCP connection on ~s:~p from ~s:~p~n",
+                              [inet_parse:ntoa(Address), Port,
+                               inet_parse:ntoa(PeerAddress), PeerPort]),
+        %% handle
+        apply(M, F, A ++ [Sock])
+    catch {inet_error, Reason} ->
+            gen_tcp:close(Sock),
+            error_logger:error_msg("unable to accept TCP connection: ~p~n",
+                                   [Reason])
+    end,
 
     %% accept more
     case prim_inet:async_accept(LSock, -1) of
@@ -95,3 +100,7 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%--------------------------------------------------------------------
+
+inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
