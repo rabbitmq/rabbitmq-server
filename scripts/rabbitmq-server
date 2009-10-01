@@ -37,10 +37,10 @@ SERVER_ERL_ARGS="+K true +A30 \
 -kernel inet_default_listen_options [{nodelay,true},{sndbuf,16384},{recbuf,4096}] \
 -kernel inet_default_connect_options [{nodelay,true}]"
 CLUSTER_CONFIG_FILE=/etc/rabbitmq/rabbitmq_cluster.config
+CONFIG_FILE=/etc/rabbitmq/rabbitmq
 LOG_BASE=/var/log/rabbitmq
 MNESIA_BASE=/var/lib/rabbitmq/mnesia
 SERVER_START_ARGS=
-[ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=/etc/rabbitmq/rabbitmq
 
 . `dirname $0`/rabbitmq-env
 
@@ -49,6 +49,7 @@ SERVER_START_ARGS=
 [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=${NODE_PORT}
 [ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_ERL_ARGS}
 [ "x" = "x$RABBITMQ_CLUSTER_CONFIG_FILE" ] && RABBITMQ_CLUSTER_CONFIG_FILE=${CLUSTER_CONFIG_FILE}
+[ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
 [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
 [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
 [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
