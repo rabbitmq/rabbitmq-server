@@ -109,9 +109,12 @@ if exist "%RABBITMQ_EBIN_ROOT%\rabbit.boot" (
     set RABBITMQ_BOOT_FILE=start_sasl
     set RABBITMQ_EBIN_PATH=-pa "%RABBITMQ_EBIN_ROOT%"
 )
-set RABBITMQ_ETC_ROOT=%~dp0..\etc
-if exist "%RABBITMQ_ETC_ROOT%\rabbitmq.config" (
-    set RABBITMQ_CONFIG_ARG=-config "%RABBITMQ_ETC_ROOT%\rabbitmq"
+if "%RABBITMQ_CONFIG_FILE%"=="" (
+    set RABBITMQ_CONFIG_FILE="%RABBITMQ_BASE%\rabbitmq"
+)
+   
+if exist "%RABBITMQ_CONFIG_FILE%.config" (
+    set RABBITMQ_CONFIG_ARG=-config "%RABBITMQ_CONFIG_FILE%"
 ) else (
     set RABBITMQ_CONFIG_ARG=""
 )
