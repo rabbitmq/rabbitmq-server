@@ -186,10 +186,11 @@ flush_journal(State = #qistate { journal_handle = JournalHdl,
             {true, State2}
     end.
 
-read_segment_entries(InitSeqId, State = #qistate { dir = Dir }) ->
+read_segment_entries(InitSeqId, State =
+                     #qistate { dir = Dir, journal_ack_dict = JAckDict }) ->
     {SegNum, 0} = seq_id_to_seg_and_rel_seq_id(InitSeqId),
     SegPath = seg_num_to_path(Dir, SegNum),
-    {SDict, _AckCount} = load_segment(SegNum, SegPath),
+    {SDict, _AckCount} = load_segment(SegNum, SegPath, JAckDict),
     %% deliberately sort the list desc, because foldl will reverse it
     RelSeqs = lists:sort(fun (A, B) -> B < A end, dict:fetch_keys(SDict)),
     {lists:foldl(fun (RelSeq, Acc) ->
@@ -251,7 +252,7 @@ find_ack_counts(Dir) ->
          || SegName <- filelib:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)],
     lists:foldl(
       fun ({SegNum, SegPath}, Acc) ->
-              case load_segment(SegNum, SegPath) of
+              case load_segment(SegNum, SegPath, dict:new()) of
                   {_SDict, 0} -> Acc;
                   {_SDict, AckCount} -> dict:store(SegNum, AckCount, Acc)
               end
@@ -283,7 +284,7 @@ add_ack_to_ack_dict(SeqId, ADict) ->
 
 replay_journal_acks_to_segment(SegNum, Acks, {AckCounts, Dir}) ->
     SegPath = seg_num_to_path(Dir, SegNum),
-    {SDict, _AckCount} = load_segment(SegNum, SegPath),
+    {SDict, _AckCount} = load_segment(SegNum, SegPath, dict:new()),
     ValidRelSeqIds = dict:fetch_keys(SDict),
     ValidAcks = sets:intersection(sets:from_list(ValidRelSeqIds),
                                   sets:from_list(Acks)),
@@ -296,13 +297,20 @@ replay_journal_acks_to_segment(SegNum, Acks, {AckCounts, Dir}) ->
 %% Loading Segments
 %%----------------------------------------------------------------------------
 
-load_segment(SegNum, SegPath) ->
+load_segment(SegNum, SegPath, JAckDict) ->
     case file:open(SegPath, [raw, binary, read_ahead, read]) of
-        {error, enoent} -> dict:new();
+        {error, enoent} -> {dict:new(), 0};
         {ok, Hdl} ->
-            Result = load_segment_entries(SegNum, Hdl, {dict:new(), 0}),
+            {SDict, AckCount} =
+                load_segment_entries(SegNum, Hdl, {dict:new(), 0}),
             ok = file:close(Hdl),
-            Result
+            RelSeqs = case dict:find(SegNum, JAckDict) of
+                        {ok, RelSeqs1} -> RelSeqs1;
+                        error -> []
+                      end,
+            lists:foldl(fun (RelSeq, {SDict1, AckCount1}) ->
+                                {dict:erase(RelSeq, SDict1), AckCount1+1}
+                        end, {SDict, AckCount}, RelSeqs)
     end.
 
 load_segment_entries(SegNum, Hdl, {SDict, AckCount}) ->
