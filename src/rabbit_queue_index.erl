@@ -154,7 +154,8 @@ write_acks(SeqIds, State = #qistate { journal_handle    = JournalHdl,
     State1 = State #qistate { journal_ack_dict = JAckDict1,
                               journal_ack_count = JAckCount1 },
     case JAckCount1 > ?MAX_ACK_JOURNAL_ENTRY_COUNT of
-        true -> flush_journal(State1);
+        true -> {_Cont, State2} = flush_journal(State1),
+                State2;
         false -> State1
     end.
 
@@ -177,7 +178,7 @@ flush_journal(State = #qistate { journal_handle = JournalHdl,
     if
         JAckCount1 == 0 ->
             {ok, 0} = file:position(JournalHdl, 0),
-            file:truncate(JournalHdl),
+            ok = file:truncate(JournalHdl),
             {false, State2};
         JAckCount1 > ?MAX_ACK_JOURNAL_ENTRY_COUNT ->
             flush_journal(State2);
@@ -203,7 +204,8 @@ read_segment_entries(InitSeqId, State = #qistate { dir = Dir }) ->
 %% Minor Helpers
 %%----------------------------------------------------------------------------
 
-close_file_handle_for_seg(undefined, State) ->
+close_file_handle_for_seg(_SegNum,
+                          State = #qistate { cur_seg_num = undefined }) ->
     State;
 close_file_handle_for_seg(SegNum, State = #qistate { cur_seg_num = SegNum,
                                                      cur_seg_hdl = Hdl }) ->
