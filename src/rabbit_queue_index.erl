@@ -43,27 +43,27 @@
 %%
 %% Publishes and delivery notes are written directly to the segment
 %% files. The segment is found by dividing the sequence id by the the
-%% max number of entries per segment. Only the relative sequeuence
+%% max number of entries per segment. Only the relative sequence
 %% within the segment is recorded as the sequence id within a segment
-%% file (i.e. sequeuence id modulo max number of entries per
-%% segment). This is keeps entries as small as possible. Publishes and
+%% file (i.e. sequence id modulo max number of entries per segment).
+%% This is keeps entries as small as possible. Publishes and
 %% deliveries are only ever going to be received in contiguous
-%% ascending order, with publishes following the tail of the queue and
-%% deliveries following the head of the queue.
+%% ascending order.
 %%
 %% Acks are written to a bounded journal and are also held in memory,
-%% in a dict with the segment file as the key. When the journal gets
-%% too big, or flush_journal is called, the journal is (possibly
-%% incrementally) flushed out to the segment files. As acks can be
-%% received from any delivered message in any order, this journal
-%% reduces seeking, and batches writes to the segment files, keeping
-%% performance high. The flush_journal/1 function returns a boolean
-%% indicating whether there is more flushing work that can be
-%% done. This means that the process can call this whenever it has an
-%% empty mailbox, only a small amount of work is done, allowing the
-%% process to respond quickly to new messages if they arrive, or to
-%% call flush_journal/1 several times until the result indicates there
-%% is no more flushing to be done.
+%% in a dict with the segment file as the key. Again, the records are
+%% fixed size: the entire sequence id is written and is limited to a
+%% 64-bit unsigned integer. When the journal gets too big, or
+%% flush_journal is called, the journal is (possibly incrementally)
+%% flushed out to the segment files. As acks can be received from any
+%% delivered message in any order, this journal reduces seeking, and
+%% batches writes to the segment files, keeping performance high. The
+%% flush_journal/1 function returns a boolean indicating whether there
+%% is more flushing work that can be done. This means that the process
+%% can call this whenever it has an empty mailbox, only a small amount
+%% of work is done, allowing the process to respond quickly to new
+%% messages if they arrive, or to call flush_journal/1 several times
+%% until the result indicates there is no more flushing to be done.
 %%
 %% On startup, the ack journal is read along with all the segment
 %% files, and the ack journal is fully flushed out to the segment
