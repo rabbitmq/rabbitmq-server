@@ -37,7 +37,7 @@ PIDS_FILE=/var/lib/rabbitmq/pids
 MULTI_ERL_ARGS=
 MULTI_START_ARGS=
 
-[ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
+. `dirname $0`/rabbitmq-env
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=${NODE_IP_ADDRESS}
@@ -60,7 +60,7 @@ export \
 set -f
 
 exec erl \
-    -pa "`dirname $0`/../ebin" \
+    -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
     ${RABBITMQ_MULTI_ERL_ARGS} \

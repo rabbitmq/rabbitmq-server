@@ -33,7 +33,7 @@
 
 -behaviour(application).
 
--export([start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
 
 -export([start/2, stop/1]).
 
@@ -57,6 +57,7 @@
 -type(log_location() :: 'tty' | 'undefined' | string()).
 -type(file_suffix() :: binary()).
 
+-spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
@@ -71,11 +72,14 @@
 
 %%----------------------------------------------------------------------------
 
+prepare() ->
+    ok = ensure_working_log_handlers(),
+    ok = rabbit_mnesia:ensure_mnesia_dir().
+
 start() ->
     try
-        ok = ensure_working_log_handlers(),
-        ok = rabbit_mnesia:ensure_mnesia_dir(),
-        ok = rabbit_misc:start_applications(?APPS)
+        ok = prepare(),
+        ok = rabbit_misc:start_applications(?APPS) 
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
@@ -116,8 +120,6 @@ start(normal, []) ->
 
     print_banner(),
 
-    {ok, ExtraSteps} = application:get_env(extra_startup_steps),
-
     lists:foreach(
       fun ({Msg, Thunk}) ->
               io:format("starting ~-20s ...", [Msg]),
@@ -135,13 +137,13 @@ start(normal, []) ->
                 ok = start_child(rabbit_log),
                 ok = rabbit_hooks:start(),
 
-                ok = rabbit_amqqueue:start(),
+                ok = rabbit_binary_generator:
+                    check_empty_content_body_frame_size(),
 
                 {ok, MemoryAlarms} = application:get_env(memory_alarms),
                 ok = rabbit_alarm:start(MemoryAlarms),
                 
-                ok = rabbit_binary_generator:
-                    check_empty_content_body_frame_size(),
+                ok = rabbit_amqqueue:start(),
 
                 ok = start_child(rabbit_router),
                 ok = start_child(rabbit_node_monitor)
@@ -170,14 +172,28 @@ start(normal, []) ->
        {"TCP listeners",
         fun () ->
                 ok = rabbit_networking:start(),
-                {ok, TCPListeners} = application:get_env(tcp_listeners),
+                {ok, TcpListeners} = application:get_env(tcp_listeners),
                 lists:foreach(
                   fun ({Host, Port}) ->
                           ok = rabbit_networking:start_tcp_listener(Host, Port)
                   end,
-                  TCPListeners)
-        end}]
-      ++ ExtraSteps),
+                  TcpListeners)
+        end},
+       {"SSL listeners",
+        fun () ->
+                case application:get_env(ssl_listeners) of
+                    {ok, []} ->
+                        ok;
+                    {ok, SslListeners} ->
+                        ok = rabbit_misc:start_applications([crypto, ssl]),
+
+                        {ok, SslOpts} = application:get_env(ssl_options),
+
+                        [rabbit_networking:start_ssl_listener
+                         (Host, Port, SslOpts) || {Host, Port} <- SslListeners],
+                        ok
+                end
+        end}]),
 
     io:format("~nbroker running~n"),
 
@@ -203,6 +219,16 @@ log_location(Type) ->
         _                  -> undefined
     end.
 
+app_location() ->
+    {ok, Application} = application:get_application(),
+    filename:absname(code:where_is_file(atom_to_list(Application) ++ ".app")).
+
+home_dir() ->
+    case init:get_argument(home) of
+        {ok, [[Home]]} -> Home;
+        Other          -> Other
+    end.
+
 %---------------------------------------------------------------------------
 
 print_banner() ->
@@ -225,10 +251,13 @@ print_banner() ->
               [Product, string:right([$v|Version], ProductLen),
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
-    Settings = [{"node",         node()},
-                {"log",          log_location(kernel)},
-                {"sasl log",     log_location(sasl)},
-                {"database dir", rabbit_mnesia:dir()}],
+    Settings = [{"node",           node()},
+                {"app descriptor", app_location()},
+                {"home dir",       home_dir()},
+                {"cookie hash",    rabbit_misc:cookie_hash()},
+                {"log",            log_location(kernel)},
+                {"sasl log",       log_location(sasl)},
+                {"database dir",   rabbit_mnesia:dir()}],
     DescrLen = lists:max([length(K) || {K, _V} <- Settings]),
     Format = "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
     lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),

@@ -117,6 +117,13 @@ def genErl(spec):
 
     def genMethodHasContent(m):
         print "method_has_content(%s) -> %s;" % (m.erlangName(), str(m.hasContent).lower())
+    
+    def genMethodIsSynchronous(m):
+        hasNoWait = "nowait" in fieldNameList(m.arguments)
+        if m.isSynchronous and hasNoWait:
+          print "is_method_synchronous(#%s{nowait = NoWait}) -> not(NoWait);" % (m.erlangName())
+        else:
+          print "is_method_synchronous(#%s{}) -> %s;" % (m.erlangName(), str(m.isSynchronous).lower())
 
     def genMethodFieldTypes(m):
         """Not currently used - may be useful in future?"""
@@ -246,6 +253,7 @@ def genErl(spec):
 
 -export([method_id/1]).
 -export([method_has_content/1]).
+-export([is_method_synchronous/1]).
 -export([method_fieldnames/1]).
 -export([decode_method_fields/2]).
 -export([decode_properties/2]).
@@ -265,6 +273,9 @@ bitvalue(undefined) -> 0.
 
     for m in methods: genMethodHasContent(m)
     print "method_has_content(Name) -> exit({unknown_method_name, Name})."
+
+    for m in methods: genMethodIsSynchronous(m)
+    print "is_method_synchronous(Name) -> exit({unknown_method_name, Name})."
 
     for m in methods: genMethodFieldNames(m)
     print "method_fieldnames(Name) -> exit({unknown_method_name, Name})."

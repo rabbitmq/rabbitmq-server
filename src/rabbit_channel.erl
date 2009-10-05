@@ -60,8 +60,8 @@
 -spec(do/3 :: (pid(), amqp_method(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
--spec(deliver/4 :: (pid(), ctag(), bool(), msg()) -> 'ok').
--spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
+-spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 
 -endif.
 
@@ -125,11 +125,11 @@ handle_cast({method, Method, Content}, State) ->
         stop ->
             {stop, normal, State#ch{state = terminating}}
     catch
-        exit:{amqp, Error, Explanation, none} ->
-            ok = notify_queues(internal_rollback(State)),
-            Reason = {amqp, Error, Explanation,
-                      rabbit_misc:method_record_type(Method)},
-            State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
+        exit:Reason = #amqp_error{} ->
+            ok = rollback_and_notify(State),
+            MethodName = rabbit_misc:method_record_type(Method),
+            State#ch.reader_pid ! {channel_exit, State#ch.channel,
+                                   Reason#amqp_error{method = MethodName}},
             {stop, normal, State#ch{state = terminating}};
         exit:normal ->
             {stop, normal, State};
@@ -157,6 +157,10 @@ handle_cast({conserve_memory, Conserve}, State) ->
            State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
     noreply(State).
 
+handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
+            State = #ch{writer_pid = WriterPid}) ->
+    State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
+    {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
@@ -171,7 +175,7 @@ terminate(_Reason, #ch{writer_pid = WriterPid, limiter_pid = LimiterPid,
 
 terminate(Reason, State = #ch{writer_pid = WriterPid,
                               limiter_pid = LimiterPid}) ->
-    Res = notify_queues(internal_rollback(State)),
+    Res = rollback_and_notify(State),
     case Reason of
         normal -> ok = Res;
         _      -> ok
@@ -256,9 +260,6 @@ expand_routing_key_shortcut(<<>>, <<>>,
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
-die_precondition_failed(Fmt, Params) ->
-    rabbit_misc:protocol_error(precondition_failed, Fmt, Params).
-
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
 %%
@@ -290,7 +291,7 @@ handle_method(_Method, _, #ch{state = starting}) ->
     rabbit_misc:protocol_error(channel_error, "expected 'channel.open'", []);
 
 handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
-    ok = notify_queues(internal_rollback(State)),
+    ok = rollback_and_notify(State),
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
     stop;
 
@@ -601,8 +602,8 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
         {error, not_found} ->
             rabbit_misc:not_found(ExchangeName);
         {error, in_use} ->
-            die_precondition_failed(
-              "~s in use", [rabbit_misc:rs(ExchangeName)]);
+            rabbit_misc:protocol_error(
+              precondition_failed, "~s in use", [rabbit_misc:rs(ExchangeName)]);
         ok ->
             return_ok(State, NoWait,  #'exchange.delete_ok'{})
     end;
@@ -676,11 +677,11 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
            QueueName,
            fun (Q) -> rabbit_amqqueue:delete(Q, IfUnused, IfEmpty) end) of
         {error, in_use} ->
-            die_precondition_failed(
-              "~s in use", [rabbit_misc:rs(QueueName)]);
+            rabbit_misc:protocol_error(
+              precondition_failed, "~s in use", [rabbit_misc:rs(QueueName)]);
         {error, not_empty} ->
-            die_precondition_failed(
-              "~s not empty", [rabbit_misc:rs(QueueName)]);
+            rabbit_misc:protocol_error(
+              precondition_failed, "~s not empty", [rabbit_misc:rs(QueueName)]);
         {ok, PurgedMessageCount} ->
             return_ok(State, NoWait,
                       #'queue.delete_ok'{
@@ -862,6 +863,11 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
         {error, Errors} -> rabbit_misc:protocol_error(
                              internal_error, "rollback failed: ~w", [Errors])
     end.
+
+rollback_and_notify(State = #ch{transaction_id = none}) ->
+    notify_queues(State);
+rollback_and_notify(State) ->
+    notify_queues(internal_rollback(State)).
 
 fold_per_queue(F, Acc0, UAQ) ->
     D = lists:foldl(

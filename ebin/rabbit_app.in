@@ -15,7 +15,8 @@
 %% actually want to start it
   {mod, {rabbit, []}},
   {env, [{tcp_listeners, [{"0.0.0.0", 5672}]},
-         {extra_startup_steps, []},
+         {ssl_listeners, []},
+         {ssl_options, []},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},

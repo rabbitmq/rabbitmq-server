@@ -30,24 +30,6 @@ REM
 REM   Contributor(s): ______________________________________.
 REM
 
-if "%ERLANG_HOME%"=="" (
-    set ERLANG_HOME=%~dp0%..\..\..
-)
-
-if not exist "%ERLANG_HOME%\bin\erl.exe" (
-    echo.
-    echo ******************************
-    echo ERLANG_HOME not set correctly. 
-    echo ******************************
-    echo.
-    echo Please either set ERLANG_HOME to point to your Erlang installation or place the
-    echo RabbitMQ server distribution in the Erlang lib folder.
-    echo.
-    exit /B
-)
-
-set RABBITMQ_PLUGINS_DIR="%~dp0..\plugins"
-set RABBITMQ_PLUGINS_EXPAND_DIR="%~dp0..\priv\plugins"
 set RABBITMQ_EBIN_DIR="%~dp0..\ebin"
 
-"%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden -s rabbit_plugin_activator -rabbit plugins_dir \"%RABBITMQ_PLUGINS_DIR:\=/%\" -rabbit plugins_expand_dir \"%RABBITMQ_PLUGINS_EXPAND_DIR:\=/%\" -rabbit rabbit_ebin  \"%RABBITMQ_EBIN_DIR:\=/%\" -extra %*
+del /f %RABBITMQ_EBIN_DIR%\rabbit.rel %RABBITMQ_EBIN_DIR%\rabbit.script %RABBITMQ_EBIN_DIR%\rabbit.boot

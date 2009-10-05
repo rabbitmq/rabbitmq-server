@@ -50,8 +50,6 @@
 %% TODO: make this more precise
 -type(amqp_method_name() :: atom()).
 -type(channel_number() :: non_neg_integer()).
-%% TODO: make this more precise
--type(amqp_error() :: {bool(), non_neg_integer(), binary()}).
 -type(resource_name() :: binary()).
 -type(routing_key() :: binary()).
 -type(username() :: binary()).

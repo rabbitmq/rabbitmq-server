@@ -30,25 +30,24 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-# Escape spaces and quotes, because shell is revolting.
-for arg in "$@" ; do
-	# Escape quotes in parameters, so that they're passed through cleanly.
-	arg=$(sed -e 's/"/\\"/g' <<-END
-		$arg
-		END
-	)
-	CMDLINE="${CMDLINE} \"${arg}\""
+# Determine where this script is really located
+SCRIPT_PATH="$0"
+while [ -h "$SCRIPT_PATH" ] ; do
+    FULL_PATH=`readlink -f $SCRIPT_PATH 2>/dev/null`
+    if [ "$?" != "0" ]; then
+      REL_PATH=`readlink $SCRIPT_PATH`
+      if expr "$REL_PATH" : '/.*' > /dev/null; then
+        SCRIPT_PATH="$REL_PATH"
+      else
+        SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$REL_PATH"
+      fi
+    else
+      SCRIPT_PATH=$FULL_PATH
+    fi
 done
 
-cd /var/lib/rabbitmq
+SCRIPT_DIR=`dirname $SCRIPT_PATH`
+RABBITMQ_HOME="${SCRIPT_DIR}/.."
 
-SCRIPT=`basename $0`
-
-if [ `id -u` = 0 ] ; then
-    su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
-else
-    /usr/lib/rabbitmq/bin/${SCRIPT}
-    echo -e "\nOnly root should run ${SCRIPT}\n"
-    exit 1
-fi
-
+# Load configuration from the rabbitmq.conf file
+[ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf

@@ -30,18 +30,18 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-[ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
+. `dirname $0`/rabbitmq-env
 
-RABBITMQ_EBIN=`dirname $0`/../ebin
-[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="`dirname $0`/../plugins"
-[ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="`dirname $0`/../priv/plugins"
+RABBITMQ_EBIN=${RABBITMQ_HOME}/ebin
+[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
+[ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="${RABBITMQ_HOME}/priv/plugins"
 
 exec erl \
     -pa "$RABBITMQ_EBIN" \
     -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
-	-rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
-	-rabbit rabbit_ebin "\"$RABBITMQ_EBIN\"" \
-	-noinput \
+    -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
+    -rabbit rabbit_ebin "\"$RABBITMQ_EBIN\"" \
+    -noinput \
     -hidden \
     -s rabbit_plugin_activator \
     -extra "$@"

@@ -35,7 +35,8 @@
 -include_lib("kernel/include/file.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
--export([die/1, frame_error/2, protocol_error/3, protocol_error/4]).
+-export([die/1, frame_error/2, amqp_error/4,
+         protocol_error/3, protocol_error/4]).
 -export([not_found/1]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
@@ -46,13 +47,15 @@
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
--export([localnode/1, tcp_name/3]).
+-export([localnode/1, nodehost/1, cookie_hash/0, tcp_name/3]).
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([table_foreach/2]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
+-export([read_term_file/1, write_term_file/2]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
+-export([unfold/2, ceil/1]).
 
 -import(mnesia).
 -import(lists).
@@ -65,15 +68,16 @@
 
 -include_lib("kernel/include/inet.hrl").
 
+-type(ok_or_error() :: 'ok' | {'error', any()}).
+
 -spec(method_record_type/1 :: (tuple()) -> atom()).
 -spec(polite_pause/0 :: () -> 'done').
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
 -spec(die/1 :: (atom()) -> no_return()).
 -spec(frame_error/2 :: (atom(), binary()) -> no_return()).
--spec(protocol_error/3 ::
-      (atom() | amqp_error(), string(), [any()]) -> no_return()).
--spec(protocol_error/4 ::
-      (atom() | amqp_error(), string(), [any()], atom()) -> no_return()).
+-spec(amqp_error/4 :: (atom(), string(), [any()], atom()) -> amqp_error()).
+-spec(protocol_error/3 :: (atom(), string(), [any()]) -> no_return()).
+-spec(protocol_error/4 :: (atom(), string(), [any()], atom()) -> no_return()).
 -spec(not_found/1 :: (r(atom())) -> no_return()).
 -spec(get_config/1 :: (atom()) -> {'ok', any()} | not_found()).
 -spec(get_config/2 :: (atom(), A) -> A).
@@ -88,9 +92,9 @@
 -spec(r_arg/4 :: (vhost() | r(atom()), K, amqp_table(), binary()) ->
              undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
--spec(enable_cover/0 :: () -> 'ok' | {'error', any()}).
+-spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(report_cover/0 :: () -> 'ok').
--spec(enable_cover/1 :: (string()) -> 'ok' | {'error', any()}).
+-spec(enable_cover/1 :: (string()) -> ok_or_error()).
 -spec(report_cover/1 :: (string()) -> 'ok').
 -spec(throw_on_error/2 ::
       (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
@@ -100,8 +104,10 @@
 -spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
--spec(ensure_ok/2 :: ('ok' | {'error', any()}, atom()) -> 'ok').
+-spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
 -spec(localnode/1 :: (atom()) -> erlang_node()).
+-spec(nodehost/1 :: (erlang_node()) -> string()).
+-spec(cookie_hash/0 :: () -> string()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
@@ -110,12 +116,16 @@
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
--spec(dirty_dump_log/1 :: (string()) -> 'ok' | {'error', any()}).
--spec(append_file/2 :: (string(), string()) -> 'ok' | {'error', any()}).
+-spec(dirty_dump_log/1 :: (string()) -> ok_or_error()).
+-spec(read_term_file/1 :: (string()) -> {'ok', [any()]} | {'error', any()}).
+-spec(write_term_file/2 :: (string(), [any()]) -> ok_or_error()).
+-spec(append_file/2 :: (string(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
+-spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
+-spec(ceil/1 :: (number()) -> number()).
 
 -endif.
 
@@ -136,15 +146,17 @@ die(Error) ->
     protocol_error(Error, "~w", [Error]).
 
 frame_error(MethodName, BinaryFields) ->
-    protocol_error(frame_error, "cannot decode ~w",
-                   [BinaryFields], MethodName).
+    protocol_error(frame_error, "cannot decode ~w", [BinaryFields], MethodName).
 
-protocol_error(Error, Explanation, Params) ->
-    protocol_error(Error, Explanation, Params, none).
+amqp_error(Name, ExplanationFormat, Params, Method) ->
+    Explanation = lists:flatten(io_lib:format(ExplanationFormat, Params)),
+    #amqp_error{name = Name, explanation = Explanation, method = Method}.
 
-protocol_error(Error, Explanation, Params, Method) ->
-    CompleteExplanation = lists:flatten(io_lib:format(Explanation, Params)),
-    exit({amqp, Error, CompleteExplanation, Method}).
+protocol_error(Name, ExplanationFormat, Params) ->
+    protocol_error(Name, ExplanationFormat, Params, none).
+
+protocol_error(Name, ExplanationFormat, Params, Method) ->
+    exit(amqp_error(Name, ExplanationFormat, Params, Method)).
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
@@ -297,11 +309,15 @@ ensure_ok(ok, _) -> ok;
 ensure_ok({error, Reason}, ErrorTag) -> throw({error, {ErrorTag, Reason}}).
 
 localnode(Name) ->
+    list_to_atom(lists:append([atom_to_list(Name), "@", nodehost(node())])).
+
+nodehost(Node) ->
     %% This is horrible, but there doesn't seem to be a way to split a
     %% nodename into its constituent parts.
-    list_to_atom(lists:append(atom_to_list(Name),
-                              lists:dropwhile(fun (E) -> E =/= $@ end,
-                                              atom_to_list(node())))).
+    tl(lists:dropwhile(fun (E) -> E =/= $@ end, atom_to_list(Node))).
+
+cookie_hash() ->
+    ssl_base64:encode(erlang:md5(atom_to_list(erlang:get_cookie()))).
 
 tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->
@@ -360,7 +376,9 @@ dirty_foreach_key1(F, TableName, K) ->
     end.
 
 dirty_dump_log(FileName) ->
-    {ok, LH} = disk_log:open([{name, dirty_dump_log}, {mode, read_only}, {file, FileName}]),
+    {ok, LH} = disk_log:open([{name, dirty_dump_log},
+                              {mode, read_only},
+                              {file, FileName}]),
     dirty_dump_log1(LH, disk_log:chunk(LH, start)),
     disk_log:close(LH).
 
@@ -373,6 +391,12 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
 
+
+read_term_file(File) -> file:consult(File).
+
+write_term_file(File, Terms) ->
+    file:write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
+                                             Term <- Terms])).
 
 append_file(File, Suffix) ->
     case file:read_file_info(File) of
@@ -444,3 +468,18 @@ stop_applications(Apps) ->
                         cannot_stop_application,
                         Apps).
 
+unfold(Fun, Init) ->
+    unfold(Fun, [], Init).
+
+unfold(Fun, Acc, Init) ->
+    case Fun(Init) of
+        {true, E, I} -> unfold(Fun, [E|Acc], I);
+        false -> {Acc, Init}
+    end.
+
+ceil(N) ->
+    T = trunc(N),
+    case N - T of
+        0 -> N;
+        _ -> 1 + T
+    end.
