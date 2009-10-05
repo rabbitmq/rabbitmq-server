@@ -89,12 +89,11 @@ get_file_handle(Path, Mode, CState = #client_state { handles = Handles }) ->
 
 release_file_handle({release_handle, Key = {_From, Path, Mode}},
                     CState = #client_state { handles = Handles }) ->
-    Mode1 = lists:usort(Mode),
-    case dict:find({Path, Mode1}, Handles) of
+    case dict:find({Path, Mode}, Handles) of
         error -> %% oh well, it must have already gone
             CState;
         {value, {_Hdl, Offset}} ->
-            Handles1 = dict:erase({Path, Mode1}, Handles),
+            Handles1 = dict:erase({Path, Mode}, Handles),
             gen_server2:cast(?SERVER, {release_handle, Key, Offset}),
             CState #client_state { handles = Handles1 }
     end.
@@ -113,13 +112,14 @@ with_file_handle_at(Path, Mode, Offset, Fun, CState =
     case obtain_file_handle(Path, Mode, CState) of
         not_available -> {not_available, CState};
         {Mode1, Hdl, OldOffset} ->
-            SeekRes = case Offset == OldOffset of
-                          true -> ok;
-                          false -> case file:position(Hdl, Offset) of
-                                       {ok, _} -> ok;
-                                       KO -> KO
-                                   end
-                      end,
+            SeekRes =
+                case Offset == OldOffset orelse not is_integer(Offset) of
+                    true -> ok;
+                    false -> case file:position(Hdl, Offset) of
+                                 {ok, _} -> ok;
+                                 KO -> KO
+                             end
+                end,
             case SeekRes of
                 ok -> {NewOffset, Result} = Fun(Hdl),
                       {Result, CState #client_state {
@@ -164,7 +164,7 @@ init([MaxFileHandles]) ->
 
 handle_call(new_client, From, State) ->
     _MRef = erlang:monitor(process, From),
-    {reply, ok, State};
+    {reply, ok, State, hibernate};
 handle_call({get_handle, Path, Mode, Callback = {_M, _F, _A}}, From,
             State = #server_state { handles = Handles,
                                     ages = Ages,
