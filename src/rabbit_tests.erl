@@ -656,7 +656,7 @@ test_server_status() ->
     %% list exchanges
     ok = info_action(
            list_exchanges,
-           [name, type, durable, auto_delete, arguments],
+           [name, type, durable, arguments],
            true),
 
     %% list bindings
