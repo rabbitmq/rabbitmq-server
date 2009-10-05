@@ -30,25 +30,8 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-# Escape spaces and quotes, because shell is revolting.
-for arg in "$@" ; do
-	# Escape quotes in parameters, so that they're passed through cleanly.
-	arg=$(sed -e 's/"/\\"/g' <<-END
-		$arg
-		END
-	)
-	CMDLINE="${CMDLINE} \"${arg}\""
-done
+. `dirname $0`/rabbitmq-env
 
-cd /var/lib/rabbitmq
+RABBITMQ_EBIN=${RABBITMQ_HOME}/ebin
 
-SCRIPT=`basename $0`
-
-if [ `id -u` = 0 ] ; then
-    su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
-else
-    /usr/lib/rabbitmq/bin/${SCRIPT}
-    echo -e "\nOnly root should run ${SCRIPT}\n"
-    exit 1
-fi
-
+rm -f ${RABBITMQ_EBIN}/rabbit.rel ${RABBITMQ_EBIN}/rabbit.script ${RABBITMQ_EBIN}/rabbit.boot

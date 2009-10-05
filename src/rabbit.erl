@@ -116,8 +116,6 @@ start(normal, []) ->
 
     print_banner(),
 
-    {ok, ExtraSteps} = application:get_env(extra_startup_steps),
-
     lists:foreach(
       fun ({Msg, Thunk}) ->
               io:format("starting ~-20s ...", [Msg]),
@@ -155,10 +153,8 @@ start(normal, []) ->
                 ok = maybe_insert_default_data(),
                 ok = rabbit_exchange:recover(),
                 {ok, DurableQueues} = rabbit_amqqueue:recover(),
-                DurableQueueNames =
-                    sets:from_list([ Q #amqqueue.name || Q <- DurableQueues ]),
                 ok = rabbit_disk_queue:delete_non_durable_queues(
-                       DurableQueueNames)
+                       [ Q #amqqueue.name || Q <- DurableQueues ])
         end},
        {"builtin applications",
         fun () ->
@@ -191,8 +187,7 @@ start(normal, []) ->
                          (Host, Port, SslOpts) || {Host, Port} <- SslListeners],
                         ok
                 end
-        end}]
-      ++ ExtraSteps),
+        end}]),
 
     io:format("~nbroker running~n"),
 
@@ -218,6 +213,16 @@ log_location(Type) ->
         _                  -> undefined
     end.
 
+app_location() ->
+    {ok, Application} = application:get_application(),
+    filename:absname(code:where_is_file(atom_to_list(Application) ++ ".app")).
+
+home_dir() ->
+    case init:get_argument(home) of
+        {ok, [[Home]]} -> Home;
+        Other          -> Other
+    end.
+
 %---------------------------------------------------------------------------
 
 print_banner() ->
@@ -240,10 +245,13 @@ print_banner() ->
               [Product, string:right([$v|Version], ProductLen),
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
-    Settings = [{"node",         node()},
-                {"log",          log_location(kernel)},
-                {"sasl log",     log_location(sasl)},
-                {"database dir", rabbit_mnesia:dir()}],
+    Settings = [{"node",           node()},
+                {"app descriptor", app_location()},
+                {"home dir",       home_dir()},
+                {"cookie hash",    rabbit_misc:cookie_hash()},
+                {"log",            log_location(kernel)},
+                {"sasl log",       log_location(sasl)},
+                {"database dir",   rabbit_mnesia:dir()}],
     DescrLen = lists:max([length(K) || {K, _V} <- Settings]),
     Format = "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
     lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
@@ -252,7 +260,7 @@ print_banner() ->
 start_child(Mod) ->
     {ok,_} = supervisor:start_child(rabbit_sup,
                                     {Mod, {Mod, start_link, []},
-                                     transient, 1000, worker, [Mod]}),
+                                     transient, 5000, worker, [Mod]}),
     ok.
 
 ensure_working_log_handlers() ->

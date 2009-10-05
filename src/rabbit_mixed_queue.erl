@@ -53,6 +53,7 @@
        ).
 
 -define(TO_DISK_MAX_FLUSH_SIZE, 100000).
+-define(MAGIC_MARKER, <<"$magic_marker">>).
 
 %%----------------------------------------------------------------------------
 
@@ -67,21 +68,23 @@
                               memory_size :: (non_neg_integer() | 'undefined'),
                               prefetcher :: (pid() | 'undefined')
                             }).
--type(acktag() :: ( 'no_on_disk' | { non_neg_integer(), non_neg_integer() })).
+-type(msg_id() :: guid()).
+-type(seq_id() :: non_neg_integer()).
+-type(ack_tag() :: ( 'not_on_disk' | {msg_id(), seq_id()} )).
 -type(okmqs() :: {'ok', mqstate()}).
 
 -spec(init/2 :: (queue_name(), boolean()) -> okmqs()).
 -spec(publish/2 :: (message(), mqstate()) -> okmqs()).
 -spec(publish_delivered/2 :: (message(), mqstate()) ->
-             {'ok', acktag(), mqstate()}).
+             {'ok', ack_tag(), mqstate()}).
 -spec(fetch/1 :: (mqstate()) ->
-             {('empty' | {message(), boolean(), acktag(), non_neg_integer()}),
+             {('empty' | {message(), boolean(), ack_tag(), non_neg_integer()}),
               mqstate()}).
--spec(ack/2 :: ([{message(), acktag()}], mqstate()) -> okmqs()).
+-spec(ack/2 :: ([{message(), ack_tag()}], mqstate()) -> okmqs()).
 -spec(tx_publish/2 :: (message(), mqstate()) -> okmqs()).
--spec(tx_commit/3 :: ([message()], [acktag()], mqstate()) -> okmqs()).
+-spec(tx_commit/3 :: ([message()], [ack_tag()], mqstate()) -> okmqs()).
 -spec(tx_rollback/2 :: ([message()], mqstate()) -> okmqs()).
--spec(requeue/2 :: ([{message(), acktag()}], mqstate()) -> okmqs()).
+-spec(requeue/2 :: ([{message(), ack_tag()}], mqstate()) -> okmqs()).
 -spec(purge/1 :: (mqstate()) -> okmqs()).
 -spec(delete_queue/1 :: (mqstate()) -> {'ok', mqstate()}).
 -spec(len/1 :: (mqstate()) -> non_neg_integer()).
@@ -152,7 +155,7 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
     %% must call phantom_fetch otherwise the msg remains at the head
     %% of the queue. This is synchronous, but unavoidable as we need
     %% the AckTag
-    {MsgId, IsPersistent, true, AckTag, 0} = rabbit_disk_queue:phantom_fetch(Q),
+    {MsgId, true, AckTag, 0} = rabbit_disk_queue:phantom_fetch(Q),
     {ok, AckTag, State1};
 publish_delivered(Msg, State = #mqstate { length = 0 }) ->
     Msg1 = ensure_binary_properties(Msg),
@@ -172,7 +175,7 @@ fetch(State = #mqstate { msg_buf = MsgBuf, queue = Q,
             AckTag =
                 case IsDurable andalso IsPersistent of
                     true ->
-                        {MsgId, IsPersistent, IsDelivered, AckTag1, _PRem}
+                        {MsgId, IsDelivered, AckTag1, _PRem}
                             = rabbit_disk_queue:phantom_fetch(Q),
                         AckTag1;
                     false ->
@@ -232,7 +235,7 @@ tx_commit(Publishes, MsgsWithAcks,
           State = #mqstate { mode = Mode, queue = Q, msg_buf = MsgBuf,
                              is_durable = IsDurable, length = Length }) ->
     PersistentPubs =
-        [{MsgId, false} ||
+        [{MsgId, false, IsPersistent} ||
             #basic_message { guid = MsgId,
                              is_persistent = IsPersistent } <- Publishes,
             on_disk(Mode, IsDurable, IsPersistent)],
@@ -531,12 +534,13 @@ send_messages_to_disk(IsDurable, Q, Queue, PublishCount, RequeueCount,
               Commit, Ack, inc_queue_length(MsgBuf, Count))
     end.
 
-republish_message_to_disk_queue(IsDurable, Q, Queue, PublishCount, RequeueCount,
-                                Commit, Ack, MsgBuf, Msg =
-                                #basic_message { guid = MsgId }, IsDelivered) ->
+republish_message_to_disk_queue(
+  IsDurable, Q, Queue, PublishCount, RequeueCount, Commit, Ack, MsgBuf,
+  Msg = #basic_message { guid = MsgId, is_persistent = IsPersistent },
+  IsDelivered) ->
     {Commit1, Ack1} = flush_requeue_to_disk_queue(Q, RequeueCount, Commit, Ack),
     ok = rabbit_disk_queue:tx_publish(Msg),
-    Commit2 = [{MsgId, IsDelivered} | Commit1],
+    Commit2 = [{MsgId, IsDelivered, IsPersistent} | Commit1],
     {PublishCount1, Commit3, Ack2} =
         case PublishCount == ?TO_DISK_MAX_FLUSH_SIZE of
             true  -> ok = flush_messages_to_disk_queue(Q, Commit2, Ack1),
@@ -652,7 +656,8 @@ on_disk(mixed, _IsDurable, _IsPersistent) -> false.
 
 publish_magic_marker_message(Q) ->
     Msg = rabbit_basic:message(
-            none, internal, [], <<>>, rabbit_guid:guid(), true),
+            rabbit_misc:r(<<"/">>, exchange, <<>>), ?MAGIC_MARKER,
+            [], <<>>, <<>>, true),
     ok = rabbit_disk_queue:publish(Q, ensure_binary_properties(Msg), false).
 
 fetch_ack_magic_marker_message(Q) ->
@@ -661,9 +666,8 @@ fetch_ack_magic_marker_message(Q) ->
     ok = rabbit_disk_queue:ack(Q, [AckTag]),
     {ok, Length}.
 
-is_magic_marker_message(
-  #basic_message { exchange_name = none, routing_key = internal,
-                   is_persistent = true }) ->
+is_magic_marker_message(#basic_message { routing_key = ?MAGIC_MARKER,
+                                         is_persistent = true, guid = <<>> }) ->
     true;
 is_magic_marker_message(_) ->
     false.

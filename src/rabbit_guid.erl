@@ -99,7 +99,7 @@ guid() ->
             {S, I}   -> {S, I+1}
         end,
     put(guid, G),
-    G.
+    erlang:md5(term_to_binary(G)).
 
 %% generate a readable string representation of a guid. Note that any
 %% monotonicity of the guid is not preserved in the encoding.
@@ -110,7 +110,7 @@ string_guid(Prefix) ->
     %%
     %% TODO: once debian stable and EPEL have moved from R11B-2 to
     %% R11B-4 or later we should change this to use base64.
-    Prefix ++ "-" ++ ssl_base64:encode(erlang:md5(term_to_binary(guid()))).
+    Prefix ++ "-" ++ ssl_base64:encode(guid()).
 
 binstring_guid(Prefix) ->
     list_to_binary(string_guid(Prefix)).

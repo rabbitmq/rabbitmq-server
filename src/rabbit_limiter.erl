@@ -47,7 +47,7 @@
 -spec(start_link/1 :: (pid()) -> pid()).
 -spec(shutdown/1 :: (maybe_pid()) -> 'ok').
 -spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
--spec(can_send/3 :: (maybe_pid(), pid(), bool()) -> bool()).
+-spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
 -spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
 -spec(unregister/2 :: (maybe_pid(), pid()) -> 'ok').

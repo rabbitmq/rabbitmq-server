@@ -31,50 +31,46 @@
 
 -module(rabbit_msg_file).
 
--export([append/4, read/2, scan/1]).
+-export([append/3, read/2, scan/1]).
 
 %%----------------------------------------------------------------------------
-
--include("rabbit.hrl").
 
 -define(INTEGER_SIZE_BYTES,      8).
 -define(INTEGER_SIZE_BITS,       (8 * ?INTEGER_SIZE_BYTES)).
 -define(WRITE_OK_SIZE_BITS,      8).
--define(WRITE_OK_TRANSIENT,      255).
--define(WRITE_OK_PERSISTENT,     254).
--define(FILE_PACKING_ADJUSTMENT, (1 + (2* (?INTEGER_SIZE_BYTES)))).
+-define(WRITE_OK_MARKER,         255).
+-define(FILE_PACKING_ADJUSTMENT, (1 + (2 * (?INTEGER_SIZE_BYTES)))).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(append/4 :: (io_device(), msg_id(), binary(), boolean()) ->
-             ({'ok', non_neg_integer()} | {'error', any()})).
--spec(read/2 :: (io_device(), non_neg_integer()) ->
-             ({'ok', {msg_id(), binary(), boolean(), non_neg_integer()}} |
-              {'error', any()})).
+-type(io_device() :: any()).
+-type(msg_id() :: binary()).
+-type(msg() :: any()).
+-type(position() :: non_neg_integer()).
+-type(msg_size() :: non_neg_integer()).
+
+-spec(append/3 :: (io_device(), msg_id(), msg()) ->
+             ({'ok', msg_size()} | {'error', any()})).
+-spec(read/2 :: (io_device(), msg_size()) ->
+             ({'ok', {msg_id(), msg()}} | {'error', any()})).
 -spec(scan/1 :: (io_device()) ->
-             {'ok', [{msg_id(), boolean(), non_neg_integer(),
-                      non_neg_integer()}]}).
+             {'ok', [{msg_id(), msg_size(), position()}]}).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-append(FileHdl, MsgId, MsgBody, IsPersistent) when is_binary(MsgBody) ->
-    BodySize = size(MsgBody),
-    MsgIdBin = term_to_binary(MsgId),
-    MsgIdBinSize = size(MsgIdBin),
-    Size = BodySize + MsgIdBinSize,
-    StopByte = case IsPersistent of
-                   true -> ?WRITE_OK_PERSISTENT;
-                   false -> ?WRITE_OK_TRANSIENT
-               end,
+append(FileHdl, MsgId, MsgBody) when is_binary(MsgId) ->
+    MsgBodyBin  = term_to_binary(MsgBody),
+    [MsgIdSize, MsgBodyBinSize] = Sizes = [size(B) || B <- [MsgId, MsgBodyBin]],
+    Size = lists:sum(Sizes),
     case file:write(FileHdl, <<Size:?INTEGER_SIZE_BITS,
-                               MsgIdBinSize:?INTEGER_SIZE_BITS,
-                               MsgIdBin:MsgIdBinSize/binary,
-                               MsgBody:BodySize/binary,
-                               StopByte:?WRITE_OK_SIZE_BITS>>) of
+                               MsgIdSize:?INTEGER_SIZE_BITS,
+                               MsgId:MsgIdSize/binary,
+                               MsgBodyBin:MsgBodyBinSize/binary,
+                               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
         ok -> {ok, Size + ?FILE_PACKING_ADJUSTMENT};
         KO -> KO
     end.
@@ -84,16 +80,13 @@ read(FileHdl, TotalSize) ->
     SizeWriteOkBytes = Size + 1,
     case file:read(FileHdl, TotalSize) of
         {ok, <<Size:?INTEGER_SIZE_BITS,
-               MsgIdBinSize:?INTEGER_SIZE_BITS,
+               MsgIdSize:?INTEGER_SIZE_BITS,
                Rest:SizeWriteOkBytes/binary>>} ->
-            BodySize = Size - MsgIdBinSize,
-            <<MsgId:MsgIdBinSize/binary, MsgBody:BodySize/binary,
-             StopByte:?WRITE_OK_SIZE_BITS>> = Rest,
-            Persistent = case StopByte of
-                             ?WRITE_OK_TRANSIENT  -> false;
-                             ?WRITE_OK_PERSISTENT -> true
-                         end,
-            {ok, {binary_to_term(MsgId), MsgBody, Persistent, BodySize}};
+            BodyBinSize = Size - MsgIdSize,
+            <<MsgId:MsgIdSize/binary,
+              MsgBodyBin:BodyBinSize/binary,
+              ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>> = Rest,
+            {ok, {MsgId, binary_to_term(MsgBodyBin)}};
         KO -> KO
     end.
 
@@ -104,9 +97,8 @@ scan(FileHdl, Offset, Acc) ->
         eof -> {ok, Acc};
         {corrupted, NextOffset} ->
             scan(FileHdl, NextOffset, Acc);
-        {ok, {MsgId, IsPersistent, TotalSize, NextOffset}} ->
-            scan(FileHdl, NextOffset,
-                 [{MsgId, IsPersistent, TotalSize, Offset} | Acc]);
+        {ok, {MsgId, TotalSize, NextOffset}} ->
+            scan(FileHdl, NextOffset, [{MsgId, TotalSize, Offset} | Acc]);
         _KO ->
             %% bad message, but we may still have recovered some valid messages
             {ok, Acc}
@@ -115,11 +107,9 @@ scan(FileHdl, Offset, Acc) ->
 read_next(FileHdl, Offset) ->
     TwoIntegers = 2 * ?INTEGER_SIZE_BYTES,
     case file:read(FileHdl, TwoIntegers) of
-        {ok,
-         <<Size:?INTEGER_SIZE_BITS, MsgIdBinSize:?INTEGER_SIZE_BITS>>} ->
-            case {Size, MsgIdBinSize} of
-                {0, _} -> eof; %% Nothing we can do other than stop
-                {_, 0} ->
+        {ok, <<Size:?INTEGER_SIZE_BITS, MsgIdSize:?INTEGER_SIZE_BITS>>} ->
+            if Size == 0 -> eof; %% Nothing we can do other than stop
+               MsgIdSize == 0 ->
                     %% current message corrupted, try skipping past it
                     ExpectedAbsPos = Offset + Size + ?FILE_PACKING_ADJUSTMENT,
                     case file:position(FileHdl, {cur, Size + 1}) of
@@ -127,21 +117,21 @@ read_next(FileHdl, Offset) ->
                         {ok, _SomeOtherPos}  -> eof; %% seek failed, so give up
                         KO                   -> KO
                     end;
-                {_, _} -> %% all good, let's continue
-                    case file:read(FileHdl, MsgIdBinSize) of
-                        {ok, <<MsgIdBin:MsgIdBinSize/binary>>} ->
+               true -> %% all good, let's continue
+                    case file:read(FileHdl, MsgIdSize) of
+                        {ok, <<MsgId:MsgIdSize/binary>>} ->
                             TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
                             ExpectedAbsPos = Offset + TotalSize - 1,
                             case file:position(
-                                   FileHdl, {cur, Size - MsgIdBinSize}) of
+                                   FileHdl, {cur, Size - MsgIdSize}) of
                                 {ok, ExpectedAbsPos} ->
                                     NextOffset = ExpectedAbsPos + 1,
-                                    case read_stop_byte(FileHdl) of
-                                        {ok, Persistent} ->
-                                            MsgId = binary_to_term(MsgIdBin),
-                                            {ok, {MsgId, Persistent,
+                                    case file:read(FileHdl, 1) of
+                                        {ok, <<?WRITE_OK_MARKER:
+                                               ?WRITE_OK_SIZE_BITS>>} ->
+                                            {ok, {MsgId,
                                                   TotalSize, NextOffset}};
-                                        corrupted ->
+                                        {ok, _SomeOtherData} ->
                                             {corrupted, NextOffset};
                                         KO -> KO
                                     end;
@@ -154,12 +144,4 @@ read_next(FileHdl, Offset) ->
                     end
             end;
         Other -> Other
-    end.
-
-read_stop_byte(FileHdl) ->
-    case file:read(FileHdl, 1) of
-        {ok, <<?WRITE_OK_TRANSIENT:?WRITE_OK_SIZE_BITS>>}  -> {ok, false};
-        {ok, <<?WRITE_OK_PERSISTENT:?WRITE_OK_SIZE_BITS>>} -> {ok, true};
-        {ok, _SomeOtherData}                               -> corrupted;
-        KO                                                 -> KO
     end.

@@ -8,13 +8,11 @@ erl_crash.dump
 syntax: regexp
 ^cover/
 ^dist/
-^include/rabbit_framing.hrl$
-^src/rabbit_framing.erl$
-^rabbit.plt$
-^ebin/rabbit.app$
-^ebin/rabbit.rel$
-^ebin/rabbit.boot$
-^ebin/rabbit.script$
+^include/rabbit_framing\.hrl$
+^src/rabbit_framing\.erl$
+^rabbit\.plt$
+^basic.plt$
+^ebin/rabbit\.(app|rel|boot|script)$
 ^plugins/
 ^priv/plugins/
 
