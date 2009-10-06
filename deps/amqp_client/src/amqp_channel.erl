@@ -191,37 +191,42 @@ rpc_top_half(Method, From, State) ->
     rpc_top_half(Method, undefined, From, State).
 
 rpc_top_half(Method, Content, From, 
-             State = #channel_state{rpc_requests = RequestQueue}) ->
+             State0 = #channel_state{rpc_requests = RequestQueue}) ->
     % Enqueue the incoming RPC request to serialize RPC dispatching
-    NewState = State#channel_state{
+    State1 = State0#channel_state{
         rpc_requests = queue:in({From, Method, Content}, RequestQueue)},
     IsFirstElement = queue:is_empty(RequestQueue),
-    if IsFirstElement -> do_rpc(NewState);
-       true           -> ok
-    end,
-    {noreply, NewState}.
+    State2 = if IsFirstElement -> do_rpc(State1);
+                true           -> State1
+             end,
+    {noreply, State2}.
 
-rpc_bottom_half(Reply, State = #channel_state{rpc_requests = RequestQueue}) ->
+rpc_bottom_half(Reply, State0 = #channel_state{rpc_requests = RequestQueue}) ->
     case queue:out(RequestQueue) of
         {empty, _} ->
             exit(empty_rpc_bottom_half);
         {{value, {From, _Method, _Content}}, NewRequestQueue} ->
             gen_server:reply(From, Reply),
-            NewState = State#channel_state{rpc_requests = NewRequestQueue},
-            do_rpc(NewState),
-            {noreply, NewState}
+            State1 = State0#channel_state{rpc_requests = NewRequestQueue},
+            State2 = do_rpc(State1),
+            {noreply, State2}
     end.
 
-do_rpc(#channel_state{writer_pid = Writer,
-                      rpc_requests = RequestQueue,
-                      driver = Driver}) ->
+do_rpc(State = #channel_state{writer_pid = Writer,
+                              rpc_requests = RequestQueue,
+                              driver = Driver}) ->
     case queue:peek(RequestQueue) of
+        {value, {_From, Method = #'channel.close'{}, undefined}} ->
+            Driver:do(Writer, Method),
+            State#channel_state{closing = true};
         {value, {_From, Method, undefined}} ->
-            Driver:do(Writer, Method);
+            Driver:do(Writer, Method),
+            State;
         {value, {_From, Method, Content}} ->
-            Driver:do(Writer, Method, Content);
+            Driver:do(Writer, Method, Content),
+            State;
         empty ->
-            empty
+            State
     end.
 
 resolve_consumer(_ConsumerTag, #channel_state{consumers = []}) ->
@@ -253,6 +258,25 @@ amqp_msg(Content) ->
     {Props, Payload} = rabbit_basic:from_content(Content),
     #amqp_msg{props = Props, payload = Payload}.
 
+%% Handles the scenario when the broker intiates a channel.close
+handle_method(#'channel.close'{reply_code = ReplyCode,
+                               reply_text = ReplyText},
+              State = #channel_state{driver = Driver,
+                                     writer_pid = Writer}) ->
+    Driver:do(Writer, #'channel.close_ok'{}),
+    {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
+
+handle_method(CloseOk = #'channel.close_ok'{}, State) ->
+    {noreply, NewState} = rpc_bottom_half(CloseOk, State),
+    {stop, normal, NewState};
+
+%% Drop all messages from the server except 'channel.close' and
+%% 'channel.close_ok' when channel is closing.
+handle_method(Method, State = #channel_state{closing = true}) ->
+    ?LOG_INFO("Channel (~p): dropping method from server because channel "
+              "is closing: ~p~n", [self(), Method]),
+    {noreply, State};
+
 handle_method(ConsumeOk = #'basic.consume_ok'{consumer_tag = ConsumerTag},
               State = #channel_state{anon_sub_requests = Anon,
                                      tagged_sub_requests = Tagged}) ->
@@ -280,18 +304,6 @@ handle_method(CancelOk = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
     Consumer ! CancelOk,
     NewState = unregister_consumer(ConsumerTag, State),
     rpc_bottom_half(CancelOk, NewState);
-
-handle_method(CloseOk = #'channel.close_ok'{}, State) ->
-    {noreply, NewState} = rpc_bottom_half(CloseOk, State),
-    {stop, normal, NewState};
-
-%% Handles the scenario when the broker intiates a channel.close
-handle_method(#'channel.close'{reply_code = ReplyCode,
-                               reply_text = ReplyText},
-              State = #channel_state{driver = Driver,
-                                     writer_pid = Writer}) ->
-    Driver:do(Writer, #'channel.close_ok'{}),
-    {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
 
 %% This handles the flow control flag that the broker initiates.
 %% If defined, it informs the flow control handler to suspend submitting
@@ -347,10 +359,6 @@ handle_call(_, _, State = #channel_state{closing = true}) ->
     {reply, closing, State};
 
 %% @private
-handle_call({call, Method = #'channel.close'{}}, From, State) ->
-    rpc_top_half(Method, From, State#channel_state{closing = true});
-
-%% @private
 handle_call({call, Method}, From, State = #channel_state{writer_pid = Writer,
                                                          driver = Driver}) ->
     case rabbit_framing:is_method_synchronous(Method) of
@@ -400,10 +408,12 @@ handle_call({Method = #'basic.consume'{consumer_tag = Tag}, Consumer},
     NewState = State#channel_state{tagged_sub_requests = NewSubs},
     rpc_top_half(Method, From, NewState).
 
-%% Do not accept any further messages for writer when the channel is about to
-%% close
+%% Do not accept any casts when the channel is about to close
 %% @private
-handle_cast({cast, _Method}, State = #channel_state{closing = true}) ->
+handle_cast({cast, Method}, State = #channel_state{closing = true}) ->
+    %% Discard the message and log it
+    ?LOG_INFO("Channel (~p): discarding method in cast ~p. Reason: closing.~n",
+              [self(), Method]),
     {noreply, State};
 
 %% Standard implementation of the cast/2 command
@@ -413,13 +423,22 @@ handle_cast({cast, Method}, State = #channel_state{writer_pid = Writer,
     Driver:do(Writer, Method),
     {noreply, State};
 
+%% Do not accept any casts when the channel is about to close
+%% @private
+handle_cast({cast, Method, _Content}, State = #channel_state{closing = true}) ->
+    %% Discard the message and log it
+    ?LOG_INFO("Channel (~p): discarding content bearing method in cast ~p. "
+              "Reason: closing.~n", [self(), Method]),
+    {noreply, State};
+
 %% This discards any message submitted to the channel when flow control is
 %% active
 %% @private
 handle_cast({cast, Method, _Content},
             State = #channel_state{flow_control = true}) ->
-    % Discard the message and log it
-    ?LOG_INFO("Discarding content bearing method (~p) ~n", [Method]),
+    %% Discard the message and log it
+    ?LOG_INFO("Channel (~p): discarding content bearing method in cast ~p. "
+              "Reason: flow_control.~n", [self(), Method]),
     {noreply, State};
 
 %% Do not accept any further messages for writer when the channel is about to
