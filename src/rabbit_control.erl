@@ -182,8 +182,8 @@ arguments, node, messages_ready, messages_unacknowledged, messages_uncommitted,
 messages, acks_uncommitted, consumers, transactions, memory]. The default is 
  to display name and (number of) messages.
 
-<ExchangeInfoItem> must be a member of the list [name, type, durable, 
-auto_delete, arguments]. The default is to display name and type.
+<ExchangeInfoItem> must be a member of the list [name, type, durable,
+arguments]. The default is to display name and type.
 
 The output format for \"list_bindings\" is a list of rows containing 
 exchange name, routing key, queue name and arguments, in that order.
