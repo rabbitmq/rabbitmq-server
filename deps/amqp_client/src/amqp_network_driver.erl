@@ -30,7 +30,8 @@
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0},{active,false}, {nodelay, true}]).
 
--export([handshake/1, open_channel/2, close_channel/3, close_connection/3]).
+-export([handshake/1, open_channel/2, close_channel/3]).
+-export([close_connection/2, close_connection/3]).
 -export([start_main_reader/2, start_writer/2]).
 -export([do/2, do/3]).
 -export([handle_broker_close/1]).
@@ -91,6 +92,9 @@ close_channel(_Reason, WriterPid, ReaderPid) ->
     rabbit_framing_channel:shutdown(ReaderPid),
     ok.
 
+close_connection(Close = #'connection.close'{}, State) ->
+    close_connection(Close, none, State).
+
 %% This closes the writer down, waits for the confirmation from
 %% the channel and then returns the ack to the user
 close_connection(Close = #'connection.close'{}, From,
@@ -100,7 +104,10 @@ close_connection(Close = #'connection.close'{}, From,
     rabbit_writer:shutdown(WriterPid),
     receive
         {'$gen_cast', {method, {'connection.close_ok'}, none }} ->
-            gen_server:reply(From, #'connection.close_ok'{})
+            case From of
+                none -> ok;
+                _    -> gen_server:reply(From, #'connection.close_ok'{})
+            end
     after
         ?CLIENT_CLOSE_TIMEOUT -> exit(timeout_on_exit)
     end,
