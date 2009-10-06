@@ -359,8 +359,8 @@
 			   {"type": "timestamp", "name": "timestamp"},
 			   {"type": "shortstr", "name": "type"},
 			   {"type": "shortstr", "name": "user-id"},
-			   {"type": "shortstr", "name": "deprecated-app-id"},
-			   {"type": "shortstr", "name": "cluster-id"}]
+			   {"type": "shortstr", "name": "app-id"},
+			   {"type": "shortstr", "name": "deprecated-cluster-id"}]
 	},
 	{
 	    "id": 90,
