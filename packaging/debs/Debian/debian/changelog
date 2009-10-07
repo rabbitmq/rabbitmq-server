@@ -1,3 +1,9 @@
+rabbitmq-server (1.7.0-1) intrepid; urgency=low
+
+  * New Upstream Release
+
+ -- David Wragg <dpw@lshift.net>  Mon, 05 Oct 2009 13:44:41 +0100
+
 rabbitmq-server (1.6.0-1) hardy; urgency=low
 
   * New Upstream Release
