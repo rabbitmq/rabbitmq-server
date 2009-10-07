@@ -53,6 +53,20 @@
 %% update we notice that a queue was using too much memory, we send a message
 %% back. This will happen even if the queue is hibernated, as we really do want
 %% it to reduce its memory footprint.
+%%
+%%
+%% The main job of this module, is to make sure that all the queues have
+%% more or less the same number of seconds till become drained.
+%% This average, seconds-till-queue-is-drained, is then multiplied by 
+%% the ratio of Used/Total memory. So, if we can 'afford' more memory to be
+%% used, we'll report greater number back to the queues. In the out of
+%% memory case, we are going to reduce the average drain-seconds.
+%% To acheive all this we need to accumulate the information from every
+%% queue, and count an average from that.
+%% 
+%%  real_drain_avg = avg([drain_from_queue_1, queue_2, queue_3, ...])
+%%  memory_overcommit = used_memory / allowed_memory
+%%  desired_drain_avg = memory_overcommit * real_drain_avg
 
 
 -module(rabbit_memory_monitor).
