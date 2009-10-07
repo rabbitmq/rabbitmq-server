@@ -92,7 +92,7 @@ release_file_handle({release_handle, Key = {_From, Path, Mode}},
     case dict:find({Path, Mode}, Handles) of
         error -> %% oh well, it must have already gone
             CState;
-        {value, {_Hdl, Offset}} ->
+        {ok, {_Hdl, Offset}} ->
             Handles1 = dict:erase({Path, Mode}, Handles),
             gen_server2:cast(?SERVER, {release_handle, Key, Offset}),
             CState #client_state { handles = Handles1 }
@@ -103,7 +103,7 @@ close_file_handle(Path, Mode, CState = #client_state { handles = Handles }) ->
     case dict:find({Path, Mode1}, Handles) of
         error -> %% oh well, it must have already gone
              CState;
-        {value, _} ->
+        {ok, _} ->
             gen_server2:cast(?SERVER, {close_handle, {self(), Path, Mode1}}),
             CState #client_state { handles = dict:erase({Path, Mode}, Handles) }
     end.
@@ -155,7 +155,7 @@ obtain_file_handle(Path, Mode, #client_state { handles = Handles,
                 {Hdl, Offset} -> {Mode1, Hdl, Offset};
                 exiting -> not_available
             end;
-        {value, {Hdl, Offset}} ->
+        {ok, {Hdl, Offset}} ->
             {Mode1, Hdl, Offset}
     end.
 
@@ -277,7 +277,7 @@ stop_timer(TRef) ->
 close_handle(#hdl { key = Key, timer_ref = TRef, released_at = ReleasedAt,
                     handle = Hdl },
              Handles, Ages) ->
-    ok = timer:stop(TRef),
+    ok = stop_timer(TRef),
     ok = file:sync(Hdl),
     ok = file:close(Hdl),
     true = ets:delete(Handles, Key),
