@@ -32,7 +32,7 @@
 -module(rabbit_queue_index).
 
 -export([init/1, write_published/4, write_delivered/2, write_acks/2,
-         flush_journal/1, read_segment_entries/2]).
+         flush_journal/1, read_segment_entries/2, next_segment_boundary/1]).
 
 %%----------------------------------------------------------------------------
 %% The queue disk index
@@ -241,6 +241,10 @@ read_segment_entries(InitSeqId, State =
                           MsgId, IsDelivered, IsPersistent, on_disk} | Acc]
                  end, [], RelSeqs),
      State}.
+
+next_segment_boundary(SeqId) ->
+    {SegNum, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
+    reconstruct_seq_id(SegNum + 1, 0).
 
 %%----------------------------------------------------------------------------
 %% Minor Helpers
