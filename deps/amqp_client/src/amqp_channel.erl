@@ -441,12 +441,6 @@ handle_cast({cast, Method, _Content},
               "Reason: flow_control.~n", [self(), Method]),
     {noreply, State};
 
-%% Do not accept any further messages for writer when the channel is about to
-%% close
-%% @private
-handle_cast({cast, _Method, _Content}, State = #channel_state{closing = true}) ->
-    {noreply, State};
-
 %% Standard implementation of the cast/3 command
 %% @private
 handle_cast({cast, Method, #amqp_msg{props = Props, payload = Payload}},
