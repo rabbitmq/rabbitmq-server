@@ -58,10 +58,31 @@ def insert_base_types(d):
     for t in ['octet', 'shortstr', 'longstr', 'short', 'long',
               'longlong', 'bit', 'table', 'timestamp']:
         d[t] = t
+
+class AmqpSpecFileMergeConflict(Exception): pass
+
+def default_spec_value_merger(key, old, new):
+    if old is None or old == new:
+        return new
+    raise AmqpSpecFileMergeConflict((key, old, new))
+
+mergers = {
+}
+
+def merge_load_specs(filenames):
+    handles = [file(filename) for filename in filenames]
+    docs = [json.load(handle) for handle in handles]
+    spec = {}
+    for doc in docs:
+        for (key, value) in doc.iteritems():
+            (merger, default_value) = mergers.get(key, (default_spec_value_merger, None))
+            spec[key] = merger(key, spec.get(key, default_value), value)
+    for handle in handles: handle.close()
+    return spec
         
 class AmqpSpec:
-    def __init__(self, filename):
-        self.spec = json.load(file(filename))
+    def __init__(self, filenames):
+        self.spec = merge_load_specs(filenames)
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
@@ -175,13 +196,13 @@ def do_main(header_fn,body_fn):
         print >> sys.stderr , " %s header|body path_to_amqp_spec.json path_to_output_file" % (sys.argv[0])
         print >> sys.stderr , ""
         
-    def execute(fn, amqp_spec, out_file):
+    def execute(fn, amqp_specs, out_file):
         stdout = sys.stdout
         f = open(out_file, 'w')
         try:
             try:
                 sys.stdout = f
-                fn(amqp_spec)
+                fn(amqp_specs)
             except:
                 remove(out_file)
                 raise
@@ -189,14 +210,14 @@ def do_main(header_fn,body_fn):
             sys.stdout = stdout
             f.close()
 
-    if not len(sys.argv) == 4:
+    if len(sys.argv) < 4:
         usage()
         sys.exit(1)
     else:
         if sys.argv[1] == "header":
-            execute(header_fn, sys.argv[2], sys.argv[3])
+            execute(header_fn, sys.argv[2:-1], sys.argv[-1])
         elif sys.argv[1] == "body":
-            execute(body_fn, sys.argv[2], sys.argv[3])
+            execute(body_fn, sys.argv[2:-1], sys.argv[-1])
         else:
             usage()
             sys.exit(1)
