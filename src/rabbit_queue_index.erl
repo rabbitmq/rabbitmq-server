@@ -32,7 +32,8 @@
 -module(rabbit_queue_index).
 
 -export([init/1, write_published/4, write_delivered/2, write_acks/2,
-         flush_journal/1, read_segment_entries/2, next_segment_boundary/1]).
+         flush_journal/1, read_segment_entries/2, next_segment_boundary/1,
+         segment_size/0]).
 
 %%----------------------------------------------------------------------------
 %% The queue disk index
@@ -139,8 +140,10 @@
 -spec(write_acks/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush_journal/1 :: (qistate()) -> {boolean(), qistate()}).
 -spec(read_segment_entries/2 :: (seq_id(), qistate()) ->
-             {[{'index_entry', seq_id(), msg_id(), boolean(), boolean(),
-                'on_disk'}], qistate()}).
+             {( [{'index', msg_id(), seq_id(), boolean(), boolean()}]
+              | 'not_found'), qistate()}).
+-spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
+-spec(segment_size/0 :: () -> non_neg_integer()).
 
 -endif.
 
@@ -237,14 +240,18 @@ read_segment_entries(InitSeqId, State =
     {lists:foldl(fun (RelSeq, Acc) ->
                          {MsgId, IsDelivered, IsPersistent} =
                              dict:fetch(RelSeq, SDict),
-                        [{index_entry, reconstruct_seq_id(SegNum, RelSeq),
-                          MsgId, IsDelivered, IsPersistent, on_disk} | Acc]
+                         [ {index, MsgId,
+                            reconstruct_seq_id(SegNum, RelSeq),
+                            IsPersistent, IsDelivered, true} | Acc]
                  end, [], RelSeqs),
      State}.
 
 next_segment_boundary(SeqId) ->
     {SegNum, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
     reconstruct_seq_id(SegNum + 1, 0).
+
+segment_size() ->
+    ?SEGMENT_ENTRIES_COUNT.
 
 %%----------------------------------------------------------------------------
 %% Minor Helpers
