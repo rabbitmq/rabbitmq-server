@@ -66,7 +66,52 @@ def default_spec_value_merger(key, old, new):
         return new
     raise AmqpSpecFileMergeConflict((key, old, new))
 
+def extension_info_merger(key, old, new):
+    return old + [new]
+
+def domains_merger(key, old, new):
+    o = dict((k, v) for [k, v] in old)
+    for [k, v] in new:
+        if o.has_key(k):
+            raise AmqpSpecFileMergeConflict(key, old, new)
+        o[k] = v
+    return [[k, v] for (k, v) in o.iteritems()]
+
+def constants_merger(key, old, new):
+    o = dict((v["name"], v) for v in old)
+    for v in new:
+        if o.has_key(v["name"]):
+            raise AmqpSpecFileMergeConflict(key, old, new)
+        o[v["name"]] = v
+    return list(o.values())
+
+def methods_merger(classname, old, new):
+    o = dict((v["name"], v) for v in old)
+    for v in new:
+        if o.has_key(v["name"]):
+            raise AmqpSpecFileMergeConflict(("class", classname), old, new)
+        o[v["name"]] = v
+    return list(o.values())
+
+def class_merger(old, new):
+    old["methods"] = methods_merger(old["name"], old["methods"], new["methods"])
+    old["properties"] = old.get("properties", []) + new.get("properties", [])
+    return old
+
+def classes_merger(key, old, new):
+    o = dict((v["name"], v) for v in old)
+    for v in new:
+        if o.has_key(v["name"]):
+            o[v["name"]] = class_merger(o[v["name"]], v)
+        else:
+            o[v["name"]] = v
+    return list(o.values())
+
 mergers = {
+    "extension": (extension_info_merger, []),
+    "domains": (domains_merger, []),
+    "constants": (constants_merger, []),
+    "classes": (classes_merger, []),
 }
 
 def merge_load_specs(filenames):
