@@ -23,6 +23,7 @@ DESC=rabbitmq-server
 USER=rabbitmq
 NODE_COUNT=1
 ROTATE_SUFFIX=
+INIT_LOG_DIR=/var/log/rabbitmq
 
 DEFAULTS_FILE= # This is filled in when building packages
 LOCK_FILE= # This is filled in when building packages
@@ -39,7 +40,7 @@ set -e
 
 start_rabbitmq () {
     set +e
-    $DAEMON start_all ${NODE_COUNT} > /var/log/rabbitmq/startup_log 2> /var/log/rabbitmq/startup_err
+    $DAEMON start_all ${NODE_COUNT} > ${INIT_LOG_DIR}/startup_log 2> ${INIT_LOG_DIR}/startup_err
     case "$?" in
       0)
         echo SUCCESS
@@ -47,11 +48,11 @@ start_rabbitmq () {
         RETVAL=0
         ;;
       1)
-        echo TIMEOUT - check /var/log/rabbitmq/startup_\{log,err\}
+        echo TIMEOUT - check ${INIT_LOG_DIR}/startup_\{log,err\}
         RETVAL=1
         ;;
       *)
-        echo FAILED - check /var/log/rabbitmq/startup_log, _err
+        echo FAILED - check ${INIT_LOG_DIR}/startup_log, _err
         RETVAL=1
         ;;
     esac
@@ -62,14 +63,14 @@ stop_rabbitmq () {
     set +e
     status_rabbitmq quiet
     if [ $RETVAL = 0 ] ; then
-        $DAEMON stop_all > /var/log/rabbitmq/shutdown_log 2> /var/log/rabbitmq/shutdown_err
+        $DAEMON stop_all > ${INIT_LOG_DIR}/shutdown_log 2> ${INIT_LOG_DIR}/shutdown_err
         RETVAL=$?
         if [ $RETVAL = 0 ] ; then
             # Try to stop epmd if run by the rabbitmq user
             pkill -u rabbitmq epmd || :
             [ -n "$LOCK_FILE" ] && rm -rf $LOCK_FILE
         else
-            echo FAILED - check /var/log/rabbitmq/shutdown_log, _err
+            echo FAILED - check ${INIT_LOG_DIR}/shutdown_log, _err
         fi
     else
         echo No nodes running 

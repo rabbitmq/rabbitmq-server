@@ -49,6 +49,8 @@ start() ->
     UnpackedPluginDir = get_env(plugins_expand_dir, ?DefaultUnpackedPluginDir),
     RabbitEBin        = get_env(rabbit_ebin,        ?DefaultRabbitEBin),
 
+    RootName = RabbitEBin ++ "/rabbit",
+
     %% Unpack any .ez plugins
     unpack_ez_plugins(PluginDir, UnpackedPluginDir),
 
@@ -60,10 +62,8 @@ start() ->
     %% Build the entire set of dependencies - this will load the
     %% applications along the way
     AllApps = case catch sets:to_list(expand_dependencies(RequiredApps)) of
-                  {unknown_app, {App, Err}} -> 
-                      io:format("ERROR: Failed to load application " ++
-                                "~s: ~p~n", [App, Err]),
-                      halt(1);
+                  {failed_to_load_app, App, Err} -> 
+                      error("failed to load application ~s: ~p", [App, Err]);
                   AppList ->
                       AppList
               end,
@@ -77,11 +77,11 @@ start() ->
              AppVersions},
 
     %% Write it out to ebin/rabbit.rel
-    file:write_file(RabbitEBin ++ "/rabbit.rel",
-                    io_lib:format("~p.~n", [RDesc])),
+    file:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
 
     %% Compile the script
-    case systools:make_script(RabbitEBin ++ "/rabbit", [local, silent]) of
+    ScriptFile = RootName ++ ".script",
+    case systools:make_script(RootName, [local, silent]) of
         {ok, Module, Warnings} -> 
             %% This gets lots of spurious no-source warnings when we
             %% have .ez files, so we want to supress them to prevent
@@ -98,9 +98,19 @@ start() ->
             end,
             ok;
         {error, Module, Error} ->
-            io:format("Boot file generation failed: ~s~n",
-                      [Module:format_error(Error)]),
-            halt(1)
+            error("generation of boot script file ~s failed: ~w",
+                  [ScriptFile, Module:format_error(Error)])
+    end,
+
+    case post_process_script(ScriptFile) of
+        ok -> ok;
+        {error, Reason} ->
+            error("post processing of boot script file ~s failed: ~w",
+                  [ScriptFile, Reason])
+    end,
+    case systools:script2boot(RootName) of
+        ok    -> ok;
+        error -> error("failed to compile boot script file ~s", [ScriptFile])
     end,
     halt(),
     ok.
@@ -122,10 +132,10 @@ determine_version(App) ->
 assert_dir(Dir) ->
     case filelib:is_dir(Dir) of
         true  -> ok;
-        false ->
-            ok = filelib:ensure_dir(Dir),
-            ok = file:make_dir(Dir)
+        false -> ok = filelib:ensure_dir(Dir),
+                 ok = file:make_dir(Dir)
     end.
+
 delete_dir(Dir) ->
     case filelib:is_dir(Dir) of
         true ->
@@ -143,6 +153,7 @@ delete_dir(Dir) ->
         false ->
             ok
     end.
+
 is_symlink(Name) ->
     case file:read_link(Name) of
         {ok, _} -> true;
@@ -185,14 +196,43 @@ expand_dependencies(Current, [Next|Rest]) ->
             expand_dependencies(Current, Rest);
         false ->
             case application:load(Next) of
-                ok -> 
+                ok ->
                     ok;
-                {error, {already_loaded, _}} -> 
+                {error, {already_loaded, _}} ->
                     ok;
-                X -> 
-                    throw({unknown_app, {Next, X}})
+                {error, Reason} ->
+                    throw({failed_to_load_app, Next, Reason})
             end,
             {ok, Required} = application:get_key(Next, applications),
             Unique = [A || A <- Required, not(sets:is_element(A, Current))],
             expand_dependencies(sets:add_element(Next, Current), Rest ++ Unique)
     end.
+
+post_process_script(ScriptFile) ->
+    case file:consult(ScriptFile) of
+        {ok, [{script, Name, Entries}]} ->
+            NewEntries = process_entries(Entries),
+            case file:open(ScriptFile, [write]) of
+                {ok, Fd} ->
+                    io:format(Fd, "%% script generated at ~w ~w~n~p.~n",
+                              [date(), time(), {script, Name, NewEntries}]),
+                    file:close(Fd),
+                    ok;
+                {error, OReason} ->
+                    {error, {failed_to_open_script_file_for_writing, OReason}}
+            end;
+        {error, Reason} ->
+            {error, {failed_to_load_script, Reason}}
+    end.
+
+process_entries([]) -> 
+    [];
+process_entries([Entry = {apply,{application,start_boot,[stdlib,permanent]}} |
+                 Rest]) ->
+    [Entry, {apply,{rabbit,prepare,[]}} | Rest];
+process_entries([Entry|Rest]) ->
+    [Entry | process_entries(Rest)].
+
+error(Fmt, Args) ->
+    io:format("ERROR: " ++ Fmt ++ "~n", Args),
+    halt(1).
