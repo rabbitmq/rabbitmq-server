@@ -64,7 +64,7 @@
 -spec(contains/1 :: (msg_id()) -> boolean()).
 -spec(remove/1 :: ([msg_id()]) -> 'ok').
 -spec(release/1 :: ([msg_id()]) -> 'ok').
--spec(sync/2 :: ([msg_id()], thunk(any())) -> 'ok').
+-spec(sync/2 :: ([msg_id()], fun (() -> any())) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 
 -endif.
