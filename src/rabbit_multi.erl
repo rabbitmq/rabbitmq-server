@@ -100,10 +100,12 @@ Available commands:
 action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),
     N = list_to_integer(NodeCount),
-    {NodePids, Running} = start_nodes(N, N, [], true,
-                                      getenv("RABBITMQ_NODENAME"),
-                                      getenv("RABBITMQ_NODE_PORT"),
-                                      RpcTimeout),
+    {NodePids, Running} =
+        start_nodes(N, N, [], true,
+                    rabbit_misc:nodeparts(
+                      list_to_atom(getenv("RABBITMQ_NODENAME"))),
+                    list_to_integer(getenv("RABBITMQ_NODE_PORT")),
+                    RpcTimeout),
     write_pids_file(NodePids),
     case Running of
         true  -> ok;
@@ -158,24 +160,24 @@ start_nodes(0, _, PNodePid, Running, _, _, _) -> {PNodePid, Running};
 
 start_nodes(N, Total, PNodePid, Running,
             NodeNameBase, NodePortBase, RpcTimeout) ->
+    {NodePre, NodeSuff} = NodeNameBase,
     NodeNumber = Total - N,
-    NodeName = if NodeNumber == 0 ->
+    NodePre1 = if NodeNumber == 0 ->
                        %% For compatibility with running a single node
-                       NodeNameBase;
+                       NodePre;
                   true ->           
-                       NodeNameBase ++ "_" ++ integer_to_list(NodeNumber)
+                       NodePre ++ "_" ++ integer_to_list(NodeNumber)
                end,
-    {NodePid, Started} = start_node(NodeName,
-                                    list_to_integer(NodePortBase) + NodeNumber,
+    {NodePid, Started} = start_node(rabbit_misc:makenode({NodePre1, NodeSuff}),
+                                    NodePortBase + NodeNumber,
                                     RpcTimeout),
     start_nodes(N - 1, Total, [NodePid | PNodePid],
                 Started and Running,
                 NodeNameBase, NodePortBase, RpcTimeout).
 
-start_node(NodeName, NodePort, RpcTimeout) ->
-    os:putenv("RABBITMQ_NODENAME", NodeName),
+start_node(Node, NodePort, RpcTimeout) ->
+    os:putenv("RABBITMQ_NODENAME", atom_to_list(Node)),
     os:putenv("RABBITMQ_NODE_PORT", integer_to_list(NodePort)),
-    Node = rabbit_misc:localnode(list_to_atom(NodeName)),
     io:format("Starting node ~s...~n", [Node]),
     case rpc:call(Node, os, getpid, []) of
         {badrpc, _} ->
