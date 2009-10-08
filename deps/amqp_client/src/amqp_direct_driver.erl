@@ -30,7 +30,7 @@
 
 -export([handshake/1, open_channel/2, close_channel/3]).
 -export([close_connection/2, close_connection/3]).
--export([do/2, do/3]).
+-export([do/3]).
 -export([handle_broker_close/1]).
 
 %---------------------------------------------------------------------------
@@ -65,9 +65,8 @@ close_connection(_Close, _State) ->
 close_connection(_Close, From, _State) ->
     gen_server:reply(From, #'connection.close_ok'{}).
 
-do(Writer, Method) ->
-    rabbit_channel:do(Writer, Method).
-
+do(Writer, Method, none) ->
+    rabbit_channel:do(Writer, Method);
 do(Writer, Method, Content) ->
     rabbit_channel:do(Writer, Method, Content).
 

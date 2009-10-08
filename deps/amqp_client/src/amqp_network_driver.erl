@@ -33,7 +33,7 @@
 -export([handshake/1, open_channel/2, close_channel/3]).
 -export([close_connection/2, close_connection/3]).
 -export([start_main_reader/2, start_writer/2]).
--export([do/2, do/3]).
+-export([do/3]).
 -export([handle_broker_close/1]).
 
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
@@ -100,7 +100,7 @@ close_connection(Close = #'connection.close'{}, State) ->
 close_connection(Close = #'connection.close'{}, From,
                  #connection_state{channel0_writer_pid = WriterPid,
                                    channel0_reader_pid = FramingPid}) ->
-    do(WriterPid, Close),
+    do(WriterPid, Close, none),
     rabbit_writer:shutdown(WriterPid),
     receive
         {'$gen_cast', {method, {'connection.close_ok'}, none }} ->
@@ -114,12 +114,14 @@ close_connection(Close = #'connection.close'{}, From,
     rabbit_framing_channel:shutdown(FramingPid),
     ok.
 
-do(Writer, Method) ->
-    rabbit_writer:send_command_and_signal_back(Writer, Method, self()),
-    receive_writer_send_command_signal(Writer).
-
 do(Writer, Method, Content) ->
-    rabbit_writer:send_command_and_signal_back(Writer, Method, Content, self()),
+    case Content of
+        none ->
+            rabbit_writer:send_command_and_signal_back(Writer, Method, self());
+        _ ->
+            rabbit_writer:send_command_and_signal_back(Writer, Method, Content,
+                                                       self())
+    end,
     receive_writer_send_command_signal(Writer).
 
 receive_writer_send_command_signal(Writer) ->
@@ -130,7 +132,7 @@ receive_writer_send_command_signal(Writer) ->
 
 handle_broker_close(#connection_state{channel0_writer_pid = Writer,
                                       main_reader_pid = MainReader}) ->
-    do(Writer, #'connection.close_ok'{}),
+    do(Writer, #'connection.close_ok'{}, none),
     rabbit_writer:shutdown(Writer),
     erlang:send_after(?SOCKET_CLOSING_TIMEOUT, MainReader,
                       socket_closing_timeout).
@@ -174,21 +176,21 @@ do_handshake(Sock, State) ->
 network_handshake(Writer,
                   State = #connection_state{vhostpath = VHostPath}) ->
     #'connection.start'{} = recv(State),
-    do(Writer, start_ok(State)),
+    do(Writer, start_ok(State), none),
     #'connection.tune'{channel_max = ChannelMax,
                        frame_max = FrameMax,
                        heartbeat = Heartbeat} = recv(State),
     TuneOk = #'connection.tune_ok'{channel_max = ChannelMax,
                                    frame_max = FrameMax,
                                    heartbeat = Heartbeat},
-    do(Writer, TuneOk),
+    do(Writer, TuneOk, none),
 
     %% This is something where I don't understand the protocol,
     %% What happens if the following command reaches the server
     %% before the tune ok?
     %% Or doesn't get sent at all?
     ConnectionOpen = #'connection.open'{virtual_host = VHostPath},
-    do(Writer, ConnectionOpen),
+    do(Writer, ConnectionOpen, none),
     #'connection.open_ok'{} = recv(State),
     %% TODO What should I do with the KnownHosts?
     State#connection_state{channel_max = ChannelMax, heartbeat = Heartbeat}.
