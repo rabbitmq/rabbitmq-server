@@ -276,13 +276,13 @@ init({InitialState, Driver}) when is_atom(Driver) ->
     State = Driver:handshake(InitialState),
     {ok, State#connection_state{driver = Driver} }.
 
-%% @private
 %% Starts a new channel
+%% @private
 handle_call({open_channel, ChannelNumber}, _From, State) ->
     handle_open_channel(ChannelNumber, State);
 
-%% @private
 %% Shuts the AMQP connection down
+%% @private
 handle_call(Close = #'connection.close'{},
             From, State = #connection_state{driver = Driver}) ->
     Driver:close_connection(Close, From, State),
@@ -293,7 +293,7 @@ handle_call(Close = #'connection.close'{},
 %%---------------------------------------------------------------------------
 
 %% Don't just exit here, rather, save the close message and wait for the
-%% the server to close the socket (or timeout) and have the reader process
+%% the server to close the socket (or timeout) and have the main reader process
 %% send an EXIT signal to this process.
 %% @private
 handle_cast({method, #'connection.close'{reply_code = Code,

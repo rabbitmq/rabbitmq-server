@@ -116,17 +116,16 @@ close_connection(Close = #'connection.close'{}, From,
 
 do(Writer, Method, Content) ->
     case Content of
-        none ->
-            rabbit_writer:send_command_and_signal_back(Writer, Method, self());
-        _ ->
-            rabbit_writer:send_command_and_signal_back(Writer, Method, Content,
-                                                       self())
+        none -> rabbit_writer:send_command_and_signal_back(Writer, Method,
+                                                           self());
+        _    -> rabbit_writer:send_command_and_signal_back(Writer, Method,
+                                                           Content, self())
     end,
     receive_writer_send_command_signal(Writer).
 
 receive_writer_send_command_signal(Writer) ->
     receive
-        rabbit_writer_send_command_signal -> ok;
+        rabbit_writer_send_command_signal   -> ok;
         WriterExitMsg = {'EXIT', Writer, _} -> self() ! WriterExitMsg
     end.
 

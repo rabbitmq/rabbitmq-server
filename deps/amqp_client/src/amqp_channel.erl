@@ -187,9 +187,6 @@ register_flow_handler(Channel, FlowHandler) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-rpc_top_half(Method, From, State) ->
-    rpc_top_half(Method, none, From, State).
-
 rpc_top_half(Method, Content, From, 
              State0 = #channel_state{rpc_requests = RequestQueue}) ->
     % Enqueue the incoming RPC request to serialize RPC dispatching
@@ -212,15 +209,20 @@ rpc_bottom_half(Reply, State0 = #channel_state{rpc_requests = RequestQueue}) ->
 
 do_rpc(State = #channel_state{writer_pid = Writer,
                               rpc_requests = RequestQueue,
-                              driver = Driver}) ->
+                              driver = Driver,
+                              closing = Closing}) ->
     case queue:peek(RequestQueue) of
         {value, {_From, Method = #'channel.close'{}, Content}} ->
             Driver:do(Writer, Method, Content),
-            State#channel_state{closing = true};
+            State#channel_state{closing = just_channel};
         {value, {_From, Method, Content}} ->
             Driver:do(Writer, Method, Content),
             State;
         empty ->
+            case Closing of
+                connection -> signal_flushed(State);
+                _          -> ok
+            end,
             State
     end.
 
@@ -260,6 +262,9 @@ build_content(none) ->
 build_content(#amqp_msg{props = Props, payload = Payload}) ->
     rabbit_basic:build_content(Props, Payload).
 
+signal_flushed(#channel_state{parent_connection = Connection}) ->
+    Connection ! {channel_flushed, self()}.
+
 handle_method(Method, Content,
               #channel_state{closing = Closing,
                              driver = Driver,
@@ -274,17 +279,17 @@ handle_method(Method, Content,
         {CloseOk = #'channel.close_ok'{}, none} ->
             {stop, normal, rpc_bottom_half(CloseOk, State)};
         _ ->
-            if
+            case Closing of
                 %% Drop all incomming traffic except 'channel.close' and
                 %% 'channel.close_ok' when channel is closing (has sent
                 %% 'channel.close')
-                Closing ->
+                just_channel ->
                     ?LOG_INFO("Channel (~p): dropping method ~p from server "
                               "because channel is closing~n",
                               [self(), {Method, Content}]),
                     {noreply, State};
                 %% Standard handling of incoming method
-                true ->
+                _ ->
                     handle_regular_method(Method, amqp_msg(Content), State)
             end
     end.
@@ -352,27 +357,16 @@ handle_regular_method(Method, none, State) ->
 handle_regular_method(Method, Content, State) ->
     {noreply, rpc_bottom_half({Method, Content}, State)}.
 
-check_drop(_Method, _AmqpMsg, #channel_state{closing = true})      -> closing;
-check_drop(_Method, none, #channel_state{})                        -> ok;
-check_drop(_Method, _AmqpMsg, #channel_state{flow_control = true}) -> blocked;
-check_drop(_Method, _AmqpMsg, #channel_state{})                    -> ok.
-
-handle_subscribe(#'basic.consume'{consumer_tag = Tag} = Method, Consumer, From,
-                 #channel_state{anon_sub_requests = Subs} = State)
-                 when Tag =:= undefined ; size(Tag) == 0 ->
-    NewSubs = queue:in({From,Consumer}, Subs),
-    NewState = State#channel_state{anon_sub_requests = NewSubs},
-    NewMethod =  Method#'basic.consume'{consumer_tag = <<"">>},
-    {noreply, rpc_top_half(NewMethod, From, NewState)};
-
-handle_subscribe(#'basic.consume'{consumer_tag = Tag} = Method, Consumer, From,
-                 #channel_state{tagged_sub_requests = Subs} = State)
-                 when is_binary(Tag) ->
-    %% TODO test whether this tag already exists, either in the pending tagged
-    %% request map or in general as already subscribed consumer
-    NewSubs = dict:store(Tag,{From,Consumer},Subs),
-    NewState = State#channel_state{tagged_sub_requests = NewSubs},
-    {noreply, rpc_top_half(Method, From, NewState)}.
+check_block(_Method, _AmqpMsg, #channel_state{closing = just_channel}) ->
+    channel_closing;
+check_block(_Method, _AmqpMsg, #channel_state{closing = connection}) ->
+    connection_closing;
+check_block(_Method, none, #channel_state{}) ->
+    ok;
+check_block(_Method, _AmqpMsg, #channel_state{flow_control = true}) ->
+    blocked;
+check_block(_Method, _AmqpMsg, #channel_state{}) ->
+    ok.
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -390,7 +384,7 @@ init({ChannelState = #channel_state{driver = Driver, number = ChannelNumber},
 handle_call({call, Method, AmqpMsg}, From,
             #channel_state{writer_pid = Writer,
                            driver = Driver} = State) ->
-    case check_drop(Method, AmqpMsg, State) of
+    case check_block(Method, AmqpMsg, State) of
         ok        -> Content = build_content(AmqpMsg),
                      case rabbit_framing:is_method_synchronous(Method) of
                          true ->
@@ -405,14 +399,34 @@ handle_call({call, Method, AmqpMsg}, From,
 
 %% Standard implementation of the subscribe/3 command
 %% @private
-handle_call({subscribe, Method, Consumer}, From, State) ->
-    handle_subscribe(Method, Consumer, From, State).
+handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer},
+            From, #channel_state{tagged_sub_requests = Tagged,
+                                 anon_sub_requests = Anon} = State) ->
+    case check_block(Method, none, State) of
+        ok ->
+            {NewMethod, NewState} =
+                if Tag =:= undefined orelse size(Tag) == 0 ->
+                       NewAnon = queue:in({From,Consumer}, Anon),
+                       {Method#'basic.consume'{consumer_tag = <<"">>},
+                        State#channel_state{anon_sub_requests = NewAnon}};
+                   is_binary(Tag) ->
+                       %% TODO test whether this tag already exists, either in
+                       %% the pending tagged request map or in general as
+                       %% already subscribed consumer
+                       NewTagged = dict:store(Tag,{From,Consumer}, Tagged),
+                       {Method,
+                        State#channel_state{tagged_sub_requests = NewTagged}}
+                end,
+            {noreply, rpc_top_half(NewMethod, none, From, NewState)};
+        DropReply ->
+            {reply, DropReply, State}
+    end.
 
 %% Standard implementation of the cast/{2,3} command
 %% @private
 handle_cast({cast, Method, AmqpMsg} = Cast,
             #channel_state{writer_pid = Writer, driver = Driver} = State) ->
-    case check_drop(Method, AmqpMsg, State) of
+    case check_block(Method, AmqpMsg, State) of
         ok        -> Driver:do(Writer, Method, build_content(AmqpMsg));
         DropReply -> ?LOG_INFO("Channel (~p): discarding method in cast ~p."
                                "Reason: ~p~n", [self(), Cast, DropReply])
@@ -461,6 +475,39 @@ handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
 handle_info(shutdown, State) ->
     {stop, normal, State};
 
+%% Handles the situation when the connection closes without closing the channel
+%% beforehand. The channel must block all further RPCs, flush the RPC queue
+%% and signal the connection back that the channel has been flushed so the
+%% actual connection closing can take place.
+%% @private
+handle_info(connection_closing, #channel_state{rpc_requests = RpcQueue,
+                                               closing = Closing} = State) ->
+    case Closing of
+        false -> case queue:is_empty(RpcQueue) of
+                     true  -> signal_flushed(State);
+                     false -> ok
+                 end,
+                 {noreply, State#channel_state{closing = connection}};
+        _     -> signal_flushed(State),
+                 {noreply, State}
+    end;
+
+%% This is for a channel exception that is sent by the direct
+%% rabbit_channel process - in this case this process needs to tell
+%% the connection process whether this is a hard error or not
+%% @private
+handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName}},
+            State = #channel_state{parent_connection = Connection}) ->
+    {ConError, Code, Text} = rabbit_framing:lookup_amqp_exception(ErrorName),
+    case ConError of
+        true  -> Connection ! {connection_level_error, Code, Text};
+        false -> ok
+    end,
+    {stop, {server_initiated_close, Code, Text}, State};
+
+%%---------------------------------------------------------------------------
+%% Trap exits
+%%---------------------------------------------------------------------------
 
 %% Handle writer exit
 %% @private
@@ -486,20 +533,7 @@ handle_info({'EXIT', Pid, Reason},
             State = #channel_state{number = ChannelNumber}) ->
     ?LOG_WARN("Channel ~p closing: received unexpected exit signal from (~p). "
               "Reason: ~p~n", [ChannelNumber, Pid, Reason]),
-    {stop, {unexpected_exit_signal, Pid, Reason}, State};
-
-%% This is for a channel exception that is sent by the direct
-%% rabbit_channel process - in this case this process needs to tell
-%% the connection process whether this is a hard error or not
-%% @private
-handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName}},
-            State = #channel_state{parent_connection = Connection}) ->
-    {ConError, Code, Text} = rabbit_framing:lookup_amqp_exception(ErrorName),
-    case ConError of
-        true  -> Connection ! {connection_level_error, Code, Text};
-        false -> ok
-    end,
-    {stop, {server_initiated_close, Code, Text}, State}.
+    {stop, {unexpected_exit_signal, Pid, Reason}, State}.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks
