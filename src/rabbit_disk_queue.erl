@@ -408,11 +408,9 @@ finalise_commit({Q, From},
                 rabbit_misc:execute_mnesia_transaction(
                   fun() ->
                           ok = mnesia:write_lock_table(rabbit_disk_queue),
-                          {ok, WriteSeqId1} =
-                              lists:foldl(
-                                fun ({MsgId, IsDelivered, IsPersistent},
-                                     {ok, SeqId}) ->
-                                        {mnesia:write(
+                          lists:foldl(
+                            fun ({MsgId, IsDelivered, IsPersistent}, SeqId) ->
+                                    ok = mnesia:write(
                                            rabbit_disk_queue,
                                            #dq_msg_loc {
                                              queue_and_seq_id = {Q, SeqId},
@@ -420,9 +418,8 @@ finalise_commit({Q, From},
                                              is_delivered = IsDelivered,
                                              is_persistent = IsPersistent
                                             }, write),
-                                         SeqId + 1}
-                                end, {ok, InitWriteSeqId}, PubMsgIds),
-                          WriteSeqId1
+                                    SeqId + 1
+                            end, InitWriteSeqId, PubMsgIds)
                   end),
             {ok, State1} = remove_messages(Q, AckSeqIds, State),
             true = case PubMsgIds of
