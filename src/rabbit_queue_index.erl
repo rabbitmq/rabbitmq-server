@@ -140,7 +140,7 @@
 -spec(write_acks/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush_journal/1 :: (qistate()) -> {boolean(), qistate()}).
 -spec(read_segment_entries/2 :: (seq_id(), qistate()) ->
-             {( [{'index', msg_id(), seq_id(), boolean(), boolean()}]
+             {( [{msg_id(), seq_id(), boolean(), boolean()}]
               | 'not_found'), qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(segment_size/0 :: () -> non_neg_integer()).
@@ -152,7 +152,7 @@
 %%----------------------------------------------------------------------------
 
 init(Name) ->
-    Dir = filename:join(rabbit_mnesia:dir(), Name),
+    Dir = filename:join(queues_dir(), Name),
     ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
     AckCounts = scatter_journal(Dir, find_ack_counts(Dir)),
     {ok, JournalHdl} = file:open(filename:join(Dir, ?ACK_JOURNAL_FILENAME),
@@ -240,9 +240,8 @@ read_segment_entries(InitSeqId, State =
     {lists:foldl(fun (RelSeq, Acc) ->
                          {MsgId, IsDelivered, IsPersistent} =
                              dict:fetch(RelSeq, SDict),
-                         [ {index, MsgId,
-                            reconstruct_seq_id(SegNum, RelSeq),
-                            IsPersistent, IsDelivered, true} | Acc]
+                         [ {MsgId, reconstruct_seq_id(SegNum, RelSeq),
+                            IsPersistent, IsDelivered} | Acc]
                  end, [], RelSeqs),
      State}.
 
@@ -256,6 +255,9 @@ segment_size() ->
 %%----------------------------------------------------------------------------
 %% Minor Helpers
 %%----------------------------------------------------------------------------
+
+queues_dir() ->
+    filename:join(rabbit_mnesia:dir(), "queues").
 
 rev_sort(List) ->
     lists:sort(fun (A, B) -> B < A end, List).
