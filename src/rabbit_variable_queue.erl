@@ -81,7 +81,7 @@
 %% in ram), and gamma is just a count of the number of index entries
 %% on disk at that stage (msg on disk, index on disk).
 %%
-%% When a msg arrives, we decide which form it should be in. It is
+%% When a msg arrives, we decide in which form it should be. It is
 %% then added to the rightmost appropriate queue, maintaining
 %% order. Thus if the msg is to be an alpha, it will be added to q1,
 %% unless all of q1, q2, gamma and q3 are empty, in which case it will
@@ -103,9 +103,14 @@
 %% is non empty then q3 must be non empty.
 
 init(QueueName) ->
-    {NextSeqId, IndexState} = rabbit_queue_index:init(QueueName),
+    {LowSeqId, NextSeqId, Count, IndexState} =
+        rabbit_queue_index:init(QueueName),
+    Gamma = case Count of
+                0 -> #gamma { seq_id = undefined, count = 0 };
+                _ -> #gamma { seq_id = LowSeqId, count = Count }
+            end,
     #vqstate { q1 = queue:new(), q2 = queue:new(),
-               gamma = #gamma { seq_id = undefined, count = 0 },
+               gamma = Gamma,
                q3 = queue:new(), q4 = queue:new(),
                target_ram_msg_count = undefined,
                ram_msg_count = 0,
