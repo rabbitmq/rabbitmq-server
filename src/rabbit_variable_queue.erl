@@ -32,7 +32,7 @@
 -module(rabbit_variable_queue).
 
 -export([init/1, publish/3, set_queue_ram_duration_target/2, remeasure_egress_rate/1,
-         fetch/1, len/1, is_empty/1]).
+         fetch/1, len/1, is_empty/1, maybe_start_prefetcher/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -171,19 +171,21 @@ remeasure_egress_rate(State = #vqstate { egress_rate = OldEgressRate,
                      out_counter = 0 }.
 
 fetch(State =
-      #vqstate { q4 = Q4,
+      #vqstate { q3 = Q3, q4 = Q4,
                  out_counter = OutCount, prefetcher = Prefetcher,
                  index_state = IndexState, len = Len }) ->
     case queue:out(Q4) of
         {empty, _Q4} when Prefetcher == undefined ->
             fetch_from_q3_or_gamma(State);
         {empty, _Q4} ->
-            Q4a =
-                case rabbit_queue_prefetcher:drain_and_stop(Prefetcher) of
-                    empty -> Q4;
-                    Q4b -> Q4b
+            {Q3a, Q4a, Prefetcher1} =
+                case rabbit_queue_prefetcher:drain(Prefetcher) of
+                    {empty, Betas} -> {queue:join(Betas, Q3), Q4, undefined};
+                    {finished, Alphas} -> {Q3, Alphas, undefined};
+                    {continuing, Alphas} -> {Q3, Alphas, Prefetcher}
                 end,
-            fetch(State #vqstate { q4 = Q4a, prefetcher = undefined });
+            fetch(State #vqstate { q3 = Q3a, q4 = Q4a,
+                                   prefetcher = Prefetcher1 });
         {{value,
           #alpha { msg = Msg = #basic_message { guid = MsgId,
                                                 is_persistent = IsPersistent },
@@ -232,6 +234,24 @@ len(#vqstate { len = Len }) ->
 
 is_empty(State) ->
     0 == len(State).
+
+maybe_start_prefetcher(State = #vqstate { ram_msg_count = RamMsgCount,
+                                          target_ram_msg_count = TargetRamMsgCount,
+                                          q3 = Q3, prefetcher = undefined
+                                        }) ->
+    PrefetchCount = erlang:min(queue:len(Q3), TargetRamMsgCount - RamMsgCount),
+    if PrefetchCount =< 0 -> State;
+       true ->
+            {PrefetchQueue, Q3a} = queue:split(PrefetchCount, Q3),
+            {ok, Prefetcher} =
+                rabbit_queue_prefetcher:start_link(PrefetchQueue),
+            RamMsgCount1 = RamMsgCount + PrefetchCount,
+            maybe_load_next_segment(State #vqstate { q3 = Q3a,
+                                                     ram_msg_count = RamMsgCount1,
+                                                     prefetcher = Prefetcher })
+    end;
+maybe_start_prefetcher(State) ->
+    State.
 
 %%----------------------------------------------------------------------------
 
@@ -360,10 +380,6 @@ read_index_segment(SeqId, IndexState) ->
         {[], IndexState1} -> read_index_segment(SeqId1, IndexState1);
         {List, IndexState1} -> {List, IndexState1, SeqId1}
     end.
-
-maybe_start_prefetcher(State) ->
-    %% TODO
-    State.
 
 reduce_memory_use(State = #vqstate { ram_msg_count = RamMsgCount,
                                      target_ram_msg_count = TargetRamMsgCount })

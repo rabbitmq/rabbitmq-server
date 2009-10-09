@@ -39,7 +39,7 @@
 -export([sync/0]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+         terminate/2, code_change/3, idle_read/1]).
 
 -define(SERVER, ?MODULE).
 
@@ -231,14 +231,15 @@ start_link(Dir, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
                            [Dir, MsgRefDeltaGen, MsgRefDeltaGenInit],
                            [{timeout, infinity}]).
 
-write(MsgId, Msg)  -> gen_server2:cast(?SERVER, {write, MsgId, Msg}).
-read(MsgId)        -> gen_server2:call(?SERVER, {read, MsgId}, infinity).
-contains(MsgId)    -> gen_server2:call(?SERVER, {contains, MsgId}, infinity).
-remove(MsgIds)     -> gen_server2:cast(?SERVER, {remove, MsgIds}).
-release(MsgIds)    -> gen_server2:cast(?SERVER, {release, MsgIds}).
-sync(MsgIds, K)    -> gen_server2:cast(?SERVER, {sync, MsgIds, K}).
-stop()             -> gen_server2:call(?SERVER, stop, infinity).
-sync()             -> gen_server2:pcast(?SERVER, 9, sync). %% internal
+write(MsgId, Msg) -> gen_server2:cast(?SERVER, {write, MsgId, Msg}).
+read(MsgId)       -> gen_server2:call(?SERVER, {read, MsgId}, infinity).
+idle_read(MsgId)  -> gen_server2:pcast(?SERVER, -1, {idle_read, MsgId, self()}).
+contains(MsgId)   -> gen_server2:call(?SERVER, {contains, MsgId}, infinity).
+remove(MsgIds)    -> gen_server2:cast(?SERVER, {remove, MsgIds}).
+release(MsgIds)   -> gen_server2:cast(?SERVER, {release, MsgIds}).
+sync(MsgIds, K)   -> gen_server2:cast(?SERVER, {sync, MsgIds, K}).
+stop()            -> gen_server2:call(?SERVER, stop, infinity).
+sync()            -> gen_server2:pcast(?SERVER, 9, sync). %% internal
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -291,44 +292,8 @@ init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
     {ok, State1 #msstate { current_file_handle = FileHdl }}.
 
 handle_call({read, MsgId}, _From, State) ->
-    case index_lookup(MsgId, State) of
-        not_found -> reply(not_found, State);
-        #msg_location { ref_count  = RefCount,
-                        file       = File,
-                        offset     = Offset,
-                        total_size = TotalSize } ->
-            case fetch_and_increment_cache(MsgId, State) of
-                not_found ->
-                    {{ok, {MsgId, Msg}}, State1} =
-                        with_read_handle_at(
-                          File, Offset,
-                          fun(Hdl) ->
-                                  Res = case rabbit_msg_file:read(
-                                               Hdl, TotalSize) of
-                                            {ok, {MsgId, _}} = Obj -> Obj;
-                                            {ok, Rest} ->
-                                                throw({error,
-                                                       {misread, 
-                                                        [{old_state, State},
-                                                         {file_num, File},
-                                                         {offset, Offset},
-                                                         {read, Rest}]}})
-                                        end,
-                                  {Offset + TotalSize, Res}
-                          end, State),
-                    ok = if RefCount > 1 ->
-                                 insert_into_cache(MsgId, Msg, State1);
-                            true -> ok
-                                    %% it's not in the cache and we
-                                    %% only have one reference to the
-                                    %% message. So don't bother
-                                    %% putting it in the cache.
-                         end,
-                    reply({ok, Msg}, State1);
-                {Msg, _RefCount} ->
-                    reply({ok, Msg}, State)
-            end
-    end;
+    {Result, State1} = internal_read_message(MsgId, State),
+    reply(Result, State1);
 
 handle_call({contains, MsgId}, _From, State) ->
     reply(case index_lookup(MsgId, State) of
@@ -416,7 +381,14 @@ handle_cast({sync, MsgIds, K},
     end;
 
 handle_cast(sync, State) ->
-    noreply(sync(State)).
+    noreply(sync(State));
+
+handle_cast({idle_read, MsgId, From}, State) ->
+    {Result, State1} = internal_read_message(MsgId, State),
+    rabbit_misc:with_exit_handler(
+      fun () -> ok end,
+      fun () -> rabbit_queue_prefetcher:publish(From, Result) end),
+    noreply(State1).
 
 handle_info(timeout, State) ->
     noreply(sync(State)).
@@ -547,6 +519,46 @@ remove_message(MsgId, State = #msstate { file_summary = FileSummary }) ->
             ok = index_update(StoreEntry #msg_location {
                                 ref_count = RefCount - 1 }, State),
             no_compact
+    end.
+
+internal_read_message(MsgId, State) ->
+    case index_lookup(MsgId, State) of
+        not_found -> {not_found, State};
+        #msg_location { ref_count  = RefCount,
+                        file       = File,
+                        offset     = Offset,
+                        total_size = TotalSize } ->
+            case fetch_and_increment_cache(MsgId, State) of
+                not_found ->
+                    {{ok, {MsgId, Msg}}, State1} =
+                        with_read_handle_at(
+                          File, Offset,
+                          fun(Hdl) ->
+                                  Res = case rabbit_msg_file:read(
+                                               Hdl, TotalSize) of
+                                            {ok, {MsgId, _}} = Obj -> Obj;
+                                            {ok, Rest} ->
+                                                throw({error,
+                                                       {misread, 
+                                                        [{old_state, State},
+                                                         {file_num, File},
+                                                         {offset, Offset},
+                                                         {read, Rest}]}})
+                                        end,
+                                  {Offset + TotalSize, Res}
+                          end, State),
+                    ok = if RefCount > 1 ->
+                                 insert_into_cache(MsgId, Msg, State1);
+                            true -> ok
+                                    %% it's not in the cache and we
+                                    %% only have one reference to the
+                                    %% message. So don't bother
+                                    %% putting it in the cache.
+                         end,
+                    {{ok, Msg}, State1};
+                {Msg, _RefCount} ->
+                    {{ok, Msg}, State}
+            end
     end.
 
 %%----------------------------------------------------------------------------

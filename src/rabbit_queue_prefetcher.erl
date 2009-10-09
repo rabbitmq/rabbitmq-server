@@ -33,7 +33,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/2]).
+-export([start_link/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -46,10 +46,25 @@
 -define(DESIRED_HIBERNATE, 10000).
 
 -record(pstate,
-        { msg_buf,
-          target_count,
-          queue,
+        { alphas,
+          betas,
           queue_mref
+        }).
+
+-record(alpha,
+        { msg,
+          seq_id,
+          is_delivered,
+          msg_on_disk,
+          index_on_disk
+        }).
+
+-record(beta,
+        { msg_id,
+          seq_id,
+          is_persistent,
+          is_delivered,
+          index_on_disk
         }).
 
 %%----------------------------------------------------------------------------
@@ -182,22 +197,22 @@
 
 -ifdef(use_specs).
 
--spec(start_link/2 :: (queue_name(), non_neg_integer()) ->
+-spec(start_link/1 :: (queue()) ->
              ({'ok', pid()} | 'ignore' | {'error', any()})).
 -spec(publish/2 :: (pid(), (message()| 'empty')) -> 'ok').
--spec(drain/1 :: (pid()) -> ('empty' | {queue(), ('finished' | 'continuing')})).
--spec(drain_and_stop/1 :: (pid()) -> ('empty' | queue())).
+-spec(drain/1 :: (pid()) -> ({('finished' | 'continuing' | 'empty'), queue()})).
+-spec(drain_and_stop/1 :: (pid()) -> ({('empty' | queue()), queue()})).
 -spec(stop/1 :: (pid()) -> 'ok').
              
 -endif.
 
 %%----------------------------------------------------------------------------
 
-start_link(Queue, Count) ->
-    gen_server2:start_link(?MODULE, [Queue, Count, self()], []).
+start_link(Betas) ->
+    false = queue:is_empty(Betas), %% ASSERTION
+    gen_server2:start_link(?MODULE, [Betas, self()], []).
 
-publish(Prefetcher,
-        Obj = { #basic_message {}, _IsDelivered, _AckTag, _Remaining }) ->
+publish(Prefetcher, Obj = #basic_message {}) ->
     gen_server2:call(Prefetcher, {publish, Obj}, infinity);
 publish(Prefetcher, empty) ->
     gen_server2:call(Prefetcher, publish_empty, infinity).
@@ -213,50 +228,50 @@ stop(Prefetcher) ->
 
 %%----------------------------------------------------------------------------
 
-init([Q, Count, QPid]) when Count > 0 andalso is_pid(QPid) ->
+init([Betas, QPid]) when is_pid(QPid) ->
     %% link isn't enough because the signal will not appear if the
     %% queue exits normally. Thus have to use monitor.
     MRef = erlang:monitor(process, QPid),
-    State = #pstate { msg_buf = queue:new(),
-                      target_count = Count,
-                      queue = Q,
+    State = #pstate { alphas = queue:new(),
+                      betas = Betas,
                       queue_mref = MRef
-                     },
-    ok = rabbit_disk_queue:prefetch(Q),
-    {ok, State, infinity, {backoff, ?HIBERNATE_AFTER_MIN,
-                           ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+                    },
+    {ok, prefetch(State), infinity, {backoff, ?HIBERNATE_AFTER_MIN,
+                                     ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({publish,
-             {Msg = #basic_message {}, IsDelivered, AckTag, _Remaining}},
-	    DiskQueue, State = #pstate {
-                         target_count = Target, msg_buf = MsgBuf, queue = Q}) ->
+handle_call({publish, Msg = #basic_message { guid = MsgId,
+                                             is_persistent = IsPersistent }},
+	    DiskQueue, State = #pstate { alphas = Alphas, betas = Betas }) ->
     gen_server2:reply(DiskQueue, ok),
-    Timeout = case Target of
-                  1 -> hibernate;
-                  _ -> ok = rabbit_disk_queue:prefetch(Q),
-                       infinity
-              end,
-    MsgBuf1 = queue:in({Msg, IsDelivered, AckTag}, MsgBuf),
-    {noreply, State #pstate { target_count = Target - 1, msg_buf = MsgBuf1 },
-     Timeout};
+    {{value, #beta { msg_id = MsgId, seq_id = SeqId,
+                     is_persistent = IsPersistent,
+                     is_delivered = IsDelivered,
+                     index_on_disk = IndexOnDisk}}, Betas1} = queue:out(Betas),
+    Alphas1 = queue:in(#alpha { msg = Msg, seq_id = SeqId,
+                                is_delivered = IsDelivered, msg_on_disk = true,
+                                index_on_disk = IndexOnDisk }, Alphas),
+    State1 = State #pstate { alphas = Alphas1, betas = Betas1 },
+    {Timeout, State2} = case queue:is_empty(Betas1) of
+                            true  -> {hibernate, State1};
+                            false -> {infinity, prefetch(State1)}
+                        end,
+    {noreply, State2, Timeout};
 handle_call(publish_empty, _From, State) ->
     %% Very odd. This could happen if the queue is deleted or purged
     %% and the mixed queue fails to shut us down.
     {reply, ok, State, hibernate};
-handle_call(drain, _From, State = #pstate { target_count = 0,
-                                            msg_buf = MsgBuf }) ->
-    Res = case queue:is_empty(MsgBuf) of
-              true  -> empty;
-              false -> {MsgBuf, finished}
-          end,
-    {stop, normal, Res, State};
-handle_call(drain, _From, State = #pstate { msg_buf = MsgBuf }) ->
-    {reply, {MsgBuf, continuing}, State #pstate { msg_buf = queue:new() },
-     infinity};
-handle_call(drain_and_stop, _From, State = #pstate { msg_buf = MsgBuf }) ->
-    Res = case queue:is_empty(MsgBuf) of
-              true -> empty;
-              false -> MsgBuf
+handle_call(drain, _From, State = #pstate { alphas = Alphas, betas = Betas }) ->
+    case {queue:is_empty(Betas), queue:is_empty(Alphas)} of
+        {true , _    } -> {stop, normal, {finished, Alphas}, State};
+        {false, true } -> {stop, normal, {empty, Betas}, State};
+        {false, false} -> {reply, {continuing, Alphas},
+                           State #pstate { alphas = queue:new() }}
+    end;
+handle_call(drain_and_stop, _From, State = #pstate { alphas = Alphas,
+                                                     betas = Betas }) ->
+    Res = case queue:is_empty(Alphas) of
+              true -> {empty, Betas};
+              false -> {Alphas, Betas}
           end,
     {stop, normal, Res, State};
 handle_call(stop, _From, State) ->
@@ -276,3 +291,8 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+prefetch(State = #pstate { betas = Betas }) ->
+    {{value, #beta { msg_id = MsgId }}, _Betas1} = queue:out(Betas),
+    ok = rabbit_msg_store:idle_read(MsgId),
+    State.
