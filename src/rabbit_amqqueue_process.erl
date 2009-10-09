@@ -278,11 +278,10 @@ deliver_from_queue_deliver(AckRequired, {false, AutoAcks},
                            State = #q { mixed_state = MS }) ->
     {{Msg, IsDelivered, AckTag, Remaining}, MS1} =
         rabbit_mixed_queue:fetch(MS),
-    AutoAcks1 =
-        case AckRequired of
-            true -> AutoAcks;
-            false -> [{Msg, AckTag} | AutoAcks]
-        end,
+    AutoAcks1 = case AckRequired of
+                    true -> AutoAcks;
+                    false -> [AckTag | AutoAcks]
+                end,
     {{Msg, IsDelivered, AckTag}, {0 == Remaining, AutoAcks1},
      State #q { mixed_state = MS1 }}.
 
@@ -348,8 +347,8 @@ deliver_or_requeue_n(MsgsWithAcks, State) ->
 deliver_or_requeue_msgs_pred({Len, _AcksAcc, _MsgsWithAcks}, _State) ->
     0 < Len.
 deliver_or_requeue_msgs_deliver(
-  false, {Len, AcksAcc, [(MsgAckTag = {Msg, _}) | MsgsWithAcks]}, State) ->
-    {{Msg, true, noack}, {Len - 1, [MsgAckTag | AcksAcc], MsgsWithAcks}, State};
+  false, {Len, AcksAcc, [{Msg, AckTag} | MsgsWithAcks]}, State) ->
+    {{Msg, true, noack}, {Len - 1, [AckTag | AcksAcc], MsgsWithAcks}, State};
 deliver_or_requeue_msgs_deliver(
   true, {Len, AcksAcc, [{Msg, AckTag} | MsgsWithAcks]}, State) ->
     {{Msg, true, AckTag}, {Len - 1, AcksAcc, MsgsWithAcks}, State}.
@@ -620,7 +619,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
                         store_ch_record(C#cr{unacked_messages = NewUAM}),
                         {ok, MS1};
                     false ->
-                        rabbit_mixed_queue:ack([{Msg, AckTag}], MS1)
+                        rabbit_mixed_queue:ack([AckTag], MS1)
                 end,
             Message = {QName, self(), NextId, IsDelivered, Msg},
             reply({ok, Remaining, Message},
@@ -764,8 +763,9 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
             case Txn of
                 none ->
                     {MsgWithAcks, Remaining} = collect_messages(MsgIds, UAM),
-                    {ok, MS} =
-                        rabbit_mixed_queue:ack(MsgWithAcks, State #q.mixed_state),
+                    {ok, MS} = rabbit_mixed_queue:ack(
+                                 [AckTag || {_Msg, AckTag} <- MsgWithAcks],
+                                 State #q.mixed_state),
                     store_ch_record(C#cr{unacked_messages = Remaining}),
                     noreply(State #q { mixed_state = MS });
                 _  ->

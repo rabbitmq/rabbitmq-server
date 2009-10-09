@@ -32,7 +32,7 @@
 -module(rabbit_variable_queue).
 
 -export([init/1, publish/3, set_queue_ram_duration_target/2, remeasure_egress_rate/1,
-         fetch/1, len/1, is_empty/1, maybe_start_prefetcher/1]).
+         fetch/1, ack/2, len/1, is_empty/1, maybe_start_prefetcher/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -245,6 +245,20 @@ maybe_start_prefetcher(State = #vqstate { ram_msg_count = RamMsgCount,
     end;
 maybe_start_prefetcher(State) ->
     State.
+
+ack(AckTags, State = #vqstate { index_state = IndexState }) ->
+    {MsgIds, SeqIds} =
+        lists:foldl(
+          fun (ack_not_on_disk, Acc) -> Acc;
+              ({ack_index_and_store, MsgId, SeqId}, {MsgIds, SeqIds}) ->
+                  {[MsgId | MsgIds], [SeqId, SeqIds]}
+          end, {[], []}, AckTags),
+    IndexState1 = case SeqIds of
+                      [] -> IndexState;
+                      _  -> rabbit_queue_index:write_acks(SeqIds, IndexState)
+                  end,
+    ok = rabbit_msg_store:remove(MsgIds),
+    State #vqstate { index_state = IndexState1 }.
 
 %%----------------------------------------------------------------------------
 
