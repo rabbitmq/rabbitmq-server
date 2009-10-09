@@ -228,10 +228,11 @@ len(#vqstate { len = Len }) ->
 is_empty(State) ->
     0 == len(State).
 
-maybe_start_prefetcher(State = #vqstate { ram_msg_count = RamMsgCount,
-                                          target_ram_msg_count = TargetRamMsgCount,
-                                          q1 = Q1, q3 = Q3, prefetcher = undefined
-                                        }) ->
+maybe_start_prefetcher(State = #vqstate {
+                         ram_msg_count = RamMsgCount,
+                         target_ram_msg_count = TargetRamMsgCount,
+                         q1 = Q1, q3 = Q3, prefetcher = undefined
+                        }) ->
     %% prefetched content takes priority over q1
     AvailableSpace = (TargetRamMsgCount - RamMsgCount) + queue:len(Q1),
     PrefetchCount = lists:min([queue:len(Q3), AvailableSpace]),

@@ -33,7 +33,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/3, write/2, read/1, idle_read/2, contains/1, remove/1,
+-export([start_link/3, write/2, read/1, peruse/2, contains/1, remove/1,
          release/1, sync/2, stop/0]).
 
 -export([sync/0]). %% internal
@@ -61,7 +61,7 @@
              {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(write/2 :: (msg_id(), msg()) -> 'ok').
 -spec(read/1 :: (msg_id()) -> {'ok', msg()} | 'not_found').
--spec(idle_read/2 :: (msg_id(), fun (({'ok', msg()} | 'not_found') -> 'ok')) ->
+-spec(peruse/2 :: (msg_id(), fun (({'ok', msg()} | 'not_found') -> 'ok')) ->
              'ok').
 -spec(contains/1 :: (msg_id()) -> boolean()).
 -spec(remove/1 :: ([msg_id()]) -> 'ok').
@@ -233,15 +233,15 @@ start_link(Dir, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
                            [Dir, MsgRefDeltaGen, MsgRefDeltaGenInit],
                            [{timeout, infinity}]).
 
-write(MsgId, Msg)     -> gen_server2:cast(?SERVER, {write, MsgId, Msg}).
-read(MsgId)           -> gen_server2:call(?SERVER, {read, MsgId}, infinity).
-idle_read(MsgId, Fun) -> gen_server2:pcast(?SERVER, -1, {idle_read, MsgId, Fun}).
-contains(MsgId)       -> gen_server2:call(?SERVER, {contains, MsgId}, infinity).
-remove(MsgIds)        -> gen_server2:cast(?SERVER, {remove, MsgIds}).
-release(MsgIds)       -> gen_server2:cast(?SERVER, {release, MsgIds}).
-sync(MsgIds, K)       -> gen_server2:cast(?SERVER, {sync, MsgIds, K}).
-stop()                -> gen_server2:call(?SERVER, stop, infinity).
-sync()                -> gen_server2:pcast(?SERVER, 9, sync). %% internal
+write(MsgId, Msg)  -> gen_server2:cast(?SERVER, {write, MsgId, Msg}).
+read(MsgId)        -> gen_server2:call(?SERVER, {read, MsgId}, infinity).
+peruse(MsgId, Fun) -> gen_server2:pcast(?SERVER, -1, {peruse, MsgId, Fun}).
+contains(MsgId)    -> gen_server2:call(?SERVER, {contains, MsgId}, infinity).
+remove(MsgIds)     -> gen_server2:cast(?SERVER, {remove, MsgIds}).
+release(MsgIds)    -> gen_server2:cast(?SERVER, {release, MsgIds}).
+sync(MsgIds, K)    -> gen_server2:cast(?SERVER, {sync, MsgIds, K}).
+stop()             -> gen_server2:call(?SERVER, stop, infinity).
+sync()             -> gen_server2:pcast(?SERVER, 9, sync). %% internal
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -344,9 +344,9 @@ handle_cast({write, MsgId, Msg},
             noreply(State)
     end;
 
-handle_cast({idle_read, MsgId, Fun}, State) ->
+handle_cast({peruse, MsgId, Fun}, State) ->
     {Result, State1} = internal_read_message(MsgId, State),
-    rabbit_misc:with_exit_handler(fun () -> ok end, fun () -> Fun(Result) end),
+    Fun(Result),
     noreply(State1);
 
 handle_cast({remove, MsgIds}, State = #msstate { current_file = CurFile }) ->

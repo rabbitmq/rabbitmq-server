@@ -49,7 +49,7 @@
         { alphas,
           betas,
           queue_mref,
-          idle_read_cb
+          peruse_cb
         }).
 
 -record(alpha,
@@ -234,12 +234,19 @@ init([Betas, QPid]) when is_pid(QPid) ->
     %% queue exits normally. Thus have to use monitor.
     MRef = erlang:monitor(process, QPid),
     Self = self(),
+    CB = fun (Result) ->
+                 rabbit_misc:with_exit_handler(
+                   fun () -> ok end,
+                   fun () -> case Result of
+                                 {ok, Msg} -> publish(Self, Msg);
+                                 not_found -> publish(Self, not_found)
+                             end
+                   end)
+         end,
     State = #pstate { alphas = queue:new(),
                       betas = Betas,
                       queue_mref = MRef,
-                      idle_read_cb = fun ({ok, Msg}) -> publish(Self, Msg);
-                                         (not_found) -> publish(Self, not_found)
-                                     end
+                      peruse_cb = CB
                     },
     {ok, prefetch(State), infinity, {backoff, ?HIBERNATE_AFTER_MIN,
                                      ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -297,7 +304,7 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-prefetch(State = #pstate { betas = Betas, idle_read_cb = CB }) ->
+prefetch(State = #pstate { betas = Betas, peruse_cb = CB }) ->
     {{value, #beta { msg_id = MsgId }}, _Betas1} = queue:out(Betas),
-    ok = rabbit_msg_store:idle_read(MsgId, CB),
+    ok = rabbit_msg_store:peruse(MsgId, CB),
     State.
