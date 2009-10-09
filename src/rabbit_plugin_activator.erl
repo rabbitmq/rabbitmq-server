@@ -98,7 +98,7 @@ start() ->
             end,
             ok;
         {error, Module, Error} ->
-            error("generation of boot script file ~s failed: ~w",
+            error("generation of boot script file ~s failed: ~s",
                   [ScriptFile, Module:format_error(Error)])
     end,
 
