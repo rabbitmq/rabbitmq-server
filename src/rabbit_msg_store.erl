@@ -508,7 +508,7 @@ remove_message(MsgId, State = #msstate { file_summary = FileSummary }) ->
             [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
                                        contiguous_top = ContiguousTop }] =
                 ets:lookup(FileSummary, File),
-            ContiguousTop1 = erlang:min(ContiguousTop, Offset),
+            ContiguousTop1 = lists:min([ContiguousTop, Offset]),
             ValidTotalSize1 = ValidTotalSize - TotalSize,
             true = ets:insert(FileSummary, FSEntry #file_summary { 
                                              valid_total_size = ValidTotalSize1,

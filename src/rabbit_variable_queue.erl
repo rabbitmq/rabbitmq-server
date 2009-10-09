@@ -239,7 +239,7 @@ maybe_start_prefetcher(State = #vqstate { ram_msg_count = RamMsgCount,
                                           target_ram_msg_count = TargetRamMsgCount,
                                           q3 = Q3, prefetcher = undefined
                                         }) ->
-    PrefetchCount = erlang:min(queue:len(Q3), TargetRamMsgCount - RamMsgCount),
+    PrefetchCount = lists:min([queue:len(Q3), TargetRamMsgCount - RamMsgCount]),
     if PrefetchCount =< 0 -> State;
        true ->
             {PrefetchQueue, Q3a} = queue:split(PrefetchCount, Q3),

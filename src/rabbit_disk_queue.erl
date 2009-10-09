@@ -716,8 +716,8 @@ extract_sequence_numbers(Sequences) ->
                                 [] -> ets:insert_new(Sequences,
                                                      {Q, SeqId, NextWrite});
                                 [Orig = {_, Read, Write}] ->
-                                    Repl = {Q, erlang:min(Read, SeqId),
-                                            erlang:max(Write, NextWrite)},
+                                    Repl = {Q, lists:min([Read, SeqId]),
+                                            lists:max([Write, NextWrite])},
                                     case Orig == Repl of
                                         true -> true;
                                         false -> ets:insert(Sequences, Repl)
