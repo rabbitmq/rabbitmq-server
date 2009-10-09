@@ -616,7 +616,8 @@ push_betas_to_gammas(Generator, Limit, Q, Count, IndexState) ->
     end.
 
 %% the first arg is the older gamma            
-combine_gammas(#gamma { count = 0 }, #gamma { count = 0 }) -> {undefined, 0};
+combine_gammas(#gamma { count = 0 }, #gamma { count = 0 }) ->
+    #gamma { seq_id = undefined, count = 0 };
 combine_gammas(#gamma { count = 0 }, #gamma {       } = B) -> B;
 combine_gammas(#gamma {       } = A, #gamma { count = 0 }) -> A;
 combine_gammas(#gamma { seq_id = SeqIdLow,  count = CountLow },
