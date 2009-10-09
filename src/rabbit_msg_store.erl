@@ -384,7 +384,10 @@ handle_cast(sync, State) ->
     noreply(sync(State));
 
 handle_cast({idle_read, MsgId, From}, State) ->
-    {Result, State1} = internal_read_message(MsgId, State),
+    {Result, State1} = case internal_read_message(MsgId, State) of
+                           {not_found, _} = Res -> Res;
+                           {{ok, Msg}, State2} -> {Msg, State2}
+                       end,
     rabbit_misc:with_exit_handler(
       fun () -> ok end,
       fun () -> rabbit_queue_prefetcher:publish(From, Result) end),

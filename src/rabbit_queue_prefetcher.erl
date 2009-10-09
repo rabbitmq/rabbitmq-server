@@ -199,7 +199,7 @@
 
 -spec(start_link/1 :: (queue()) ->
              ({'ok', pid()} | 'ignore' | {'error', any()})).
--spec(publish/2 :: (pid(), (message()| 'empty')) -> 'ok').
+-spec(publish/2 :: (pid(), (message()| 'not_found')) -> 'ok').
 -spec(drain/1 :: (pid()) -> ({('finished' | 'continuing' | 'empty'), queue()})).
 -spec(drain_and_stop/1 :: (pid()) -> ({('empty' | queue()), queue()})).
 -spec(stop/1 :: (pid()) -> 'ok').
@@ -214,7 +214,7 @@ start_link(Betas) ->
 
 publish(Prefetcher, Obj = #basic_message {}) ->
     gen_server2:call(Prefetcher, {publish, Obj}, infinity);
-publish(Prefetcher, empty) ->
+publish(Prefetcher, not_found) ->
     gen_server2:call(Prefetcher, publish_empty, infinity).
 
 drain(Prefetcher) ->
