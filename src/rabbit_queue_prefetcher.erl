@@ -48,7 +48,8 @@
 -record(pstate,
         { alphas,
           betas,
-          queue_mref
+          queue_mref,
+          idle_read_cb
         }).
 
 -record(alpha,
@@ -232,9 +233,13 @@ init([Betas, QPid]) when is_pid(QPid) ->
     %% link isn't enough because the signal will not appear if the
     %% queue exits normally. Thus have to use monitor.
     MRef = erlang:monitor(process, QPid),
+    Self = self(),
     State = #pstate { alphas = queue:new(),
                       betas = Betas,
-                      queue_mref = MRef
+                      queue_mref = MRef,
+                      idle_read_cb = fun ({ok, Msg}) -> publish(Self, Msg);
+                                         (not_found) -> publish(Self, not_found)
+                                     end
                     },
     {ok, prefetch(State), infinity, {backoff, ?HIBERNATE_AFTER_MIN,
                                      ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -292,7 +297,7 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-prefetch(State = #pstate { betas = Betas }) ->
+prefetch(State = #pstate { betas = Betas, idle_read_cb = CB }) ->
     {{value, #beta { msg_id = MsgId }}, _Betas1} = queue:out(Betas),
-    ok = rabbit_msg_store:idle_read(MsgId),
+    ok = rabbit_msg_store:idle_read(MsgId, CB),
     State.
