@@ -118,16 +118,23 @@ init(Q = #amqqueue { name = QName, durable = Durable }) ->
     {ok, start_memory_timer(State), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-terminate(_Reason, State) ->
+terminate(_Reason, State = #q{mixed_state = MS}) ->
     %% FIXME: How do we cancel active subscriptions?
     State1 = stop_memory_timer(State),
+    %% Ensure that any persisted tx messages are removed;
+    %% mixed_queue:delete_queue cannot do that for us since neither
+    %% mixed_queue nor disk_queue keep a record of uncommitted tx
+    %% messages.
+    {ok, MS1} = rabbit_mixed_queue:tx_rollback(
+                  lists:concat([PM || #tx { pending_messages = PM } <-
+                                          all_tx_record()]), MS),
     %% Delete from disk queue first. If we crash at this point, when a
     %% durable queue, we will be recreated at startup, possibly with
     %% partial content. The alternative is much worse however - if we
     %% called internal_delete first, we would then have a race between
     %% the disk_queue delete and a new queue with the same name being
     %% created and published to.
-    {ok, _MS} = rabbit_mixed_queue:delete_queue(State1 #q.mixed_state),
+    {ok, _MS} = rabbit_mixed_queue:delete_queue(MS1),
     ok = rabbit_amqqueue:internal_delete(qname(State1)).
 
 code_change(_OldVsn, State, _Extra) ->

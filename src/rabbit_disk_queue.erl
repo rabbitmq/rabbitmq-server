@@ -66,10 +66,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(dqstate,
-        { sequences,      %% next read and write for each q
-          pending_commits %% dict of txns waiting for msg_store
-        }).
+-record(dqstate, { sequences }).      %% next read and write for each q
 
 %%----------------------------------------------------------------------------
 
@@ -170,8 +167,8 @@ stop_and_obliterate() ->
 
 %% private
 
-finalise_commit(TxId) ->
-    gen_server2:cast(?SERVER, {finalise_commit, TxId}).
+finalise_commit(TxDetails) ->
+    gen_server2:cast(?SERVER, {finalise_commit, TxDetails}).
 
 %%----------------------------------------------------------------------------
 %% gen_server behaviour
@@ -200,7 +197,7 @@ init([]) ->
     Sequences = ets:new(?SEQUENCE_ETS_NAME, [set, private]),
     ok = extract_sequence_numbers(Sequences),
 
-    State = #dqstate { sequences = Sequences, pending_commits = dict:new() },
+    State = #dqstate { sequences = Sequences },
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -269,8 +266,8 @@ handle_cast({prefetch, Q, From}, State) ->
         false -> ok
     end,
     noreply(State1);
-handle_cast({finalise_commit, TxId}, State) ->
-    noreply(finalise_commit(TxId, State)).
+handle_cast({finalise_commit, TxDetails}, State) ->
+    noreply(finalise_commit(TxDetails, State)).
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
@@ -390,54 +387,40 @@ internal_tx_publish(Message = #basic_message { guid = MsgId,
            MsgId, Message #basic_message { content = ClearedContent }),
     {ok, State}.
 
-internal_tx_commit(Q, PubMsgIds, AckSeqIds, From,
-                   State = #dqstate { pending_commits = PendingCommits }) ->
+internal_tx_commit(Q, PubMsgIds, AckSeqIds, From, State) ->
+    TxDetails = {Q, PubMsgIds, AckSeqIds, From},
     ok = rabbit_msg_store:sync([MsgId || {MsgId, _, _} <- PubMsgIds],
-                               fun () -> finalise_commit({Q, From}) end),
-    PendingCommits1 = dict:store(Q, {PubMsgIds, AckSeqIds, From},
-                                 PendingCommits),
-    State #dqstate { pending_commits = PendingCommits1 }.
+                               fun () -> finalise_commit(TxDetails) end),
+    State.
 
-finalise_commit({Q, From},
-                State = #dqstate { sequences = Sequences,
-                                   pending_commits = PendingCommits }) ->
-    case dict:find(Q, PendingCommits) of
-        {ok, {PubMsgIds, AckSeqIds, From}} ->
-            {InitReadSeqId, InitWriteSeqId} = sequence_lookup(Sequences, Q),
-            WriteSeqId =
-                rabbit_misc:execute_mnesia_transaction(
-                  fun() ->
-                          ok = mnesia:write_lock_table(rabbit_disk_queue),
-                          lists:foldl(
-                            fun ({MsgId, IsDelivered, IsPersistent}, SeqId) ->
-                                    ok = mnesia:write(
-                                           rabbit_disk_queue,
-                                           #dq_msg_loc {
-                                             queue_and_seq_id = {Q, SeqId},
-                                             msg_id = MsgId,
-                                             is_delivered = IsDelivered,
-                                             is_persistent = IsPersistent
-                                            }, write),
-                                    SeqId + 1
-                            end, InitWriteSeqId, PubMsgIds)
-                  end),
-            {ok, State1} = remove_messages(Q, AckSeqIds, State),
-            true = case PubMsgIds of
-                       [] -> true;
-                       _  -> ets:insert(Sequences, 
-                                        {Q, InitReadSeqId, WriteSeqId})
-                   end,
-            gen_server2:reply(From, ok),
-            State1 # dqstate { pending_commits =
-                               dict:erase(Q, PendingCommits) };
-        {ok, _} ->
-            %% sync notification for a deleted queue which has since
-            %% been recreated
-            State;
-        error ->
-            %% sync notification for a deleted queue
-            State
-    end.
+finalise_commit({Q, PubMsgIds, AckSeqIds, From},
+                State = #dqstate { sequences = Sequences }) ->
+    {InitReadSeqId, InitWriteSeqId} = sequence_lookup(Sequences, Q),
+    WriteSeqId =
+        rabbit_misc:execute_mnesia_transaction(
+          fun() ->
+                  ok = mnesia:write_lock_table(rabbit_disk_queue),
+                  lists:foldl(
+                    fun ({MsgId, IsDelivered, IsPersistent}, SeqId) ->
+                            ok = mnesia:write(
+                                   rabbit_disk_queue,
+                                   #dq_msg_loc {
+                                     queue_and_seq_id = {Q, SeqId},
+                                     msg_id           = MsgId,
+                                     is_delivered     = IsDelivered,
+                                     is_persistent    = IsPersistent
+                                    }, write),
+                            SeqId + 1
+                    end, InitWriteSeqId, PubMsgIds)
+          end),
+    {ok, State1} = remove_messages(Q, AckSeqIds, State),
+    true = case PubMsgIds of
+               [] -> true;
+               _  -> ets:insert(Sequences, 
+                                {Q, InitReadSeqId, WriteSeqId})
+           end,
+    gen_server2:reply(From, ok),
+    State1.
 
 internal_publish(Q, Message = #basic_message { guid = MsgId,
                                                is_persistent = IsPersistent },
@@ -551,31 +534,20 @@ internal_purge(Q, State = #dqstate { sequences = Sequences }) ->
             {ok, WriteSeqId - ReadSeqId, State1}
     end.
 
-internal_delete_queue(Q,
-                      State = #dqstate { pending_commits = PendingCommits }) ->
-    %% remove pending commits
-    State1 =  case dict:find(Q, PendingCommits) of
-                  {ok, {PubMsgIds, _, _}} ->
-                      ok = rabbit_msg_store:remove(
-                             [MsgId || {MsgId, _, _} <- PubMsgIds]),
-                      State # dqstate { pending_commits =
-                                        dict:erase(Q, PendingCommits) };
-                  error ->
-                      State
-              end,
+internal_delete_queue(Q, State) ->
     %% remove everything undelivered
-    {ok, _Count, State2 = #dqstate { sequences = Sequences }} =
-        internal_purge(Q, State1),
+    {ok, _Count, State1 = #dqstate { sequences = Sequences }} =
+        internal_purge(Q, State),
     true = ets:delete(Sequences, Q),
     %% remove everything already delivered
-    Objs = mnesia:dirty_match_object(
-             rabbit_disk_queue,
-             #dq_msg_loc { queue_and_seq_id = {Q, '_'}, _ = '_' }),
-    MsgSeqIds = lists:map(fun (#dq_msg_loc { queue_and_seq_id = {_Q, SeqId},
-                                             msg_id = MsgId }) ->
-                                  {MsgId, SeqId}
-                          end, Objs),
-    remove_messages(Q, MsgSeqIds, State2).
+    remove_messages(
+      Q, [{MsgId, SeqId} || #dq_msg_loc { queue_and_seq_id = {_Q, SeqId},
+                                          msg_id = MsgId } <-
+                                mnesia:dirty_match_object(
+                                  rabbit_disk_queue,
+                                  #dq_msg_loc {
+                                    queue_and_seq_id = {Q, '_'},
+                                    _ = '_' })], State1).
 
 internal_delete_non_durable_queues(
   DurableQueues, State = #dqstate { sequences = Sequences }) ->
