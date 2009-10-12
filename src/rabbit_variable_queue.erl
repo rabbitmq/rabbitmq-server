@@ -592,11 +592,12 @@ test_keep_msg_in_ram(SeqId, #vqstate { target_ram_msg_count = TargetRamMsgCount,
                     end
             end;
         _ when TargetRamMsgCount > RamMsgCount ->
-                     msg;
-        _         -> case queue:is_empty(Q1) of
-                         true -> index;
-                         false -> msg %% can push out elders to disk
-                     end
+            msg;
+        _ ->
+            case queue:is_empty(Q1) of
+                true -> index;
+                false -> msg %% can push out elders to disk
+            end
     end.
 
 ensure_binary_properties(Msg = #basic_message { content = Content }) ->
