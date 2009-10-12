@@ -44,8 +44,6 @@
          prefetch/1
         ]).
 
--export([filesync/0]).
-
 -export([stop/0, stop_and_obliterate/0]).
 
 %%----------------------------------------------------------------------------
@@ -63,17 +61,12 @@
                       is_persistent = true
                     }).
 
--define(SYNC_INTERVAL, 5). %% milliseconds
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 
 -define(SERVER, ?MODULE).
 
--record(dqstate,
-        {sequences,               %% next read and write for each q
-         on_sync_txns,            %% list of commiters to run on sync (reversed)
-         commit_timer_ref         %% TRef for our interval timer
-        }).
+-record(dqstate, { sequences }).      %% next read and write for each q
 
 %%----------------------------------------------------------------------------
 
@@ -109,7 +102,6 @@
                   A, queue_name()) -> A).
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_obliterate/0 :: () -> 'ok').
--spec(filesync/0 :: () -> 'ok').
 
 -endif.
 
@@ -173,8 +165,10 @@ stop() ->
 stop_and_obliterate() ->
     gen_server2:call(?SERVER, stop_vaporise, infinity).
 
-filesync() ->
-    gen_server2:pcall(?SERVER, 9, filesync).
+%% private
+
+finalise_commit(TxDetails) ->
+    gen_server2:cast(?SERVER, {finalise_commit, TxDetails}).
 
 %%----------------------------------------------------------------------------
 %% gen_server behaviour
@@ -203,9 +197,7 @@ init([]) ->
     Sequences = ets:new(?SEQUENCE_ETS_NAME, [set, private]),
     ok = extract_sequence_numbers(Sequences),
 
-    State = #dqstate { sequences        = Sequences,
-                       on_sync_txns     = [],
-                       commit_timer_ref = undefined },
+    State = #dqstate { sequences = Sequences },
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -222,8 +214,6 @@ handle_call({tx_commit, Q, PubMsgIds, AckSeqIds}, From, State) ->
 handle_call({purge, Q}, _From, State) ->
     {ok, Count, State1} = internal_purge(Q, State),
     reply(Count, State1);
-handle_call(filesync, _From, State) ->
-    reply(ok, sync(State));
 handle_call({delete_queue, Q}, From, State) ->
     gen_server2:reply(From, ok),
     {ok, State1} = internal_delete_queue(Q, State),
@@ -275,13 +265,12 @@ handle_cast({prefetch, Q, From}, State) ->
             internal_fetch_attributes(Q, ignore_delivery, State1);
         false -> ok
     end,
-    noreply(State1).
+    noreply(State1);
+handle_cast({finalise_commit, TxDetails}, State) ->
+    noreply(finalise_commit(TxDetails, State)).
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
-    {stop, Reason, State};
-handle_info(timeout, State) ->
-    %% must have commit_timer set, so timeout was 0, and we're not hibernating
-    noreply(sync(State)).
+    {stop, Reason, State}.
 
 terminate(_Reason, State) ->
     State1 = shutdown(State),
@@ -291,10 +280,9 @@ terminate(_Reason, State) ->
 shutdown(State = #dqstate { sequences = undefined }) ->
     State;
 shutdown(State = #dqstate { sequences = Sequences }) ->
-    State1 = stop_commit_timer(State),
     ok = rabbit_msg_store:stop(),
     ets:delete(Sequences),
-    State1 #dqstate { sequences = undefined }.
+    State #dqstate { sequences = undefined }.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -304,28 +292,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 noreply(State) ->
-    noreply1(State).
-
-noreply1(State) ->
-    {State1, Timeout} = next_state(State),
-    {noreply, State1, Timeout}.
+    {noreply, State, hibernate}.
 
 reply(Reply, State) ->
-    reply1(Reply, State).
-
-reply1(Reply, State) ->
-    {State1, Timeout} = next_state(State),
-    {reply, Reply, State1, Timeout}.
-
-next_state(State = #dqstate { on_sync_txns = [],
-                              commit_timer_ref = undefined }) ->
-    {State, hibernate};
-next_state(State = #dqstate { commit_timer_ref = undefined }) ->
-    {start_commit_timer(State), 0};
-next_state(State = #dqstate { on_sync_txns = [] }) ->
-    {stop_commit_timer(State), hibernate};
-next_state(State) ->
-    {State, 0}.
+    {reply, Reply, State, hibernate}.
 
 form_filename(Name) ->
     filename:join(base_directory(), Name).
@@ -337,25 +307,6 @@ sequence_lookup(Sequences, Q) ->
     case ets:lookup(Sequences, Q) of
         []                           -> {0, 0};
         [{_, ReadSeqId, WriteSeqId}] -> {ReadSeqId, WriteSeqId}
-    end.
-
-start_commit_timer(State = #dqstate { commit_timer_ref = undefined }) ->
-    {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, filesync, []),
-    State #dqstate { commit_timer_ref = TRef }.
-
-stop_commit_timer(State = #dqstate { commit_timer_ref = undefined }) ->
-    State;
-stop_commit_timer(State = #dqstate { commit_timer_ref = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
-    State #dqstate { commit_timer_ref = undefined }.
-
-sync(State = #dqstate { on_sync_txns = Txns }) ->
-    ok = rabbit_msg_store:sync(),
-    case Txns of
-        [] -> State;
-        _  -> lists:foldl(fun internal_do_tx_commit/2,
-                          State #dqstate { on_sync_txns = [] },
-                          lists:reverse(Txns))
     end.
 
 %%----------------------------------------------------------------------------
@@ -404,10 +355,9 @@ maybe_advance(pop_queue, Sequences, Q, ReadSeqId, WriteSeqId) ->
     true = ets:insert(Sequences, {Q, ReadSeqId + 1, WriteSeqId}),
     ok.
 
-internal_foldl(Q, Fun, Init, State) ->
-    State1 = #dqstate { sequences = Sequences } = sync(State),
+internal_foldl(Q, Fun, Init, State = #dqstate { sequences = Sequences }) ->
     {ReadSeqId, WriteSeqId} = sequence_lookup(Sequences, Q),
-    internal_foldl(Q, WriteSeqId, Fun, State1, Init, ReadSeqId).
+    internal_foldl(Q, WriteSeqId, Fun, State, Init, ReadSeqId).
 
 internal_foldl(_Q, SeqId, _Fun, State, Acc, SeqId) ->
     {ok, Acc, State};
@@ -437,41 +387,37 @@ internal_tx_publish(Message = #basic_message { guid = MsgId,
            MsgId, Message #basic_message { content = ClearedContent }),
     {ok, State}.
 
-internal_tx_commit(Q, PubMsgIds, AckSeqIds, From,
-                   State = #dqstate { on_sync_txns = Txns }) ->
-    TxnDetails = {Q, PubMsgIds, AckSeqIds, From},
-    case rabbit_msg_store:needs_sync(
-           [MsgId || {MsgId, _IsDelivered, _IsPersistent} <- PubMsgIds]) of
-        true  -> Txns1 = [TxnDetails | Txns],
-                 State #dqstate { on_sync_txns = Txns1 };
-        false -> internal_do_tx_commit(TxnDetails, State)
-    end.
+internal_tx_commit(Q, PubMsgIds, AckSeqIds, From, State) ->
+    TxDetails = {Q, PubMsgIds, AckSeqIds, From},
+    ok = rabbit_msg_store:sync([MsgId || {MsgId, _, _} <- PubMsgIds],
+                               fun () -> finalise_commit(TxDetails) end),
+    State.
 
-internal_do_tx_commit({Q, PubMsgIds, AckSeqIds, From},
-                      State = #dqstate { sequences = Sequences }) ->
+finalise_commit({Q, PubMsgIds, AckSeqIds, From},
+                State = #dqstate { sequences = Sequences }) ->
     {InitReadSeqId, InitWriteSeqId} = sequence_lookup(Sequences, Q),
     WriteSeqId =
         rabbit_misc:execute_mnesia_transaction(
           fun() ->
                   ok = mnesia:write_lock_table(rabbit_disk_queue),
-                  {ok, WriteSeqId1} =
-                      lists:foldl(
-                        fun ({MsgId, IsDelivered, IsPersistent}, {ok, SeqId}) ->
-                                {mnesia:write(
+                  lists:foldl(
+                    fun ({MsgId, IsDelivered, IsPersistent}, SeqId) ->
+                            ok = mnesia:write(
                                    rabbit_disk_queue,
-                                   #dq_msg_loc { queue_and_seq_id = {Q, SeqId},
-                                                 msg_id = MsgId,
-                                                 is_delivered = IsDelivered,
-                                                 is_persistent = IsPersistent
-                                               }, write),
-                                 SeqId + 1}
-                        end, {ok, InitWriteSeqId}, PubMsgIds),
-                  WriteSeqId1
+                                   #dq_msg_loc {
+                                     queue_and_seq_id = {Q, SeqId},
+                                     msg_id           = MsgId,
+                                     is_delivered     = IsDelivered,
+                                     is_persistent    = IsPersistent
+                                    }, write),
+                            SeqId + 1
+                    end, InitWriteSeqId, PubMsgIds)
           end),
     {ok, State1} = remove_messages(Q, AckSeqIds, State),
     true = case PubMsgIds of
                [] -> true;
-               _  -> ets:insert(Sequences, {Q, InitReadSeqId, WriteSeqId})
+               _  -> ets:insert(Sequences, 
+                                {Q, InitReadSeqId, WriteSeqId})
            end,
     gen_server2:reply(From, ok),
     State1.
@@ -589,19 +535,19 @@ internal_purge(Q, State = #dqstate { sequences = Sequences }) ->
     end.
 
 internal_delete_queue(Q, State) ->
-    State1 = sync(State),
-    {ok, _Count, State2 = #dqstate { sequences = Sequences }} =
-        internal_purge(Q, State1), %% remove everything undelivered
+    %% remove everything undelivered
+    {ok, _Count, State1 = #dqstate { sequences = Sequences }} =
+        internal_purge(Q, State),
     true = ets:delete(Sequences, Q),
-    %% now remove everything already delivered
-    Objs = mnesia:dirty_match_object(
-             rabbit_disk_queue,
-             #dq_msg_loc { queue_and_seq_id = {Q, '_'}, _ = '_' }),
-    MsgSeqIds = lists:map(fun (#dq_msg_loc { queue_and_seq_id = {_Q, SeqId},
-                                             msg_id = MsgId }) ->
-                                  {MsgId, SeqId}
-                          end, Objs),
-    remove_messages(Q, MsgSeqIds, State2).
+    %% remove everything already delivered
+    remove_messages(
+      Q, [{MsgId, SeqId} || #dq_msg_loc { queue_and_seq_id = {_Q, SeqId},
+                                          msg_id = MsgId } <-
+                                mnesia:dirty_match_object(
+                                  rabbit_disk_queue,
+                                  #dq_msg_loc {
+                                    queue_and_seq_id = {Q, '_'},
+                                    _ = '_' })], State1).
 
 internal_delete_non_durable_queues(
   DurableQueues, State = #dqstate { sequences = Sequences }) ->

@@ -34,7 +34,9 @@
 -behaviour(gen_server2).
 
 -export([start_link/3, write/2, read/1, contains/1, remove/1, release/1,
-         needs_sync/1, sync/0, stop/0]).
+         sync/2, stop/0]).
+
+-export([sync/0]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -43,6 +45,7 @@
 
 -define(MAX_READ_FILE_HANDLES, 256).
 -define(FILE_SIZE_LIMIT,       (256*1024*1024)).
+-define(SYNC_INTERVAL,         5). %% milliseconds
 
 %%----------------------------------------------------------------------------
 
@@ -61,8 +64,7 @@
 -spec(contains/1 :: (msg_id()) -> boolean()).
 -spec(remove/1 :: ([msg_id()]) -> 'ok').
 -spec(release/1 :: ([msg_id()]) -> 'ok').
--spec(needs_sync/1 :: ([msg_id()]) -> boolean()).
--spec(sync/0 :: () -> 'ok').
+-spec(sync/2 :: ([msg_id()], fun (() -> any())) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 
 -endif.
@@ -81,6 +83,8 @@
          file_size_limit,        %% how big can our files get?
          read_file_handle_cache, %% file handle cache for reading
          last_sync_offset,       %% current_offset at the last time we sync'd
+         on_sync,                %% pending sync requests
+         sync_timer_ref,         %% TRef for our interval timer
          message_cache           %% ets message cache
          }).
 
@@ -232,9 +236,9 @@ read(MsgId)        -> gen_server2:call(?SERVER, {read, MsgId}, infinity).
 contains(MsgId)    -> gen_server2:call(?SERVER, {contains, MsgId}, infinity).
 remove(MsgIds)     -> gen_server2:cast(?SERVER, {remove, MsgIds}).
 release(MsgIds)    -> gen_server2:cast(?SERVER, {release, MsgIds}).
-needs_sync(MsgIds) -> gen_server2:call(?SERVER, {needs_sync, MsgIds}, infinity).
-sync()             -> gen_server2:call(?SERVER, sync, infinity).
+sync(MsgIds, K)    -> gen_server2:cast(?SERVER, {sync, MsgIds, K}).
 stop()             -> gen_server2:call(?SERVER, stop, infinity).
+sync()             -> gen_server2:pcast(?SERVER, 9, sync). %% internal
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -262,6 +266,8 @@ init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
                    file_size_limit        = ?FILE_SIZE_LIMIT,
                    read_file_handle_cache = HandleCache,
                    last_sync_offset       = 0,
+                   on_sync                = [],
+                   sync_timer_ref         = undefined,
                    message_cache          = MessageCache
                   },
 
@@ -330,21 +336,6 @@ handle_call({contains, MsgId}, _From, State) ->
               #msg_location {} -> true
           end, State);
 
-handle_call({needs_sync, _MsgIds}, _From,
-            State = #msstate { current_dirty = false }) ->
-    reply(false, State);
-handle_call({needs_sync, MsgIds}, _From,
-            State = #msstate { current_file     = CurFile,
-                               last_sync_offset = SyncOffset }) ->
-    reply(lists:any(fun (MsgId) ->
-                            #msg_location { file = File, offset = Offset } =
-                                index_lookup(MsgId, State),
-                            File =:= CurFile andalso Offset >= SyncOffset
-                    end, MsgIds), State);
-
-handle_call(sync, _From, State) ->
-    reply(ok, sync(State));
-
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
@@ -403,10 +394,32 @@ handle_cast({remove, MsgIds}, State = #msstate { current_file = CurFile }) ->
 
 handle_cast({release, MsgIds}, State) ->
     lists:foreach(fun (MsgId) -> decrement_cache(MsgId, State) end, MsgIds),
-    noreply(State).
+    noreply(State);
 
-handle_info(_Info, State) ->
-    noreply(State).
+handle_cast({sync, _MsgIds, K},
+            State = #msstate { current_dirty = false }) ->
+    K(),
+    noreply(State);
+
+handle_cast({sync, MsgIds, K},
+            State = #msstate { current_file     = CurFile,
+                               last_sync_offset = SyncOffset,
+                               on_sync          = Syncs }) ->
+    case lists:any(fun (MsgId) ->
+                           #msg_location { file = File, offset = Offset } =
+                               index_lookup(MsgId, State),
+                           File =:= CurFile andalso Offset >= SyncOffset
+                   end, MsgIds) of
+        false -> K(),
+                 noreply(State);
+        true  -> noreply(State #msstate { on_sync = [K | Syncs] })
+    end;
+
+handle_cast(sync, State) ->
+    noreply(sync(State)).
+
+handle_info(timeout, State) ->
+    noreply(sync(State)).
 
 terminate(_Reason, State = #msstate { msg_locations          = MsgLocations,
                                       file_summary           = FileSummary,
@@ -434,9 +447,32 @@ code_change(_OldVsn, State, _Extra) ->
 %% general helper functions
 %%----------------------------------------------------------------------------
 
-noreply(State) -> {noreply, State}.
+noreply(State) ->
+    {State1, Timeout} = next_state(State),
+    {noreply, State1, Timeout}.
 
-reply(Reply, State) -> {reply, Reply, State}.
+reply(Reply, State) ->
+    {State1, Timeout} = next_state(State),
+    {reply, Reply, State1, Timeout}.
+
+next_state(State = #msstate { on_sync = [], sync_timer_ref = undefined }) ->
+    {State, infinity};
+next_state(State = #msstate { sync_timer_ref = undefined }) ->
+    {start_sync_timer(State), 0};
+next_state(State = #msstate { on_sync = [] }) ->
+    {stop_sync_timer(State), infinity};
+next_state(State) ->
+    {State, 0}.
+
+start_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
+    {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, sync, []),
+    State #msstate { sync_timer_ref = TRef }.
+
+stop_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
+    State;
+stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State #msstate { sync_timer_ref = undefined }.
 
 form_filename(Dir, Name) -> filename:join(Dir, Name).
 
@@ -465,9 +501,14 @@ truncate_and_extend_file(FileHdl, Lowpoint, Highpoint) ->
 sync(State = #msstate { current_dirty = false }) ->
     State;
 sync(State = #msstate { current_file_handle = CurHdl,
-                        current_offset = CurOffset }) ->
+                        current_offset = CurOffset,
+                        on_sync = Syncs }) ->
+    State1 = stop_sync_timer(State),
     ok = file:sync(CurHdl),
-    State #msstate { current_dirty = false, last_sync_offset = CurOffset }.
+    lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
+    State1 #msstate { current_dirty = false,
+                      last_sync_offset = CurOffset,
+                      on_sync = [] }.
 
 with_read_handle_at(File, Offset, Fun,
                     State = #msstate { dir                    = Dir,
