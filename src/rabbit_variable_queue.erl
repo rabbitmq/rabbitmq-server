@@ -33,7 +33,8 @@
 
 -export([init/1, publish/3, set_queue_ram_duration_target/2,
          remeasure_egress_rate/1, fetch/1, ack/2, len/1, is_empty/1,
-         maybe_start_prefetcher/1, purge/1, delete/1, requeue/2]).
+         maybe_start_prefetcher/1, purge/1, delete/1, requeue/2,
+         tx_publish/2, tx_rollback/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -296,6 +297,16 @@ requeue(MsgsWithAckTags, State) ->
                   {[AckTag | AckTagsAcc], StateN1}
           end, {[], State}, MsgsWithAckTags),
     ack(AckTags, State1).
+
+tx_publish(Msg = #basic_message { is_persistent = true }, State) ->
+    true = maybe_write_msg_to_disk(true, Msg),
+    State.
+
+tx_rollback(Pubs, State) ->
+    ok = rabbit_msg_store:remove(
+           [MsgId || Obj = #basic_message { guid = MsgId } <- Pubs,
+                     Obj #basic_message.is_persistent]),
+    State.
 
 %%----------------------------------------------------------------------------
 
