@@ -112,8 +112,10 @@
 %%----------------------------------------------------------------------------
 
 init(QueueName) ->
-    {GammaSeqId, NextSeqId, GammaCount, IndexState} =
+    {GammaCount, IndexState} =
         rabbit_queue_index:init(QueueName),
+    {GammaSeqId, NextSeqId} =
+        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(IndexState),
     Gamma = case GammaCount of
                 0 -> #gamma { seq_id = undefined, count = 0 };
                 _ -> #gamma { seq_id = GammaSeqId, count = GammaCount }

@@ -33,7 +33,7 @@
 
 -export([init/1, write_published/4, write_delivered/2, write_acks/2,
          flush_journal/1, read_segment_entries/2, next_segment_boundary/1,
-         segment_size/0]).
+         segment_size/0, find_lowest_seq_id_seg_and_next_seq_id/1]).
 
 %%----------------------------------------------------------------------------
 %% The queue disk index
@@ -133,8 +133,7 @@
                               seg_ack_counts    :: dict()
                             }).
 
--spec(init/1 :: (string()) -> {non_neg_integer(), non_neg_integer(),
-                               non_neg_integer(), qistate()}).
+-spec(init/1 :: (string()) -> {non_neg_integer(), qistate()}).
 -spec(write_published/4 :: (msg_id(), seq_id(), boolean(), qistate())
       -> qistate()).
 -spec(write_delivered/2 :: (seq_id(), qistate()) -> qistate()).
@@ -145,6 +144,8 @@
               | 'not_found'), qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(segment_size/0 :: () -> non_neg_integer()).
+-spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
+             {non_neg_integer(), non_neg_integer()}).
 
 -endif.
 
@@ -158,17 +159,14 @@ init(Name) ->
     {AckCounts, TotalMsgCount} = scatter_journal(Dir, find_ack_counts(Dir)),
     {ok, JournalHdl} = file:open(filename:join(Dir, ?ACK_JOURNAL_FILENAME),
                                  [raw, binary, delayed_write, write, read]),
-    {LowestSeqIdSeg, HighestSeqId} =
-        find_lowest_seq_id_seg_and_highest_seq_id(Dir),
-    {LowestSeqIdSeg, HighestSeqId + 1, TotalMsgCount,
-     #qistate { dir = Dir,
-                cur_seg_num = undefined,
-                cur_seg_hdl = undefined,
-                journal_ack_count = 0,
-                journal_ack_dict = dict:new(),
-                journal_handle = JournalHdl,
-                seg_ack_counts = AckCounts
-              }}.
+    {TotalMsgCount, #qistate { dir = Dir,
+                               cur_seg_num = undefined,
+                               cur_seg_hdl = undefined,
+                               journal_ack_count = 0,
+                               journal_ack_dict = dict:new(),
+                               journal_handle = JournalHdl,
+                               seg_ack_counts = AckCounts
+                             }}.
 
 write_published(MsgId, SeqId, IsPersistent, State)
   when is_binary(MsgId) ->
@@ -255,6 +253,29 @@ next_segment_boundary(SeqId) ->
 segment_size() ->
     ?SEGMENT_ENTRIES_COUNT.
 
+find_lowest_seq_id_seg_and_next_seq_id(
+  #qistate { dir = Dir, journal_ack_dict = JAckDict }) ->
+    SegNumsPaths = all_segment_nums_paths(Dir),
+    %% We don't want the lowest seq_id, merely the seq_id of the start
+    %% of the lowest segment. That seq_id may not actually exist, but
+    %% that's fine. The important thing is that the segment exists and
+    %% the seq_id reported is on a segment boundary.
+    LowSeqIdSeg =
+        case SegNumsPaths of
+            [] -> 0;
+            _  -> {SegNum1, _SegPath1} = lists:min(SegNumsPaths),
+                  reconstruct_seq_id(SegNum1, 0)
+        end,
+    HighestSeqId =
+        case SegNumsPaths of
+            [] -> 0;
+            _  -> {SegNum2, SegPath2} = lists:max(SegNumsPaths),
+                  {_SDict, _AckCount, HighRelSeq} =
+                      load_segment(SegNum2, SegPath2, JAckDict),
+                  1 + reconstruct_seq_id(SegNum2, HighRelSeq)
+        end,
+    {LowSeqIdSeg, HighestSeqId}.
+
 %%----------------------------------------------------------------------------
 %% Minor Helpers
 %%----------------------------------------------------------------------------
@@ -310,28 +331,6 @@ all_segment_nums_paths(Dir) ->
         lists:takewhile(fun(C) -> $0 =< C andalso C =< $9 end,
                         SegName)), filename:join(Dir, SegName)}
      || SegName <- filelib:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)].
-
-find_lowest_seq_id_seg_and_highest_seq_id(Dir) ->
-    SegNumsPaths = all_segment_nums_paths(Dir),
-    %% We don't want the lowest seq_id, merely the seq_id of the start
-    %% of the lowest segment. That seq_id may not actually exist, but
-    %% that's fine. The important thing is that the segment exists and
-    %% the seq_id reported is on a segment boundary.
-    LowSeqIdSeg =
-        case SegNumsPaths of
-            [] -> 0;
-            _  -> {SegNum1, _SegPath1} = lists:min(SegNumsPaths),
-                  reconstruct_seq_id(SegNum1, 0)
-        end,
-    HighestSeqId =
-        case SegNumsPaths of
-            [] -> 0;
-            _  -> {SegNum2, SegPath2} = lists:max(SegNumsPaths),
-                  {_SDict, _AckCount, HighRelSeq} =
-                      load_segment(SegNum2, SegPath2, dict:new()),
-                  reconstruct_seq_id(SegNum2, HighRelSeq)
-        end,
-    {LowSeqIdSeg, HighestSeqId}.
 
 find_ack_counts(Dir) ->
     SegNumsPaths = all_segment_nums_paths(Dir),
