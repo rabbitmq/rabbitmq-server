@@ -181,7 +181,7 @@ get_vm_limit() ->
 
 
 get_mem_limit(MemFraction, TotalMemory) ->
-    lists:min([erlang:trunc(TotalMemory * MemFraction),
+    lists:min([trunc(TotalMemory * MemFraction),
                 get_vm_limit()]).
 
 init([MemFraction]) -> 
@@ -195,7 +195,7 @@ init([MemFraction]) ->
     end,
     MemLimit = get_mem_limit(MemFraction, TotalMemory),
     rabbit_log:info("Memory limit set to ~pMiB.~n", 
-                                              [erlang:trunc(MemLimit/1048576)]),
+                                              [trunc(MemLimit/1048576)]),
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
     State = #state { total_memory = TotalMemory,
                      memory_limit = MemLimit,
