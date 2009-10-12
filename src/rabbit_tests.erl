@@ -666,7 +666,10 @@ test_server_status() ->
     {ok, _} = rabbit_amqqueue:delete(Q, false, false),
 
     %% list connections
-    [#listener{host = H, port = P} | _] = rabbit_networking:active_listeners(),
+    [#listener{host = H, port = P} | _] =
+        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
+              N =:= node()],
+
     {ok, C} = gen_tcp:connect(H, P, []),
     timer:sleep(100),
     ok = info_action(

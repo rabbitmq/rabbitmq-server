@@ -52,10 +52,12 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    {ok, [[NodeNameStr|_]|_]} = init:get_argument(nodename),
+    NodeName = list_to_atom(NodeNameStr),
     FullCommand = init:get_plain_arguments(),
     #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
         parse_args(FullCommand, #params{quiet = false,
-                                        node = rabbit_misc:localnode(rabbit)}),
+                                        node = rabbit_misc:localnode(NodeName)}),
     Inform = case Quiet of
                  true  -> fun(_Format, _Args1) -> ok end;
                  false -> fun(Format, Args1) ->
@@ -80,13 +82,38 @@ start() ->
         {error, Reason} ->
             error("~p", [Reason]),
             halt(2);
+        {badrpc, Reason} ->
+            error("unable to connect to node ~w: ~w", [Node, Reason]),
+            print_badrpc_diagnostics(Node),
+            halt(2);
         Other ->
             error("~p", [Other]),
             halt(2)
     end.
 
-error(Format, Args) ->
-    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
+fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
+
+error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
+
+print_badrpc_diagnostics(Node) ->
+    fmt_stderr("diagnostics:", []),
+    NodeHost = rabbit_misc:nodehost(Node),
+    case net_adm:names(NodeHost) of
+        {error, EpmdReason} ->
+            fmt_stderr("- unable to connect to epmd on ~s: ~w",
+                       [NodeHost, EpmdReason]);
+                {ok, NamePorts} ->
+            fmt_stderr("- nodes and their ports on ~s: ~p",
+                       [NodeHost, [{list_to_atom(Name), Port} ||
+                                      {Name, Port} <- NamePorts]])
+            end,
+    fmt_stderr("- current node: ~w", [node()]),
+    case init:get_argument(home) of
+        {ok, [[Home]]} -> fmt_stderr("- current node home dir: ~s", [Home]);
+        Other          -> fmt_stderr("- no current node home dir: ~p", [Other])
+    end,
+    fmt_stderr("- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]),
+    ok.
 
 parse_args(["-n", NodeS | Args], Params) ->
     Node = case lists:member($@, NodeS) of

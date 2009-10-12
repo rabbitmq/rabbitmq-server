@@ -60,8 +60,8 @@
 -spec(do/3 :: (pid(), amqp_method(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
--spec(deliver/4 :: (pid(), ctag(), bool(), msg()) -> 'ok').
--spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
+-spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 
 -endif.
 
@@ -259,12 +259,6 @@ expand_routing_key_shortcut(<<>>, <<>>,
     MRDQ;
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
-
-die_precondition_failed(Fmt, Params) ->
-    %% FIXME: 406 should be replaced with precondition_failed when we
-    %% move to AMQP spec >=8.1
-    rabbit_misc:protocol_error({false, 406, <<"PRECONDITION_FAILED">>},
-                               Fmt, Params).
 
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
@@ -610,8 +604,8 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
         {error, not_found} ->
             rabbit_misc:not_found(ExchangeName);
         {error, in_use} ->
-            die_precondition_failed(
-              "~s in use", [rabbit_misc:rs(ExchangeName)]);
+            rabbit_misc:protocol_error(
+              precondition_failed, "~s in use", [rabbit_misc:rs(ExchangeName)]);
         ok ->
             return_ok(State, NoWait,  #'exchange.delete_ok'{})
     end;
@@ -685,11 +679,11 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
            QueueName,
            fun (Q) -> rabbit_amqqueue:delete(Q, IfUnused, IfEmpty) end) of
         {error, in_use} ->
-            die_precondition_failed(
-              "~s in use", [rabbit_misc:rs(QueueName)]);
+            rabbit_misc:protocol_error(
+              precondition_failed, "~s in use", [rabbit_misc:rs(QueueName)]);
         {error, not_empty} ->
-            die_precondition_failed(
-              "~s not empty", [rabbit_misc:rs(QueueName)]);
+            rabbit_misc:protocol_error(
+              precondition_failed, "~s not empty", [rabbit_misc:rs(QueueName)]);
         {ok, PurgedMessageCount} ->
             return_ok(State, NoWait,
                       #'queue.delete_ok'{

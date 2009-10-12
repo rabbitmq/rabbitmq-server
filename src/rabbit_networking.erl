@@ -39,8 +39,8 @@
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/3]).
 
--export([tcp_listener_started/2, ssl_connection_upgrade/2, 
-        tcp_listener_stopped/2, start_client/1]).
+-export([tcp_listener_started/2, tcp_listener_stopped/2,
+         start_client/1, start_ssl_client/2]).
 
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
@@ -112,7 +112,7 @@ start_tcp_listener(Host, Port) ->
 
 start_ssl_listener(Host, Port, SslOpts) ->
     start_listener(Host, Port, "SSL Listener",
-                   {?MODULE, ssl_connection_upgrade, [SslOpts]}).
+                   {?MODULE, start_ssl_client, [SslOpts]}).
 
 start_listener(Host, Port, Label, OnConnect) ->
     {IPAddress, Name} =
@@ -166,20 +166,28 @@ start_client(Sock) ->
     Child ! {go, Sock},
     Child.
 
-ssl_connection_upgrade(SslOpts, Sock) ->
-    {ok, {PeerAddress, PeerPort}} = rabbit_net:peername(Sock),
-    PeerIp = inet_parse:ntoa(PeerAddress),
-
-    case ssl:ssl_accept(Sock, SslOpts) of
-        {ok, SslSock} ->
-            rabbit_log:info("upgraded TCP connection from ~s:~p to SSL~n", 
-                [PeerIp, PeerPort]),
-            RabbitSslSock = #ssl_socket{tcp = Sock, ssl = SslSock},
-            start_client(RabbitSslSock);
+start_ssl_client(SslOpts, Sock) ->
+    case rabbit_net:peername(Sock) of
+        {ok, {PeerAddress, PeerPort}} ->
+            PeerIp = inet_parse:ntoa(PeerAddress),
+            case ssl:ssl_accept(Sock, SslOpts) of
+                {ok, SslSock} ->
+                    rabbit_log:info("upgraded TCP connection "
+                                    "from ~s:~p to SSL~n",
+                                    [PeerIp, PeerPort]),
+                    RabbitSslSock = #ssl_socket{tcp = Sock, ssl = SslSock},
+                    start_client(RabbitSslSock);
+                {error, Reason} ->
+                    gen_tcp:close(Sock),
+                    rabbit_log:error("failed to upgrade TCP connection "
+                                     "from ~s:~p to SSL: ~n~p~n",
+                                     [PeerIp, PeerPort, Reason]),
+                    {error, Reason}
+            end;
         {error, Reason} ->
             gen_tcp:close(Sock),
-            rabbit_log:error("failed to upgrade TCP connection from ~s:~p "
-                             "to SSL: ~n~p~n", [PeerIp, PeerPort, Reason]),
+            rabbit_log:error("failed to upgrade TCP connection to SSL: ~p~n",
+                             [Reason]),
             {error, Reason}
     end.
 

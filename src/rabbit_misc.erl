@@ -47,7 +47,7 @@
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
--export([localnode/1, tcp_name/3]).
+-export([localnode/1, nodehost/1, cookie_hash/0, tcp_name/3]).
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([table_foreach/2]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
@@ -106,6 +106,8 @@
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
 -spec(localnode/1 :: (atom()) -> erlang_node()).
+-spec(nodehost/1 :: (erlang_node()) -> string()).
+-spec(cookie_hash/0 :: () -> string()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
@@ -307,11 +309,15 @@ ensure_ok(ok, _) -> ok;
 ensure_ok({error, Reason}, ErrorTag) -> throw({error, {ErrorTag, Reason}}).
 
 localnode(Name) ->
+    list_to_atom(lists:append([atom_to_list(Name), "@", nodehost(node())])).
+
+nodehost(Node) ->
     %% This is horrible, but there doesn't seem to be a way to split a
     %% nodename into its constituent parts.
-    list_to_atom(lists:append(atom_to_list(Name),
-                              lists:dropwhile(fun (E) -> E =/= $@ end,
-                                              atom_to_list(node())))).
+    tl(lists:dropwhile(fun (E) -> E =/= $@ end, atom_to_list(Node))).
+
+cookie_hash() ->
+    ssl_base64:encode(erlang:md5(atom_to_list(erlang:get_cookie()))).
 
 tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->
