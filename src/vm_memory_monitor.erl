@@ -175,20 +175,14 @@ parse_line_linux(Line) ->
 %% you're in big trouble anyway.
 get_vm_limit() ->
     case erlang:system_info(wordsize) of
-        4 -> 2*1024*1024*1024;
-        8 -> infinity
+        4 -> 2*1024*1024*1024;                  % 2 GiB for 32 bits
+        8 -> 64*1024*1024*1024*1024             % 64 TiB for 64 bits
     end.
-
-min(A,B) -> 
-    case A<B of
-        true -> A;
-        false -> B
-    end.
-
 
 
 get_mem_limit(MemFraction, TotalMemory) ->
-    min(TotalMemory * MemFraction, get_vm_limit()).
+    lists:min([erlang:trunc(TotalMemory * MemFraction),
+                get_vm_limit()]).
 
 init([MemFraction]) -> 
     TotalMemory = case get_total_memory(os:type()) of
@@ -200,8 +194,8 @@ init([MemFraction]) ->
         M -> M
     end,
     MemLimit = get_mem_limit(MemFraction, TotalMemory),
-    rabbit_log:info("Memory alarm set to ~p, ~p bytes.~n", 
-                                                    [MemFraction, MemLimit]),
+    rabbit_log:info("Memory limit set to ~pMiB.~n", 
+                                              [erlang:trunc(MemLimit/1048576)]),
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
     State = #state { total_memory = TotalMemory,
                      memory_limit = MemLimit,
