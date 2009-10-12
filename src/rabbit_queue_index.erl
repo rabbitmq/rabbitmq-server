@@ -318,17 +318,18 @@ find_lowest_seq_id_seg_and_highest_seq_id(Dir) ->
     %% that's fine. The important thing is that the segment exists and
     %% the seq_id reported is on a segment boundary.
     LowSeqIdSeg =
-        case lists:sort(SegNumsPaths) of
+        case SegNumsPaths of
             [] -> 0;
-            [{SegNum1, _SegPath1}|_] -> reconstruct_seq_id(SegNum1, 0)
+            _  -> {SegNum1, _SegPath1} = lists:min(SegNumsPaths),
+                  reconstruct_seq_id(SegNum1, 0)
         end,
     HighestSeqId =
-        case rev_sort(SegNumsPaths) of
+        case SegNumsPaths of
             [] -> 0;
-            [{SegNum2, SegPath2}|_] ->
-                {_SDict, _AckCount, HighRelSeq} =
-                    load_segment(SegNum2, SegPath2, dict:new()),
-                reconstruct_seq_id(SegNum2, HighRelSeq)
+            _  -> {SegNum2, SegPath2} = lists:max(SegNumsPaths),
+                  {_SDict, _AckCount, HighRelSeq} =
+                      load_segment(SegNum2, SegPath2, dict:new()),
+                  reconstruct_seq_id(SegNum2, HighRelSeq)
         end,
     {LowSeqIdSeg, HighestSeqId}.
 
