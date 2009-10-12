@@ -87,11 +87,11 @@
 %% on disk at that stage (msg on disk, index on disk).
 %%
 %% When a msg arrives, we decide in which form it should be. It is
-%% then added to the rightmost appropriate queue, maintaining
+%% then added to the right-most appropriate queue, maintaining
 %% order. Thus if the msg is to be an alpha, it will be added to q1,
-%% unless all of q1, q2, gamma and q3 are empty, in which case it will
-%% go to q4. If it is to be a beta, it will be added to q2 unless all
-%% of q2 and gamma are empty, in which case it will go to q3.
+%% unless all of q2, gamma and q3 are empty, in which case it will go
+%% to q4. If it is to be a beta, it will be added to q2 unless gamma
+%% is empty, in which case it will go to q3.
 %%
 %% The major invariant is that if the msg is to be a beta, q1 will be
 %% empty, and if it is to be a gamma then both q1 and q2 will be empty.
@@ -528,8 +528,8 @@ store_alpha_entry(Entry = #alpha {}, State =
                   #vqstate { q1 = Q1, q2 = Q2,
                              gamma = #gamma { count = GammaCount },
                              q3 = Q3, q4 = Q4 }) ->
-    case queue:is_empty(Q1) andalso queue:is_empty(Q2) andalso 
-        GammaCount == 0 andalso queue:is_empty(Q3) of
+    case queue:is_empty(Q2) andalso GammaCount == 0 andalso queue:is_empty(Q3)
+        of
         true ->
             State #vqstate { q4 = queue:in(Entry, Q4) };
         false ->
@@ -539,7 +539,7 @@ store_alpha_entry(Entry = #alpha {}, State =
 store_beta_entry(Entry = #beta {}, State =
                  #vqstate { q2 = Q2, gamma = #gamma { count = GammaCount },
                             q3 = Q3 }) ->
-    case queue:is_empty(Q2) andalso GammaCount == 0 of
+    case GammaCount == 0 of
         true  -> State #vqstate { q3 = queue:in(Entry, Q3) };
         false -> State #vqstate { q2 = queue:in(Entry, Q2) }
     end.
