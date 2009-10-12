@@ -33,7 +33,7 @@
 
 -export([init/1, publish/3, set_queue_ram_duration_target/2,
          remeasure_egress_rate/1, fetch/1, ack/2, len/1, is_empty/1,
-         maybe_start_prefetcher/1, purge/1, delete/1]).
+         maybe_start_prefetcher/1, purge/1, delete/1, requeue/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -286,6 +286,16 @@ delete(State) ->
             {PurgeCount + DeleteCount,
              State1 #vqstate { index_state = IndexState1 }}
     end.
+
+%% [{Msg, AckTag}]
+requeue(MsgsWithAckTags, State) ->
+    {AckTags, State1} =
+        lists:foldl(
+          fun ({Msg, AckTag}, {AckTagsAcc, StateN}) ->
+                  StateN1 = publish(Msg, true, StateN),
+                  {[AckTag | AckTagsAcc], StateN1}
+          end, {[], State}, MsgsWithAckTags),
+    ack(AckTags, State1).
 
 %%----------------------------------------------------------------------------
 
