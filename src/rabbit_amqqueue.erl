@@ -42,7 +42,6 @@
 -export([notify_sent/2, unblock/2, tx_commit_callback/3]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([set_storage_mode/2]).
 
 -import(mnesia).
 -import(gen_server2).
@@ -107,7 +106,6 @@
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(tx_commit_callback/3 :: (pid(), [message()], [acktag()]) -> 'ok').
--spec(set_storage_mode/2 :: (pid(), ('oppressed' | 'liberated')) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
@@ -227,9 +225,6 @@ list(VHostPath) ->
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
 
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
-
-set_storage_mode(QPid, Mode) ->
-    gen_server2:pcast(QPid, 10, {set_storage_mode, Mode}).
 
 info(#amqqueue{ pid = QPid }) ->
     gen_server2:pcall(QPid, 9, info, infinity).

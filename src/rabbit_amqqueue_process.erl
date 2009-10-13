@@ -38,7 +38,6 @@
 -define(UNSENT_MESSAGE_LIMIT, 100).
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
--define(MINIMUM_MEMORY_REPORT_TIME_INTERVAL, 10000). %% 10 seconds in milliseconds
 
 -export([start_link/1]).
 
@@ -54,11 +53,10 @@
             owner,
             exclusive_consumer,
             has_had_consumers,
-            mixed_state,
+            variable_queue_state,
             next_msg_id,
             active_consumers,
-            blocked_consumers,
-            memory_report_timer
+            blocked_consumers
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -88,8 +86,7 @@
          acks_uncommitted,
          consumers,
          transactions,
-         memory,
-         storage_mode
+         memory
         ]).
          
 %%----------------------------------------------------------------------------
@@ -99,43 +96,41 @@ start_link(Q) ->
 
 %%----------------------------------------------------------------------------
 
-init(Q = #amqqueue { name = QName, durable = Durable }) ->
+init(Q = #amqqueue { name = QName }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     ok = rabbit_memory_manager:register
            (self(), false, rabbit_amqqueue, set_storage_mode, [self()]),
-    {ok, MS} = rabbit_mixed_queue:init(QName, Durable),
+    VQS = rabbit_variable_queue:init(QName),
     State = #q{q = Q,
                owner = none,
                exclusive_consumer = none,
                has_had_consumers = false,
-               mixed_state = MS,
+               variable_queue_state = VQS,
                next_msg_id = 1,
                active_consumers = queue:new(),
-               blocked_consumers = queue:new(),
-               memory_report_timer = undefined
+               blocked_consumers = queue:new()
               },
-    %% first thing we must do is report_memory.
-    {ok, start_memory_timer(State), hibernate,
+    {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-terminate(_Reason, State = #q{mixed_state = MS}) ->
+terminate(_Reason, State = #q{variable_queue_state = VQS}) ->
     %% FIXME: How do we cancel active subscriptions?
-    State1 = stop_memory_timer(State),
     %% Ensure that any persisted tx messages are removed;
     %% mixed_queue:delete_queue cannot do that for us since neither
     %% mixed_queue nor disk_queue keep a record of uncommitted tx
     %% messages.
-    {ok, MS1} = rabbit_mixed_queue:tx_rollback(
-                  lists:concat([PM || #tx { pending_messages = PM } <-
-                                          all_tx_record()]), MS),
-    %% Delete from disk queue first. If we crash at this point, when a
+    %% TODO: wait for all in flight tx_commits to complete
+    VQS1 = rabbit_variable_queue:tx_rollback(
+             lists:concat([PM || #tx { pending_messages = PM } <-
+                                     all_tx_record()]), VQS),
+    %% Delete from disk first. If we crash at this point, when a
     %% durable queue, we will be recreated at startup, possibly with
     %% partial content. The alternative is much worse however - if we
     %% called internal_delete first, we would then have a race between
-    %% the disk_queue delete and a new queue with the same name being
+    %% the disk delete and a new queue with the same name being
     %% created and published to.
-    {ok, _MS} = rabbit_mixed_queue:delete_queue(MS1),
-    ok = rabbit_amqqueue:internal_delete(qname(State1)).
+    _VQS = rabbit_variable_queue:delete(VQS1),
+    ok = rabbit_amqqueue:internal_delete(qname(State)).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -144,27 +139,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 reply(Reply, NewState) ->
     assert_invariant(NewState),
-    {reply, Reply, start_memory_timer(NewState), hibernate}.
+    {reply, Reply, NewState, hibernate}.
 
 noreply(NewState) ->
     assert_invariant(NewState),
-    {noreply, start_memory_timer(NewState), hibernate}.
+    {noreply, NewState, hibernate}.
 
-assert_invariant(#q { active_consumers = AC, mixed_state = MS }) ->
-    true = (queue:is_empty(AC) orelse rabbit_mixed_queue:is_empty(MS)).
-
-start_memory_timer(State = #q { memory_report_timer = undefined }) ->
-    {ok, TRef} = timer:send_after(?MINIMUM_MEMORY_REPORT_TIME_INTERVAL,
-                                  report_memory),
-    report_memory(false, State #q { memory_report_timer = TRef });
-start_memory_timer(State) ->
-    State.
-
-stop_memory_timer(State = #q { memory_report_timer = undefined }) ->
-    State;
-stop_memory_timer(State = #q { memory_report_timer = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
-    State #q { memory_report_timer = undefined }.
+assert_invariant(#q { active_consumers = AC, variable_queue_state = VQS }) ->
+    true = (queue:is_empty(AC) orelse rabbit_variable_queue:is_empty(VQS)).
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
@@ -282,25 +264,24 @@ deliver_msgs_to_consumers(
 deliver_from_queue_pred({IsEmpty, _AutoAcks}, _State) ->
     not IsEmpty.
 deliver_from_queue_deliver(AckRequired, {false, AutoAcks},
-                           State = #q { mixed_state = MS }) ->
-    {{Msg, IsDelivered, AckTag, Remaining}, MS1} =
-        rabbit_mixed_queue:fetch(MS),
+                           State = #q { variable_queue_state = VQS }) ->
+    {{Msg, IsDelivered, AckTag, Remaining}, VQS1} =
+        rabbit_variable_queue:fetch(VQS),
     AutoAcks1 = case AckRequired of
                     true -> AutoAcks;
                     false -> [AckTag | AutoAcks]
                 end,
     {{Msg, IsDelivered, AckTag}, {0 == Remaining, AutoAcks1},
-     State #q { mixed_state = MS1 }}.
+     State #q { variable_queue_state = VQS1 }}.
 
-run_message_queue(State = #q { mixed_state = MS }) ->
+run_message_queue(State = #q { variable_queue_state = VQS }) ->
     Funs = { fun deliver_from_queue_pred/2,
              fun deliver_from_queue_deliver/3 },
-    IsEmpty = rabbit_mixed_queue:is_empty(MS),
+    IsEmpty = rabbit_variable_queue:is_empty(VQS),
     {{_IsEmpty1, AutoAcks}, State1} =
         deliver_msgs_to_consumers(Funs, {IsEmpty, []}, State),
-    {ok, MS1} =
-        rabbit_mixed_queue:ack(AutoAcks, State1 #q.mixed_state),
-    State1 #q { mixed_state = MS1 }.
+    VQS1 = rabbit_variable_queue:ack(AutoAcks, State1 #q.variable_queue_state),
+    State1 #q { variable_queue_state = VQS1 }.
 
 attempt_immediate_delivery(none, _ChPid, Msg, State) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
@@ -309,10 +290,10 @@ attempt_immediate_delivery(none, _ChPid, Msg, State) ->
                 {AckTag, State2} =
                     case AckRequired of
                         true ->
-                            {ok, AckTag1, MS} =
-                                rabbit_mixed_queue:publish_delivered(
-                                  Msg, State1 #q.mixed_state),
-                            {AckTag1, State1 #q { mixed_state = MS }};
+                            {AckTag1, VQS} =
+                                rabbit_variable_queue:publish_delivered(
+                                  Msg, State1 #q.variable_queue_state),
+                            {AckTag1, State1 #q { variable_queue_state = VQS }};
                         false ->
                             {noack, State1}
                     end,
@@ -320,9 +301,9 @@ attempt_immediate_delivery(none, _ChPid, Msg, State) ->
         end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
 attempt_immediate_delivery(Txn, ChPid, Msg, State) ->
-    {ok, MS} = rabbit_mixed_queue:tx_publish(Msg, State #q.mixed_state),
+    VQS = rabbit_variable_queue:tx_publish(Msg, State #q.variable_queue_state),
     record_pending_message(Txn, ChPid, Msg),
-    {true, State #q { mixed_state = MS }}.
+    {true, State #q { variable_queue_state = VQS }}.
 
 deliver_or_enqueue(Txn, ChPid, Msg, State) ->
     case attempt_immediate_delivery(Txn, ChPid, Msg, State) of
@@ -330,8 +311,9 @@ deliver_or_enqueue(Txn, ChPid, Msg, State) ->
             {true, NewState};
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
-            {ok, MS} = rabbit_mixed_queue:publish(Msg, State #q.mixed_state),
-            {false, NewState #q { mixed_state = MS }}
+            {_SeqId, VQS} = rabbit_variable_queue:publish(
+                              Msg, State #q.variable_queue_state),
+            {false, NewState #q { variable_queue_state = VQS }}
     end.
 
 %% all these messages have already been delivered at least once and
@@ -344,11 +326,11 @@ deliver_or_requeue_n(MsgsWithAcks, State) ->
     {{_RemainingLengthMinusOne, AutoAcks, OutstandingMsgs}, NewState} =
         deliver_msgs_to_consumers(
           Funs, {length(MsgsWithAcks), [], MsgsWithAcks}, State),
-    {ok, MS} = rabbit_mixed_queue:ack(AutoAcks, NewState #q.mixed_state),
+    VQS = rabbit_variable_queue:ack(AutoAcks, NewState #q.variable_queue_state),
     case OutstandingMsgs of
-        [] -> NewState #q { mixed_state = MS };
-        _ -> {ok, MS1} = rabbit_mixed_queue:requeue(OutstandingMsgs, MS),
-             NewState #q { mixed_state = MS1 }
+        [] -> NewState #q { variable_queue_state = VQS };
+        _ -> VQS1 = rabbit_variable_queue:requeue(OutstandingMsgs, VQS),
+             NewState #q { variable_queue_state = VQS1 }
     end.
 
 deliver_or_requeue_msgs_pred({Len, _AcksAcc, _MsgsWithAcks}, _State) ->
@@ -504,17 +486,17 @@ commit_transaction(Txn, State) ->
                 store_ch_record(C#cr{unacked_messages = Remaining}),
                 MsgWithAcks
         end,
-    {ok, MS} = rabbit_mixed_queue:tx_commit(
-                 PendingMessagesOrdered, Acks, State #q.mixed_state),
-    State #q { mixed_state = MS }.
+    VQS = rabbit_variable_queue:tx_commit(
+            PendingMessagesOrdered, Acks, State #q.variable_queue_state),
+    State #q { variable_queue_state = VQS }.
 
 rollback_transaction(Txn, State) ->
     #tx { pending_messages = PendingMessages
         } = lookup_tx(Txn),
-    {ok, MS} = rabbit_mixed_queue:tx_rollback(PendingMessages,
-                                              State #q.mixed_state),
+    VQS = rabbit_variable_queue:tx_rollback(PendingMessages,
+                                            State #q.variable_queue_state),
     erase_tx(Txn),
-    State #q { mixed_state = MS }.
+    State #q { variable_queue_state = VQS }.
 
 %% {A, B} = collect_messages(C, D) %% A = C `intersect` D; B = D \\ C
 %% err, A = C `intersect` D , via projection through the dict that is C
@@ -529,12 +511,10 @@ i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
 i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
 i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
 i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
-i(storage_mode, #q{ mixed_state = MS }) ->
-    rabbit_mixed_queue:storage_mode(MS);
 i(pid, _) ->
     self();
-i(messages_ready, #q { mixed_state = MS }) ->
-    rabbit_mixed_queue:len(MS);
+i(messages_ready, #q { variable_queue_state = VQS }) ->
+    rabbit_variable_queue:len(VQS);
 i(messages_unacknowledged, _) ->
     lists:sum([dict:size(UAM) ||
                   #cr{unacked_messages = UAM} <- all_ch_record()]);
@@ -557,11 +537,6 @@ i(memory, _) ->
     M;
 i(Item, _) ->
     throw({bad_argument, Item}).
-
-report_memory(Hib, State = #q { mixed_state = MS }) ->
-    {MS1, MSize} = rabbit_mixed_queue:estimate_queue_memory(MS),
-    rabbit_memory_manager:report_memory(self(), MSize, Hib),
-    State #q { mixed_state = MS1 }.
 
 %---------------------------------------------------------------------------
 
@@ -612,25 +587,25 @@ handle_call({notify_down, ChPid}, From, State) ->
 handle_call({basic_get, ChPid, NoAck}, _From,
             State = #q{q = #amqqueue{name = QName},
                        next_msg_id = NextId,
-                       mixed_state = MS
+                       variable_queue_state = VQS
                        }) ->
-    case rabbit_mixed_queue:fetch(MS) of
-        {empty, MS1} -> reply(empty, State #q { mixed_state = MS1 });
-        {{Msg, IsDelivered, AckTag, Remaining}, MS1} ->
+    case rabbit_variable_queue:fetch(VQS) of
+        {empty, VQS1} -> reply(empty, State #q { variable_queue_state = VQS1 });
+        {{Msg, IsDelivered, AckTag, Remaining}, VQS1} ->
             AckRequired = not(NoAck),
-            {ok, MS2} =
+            {ok, VQS2} =
                 case AckRequired of
                     true ->
                         C = #cr{unacked_messages = UAM} = ch_record(ChPid),
                         NewUAM = dict:store(NextId, {Msg, AckTag}, UAM),
                         store_ch_record(C#cr{unacked_messages = NewUAM}),
-                        {ok, MS1};
+                        {ok, VQS1};
                     false ->
-                        rabbit_mixed_queue:ack([AckTag], MS1)
+                        rabbit_variable_queue:ack([AckTag], VQS1)
                 end,
             Message = {QName, self(), NextId, IsDelivered, Msg},
             reply({ok, Remaining, Message},
-                  State #q { next_msg_id = NextId + 1, mixed_state = MS2 })
+                  State #q { next_msg_id = NextId + 1, variable_queue_state = VQS2 })
     end;
 
 handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
@@ -710,14 +685,14 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
     end;
 
 handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
-                                    mixed_state = MS,
+                                    variable_queue_state = VQS,
                                     active_consumers = ActiveConsumers}) ->
-    Length = rabbit_mixed_queue:len(MS),
+    Length = rabbit_variable_queue:len(VQS),
     reply({ok, Name, Length, queue:len(ActiveConsumers)}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
-            State = #q { mixed_state = MS }) ->
-    Length = rabbit_mixed_queue:len(MS),
+            State = #q { variable_queue_state = VQS }) ->
+    Length = rabbit_variable_queue:len(VQS),
     IsEmpty = Length == 0,
     IsUnused = is_unused(State),
     if
@@ -730,8 +705,8 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
     end;
 
 handle_call(purge, _From, State) ->
-    {Count, MS} = rabbit_mixed_queue:purge(State #q.mixed_state),
-    reply({ok, Count}, State #q { mixed_state = MS });
+    {Count, VQS} = rabbit_variable_queue:purge(State #q.variable_queue_state),
+    reply({ok, Count}, State #q { variable_queue_state = VQS });
 
 handle_call({claim_queue, ReaderPid}, _From,
             State = #q{owner = Owner, exclusive_consumer = Holder}) ->
@@ -770,11 +745,11 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
             case Txn of
                 none ->
                     {MsgWithAcks, Remaining} = collect_messages(MsgIds, UAM),
-                    {ok, MS} = rabbit_mixed_queue:ack(
-                                 [AckTag || {_Msg, AckTag} <- MsgWithAcks],
-                                 State #q.mixed_state),
+                    VQS = rabbit_variable_queue:ack(
+                            [AckTag || {_Msg, AckTag} <- MsgWithAcks],
+                            State #q.variable_queue_state),
                     store_ch_record(C#cr{unacked_messages = Remaining}),
-                    noreply(State #q { mixed_state = MS });
+                    noreply(State #q { variable_queue_state = VQS });
                 _  ->
                     record_pending_acks(Txn, ChPid, MsgIds),
                     noreply(State)
@@ -822,23 +797,7 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 end,
                 NewLimited = Limited andalso LimiterPid =/= undefined,
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
-        end));
-
-handle_cast({set_storage_mode, Mode}, State = #q { mixed_state = MS }) ->
-    PendingMessages =
-        lists:flatten([Pending || #tx { pending_messages = Pending}
-                                      <- all_tx_record()]),
-    Mode1 = case Mode of
-                liberated -> mixed;
-                oppressed -> disk
-            end,
-    {ok, MS1} = rabbit_mixed_queue:set_storage_mode(Mode1, PendingMessages, MS),
-    noreply(State #q { mixed_state = MS1 }).
-
-handle_info(report_memory, State) ->
-    %% deliberately don't call noreply/1 as we don't want to start the timer.
-    %% By unsetting the timer, we force a report on the next normal message.
-    {noreply, State #q { memory_report_timer = undefined }, hibernate};
+        end)).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -860,9 +819,6 @@ handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
 
-handle_pre_hibernate(State = #q { mixed_state = MS }) ->
-    MS1 = rabbit_mixed_queue:maybe_prefetch(MS),
-    State1 =
-        stop_memory_timer(report_memory(true, State #q { mixed_state = MS1 })),
-    %% don't call noreply/1 as that'll restart the memory_report_timer
-    {hibernate, State1}.
+handle_pre_hibernate(State = #q { variable_queue_state = VQS }) ->
+    VQS1 = rabbit_variable_queue:maybe_start_prefetcher(VQS),
+    {hibernate, State #q { variable_queue_state = VQS1 }}.

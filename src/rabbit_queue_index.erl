@@ -348,7 +348,6 @@ seg_num_to_path(Dir, SegNum) ->
     SegName = integer_to_list(SegNum),
     filename:join(Dir, SegName ++ ?SEGMENT_EXTENSION).    
 
-
 %%----------------------------------------------------------------------------
 %% Msg Store Startup Delta Function
 %%----------------------------------------------------------------------------

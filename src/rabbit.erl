@@ -150,6 +150,7 @@ start(normal, []) ->
                 ok = start_child(rabbit_router),
                 ok = start_child(rabbit_node_monitor),
                 ok = start_child(rabbit_guid),
+                %% TODO - this should probably use start_child somehow too
                 ok = rabbit_queue_index:start_msg_store()
         end},
        {"recovery",
