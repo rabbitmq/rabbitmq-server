@@ -249,6 +249,8 @@ sync()             -> gen_server2:pcast(?SERVER, 9, sync). %% internal
 
 init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
 
+    ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+
     MsgLocations = ets:new(?MSG_LOC_NAME,
                            [set, private, {keypos, #msg_location.msg_id}]),
 

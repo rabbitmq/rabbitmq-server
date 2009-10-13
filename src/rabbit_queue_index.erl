@@ -300,7 +300,8 @@ start_msg_store() ->
     MsgStoreDir = filename:join(rabbit_mnesia:dir(), "msg_store"),
     {ok, _Pid} = rabbit_msg_store:start_link(MsgStoreDir,
                                              fun queue_index_walker/1,
-                                             Queues).
+                                             Queues),
+    ok.
 
 %%----------------------------------------------------------------------------
 %% Minor Helpers
