@@ -483,62 +483,58 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, Stat
             throw({bad_payload, PayloadAndMarker})
     end;
 
-handle_input(handshake, <<"AMQP",0,ProtocolMajor,ProtocolMinor,ProtocolRevision>>, State) ->
+%% The two rules pertaining to version negotiation:
+%%
+%% * If the server cannot support the protocol specified in the
+%% protocol header, it MUST respond with a valid protocol header and
+%% then close the socket connection.
+%%
+%% * The server MUST provide a protocol version that is lower than or
+%% equal to that requested by the client in the protocol header.
+%%
+%% We support 0-9-1 and 0-9, so by the first rule, we must close the
+%% connection if we're sent anything else.  Then, we must send that
+%% version in the Connection.start method.
+handle_input(handshake, <<"AMQP",0,0,9,1>>, State) ->
     %% 0-9-1 style protocol header.
-    check_protocol_header(ProtocolMajor, ProtocolMinor, ProtocolRevision, State);
-handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>, State) ->
-    %% 0-8 and 0-9 style protocol header.
-    check_protocol_header(ProtocolMajor, ProtocolMinor, 0, State);
+    protocol_negotiate(0, 9, 1, State);
+handle_input(handshake, <<"AMQP",1,1,0,9>>, State) ->
+    %% 0-8 and 0-9 style protocol header; we support only 0-9
+    protocol_negotiate(0, 9, 0, State);
 handle_input(handshake, Other, #v1{sock = Sock}) ->
     ok = inet_op(fun () -> rabbit_net:send(
-                             Sock, <<"AMQP",1,1,
-                                    ?PROTOCOL_VERSION_MAJOR,
-                                    ?PROTOCOL_VERSION_MINOR>>) end),
+                             Sock, <<"AMQP",0,0,9,1>>) end),
     throw({bad_header, Other});
 
 handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
 
-check_protocol_header(ProtocolMajor, ProtocolMinor, _ProtocolRevision,
-                      State = #v1{sock = Sock, connection = Connection}) ->
-    case check_version({ProtocolMajor, ProtocolMinor},
-                       {?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR}) of
-        true ->
-            {ok, Product} = application:get_key(id),
-            {ok, Version} = application:get_key(vsn),
-            ok = send_on_channel0(
-                   Sock,
-                   #'connection.start'{
-                     version_major = ?PROTOCOL_VERSION_MAJOR,
-                     version_minor = ?PROTOCOL_VERSION_MINOR,
-                     server_properties =
-                     [{list_to_binary(K), longstr, list_to_binary(V)} ||
-                         {K, V} <-
-                             [{"product",     Product},
-                              {"version",     Version},
-                              {"platform",    "Erlang/OTP"},
-                              {"copyright",   ?COPYRIGHT_MESSAGE},
-                              {"information", ?INFORMATION_MESSAGE}]],
-                     mechanisms = <<"PLAIN AMQPLAIN">>,
-                     locales = <<"en_US">> }),
-            {State#v1{connection = Connection#connection{
-                                     timeout_sec = ?NORMAL_TIMEOUT},
-                      connection_state = starting},
-             frame_header, 7};
-        false ->
-            throw({bad_version, ProtocolMajor, ProtocolMinor})
-    end.
-
-%% the 0-8 spec, confusingly, defines the version as 8-0
-adjust_version({8,0})   -> {0,8};
-adjust_version(Version) -> Version.
-check_version(ClientVersion, ServerVersion) ->
-    {ClientMajor, ClientMinor} = adjust_version(ClientVersion),
-    {ServerMajor, ServerMinor} = adjust_version(ServerVersion),
-    ClientMajor > ServerMajor
-        orelse
-          (ClientMajor == ServerMajor andalso
-           ClientMinor >= ServerMinor).
+%% Offer a protocol version to the client..  Connection.start only
+%% includes a major and minor version number, Luckily 0-9 and 0-9-1
+%% are similar enough that clients will be happy with either.
+protocol_negotiate(ProtocolMajor, ProtocolMinor, _ProtocolRevision,
+                   State = #v1{sock = Sock, connection = Connection}) ->
+    {ok, Product} = application:get_key(id),
+    {ok, Version} = application:get_key(vsn),
+    ok = send_on_channel0(
+           Sock,
+           #'connection.start'{
+             version_major = ProtocolMajor,
+             version_minor = ProtocolMinor,
+             server_properties =
+             [{list_to_binary(K), longstr, list_to_binary(V)} ||
+                 {K, V} <-
+                     [{"product",     Product},
+                      {"version",     Version},
+                      {"platform",    "Erlang/OTP"},
+                      {"copyright",   ?COPYRIGHT_MESSAGE},
+                      {"information", ?INFORMATION_MESSAGE}]],
+             mechanisms = <<"PLAIN AMQPLAIN">>,
+             locales = <<"en_US">> }),
+    {State#v1{connection = Connection#connection{
+                             timeout_sec = ?NORMAL_TIMEOUT},
+              connection_state = starting},
+     frame_header, 7}.
 
 %%--------------------------------------------------------------------------
 
