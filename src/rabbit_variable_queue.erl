@@ -576,26 +576,24 @@ reduce_memory_use(State =
         _ -> State1
     end.
 
-%% Bool  PersistentMsgsAlreadyOnDisk IsPersistent | WriteToDisk?
+%% Bool  IsPersistent PersistentMsgsAlreadyOnDisk | WriteToDisk?
 %% -----------------------------------------------+-------------
-%% false false                       false        | false      1
-%% false false                       true         | true       2
-%% false true                        false        | false      3
-%% false true                        true         | false      4
-%% true  false                       false        | true       5
-%% true  false                       true         | true       6
-%% true  true                        false        | true       7
-%% true  true                        true         | false      8
+%% false false        false                       | false      1
+%% false true         false                       | true       2
+%% false false        true                        | false      3
+%% false true         true                        | false      4
+%% true  false        false                       | true       5
+%% true  true         false                       | true       6
+%% true  false        true                        | true       7
+%% true  true         true                        | false      8
 
-%% (Bool and (not PersistentMsgsAlreadyOnDisk)) or        | 5 6
-%% (Bool and (not IsPersistent)) or                       | 5 7
-%% ((not PersistentMsgsAlreadyOnDisk) and IsPersistent)   | 2 6
+%% (Bool and not (IsPersistent and PersistentMsgsAlreadyOnDisk)) or  | 5 6 7
+%% (IsPersistent and (not PersistentMsgsAlreadyOnDisk))              | 2 6
 maybe_write_msg_to_disk(Bool, PersistentMsgsAlreadyOnDisk,
                         Msg = #basic_message { guid = MsgId,
                                                is_persistent = IsPersistent })
-  when (Bool andalso (not PersistentMsgsAlreadyOnDisk)) orelse
-       (Bool andalso (not IsPersistent)) orelse
-       ((not PersistentMsgsAlreadyOnDisk) andalso (IsPersistent)) ->
+  when (Bool andalso not (IsPersistent andalso PersistentMsgsAlreadyOnDisk))
+       orelse (IsPersistent andalso not PersistentMsgsAlreadyOnDisk) ->
     ok = rabbit_msg_store:write(MsgId, ensure_binary_properties(Msg)),
     true;
 maybe_write_msg_to_disk(_Bool, _PersistentMsgsAlreadyOnDisk, _Msg) ->
