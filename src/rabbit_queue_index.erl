@@ -31,9 +31,9 @@
 
 -module(rabbit_queue_index).
 
--export([init/1, terminate/1, write_published/4, write_delivered/2,
-         write_acks/2, flush_journal/1, read_segment_entries/2,
-         next_segment_boundary/1, segment_size/0,
+-export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
+         write_delivered/2, write_acks/2, flush_journal/1,
+         read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/0]).
 
 %%----------------------------------------------------------------------------
@@ -115,14 +115,14 @@
           seg_ack_counts
         }).
 
+-include("rabbit.hrl").
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(io_device() :: any()).
 -type(msg_id() :: binary()).
 -type(seq_id() :: integer()).
--type(file_path() :: any()).
 -type(int_or_undef() :: integer() | 'undefined').
 -type(io_dev_or_undef() :: io_device() | 'undefined').
 -type(qistate() :: #qistate { dir               :: file_path(),
@@ -134,8 +134,9 @@
                               seg_ack_counts    :: dict()
                             }).
 
--spec(init/1 :: (string()) -> {non_neg_integer(), qistate()}).
+-spec(init/1 :: (queue_name()) -> {non_neg_integer(), qistate()}).
 -spec(terminate/1 :: (qistate()) -> qistate()).
+-spec(terminate_and_erase/1 :: (qistate()) -> qistate()).
 -spec(write_published/4 :: (msg_id(), seq_id(), boolean(), qistate())
       -> qistate()).
 -spec(write_delivered/2 :: (seq_id(), qistate()) -> qistate()).
@@ -156,7 +157,8 @@
 %%----------------------------------------------------------------------------
 
 init(Name) ->
-    Dir = filename:join(queues_dir(), Name),
+    StrName = queue_name_to_dir_name(Name),
+    Dir = filename:join(queues_dir(), StrName),
     ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
     {AckCounts, TotalMsgCount} = scatter_journal(Dir, find_ack_counts(Dir)),
     {ok, JournalHdl} = file:open(filename:join(Dir, ?ACK_JOURNAL_FILENAME),
@@ -170,6 +172,8 @@ init(Name) ->
                                seg_ack_counts = AckCounts
                              }}.
 
+terminate(State = #qistate { journal_handle = undefined }) ->
+    State;
 terminate(State) ->
     case flush_journal(State) of
         {true, State1} ->
@@ -181,6 +185,11 @@ terminate(State) ->
             ok = file:close(JournalHdl),
             State2 #qistate { journal_handle = undefined }
     end.
+
+terminate_and_erase(State) ->
+    State1 = terminate(State),
+    ok = delete_queue_directory(State1 #qistate.dir),
+    State1.
 
 write_published(MsgId, SeqId, IsPersistent, State)
   when is_binary(MsgId) ->
@@ -291,21 +300,42 @@ find_lowest_seq_id_seg_and_next_seq_id(
     {LowSeqIdSeg, NextSeqId}.
 
 start_msg_store() ->
-    Queues = case file:list_dir(queues_dir()) of
-                 {ok, Entries} ->
-                     [ Entry || Entry <- Entries, filelib:is_dir(Entry) ];
-                 {error, enoent} ->
-                     []
-             end,
+    DurableQueues = rabbit_amqqueue:find_durable_queues(),
+    DurableQueueNames = 
+        sets:from_list([ queue_name_to_dir_name(Queue #amqqueue.name)
+                       || Queue <- DurableQueues ]),
+    Directories = case file:list_dir(queues_dir()) of
+                      {ok, Entries} ->
+                          [ Entry || Entry <- Entries, filelib:is_dir(Entry) ];
+                      {error, enoent} ->
+                          []
+                  end,
+    {Durable, Transient} =
+        lists:foldl(fun (Queue, {DurableAcc, TransientAcc}) ->
+                            case sets:is_element(Queue, DurableQueueNames) of
+                                true  -> {[Queue | DurableAcc], TransientAcc};
+                                false -> {DurableAcc, [Queue | TransientAcc]}
+                            end
+                    end, {[], []}, Directories),
     MsgStoreDir = filename:join(rabbit_mnesia:dir(), "msg_store"),
     {ok, _Pid} = rabbit_msg_store:start_link(MsgStoreDir,
                                              fun queue_index_walker/1,
-                                             Queues),
-    ok.
+                                             Durable),
+    lists:foreach(fun (DirName) ->
+                          Dir = filename:join(queues_dir(), DirName),
+                          ok = delete_queue_directory(Dir)
+                  end, Transient),
+    {ok, DurableQueues}.
 
 %%----------------------------------------------------------------------------
 %% Minor Helpers
 %%----------------------------------------------------------------------------
+
+queue_name_to_dir_name(Name = #resource { kind = queue }) ->
+    lists:map(fun ($/) -> $_;
+                  ($+) -> $-;
+                  (C)  -> C
+              end, ssl_base64:encode(term_to_binary(Name))).
 
 queues_dir() ->
     filename:join(rabbit_mnesia:dir(), "queues").
@@ -347,6 +377,12 @@ reconstruct_seq_id(SegNum, RelSeq) ->
 seg_num_to_path(Dir, SegNum) ->
     SegName = integer_to_list(SegNum),
     filename:join(Dir, SegName ++ ?SEGMENT_EXTENSION).    
+
+delete_queue_directory(Dir) ->
+    {ok, Entries} = file:list_dir(Dir),
+    lists:foreach(fun file:delete/1,
+                  [ filename:join(Dir, Entry) || Entry <- Entries ]),
+    ok = file:del_dir(Dir).
 
 %%----------------------------------------------------------------------------
 %% Msg Store Startup Delta Function

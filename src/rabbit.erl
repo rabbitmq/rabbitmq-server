@@ -149,15 +149,15 @@ start(normal, []) ->
 
                 ok = start_child(rabbit_router),
                 ok = start_child(rabbit_node_monitor),
-                ok = start_child(rabbit_guid),
-                %% TODO - this should probably use start_child somehow too
-                ok = rabbit_queue_index:start_msg_store()
+                ok = start_child(rabbit_guid)
         end},
        {"recovery",
         fun () ->
                 ok = maybe_insert_default_data(),
                 ok = rabbit_exchange:recover(),
-                {ok, _DurableQueues} = rabbit_amqqueue:recover()
+                %% TODO - this should probably use start_child somehow too
+                {ok, DurableQueues} = rabbit_queue_index:start_msg_store(),
+                {ok, _RealDurableQueues} = rabbit_amqqueue:recover(DurableQueues)
                 %% TODO - don't use disk_queue any more!
                 %% ok = rabbit_disk_queue:delete_non_durable_queues(
                 %%        [ Q #amqqueue.name || Q <- DurableQueues ])

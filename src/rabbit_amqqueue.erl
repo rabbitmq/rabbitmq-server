@@ -31,7 +31,8 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, recover/0, declare/4, delete/3, purge/1]).
+-export([start/0, recover/1, find_durable_queues/0, declare/4, delete/3,
+         purge/1]).
 -export([internal_declare/2, internal_delete/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
@@ -66,7 +67,8 @@
 -type(acktag() :: ('ack_not_on_disk' | {'ack_index_and_store', msg_id(), seq_id()})).
 
 -spec(start/0 :: () -> 'ok').
--spec(recover/0 :: () -> {'ok', [amqqueue()]}).
+-spec(recover/1 :: ([amqqueue()]) -> {'ok', [amqqueue()]}).
+-spec(find_durable_queues/0 :: () -> [amqqueue()]).
 -spec(declare/4 :: (queue_name(), boolean(), boolean(), amqp_table()) ->
              amqqueue()).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
@@ -123,13 +125,11 @@ start() ->
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
     ok.
 
-recover() ->
-    {ok, DurableQueues} = recover_durable_queues(),
-    {ok, DurableQueues}.
+recover(DurableQueues) ->
+    {ok, _RealDurableQueues} = recover_durable_queues(DurableQueues).
 
-recover_durable_queues() ->
-    Node = node(),
-    DurableQueues =
+recover_durable_queues(DurableQueues) ->
+    RealDurableQueues =
         lists:foldl(
           fun (RecoveredQ, Acc) ->
                   Q = start_queue_process(RecoveredQ),
@@ -151,15 +151,18 @@ recover_durable_queues() ->
                       false -> exit(Q#amqqueue.pid, shutdown),
                                Acc
                   end
-          end, [],
-          %% TODO: use dirty ops instead
-          rabbit_misc:execute_mnesia_transaction(
-            fun () ->
-                    qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
-                                          <- mnesia:table(rabbit_durable_queue),
-                                      node(Pid) == Node]))
-            end)),
-    {ok, DurableQueues}.
+          end, [], DurableQueues),
+    {ok, RealDurableQueues}.
+
+find_durable_queues() ->
+    Node = node(),
+    %% TODO: use dirty ops instead
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
+                                    <- mnesia:table(rabbit_durable_queue),
+                                node(Pid) == Node]))
+      end).
 
 declare(QueueName, Durable, AutoDelete, Args) ->
     Q = start_queue_process(#amqqueue{name = QueueName,

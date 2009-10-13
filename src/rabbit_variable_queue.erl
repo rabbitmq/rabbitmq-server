@@ -371,7 +371,7 @@ persistent_msg_ids(Pubs) ->
 
 delete1(NextSeqId, Count, GammaSeqId, IndexState)
   when GammaSeqId >= NextSeqId ->
-    {Count, IndexState};
+    {Count, rabbit_queue_index:terminate_and_erase(IndexState)};
 delete1(NextSeqId, Count, GammaSeqId, IndexState) ->
     Gamma1SeqId = GammaSeqId + rabbit_queue_index:segment_size(),
     case rabbit_queue_index:read_segment_entries(GammaSeqId, IndexState) of
