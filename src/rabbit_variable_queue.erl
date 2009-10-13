@@ -31,7 +31,7 @@
 
 -module(rabbit_variable_queue).
 
--export([init/1, publish/2, set_queue_ram_duration_target/2,
+-export([init/1, publish/2, publish_delivered/2, set_queue_ram_duration_target/2,
          remeasure_egress_rate/1, fetch/1, ack/2, len/1, is_empty/1,
          maybe_start_prefetcher/1, purge/1, delete/1, requeue/2,
          tx_publish/2, tx_rollback/2, tx_commit/3, do_tx_commit/3]).
@@ -142,6 +142,22 @@ init(QueueName) ->
 
 publish(Msg, State) ->
     publish(Msg, false, false, State).
+
+publish_delivered(Msg = #basic_message { guid = MsgId,
+                                         is_persistent = IsPersistent },
+                  State = #vqstate { len = 0, index_state = IndexState,
+                                     next_seq_id = SeqId }) ->
+    case maybe_write_msg_to_disk(false, false, Msg) of
+        true ->
+            {true, IndexState1} =
+                maybe_write_index_to_disk(false, IsPersistent, MsgId, SeqId,
+                                          true, IndexState),
+            {{ack_index_and_store, MsgId, SeqId},
+             State #vqstate { index_state = IndexState1,
+                              next_seq_id = SeqId + 1 }};
+        false ->
+            {ack_not_on_disk, State}
+    end.
 
 set_queue_ram_duration_target(
   DurationTarget, State = #vqstate { avg_egress_rate = EgressRate,
