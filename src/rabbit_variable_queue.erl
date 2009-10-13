@@ -34,7 +34,7 @@
 -export([init/1, publish/3, set_queue_ram_duration_target/2,
          remeasure_egress_rate/1, fetch/1, ack/2, len/1, is_empty/1,
          maybe_start_prefetcher/1, purge/1, delete/1, requeue/2,
-         tx_publish/2, tx_rollback/2]).
+         tx_publish/2, tx_rollback/2, tx_commit/3, do_tx_commit/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -145,9 +145,9 @@ publish(Msg, IsDelivered, State) ->
 
 publish(Msg, IsDelivered, PersistentMsgsAlreadyOnDisk,
         State = #vqstate { next_seq_id = SeqId, len = Len }) ->
-    publish(test_keep_msg_in_ram(SeqId, State), Msg, SeqId, IsDelivered,
-            PersistentMsgsAlreadyOnDisk,
-            State #vqstate { next_seq_id = SeqId + 1, len = Len + 1 }).
+    {SeqId, publish(test_keep_msg_in_ram(SeqId, State), Msg, SeqId, IsDelivered,
+                    PersistentMsgsAlreadyOnDisk,
+                    State #vqstate { next_seq_id = SeqId + 1, len = Len + 1 })}.
 
 set_queue_ram_duration_target(
   DurationTarget, State = #vqstate { avg_egress_rate = EgressRate,
@@ -312,21 +312,28 @@ tx_rollback(Pubs, State) ->
     ok = rabbit_msg_store:remove(persistent_msg_ids(Pubs)),
     State.
 
-%% tx_commit(Pubs, AckTags, State) ->
-%%     case persistent_msg_ids(Pubs) of
-%%         [] ->
-%%             do_tx_commit(Pubs, AckTags, State);
-%%         PersistentMsgIds ->
-%%             ok = rabbit_msg_store:sync(
-%%                    PersistentMsgIds,
-%%                    fun () -> ok = rabbit_amqqueue:tx_commit_callback(
-%%                                     self(), Pubs, AckTags)
-%%                    end),
-%%             State
-%%     end.
+tx_commit(Pubs, AckTags, State) ->
+    case persistent_msg_ids(Pubs) of
+        [] ->
+            do_tx_commit(Pubs, AckTags, State);
+        PersistentMsgIds ->
+            ok = rabbit_msg_store:sync(
+                   PersistentMsgIds,
+                   fun () -> ok = rabbit_amqqueue:tx_commit_callback(
+                                    self(), Pubs, AckTags)
+                   end),
+            State
+    end.
 
-%% do_tx_commit(Pubs, AckTags, State) ->
-%%     lists:foldl(fun (Msg, StateN) -> publish(Msg, false, StateN) end, State, Pubs).
+do_tx_commit(Pubs, AckTags, State) ->
+    {_PubSeqIds, State1} =
+        lists:foldl(
+          fun (Msg, {SeqIdsAcc, StateN}) ->
+                  {SeqId, StateN1} = publish(Msg, false, true, StateN),
+                  {[SeqId | SeqIdsAcc], StateN1}
+          end, {[], State}, Pubs),
+    %% TODO need to do something here about syncing the queue index, PubSeqIds
+    ack(AckTags, State1).
 
 %%----------------------------------------------------------------------------
 
@@ -695,9 +702,9 @@ maybe_push_alphas_to_betas(Generator, Consumer, Q, State =
           #alpha { msg = Msg = #basic_message { guid = MsgId,
                                                 is_persistent = IsPersistent },
                    seq_id = SeqId, is_delivered = IsDelivered,
-                   msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk }},
+                   index_on_disk = IndexOnDisk }},
          Qa} ->
-            true = maybe_write_msg_to_disk(true, MsgOnDisk, Msg),
+            true = maybe_write_msg_to_disk(true, true, Msg),
             Beta = #beta { msg_id = MsgId, seq_id = SeqId,
                            is_persistent = IsPersistent,
                            is_delivered = IsDelivered,

@@ -39,7 +39,7 @@
 -export([list/1, info/1, info/2, info_all/1, info_all/2]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
--export([notify_sent/2, unblock/2]).
+-export([notify_sent/2, unblock/2, tx_commit_callback/3]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 -export([set_storage_mode/2]).
@@ -63,6 +63,8 @@
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
+-type(seq_id() :: non_neg_integer()).
+-type(acktag() :: ('ack_not_on_disk' | {'ack_index_and_store', msg_id(), seq_id()})).
 
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> {'ok', [amqqueue()]}).
@@ -104,6 +106,7 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
+-spec(tx_commit_callback/3 :: (pid(), [message()], [acktag()]) -> 'ok').
 -spec(set_storage_mode/2 :: (pid(), ('oppressed' | 'liberated')) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
@@ -319,6 +322,9 @@ notify_sent(QPid, ChPid) ->
 
 unblock(QPid, ChPid) ->
     gen_server2:pcast(QPid, 8, {unblock, ChPid}).
+
+tx_commit_callback(QPid, Pubs, AckTags) ->
+    gen_server2:pcast(QPid, 8, {tx_commit_callback, Pubs, AckTags}).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
