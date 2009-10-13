@@ -31,9 +31,10 @@
 
 -module(rabbit_queue_index).
 
--export([init/1, write_published/4, write_delivered/2, write_acks/2,
-         flush_journal/1, read_segment_entries/2, next_segment_boundary/1,
-         segment_size/0, find_lowest_seq_id_seg_and_next_seq_id/1]).
+-export([init/1, terminate/1, write_published/4, write_delivered/2,
+         write_acks/2, flush_journal/1, read_segment_entries/2,
+         next_segment_boundary/1, segment_size/0,
+         find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/0]).
 
 %%----------------------------------------------------------------------------
 %% The queue disk index
@@ -134,6 +135,7 @@
                             }).
 
 -spec(init/1 :: (string()) -> {non_neg_integer(), qistate()}).
+-spec(terminate/1 :: (qistate()) -> qistate()).
 -spec(write_published/4 :: (msg_id(), seq_id(), boolean(), qistate())
       -> qistate()).
 -spec(write_delivered/2 :: (seq_id(), qistate()) -> qistate()).
@@ -167,6 +169,18 @@ init(Name) ->
                                journal_handle = JournalHdl,
                                seg_ack_counts = AckCounts
                              }}.
+
+terminate(State) ->
+    case flush_journal(State) of
+        {true, State1} ->
+            terminate(State1);
+        {false, State1 = #qistate { cur_seg_num = SegNum }} ->
+            State2 = #qistate { journal_handle = JournalHdl } =
+                close_file_handle_for_seg(SegNum, State1),
+            ok = file:sync(JournalHdl),
+            ok = file:close(JournalHdl),
+            State2 #qistate { journal_handle = undefined }
+    end.
 
 write_published(MsgId, SeqId, IsPersistent, State)
   when is_binary(MsgId) ->
@@ -266,7 +280,7 @@ find_lowest_seq_id_seg_and_next_seq_id(
             _  -> {SegNum1, _SegPath1} = lists:min(SegNumsPaths),
                   reconstruct_seq_id(SegNum1, 0)
         end,
-    HighestSeqId =
+    NextSeqId =
         case SegNumsPaths of
             [] -> 0;
             _  -> {SegNum2, SegPath2} = lists:max(SegNumsPaths),
@@ -274,7 +288,19 @@ find_lowest_seq_id_seg_and_next_seq_id(
                       load_segment(SegNum2, SegPath2, JAckDict),
                   1 + reconstruct_seq_id(SegNum2, HighRelSeq)
         end,
-    {LowSeqIdSeg, HighestSeqId}.
+    {LowSeqIdSeg, NextSeqId}.
+
+start_msg_store() ->
+    Queues = case file:list_dir(queues_dir()) of
+                 {ok, Entries} ->
+                     [ Entry || Entry <- Entries, filelib:is_dir(Entry) ];
+                 {error, enoent} ->
+                     []
+             end,
+    MsgStoreDir = filename:join(rabbit_mnesia:dir(), "msg_store"),
+    {ok, _Pid} = rabbit_msg_store:start_link(MsgStoreDir,
+                                             fun queue_index_walker/1,
+                                             Queues).
 
 %%----------------------------------------------------------------------------
 %% Minor Helpers
@@ -321,6 +347,32 @@ seg_num_to_path(Dir, SegNum) ->
     SegName = integer_to_list(SegNum),
     filename:join(Dir, SegName ++ ?SEGMENT_EXTENSION).    
 
+
+%%----------------------------------------------------------------------------
+%% Msg Store Startup Delta Function
+%%----------------------------------------------------------------------------
+
+queue_index_walker([]) ->
+    finished;
+queue_index_walker([QueueName|QueueNames]) ->
+    {TotalMsgCount, State} = init(QueueName),
+    {LowSeqIdSeg, _NextSeqId} = find_lowest_seq_id_seg_and_next_seq_id(State),
+    queue_index_walker({TotalMsgCount, LowSeqIdSeg, State, QueueNames});
+
+queue_index_walker({0, _LowSeqIdSeg, State, QueueNames}) ->
+    terminate(State),
+    queue_index_walker(QueueNames);
+queue_index_walker({N, LowSeqIdSeg, State, QueueNames}) ->
+    {Entries, State1} = read_segment_entries(LowSeqIdSeg, State),
+    LowSeqIdSeg1 = LowSeqIdSeg + segment_size(),
+    queue_index_walker({Entries, N, LowSeqIdSeg1, State1, QueueNames});
+
+queue_index_walker({[], N, LowSeqIdSeg, State, QueueNames}) ->
+    queue_index_walker({N, LowSeqIdSeg, State, QueueNames});
+queue_index_walker({[{MsgId, _SeqId, IsPersistent, _IsDelivered} | Entries],
+                    N, LowSeqIdSeg, State, QueueNames}) ->
+    {MsgId, bool_to_int(IsPersistent),
+     {Entries, N - 1, LowSeqIdSeg, State, QueueNames}}.
 
 %%----------------------------------------------------------------------------
 %% Startup Functions
