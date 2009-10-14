@@ -472,11 +472,11 @@ deliver_and_ack_transient(SDict, Acks) ->
     %% because an Ack entry and a Delivered entry are identical, we
     %% simply add the RelSeq twice to the accumulator for transient
     %% msgs that have not yet been delivered.
-    dict:fold(fun (_RelSeq, {_MsgId, _IsDelivered, true}, Acc) ->
+    dict:fold(fun (_RelSeq, {_MsgId, _IsDelivered, true }, Acc) ->
                       Acc;
-                  (RelSeq, {_MsgId, true, false}, Acc) ->
+                  (RelSeq,  {_MsgId, true,         false}, Acc) ->
                       [RelSeq | Acc];
-                  (RelSeq, {_MsgId, false, false}, Acc) ->
+                  (RelSeq,  {_MsgId, false,        false}, Acc) ->
                       [RelSeq, RelSeq | Acc]
               end, Acks, SDict).
 
@@ -505,18 +505,18 @@ load_segment(SegNum, SegPath, JAckDict) ->
 load_segment_entries(SegNum, Hdl, {SDict, AckCount, HighRelSeq}) ->
     case file:read(Hdl, 1) of
         {ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-               MSB/bitstring>>} ->
+               MSB>>} ->
             {ok, LSB} = file:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES - 1),
-            <<RelSeq:?REL_SEQ_BITS>> = <<MSB/bitstring, LSB/binary>>,
+            <<RelSeq:?REL_SEQ_BITS>> = <<MSB, LSB/binary>>,
             {SDict1, AckCount1} = deliver_or_ack_msg(SDict, AckCount, RelSeq),
             load_segment_entries(SegNum, Hdl, {SDict1, AckCount1, HighRelSeq});
         {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
-               IsPersistentNum:1, MSB/bitstring>>} ->
+               IsPersistentNum:1, MSB>>} ->
             %% because we specify /binary, and binaries are complete
             %% bytes, the size spec is in bytes, not bits.
             {ok, <<LSB:1/binary, MsgId:?MSG_ID_BYTES/binary>>} =
                 file:read(Hdl, ?PUBLISH_RECORD_LENGTH_BYTES - 1),
-            <<RelSeq:?REL_SEQ_BITS>> = <<MSB/bitstring, LSB/binary>>,
+            <<RelSeq:?REL_SEQ_BITS>> = <<MSB, LSB/binary>>,
             HighRelSeq1 = lists:max([RelSeq, HighRelSeq]),
             load_segment_entries(
               SegNum, Hdl, {dict:store(RelSeq, {MsgId, false,
