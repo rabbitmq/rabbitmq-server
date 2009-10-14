@@ -44,7 +44,7 @@ clean: common_clean
 %.app: %.app.in
 	sed -e 's:%%VSN%%:$(VERSION):g' < $< > $@
 
-##############################################################################
+###############################################################################
 ##  Testing
 ###############################################################################
 
@@ -55,7 +55,7 @@ test_common_package: common_package package prepare_tests
 	OK=true && \
 	TMPFILE=$(MKTEMP) && \
 	    { $(LIBS_PATH) erl -noshell -pa $(TEST_DIR) \
-	    -eval 'network_client_SUITE:test(), halt().' 2>&1 | \
+	    -eval 'error_logger:tty(false), network_client_SUITE:test(), halt().' 2>&1 | \
 		tee $$TMPFILE || OK=false; } && \
 	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
