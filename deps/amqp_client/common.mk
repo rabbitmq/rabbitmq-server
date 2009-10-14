@@ -138,7 +138,7 @@ compile_tests: $(TEST_DIR) $(COMPILE_DEPS) $(EBIN_DIR)/$(PACKAGE).app
 	$(MAKE) -C $(TEST_DIR)
 
 run: compile $(EBIN_DIR)/$(PACKAGE).app
-	erl -pa $(LOAD_PATH)
+	$(LIBS_PATH) erl -pa $(LOAD_PATH)
 
 run_in_broker: compile $(BROKER_DIR) $(EBIN_DIR)/$(PACKAGE).app
 	$(MAKE) RABBITMQ_SERVER_START_ARGS='$(PA_LOAD_PATH)' -C $(BROKER_DIR) run

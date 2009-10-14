@@ -340,11 +340,10 @@ handle_regular_method(
 %% Handle 'channel.flow'
 %% If flow_control flag is defined, it informs the flow control handler to
 %% suspend submitting any content bearing methods
-handle_regular_method(
-        #'channel.flow'{active = Active} = Flow, none,
-        #channel_state{flow_handler_pid = FlowHandler,
-                       driver = Driver,
-                       writer_pid = Writer} = State) ->
+handle_regular_method(#'channel.flow'{active = Active} = Flow, none,
+                      #channel_state{flow_handler_pid = FlowHandler,
+                                     driver = Driver,
+                                     writer_pid = Writer} = State) ->
     case FlowHandler of
         undefined -> ok;
         _         -> FlowHandler ! Flow
@@ -352,15 +351,13 @@ handle_regular_method(
     Driver:do(Writer, #'channel.flow_ok'{active = Active}, none),
     {noreply, State#channel_state{flow_control = not(Active)}};
 
-handle_regular_method(
-        #'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, AmqpMsg,
-        State) ->
+handle_regular_method(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver,
+                      AmqpMsg, State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
     Consumer ! {Deliver, AmqpMsg},
     {noreply, State};
 
-handle_regular_method(
-        #'basic.return'{} = BasicReturn, AmqpMsg, State) ->
+handle_regular_method(#'basic.return'{} = BasicReturn, AmqpMsg, State) ->
     {ReturnHandler, NewState} = return_handler(State),
     ReturnHandler ! {BasicReturn, AmqpMsg},
     {noreply, NewState};
