@@ -158,9 +158,11 @@ start(normal, []) ->
                 %% TODO - this should probably use start_child somehow too
                 {ok, DurableQueues} = rabbit_queue_index:start_msg_store(),
                 {ok, _RealDurableQueues} = rabbit_amqqueue:recover(DurableQueues)
-                %% TODO - don't use disk_queue any more!
-                %% ok = rabbit_disk_queue:delete_non_durable_queues(
-                %%        [ Q #amqqueue.name || Q <- DurableQueues ])
+                %% TODO - RealDurableQueues is a subset of
+                %% DurableQueues. It may have queues removed which
+                %% have since been recreated on another node in our
+                %% cluster. We need to remove DurableQueues --
+                %% RealDurableQueues somehow. See also bug 20916
         end},
        {"builtin applications",
         fun () ->
