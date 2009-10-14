@@ -223,6 +223,8 @@ closing_to_reason(#closing{reason = Reason,
 
 %% Changes connection's state to closing.
 %%
+%% ChannelCloseType can be flush or abrupt
+%%
 %% The closing reason (Closing#closing.reason) can be one of the following
 %%     app_initiated_close - app has invoked the close/{1,3} command. In this
 %%         case the close field is the method to be sent to the server after all
@@ -241,18 +243,50 @@ closing_to_reason(#closing{reason = Reason,
 %% The precedence of the closing MainReason's is as follows:
 %%     app_initiated_close, internal_error, server_initiated_close
 %% (i.e.: a given reason can override the currently set one if it is later
-%% mentioned in the above list)
-%% Also, internal_error and server_initiated_close can also override themselves
-%% (i.e.: update the close method and restart the closing process)
-%%
-%% ChannelCloseType can be flush or abrupt
-set_closing_state(ChannelCloseType, Closing, State) ->
+%% mentioned in the above list). We can rely on erlang's comparison of atoms
+%% for this.
+set_closing_state(ChannelCloseType, Closing, 
+                  #connection_state{closing = false} = State) ->
     broadcast_to_channels(
         {connection_closing, ChannelCloseType, closing_to_reason(Closing)},
          State),
     check_trigger_all_channels_closed_event(
-        State#connection_state{closing = Closing}).
-
+        State#connection_state{closing = Closing});
+%% Already closing, override situation
+set_closing_state(ChannelCloseType, NewClosing,
+                  #connection_state{closing = CurClosing} = State) ->
+    %% Do not override reason in channels (because it might cause channels to
+    %% to exit with different reasons) but do cause them to close abruptly
+    %% if the new closing type requires it
+    case ChannelCloseType of
+        abrupt ->
+            broadcast_to_channels({connection_closing, ChannelCloseType,
+                                   closing_to_reason(CurClosing)},
+                                  State);
+        _ -> ok
+   end,
+   #closing{reason = NewReason, close = NewClose} = NewClosing,
+   #closing{reason = CurReason} = CurClosing,
+   ResClosing =
+       if
+           %% Override (rely on erlang's comparison of atoms)
+           NewReason >= CurReason ->
+               %% Note that when overriding, we keep the current phase
+               CurClosing#closing{reason = NewReason, close = NewClose};
+           %% Do not override
+           true ->
+               CurClosing
+       end,
+    NewState = State#connection_state{closing = ResClosing},
+    %% Now check if it's the case that the server has sent a connection.close
+    %% while we were in the closing state (for whatever reason). We need to
+    %% send connection.close_ok (it might be even be the case that we are
+    %% sending it again) and wait for the socket to close.
+    case NewReason of
+        server_initiated_close -> all_channels_closed_event(NewState);
+        _                      -> NewState
+    end.
+   
 %% The all_channels_closed_event is called when all channels have been closed
 %% after the connection broadcasts a connection_closing message to all channels
 check_trigger_all_channels_closed_event(
@@ -260,17 +294,18 @@ check_trigger_all_channels_closed_event(
     State;
 check_trigger_all_channels_closed_event(
         #connection_state{channels = Channels,
-                          driver = Driver,
                           closing = Closing} = State) ->
-    #closing{reason = Reason, close = Close, phase = ClosingPhase} = Closing,
-    ClosingPhase = terminate_channels, % assertion
+    #closing{phase = terminate_channels} = Closing, % assertion
     IsChannelsEmpty = (dict:size(Channels) == 0),
-    if IsChannelsEmpty ->
-           NewPhase = Driver:all_channels_closed_event(Reason, Close, State),
-           State#connection_state{closing = Closing#closing{phase = NewPhase}};
-       true ->
-           State
+    if IsChannelsEmpty -> all_channels_closed_event(State);
+       true            -> State
     end.
+
+all_channels_closed_event(#connection_state{driver = Driver,
+                                            closing = Closing} = State) ->
+    #closing{reason = Reason, close = Close} = Closing,
+    NewPhase = Driver:all_channels_closed_event(Reason, Close, State),
+    State#connection_state{closing = Closing#closing{phase = NewPhase}}.
 
 internal_error_closing() ->
     #closing{reason = internal_error,
@@ -376,14 +411,19 @@ handle_cast({method, #'connection.close'{} = Close, none}, State) ->
                                 State)};
 
 %% Handle close_ok from broker: reply to app and stop
-handle_cast(
-        {method, #'connection.close_ok'{}, none},
-        State = #connection_state{closing = #closing{from = From} = Closing}) ->
+handle_cast({method, #'connection.close_ok'{}, none},
+            State = #connection_state{closing = Closing =
+                                          #closing{from = From,
+                                                   close = Close}}) ->
     case From of
         none -> ok;
         _    -> gen_server:reply(From, ok)
     end,
-    {stop, closing_to_reason(Closing), State}.
+    if Close#'connection.close'.reply_code =:= 200 ->
+           {stop, normal, State};
+       true ->
+           {stop, closing_to_reason(Closing), State}
+    end.
 
 %% Handle forced close from the broker
 %% Direct case: Just stop connection here

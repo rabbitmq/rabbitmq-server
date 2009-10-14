@@ -275,6 +275,11 @@ check_block(_Method, _AmqpMsg, #channel_state{flow_control = true}) ->
 check_block(_Method, _AmqpMsg, #channel_state{}) ->
     ok.
 
+shutdown_with_reason({_, 200, _}, State) ->
+    {stop, normal, State};
+shutdown_with_reason(Reason, State) ->
+    {stop, Reason, State}.
+
 %%---------------------------------------------------------------------------
 %% Handling of methods from the server
 %%---------------------------------------------------------------------------
@@ -478,7 +483,7 @@ handle_info(shutdown, State) ->
 
 %% @private
 handle_info({shutdown, Reason}, State) ->
-    {stop, Reason, State};
+    shutdown_with_reason(Reason, State);
 
 %% Handles the situation when the connection closes without closing the channel
 %% beforehand. The channel must block all further RPCs,
@@ -491,7 +496,7 @@ handle_info({connection_closing, CloseType, Reason},
         {flush, false, false} ->
             {noreply, State#channel_state{closing = {connection, Reason}}};
         _ ->
-            {stop, Reason, State}
+            shutdown_with_reason(Reason, State)
     end;
 
 %% This is for a channel exception that is sent by the direct
