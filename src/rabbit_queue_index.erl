@@ -80,7 +80,7 @@
 -define(SEGMENT_EXTENSION, ".idx").
 
 -define(REL_SEQ_BITS, 14).
--define(REL_SEQ_BITS_BYTE_ALIGNED, (?REL_SEQ_BITS + (?REL_SEQ_BITS rem 8))).
+-define(REL_SEQ_BITS_BYTE_ALIGNED, (?REL_SEQ_BITS + 8 - (?REL_SEQ_BITS rem 8))).
 -define(SEGMENT_ENTRIES_COUNT, 16384). %% trunc(math:pow(2,?REL_SEQ_BITS))).
 
 %% seq only is binary 00 followed by 14 bits of rel seq id
@@ -336,10 +336,10 @@ start_msg_store() ->
 %%----------------------------------------------------------------------------
 
 queue_name_to_dir_name(Name = #resource { kind = queue }) ->
-    lists:map(fun ($/) -> $_;
-                  ($+) -> $-;
-                  (C)  -> C
-              end, ssl_base64:encode(term_to_binary(Name))).
+    Bin = term_to_binary(Name),
+    Size = 8*size(Bin),
+    <<Num:Size>> = Bin,
+    hd(io_lib:format("~.36B", [Num])).
 
 queues_dir() ->
     filename:join(rabbit_mnesia:dir(), "queues").
