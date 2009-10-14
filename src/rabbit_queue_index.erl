@@ -339,7 +339,7 @@ queue_name_to_dir_name(Name = #resource { kind = queue }) ->
     Bin = term_to_binary(Name),
     Size = 8*size(Bin),
     <<Num:Size>> = Bin,
-    hd(io_lib:format("~.36B", [Num])).
+    lists:flatten(io_lib:format("~.36B", [Num])).
 
 queues_dir() ->
     filename:join(rabbit_mnesia:dir(), "queues").
