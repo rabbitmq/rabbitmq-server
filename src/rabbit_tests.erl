@@ -50,7 +50,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
-    passed = test_disk_queue(),
+    %% passed = test_disk_queue(),
     passed = test_priority_queue(),
     passed = test_unfold(),
     passed = test_parsing(),

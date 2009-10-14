@@ -274,7 +274,7 @@ ack(AckTags, State = #vqstate { index_state = IndexState }) ->
         lists:foldl(
           fun (ack_not_on_disk, Acc) -> Acc;
               ({ack_index_and_store, MsgId, SeqId}, {MsgIds, SeqIds}) ->
-                  {[MsgId | MsgIds], [SeqId, SeqIds]}
+                  {[MsgId | MsgIds], [SeqId | SeqIds]}
           end, {[], []}, AckTags),
     IndexState1 = case SeqIds of
                       [] -> IndexState;
@@ -294,16 +294,15 @@ purge(State) ->
 %% the only difference between purge and delete is that delete also
 %% needs to delete everything that's been delivered and not ack'd.
 delete(State) ->
-    {PurgeCount, State1 = #vqstate { index_state = IndexState }} = purge(State),
+    {_PurgeCount, State1 = #vqstate { index_state = IndexState }} = purge(State),
     case rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(IndexState)
         of
         {N, N} ->
-            {PurgeCount, State1};
+            State1;
         {GammaSeqId, NextSeqId} ->
-            {DeleteCount, IndexState1} =
+            {_DeleteCount, IndexState1} =
                 delete1(NextSeqId, 0, GammaSeqId, IndexState),
-            {PurgeCount + DeleteCount,
-             State1 #vqstate { index_state = IndexState1 }}
+            State1 #vqstate { index_state = IndexState1 }
     end.
 
 %% [{Msg, AckTag}]
@@ -349,10 +348,11 @@ tx_commit(Pubs, AckTags, State) ->
         [] ->
             do_tx_commit(Pubs, AckTags, State);
         PersistentMsgIds ->
+            Self = self(),
             ok = rabbit_msg_store:sync(
                    PersistentMsgIds,
                    fun () -> ok = rabbit_amqqueue:tx_commit_callback(
-                                    self(), Pubs, AckTags)
+                                    Self, Pubs, AckTags)
                    end),
             State
     end.

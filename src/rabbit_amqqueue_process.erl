@@ -481,10 +481,10 @@ commit_transaction(Txn, State) ->
         case lookup_ch(ChPid) of
             not_found -> [];
             C = #cr { unacked_messages = UAM } ->
-                {MsgWithAcks, Remaining} =
+                {MsgsWithAcks, Remaining} =
                     collect_messages(PendingAcksOrdered, UAM),
                 store_ch_record(C#cr{unacked_messages = Remaining}),
-                MsgWithAcks
+                [AckTag || {_Msg, AckTag} <- MsgsWithAcks]
         end,
     VQS = rabbit_variable_queue:tx_commit(
             PendingMessagesOrdered, Acks, State #q.variable_queue_state),
@@ -593,13 +593,13 @@ handle_call({basic_get, ChPid, NoAck}, _From,
         {empty, VQS1} -> reply(empty, State #q { variable_queue_state = VQS1 });
         {{Msg, IsDelivered, AckTag, Remaining}, VQS1} ->
             AckRequired = not(NoAck),
-            {ok, VQS2} =
+            VQS2 =
                 case AckRequired of
                     true ->
                         C = #cr{unacked_messages = UAM} = ch_record(ChPid),
                         NewUAM = dict:store(NextId, {Msg, AckTag}, UAM),
                         store_ch_record(C#cr{unacked_messages = NewUAM}),
-                        {ok, VQS1};
+                        VQS1;
                     false ->
                         rabbit_variable_queue:ack([AckTag], VQS1)
                 end,

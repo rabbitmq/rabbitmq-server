@@ -516,6 +516,7 @@ load_segment(SegNum, SegPath, JAckDict) ->
     case file:open(SegPath, [raw, binary, read_ahead, read]) of
         {error, enoent} -> {dict:new(), 0, 0};
         {ok, Hdl} ->
+            rabbit_log:info("SegNum: ~p~n", [SegNum]),
             {SDict, AckCount, HighRelSeq} =
                 load_segment_entries(Hdl, dict:new(), 0, 0),
             ok = file:close(Hdl),
@@ -536,6 +537,7 @@ load_segment_entries(Hdl, SDict, AckCount, HighRelSeq) ->
                MSB:(8-?REL_SEQ_ONLY_PREFIX_BITS)>>} ->
             {ok, LSB} = file:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES - 1),
             <<RelSeq:?REL_SEQ_BITS_BYTE_ALIGNED>> = <<MSB, LSB/binary>>,
+            rabbit_log:info("D/A: ~p: ~p~n", [self(), RelSeq]),
             {SDict1, AckCount1} = deliver_or_ack_msg(SDict, AckCount, RelSeq),
             load_segment_entries(Hdl, SDict1, AckCount1, HighRelSeq);
         {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
@@ -545,6 +547,7 @@ load_segment_entries(Hdl, SDict, AckCount, HighRelSeq) ->
             {ok, <<LSB:1/binary, MsgId:?MSG_ID_BYTES/binary>>} =
                 file:read(Hdl, ?PUBLISH_RECORD_LENGTH_BYTES - 1),
             <<RelSeq:?REL_SEQ_BITS_BYTE_ALIGNED>> = <<MSB, LSB/binary>>,
+            rabbit_log:info("Pub: ~p: ~p~n", [self(), RelSeq]),
             HighRelSeq1 = lists:max([RelSeq, HighRelSeq]),
             load_segment_entries(
               Hdl, dict:store(RelSeq, {MsgId, false,
