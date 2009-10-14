@@ -456,7 +456,7 @@ find_ack_counts_and_deliver_transient_msgs(Dir) ->
 scatter_journal(Dir, TotalMsgCount, AckCounts, TransientADict) ->
     JournalPath = filename:join(Dir, ?ACK_JOURNAL_FILENAME),
     case file:open(JournalPath, [read, read_ahead, raw, binary]) of
-        {error, enoent} -> AckCounts;
+        {error, enoent} -> {TotalMsgCount, AckCounts};
         {ok, Hdl} ->
             %% ADict may well contain duplicates. However, this is ok,
             %% due to the use of sets in replay_journal_acks_to_segment

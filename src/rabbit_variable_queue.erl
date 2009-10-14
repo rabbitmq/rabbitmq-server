@@ -167,6 +167,7 @@ set_queue_ram_duration_target(
     State1 = State #vqstate { target_ram_msg_count = TargetRamMsgCount1 },
     if TargetRamMsgCount == TargetRamMsgCount1 ->
             State1;
+       TargetRamMsgCount == undefined orelse
        TargetRamMsgCount < TargetRamMsgCount1 ->
             maybe_start_prefetcher(State1);
        true ->
@@ -252,7 +253,10 @@ maybe_start_prefetcher(State = #vqstate {
                          q1 = Q1, q3 = Q3, prefetcher = undefined
                         }) ->
     %% prefetched content takes priority over q1
-    AvailableSpace = (TargetRamMsgCount - RamMsgCount) + queue:len(Q1),
+    AvailableSpace = case TargetRamMsgCount of
+                         undefined -> queue:len(Q3);
+                         _ -> (TargetRamMsgCount - RamMsgCount) + queue:len(Q1)
+                     end,
     PrefetchCount = lists:min([queue:len(Q3), AvailableSpace]),
     if PrefetchCount =< 0 -> State;
        true ->
@@ -602,7 +606,7 @@ drain_prefetcher(DrainOrStop,
 
 reduce_memory_use(State = #vqstate { ram_msg_count = RamMsgCount,
                                      target_ram_msg_count = TargetRamMsgCount })
-  when TargetRamMsgCount >= RamMsgCount ->
+  when TargetRamMsgCount == undefined orelse TargetRamMsgCount >= RamMsgCount ->
     State;
 reduce_memory_use(State =
                   #vqstate { target_ram_msg_count = TargetRamMsgCount }) ->
@@ -726,7 +730,7 @@ maybe_push_q4_to_betas(State = #vqstate { q4 = Q4 }) ->
 maybe_push_alphas_to_betas(_Generator, _Consumer, _Q, State =
                            #vqstate { ram_msg_count = RamMsgCount,
                                       target_ram_msg_count = TargetRamMsgCount })
-  when TargetRamMsgCount >= RamMsgCount ->
+  when TargetRamMsgCount == undefined orelse TargetRamMsgCount >= RamMsgCount ->
     State;
 maybe_push_alphas_to_betas(Generator, Consumer, Q, State =
                            #vqstate { ram_msg_count = RamMsgCount }) ->
