@@ -308,9 +308,12 @@ start_msg_store() ->
     DurableQueueNames = 
         sets:from_list([ queue_name_to_dir_name(Queue #amqqueue.name)
                        || Queue <- DurableQueues ]),
-    Directories = case file:list_dir(queues_dir()) of
+    QueuesDir = queues_dir(),
+    Directories = case file:list_dir(QueuesDir) of
                       {ok, Entries} ->
-                          [ Entry || Entry <- Entries, filelib:is_dir(Entry) ];
+                          [ Entry || Entry <- Entries,
+                                     filelib:is_dir(
+                                       filename:join(QueuesDir, Entry)) ];
                       {error, enoent} ->
                           []
                   end,
