@@ -289,10 +289,10 @@ ack(AckTags, State = #vqstate { index_state = IndexState }) ->
 purge(State = #vqstate { prefetcher = undefined, q4 = Q4,
                          index_state = IndexState, len = Len }) ->
     {Q4Count, IndexState1} = remove_queue_entries(Q4, IndexState),
-    {TotalCount, State1} =
+    {Len, State1} =
         purge1(Q4Count, State #vqstate { index_state = IndexState1,
                                          q4 = queue:new() }),
-    {TotalCount, State1 #vqstate { len = 0 }};
+    {Len, State1 #vqstate { len = 0 }};
 purge(State) ->
     purge(drain_prefetcher(stop, State)).
 
