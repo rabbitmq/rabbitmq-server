@@ -305,9 +305,9 @@ find_lowest_seq_id_seg_and_next_seq_id(
 
 start_msg_store() ->
     DurableQueues = rabbit_amqqueue:find_durable_queues(),
-    DurableQueueNames = 
-        sets:from_list([ queue_name_to_dir_name(Queue #amqqueue.name)
-                       || Queue <- DurableQueues ]),
+    DurableDict = 
+        dict:from_list([ {queue_name_to_dir_name(Queue #amqqueue.name),
+                          Queue #amqqueue.name} || Queue <- DurableQueues ]),
     QueuesDir = queues_dir(),
     Directories = case file:list_dir(QueuesDir) of
                       {ok, Entries} ->
@@ -317,21 +317,26 @@ start_msg_store() ->
                       {error, enoent} ->
                           []
                   end,
-    {Durable, Transient} =
-        lists:foldl(fun (Queue, {DurableAcc, TransientAcc}) ->
-                            case sets:is_element(Queue, DurableQueueNames) of
-                                true  -> {[Queue | DurableAcc], TransientAcc};
-                                false -> {DurableAcc, [Queue | TransientAcc]}
-                            end
-                    end, {[], []}, Directories),
+    DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
+    {DurableQueueNames, TransientDirs} =
+        lists:foldl(
+          fun (QueueDir, {DurableAcc, TransientAcc}) ->
+                  case sets:is_element(QueueDir, DurableDirectories) of
+                      true ->
+                          {[dict:fetch(QueueDir, DurableDict) | DurableAcc],
+                           TransientAcc};
+                      false ->
+                          {DurableAcc, [QueueDir | TransientAcc]}
+                  end
+          end, {[], []}, Directories),
     MsgStoreDir = filename:join(rabbit_mnesia:dir(), "msg_store"),
     {ok, _Pid} = rabbit_msg_store:start_link(MsgStoreDir,
                                              fun queue_index_walker/1,
-                                             Durable),
+                                             DurableQueueNames),
     lists:foreach(fun (DirName) ->
                           Dir = filename:join(queues_dir(), DirName),
                           ok = delete_queue_directory(Dir)
-                  end, Transient),
+                  end, TransientDirs),
     {ok, DurableQueues}.
 
 %%----------------------------------------------------------------------------
@@ -519,7 +524,6 @@ load_segment(SegNum, SegPath, JAckDict) ->
     case file:open(SegPath, [raw, binary, read_ahead, read]) of
         {error, enoent} -> {dict:new(), 0, 0};
         {ok, Hdl} ->
-            rabbit_log:info("SegNum: ~p~n", [SegNum]),
             {SDict, AckCount, HighRelSeq} =
                 load_segment_entries(Hdl, dict:new(), 0, 0),
             ok = file:close(Hdl),
@@ -540,7 +544,6 @@ load_segment_entries(Hdl, SDict, AckCount, HighRelSeq) ->
                MSB:(8-?REL_SEQ_ONLY_PREFIX_BITS)>>} ->
             {ok, LSB} = file:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES - 1),
             <<RelSeq:?REL_SEQ_BITS_BYTE_ALIGNED>> = <<MSB, LSB/binary>>,
-            rabbit_log:info("D/A: ~p: ~p~n", [self(), RelSeq]),
             {SDict1, AckCount1} = deliver_or_ack_msg(SDict, AckCount, RelSeq),
             load_segment_entries(Hdl, SDict1, AckCount1, HighRelSeq);
         {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
@@ -550,7 +553,6 @@ load_segment_entries(Hdl, SDict, AckCount, HighRelSeq) ->
             {ok, <<LSB:1/binary, MsgId:?MSG_ID_BYTES/binary>>} =
                 file:read(Hdl, ?PUBLISH_RECORD_LENGTH_BYTES - 1),
             <<RelSeq:?REL_SEQ_BITS_BYTE_ALIGNED>> = <<MSB, LSB/binary>>,
-            rabbit_log:info("Pub: ~p: ~p~n", [self(), RelSeq]),
             HighRelSeq1 = lists:max([RelSeq, HighRelSeq]),
             load_segment_entries(
               Hdl, dict:store(RelSeq, {MsgId, false,
