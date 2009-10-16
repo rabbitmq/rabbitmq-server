@@ -470,7 +470,7 @@ record_pending_acks(Txn, ChPid, MsgIds) ->
     store_tx(Txn, Tx#tx{pending_acks = [MsgIds | Pending],
                         ch_pid = ChPid}).
 
-commit_transaction(Txn, State) ->
+commit_transaction(Txn, From, State) ->
     #tx { ch_pid = ChPid,
           pending_messages = PendingMessages,
           pending_acks = PendingAcks
@@ -487,7 +487,7 @@ commit_transaction(Txn, State) ->
                 [AckTag || {_Msg, AckTag} <- MsgsWithAcks]
         end,
     VQS = rabbit_variable_queue:tx_commit(
-            PendingMessagesOrdered, Acks, State #q.variable_queue_state),
+            PendingMessagesOrdered, Acks, From, State #q.variable_queue_state),
     State #q { variable_queue_state = VQS }.
 
 rollback_transaction(Txn, State) ->
@@ -573,9 +573,7 @@ handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
     reply(Delivered, NewState);
 
 handle_call({commit, Txn}, From, State) ->
-    NewState = commit_transaction(Txn, State),
-    %% optimisation: we reply straight away so the sender can continue
-    gen_server2:reply(From, ok),
+    NewState = commit_transaction(Txn, From, State),
     erase_tx(Txn),
     noreply(run_message_queue(NewState));
 
@@ -783,10 +781,11 @@ handle_cast({notify_sent, ChPid}, State) ->
                                C#cr{unsent_message_count = Count - 1}
                        end));
 
-handle_cast({tx_commit_callback, Pubs, AckTags},
+handle_cast({tx_commit_callback, Pubs, AckTags, From},
             State = #q{variable_queue_state = VQS}) ->
     noreply(State#q{variable_queue_state =
-                    rabbit_variable_queue:do_tx_commit(Pubs, AckTags, VQS)});
+                    rabbit_variable_queue:do_tx_commit(
+                      Pubs, AckTags, From, VQS)});
 
 handle_cast({limit, ChPid, LimiterPid}, State) ->
     noreply(

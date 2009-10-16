@@ -34,7 +34,7 @@
 -export([init/1, publish/2, publish_delivered/2, set_queue_ram_duration_target/2,
          remeasure_egress_rate/1, fetch/1, ack/2, len/1, is_empty/1,
          maybe_start_prefetcher/1, purge/1, delete/1, requeue/2,
-         tx_publish/2, tx_rollback/2, tx_commit/3, do_tx_commit/3]).
+         tx_publish/2, tx_rollback/2, tx_commit/4, do_tx_commit/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -349,21 +349,21 @@ tx_rollback(Pubs, State) ->
          end,
     State.
 
-tx_commit(Pubs, AckTags, State) ->
+tx_commit(Pubs, AckTags, From, State) ->
     case persistent_msg_ids(Pubs) of
         [] ->
-            do_tx_commit(Pubs, AckTags, State);
+            do_tx_commit(Pubs, AckTags, From, State);
         PersistentMsgIds ->
             Self = self(),
             ok = rabbit_msg_store:sync(
                    PersistentMsgIds,
                    fun () -> ok = rabbit_amqqueue:tx_commit_callback(
-                                    Self, Pubs, AckTags)
+                                    Self, Pubs, AckTags, From)
                    end),
             State
     end.
 
-do_tx_commit(Pubs, AckTags, State) ->
+do_tx_commit(Pubs, AckTags, From, State) ->
     {_PubSeqIds, State1} =
         lists:foldl(
           fun (Msg, {SeqIdsAcc, StateN}) ->
@@ -371,7 +371,9 @@ do_tx_commit(Pubs, AckTags, State) ->
                   {[SeqId | SeqIdsAcc], StateN1}
           end, {[], State}, Pubs),
     %% TODO need to do something here about syncing the queue index, PubSeqIds
-    ack(AckTags, State1).
+    State2 = ack(AckTags, State1),
+    gen_server2:reply(From, ok),
+    State2.
 
 %%----------------------------------------------------------------------------
 
