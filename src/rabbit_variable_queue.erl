@@ -280,7 +280,10 @@ ack(AckTags, State = #vqstate { index_state = IndexState }) ->
                       [] -> IndexState;
                       _  -> rabbit_queue_index:write_acks(SeqIds, IndexState)
                   end,
-    ok = rabbit_msg_store:remove(MsgIds),
+    ok = case MsgIds of
+             [] -> ok;
+             _  -> rabbit_msg_store:remove(MsgIds)
+         end,
     State #vqstate { index_state = IndexState1 }.
 
 purge(State = #vqstate { prefetcher = undefined, q4 = Q4,
@@ -340,7 +343,10 @@ tx_publish(_Msg, State) ->
     State.
 
 tx_rollback(Pubs, State) ->
-    ok = rabbit_msg_store:remove(persistent_msg_ids(Pubs)),
+    ok = case persistent_msg_ids(Pubs) of
+             [] -> ok;
+             PP -> rabbit_msg_store:remove(PP)
+         end,
     State.
 
 tx_commit(Pubs, AckTags, State) ->
@@ -641,6 +647,8 @@ maybe_write_msg_to_disk(Bool, PersistentMsgsAlreadyOnDisk,
   when (Bool andalso not (IsPersistent andalso PersistentMsgsAlreadyOnDisk))
        orelse (IsPersistent andalso not PersistentMsgsAlreadyOnDisk) ->
     ok = rabbit_msg_store:write(MsgId, ensure_binary_properties(Msg)),
+    true;
+maybe_write_msg_to_disk(_Bool, true, #basic_message { is_persistent = true }) ->
     true;
 maybe_write_msg_to_disk(_Bool, _PersistentMsgsAlreadyOnDisk, _Msg) ->
     false.
