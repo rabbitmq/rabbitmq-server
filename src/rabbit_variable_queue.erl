@@ -300,15 +300,18 @@ purge(State) ->
 %% needs to delete everything that's been delivered and not ack'd.
 delete(State) ->
     {_PurgeCount, State1 = #vqstate { index_state = IndexState }} = purge(State),
-    case rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(IndexState)
-        of
-        {N, N} ->
-            State1;
-        {GammaSeqId, NextSeqId} ->
-            {_DeleteCount, IndexState1} =
-                delete1(NextSeqId, 0, GammaSeqId, IndexState),
-            State1 #vqstate { index_state = IndexState1, len = 0 }
-    end.
+    IndexState1 =
+        case rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(
+               IndexState) of
+            {N, N} ->
+                IndexState;
+            {GammaSeqId, NextSeqId} ->
+                {_DeleteCount, IndexState2} =
+                    delete1(NextSeqId, 0, GammaSeqId, IndexState),
+                IndexState2
+    end,
+    IndexState3 = rabbit_queue_index:terminate_and_erase(IndexState1),
+    State1 #vqstate { index_state = IndexState3 }.
 
 %% [{Msg, AckTag}]
 %% We guarantee that after fetch, only persistent msgs are left on
@@ -385,7 +388,7 @@ persistent_msg_ids(Pubs) ->
 
 delete1(NextSeqId, Count, GammaSeqId, IndexState)
   when GammaSeqId >= NextSeqId ->
-    {Count, rabbit_queue_index:terminate_and_erase(IndexState)};
+    {Count, IndexState};
 delete1(NextSeqId, Count, GammaSeqId, IndexState) ->
     Gamma1SeqId = GammaSeqId + rabbit_queue_index:segment_size(),
     case rabbit_queue_index:read_segment_entries(GammaSeqId, IndexState) of
