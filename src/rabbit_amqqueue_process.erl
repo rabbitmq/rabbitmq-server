@@ -575,7 +575,7 @@ handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
 handle_call({commit, Txn}, From, State) ->
     NewState = commit_transaction(Txn, From, State),
     erase_tx(Txn),
-    noreply(run_message_queue(NewState));
+    noreply(NewState);
 
 handle_call({notify_down, ChPid}, From, State) ->
     %% optimisation: we reply straight away so the sender can continue
@@ -783,9 +783,10 @@ handle_cast({notify_sent, ChPid}, State) ->
 
 handle_cast({tx_commit_callback, Pubs, AckTags, From},
             State = #q{variable_queue_state = VQS}) ->
-    noreply(State#q{variable_queue_state =
-                    rabbit_variable_queue:do_tx_commit(
-                      Pubs, AckTags, From, VQS)});
+    noreply(
+      run_message_queue(
+        State#q{variable_queue_state =
+                rabbit_variable_queue:do_tx_commit(Pubs, AckTags, From, VQS)}));
 
 handle_cast({limit, ChPid, LimiterPid}, State) ->
     noreply(
