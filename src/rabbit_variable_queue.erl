@@ -398,7 +398,8 @@ purge1(Count, State = #vqstate { q3 = Q3, index_state = IndexState }) ->
             {Q3Count, IndexState1} = remove_queue_entries(Q3, IndexState),
             purge1(Count + Q3Count,
                    maybe_load_next_segment(
-                     State #vqstate { index_state = IndexState1 }))
+                     State #vqstate { index_state = IndexState1,
+                                      q3 = queue:new() }))
     end.
 
 remove_queue_entries(Q, IndexState) ->
