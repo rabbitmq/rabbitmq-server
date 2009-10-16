@@ -245,14 +245,6 @@ unregister_consumer(ConsumerTag,
     Consumers1 = dict:erase(ConsumerTag, Consumers0),
     State#channel_state{consumers = Consumers1}.
 
-return_handler(State = #channel_state{return_handler_pid = undefined}) ->
-    %% TODO what about trapping exits??
-    {ok, ReturnHandler} = gen_event:start_link(),
-    gen_event:add_handler(ReturnHandler, amqp_return_handler , [] ),
-    {ReturnHandler, State#channel_state{return_handler_pid = ReturnHandler}};
-return_handler(State = #channel_state{return_handler_pid = ReturnHandler}) ->
-    {ReturnHandler, State}.
-
 amqp_msg(none) ->
     none;
 amqp_msg(Content) ->
@@ -350,8 +342,8 @@ handle_regular_method(#'channel.flow'{active = Active} = Flow, none,
                                      driver = Driver,
                                      writer_pid = Writer} = State) ->
     case FlowHandler of
-        undefined -> ok;
-        _         -> FlowHandler ! Flow
+        none -> ok;
+        _    -> FlowHandler ! Flow
     end,
     Driver:do(Writer, #'channel.flow_ok'{active = Active}, none),
     {noreply, State#channel_state{flow_control = not(Active)}};
@@ -362,10 +354,16 @@ handle_regular_method(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver,
     Consumer ! {Deliver, AmqpMsg},
     {noreply, State};
 
-handle_regular_method(#'basic.return'{} = BasicReturn, AmqpMsg, State) ->
-    {ReturnHandler, NewState} = return_handler(State),
-    ReturnHandler ! {BasicReturn, AmqpMsg},
-    {noreply, NewState};
+handle_regular_method(
+        #'basic.return'{} = BasicReturn, AmqpMsg,
+        #channel_state{return_handler_pid = ReturnHandler} = State) ->
+    case ReturnHandler of
+        none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
+                          "return handler registered~n",
+                          [self(), BasicReturn, AmqpMsg]);
+        _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
+    end,
+    {noreply, State};
 
 handle_regular_method(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
@@ -442,14 +440,14 @@ handle_cast({cast, Method, AmqpMsg} = Cast,
 %% Registers a handler to process return messages
 %% @private
 handle_cast({register_return_handler, ReturnHandler}, State) ->
-    NewState = State#channel_state{return_handler_pid = ReturnHandler},
-    {noreply, NewState};
+    link(ReturnHandler),
+    {noreply, State#channel_state{return_handler_pid = ReturnHandler}};
 
 %% Registers a handler to process flow control messages
 %% @private
 handle_cast({register_flow_handler, FlowHandler}, State) ->
-    NewState = State#channel_state{flow_handler_pid = FlowHandler},
-    {noreply, NewState};
+    link(FlowHandler),
+    {noreply, State#channel_state{flow_handler_pid = FlowHandler}};
 
 %% @private
 handle_cast({notify_sent, _Peer}, State) ->
@@ -542,6 +540,24 @@ handle_info({'EXIT', ReaderPid, Reason},
     ?LOG_WARN("Channel ~p closing: received exit signal from reader. "
               "Reason: ~p~n", [ChannelNumber, Reason]),
     {stop, {reader_died, ReaderPid, Reason}, State};
+
+%% Handle flow handler exit
+%% @private
+handle_info({'EXIT', FlowHandler, Reason},
+            State = #channel_state{number = ChannelNumber,
+                                   flow_handler_pid = FlowHandler}) ->
+    ?LOG_INFO("Channel ~p: unregistering flow handler because it is "
+              "closing: ~p~n", [ChannelNumber, Reason]),
+    {noreply, State#channel_state{flow_handler_pid = none}};
+
+%% Handle return handler exit
+%% @private
+handle_info({'EXIT', ReturnHandler, Reason},
+            State = #channel_state{number = ChannelNumber,
+                                   return_handler_pid = ReturnHandler}) ->
+    ?LOG_INFO("Channel ~p: unregistering return handler because it is "
+              "closing: ~p~n", [ChannelNumber, Reason]),
+    {noreply, State#channel_state{return_handler_pid = none}};
 
 %% Handle other exit
 %% @private
