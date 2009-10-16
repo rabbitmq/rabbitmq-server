@@ -43,6 +43,9 @@
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
 
+-define(TIMEOUT_FLUSH, 60000).
+-define(TIMEOUT_CLOSE_OK, 3000).
+
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
 %%
@@ -483,6 +486,19 @@ handle_info(shutdown, State) ->
 handle_info({shutdown, Reason}, State) ->
     shutdown_with_reason(Reason, State);
 
+%% @private
+handle_info({shutdown, FailShutdownReason, InitialReason},
+            #channel_state{number = Number} = State) ->
+    case FailShutdownReason of
+        {connection_closing, timed_out_flushing_channel} ->
+            ?LOG_WARN("Channel ~p closing: timed out flushing while connection "
+                      "closing~n", [Number]);
+        {connection_closing, timed_out_waiting_close_ok} ->
+            ?LOG_WARN("Channel ~p closing: timed out waiting for "
+                      "channel.close_ok while connection closing~n", [Number])
+    end,
+    {stop, {FailShutdownReason, InitialReason}, State};
+
 %% Handles the situation when the connection closes without closing the channel
 %% beforehand. The channel must block all further RPCs,
 %% flush the RPC queue (optional), and terminate
@@ -492,7 +508,17 @@ handle_info({connection_closing, CloseType, Reason},
                            closing = Closing} = State) ->
     case {CloseType, Closing, queue:is_empty(RpcQueue)} of
         {flush, false, false} ->
+            erlang:send_after(?TIMEOUT_FLUSH, self(),
+                              {shutdown,
+                               {connection_closing, timed_out_flushing_channel},
+                               Reason}),
             {noreply, State#channel_state{closing = {connection, Reason}}};
+        {flush, just_channel, false} ->
+            erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
+                              {shutdown,
+                               {connection_closing, timed_out_waiting_close_ok},
+                               Reason}),
+            {noreply, State};
         _ ->
             shutdown_with_reason(Reason, State)
     end;

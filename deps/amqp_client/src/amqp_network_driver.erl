@@ -134,8 +134,14 @@ receive_writer_send_command_signal(Writer) ->
 %---------------------------------------------------------------------------
 
 send_frame(Channel, Frame) ->
-    {framing_pid, FramingPid} = resolve_framing_channel({channel, Channel}),
-    rabbit_framing_channel:process(FramingPid, Frame).
+    case resolve_framing_channel({channel, Channel}) of
+        {framing_pid, FramingPid} ->
+            rabbit_framing_channel:process(FramingPid, Frame);
+        undefined ->
+            ?LOG_INFO("Dropping frame ~p for invalid or closed channel "
+                      "number ~p~n", [Frame, Channel]),
+            ok
+    end.
 
 recv(#connection_state{main_reader_pid = MainReaderPid}) ->
     receive
