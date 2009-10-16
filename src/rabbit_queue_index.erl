@@ -179,16 +179,12 @@ init(Name) ->
 terminate(State = #qistate { journal_handle = undefined }) ->
     State;
 terminate(State) ->
-    case flush_journal(State) of
-        {true, State1} ->
-            terminate(State1);
-        {false, State1 = #qistate { cur_seg_num = SegNum }} ->
-            State2 = #qistate { journal_handle = JournalHdl } =
-                close_file_handle_for_seg(SegNum, State1),
-            ok = file:sync(JournalHdl),
-            ok = file:close(JournalHdl),
-            State2 #qistate { journal_handle = undefined }
-    end.
+    State1 = #qistate { cur_seg_num = SegNum } = full_flush_journal(State),
+    State2 = #qistate { journal_handle = JournalHdl } =
+        close_file_handle_for_seg(SegNum, State1),
+    ok = file:sync(JournalHdl),
+    ok = file:close(JournalHdl),
+    State2 #qistate { journal_handle = undefined }.
 
 terminate_and_erase(State) ->
     State1 = terminate(State),
@@ -226,9 +222,14 @@ write_acks(SeqIds, State = #qistate { journal_handle    = JournalHdl,
     State1 = State #qistate { journal_ack_dict = JAckDict1,
                               journal_ack_count = JAckCount1 },
     case JAckCount1 > ?MAX_ACK_JOURNAL_ENTRY_COUNT of
-        true -> {_Cont, State2} = flush_journal(State1),
-                State2;
+        true  -> full_flush_journal(State1);
         false -> State1
+    end.
+
+full_flush_journal(State) ->
+    case flush_journal(State) of
+        {true,  State1} -> full_flush_journal(State1);
+        {false, State1} -> State1
     end.
 
 flush_journal(State = #qistate { journal_ack_count = 0 }) ->
