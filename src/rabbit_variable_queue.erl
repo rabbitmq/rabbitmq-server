@@ -287,10 +287,12 @@ ack(AckTags, State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = IndexState1 }.
 
 purge(State = #vqstate { prefetcher = undefined, q4 = Q4,
-                         index_state = IndexState }) ->
+                         index_state = IndexState, len = Len }) ->
     {Q4Count, IndexState1} = remove_queue_entries(Q4, IndexState),
-    purge1(Q4Count, State #vqstate { index_state = IndexState1,
-                                     q4 = queue:new() });
+    {TotalCount, State1} =
+        purge1(Q4Count, State #vqstate { index_state = IndexState1,
+                                         q4 = queue:new() }),
+    {TotalCount, State1 #vqstate { len = 0 }};
 purge(State) ->
     purge(drain_prefetcher(stop, State)).
 
@@ -305,7 +307,7 @@ delete(State) ->
         {GammaSeqId, NextSeqId} ->
             {_DeleteCount, IndexState1} =
                 delete1(NextSeqId, 0, GammaSeqId, IndexState),
-            State1 #vqstate { index_state = IndexState1 }
+            State1 #vqstate { index_state = IndexState1, len = 0 }
     end.
 
 %% [{Msg, AckTag}]
@@ -352,7 +354,7 @@ tx_rollback(Pubs, State) ->
 tx_commit(Pubs, AckTags, From, State) ->
     case persistent_msg_ids(Pubs) of
         [] ->
-            do_tx_commit(Pubs, AckTags, From, State);
+            {true, do_tx_commit(Pubs, AckTags, From, State)};
         PersistentMsgIds ->
             Self = self(),
             ok = rabbit_msg_store:sync(
@@ -360,7 +362,7 @@ tx_commit(Pubs, AckTags, From, State) ->
                    fun () -> ok = rabbit_amqqueue:tx_commit_callback(
                                     Self, Pubs, AckTags, From)
                    end),
-            State
+            {false, State}
     end.
 
 do_tx_commit(Pubs, AckTags, From, State) ->

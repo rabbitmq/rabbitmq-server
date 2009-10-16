@@ -486,9 +486,10 @@ commit_transaction(Txn, From, State) ->
                 store_ch_record(C#cr{unacked_messages = Remaining}),
                 [AckTag || {_Msg, AckTag} <- MsgsWithAcks]
         end,
-    VQS = rabbit_variable_queue:tx_commit(
-            PendingMessagesOrdered, Acks, From, State #q.variable_queue_state),
-    State #q { variable_queue_state = VQS }.
+    {RunQueue, VQS} =
+        rabbit_variable_queue:tx_commit(
+          PendingMessagesOrdered, Acks, From, State #q.variable_queue_state),
+    {RunQueue, State #q { variable_queue_state = VQS }}.
 
 rollback_transaction(Txn, State) ->
     #tx { pending_messages = PendingMessages
@@ -573,9 +574,12 @@ handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
     reply(Delivered, NewState);
 
 handle_call({commit, Txn}, From, State) ->
-    NewState = commit_transaction(Txn, From, State),
+    {RunQueue, NewState} = commit_transaction(Txn, From, State),
     erase_tx(Txn),
-    noreply(NewState);
+    noreply(case RunQueue of
+                true -> run_message_queue(NewState);
+                false -> NewState
+            end);
 
 handle_call({notify_down, ChPid}, From, State) ->
     %% optimisation: we reply straight away so the sender can continue
