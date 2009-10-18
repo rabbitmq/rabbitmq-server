@@ -80,7 +80,7 @@ channel_writer_death_test(Connection) ->
     Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
     Message = #amqp_msg{props = <<>>, payload = <<>>},
     ok = amqp_channel:call(Channel, Publish, Message),
-    timer:sleep(100),
+    timer:sleep(300),
     ?assertNot(is_process_alive(Channel)),
     ?assertNot(is_process_alive(Connection)),
     ok.
@@ -91,7 +91,7 @@ channel_writer_death_test(Connection) ->
 channel_death_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
     ?assertExit(_, amqp_channel:call(Channel, bogus_message)),
-    timer:sleep(100),
+    timer:sleep(300),
     ?assertNot(is_process_alive(Channel)),
     ?assertNot(is_process_alive(Connection)),
     ok.
