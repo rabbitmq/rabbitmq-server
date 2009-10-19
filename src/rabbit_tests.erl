@@ -891,8 +891,8 @@ test_msg_store() ->
            fun (MsgId, ok) -> rabbit_msg_store:sync(
                                 [MsgId], fun () -> Self ! {sync, MsgId} end)
            end, ok, MsgIds2ndHalf),
-    lists:foreach(
-      fun(MsgId) ->
+    lists:foldl(
+      fun(MsgId, ok) ->
               receive
                   {sync, MsgId} -> ok
               after
@@ -901,7 +901,7 @@ test_msg_store() ->
                                 [MsgId]),
                       throw(timeout)
               end
-      end, MsgIds2ndHalf),
+      end, ok, MsgIds2ndHalf),
     %% it's very likely we're not dirty here, so the 1st half sync
     %% should hit a different code path
     ok = msg_store_sync(MsgIds1stHalf),
