@@ -283,7 +283,8 @@ segment_size() ->
     ?SEGMENT_ENTRIES_COUNT.
 
 find_lowest_seq_id_seg_and_next_seq_id(
-  State = #qistate { dir = Dir, journal_ack_dict = JAckDict }) ->
+  State = #qistate { dir = Dir, journal_ack_dict = JAckDict,
+                     cur_seg_num = SegNum }) ->
     SegNumsPaths = all_segment_nums_paths(Dir),
     %% We don't want the lowest seq_id, merely the seq_id of the start
     %% of the lowest segment. That seq_id may not actually exist, but
@@ -299,7 +300,7 @@ find_lowest_seq_id_seg_and_next_seq_id(
         case SegNumsPaths of
             [] -> {0, State};
             _  -> {SegNum2, SegPath2} = lists:max(SegNumsPaths),
-                  State2 = close_file_handle_for_seg(SegNum2, State),
+                  State2 = close_file_handle_for_seg(SegNum, State),
                   {_SDict, _AckCount, HighRelSeq} =
                       load_segment(SegNum2, SegPath2, JAckDict),
                   {1 + reconstruct_seq_id(SegNum2, HighRelSeq), State2}
