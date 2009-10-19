@@ -831,36 +831,61 @@ start_msg_store_empty() ->
 start_msg_store(MsgRefDeltaGen, MsgRefDeltaGenInit) ->
     {ok, _Pid} = rabbit_msg_store:start_link(msg_store_dir(), MsgRefDeltaGen,
                                              MsgRefDeltaGenInit).
+
+msg_store_contains(Atom, MsgIds) ->
+    Atom = lists:foldl(
+              fun (MsgId, Atom1) when Atom1 =:= Atom ->
+                      rabbit_msg_store:contains(MsgId) end, Atom, MsgIds).
+
+msg_store_sync(MsgIds) ->
+    Now = now(),
+    Self = self(),
+    ok = rabbit_msg_store:sync(MsgIds,
+                               fun () -> Self ! {sync, Now} end),
+    receive
+        {sync, Now} -> ok
+    after
+        10000 ->
+            io:format("Sync from msg_store missing for msg_ids ~p~n", [MsgIds]),
+            throw(timeout)
+    end.
+
+msg_store_read(MsgIds) ->
+    ok =
+        lists:foldl(
+          fun (MsgId, ok) -> {ok, MsgId} = rabbit_msg_store:read(MsgId), ok end,
+          ok, MsgIds).
+
+msg_store_write(MsgIds) ->
+    ok = lists:foldl(
+           fun (MsgId, ok) -> rabbit_msg_store:write(MsgId, MsgId) end,
+           ok, MsgIds).
                             
 test_msg_store() ->
-    %% ignore return code just in case it's already stopped
     rabbit_msg_store:stop(),
     {ok, _Pid} = start_msg_store_empty(),
+    Self = self(),
     MsgIds = [term_to_binary(M) || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
     %% check we don't contain any of the msgs we're about to publish
-    false = lists:foldl(
-              fun (MsgId, false) -> rabbit_msg_store:contains(MsgId) end,
-              false, MsgIds),
-    %% publish some msgs
-    ok = lists:foldl(
-           fun (MsgId, ok) -> rabbit_msg_store:write(MsgId, MsgId) end,
-           ok, MsgIds),
+    false = msg_store_contains(false, MsgIds),
+    %% publish the first half
+    ok = msg_store_write(MsgIds1stHalf),
+    %% sync on the first half
+    ok = msg_store_sync(MsgIds1stHalf),
+    %% publish the second half
+    ok = msg_store_write(MsgIds2ndHalf),
+    %% sync on the first half again - the msg_store will be dirty, but
+    %% we won't need the fsync
+    ok = msg_store_sync(MsgIds1stHalf),
     %% check they're all in there
-    true = lists:foldl(
-             fun (MsgId, true) -> rabbit_msg_store:contains(MsgId) end,
-             true, MsgIds),
+    true = msg_store_contains(true, MsgIds),
     %% publish the latter half twice so we hit the caching and ref count code
-    ok = lists:foldl(
-           fun (MsgId, ok) -> rabbit_msg_store:write(MsgId, MsgId) end,
-           ok, MsgIds2ndHalf),
+    ok = msg_store_write(MsgIds2ndHalf),
     %% check they're still all in there
-    true = lists:foldl(
-             fun (MsgId, true) -> rabbit_msg_store:contains(MsgId) end,
-             true, MsgIds),
+    true = msg_store_contains(true, MsgIds),
     %% sync on the 2nd half, but do lots of individual syncs to try
     %% and cause coalescing to happen
-    Self = self(),
     ok = lists:foldl(
            fun (MsgId, ok) -> rabbit_msg_store:sync(
                                 [MsgId], fun () -> Self ! {sync, MsgId} end)
@@ -876,49 +901,25 @@ test_msg_store() ->
                       throw(timeout)
               end
       end, MsgIds2ndHalf),
-    %% it's very likely we're totally sync'd here, so the 1st half
-    %% sync should not cause an fsync (hence different code path
-    ok = rabbit_msg_store:sync(MsgIds1stHalf,
-                               fun () -> Self ! {sync, first_half} end),
-    receive
-        {sync, first_half} -> ok
-    after
-        10000 ->
-            io:format("Sync from msg_store missing for first_half~n"),
-            throw(timeout)
-    end,
+    %% it's very likely we're not dirty here, so the 1st half sync
+    %% should hit a different code path
+    ok = msg_store_sync(MsgIds1stHalf),
     %% read them all
-    ok =
-        lists:foldl(
-          fun (MsgId, ok) -> {ok, MsgId} = rabbit_msg_store:read(MsgId), ok end,
-          ok, MsgIds),
+    ok = msg_store_read(MsgIds),
     %% read them all again - this will hit the cache, not disk
-    ok =
-        lists:foldl(
-          fun (MsgId, ok) -> {ok, MsgId} = rabbit_msg_store:read(MsgId), ok end,
-          ok, MsgIds),
+    ok = msg_store_read(MsgIds),
     %% remove them all
     ok = rabbit_msg_store:remove(MsgIds),
     %% check first half doesn't exist
-    false = lists:foldl(
-              fun (MsgId, false) -> rabbit_msg_store:contains(MsgId) end,
-              false, MsgIds1stHalf),
+    false = msg_store_contains(false, MsgIds1stHalf),
     %% check second half does exist
-    true = lists:foldl(
-             fun (MsgId, true) -> rabbit_msg_store:contains(MsgId) end,
-             true, MsgIds2ndHalf),
+    true = msg_store_contains(true, MsgIds2ndHalf),
     %% read the second half again
-    ok =
-        lists:foldl(
-          fun (MsgId, ok) -> {ok, MsgId} = rabbit_msg_store:read(MsgId), ok end,
-          ok, MsgIds2ndHalf),
-    %% release the second half, just for fun
+    ok = msg_store_read(MsgIds2ndHalf),
+    %% release the second half, just for fun (aka code coverage)
     ok = rabbit_msg_store:release(MsgIds2ndHalf),
-    %% read the second half again, just for fun
-    ok =
-        lists:foldl(
-          fun (MsgId, ok) -> {ok, MsgId} = rabbit_msg_store:read(MsgId), ok end,
-          ok, MsgIds2ndHalf),
+    %% read the second half again, just for fun (aka code coverage)
+    ok = msg_store_read(MsgIds2ndHalf),
     %% read the second half via peruse
     lists:foldl(
       fun (MsgId, ok) ->
@@ -954,9 +955,7 @@ test_msg_store() ->
     ok = rabbit_msg_store:stop(),
     {ok, _Pid2} = start_msg_store_empty(),
     %% check we don't contain any of the msgs
-    false = lists:foldl(
-              fun (MsgId, false) -> rabbit_msg_store:contains(MsgId) end,
-              false, MsgIds),
+    false = msg_store_contains(false, MsgIds),
     %% push a lot of msgs in...
     BigCount = 100000,
     MsgIdsBig = lists:seq(1, BigCount),
@@ -976,10 +975,8 @@ test_msg_store() ->
                                               end)])
            end, ok, MsgIdsBig),
     %% ensure empty
-    false = lists:foldl(
-              fun (MsgId, false) -> rabbit_msg_store:contains(
-                                      term_to_binary(MsgId)) end,
-              false, MsgIdsBig),
+    false =
+        msg_store_contains(false, lists:map(fun term_to_binary/1, MsgIdsBig)),
     %% restart empty
     ok = rabbit_msg_store:stop(),
     {ok, _Pid3} = start_msg_store_empty(),
