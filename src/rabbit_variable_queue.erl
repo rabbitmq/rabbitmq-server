@@ -320,25 +320,32 @@ delete(State) ->
 %% msg_store:write for persistent msgs. It also means that we don't
 %% need to worry about calling msg_store:remove (as ack would do)
 %% because transient msgs won't be on disk anyway, thus they won't
-%% need to be removed.
+%% need to be removed. However, we do call msg_store:release so that
+%% the cache isn't held full of msgs which are now at the tail of the
+%% queue.
 requeue(MsgsWithAckTags, State) ->
-    {SeqIds, State1 = #vqstate { index_state = IndexState }} =
+    {SeqIds, MsgIds, State1 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun ({Msg = #basic_message { guid = MsgId }, AckTag},
-               {SeqIdsAcc, StateN}) ->
+               {SeqIdsAcc, MsgIdsAcc, StateN}) ->
                   {_SeqId, StateN1} = publish(Msg, true, true, StateN),
-                  SeqIdsAcc1 = case AckTag of
-                                   ack_not_on_disk ->
-                                       SeqIdsAcc;
-                                   {ack_index_and_store, MsgId, SeqId} ->
-                                       [SeqId | SeqIdsAcc]
-                               end,
-                  {SeqIdsAcc1, StateN1}
-          end, {[], State}, MsgsWithAckTags),
+                  {SeqIdsAcc1, MsgIdsAcc1} =
+                      case AckTag of
+                          ack_not_on_disk ->
+                              {SeqIdsAcc, MsgIdsAcc};
+                          {ack_index_and_store, MsgId, SeqId} ->
+                              {[SeqId | SeqIdsAcc], [MsgId | MsgIdsAcc]}
+                      end,
+                  {SeqIdsAcc1, MsgIdsAcc1, StateN1}
+          end, {[], [], State}, MsgsWithAckTags),
     IndexState1 = case SeqIds of
                       [] -> IndexState;
                       _  -> rabbit_queue_index:write_acks(SeqIds, IndexState)
                   end,
+    ok = case MsgIds of
+             [] -> ok;
+             _  -> rabbit_msg_store:release(MsgIds)
+         end,
     State1 #vqstate { index_state = IndexState1 }.
 
 tx_publish(Msg = #basic_message { is_persistent = true }, State) ->
