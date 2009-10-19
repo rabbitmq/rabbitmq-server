@@ -958,7 +958,8 @@ test_msg_store() ->
               fun (MsgId, false) -> rabbit_msg_store:contains(MsgId) end,
               false, MsgIds),
     %% push a lot of msgs in...
-    MsgIdsBig = lists:seq(1,100000),
+    BigCount = 100000,
+    MsgIdsBig = lists:seq(1, BigCount),
     Payload = << 0:65536 >>,
     ok = lists:foldl(
            fun (MsgId, ok) -> rabbit_msg_store:write(term_to_binary(MsgId),
@@ -971,7 +972,7 @@ test_msg_store() ->
                    rabbit_msg_store:remove([term_to_binary(
                                               case MsgId rem 2 of
                                                   0 -> MsgId;
-                                                  1 -> 100000 - MsgId
+                                                  1 -> BigCount - MsgId
                                               end)])
            end, ok, MsgIdsBig),
     %% ensure empty
