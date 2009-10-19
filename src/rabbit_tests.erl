@@ -876,6 +876,17 @@ test_msg_store() ->
                       throw(timeout)
               end
       end, MsgIds2ndHalf),
+    %% it's very likely we're totally sync'd here, so the 1st half
+    %% sync should not cause an fsync (hence different code path
+    ok = rabbit_msg_store:sync(MsgIds1stHalf,
+                               fun () -> Self ! {sync, first_half} end),
+    receive
+        {sync, first_half} -> ok
+    after
+        10000 ->
+            io:format("Sync from msg_store missing for first_half~n"),
+            throw(timeout)
+    end,
     %% read them all
     ok =
         lists:foldl(
@@ -971,4 +982,5 @@ test_msg_store() ->
     %% restart empty
     ok = rabbit_msg_store:stop(),
     {ok, _Pid3} = start_msg_store_empty(),
+    ok = rabbit_msg_store:stop(),
     passed.
