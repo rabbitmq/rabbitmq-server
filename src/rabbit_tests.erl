@@ -33,7 +33,7 @@
 
 -compile(export_all).
 
--export([all_tests/0, test_parsing/0, test_disk_queue/0]).
+-export([all_tests/0, test_parsing/0]).
 
 %% Exported so the hook mechanism can call back
 -export([handle_hook/3, bad_handle_hook/3, extra_arg_hook/5]).
@@ -50,7 +50,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
-    %% passed = test_disk_queue(),
+    passed = test_msg_store(),
     passed = test_priority_queue(),
     passed = test_unfold(),
     passed = test_parsing(),
@@ -822,472 +822,153 @@ bad_handle_hook(_, _, _) ->
 extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
     handle_hook(Hookname, Handler, {Args, Extra1, Extra2}).
 
-test_disk_queue() ->
-    rdq_stop(),
-    rdq_virgin(),
-    passed = rdq_stress_gc(5000),
-    passed = rdq_test_startup_with_queue_gaps(),
-    passed = rdq_test_redeliver(),
-    passed = rdq_test_purge(),
-    passed = rdq_test_mixed_queue_modes(),
-    passed = rdq_test_mode_conversion_mid_txn(),
-    rdq_virgin(),
-    passed.
+msg_store_dir() ->
+    filename:join(rabbit_mnesia:dir(), "msg_store").
 
-benchmark_disk_queue() ->
-    rdq_stop(),
-    % unicode chars are supported properly from r13 onwards
-    io:format("Msg Count\t| Msg Size\t| Queue Count\t| Startup mu s\t| Publish mu s\t| Pub mu s/msg\t| Pub mu s/byte\t| Deliver mu s\t| Del mu s/msg\t| Del mu s/byte~n", []),
-    [begin rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSize),
-           timer:sleep(1000) end || % 1000 milliseconds
-        MsgSize <- [512, 8192, 32768, 131072],
-        Qs <- [[1], lists:seq(1,10)], %, lists:seq(1,100), lists:seq(1,1000)],
-        MsgCount <- [1024, 4096, 16384]
-    ],
-    rdq_virgin(),
-    ok = control_action(stop_app, []),
-    ok = control_action(start_app, []),
-    passed.
+start_msg_store_empty() ->
+    start_msg_store(fun (ok) -> finished end, ok).
 
-rdq_message(MsgId, MsgBody, IsPersistent) ->
-    rabbit_basic:message(x, <<>>, [], MsgBody, term_to_binary(MsgId),
-                         IsPersistent).
-
-rdq_match_message(Msg, MsgId, MsgBody, Size) when is_number(MsgId) ->
-    rdq_match_message(Msg, term_to_binary(MsgId), MsgBody, Size);
-rdq_match_message(
-  #basic_message { guid = MsgId, content =
-                   #content { payload_fragments_rev = [MsgBody] }},
-  MsgId, MsgBody, Size) when size(MsgBody) =:= Size ->
-    ok.
-
-rdq_match_messages(#basic_message { guid = MsgId, content = #content { payload_fragments_rev = MsgBody }},
-                   #basic_message { guid = MsgId, content = #content { payload_fragments_rev = MsgBody }}) ->
-    ok.
-
-commit_list(List, MsgCount, IsPersistent) ->
-    lists:zip3([term_to_binary(MsgId) || MsgId <- List],
-               lists:duplicate(MsgCount, false),
-               lists:duplicate(MsgCount, IsPersistent)).
-
-rdq_time_tx_publish_commit_deliver_ack(Qs, MsgCount, MsgSizeBytes) ->
-    Startup = rdq_virgin(),
-    rdq_start(),
-    QCount = length(Qs),
-    Msg = <<0:(8*MsgSizeBytes)>>,
-    List = lists:seq(1, MsgCount),
-    CommitList = commit_list(List, MsgCount, false),
-    {Publish, ok} =
-        timer:tc(?MODULE, rdq_time_commands,
-                 [[fun() -> [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false))
-                             || N <- List, _ <- Qs] end,
-                   fun() -> [ok = rabbit_disk_queue:tx_commit(Q, CommitList, [])
-                             || Q <- Qs] end
-                  ]]),
-    {Deliver, ok} =
-        timer:tc(
-          ?MODULE, rdq_time_commands,
-          [[fun() -> [begin SeqIds =
-                                [begin
-                                     Remaining = MsgCount - N,
-                                     {Message, false, SeqId, Remaining}
-                                         = rabbit_disk_queue:fetch(Q),
-                                     ok = rdq_match_message(Message, N, Msg, MsgSizeBytes),
-                                     SeqId
-                                 end || N <- List],
-                            ok = rabbit_disk_queue:tx_commit(Q, [], SeqIds)
-                      end || Q <- Qs]
-            end]]),
-    io:format(" ~15.10B| ~14.10B| ~14.10B| ~14.1f| ~14.1f| ~14.6f| ~14.10f| ~14.1f| ~14.6f| ~14.10f~n",
-              [MsgCount, MsgSizeBytes, QCount, float(Startup),
-               float(Publish), (Publish / (MsgCount * QCount)),
-               (Publish / (MsgCount * QCount * MsgSizeBytes)),
-               float(Deliver), (Deliver / (MsgCount * QCount)),
-               (Deliver / (MsgCount * QCount * MsgSizeBytes))]),
-    rdq_stop().
-
-% we know each file is going to be 1024*1024*10 bytes in size (10MB),
-% so make sure we have several files, and then keep punching holes in
-% a reasonably sensible way.
-rdq_stress_gc(MsgCount) ->
-    rdq_virgin(),
-    rdq_start(),
-    MsgSizeBytes = 256*1024,
-    Msg = <<0:(8*MsgSizeBytes)>>, % 256KB
-    List = lists:seq(1, MsgCount),
-    CommitList = commit_list(List, MsgCount, false),
-    [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- List],
-    rabbit_disk_queue:tx_commit(q, CommitList, []),
-    StartChunk = round(MsgCount / 20), % 5%
-    AckList =
+start_msg_store(MsgRefDeltaGen, MsgRefDeltaGenInit) ->
+    {ok, _Pid} = rabbit_msg_store:start_link(msg_store_dir(), MsgRefDeltaGen,
+                                             MsgRefDeltaGenInit).
+                            
+test_msg_store() ->
+    %% ignore return code just in case it's already stopped
+    rabbit_msg_store:stop(),
+    {ok, _Pid} = start_msg_store_empty(),
+    MsgIds = [term_to_binary(M) || M <- lists:seq(1,100)],
+    {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
+    %% check we don't contain any of the msgs we're about to publish
+    false = lists:foldl(
+              fun (MsgId, false) -> rabbit_msg_store:contains(MsgId) end,
+              false, MsgIds),
+    %% publish some msgs
+    ok = lists:foldl(
+           fun (MsgId, ok) -> rabbit_msg_store:write(MsgId, MsgId) end,
+           ok, MsgIds),
+    %% check they're all in there
+    true = lists:foldl(
+             fun (MsgId, true) -> rabbit_msg_store:contains(MsgId) end,
+             true, MsgIds),
+    %% publish the latter half twice so we hit the caching and ref count code
+    ok = lists:foldl(
+           fun (MsgId, ok) -> rabbit_msg_store:write(MsgId, MsgId) end,
+           ok, MsgIds2ndHalf),
+    %% check they're still all in there
+    true = lists:foldl(
+             fun (MsgId, true) -> rabbit_msg_store:contains(MsgId) end,
+             true, MsgIds),
+    %% sync on the 2nd half, but do lots of individual syncs to try
+    %% and cause coalescing to happen
+    Self = self(),
+    ok = lists:foldl(
+           fun (MsgId, ok) -> rabbit_msg_store:sync(
+                                [MsgId], fun () -> Self ! {sync, MsgId} end)
+           end, ok, MsgIds2ndHalf),
+    lists:foreach(
+      fun(MsgId) ->
+              receive
+                  {sync, MsgId} -> ok
+              after
+                  10000 ->
+                      io:format("Sync from msg_store missing (msg_id: ~p)~n",
+                                [MsgId]),
+                      throw(timeout)
+              end
+      end, MsgIds2ndHalf),
+    %% read them all
+    ok =
         lists:foldl(
-          fun (E, Acc) ->
-                  case lists:member(E, Acc) of
-                      true -> Acc;
-                      false -> [E|Acc]
-                  end
-          end, [], lists:flatten(
-                     lists:reverse(
-                       [ lists:seq(N, MsgCount, N)
-                         || N <- lists:seq(1, round(MsgCount / 2), 1)
-                       ]))),
-    {Start, End} = lists:split(StartChunk, AckList),
-    AckList2 = End ++ Start,
-    MsgIdToSeqDict =
+          fun (MsgId, ok) -> {ok, MsgId} = rabbit_msg_store:read(MsgId), ok end,
+          ok, MsgIds),
+    %% read them all again - this will hit the cache, not disk
+    ok =
         lists:foldl(
-          fun (MsgId, Acc) ->
-                  Remaining = MsgCount - MsgId,
-                  {Message, false, SeqId, Remaining} =
-                      rabbit_disk_queue:fetch(q),
-                  ok = rdq_match_message(Message, MsgId, Msg, MsgSizeBytes),
-                  dict:store(MsgId, SeqId, Acc)
-          end, dict:new(), List),
-    %% we really do want to ack each of this individually
-    [begin {ok, SeqId} = dict:find(MsgId, MsgIdToSeqDict),
-           rabbit_disk_queue:ack(q, [SeqId])
-     end || MsgId <- AckList2],
-    rabbit_disk_queue:tx_commit(q, [], []),
-    empty = rabbit_disk_queue:fetch(q),
-    rdq_stop(),
-    passed.
-
-rdq_test_startup_with_queue_gaps() ->
-    rdq_virgin(),
-    rdq_start(),
-    Msg = <<0:(8*256)>>,
-    Total = 1000,
-    Half = round(Total/2),
-    All = lists:seq(1,Total),
-    CommitAll = commit_list(All, Total, true),
-    [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, true)) || N <- All],
-    rabbit_disk_queue:tx_commit(q, CommitAll, []),
-    io:format("Publish done~n", []),
-    %% deliver first half
-    Seqs = [begin
-                Remaining = Total - N,
-                {Message, false, SeqId, Remaining}
-                    = rabbit_disk_queue:fetch(q),
-                ok = rdq_match_message(Message, N, Msg, 256),
-                SeqId
-            end || N <- lists:seq(1,Half)],
-    io:format("Deliver first half done~n", []),
-    %% ack every other message we have delivered (starting at the _first_)
-    lists:foldl(fun (SeqId2, true) ->
-                        rabbit_disk_queue:ack(q, [SeqId2]),
-                        false;
-                    (_SeqId2, false) ->
-                        true
-                end, true, Seqs),
-    rabbit_disk_queue:tx_commit(q, [], []),
-    io:format("Acked every other message delivered done~n", []),
-    rdq_stop(),
-    rdq_start(),
-    io:format("Startup (with shuffle) done~n", []),
-    %% should have shuffled up. So we should now get
-    %% lists:seq(2,500,2) already delivered
-    Seqs2 = [begin
-                 Remaining = round(Total - ((Half + N)/2)),
-                 {Message, true, SeqId, Remaining} =
-                     rabbit_disk_queue:fetch(q),
-                 ok = rdq_match_message(Message, N, Msg, 256),
-                 SeqId
-             end || N <- lists:seq(2,Half,2)],
-    rabbit_disk_queue:tx_commit(q, [], Seqs2),
-    io:format("Reread non-acked messages done~n", []),
-    %% and now fetch the rest
-    Seqs3 = [begin
-                 Remaining = Total - N,
-                 {Message, false, SeqId, Remaining} =
-                     rabbit_disk_queue:fetch(q),
-                 ok = rdq_match_message(Message, N, Msg, 256),
-                 SeqId
-             end || N <- lists:seq(1 + Half,Total)],
-    rabbit_disk_queue:tx_commit(q, [], Seqs3),
-    io:format("Read second half done~n", []),
-    empty = rabbit_disk_queue:fetch(q),
-    rdq_stop(),
-    passed.
-
-rdq_test_redeliver() ->
-    rdq_virgin(),
-    rdq_start(),
-    Msg = <<0:(8*256)>>,
-    Total = 1000,
-    Half = round(Total/2),
-    All = lists:seq(1,Total),
-    CommitAll = commit_list(All, Total, false),
-    [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- All],
-    rabbit_disk_queue:tx_commit(q, CommitAll, []),
-    io:format("Publish done~n", []),
-    %% deliver first half
-    Seqs = [begin
-                Remaining = Total - N,
-                {Message, false, SeqId, Remaining} =
-                    rabbit_disk_queue:fetch(q),
-                ok = rdq_match_message(Message, N, Msg, 256),
-                SeqId
-            end || N <- lists:seq(1,Half)],
-    io:format("Deliver first half done~n", []),
-    %% now requeue every other message (starting at the _first_)
-    %% and ack the other ones
-    lists:foldl(fun (SeqId2, true) ->
-                        rabbit_disk_queue:requeue(q, [{SeqId2, true}]),
-                        false;
-                    (SeqId2, false) ->
-                        rabbit_disk_queue:ack(q, [SeqId2]),
-                        true
-                end, true, Seqs),
-    rabbit_disk_queue:tx_commit(q, [], []),
-    io:format("Redeliver and acking done~n", []),
-    %% we should now get the 2nd half in order, followed by
-    %% every-other-from-the-first-half
-    Seqs2 = [begin
-                 Remaining = round(Total - N + (Half/2)),
-                 {Message, false, SeqId, Remaining} =
-                     rabbit_disk_queue:fetch(q),
-                 ok = rdq_match_message(Message, N, Msg, 256),
-                 SeqId
-             end || N <- lists:seq(1+Half, Total)],
-    rabbit_disk_queue:tx_commit(q, [], Seqs2),
-    Seqs3 = [begin
-                 Remaining = round((Half - N) / 2) - 1,
-                 {Message, true, SeqId, Remaining} =
-                     rabbit_disk_queue:fetch(q),
-                 ok = rdq_match_message(Message, N, Msg, 256),
-                 SeqId
-             end || N <- lists:seq(1, Half, 2)],
-    rabbit_disk_queue:tx_commit(q, [], Seqs3),
-    empty = rabbit_disk_queue:fetch(q),
-    rdq_stop(),
-    passed.
-
-rdq_test_purge() ->
-    rdq_virgin(),
-    rdq_start(),
-    Msg = <<0:(8*256)>>,
-    Total = 1000,
-    Half = round(Total/2),
-    All = lists:seq(1,Total),
-    CommitAll = commit_list(All, Total, false),
-    [rabbit_disk_queue:tx_publish(rdq_message(N, Msg, false)) || N <- All],
-    rabbit_disk_queue:tx_commit(q, CommitAll, []),
-    io:format("Publish done~n", []),
-    %% deliver first half
-    Seqs = [begin
-                Remaining = Total - N,
-                {Message, false, SeqId, Remaining} =
-                    rabbit_disk_queue:fetch(q),
-                ok = rdq_match_message(Message, N, Msg, 256),
-                SeqId
-            end || N <- lists:seq(1,Half)],
-    io:format("Deliver first half done~n", []),
-    rabbit_disk_queue:purge(q),
-    io:format("Purge done~n", []),
-    rabbit_disk_queue:tx_commit(q, [], Seqs),
-    io:format("Ack first half done~n", []),
-    empty = rabbit_disk_queue:fetch(q),
-    rdq_stop(),
-    passed.    
-
-rdq_new_mixed_queue(Q, Durable, Disk) ->
-    {ok, MS} = rabbit_mixed_queue:init(Q, Durable),
-    {MS1, _} =
-        rabbit_mixed_queue:estimate_queue_memory(MS),
-    case Disk of
-        true -> {ok, MS2} = rabbit_mixed_queue:set_storage_mode(disk, [], MS1),
-                MS2;
-        false -> MS1
-    end.
-
-rdq_test_mixed_queue_modes() ->
-    rdq_virgin(),
-    rdq_start(),
-    Payload = <<0:(8*256)>>,
-    MS = rdq_new_mixed_queue(q, true, false),
-    MS2 = lists:foldl(
-            fun (_N, MS1) ->
-                    Msg = rabbit_basic:message(x, <<>>, [], Payload),
-                    {ok, MS1a} = rabbit_mixed_queue:publish(Msg, MS1),
-                    MS1a
-            end, MS, lists:seq(1,10)),
-    MS4 = lists:foldl(
-            fun (_N, MS3) ->
-                    Msg = (rabbit_basic:message(x, <<>>, [], Payload))
-                        #basic_message { is_persistent = true },
-                    {ok, MS3a} = rabbit_mixed_queue:publish(Msg, MS3),
-                    MS3a
-            end, MS2, lists:seq(1,10)),
-    MS6 = lists:foldl(
-            fun (_N, MS5) ->
-                    Msg = rabbit_basic:message(x, <<>>, [], Payload),
-                    {ok, MS5a} = rabbit_mixed_queue:publish(Msg, MS5),
-                    MS5a
-            end, MS4, lists:seq(1,10)),
-    30 = rabbit_mixed_queue:len(MS6),
-    io:format("Published a mixture of messages; ~w~n",
-              [rabbit_mixed_queue:estimate_queue_memory(MS6)]),
-    {ok, MS7} = rabbit_mixed_queue:set_storage_mode(disk, [], MS6),
-    30 = rabbit_mixed_queue:len(MS7),
-    io:format("Converted to disk only mode; ~w~n",
-             [rabbit_mixed_queue:estimate_queue_memory(MS7)]),
-    {ok, MS8} = rabbit_mixed_queue:set_storage_mode(mixed, [], MS7),
-    30 = rabbit_mixed_queue:len(MS8),
-    io:format("Converted to mixed mode; ~w~n",
-              [rabbit_mixed_queue:estimate_queue_memory(MS8)]),
-    MS10 =
+          fun (MsgId, ok) -> {ok, MsgId} = rabbit_msg_store:read(MsgId), ok end,
+          ok, MsgIds),
+    %% remove them all
+    ok = rabbit_msg_store:remove(MsgIds),
+    %% check first half doesn't exist
+    false = lists:foldl(
+              fun (MsgId, false) -> rabbit_msg_store:contains(MsgId) end,
+              false, MsgIds1stHalf),
+    %% check second half does exist
+    true = lists:foldl(
+             fun (MsgId, true) -> rabbit_msg_store:contains(MsgId) end,
+             true, MsgIds2ndHalf),
+    %% read the second half again
+    ok =
         lists:foldl(
-          fun (N, MS9) ->
-                  Rem = 30 - N,
-                  {{#basic_message { is_persistent = false },
-                    false, _AckTag, Rem},
-                   MS9a} = rabbit_mixed_queue:fetch(MS9),
-                  MS9a
-          end, MS8, lists:seq(1,10)),
-    20 = rabbit_mixed_queue:len(MS10),
-    io:format("Delivered initial non persistent messages~n"),
-    {ok, MS11} = rabbit_mixed_queue:set_storage_mode(disk, [], MS10),
-    20 = rabbit_mixed_queue:len(MS11),
-    io:format("Converted to disk only mode~n"),
-    rdq_stop(),
-    rdq_start(),
-    MS12 = rdq_new_mixed_queue(q, true, false),
-    10 = rabbit_mixed_queue:len(MS12),
-    io:format("Recovered queue~n"),
-    {MS14, AckTags} =
+          fun (MsgId, ok) -> {ok, MsgId} = rabbit_msg_store:read(MsgId), ok end,
+          ok, MsgIds2ndHalf),
+    %% release the second half, just for fun
+    ok = rabbit_msg_store:release(MsgIds2ndHalf),
+    %% read the second half again, just for fun
+    ok =
         lists:foldl(
-          fun (N, {MS13, AcksAcc}) ->
-                  Rem = 10 - N,
-                  {{Msg = #basic_message { is_persistent = true },
-                    false, AckTag, Rem},
-                   MS13a} = rabbit_mixed_queue:fetch(MS13),
-                  {MS13a, [{Msg, AckTag} | AcksAcc]}
-          end, {MS12, []}, lists:seq(1,10)),
-    0 = rabbit_mixed_queue:len(MS14),
-    {ok, MS15} = rabbit_mixed_queue:ack(AckTags, MS14),
-    io:format("Delivered and acked all messages~n"),
-    {ok, MS16} = rabbit_mixed_queue:set_storage_mode(disk, [], MS15),
-    0 = rabbit_mixed_queue:len(MS16),
-    io:format("Converted to disk only mode~n"),
-    rdq_stop(),
-    rdq_start(),
-    MS17 = rdq_new_mixed_queue(q, true, false),
-    0 = rabbit_mixed_queue:len(MS17),
-    {MS17,0} = rabbit_mixed_queue:estimate_queue_memory(MS17),
-    io:format("Recovered queue~n"),
-    rdq_stop(),
+          fun (MsgId, ok) -> {ok, MsgId} = rabbit_msg_store:read(MsgId), ok end,
+          ok, MsgIds2ndHalf),
+    %% read the second half via peruse
+    lists:foldl(
+      fun (MsgId, ok) ->
+              rabbit_msg_store:peruse(MsgId,
+                                      fun ({ok, MsgId1}) when MsgId1 == MsgId ->
+                                              Self ! {peruse, MsgId1}
+                                      end),
+              receive
+                  {peruse, MsgId} ->
+                      ok
+              after
+                  10000 ->
+                      io:format("Failed to receive response via perues~n"),
+                      throw(timeout)
+              end
+      end, ok, MsgIds2ndHalf),
+    %% stop and restart, preserving every other msg in 2nd half
+    ok = rabbit_msg_store:stop(),
+    {ok, _Pid1} =
+        start_msg_store(fun ([]) -> finished;
+                            ([MsgId|MsgIdsTail])
+                            when length(MsgIdsTail) rem 2 == 0 ->
+                                {MsgId, 1, MsgIdsTail};
+                            ([MsgId|MsgIdsTail]) ->
+                                {MsgId, 0, MsgIdsTail}
+                        end, MsgIds2ndHalf),
+    %% check we have the right msgs left
+    lists:foldl(
+      fun (MsgId, Bool) ->
+              not(Bool = rabbit_msg_store:contains(MsgId))
+      end, false, MsgIds2ndHalf),
+    %% restart empty
+    ok = rabbit_msg_store:stop(),
+    {ok, _Pid2} = start_msg_store_empty(),
+    %% check we don't contain any of the msgs
+    false = lists:foldl(
+              fun (MsgId, false) -> rabbit_msg_store:contains(MsgId) end,
+              false, MsgIds),
+    %% push a lot of msgs in...
+    MsgIdsBig = lists:seq(1,100000),
+    Payload = << 0:65536 >>,
+    ok = lists:foldl(
+           fun (MsgId, ok) -> rabbit_msg_store:write(term_to_binary(MsgId),
+                                                     Payload) end,
+           ok, MsgIdsBig),
+    %% .., then remove even numbers ascending, and odd numbers
+    %% descending. This hits the GC.
+    ok = lists:foldl(
+           fun (MsgId, ok) ->
+                   rabbit_msg_store:remove([term_to_binary(
+                                              case MsgId rem 2 of
+                                                  0 -> MsgId;
+                                                  1 -> 100000 - MsgId
+                                              end)])
+           end, ok, MsgIdsBig),
+    %% ensure empty
+    false = lists:foldl(
+              fun (MsgId, false) -> rabbit_msg_store:contains(
+                                      term_to_binary(MsgId)) end,
+              false, MsgIdsBig),
+    %% restart empty
+    ok = rabbit_msg_store:stop(),
+    {ok, _Pid3} = start_msg_store_empty(),
     passed.
-
-rdq_test_mode_conversion_mid_txn() ->
-    Payload = <<0:(8*256)>>,
-    MsgIdsA = lists:seq(0,9),
-    MsgsA = [ rdq_message(MsgId, Payload, (0 == MsgId rem 2))
-              || MsgId <- MsgIdsA ],
-    MsgIdsB = lists:seq(10,20),
-    MsgsB = [ rdq_message(MsgId, Payload, (0 == MsgId rem 2))
-            || MsgId <- MsgIdsB ],
-
-    rdq_virgin(),
-    rdq_start(),
-    MS0 = rdq_new_mixed_queue(q, true, false),
-    passed = rdq_tx_publish_mixed_alter_commit_get(
-               MS0, MsgsA, MsgsB, disk, commit),
-
-    rdq_stop_virgin_start(),
-    MS1 = rdq_new_mixed_queue(q, true, false),
-    passed = rdq_tx_publish_mixed_alter_commit_get(
-               MS1, MsgsA, MsgsB, disk, cancel),
-
-
-    rdq_stop_virgin_start(),
-    MS2 = rdq_new_mixed_queue(q, true, true),
-    passed = rdq_tx_publish_mixed_alter_commit_get(
-               MS2, MsgsA, MsgsB, mixed, commit),
-
-    rdq_stop_virgin_start(),
-    MS3 = rdq_new_mixed_queue(q, true, true),
-    passed = rdq_tx_publish_mixed_alter_commit_get(
-               MS3, MsgsA, MsgsB, mixed, cancel),
-
-    rdq_stop(),
-    passed.
-
-rdq_tx_publish_mixed_alter_commit_get(MS0, MsgsA, MsgsB, Mode, CommitOrCancel) ->
-    0 = rabbit_mixed_queue:len(MS0),
-    MS2 = lists:foldl(
-            fun (Msg, MS1) ->
-                    {ok, MS1a} = rabbit_mixed_queue:publish(Msg, MS1),
-                    MS1a
-            end, MS0, MsgsA),
-    Len0 = length(MsgsA),
-    Len0 = rabbit_mixed_queue:len(MS2),
-    MS4 = lists:foldl(
-            fun (Msg, MS3) ->
-                    {ok, MS3a} = rabbit_mixed_queue:tx_publish(Msg, MS3),
-                    MS3a
-            end, MS2, MsgsB),
-    Len0 = rabbit_mixed_queue:len(MS4),
-    {ok, MS5} = rabbit_mixed_queue:set_storage_mode(Mode, MsgsB, MS4),
-    Len0 = rabbit_mixed_queue:len(MS5),
-    {ok, MS9} =
-        case CommitOrCancel of
-            commit ->
-                {ok, MS6} = rabbit_mixed_queue:tx_commit(MsgsB, [], MS5),
-                Len1 = Len0 + length(MsgsB),
-                Len1 = rabbit_mixed_queue:len(MS6),
-                {AckTags, MS8} =
-                    lists:foldl(
-                      fun (Msg, {Acc, MS7}) ->
-                              MsgId = binary_to_term(Msg #basic_message.guid),
-                              Rem = Len1 - MsgId - 1,
-                              {{Msg1, false, AckTag, Rem}, MS7a} =
-                                  rabbit_mixed_queue:fetch(MS7),
-                              ok = rdq_match_messages(Msg, Msg1),
-                              {[{Msg1, AckTag} | Acc], MS7a}
-                      end, {[], MS6}, MsgsA ++ MsgsB),
-                0 = rabbit_mixed_queue:len(MS8),
-                rabbit_mixed_queue:ack(AckTags, MS8);
-            cancel ->
-                {ok, MS6} = rabbit_mixed_queue:tx_rollback(MsgsB, MS5),
-                Len0 = rabbit_mixed_queue:len(MS6),
-                {AckTags, MS8} =
-                    lists:foldl(
-                      fun (Msg, {Acc, MS7}) ->
-                              MsgId = binary_to_term(Msg #basic_message.guid),
-                              Rem = Len0 - MsgId - 1,
-                              {{Msg1, false, AckTag, Rem}, MS7a} =
-                                  rabbit_mixed_queue:fetch(MS7),
-                              ok = rdq_match_messages(Msg, Msg1),
-                              {[{Msg1, AckTag} | Acc], MS7a}
-                      end, {[], MS6}, MsgsA),
-                0 = rabbit_mixed_queue:len(MS8),
-                rabbit_mixed_queue:ack(AckTags, MS8)
-        end,
-    0 = rabbit_mixed_queue:len(MS9),
-    Msg = rdq_message(0, <<0:256>>, false),
-    {ok, AckTag, MS10} = rabbit_mixed_queue:publish_delivered(Msg, MS9),
-    {ok,MS11} = rabbit_mixed_queue:ack([{Msg, AckTag}], MS10),
-    0 = rabbit_mixed_queue:len(MS11),
-    passed.
-
-rdq_time_commands(Funcs) ->
-    lists:foreach(fun (F) -> F() end, Funcs).
-
-rdq_virgin() ->
-    {Micros, {ok, _}} =
-        timer:tc(rabbit_disk_queue, start_link, []),
-    ok = rabbit_disk_queue:stop_and_obliterate(),
-    timer:sleep(1000),
-    Micros.
-
-rdq_start() ->
-    {ok, _} = rabbit_disk_queue:start_link(),
-    ok.
-
-rdq_stop() ->
-    rabbit_disk_queue:stop(),
-    timer:sleep(1000).
-
-rdq_stop_virgin_start() ->
-    rdq_stop(),
-    rdq_virgin(),
-    rdq_start().
