@@ -34,7 +34,7 @@
 -export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
          write_delivered/2, write_acks/2, flush_journal/1,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
-         find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/0]).
+         find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/1]).
 
 %%----------------------------------------------------------------------------
 %% The queue disk index
@@ -149,8 +149,8 @@
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(segment_size/0 :: () -> non_neg_integer()).
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
-             {non_neg_integer(), non_neg_integer()}).
--spec(start_msg_store/0 :: () -> {'ok', [amqqueue()]}).
+             {non_neg_integer(), non_neg_integer(), qistate()}).
+-spec(start_msg_store/1 :: ([amqqueue()]) -> 'ok').
 
 -endif.
 
@@ -283,7 +283,7 @@ segment_size() ->
     ?SEGMENT_ENTRIES_COUNT.
 
 find_lowest_seq_id_seg_and_next_seq_id(
-  #qistate { dir = Dir, journal_ack_dict = JAckDict }) ->
+  State = #qistate { dir = Dir, journal_ack_dict = JAckDict }) ->
     SegNumsPaths = all_segment_nums_paths(Dir),
     %% We don't want the lowest seq_id, merely the seq_id of the start
     %% of the lowest segment. That seq_id may not actually exist, but
@@ -295,18 +295,18 @@ find_lowest_seq_id_seg_and_next_seq_id(
             _  -> {SegNum1, _SegPath1} = lists:min(SegNumsPaths),
                   reconstruct_seq_id(SegNum1, 0)
         end,
-    NextSeqId =
+    {NextSeqId, State1} =
         case SegNumsPaths of
-            [] -> 0;
+            [] -> {0, State};
             _  -> {SegNum2, SegPath2} = lists:max(SegNumsPaths),
+                  State2 = close_file_handle_for_seg(SegNum2, State),
                   {_SDict, _AckCount, HighRelSeq} =
                       load_segment(SegNum2, SegPath2, JAckDict),
-                  1 + reconstruct_seq_id(SegNum2, HighRelSeq)
+                  {1 + reconstruct_seq_id(SegNum2, HighRelSeq), State2}
         end,
-    {LowSeqIdSeg, NextSeqId}.
+    {LowSeqIdSeg, NextSeqId, State1}.
 
-start_msg_store() ->
-    DurableQueues = rabbit_amqqueue:find_durable_queues(),
+start_msg_store(DurableQueues) ->
     DurableDict = 
         dict:from_list([ {queue_name_to_dir_name(Queue #amqqueue.name),
                           Queue #amqqueue.name} || Queue <- DurableQueues ]),
@@ -339,7 +339,7 @@ start_msg_store() ->
                           Dir = filename:join(queues_dir(), DirName),
                           ok = delete_queue_directory(Dir)
                   end, TransientDirs),
-    {ok, DurableQueues}.
+    ok.
 
 %%----------------------------------------------------------------------------
 %% Minor Helpers
@@ -375,7 +375,8 @@ get_file_handle_for_seg(SegNum, State = #qistate { cur_seg_num = CurSegNum }) ->
     State1 = #qistate { dir = Dir } =
         close_file_handle_for_seg(CurSegNum, State),
     {ok, Hdl} = file:open(seg_num_to_path(Dir, SegNum),
-                          [binary, raw, write, delayed_write, read]),
+                          [binary, raw, read, write,
+                           {delayed_write, ?SEGMENT_TOTAL_SIZE, 1000}]),
     {ok, _} = file:position(Hdl, {eof, 0}),
     {Hdl, State1 #qistate { cur_seg_num = SegNum, cur_seg_hdl = Hdl}}.
 
@@ -410,8 +411,9 @@ queue_index_walker([]) ->
     finished;
 queue_index_walker([QueueName|QueueNames]) ->
     {TotalMsgCount, State} = init(QueueName),
-    {LowSeqIdSeg, _NextSeqId} = find_lowest_seq_id_seg_and_next_seq_id(State),
-    queue_index_walker({TotalMsgCount, LowSeqIdSeg, State, QueueNames});
+    {LowSeqIdSeg, _NextSeqId, State1} =
+        find_lowest_seq_id_seg_and_next_seq_id(State),
+    queue_index_walker({TotalMsgCount, LowSeqIdSeg, State1, QueueNames});
 
 queue_index_walker({0, _LowSeqIdSeg, State, QueueNames}) ->
     terminate(State),
@@ -510,7 +512,8 @@ deliver_transient(SegPath, SDict) ->
               (RelSeq, {_MsgId, true, false}, {AckMeAcc, DeliverMeAcc}) ->
                   {[RelSeq | AckMeAcc], DeliverMeAcc}
           end, {[], []}, SDict),
-    {ok, Hdl} = file:open(SegPath, [binary, raw, write, delayed_write, read]),
+    {ok, Hdl} = file:open(SegPath, [binary, raw, read, write,
+                                    {delayed_write, ?SEGMENT_TOTAL_SIZE, 1000}]),
     {ok, _} = file:position(Hdl, {eof, 0}),
     ok = file:write(Hdl, [ <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                              RelSeq:?REL_SEQ_BITS>> || RelSeq <- DeliverMe ]),
@@ -523,7 +526,8 @@ deliver_transient(SegPath, SDict) ->
 %%----------------------------------------------------------------------------
 
 load_segment(SegNum, SegPath, JAckDict) ->
-    case file:open(SegPath, [raw, binary, read_ahead, read]) of
+    case file:open(SegPath, [raw, binary, read,
+                             {read_ahead, ?SEGMENT_TOTAL_SIZE}]) of
         {error, enoent} -> {dict:new(), 0, 0};
         {ok, Hdl} ->
             {SDict, AckCount, HighRelSeq} =
@@ -596,7 +600,8 @@ append_acks_to_segment(SegPath, AckCount, Acks)
     ?SEGMENT_ENTRIES_COUNT;
 append_acks_to_segment(SegPath, AckCount, Acks)
   when length(Acks) + AckCount < ?SEGMENT_ENTRIES_COUNT ->
-    {ok, Hdl} = file:open(SegPath, [raw, binary, delayed_write, write, read]),
+    {ok, Hdl} = file:open(SegPath, [raw, binary, read, write, 
+                                    {delayed_write, ?SEGMENT_TOTAL_SIZE, 1000}]),
     {ok, _} = file:position(Hdl, {eof, 0}),
     AckCount1 =
         lists:foldl(

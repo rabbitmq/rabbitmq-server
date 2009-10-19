@@ -156,7 +156,8 @@ start(normal, []) ->
                 ok = maybe_insert_default_data(),
                 ok = rabbit_exchange:recover(),
                 %% TODO - this should probably use start_child somehow too
-                {ok, DurableQueues} = rabbit_queue_index:start_msg_store(),
+                DurableQueues = rabbit_amqqueue:find_durable_queues(),
+                ok = rabbit_queue_index:start_msg_store(DurableQueues),
                 {ok, _RealDurableQueues} = rabbit_amqqueue:recover(DurableQueues)
                 %% TODO - RealDurableQueues is a subset of
                 %% DurableQueues. It may have queues removed which

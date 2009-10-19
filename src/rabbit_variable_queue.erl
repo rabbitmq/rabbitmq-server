@@ -116,7 +116,7 @@
 init(QueueName) ->
     {GammaCount, IndexState} =
         rabbit_queue_index:init(QueueName),
-    {GammaSeqId, NextSeqId} =
+    {GammaSeqId, NextSeqId, IndexState1} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(IndexState),
     Gamma = case GammaCount of
                 0 -> #gamma { seq_id = undefined, count = 0 };
@@ -129,7 +129,7 @@ init(QueueName) ->
                    target_ram_msg_count = undefined,
                    ram_msg_count = 0,
                    queue = QueueName,
-                   index_state = IndexState,
+                   index_state = IndexState1,
                    next_seq_id = NextSeqId,
                    out_counter = 0,
                    egress_rate = 0,
@@ -303,15 +303,15 @@ delete(State) ->
     IndexState1 =
         case rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(
                IndexState) of
-            {N, N} ->
-                IndexState;
-            {GammaSeqId, NextSeqId} ->
-                {_DeleteCount, IndexState2} =
-                    delete1(NextSeqId, 0, GammaSeqId, IndexState),
-                IndexState2
+            {N, N, IndexState2} ->
+                IndexState2;
+            {GammaSeqId, NextSeqId, IndexState2} ->
+                {_DeleteCount, IndexState3} =
+                    delete1(NextSeqId, 0, GammaSeqId, IndexState2),
+                IndexState3
     end,
-    IndexState3 = rabbit_queue_index:terminate_and_erase(IndexState1),
-    State1 #vqstate { index_state = IndexState3 }.
+    IndexState4 = rabbit_queue_index:terminate_and_erase(IndexState1),
+    State1 #vqstate { index_state = IndexState4 }.
 
 %% [{Msg, AckTag}]
 %% We guarantee that after fetch, only persistent msgs are left on

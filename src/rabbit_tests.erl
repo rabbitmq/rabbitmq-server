@@ -51,6 +51,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     passed = test_msg_store(),
+    passed = test_queue_index(),
     passed = test_priority_queue(),
     passed = test_unfold(),
     passed = test_parsing(),
@@ -980,5 +981,76 @@ test_msg_store() ->
     %% restart empty
     ok = rabbit_msg_store:stop(),
     {ok, _Pid3} = start_msg_store_empty(),
+    passed.
+
+queue_name(Name) ->
+    rabbit_misc:r(<<"/">>, queue, term_to_binary(Name)).
+
+test_queue() ->
+    queue_name(test).
+
+test_amqqueue(Durable) ->
+    #amqqueue{name = test_queue(),
+              durable = Durable,
+              auto_delete = true,
+              arguments = [],
+              pid = none}.
+
+empty_test_queue() ->
+    ok = rabbit_queue_index:start_msg_store([]),
+    {0, Qi1} = rabbit_queue_index:init(test_queue()),
+    _Qi2 = rabbit_queue_index:terminate_and_erase(Qi1),
+    ok.
+
+queue_index_publish(SeqIds, Persistent, Qi) ->
+    lists:foldl(
+      fun (SeqId, {QiN, SeqIdsMsgIdsAcc}) ->
+              MsgId = rabbit_guid:guid(),
+              QiM = rabbit_queue_index:write_published(MsgId, SeqId, Persistent,
+                                                       QiN),
+              {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
+      end, {Qi, []}, SeqIds).
+
+test_queue_index() ->
+    ok = empty_test_queue(),
+    SeqIdsA = lists:seq(1,10000),
+    SeqIdsB = lists:seq(10001,20000),
+    {0, Qi0} = rabbit_queue_index:init(test_queue()),
+    {0, 0, Qi1} =
+        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi0),
+    {Qi2, _SeqIdsMsgIdsA} = queue_index_publish(SeqIdsA, false, Qi1),
+    {0, 10001, Qi3} =
+        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi2),
+    %% call terminate twice to prove it's idempotent
+    _Qi4 = rabbit_queue_index:terminate(rabbit_queue_index:terminate(Qi3)),
     ok = rabbit_msg_store:stop(),
+    ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
+    %% should get length back as 0, as all the msgs were transient
+    {0, Qi5} = rabbit_queue_index:init(test_queue()),
+    {false, Qi6} = rabbit_queue_index:flush_journal(Qi5),
+    {0, 10001, Qi7} =
+        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi6),
+    {Qi8, _SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
+    {0, 20001, Qi9} =
+        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi8),
+    _Qi10 = rabbit_queue_index:terminate(Qi9),
+    ok = rabbit_msg_store:stop(),
+    ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
+    %% should get length back as 10000
+    LenB = length(SeqIdsB),
+    {LenB, Qi11} = rabbit_queue_index:init(test_queue()),
+    {0, 20001, Qi12} =
+        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi11),
+    Qi13 = lists:foldl(
+             fun (SeqId, QiN) ->
+                     rabbit_queue_index:write_delivered(SeqId, QiN)
+             end, Qi12, SeqIdsB),
+    Qi14 = rabbit_queue_index:write_acks(SeqIdsB, Qi13),
+    {0, 20001, Qi15} =
+        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi14),
+    _Qi16 = rabbit_queue_index:terminate(Qi15),
+    ok = rabbit_msg_store:stop(),
+    ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
+    %% should get length back as 0 because all persistent msgs have been acked
+    {0, _Qi17} = rabbit_queue_index:init(test_queue()),
     passed.
