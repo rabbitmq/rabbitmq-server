@@ -1021,6 +1021,7 @@ verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
     ko.
 
 test_queue_index() ->
+    rabbit_msg_store:stop(),
     ok = empty_test_queue(),
     SeqIdsA = lists:seq(1,10000),
     SeqIdsB = lists:seq(10001,20000),
