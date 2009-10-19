@@ -577,9 +577,17 @@ handle_call({commit, Txn}, From, State) ->
     noreply(NewState);
 
 handle_call({notify_down, ChPid}, From, State) ->
-    %% optimisation: we reply straight away so the sender can continue
-    gen_server2:reply(From, ok),
-    handle_ch_down(ChPid, State);
+    %% we want to do this synchronously, so that auto_deleted queues
+    %% are no longer visible by the time we send a response to the
+    %% client.  The queue is ultimately deleted in terminate/2; if we
+    %% return stop with a reply, terminate/2 will be called by
+    %% gen_server/2 *before* the reply is sent.
+    case handle_ch_down(ChPid, State) of
+        {noreply, NewState, Timeout} ->
+            {reply, ok, NewState, Timeout};
+        {stop, normal, NewState2} ->
+            {stop, normal, ok, NewState2}
+    end;
 
 handle_call({basic_get, ChPid, NoAck}, _From,
             State = #q{q = #amqqueue{name = QName},
