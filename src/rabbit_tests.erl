@@ -1052,5 +1052,7 @@ test_queue_index() ->
     ok = rabbit_msg_store:stop(),
     ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
     %% should get length back as 0 because all persistent msgs have been acked
-    {0, _Qi17} = rabbit_queue_index:init(test_queue()),
+    {0, Qi17} = rabbit_queue_index:init(test_queue()),
+    _Qi18 = rabbit_queue_index:terminate_and_erase(Qi17),
+    ok = rabbit_msg_store:stop(),
     passed.
