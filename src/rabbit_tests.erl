@@ -932,7 +932,7 @@ test_msg_store() ->
                       ok
               after
                   10000 ->
-                      io:format("Failed to receive response via perues~n"),
+                      io:format("Failed to receive response via peruse~n"),
                       throw(timeout)
               end
       end, ok, MsgIds2ndHalf),
