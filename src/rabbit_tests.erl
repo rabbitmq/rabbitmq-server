@@ -838,12 +838,12 @@ msg_store_contains(Atom, MsgIds) ->
                       rabbit_msg_store:contains(MsgId) end, Atom, MsgIds).
 
 msg_store_sync(MsgIds) ->
-    Now = now(),
+    Ref = make_ref(),
     Self = self(),
     ok = rabbit_msg_store:sync(MsgIds,
-                               fun () -> Self ! {sync, Now} end),
+                               fun () -> Self ! {sync, Ref} end),
     receive
-        {sync, Now} -> ok
+        {sync, Ref} -> ok
     after
         10000 ->
             io:format("Sync from msg_store missing for msg_ids ~p~n", [MsgIds]),
