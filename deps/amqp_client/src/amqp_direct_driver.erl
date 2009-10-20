@@ -28,10 +28,9 @@
 
 -include("amqp_client.hrl").
 
--export([handshake/1, open_channel/2, close_channel/3]).
--export([close_connection/2, close_connection/3]).
+-export([handshake/1, init_channel/2, terminate_channel/3]).
+-export([all_channels_closed_event/3, terminate_connection/2]).
 -export([do/3]).
--export([handle_broker_close/1]).
 
 %---------------------------------------------------------------------------
 % Driver API Methods
@@ -50,25 +49,30 @@ handshake(ConnectionState = #connection_state{username = User,
                                              VHostPath),
     ConnectionState.
 
-open_channel(ChannelNumber,
+init_channel(ChannelNumber,
              #connection_state{username = User, vhostpath = VHost}) ->
     Peer = rabbit_channel:start_link(ChannelNumber, self(), self(),
                                      User, VHost),
     {Peer, Peer}.
 
-close_channel(_Reason, _WriterPid, _ReaderPid) ->
+terminate_channel(_Reason, _WriterPid, _ReaderPid) ->
     ok.
 
-close_connection(_Close, _State) ->
-    ok.
+all_channels_closed_event(Reason, _Close, _State) ->
+    case Reason of
+        server_initiated_close ->
+            %% In the direct case, the connection should terminate right away
+            %% in the case of a server initiated shutdown
+            erlang:error(unexpected_situation);
+        _ ->
+            self() ! {'$gen_cast', {method, #'connection.close_ok'{}, none}},
+            wait_close_ok
+    end.
 
-close_connection(_Close, From, _State) ->
-    gen_server:reply(From, #'connection.close_ok'{}).
+terminate_connection(_Reason, _State) ->
+    ok.
 
 do(Writer, Method, none) ->
     rabbit_channel:do(Writer, Method);
 do(Writer, Method, Content) ->
     rabbit_channel:do(Writer, Method, Content).
-
-handle_broker_close(_State) ->
-    ok.

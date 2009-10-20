@@ -41,6 +41,8 @@
 -export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
 -export([close/1, close/3]).
 
+-record(closing, {reason, close, from = none, phase = terminate_channels}).
+
 %%---------------------------------------------------------------------------
 %% Type Definitions
 %%---------------------------------------------------------------------------
@@ -178,16 +180,16 @@ open_channel(ConnectionPid) ->
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
 open_channel(ConnectionPid, ChannelNumber) ->
-    gen_server:call(ConnectionPid, {open_channel, ChannelNumber}, infinity).
+    command(ConnectionPid, {open_channel, ChannelNumber}).
 
-%% @spec (ConnectionPid) -> ok
+%% @spec (ConnectionPid) -> ok | Error
 %% where
 %%      ConnectionPid = pid()
 %% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye">>).
 close(ConnectionPid) ->
     close(ConnectionPid, 200, <<"Goodbye">>).
 
-%% @spec (ConnectionPid, Code, Text) -> ok
+%% @spec (ConnectionPid, Code, Text) -> ok | closing
 %% where
 %%      ConnectionPid = pid()
 %%      Code = integer()
@@ -199,38 +201,130 @@ close(ConnectionPid, Code, Text) ->
                                 reply_code = Code,
                                 class_id   = 0,
                                 method_id  = 0},
-    #'connection.close_ok'{} = gen_server:call(ConnectionPid, Close, infinity),
-    ok.
+    command(ConnectionPid, {close, Close}).
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-%% Starts a new channel process, invokes the correct driver
-%% (network or direct) to perform any environment specific channel setup and
-%% starts the AMQP ChannelOpen handshake.
-handle_open_channel(ProposedNumber,
-                    ConnectionState = #connection_state{driver = Driver}) ->
-    ChannelNumber = assign_channel_number(ProposedNumber, ConnectionState),
-    ChannelState = #channel_state{parent_connection = self(),
-                                  number = ChannelNumber,
-                                  driver = Driver},
-    {ok, ChannelPid} =
-        gen_server:start_link(amqp_channel, {ChannelState, ConnectionState}, []),
-    NewConnectionState =
-        register_channel(ChannelNumber, ChannelPid, ConnectionState),
-    #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
-    {reply, ChannelPid, NewConnectionState}.
+command(ConnectionPid, Command) ->
+    gen_server:call(ConnectionPid, {command, Command}, infinity).
+
+broadcast_to_channels(Message, #connection_state{channels = Channels}) ->
+    dict:map(fun({chpid, Channel}, _) -> Channel ! Message, ok;
+                ({channel, _}, _)     -> ok
+             end, Channels),
+    ok.
+
+closing_to_reason(#closing{reason = Reason,
+                           close = #'connection.close'{reply_code = Code,
+                                                       reply_text = Text}}) ->
+    {Reason, Code, Text}.
+
+%% Changes connection's state to closing.
+%%
+%% ChannelCloseType can be flush or abrupt
+%%
+%% The closing reason (Closing#closing.reason) can be one of the following
+%%     app_initiated_close - app has invoked the close/{1,3} command. In this
+%%         case the close field is the method to be sent to the server after all
+%%         the channels have terminated (and flushed); the from field is the
+%%         process that initiated the call and to whom the server must reply.
+%%         phase = terminate_channels | wait_close_ok
+%%     internal_error - there was an internal error either in a channel or in
+%%         the connection process. close field is the method to be sent to the
+%%         server after all channels have been abruptly terminated (do not flush
+%%         in this case).
+%%         phase = terminate_channels | wait_close_ok
+%%     server_initiated_close - server has sent 'connection.close'. close field
+%%         is the method sent by the server.
+%%         phase = terminate_channels | wait_socket_close
+%%
+%% The precedence of the closing MainReason's is as follows:
+%%     app_initiated_close, internal_error, server_initiated_close
+%% (i.e.: a given reason can override the currently set one if it is later
+%% mentioned in the above list). We can rely on erlang's comparison of atoms
+%% for this.
+set_closing_state(ChannelCloseType, Closing, 
+                  #connection_state{closing = false} = State) ->
+    broadcast_to_channels(
+        {connection_closing, ChannelCloseType, closing_to_reason(Closing)},
+         State),
+    check_trigger_all_channels_closed_event(
+        State#connection_state{closing = Closing});
+%% Already closing, override situation
+set_closing_state(ChannelCloseType, NewClosing,
+                  #connection_state{closing = CurClosing} = State) ->
+    %% Do not override reason in channels (because it might cause channels to
+    %% to exit with different reasons) but do cause them to close abruptly
+    %% if the new closing type requires it
+    case ChannelCloseType of
+        abrupt ->
+            broadcast_to_channels({connection_closing, ChannelCloseType,
+                                   closing_to_reason(CurClosing)},
+                                  State);
+        _ -> ok
+   end,
+   #closing{reason = NewReason, close = NewClose} = NewClosing,
+   #closing{reason = CurReason} = CurClosing,
+   ResClosing =
+       if
+           %% Override (rely on erlang's comparison of atoms)
+           NewReason >= CurReason ->
+               %% Note that when overriding, we keep the current phase
+               CurClosing#closing{reason = NewReason, close = NewClose};
+           %% Do not override
+           true ->
+               CurClosing
+       end,
+    NewState = State#connection_state{closing = ResClosing},
+    %% Now check if it's the case that the server has sent a connection.close
+    %% while we were in the closing state (for whatever reason). We need to
+    %% send connection.close_ok (it might be even be the case that we are
+    %% sending it again) and wait for the socket to close.
+    case NewReason of
+        server_initiated_close -> all_channels_closed_event(NewState);
+        _                      -> NewState
+    end.
+   
+%% The all_channels_closed_event is called when all channels have been closed
+%% after the connection broadcasts a connection_closing message to all channels
+check_trigger_all_channels_closed_event(
+        #connection_state{closing = false} = State) ->
+    State;
+check_trigger_all_channels_closed_event(
+        #connection_state{channels = Channels,
+                          closing = Closing} = State) ->
+    #closing{phase = terminate_channels} = Closing, % assertion
+    IsChannelsEmpty = (dict:size(Channels) == 0),
+    if IsChannelsEmpty -> all_channels_closed_event(State);
+       true            -> State
+    end.
+
+all_channels_closed_event(#connection_state{driver = Driver,
+                                            closing = Closing} = State) ->
+    #closing{reason = Reason, close = Close} = Closing,
+    NewPhase = Driver:all_channels_closed_event(Reason, Close, State),
+    State#connection_state{closing = Closing#closing{phase = NewPhase}}.
+
+internal_error_closing() ->
+    #closing{reason = internal_error,
+             close = #'connection.close'{reply_text = <<>>,
+                                         reply_code = ?INTERNAL_ERROR,
+                                         class_id = 0,
+                                         method_id = 0}}.
+
+%%---------------------------------------------------------------------------
+%% Channel assignment (internal plumbing)
+%%---------------------------------------------------------------------------
 
 assign_channel_number(none, #connection_state{channels = Channels}) ->
     %% TODO Implement support for channel_max from 'connection.tune'
     %% TODO Make it possible for channel numbers to be reused properly
-    lists:foldl(
-        fun
-            ({channel, N},  Max) when Max >= N -> Max;
-            ({channel, N}, _Max)               -> N;
-            ({chpid, _},    Max)               -> Max
-        end, 0, dict:fetch_keys(Channels)) + 1;
+    dict:fold(fun({channel, N}, _,  Max) when Max >= N -> Max;
+                 ({channel, N}, _, _Max)               -> N;
+                 ({chpid, _}, _, Max)                  -> Max
+              end, 0, Channels) + 1;
 
 assign_channel_number(ChannelNumber, State = #connection_state{channels = Channels}) ->
     case dict:is_key({channel, ChannelNumber}, Channels) of
@@ -254,17 +348,38 @@ register_channel(ChannelNumber, ChannelPid,
 %% This will be called when a channel process exits and needs to be
 %% deregistered. Can be called with either {channel, ChannelNumber} or
 %% {chpid, ChannelPid}
-unregister_channel(Channel,
-                   State = #connection_state{channels = Channels0} ) ->
+unregister_channel(Channel, State = #connection_state{channels = Channels0}) ->
     Val = dict:fetch(Channel, Channels0),
     Channels1 = dict:erase(Val, dict:erase(Channel, Channels0)),
-    State#connection_state{channels = Channels1}.
+    NewState = State#connection_state{channels = Channels1},
+    check_trigger_all_channels_closed_event(NewState).
 
 %% Returns true iff channel defined either by {channel, ChannelNumber} or
 %% {chpid, ChannelPid} is registered within the connection
 is_registered_channel(Channel, #connection_state{channels = Channels}) ->
     dict:is_key(Channel, Channels).
 
+%%---------------------------------------------------------------------------
+%% Command handling
+%%---------------------------------------------------------------------------
+
+handle_command({open_channel, ProposedNumber}, _From,
+               #connection_state{driver = Driver} = State) ->
+    ChannelNumber = assign_channel_number(ProposedNumber, State),
+    ChannelState = #channel_state{parent_connection = self(),
+                                  number = ChannelNumber,
+                                  driver = Driver},
+    {ok, ChannelPid} = gen_server:start_link(amqp_channel,
+                                             {ChannelState, State}, []),
+    NewState = register_channel(ChannelNumber, ChannelPid, State),
+    #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
+    {reply, ChannelPid, NewState};
+
+handle_command({close, #'connection.close'{} = Close}, From, State) ->
+    {noreply, set_closing_state(flush, #closing{reason = app_initiated_close,
+                                                close = Close,
+                                                from = From},
+                                State)}.
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -274,40 +389,57 @@ is_registered_channel(Channel, #connection_state{channels = Channels}) ->
 init({InitialState, Driver}) when is_atom(Driver) ->
     process_flag(trap_exit, true),
     State = Driver:handshake(InitialState),
-    {ok, State#connection_state{driver = Driver} }.
+    {ok, State#connection_state{driver = Driver}}.
 
+%% Standard handling of a command
 %% @private
-%% Starts a new channel
-handle_call({open_channel, ChannelNumber}, _From, State) ->
-    handle_open_channel(ChannelNumber, State);
+handle_call({command, Command}, From,
+            #connection_state{closing = Closing} = State) ->
+    case Closing of
+        false -> handle_command(Command, From, State);
+        _     -> {reply, closing, State}
+    end.
 
-%% @private
-%% Shuts the AMQP connection down
-handle_call(Close = #'connection.close'{},
-            From, State = #connection_state{driver = Driver}) ->
-    Driver:close_connection(Close, From, State),
-    {stop, normal, State}.
-
-%%---------------------------------------------------------------------------
 %% Handle forced close from the broker
-%%---------------------------------------------------------------------------
-
-%% Don't just exit here, rather, save the close message and wait for the
-%% the server to close the socket (or timeout) and have the reader process
-%% send an EXIT signal to this process.
+%% Network case: terminate channels abruptly and enter closing state
+%% (wait for channels to terminate and then send 'connection.close_ok')
 %% @private
-handle_cast({method, #'connection.close'{reply_code = Code,
-                                         reply_text = Text}, none},
-            State = #connection_state{driver = Driver}) ->
-    Driver:handle_broker_close(State),
-    Reason = {server_initiated_close, Code, Text},
-    {noreply, State#connection_state{close_reason = Reason,
-                                     closing      = true}}.
+handle_cast({method, #'connection.close'{} = Close, none}, State) ->
+    {noreply, set_closing_state(abrupt,
+                                #closing{reason = server_initiated_close,
+                                         close = Close},
+                                State)};
 
-%% This can be sent by the channel process in the direct case
-%% when it receives an amqp exception from it's corresponding channel process
-handle_info({connection_level_error, Code, Text}, State) ->
+%% Handle close_ok from broker: reply to app and stop
+handle_cast({method, #'connection.close_ok'{}, none},
+            State = #connection_state{closing = Closing =
+                                          #closing{from = From,
+                                                   close = Close}}) ->
+    case From of
+        none -> ok;
+        _    -> gen_server:reply(From, ok)
+    end,
+    if Close#'connection.close'.reply_code =:= 200 ->
+           {stop, normal, State};
+       true ->
+           {stop, closing_to_reason(Closing), State}
+    end.
+
+%% Handle forced close from the broker
+%% Direct case: Just stop connection here
+%% @private
+handle_info({connection_level_error, Code, Text},
+            #connection_state{driver = Driver} = State) ->
+    Driver:handle_broker_close(State),
     {stop, {server_initiated_close, Code, Text}, State};
+
+%% This is received after we have sent 'connection.close' to the server
+%% but timed out waiting for 'connection.close_ok' back
+handle_info(timeout_waiting_for_close_ok,
+            State = #connection_state{closing = Closing}) ->
+    ?LOG_WARN("Connection ~p closing: timed out waiting for"
+              "'connection.close_ok'.", [self()]),
+    {stop, {timeout_waiting_for_close_ok, closing_to_reason(Closing)}, State};
 
 %%---------------------------------------------------------------------------
 %% Trap exits
@@ -316,18 +448,16 @@ handle_info({connection_level_error, Code, Text}, State) ->
 %% Handle exit from writer0
 %% @private
 handle_info({'EXIT', Writer0Pid, Reason},
-            State = #connection_state{channel0_writer_pid = Writer0Pid,
-                                      closing = false}) ->
-    ?LOG_WARN("Connection ~p closing: received exit signal from writer. "
+            State = #connection_state{channel0_writer_pid = Writer0Pid}) ->
+    ?LOG_WARN("Connection (~p) closing: received exit signal from writer. "
               "Reason: ~p~n", [self(), Reason]),
     {stop, {writer0_died, Reason}, State};
 
 %% Handle exit from reader0
 %% @private
 handle_info({'EXIT', Reader0Pid, Reason},
-            State = #connection_state{channel0_reader_pid = Reader0Pid,
-                                      closing = false}) ->
-    ?LOG_WARN("Connection ~p closing: received exit signal from reader. "
+            State = #connection_state{channel0_reader_pid = Reader0Pid}) ->
+    ?LOG_WARN("Connection (~p) closing: received exit signal from reader. "
               "Reason: ~p~n", [self(), Reason]),
     {stop, {reader0_died, Reason}, State};
 
@@ -335,83 +465,66 @@ handle_info({'EXIT', Reader0Pid, Reason},
 %% @private
 handle_info({'EXIT', MainReaderPid, Reason},
             State = #connection_state{main_reader_pid = MainReaderPid,
-                                      closing = false}) ->
-    ?LOG_WARN("Connection (~p) closing: received exit signal from main "
-              "reader. Reason: ~p~n", [self(), Reason]),
-    {stop, {main_reader_died, Reason}, State};
+                                      closing = Closing}) ->
+    #closing{reason = ClosingReason, phase = ClosingPhase} = Closing,
+    case {ClosingReason, ClosingPhase, Reason} of
+        %% Normal server initiated shutdown exit (socket has been closed after
+        %% replying with 'connection.close_ok')
+        {server_initiated_close, wait_socket_close, socket_closed} ->
+            {stop, closing_to_reason(Closing), State};
+        %% Timed out waiting for socket to close after replying with
+        %% 'connection.close_ok'
+        {server_initiated_close, wait_socket_close, socket_closing_timeout} ->
+            ?LOG_WARN("Connection (~p) closing: timed out waiting for socket "
+                      "to close after sending 'connection.close_ok", [self()]),
+            {stop, {socket_closing_timeout, closing_to_reason(Closing)}, State};
+        %% Main reader died
+        _ ->
+            ?LOG_WARN("Connection (~p) closing: received exit signal from main "
+                      "reader. Reason: ~p~n", [self(), Reason]),
+            {stop, {main_reader_died, Reason}, State}
+    end;
 
 %% Handle exit from other pid
 %% @private
-handle_info({'EXIT', Pid, Reason}, State = #connection_state{closing = false}) ->
+handle_info({'EXIT', Pid, Reason},
+            #connection_state{closing = Closing} = State) ->
     case {is_registered_channel({chpid, Pid}, State), Reason} of
         %% Normal amqp_channel shutdown
         {true, normal} ->
             {noreply, unregister_channel({chpid, Pid}, State)};
-        %% amqp_channel server forced shutdown (soft error)
+        %% Channel terminating due to soft error
         {true, {server_initiated_close, _, _}} ->
             {noreply, unregister_channel({chpid, Pid}, State)};
-        %% amqp_channel server forced shutdown (hard error)
-        {true, Error = #amqp_error{name = ErrorName}} ->
-            ?LOG_WARN("Channel peer (~p) sent this message: ~p~n",
-                      [Pid, Error]),
-            {_, Code, Text} = rabbit_framing:lookup_amqp_exception(ErrorName),
-            {stop, {server_initiated_close, Code, Text}, State};
+        %% Channel terminating because of connection_closing
+        {true, {_, _, _}} when Closing =/= false ->
+            {noreply, unregister_channel({chpid, Pid}, State)};
         %% amqp_channel dies with internal reason - this takes the entire
         %% connection down
         {true, _} ->
             ?LOG_WARN("Connection (~p) closing: channel (~p) died. Reason: ~p~n",
                       [self(), Pid, Reason]),
-            {stop, {channel_died, Pid, Reason}, State};
+            State1 = unregister_channel({chpid, Pid}, State),
+            State2 = set_closing_state(abrupt, internal_error_closing(),
+                                       State1),
+            {noreply, State2};
         %% Exit signal from unknown pid
         {false, _} ->
             ?LOG_WARN("Connection (~p) closing: received unexpected exit signal "
                       "from (~p). Reason: ~p~n", [self(), Pid, Reason]),
-            {stop, {unexpected_exit_signal, Pid, Reason}, State}
-    end;
-
-%% Handle exit from main reader, when closing:
-%% @private
-handle_info({'EXIT', MainReaderPid, Reason},
-            State = #connection_state{main_reader_pid = MainReaderPid,
-                                      closing = true,
-                                      close_reason = CloseReason}) ->
-    case Reason of
-        socket_closed ->
-            {stop, CloseReason, State};
-        socket_closing_timeout ->
-            {stop, {socket_closing_timeout, CloseReason}, State};
-        _ ->
-            {stop,
-             {main_reader_died_while_closing_connection, Reason, CloseReason},
-             State}
-    end;
-
-%% Handle exit from some other process, when closing:
-%% Just ignore all other exit signals. Wait for main reader to die due to
-%% the server closing the socket or the socket_closing_timeout
-%% @private
-handle_info({'EXIT', _Pid, _Reason},
-            State = #connection_state{closing = true}) ->
-    {noreply, State}.
+            State1 = unregister_channel({chpid, Pid}, State),
+            State2 = set_closing_state(abrupt, internal_error_closing(),
+                                       State1),
+            {noreply, State2}
+    end.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks
 %%---------------------------------------------------------------------------
 
 %% @private
-terminate({Error, _Pid, _Reason}, State = #connection_state{driver = Driver}) 
-    when Error == channel_died;
-         Error == unexpected_exit_signal ->
-    Close = #'connection.close'{reply_text = <<>>,
-                                reply_code = ?INTERNAL_ERROR,
-                                class_id   = 0,
-                                method_id  = 0},
-    Driver:close_connection(Close, State),
-    ok;
-
-%% @private
-terminate(_Reason, _State) ->
-    ok.
+terminate(Reason, #connection_state{driver = Driver} = State) ->
+    Driver:terminate_connection(Reason, State).
     
 %% @private
 code_change(_OldVsn, State, _Extra) ->

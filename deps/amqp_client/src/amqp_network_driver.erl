@@ -30,11 +30,10 @@
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0},{active,false}, {nodelay, true}]).
 
--export([handshake/1, open_channel/2, close_channel/3]).
--export([close_connection/2, close_connection/3]).
--export([start_main_reader/2, start_writer/2]).
+-export([handshake/1, init_channel/2, terminate_channel/3]).
+-export([all_channels_closed_event/3, terminate_connection/2]).
 -export([do/3]).
--export([handle_broker_close/1]).
+-export([start_main_reader/2, start_writer/2]).
 
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
 -define(CLIENT_CLOSE_TIMEOUT, 5000).
@@ -80,70 +79,69 @@ handshake(State = #connection_state{serverhost = Host, port = Port,
 %% because this will be parsed out of the frames received off the socket.
 %% Hence, you have tell the main reader which Pids are intended to
 %% process messages for a particular channel
-open_channel(ChannelNumber,
+init_channel(ChannelNumber,
              #connection_state{main_reader_pid = MainReaderPid, sock = Sock}) ->
     FramingPid = start_framing_channel(),
     MainReaderPid ! {register_framing_channel, ChannelNumber, FramingPid},
     WriterPid = start_writer(Sock, ChannelNumber),
     {WriterPid, FramingPid}.
 
-close_channel(_Reason, WriterPid, ReaderPid) ->
+terminate_channel(_Reason, WriterPid, ReaderPid) ->
     rabbit_writer:shutdown(WriterPid),
     rabbit_framing_channel:shutdown(ReaderPid),
     ok.
 
-close_connection(Close = #'connection.close'{}, State) ->
-    close_connection(Close, none, State).
+all_channels_closed_event(Reason, #'connection.close'{} = Close,
+                          #connection_state{channel0_writer_pid = WriterPid,
+                                            main_reader_pid = MainReaderPid}) ->
+    case Reason of
+        server_initiated_close ->
+            do(WriterPid, #'connection.close_ok'{}, none),
+            erlang:send_after(?SOCKET_CLOSING_TIMEOUT, MainReaderPid,
+                              socket_closing_timeout),
+            wait_socket_close;
+        _ ->
+            do(WriterPid, Close, none),
+            erlang:send_after(?CLIENT_CLOSE_TIMEOUT, self(),
+                              timeout_waiting_for_close_ok),
+            wait_close_ok
+    end.
 
-%% This closes the writer down, waits for the confirmation from
-%% the channel and then returns the ack to the user
-close_connection(Close = #'connection.close'{}, From,
-                 #connection_state{channel0_writer_pid = WriterPid,
-                                   channel0_reader_pid = FramingPid}) ->
-    do(WriterPid, Close, none),
+terminate_connection(_Reason,
+                     #connection_state{channel0_writer_pid = WriterPid,
+                                       channel0_reader_pid = FramingPid}) ->
     rabbit_writer:shutdown(WriterPid),
-    receive
-        {'$gen_cast', {method, {'connection.close_ok'}, none }} ->
-            case From of
-                none -> ok;
-                _    -> gen_server:reply(From, #'connection.close_ok'{})
-            end
-    after
-        ?CLIENT_CLOSE_TIMEOUT -> exit(timeout_on_exit)
-    end,
     rabbit_framing_channel:shutdown(FramingPid),
     ok.
 
 do(Writer, Method, Content) ->
     case Content of
-        none ->
-            rabbit_writer:send_command_and_signal_back(Writer, Method, self());
-        _ ->
-            rabbit_writer:send_command_and_signal_back(Writer, Method, Content,
-                                                       self())
+        none -> rabbit_writer:send_command_and_signal_back(Writer, Method,
+                                                           self());
+        _    -> rabbit_writer:send_command_and_signal_back(Writer, Method,
+                                                           Content, self())
     end,
     receive_writer_send_command_signal(Writer).
 
 receive_writer_send_command_signal(Writer) ->
     receive
-        rabbit_writer_send_command_signal -> ok;
+        rabbit_writer_send_command_signal   -> ok;
         WriterExitMsg = {'EXIT', Writer, _} -> self() ! WriterExitMsg
     end.
-
-handle_broker_close(#connection_state{channel0_writer_pid = Writer,
-                                      main_reader_pid = MainReader}) ->
-    do(Writer, #'connection.close_ok'{}, none),
-    rabbit_writer:shutdown(Writer),
-    erlang:send_after(?SOCKET_CLOSING_TIMEOUT, MainReader,
-                      socket_closing_timeout).
 
 %---------------------------------------------------------------------------
 % AMQP message sending and receiving
 %---------------------------------------------------------------------------
 
 send_frame(Channel, Frame) ->
-    {framing_pid, FramingPid} = resolve_framing_channel({channel, Channel}),
-    rabbit_framing_channel:process(FramingPid, Frame).
+    case resolve_framing_channel({channel, Channel}) of
+        {framing_pid, FramingPid} ->
+            rabbit_framing_channel:process(FramingPid, Frame);
+        undefined ->
+            ?LOG_INFO("Dropping frame ~p for invalid or closed channel "
+                      "number ~p~n", [Frame, Channel]),
+            ok
+    end.
 
 recv(#connection_state{main_reader_pid = MainReaderPid}) ->
     receive
