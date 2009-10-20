@@ -43,6 +43,7 @@
           last_sync_offset,
           is_dirty,
           is_append,
+          at_eof,
           path_mode_key }).
 
 init() ->
@@ -64,7 +65,7 @@ open(Path, Mode, [] = _ExtraOptions,
                     Entry = #entry { hdl = Hdl, current_offset = 0,
                                      last_sync_offset = 0, is_dirty = false,
                                      is_append = lists:member(append, Mode1),
-                                     path_mode_key = Key },
+                                     at_eof = false, path_mode_key = Key },
                     RefEntry1 = dict:store(Ref, Entry, RefEntry),
                     {{ok, Ref}, State #hcstate { ref_entry = RefEntry1,
                                                  path_mode_ref = PathModeRef1 }};
@@ -93,24 +94,15 @@ release(_Ref, State) -> %% noop for the time being
 
 read(Ref, Offset, Count, State = #hcstate { ref_entry = RefEntry }) ->
     case dict:find(Ref, RefEntry) of
-        {ok, Entry = #entry { hdl = Hdl, current_offset = OldOffset,
-                              last_sync_offset = LastSyncOffset,
-                              is_dirty = IsDirty }} ->
+        {ok, Entry = #entry { hdl = Hdl, current_offset = OldOffset }} ->
             NewOffset = Count +
                 case Offset of
                     cur -> OldOffset;
                     _ -> {ok, RealOff} = file:position(Hdl, Offset),
                          RealOff
                 end,
-            {IsDirty1, LastSyncOffset1} =
-                case IsDirty andalso NewOffset > LastSyncOffset of
-                    true -> ok = file:sync(Hdl),
-                            {false, lists:max([NewOffset, OldOffset])};
-                    false -> {IsDirty, LastSyncOffset}
-                end,
             Entry1 = Entry #entry { current_offset = NewOffset,
-                                    last_sync_offset = LastSyncOffset1,
-                                    is_dirty = IsDirty1 },
+                                    at_eof = Offset =:= eof },
             State1 = State #hcstate { ref_entry = dict:store(Ref, Entry1,
                                                              RefEntry) },
             {file:read(Hdl, Count), State1};
@@ -122,7 +114,7 @@ read(Ref, Offset, Count, State = #hcstate { ref_entry = RefEntry }) ->
 write(Ref, Offset, Data, State = #hcstate { ref_entry = RefEntry }) ->
     case dict:find(Ref, RefEntry) of
         {ok, Entry = #entry { hdl = Hdl, current_offset = OldOffset,
-                              is_append = IsAppend }} ->
+                              is_append = IsAppend, at_eof = AtEoF }} ->
             NewOffset =
                 case IsAppend of
                     true ->
@@ -131,12 +123,13 @@ write(Ref, Offset, Data, State = #hcstate { ref_entry = RefEntry }) ->
                         size_of_write_data(Data) +
                             case Offset of
                                 cur -> OldOffset;
+                                eof when AtEoF -> OldOffset;
                                 _ -> {ok, RealOff} = file:position(Hdl, Offset),
                                      RealOff
                             end
                 end,
             Entry1 = Entry #entry { current_offset = NewOffset,
-                                    is_dirty = true },
+                                    is_dirty = true, at_eof = Offset =:= eof },
             State1 = State #hcstate { ref_entry = dict:store(Ref, Entry1,
                                                              RefEntry) },
             {file:write(Hdl, Data), State1};
@@ -151,7 +144,7 @@ sync(Ref, State = #hcstate { ref_entry = RefEntry }) ->
             SyncOffset = lists:max([Offset, LastSyncOffset]),
             ok = file:sync(Hdl),
             Entry1 = Entry #entry { last_sync_offset = SyncOffset,
-                                      is_dirty = false },
+                                    is_dirty = false },
             {ok, State #hcstate { ref_entry = dict:store(Ref, Entry1,
                                                          RefEntry) }};
         {ok, _Entry_not_dirty} ->
@@ -163,23 +156,12 @@ position(Ref, NewOffset, State = #hcstate { ref_entry = RefEntry }) ->
     case dict:find(Ref, RefEntry) of
         {ok, #entry { current_offset = NewOffset }} ->
             {ok, State};
-        {ok, Entry = #entry { hdl = Hdl, current_offset = OldOffset,
-                              last_sync_offset = LastSyncOffset,
-                              is_dirty = IsDirty }} ->
+        {ok, #entry { at_eof = true }} when NewOffset =:= eof ->
+            {ok, State};
+        {ok, Entry = #entry { hdl = Hdl }} ->
             {ok, RealOff} = file:position(Hdl, NewOffset),
-            {IsDirty1, LastSyncOffset1} =
-                case {IsDirty, RealOff > LastSyncOffset} of
-                    {true, true} ->
-                        ok = file:sync(Hdl),
-                        {false, lists:max([RealOff, OldOffset])};
-                    {false, true} ->
-                        {false, RealOff};
-                    _ ->
-                        {IsDirty, LastSyncOffset}
-                end,
             Entry1 = Entry #entry { current_offset = RealOff,
-                                    last_sync_offset = LastSyncOffset1,
-                                    is_dirty = IsDirty1 },
+                                    at_eof = NewOffset =:= eof },
             {ok, State #hcstate { ref_entry = dict:store(Ref, Entry1,
                                                          RefEntry) }};
         error ->
@@ -198,7 +180,7 @@ truncate(Ref, State = #hcstate { ref_entry = RefEntry }) ->
             LastSyncOffset1 = lists:min([Offset, LastSyncOffset]),
             ok = file:truncate(Hdl),
             Entry1 = Entry #entry { last_sync_offset = LastSyncOffset1,
-                                    is_dirty = false },
+                                    is_dirty = false, at_eof = true },
             {ok, State #hcstate { ref_entry = dict:store(Ref, Entry1,
                                                          RefEntry) }};
         error -> {{error, not_open}, State}
@@ -209,9 +191,10 @@ with_file_handle_at(Ref, Offset, Fun,
     case dict:find(Ref, RefEntry) of
         {ok, Entry = #entry { hdl = Hdl, current_offset = OldOffset,
                               last_sync_offset = LastSyncOffset,
-                              is_dirty = IsDirty }} ->
+                              is_dirty = IsDirty, at_eof = AtEoF }} ->
             Offset1 =
                 case Offset of
+                    eof when AtEoF -> OldOffset;
                     cur       -> OldOffset;
                     OldOffset -> OldOffset;
                     _         -> {ok, RealOff} = file:position(Hdl, Offset),
@@ -226,7 +209,7 @@ with_file_handle_at(Ref, Offset, Fun,
             {Offset2, Result} = Fun(Hdl),
             Entry1 = Entry #entry { current_offset = Offset2,
                                     last_sync_offset = LastSyncOffset1,
-                                    is_dirty = true },
+                                    is_dirty = true, at_eof = false },
             State1 = State #hcstate { ref_entry = dict:store(Ref, Entry1,
                                                              RefEntry) },
             {Result, State1};
@@ -249,6 +232,7 @@ sync_to_offset(Ref, Offset, State = #hcstate { ref_entry = RefEntry }) ->
                                     is_dirty = false },
             {ok, State #hcstate { ref_entry = dict:store(Ref, Entry1,
                                                          RefEntry) }};
+        {ok, _Entry} -> {ok, State};
         error -> {{error, not_open}, State}
     end.
 
