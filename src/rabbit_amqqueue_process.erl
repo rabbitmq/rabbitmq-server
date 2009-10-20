@@ -581,12 +581,10 @@ handle_call({notify_down, ChPid}, _From, State) ->
     %% are no longer visible by the time we send a response to the
     %% client.  The queue is ultimately deleted in terminate/2; if we
     %% return stop with a reply, terminate/2 will be called by
-    %% gen_server/2 *before* the reply is sent.
+    %% gen_server2 *before* the reply is sent.
     case handle_ch_down(ChPid, State) of
-        {ok, NewState} ->
-            reply(ok, NewState);
-        {stop, NewState2} ->
-            {stop, normal, ok, NewState2}
+        {ok, NewState}   -> reply(ok, NewState);
+        {stop, NewState} -> {stop, normal, ok, NewState}
     end;
 
 handle_call({basic_get, ChPid, NoAck}, _From,
@@ -822,8 +820,8 @@ handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
     {stop, normal, NewState};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     case handle_ch_down(DownPid, State) of
-        {ok, NewState} -> noreply(NewState);
-        {stop, NewState2} -> {stop, normal, NewState2}
+        {ok, NewState}   -> noreply(NewState);
+        {stop, NewState} -> {stop, normal, NewState}
     end;
 
 handle_info(Info, State) ->
