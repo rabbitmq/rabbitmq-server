@@ -52,12 +52,11 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    {ok, [[NodeNameStr|_]|_]} = init:get_argument(nodename),
-    NodeName = list_to_atom(NodeNameStr),
+    {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     FullCommand = init:get_plain_arguments(),
     #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
         parse_args(FullCommand, #params{quiet = false,
-                                        node = rabbit_misc:localnode(NodeName)}),
+                                        node = rabbit_misc:makenode(NodeStr)}),
     Inform = case Quiet of
                  true  -> fun(_Format, _Args1) -> ok end;
                  false -> fun(Format, Args1) ->
@@ -97,12 +96,12 @@ error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
     fmt_stderr("diagnostics:", []),
-    NodeHost = rabbit_misc:nodehost(Node),
+    {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
     case net_adm:names(NodeHost) of
         {error, EpmdReason} ->
             fmt_stderr("- unable to connect to epmd on ~s: ~w",
                        [NodeHost, EpmdReason]);
-                {ok, NamePorts} ->
+        {ok, NamePorts} ->
             fmt_stderr("- nodes and their ports on ~s: ~p",
                        [NodeHost, [{list_to_atom(Name), Port} ||
                                       {Name, Port} <- NamePorts]])
@@ -116,11 +115,7 @@ print_badrpc_diagnostics(Node) ->
     ok.
 
 parse_args(["-n", NodeS | Args], Params) ->
-    Node = case lists:member($@, NodeS) of
-               true  -> list_to_atom(NodeS);
-               false -> rabbit_misc:localnode(list_to_atom(NodeS))
-           end,
-    parse_args(Args, Params#params{node = Node});
+    parse_args(Args, Params#params{node = rabbit_misc:makenode(NodeS)});
 parse_args(["-q" | Args], Params) ->
     parse_args(Args, Params#params{quiet = true});
 parse_args([Command | Args], Params) ->
