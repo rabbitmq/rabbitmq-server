@@ -98,6 +98,7 @@ start_link(Q) ->
 
 init(Q = #amqqueue { name = QName }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
+    process_flag(trap_exit, true),
     ok = rabbit_memory_manager:register
            (self(), false, rabbit_amqqueue, set_storage_mode, [self()]),
     VQS = rabbit_variable_queue:init(QName),
@@ -113,6 +114,8 @@ init(Q = #amqqueue { name = QName }) ->
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
+terminate(shutdown, #q{variable_queue_state = VQS}) ->
+    _VQS = rabbit_variable_queue:terminate(VQS);
 terminate(_Reason, State = #q{variable_queue_state = VQS}) ->
     %% FIXME: How do we cancel active subscriptions?
     %% Ensure that any persisted tx messages are removed;

@@ -31,10 +31,10 @@
 
 -module(rabbit_variable_queue).
 
--export([init/1, publish/2, publish_delivered/2, set_queue_ram_duration_target/2,
-         remeasure_egress_rate/1, fetch/1, ack/2, len/1, is_empty/1,
-         maybe_start_prefetcher/1, purge/1, delete/1, requeue/2,
-         tx_publish/2, tx_rollback/2, tx_commit/4, do_tx_commit/4]).
+-export([init/1, terminate/1, publish/2, publish_delivered/2,
+         set_queue_ram_duration_target/2, remeasure_egress_rate/1, fetch/1,
+         ack/2, len/1, is_empty/1, maybe_start_prefetcher/1, purge/1, delete/1,
+         requeue/2, tx_publish/2, tx_rollback/2, tx_commit/4, do_tx_commit/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -139,6 +139,9 @@ init(QueueName) ->
                    len = GammaCount
                   },
     maybe_load_next_segment(State).
+
+terminate(State = #vqstate { index_state = IndexState }) ->
+    State #vqstate { index_state = rabbit_queue_index:terminate(IndexState) }.
 
 publish(Msg, State) ->
     publish(Msg, false, false, State).
@@ -383,9 +386,10 @@ do_tx_commit(Pubs, AckTags, From, State) ->
                   {[SeqId | SeqIdsAcc], StateN1}
           end, {[], State}, Pubs),
     %% TODO need to do something here about syncing the queue index, PubSeqIds
-    State2 = ack(AckTags, State1),
+    State2 = #vqstate { index_state = IndexState } = ack(AckTags, State1),
+    IndexState1 = rabbit_queue_index:sync_all(IndexState),
     gen_server2:reply(From, ok),
-    State2.
+    State2 #vqstate { index_state = IndexState1 }.
 
 %%----------------------------------------------------------------------------
 

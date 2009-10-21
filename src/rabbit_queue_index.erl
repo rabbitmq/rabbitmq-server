@@ -32,7 +32,7 @@
 -module(rabbit_queue_index).
 
 -export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
-         write_delivered/2, write_acks/2, flush_journal/1,
+         write_delivered/2, write_acks/2, flush_journal/1, sync_all/1,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/1]).
 
@@ -228,6 +228,16 @@ full_flush_journal(State) ->
         {true,  State1} -> full_flush_journal(State1);
         {false, State1} -> State1
     end.
+
+sync_all(State = #qistate { hc_state = HCState, seg_num_handles = SegHdls }) ->
+    HCState1 =
+        dict:fold(
+          fun (_Key, Hdl, HCStateN) ->
+                  {ok, HCStateM} =
+                      horrendously_dumb_file_handle_cache:sync(Hdl, HCStateN),
+                  HCStateM
+          end, HCState, SegHdls),
+    State #qistate { hc_state = HCState1 }.
 
 flush_journal(State = #qistate { journal_ack_count = 0 }) ->
     {false, State};
