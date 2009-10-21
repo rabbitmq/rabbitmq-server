@@ -53,12 +53,12 @@
         }).
 
 open(Path, Mode, Options, State) ->
-    Mode1 = lists:usort(Mode),
     Path1 = filename:absname(Path),
     case get({Path1, fhc_path}) of
         {gref, GRef} ->
             #file { reader_count = RCount, has_writer = HasWriter }
                 = File = get({GRef, fhc_file}),
+            Mode1 = lists:usort(Mode),
             IsWriter = is_writer(Mode1),
             case IsWriter andalso HasWriter of
                 true ->
@@ -75,7 +75,6 @@ open(Path, Mode, Options, State) ->
             end;
         undefined ->
             GRef = make_ref(),
-            %% returns 0 even if file doesn't exist
             put({Path1, fhc_path}, {gref, GRef}),
             put({GRef, fhc_file},
                 #file { reader_count = 0, has_writer = false, path = Path1 }),
