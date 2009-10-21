@@ -103,7 +103,7 @@ action(start_all, [NodeCount], RpcTimeout) ->
     {NodePids, Running} =
         start_nodes(N, N, [], true,
                     rabbit_misc:nodeparts(
-                      list_to_atom(getenv("RABBITMQ_NODENAME"))),
+                      getenv("RABBITMQ_NODENAME")),
                     list_to_integer(getenv("RABBITMQ_NODE_PORT")),
                     RpcTimeout),
     write_pids_file(NodePids),
