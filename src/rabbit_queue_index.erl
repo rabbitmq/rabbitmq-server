@@ -354,34 +354,37 @@ queues_dir() ->
 rev_sort(List) ->
     lists:sort(fun (A, B) -> B < A end, List).
 
-get_journal_handle(State = #qistate { dir = Dir }) ->
-    Path = filename:join(Dir, ?ACK_JOURNAL_FILENAME),
-    Mode = [raw, binary, delayed_write, write, read],
-    get_handle(journal, Path, Mode, State).
+get_journal_handle(State = #qistate { dir = Dir, seg_num_handles = SegHdls }) ->
+    case dict:find(journal, SegHdls) of
+        {ok, Hdl} -> {Hdl, State};
+        error ->
+            Path = filename:join(Dir, ?ACK_JOURNAL_FILENAME),
+            Mode = [raw, binary, delayed_write, write, read, read_ahead],
+            new_handle(journal, Path, Mode, State)
+    end.
 
-get_seg_handle(SegNum, State = #qistate { dir = Dir }) ->
-    get_handle(SegNum, seg_num_to_path(Dir, SegNum),
-               [binary, raw, read, write,
-                {delayed_write, ?SEGMENT_TOTAL_SIZE, 1000}],
-               State).
+get_seg_handle(SegNum, State = #qistate { dir = Dir, seg_num_handles = SegHdls }) ->
+    case dict:find(SegNum, SegHdls) of
+        {ok, Hdl} -> {Hdl, State};
+        error ->
+            new_handle(SegNum, seg_num_to_path(Dir, SegNum),
+                       [binary, raw, read, write,
+                        {delayed_write, ?SEGMENT_TOTAL_SIZE, 1000},
+                        {read_ahead, ?SEGMENT_TOTAL_SIZE}],
+                       State)
+    end.
 
-get_handle(Key, Path, Mode, State = #qistate { seg_num_handles = SegHdls }) ->
+new_handle(Key, Path, Mode, State = #qistate { seg_num_handles = SegHdls }) ->
     State1 = #qistate { hc_state = HCState,
                         seg_num_handles = SegHdls1 } =
-        case dict:size(SegHdls) > 10 of
+        case dict:size(SegHdls) > 100 of
             true -> close_all_handles(State);
             false -> State
         end,
-    case dict:find(Key, SegHdls1) of
-        {ok, Hdl} -> {Hdl, State1};
-        error ->
-            {{ok, Hdl}, HCState1} = 
-                horrendously_dumb_file_handle_cache:open(Path, Mode, [],
-                                                         HCState),
-            {Hdl, State1 #qistate {
-                    hc_state = HCState1,
-                    seg_num_handles = dict:store(Key, Hdl, SegHdls1) }}
-    end.
+    {{ok, Hdl}, HCState1} = 
+        horrendously_dumb_file_handle_cache:open(Path, Mode, [], HCState),
+    {Hdl, State1 #qistate { hc_state = HCState1,
+                            seg_num_handles = dict:store(Key, Hdl, SegHdls1) }}.
 
 close_handle(Key, State = #qistate { hc_state = HCState,
                                      seg_num_handles = SegHdls }) ->
