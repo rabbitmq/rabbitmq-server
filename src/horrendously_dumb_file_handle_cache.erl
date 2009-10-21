@@ -49,18 +49,18 @@ open(Path, Mode, [] = _ExtraOptions, State) ->
     Mode1 = lists:usort(Mode),
     Path1 = filename:absname(Path),
     Key = {Path1, Mode1},
-    case get({rabbit_fhc, path_mode_ref, Key}) of
+    case get({fhc, path_mode_ref, Key}) of
         {ref, Ref} -> {{ok, Ref}, State};
         undefined ->
             case file:open(Path1, Mode1) of
                 {ok, Hdl} ->
                     Ref = make_ref(),
-                    put({rabbit_fhc, path_mode_ref, Key}, {ref, Ref}),
+                    put({fhc, path_mode_ref, Key}, {ref, Ref}),
                     Entry = #entry { hdl = Hdl, current_offset = 0,
                                      last_sync_offset = 0, is_dirty = false,
                                      is_append = lists:member(append, Mode1),
                                      at_eof = false, path_mode_key = Key },
-                    put({rabbit_fhc, ref_entry, Ref}, Entry),
+                    put({fhc, ref_entry, Ref}, Entry),
                     {{ok, Ref}, State};
                 {error, Error} ->
                     {{error, Error}, State}
@@ -69,14 +69,14 @@ open(Path, Mode, [] = _ExtraOptions, State) ->
 
 close(Ref, State) ->
     {ok,
-     case erase({rabbit_fhc, ref_entry, Ref}) of
+     case erase({fhc, ref_entry, Ref}) of
          #entry { hdl = Hdl, is_dirty = IsDirty, path_mode_key = Key } ->
              ok = case IsDirty of
                       true -> file:sync(Hdl);
                       false -> ok
                   end,
              ok = file:close(Hdl),
-             erase({rabbit_fhc, path_mode_ref, Key}),
+             erase({fhc, path_mode_ref, Key}),
              State;
          undefined -> State
      end}.
@@ -85,7 +85,7 @@ release(_Ref, State) -> %% noop for the time being
     {ok, State}.
 
 read(Ref, Offset, Count, State) ->
-    case get({rabbit_fhc, ref_entry, Ref}) of
+    case get({fhc, ref_entry, Ref}) of
         Entry = #entry { hdl = Hdl, current_offset = OldOffset } ->
             NewOffset = Count +
                 case Offset of
@@ -93,7 +93,7 @@ read(Ref, Offset, Count, State) ->
                     _ -> {ok, RealOff} = file:position(Hdl, Offset),
                          RealOff
                 end,
-            put({rabbit_fhc, ref_entry, Ref},
+            put({fhc, ref_entry, Ref},
                 Entry #entry { current_offset = NewOffset,
                                at_eof = Offset =:= eof }),
             {file:read(Hdl, Count), State};
@@ -103,7 +103,7 @@ read(Ref, Offset, Count, State) ->
 %% if the file was opened in append mode, then Offset is ignored, as
 %% it would only affect the read head for this file.
 write(Ref, Offset, Data, State) ->
-    case get({rabbit_fhc, ref_entry, Ref}) of
+    case get({fhc, ref_entry, Ref}) of
         Entry = #entry { hdl = Hdl, current_offset = OldOffset,
                          is_append = IsAppend, at_eof = AtEoF } ->
             NewOffset =
@@ -119,7 +119,7 @@ write(Ref, Offset, Data, State) ->
                                      RealOff
                             end
                 end,
-            put({rabbit_fhc, ref_entry, Ref},
+            put({fhc, ref_entry, Ref},
                 Entry #entry { current_offset = NewOffset,
                                is_dirty = true, at_eof = Offset =:= eof }),
             {file:write(Hdl, Data), State};
@@ -127,13 +127,13 @@ write(Ref, Offset, Data, State) ->
     end.
 
 sync(Ref, State) ->
-    case get({rabbit_fhc, ref_entry, Ref}) of
+    case get({fhc, ref_entry, Ref}) of
         Entry = #entry { hdl = Hdl, current_offset = Offset,
                          last_sync_offset = LastSyncOffset,
                          is_dirty = true } ->
             SyncOffset = lists:max([Offset, LastSyncOffset]),
             ok = file:sync(Hdl),
-            put({rabbit_fhc, ref_entry, Ref},
+            put({fhc, ref_entry, Ref},
                 Entry #entry { last_sync_offset = SyncOffset,
                                is_dirty = false }),
             {ok, State};
@@ -142,14 +142,14 @@ sync(Ref, State) ->
     end.
 
 position(Ref, NewOffset, State) ->
-    case get({rabbit_fhc, ref_entry, Ref}) of
+    case get({fhc, ref_entry, Ref}) of
         #entry { current_offset = NewOffset } ->
             {ok, State};
         #entry { at_eof = true } when NewOffset =:= eof ->
             {ok, State};
         Entry = #entry { hdl = Hdl } ->
             {ok, RealOff} = file:position(Hdl, NewOffset),
-            put({rabbit_fhc, ref_entry, Ref},
+            put({fhc, ref_entry, Ref},
                 Entry #entry { current_offset = RealOff,
                                at_eof = NewOffset =:= eof }),
             {ok, State};
@@ -158,16 +158,16 @@ position(Ref, NewOffset, State) ->
     end.
 
 truncate(Ref, State) ->
-    case get({rabbit_fhc, ref_entry, Ref}) of
+    case get({fhc, ref_entry, Ref}) of
         Entry = #entry { hdl = Hdl } ->
             ok = file:truncate(Hdl),
-            put({rabbit_fhc, ref_entry, Ref}, Entry #entry { at_eof = true }),
+            put({fhc, ref_entry, Ref}, Entry #entry { at_eof = true }),
             {ok, State};
         undefined -> {{error, not_open}, State}
     end.
 
 with_file_handle_at(Ref, Offset, Fun, State) ->
-    case get({rabbit_fhc, ref_entry, Ref}) of
+    case get({fhc, ref_entry, Ref}) of
         Entry = #entry { hdl = Hdl, current_offset = OldOffset,
                          last_sync_offset = LastSyncOffset,
                          is_dirty = IsDirty, at_eof = AtEoF } ->
@@ -186,7 +186,7 @@ with_file_handle_at(Ref, Offset, Fun, State) ->
                     false -> LastSyncOffset
                 end,
             {Offset2, Result} = Fun(Hdl),
-            put({rabbit_fhc, ref_entry, Ref},
+            put({fhc, ref_entry, Ref},
                 Entry #entry { current_offset = Offset2,
                                last_sync_offset = LastSyncOffset1,
                                is_dirty = true, at_eof = false }),
@@ -195,7 +195,7 @@ with_file_handle_at(Ref, Offset, Fun, State) ->
     end.
 
 sync_to_offset(Ref, Offset, State) ->
-    case get({rabbit_fhc, ref_entry, Ref}) of
+    case get({fhc, ref_entry, Ref}) of
         Entry = #entry { hdl = Hdl, last_sync_offset = LastSyncOffset,
                          current_offset = CurOffset, is_dirty = true }
         when (Offset =:= cur andalso CurOffset > LastSyncOffset)
@@ -206,7 +206,7 @@ sync_to_offset(Ref, Offset, State) ->
                     cur -> lists:max([LastSyncOffset, CurOffset]);
                     _ -> lists:max([LastSyncOffset, CurOffset, Offset])
                 end,
-            put({rabbit_fhc, ref_entry, Ref},
+            put({fhc, ref_entry, Ref},
                 Entry #entry { last_sync_offset = LastSyncOffset1,
                                is_dirty = false }),
             {ok, State};
