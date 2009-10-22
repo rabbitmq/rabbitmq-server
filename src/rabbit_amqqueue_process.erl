@@ -49,7 +49,6 @@
 
 % Queue's state
 -record(q, {q,
-            owner,
             exclusive_consumer,
             has_had_consumers,
             next_msg_id,
@@ -95,8 +94,11 @@ start_link(Q) ->
 
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
+    case Q#amqqueue.exclusive_owner of
+        none      -> ok;
+        ReaderPid -> erlang:monitor(process, ReaderPid)
+    end,
     {ok, #q{q = Q,
-            owner = none,
             exclusive_consumer = none,
             has_had_consumers = false,
             next_msg_id = 1,
@@ -331,9 +333,9 @@ cancel_holder(ChPid, ConsumerTag, {ChPid, ConsumerTag}) ->
 cancel_holder(_ChPid, _ConsumerTag, Holder) ->
     Holder.
 
-check_queue_owner(none,           _)         -> ok;
-check_queue_owner({ReaderPid, _}, ReaderPid) -> ok;
-check_queue_owner({_,         _}, _)         -> mismatch.
+check_queue_owner(none,           _)    -> ok;
+check_queue_owner(ReaderPid, ReaderPid) -> ok;
+check_queue_owner(_, _)                 -> mismatch.
 
 check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume, _State) ->
     in_use;
@@ -607,7 +609,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
 
 handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
              ConsumerTag, ExclusiveConsume, OkMsg},
-            _From, State = #q{owner = Owner,
+            _From, State = #q{q = #amqqueue{exclusive_owner = Owner},
                               exclusive_consumer = ExistingHolder}) ->
     case check_queue_owner(Owner, ReaderPid) of
         mismatch ->
@@ -705,29 +707,7 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
 handle_call(purge, _From, State = #q{message_buffer = MessageBuffer}) ->
     ok = purge_message_buffer(qname(State), MessageBuffer),
     reply({ok, queue:len(MessageBuffer)},
-          State#q{message_buffer = queue:new()});
-
-handle_call({claim_queue, ReaderPid}, _From, State = #q{owner = Owner,
-                                                        exclusive_consumer = Holder}) ->
-    case Owner of
-        none ->
-            case check_exclusive_access(Holder, true, State) of
-                in_use ->
-                    %% FIXME: Is this really the right answer? What if
-                    %% an active consumer's reader is actually the
-                    %% claiming pid? Should that be allowed? In order
-                    %% to check, we'd need to hold not just the ch
-                    %% pid for each consumer, but also its reader
-                    %% pid...
-                    reply(locked, State);
-                ok ->
-                    reply(ok, State#q{owner = {ReaderPid, erlang:monitor(process, ReaderPid)}})
-            end;
-        {ReaderPid, _MonitorRef} ->
-            reply(ok, State);
-        _ ->
-            reply(locked, State)
-    end.
+          State#q{message_buffer = queue:new()}).
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
@@ -799,19 +779,10 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
         end)).
 
-handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
-            State = #q{owner = {DownPid, MonitorRef}}) ->
-    %% We know here that there are no consumers on this queue that are
-    %% owned by other pids than the one that just went down, so since
-    %% exclusive in some sense implies autodelete, we delete the queue
-    %% here. The other way of implementing the "exclusive implies
-    %% autodelete" feature is to actually set autodelete when an
-    %% exclusive declaration is seen, but this has the problem that
-    %% the python tests rely on the queue not going away after a
-    %% basic.cancel when the queue was declared exclusive and
-    %% nonautodelete.
-    NewState = State#q{owner = none},
-    {stop, normal, NewState};
+handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
+            State = #q{q= #amqqueue{ exclusive_owner = DownPid}}) ->
+    %% Exclusively owned queues must disappear with their owner.
+    {stop, normal, State};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
 

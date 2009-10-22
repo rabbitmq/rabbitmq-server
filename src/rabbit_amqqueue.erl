@@ -31,13 +31,12 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, recover/0, declare/4, delete/3, purge/1]).
+-export([start/0, recover/0, declare/5, delete/3, purge/1]).
 -export([internal_declare/2, internal_delete/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/2, redeliver/2, requeue/3, ack/4]).
 -export([list/1, info/1, info/2, info_all/1, info_all/2]).
--export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2, unblock/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
@@ -63,7 +62,7 @@
 
 -spec(start/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
--spec(declare/4 :: (queue_name(), boolean(), boolean(), amqp_table()) ->
+-spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(), maybe(pid())) ->
              amqqueue()).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
@@ -91,7 +90,6 @@
 -spec(rollback_all/2 :: ([pid()], txn()) -> ok_or_errors()).
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
--spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
 -spec(basic_consume/8 ::
@@ -151,11 +149,12 @@ recover_durable_queues() ->
         end)),
     ok.
 
-declare(QueueName, Durable, AutoDelete, Args) ->
+declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
                                       arguments = Args,
+                                      exclusive_owner = Owner,
                                       pid = none}),
     internal_declare(Q, true).
 
@@ -286,9 +285,6 @@ limit_all(QPids, ChPid, LimiterPid) ->
       fun (QPid) -> gen_server2:cast(QPid, {limit, ChPid, LimiterPid}) end,
       QPids).
     
-claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
-    gen_server2:call(QPid, {claim_queue, ReaderPid}, infinity).
-
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
     gen_server2:call(QPid, {basic_get, ChPid, NoAck}, infinity).
 
