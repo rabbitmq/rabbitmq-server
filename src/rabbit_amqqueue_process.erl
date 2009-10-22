@@ -823,7 +823,7 @@ handle_cast(send_memory_monitor_update, State) ->
         true -> infinity;
         false -> queue:len(State#q.message_buffer) / MsgSec
     end,
-    gen_server2:cast(rabbit_memory_monitor, {push_drain_ratio, self(), BufSec}),
+    rabbit_memory_monitor:push_queue_duration(self(), BufSec),
     noreply(State#q{drain_ratio = DrainRatio1});
 
 handle_cast({set_bufsec_limit, BufSec}, State) ->
