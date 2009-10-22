@@ -31,7 +31,7 @@
 
 -module(file_handle_cache).
 
--export([init/0, open/4, close/2, release/2, read/4, append/3, sync/2,
+-export([init/0, open/4, close/2, release/2, read/3, append/3, sync/2,
          position/3, truncate/2, last_sync_offset/2]).
 
 -record(file,
@@ -134,28 +134,21 @@ close(Ref, State) ->
 release(_Ref, State) -> %% noop just for now
     {ok, State}.
 
-read(Ref, NewOffset, Count, State) ->
+read(Ref, Count, State) ->
     case get_or_reopen(Ref, State) of
         {{ok, #handle { is_read = false }}, State1} ->
             {{error, not_open_for_reading}, State1};
         {{ok, Handle}, State1} ->
             {Result, Handle1} =
                 case write_buffer(Handle) of
-                    {ok, Handle2} ->
-                        case maybe_seek(NewOffset, Handle2) of
-                            {ok, Handle3 = #handle { hdl = Hdl,
-                                                     offset = Offset }} ->
-                                case file:read(Hdl, Count) of
-                                    {ok, _} = Obj ->
-                                        {Obj, Handle3 #handle {
-                                                offset = Offset + Count }};
-                                    eof ->
-                                        {eof, Handle3 #handle {
-                                                at_eof = true }};
-                                    {error, _} = Error ->
-                                        {Error, Handle3}
-                                end;
-                            {Error, Handle3} -> {Error, Handle3}
+                    {ok, Handle2 = #handle { hdl = Hdl, offset = Offset }} ->
+                        case file:read(Hdl, Count) of
+                            {ok, Data} = Obj ->
+                                Size = iolist_size(Data),
+                                {Obj,
+                                 Handle2 #handle { offset = Offset + Size }};
+                            eof -> {eof, Handle2 #handle { at_eof = true }};
+                            Error -> {Error, Handle2}
                         end;
                     {Error, Handle2} -> {Error, Handle2}
                 end,
@@ -299,7 +292,7 @@ write_to_buffer(Data, Handle =
                 #handle { write_buffer = WriteBuffer,
                           write_buffer_size = Size,
                           write_buffer_size_limit = Limit }) ->
-    Size1 = Size + size_of_write_data(Data),
+    Size1 = Size + iolist_size(Data),
     Handle1 = Handle #handle { write_buffer = [ Data | WriteBuffer ],
                                write_buffer_size = Size1 },
     case Limit /= infinity andalso Size1 > Limit of
@@ -321,16 +314,6 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
         {error, _} = Error ->
             {Error, Handle}
     end.
-
-size_of_write_data(Data) ->
-    size_of_write_data(Data, 0).
-
-size_of_write_data([], Acc) ->
-    Acc;
-size_of_write_data([A|B], Acc) ->
-    size_of_write_data(B, size_of_write_data(A, Acc));
-size_of_write_data(Bin, Acc) when is_binary(Bin) ->
-    size(Bin) + Acc.
 
 is_reader(Mode) -> lists:member(read, Mode).
 

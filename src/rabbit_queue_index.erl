@@ -521,7 +521,7 @@ scatter_journal(TotalMsgCount, State = #qistate { dir = Dir }) ->
     {TotalMsgCount1, State3 #qistate { journal_ack_dict = dict:new() }}.
 
 load_journal(Hdl, ADict, HCState) ->
-    case file_handle_cache:read(Hdl, cur, ?SEQ_BYTES, HCState) of
+    case file_handle_cache:read(Hdl, ?SEQ_BYTES, HCState) of
         {{ok, <<SeqId:?SEQ_BITS>>}, HCState1} ->
             load_journal(Hdl, add_ack_to_ack_dict(SeqId, ADict), HCState1);
         {_ErrOrEoF, HCState1} -> {ADict, HCState1}
@@ -599,12 +599,12 @@ load_segment(SegNum, State = #qistate { seg_num_handles = SegHdls,
     end.
 
 load_segment_entries(Hdl, SDict, AckCount, HighRelSeq, HCState) ->
-    case file_handle_cache:read(Hdl, cur, 1, HCState) of
+    case file_handle_cache:read(Hdl, 1, HCState) of
         {{ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                 MSB:(8-?REL_SEQ_ONLY_PREFIX_BITS)>>}, HCState1} ->
             {{ok, LSB}, HCState2} =
                 file_handle_cache:read(
-                  Hdl, cur, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES - 1, HCState1),
+                  Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES - 1, HCState1),
             <<RelSeq:?REL_SEQ_BITS_BYTE_ALIGNED>> = <<MSB, LSB/binary>>,
             {SDict1, AckCount1} = deliver_or_ack_msg(SDict, AckCount, RelSeq),
             load_segment_entries(Hdl, SDict1, AckCount1, HighRelSeq, HCState2);
@@ -614,7 +614,7 @@ load_segment_entries(Hdl, SDict, AckCount, HighRelSeq, HCState) ->
             %% bytes, the size spec is in bytes, not bits.
             {{ok, <<LSB:1/binary, MsgId:?MSG_ID_BYTES/binary>>}, HCState2} =
                 file_handle_cache:read(
-                  Hdl, cur, ?PUBLISH_RECORD_LENGTH_BYTES - 1, HCState1),
+                  Hdl, ?PUBLISH_RECORD_LENGTH_BYTES - 1, HCState1),
             <<RelSeq:?REL_SEQ_BITS_BYTE_ALIGNED>> = <<MSB, LSB/binary>>,
             HighRelSeq1 = lists:max([RelSeq, HighRelSeq]),
             load_segment_entries(
