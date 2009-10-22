@@ -156,7 +156,7 @@
 %%----------------------------------------------------------------------------
 
 init(Name) ->
-    HCState = horrendously_dumb_file_handle_cache:init(),
+    HCState = file_handle_cache:init(),
     StrName = queue_name_to_dir_name(Name),
     Dir = filename:join(queues_dir(), StrName),
     ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
@@ -185,19 +185,19 @@ write_published(MsgId, SeqId, IsPersistent, State)
     ?MSG_ID_BYTES = size(MsgId),
     {SegNum, RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
     {Hdl, State1} = get_seg_handle(SegNum, State),
-    {ok, HCState} = horrendously_dumb_file_handle_cache:write(
-                      Hdl, eof,
-                      <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
-                       (bool_to_int(IsPersistent)):1,
-                       RelSeq:?REL_SEQ_BITS, MsgId/binary>>,
-                      State1 #qistate.hc_state),
+    {ok, HCState} =
+        file_handle_cache:append(Hdl,
+                                 <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
+                                  (bool_to_int(IsPersistent)):1,
+                                  RelSeq:?REL_SEQ_BITS, MsgId/binary>>,
+                                 State1 #qistate.hc_state),
     State1 #qistate { hc_state = HCState }.
 
 write_delivered(SeqId, State) ->
     {SegNum, RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
     {Hdl, State1} = get_seg_handle(SegNum, State),
-    {ok, HCState} = horrendously_dumb_file_handle_cache:write(
-                      Hdl, eof,
+    {ok, HCState} = file_handle_cache:append(
+                      Hdl,
                       <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                        RelSeq:?REL_SEQ_BITS>>,
                       State1 #qistate.hc_state),
@@ -209,9 +209,8 @@ write_acks(SeqIds, State = #qistate { journal_ack_dict  = JAckDict,
     {JAckDict1, JAckCount1, HCState} =
         lists:foldl(
           fun (SeqId, {JAckDict2, JAckCount2, HCStateN}) ->
-                  {ok, HCStateM} =
-                      horrendously_dumb_file_handle_cache:write(
-                        Hdl, eof, <<SeqId:?SEQ_BITS>>, HCStateN),
+                  {ok, HCStateM} = file_handle_cache:append(
+                                     Hdl, <<SeqId:?SEQ_BITS>>, HCStateN),
                   {add_ack_to_ack_dict(SeqId, JAckDict2),
                    JAckCount2 + 1, HCStateM}
           end, {JAckDict, JAckCount, State1 #qistate.hc_state}, SeqIds),
@@ -233,8 +232,7 @@ sync_all(State = #qistate { hc_state = HCState, seg_num_handles = SegHdls }) ->
     HCState1 =
         dict:fold(
           fun (_Key, Hdl, HCStateN) ->
-                  {ok, HCStateM} =
-                      horrendously_dumb_file_handle_cache:sync(Hdl, HCStateN),
+                  {ok, HCStateM} = file_handle_cache:sync(Hdl, HCStateN),
                   HCStateM
           end, HCState, SegHdls),
     State #qistate { hc_state = HCState1 }.
@@ -253,10 +251,8 @@ flush_journal(State = #qistate { journal_ack_dict = JAckDict,
         JAckCount1 == 0 ->
             {Hdl, State3 = #qistate { hc_state = HCState }} =
                 get_journal_handle(State2),
-            {ok, HCState1} =
-                horrendously_dumb_file_handle_cache:position(Hdl, 0, HCState),
-            {ok, HCState2} =
-                horrendously_dumb_file_handle_cache:truncate(Hdl, HCState1),
+            {ok, HCState1} = file_handle_cache:position(Hdl, bof, HCState),
+            {ok, HCState2} = file_handle_cache:truncate(Hdl, HCState1),
             {false, State3 #qistate { hc_state = HCState2 }};
         JAckCount1 > ?MAX_ACK_JOURNAL_ENTRY_COUNT ->
             flush_journal(State2);
@@ -391,8 +387,8 @@ new_handle(Key, Path, Mode, State = #qistate { seg_num_handles = SegHdls }) ->
             true -> close_all_handles(State);
             false -> State
         end,
-    {{ok, Hdl}, HCState1} = 
-        horrendously_dumb_file_handle_cache:open(Path, Mode, [], HCState),
+    {{ok, Hdl}, HCState1} =
+        file_handle_cache:open(Path, Mode, [{write_buffer, infinity}], HCState),
     {Hdl, State1 #qistate { hc_state = HCState1,
                             seg_num_handles = dict:store(Key, Hdl, SegHdls1) }}.
 
@@ -400,8 +396,7 @@ close_handle(Key, State = #qistate { hc_state = HCState,
                                      seg_num_handles = SegHdls }) ->
     case dict:find(Key, SegHdls) of
         {ok, Hdl} ->
-            {ok, HCState1} =
-                horrendously_dumb_file_handle_cache:close(Hdl, HCState),
+            {ok, HCState1} = file_handle_cache:close(Hdl, HCState),
             State #qistate { hc_state = HCState1,
                              seg_num_handles = dict:erase(Key, SegHdls) };
         error -> State
@@ -411,9 +406,8 @@ close_all_handles(State = #qistate { hc_state = HCState,
                                      seg_num_handles = SegHdls }) ->
     HCState1 =
         dict:fold(
-          fun (_Key, Ref, HCStateN) ->
-                  {ok, HCStateM} =
-                      horrendously_dumb_file_handle_cache:close(Ref, HCStateN),
+          fun (_Key, Hdl, HCStateN) ->
+                  {ok, HCStateM} = file_handle_cache:close(Hdl, HCStateN),
                   HCStateM
           end, HCState, SegHdls),
     State #qistate { hc_state = HCState1, seg_num_handles = dict:new() }.
@@ -527,8 +521,7 @@ scatter_journal(TotalMsgCount, State = #qistate { dir = Dir }) ->
     {TotalMsgCount1, State3 #qistate { journal_ack_dict = dict:new() }}.
 
 load_journal(Hdl, ADict, HCState) ->
-    case horrendously_dumb_file_handle_cache:read(
-           Hdl, cur, ?SEQ_BYTES, HCState) of
+    case file_handle_cache:read(Hdl, cur, ?SEQ_BYTES, HCState) of
         {{ok, <<SeqId:?SEQ_BITS>>}, HCState1} ->
             load_journal(Hdl, add_ack_to_ack_dict(SeqId, ADict), HCState1);
         {_ErrOrEoF, HCState1} -> {ADict, HCState1}
@@ -561,11 +554,16 @@ deliver_transient(SegNum, SDict, State) ->
                   {[RelSeq | AckMeAcc], DeliverMeAcc}
           end, {[], []}, SDict),
     {Hdl, State1} = get_seg_handle(SegNum, State),
-    {ok, HCState} = horrendously_dumb_file_handle_cache:write(
-                      Hdl, eof,
-                      [ <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-                         RelSeq:?REL_SEQ_BITS>> || RelSeq <- DeliverMe ],
-                      State1 #qistate.hc_state),
+    {ok, HCState} =
+        case DeliverMe of
+            [] -> {ok, State1 #qistate.hc_state};
+            _ ->
+                file_handle_cache:append(
+                  Hdl,
+                  [ <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
+                     RelSeq:?REL_SEQ_BITS>> || RelSeq <- DeliverMe ],
+                  State1 #qistate.hc_state)
+        end,
     {AckMe, State1 #qistate { hc_state = HCState }}.
 
 
@@ -585,9 +583,7 @@ load_segment(SegNum, State = #qistate { seg_num_handles = SegHdls,
             {Hdl, State1 = #qistate { hc_state = HCState,
                                       journal_ack_dict = JAckDict }} =
                 get_seg_handle(SegNum, State),
-            {ok, HCState1} =
-                horrendously_dumb_file_handle_cache:position(Hdl, 0, HCState),
-            
+            {ok, HCState1} = file_handle_cache:position(Hdl, bof, HCState),
             {SDict, AckCount, HighRelSeq, HCState2} =
                 load_segment_entries(Hdl, dict:new(), 0, 0, HCState1),
             RelSeqs = case dict:find(SegNum, JAckDict) of
@@ -603,11 +599,11 @@ load_segment(SegNum, State = #qistate { seg_num_handles = SegHdls,
     end.
 
 load_segment_entries(Hdl, SDict, AckCount, HighRelSeq, HCState) ->
-    case horrendously_dumb_file_handle_cache:read(Hdl, cur, 1, HCState) of
+    case file_handle_cache:read(Hdl, cur, 1, HCState) of
         {{ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                 MSB:(8-?REL_SEQ_ONLY_PREFIX_BITS)>>}, HCState1} ->
             {{ok, LSB}, HCState2} =
-                horrendously_dumb_file_handle_cache:read(
+                file_handle_cache:read(
                   Hdl, cur, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES - 1, HCState1),
             <<RelSeq:?REL_SEQ_BITS_BYTE_ALIGNED>> = <<MSB, LSB/binary>>,
             {SDict1, AckCount1} = deliver_or_ack_msg(SDict, AckCount, RelSeq),
@@ -617,7 +613,7 @@ load_segment_entries(Hdl, SDict, AckCount, HighRelSeq, HCState) ->
             %% because we specify /binary, and binaries are complete
             %% bytes, the size spec is in bytes, not bits.
             {{ok, <<LSB:1/binary, MsgId:?MSG_ID_BYTES/binary>>}, HCState2} =
-                horrendously_dumb_file_handle_cache:read(
+                file_handle_cache:read(
                   Hdl, cur, ?PUBLISH_RECORD_LENGTH_BYTES - 1, HCState1),
             <<RelSeq:?REL_SEQ_BITS_BYTE_ALIGNED>> = <<MSB, LSB/binary>>,
             HighRelSeq1 = lists:max([RelSeq, HighRelSeq]),
@@ -673,11 +669,11 @@ append_acks_to_segment(SegNum, AckCount, Acks, State)
         lists:foldl(
           fun (RelSeq, {AckCount2, HCStateN}) ->
                   {ok, HCStateM} =
-                      horrendously_dumb_file_handle_cache:write(
-                        Hdl, eof,
+                      file_handle_cache:append(
+                        Hdl, 
                         <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                          RelSeq:?REL_SEQ_BITS>>, HCStateN),
                   {AckCount2 + 1, HCStateM}
           end, {AckCount, State1 #qistate.hc_state}, Acks),
-    {ok, HCState1} = horrendously_dumb_file_handle_cache:sync(Hdl, HCState),
+    {ok, HCState1} = file_handle_cache:sync(Hdl, HCState),
     {AckCount1, State1 #qistate { hc_state = HCState1 }}.

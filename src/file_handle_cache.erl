@@ -134,12 +134,17 @@ read(Ref, NewOffset, Count, State) ->
                 case write_buffer(Handle) of
                     {ok, Handle2} ->
                         case maybe_seek(NewOffset, Handle2) of
-                            {ok, Handle3 = #handle { hdl = Hdl }} ->
+                            {ok, Handle3 = #handle { hdl = Hdl,
+                                                     offset = Offset }} ->
                                 case file:read(Hdl, Count) of
-                                    {ok, _} = Obj -> {Obj, Handle3};
-                                    eof -> {eof,
-                                            Handle3 #handle { at_eof = true }};
-                                    {error, _} = Error -> {Error, Handle3}
+                                    {ok, _} = Obj ->
+                                        {Obj, Handle3 #handle {
+                                                offset = Offset + Count }};
+                                    eof ->
+                                        {eof, Handle3 #handle {
+                                                at_eof = true }};
+                                    {error, _} = Error ->
+                                        {Error, Handle3}
                                 end;
                             {Error, Handle3} -> {Error, Handle3}
                         end;
@@ -183,6 +188,50 @@ position(Ref, NewOffset, State) ->
                 end,
             put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
             {Result, State}
+    end.
+
+sync(Ref, State) ->
+    case get({Ref, fhc_handle}) of
+        undefined -> {{error, not_open}, State}; 
+        Handle = #handle { write_buffer = [], hdl = Hdl, offset = Offset } ->
+            {Result, Handle1} =
+                case file:sync(Hdl) of
+                    ok -> {ok, Handle #handle { trusted_offset = Offset }};
+                    Error -> {Error, Handle}
+                end,
+            put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
+            {Result, State};
+        Handle = #handle { at_eof = true } ->
+            %% we can't have content in the buffer without being at eof
+            {Result, Handle1} = write_buffer(Handle),
+            put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
+            {Result, State}
+    end.
+
+truncate(Ref, State) ->
+    case get({Ref, fhc_handle}) of
+        undefined -> {{error, not_open}, State};
+        Handle = #handle { is_write = true } ->
+            {Result, Handle1} =
+                case write_buffer(Handle) of
+                    {ok,
+                     Handle2 = #handle { hdl = Hdl, offset = Offset,
+                                         trusted_offset = TrustedOffset }} ->
+                        case file:truncate(Hdl) of
+                            ok ->
+                                {ok,
+                                 Handle2 #handle {
+                                   at_eof = true,
+                                   trusted_offset = lists:min([Offset,
+                                                               TrustedOffset])
+                                  }};
+                            Error -> {Error, Handle2}
+                        end;
+                    {Error, Handle2} -> {Error, Handle2}
+                end,
+            put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now () }),
+            {Result, State};
+        _Handle -> {{error, not_open_for_writing}, State}
     end.
 
 open1(Path, Mode, Options, GRef, State) ->
