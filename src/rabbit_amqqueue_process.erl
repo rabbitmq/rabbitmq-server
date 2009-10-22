@@ -833,7 +833,7 @@ handle_cast({set_bufsec_limit, BufSec}, State) ->
         _ -> BufSec * DrainRatio#ratio.ratio * 1000000
     end,
     %% Just to proove that something is happening.
-    io:format("Queue size is ~8p, should be ~p~n", 
+    ?LOGDEBUG("Queue size is ~8p, should be ~p~n", 
                        [queue:len(State#q.message_buffer), DesiredQueueLength]),
     noreply(State).
 

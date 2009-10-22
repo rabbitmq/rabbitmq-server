@@ -70,6 +70,7 @@
 
 
 -module(rabbit_memory_monitor).
+-include("rabbit.hrl").
 
 -behaviour(gen_server2).
 
@@ -91,13 +92,20 @@
 -define(SERVER, ?MODULE).
 -define(DEFAULT_UPDATE_INTERVAL_MS, 2500).
 
-%% Enable debug reports in stdout:
--define(debug, true).
-
 %%----------------------------------------------------------------------------
-
 -ifdef(use_specs).
 
+-spec(start_link/0 :: () -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(register/1 :: (pid()) -> ok).
+
+-spec(init/1 :: ([]) -> {ok, #state{}}).
+
+-ifdef(debug).
+-spec(ftoa/1 :: (any()) -> string()).
+-endif.
+
+-spec(count_average/1 :: (list()) -> float() | infinity ).
+-spec(internal_update/1 :: (#state{}) -> #state{}).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -133,7 +141,7 @@ init([]) ->
     %% We should never use more memory than user requested. As the memory 
     %% manager doesn't really know how much memory queues are using, we shall
     %% try to remain safe distance from real limit. 
-    MemoryLimit = get_user_memory_limit() * 0.6,
+    MemoryLimit = trunc(get_user_memory_limit() * 0.6),
     rabbit_log:warning("Memory monitor limit: ~pMB~n", 
                     [erlang:trunc(MemoryLimit/1024/1024)]),
     
@@ -184,15 +192,6 @@ ftoa(Float) ->
         false -> io_lib:format("~p", [Float])
     end,
     lists:flatten(Str).
-
-print_debug_info(RealDrainAvg, DesiredDrainAvg, MemoryOvercommit) ->
-    io:format("DrainAvg Real/Desired:~s/~s  MemoryOvercommit:~s~n", 
-                [ftoa(RealDrainAvg), ftoa(DesiredDrainAvg),
-                ftoa(MemoryOvercommit)]).
--else.
-print_debug_info(_RealDrainAvg, _DesiredDrainAvg, _MemoryOvercommit) ->
-    ok.
-
 -endif.
 
 %% Count average from numbers, excluding atoms in the list.
@@ -214,11 +213,12 @@ internal_update(State) ->
     %% Not does the queue.
     DesiredDrainAvg = case RealDrainAvg of
         infinity -> infinity;
-        0 -> infinity;
         0.0 -> infinity;
         _ ->  RealDrainAvg / MemoryOvercommit
     end,
-    print_debug_info(RealDrainAvg, DesiredDrainAvg, MemoryOvercommit),
+    ?LOGDEBUG("DrainAvg Real/Desired:~s/~s  MemoryOvercommit:~s~n", 
+                [ftoa(RealDrainAvg), ftoa(DesiredDrainAvg),
+                ftoa(MemoryOvercommit)]),
     %% Inform the queue to reduce it's memory usage when needed.
     %% This can sometimes wake the queue from hibernation. Well, we don't care.
     ReduceMemory = fun ({Pid, QueueDrain}) ->
