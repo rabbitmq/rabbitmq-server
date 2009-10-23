@@ -252,6 +252,7 @@ flush_journal(State = #qistate { journal_ack_dict = JAckDict,
             {Hdl, State3} = get_journal_handle(State2),
             ok = file_handle_cache:position(Hdl, bof),
             ok = file_handle_cache:truncate(Hdl),
+            ok = file_handle_cache:sync(Hdl),
             {false, State3};
         JAckCount1 > ?MAX_ACK_JOURNAL_ENTRY_COUNT ->
             flush_journal(State2);
