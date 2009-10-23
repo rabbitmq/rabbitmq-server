@@ -381,13 +381,8 @@ get_seg_handle(SegNum, State = #qistate { dir = Dir, seg_num_handles = SegHdls }
     end.
 
 new_handle(Key, Path, Mode, State = #qistate { seg_num_handles = SegHdls }) ->
-    State1 = #qistate { seg_num_handles = SegHdls1 } =
-        case dict:size(SegHdls) > 100 of
-            true -> close_all_handles(State);
-            false -> State
-        end,
     {ok, Hdl} = file_handle_cache:open(Path, Mode, [{write_buffer, infinity}]),
-    {Hdl, State1 #qistate { seg_num_handles = dict:store(Key, Hdl, SegHdls1) }}.
+    {Hdl, State #qistate { seg_num_handles = dict:store(Key, Hdl, SegHdls) }}.
 
 close_handle(Key, State = #qistate { seg_num_handles = SegHdls }) ->
     case dict:find(Key, SegHdls) of
