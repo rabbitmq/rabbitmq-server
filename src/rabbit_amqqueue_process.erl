@@ -38,6 +38,7 @@
 -define(UNSENT_MESSAGE_LIMIT, 100).
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
+-define(SYNC_INTERVAL,         5). %% milliseconds
 
 -export([start_link/1]).
 
@@ -56,7 +57,8 @@
             variable_queue_state,
             next_msg_id,
             active_consumers,
-            blocked_consumers
+            blocked_consumers,
+            sync_timer_ref
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -109,7 +111,8 @@ init(Q = #amqqueue { name = QName }) ->
                variable_queue_state = VQS,
                next_msg_id = 1,
                active_consumers = queue:new(),
-               blocked_consumers = queue:new()
+               blocked_consumers = queue:new(),
+               sync_timer_ref = undefined
               },
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -142,11 +145,34 @@ code_change(_OldVsn, State, _Extra) ->
 
 reply(Reply, NewState) ->
     assert_invariant(NewState),
-    {reply, Reply, NewState, hibernate}.
+    {NewState1, Timeout} = next_state(NewState),
+    {reply, Reply, NewState1, Timeout}.
 
 noreply(NewState) ->
     assert_invariant(NewState),
-    {noreply, NewState, hibernate}.
+    {NewState1, Timeout} = next_state(NewState),
+    {noreply, NewState1, Timeout}.
+
+next_state(State = #q { variable_queue_state = VQS }) ->
+    next_state1(State, rabbit_variable_queue:needs_sync(VQS)).
+
+next_state1(State = #q { sync_timer_ref = undefined }, true) ->
+    {start_sync_timer(State), 0};
+next_state1(State, true) ->
+    {State, 0};
+next_state1(State = #q { sync_timer_ref = undefined }, false) ->
+    {State, hibernate};
+next_state1(State, false) ->
+    {stop_sync_timer(State), 0}.
+
+start_sync_timer(State = #q { sync_timer_ref = undefined }) ->
+    {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, rabbit_amqqueue,
+                                   tx_commit_vq_callback, [self()]),
+    State #q { sync_timer_ref = TRef }.
+
+stop_sync_timer(State = #q { sync_timer_ref = TRef }) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State #q { sync_timer_ref = undefined }.
 
 assert_invariant(#q { active_consumers = AC, variable_queue_state = VQS }) ->
     true = (queue:is_empty(AC) orelse rabbit_variable_queue:is_empty(VQS)).
@@ -791,10 +817,15 @@ handle_cast({notify_sent, ChPid}, State) ->
 handle_cast({tx_commit_msg_store_callback, Pubs, AckTags, From},
             State = #q{variable_queue_state = VQS}) ->
     noreply(
+      State#q{variable_queue_state =
+              rabbit_variable_queue:tx_commit_from_msg_store(
+                Pubs, AckTags, From, VQS)});
+
+handle_cast(tx_commit_vq_callback, State = #q{variable_queue_state = VQS}) ->
+    noreply(
       run_message_queue(
         State#q{variable_queue_state =
-                rabbit_variable_queue:tx_commit_from_msg_store(
-                  Pubs, AckTags, From, VQS)}));
+                rabbit_variable_queue:tx_commit_from_vq(VQS)}));
 
 handle_cast({limit, ChPid, LimiterPid}, State) ->
     noreply(
@@ -827,6 +858,12 @@ handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
     {stop, normal, NewState};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     handle_ch_down(DownPid, State);
+
+handle_info(timeout, State = #q{variable_queue_state = VQS}) ->
+    noreply(
+      run_message_queue(
+        State#q{variable_queue_state =
+                rabbit_variable_queue:tx_commit_from_vq(VQS)}));    
 
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),

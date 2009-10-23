@@ -40,7 +40,8 @@
 -export([list/1, info/1, info/2, info_all/1, info_all/2]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
--export([notify_sent/2, unblock/2, tx_commit_msg_store_callback/4]).
+-export([notify_sent/2, unblock/2, tx_commit_msg_store_callback/4,
+         tx_commit_vq_callback/1]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
@@ -325,6 +326,9 @@ unblock(QPid, ChPid) ->
 tx_commit_msg_store_callback(QPid, Pubs, AckTags, From) ->
     gen_server2:pcast(QPid, 8,
                       {tx_commit_msg_store_callback, Pubs, AckTags, From}).
+
+tx_commit_vq_callback(QPid) ->
+    gen_server2:pcast(QPid, 8, tx_commit_vq_callback).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(

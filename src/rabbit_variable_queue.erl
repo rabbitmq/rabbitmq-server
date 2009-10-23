@@ -34,7 +34,8 @@
 -export([init/1, terminate/1, publish/2, publish_delivered/2,
          set_queue_ram_duration_target/2, remeasure_egress_rate/1, fetch/1,
          ack/2, len/1, is_empty/1, maybe_start_prefetcher/1, purge/1, delete/1,
-         requeue/2, tx_publish/2, tx_rollback/2, tx_commit/4, tx_commit_from_msg_store/4]).
+         requeue/2, tx_publish/2, tx_rollback/2, tx_commit/4,
+         tx_commit_from_msg_store/4, tx_commit_from_vq/1, needs_sync/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -54,7 +55,8 @@
           avg_egress_rate,
           egress_rate_timestamp,
           prefetcher,
-          len
+          len,
+          on_sync
         }).
 
 -record(alpha,
@@ -136,7 +138,8 @@ init(QueueName) ->
                    avg_egress_rate = 0,
                    egress_rate_timestamp = now(),
                    prefetcher = undefined,
-                   len = GammaCount
+                   len = GammaCount,
+                   on_sync = {[], [], []}
                   },
     maybe_load_next_segment(State).
 
@@ -378,10 +381,16 @@ tx_commit(Pubs, AckTags, From, State) ->
             {false, State}
     end.
 
-tx_commit_from_msg_store(Pubs, AckTags, From, State) ->
+tx_commit_from_msg_store(Pubs, AckTags, From,
+                         State = #vqstate { on_sync = {SAcks, SPubs, SFroms} }) ->
     DiskAcks =
         lists:filter(fun (AckTag) -> AckTag /= ack_not_on_disk end, AckTags),
-    State1 = ack(DiskAcks, State),
+    State #vqstate { on_sync = { [DiskAcks | SAcks],
+                                 [Pubs | SPubs],
+                                 [From | SFroms] }}.
+
+tx_commit_from_vq(State = #vqstate { on_sync = {SAcks, SPubs, SFroms} }) ->
+    State1 = ack(lists:flatten(SAcks), State),
     {PubSeqIds, State2 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun (Msg = #basic_message { is_persistent = IsPersistent },
@@ -392,11 +401,16 @@ tx_commit_from_msg_store(Pubs, AckTags, From, State) ->
                                    false -> SeqIdsAcc
                                end,
                   {SeqIdsAcc1, StateN1}
-          end, {[], State1}, Pubs),
+          end, {[], State1}, lists:flatten(lists:reverse(SPubs))),
     IndexState1 =
-        rabbit_queue_index:sync_seq_ids(PubSeqIds, [] /= DiskAcks, IndexState),
-    gen_server2:reply(From, ok),
-    State2 #vqstate { index_state = IndexState1 }.
+        rabbit_queue_index:sync_seq_ids(PubSeqIds, [] /= SAcks, IndexState),
+    [ gen_server2:reply(From, ok) || From <- lists:reverse(SFroms) ],
+    State2 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }.
+
+needs_sync(#vqstate { on_sync = {_, _, []} }) ->
+    false;
+needs_sync(_) ->
+    true.
 
 %%----------------------------------------------------------------------------
 
