@@ -158,9 +158,10 @@ set_closing_state(ChannelCloseType, NewClosing,
            true ->
                CurClosing
        end,
-   NewState = State#dc_state{closing = ResClosing},
-   check_trigger_all_channels_closed_event(NewState).
+   State#dc_state{closing = ResClosing}.
 
+%% The all_channels_closed_event is called when all channels have been closed
+%% after the connection broadcasts a connection_closing message to all channels
 all_channels_closed_event(#dc_state{closing = Closing} = State) ->
     case Closing#dc_closing.from of
         none -> ok;
@@ -187,6 +188,11 @@ internal_error_closing() ->
 %% Channel utilities
 %%---------------------------------------------------------------------------
 
+unregister_channel(Pid, State = #dc_state{channels = Channels}) ->
+    NewChannels = amqp_channel_util:unregister_channel({chpid, Pid}, Channels),
+    NewState = State#dc_state{channels = NewChannels},
+    check_trigger_all_channels_closed_event(NewState).
+
 check_trigger_all_channels_closed_event(#dc_state{closing = false} = State) ->
     State;
 check_trigger_all_channels_closed_event(
@@ -195,11 +201,6 @@ check_trigger_all_channels_closed_event(
         true  -> all_channels_closed_event(State);
         false -> State
     end.
-
-unregister_channel(Pid, State = #dc_state{channels = Channels}) ->
-    NewChannels = amqp_channel_util:unregister_channel({chpid, Pid}, Channels),
-    NewState = State#dc_state{channels = NewChannels},
-    check_trigger_all_channels_closed_event(NewState).
 
 %%---------------------------------------------------------------------------
 %% Trap exits

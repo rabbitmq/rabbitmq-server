@@ -174,8 +174,7 @@ set_closing_state(ChannelCloseType, Closing,
     amqp_channel_util:broadcast_to_channels(
         {connection_closing, ChannelCloseType, closing_to_reason(Closing)},
         Channels),
-    check_trigger_all_channels_closed_event(
-        State#nc_state{closing = Closing});
+    check_trigger_all_channels_closed_event(State#nc_state{closing = Closing});
 %% Already closing, override situation
 set_closing_state(ChannelCloseType, NewClosing,
                   #nc_state{closing = CurClosing,
