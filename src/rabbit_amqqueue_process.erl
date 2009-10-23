@@ -826,11 +826,11 @@ handle_cast(send_memory_monitor_update, State) ->
     rabbit_memory_monitor:push_queue_duration(self(), BufSec),
     noreply(State#q{drain_ratio = DrainRatio1});
 
-handle_cast({set_bufsec_limit, BufSec}, State) ->
+handle_cast({set_queue_duration, QueueDuration}, State) ->
     DrainRatio = State#q.drain_ratio,
-    DesiredQueueLength = case BufSec of 
+    DesiredQueueLength = case QueueDuration of
         infinity -> infinity;
-        _ -> BufSec * DrainRatio#ratio.ratio * 1000000
+        _ -> QueueDuration * DrainRatio#ratio.ratio * 1000000
     end,
     %% Just to proove that something is happening.
     ?LOGDEBUG("Queue size is ~8p, should be ~p~n", 
