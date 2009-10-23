@@ -379,15 +379,14 @@ tx_commit(Pubs, AckTags, From, State) ->
     end.
 
 do_tx_commit(Pubs, AckTags, From, State) ->
-    {_PubSeqIds, State1} =
+    State1 = ack(AckTags, State),
+    {PubSeqIds, State2 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun (Msg, {SeqIdsAcc, StateN}) ->
                   {SeqId, StateN1} = publish(Msg, false, true, StateN),
                   {[SeqId | SeqIdsAcc], StateN1}
-          end, {[], State}, Pubs),
-    %% TODO need to do something here about syncing the queue index, PubSeqIds
-    State2 = #vqstate { index_state = IndexState } = ack(AckTags, State1),
-    IndexState1 = rabbit_queue_index:sync_all(IndexState),
+          end, {[], State1}, Pubs),
+    IndexState1 = rabbit_queue_index:sync_seq_ids(PubSeqIds, IndexState),
     gen_server2:reply(From, ok),
     State2 #vqstate { index_state = IndexState1 }.
 

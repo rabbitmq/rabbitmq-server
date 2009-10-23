@@ -32,7 +32,7 @@
 -module(rabbit_queue_index).
 
 -export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
-         write_delivered/2, write_acks/2, flush_journal/1, sync_all/1,
+         write_delivered/2, write_acks/2, flush_journal/1, sync_seq_ids/2,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/1]).
 
@@ -217,11 +217,21 @@ full_flush_journal(State) ->
         {false, State1} -> State1
     end.
 
-sync_all(State = #qistate { seg_num_handles = SegHdls }) ->
-    ok = dict:fold(fun (_Key, Hdl, ok) ->
-                           file_handle_cache:sync(Hdl)
-                   end, ok, SegHdls),
-    State.
+sync_seq_ids(SeqIds, State) ->
+    {Hdl, State1} = get_journal_handle(State),
+    ok = file_handle_cache:sync(Hdl),
+    SegNumsSet =
+        lists:foldl(
+          fun (SeqId, Set) ->
+                  {SegNum, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
+                  sets:add_element(SegNum, Set)
+          end, sets:new(), SeqIds),
+    sets:fold(
+      fun (SegNum, StateN) ->
+              {Hdl1, StateM} = get_seg_handle(SegNum, StateN),
+              ok = file_handle_cache:sync(Hdl1),
+              StateM
+      end, State1, SegNumsSet).
 
 flush_journal(State = #qistate { journal_ack_count = 0 }) ->
     {false, State};
