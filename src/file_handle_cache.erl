@@ -31,8 +31,8 @@
 
 -module(file_handle_cache).
 
--export([init/0, open/4, close/2, release/2, read/3, append/3, sync/2,
-         position/3, truncate/2, last_sync_offset/2]).
+-export([open/3, close/1, release/1, read/2, append/2, sync/1,
+         position/2, truncate/1, last_sync_offset/1]).
 
 -record(file,
         { reader_count,
@@ -56,11 +56,9 @@
           last_used_at
         }).
 
-init() -> empty_state.
-
-open(Path, Mode, Options, State) ->
+open(Path, Mode, Options) ->
     case is_appender(Mode) of
-        true -> {{error, append_not_supported}, State};
+        true -> {error, append_not_supported};
         false ->
             Path1 = filename:absname(Path),
             case get({Path1, fhc_path}) of
@@ -71,7 +69,7 @@ open(Path, Mode, Options, State) ->
                     IsWriter = is_writer(Mode1),
                     case IsWriter andalso HasWriter of
                         true ->
-                            {{error, writer_exists}, State};
+                            {error, writer_exists};
                         false ->
                             RCount1 = case is_reader(Mode1) of
                                           true -> RCount + 1;
@@ -82,10 +80,9 @@ open(Path, Mode, Options, State) ->
                                   reader_count = RCount1,
                                   has_writer = HasWriter orelse IsWriter }),
                             Ref = make_ref(),
-                            case open1(Path1, Mode1, Options, Ref, GRef, State)
-                                of
-                                {{ok, _Handle}, State} -> {{ok, Ref}, State};
-                                {Error, State} -> {Error, State}
+                            case open1(Path1, Mode1, Options, Ref, GRef) of
+                                {ok, _Handle} -> {ok, Ref};
+                                Error -> Error
                             end
                     end;
                 undefined ->
@@ -94,13 +91,13 @@ open(Path, Mode, Options, State) ->
                     put({GRef, fhc_file},
                         #file { reader_count = 0, has_writer = false,
                                 path = Path1 }),
-                    open(Path, Mode, Options, State)
+                    open(Path, Mode, Options)
             end
     end.
 
-close(Ref, State) ->
+close(Ref) ->
     case erase({Ref, fhc_handle}) of
-        undefined -> {ok, State};
+        undefined -> ok;
         Handle ->
             case write_buffer(Handle) of
                 {ok, #handle { hdl = Hdl, global_key = GRef,
@@ -124,21 +121,21 @@ close(Ref, State) ->
                                      File #file { reader_count = RCount1,
                                                   has_writer = HasWriter1 })
                     end,
-                    {ok, State};
+                    ok;
                 {Error, Handle1} ->
                     put({Ref, fhc_handle}, Handle1),
-                    {Error, State}
+                    Error
             end
     end.
 
-release(_Ref, State) -> %% noop just for now
-    {ok, State}.
+release(_Ref) -> %% noop just for now
+    ok.
 
-read(Ref, Count, State) ->
-    case get_or_reopen(Ref, State) of
-        {{ok, #handle { is_read = false }}, State1} ->
-            {{error, not_open_for_reading}, State1};
-        {{ok, Handle}, State1} ->
+read(Ref, Count) ->
+    case get_or_reopen(Ref) of
+        {ok, #handle { is_read = false }} ->
+            {error, not_open_for_reading};
+        {ok, Handle} ->
             {Result, Handle1} =
                 case write_buffer(Handle) of
                     {ok, Handle2 = #handle { hdl = Hdl, offset = Offset }} ->
@@ -153,15 +150,15 @@ read(Ref, Count, State) ->
                     {Error, Handle2} -> {Error, Handle2}
                 end,
             put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
-            {Result, State1};
+            Result;
         ErrorAndState -> ErrorAndState
     end.
 
-append(Ref, Data, State) ->
-    case get_or_reopen(Ref, State) of
-        {{ok, #handle { is_write = false }}, State1} ->
-            {{error, not_open_for_writing}, State1};
-        {{ok, Handle}, State1} ->
+append(Ref, Data) ->
+    case get_or_reopen(Ref) of
+        {ok, #handle { is_write = false }} ->
+            {error, not_open_for_writing};
+        {ok, Handle} ->
             {Result, Handle1} =
                 case maybe_seek(eof, Handle) of
                     {ok, Handle2 = #handle { at_eof = true }} ->
@@ -170,54 +167,54 @@ append(Ref, Data, State) ->
                         {Error, Handle2}
                 end,
             put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
-            {Result, State1};
+            Result;
         ErrorAndState -> ErrorAndState
     end.
 
-last_sync_offset(Ref, State) ->
-    case get_or_reopen(Ref, State) of
-        {{ok, #handle { trusted_offset = TrustedOffset }}, State1} ->
-            {{ok, TrustedOffset}, State1};
+last_sync_offset(Ref) ->
+    case get_or_reopen(Ref) of
+        {ok, #handle { trusted_offset = TrustedOffset }} ->
+            {ok, TrustedOffset};
         ErrorAndState -> ErrorAndState
     end.
 
-position(Ref, NewOffset, State) ->
-    case get_or_reopen(Ref, State) of
-        {{ok, Handle}, State1} ->
+position(Ref, NewOffset) ->
+    case get_or_reopen(Ref) of
+        {ok, Handle} ->
             {Result, Handle1} =
                 case write_buffer(Handle) of
                     {ok, Handle2} -> maybe_seek(NewOffset, Handle2);
                     {Error, Handle2} -> {Error, Handle2}
                 end,
             put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
-            {Result, State1};
+            Result;
         ErrorAndState -> ErrorAndState
     end.
 
-sync(Ref, State) ->
-    case get_or_reopen(Ref, State) of
-        {{ok, Handle = #handle { write_buffer = [], hdl = Hdl,
-                                 offset = Offset }}, State1} ->
+sync(Ref) ->
+    case get_or_reopen(Ref) of
+        {ok, Handle = #handle { write_buffer = [], hdl = Hdl,
+                                offset = Offset }} ->
             {Result, Handle1} =
                 case file:sync(Hdl) of
                     ok -> {ok, Handle #handle { trusted_offset = Offset }};
                     Error -> {Error, Handle}
                 end,
             put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
-            {Result, State1};
-        {{ok, Handle = #handle { at_eof = true }}, State1} ->
+            Result;
+        {ok, Handle = #handle { at_eof = true }} ->
             %% we can't have content in the buffer without being at eof
             {Result, Handle1} = write_buffer(Handle),
             put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
-            {Result, State1};
+            Result;
         ErrorAndState -> ErrorAndState
     end.
 
-truncate(Ref, State) ->
-    case get_or_reopen(Ref, State) of
-        {{ok, #handle { is_write = false }}, State1} ->
-            {{error, not_open_for_writing}, State1};
-        {{ok, Handle}, State1} ->
+truncate(Ref) ->
+    case get_or_reopen(Ref) of
+        {ok, #handle { is_write = false }} ->
+            {error, not_open_for_writing};
+        {ok, Handle} ->
             {Result, Handle1} =
                 case write_buffer(Handle) of
                     {ok,
@@ -236,21 +233,21 @@ truncate(Ref, State) ->
                     {Error, Handle2} -> {Error, Handle2}
                 end,
             put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now () }),
-            {Result, State1};
+            Result;
         ErrorAndState -> ErrorAndState
     end.
 
-get_or_reopen(Ref, State) ->
+get_or_reopen(Ref) ->
     case get({Ref, fhc_handle}) of
-        undefined -> {{error, not_open}, State};
+        undefined -> {error, not_open};
         #handle { hdl = closed, mode = Mode, global_key = GRef,
                   options = Options } ->
             #file { path = Path } = get({GRef, fhc_file}),
-            open1(Path, Mode, Options, Ref, GRef, State);
-        Handle -> {{ok, Handle}, State}
+            open1(Path, Mode, Options, Ref, GRef);
+        Handle -> {ok, Handle}
     end.
 
-open1(Path, Mode, Options, Ref, GRef, State) ->
+open1(Path, Mode, Options, Ref, GRef) ->
     case file:open(Path, Mode) of
         {ok, Hdl} ->
             WriteBufferSize =
@@ -267,9 +264,9 @@ open1(Path, Mode, Options, Ref, GRef, State) ->
                           is_write = is_writer(Mode), is_read = is_reader(Mode),
                           global_key = GRef, last_used_at = now() },
             put({Ref, fhc_handle}, Handle),
-            {{ok, Handle}, State};
+            {ok, Handle};
         {error, Reason} ->
-            {{error, Reason}, State}
+            {error, Reason}
     end.
 
 maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, at_eof = AtEoF,
