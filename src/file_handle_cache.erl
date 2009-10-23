@@ -44,6 +44,7 @@
         { hdl,
           offset,
           trusted_offset,
+          is_dirty,
           write_buffer_size,
           write_buffer_size_limit,
           write_buffer,
@@ -100,11 +101,14 @@ close(Ref) ->
         undefined -> ok;
         Handle ->
             case write_buffer(Handle) of
-                {ok, #handle { hdl = Hdl, global_key = GRef,
+                {ok, #handle { hdl = Hdl, global_key = GRef, is_dirty = IsDirty,
                                is_read = IsReader, is_write = IsWriter }} ->
                     case Hdl of
                         closed -> ok;
-                        _ -> ok = file:sync(Hdl),
+                        _ -> ok = case IsDirty of
+                                      true -> file:sync(Hdl);
+                                      false -> ok
+                                  end,
                              ok = file:close(Hdl)
                     end,
                     #file { reader_count = RCount, has_writer = HasWriter,
@@ -149,9 +153,9 @@ read(Ref, Count) ->
                         end;
                     {Error, Handle2} -> {Error, Handle2}
                 end,
-            put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
+            put({Ref, fhc_handle}, Handle1),
             Result;
-        ErrorAndState -> ErrorAndState
+        Error -> Error
     end.
 
 append(Ref, Data) ->
@@ -166,16 +170,16 @@ append(Ref, Data) ->
                     {{error, _} = Error, Handle2} ->
                         {Error, Handle2}
                 end,
-            put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
+            put({Ref, fhc_handle}, Handle1),
             Result;
-        ErrorAndState -> ErrorAndState
+        Error -> Error
     end.
 
 last_sync_offset(Ref) ->
     case get_or_reopen(Ref) of
         {ok, #handle { trusted_offset = TrustedOffset }} ->
             {ok, TrustedOffset};
-        ErrorAndState -> ErrorAndState
+        Error -> Error
     end.
 
 position(Ref, NewOffset) ->
@@ -186,28 +190,32 @@ position(Ref, NewOffset) ->
                     {ok, Handle2} -> maybe_seek(NewOffset, Handle2);
                     {Error, Handle2} -> {Error, Handle2}
                 end,
-            put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
+            put({Ref, fhc_handle}, Handle1),
             Result;
-        ErrorAndState -> ErrorAndState
+        Error -> Error
     end.
 
 sync(Ref) ->
     case get_or_reopen(Ref) of
-        {ok, Handle = #handle { write_buffer = [], hdl = Hdl,
-                                offset = Offset }} ->
+        {ok, #handle { is_dirty = false, write_buffer = [] }} ->
+            ok;
+        {ok, Handle} ->
+            %% write_buffer will set is_dirty, or leave it set if buffer empty
             {Result, Handle1} =
-                case file:sync(Hdl) of
-                    ok -> {ok, Handle #handle { trusted_offset = Offset }};
+                case write_buffer(Handle) of
+                    {ok, Handle2 = #handle {
+                           hdl = Hdl, offset = Offset, is_dirty = true }} ->
+                        case file:sync(Hdl) of
+                            ok -> {ok,
+                                   Handle2 #handle { trusted_offset = Offset,
+                                                     is_dirty = false }};
+                            Error -> {Error, Handle2}
+                        end;
                     Error -> {Error, Handle}
                 end,
-            put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
+            put({Ref, fhc_handle}, Handle1),
             Result;
-        {ok, Handle = #handle { at_eof = true }} ->
-            %% we can't have content in the buffer without being at eof
-            {Result, Handle1} = write_buffer(Handle),
-            put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now() }),
-            Result;
-        ErrorAndState -> ErrorAndState
+        Error -> Error
     end.
 
 truncate(Ref) ->
@@ -232,9 +240,9 @@ truncate(Ref) ->
                         end;
                     {Error, Handle2} -> {Error, Handle2}
                 end,
-            put({Ref, fhc_handle}, Handle1 #handle { last_used_at = now () }),
+            put({Ref, fhc_handle}, Handle1),
             Result;
-        ErrorAndState -> ErrorAndState
+        Error -> Error
     end.
 
 get_or_reopen(Ref) ->
@@ -244,7 +252,7 @@ get_or_reopen(Ref) ->
                   options = Options } ->
             #file { path = Path } = get({GRef, fhc_file}),
             open1(Path, Mode, Options, Ref, GRef);
-        Handle -> {ok, Handle}
+        Handle -> {ok, Handle #handle { last_used_at = now() }}
     end.
 
 open1(Path, Mode, Options, Ref, GRef) ->
@@ -262,7 +270,8 @@ open1(Path, Mode, Options, Ref, GRef) ->
                           write_buffer_size_limit = WriteBufferSize,
                           write_buffer = [], at_eof = false, mode = Mode,
                           is_write = is_writer(Mode), is_read = is_reader(Mode),
-                          global_key = GRef, last_used_at = now() },
+                          global_key = GRef, last_used_at = now(),
+                          is_dirty = false },
             put({Ref, fhc_handle}, Handle),
             {ok, Handle};
         {error, Reason} ->
@@ -284,7 +293,7 @@ maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, at_eof = AtEoF,
 
 write_to_buffer(Data, Handle = #handle { hdl = Hdl,
                                          write_buffer_size_limit = 0 }) ->
-    {file:write(Hdl, Data), Handle};
+    {file:write(Hdl, Data), Handle #handle { is_dirty = true }};
 write_to_buffer(Data, Handle =
                 #handle { write_buffer = WriteBuffer,
                           write_buffer_size = Size,
@@ -307,7 +316,7 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
         ok ->
             Offset1 = Offset + DataSize,
             {ok, Handle #handle { offset = Offset1, write_buffer = [],
-                                  write_buffer_size = 0 }};
+                                  write_buffer_size = 0, is_dirty = true }};
         {error, _} = Error ->
             {Error, Handle}
     end.
