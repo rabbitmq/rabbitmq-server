@@ -384,9 +384,14 @@ tx_commit_from_msg_store(Pubs, AckTags, From, State) ->
     State1 = ack(DiskAcks, State),
     {PubSeqIds, State2 = #vqstate { index_state = IndexState }} =
         lists:foldl(
-          fun (Msg, {SeqIdsAcc, StateN}) ->
+          fun (Msg = #basic_message { is_persistent = IsPersistent },
+               {SeqIdsAcc, StateN}) ->
                   {SeqId, StateN1} = publish(Msg, false, true, StateN),
-                  {[SeqId | SeqIdsAcc], StateN1}
+                  SeqIdsAcc1 = case IsPersistent of
+                                   true -> [SeqId | SeqIdsAcc];
+                                   false -> SeqIdsAcc
+                               end,
+                  {SeqIdsAcc1, StateN1}
           end, {[], State1}, Pubs),
     IndexState1 =
         rabbit_queue_index:sync_seq_ids(PubSeqIds, [] /= DiskAcks, IndexState),
