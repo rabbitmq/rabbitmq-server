@@ -32,7 +32,7 @@
 -module(rabbit_queue_index).
 
 -export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
-         write_delivered/2, write_acks/2, flush_journal/1, sync_seq_ids/2,
+         write_delivered/2, write_acks/2, flush_journal/1, sync_seq_ids/3,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/1]).
 
@@ -217,9 +217,13 @@ full_flush_journal(State) ->
         {false, State1} -> State1
     end.
 
-sync_seq_ids(SeqIds, State) ->
-    {Hdl, State1} = get_journal_handle(State),
-    ok = file_handle_cache:sync(Hdl),
+sync_seq_ids(SeqIds, SyncAckJournal, State) ->
+    State1 = case SyncAckJournal of
+                 true -> {Hdl, State2} = get_journal_handle(State),
+                         ok = file_handle_cache:sync(Hdl),
+                         State2;
+                 false -> State
+             end,
     SegNumsSet =
         lists:foldl(
           fun (SeqId, Set) ->

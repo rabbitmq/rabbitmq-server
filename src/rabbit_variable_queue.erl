@@ -34,7 +34,7 @@
 -export([init/1, terminate/1, publish/2, publish_delivered/2,
          set_queue_ram_duration_target/2, remeasure_egress_rate/1, fetch/1,
          ack/2, len/1, is_empty/1, maybe_start_prefetcher/1, purge/1, delete/1,
-         requeue/2, tx_publish/2, tx_rollback/2, tx_commit/4, do_tx_commit/4]).
+         requeue/2, tx_publish/2, tx_rollback/2, tx_commit/4, tx_commit_from_msg_store/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -367,26 +367,29 @@ tx_rollback(Pubs, State) ->
 tx_commit(Pubs, AckTags, From, State) ->
     case persistent_msg_ids(Pubs) of
         [] ->
-            {true, do_tx_commit(Pubs, AckTags, From, State)};
+            {true, tx_commit_from_msg_store(Pubs, AckTags, From, State)};
         PersistentMsgIds ->
             Self = self(),
             ok = rabbit_msg_store:sync(
                    PersistentMsgIds,
-                   fun () -> ok = rabbit_amqqueue:tx_commit_callback(
+                   fun () -> ok = rabbit_amqqueue:tx_commit_msg_store_callback(
                                     Self, Pubs, AckTags, From)
                    end),
             {false, State}
     end.
 
-do_tx_commit(Pubs, AckTags, From, State) ->
-    State1 = ack(AckTags, State),
+tx_commit_from_msg_store(Pubs, AckTags, From, State) ->
+    DiskAcks =
+        lists:filter(fun (AckTag) -> AckTag /= ack_not_on_disk end, AckTags),
+    State1 = ack(DiskAcks, State),
     {PubSeqIds, State2 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun (Msg, {SeqIdsAcc, StateN}) ->
                   {SeqId, StateN1} = publish(Msg, false, true, StateN),
                   {[SeqId | SeqIdsAcc], StateN1}
           end, {[], State1}, Pubs),
-    IndexState1 = rabbit_queue_index:sync_seq_ids(PubSeqIds, IndexState),
+    IndexState1 =
+        rabbit_queue_index:sync_seq_ids(PubSeqIds, [] /= DiskAcks, IndexState),
     gen_server2:reply(From, ok),
     State2 #vqstate { index_state = IndexState1 }.
 

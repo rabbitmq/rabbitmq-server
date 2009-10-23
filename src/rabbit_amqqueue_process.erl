@@ -788,12 +788,13 @@ handle_cast({notify_sent, ChPid}, State) ->
                                C#cr{unsent_message_count = Count - 1}
                        end));
 
-handle_cast({tx_commit_callback, Pubs, AckTags, From},
+handle_cast({tx_commit_msg_store_callback, Pubs, AckTags, From},
             State = #q{variable_queue_state = VQS}) ->
     noreply(
       run_message_queue(
         State#q{variable_queue_state =
-                rabbit_variable_queue:do_tx_commit(Pubs, AckTags, From, VQS)}));
+                rabbit_variable_queue:tx_commit_from_msg_store(
+                  Pubs, AckTags, From, VQS)}));
 
 handle_cast({limit, ChPid, LimiterPid}, State) ->
     noreply(
