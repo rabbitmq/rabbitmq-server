@@ -36,37 +36,7 @@
                       virtual_host = <<"/">>,
                       host         = "localhost",
                       port         = ?PROTOCOL_PORT,
-                      ssl_options  = undefined}).
-
--record(connection_state, {username,
-                           password,
-                           serverhost,
-                           sock,
-                           vhostpath,
-                           main_reader_pid,
-                           channel0_writer_pid,
-                           channel0_reader_pid,
-                           channel_max,
-                           heartbeat,
-                           driver,
-                           port,
-                           closing = false,
-                           channels = dict:new(),
-                           ssl_options}).
-
--record(channel_state, {number,
-                        parent_connection,
-                        reader_pid,
-                        writer_pid,
-                        driver,
-                        rpc_requests = queue:new(),
-                        anon_sub_requests = queue:new(),
-                        tagged_sub_requests = dict:new(),
-                        closing = false,
-                        return_handler_pid = none,
-                        flow_control = false,
-                        flow_handler_pid = none,
-                        consumers = dict:new()}).
+                      ssl_options  = none}).
 
 -record(rpc_client_state, {channel,
                            reply_queue,
@@ -81,4 +51,3 @@
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).
 -define(LOG_WARN(Format, Args), error_logger:warning_msg(Format, Args)).
-
