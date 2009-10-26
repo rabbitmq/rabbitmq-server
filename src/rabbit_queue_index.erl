@@ -32,9 +32,10 @@
 -module(rabbit_queue_index).
 
 -export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
-         write_delivered/2, write_acks/2, can_flush_journal/1, flush_journal/1, sync_seq_ids/3,
-         read_segment_entries/2, next_segment_boundary/1, segment_size/0,
-         find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/1]).
+         write_delivered/2, write_acks/2, sync_seq_ids/3, can_flush_journal/1,
+         flush_journal/1, read_segment_entries/2, next_segment_boundary/1,
+         segment_size/0, find_lowest_seq_id_seg_and_next_seq_id/1,
+         start_msg_store/1]).
 
 %%----------------------------------------------------------------------------
 %% The queue disk index
@@ -136,11 +137,11 @@
       -> qistate()).
 -spec(write_delivered/2 :: (seq_id(), qistate()) -> qistate()).
 -spec(write_acks/2 :: ([seq_id()], qistate()) -> qistate()).
--spec(flush_journal/1 :: (qistate()) -> qistate()).
+-spec(sync_seq_ids/3 :: ([seq_id()], boolean(), qistate()) -> qistate()).
 -spec(can_flush_journal/1 :: (qistate()) -> boolean()).
+-spec(flush_journal/1 :: (qistate()) -> qistate()).
 -spec(read_segment_entries/2 :: (seq_id(), qistate()) ->
-             {( [{msg_id(), seq_id(), boolean(), boolean()}]
-              | 'not_found'), qistate()}).
+             {[{msg_id(), seq_id(), boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(segment_size/0 :: () -> non_neg_integer()).
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
