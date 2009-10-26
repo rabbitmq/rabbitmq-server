@@ -63,7 +63,7 @@ start() ->
     %% applications along the way
     AllApps = case catch sets:to_list(expand_dependencies(RequiredApps)) of
                   {failed_to_load_app, App, Err} -> 
-                      error("failed to load application ~s: ~p", [App, Err]);
+                      error("failed to load application ~s:~n~p", [App, Err]);
                   AppList ->
                       AppList
               end,
@@ -98,14 +98,14 @@ start() ->
             end,
             ok;
         {error, Module, Error} ->
-            error("generation of boot script file ~s failed: ~s",
+            error("generation of boot script file ~s failed:~n~s",
                   [ScriptFile, Module:format_error(Error)])
     end,
 
     case post_process_script(ScriptFile) of
         ok -> ok;
         {error, Reason} ->
-            error("post processing of boot script file ~s failed: ~w",
+            error("post processing of boot script file ~s failed:~n~w",
                   [ScriptFile, Reason])
     end,
     case systools:script2boot(RootName) of
