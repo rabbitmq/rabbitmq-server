@@ -415,7 +415,7 @@ should_auto_delete(State) -> is_unused(State).
 
 handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
     case lookup_ch(DownPid) of
-        not_found -> noreply(State);
+        not_found -> {ok, State};
         #cr{monitor_ref = MonitorRef, ch_pid = ChPid, txn = Txn,
             unacked_messages = UAM} ->
             erlang:demonitor(MonitorRef),
@@ -431,16 +431,16 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
                                              ChPid, State#q.blocked_consumers)},
             case should_auto_delete(State1) of
                 true  ->
-                    {stop, normal, State1};
+                    {stop, State1};
                 false -> 
                     State2 = case Txn of
                                  none -> State1;
                                  _    -> rollback_transaction(Txn, State1)
                              end,
-                    noreply(
+                    {ok,
                       deliver_or_requeue_n(
                         [MsgWithAck ||
-                            {_MsgId, MsgWithAck} <- dict:to_list(UAM)], State2))
+                            {_MsgId, MsgWithAck} <- dict:to_list(UAM)], State2)}
             end
     end.
 
@@ -610,10 +610,16 @@ handle_call({commit, Txn}, From, State) ->
                 false -> NewState
             end);
 
-handle_call({notify_down, ChPid}, From, State) ->
-    %% optimisation: we reply straight away so the sender can continue
-    gen_server2:reply(From, ok),
-    handle_ch_down(ChPid, State);
+handle_call({notify_down, ChPid}, _From, State) ->
+    %% we want to do this synchronously, so that auto_deleted queues
+    %% are no longer visible by the time we send a response to the
+    %% client.  The queue is ultimately deleted in terminate/2; if we
+    %% return stop with a reply, terminate/2 will be called by
+    %% gen_server2 *before* the reply is sent.
+    case handle_ch_down(ChPid, State) of
+        {ok, NewState}   -> reply(ok, NewState);
+        {stop, NewState} -> {stop, normal, ok, NewState}
+    end;
 
 handle_call({basic_get, ChPid, NoAck}, _From,
             State = #q{q = #amqqueue{name = QName},
@@ -857,7 +863,10 @@ handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
     NewState = State#q{owner = none},
     {stop, normal, NewState};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
-    handle_ch_down(DownPid, State);
+    case handle_ch_down(DownPid, State) of
+        {ok, NewState}   -> noreply(NewState);
+        {stop, NewState} -> {stop, normal, NewState}
+    end;
 
 handle_info(timeout, State = #q{variable_queue_state = VQS}) ->
     noreply(

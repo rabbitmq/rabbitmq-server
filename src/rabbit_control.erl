@@ -52,12 +52,11 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    {ok, [[NodeNameStr|_]|_]} = init:get_argument(nodename),
-    NodeName = list_to_atom(NodeNameStr),
+    {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     FullCommand = init:get_plain_arguments(),
     #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
         parse_args(FullCommand, #params{quiet = false,
-                                        node = rabbit_misc:localnode(NodeName)}),
+                                        node = rabbit_misc:makenode(NodeStr)}),
     Inform = case Quiet of
                  true  -> fun(_Format, _Args1) -> ok end;
                  false -> fun(Format, Args1) ->
@@ -97,12 +96,12 @@ error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
     fmt_stderr("diagnostics:", []),
-    NodeHost = rabbit_misc:nodehost(Node),
+    {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
     case net_adm:names(NodeHost) of
         {error, EpmdReason} ->
             fmt_stderr("- unable to connect to epmd on ~s: ~w",
                        [NodeHost, EpmdReason]);
-                {ok, NamePorts} ->
+        {ok, NamePorts} ->
             fmt_stderr("- nodes and their ports on ~s: ~p",
                        [NodeHost, [{list_to_atom(Name), Port} ||
                                       {Name, Port} <- NamePorts]])
@@ -116,11 +115,7 @@ print_badrpc_diagnostics(Node) ->
     ok.
 
 parse_args(["-n", NodeS | Args], Params) ->
-    Node = case lists:member($@, NodeS) of
-               true  -> list_to_atom(NodeS);
-               false -> rabbit_misc:localnode(list_to_atom(NodeS))
-           end,
-    parse_args(Args, Params#params{node = Node});
+    parse_args(Args, Params#params{node = rabbit_misc:makenode(NodeS)});
 parse_args(["-q" | Args], Params) ->
     parse_args(Args, Params#params{quiet = true});
 parse_args([Command | Args], Params) ->
@@ -186,7 +181,7 @@ default is to display name and (number of) messages.
 auto_delete, arguments]. The default is to display name and type.
 
 The output format for \"list_bindings\" is a list of rows containing 
-exchange name, routing key, queue name and arguments, in that order.
+exchange name, queue name, routing key and arguments, in that order.
 
 <ConnectionInfoItem> must be a member of the list [node, address, port, 
 peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
@@ -289,7 +284,7 @@ action(list_exchanges, Node, Args, Inform) ->
 action(list_bindings, Node, Args, Inform) ->
     Inform("Listing bindings", []),
     {VHostArg, _} = parse_vhost_flag_bin(Args),
-    InfoKeys = [exchange_name, routing_key, queue_name, args],
+    InfoKeys = [exchange_name, queue_name, routing_key, args],
     display_info_list(
       [lists:zip(InfoKeys, tuple_to_list(X)) ||
           X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])], 

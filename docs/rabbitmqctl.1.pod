@@ -279,7 +279,7 @@ exchange arguments
 =item list_bindings [-p I<vhostpath>]
 
 List bindings by virtual host. Each line printed describes a binding,
-with the exchange name, routing key, queue name and arguments,
+with the exchange name, queue name, routing key and arguments,
 separated by tab characters.
 
 =item list_connections [I<connectioninfoitem> ...]
