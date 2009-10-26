@@ -819,22 +819,26 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
 handle_cast(send_memory_monitor_update, State) ->
     DrainRatio1 = update_ratio(State#q.drain_ratio, State#q.next_msg_id),
     MsgSec = DrainRatio1#ratio.ratio * 1000000, % msg/sec
-    BufSec = case MsgSec < 0.016 of  %% less than 1 msg/1 minute
+    QueueDuration = case MsgSec < 0.016 of  %% less than 1 msg/1 minute
         true -> infinity;
         false -> queue:len(State#q.message_buffer) / MsgSec
     end,
-    rabbit_memory_monitor:push_queue_duration(self(), BufSec),
+    DesiredQueueDuration = rabbit_memory_monitor:push_queue_duration(
+                                                        self(), QueueDuration),
+    ?LOGDEBUG("~p Queue duration current/desired ~p/~p~n",
+            [(State#q.q)#amqqueue.name, QueueDuration, DesiredQueueDuration]),
     noreply(State#q{drain_ratio = DrainRatio1});
 
-handle_cast({set_queue_duration, QueueDuration}, State) ->
+handle_cast({set_queue_duration, DesiredQueueDuration}, State) ->
     DrainRatio = State#q.drain_ratio,
-    DesiredQueueLength = case QueueDuration of
+    DesiredBufLength = case DesiredQueueDuration of
         infinity -> infinity;
-        _ -> QueueDuration * DrainRatio#ratio.ratio * 1000000
+        _ -> DesiredQueueDuration * DrainRatio#ratio.ratio * 1000000
     end,
     %% Just to proove that something is happening.
-    ?LOGDEBUG("Queue size is ~8p, should be ~p~n", 
-                       [queue:len(State#q.message_buffer), DesiredQueueLength]),
+    ?LOGDEBUG("~p Queue length is~8p, should be ~p~n",
+                  [(State#q.q)#amqqueue.name, queue:len(State#q.message_buffer),
+                   DesiredBufLength]),
     noreply(State).
 
 

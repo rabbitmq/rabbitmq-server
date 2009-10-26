@@ -41,13 +41,13 @@
 %% Timer      |        |
 %%            v        v
 %% Queue -----+--------+-----<***hibernated***>------------->
-%%            | ^      | ^                     ^               
+%%            | ^      | ^                     ^
 %%            v |      v |                     |
 %% Monitor X--*-+--X---*-+--X------X----X-----X+----------->
 %%
 %% Or to put it in words. Queue periodically sends (casts) 'push_queue_duration'
 %% message to the Monitor (cases 1 and 2 on the asciiart above). Monitor 
-%% _always_ replies with a 'set_bufsec_limit' cast. This way, 
+%% _always_ replies with a 'set_queue_duration' cast. This way, 
 %% we're pretty sure that the Queue is not hibernated.
 %% Monitor periodically recounts numbers ('X' on asciiart). If, during this
 %% update we notice that a queue was using too much memory, we send a message
@@ -84,29 +84,37 @@
 -export([register/1, push_queue_duration/2]).
 
 -record(state, {timer,               %% 'internal_update' timer
-                queue_duration_dict, %% dict, qpid:seconds_till_queue_is_empty
-                queue_duration_avg,  %% global, the desired queue depth (in sec)
-                memory_limit         %% how much memory we intend to use
+                queue_durations,     %% ets, (qpid, seconds_till_queue_is_empty)
+                queue_duration_sum,  %% sum of all queue_durations
+                queue_duration_items,%% number of elements in sum
+                memory_limit,        %% how much memory we intend to use
+                memory_ratio         %% how much more memory we can use
                }).
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_UPDATE_INTERVAL_MS, 2500).
-
+-define(TABLE_NAME, ?MODULE).
+-define(MAX_QUEUE_DURATION_ALLOWED, 60*60*24). % 1 day
 %%----------------------------------------------------------------------------
 -ifdef(use_specs).
+-type(state() :: #state{timer               :: timer:tref(),
+                        queue_durations     :: tid(),
+                        queue_duration_sum  :: float(),
+                        queue_duration_items:: non_neg_integer(),
+                        memory_limit        :: pos_integer(),
+                        memory_ratio        :: float() }).
 
--spec(start_link/0 :: () -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(start_link/0 :: () -> ignore | {error, _} | {ok, pid()}).
 -spec(register/1 :: (pid()) -> ok).
 -spec(push_queue_duration/2 :: (pid(), float() | infinity) -> ok).
 
--spec(init/1 :: ([]) -> {ok, #state{}}).
+-spec(init/1 :: ([]) -> {ok, state()}).
 
 -ifdef(debug).
 -spec(ftoa/1 :: (any()) -> string()).
 -endif.
 
--spec(count_average/1 :: (list()) -> float() | infinity ).
--spec(internal_update/1 :: (#state{}) -> #state{}).
+-spec(internal_update/1 :: (state()) -> state()).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -122,8 +130,9 @@ update() ->
 register(Pid) ->
     gen_server2:cast(?SERVER, {register, Pid}).
 
-push_queue_duration(Pid, BufSec) ->
-    gen_server2:cast(rabbit_memory_monitor, {push_queue_duration, Pid, BufSec}).
+push_queue_duration(Pid, QueueDuration) ->
+    gen_server2:call(rabbit_memory_monitor,
+                                    {push_queue_duration, Pid, QueueDuration}).
 
 %%----------------------------------------------------------------------------
 
@@ -141,20 +150,58 @@ get_user_memory_limit() ->
     end.
 
 
-init([]) -> 
+init([]) ->
     %% We should never use more memory than user requested. As the memory 
     %% manager doesn't really know how much memory queues are using, we shall
     %% try to remain safe distance from real limit. 
     MemoryLimit = trunc(get_user_memory_limit() * 0.6),
     rabbit_log:warning("Memory monitor limit: ~pMB~n", 
-                    [erlang:trunc(MemoryLimit/1024/1024)]),
-    
+                    [erlang:trunc(MemoryLimit/1048576)]),
+
     {ok, TRef} = timer:apply_interval(?DEFAULT_UPDATE_INTERVAL_MS, 
                                                         ?SERVER, update, []),
     {ok, #state{timer = TRef,
-                queue_duration_dict = dict:new(),
-                queue_duration_avg  = infinity,
-                memory_limit = MemoryLimit}}.
+                queue_durations = ets:new(?TABLE_NAME, [set, private]),
+                queue_duration_sum = 0.0,
+                queue_duration_items = 0,
+                memory_limit = MemoryLimit,
+                memory_ratio = 1.0}}.
+
+get_avg_duration(#state{queue_duration_sum = Sum,
+                        queue_duration_items = Items}) ->
+    case Items of
+        0 -> infinity;
+        _ -> Sum / Items
+    end.
+
+get_desired_duration(State) ->
+    case get_avg_duration(State) of
+        infinity -> infinity;
+        AvgQueueDuration -> AvgQueueDuration * State#state.memory_ratio
+    end.
+
+handle_call({push_queue_duration, Pid, QueueDuration0}, From, State) ->
+    SendDuration = get_desired_duration(State),
+    gen_server2:reply(From, SendDuration),
+
+    QueueDuration = case QueueDuration0 > ?MAX_QUEUE_DURATION_ALLOWED of
+        true -> infinity;
+        false -> QueueDuration0
+    end,
+
+    {Sum, Items} = {State#state.queue_duration_sum,
+                    State#state.queue_duration_items},
+    [{_Pid, PrevQueueDuration, _PrevSendDuration}] = ets:lookup(State#state.queue_durations, Pid),
+    {Sum1, Items1} =
+            case {PrevQueueDuration == infinity, QueueDuration == infinity} of
+        {true, true} -> {Sum, Items};
+        {true, false} -> {Sum + QueueDuration, Items + 1};
+        {false, true} -> {Sum - PrevQueueDuration, Items - 1};
+        {false, false} -> {Sum - PrevQueueDuration + QueueDuration, Items}
+    end,
+    ets:insert(State#state.queue_durations, {Pid, QueueDuration, SendDuration}),
+    {noreply, State#state{queue_duration_sum = Sum1,
+                          queue_duration_items = Items1}};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -165,20 +212,24 @@ handle_cast(update, State) ->
 
 handle_cast({register, Pid}, State) ->
     _MRef = erlang:monitor(process, Pid),
+    ets:insert(State#state.queue_durations, {Pid, infinity, infinity}),
     {noreply, State};
-
-handle_cast({push_queue_duration, Pid, DrainRatio}, State) ->
-    gen_server2:cast(Pid, {set_bufsec_limit, State#state.queue_duration_avg}),
-    {noreply, State#state{queue_duration_dict = 
-                dict:store(Pid, DrainRatio, State#state.queue_duration_dict)}};
 
 handle_cast(_Request, State) ->
     {noreply, State}.
 
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason}, State) ->
-    {noreply, State#state{queue_duration_dict = 
-                            dict:erase(Pid, State#state.queue_duration_dict)}};
+    {Sum, Items} = {State#state.queue_duration_sum,
+                    State#state.queue_duration_items},
+    [{_Pid, PrevQueueDuration, _PrevSendDuration}] = ets:lookup(State#state.queue_durations, Pid),
+    Sum1 = case PrevQueueDuration == infinity of
+        true  -> Sum;
+        false -> Sum - PrevQueueDuration
+    end,
+    ets:delete(State#state.queue_durations, Pid),
+    {noreply, State#state{queue_duration_sum = Sum1,
+                          queue_duration_items = Items-1}};
 
 handle_info(_Info, State) -> 
     {noreply, State}.
@@ -190,7 +241,11 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) -> 
     {ok, State}.
 
--ifdef(debug). 
+
+set_queue_duration(Pid, QueueDuration) ->
+    gen_server2:pcast(Pid, 7, {set_queue_duration, QueueDuration}).
+
+-ifdef(debug).
 ftoa(Float) ->
     Str = case is_float(Float) of
         true  -> io_lib:format("~11.3f",[Float]);
@@ -199,41 +254,35 @@ ftoa(Float) ->
     lists:flatten(Str).
 -endif.
 
-%% Count average from numbers, excluding atoms in the list.
-count_average(List) ->
-    List1 = [V || V <- List, is_number(V) or is_float(V)],
-    case length(List1) of
-        0 -> infinity;
-        Len -> lists:sum(List1) / Len
-    end.
 
-internal_update(State) ->
+%% Update memory ratio. Count new DesiredQueueDuration.
+%% Get queues that are using more than that, and send
+%% pessimistic information back to them.
+internal_update(State0) ->
     %% available memory /  used memory
-    UsedMemory = erlang:memory(total),
-    MemoryOvercommit = State#state.memory_limit / UsedMemory,
-    RealDrainAvg = count_average([V || {_K, V} <- 
-                                dict:to_list(State#state.queue_duration_dict)]),
-    %% In case of no active queues, feel free to grow. We can't make any 
-    %% decisionswe have no clue what is the average ram_usage/second.
-    %% Not does the queue.
-    DesiredDrainAvg = case RealDrainAvg of
-        infinity -> infinity;
-        0.0 -> infinity;
-        _ ->  RealDrainAvg * MemoryOvercommit
+    MemoryRatio = State0#state.memory_limit / erlang:memory(total),
+    State = State0#state{memory_ratio = MemoryRatio},
+
+    DesiredDurationAvg = get_desired_duration(State),
+
+    ?LOGDEBUG("Avg duration: real/desired:~s/~s  Memory ratio:~s  Queues:~p~n",
+                [ftoa(get_avg_duration(State)), ftoa(DesiredDurationAvg),
+                ftoa(MemoryRatio),
+                ets:foldl(fun (_, Acc) -> Acc+1 end,
+                                            0, State#state.queue_durations)] ),
+
+    %% If we have pessimistic information, we need to inform queues
+    %% to reduce it's memory usage when needed.
+    %% This sometimes wakes up queues from hibernation. Well, we don't care.
+    PromptReduceDuraton = fun ({Pid, QueueDuration, PrevSendDuration}, Acc) ->
+        case (PrevSendDuration > DesiredDurationAvg) and (QueueDuration > DesiredDurationAvg) of
+            true -> set_queue_duration(Pid, DesiredDurationAvg),
+                    ets:insert(State#state.queue_durations, {Pid, QueueDuration, DesiredDurationAvg}),
+                    Acc + 1;
+            _ -> Acc
+        end
     end,
-    ?LOGDEBUG("DrainAvg Real/Desired:~s/~s  MemoryOvercommit:~s~n", 
-                [ftoa(RealDrainAvg), ftoa(DesiredDrainAvg),
-                ftoa(MemoryOvercommit)]),
-    %% Inform the queue to reduce it's memory usage when needed.
-    %% This can sometimes wake the queue from hibernation. Well, we don't care.
-    ReduceMemory = fun ({Pid, QueueDrain}) ->
-        case QueueDrain > DesiredDrainAvg of 
-            true -> 
-                gen_server2:cast(Pid, {set_bufsec_limit, DesiredDrainAvg});
-            _ -> ok
-        end 
-    end,
-    lists:map(ReduceMemory, dict:to_list(State#state.queue_duration_dict)),
-    State#state{queue_duration_avg = DesiredDrainAvg}.
+    ets:foldl(PromptReduceDuraton, 0, State#state.queue_durations),
+    State.
 
 
