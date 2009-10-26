@@ -297,7 +297,7 @@ should_auto_delete(State) -> is_unused(State).
 
 handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
     case lookup_ch(DownPid) of
-        not_found -> noreply(State);
+        not_found -> {ok, State};
         #cr{monitor_ref = MonitorRef, ch_pid = ChPid, txn = Txn,
             unacked_messages = UAM} ->
             erlang:demonitor(MonitorRef),
