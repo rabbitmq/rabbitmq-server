@@ -1008,6 +1008,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
               MsgId = rabbit_guid:guid(),
               QiM = rabbit_queue_index:write_published(MsgId, SeqId, Persistent,
                                                        QiN),
+              ok = rabbit_msg_store:write(MsgId, MsgId),
               {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
       end, {Qi, []}, SeqIds).
 

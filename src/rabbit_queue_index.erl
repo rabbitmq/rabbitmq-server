@@ -464,8 +464,10 @@ queue_index_walker({[], State, SegNums, QueueNames}) ->
     queue_index_walker({SegNums, State, QueueNames});
 queue_index_walker({[{_RelSeq, {MsgId, _IsDelivered, IsPersistent}} | Msgs],
                     State, SegNums, QueueNames}) ->
-    {MsgId, bool_to_int(IsPersistent),
-     {Msgs, State, SegNums, QueueNames}}.
+    case IsPersistent of
+        true -> {MsgId, 1, {Msgs, State, SegNums, QueueNames}};
+        false -> queue_index_walker({Msgs, State, SegNums, QueueNames})
+    end.
 
 
 %%----------------------------------------------------------------------------
@@ -544,8 +546,15 @@ replay_journal_acks_to_segment(SegNum, Acks, {TotalMsgCount, State}) ->
 deliver_transient(SegNum, SDict, State) ->
     {AckMe, DeliverMe} =
         dict:fold(
-          fun (_RelSeq, {_MsgId, _IsDelivered, true}, Acc) ->
-                  Acc;
+          fun (RelSeq, {MsgId, IsDelivered, true}, {AckMeAcc, DeliverMeAcc}) ->
+                  case {IsDelivered, rabbit_msg_store:contains(MsgId)} of
+                      {_, true} ->
+                          {AckMeAcc, DeliverMeAcc};
+                      {true, false} ->
+                          {[RelSeq | AckMeAcc], DeliverMeAcc};
+                      {false, false} ->
+                          {[RelSeq | AckMeAcc], [RelSeq | DeliverMeAcc]}
+                  end;
               (RelSeq, {_MsgId, false, false}, {AckMeAcc, DeliverMeAcc}) ->
                   {[RelSeq | AckMeAcc], [RelSeq | DeliverMeAcc]};
               (RelSeq, {_MsgId, true, false}, {AckMeAcc, DeliverMeAcc}) ->
