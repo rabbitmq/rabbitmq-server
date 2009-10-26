@@ -181,7 +181,7 @@ messages, acks_uncommitted, consumers, transactions, memory]. The default is
 auto_delete, arguments]. The default is to display name and type.
 
 The output format for \"list_bindings\" is a list of rows containing 
-exchange name, routing key, queue name and arguments, in that order.
+exchange name, queue name, routing key and arguments, in that order.
 
 <ConnectionInfoItem> must be a member of the list [node, address, port, 
 peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
@@ -285,7 +285,7 @@ action(list_exchanges, Node, Args, Inform) ->
 action(list_bindings, Node, Args, Inform) ->
     Inform("Listing bindings", []),
     {VHostArg, _} = parse_vhost_flag_bin(Args),
-    InfoKeys = [exchange_name, routing_key, queue_name, args],
+    InfoKeys = [exchange_name, queue_name, routing_key, args],
     display_info_list(
       [lists:zip(InfoKeys, tuple_to_list(X)) ||
           X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])], 
