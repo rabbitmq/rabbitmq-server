@@ -1040,31 +1040,33 @@ test_queue_index() ->
     ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
     %% should get length back as 0, as all the msgs were transient
     {0, Qi6} = rabbit_queue_index:init(test_queue()),
-    {false, Qi7} = rabbit_queue_index:flush_journal(Qi6),
-    {0, 10001, Qi8} =
-        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi7),
-    {Qi9, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi8),
-    {0, 20001, Qi10} =
-        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi9),
-    {ReadB, Qi11} = rabbit_queue_index:read_segment_entries(0, Qi10),
+    false = rabbit_queue_index:can_flush_journal(Qi6),
+    {0, 10001, Qi7} =
+        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi6),
+    {Qi8, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
+    {0, 20001, Qi9} =
+        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi8),
+    {ReadB, Qi10} = rabbit_queue_index:read_segment_entries(0, Qi9),
     ok = verify_read_with_published(false, true, ReadB,
                                     lists:reverse(SeqIdsMsgIdsB)),
-    _Qi12 = rabbit_queue_index:terminate(Qi11),
+    _Qi11 = rabbit_queue_index:terminate(Qi10),
     ok = rabbit_msg_store:stop(),
     ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
     %% should get length back as 10000
     LenB = length(SeqIdsB),
-    {LenB, Qi13} = rabbit_queue_index:init(test_queue()),
-    {0, 20001, Qi14} =
-        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi13),
-    Qi15 = lists:foldl(
+    {LenB, Qi12} = rabbit_queue_index:init(test_queue()),
+    {0, 20001, Qi13} =
+        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi12),
+    Qi14 = lists:foldl(
              fun (SeqId, QiN) ->
                      rabbit_queue_index:write_delivered(SeqId, QiN)
-             end, Qi14, SeqIdsB),
-    {ReadC, Qi16} = rabbit_queue_index:read_segment_entries(0, Qi15),
+             end, Qi13, SeqIdsB),
+    {ReadC, Qi15} = rabbit_queue_index:read_segment_entries(0, Qi14),
     ok = verify_read_with_published(true, true, ReadC,
                                     lists:reverse(SeqIdsMsgIdsB)),
-    Qi17 = rabbit_queue_index:write_acks(SeqIdsB, Qi16),
+    Qi16 = rabbit_queue_index:write_acks(SeqIdsB, Qi15),
+    true = rabbit_queue_index:can_flush_journal(Qi16),
+    Qi17 = rabbit_queue_index:flush_journal(Qi16),
     {0, 20001, Qi18} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi17),
     _Qi19 = rabbit_queue_index:terminate(Qi18),

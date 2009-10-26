@@ -32,7 +32,7 @@
 -module(rabbit_queue_index).
 
 -export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
-         write_delivered/2, write_acks/2, flush_journal/1, sync_seq_ids/3,
+         write_delivered/2, write_acks/2, can_flush_journal/1, flush_journal/1, sync_seq_ids/3,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/1]).
 
@@ -136,7 +136,8 @@
       -> qistate()).
 -spec(write_delivered/2 :: (seq_id(), qistate()) -> qistate()).
 -spec(write_acks/2 :: ([seq_id()], qistate()) -> qistate()).
--spec(flush_journal/1 :: (qistate()) -> {boolean(), qistate()}).
+-spec(flush_journal/1 :: (qistate()) -> qistate()).
+-spec(can_flush_journal/1 :: (qistate()) -> boolean()).
 -spec(read_segment_entries/2 :: (seq_id(), qistate()) ->
              {( [{msg_id(), seq_id(), boolean(), boolean()}]
               | 'not_found'), qistate()}).
@@ -211,12 +212,6 @@ write_acks(SeqIds, State = #qistate { journal_ack_dict  = JAckDict,
         false -> State2
     end.
 
-full_flush_journal(State) ->
-    case flush_journal(State) of
-        {true,  State1} -> full_flush_journal(State1);
-        {false, State1} -> State1
-    end.
-
 sync_seq_ids(SeqIds, SyncAckJournal, State) ->
     State1 = case SyncAckJournal of
                  true -> {Hdl, State2} = get_journal_handle(State),
@@ -237,8 +232,13 @@ sync_seq_ids(SeqIds, SyncAckJournal, State) ->
               StateM
       end, State1, SegNumsSet).
 
+can_flush_journal(#qistate { journal_ack_count = 0 }) ->
+    false;
+can_flush_journal(_) ->
+    true.
+
 flush_journal(State = #qistate { journal_ack_count = 0 }) ->
-    {false, State};
+    State;
 flush_journal(State = #qistate { journal_ack_dict = JAckDict,
                                  journal_ack_count = JAckCount }) ->
     [SegNum|_] = dict:fetch_keys(JAckDict),
@@ -253,11 +253,11 @@ flush_journal(State = #qistate { journal_ack_dict = JAckDict,
             ok = file_handle_cache:position(Hdl, bof),
             ok = file_handle_cache:truncate(Hdl),
             ok = file_handle_cache:sync(Hdl),
-            {false, State3};
+            State3;
         JAckCount1 > ?MAX_ACK_JOURNAL_ENTRY_COUNT ->
             flush_journal(State2);
         true ->
-            {true, State2}
+            State2
     end.
 
 read_segment_entries(InitSeqId, State) ->
@@ -348,6 +348,13 @@ start_msg_store(DurableQueues) ->
 %% Minor Helpers
 %%----------------------------------------------------------------------------
 
+full_flush_journal(State) ->
+    case can_flush_journal(State) of
+        true -> State1 = flush_journal(State),
+                full_flush_journal(State1);
+        false -> State
+    end.
+
 queue_name_to_dir_name(Name = #resource { kind = queue }) ->
     Bin = term_to_binary(Name),
     Size = 8*size(Bin),
@@ -421,6 +428,11 @@ add_ack_to_ack_dict(SeqId, ADict) ->
     {SegNum, RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
     dict:update(SegNum, fun(Lst) -> [RelSeq|Lst] end, [RelSeq], ADict).
 
+all_segment_nums(Dir) ->
+    [list_to_integer(
+       lists:takewhile(fun(C) -> $0 =< C andalso C =< $9 end, SegName))
+     || SegName <- filelib:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)].
+
 
 %%----------------------------------------------------------------------------
 %% Msg Store Startup Delta Function
@@ -453,11 +465,6 @@ queue_index_walker({[{MsgId, _SeqId, IsPersistent, _IsDelivered} | Entries],
 %%----------------------------------------------------------------------------
 %% Startup Functions
 %%----------------------------------------------------------------------------
-
-all_segment_nums(Dir) ->
-    [list_to_integer(
-       lists:takewhile(fun(C) -> $0 =< C andalso C =< $9 end, SegName))
-     || SegName <- filelib:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)].
 
 find_ack_counts_and_deliver_transient_msgs(State = #qistate { dir = Dir }) ->
     SegNums = all_segment_nums(Dir),

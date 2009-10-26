@@ -153,28 +153,32 @@ noreply(NewState) ->
     {NewState1, Timeout} = next_state(NewState),
     {noreply, NewState1, Timeout}.
 
-next_state(State = #q { variable_queue_state = VQS }) ->
+next_state(State = #q{variable_queue_state = VQS}) ->
     next_state1(State, rabbit_variable_queue:needs_sync(VQS)).
 
-next_state1(State = #q { sync_timer_ref = undefined }, true) ->
+next_state1(State = #q{sync_timer_ref = undefined}, true) ->
     {start_sync_timer(State), 0};
 next_state1(State, true) ->
     {State, 0};
-next_state1(State = #q { sync_timer_ref = undefined }, false) ->
-    {State, hibernate};
+next_state1(State = #q{sync_timer_ref = undefined,
+                       variable_queue_state = VQS}, false) ->
+    {State, case rabbit_variable_queue:can_flush_journal(VQS) of
+                true -> 0;
+                false -> hibernate
+            end};
 next_state1(State, false) ->
     {stop_sync_timer(State), 0}.
 
-start_sync_timer(State = #q { sync_timer_ref = undefined }) ->
+start_sync_timer(State = #q{sync_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, rabbit_amqqueue,
                                    tx_commit_vq_callback, [self()]),
-    State #q { sync_timer_ref = TRef }.
+    State#q{sync_timer_ref = TRef}.
 
-stop_sync_timer(State = #q { sync_timer_ref = TRef }) ->
+stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
-    State #q { sync_timer_ref = undefined }.
+    State#q{sync_timer_ref = undefined}.
 
-assert_invariant(#q { active_consumers = AC, variable_queue_state = VQS }) ->
+assert_invariant(#q{active_consumers = AC, variable_queue_state = VQS}) ->
     true = (queue:is_empty(AC) orelse rabbit_variable_queue:is_empty(VQS)).
 
 lookup_ch(ChPid) ->
@@ -867,6 +871,13 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
         {ok, NewState}   -> noreply(NewState);
         {stop, NewState} -> {stop, normal, NewState}
     end;
+
+handle_info(timeout, State = #q{variable_queue_state = VQS,
+                                sync_timer_ref = undefined}) ->
+    %% if sync_timer_ref is undefined then we must have set the
+    %% timeout to zero because we thought we could flush the journal
+    noreply(State#q{variable_queue_state =
+                    rabbit_variable_queue:flush_journal(VQS)});
 
 handle_info(timeout, State = #q{variable_queue_state = VQS}) ->
     noreply(

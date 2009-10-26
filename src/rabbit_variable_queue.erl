@@ -35,7 +35,8 @@
          set_queue_ram_duration_target/2, remeasure_egress_rate/1, fetch/1,
          ack/2, len/1, is_empty/1, maybe_start_prefetcher/1, purge/1, delete/1,
          requeue/2, tx_publish/2, tx_rollback/2, tx_commit/4,
-         tx_commit_from_msg_store/4, tx_commit_from_vq/1, needs_sync/1]).
+         tx_commit_from_msg_store/4, tx_commit_from_vq/1, needs_sync/1,
+         can_flush_journal/1, flush_journal/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -411,6 +412,13 @@ needs_sync(#vqstate { on_sync = {_, _, []} }) ->
     false;
 needs_sync(_) ->
     true.
+
+can_flush_journal(#vqstate { index_state = IndexState }) ->
+    rabbit_queue_index:can_flush_journal(IndexState).
+
+flush_journal(State = #vqstate { index_state = IndexState }) ->
+    State #vqstate { index_state =
+                     rabbit_queue_index:flush_journal(IndexState) }.
 
 %%----------------------------------------------------------------------------
 
