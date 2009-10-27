@@ -74,7 +74,7 @@
 %%
 %%----------------------------------------------------------------------------
 
--define(CLEAN_FILENAME, "cl.ean").
+-define(CLEAN_FILENAME, "clean.dot").
 
 -define(MAX_ACK_JOURNAL_ENTRY_COUNT, 32768).
 -define(ACK_JOURNAL_FILENAME, "ack_journal.jif").

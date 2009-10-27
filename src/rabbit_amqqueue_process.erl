@@ -121,10 +121,7 @@ terminate(shutdown, #q{variable_queue_state = VQS}) ->
     _VQS = rabbit_variable_queue:terminate(VQS);
 terminate(_Reason, State = #q{variable_queue_state = VQS}) ->
     %% FIXME: How do we cancel active subscriptions?
-    %% Ensure that any persisted tx messages are removed;
-    %% mixed_queue:delete_queue cannot do that for us since neither
-    %% mixed_queue nor disk_queue keep a record of uncommitted tx
-    %% messages.
+    %% Ensure that any persisted tx messages are removed.
     %% TODO: wait for all in flight tx_commits to complete
     VQS1 = rabbit_variable_queue:tx_rollback(
              lists:concat([PM || #tx { pending_messages = PM } <-

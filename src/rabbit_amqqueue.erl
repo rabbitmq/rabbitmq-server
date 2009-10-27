@@ -177,6 +177,10 @@ declare(QueueName, Durable, AutoDelete, Args) ->
 internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
+                   %% we could still find that mnesia has another
+                   %% entry here because the queue may exist on
+                   %% another node, beyond the knowledge of our own
+                   %% local queue_sup.
                    case mnesia:wread({rabbit_queue, QueueName}) of
                        [] -> ok = store_queue(Q),
                              case WantDefaultBinding of
@@ -200,9 +204,30 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-start_queue_process(Q) ->
-    {ok, Pid} = supervisor:start_child(rabbit_amqqueue_sup, [Q]),
-    Q#amqqueue{pid = Pid}.
+start_queue_process(Q = #amqqueue{name = QueueName}) ->
+    case supervisor:start_child(
+           rabbit_amqqueue_sup,
+           {QueueName, {rabbit_amqqueue_process, start_link, [Q]},
+            %% 4294967295 is 2^32 - 1, which is the highest value allowed
+            temporary, 4294967295, worker, [rabbit_amqqueue_process]}) of
+        {ok, Pid} ->
+            Q#amqqueue{pid = Pid};
+        {error, already_present} ->
+            supervisor:delete_child(rabbit_amqqueue_sup, QueueName),
+            start_queue_process(Q);
+        {error, {already_started, _QPid}} ->
+            case rabbit_misc:execute_mnesia_transaction(
+                   fun () ->
+                           case mnesia:wread({rabbit_queue, QueueName}) of
+                               %% it's vanished in the mean time, try again
+                               [] -> try_again;
+                               [ExistingQ] -> ExistingQ
+                           end
+                   end) of
+                try_again -> start_queue_process(Q);
+                ExistingQ -> ExistingQ
+            end
+    end.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
     Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
@@ -250,7 +275,10 @@ stat_all() ->
     lists:map(fun stat/1, rabbit_misc:dirty_read_all(rabbit_queue)).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    gen_server2:call(QPid, {delete, IfUnused, IfEmpty}, infinity).
+    case gen_server2:call(QPid, {delete, IfUnused, IfEmpty}, infinity) of
+        ok -> supervisor:delete_child(rabbit_amqqueue_sup, QPid);
+        E -> E
+    end.
 
 purge(#amqqueue{ pid = QPid }) -> gen_server2:call(QPid, purge, infinity).
 
