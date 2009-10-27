@@ -74,6 +74,8 @@
 %%
 %%----------------------------------------------------------------------------
 
+-define(CLEAN_FILENAME, "cl.ean").
+
 -define(MAX_ACK_JOURNAL_ENTRY_COUNT, 32768).
 -define(ACK_JOURNAL_FILENAME, "ack_journal.jif").
 -define(SEQ_BYTES, 8).
@@ -157,13 +159,15 @@
 
 init(Name) ->
     State = blank_state(Name),
-    {TotalMsgCount, State1} = find_ack_counts_and_deliver_transient_msgs(State),
+    {TotalMsgCount, State1} = read_and_prune_segments(State),
     scatter_journal(TotalMsgCount, State1).
 
 terminate(State = #qistate { seg_num_handles = SegHdls }) ->
     case 0 == dict:size(SegHdls) of
         true  -> State;
-        false -> close_all_handles(State)
+        false -> State1 = #qistate { dir = Dir } = close_all_handles(State),
+                 store_clean_shutdown(Dir),
+                 State1
     end.
 
 terminate_and_erase(State) ->
@@ -436,6 +440,18 @@ blank_state(QueueName) ->
                journal_ack_count = 0,
                journal_ack_dict = dict:new(),
                seg_ack_counts = dict:new() }.
+
+detect_clean_shutdown(Dir) ->
+    case file:delete(filename:join(Dir, ?CLEAN_FILENAME)) of
+        ok -> true;
+        {error, enoent} -> false
+    end.
+
+store_clean_shutdown(Dir) ->
+    {ok, Hdl} = file_handle_cache:open(filename:join(Dir, ?CLEAN_FILENAME),
+                                       [write, raw, binary],
+                                       [{write_buffer, unbuffered}]),
+    ok = file_handle_cache:close(Hdl).
     
 
 %%----------------------------------------------------------------------------
@@ -474,8 +490,9 @@ queue_index_walker({[{_RelSeq, {MsgId, _IsDelivered, IsPersistent}} | Msgs],
 %% Startup Functions
 %%----------------------------------------------------------------------------
 
-find_ack_counts_and_deliver_transient_msgs(State = #qistate { dir = Dir }) ->
+read_and_prune_segments(State = #qistate { dir = Dir }) ->
     SegNums = all_segment_nums(Dir),
+    CleanShutdown = detect_clean_shutdown(Dir),
     {TotalMsgCount, State1} =
         lists:foldl(
           fun (SegNum, {TotalMsgCount1, StateN}) ->
@@ -484,7 +501,7 @@ find_ack_counts_and_deliver_transient_msgs(State = #qistate { dir = Dir }) ->
                   {TransientMsgsAcks, StateL =
                    #qistate { seg_ack_counts = AckCounts,
                               journal_ack_dict = JAckDict }} =
-                      deliver_transient(SegNum, SDict, StateM),
+                      drop_and_deliver(SegNum, SDict, CleanShutdown, StateM),
                   %% ignore TransientMsgsAcks in AckCounts and
                   %% JAckDict1 because the TransientMsgsAcks fall
                   %% through into scatter_journal at which point the
@@ -543,11 +560,15 @@ replay_journal_acks_to_segment(SegNum, Acks, {TotalMsgCount, State}) ->
     {TotalMsgCount - length(ValidAcks),
      append_acks_to_segment(SegNum, ValidAcks, State2)}.
 
-deliver_transient(SegNum, SDict, State) ->
+drop_and_deliver(SegNum, SDict, CleanShutdown, State) ->
     {AckMe, DeliverMe} =
         dict:fold(
           fun (RelSeq, {MsgId, IsDelivered, true}, {AckMeAcc, DeliverMeAcc}) ->
+                  %% msg is persistent, keep only if the msg_store has it
                   case {IsDelivered, rabbit_msg_store:contains(MsgId)} of
+                      {false, true} when not CleanShutdown ->
+                          %% not delivered, but dirty shutdown => mark delivered
+                          {AckMeAcc, [RelSeq | DeliverMeAcc]};
                       {_, true} ->
                           {AckMeAcc, DeliverMeAcc};
                       {true, false} ->
@@ -556,8 +577,10 @@ deliver_transient(SegNum, SDict, State) ->
                           {[RelSeq | AckMeAcc], [RelSeq | DeliverMeAcc]}
                   end;
               (RelSeq, {_MsgId, false, false}, {AckMeAcc, DeliverMeAcc}) ->
+                  %% not persistent and not delivered => deliver and ack it
                   {[RelSeq | AckMeAcc], [RelSeq | DeliverMeAcc]};
               (RelSeq, {_MsgId, true, false}, {AckMeAcc, DeliverMeAcc}) ->
+                  %% not persistent but delivered => ack it
                   {[RelSeq | AckMeAcc], DeliverMeAcc}
           end, {[], []}, SDict),
     {Hdl, State1} = get_seg_handle(SegNum, State),
