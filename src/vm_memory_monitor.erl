@@ -121,6 +121,14 @@ get_total_memory({unix, linux}) ->
     MemTotal = dict:fetch('MemTotal', Dict),
     MemTotal;
 
+get_total_memory({unix, sunos}) ->
+    File = os:cmd("/usr/sbin/prtconf"),
+    Lines = string:tokens(File, "\n"),
+    Dict = dict:from_list(lists:map(fun parse_line_sunos/1, Lines)),
+    MemTotal = dict:fetch('Memory size', Dict),
+    MemTotal;
+    
+
 get_total_memory(_OsType) ->
     unknown.
 
@@ -166,6 +174,21 @@ parse_line_linux(Line) ->
                  ["kB"] -> list_to_integer(Value) * 1024
              end,
     {list_to_atom(Name), Value1}.
+
+%% A line looks like "Memory size: 1024 Megabytes"
+parse_line_sunos(Line) ->
+    case string:tokens(Line, ":") of
+	[Name, RHS | _Rest] ->
+		[Value1 | UnitsRest] = string:tokens(RHS, " "),
+		Value2 = case UnitsRest of
+				["Gigabytes"] -> list_to_integer(Value1) * 1024 * 1024 * 1024;
+				["Megabytes"] -> list_to_integer(Value1) * 1024 * 1024;
+				["Kilobytes"] -> list_to_integer(Value1) * 1024;
+				_ -> Value1 ++ UnitsRest %% no known units
+			end,
+		{list_to_atom(Name), Value2};
+	[Name] -> {list_to_atom(Name), none}
+    end.
 
 
 
