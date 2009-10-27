@@ -125,56 +125,66 @@ receive_writer_send_command_signal(Writer) ->
 
 %% New channel dictionary for keeping track of the mapping between the channel
 %% pid's and the channel numbers (the dictionary will essentially be used as a
-%% bimap)
+%% bimap). This also keeps track of the maximum channel number used.
 new_channel_dict() ->
-    dict:new().
+    {dict:new(), 0}.
 
 %% Returns true iff there are no channels currently registered in the given
 %% dictionary
-is_channel_dict_empty(Dict) ->
-    dict:size(Dict) =:= 0.
+is_channel_dict_empty(_Channels = {_Dict, MaxNumber}) ->
+    MaxNumber =:= 0.
 
 %% Register a channel in a given channel dictionary
-register_channel(Number, Pid, Dict) ->
+register_channel(Number, Pid, _Channels = {Dict, MaxNumber}) ->
     case dict:is_key({channel, Number}, Dict) of
         true ->
             erlang:error({channel_already_registered, Number});
         false ->
             Dict1 = dict:store({channel, Number}, {chpid, Pid}, Dict),
-            dict:store({chpid, Pid}, {channel, Number}, Dict1)
+            Dict2 = dict:store({chpid, Pid}, {channel, Number}, Dict1),
+            NewMaxNumber = if Number > MaxNumber -> Number;
+                              true               -> MaxNumber
+                           end,
+            {Dict2, NewMaxNumber}
     end.
 
 %% Unregister a channel by passing either {channel, Number} or {chpid, Pid} for
 %% Channel
-unregister_channel(Channel, Dict) ->
+unregister_channel(Channel, _Channels = {Dict, MaxNumber}) ->
     case dict:fetch(Channel, Dict) of
         undefined -> erlang:error(undefined);
-        Val       -> dict:erase(Val, dict:erase(Channel, Dict))
+        Val       -> Dict1 = dict:erase(Val, dict:erase(Channel, Dict)),
+                     determine_new_max_number({Dict1, MaxNumber})
+    end.
+
+determine_new_max_number(Channels = {_Dict, 0}) ->
+    Channels;
+determine_new_max_number(Channels = {Dict, MaxNumber}) ->
+    case is_channel_registered({channel, MaxNumber}, Channels) of
+        true  -> Channels;
+        false -> determine_new_max_number({Dict, MaxNumber - 1})
     end.
 
 %% Resolve channel by passing either {channel, Number} or {chpid, Pid} for
 %% Channel
-resolve_channel(Channel, Dict) ->
+resolve_channel(Channel, _Channels = {Dict, _MaxNumber}) ->
     dict:fetch(Channel, Dict).
 
 %% Returns true iff Channel is registered in the given channel dictionary.
 %% Pass either {channel, Number} or {chpid, Pid} for Channel
-is_channel_registered(Channel, Dict) ->
+is_channel_registered(Channel, _Channels = {Dict, _MaxNumber}) ->
     dict:is_key(Channel, Dict).
 
 %% Returns the greatest channel number of the currently registered channels in
 %% the given dictionary. Returns 0 if there are no channels registered.
-get_max_channel_number(Dict) ->
-    dict:fold(fun({channel, N}, _,  Max) when Max >= N -> Max;
-                 ({channel, N}, _, _Max)               -> N;
-                 ({chpid,   _}, _,  Max)               -> Max
-              end, 0, Dict).
+get_max_channel_number(_Channels = {_, MaxNumber}) ->
+    MaxNumber.
 
 %%---------------------------------------------------------------------------
 %% Other channel utilities
 %%---------------------------------------------------------------------------
 
-broadcast_to_channels(Message, Dict) ->
+broadcast_to_channels(Message, _Channels = {Dict, _}) ->
     dict:map(fun({chpid, Channel}, _) -> Channel ! Message, ok;
                 ({channel, _}, _)     -> ok
              end, Dict),
