@@ -332,9 +332,9 @@ start_msg_store(DurableQueues) ->
                   end
           end, {[], []}, Directories),
     MsgStoreDir = filename:join(rabbit_mnesia:dir(), "msg_store"),
-    {ok, _Pid} = rabbit_msg_store:start_link(MsgStoreDir,
-                                             fun queue_index_walker/1,
-                                             DurableQueueNames),
+    ok = rabbit:start_child(rabbit_msg_store, [MsgStoreDir,
+                                               fun queue_index_walker/1,
+                                               DurableQueueNames]),
     lists:foreach(fun (DirName) ->
                           Dir = filename:join(queues_dir(), DirName),
                           ok = delete_queue_directory(Dir)

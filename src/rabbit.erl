@@ -37,7 +37,7 @@
 
 -export([start/2, stop/1]).
 
--export([log_location/1]).
+-export([log_location/1, start_child/2]).
 
 -import(application).
 -import(mnesia).
@@ -67,6 +67,7 @@
               {nodes, [erlang_node()]} |
               {running_nodes, [erlang_node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
+-spec(start_child/2 :: (atom(), [any()]) -> 'ok'). 
 
 -endif.
 
@@ -155,7 +156,6 @@ start(normal, []) ->
         fun () ->
                 ok = maybe_insert_default_data(),
                 ok = rabbit_exchange:recover(),
-                %% TODO - this should probably use start_child somehow too
                 DurableQueues = rabbit_amqqueue:find_durable_queues(),
                 ok = rabbit_queue_index:start_msg_store(DurableQueues),
                 {ok, _RealDurableQueues} = rabbit_amqqueue:recover(DurableQueues)
@@ -267,8 +267,11 @@ print_banner() ->
     io:nl().
 
 start_child(Mod) ->
+    start_child(Mod, []).
+
+start_child(Mod, Args) ->
     {ok,_} = supervisor:start_child(rabbit_sup,
-                                    {Mod, {Mod, start_link, []},
+                                    {Mod, {Mod, start_link, Args},
                                      transient, 5000, worker, [Mod]}),
     ok.
 
