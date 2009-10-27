@@ -167,6 +167,7 @@ find_durable_queues() ->
       end).
 
 declare(QueueName, Durable, AutoDelete, Args) ->
+    prune_queue_childspecs(),
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
@@ -275,10 +276,8 @@ stat_all() ->
     lists:map(fun stat/1, rabbit_misc:dirty_read_all(rabbit_queue)).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    case gen_server2:call(QPid, {delete, IfUnused, IfEmpty}, infinity) of
-        ok -> supervisor:delete_child(rabbit_amqqueue_sup, QPid);
-        E -> E
-    end.
+    prune_queue_childspecs(),
+    gen_server2:call(QPid, {delete, IfUnused, IfEmpty}, infinity).
 
 purge(#amqqueue{ pid = QPid }) -> gen_server2:call(QPid, purge, infinity).
 
@@ -370,6 +369,14 @@ internal_delete(QueueName) ->
                       ok
               end
       end).
+
+prune_queue_childspecs() ->
+    lists:foreach(
+      fun ({Name, undefined, _Type, _Mods}) ->
+              supervisor:delete_child(rabbit_amqqueue_sup, Name);
+          (_) -> ok
+      end, supervisor:which_children(rabbit_amqqueue_sup)),
+    ok.
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(
