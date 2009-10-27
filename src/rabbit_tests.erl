@@ -830,8 +830,14 @@ start_msg_store_empty() ->
     start_msg_store(fun (ok) -> finished end, ok).
 
 start_msg_store(MsgRefDeltaGen, MsgRefDeltaGenInit) ->
-    {ok, _Pid} = rabbit_msg_store:start_link(msg_store_dir(), MsgRefDeltaGen,
-                                             MsgRefDeltaGenInit).
+    rabbit:start_child(rabbit_msg_store, [msg_store_dir(), MsgRefDeltaGen,
+                                          MsgRefDeltaGenInit]).
+
+stop_msg_store() ->
+    case supervisor:terminate_child(rabbit_sup, rabbit_msg_store) of
+        ok -> supervisor:delete_child(rabbit_sup, rabbit_msg_store);
+        E -> E
+    end.
 
 msg_store_contains(Atom, MsgIds) ->
     Atom = lists:foldl(
@@ -863,8 +869,8 @@ msg_store_write(MsgIds) ->
            ok, MsgIds).
                             
 test_msg_store() ->
-    rabbit_msg_store:stop(),
-    {ok, _Pid} = start_msg_store_empty(),
+    stop_msg_store(),
+    ok = start_msg_store_empty(),
     Self = self(),
     MsgIds = [term_to_binary(M) || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
@@ -938,23 +944,22 @@ test_msg_store() ->
               end
       end, ok, MsgIds2ndHalf),
     %% stop and restart, preserving every other msg in 2nd half
-    ok = rabbit_msg_store:stop(),
-    {ok, _Pid1} =
-        start_msg_store(fun ([]) -> finished;
-                            ([MsgId|MsgIdsTail])
-                            when length(MsgIdsTail) rem 2 == 0 ->
-                                {MsgId, 1, MsgIdsTail};
-                            ([MsgId|MsgIdsTail]) ->
-                                {MsgId, 0, MsgIdsTail}
-                        end, MsgIds2ndHalf),
+    ok = stop_msg_store(),
+    ok = start_msg_store(fun ([]) -> finished;
+                             ([MsgId|MsgIdsTail])
+                             when length(MsgIdsTail) rem 2 == 0 ->
+                                 {MsgId, 1, MsgIdsTail};
+                             ([MsgId|MsgIdsTail]) ->
+                                 {MsgId, 0, MsgIdsTail}
+                         end, MsgIds2ndHalf),
     %% check we have the right msgs left
     lists:foldl(
       fun (MsgId, Bool) ->
               not(Bool = rabbit_msg_store:contains(MsgId))
       end, false, MsgIds2ndHalf),
     %% restart empty
-    ok = rabbit_msg_store:stop(),
-    {ok, _Pid2} = start_msg_store_empty(),
+    ok = stop_msg_store(),
+    ok = start_msg_store_empty(),
     %% check we don't contain any of the msgs
     false = msg_store_contains(false, MsgIds),
     %% push a lot of msgs in...
@@ -979,8 +984,8 @@ test_msg_store() ->
     false =
         msg_store_contains(false, lists:map(fun term_to_binary/1, MsgIdsBig)),
     %% restart empty
-    ok = rabbit_msg_store:stop(),
-    {ok, _Pid3} = start_msg_store_empty(),
+    ok = stop_msg_store(),
+    ok = start_msg_store_empty(),
     passed.
 
 queue_name(Name) ->
@@ -1022,7 +1027,7 @@ verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
     ko.
 
 test_queue_index() ->
-    io:format("~p~n", [rabbit_msg_store:stop()]),
+    stop_msg_store(),
     ok = empty_test_queue(),
     SeqIdsA = lists:seq(1,10000),
     SeqIdsB = lists:seq(10001,20000),
@@ -1037,7 +1042,7 @@ test_queue_index() ->
                                     lists:reverse(SeqIdsMsgIdsA)),
     %% call terminate twice to prove it's idempotent
     _Qi5 = rabbit_queue_index:terminate(rabbit_queue_index:terminate(Qi4)),
-    ok = rabbit_msg_store:stop(),
+    ok = stop_msg_store(),
     ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
     %% should get length back as 0, as all the msgs were transient
     {0, Qi6} = rabbit_queue_index:init(test_queue()),
@@ -1051,7 +1056,7 @@ test_queue_index() ->
     ok = verify_read_with_published(false, true, ReadB,
                                     lists:reverse(SeqIdsMsgIdsB)),
     _Qi11 = rabbit_queue_index:terminate(Qi10),
-    ok = rabbit_msg_store:stop(),
+    ok = stop_msg_store(),
     ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
     %% should get length back as 10000
     LenB = length(SeqIdsB),
@@ -1071,10 +1076,10 @@ test_queue_index() ->
     {0, 20001, Qi18} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi17),
     _Qi19 = rabbit_queue_index:terminate(Qi18),
-    ok = rabbit_msg_store:stop(),
+    ok = stop_msg_store(),
     ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
     %% should get length back as 0 because all persistent msgs have been acked
     {0, Qi20} = rabbit_queue_index:init(test_queue()),
     _Qi21 = rabbit_queue_index:terminate_and_erase(Qi20),
-    ok = rabbit_msg_store:stop(),
+    ok = stop_msg_store(),
     passed.
