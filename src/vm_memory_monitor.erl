@@ -178,16 +178,16 @@ parse_line_linux(Line) ->
 %% A line looks like "Memory size: 1024 Megabytes"
 parse_line_sunos(Line) ->
     case string:tokens(Line, ":") of
-    [Name, RHS | _Rest] ->
-        [Value1 | UnitsRest] = string:tokens(RHS, " "),
-        Value2 = case UnitsRest of
-                    ["Gigabytes"] -> list_to_integer(Value1) * 1024 * 1024 * 1024;
-                    ["Megabytes"] -> list_to_integer(Value1) * 1024 * 1024;
-                    ["Kilobytes"] -> list_to_integer(Value1) * 1024;
-                    _ -> Value1 ++ UnitsRest %% no known units
-                end,
-        {list_to_atom(Name), Value2};
-    [Name] -> {list_to_atom(Name), none}
+        [Name, RHS | _Rest] ->
+            [Value1 | UnitsRest] = string:tokens(RHS, " "),
+            Value2 = case UnitsRest of
+                        ["Gigabytes"] -> list_to_integer(Value1) * 1024 * 1024 * 1024;
+                        ["Megabytes"] -> list_to_integer(Value1) * 1024 * 1024;
+                        ["Kilobytes"] -> list_to_integer(Value1) * 1024;
+                        _ -> Value1 ++ UnitsRest %% no known units
+                    end,
+            {list_to_atom(Name), Value2};
+        [Name] -> {list_to_atom(Name), none}
     end.
 
 
