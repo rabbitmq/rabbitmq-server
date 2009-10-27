@@ -131,7 +131,7 @@ new_channel_dict() ->
 
 %% Returns true iff there are no channels currently registered in the given
 %% dictionary
-is_channel_dict_empty(_Channels = {_Dict, MaxNumber}) ->
+is_channel_dict_empty(_Channels = {_, MaxNumber}) ->
     MaxNumber =:= 0.
 
 %% Register a channel in a given channel dictionary
@@ -157,7 +157,7 @@ unregister_channel(Channel, _Channels = {Dict, MaxNumber}) ->
                      determine_new_max_number({Dict1, MaxNumber})
     end.
 
-determine_new_max_number(Channels = {_Dict, 0}) ->
+determine_new_max_number(Channels = {_, 0}) ->
     Channels;
 determine_new_max_number(Channels = {Dict, MaxNumber}) ->
     case is_channel_registered({channel, MaxNumber}, Channels) of
@@ -167,12 +167,12 @@ determine_new_max_number(Channels = {Dict, MaxNumber}) ->
 
 %% Resolve channel by passing either {channel, Number} or {chpid, Pid} for
 %% Channel
-resolve_channel(Channel, _Channels = {Dict, _MaxNumber}) ->
+resolve_channel(Channel, _Channels = {Dict, _}) ->
     dict:fetch(Channel, Dict).
 
 %% Returns true iff Channel is registered in the given channel dictionary.
 %% Pass either {channel, Number} or {chpid, Pid} for Channel
-is_channel_registered(Channel, _Channels = {Dict, _MaxNumber}) ->
+is_channel_registered(Channel, _Channels = {Dict, _}) ->
     dict:is_key(Channel, Dict).
 
 %% Returns the greatest channel number of the currently registered channels in
