@@ -839,6 +839,9 @@ stop_msg_store() ->
         E -> E
     end.
 
+msg_id_bin(X) ->
+    erlang:md5(term_to_binary(X)).
+
 msg_store_contains(Atom, MsgIds) ->
     Atom = lists:foldl(
               fun (MsgId, Atom1) when Atom1 =:= Atom ->
@@ -872,7 +875,7 @@ test_msg_store() ->
     stop_msg_store(),
     ok = start_msg_store_empty(),
     Self = self(),
-    MsgIds = [term_to_binary(M) || M <- lists:seq(1,100)],
+    MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds),
@@ -967,22 +970,21 @@ test_msg_store() ->
     MsgIdsBig = lists:seq(1, BigCount),
     Payload = << 0:65536 >>,
     ok = lists:foldl(
-           fun (MsgId, ok) -> rabbit_msg_store:write(term_to_binary(MsgId),
-                                                     Payload) end,
-           ok, MsgIdsBig),
+           fun (MsgId, ok) ->
+                   rabbit_msg_store:write(msg_id_bin(MsgId), Payload)
+           end, ok, MsgIdsBig),
     %% .., then remove even numbers ascending, and odd numbers
     %% descending. This hits the GC.
     ok = lists:foldl(
            fun (MsgId, ok) ->
-                   rabbit_msg_store:remove([term_to_binary(
+                   rabbit_msg_store:remove([msg_id_bin(
                                               case MsgId rem 2 of
                                                   0 -> MsgId;
                                                   1 -> BigCount - MsgId
                                               end)])
            end, ok, MsgIdsBig),
     %% ensure empty
-    false =
-        msg_store_contains(false, lists:map(fun term_to_binary/1, MsgIdsBig)),
+    false = msg_store_contains(false, [msg_id_bin(M) || M <- MsgIdsBig]),
     %% restart empty
     ok = stop_msg_store(),
     ok = start_msg_store_empty(),
