@@ -104,9 +104,14 @@ code_change(_OldVsn, State, _Extra) ->
 handle_command({open_channel, ProposedNumber}, _From,
                State = #dc_state{params = Params,
                                  channels = Channels}) ->
-    {ChannelPid, NewChannels} =
-        amqp_channel_util:open_channel(ProposedNumber, direct, Params, Channels),
-    {reply, ChannelPid, State#dc_state{channels = NewChannels}};
+    try amqp_channel_util:open_channel(ProposedNumber, ?MAX_CHANNEL_NUMBER,
+                                       direct, Params, Channels) of
+        {ChannelPid, NewChannels} ->
+            {reply, ChannelPid, State#dc_state{channels = NewChannels}}
+    catch
+        out_of_channel_numbers = Error ->
+            {reply, Error, State}
+    end;
 
 handle_command({close, Close}, From, State) ->
     {noreply, set_closing_state(flush, #dc_closing{reason = app_initiated_close,
@@ -189,7 +194,7 @@ internal_error_closing() ->
 %%---------------------------------------------------------------------------
 
 unregister_channel(Pid, State = #dc_state{channels = Channels}) ->
-    NewChannels = amqp_channel_util:unregister_channel({chpid, Pid}, Channels),
+    NewChannels = amqp_channel_util:unregister_channel_pid(Pid, Channels),
     NewState = State#dc_state{channels = NewChannels},
     check_trigger_all_channels_closed_event(NewState).
 
@@ -208,7 +213,7 @@ check_trigger_all_channels_closed_event(
 
 %% Standard handling of exit signals
 handle_exit(Pid, Reason, #dc_state{channels = Channels} = State) ->
-    case amqp_channel_util:is_channel_registered({chpid, Pid}, Channels) of
+    case amqp_channel_util:is_channel_pid_registered(Pid, Channels) of
         true  -> handle_channel_exit(Pid, Reason, State);
         false -> handle_other_pid_exit(Pid, Reason, State)
     end.

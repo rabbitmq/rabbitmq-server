@@ -113,13 +113,13 @@ handle_frame(Type, Channel, Payload, State) ->
     end.
 
 pass_frame(Channel, Frame, #mr_state{framing_channels = Channels}) ->
-    case amqp_channel_util:resolve_channel({channel, Channel}, Channels) of
-        {chpid, FramingPid} ->
-            rabbit_framing_channel:process(FramingPid, Frame);
+    case amqp_channel_util:resolve_channel_number(Channel, Channels) of
         undefined ->
             ?LOG_INFO("Dropping frame ~p for invalid or closed channel "
                       "number ~p~n", [Frame, Channel]),
-            ok
+            ok;
+        FramingPid ->
+            rabbit_framing_channel:process(FramingPid, Frame)
     end.
 
 register_framing_channel(Number, Pid, Caller,
@@ -134,10 +134,10 @@ register_framing_channel(Number, Pid, Caller,
 
 handle_down({'DOWN', _MonitorRef, process, Pid, Info},
             State = #mr_state{framing_channels = Channels}) ->
-    case amqp_channel_util:is_channel_registered({chpid, Pid}, Channels) of
+    case amqp_channel_util:is_channel_pid_registered(Pid, Channels) of
         true ->
-            NewChannels = amqp_channel_util:unregister_channel({chpid, Pid},
-                                                               Channels),
+            NewChannels =
+                amqp_channel_util:unregister_channel_pid(Pid, Channels),
             State#mr_state{framing_channels = NewChannels};
         false ->
             ?LOG_WARN("Reader received unexpected DOWN signal from (~p)."

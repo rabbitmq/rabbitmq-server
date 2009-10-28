@@ -42,7 +42,7 @@
                    main_reader_pid,
                    channel0_writer_pid,
                    channel0_framing_pid,
-                   channel_max,
+                   max_channel,
                    heartbeat,
                    closing = false,
                    channels = amqp_channel_util:new_channel_dict()}).
@@ -106,11 +106,18 @@ code_change(_OldVsn, State, _Extra) ->
 handle_command({open_channel, ProposedNumber}, _From,
                State = #nc_state{sock = Sock,
                                  main_reader_pid = MainReader,
-                                 channels = Channels}) ->
-    {ChannelPid, NewChannels} =
-        amqp_channel_util:open_channel(ProposedNumber, network,
-                                       {Sock, MainReader}, Channels),
-    {reply, ChannelPid, State#nc_state{channels = NewChannels}};
+                                 channels = Channels,
+                                 max_channel = MaxChannel}) ->
+    try amqp_channel_util:open_channel(ProposedNumber, MaxChannel, network,
+                                       {Sock, MainReader}, Channels) of
+        {ChannelPid, NewChannels} ->
+            {reply, ChannelPid, State#nc_state{channels = NewChannels}}
+    catch
+        out_of_channel_numbers = Error ->
+            {reply, Error, State};
+        SomethingElse ->
+            io:format("HEEEREREEEEEE: ~p~n", [SomethingElse])
+    end;
 
 handle_command({close, #'connection.close'{} = Close}, From, State) ->
     {noreply, set_closing_state(flush, #nc_closing{reason = app_initiated_close,
@@ -250,7 +257,7 @@ internal_error_closing() ->
 %%---------------------------------------------------------------------------
 
 unregister_channel(Pid, State = #nc_state{channels = Channels}) ->
-    NewChannels = amqp_channel_util:unregister_channel({chpid, Pid}, Channels),
+    NewChannels = amqp_channel_util:unregister_channel_pid(Pid, Channels),
     NewState = State#nc_state{channels = NewChannels},
     check_trigger_all_channels_closed_event(NewState).
 
@@ -311,7 +318,7 @@ handle_exit(MainReaderPid, Reason,
 %% Handle exit from channel or other pid
 handle_exit(Pid, Reason,
             #nc_state{channels = Channels} = State) ->
-    case amqp_channel_util:is_channel_registered({chpid, Pid}, Channels) of
+    case amqp_channel_util:is_channel_pid_registered(Pid, Channels) of
         true  -> handle_channel_exit(Pid, Reason, State);
         false -> handle_other_pid_exit(Pid, Reason, State)
     end.
@@ -411,7 +418,10 @@ network_handshake(State = #nc_state{channel0_writer_pid = Writer0,
     amqp_channel_util:do(network, Writer0, ConnectionOpen, none),
     #'connection.open_ok'{} = handshake_recv(State),
     %% TODO What should I do with the KnownHosts?
-    State#nc_state{channel_max = ChannelMax, heartbeat = Heartbeat}.
+    MaxChannelNumber = if ChannelMax =:= 0 -> ?MAX_CHANNEL_NUMBER;
+                          true             -> ChannelMax
+                       end,
+    State#nc_state{max_channel = MaxChannelNumber, heartbeat = Heartbeat}.
 
 start_ok(#nc_state{params = #amqp_params{username = Username,
                                          password = Password}}) ->
