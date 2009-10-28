@@ -69,14 +69,13 @@ register(Pid, HighMemMFA) ->
 init([]) ->
     {ok, #alarms{alertees = dict:new()}}.
 
-handle_call({register, Pid, HighMemMFA},
+handle_call({register, Pid, {M, F, A} = HighMemMFA},
             State = #alarms{alertees = Alertess}) ->
     _MRef = erlang:monitor(process, Pid),
-    case State#alarms.vm_memory_high_watermark of
-        true  -> {M, F, A} = HighMemMFA,
-                 ok = erlang:apply(M, F, A ++ [Pid, true]);
-        false -> ok
-    end,
+    ok = case State#alarms.vm_memory_high_watermark of
+             true  -> apply(M, F, A ++ [Pid, true]);
+             false -> ok
+         end,
     NewAlertees = dict:store(Pid, HighMemMFA, Alertess),
     {ok, ok, State#alarms{alertees = NewAlertees}};
 

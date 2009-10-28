@@ -143,12 +143,14 @@ start(normal, []) ->
                 ok = rabbit_alarm:start(),
                 MemoryWatermark = 
                     application:get_env(os_mon, system_memory_high_watermark),
-                case MemoryWatermark of
-                    {ok, false} -> ok;
-                    {ok, off} -> ok;
-                    {ok, Float} -> start_child(vm_memory_monitor, [Float]);
-                    undefined -> throw({undefined, os_mon, system_memory_high_watermark, settings})
-                end,
+                ok = case MemoryWatermark of
+                         {ok, false} -> ok;
+                         {ok, Float} when Float == 0 -> ok;
+                         {ok, Float} -> start_child(vm_memory_monitor, [Float]);
+                         undefined ->
+                             throw({undefined, os_mon,
+                                    system_memory_high_watermark, settings})
+                     end,
                 
                 ok = rabbit_amqqueue:start(),
 
