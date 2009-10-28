@@ -524,7 +524,6 @@ read_and_prune_segments(State = #qistate { dir = Dir }) ->
     {TotalMsgCount, State1}.
 
 scatter_journal(TotalMsgCount, State = #qistate { dir = Dir }) ->
-    JournalPath = filename:join(Dir, ?ACK_JOURNAL_FILENAME),
     {Hdl, State1 = #qistate { journal_ack_dict = JAckDict }} =
         get_journal_handle(State),
     %% ADict may well contain duplicates. However, this is ok, due to
@@ -533,9 +532,15 @@ scatter_journal(TotalMsgCount, State = #qistate { dir = Dir }) ->
     State2 = close_handle(journal, State1),
     {TotalMsgCount1, State3} =
         dict:fold(fun replay_journal_acks_to_segment/3,
-                  {TotalMsgCount, State2}, ADict),
+                  {TotalMsgCount,
+                   %% supply empty dict so that when
+                   %% replay_journal_acks_to_segment loads segments,
+                   %% it gets all msgs, and ignores anything we've
+                   %% found in the journal.
+                   State2 #qistate { journal_ack_dict = dict:new() }}, ADict),
+    JournalPath = filename:join(Dir, ?ACK_JOURNAL_FILENAME),
     ok = file:delete(JournalPath),
-    {TotalMsgCount1, State3 #qistate { journal_ack_dict = dict:new() }}.
+    {TotalMsgCount1, State3}.
 
 load_journal(Hdl, ADict) ->
     case file_handle_cache:read(Hdl, ?SEQ_BYTES) of
@@ -547,18 +552,13 @@ load_journal(Hdl, ADict) ->
 replay_journal_acks_to_segment(_, [], Acc) ->
     Acc;
 replay_journal_acks_to_segment(SegNum, Acks, {TotalMsgCount, State}) ->
-    %% supply empty dict so that we get all msgs in SDict that have
-    %% not been acked in the segment file itself
-    {SDict, _AckCount, _HighRelSeq, State1} =
-        load_segment(SegNum, State #qistate { journal_ack_dict = dict:new() }),
+    {SDict, _AckCount, _HighRelSeq, State1} = load_segment(SegNum, State),
     ValidRelSeqIds = dict:fetch_keys(SDict),
     ValidAcks = sets:to_list(sets:intersection(sets:from_list(ValidRelSeqIds),
                                                sets:from_list(Acks))),
     %% ValidAcks will not contain any duplicates at this point.
-    State2 =
-        State1 #qistate { journal_ack_dict = State #qistate.journal_ack_dict },
     {TotalMsgCount - length(ValidAcks),
-     append_acks_to_segment(SegNum, ValidAcks, State2)}.
+     append_acks_to_segment(SegNum, ValidAcks, State1)}.
 
 drop_and_deliver(SegNum, SDict, CleanShutdown, State) ->
     {AckMe, DeliverMe} =

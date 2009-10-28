@@ -1084,4 +1084,24 @@ test_queue_index() ->
     {0, Qi20} = rabbit_queue_index:init(test_queue()),
     _Qi21 = rabbit_queue_index:terminate_and_erase(Qi20),
     ok = stop_msg_store(),
+    ok = empty_test_queue(),
+    %% this next bit is just to hit the auto deletion of segment files
+    SeqIdsC = lists:seq(1,65536),
+    {0, Qi22} = rabbit_queue_index:init(test_queue()),
+    {Qi23, _SeqIdsMsgIdsC} = queue_index_publish(SeqIdsC, false, Qi22),
+    Qi24 = lists:foldl(
+             fun (SeqId, QiN) ->
+                     rabbit_queue_index:write_delivered(SeqId, QiN)
+             end, Qi23, SeqIdsC),
+    Qi25 = rabbit_queue_index:write_acks(SeqIdsC, Qi24),
+    {_Oks, {false, Qi26}} =
+        rabbit_misc:unfold(
+          fun ({true, QiN}) ->
+                  QiM = rabbit_queue_index:flush_journal(QiN),
+                  {true, ok, {rabbit_queue_index:can_flush_journal(QiM), QiM}};
+              ({false, _QiN}) ->
+                  false
+          end, {true, Qi25}),
+    _Qi27 = rabbit_queue_index:terminate_and_erase(Qi26),
+    ok = stop_msg_store(),
     passed.
