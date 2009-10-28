@@ -57,10 +57,10 @@
 -define(SERVER, ?MODULE).
 -define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
 
-%% For an unknown OS, we assume that we have 512 MB of memory, which
-%% is pretty safe value, even for 32 bit systems. It's better to be
-%% slow than to crash.
--define(MEMORY_SIZE_FOR_UNKNOWN_OS, 512*1024*1024).
+%% For an unknown OS, we assume that we have 1GB of memory. It'll be
+%% wrong. Scale by vm_memory_high_watermark in configuration to get a
+%% sensible value.
+-define(MEMORY_SIZE_FOR_UNKNOWN_OS, 1073741824).
 
 -record(state, {total_memory,
                 memory_limit,
