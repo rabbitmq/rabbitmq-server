@@ -144,7 +144,6 @@ start(normal, []) ->
                 MemoryWatermark = 
                     application:get_env(os_mon, vm_memory_high_watermark),
                 ok = case MemoryWatermark of
-                         {ok, false} -> ok;
                          {ok, Float} when Float == 0 -> ok;
                          {ok, Float} -> start_child(vm_memory_monitor, [Float]);
                          undefined ->
