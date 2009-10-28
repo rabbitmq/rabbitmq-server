@@ -29,19 +29,14 @@
 %%   Contributor(s): ______________________________________.
 %%
 
-%% In practice erlang shouldn't be allowed to grow to more than a half
-%% of available memory. The pessimistic scenario is when erlang VM has
-%% a single erlang process that's consuming all the memory.  In such
-%% case during garbage collection erlang tries to allocate huge chunk
-%% of continuous memory, which can result in a crash (likely on 32-bit
-%% machine) or heavy swapping (likely on 64-bit).
+%% In practice Erlang shouldn't be allowed to grow to more than a half
+%% of available memory. The pessimistic scenario is when the Erlang VM
+%% has a single process that's consuming all memory. In such a case,
+%% during garbage collection, Erlang tries to allocate a huge chunk of
+%% continuous memory, which can result in a crash or heavy swapping.
 %% 
-%% This module tries to warn Rabbit before such situations happen, so
-%% that it has higher chances to prevent running out of memory.
-%%
-%% This code depends on Erlang Memsup supervisor. Setting the update
-%% interval causes a side effect of setting the interval on Memsup.
-%% This should rarely be an issue.
+%% This module tries to warn Rabbit before such situations occur, so
+%% that it has a higher chance to avoid running out of memory.
 
 -module(vm_memory_monitor).
 
@@ -60,9 +55,9 @@
 -define(SERVER, ?MODULE).
 -define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
 
-%% For unknown OS, we assume that we have 512 MB of memory, which is
-%% pretty safe value, even for 32 bit systems. It's better to be slow
-%% than to crash.
+%% For an unknown OS, we assume that we have 512 MB of memory, which
+%% is pretty safe value, even for 32 bit systems. It's better to be
+%% slow than to crash.
 -define(MEMORY_SIZE_FOR_UNKNOWN_OS, 512*1024*1024).
 
 -record(state, {total_memory,
@@ -83,15 +78,14 @@ init([MemFraction]) ->
     TotalMemory =
         case get_total_memory() of
             unknown ->
-                rabbit_log:info("Unknown total memory size for your OS ~p. "
-                                "Assuming memory size is ~p bytes.~n", 
-                                [os:type(), ?MEMORY_SIZE_FOR_UNKNOWN_OS]),
+                rabbit_log:warning("Unknown total memory size for your OS ~p. "
+                                   "Assuming memory size is ~p bytes.~n", 
+                                   [os:type(), ?MEMORY_SIZE_FOR_UNKNOWN_OS]),
                 ?MEMORY_SIZE_FOR_UNKNOWN_OS;
             M -> M
         end,
     MemLimit = get_mem_limit(MemFraction, TotalMemory),
-    rabbit_log:info("Memory limit set to ~pMB.~n", 
-                    [trunc(MemLimit/1048576)]),
+    rabbit_log:info("Memory limit set to ~pMB.~n", [trunc(MemLimit/1048576)]),
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
     State = #state { total_memory = TotalMemory,
                      memory_limit = MemLimit,
@@ -214,16 +208,14 @@ get_total_memory({unix,darwin}) ->
         [dict:fetch(Key, Dict) ||
             Key <- [page_size, 'Pages inactive', 'Pages active', 'Pages free',
                     'Pages wired down']],
-    MemTotal = PageSize * (Inactive + Active + Free + Wired),
-    MemTotal;
+    PageSize * (Inactive + Active + Free + Wired);
 
 %% FreeBSD: Look in /usr/include/sys/vmmeter.h for the format of
 %% struct vmmeter
 get_total_memory({unix,freebsd}) ->
     PageSize  = freebsd_sysctl("vm.stats.vm.v_page_size"),
     PageCount = freebsd_sysctl("vm.stats.vm.v_page_count"),
-    NMemTotal = PageCount * PageSize,
-    NMemTotal;
+    PageCount * PageSize;
 
 %% Win32: Find out how much memory is in use by asking the
 %% os_mon_sysinfo process.
@@ -239,15 +231,13 @@ get_total_memory({unix, linux}) ->
     File = read_proc_file("/proc/meminfo"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_linux/1, Lines)),
-    MemTotal = dict:fetch('MemTotal', Dict),
-    MemTotal;
+    dict:fetch('MemTotal', Dict);
 
 get_total_memory({unix, sunos}) ->
     File = os:cmd("/usr/sbin/prtconf"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_sunos/1, Lines)),
-    MemTotal = dict:fetch('Memory size', Dict),
-    MemTotal;
+    dict:fetch('Memory size', Dict);
 
 get_total_memory(_OsType) ->
     unknown.
