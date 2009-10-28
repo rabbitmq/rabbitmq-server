@@ -118,6 +118,11 @@ read_next(FileHdl, Offset) ->
                         KO                   -> KO
                     end;
                true -> %% all good, let's continue
+                    %% Here we take option 5 from
+                    %% http://www.erlang.org/cgi-bin/ezmlm-cgi?2:mss:1569
+                    %% in which we read the MsgId as a number, and
+                    %% then convert it back to a binary in order to
+                    %% work around bugs in Erlang's GC.
                     MsgIdSizeBits = MsgIdSize * 8,
                     case file:read(FileHdl, MsgIdSize) of
                         {ok, <<MsgIdNum:MsgIdSizeBits>>} ->
