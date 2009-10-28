@@ -73,17 +73,17 @@ rem Log management (rotation, filtering based of size...) is left as an exercice
 
 set BACKUP_EXTENSION=.1
 
-set LOGS="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log"
-set SASL_LOGS="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log"
+set LOGS=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log
+set SASL_LOGS=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log
 
-set LOGS_BACKUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log%BACKUP_EXTENSION%"
-set SASL_LOGS_BACKUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXTENSION%"
+set LOGS_BACKUP=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log%BACKUP_EXTENSION%
+set SASL_LOGS_BACKUP=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXTENSION%
 
-if exist %LOGS% (
-    type %LOGS% >> %LOGS_BACKUP%
+if exist "%LOGS%" (
+    type "%LOGS%" >> "%LOGS_BACKUP%"
 )
-if exist %SASL_LOGS% (
-    type %SASL_LOGS% >> %SASL_LOGS_BACKUP%
+if exist "%SASL_LOGS%" (
+    type "%SASL_LOGS%" >> "%SASL_LOGS_BACKUP%"
 )
 
 rem End of log management
@@ -103,26 +103,27 @@ if "%RABBITMQ_MNESIA_DIR%"=="" (
 set RABBITMQ_EBIN_ROOT=%~dp0..\ebin
 if exist "%RABBITMQ_EBIN_ROOT%\rabbit.boot" (
     echo Using Custom Boot File "%RABBITMQ_EBIN_ROOT%\rabbit.boot"
-    set RABBITMQ_BOOT_FILE="%RABBITMQ_EBIN_ROOT%\rabbit"
+    set RABBITMQ_BOOT_FILE=%RABBITMQ_EBIN_ROOT%\rabbit
     set RABBITMQ_EBIN_PATH=
 ) else (
     set RABBITMQ_BOOT_FILE=start_sasl
     set RABBITMQ_EBIN_PATH=-pa "%RABBITMQ_EBIN_ROOT%"
 )
 if "%RABBITMQ_CONFIG_FILE%"=="" (
-    set RABBITMQ_CONFIG_FILE="%RABBITMQ_BASE%\rabbitmq"
+    set RABBITMQ_CONFIG_FILE=%RABBITMQ_BASE%\rabbitmq
 )
    
 if exist "%RABBITMQ_CONFIG_FILE%.config" (
     set RABBITMQ_CONFIG_ARG=-config "%RABBITMQ_CONFIG_FILE%"
 ) else (
-    set RABBITMQ_CONFIG_ARG=""
+    set RABBITMQ_CONFIG_ARG=
 )
 
 "%ERLANG_HOME%\bin\erl.exe" ^
 %RABBITMQ_EBIN_PATH% ^
 -noinput ^
--boot %RABBITMQ_BOOT_FILE% %RABBITMQ_CONFIG_ARG% ^
+-boot "%RABBITMQ_BOOT_FILE%" ^
+%RABBITMQ_CONFIG_ARG% ^
 -sname %RABBITMQ_NODENAME% ^
 -s rabbit ^
 +W w ^
