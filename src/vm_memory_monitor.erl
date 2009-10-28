@@ -52,7 +52,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([update/0, get_total_memory/1, 
+-export([update/0, get_total_memory/0,
          get_check_interval/0, set_check_interval/1,
          get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1]).
 
@@ -81,7 +81,7 @@ start_link(Args) ->
 
 init([MemFraction]) -> 
     TotalMemory =
-        case get_total_memory(os:type()) of
+        case get_total_memory() of
             unknown ->
                 rabbit_log:info("Unknown total memory size for your OS ~p. "
                                 "Assuming memory size is ~p bytes.~n", 
@@ -90,7 +90,7 @@ init([MemFraction]) ->
             M -> M
         end,
     MemLimit = get_mem_limit(MemFraction, TotalMemory),
-    rabbit_log:info("Memory limit set to ~pMiB.~n", 
+    rabbit_log:info("Memory limit set to ~pMB.~n", 
                     [trunc(MemLimit/1048576)]),
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
     State = #state { total_memory = TotalMemory,
@@ -140,6 +140,65 @@ code_change(_OldVsn, State, _Extra) ->
  
 update() ->
     gen_server2:cast(?SERVER, update).
+
+get_total_memory() ->
+    get_total_memory(os:type()).
+
+get_check_interval() ->
+    gen_server2:call(?MODULE, get_check_interval).
+
+set_check_interval(Fraction) ->
+    gen_server2:call(?MODULE, {set_check_interval, Fraction}).
+
+get_vm_memory_high_watermark() ->
+    gen_server2:call(?MODULE, get_vm_memory_high_watermark).
+
+set_vm_memory_high_watermark(Fraction) ->
+    gen_server2:call(?MODULE, {set_vm_memory_high_watermark, Fraction}).
+
+%%----------------------------------------------------------------------------
+%% Server Internals
+%%----------------------------------------------------------------------------
+
+internal_update(State = #state { memory_limit = MemLimit,
+                                 alarmed = Alarmed}) ->
+    MemUsed = erlang:memory(total),
+    NewAlarmed = MemUsed > MemLimit,
+    case {Alarmed, NewAlarmed} of
+        {false, true} ->
+            emit_update_info(set, MemUsed, MemLimit),
+            alarm_handler:set_alarm({vm_memory_high_watermark, []});
+        {true, false} ->
+            emit_update_info(clear, MemUsed, MemLimit),
+            alarm_handler:clear_alarm(vm_memory_high_watermark);
+        _ ->
+            ok
+    end,
+    State #state {alarmed = NewAlarmed}.
+
+emit_update_info(State, MemUsed, MemLimit) ->
+    rabbit_log:info("vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
+                    [State, MemUsed, MemLimit]).
+
+start_timer(Timeout) ->
+    {ok, TRef} = timer:apply_interval(Timeout, ?MODULE, update, []),
+    TRef.
+
+%% On a 32-bit machine, if you're using more than 2 gigs of RAM you're
+%% in big trouble anyway.
+get_vm_limit() ->
+    case erlang:system_info(wordsize) of
+        4 -> 2147483648;     %% 2 GB for 32 bits  2^31
+        8 -> 140737488355328 %% 128 TB for 64 bits 2^47
+             %% http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
+    end.
+
+get_mem_limit(MemFraction, TotalMemory) ->
+    lists:min([trunc(TotalMemory * MemFraction), get_vm_limit()]).
+
+%%----------------------------------------------------------------------------
+%% Internal Helpers
+%%----------------------------------------------------------------------------
 
 %% get_total_memory(OS) -> Total
 %% Windows and Freebsd code based on: memsup:get_memory_usage/1
@@ -193,22 +252,6 @@ get_total_memory({unix, sunos}) ->
 get_total_memory(_OsType) ->
     unknown.
 
-get_check_interval() ->
-    gen_server2:call(?MODULE, get_check_interval).
-
-set_check_interval(Fraction) ->
-    gen_server2:call(?MODULE, {set_check_interval, Fraction}).
-
-get_vm_memory_high_watermark() ->
-    gen_server2:call(?MODULE, get_vm_memory_high_watermark).
-
-set_vm_memory_high_watermark(Fraction) ->
-    gen_server2:call(?MODULE, {set_vm_memory_high_watermark, Fraction}).
-
-%%----------------------------------------------------------------------------
-%% Internal Helpers
-%%----------------------------------------------------------------------------
-
 %% A line looks like "Foo bar: 123456."
 parse_line_mach(Line) ->
     [Name, RHS | _Rest] = string:tokens(Line, ":"),
@@ -220,26 +263,6 @@ parse_line_mach(Line) ->
         _ ->
             [Value | _Rest1] = string:tokens(RHS, " ."),
             {list_to_atom(Name), list_to_integer(Value)}
-    end.
-
-freebsd_sysctl(Def) ->
-    list_to_integer(os:cmd("/sbin/sysctl -n " ++ Def) -- "\n").
-
-%% file:read_file does not work on files in /proc as it seems to get
-%% the size of the file first and then read that many bytes. But files
-%% in /proc always have length 0, we just have to read until we get
-%% eof.
-read_proc_file(File) ->
-    {ok, IoDevice} = file:open(File, [read, raw]),
-    Res = read_proc_file(IoDevice, []),
-    file:close(IoDevice),
-    lists:flatten(lists:reverse(Res)).
-
--define(BUFFER_SIZE, 1024).
-read_proc_file(IoDevice, Acc) ->
-    case file:read(IoDevice, ?BUFFER_SIZE) of
-        {ok, Res} -> read_proc_file(IoDevice, [Res | Acc]);
-        eof       -> Acc
     end.
 
 %% A line looks like "FooBar: 123456 kB"
@@ -271,37 +294,22 @@ parse_line_sunos(Line) ->
         [Name] -> {list_to_atom(Name), none}
     end.
 
-%% On a 32-bit machine, if you're using more than 2 gigs of RAM you're
-%% in big trouble anyway.
-get_vm_limit() ->
-    case erlang:system_info(wordsize) of
-        4 -> 2*1024*1024*1024;                  % 2 GiB for 32 bits
-        8 -> 64*1024*1024*1024*1024             % 64 TiB for 64 bits
+freebsd_sysctl(Def) ->
+    list_to_integer(os:cmd("/sbin/sysctl -n " ++ Def) -- "\n").
+
+%% file:read_file does not work on files in /proc as it seems to get
+%% the size of the file first and then read that many bytes. But files
+%% in /proc always have length 0, we just have to read until we get
+%% eof.
+read_proc_file(File) ->
+    {ok, IoDevice} = file:open(File, [read, raw]),
+    Res = read_proc_file(IoDevice, []),
+    file:close(IoDevice),
+    lists:flatten(lists:reverse(Res)).
+
+-define(BUFFER_SIZE, 1024).
+read_proc_file(IoDevice, Acc) ->
+    case file:read(IoDevice, ?BUFFER_SIZE) of
+        {ok, Res} -> read_proc_file(IoDevice, [Res | Acc]);
+        eof       -> Acc
     end.
-
-get_mem_limit(MemFraction, TotalMemory) ->
-    lists:min([trunc(TotalMemory * MemFraction), get_vm_limit()]).
-
-start_timer(Timeout) ->
-    {ok, TRef} = timer:apply_interval(Timeout, ?MODULE, update, []),
-    TRef.
-
-emit_update_info(State, MemUsed, MemLimit) ->
-    rabbit_log:info("vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
-                    [State, MemUsed, MemLimit]).
-
-internal_update(State = #state { memory_limit = MemLimit,
-                                 alarmed = Alarmed}) ->
-    MemUsed = erlang:memory(total),
-    NewAlarmed = MemUsed > MemLimit,
-    case {Alarmed, NewAlarmed} of
-        {false, true} ->
-            emit_update_info(set, MemUsed, MemLimit),
-            alarm_handler:set_alarm({vm_memory_high_watermark, []});
-        {true, false} ->
-            emit_update_info(clear, MemUsed, MemLimit),
-            alarm_handler:clear_alarm(vm_memory_high_watermark);
-        _ ->
-            ok
-    end,
-    State #state {alarmed = NewAlarmed}.
