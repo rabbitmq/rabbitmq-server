@@ -140,8 +140,16 @@ start(normal, []) ->
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
 
-                {ok, MemoryAlarms} = application:get_env(memory_alarms),
-                ok = rabbit_alarm:start(MemoryAlarms),
+                ok = rabbit_alarm:start(),
+                MemoryWatermark = 
+                    application:get_env(os_mon, vm_memory_high_watermark),
+                ok = case MemoryWatermark of
+                         {ok, Float} when Float == 0 -> ok;
+                         {ok, Float} -> start_child(vm_memory_monitor, [Float]);
+                         undefined ->
+                             throw({undefined, os_mon,
+                                    vm_memory_high_watermark, settings})
+                     end,
                 
                 ok = rabbit_amqqueue:start(),
 
@@ -264,8 +272,11 @@ print_banner() ->
     io:nl().
 
 start_child(Mod) ->
+    start_child(Mod, []).
+
+start_child(Mod, Args) ->
     {ok,_} = supervisor:start_child(rabbit_sup,
-                                    {Mod, {Mod, start_link, []},
+                                    {Mod, {Mod, start_link, Args},
                                      transient, 100, worker, [Mod]}),
     ok.
 
