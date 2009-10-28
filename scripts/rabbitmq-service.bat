@@ -91,17 +91,17 @@ rem Log management (rotation, filtering based on size...) is left as an exercise
 
 set BACKUP_EXTENSION=.1
 
-set LOGS="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log"
-set SASL_LOGS="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log"
+set LOGS=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log
+set SASL_LOGS=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log
 
-set LOGS_BACKUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log%BACKUP_EXTENSION%"
-set SASL_LOGS_BACKUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXTENSION%"
+set LOGS_BACKUP=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log%BACKUP_EXTENSION%
+set SASL_LOGS_BACKUP=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXTENSION%
 
-if exist %LOGS% (
-	type %LOGS% >> %LOGS_BACKUP%
+if exist "%LOGS%" (
+	type "%LOGS%" >> "%LOGS_BACKUP%"
 )
 if exist %SASL_LOGS% (
-	type %SASL_LOGS% >> %SASL_LOGS_BACKUP%
+	type "%SASL_LOGS%" >> "%SASL_LOGS_BACKUP%"
 )
 
 rem End of log management

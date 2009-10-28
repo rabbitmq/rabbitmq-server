@@ -323,7 +323,7 @@ nodeparts(NodeStr) ->
     end.
 
 cookie_hash() ->
-    ssl_base64:encode(erlang:md5(atom_to_list(erlang:get_cookie()))).
+    base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
 
 tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->
