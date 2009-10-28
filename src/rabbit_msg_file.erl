@@ -118,8 +118,9 @@ read_next(FileHdl, Offset) ->
                         KO                   -> KO
                     end;
                true -> %% all good, let's continue
+                    MsgIdSizeBits = MsgIdSize * 8,
                     case file:read(FileHdl, MsgIdSize) of
-                        {ok, <<MsgId:MsgIdSize/binary>>} ->
+                        {ok, <<MsgIdNum:MsgIdSizeBits>>} ->
                             TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
                             ExpectedAbsPos = Offset + TotalSize - 1,
                             case file:position(
@@ -129,6 +130,8 @@ read_next(FileHdl, Offset) ->
                                     case file:read(FileHdl, 1) of
                                         {ok, <<?WRITE_OK_MARKER:
                                                ?WRITE_OK_SIZE_BITS>>} ->
+                                            <<MsgId:MsgIdSize/binary>> =
+                                                <<MsgIdNum:MsgIdSizeBits>>,
                                             {ok, {MsgId,
                                                   TotalSize, NextOffset}};
                                         {ok, _SomeOtherData} ->

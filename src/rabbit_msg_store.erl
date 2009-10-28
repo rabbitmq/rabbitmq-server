@@ -102,9 +102,10 @@
 -define(FILE_EXTENSION_TMP,    ".rdt").
 -define(CACHE_ETS_NAME,        rabbit_disk_queue_cache).
 
--define(BINARY_MODE, [raw, binary]).
--define(READ_MODE,   [read, read_ahead]).
--define(WRITE_MODE,  [write, delayed_write]).
+-define(BINARY_MODE,     [raw, binary]).
+-define(READ_MODE,       [read]).
+-define(READ_AHEAD_MODE, [read_ahead | ?READ_MODE]).
+-define(WRITE_MODE,      [write, delayed_write]).
 
 %% The components:
 %%
@@ -741,7 +742,7 @@ recover_crashed_compactions1(Dir, FileNames, TmpFileName) ->
             %% move. If we run out of disk space, this truncate could
             %% fail, but we still aren't risking losing data
             ok = truncate_and_extend_file(MainHdl, Top, Top + TmpSize),
-            {ok, TmpHdl} = open_file(Dir, TmpFileName, ?READ_MODE),
+            {ok, TmpHdl} = open_file(Dir, TmpFileName, ?READ_AHEAD_MODE),
             {ok, TmpSize} = file:copy(TmpHdl, MainHdl, TmpSize),
             ok = file:sync(MainHdl),
             ok = file:close(MainHdl),
@@ -959,9 +960,9 @@ combine_files(#file_summary { file = Source,
     SourceName = filenum_to_name(Source),
     DestinationName = filenum_to_name(Destination),
     State1 = close_file(SourceName, close_file(DestinationName, State)),
-    {ok, SourceHdl} = open_file(Dir, SourceName, ?READ_MODE),
+    {ok, SourceHdl} = open_file(Dir, SourceName, ?READ_AHEAD_MODE),
     {ok, DestinationHdl} = open_file(Dir, DestinationName,
-                                     ?READ_MODE ++ ?WRITE_MODE),
+                                     ?READ_AHEAD_MODE ++ ?WRITE_MODE),
     ExpectedSize = SourceValid + DestinationValid,
     %% if DestinationValid =:= DestinationContiguousTop then we don't
     %% need a tmp file
@@ -974,7 +975,7 @@ combine_files(#file_summary { file = Source,
                                           DestinationValid, ExpectedSize);
        true ->
             Tmp = filename:rootname(DestinationName) ++ ?FILE_EXTENSION_TMP,
-            {ok, TmpHdl} = open_file(Dir, Tmp, ?READ_MODE ++ ?WRITE_MODE),
+            {ok, TmpHdl} = open_file(Dir, Tmp, ?READ_AHEAD_MODE ++ ?WRITE_MODE),
             Worklist =
                 lists:dropwhile(
                   fun (#msg_location { offset = Offset })
