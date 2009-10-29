@@ -100,7 +100,7 @@ set SASL_LOGS_BACKUP=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXT
 if exist "%LOGS%" (
 	type "%LOGS%" >> "%LOGS_BACKUP%"
 )
-if exist %SASL_LOGS% (
+if exist "%SASL_LOGS%" (
 	type "%SASL_LOGS%" >> "%SASL_LOGS_BACKUP%"
 )
 
