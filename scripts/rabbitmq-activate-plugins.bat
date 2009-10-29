@@ -30,6 +30,8 @@ REM
 REM   Contributor(s): ______________________________________.
 REM
 
+setlocal
+
 if not exist "%ERLANG_HOME%\bin\erl.exe" (
     echo.
     echo ******************************
@@ -54,3 +56,5 @@ set RABBITMQ_EBIN_DIR=%~dp0..\ebin
 -rabbit plugins_expand_dir \""%RABBITMQ_PLUGINS_EXPAND_DIR:\=/%"\" ^
 -rabbit rabbit_ebin  \""%RABBITMQ_EBIN_DIR:\=/%"\" ^
 -extra %*
+
+endlocal

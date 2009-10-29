@@ -30,6 +30,10 @@ REM
 REM   Contributor(s): ______________________________________.
 REM
 
+setlocal
+
 set RABBITMQ_EBIN_DIR=%~dp0..\ebin
 
 del /f "%RABBITMQ_EBIN_DIR%"\rabbit.rel "%RABBITMQ_EBIN_DIR%"\rabbit.script "%RABBITMQ_EBIN_DIR%"\rabbit.boot
+
+endlocal
