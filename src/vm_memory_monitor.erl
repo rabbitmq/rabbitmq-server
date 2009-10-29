@@ -73,13 +73,13 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 :: (_) -> 'ignore' | {error,_} | {ok,pid()}).
--spec(update/0 :: () -> ok).
--spec(get_total_memory/0 :: () -> non_neg_integer() | unknown).
--spec(get_check_interval/0 :: () -> non_neg_integer() ).
--spec(set_check_interval/1 :: (non_neg_integer()) -> ok ).
--spec(get_vm_memory_high_watermark/0 :: () -> float() ).
--spec(set_vm_memory_high_watermark/1 :: (float()) -> ok ).
+-spec(start_link/1 :: (float()) -> ('ignore' | {error, any()} | {'ok', pid()})).
+-spec(update/0 :: () -> 'ok').
+-spec(get_total_memory/0 :: () -> (non_neg_integer() | unknown)).
+-spec(get_check_interval/0 :: () -> non_neg_integer()).
+-spec(set_check_interval/1 :: (non_neg_integer()) -> 'ok').
+-spec(get_vm_memory_high_watermark/0 :: () -> float()).
+-spec(set_vm_memory_high_watermark/1 :: (float()) -> 'ok').
 
 -endif.
 
@@ -211,12 +211,11 @@ get_mem_limit(MemFraction, TotalMemory) ->
 %% Internal Helpers
 %%----------------------------------------------------------------------------
 cmd(Command) ->
-    [Exec| _Rest] = string:tokens(Command, " "),
+    Exec = hd(string:tokens(Command, " ")),
     case os:find_executable(Exec) of
         false -> throw({command_not_found, Exec});
-        _ -> ok
-    end,
-    os:cmd(Command).
+        _     -> os:cmd(Command)
+    end.
 
 %% get_total_memory(OS) -> Total
 %% Windows and Freebsd code based on: memsup:get_memory_usage/1
