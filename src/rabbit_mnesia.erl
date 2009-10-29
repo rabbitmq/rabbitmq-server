@@ -32,7 +32,7 @@
 -module(rabbit_mnesia).
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
-         cluster/1, reset/0, force_reset/0]).
+         cluster/1, reset/0, force_reset/0, maybe_empty_ram_only_tables/0]).
 
 -export([table_names/0]).
 
@@ -54,6 +54,7 @@
 -spec(cluster/1 :: ([erlang_node()]) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
+-spec(maybe_empty_ram_only_tables/0 :: () -> 'ok'). 
 -spec(create_tables/0 :: () -> 'ok').
 
 -endif.
@@ -97,6 +98,12 @@ cluster(ClusterNodes) ->
 %% persisted messages
 reset()       -> reset(false).
 force_reset() -> reset(true).
+
+maybe_empty_ram_only_tables() ->
+    case is_clustered() of
+        true  -> ok;
+        false -> empty_ram_only_tables()
+    end.
 
 %%--------------------------------------------------------------------
 
@@ -433,3 +440,18 @@ leave_cluster(Nodes, RunningNodes) ->
         false -> throw({error, {no_running_cluster_nodes,
                                 Nodes, RunningNodes}})
     end.
+
+is_clustered() ->
+    RunningNodes = mnesia:system_info(running_db_nodes),
+    [node()] /= RunningNodes andalso [] /= RunningNodes.
+
+empty_ram_only_tables() ->
+    Node = node(),
+    lists:foreach(
+      fun (TabName) ->
+          case lists:member(Node, mnesia:table_info(TabName, ram_copies)) of
+              true  -> {atomic, ok} = mnesia:clear_table(TabName);
+              false -> ok
+          end
+      end, table_names()),
+    ok.

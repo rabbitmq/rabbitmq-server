@@ -210,6 +210,7 @@ start(normal, []) ->
 stop(_State) ->
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
+    ok = rabbit_mnesia:maybe_empty_ram_only_tables(),
     ok.
 
 %---------------------------------------------------------------------------
