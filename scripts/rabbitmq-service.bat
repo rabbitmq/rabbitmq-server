@@ -53,7 +53,7 @@ if "%RABBITMQ_NODE_PORT%"=="" (
 )
 
 if "%ERLANG_SERVICE_MANAGER_PATH%"=="" (
-    set ERLANG_SERVICE_MANAGER_PATH=C:\Program Files\erl5.5.5\erts-5.5.5\bin
+    set ERLANG_SERVICE_MANAGER_PATH=C:\Program Files\erl5.6.5\erts-5.6.5\bin
 )
 
 set CONSOLE_FLAG=
