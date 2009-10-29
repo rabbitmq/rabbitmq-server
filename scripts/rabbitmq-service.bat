@@ -30,6 +30,8 @@ REM
 REM   Contributor(s): ______________________________________.
 REM
 
+setlocal
+
 if "%RABBITMQ_SERVICENAME%"=="" (
     set RABBITMQ_SERVICENAME=RabbitMQ
 )
@@ -200,3 +202,5 @@ goto END
 
 
 :END
+
+endlocal

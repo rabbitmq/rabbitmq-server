@@ -30,6 +30,8 @@ REM
 REM   Contributor(s): ______________________________________.
 REM
 
+setlocal
+
 if "%RABBITMQ_BASE%"=="" (
     set RABBITMQ_BASE=%APPDATA%\RabbitMQ
 )
@@ -143,3 +145,5 @@ if exist "%RABBITMQ_CONFIG_FILE%.config" (
 %CLUSTER_CONFIG% ^
 %RABBITMQ_SERVER_START_ARGS% ^
 %*
+
+endlocal
