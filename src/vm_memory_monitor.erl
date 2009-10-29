@@ -198,12 +198,14 @@ get_mem_limit(MemFraction, TotalMemory) ->
 
 %% get_total_memory(OS) -> Total
 %% Windows and Freebsd code based on: memsup:get_memory_usage/1
-%% Original code was part of OTP and released under "Erlang Public
-%% License".
+%% Original code was part of OTP and released under "Erlang Public License".
 
-%% Darwin: Uses vm_stat command.
 get_total_memory({unix,darwin}) ->
     File = os:cmd("/usr/bin/vm_stat"),
+    case string:str(File, " not found\n") of
+        0 -> ok;
+        _ -> throw({command_not_found, "/usr/bin/vm_stat"})
+    end,
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_mach/1, Lines)),
     [PageSize, Inactive, Active, Free, Wired] =
@@ -212,15 +214,11 @@ get_total_memory({unix,darwin}) ->
                     'Pages wired down']],
     PageSize * (Inactive + Active + Free + Wired);
 
-%% FreeBSD: Look in /usr/include/sys/vmmeter.h for the format of
-%% struct vmmeter
 get_total_memory({unix,freebsd}) ->
     PageSize  = freebsd_sysctl("vm.stats.vm.v_page_size"),
     PageCount = freebsd_sysctl("vm.stats.vm.v_page_count"),
     PageCount * PageSize;
 
-%% Win32: Find out how much memory is in use by asking the
-%% os_mon_sysinfo process.
 get_total_memory({win32,_OSname}) ->
     [Result|_] = os_mon_sysinfo:get_mem_info(),
     {ok, [_MemLoad, TotPhys, _AvailPhys,
@@ -228,7 +226,6 @@ get_total_memory({win32,_OSname}) ->
         io_lib:fread("~d~d~d~d~d~d~d", Result),
     TotPhys;
 
-%% Linux: Look in /proc/meminfo
 get_total_memory({unix, linux}) ->
     File = read_proc_file("/proc/meminfo"),
     Lines = string:tokens(File, "\n"),
@@ -237,6 +234,10 @@ get_total_memory({unix, linux}) ->
 
 get_total_memory({unix, sunos}) ->
     File = os:cmd("/usr/sbin/prtconf"),
+    case string:str(File, "No such file or directory\n") of
+        0 -> ok;
+        _ -> throw({command_not_found, "/usr/sbin/prtconf"})
+    end,
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_sunos/1, Lines)),
     dict:fetch('Memory size', Dict);
@@ -287,7 +288,12 @@ parse_line_sunos(Line) ->
     end.
 
 freebsd_sysctl(Def) ->
-    list_to_integer(os:cmd("/sbin/sysctl -n " ++ Def) -- "\n").
+    Result = os:cmd("/sbin/sysctl -n " ++ Def),
+    case string:str(Result, " not found\n") of
+        0 -> ok;
+        _ -> throw({command_not_found, "/sbin/sysctl"})
+    end,
+    list_to_integer(Result -- "\n").
 
 %% file:read_file does not work on files in /proc as it seems to get
 %% the size of the file first and then read that many bytes. But files
