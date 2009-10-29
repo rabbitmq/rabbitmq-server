@@ -34,7 +34,7 @@
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0}, {active,false}, {nodelay, true}]).
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
--define(CLIENT_CLOSE_TIMEOUT, 5000).
+-define(CLIENT_CLOSE_TIMEOUT, 60000).
 -define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
 
 -record(nc_state, {params = #amqp_params{},
@@ -75,7 +75,7 @@ handle_cast({method, Method, Content}, State) ->
 
 %% This is received after we have sent 'connection.close' to the server
 %% but timed out waiting for 'connection.close_ok' back
-handle_info(time_out_waiting_for_close_ok = Msg,
+handle_info(timeout_waiting_for_close_ok = Msg,
             State = #nc_state{closing = Closing}) ->
     ?LOG_WARN("Connection ~p closing: timed out waiting for"
               "'connection.close_ok'.", [self()]),
@@ -113,10 +113,8 @@ handle_command({open_channel, ProposedNumber}, _From,
         {ChannelPid, NewChannels} ->
             {reply, ChannelPid, State#nc_state{channels = NewChannels}}
     catch
-        out_of_channel_numbers = Error ->
-            {reply, Error, State};
-        SomethingElse ->
-            io:format("HEEEREREEEEEE: ~p~n", [SomethingElse])
+        error:out_of_channel_numbers = Error ->
+            {reply, {Error, MaxChannel}, State}
     end;
 
 handle_command({close, #'connection.close'{} = Close}, From, State) ->

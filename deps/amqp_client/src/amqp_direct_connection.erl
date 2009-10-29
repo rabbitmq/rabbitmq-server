@@ -109,8 +109,8 @@ handle_command({open_channel, ProposedNumber}, _From,
         {ChannelPid, NewChannels} ->
             {reply, ChannelPid, State#dc_state{channels = NewChannels}}
     catch
-        out_of_channel_numbers = Error ->
-            {reply, Error, State}
+        error:out_of_channel_numbers = Error ->
+            {reply, {Error, ?MAX_CHANNEL_NUMBER}, State}
     end;
 
 handle_command({close, Close}, From, State) ->
