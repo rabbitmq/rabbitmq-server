@@ -95,9 +95,10 @@ init([MemFraction]) ->
     TotalMemory =
         case get_total_memory() of
             unknown ->
-                rabbit_log:warning("Unknown total memory size for your OS ~p. "
-                                   "Assuming memory size is ~p bytes.~n", 
-                                   [os:type(), ?MEMORY_SIZE_FOR_UNKNOWN_OS]),
+                rabbit_log:warning(
+                  "Unknown total memory size for your OS ~p. "
+                  "Assuming memory size is ~pMB.~n", 
+                  [os:type(), trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/1048576)]),
                 ?MEMORY_SIZE_FOR_UNKNOWN_OS;
             M -> M
         end,
@@ -199,8 +200,8 @@ start_timer(Timeout) ->
 %% in big trouble anyway.
 get_vm_limit() ->
     case erlang:system_info(wordsize) of
-        4 -> 2147483648;     %% 2 GB for 32 bits  2^31
-        8 -> 140737488355328 %% 128 TB for 64 bits 2^47
+        4 -> 4294967296;     %% 4 GB for 32 bits  2^32
+        8 -> 281474976710656 %% 256 TB for 64 bits 2^48
              %% http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
     end.
 
