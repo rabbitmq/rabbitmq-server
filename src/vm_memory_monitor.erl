@@ -70,6 +70,21 @@
                }).
 
 %%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/1 :: (_) -> 'ignore' | {error,_} | {ok,pid()}).
+-spec(update/0 :: () -> ok).
+-spec(get_total_memory/0 :: () -> non_neg_integer() | unknown).
+-spec(get_check_interval/0 :: () -> non_neg_integer() ).
+-spec(set_check_interval/1 :: (non_neg_integer()) -> ok ).
+-spec(get_vm_memory_high_watermark/0 :: () -> float() ).
+-spec(set_vm_memory_high_watermark/1 :: (float()) -> ok ).
+
+-endif.
+
+
+%%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
