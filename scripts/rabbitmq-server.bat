@@ -138,7 +138,7 @@ if exist "%RABBITMQ_CONFIG_FILE%.config" (
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
--os_mon vm_memory_high_watermark 0.7 ^
+-os_mon vm_memory_high_watermark 0.4 ^
 -mnesia dir \""%RABBITMQ_MNESIA_DIR%"\" ^
 %CLUSTER_CONFIG% ^
 %RABBITMQ_SERVER_START_ARGS% ^

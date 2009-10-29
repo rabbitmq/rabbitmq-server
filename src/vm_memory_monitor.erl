@@ -70,6 +70,21 @@
                }).
 
 %%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/1 :: (float()) -> ('ignore' | {error, any()} | {'ok', pid()})).
+-spec(update/0 :: () -> 'ok').
+-spec(get_total_memory/0 :: () -> (non_neg_integer() | unknown)).
+-spec(get_check_interval/0 :: () -> non_neg_integer()).
+-spec(set_check_interval/1 :: (non_neg_integer()) -> 'ok').
+-spec(get_vm_memory_high_watermark/0 :: () -> float()).
+-spec(set_vm_memory_high_watermark/1 :: (float()) -> 'ok').
+
+-endif.
+
+
+%%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
@@ -80,9 +95,10 @@ init([MemFraction]) ->
     TotalMemory =
         case get_total_memory() of
             unknown ->
-                rabbit_log:warning("Unknown total memory size for your OS ~p. "
-                                   "Assuming memory size is ~p bytes.~n", 
-                                   [os:type(), ?MEMORY_SIZE_FOR_UNKNOWN_OS]),
+                rabbit_log:warning(
+                  "Unknown total memory size for your OS ~p. "
+                  "Assuming memory size is ~pMB.~n", 
+                  [os:type(), trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/1048576)]),
                 ?MEMORY_SIZE_FOR_UNKNOWN_OS;
             M -> M
         end,
@@ -184,8 +200,8 @@ start_timer(Timeout) ->
 %% in big trouble anyway.
 get_vm_limit() ->
     case erlang:system_info(wordsize) of
-        4 -> 2147483648;     %% 2 GB for 32 bits  2^31
-        8 -> 140737488355328 %% 128 TB for 64 bits 2^47
+        4 -> 4294967296;     %% 4 GB for 32 bits  2^32
+        8 -> 281474976710656 %% 256 TB for 64 bits 2^48
              %% http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
     end.
 
@@ -195,15 +211,19 @@ get_mem_limit(MemFraction, TotalMemory) ->
 %%----------------------------------------------------------------------------
 %% Internal Helpers
 %%----------------------------------------------------------------------------
+cmd(Command) ->
+    Exec = hd(string:tokens(Command, " ")),
+    case os:find_executable(Exec) of
+        false -> throw({command_not_found, Exec});
+        _     -> os:cmd(Command)
+    end.
 
 %% get_total_memory(OS) -> Total
 %% Windows and Freebsd code based on: memsup:get_memory_usage/1
-%% Original code was part of OTP and released under "Erlang Public
-%% License".
+%% Original code was part of OTP and released under "Erlang Public License".
 
-%% Darwin: Uses vm_stat command.
 get_total_memory({unix,darwin}) ->
-    File = os:cmd("/usr/bin/vm_stat"),
+    File = cmd("/usr/bin/vm_stat"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_mach/1, Lines)),
     [PageSize, Inactive, Active, Free, Wired] =
@@ -212,15 +232,11 @@ get_total_memory({unix,darwin}) ->
                     'Pages wired down']],
     PageSize * (Inactive + Active + Free + Wired);
 
-%% FreeBSD: Look in /usr/include/sys/vmmeter.h for the format of
-%% struct vmmeter
 get_total_memory({unix,freebsd}) ->
     PageSize  = freebsd_sysctl("vm.stats.vm.v_page_size"),
     PageCount = freebsd_sysctl("vm.stats.vm.v_page_count"),
     PageCount * PageSize;
 
-%% Win32: Find out how much memory is in use by asking the
-%% os_mon_sysinfo process.
 get_total_memory({win32,_OSname}) ->
     [Result|_] = os_mon_sysinfo:get_mem_info(),
     {ok, [_MemLoad, TotPhys, _AvailPhys,
@@ -228,7 +244,6 @@ get_total_memory({win32,_OSname}) ->
         io_lib:fread("~d~d~d~d~d~d~d", Result),
     TotPhys;
 
-%% Linux: Look in /proc/meminfo
 get_total_memory({unix, linux}) ->
     File = read_proc_file("/proc/meminfo"),
     Lines = string:tokens(File, "\n"),
@@ -236,7 +251,7 @@ get_total_memory({unix, linux}) ->
     dict:fetch('MemTotal', Dict);
 
 get_total_memory({unix, sunos}) ->
-    File = os:cmd("/usr/sbin/prtconf"),
+    File = cmd("/usr/sbin/prtconf"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_sunos/1, Lines)),
     dict:fetch('Memory size', Dict);
@@ -287,7 +302,7 @@ parse_line_sunos(Line) ->
     end.
 
 freebsd_sysctl(Def) ->
-    list_to_integer(os:cmd("/sbin/sysctl -n " ++ Def) -- "\n").
+    list_to_integer(cmd("/sbin/sysctl -n " ++ Def) -- "\n").
 
 %% file:read_file does not work on files in /proc as it seems to get
 %% the size of the file first and then read that many bytes. But files
