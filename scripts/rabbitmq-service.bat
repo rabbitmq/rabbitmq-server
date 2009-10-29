@@ -69,7 +69,7 @@ if not exist "%ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe" (
     echo ERLANG_SERVICE_MANAGER_PATH not set correctly. 
     echo **********************************************
     echo.
-    echo %ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe not found!
+    echo "%ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe" not found!
     echo Please set ERLANG_SERVICE_MANAGER_PATH to the folder containing "erlsrv.exe".
     echo.
     exit /B 1
