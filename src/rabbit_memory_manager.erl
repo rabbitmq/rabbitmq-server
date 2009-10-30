@@ -55,7 +55,7 @@
 -spec(register/5 :: (pid(), boolean(), atom(), atom(), list()) -> 'ok').
 -spec(report_memory/3 :: (pid(), non_neg_integer(), boolean()) -> 'ok').
 -spec(info/0 :: () -> [{atom(), any()}]).
--spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 
 -endif.
 
