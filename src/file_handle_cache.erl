@@ -32,7 +32,7 @@
 -module(file_handle_cache).
 
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
-         last_sync_offset/1]).
+         last_sync_offset/1, append_write_buffer/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -58,6 +58,30 @@
           global_key,
           last_used_at
         }).
+
+%%----------------------------------------------------------------------------
+%% Specs
+
+-ifdef(use_specs).
+
+-type(ref() :: any()).
+-type(error() :: {'error', any()}).
+-type(ok_or_error() :: ('ok' | error())).
+-type(position() :: ('bof' | 'eof' | {'bof',integer()} | {'eof',integer()}
+                     | {'cur',integer()} | integer())).
+
+-spec(open/3 :: (string(), [any()], [any()]) -> ({'ok', ref()} | error())).
+-spec(close/1 :: (ref()) -> ('ok' | error())).
+-spec(read/2 :: (ref(), integer()) ->
+             ({'ok', ([char()]|binary())} | eof | error())). 
+-spec(append/2 :: (ref(), iodata()) -> ok_or_error()).
+-spec(sync/1 :: (ref()) ->  ok_or_error()).
+-spec(position/2 :: (ref(), position()) -> ok_or_error()).
+-spec(truncate/1 :: (ref()) -> ok_or_error()).
+-spec(last_sync_offset/1 :: (ref()) -> ({'ok', integer()} | error())).
+-spec(append_write_buffer/1 :: (ref()) -> ok_or_error()). 
+
+-endif.
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -244,6 +268,15 @@ last_sync_offset(Ref) ->
     case get_or_reopen(Ref) of
         {ok, #handle { trusted_offset = TrustedOffset }} ->
             {ok, TrustedOffset};
+        Error -> Error
+    end.
+
+append_write_buffer(Ref) ->
+    case get_or_reopen(Ref) of
+        {ok, Handle} ->
+            {Result, Handle1} = write_buffer(Handle),
+            put({Ref, fhc_handle}, Handle1),
+            Result;
         Error -> Error
     end.
 
