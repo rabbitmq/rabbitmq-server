@@ -52,7 +52,7 @@
 -spec(message/5 :: (exchange_name(), routing_key(), properties_input(),
                     binary(), guid()) -> message()).
 -spec(message/6 :: (exchange_name(), routing_key(), properties_input(),
-                    binary(), guid(), bool()) -> message()).
+                    binary(), guid(), boolean()) -> message()).
 -spec(properties/1 :: (properties_input()) -> amqp_properties()).
 -spec(publish/4 :: (exchange_name(), routing_key(), properties_input(),
                     binary()) -> publish_result()).
