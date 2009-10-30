@@ -475,10 +475,9 @@ remove_queue_entries(Q, IndexState) ->
                                    false -> MsgIdsAcc
                                end,
                   {CountN + 1, MsgIdsAcc1, SeqIdsAcc1, IndexStateN1}
-          %% the foldl is going to reverse the result lists, so start
-          %% by reversing so that we maintain doing things in
-          %% ascending seqid order
-          end, {0, [], [], IndexState}, lists:reverse(queue:to_list(Q))),
+          %% we need to write the delivered records in order otherwise
+          %% we upset the qi. So don't reverse.
+          end, {0, [], [], IndexState}, queue:to_list(Q)),
     ok = case MsgIds of
              [] -> ok;
              _  -> rabbit_msg_store:remove(MsgIds)
