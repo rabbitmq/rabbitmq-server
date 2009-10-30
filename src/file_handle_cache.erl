@@ -31,8 +31,10 @@
 
 -module(file_handle_cache).
 
--export([open/3, close/1, release/1, read/2, append/2, sync/1,
-         position/2, truncate/1, last_sync_offset/1]).
+-export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
+         last_sync_offset/1]).
+
+%%----------------------------------------------------------------------------
 
 -record(file,
         { reader_count,
@@ -56,6 +58,9 @@
           global_key,
           last_used_at
         }).
+
+%%----------------------------------------------------------------------------
+%% Public API
 
 open(Path, Mode, Options) ->
     case is_appender(Mode) of
@@ -132,9 +137,6 @@ close(Ref) ->
             end
     end.
 
-release(_Ref) -> %% noop just for now
-    ok.
-
 read(Ref, Count) ->
     case get_or_reopen(Ref) of
         {ok, #handle { is_read = false }} ->
@@ -175,26 +177,6 @@ append(Ref, Data) ->
         Error -> Error
     end.
 
-last_sync_offset(Ref) ->
-    case get_or_reopen(Ref) of
-        {ok, #handle { trusted_offset = TrustedOffset }} ->
-            {ok, TrustedOffset};
-        Error -> Error
-    end.
-
-position(Ref, NewOffset) ->
-    case get_or_reopen(Ref) of
-        {ok, Handle} ->
-            {Result, Handle1} =
-                case write_buffer(Handle) of
-                    {ok, Handle2} -> maybe_seek(NewOffset, Handle2);
-                    {Error, Handle2} -> {Error, Handle2}
-                end,
-            put({Ref, fhc_handle}, Handle1),
-            Result;
-        Error -> Error
-    end.
-
 sync(Ref) ->
     case get_or_reopen(Ref) of
         {ok, #handle { is_dirty = false, write_buffer = [] }} ->
@@ -212,6 +194,19 @@ sync(Ref) ->
                             Error -> {Error, Handle2}
                         end;
                     Error -> {Error, Handle}
+                end,
+            put({Ref, fhc_handle}, Handle1),
+            Result;
+        Error -> Error
+    end.
+
+position(Ref, NewOffset) ->
+    case get_or_reopen(Ref) of
+        {ok, Handle} ->
+            {Result, Handle1} =
+                case write_buffer(Handle) of
+                    {ok, Handle2} -> maybe_seek(NewOffset, Handle2);
+                    {Error, Handle2} -> {Error, Handle2}
                 end,
             put({Ref, fhc_handle}, Handle1),
             Result;
@@ -244,6 +239,17 @@ truncate(Ref) ->
             Result;
         Error -> Error
     end.
+
+last_sync_offset(Ref) ->
+    case get_or_reopen(Ref) of
+        {ok, #handle { trusted_offset = TrustedOffset }} ->
+            {ok, TrustedOffset};
+        Error -> Error
+    end.
+
+%%----------------------------------------------------------------------------
+%% Internal functions
+%%----------------------------------------------------------------------------
 
 get_or_reopen(Ref) ->
     case get({Ref, fhc_handle}) of
