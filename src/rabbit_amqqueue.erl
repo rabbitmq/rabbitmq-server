@@ -33,7 +33,7 @@
 
 -export([start/0, recover/1, find_durable_queues/0, declare/4, delete/3,
          purge/1]).
--export([internal_declare/2, internal_delete/1]).
+-export([internal_declare/2, internal_delete/1, remeasure_egress_rate/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/2, redeliver/2, requeue/3, ack/4]).
@@ -108,10 +108,12 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
--spec(tx_commit_msg_store_callback/4 :: (pid(), [message()], [acktag()],
-                                         {pid(), any()}) -> 'ok').
+-spec(tx_commit_msg_store_callback/4 ::
+      (pid(), [message()], [acktag()], {pid(), any()}) -> 'ok').
+-spec(tx_commit_vq_callback/1 :: (pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
+-spec(remeasure_egress_rate/1 :: (pid()) -> 'ok').
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
 
@@ -369,6 +371,9 @@ internal_delete(QueueName) ->
                       ok
               end
       end).
+
+remeasure_egress_rate(QPid) ->
+    gen_server2:pcast(QPid, 8, remeasure_egress_rate).    
 
 prune_queue_childspecs() ->
     lists:foreach(

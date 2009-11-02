@@ -36,7 +36,7 @@
          ack/2, len/1, is_empty/1, maybe_start_prefetcher/1, purge/1, delete/1,
          requeue/2, tx_publish/2, tx_rollback/2, tx_commit/4,
          tx_commit_from_msg_store/4, tx_commit_from_vq/1, needs_sync/1,
-         can_flush_journal/1, flush_journal/1]).
+         can_flush_journal/1, flush_journal/1, status/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -189,7 +189,8 @@ remeasure_egress_rate(State = #vqstate { egress_rate = OldEgressRate,
     %% incorporates the last two values, and not the current value and
     %% the last average. Averaging helps smooth out spikes.
     Now = now(),
-    EgressRate = OutCount / timer:now_diff(Now, Timestamp),
+    %% EgressRate is in seconds, and now_diff is in microseconds
+    EgressRate = 1000000 * OutCount / timer:now_diff(Now, Timestamp),
     AvgEgressRate = (EgressRate + OldEgressRate) / 2,
     State #vqstate { egress_rate = EgressRate,
                      avg_egress_rate = AvgEgressRate,
@@ -419,6 +420,21 @@ can_flush_journal(#vqstate { index_state = IndexState }) ->
 flush_journal(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state =
                      rabbit_queue_index:flush_journal(IndexState) }.
+
+status(#vqstate { q1 = Q1, q2 = Q2, gamma = Gamma, q3 = Q3, q4 = Q4,
+                  len = Len, on_sync = {_, _, From},
+                  target_ram_msg_count = TargetRamMsgCount,
+                  ram_msg_count = RamMsgCount, prefetcher = Prefetcher }) ->
+    [ {q1, queue:len(Q1)},
+      {q2, queue:len(Q2)},
+      {gamma, Gamma},
+      {q3, queue:len(Q3)},
+      {q4, Q4},
+      {len, Len},
+      {outstanding_txns, length(From)},
+      {target_ram_msg_count, TargetRamMsgCount},
+      {ram_msg_count, RamMsgCount},
+      {prefetching, Prefetcher /= undefined} ].
 
 %%----------------------------------------------------------------------------
 
@@ -895,8 +911,5 @@ combine_gammas(#gamma { count = 0 }, #gamma {       } = B) -> B;
 combine_gammas(#gamma {       } = A, #gamma { count = 0 }) -> A;
 combine_gammas(#gamma { seq_id = SeqIdLow,  count = CountLow },
                #gamma { seq_id = SeqIdHigh, count = CountHigh}) ->
-    true = SeqIdLow + CountLow =< SeqIdHigh, %% ASSERTION
-    %% note the above assertion does not say ==. This is because acks
-    %% may mean that the counts are not straight multiples of
-    %% segment_size.
+    true = SeqIdLow =< SeqIdHigh, %% ASSERTION
     #gamma { seq_id = SeqIdLow, count = CountLow + CountHigh}.

@@ -35,10 +35,11 @@
 
 -behaviour(gen_server2).
 
--define(UNSENT_MESSAGE_LIMIT, 100).
--define(HIBERNATE_AFTER_MIN, 1000).
--define(DESIRED_HIBERNATE, 10000).
--define(SYNC_INTERVAL,         5). %% milliseconds
+-define(UNSENT_MESSAGE_LIMIT,        100).
+-define(HIBERNATE_AFTER_MIN,        1000).
+-define(DESIRED_HIBERNATE,         10000).
+-define(SYNC_INTERVAL,                 5). %% milliseconds
+-define(EGRESS_REMEASURE_INTERVAL,  5000).
 
 -export([start_link/1]).
 
@@ -58,7 +59,8 @@
             next_msg_id,
             active_consumers,
             blocked_consumers,
-            sync_timer_ref
+            sync_timer_ref,
+            egress_rate_timer_ref
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -112,7 +114,8 @@ init(Q = #amqqueue { name = QName }) ->
                next_msg_id = 1,
                active_consumers = queue:new(),
                blocked_consumers = queue:new(),
-               sync_timer_ref = undefined
+               sync_timer_ref = undefined,
+               egress_rate_timer_ref = undefined
               },
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -151,7 +154,8 @@ noreply(NewState) ->
     {noreply, NewState1, Timeout}.
 
 next_state(State = #q{variable_queue_state = VQS}) ->
-    next_state1(State, rabbit_variable_queue:needs_sync(VQS)).
+    next_state1(ensure_egress_rate_timer(State),
+                rabbit_variable_queue:needs_sync(VQS)).
 
 next_state1(State = #q{sync_timer_ref = undefined}, true) ->
     {start_sync_timer(State), 0};
@@ -160,11 +164,28 @@ next_state1(State, true) ->
 next_state1(State = #q{sync_timer_ref = undefined,
                        variable_queue_state = VQS}, false) ->
     {State, case rabbit_variable_queue:can_flush_journal(VQS) of
-                true -> 0;
+                true  -> 0;
                 false -> hibernate
             end};
 next_state1(State, false) ->
     {stop_sync_timer(State), 0}.
+
+ensure_egress_rate_timer(State = #q{egress_rate_timer_ref = undefined}) ->
+    {ok, TRef} = timer:apply_after(?EGRESS_REMEASURE_INTERVAL, rabbit_amqqueue,
+                                   remeasure_egress_rate, [self()]),
+    State#q{egress_rate_timer_ref = TRef};
+ensure_egress_rate_timer(State = #q{egress_rate_timer_ref = just_measured}) ->
+    State#q{egress_rate_timer_ref = undefined};
+ensure_egress_rate_timer(State) ->
+    State.
+
+stop_egress_rate_timer(State = #q{egress_rate_timer_ref = undefined}) ->
+    State;
+stop_egress_rate_timer(State = #q{egress_rate_timer_ref = just_measured}) ->
+    State#q{egress_rate_timer_ref = undefined};
+stop_egress_rate_timer(State = #q{egress_rate_timer_ref = TRef}) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State#q{egress_rate_timer_ref = undefined}.
 
 start_sync_timer(State = #q{sync_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, rabbit_amqqueue,
@@ -848,7 +869,12 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 end,
                 NewLimited = Limited andalso LimiterPid =/= undefined,
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
-        end)).
+        end));
+
+handle_cast(remeasure_egress_rate, State = #q{variable_queue_state = VQS}) ->
+    noreply(State#q{egress_rate_timer_ref = just_measured,
+                    variable_queue_state =
+                    rabbit_variable_queue:remeasure_egress_rate(VQS)}).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -886,6 +912,7 @@ handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
 
-handle_pre_hibernate(State = #q { variable_queue_state = VQS }) ->
+handle_pre_hibernate(State = #q{ variable_queue_state = VQS }) ->
     VQS1 = rabbit_variable_queue:maybe_start_prefetcher(VQS),
-    {hibernate, State #q { variable_queue_state = VQS1 }}.
+    {hibernate, stop_egress_rate_timer(
+                  State#q{ variable_queue_state = VQS1 })}.

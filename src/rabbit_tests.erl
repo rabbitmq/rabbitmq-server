@@ -1110,3 +1110,49 @@ test_queue_index() ->
     ok = rabbit_queue_index:start_msg_store([]),
     ok = stop_msg_store(),
     passed.
+
+variable_queue_publish(IsPersistent, Count, VQ) ->
+    lists:foldl(
+      fun (_N, {Acc, VQ1}) ->
+              {SeqId, VQ2} = rabbit_variable_queue:publish(
+                               rabbit_basic:message(
+                                 <<>>, <<>>, [], <<>>, rabbit_guid:guid(),
+                                 IsPersistent), VQ1),
+              {[SeqId | Acc], VQ2}
+      end, {[], VQ}, lists:seq(1, Count)).
+
+test_variable_queue() ->
+    SegmentSize = rabbit_queue_index:segment_size(),
+    stop_msg_store(),
+    ok = empty_test_queue(),
+    VQ0 = rabbit_variable_queue:init(test_queue()),
+    S0 = rabbit_variable_queue:status(VQ0),
+    0 = proplists:get_value(len, S0),
+    false = proplists:get_value(prefetching, S0),
+
+    VQ1 = rabbit_variable_queue:set_queue_ram_duration_target(10, VQ0),
+    0 = proplists:get_value(target_ram_msg_count,
+                            rabbit_variable_queue:status(VQ1)),
+
+    {SeqIds, VQ2} = variable_queue_publish(false, 3 * SegmentSize, VQ1),
+    S2 = rabbit_variable_queue:status(VQ2),
+    TwoSegments = 2*SegmentSize,
+    {gamma, SegmentSize, TwoSegments} = proplists:get_value(gamma, S2),
+    SegmentSize = proplists:get_value(q3, S2),
+    ThreeSegments = 3*SegmentSize,
+    ThreeSegments = proplists:get_value(len, S2),
+
+    VQ3 = rabbit_variable_queue:remeasure_egress_rate(VQ2),
+    io:format("~p~n", [rabbit_variable_queue:status(VQ3)]),
+    {{Msg, false, AckTag, Len1} = Obj, VQ4} =
+        rabbit_variable_queue:fetch(VQ3),
+    io:format("~p~n", [Obj]),
+    timer:sleep(1000),
+    VQ5 = rabbit_variable_queue:remeasure_egress_rate(VQ4),
+    VQ6 = rabbit_variable_queue:set_queue_ram_duration_target(10, VQ5),
+    io:format("~p~n", [rabbit_variable_queue:status(VQ6)]),
+    {{Msg1, false, AckTag1, Len11} = Obj1, VQ7} =
+        rabbit_variable_queue:fetch(VQ6),
+    io:format("~p~n", [Obj1]),
+    io:format("~p~n", [rabbit_variable_queue:status(VQ7)]),
+    passed.
