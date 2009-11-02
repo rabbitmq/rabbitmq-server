@@ -40,37 +40,35 @@
 %%----------------------------------------------------------------------------
 %% The queue disk index
 %%
-%% The queue disk index operates over an ack journal, and a number of
+%% The queue disk index operates over a journal, and a number of
 %% segment files. Each segment is the same size, both in max number of
 %% entries, and max file size, owing to fixed sized records.
 %%
-%% Publishes and delivery notes are written directly to the segment
-%% files. The segment is found by dividing the sequence id by the the
-%% max number of entries per segment. Only the relative sequence
-%% within the segment is recorded as the sequence id within a segment
-%% file (i.e. sequence id modulo max number of entries per segment).
-%% This is keeps entries as small as possible. Publishes and
-%% deliveries are only ever going to be received in contiguous
-%% ascending order.
+%% Publishes are written directly to the segment files. The segment is
+%% found by dividing the sequence id by the the max number of entries
+%% per segment. Only the relative sequence within the segment is
+%% recorded as the sequence id within a segment file (i.e. sequence id
+%% modulo max number of entries per segment).  This is keeps entries
+%% as small as possible. Publishes are only ever going to be received
+%% in contiguous ascending order.
 %%
-%% Acks are written to a bounded journal and are also held in memory,
-%% in a dict with the segment file as the key. Again, the records are
-%% fixed size: the entire sequence id is written and is limited to a
-%% 64-bit unsigned integer. When the journal gets too big, or
-%% flush_journal is called, the journal is (possibly incrementally)
-%% flushed out to the segment files. As acks can be received from any
-%% delivered message in any order, this journal reduces seeking, and
-%% batches writes to the segment files, keeping performance high. The
-%% flush_journal/1 function returns a boolean indicating whether there
-%% is more flushing work that can be done. This means that the process
-%% can call this whenever it has an empty mailbox, only a small amount
-%% of work is done, allowing the process to respond quickly to new
-%% messages if they arrive, or to call flush_journal/1 several times
-%% until the result indicates there is no more flushing to be done.
+%% Acks and deliveries are written to a bounded journal and are also
+%% held in memory, each in a dict with the segment as the key. Again,
+%% the records are fixed size: the entire sequence id is written and
+%% is limited to a 63-bit unsigned integer. The remaining bit
+%% indicates whether the journal entry is for a delivery or an
+%% ack. When the journal gets too big, or flush_journal is called, the
+%% journal is (possibly incrementally) flushed out to the segment
+%% files. As acks and delivery notes can be received in any order
+%% (this is not obvious for deliveries, but consider what happens when
+%% eg msgs are *re*queued - you'll publish and then mark the msgs
+%% delivered immediately, which may be out of order), this journal
+%% reduces seeking, and batches writes to the segment files, keeping
+%% performance high.
 %%
-%% On startup, the ack journal is read along with all the segment
-%% files, and the ack journal is fully flushed out to the segment
-%% files. Care is taken to ensure that no message can be ack'd twice.
+%% On startup, the journal is read along with all the segment files,
+%% and the journal is fully flushed out to the segment files. Care is
+%% taken to ensure that no message can be delivered or ack'd twice.
 %%
 %%----------------------------------------------------------------------------
 
@@ -203,9 +201,9 @@ write_delivered(SeqId, State = #qistate { journal_del_dict = JDelDict }) ->
     maybe_full_flush(State1 #qistate { journal_del_dict = JDelDict1 }).
 
 write_acks(SeqIds, State = #qistate { journal_ack_dict = JAckDict }) ->
-    {JAckDict1, State1} = write_to_journal([<<?ACK_BIT:1, SeqId:?SEQ_BITS>> ||
-                                               SeqId <- SeqIds],
-                                           SeqIds, JAckDict, State),
+    {JAckDict1, State1} =
+        write_to_journal([<<?ACK_BIT:1, SeqId:?SEQ_BITS>> || SeqId <- SeqIds],
+                         SeqIds, JAckDict, State),
     maybe_full_flush(State1 #qistate { journal_ack_dict = JAckDict1 }).
 
 sync_seq_ids(SeqIds, SyncAckJournal, State) ->

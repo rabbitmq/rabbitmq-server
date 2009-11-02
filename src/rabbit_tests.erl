@@ -1107,4 +1107,6 @@ test_queue_index() ->
           end, {true, Qi25}),
     _Qi27 = rabbit_queue_index:terminate_and_erase(Qi26),
     ok = stop_msg_store(),
+    ok = rabbit_queue_index:start_msg_store([]),
+    ok = stop_msg_store(),
     passed.
