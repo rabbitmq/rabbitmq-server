@@ -32,7 +32,7 @@
 -module(file_handle_cache).
 
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
-         last_sync_offset/1, append_write_buffer/1]).
+         last_sync_offset/1, current_offset/1, append_write_buffer/1, copy/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -76,10 +76,14 @@
              ({'ok', ([char()]|binary())} | eof | error())). 
 -spec(append/2 :: (ref(), iodata()) -> ok_or_error()).
 -spec(sync/1 :: (ref()) ->  ok_or_error()).
--spec(position/2 :: (ref(), position()) -> ok_or_error()).
+-spec(position/2 :: (ref(), position()) ->
+             ({'ok', non_neg_integer()} | error())).
 -spec(truncate/1 :: (ref()) -> ok_or_error()).
 -spec(last_sync_offset/1 :: (ref()) -> ({'ok', integer()} | error())).
--spec(append_write_buffer/1 :: (ref()) -> ok_or_error()). 
+-spec(current_offset/1 :: (ref()) -> ({'ok', integer()} | error())).
+-spec(append_write_buffer/1 :: (ref()) -> ok_or_error()).
+-spec(copy/3 :: (ref(), ref(), non_neg_integer()) ->
+             ({'ok', integer()} | error())).
 
 -endif.
 
@@ -191,7 +195,7 @@ append(Ref, Data) ->
         {ok, Handle} ->
             {Result, Handle1} =
                 case maybe_seek(eof, Handle) of
-                    {ok, Handle2 = #handle { at_eof = true }} ->
+                    {{ok, _Offset}, Handle2 = #handle { at_eof = true }} ->
                         write_to_buffer(Data, Handle2);
                     {{error, _} = Error, Handle2} ->
                         {Error, Handle2}
@@ -266,8 +270,17 @@ truncate(Ref) ->
 
 last_sync_offset(Ref) ->
     case get_or_reopen(Ref) of
-        {ok, #handle { trusted_offset = TrustedOffset }} ->
-            {ok, TrustedOffset};
+        {ok, #handle { trusted_offset = TrustedOffset }} -> {ok, TrustedOffset};
+        Error -> Error
+    end.
+
+current_offset(Ref) ->
+    case get_or_reopen(Ref) of
+        {ok, #handle { at_eof = true, is_write = true, offset = Offset,
+                       write_buffer_size = Size }} ->
+            {ok, Offset + Size};
+        {ok, #handle { offset = Offset }} ->
+            {ok, Offset};
         Error -> Error
     end.
 
@@ -279,6 +292,45 @@ append_write_buffer(Ref) ->
             Result;
         Error -> Error
     end.
+
+copy(Src, Dest, Count) ->
+    case get_or_reopen(Src) of
+        {ok, SHandle = #handle { is_read = true }} ->
+            case get_or_reopen(Dest) of
+                {ok, DHandle = #handle { is_write = true }} ->
+                    {Result, SHandle1, DHandle1} =
+                        case write_buffer(SHandle) of
+                            {ok, SHandle2 = #handle { hdl = SHdl,
+                                                      offset = SOffset }} ->
+                                case write_buffer(DHandle) of
+                                    {ok,
+                                     DHandle2 = #handle { hdl = DHdl,
+                                                          offset = DOffset }} ->
+                                        Result1 = file:copy(SHdl, DHdl, Count),
+                                        case Result1 of
+                                            {ok, Count1} ->
+                                                {Result1,
+                                                 SHandle2 #handle {
+                                                   offset = SOffset + Count1 },
+                                                 DHandle2 #handle {
+                                                   offset = DOffset + Count1 }};
+                                            Error ->
+                                                {Error, SHandle2, DHandle2}
+                                        end;
+                                    Error -> {Error, SHandle2, DHandle}
+                                end;
+                            Error -> {Error, SHandle, DHandle}
+                        end,
+                    put({Src, fhc_handle}, SHandle1),
+                    put({Dest, fhc_handle}, DHandle1),
+                    Result;
+                {ok, _} -> {error, destination_not_open_for_writing};
+                Error -> Error
+            end;
+        {ok, _} -> {error, source_not_open_for_reading};
+        Error -> Error
+    end.
+                                
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -326,13 +378,15 @@ maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, at_eof = AtEoF,
              end,
     case Result of
         {ok, Offset1} ->
-            {ok, Handle #handle { at_eof = AtEoF1, offset = Offset1 }};
+            {Result, Handle #handle { at_eof = AtEoF1, offset = Offset1 }};
         {error, _} = Error -> {Error, Handle}
     end.
 
-write_to_buffer(Data, Handle = #handle { hdl = Hdl,
+write_to_buffer(Data, Handle = #handle { hdl = Hdl, offset = Offset,
                                          write_buffer_size_limit = 0 }) ->
-    {file:write(Hdl, Data), Handle #handle { is_dirty = true }};
+    Offset1 = Offset + iolist_size(Data),
+    {file:write(Hdl, Data),
+     Handle #handle { is_dirty = true, offset = Offset1 }};
 write_to_buffer(Data, Handle =
                 #handle { write_buffer = WriteBuffer,
                           write_buffer_size = Size,

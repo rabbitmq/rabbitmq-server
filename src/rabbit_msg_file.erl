@@ -70,10 +70,11 @@ append(FileHdl, MsgId, MsgBody)
     MsgBodyBin  = term_to_binary(MsgBody),
     MsgBodyBinSize = size(MsgBodyBin),
     Size = MsgBodyBinSize + ?MSG_ID_SIZE_BYTES,
-    case file:write(FileHdl, <<Size:?INTEGER_SIZE_BITS,
-                               MsgId:?MSG_ID_SIZE_BYTES/binary,
-                               MsgBodyBin:MsgBodyBinSize/binary,
-                               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
+    case file_handle_cache:append(FileHdl,
+                                  <<Size:?INTEGER_SIZE_BITS,
+                                   MsgId:?MSG_ID_SIZE_BYTES/binary,
+                                   MsgBodyBin:MsgBodyBinSize/binary,
+                                   ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
         ok -> {ok, Size + ?FILE_PACKING_ADJUSTMENT};
         KO -> KO
     end.
@@ -81,7 +82,7 @@ append(FileHdl, MsgId, MsgBody)
 read(FileHdl, TotalSize) ->
     Size = TotalSize - ?FILE_PACKING_ADJUSTMENT,
     BodyBinSize = Size - ?MSG_ID_SIZE_BYTES,
-    case file:read(FileHdl, TotalSize) of
+    case file_handle_cache:read(FileHdl, TotalSize) of
         {ok, <<Size:?INTEGER_SIZE_BITS,
                MsgId:?MSG_ID_SIZE_BYTES/binary,
                MsgBodyBin:BodyBinSize/binary,
@@ -105,7 +106,7 @@ scan(FileHdl, Offset, Acc) ->
     end.
 
 read_next(FileHdl, Offset) ->
-    case file:read(FileHdl, ?SIZE_AND_MSG_ID_BYTES) of
+    case file_handle_cache:read(FileHdl, ?SIZE_AND_MSG_ID_BYTES) of
         %% Here we take option 5 from
         %% http://www.erlang.org/cgi-bin/ezmlm-cgi?2:mss:1569 in which
         %% we read the MsgId as a number, and then convert it back to
@@ -116,11 +117,11 @@ read_next(FileHdl, Offset) ->
                 _ ->
                     TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
                     ExpectedAbsPos = Offset + TotalSize - 1,
-                    case file:position(
+                    case file_handle_cache:position(
                            FileHdl, {cur, Size - ?MSG_ID_SIZE_BYTES}) of
                         {ok, ExpectedAbsPos} ->
                             NextOffset = ExpectedAbsPos + 1,
-                            case file:read(FileHdl, 1) of
+                            case file_handle_cache:read(FileHdl, 1) of
                                 {ok,
                                  <<?WRITE_OK_MARKER: ?WRITE_OK_SIZE_BITS>>} ->
                                     <<MsgId:?MSG_ID_SIZE_BYTES/binary>> =

@@ -251,7 +251,7 @@ flush_journal(State = #qistate { journal_ack_dict = JAckDict,
     if
         JCount1 == 0 ->
             {Hdl, State4} = get_journal_handle(State3),
-            ok = file_handle_cache:position(Hdl, bof),
+            {ok, 0} = file_handle_cache:position(Hdl, bof),
             ok = file_handle_cache:truncate(Hdl),
             ok = file_handle_cache:sync(Hdl),
             State4;
@@ -705,7 +705,7 @@ load_segment(SegNum, State = #qistate { seg_num_handles = SegHdls,
             {Hdl, State1 = #qistate { journal_del_dict = JDelDict,
                                       journal_ack_dict = JAckDict }} =
                 get_seg_handle(SegNum, State),
-            ok = file_handle_cache:position(Hdl, bof),
+            {ok, 0} = file_handle_cache:position(Hdl, bof),
             {SDict, PubCount, AckCount, HighRelSeq} =
                 load_segment_entries(Hdl, dict:new(), 0, 0, 0),
             %% delete ack'd msgs first
