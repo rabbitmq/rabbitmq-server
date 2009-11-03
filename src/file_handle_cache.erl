@@ -338,7 +338,7 @@ copy(Src, Dest, Count) ->
 
 get_or_reopen(Ref) ->
     case get({Ref, fhc_handle}) of
-        undefined -> {error, not_open};
+        undefined -> {error, not_open, Ref};
         #handle { hdl = closed, mode = Mode, global_key = GRef,
                   options = Options } ->
             #file { path = Path } = get({GRef, fhc_file}),

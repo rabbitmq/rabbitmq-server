@@ -175,7 +175,7 @@ terminate(State = #qistate { seg_num_handles = SegHdls }) ->
         true  -> State;
         false -> State1 = #qistate { dir = Dir } = close_all_handles(State),
                  store_clean_shutdown(Dir),
-                 State1
+                 State1 #qistate { publish_handle = undefined }
     end.
 
 terminate_and_erase(State) ->
@@ -781,9 +781,15 @@ append_acks_to_segment(SegNum, Acks,
     append_acks_to_segment(SegNum, AckCount2, Acks,
                            State #qistate { seg_ack_counts = AckCounts1 }).
 
-append_acks_to_segment(SegNum, AckCount, _Acks, State = #qistate { dir = Dir })
+append_acks_to_segment(SegNum, AckCount, _Acks,
+                       State = #qistate { dir = Dir, publish_handle = PubHdl })
   when AckCount == ?SEGMENT_ENTRIES_COUNT ->
-    State1 = close_handle(SegNum, State),
+    PubHdl1 = case PubHdl of
+                  {SegNum, Hdl, ?SEGMENT_ENTRIES_COUNT} when Hdl /= undefined ->
+                      {SegNum + 1, undefined, 0};
+                  _ -> PubHdl
+              end,
+    State1 = close_handle(SegNum, State #qistate { publish_handle = PubHdl1 }),
     ok = case file:delete(seg_num_to_path(Dir, SegNum)) of
              ok -> ok;
              {error, enoent} -> ok
