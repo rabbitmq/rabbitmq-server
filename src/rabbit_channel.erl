@@ -241,7 +241,7 @@ check_write_permitted(Resource, #ch{ username = Username}) ->
 check_read_permitted(Resource, #ch{ username = Username}) ->
     check_resource_access(Username, Resource, read).
 
-exclusive_access_or_locked(ReaderPid, Q) ->
+check_queue_exclusivity(ReaderPid, Q) ->
     case Q of
         #amqqueue{ exclusive_owner = none} -> Q;
         #amqqueue{ exclusive_owner = ReaderPid } -> Q;
@@ -422,9 +422,9 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
             case rabbit_amqqueue:with_or_die(
                    QueueName,
                    fun (Q) ->
+                           check_queue_exclusivity(ReaderPid, Q),
                            rabbit_amqqueue:basic_consume(
-                             exclusive_access_or_locked(ReaderPid, Q),
-                             NoAck, ReaderPid, self(), LimiterPid,
+                             Q, NoAck, ReaderPid, self(), LimiterPid,
                              ActualConsumerTag, ExclusiveConsume,
                              ok_msg(NoWait, #'basic.consume_ok'{
                                       consumer_tag = ActualConsumerTag}))
@@ -674,7 +674,7 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                               reader_pid = ReaderPid }) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
     check_configure_permitted(QueueName, State),
-    CheckExclusive = fun(Q) -> exclusive_access_or_locked(ReaderPid, Q) end,
+    CheckExclusive = fun(Q) -> check_queue_exclusivity(ReaderPid, Q) end,
     Q = rabbit_amqqueue:with_or_die(QueueName, CheckExclusive),
     return_queue_declare_ok(State, NoWait, Q);
 
@@ -689,8 +689,8 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
     case rabbit_amqqueue:with_or_die(
            QueueName,
            fun (Q) ->
-                   rabbit_amqqueue:delete(exclusive_access_or_locked(ReaderPid, Q),
-                                          IfUnused, IfEmpty)
+                   check_queue_exclusivity(ReaderPid, Q),
+                   rabbit_amqqueue:delete(Q, IfUnused, IfEmpty)
            end) of
         {error, in_use} ->
             rabbit_misc:protocol_error(
@@ -709,7 +709,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             routing_key = RoutingKey,
                             nowait = NoWait,
                             arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_exchange:add_binding/4, ExchangeNameBin,
+    binding_action(fun rabbit_exchange:add_binding/5, ExchangeNameBin,
                    QueueNameBin, RoutingKey, Arguments, #'queue.bind_ok'{},
                    NoWait, State);
 
@@ -717,7 +717,7 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
                               exchange = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_exchange:delete_binding/4, ExchangeNameBin,
+    binding_action(fun rabbit_exchange:delete_binding/5, ExchangeNameBin,
                    QueueNameBin, RoutingKey, Arguments, #'queue.unbind_ok'{},
                    false, State);
 
@@ -729,7 +729,7 @@ handle_method(#'queue.purge'{queue = QueueNameBin,
     {ok, PurgedMessageCount} = rabbit_amqqueue:with_or_die(
                                  QueueName,
                                  fun (Q) ->
-                                         exclusive_access_or_locked(ReaderPid, Q),
+                                         check_queue_exclusivity(ReaderPid, Q),
                                          rabbit_amqqueue:purge(Q)
                                  end),
     return_ok(State, NoWait,
@@ -772,7 +772,9 @@ handle_method(_MethodRecord, _Content, _State) ->
 %%----------------------------------------------------------------------------
 
 binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
-               ReturnMethod, NoWait, State = #ch{virtual_host = VHostPath}) ->
+               ReturnMethod, NoWait,
+               State = #ch{ virtual_host = VHostPath,
+                            reader_pid = ReaderPid }) ->
     %% FIXME: connection exception (!) on failure?? 
     %% (see rule named "failure" in spec-XML)
     %% FIXME: don't allow binding to internal exchanges - 
@@ -783,7 +785,8 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
-    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments) of
+    CheckExclusive = fun(_X, Q) -> check_queue_exclusivity(ReaderPid, Q) end,
+    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments, CheckExclusive) of
         {error, exchange_not_found} ->
             rabbit_misc:not_found(ExchangeName);
         {error, queue_not_found} ->

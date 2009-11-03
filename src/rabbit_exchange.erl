@@ -37,7 +37,7 @@
 -export([recover/0, declare/4, lookup/1, lookup_or_die/1,
          list/1, info/1, info/2, info_all/1, info_all/2,
          publish/2]).
--export([add_binding/4, delete_binding/4, list_bindings/1]).
+-export([add_binding/5, delete_binding/5, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
 -export([check_type/1, assert_type/2, topic_matches/2, headers_match/2]).
@@ -60,6 +60,8 @@
                             'queue_not_found' |
                             'exchange_not_found' |
                             'exchange_and_queue_not_found'}).
+-type(inner_fun() :: fun((exchange(), queue()) -> any())).
+
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/4 :: (exchange_name(), exchange_type(), boolean(), amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
@@ -72,11 +74,11 @@
 -spec(info_all/1 :: (vhost()) -> [[info()]]).
 -spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
 -spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
--spec(add_binding/4 ::
-      (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
+-spec(add_binding/5 ::
+      (exchange_name(), queue_name(), routing_key(), amqp_table(), inner_fun()) ->
              bind_res() | {'error', 'durability_settings_incompatible'}).
--spec(delete_binding/4 ::
-      (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
+-spec(delete_binding/5 ::
+      (exchange_name(), queue_name(), routing_key(), amqp_table(), inner_fun()) ->
              bind_res() | {'error', 'binding_not_found'}).
 -spec(list_bindings/1 :: (vhost()) -> 
              [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
@@ -364,21 +366,23 @@ call_with_exchange_and_queue(Exchange, Queue, Fun) ->
                end
       end).
 
-add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
+add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
     binding_action(
       ExchangeName, QueueName, RoutingKey, Arguments,
-      fun (_X, Q, B) ->
+      fun (X, Q, B) ->
+              InnerFun(X, Q),
               ok = sync_binding(B, Q#amqqueue.durable, fun mnesia:write/3)
       end).
 
-delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
+delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
     binding_action(
       ExchangeName, QueueName, RoutingKey, Arguments,
-      fun (_X, Q, B) ->
+      fun (X, Q, B) ->
               case mnesia:match_object(rabbit_route, #route{binding = B},
                                        write) of
                   [] -> {error, binding_not_found};
-                  _  -> ok = sync_binding(B, Q#amqqueue.durable,
+                  _  -> InnerFun(X, Q),
+                        ok = sync_binding(B, Q#amqqueue.durable,
                                           fun mnesia:delete_object/3)
               end
       end).
