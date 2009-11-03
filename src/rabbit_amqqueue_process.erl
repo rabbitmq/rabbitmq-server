@@ -333,10 +333,6 @@ cancel_holder(ChPid, ConsumerTag, {ChPid, ConsumerTag}) ->
 cancel_holder(_ChPid, _ConsumerTag, Holder) ->
     Holder.
 
-check_queue_owner(none,           _)    -> ok;
-check_queue_owner(ReaderPid, ReaderPid) -> ok;
-check_queue_owner(_, _)                 -> mismatch.
-
 check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume, _State) ->
     in_use;
 check_exclusive_access(none, false, _State) ->
@@ -611,48 +607,43 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
              ConsumerTag, ExclusiveConsume, OkMsg},
             _From, State = #q{q = #amqqueue{exclusive_owner = Owner},
                               exclusive_consumer = ExistingHolder}) ->
-    case check_queue_owner(Owner, ReaderPid) of
-        mismatch ->
-            reply({error, queue_owned_by_another_connection}, State);
+    case check_exclusive_access(ExistingHolder, ExclusiveConsume,
+                                State) of
+        in_use ->
+            reply({error, exclusive_consume_unavailable}, State);
         ok ->
-            case check_exclusive_access(ExistingHolder, ExclusiveConsume,
-                                        State) of
-                in_use ->
-                    reply({error, exclusive_consume_unavailable}, State);
-                ok ->
-                    C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
-                    Consumer = #consumer{tag = ConsumerTag,
-                                         ack_required = not(NoAck)},
-                    store_ch_record(C#cr{consumer_count = ConsumerCount +1,
-                                         limiter_pid = LimiterPid}),
-                    if ConsumerCount == 0 ->
-                            ok = rabbit_limiter:register(LimiterPid, self());
-                       true ->
-                            ok
-                    end,
-                    ExclusiveConsumer =
-                        if ExclusiveConsume -> {ChPid, ConsumerTag};
-                           true             -> ExistingHolder
-                        end,
-                    State1 = State#q{has_had_consumers = true,
-                                     exclusive_consumer = ExclusiveConsumer},
-                    ok = maybe_send_reply(ChPid, OkMsg),
-                    State2 =
-                        case is_ch_blocked(C) of
-                            true  -> State1#q{
-                                       blocked_consumers =
-                                       add_consumer(
-                                         ChPid, Consumer,
-                                         State1#q.blocked_consumers)};
-                            false -> run_poke_burst(
-                                       State1#q{
-                                         active_consumers =
-                                         add_consumer(
-                                           ChPid, Consumer,
-                                           State1#q.active_consumers)})
-                        end,
-                    reply(ok, State2)
-            end
+            C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
+            Consumer = #consumer{tag = ConsumerTag,
+                                 ack_required = not(NoAck)},
+            store_ch_record(C#cr{consumer_count = ConsumerCount +1,
+                                 limiter_pid = LimiterPid}),
+            if ConsumerCount == 0 ->
+                    ok = rabbit_limiter:register(LimiterPid, self());
+               true ->
+                    ok
+            end,
+            ExclusiveConsumer =
+                if ExclusiveConsume -> {ChPid, ConsumerTag};
+                   true             -> ExistingHolder
+                end,
+            State1 = State#q{has_had_consumers = true,
+                             exclusive_consumer = ExclusiveConsumer},
+            ok = maybe_send_reply(ChPid, OkMsg),
+            State2 =
+                case is_ch_blocked(C) of
+                    true  -> State1#q{
+                               blocked_consumers =
+                               add_consumer(
+                                 ChPid, Consumer,
+                                 State1#q.blocked_consumers)};
+                    false -> run_poke_burst(
+                               State1#q{
+                                 active_consumers =
+                                 add_consumer(
+                                   ChPid, Consumer,
+                                   State1#q.active_consumers)})
+                end,
+            reply(ok, State2)
     end;
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
