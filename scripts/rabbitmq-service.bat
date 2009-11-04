@@ -158,11 +158,31 @@ if errorlevel 1 (
     echo %RABBITMQ_SERVICENAME% service is already present - only updating service parameters
 )
 
-set RABBIT_EBIN=%~dp0..\ebin
+set RABBITMQ_EBIN_ROOT=%~dp0..\ebin
+if exist "%RABBITMQ_EBIN_ROOT%\rabbit.boot" (
+    echo Using Custom Boot File "%RABBITMQ_EBIN_ROOT%\rabbit.boot"
+    set RABBITMQ_BOOT_FILE=%RABBITMQ_EBIN_ROOT%\rabbit
+    set RABBITMQ_EBIN_PATH=
+) else (
+    set RABBITMQ_BOOT_FILE=start_sasl
+    set RABBITMQ_EBIN_PATH=-pa "%RABBITMQ_EBIN_ROOT%"
+)
+if "%RABBITMQ_CONFIG_FILE%"=="" (
+    set RABBITMQ_CONFIG_FILE=%RABBITMQ_BASE%\rabbitmq
+)
+   
+if exist "%RABBITMQ_CONFIG_FILE%.config" (
+    set RABBITMQ_CONFIG_ARG=-config "%RABBITMQ_CONFIG_FILE%"
+) else (
+    set RABBITMQ_CONFIG_ARG=
+)
+
+
 
 set ERLANG_SERVICE_ARGUMENTS= ^
--pa "%RABBIT_EBIN%" ^
--boot start_sasl ^
+%RABBITMQ_EBIN_PATH% ^
+-boot "%RABBITMQ_BOOT_FILE%" ^
+%RABBITMQ_CONFIG_ARG% ^
 -s rabbit ^
 +W w ^
 +A30 ^
@@ -170,6 +190,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -kernel inet_default_connect_options "[{nodelay,true}]" ^
 -rabbit tcp_listeners "[{\"%RABBITMQ_NODE_IP_ADDRESS%\",%RABBITMQ_NODE_PORT%}]" ^
 -kernel error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%.log"\"} ^
+%RABBITMQ_SERVER_ERL_ARGS% ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%-sasl.log"\"} ^
 -os_mon start_cpu_sup true ^
