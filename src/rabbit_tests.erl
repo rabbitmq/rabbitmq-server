@@ -495,7 +495,7 @@ test_cluster_management() ->
     ok = control_action(cluster, ["invalid1@invalid",
                                   "invalid2@invalid"]),
 
-    SecondaryNode = rabbit_misc:localnode(hare),
+    SecondaryNode = rabbit_misc:makenode("hare"),
     case net_adm:ping(SecondaryNode) of
         pong -> passed = test_cluster_management2(SecondaryNode);
         pang -> io:format("Skipping clustering tests with node ~p~n",
