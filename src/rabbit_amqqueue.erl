@@ -129,31 +129,30 @@ recover_durable_queues() ->
     Node = node(),
     lists:foreach(
       fun (RecoveredQ = #amqqueue{ exclusive_owner = Owner }) ->
+              %% We need to catch the case where a client connected to
+              %% another node has deleted the queue (and possibly
+              %% re-created it).
+              DoIfSameQueue =
+                  fun (Action) ->
+                          rabbit_misc:execute_mnesia_transaction(
+                            fun () -> case mnesia:match_object(
+                                             rabbit_durable_queue, RecoveredQ, read) of
+                                          [_] -> ok = Action(),
+                                                 true;
+                                          []  -> false
+                                      end
+                            end)
+                  end,
               case shared_or_live_owner(Owner) of
                   true ->
-                      Q = start_queue_process(RecoveredQ),
-                      %% We need to catch the case where a client connected to
-                      %% another node has deleted the queue (and possibly
-                      %% re-created it).
-                      case rabbit_misc:execute_mnesia_transaction(
-                             fun () -> case mnesia:match_object(
-                                              rabbit_durable_queue, RecoveredQ, read) of
-                                           [_] -> ok = store_queue(Q),
-                                                  true;
-                                           []  -> false
-                                       end
-                             end) of
+                      Q = start_queue_process(RecoveredQ), 
+                      case DoIfSameQueue(fun () -> store_queue(Q) end) of
                           true  -> ok;
                           false -> exit(Q#amqqueue.pid, shutdown)
                       end;
                   false ->
-                      rabbit_misc:execute_mnesia_transaction(
-                        fun () -> case mnesia:match_object(
-                                         rabbit_durable_queue, RecoveredQ, read) of
-                                      [_] -> internal_delete2(RecoveredQ#amqqueue.name);
-                                      [] -> ok
-                                  end
-                        end)
+                      DoIfSameQueue(
+                        fun () -> internal_delete2(RecoveredQ#amqqueue.name) end)
               end
       end,
       %% TODO: use dirty ops instead
