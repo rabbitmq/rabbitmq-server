@@ -643,7 +643,7 @@ test_server_status() ->
     %% create a queue so we have something to list
     Q = #amqqueue{} = rabbit_amqqueue:declare(
                         rabbit_misc:r(<<"/">>, queue, <<"foo">>),
-                        false, false, []),
+                        false, false, [], none),
 
     %% list queues
     ok = info_action(
