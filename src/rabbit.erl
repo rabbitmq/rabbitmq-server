@@ -210,6 +210,10 @@ start(normal, []) ->
 stop(_State) ->
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
+    ok = case rabbit_mnesia:is_clustered() of
+             true  -> rabbit_amqqueue:on_node_down(node());
+             false -> rabbit_mnesia:empty_ram_only_tables()
+         end,
     ok.
 
 %---------------------------------------------------------------------------
