@@ -7,6 +7,6 @@ main([BeamDir, TargetFile]) ->
     {ok, {application, Application, Properties}} = io:read(''),
     NewProperties = lists:keyreplace(modules, 1, Properties,
                                      {modules, Modules}),
-    file:write_file(TargetFile, io_lib:format("~p.~n", [{application,
-                                                         Application,
-                                                         NewProperties}])).
+    file:write_file(
+      TargetFile,
+      io_lib:format("~p.~n", [{application, Application, NewProperties}])).
