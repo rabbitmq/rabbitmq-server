@@ -120,24 +120,40 @@ recover() ->
     ok = recover_durable_queues(),
     ok.
 
+shared_or_live_owner(none) ->
+     true;
+shared_or_live_owner(Owner) when is_pid(Owner) ->
+    rpc:call(node(Owner), erlang, is_process_alive, [Owner]).
+
 recover_durable_queues() ->
     Node = node(),
     lists:foreach(
-      fun (RecoveredQ) ->
-              Q = start_queue_process(RecoveredQ),
-              %% We need to catch the case where a client connected to
-              %% another node has deleted the queue (and possibly
-              %% re-created it).
-              case rabbit_misc:execute_mnesia_transaction(
-                     fun () -> case mnesia:match_object(
-                                      rabbit_durable_queue, RecoveredQ, read) of
-                                   [_] -> ok = store_queue(Q),
-                                          true;
-                                   []  -> false
-                               end
-                     end) of
-                  true  -> ok;
-                  false -> exit(Q#amqqueue.pid, shutdown)
+      fun (RecoveredQ = #amqqueue{ exclusive_owner = Owner }) ->
+              case shared_or_live_owner(Owner) of
+                  true ->
+                      Q = start_queue_process(RecoveredQ),
+                      %% We need to catch the case where a client connected to
+                      %% another node has deleted the queue (and possibly
+                      %% re-created it).
+                      case rabbit_misc:execute_mnesia_transaction(
+                             fun () -> case mnesia:match_object(
+                                              rabbit_durable_queue, RecoveredQ, read) of
+                                           [_] -> ok = store_queue(Q),
+                                                  true;
+                                           []  -> false
+                                       end
+                             end) of
+                          true  -> ok;
+                          false -> exit(Q#amqqueue.pid, shutdown)
+                      end;
+                  false ->
+                      rabbit_misc:execute_mnesia_transaction(
+                        fun () -> case mnesia:match_object(
+                                         rabbit_durable_queue, RecoveredQ, read) of
+                                      [_] -> internal_delete2(RecoveredQ#amqqueue.name);
+                                      [] -> ok
+                                  end
+                        end)
               end
       end,
       %% TODO: use dirty ops instead
@@ -304,16 +320,17 @@ notify_sent(QPid, ChPid) ->
 unblock(QPid, ChPid) ->
     gen_server2:pcast(QPid, 8, {unblock, ChPid}).
 
+internal_delete2(QueueName) ->
+    ok = rabbit_exchange:delete_queue_bindings(QueueName),
+    ok = mnesia:delete({rabbit_queue, QueueName}),
+    ok = mnesia:delete({rabbit_durable_queue, QueueName}).
+
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   []  -> {error, not_found};
-                  [_] ->
-                      ok = rabbit_exchange:delete_queue_bindings(QueueName),
-                      ok = mnesia:delete({rabbit_queue, QueueName}),
-                      ok = mnesia:delete({rabbit_durable_queue, QueueName}),
-                      ok
+                  [_] -> internal_delete2(QueueName)
               end
       end).
 
