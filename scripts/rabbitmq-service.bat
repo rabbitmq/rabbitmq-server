@@ -30,6 +30,8 @@ REM
 REM   Contributor(s): ______________________________________.
 REM
 
+setlocal
+
 if "%RABBITMQ_SERVICENAME%"=="" (
     set RABBITMQ_SERVICENAME=RabbitMQ
 )
@@ -51,7 +53,7 @@ if "%RABBITMQ_NODE_PORT%"=="" (
 )
 
 if "%ERLANG_SERVICE_MANAGER_PATH%"=="" (
-    set ERLANG_SERVICE_MANAGER_PATH=C:\Program Files\erl5.5.5\erts-5.5.5\bin
+    set ERLANG_SERVICE_MANAGER_PATH=C:\Program Files\erl5.6.5\erts-5.6.5\bin
 )
 
 set CONSOLE_FLAG=
@@ -69,7 +71,7 @@ if not exist "%ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe" (
     echo ERLANG_SERVICE_MANAGER_PATH not set correctly. 
     echo **********************************************
     echo.
-    echo %ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe not found!
+    echo "%ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe" not found!
     echo Please set ERLANG_SERVICE_MANAGER_PATH to the folder containing "erlsrv.exe".
     echo.
     exit /B 1
@@ -100,7 +102,7 @@ set SASL_LOGS_BACKUP=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXT
 if exist "%LOGS%" (
 	type "%LOGS%" >> "%LOGS_BACKUP%"
 )
-if exist %SASL_LOGS% (
+if exist "%SASL_LOGS%" (
 	type "%SASL_LOGS%" >> "%SASL_LOGS_BACKUP%"
 )
 
@@ -173,9 +175,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
--os_mon start_os_sup false ^
--os_mon memsup_system_only true ^
--os_mon system_memory_high_watermark 0.95 ^
+-os_mon vm_memory_high_watermark 0.4 ^
 -mnesia dir \""%RABBITMQ_MNESIA_DIR%"\" ^
 %CLUSTER_CONFIG% ^
 %RABBITMQ_SERVER_START_ARGS% ^
@@ -202,3 +202,5 @@ goto END
 
 
 :END
+
+endlocal
