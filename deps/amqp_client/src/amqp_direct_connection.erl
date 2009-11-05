@@ -73,13 +73,6 @@ handle_cast(Message, State) ->
               [self(), Message]),
     {noreply, set_closing_state(abrupt, internal_error_closing(), State)}.
 
-%% This is sent by a channel which is shutdown by the server due to a hard error
-handle_info({connection_level_error, _, _} = Message, State) ->
-    {noreply, set_closing_state(abrupt,
-                                #dc_closing{reason = server_initiated_close,
-                                            reply = Message},
-                                State)};
-
 %% Shutdown message
 handle_info({shutdown, Reason}, State) ->
     {_, Code, _} = Reason,
@@ -224,13 +217,17 @@ handle_channel_exit(Pid, Reason, #dc_state{closing = Closing} = State) ->
         %% Normal amqp_channel shutdown
         normal ->
             {noreply, unregister_channel(Pid, State)};
-        %% Channel terminating due to connection closing
-        {_Reason, _Code, _Text} when Closing =/= false ->
-            {noreply, unregister_channel(Pid, State)};
         %% Channel terminating (server sent 'channel.close')
-        {server_initiated_close, _Code, _Text} ->
-            %% TODO determine if it's either a soft or a hard error. Terminate
-            %% connection immediately if it's a hard error
+        {server_initiated_close, Code, _Text} = Msg when Closing =:= false ->
+            case rabbit_framing:is_amqp_hard_error_code(Code) of
+                true  -> ?LOG_WARN("Connection (~p) closing: channel (~p) " 
+                                   "received hard error from server~n",
+                                   [self(), Pid]),
+                         {stop, Msg, State};
+                false -> {noreply, unregister_channel(Pid, State)}
+            end;
+        %% Channel terminating due to connection closing
+        {_CloseReason, _Code, _Text} when Closing =/= false ->
             {noreply, unregister_channel(Pid, State)};
         %% amqp_channel dies with internal reason - this takes the entire
         %% connection down
