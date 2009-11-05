@@ -38,6 +38,9 @@
                       virtual_host = <<"/">>,
                       host         = "localhost",
                       port         = ?PROTOCOL_PORT,
+                      channel_max  = 0,
+                      frame_max    = 0,
+                      heartbeat    = 0,
                       ssl_options  = none}).
 
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
