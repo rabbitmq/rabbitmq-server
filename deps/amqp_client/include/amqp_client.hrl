@@ -38,16 +38,6 @@
                       port         = ?PROTOCOL_PORT,
                       ssl_options  = none}).
 
--record(rpc_client_state, {channel,
-                           reply_queue,
-                           exchange,
-                           routing_key,
-                           continuations = dict:new(),
-                           correlation_id = 0}).
-
--record(rpc_server_state, {channel,
-                           handler}).
-
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).
 -define(LOG_WARN(Format, Args), error_logger:warning_msg(Format, Args)).
