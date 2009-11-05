@@ -29,6 +29,8 @@
 -define(PROTOCOL_HEADER,
         <<"AMQP", 1, 1, ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR>>).
 
+-define(MAX_CHANNEL_NUMBER, 65535).
+
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
 -record(amqp_params, {username     = <<"guest">>,
