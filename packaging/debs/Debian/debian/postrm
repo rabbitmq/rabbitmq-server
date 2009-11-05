@@ -34,11 +34,10 @@ case "$1" in
         if [ -d /etc/rabbitmq ]; then
                 rm -r /etc/rabbitmq
         fi
-
-        # Stop epmd if run by the rabbitmq user
-        pkill -u rabbitmq epmd || :
-
         if getent passwd rabbitmq >/dev/null; then
+                # Stop epmd if run by the rabbitmq user
+                pkill -u rabbitmq epmd || :
+
                 deluser rabbitmq
         fi
         if getent group rabbitmq >/dev/null; then
