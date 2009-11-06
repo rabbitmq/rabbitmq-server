@@ -52,6 +52,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 all_tests() ->
     passed = test_msg_store(),
     passed = test_queue_index(),
+    passed = test_variable_queue(),
     passed = test_priority_queue(),
     passed = test_unfold(),
     passed = test_parsing(),
@@ -1126,38 +1127,104 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
               {[SeqId | Acc], VQ2}
       end, {[], VQ}, lists:seq(1, Count)).
 
+variable_queue_fetch(Count, IsPersistent, Len, VQ) ->
+    lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
+                        Rem = Len - N,
+                        {{_MsgN, IsPersistent, AckTagN, Rem}, VQM} =
+                            rabbit_variable_queue:fetch(VQN),
+                        {VQM, [AckTagN | AckTagsAcc]}
+                end, {VQ, []}, lists:seq(1, Count)).
+
+assert_prop(List, Prop, Value) ->
+    Value = proplists:get_value(Prop, List).
+
 test_variable_queue() ->
     SegmentSize = rabbit_queue_index:segment_size(),
     stop_msg_store(),
     ok = empty_test_queue(),
     VQ0 = rabbit_variable_queue:init(test_queue()),
     S0 = rabbit_variable_queue:status(VQ0),
-    0 = proplists:get_value(len, S0),
-    false = proplists:get_value(prefetching, S0),
+    assert_prop(S0, len, 0),
+    assert_prop(S0, prefetching, false),
 
     VQ1 = rabbit_variable_queue:set_queue_ram_duration_target(10, VQ0),
-    0 = proplists:get_value(target_ram_msg_count,
-                            rabbit_variable_queue:status(VQ1)),
+    assert_prop(rabbit_variable_queue:status(VQ1), target_ram_msg_count, 0),
 
     {SeqIds, VQ2} = variable_queue_publish(false, 3 * SegmentSize, VQ1),
     S2 = rabbit_variable_queue:status(VQ2),
-    TwoSegments = 2*SegmentSize,
-    {gamma, SegmentSize, TwoSegments} = proplists:get_value(gamma, S2),
-    SegmentSize = proplists:get_value(q3, S2),
-    ThreeSegments = 3*SegmentSize,
-    ThreeSegments = proplists:get_value(len, S2),
+    assert_prop(S2, gamma, {gamma, SegmentSize, 2*SegmentSize}),
+    assert_prop(S2, q3, SegmentSize),
+    assert_prop(S2, len, 3*SegmentSize),
 
     VQ3 = rabbit_variable_queue:remeasure_egress_rate(VQ2),
-    io:format("~p~n", [rabbit_variable_queue:status(VQ3)]),
-    {{Msg, false, AckTag, Len1} = Obj, VQ4} =
-        rabbit_variable_queue:fetch(VQ3),
-    io:format("~p~n", [Obj]),
+    Len1 = 3*SegmentSize - 1,
+    {{_Msg, false, AckTag, Len1}, VQ4} = rabbit_variable_queue:fetch(VQ3),
     timer:sleep(1000),
     VQ5 = rabbit_variable_queue:remeasure_egress_rate(VQ4),
     VQ6 = rabbit_variable_queue:set_queue_ram_duration_target(10, VQ5),
-    io:format("~p~n", [rabbit_variable_queue:status(VQ6)]),
-    {{Msg1, false, AckTag1, Len11} = Obj1, VQ7} =
-        rabbit_variable_queue:fetch(VQ6),
-    io:format("~p~n", [Obj1]),
-    io:format("~p~n", [rabbit_variable_queue:status(VQ7)]),
+    timer:sleep(1000), %% let the prefetcher run and grab enough - about 4 msgs
+    S6 = rabbit_variable_queue:status(VQ6),
+    RamCount = proplists:get_value(target_ram_msg_count, S6),
+    assert_prop(S6, prefetching, true),
+    assert_prop(S6, q4, 0),
+    assert_prop(S6, q3, (SegmentSize - 1 - RamCount)),
+
+    Len2 = Len1 - 1,
+    %% this should be enough to stop + drain the prefetcher
+    {{_Msg1, false, AckTag1, Len2}, VQ7} = rabbit_variable_queue:fetch(VQ6),
+    S7 = rabbit_variable_queue:status(VQ7),
+    assert_prop(S7, prefetching, false),
+    assert_prop(S7, q4, (RamCount - 1)),
+    assert_prop(S7, q3, (SegmentSize - 1 - RamCount)),
+
+    %% now fetch SegmentSize - 1 which will exhaust q4 and q3,
+    %% bringing in a segment from gamma:
+    {VQ8, AckTags} = variable_queue_fetch(SegmentSize-1, false, Len2, VQ7),
+    S8 = rabbit_variable_queue:status(VQ8),
+    assert_prop(S8, prefetching, false),
+    assert_prop(S8, q4, 0),
+    assert_prop(S8, q3, (SegmentSize - 1)),
+    assert_prop(S8, gamma, {gamma, (2*SegmentSize), SegmentSize}),
+
+    VQ9 = rabbit_variable_queue:remeasure_egress_rate(VQ8),
+    VQ10 = rabbit_variable_queue:ack(AckTags, VQ9),
+
+    S10 = rabbit_variable_queue:status(VQ10),
+    assert_prop(S10, prefetching, true),
+    %% egress rate should be really high, so it's likely if we wait a
+    %% little bit, the next segment should be brought in
+    timer:sleep(2000),
+    Len3 = (2*SegmentSize) - 2,
+    {{_Msg2, false, AckTag2, Len3}, VQ11} = rabbit_variable_queue:fetch(VQ10),
+    S11 = rabbit_variable_queue:status(VQ11),
+    assert_prop(S11, prefetching, false),
+    assert_prop(S11, q4, (SegmentSize - 2)),
+    assert_prop(S11, q3, SegmentSize),
+    assert_prop(S11, gamma, {gamma, undefined, 0}),
+    assert_prop(S11, q2, 0),
+    assert_prop(S11, q1, 0),
+
+    VQ12 = rabbit_variable_queue:maybe_start_prefetcher(VQ11),
+    S12 = rabbit_variable_queue:status(VQ12),
+    assert_prop(S12, prefetching, true),
+    PrefetchCount = lists:min([proplists:get_value(target_ram_msg_count, S12) -
+                               proplists:get_value(ram_msg_count, S12),
+                               SegmentSize]),
+    timer:sleep(2000),
+    %% we have to fetch all of q4 before the prefetcher will be drained
+    {VQ13, AckTags1} = variable_queue_fetch(SegmentSize-2, false, Len3, VQ12),
+    Len4 = SegmentSize - 1,
+    {{_Msg3, false, AckTag3, Len4}, VQ14} = rabbit_variable_queue:fetch(VQ13),
+    S14 = rabbit_variable_queue:status(VQ14),
+    assert_prop(S14, prefetching, false),
+    assert_prop(S14, q4, (PrefetchCount - 1)),
+    assert_prop(S14, q3, (Len4 - (PrefetchCount - 1))),
+                               
+    VQ15 = rabbit_variable_queue:ack([AckTag3, AckTag2, AckTag1, AckTag], VQ14),
+    VQ16 = rabbit_variable_queue:ack(AckTags1, VQ15),
+
+    {VQ17, AckTags2} = variable_queue_fetch(Len4, false, Len4, VQ16),
+    VQ18 = rabbit_variable_queue:ack(AckTags2, VQ17),
+
+    rabbit_variable_queue:terminate(VQ18),
     passed.

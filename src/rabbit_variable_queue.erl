@@ -46,6 +46,7 @@
           gamma,
           q3,
           q4,
+          duration_target,
           target_ram_msg_count,
           ram_msg_count,
           queue,
@@ -130,6 +131,7 @@ init(QueueName) ->
                    gamma = Gamma,
                    q3 = queue:new(), q4 = queue:new(),
                    target_ram_msg_count = undefined,
+                   duration_target = undefined,
                    ram_msg_count = 0,
                    queue = QueueName,
                    index_state = IndexState1,
@@ -166,12 +168,15 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
             {ack_not_on_disk, State}
     end.
 
+set_queue_ram_duration_target(undefined, State) ->
+    State;
 set_queue_ram_duration_target(
   DurationTarget, State = #vqstate { avg_egress_rate = EgressRate,
                                      target_ram_msg_count = TargetRamMsgCount
                                    }) ->
     TargetRamMsgCount1 = trunc(DurationTarget * EgressRate), %% msgs = sec * msgs/sec
-    State1 = State #vqstate { target_ram_msg_count = TargetRamMsgCount1 },
+    State1 = State #vqstate { target_ram_msg_count = TargetRamMsgCount1,
+                              duration_target = DurationTarget },
     if TargetRamMsgCount == TargetRamMsgCount1 ->
             State1;
        TargetRamMsgCount == undefined orelse
@@ -183,7 +188,8 @@ set_queue_ram_duration_target(
 
 remeasure_egress_rate(State = #vqstate { egress_rate = OldEgressRate,
                                          egress_rate_timestamp = Timestamp,
-                                         out_counter = OutCount }) ->
+                                         out_counter = OutCount,
+                                         duration_target = DurationTarget }) ->
     %% We do an average over the last two values, but also hold the
     %% current value separately so that the average always only
     %% incorporates the last two values, and not the current value and
@@ -192,13 +198,15 @@ remeasure_egress_rate(State = #vqstate { egress_rate = OldEgressRate,
     %% EgressRate is in seconds, and now_diff is in microseconds
     EgressRate = 1000000 * OutCount / timer:now_diff(Now, Timestamp),
     AvgEgressRate = (EgressRate + OldEgressRate) / 2,
-    State #vqstate { egress_rate = EgressRate,
-                     avg_egress_rate = AvgEgressRate,
-                     egress_rate_timestamp = Now,
-                     out_counter = 0 }.
+    set_queue_ram_duration_target(
+      DurationTarget,
+      State #vqstate { egress_rate = EgressRate,
+                       avg_egress_rate = AvgEgressRate,
+                       egress_rate_timestamp = Now,
+                       out_counter = 0 }).
 
 fetch(State =
-      #vqstate { q4 = Q4,
+      #vqstate { q4 = Q4, ram_msg_count = RamMsgCount,
                  out_counter = OutCount, prefetcher = Prefetcher,
                  index_state = IndexState, len = Len }) ->
     case queue:out(Q4) of
@@ -246,6 +254,7 @@ fetch(State =
             Len1 = Len - 1,
             {{Msg, IsDelivered, AckTag, Len1},
              State #vqstate { q4 = Q4a, out_counter = OutCount + 1,
+                              ram_msg_count = RamMsgCount - 1,
                               index_state = IndexState1, len = Len1 }}
     end.
 
@@ -258,21 +267,29 @@ is_empty(State) ->
 maybe_start_prefetcher(State = #vqstate {
                          ram_msg_count = RamMsgCount,
                          target_ram_msg_count = TargetRamMsgCount,
-                         q1 = Q1, q3 = Q3, prefetcher = undefined
+                         q1 = Q1, q3 = Q3, prefetcher = undefined,
+                         gamma = #gamma { count = GammaCount }
                         }) ->
-    %% prefetched content takes priority over q1
-    AvailableSpace = case TargetRamMsgCount of
-                         undefined -> queue:len(Q3);
-                         _ -> (TargetRamMsgCount - RamMsgCount) + queue:len(Q1)
-                     end,
-    PrefetchCount = lists:min([queue:len(Q3), AvailableSpace]),
-    if PrefetchCount =< 0 -> State;
-       true ->
-            {PrefetchQueue, Q3a} = queue:split(PrefetchCount, Q3),
-            {ok, Prefetcher} =
-                rabbit_queue_prefetcher:start_link(PrefetchQueue),
-            maybe_load_next_segment(State #vqstate { q3 = Q3a,
-                                                     prefetcher = Prefetcher })
+    case queue:is_empty(Q3) andalso GammaCount > 0 of
+        true ->
+            maybe_start_prefetcher(maybe_load_next_segment(State));
+        false ->
+            %% prefetched content takes priority over q1
+            AvailableSpace =
+                case TargetRamMsgCount of
+                    undefined -> queue:len(Q3);
+                    _ -> (TargetRamMsgCount - RamMsgCount) + queue:len(Q1)
+                end,
+            PrefetchCount = lists:min([queue:len(Q3), AvailableSpace]),
+            case PrefetchCount =< 0 of
+                true -> State;
+                false ->
+                    {PrefetchQueue, Q3a} = queue:split(PrefetchCount, Q3),
+                    {ok, Prefetcher} =
+                        rabbit_queue_prefetcher:start_link(PrefetchQueue),
+                    maybe_load_next_segment(
+                      State #vqstate { q3 = Q3a, prefetcher = Prefetcher })
+            end
     end;
 maybe_start_prefetcher(State) ->
     State.
@@ -429,7 +446,7 @@ status(#vqstate { q1 = Q1, q2 = Q2, gamma = Gamma, q3 = Q3, q4 = Q4,
       {q2, queue:len(Q2)},
       {gamma, Gamma},
       {q3, queue:len(Q3)},
-      {q4, Q4},
+      {q4, queue:len(Q4)},
       {len, Len},
       {outstanding_txns, length(From)},
       {target_ram_msg_count, TargetRamMsgCount},
@@ -570,9 +587,9 @@ publish(neither, Msg = #basic_message { guid = MsgId,
     State #vqstate { index_state = IndexState1,
                      gamma = combine_gammas(Gamma, Gamma1) }.
 
-fetch_from_q3_or_gamma(State = #vqstate { q1 = Q1, q2 = Q2,
-                                          gamma = #gamma { count = GammaCount },
-                                          q3 = Q3, q4 = Q4 }) ->
+fetch_from_q3_or_gamma(State = #vqstate {
+                         q1 = Q1, q2 = Q2, gamma = #gamma { count = GammaCount },
+                         q3 = Q3, q4 = Q4, ram_msg_count = RamMsgCount }) ->
     case queue:out(Q3) of
         {empty, _Q3} ->
             0 = GammaCount, %% ASSERTION
@@ -590,7 +607,8 @@ fetch_from_q3_or_gamma(State = #vqstate { q1 = Q1, q2 = Q2,
                     #alpha { msg = Msg, seq_id = SeqId,
                              is_delivered = IsDelivered, msg_on_disk = true,
                              index_on_disk = IndexOnDisk }, Q4),
-            State1 = State #vqstate { q3 = Q3a, q4 = Q4a },
+            State1 = State #vqstate { q3 = Q3a, q4 = Q4a,
+                                      ram_msg_count = RamMsgCount + 1 },
             State2 =
                 case {queue:is_empty(Q3a), 0 == GammaCount} of
                     {true, true} ->
@@ -615,23 +633,31 @@ maybe_load_next_segment(State = #vqstate { gamma = #gamma { count = 0 }} ) ->
     State;
 maybe_load_next_segment(State =
                         #vqstate { index_state = IndexState, q2 = Q2,
+                                   q3 = Q3,
                                    gamma = #gamma { seq_id = GammaSeqId,
                                                     count = GammaCount }}) ->
-    {List, IndexState1, Gamma1SeqId} =
-        read_index_segment(GammaSeqId, IndexState),
-    State1 = State #vqstate { index_state = IndexState1 },
-    %% length(List) may be < segment_size because of acks. But it
-    %% can't be []
-    Q3a = betas_from_segment_entries(List),
-    case GammaCount - length(List) of
-        0 ->
-            %% gamma is now empty, but it wasn't before, so can now
-            %% join q2 onto q3
-            State1 #vqstate { gamma = #gamma { seq_id = undefined, count = 0 },
-                              q2 = queue:new(), q3 = queue:join(Q3a, Q2) };
-        N when N > 0 ->
-            State1 #vqstate { gamma = #gamma { seq_id = Gamma1SeqId,
-                                               count = N }, q3 = Q3a }
+    case queue:is_empty(Q3) of
+        false ->
+            State;
+        true ->
+            {List, IndexState1, Gamma1SeqId} =
+                read_index_segment(GammaSeqId, IndexState),
+            State1 = State #vqstate { index_state = IndexState1 },
+            %% length(List) may be < segment_size because of acks. But
+            %% it can't be []
+            Q3a = betas_from_segment_entries(List),
+            case GammaCount - length(List) of
+                0 ->
+                    %% gamma is now empty, but it wasn't before, so
+                    %% can now join q2 onto q3
+                    State1 #vqstate { gamma = #gamma { seq_id = undefined,
+                                                       count = 0 },
+                                      q2 = queue:new(),
+                                      q3 = queue:join(Q3a, Q2) };
+                N when N > 0 ->
+                    State1 #vqstate { gamma = #gamma { seq_id = Gamma1SeqId,
+                                                       count = N }, q3 = Q3a }
+            end
     end.
 
 betas_from_segment_entries(List) ->
