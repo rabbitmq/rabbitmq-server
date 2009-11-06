@@ -20,7 +20,8 @@ master_sites    http://www.rabbitmq.com/releases/rabbitmq-server/v${version}/
 
 checksums \
     md5 4505ca0fd8718439bd6f5e2af2379e56 \
-    sha1 84fb86d403057bb808c1b51deee0c1fca3bf7bef
+    sha1 84fb86d403057bb808c1b51deee0c1fca3bf7bef \
+    rmd160 092f90946825cc3eb277019805e24db637a559f4
 
 depends_build   port:erlang
 depends_run     port:erlang
