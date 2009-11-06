@@ -965,6 +965,11 @@ test_msg_store() ->
     ok = start_msg_store_empty(),
     %% check we don't contain any of the msgs
     false = msg_store_contains(false, MsgIds),
+    %% publish the first half again
+    ok = msg_store_write(MsgIds1stHalf),
+    %% this should force some sort of sync internally otherwise misread
+    ok = msg_store_read(MsgIds1stHalf),
+    ok = rabbit_msg_store:remove(MsgIds1stHalf),
     %% push a lot of msgs in...
     BigCount = 100000,
     MsgIdsBig = lists:seq(1, BigCount),

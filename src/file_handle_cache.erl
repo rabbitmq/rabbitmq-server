@@ -32,7 +32,8 @@
 -module(file_handle_cache).
 
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
-         last_sync_offset/1, current_offset/1, append_write_buffer/1, copy/3]).
+         last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
+         append_write_buffer/1, copy/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -80,7 +81,8 @@
              ({'ok', non_neg_integer()} | error())).
 -spec(truncate/1 :: (ref()) -> ok_or_error()).
 -spec(last_sync_offset/1 :: (ref()) -> ({'ok', integer()} | error())).
--spec(current_offset/1 :: (ref()) -> ({'ok', integer()} | error())).
+-spec(current_virtual_offset/1 :: (ref()) -> ({'ok', integer()} | error())).
+-spec(current_raw_offset/1 :: (ref()) -> ({'ok', integer()} | error())).
 -spec(append_write_buffer/1 :: (ref()) -> ok_or_error()).
 -spec(copy/3 :: (ref(), ref(), non_neg_integer()) ->
              ({'ok', integer()} | error())).
@@ -109,7 +111,7 @@ open(Path, Mode, Options) ->
                                           true -> RCount + 1;
                                           false -> RCount
                                       end,
-                            put({Path1, fhc_file},
+                            put({GRef, fhc_file},
                                 File #file {
                                   reader_count = RCount1,
                                   has_writer = HasWriter orelse IsWriter }),
@@ -149,9 +151,9 @@ close(Ref) ->
                     RCount1 = case IsReader of
                                   true -> RCount - 1;
                                   false -> RCount
-                              end, 
+                              end,
                     HasWriter1 = HasWriter andalso not IsWriter,
-                    case RCount1 == 0 andalso not HasWriter1 of
+                    case RCount1 =:= 0 andalso not HasWriter1 of
                         true -> erase({GRef, fhc_file}),
                                 erase({Path, fhc_path});
                         false -> put({GRef, fhc_file},
@@ -274,15 +276,20 @@ last_sync_offset(Ref) ->
         Error -> Error
     end.
 
-current_offset(Ref) ->
+current_virtual_offset(Ref) ->
     case get_or_reopen(Ref) of
         {ok, #handle { at_eof = true, is_write = true, offset = Offset,
                        write_buffer_size = Size }} ->
             {ok, Offset + Size};
-        {ok, #handle { offset = Offset }} ->
-            {ok, Offset};
+        {ok, #handle { offset = Offset }} -> {ok, Offset};
         Error -> Error
     end.
+
+current_raw_offset(Ref) ->
+    case get_or_reopen(Ref) of
+        {ok, #handle { offset = Offset }} -> {ok, Offset};
+        Error -> Error
+    end.    
 
 append_write_buffer(Ref) ->
     case get_or_reopen(Ref) of

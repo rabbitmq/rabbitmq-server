@@ -102,7 +102,7 @@
 -define(BINARY_MODE,     [raw, binary]).
 -define(READ_MODE,       [read]).
 -define(READ_AHEAD_MODE, [read_ahead | ?READ_MODE]).
--define(WRITE_MODE,      [write, delayed_write]).
+-define(WRITE_MODE,      [write]).
 
 %% The components:
 %%
@@ -306,7 +306,7 @@ handle_cast({write, MsgId, Msg},
     case index_lookup(MsgId, State) of
         not_found ->
             %% New message, lots to do
-            {ok, CurOffset} = file_handle_cache:current_offset(CurHdl),
+            {ok, CurOffset} = file_handle_cache:current_virtual_offset(CurHdl),
             {ok, TotalSize} = rabbit_msg_file:append(CurHdl, MsgId, Msg),
             ok = index_insert(#msg_location {
                                 msg_id = MsgId, ref_count = 1, file = CurFile,
@@ -453,10 +453,13 @@ truncate_and_extend_file(FileHdl, Lowpoint, Highpoint) ->
 sync(State = #msstate { current_file_handle = CurHdl,
                         on_sync = Syncs }) ->
     State1 = stop_sync_timer(State),
-    %% we depend on this really calling sync, even if [] == Syncs
-    ok = file_handle_cache:sync(CurHdl),
-    lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
-    State1 #msstate { on_sync = [] }.
+    case Syncs of
+        [] -> State1;
+        _ ->
+            ok = file_handle_cache:sync(CurHdl),
+            lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
+            State1 #msstate { on_sync = [] }
+    end.
 
 remove_message(MsgId, State = #msstate { file_summary = FileSummary }) ->
     StoreEntry = #msg_location { ref_count = RefCount, file = File,
@@ -493,13 +496,15 @@ internal_read_message(MsgId,
                         total_size = TotalSize } ->
             case fetch_and_increment_cache(MsgId, State) of
                 not_found ->
-                    {ok, SyncOffset} = file_handle_cache:last_sync_offset(CurHdl),
-                    State1 =
-                        case CurFile =:= File andalso Offset >= SyncOffset of
-                            true  -> sync(State);
-                            false -> State
-                        end,
-                    {Hdl, State2} = get_read_handle(File, State1),
+                    {ok, CurOffset} =
+                        file_handle_cache:current_raw_offset(CurHdl),
+                    ok = case CurFile =:= File andalso Offset >= CurOffset of
+                             true ->
+                                 file_handle_cache:append_write_buffer(CurHdl);
+                             false ->
+                                 ok
+                         end,
+                    {Hdl, State1} = get_read_handle(File, State),
                     {ok, Offset} = file_handle_cache:position(Hdl, Offset),
                     {ok, {MsgId, Msg}} =
                         case rabbit_msg_file:read(Hdl, TotalSize) of
@@ -508,17 +513,18 @@ internal_read_message(MsgId,
                                 throw({error, {misread, [{old_state, State},
                                                          {file_num, File},
                                                          {offset, Offset},
-                                                         {read, Rest}]}})
+                                                         {read, Rest},
+                                                         {proc_dict, get()}]}})
                         end,
                     ok = if RefCount > 1 ->
-                                 insert_into_cache(MsgId, Msg, State2);
+                                 insert_into_cache(MsgId, Msg, State1);
                             true -> ok
                                     %% it's not in the cache and we
                                     %% only have one reference to the
                                     %% message. So don't bother
                                     %% putting it in the cache.
                          end,
-                    {{ok, Msg}, State2};
+                    {{ok, Msg}, State1};
                 {Msg, _RefCount} ->
                     {{ok, Msg}, State}
             end
