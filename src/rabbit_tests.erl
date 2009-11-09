@@ -1167,7 +1167,8 @@ test_variable_queue() ->
     RamCount = proplists:get_value(target_ram_msg_count, S6),
     assert_prop(S6, prefetching, true),
     assert_prop(S6, q4, 0),
-    assert_prop(S6, q3, (SegmentSize - 1 - RamCount)),
+    assert_prop(S6, q3, (Len1 - RamCount)),
+    assert_prop(S6, gamma, {gamma, undefined, 0}),
 
     Len2 = Len1 - 1,
     %% this should be enough to stop + drain the prefetcher
@@ -1175,16 +1176,17 @@ test_variable_queue() ->
     S7 = rabbit_variable_queue:status(VQ7),
     assert_prop(S7, prefetching, false),
     assert_prop(S7, q4, (RamCount - 1)),
-    assert_prop(S7, q3, (SegmentSize - 1 - RamCount)),
+    assert_prop(S7, q3, (Len1 - RamCount)),
 
-    %% now fetch SegmentSize - 1 which will exhaust q4 and q3,
+    %% now fetch SegmentSize - 1 which will exhaust q4 and work through a bit of q3
     %% bringing in a segment from gamma:
     {VQ8, AckTags} = variable_queue_fetch(SegmentSize-1, false, Len2, VQ7),
+    Len3 = Len2 - (SegmentSize - 1),
     S8 = rabbit_variable_queue:status(VQ8),
     assert_prop(S8, prefetching, false),
     assert_prop(S8, q4, 0),
-    assert_prop(S8, q3, (SegmentSize - 1)),
-    assert_prop(S8, gamma, {gamma, (2*SegmentSize), SegmentSize}),
+    assert_prop(S8, q3, Len3),
+    assert_prop(S8, len, Len3),
 
     VQ9 = rabbit_variable_queue:remeasure_egress_rate(VQ8),
     VQ10 = rabbit_variable_queue:ack(AckTags, VQ9),
@@ -1192,38 +1194,39 @@ test_variable_queue() ->
     S10 = rabbit_variable_queue:status(VQ10),
     assert_prop(S10, prefetching, true),
     %% egress rate should be really high, so it's likely if we wait a
-    %% little bit, the next segment should be brought in
+    %% little bit, lots of msgs will be brought in
     timer:sleep(2000),
-    Len3 = (2*SegmentSize) - 2,
-    {{_Msg2, false, AckTag2, Len3}, VQ11} = rabbit_variable_queue:fetch(VQ10),
+    PrefetchCount = lists:min([proplists:get_value(target_ram_msg_count, S10) -
+                               proplists:get_value(ram_msg_count, S10),
+                               Len3]),
+    Len4 = Len3 - 1,
+    {{_Msg2, false, AckTag2, Len4}, VQ11} = rabbit_variable_queue:fetch(VQ10),
     S11 = rabbit_variable_queue:status(VQ11),
+    %% prefetcher will stop if it's fast enough and has completed by now, or may still be running if PrefetchCount > 1
     assert_prop(S11, prefetching, false),
-    assert_prop(S11, q4, (SegmentSize - 2)),
-    assert_prop(S11, q3, SegmentSize),
+    Prefetched = proplists:get_value(q4, S11),
+    true = (PrefetchCount - 1) >= Prefetched,
+    assert_prop(S11, q3, Len4 - Prefetched),
     assert_prop(S11, gamma, {gamma, undefined, 0}),
     assert_prop(S11, q2, 0),
     assert_prop(S11, q1, 0),
 
     VQ12 = rabbit_variable_queue:maybe_start_prefetcher(VQ11),
     S12 = rabbit_variable_queue:status(VQ12),
-    assert_prop(S12, prefetching, true),
-    PrefetchCount = lists:min([proplists:get_value(target_ram_msg_count, S12) -
-                               proplists:get_value(ram_msg_count, S12),
-                               SegmentSize]),
+    assert_prop(S12, prefetching, (Len4 - Prefetched) > 0),
     timer:sleep(2000),
     %% we have to fetch all of q4 before the prefetcher will be drained
-    {VQ13, AckTags1} = variable_queue_fetch(SegmentSize-2, false, Len3, VQ12),
-    Len4 = SegmentSize - 1,
-    {{_Msg3, false, AckTag3, Len4}, VQ14} = rabbit_variable_queue:fetch(VQ13),
+    {VQ13, AckTags1} =
+        variable_queue_fetch(Prefetched, false, Len4, VQ12),
+    Len5 = Len4 - Prefetched - 1,
+    {{_Msg3, false, AckTag3, Len5}, VQ14} = rabbit_variable_queue:fetch(VQ13),
     S14 = rabbit_variable_queue:status(VQ14),
     assert_prop(S14, prefetching, false),
-    assert_prop(S14, q4, (PrefetchCount - 1)),
-    assert_prop(S14, q3, (Len4 - (PrefetchCount - 1))),
                                
     VQ15 = rabbit_variable_queue:ack([AckTag3, AckTag2, AckTag1, AckTag], VQ14),
     VQ16 = rabbit_variable_queue:ack(AckTags1, VQ15),
 
-    {VQ17, AckTags2} = variable_queue_fetch(Len4, false, Len4, VQ16),
+    {VQ17, AckTags2} = variable_queue_fetch(Len5, false, Len5, VQ16),
     VQ18 = rabbit_variable_queue:ack(AckTags2, VQ17),
 
     rabbit_variable_queue:terminate(VQ18),

@@ -144,7 +144,7 @@ init(QueueName) ->
                    len = GammaCount,
                    on_sync = {[], [], []}
                   },
-    maybe_load_next_segment(State).
+    maybe_gammas_to_betas(State).
 
 terminate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:terminate(IndexState) }.
@@ -264,15 +264,16 @@ len(#vqstate { len = Len }) ->
 is_empty(State) ->
     0 == len(State).
 
-maybe_start_prefetcher(State = #vqstate {
-                         ram_msg_count = RamMsgCount,
-                         target_ram_msg_count = TargetRamMsgCount,
-                         q1 = Q1, q3 = Q3, prefetcher = undefined,
-                         gamma = #gamma { count = GammaCount }
-                        }) ->
-    case queue:is_empty(Q3) andalso GammaCount > 0 of
-        true ->
-            maybe_start_prefetcher(maybe_load_next_segment(State));
+maybe_start_prefetcher(State = #vqstate { target_ram_msg_count = 0 }) ->
+    State;
+maybe_start_prefetcher(State = #vqstate { prefetcher = undefined }) ->
+    %% ensure we have as much index in RAM as we can
+    State1 = #vqstate { ram_msg_count = RamMsgCount,
+                        target_ram_msg_count = TargetRamMsgCount,
+                        q1 = Q1, q3 = Q3 } = maybe_gammas_to_betas(State),
+    case queue:is_empty(Q3) of
+        true -> %% nothing to do
+            State1;
         false ->
             %% prefetched content takes priority over q1
             AvailableSpace =
@@ -282,13 +283,12 @@ maybe_start_prefetcher(State = #vqstate {
                 end,
             PrefetchCount = lists:min([queue:len(Q3), AvailableSpace]),
             case PrefetchCount =< 0 of
-                true -> State;
+                true -> State1;
                 false ->
                     {PrefetchQueue, Q3a} = queue:split(PrefetchCount, Q3),
                     {ok, Prefetcher} =
                         rabbit_queue_prefetcher:start_link(PrefetchQueue),
-                    maybe_load_next_segment(
-                      State #vqstate { q3 = Q3a, prefetcher = Prefetcher })
+                    State1 #vqstate { q3 = Q3a, prefetcher = Prefetcher }
             end
     end;
 maybe_start_prefetcher(State) ->
@@ -483,7 +483,7 @@ purge1(Count, State = #vqstate { q3 = Q3, index_state = IndexState }) ->
         false ->
             {Q3Count, IndexState1} = remove_queue_entries(Q3, IndexState),
             purge1(Count + Q3Count,
-                   maybe_load_next_segment(
+                   maybe_gammas_to_betas(
                      State #vqstate { index_state = IndexState1,
                                       q3 = queue:new() }))
     end.
@@ -619,7 +619,7 @@ fetch_from_q3_or_gamma(State = #vqstate {
                         State1 #vqstate { q1 = queue:new(),
                                           q4 = queue:join(Q4a, Q1) };
                     {true, false} ->
-                        maybe_load_next_segment(State1);
+                        maybe_gammas_to_betas(State1);
                     {false, _} ->
                         %% q3 still isn't empty, we've not touched
                         %% gamma, so the invariants between q1, q2,
@@ -629,23 +629,26 @@ fetch_from_q3_or_gamma(State = #vqstate {
             fetch(State2)
     end.
 
-maybe_load_next_segment(State = #vqstate { gamma = #gamma { count = 0 }} ) ->
+maybe_gammas_to_betas(State = #vqstate { gamma = #gamma { count = 0 }} ) ->
     State;
-maybe_load_next_segment(State =
-                        #vqstate { index_state = IndexState, q2 = Q2,
-                                   q3 = Q3,
-                                   gamma = #gamma { seq_id = GammaSeqId,
-                                                    count = GammaCount }}) ->
-    case queue:is_empty(Q3) of
-        false ->
-            State;
+maybe_gammas_to_betas(State =
+                      #vqstate { index_state = IndexState, q2 = Q2, q3 = Q3,
+                                 target_ram_msg_count = TargetRamMsgCount,
+                                 gamma = #gamma { seq_id = GammaSeqId,
+                                                  count = GammaCount }}) ->
+    case (not queue:is_empty(Q3)) andalso 0 == TargetRamMsgCount of
         true ->
+            State;
+        false ->
+            %% either q3 is empty, in which case we load at least one
+            %% segment, or TargetRamMsgCount > 0, meaning we should
+            %% really be holding all the betas in memory.
             {List, IndexState1, Gamma1SeqId} =
                 read_index_segment(GammaSeqId, IndexState),
             State1 = State #vqstate { index_state = IndexState1 },
             %% length(List) may be < segment_size because of acks. But
             %% it can't be []
-            Q3a = betas_from_segment_entries(List),
+            Q3a = queue:join(Q3, betas_from_segment_entries(List)),
             case GammaCount - length(List) of
                 0 ->
                     %% gamma is now empty, but it wasn't before, so
@@ -655,8 +658,10 @@ maybe_load_next_segment(State =
                                       q2 = queue:new(),
                                       q3 = queue:join(Q3a, Q2) };
                 N when N > 0 ->
-                    State1 #vqstate { gamma = #gamma { seq_id = Gamma1SeqId,
-                                                       count = N }, q3 = Q3a }
+                    maybe_gammas_to_betas(
+                      State1 #vqstate { q3 = Q3a, 
+                                        gamma = #gamma { seq_id = Gamma1SeqId,
+                                                         count = N } })
             end
     end.
 
