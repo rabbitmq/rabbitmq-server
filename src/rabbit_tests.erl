@@ -1122,7 +1122,8 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
       fun (_N, {Acc, VQ1}) ->
               {SeqId, VQ2} = rabbit_variable_queue:publish(
                                rabbit_basic:message(
-                                 <<>>, <<>>, [], <<>>, rabbit_guid:guid(),
+                                 rabbit_misc:r(<<>>, exchange, <<>>),
+                                 <<>>, [], <<>>, rabbit_guid:guid(),
                                  IsPersistent), VQ1),
               {[SeqId | Acc], VQ2}
       end, {[], VQ}, lists:seq(1, Count)).

@@ -94,6 +94,67 @@
 %% is non empty then q3 must be non empty.
 
 %%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-type(msg_id()  :: binary()).
+-type(seq_id()  :: non_neg_integer()).
+-type(ack()     :: {'ack_index_and_store', msg_id(), seq_id()}
+                 | 'ack_not_on_disk').
+-type(vqstate() :: #vqstate {
+               q1                    :: queue(),
+               q2                    :: queue(),
+               gamma                 :: gamma(),
+               q3                    :: queue(),
+               q4                    :: queue(),
+               duration_target       :: non_neg_integer(),
+               target_ram_msg_count  :: non_neg_integer(),
+               queue                 :: queue_name(),
+               index_state           :: any(),
+               next_seq_id           :: seq_id(),
+               out_counter           :: non_neg_integer(),
+               egress_rate           :: float(),
+               avg_egress_rate       :: float(),
+               egress_rate_timestamp :: {integer(), integer(), integer()},
+               prefetcher            :: ('undefined' | pid()),
+               len                   :: non_neg_integer(),
+               on_sync               :: {[ack()], [msg_id()], [{pid(), any()}]}
+              }).
+
+-spec(init/1 :: (queue_name()) -> vqstate()).
+-spec(terminate/1 :: (vqstate()) -> vqstate()).
+-spec(publish/2 :: (basic_message(), vqstate()) ->
+             {seq_id(), vqstate()}).
+-spec(publish_delivered/2 :: (basic_message(), vqstate()) ->
+             {ack(), vqstate()}).
+-spec(set_queue_ram_duration_target/2 ::
+      (('undefined' | number()), vqstate()) -> vqstate()).
+-spec(remeasure_egress_rate/1 :: (vqstate()) -> vqstate()).
+-spec(fetch/1 :: (vqstate()) ->
+             {('empty'|{basic_message(), boolean(), ack(), non_neg_integer()}),
+              vqstate()}).
+-spec(ack/2 :: ([ack()], vqstate()) -> vqstate()).
+-spec(len/1 :: (vqstate()) -> non_neg_integer()).
+-spec(is_empty/1 :: (vqstate()) -> boolean()).
+-spec(maybe_start_prefetcher/1 :: (vqstate()) -> vqstate()).
+-spec(purge/1 :: (vqstate()) -> {non_neg_integer(), vqstate()}).
+-spec(delete/1 :: (vqstate()) -> vqstate()).
+-spec(requeue/2 :: ([{basic_message(), ack()}], vqstate()) -> vqstate()).
+-spec(tx_publish/2 :: (basic_message(), vqstate()) -> vqstate()).
+-spec(tx_rollback/2 :: ([msg_id()], vqstate()) -> vqstate()).
+-spec(tx_commit/4 :: ([msg_id()], [ack()], {pid(), any()}, vqstate()) ->
+             {boolean(), vqstate()}).
+-spec(tx_commit_from_msg_store/4 ::
+      ([msg_id()], [ack()], {pid(), any()}, vqstate()) -> vqstate()).
+-spec(tx_commit_from_vq/1 :: (vqstate()) -> vqstate()).
+-spec(needs_sync/1 :: (vqstate()) -> boolean()).
+-spec(can_flush_journal/1 :: (vqstate()) -> boolean()).
+-spec(flush_journal/1 :: (vqstate()) -> vqstate()).
+-spec(status/1 :: (vqstate()) -> [{atom(), any()}]).
+
+-endif.
+
+%%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
 
@@ -238,6 +299,23 @@ fetch(State =
                               index_state = IndexState1, len = Len1 }}
     end.
 
+ack(AckTags, State = #vqstate { index_state = IndexState }) ->
+    {MsgIds, SeqIds} =
+        lists:foldl(
+          fun (ack_not_on_disk, Acc) -> Acc;
+              ({ack_index_and_store, MsgId, SeqId}, {MsgIds, SeqIds}) ->
+                  {[MsgId | MsgIds], [SeqId | SeqIds]}
+          end, {[], []}, AckTags),
+    IndexState1 = case SeqIds of
+                      [] -> IndexState;
+                      _  -> rabbit_queue_index:write_acks(SeqIds, IndexState)
+                  end,
+    ok = case MsgIds of
+             [] -> ok;
+             _  -> rabbit_msg_store:remove(MsgIds)
+         end,
+    State #vqstate { index_state = IndexState1 }.
+
 len(#vqstate { len = Len }) ->
     Len.
 
@@ -273,23 +351,6 @@ maybe_start_prefetcher(State = #vqstate { prefetcher = undefined }) ->
     end;
 maybe_start_prefetcher(State) ->
     State.
-
-ack(AckTags, State = #vqstate { index_state = IndexState }) ->
-    {MsgIds, SeqIds} =
-        lists:foldl(
-          fun (ack_not_on_disk, Acc) -> Acc;
-              ({ack_index_and_store, MsgId, SeqId}, {MsgIds, SeqIds}) ->
-                  {[MsgId | MsgIds], [SeqId | SeqIds]}
-          end, {[], []}, AckTags),
-    IndexState1 = case SeqIds of
-                      [] -> IndexState;
-                      _  -> rabbit_queue_index:write_acks(SeqIds, IndexState)
-                  end,
-    ok = case MsgIds of
-             [] -> ok;
-             _  -> rabbit_msg_store:remove(MsgIds)
-         end,
-    State #vqstate { index_state = IndexState1 }.
 
 purge(State = #vqstate { prefetcher = undefined, q4 = Q4,
                          index_state = IndexState, len = Len }) ->
@@ -434,10 +495,55 @@ status(#vqstate { q1 = Q1, q2 = Q2, gamma = Gamma, q3 = Q3, q4 = Q4,
       {prefetching, Prefetcher /= undefined} ].
 
 %%----------------------------------------------------------------------------
+%% Minor helpers
+%%----------------------------------------------------------------------------
 
 persistent_msg_ids(Pubs) ->
     [MsgId || Obj = #basic_message { guid = MsgId } <- Pubs,
               Obj #basic_message.is_persistent].
+
+entry_salient_details(#alpha { msg = #basic_message { guid = MsgId },
+                               seq_id = SeqId, is_delivered = IsDelivered,
+                               msg_on_disk = MsgOnDisk,
+                               index_on_disk = IndexOnDisk }) ->
+    {MsgId, SeqId, IsDelivered, MsgOnDisk, IndexOnDisk};
+entry_salient_details(#beta { msg_id = MsgId, seq_id = SeqId,
+                              is_delivered = IsDelivered,
+                              index_on_disk = IndexOnDisk }) ->
+    {MsgId, SeqId, IsDelivered, true, IndexOnDisk}.
+
+betas_from_segment_entries(List) ->
+    queue:from_list([#beta { msg_id = MsgId, seq_id = SeqId,
+                             is_persistent = IsPersistent,
+                             is_delivered = IsDelivered,
+                             index_on_disk = true }
+                     || {MsgId, SeqId, IsPersistent, IsDelivered} <- List]).
+
+read_index_segment(SeqId, IndexState) ->
+    SeqId1 = SeqId + rabbit_queue_index:segment_size(),
+    case rabbit_queue_index:read_segment_entries(SeqId, IndexState) of
+        {[], IndexState1} -> read_index_segment(SeqId1, IndexState1);
+        {List, IndexState1} -> {List, IndexState1, SeqId1}
+    end.
+
+ensure_binary_properties(Msg = #basic_message { content = Content }) ->
+    Msg #basic_message {
+      content = rabbit_binary_parser:clear_decoded_content(
+                  rabbit_binary_generator:ensure_content_encoded(Content)) }.
+
+%% the first arg is the older gamma            
+combine_gammas(#gamma { count = 0 }, #gamma { count = 0 }) ->
+    #gamma { seq_id = undefined, count = 0 };
+combine_gammas(#gamma { count = 0 }, #gamma {       } = B) -> B;
+combine_gammas(#gamma {       } = A, #gamma { count = 0 }) -> A;
+combine_gammas(#gamma { seq_id = SeqIdLow,  count = CountLow },
+               #gamma { seq_id = SeqIdHigh, count = CountHigh}) ->
+    true = SeqIdLow =< SeqIdHigh, %% ASSERTION
+    #gamma { seq_id = SeqIdLow, count = CountLow + CountHigh}.
+
+%%----------------------------------------------------------------------------
+%% Internal major helpers for Public API
+%%----------------------------------------------------------------------------
 
 delete1(NextSeqId, Count, GammaSeqId, IndexState)
   when GammaSeqId >= NextSeqId ->
@@ -502,71 +608,6 @@ remove_queue_entries(Q, IndexState) ->
         end,
     {Count, IndexState2}.
 
-entry_salient_details(#alpha { msg = #basic_message { guid = MsgId },
-                               seq_id = SeqId, is_delivered = IsDelivered,
-                               msg_on_disk = MsgOnDisk,
-                               index_on_disk = IndexOnDisk }) ->
-    {MsgId, SeqId, IsDelivered, MsgOnDisk, IndexOnDisk};
-entry_salient_details(#beta { msg_id = MsgId, seq_id = SeqId,
-                              is_delivered = IsDelivered,
-                              index_on_disk = IndexOnDisk }) ->
-    {MsgId, SeqId, IsDelivered, true, IndexOnDisk}.
-
-publish(Msg, IsDelivered, PersistentMsgsAlreadyOnDisk,
-        State = #vqstate { next_seq_id = SeqId, len = Len }) ->
-    {SeqId, publish(test_keep_msg_in_ram(SeqId, State), Msg, SeqId, IsDelivered,
-                    PersistentMsgsAlreadyOnDisk,
-                    State #vqstate { next_seq_id = SeqId + 1, len = Len + 1 })}.
-
-publish(msg, Msg = #basic_message { guid = MsgId,
-                                    is_persistent = IsPersistent },
-        SeqId, IsDelivered, PersistentMsgsAlreadyOnDisk,
-        State = #vqstate { index_state = IndexState,
-                           ram_msg_count = RamMsgCount }) ->
-    MsgOnDisk =
-        maybe_write_msg_to_disk(false, PersistentMsgsAlreadyOnDisk, Msg),
-    {IndexOnDisk, IndexState1} =
-        maybe_write_index_to_disk(false, IsPersistent, MsgId, SeqId,
-                                  IsDelivered, IndexState),
-    Entry = #alpha { msg = Msg, seq_id = SeqId, is_delivered = IsDelivered,
-                     msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk },
-    State1 = State #vqstate { ram_msg_count = RamMsgCount + 1,
-                              index_state = IndexState1 },
-    store_alpha_entry(Entry, State1);
-
-publish(index, Msg = #basic_message { guid = MsgId,
-                                      is_persistent = IsPersistent },
-        SeqId, IsDelivered, PersistentMsgsAlreadyOnDisk,
-        State = #vqstate { index_state = IndexState, q1 = Q1 }) ->
-    true = maybe_write_msg_to_disk(true, PersistentMsgsAlreadyOnDisk, Msg),
-    {IndexOnDisk, IndexState1} =
-        maybe_write_index_to_disk(false, IsPersistent, MsgId, SeqId,
-                                  IsDelivered, IndexState),
-    Entry = #beta { msg_id = MsgId, seq_id = SeqId, is_delivered = IsDelivered,
-                    is_persistent = IsPersistent, index_on_disk = IndexOnDisk },
-    State1 = State #vqstate { index_state = IndexState1 },
-    true = queue:is_empty(Q1), %% ASSERTION
-    store_beta_entry(Entry, State1);
-
-publish(neither, Msg = #basic_message { guid = MsgId,
-                                        is_persistent = IsPersistent },
-        SeqId, IsDelivered, PersistentMsgsAlreadyOnDisk,
-        State = #vqstate { index_state = IndexState, q1 = Q1, q2 = Q2,
-                           gamma = Gamma }) ->
-    true = maybe_write_msg_to_disk(true, PersistentMsgsAlreadyOnDisk, Msg),
-    {true, IndexState1} =
-        maybe_write_index_to_disk(true, IsPersistent, MsgId, SeqId,
-                                  IsDelivered, IndexState),
-    true = queue:is_empty(Q1) andalso queue:is_empty(Q2), %% ASSERTION
-    %% gamma may be empty, seq_id > next_segment_boundary from q3
-    %% head, so we need to find where the segment boundary is before
-    %% or equal to seq_id
-    GammaSeqId = rabbit_queue_index:next_segment_boundary(SeqId) -
-        rabbit_queue_index:segment_size(),
-    Gamma1 = #gamma { seq_id = GammaSeqId, count = 1 },
-    State #vqstate { index_state = IndexState1,
-                     gamma = combine_gammas(Gamma, Gamma1) }.
-
 fetch_from_q3_or_gamma(State = #vqstate {
                          q1 = Q1, q2 = Q2, gamma = #gamma { count = GammaCount },
                          q3 = Q3, q4 = Q4, ram_msg_count = RamMsgCount }) ->
@@ -607,56 +648,6 @@ fetch_from_q3_or_gamma(State = #vqstate {
                         State1
                 end,
             fetch(State2)
-    end.
-
-maybe_gammas_to_betas(State = #vqstate { gamma = #gamma { count = 0 } }) ->
-    State;
-maybe_gammas_to_betas(State =
-                      #vqstate { index_state = IndexState, q2 = Q2, q3 = Q3,
-                                 target_ram_msg_count = TargetRamMsgCount,
-                                 gamma = #gamma { seq_id = GammaSeqId,
-                                                  count = GammaCount }}) ->
-    case (not queue:is_empty(Q3)) andalso 0 == TargetRamMsgCount of
-        true ->
-            State;
-        false ->
-            %% either q3 is empty, in which case we load at least one
-            %% segment, or TargetRamMsgCount > 0, meaning we should
-            %% really be holding all the betas in memory.
-            {List, IndexState1, Gamma1SeqId} =
-                read_index_segment(GammaSeqId, IndexState),
-            State1 = State #vqstate { index_state = IndexState1 },
-            %% length(List) may be < segment_size because of acks. But
-            %% it can't be []
-            Q3a = queue:join(Q3, betas_from_segment_entries(List)),
-            case GammaCount - length(List) of
-                0 ->
-                    %% gamma is now empty, but it wasn't before, so
-                    %% can now join q2 onto q3
-                    State1 #vqstate { gamma = #gamma { seq_id = undefined,
-                                                       count = 0 },
-                                      q2 = queue:new(),
-                                      q3 = queue:join(Q3a, Q2) };
-                N when N > 0 ->
-                    maybe_gammas_to_betas(
-                      State1 #vqstate { q3 = Q3a, 
-                                        gamma = #gamma { seq_id = Gamma1SeqId,
-                                                         count = N } })
-            end
-    end.
-
-betas_from_segment_entries(List) ->
-    queue:from_list([#beta { msg_id = MsgId, seq_id = SeqId,
-                             is_persistent = IsPersistent,
-                             is_delivered = IsDelivered,
-                             index_on_disk = true }
-                     || {MsgId, SeqId, IsPersistent, IsDelivered} <- List]).
-
-read_index_segment(SeqId, IndexState) ->
-    SeqId1 = SeqId + rabbit_queue_index:segment_size(),
-    case rabbit_queue_index:read_segment_entries(SeqId, IndexState) of
-        {[], IndexState1} -> read_index_segment(SeqId1, IndexState1);
-        {List, IndexState1} -> {List, IndexState1, SeqId1}
     end.
 
 drain_prefetcher(_DrainOrStop, State = #vqstate { prefetcher = undefined }) ->
@@ -714,6 +705,118 @@ reduce_memory_use(State =
         _ -> State1
     end.
 
+%%----------------------------------------------------------------------------
+%% Internal gubbins for publishing
+%%----------------------------------------------------------------------------
+
+test_keep_msg_in_ram(SeqId, #vqstate { target_ram_msg_count = TargetRamMsgCount,
+                                       ram_msg_count = RamMsgCount,
+                                       q1 = Q1, q3 = Q3 }) ->
+    case TargetRamMsgCount of
+        undefined ->
+            msg;
+        0 ->
+            case queue:out(Q3) of
+                {empty, _Q3} ->
+                    %% if TargetRamMsgCount == 0, we know we have no
+                    %% alphas. If q3 is empty then gamma must be empty
+                    %% too, so create a beta, which should end up in
+                    %% q3
+                    index;
+                {{value, #beta { seq_id = OldSeqId }}, _Q3a} ->
+                    %% Don't look at the current gamma as it may be
+                    %% empty. If the SeqId is still within the current
+                    %% segment, it'll be a beta, else it'll go into
+                    %% gamma
+                    case SeqId >= rabbit_queue_index:next_segment_boundary(OldSeqId) of
+                        true -> neither;
+                        false -> index
+                    end
+            end;
+        _ when TargetRamMsgCount > RamMsgCount ->
+            msg;
+        _ ->
+            case queue:is_empty(Q1) of
+                true -> index;
+                false -> msg %% can push out elders to disk
+            end
+    end.
+
+publish(Msg, IsDelivered, PersistentMsgsAlreadyOnDisk,
+        State = #vqstate { next_seq_id = SeqId, len = Len }) ->
+    {SeqId, publish(test_keep_msg_in_ram(SeqId, State), Msg, SeqId, IsDelivered,
+                    PersistentMsgsAlreadyOnDisk,
+                    State #vqstate { next_seq_id = SeqId + 1, len = Len + 1 })}.
+
+publish(msg, Msg = #basic_message { guid = MsgId,
+                                    is_persistent = IsPersistent },
+        SeqId, IsDelivered, PersistentMsgsAlreadyOnDisk,
+        State = #vqstate { index_state = IndexState,
+                           ram_msg_count = RamMsgCount }) ->
+    MsgOnDisk =
+        maybe_write_msg_to_disk(false, PersistentMsgsAlreadyOnDisk, Msg),
+    {IndexOnDisk, IndexState1} =
+        maybe_write_index_to_disk(false, IsPersistent, MsgId, SeqId,
+                                  IsDelivered, IndexState),
+    Entry = #alpha { msg = Msg, seq_id = SeqId, is_delivered = IsDelivered,
+                     msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk },
+    State1 = State #vqstate { ram_msg_count = RamMsgCount + 1,
+                              index_state = IndexState1 },
+    store_alpha_entry(Entry, State1);
+
+publish(index, Msg = #basic_message { guid = MsgId,
+                                      is_persistent = IsPersistent },
+        SeqId, IsDelivered, PersistentMsgsAlreadyOnDisk,
+        State = #vqstate { index_state = IndexState, q1 = Q1 }) ->
+    true = maybe_write_msg_to_disk(true, PersistentMsgsAlreadyOnDisk, Msg),
+    {IndexOnDisk, IndexState1} =
+        maybe_write_index_to_disk(false, IsPersistent, MsgId, SeqId,
+                                  IsDelivered, IndexState),
+    Entry = #beta { msg_id = MsgId, seq_id = SeqId, is_delivered = IsDelivered,
+                    is_persistent = IsPersistent, index_on_disk = IndexOnDisk },
+    State1 = State #vqstate { index_state = IndexState1 },
+    true = queue:is_empty(Q1), %% ASSERTION
+    store_beta_entry(Entry, State1);
+
+publish(neither, Msg = #basic_message { guid = MsgId,
+                                        is_persistent = IsPersistent },
+        SeqId, IsDelivered, PersistentMsgsAlreadyOnDisk,
+        State = #vqstate { index_state = IndexState, q1 = Q1, q2 = Q2,
+                           gamma = Gamma }) ->
+    true = maybe_write_msg_to_disk(true, PersistentMsgsAlreadyOnDisk, Msg),
+    {true, IndexState1} =
+        maybe_write_index_to_disk(true, IsPersistent, MsgId, SeqId,
+                                  IsDelivered, IndexState),
+    true = queue:is_empty(Q1) andalso queue:is_empty(Q2), %% ASSERTION
+    %% gamma may be empty, seq_id > next_segment_boundary from q3
+    %% head, so we need to find where the segment boundary is before
+    %% or equal to seq_id
+    GammaSeqId = rabbit_queue_index:next_segment_boundary(SeqId) -
+        rabbit_queue_index:segment_size(),
+    Gamma1 = #gamma { seq_id = GammaSeqId, count = 1 },
+    State #vqstate { index_state = IndexState1,
+                     gamma = combine_gammas(Gamma, Gamma1) }.
+
+store_alpha_entry(Entry = #alpha {}, State =
+                  #vqstate { q1 = Q1, q2 = Q2,
+                             gamma = #gamma { count = GammaCount },
+                             q3 = Q3, q4 = Q4, prefetcher = Prefetcher }) ->
+    case queue:is_empty(Q2) andalso GammaCount == 0 andalso
+        queue:is_empty(Q3) andalso Prefetcher == undefined of
+        true ->
+            State #vqstate { q4 = queue:in(Entry, Q4) };
+        false ->
+            maybe_push_q1_to_betas(State #vqstate { q1 = queue:in(Entry, Q1) })
+    end.
+
+store_beta_entry(Entry = #beta {}, State =
+                 #vqstate { q2 = Q2, gamma = #gamma { count = GammaCount },
+                            q3 = Q3 }) ->
+    case GammaCount == 0 of
+        true  -> State #vqstate { q3 = queue:in(Entry, Q3) };
+        false -> State #vqstate { q2 = queue:in(Entry, Q2) }
+    end.
+
 %% Bool  IsPersistent PersistentMsgsAlreadyOnDisk | WriteToDisk?
 %% -----------------------------------------------+-------------
 %% false false        false                       | false      1
@@ -751,59 +854,44 @@ maybe_write_index_to_disk(_Bool, _IsPersistent, _MsgId, _SeqId, _IsDelivered,
                           IndexState) ->
     {false, IndexState}.
 
-test_keep_msg_in_ram(SeqId, #vqstate { target_ram_msg_count = TargetRamMsgCount,
-                                       ram_msg_count = RamMsgCount,
-                                       q1 = Q1, q3 = Q3 }) ->
-    case TargetRamMsgCount of
-        undefined ->
-            msg;
-        0 ->
-            case queue:out(Q3) of
-                {empty, _Q3} ->
-                    %% if TargetRamMsgCount == 0, we know we have no
-                    %% alphas. If q3 is empty then gamma must be empty
-                    %% too, so create a beta, which should end up in
-                    %% q3
-                    index;
-                {{value, #beta { seq_id = OldSeqId }}, _Q3a} ->
-                    %% don't look at the current gamma as it may be empty
-                    case SeqId >= rabbit_queue_index:next_segment_boundary(OldSeqId) of
-                        true -> neither;
-                        false -> index
-                    end
-            end;
-        _ when TargetRamMsgCount > RamMsgCount ->
-            msg;
-        _ ->
-            case queue:is_empty(Q1) of
-                true -> index;
-                false -> msg %% can push out elders to disk
-            end
-    end.
+%%----------------------------------------------------------------------------
+%% Phase changes
+%%----------------------------------------------------------------------------
 
-ensure_binary_properties(Msg = #basic_message { content = Content }) ->
-    Msg #basic_message {
-      content = rabbit_binary_parser:clear_decoded_content(
-                  rabbit_binary_generator:ensure_content_encoded(Content)) }.
-
-store_alpha_entry(Entry = #alpha {}, State =
-                  #vqstate { q1 = Q1, q2 = Q2,
-                             gamma = #gamma { count = GammaCount },
-                             q3 = Q3, q4 = Q4, prefetcher = Prefetcher }) ->
-    case queue:is_empty(Q2) andalso GammaCount == 0 andalso
-        queue:is_empty(Q3) andalso Prefetcher == undefined of
+maybe_gammas_to_betas(State = #vqstate { gamma = #gamma { count = 0 } }) ->
+    State;
+maybe_gammas_to_betas(State =
+                      #vqstate { index_state = IndexState, q2 = Q2, q3 = Q3,
+                                 target_ram_msg_count = TargetRamMsgCount,
+                                 gamma = #gamma { seq_id = GammaSeqId,
+                                                  count = GammaCount }}) ->
+    case (not queue:is_empty(Q3)) andalso 0 == TargetRamMsgCount of
         true ->
-            State #vqstate { q4 = queue:in(Entry, Q4) };
+            State;
         false ->
-            maybe_push_q1_to_betas(State #vqstate { q1 = queue:in(Entry, Q1) })
-    end.
-
-store_beta_entry(Entry = #beta {}, State =
-                 #vqstate { q2 = Q2, gamma = #gamma { count = GammaCount },
-                            q3 = Q3 }) ->
-    case GammaCount == 0 of
-        true  -> State #vqstate { q3 = queue:in(Entry, Q3) };
-        false -> State #vqstate { q2 = queue:in(Entry, Q2) }
+            %% either q3 is empty, in which case we load at least one
+            %% segment, or TargetRamMsgCount > 0, meaning we should
+            %% really be holding all the betas in memory.
+            {List, IndexState1, Gamma1SeqId} =
+                read_index_segment(GammaSeqId, IndexState),
+            State1 = State #vqstate { index_state = IndexState1 },
+            %% length(List) may be < segment_size because of acks. But
+            %% it can't be []
+            Q3a = queue:join(Q3, betas_from_segment_entries(List)),
+            case GammaCount - length(List) of
+                0 ->
+                    %% gamma is now empty, but it wasn't before, so
+                    %% can now join q2 onto q3
+                    State1 #vqstate { gamma = #gamma { seq_id = undefined,
+                                                       count = 0 },
+                                      q2 = queue:new(),
+                                      q3 = queue:join(Q3a, Q2) };
+                N when N > 0 ->
+                    maybe_gammas_to_betas(
+                      State1 #vqstate { q3 = Q3a, 
+                                        gamma = #gamma { seq_id = Gamma1SeqId,
+                                                         count = N } })
+            end
     end.
 
 maybe_push_q1_to_betas(State = #vqstate { q1 = Q1 }) ->
@@ -927,13 +1015,3 @@ push_betas_to_gammas(Generator, Limit, Q, Count, IndexState) ->
                 end,
             push_betas_to_gammas(Generator, Limit, Qa, Count + 1, IndexState1)
     end.
-
-%% the first arg is the older gamma            
-combine_gammas(#gamma { count = 0 }, #gamma { count = 0 }) ->
-    #gamma { seq_id = undefined, count = 0 };
-combine_gammas(#gamma { count = 0 }, #gamma {       } = B) -> B;
-combine_gammas(#gamma {       } = A, #gamma { count = 0 }) -> A;
-combine_gammas(#gamma { seq_id = SeqIdLow,  count = CountLow },
-               #gamma { seq_id = SeqIdHigh, count = CountHigh}) ->
-    true = SeqIdLow =< SeqIdHigh, %% ASSERTION
-    #gamma { seq_id = SeqIdLow, count = CountLow + CountHigh}.

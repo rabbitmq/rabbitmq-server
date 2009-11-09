@@ -49,3 +49,10 @@
         { seq_id,
           count
         }).
+
+-ifdef(use_specs).
+
+-type(gamma() :: #gamma { seq_id :: non_neg_integer(),
+                          count :: non_neg_integer () }).
+
+-endif.
