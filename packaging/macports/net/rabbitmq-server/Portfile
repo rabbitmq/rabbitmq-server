@@ -28,12 +28,15 @@ depends_run     port:erlang
 
 platform darwin 7 {
     depends_build-append port:py25-simplejson
+    build.args      PYTHON=${prefix}/bin/python2.5
 }
 platform darwin 8 {
     depends_build-append port:py25-simplejson
+    build.args      PYTHON=${prefix}/bin/python2.5
 }
 platform darwin 9 {
     depends_build-append port:py25-simplejson
+    build.args      PYTHON=${prefix}/bin/python2.5
 }
 # no need for simplejson on Snow Leopard or higher
 
@@ -51,8 +54,6 @@ set realsbin ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sb
 use_configure   no
 
 use_parallel_build yes
-
-build.args      PYTHON=${prefix}/bin/python2.5
 
 destroot.destdir \
     TARGET_DIR=${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version} \
