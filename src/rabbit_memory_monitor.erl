@@ -95,6 +95,10 @@
 -define(DEFAULT_UPDATE_INTERVAL_MS, 2500).
 -define(TABLE_NAME, ?MODULE).
 -define(MAX_QUEUE_DURATION_ALLOWED, 60*60*24). % 1 day
+
+%% If user disabled vm_memory_monitor, let's assume 1GB of memory we can use.
+-define(MEMORY_SIZE_FOR_DISABLED_VMM, 1073741824).
+
 %%----------------------------------------------------------------------------
 -ifdef(use_specs).
 -type(state() :: #state{timer               :: timer:tref(),
@@ -136,26 +140,18 @@ push_queue_duration(Pid, QueueDuration) ->
 
 %%----------------------------------------------------------------------------
 
-get_user_memory_limit() ->
-    %% TODO: References to os_mon and rabbit_memsup_linux 
-    %%       should go away as bug 21457 removes it.
-    %%       BTW: memsup:get_system_memory_data() doesn't work.
-    {state, TotalMemory, _Allocated} = rabbit_memsup_linux:update({state, 0,0}),
-    MemoryHighWatermark = os_mon:get_env(memsup, system_memory_high_watermark),
-    Limit = erlang:trunc(TotalMemory * MemoryHighWatermark),
-    %% no more than two gigs on 32 bits.
-    case (Limit > 2*1024*1024*1024) and (erlang:system_info(wordsize) == 4) of
-        true -> 2*1024*1024*1024;
-        false -> Limit
+get_memory_limit() ->
+    RabbitMemoryLimit = case vm_memory_monitor:get_memory_limit() of
+        undefined -> ?MEMORY_SIZE_FOR_DISABLED_VMM;
+        A -> A
     end.
-
 
 init([]) ->
     %% We should never use more memory than user requested. As the memory 
     %% manager doesn't really know how much memory queues are using, we shall
-    %% try to remain safe distance from real limit. 
-    MemoryLimit = trunc(get_user_memory_limit() * 0.6),
-    rabbit_log:warning("Memory monitor limit: ~pMB~n", 
+    %% try to remain safe distance from real throttle limit.
+    MemoryLimit = trunc(get_memory_limit() * 0.6),
+    rabbit_log:warning("Queues go to disk when memory is above: ~pMB~n", 
                     [erlang:trunc(MemoryLimit/1048576)]),
 
     {ok, TRef} = timer:apply_interval(?DEFAULT_UPDATE_INTERVAL_MS, 
