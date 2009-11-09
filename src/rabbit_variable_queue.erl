@@ -61,28 +61,8 @@
           on_sync
         }).
 
--record(alpha,
-        { msg,
-          seq_id,
-          is_delivered,
-          msg_on_disk,
-          index_on_disk
-        }).
-
--record(beta,
-        { msg_id,
-          seq_id,
-          is_persistent,
-          is_delivered,
-          index_on_disk
-        }).
-
--record(gamma,
-        { seq_id,
-          count
-        }).
-
 -include("rabbit.hrl").
+-include("rabbit_queue.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -682,7 +662,9 @@ read_index_segment(SeqId, IndexState) ->
 drain_prefetcher(_DrainOrStop, State = #vqstate { prefetcher = undefined }) ->
     State;
 drain_prefetcher(DrainOrStop,
-                 State = #vqstate { prefetcher = Prefetcher, q3 = Q3, q4 = Q4,
+                 State = #vqstate { prefetcher = Prefetcher, q1 = Q1, q2 = Q2,
+                                    gamma = #gamma { count = GammaCount },
+                                    q3 = Q3, q4 = Q4,
                                     ram_msg_count = RamMsgCount }) ->
     Fun = case DrainOrStop of
               drain -> fun rabbit_queue_prefetcher:drain/1;
@@ -693,16 +675,27 @@ drain_prefetcher(DrainOrStop,
             {empty, Betas} ->       %% drain or drain_and_stop
                 {queue:join(Betas, Q3), Q4, undefined, 0};
             {finished, Alphas} ->   %% just drain
-                {Q3, Alphas, undefined, queue:len(Alphas)};
+                {Q3, queue:join(Q4, Alphas), undefined, queue:len(Alphas)};
             {continuing, Alphas} -> %% just drain
-                {Q3, Alphas, Prefetcher, queue:len(Alphas)};
+                {Q3, queue:join(Q4, Alphas), Prefetcher, queue:len(Alphas)};
             {Alphas, Betas} ->      %% just drain_and_stop
                 {queue:join(Betas, Q3), queue:join(Q4, Alphas), undefined,
                  queue:len(Alphas)}
         end,
-    maybe_push_q1_to_betas(
-      State #vqstate { prefetcher = Prefetcher1, q3 = Q3a, q4 = Q4a,
-                       ram_msg_count = RamMsgCount + RamMsgCountAdj }).
+    State1 = State #vqstate { prefetcher = Prefetcher1, q3 = Q3a, q4 = Q4a,
+                              ram_msg_count = RamMsgCount + RamMsgCountAdj },
+    %% don't join up with q1/q2 unless the prefetcher has stopped
+    State2 = case GammaCount == 0 andalso Prefetcher1 == undefined of
+                 true -> case queue:is_empty(Q3a) andalso queue:is_empty(Q2) of
+                             true ->
+                                 State1 #vqstate { q1 = queue:new(),
+                                                   q4 = queue:join(Q4a, Q1) };
+                             false ->
+                                 State1 #vqstate { q3 = queue:join(Q3a, Q2) }
+                         end;
+                 false -> State1
+             end,
+    maybe_push_q1_to_betas(State2).
 
 reduce_memory_use(State = #vqstate { ram_msg_count = RamMsgCount,
                                      target_ram_msg_count = TargetRamMsgCount })
@@ -796,9 +789,9 @@ ensure_binary_properties(Msg = #basic_message { content = Content }) ->
 store_alpha_entry(Entry = #alpha {}, State =
                   #vqstate { q1 = Q1, q2 = Q2,
                              gamma = #gamma { count = GammaCount },
-                             q3 = Q3, q4 = Q4 }) ->
-    case queue:is_empty(Q2) andalso GammaCount == 0 andalso queue:is_empty(Q3)
-        of
+                             q3 = Q3, q4 = Q4, prefetcher = Prefetcher }) ->
+    case queue:is_empty(Q2) andalso GammaCount == 0 andalso
+        queue:is_empty(Q3) andalso Prefetcher == undefined of
         true ->
             State #vqstate { q4 = queue:in(Entry, Q4) };
         false ->

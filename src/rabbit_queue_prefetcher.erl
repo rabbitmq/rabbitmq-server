@@ -41,6 +41,7 @@
 -export([publish/2, drain/1, drain_and_stop/1, stop/1]).
 
 -include("rabbit.hrl").
+-include("rabbit_queue.hrl").
 
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
@@ -50,22 +51,6 @@
           betas,
           queue_mref,
           peruse_cb
-        }).
-
--record(alpha,
-        { msg,
-          seq_id,
-          is_delivered,
-          msg_on_disk,
-          index_on_disk
-        }).
-
--record(beta,
-        { msg_id,
-          seq_id,
-          is_persistent,
-          is_delivered,
-          index_on_disk
         }).
 
 %%----------------------------------------------------------------------------
