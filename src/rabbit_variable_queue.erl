@@ -629,7 +629,7 @@ fetch_from_q3_or_gamma(State = #vqstate {
             fetch(State2)
     end.
 
-maybe_gammas_to_betas(State = #vqstate { gamma = #gamma { count = 0 }} ) ->
+maybe_gammas_to_betas(State = #vqstate { gamma = #gamma { count = 0 } }) ->
     State;
 maybe_gammas_to_betas(State =
                       #vqstate { index_state = IndexState, q2 = Q2, q3 = Q3,
