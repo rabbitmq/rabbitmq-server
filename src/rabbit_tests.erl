@@ -1159,7 +1159,48 @@ test_variable_queue() ->
     passed = test_variable_queue_prefetching_during_publish(0),
     passed = test_variable_queue_prefetching_during_publish(5000),
     passed = test_variable_queue_prefetch_evicts_q1(),
+    passed = test_variable_queue_dynamic_duration_change(),
     passed.
+
+test_variable_queue_dynamic_duration_change() ->
+    SegmentSize = rabbit_queue_index:segment_size(),
+    VQ0 = fresh_variable_queue(),
+    %% start by sending in a couple of segments worth
+    Len1 = 2*SegmentSize,
+    {_SeqIds, VQ1} = variable_queue_publish(true, Len1, VQ0),
+    VQ2 = rabbit_variable_queue:remeasure_egress_rate(VQ1),
+    {ok, _TRef} = timer:send_after(1000, {duration, 30, fun erlang:'-'/2}),
+    VQ3 = test_variable_queue_dynamic_duration_change_f(Len1, VQ2),
+    {VQ4, AckTags} = variable_queue_fetch(Len1, false, false, Len1, VQ3),
+    VQ5 = rabbit_variable_queue:ack(AckTags, VQ4),
+    {empty, VQ6} = rabbit_variable_queue:fetch(VQ5),
+    rabbit_variable_queue:terminate(VQ6),
+
+    passed.
+
+test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
+    {_SeqIds, VQ1} = variable_queue_publish(false, 1, VQ0),
+    {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(VQ1),
+    VQ3 = rabbit_variable_queue:ack([AckTag], VQ2),
+    receive
+        {duration, 30, stop} ->
+            VQ3;
+        {duration, N, Fun} ->
+            N1 = Fun(N, 1),
+            Fun1 = case N1 of
+                       0  -> fun erlang:'+'/2;
+                       30 -> stop;
+                       _  -> Fun
+                   end,
+            {ok, _TRef} = timer:send_after(1000, {duration, N1, Fun1}),
+            VQ4 = rabbit_variable_queue:remeasure_egress_rate(VQ3),
+            VQ5 = %% /37 otherwise the duration is just to high to stress things
+                rabbit_variable_queue:set_queue_ram_duration_target(N/37, VQ4),
+            io:format("~p:~n~p~n~n", [N, rabbit_variable_queue:status(VQ5)]),
+            test_variable_queue_dynamic_duration_change_f(Len, VQ5)
+    after 0 ->
+            test_variable_queue_dynamic_duration_change_f(Len, VQ3)
+    end.
 
 test_variable_queue_prefetch_evicts_q1() ->
     SegmentSize = rabbit_queue_index:segment_size(),

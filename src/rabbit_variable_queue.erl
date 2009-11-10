@@ -482,7 +482,8 @@ flush_journal(State = #vqstate { index_state = IndexState }) ->
 status(#vqstate { q1 = Q1, q2 = Q2, gamma = Gamma, q3 = Q3, q4 = Q4,
                   len = Len, on_sync = {_, _, From},
                   target_ram_msg_count = TargetRamMsgCount,
-                  ram_msg_count = RamMsgCount, prefetcher = Prefetcher }) ->
+                  ram_msg_count = RamMsgCount, prefetcher = Prefetcher,
+                  avg_egress_rate = AvgEgressRate }) ->
     [ {q1, queue:len(Q1)},
       {q2, queue:len(Q2)},
       {gamma, Gamma},
@@ -492,6 +493,7 @@ status(#vqstate { q1 = Q1, q2 = Q2, gamma = Gamma, q3 = Q3, q4 = Q4,
       {outstanding_txns, length(From)},
       {target_ram_msg_count, TargetRamMsgCount},
       {ram_msg_count, RamMsgCount},
+      {avg_egress_rate, AvgEgressRate},
       {prefetching, Prefetcher /= undefined} ].
 
 %%----------------------------------------------------------------------------
