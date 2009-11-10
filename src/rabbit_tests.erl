@@ -1025,6 +1025,23 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
               {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
       end, {Qi, []}, SeqIds).
 
+queue_index_deliver(SeqIds, Qi) ->
+    lists:foldl(
+      fun (SeqId, QiN) ->
+              rabbit_queue_index:write_delivered(SeqId, QiN)
+      end, Qi, SeqIds).
+
+queue_index_flush_journal(Qi) ->
+    {_Oks, {false, Qi1}} =
+        rabbit_misc:unfold(
+          fun ({true, QiN}) ->
+                  QiM = rabbit_queue_index:flush_journal(QiN),
+                  {true, ok, {rabbit_queue_index:can_flush_journal(QiM), QiM}};
+              ({false, _QiN}) ->
+                  false
+          end, {true, Qi}),
+    Qi1.
+
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
 verify_read_with_published(Delivered, Persistent,
@@ -1071,10 +1088,7 @@ test_queue_index() ->
     {LenB, Qi12} = rabbit_queue_index:init(test_queue()),
     {0, 20000, Qi13} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi12),
-    Qi14 = lists:foldl(
-             fun (SeqId, QiN) ->
-                     rabbit_queue_index:write_delivered(SeqId, QiN)
-             end, Qi13, SeqIdsB),
+    Qi14 = queue_index_deliver(SeqIdsB, Qi13),
     {ReadC, Qi15} = rabbit_queue_index:read_segment_entries(0, Qi14),
     ok = verify_read_with_published(true, true, ReadC,
                                     lists:reverse(SeqIdsMsgIdsB)),
@@ -1094,24 +1108,40 @@ test_queue_index() ->
     _Qi21 = rabbit_queue_index:terminate_and_erase(Qi20),
     ok = stop_msg_store(),
     ok = empty_test_queue(),
-    %% this next bit is just to hit the auto deletion of segment files
-    SeqIdsC = lists:seq(0,65535),
+
+    %% These next bits are just to hit the auto deletion of segment files.
+    %% First, partials:
+    %% a) partial pub+del+ack, then move to new segment
+    SeqIdsC = lists:seq(0,trunc(SegmentSize/2)),
     {0, Qi22} = rabbit_queue_index:init(test_queue()),
     {Qi23, _SeqIdsMsgIdsC} = queue_index_publish(SeqIdsC, false, Qi22),
-    Qi24 = lists:foldl(
-             fun (SeqId, QiN) ->
-                     rabbit_queue_index:write_delivered(SeqId, QiN)
-             end, Qi23, SeqIdsC),
+    Qi24 = queue_index_deliver(SeqIdsC, Qi23),
     Qi25 = rabbit_queue_index:write_acks(SeqIdsC, Qi24),
-    {_Oks, {false, Qi26}} =
-        rabbit_misc:unfold(
-          fun ({true, QiN}) ->
-                  QiM = rabbit_queue_index:flush_journal(QiN),
-                  {true, ok, {rabbit_queue_index:can_flush_journal(QiM), QiM}};
-              ({false, _QiN}) ->
-                  false
-          end, {true, Qi25}),
-    _Qi27 = rabbit_queue_index:terminate_and_erase(Qi26),
+    Qi26 = queue_index_flush_journal(Qi25),
+    {Qi27, _SeqIdsMsgIdsC1} = queue_index_publish([SegmentSize], false, Qi26),
+    _Qi28 = rabbit_queue_index:terminate_and_erase(Qi27),
+    ok = stop_msg_store(),
+    ok = empty_test_queue(),
+
+    %% b) partial pub+del, then move to new segment, then ack all in old segment
+    {0, Qi29} = rabbit_queue_index:init(test_queue()),
+    {Qi30, _SeqIdsMsgIdsC2} = queue_index_publish(SeqIdsC, false, Qi29),
+    Qi31 = queue_index_deliver(SeqIdsC, Qi30),
+    {Qi32, _SeqIdsMsgIdsC3} = queue_index_publish([SegmentSize], false, Qi31),
+    Qi33 = rabbit_queue_index:write_acks(SeqIdsC, Qi32),
+    Qi34 = queue_index_flush_journal(Qi33),
+    _Qi35 = rabbit_queue_index:terminate_and_erase(Qi34),
+    ok = stop_msg_store(),
+    ok = empty_test_queue(),
+
+    %% c) just fill up several segments of all pubs, then +dels, then +acks
+    SeqIdsD = lists:seq(0,SegmentSize*4),
+    {0, Qi36} = rabbit_queue_index:init(test_queue()),
+    {Qi37, _SeqIdsMsgIdsD} = queue_index_publish(SeqIdsD, false, Qi36),
+    Qi38 = queue_index_deliver(SeqIdsD, Qi37),
+    Qi39 = rabbit_queue_index:write_acks(SeqIdsD, Qi38),
+    Qi40 = queue_index_flush_journal(Qi39),
+    _Qi41 = rabbit_queue_index:terminate_and_erase(Qi40),
     ok = stop_msg_store(),
     ok = rabbit_queue_index:start_msg_store([]),
     ok = stop_msg_store(),
@@ -1167,14 +1197,26 @@ test_variable_queue_dynamic_duration_change() ->
     VQ0 = fresh_variable_queue(),
     %% start by sending in a couple of segments worth
     Len1 = 2*SegmentSize,
-    {_SeqIds, VQ1} = variable_queue_publish(true, Len1, VQ0),
+    {_SeqIds, VQ1} = variable_queue_publish(false, Len1, VQ0),
     VQ2 = rabbit_variable_queue:remeasure_egress_rate(VQ1),
-    {ok, _TRef} = timer:send_after(1000, {duration, 30, fun erlang:'-'/2}),
+    {ok, _TRef} = timer:send_after(1000, {duration, 60,
+                                          fun (V) -> (V*0.75)-1 end}),
     VQ3 = test_variable_queue_dynamic_duration_change_f(Len1, VQ2),
     {VQ4, AckTags} = variable_queue_fetch(Len1, false, false, Len1, VQ3),
     VQ5 = rabbit_variable_queue:ack(AckTags, VQ4),
     {empty, VQ6} = rabbit_variable_queue:fetch(VQ5),
-    rabbit_variable_queue:terminate(VQ6),
+
+    %% just publish and fetch some persistent msgs, this hits the the
+    %% partial segment path in queue_index due to the period when
+    %% duration was 0 and the entire queue was gamma.
+    {_SeqIds1, VQ7} = variable_queue_publish(true, 20, VQ6),
+    {VQ8, AckTags1} = variable_queue_fetch(20, true, false, 20, VQ7),
+    VQ9 = rabbit_variable_queue:ack(AckTags1, VQ8),
+    VQ10 = rabbit_variable_queue:flush_journal(VQ9),
+    VQ11 = rabbit_variable_queue:flush_journal(VQ10),
+    {empty, VQ12} = rabbit_variable_queue:fetch(VQ11),
+
+    rabbit_variable_queue:terminate(VQ12),
 
     passed.
 
@@ -1183,14 +1225,14 @@ test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
     {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(VQ1),
     VQ3 = rabbit_variable_queue:ack([AckTag], VQ2),
     receive
-        {duration, 30, stop} ->
+        {duration, _, stop} ->
             VQ3;
         {duration, N, Fun} ->
-            N1 = Fun(N, 1),
+            N1 = lists:max([Fun(N), 0]),
             Fun1 = case N1 of
-                       0  -> fun erlang:'+'/2;
-                       30 -> stop;
-                       _  -> Fun
+                       0               -> fun (V) -> (V+1)/0.75 end;
+                       _ when N1 > 400 -> stop;
+                       _               -> Fun
                    end,
             {ok, _TRef} = timer:send_after(1000, {duration, N1, Fun1}),
             VQ4 = rabbit_variable_queue:remeasure_egress_rate(VQ3),

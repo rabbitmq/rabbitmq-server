@@ -117,7 +117,8 @@
           journal_ack_dict,
           journal_del_dict,
           seg_ack_counts,
-          publish_handle
+          publish_handle,
+          partial_segments
         }).
 
 -include("rabbit.hrl").
@@ -137,7 +138,8 @@
                               journal_ack_dict  :: dict(),
                               journal_del_dict  :: dict(),
                               seg_ack_counts    :: dict(),
-                              publish_handle    :: hdl_and_count()
+                              publish_handle    :: hdl_and_count(),
+                              partial_segments  :: dict()
                             }).
 
 -spec(init/1 :: (queue_name()) -> {non_neg_integer(), qistate()}).
@@ -401,18 +403,40 @@ get_pub_handle(SegNum, State = #qistate { publish_handle = PubHandle }) ->
     {Hdl, State1 #qistate { publish_handle = PubHandle1 }}.
 
 get_counted_handle(SegNum, State, undefined) ->
+    get_counted_handle(SegNum, State, {SegNum, undefined, 0});
+get_counted_handle(SegNum, State = #qistate { partial_segments = Partials },
+                   {SegNum, undefined, Count}) ->
     {Hdl, State1} = get_seg_handle(SegNum, State),
-    {State1, {SegNum, Hdl, 1}};
-get_counted_handle(SegNum, State, {SegNum, undefined, Count}) ->
-    {Hdl, State1} = get_seg_handle(SegNum, State),
-    {State1, {SegNum, Hdl, Count + 1}};
+    {CountExtra, Partials1} =
+        case dict:find(SegNum, Partials) of
+            {ok, CountExtra1} -> {CountExtra1, dict:erase(SegNum, Partials)};
+            error             -> {0, Partials}
+        end,
+    Count1 = Count + 1 + CountExtra,
+    {State1 #qistate { partial_segments = Partials1 }, {SegNum, Hdl, Count1}};
 get_counted_handle(SegNum, State, {SegNum, Hdl, Count})
   when Count < ?SEGMENT_ENTRIES_COUNT ->
     {State, {SegNum, Hdl, Count + 1}};
 get_counted_handle(SegNumA, State, {SegNumB, Hdl, ?SEGMENT_ENTRIES_COUNT})
   when SegNumA == SegNumB + 1 ->
     ok = file_handle_cache:append_write_buffer(Hdl),
-    get_counted_handle(SegNumA, State, undefined).
+    get_counted_handle(SegNumA, State, undefined);
+get_counted_handle(SegNumA, State = #qistate { partial_segments = Partials,
+                                               seg_ack_counts = AckCounts,
+                                               dir = Dir },
+                   {SegNumB, Hdl, Count}) ->
+    %% don't flush here because it's possible SegNumB has been deleted
+    State1 =
+        case dict:find(SegNumB, AckCounts) of
+            {ok, Count} ->
+                %% #acks == #pubs, and we're moving to different
+                %% segment, so delete.
+                delete_segment(SegNumB, State);
+            _ ->
+                State #qistate {
+                  partial_segments = dict:store(SegNumB, Count, Partials) }
+        end,
+    get_counted_handle(SegNumA, State1, undefined).
 
 get_seg_handle(SegNum, State = #qistate { dir = Dir, seg_num_handles = SegHdls }) ->
     case dict:find(SegNum, SegHdls) of
@@ -424,6 +448,17 @@ get_seg_handle(SegNum, State = #qistate { dir = Dir, seg_num_handles = SegHdls }
                         {read_ahead, ?SEGMENT_TOTAL_SIZE}],
                        State)
     end.
+
+delete_segment(SegNum, State = #qistate { dir = Dir,
+                                          seg_ack_counts = AckCounts,
+                                          partial_segments = Partials }) ->
+    State1 = close_handle(SegNum, State),
+    ok = case file:delete(seg_num_to_path(Dir, SegNum)) of
+             ok -> ok;
+             {error, enoent} -> ok
+         end,
+    State1 #qistate {seg_ack_counts = dict:erase(SegNum, AckCounts),
+                     partial_segments = dict:erase(SegNum, Partials) }.
 
 new_handle(Key, Path, Mode, State = #qistate { seg_num_handles = SegHdls }) ->
     {ok, Hdl} = file_handle_cache:open(Path, Mode, [{write_buffer, infinity}]),
@@ -486,7 +521,8 @@ blank_state(QueueName) ->
                journal_ack_dict = dict:new(),
                journal_del_dict = dict:new(),
                seg_ack_counts = dict:new(),
-               publish_handle = undefined
+               publish_handle = undefined,
+               partial_segments = dict:new()
              }.
 
 detect_clean_shutdown(Dir) ->
@@ -551,7 +587,8 @@ read_and_prune_segments(State = #qistate { dir = Dir }) ->
     {TotalMsgCount, State1} =
         lists:foldl(
           fun (SegNum, {TotalMsgCount1, StateN =
-                        #qistate { publish_handle = PublishHandle }}) ->
+                        #qistate { publish_handle = PublishHandle,
+                                   partial_segments = Partials }}) ->
                   {SDict, PubCount, AckCount, _HighRelSeq, StateM} =
                       load_segment(SegNum, StateN),
                   StateL = #qistate { seg_ack_counts = AckCounts } =
@@ -565,19 +602,30 @@ read_and_prune_segments(State = #qistate { dir = Dir }) ->
                                    0 -> AckCounts;
                                    N -> dict:store(SegNum, N, AckCounts)
                                end,
-                  %% In the following, there should only be max one
-                  %% segment that matches the 3rd case. All other
-                  %% segments should either be full or empty. There
-                  %% could be no partial segments.
-                  PublishHandle1 = case PubCount of
-                                       ?SEGMENT_ENTRIES_COUNT -> PublishHandle;
-                                       0 -> PublishHandle;
-                                       _ when PublishHandle == undefined ->
-                                           {SegNum, undefined, PubCount}
-                                   end,
+                  %% In the following, whilst there may be several
+                  %% partial segments, we only remember the last
+                  %% one. All other partial segments get added into
+                  %% the partial_segments dict
+                  {PublishHandle1, Partials1} =
+                      case PubCount of
+                          ?SEGMENT_ENTRIES_COUNT ->
+                              {PublishHandle, Partials};
+                          0 ->
+                              {PublishHandle, Partials};
+                          _ ->
+                              {{SegNum, undefined, PubCount},
+                               case PublishHandle of
+                                   undefined ->
+                                       Partials;
+                                   {SegNumOld, undefined, PubCountOld} ->
+                                       dict:store(SegNumOld, PubCountOld,
+                                                  Partials)
+                               end}
+                      end,
                   {TotalMsgCount2,
                    StateL #qistate { seg_ack_counts = AckCounts1,
-                                     publish_handle = PublishHandle1 }}
+                                     publish_handle = PublishHandle1,
+                                     partial_segments = Partials1 }}
           end, {0, State}, SegNums),
     {TotalMsgCount, State1}.
 
@@ -767,39 +815,40 @@ deliver_or_ack_msg(SDict, AckCount, RelSeq) ->
 %%----------------------------------------------------------------------------
 
 append_acks_to_segment(SegNum, Acks,
-                       State = #qistate { seg_ack_counts = AckCounts }) ->
+                       State = #qistate { seg_ack_counts = AckCounts,
+                                          partial_segments = Partials }) ->
     AckCount = case dict:find(SegNum, AckCounts) of
                    {ok, AckCount1} -> AckCount1;
                    error           -> 0
                end,
+    AckTarget = case dict:find(SegNum, Partials) of
+                    {ok, PubCount} -> PubCount;
+                    error -> ?SEGMENT_ENTRIES_COUNT
+                end,
     AckCount2 = AckCount + length(Acks),
-    AckCounts1 = case AckCount2 of
-                     0 -> AckCounts;
-                     ?SEGMENT_ENTRIES_COUNT -> dict:erase(SegNum, AckCounts);
-                     _ -> dict:store(SegNum, AckCount2, AckCounts)
-                 end,
-    append_acks_to_segment(SegNum, AckCount2, Acks,
-                           State #qistate { seg_ack_counts = AckCounts1 }).
+    append_acks_to_segment(SegNum, AckCount2, Acks, AckTarget, State).
 
-append_acks_to_segment(SegNum, AckCount, _Acks,
-                       State = #qistate { dir = Dir, publish_handle = PubHdl })
-  when AckCount == ?SEGMENT_ENTRIES_COUNT ->
+append_acks_to_segment(SegNum, AckCount, _Acks, AckCount, State =
+                       #qistate { publish_handle = PubHdl }) ->
     PubHdl1 = case PubHdl of
-                  {SegNum, Hdl, ?SEGMENT_ENTRIES_COUNT} when Hdl /= undefined ->
+                  %% If we're adjusting the pubhdl here then there
+                  %% will be no entry in partials, thus the target ack
+                  %% count must be SEGMENT_ENTRIES_COUNT
+                  {SegNum, Hdl, AckCount = ?SEGMENT_ENTRIES_COUNT}
+                  when Hdl /= undefined ->
                       {SegNum + 1, undefined, 0};
                   _ -> PubHdl
               end,
-    State1 = close_handle(SegNum, State #qistate { publish_handle = PubHdl1 }),
-    ok = case file:delete(seg_num_to_path(Dir, SegNum)) of
-             ok -> ok;
-             {error, enoent} -> ok
-         end,
-    State1;
-append_acks_to_segment(SegNum, AckCount, Acks, State)
-  when AckCount < ?SEGMENT_ENTRIES_COUNT ->
+    delete_segment(SegNum, State #qistate { publish_handle = PubHdl1 });
+append_acks_to_segment(_SegNum, _AckCount, [], _AckTarget, State) ->
+    State;
+append_acks_to_segment(SegNum, AckCount, Acks, AckTarget, State =
+                       #qistate { seg_ack_counts = AckCounts })
+  when AckCount < AckTarget ->
     {Hdl, State1} = append_to_segment(SegNum, Acks, State),
     ok = file_handle_cache:sync(Hdl),
-    State1.
+    State1 #qistate { seg_ack_counts =
+                      dict:store(SegNum, AckCount, AckCounts) }.
 
 append_dels_to_segment(SegNum, Dels, State) ->
     {_Hdl, State1} = append_to_segment(SegNum, Dels, State),
