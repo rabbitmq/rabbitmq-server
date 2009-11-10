@@ -276,19 +276,19 @@ test_field_values() ->
        % table length in bytes
        194:32,
 
-       7,"longstr",   "S", 21:32, "Here is a long string", %           = 34
-       9,"signedint", "I", 12345:32/signed, %                     + 15 = 49
-       7,"decimal",   "D", 3, 123456:32, %                        + 14 = 63
-       9,"timestamp", "T", 109876543209876:64, %                  + 19 = 82
-       5,"table",     "F", 31:32, % length of table               + 11 = 93
-                           3,"one", "I", 54321:32, %              +  9 = 102
+       7,"longstr",   "S", 21:32, "Here is a long string",      %      = 34
+       9,"signedint", "I", 12345:32/signed,                     % + 15 = 49
+       7,"decimal",   "D", 3, 123456:32,                        % + 14 = 63
+       9,"timestamp", "T", 109876543209876:64,                  % + 19 = 82
+       5,"table",     "F", 31:32, % length of table             % + 11 = 93
+                           3,"one", "I", 54321:32,              % +  9 = 102
                            3,"two", "S", 13:32, "A long string",% + 22 = 124
        4,"byte",      "b", 255:8,                               % +  7 = 131
-       4,"long",      "l", 1234567890:64,                %        + 14 = 145
-       5,"short",     "s", 655:16,                   %            +  9 = 154
-       4,"bool",      "t", 1,                       %             +  7 = 161
-       6,"binary",    "x", 15:32, "a binary string",     %        + 27 = 188 
-       4,"void",      "V"                                  %      +  6 = 194
+       4,"long",      "l", 1234567890:64,                       % + 14 = 145
+       5,"short",     "s", 655:16,                              % +  9 = 154
+       4,"bool",      "t", 1,                                   % +  7 = 161
+       6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188 
+       4,"void",      "V"                                       % +  6 = 194
        >>),
     passed.
 
