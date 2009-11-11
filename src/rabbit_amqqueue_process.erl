@@ -99,10 +99,6 @@ start_link(Q) ->
     gen_server2:start_link(?MODULE, Q, []).
 
 %%----------------------------------------------------------------------------
-now_us() ->
-    {Megaseconds,Seconds,Microseconds} = erlang:now(),
-    Megaseconds * 1000000 * 1000000 + Seconds * 1000000 + Microseconds.
-
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     rabbit_memory_monitor:register(self()),
@@ -117,7 +113,7 @@ init(Q) ->
             active_consumers = queue:new(),
             blocked_consumers = queue:new(),
             drain_ratio = #ratio{ratio = 0.0, 
-                                 t0 = now_us(),
+                                 t0 = now(),
                                  next_msg_id = 1}
             }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -825,10 +821,7 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
 handle_cast(send_memory_monitor_update, State) ->
     DrainRatio1 = update_ratio(State#q.drain_ratio, State#q.next_msg_id),
     MsgSec = DrainRatio1#ratio.ratio * 1000000, % msg/sec
-    QueueDuration = case MsgSec < 0.016 of  %% less than 1 msg/1 minute
-        true -> infinity;
-        false -> queue:len(State#q.message_buffer) / MsgSec
-    end,
+    QueueDuration = queue:len(State#q.message_buffer) / MsgSec, % seconds
     DesiredQueueDuration = rabbit_memory_monitor:push_queue_duration(
                                                         self(), QueueDuration),
     ?LOGDEBUG("~p Queue duration current/desired ~p/~p~n",
@@ -854,8 +847,8 @@ calc_load(Load, Exp, N) ->
     Load*Exp +  N*(1.0-Exp).
 
 update_ratio(_RatioRec = #ratio{ratio=Ratio, t0 = T0, next_msg_id = MsgCount0}, MsgCount1) ->
-    T1 = now_us(),
-    Td  = T1 - T0,
+    T1 = now(),
+    Td  = timer:now_diff(T1, T0),
     MsgCount = MsgCount1 - MsgCount0,
     MsgUSec = MsgCount / Td, % msg/usec
     %% Td is in usec. We're interested in "load average" from last 30 seconds.

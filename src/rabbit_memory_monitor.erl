@@ -108,11 +108,11 @@
                         memory_limit        :: pos_integer(),
                         memory_ratio        :: float() }).
 
--spec(start_link/0 :: () -> ignore | {error, _} | {ok, pid()}).
--spec(register/1 :: (pid()) -> ok).
--spec(push_queue_duration/2 :: (pid(), float() | infinity) -> ok).
+-spec(start_link/0 :: () -> 'ignore' | {'error', _} | {'ok', pid()}).
+-spec(register/1 :: (pid()) -> 'ok').
+-spec(push_queue_duration/2 :: (pid(), float() | 'infinity') -> 'ok').
 
--spec(init/1 :: ([]) -> {ok, state()}).
+-spec(init/1 :: ([]) -> {'ok', state()}).
 
 -ifdef(debug).
 -spec(ftoa/1 :: (any()) -> string()).
