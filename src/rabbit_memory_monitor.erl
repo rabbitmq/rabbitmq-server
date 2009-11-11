@@ -104,7 +104,7 @@
 -spec(start_link/0 :: () -> 'ignore' | {'error', _} | {'ok', pid()}).
 -spec(update/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), {atom(),atom(),[any()]}) -> 'ok').
--spec(report_queue_duration/2 :: (pid(), float() | 'infinity') -> 'ok').
+-spec(report_queue_duration/2 :: (pid(), float() | 'infinity') -> number()).
 
 -endif.
 
@@ -119,11 +119,11 @@ update() ->
     gen_server2:cast(?SERVER, update).
 
 register(Pid, MFA = {_M, _F, _A}) ->
-    gen_server2:cast(?SERVER, {register, Pid, MFA}).
+    gen_server2:call(?SERVER, {register, Pid, MFA}, infinity).
 
 report_queue_duration(Pid, QueueDuration) ->
     gen_server2:call(rabbit_memory_monitor,
-                     {report_queue_duration, Pid, QueueDuration}).
+                     {report_queue_duration, Pid, QueueDuration}, infinity).
 
 
 %%----------------------------------------------------------------------------
@@ -171,17 +171,17 @@ handle_call({report_queue_duration, Pid, QueueDuration}, From,
     {noreply, State#state{queue_duration_sum = Sum1,
                           queue_duration_count = Count1}};
 
+handle_call({register, Pid, MFA}, _From, State =
+            #state{queue_durations = Durations, callbacks = Callbacks}) ->
+    _MRef = erlang:monitor(process, Pid),
+    true = ets:insert(Durations, {Pid, infinity, infinity}),
+    {reply, ok, State#state{callbacks = dict:store(Pid, MFA, Callbacks)}};
+
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast(update, State) ->
     {noreply, internal_update(State)};
-
-handle_cast({register, Pid, MFA}, State = #state{queue_durations = Durations,
-                                                 callbacks = Callbacks}) ->
-    _MRef = erlang:monitor(process, Pid),
-    true = ets:insert(Durations, {Pid, infinity, infinity}),
-    {noreply, State#state{callbacks = dict:store(Pid, MFA, Callbacks)}};
 
 handle_cast(_Request, State) ->
     {noreply, State}.

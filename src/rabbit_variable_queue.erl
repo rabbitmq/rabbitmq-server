@@ -32,11 +32,12 @@
 -module(rabbit_variable_queue).
 
 -export([init/1, terminate/1, publish/2, publish_delivered/2,
-         set_queue_ram_duration_target/2, remeasure_egress_rate/1, fetch/1,
-         ack/2, len/1, is_empty/1, maybe_start_prefetcher/1, purge/1, delete/1,
-         requeue/2, tx_publish/2, tx_rollback/2, tx_commit/4,
-         tx_commit_from_msg_store/4, tx_commit_from_vq/1, needs_sync/1,
-         can_flush_journal/1, flush_journal/1, status/1]).
+         set_queue_ram_duration_target/2, remeasure_egress_rate/1,
+         ram_duration/1, fetch/1, ack/2, len/1, is_empty/1,
+         maybe_start_prefetcher/1, purge/1, delete/1, requeue/2, tx_publish/2,
+         tx_rollback/2, tx_commit/4, tx_commit_from_msg_store/4,
+         tx_commit_from_vq/1, needs_sync/1, can_flush_journal/1,
+         flush_journal/1, status/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -130,6 +131,7 @@
 -spec(set_queue_ram_duration_target/2 ::
       (('undefined' | number()), vqstate()) -> vqstate()).
 -spec(remeasure_egress_rate/1 :: (vqstate()) -> vqstate()).
+-spec(ram_duration/1 :: (vqstate()) -> number()).
 -spec(fetch/1 :: (vqstate()) ->
              {('empty'|{basic_message(), boolean(), ack(), non_neg_integer()}),
               vqstate()}).
@@ -209,20 +211,23 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
             {ack_not_on_disk, State}
     end.
 
-set_queue_ram_duration_target(undefined, State) ->
-    State;
 set_queue_ram_duration_target(
   DurationTarget, State = #vqstate { avg_egress_rate = EgressRate,
                                      target_ram_msg_count = TargetRamMsgCount
                                    }) ->
-    TargetRamMsgCount1 = trunc(DurationTarget * EgressRate), %% msgs = sec * msgs/sec
+    TargetRamMsgCount1 =
+        case DurationTarget of
+            infinity -> undefined;
+            undefined -> undefined;
+            _ -> trunc(DurationTarget * EgressRate) %% msgs = sec * msgs/sec
+        end,
     State1 = State #vqstate { target_ram_msg_count = TargetRamMsgCount1,
                               duration_target = DurationTarget },
     if TargetRamMsgCount == TargetRamMsgCount1 ->
             State1;
-       TargetRamMsgCount == undefined orelse
+       TargetRamMsgCount1 == undefined orelse
        TargetRamMsgCount < TargetRamMsgCount1 ->
-            maybe_start_prefetcher(State1);
+            State1;
        true ->
             reduce_memory_use(State1)
     end.
@@ -245,6 +250,14 @@ remeasure_egress_rate(State = #vqstate { egress_rate = OldEgressRate,
                        avg_egress_rate = AvgEgressRate,
                        egress_rate_timestamp = Now,
                        out_counter = 0 }).
+
+ram_duration(#vqstate { avg_egress_rate = AvgEgressRate,
+                        ram_msg_count = RamMsgCount }) ->
+    %% msgs / (msgs/sec) == sec
+    case AvgEgressRate == 0 of
+        true  -> infinity;
+        false -> RamMsgCount / AvgEgressRate
+    end.
 
 fetch(State =
       #vqstate { q4 = Q4, ram_msg_count = RamMsgCount,

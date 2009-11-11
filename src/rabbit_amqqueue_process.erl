@@ -103,8 +103,8 @@ start_link(Q) ->
 init(Q = #amqqueue { name = QName }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
-    ok = rabbit_memory_manager:register
-           (self(), false, rabbit_amqqueue, set_storage_mode, [self()]),
+    ok = rabbit_memory_monitor:register
+           (self(), {rabbit_amqqueue, set_queue_duration, [self()]}),
     VQS = rabbit_variable_queue:init(QName),
     State = #q{q = Q,
                owner = none,
@@ -872,9 +872,23 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
         end));
 
 handle_cast(remeasure_egress_rate, State = #q{variable_queue_state = VQS}) ->
+    VQS1 = rabbit_variable_queue:remeasure_egress_rate(VQS),
+    RamDuration = rabbit_variable_queue:ram_duration(VQS1),
+    DesiredDuration =
+        rabbit_memory_monitor:report_queue_duration(self(), RamDuration),
+    VQS2 = rabbit_variable_queue:set_queue_ram_duration_target(
+             DesiredDuration, VQS1),
+    io:format("~p Reported ~p and got back ~p~n", [self(), RamDuration, DesiredDuration]),
+    io:format("~p~n", [rabbit_variable_queue:status(VQS2)]),
     noreply(State#q{egress_rate_timer_ref = just_measured,
-                    variable_queue_state =
-                    rabbit_variable_queue:remeasure_egress_rate(VQS)}).
+                    variable_queue_state = VQS2});
+
+handle_cast({set_queue_duration, Duration},
+            State = #q{variable_queue_state = VQS}) ->
+    VQS1 = rabbit_variable_queue:set_queue_ram_duration_target(
+             Duration, VQS),
+    io:format("~p was told to make duration ~p~n", [self(), Duration]),
+    noreply(State#q{variable_queue_state = VQS1}).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -894,6 +908,12 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
         {ok, NewState}   -> noreply(NewState);
         {stop, NewState} -> {stop, normal, NewState}
     end;
+handle_info({'EXIT', _DownPid, normal}, State) ->
+    %% because we have trap_exit on, we'll pick up here the prefetcher
+    %% going down. We probably need to make sure that we really are
+    %% just picking up the prefetcher here. It's safe to ignore it
+    %% though, provided 'normal'
+    noreply(State);
 
 handle_info(timeout, State = #q{variable_queue_state = VQS,
                                 sync_timer_ref = undefined}) ->
