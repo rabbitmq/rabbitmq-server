@@ -47,7 +47,9 @@ SCRIPT=`basename $0`
 if [ `id -u` = 0 ] ; then
     /usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}
 else
-    echo -e "\nOnly root should run ${SCRIPT}\n"
+    echo
+    echo "Only root should run ${SCRIPT}"
+    echo
     exit 1
 fi
 
