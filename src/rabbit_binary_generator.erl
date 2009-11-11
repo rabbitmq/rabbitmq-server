@@ -183,7 +183,7 @@ table_to_binary(Table) when is_list(Table) ->
 
 array_to_binary(Array) when is_list(Array) ->
     BinArray = generate_array(Array),
-    [<<(size(Array)):32>>, BinArray].
+    [<<(size(BinArray)):32>>, BinArray].
 
 generate_table(Table) when is_list(Table) ->
     list_to_binary(lists:map(fun table_field_to_binary/1, Table)).

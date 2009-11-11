@@ -254,7 +254,7 @@ test_content_properties() ->
     end.
 
 test_field_values() ->
-    %% NB this does not test inexact numbers (double and float) yet,
+    %% FIXME this does not test inexact numbers (double and float) yet,
     %% because they won't pass the equality assertions
     test_content_prop_roundtrip(
       [{table, [{<<"longstr">>, longstr, <<"Here is a long string">>},
@@ -268,13 +268,16 @@ test_field_values() ->
                 {<<"short">>, short, 655},
                 {<<"bool">>, bool, true},
                 {<<"binary">>, binary, <<"a binary string">>},
-                {<<"void">>, void, undefined}
+                {<<"void">>, void, undefined},
+                {<<"array">>, array, [{signedint, 54321},
+                                      {longstr, <<"A long string">>}]}
+
                ]}],
       <<
        % property-flags
        16#8000:16,
        % table length in bytes
-       194:32,
+       228:32,
 
        7,"longstr",   "S", 21:32, "Here is a long string",      %      = 34
        9,"signedint", "I", 12345:32/signed,                     % + 15 = 49
@@ -288,7 +291,10 @@ test_field_values() ->
        5,"short",     "s", 655:16,                              % +  9 = 154
        4,"bool",      "t", 1,                                   % +  7 = 161
        6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188 
-       4,"void",      "V"                                       % +  6 = 194
+       4,"void",      "V",                                      % +  6 = 194
+       5,"array",     "A", 23:32,                               % + 11 = 205
+                           "I", 54321:32,                       % +  5 = 210
+                           "S", 13:32, "A long string"          % + 18 = 228
        >>),
     passed.
 

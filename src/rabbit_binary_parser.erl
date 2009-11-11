@@ -56,45 +56,57 @@
 
 parse_table(<<>>) ->
     [];
+parse_table(<<NLen:8/unsigned, NameString:NLen/binary, ValueAndRest/binary>>) ->
+    {Type, Value, Rest} = parse_field_value(ValueAndRest),
+    [{NameString, Type, Value} | parse_table(Rest)].
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "S", VLen:32/unsigned, ValueString:VLen/binary, Rest/binary>>) ->
-    [{NameString, longstr, ValueString} | parse_table(Rest)];
+parse_array(<<>>) ->
+    [];
+parse_array(<<ValueAndRest/binary>>) ->
+    {Type, Value, Rest} = parse_field_value(ValueAndRest),
+    [{Type, Value} | parse_array(Rest)].
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "I", Value:32/signed, Rest/binary>>) ->
-    [{NameString, signedint, Value} | parse_table(Rest)];
+parse_field_value(<<"S", VLen:32/unsigned, ValueString:VLen/binary, Rest/binary>>) ->
+    {longstr, ValueString, Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "D", Before:8/unsigned, After:32/unsigned, Rest/binary>>) ->
-    [{NameString, decimal, {Before, After}} | parse_table(Rest)];
+parse_field_value(<<"I", Value:32/signed, Rest/binary>>) ->
+    {signedint, Value, Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "T", Value:64/unsigned, Rest/binary>>) ->
-    [{NameString, timestamp, Value} | parse_table(Rest)];
+parse_field_value(<<"D", Before:8/unsigned, After:32/unsigned, Rest/binary>>) ->
+    {decimal, {Before, After}, Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "F", VLen:32/unsigned, Table:VLen/binary, Rest/binary>>) ->
-    [{NameString, table, parse_table(Table)} | parse_table(Rest)];
+parse_field_value(<<"T", Value:64/unsigned, Rest/binary>>) ->
+    {timestamp, Value, Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "b", Value:8/unsigned, Rest/binary>>) ->
-    [{NameString, byte, Value} | parse_table(Rest)];
+parse_field_value(<<"F", VLen:32/unsigned, Table:VLen/binary, Rest/binary>>) ->
+    {table, parse_table(Table), Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "d", Value:64/float, Rest/binary>>) ->
-    [{NameString, double, Value} | parse_table(Rest)];
+parse_field_value(<<"A", VLen:32/unsigned, Array:VLen/binary, Rest/binary>>) ->
+    {array, parse_array(Array), Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "f", Value:32/float, Rest/binary>>) ->
-    [{NameString, float, Value} | parse_table(Rest)];
+parse_field_value(<<"b", Value:8/unsigned, Rest/binary>>) ->
+    {byte, Value, Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "l", Value:64/signed, Rest/binary>>) ->
-    [{NameString, long, Value} | parse_table(Rest)];
+parse_field_value(<<"d", Value:64/float, Rest/binary>>) ->
+    {double, Value, Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "s", Value:16/signed, Rest/binary>>) ->
-    [{NameString, short, Value} | parse_table(Rest)];
+parse_field_value(<<"f", Value:32/float, Rest/binary>>) ->
+    {float, Value, Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "t", Value:8/unsigned, Rest/binary>>) ->
-    [{NameString, bool, (Value /= 0)} | parse_table(Rest)];
+parse_field_value(<<"l", Value:64/signed, Rest/binary>>) ->
+    {long, Value, Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "x", VLen:32/unsigned, ValueString:VLen/binary, Rest/binary>>) ->
-    [{NameString, binary, ValueString} | parse_table(Rest)];
+parse_field_value(<<"s", Value:16/signed, Rest/binary>>) ->
+    {short, Value, Rest};
 
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, "V", Rest/binary>>) ->
-    [{NameString, void, undefined} | parse_table(Rest)].
+parse_field_value(<<"t", Value:8/unsigned, Rest/binary>>) ->
+    {bool, (Value /= 0), Rest};
+
+parse_field_value(<<"x", VLen:32/unsigned, ValueString:VLen/binary, Rest/binary>>) ->
+    {binary, ValueString, Rest};
+
+parse_field_value(<<"V", Rest/binary>>) ->
+    {void, undefined, Rest}.
 
 
 parse_properties([], _PropBin) ->
@@ -146,7 +158,6 @@ parse_property(bit, Rest) ->
     {true, Rest};
 parse_property(table, <<Len:32/unsigned, Table:Len/binary, Rest/binary>>) ->
     {parse_table(Table), Rest}.
-
 
 ensure_content_decoded(Content = #content{properties = Props})
   when Props =/= 'none' ->
