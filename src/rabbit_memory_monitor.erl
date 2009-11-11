@@ -74,14 +74,10 @@
 
 -behaviour(gen_server2).
 
--export([start_link/0]).
+-export([start_link/0, update/0, register/2, report_queue_duration/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
-
--export([update/0]).
-
--export([register/1, report_queue_duration/2]).
 
 -record(state, {timer,                %% 'internal_update' timer
                 queue_durations,      %% ets, (qpid, last_reported, last_sent)
@@ -89,7 +85,8 @@
                 queue_duration_count, %% number of elements in sum
                 memory_limit,         %% how much memory we intend to use
                 memory_ratio,         %% how much more memory we can use
-                desired_duration      %% the desired queue duration
+                desired_duration,     %% the desired queue duration
+                callbacks             %% a dict of qpid -> {M,F,A}s
                }).
 
 -define(SERVER, ?MODULE).
@@ -101,24 +98,18 @@
 -define(MEMORY_SIZE_FOR_DISABLED_VMM, 1073741824).
 
 %%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
--type(state() :: #state{timer               :: timer:tref(),
-                        queue_durations     :: tid(),
-                        queue_duration_sum  :: float(),
-                        queue_duration_count:: non_neg_integer(),
-                        memory_limit        :: pos_integer(),
-                        memory_ratio        :: float(),
-                        desired_duration    :: float() | 'infinity' }).
 
 -spec(start_link/0 :: () -> 'ignore' | {'error', _} | {'ok', pid()}).
--spec(register/1 :: (pid()) -> 'ok').
+-spec(update/0 :: () -> 'ok').
+-spec(register/2 :: (pid(), {atom(),atom(),[any()]}) -> 'ok').
 -spec(report_queue_duration/2 :: (pid(), float() | 'infinity') -> 'ok').
 
--spec(init/1 :: ([]) -> {'ok', state()}).
-
--spec(internal_update/1 :: (state()) -> state()).
 -endif.
 
+%%----------------------------------------------------------------------------
+%% Public API
 %%----------------------------------------------------------------------------
 
 start_link() ->
@@ -127,22 +118,17 @@ start_link() ->
 update() ->
     gen_server2:cast(?SERVER, update).
 
-%%----------------------------------------------------------------------------
-
-register(Pid) ->
-    gen_server2:cast(?SERVER, {register, Pid}).
+register(Pid, MFA = {_M, _F, _A}) ->
+    gen_server2:cast(?SERVER, {register, Pid, MFA}).
 
 report_queue_duration(Pid, QueueDuration) ->
     gen_server2:call(rabbit_memory_monitor,
                      {report_queue_duration, Pid, QueueDuration}).
 
-%%----------------------------------------------------------------------------
 
-get_memory_limit() ->
-    case vm_memory_monitor:get_memory_limit() of
-        undefined -> ?MEMORY_SIZE_FOR_DISABLED_VMM;
-        A -> A
-    end.
+%%----------------------------------------------------------------------------
+%% Gen_server callbacks
+%%----------------------------------------------------------------------------
 
 init([]) ->
     %% We should never use more memory than user requested. As the memory
@@ -158,7 +144,8 @@ init([]) ->
                 queue_duration_count = 0,
                 memory_limit         = MemoryLimit,
                 memory_ratio         = 1.0,
-                desired_duration     = infinity}}.
+                desired_duration     = infinity,
+                callbacks            = dict:new()}}.
 
 handle_call({report_queue_duration, Pid, QueueDuration}, From,
             State = #state{queue_duration_sum = Sum,
@@ -187,23 +174,23 @@ handle_call({report_queue_duration, Pid, QueueDuration}, From,
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-
 handle_cast(update, State) ->
     {noreply, internal_update(State)};
 
-handle_cast({register, Pid}, State) ->
+handle_cast({register, Pid, MFA}, State = #state{queue_durations = Durations,
+                                                 callbacks = Callbacks}) ->
     _MRef = erlang:monitor(process, Pid),
-    true = ets:insert(State#state.queue_durations, {Pid, infinity, infinity}),
-    {noreply, State};
+    true = ets:insert(Durations, {Pid, infinity, infinity}),
+    {noreply, State#state{callbacks = dict:store(Pid, MFA, Callbacks)}};
 
 handle_cast(_Request, State) ->
     {noreply, State}.
 
-
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{queue_duration_sum = Sum,
                            queue_duration_count = Count,
-                           queue_durations = Durations}) ->
+                           queue_durations = Durations,
+                           callbacks = Callbacks}) ->
     [{_Pid, PrevQueueDuration, _PrevSendDuration}] = ets:lookup(Durations, Pid),
     Sum1 = case PrevQueueDuration of
                infinity -> Sum;
@@ -211,26 +198,30 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
            end,
     true = ets:delete(State#state.queue_durations, Pid),
     {noreply, State#state{queue_duration_sum = Sum1,
-                          queue_duration_count = Count-1}};
+                          queue_duration_count = Count-1,
+                          callbacks = dict:erase(Pid, Callbacks)}};
 
 handle_info(_Info, State) ->
     {noreply, State}.
 
-
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{timer = TRef}) ->
+    timer:cancel(TRef),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-set_queue_duration(Pid, QueueDuration) ->
-    gen_server2:pcast(Pid, 7, {set_queue_duration, QueueDuration}).
+
+%%----------------------------------------------------------------------------
+%% Internal functions
+%%----------------------------------------------------------------------------
 
 internal_update(State = #state{memory_limit = Limit,
                                queue_durations = Durations,
                                desired_duration = DesiredDurationAvg,
                                queue_duration_sum = Sum,
-                               queue_duration_count = Count}) ->
+                               queue_duration_count = Count,
+                               callbacks = Callbacks}) ->
     %% available memory / used memory
     MemoryRatio = Limit / erlang:memory(total),
     AvgDuration = case Count of
@@ -246,7 +237,8 @@ internal_update(State = #state{memory_limit = Limit,
 
     %% only inform queues immediately if the desired duration has
     %% decreased
-    case DesiredDurationAvg1 < DesiredDurationAvg of
+    case (DesiredDurationAvg == infinity andalso DesiredDurationAvg /= infinity)
+        orelse (DesiredDurationAvg1 < DesiredDurationAvg) of
         true ->
             %% If we have pessimistic information, we need to inform
             %% queues to reduce it's memory usage when needed. This
@@ -256,8 +248,9 @@ internal_update(State = #state{memory_limit = Limit,
                              case DesiredDurationAvg1 <
                                  lists:min([PrevSendDuration, QueueDuration]) of
                                  true ->
-                                     set_queue_duration(Pid,
-                                                        DesiredDurationAvg1),
+                                     ok =
+                                         set_queue_duration(
+                                           Pid, DesiredDurationAvg1, Callbacks),
                                      ets:insert(Durations,
                                                 {Pid, QueueDuration,
                                                  DesiredDurationAvg1});
@@ -267,3 +260,13 @@ internal_update(State = #state{memory_limit = Limit,
         false -> ok
     end,
     State1.
+
+get_memory_limit() ->
+    case vm_memory_monitor:get_memory_limit() of
+        undefined -> ?MEMORY_SIZE_FOR_DISABLED_VMM;
+        A -> A
+    end.
+
+set_queue_duration(Pid, QueueDuration, Callbacks) ->
+    {M,F,A} = dict:fetch(Pid, Callbacks),
+    ok = erlang:apply(M, F, A++[QueueDuration]).

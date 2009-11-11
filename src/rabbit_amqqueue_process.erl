@@ -42,7 +42,6 @@
 -export([start_link/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
--export([send_memory_monitor_update/1]).
 
 -import(queue).
 -import(erlang).
@@ -101,9 +100,11 @@ start_link(Q) ->
 %%----------------------------------------------------------------------------
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    rabbit_memory_monitor:register(self()),
+    rabbit_memory_monitor:register(self(), {rabbit_amqqueue, set_queue_duration,
+                                            [self()]}),
     %% Beware. This breaks hibernation!
-    timer:apply_interval(2500, ?MODULE, send_memory_monitor_update, [self()]),
+    timer:apply_interval(2500, rabbit_amqqueue, send_memory_monitor_update,
+                         [self()]),
     {ok, #q{q = Q,
             owner = none,
             exclusive_consumer = none,
@@ -821,25 +822,32 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
 handle_cast(send_memory_monitor_update, State) ->
     DrainRatio1 = update_ratio(State#q.drain_ratio, State#q.next_msg_id),
     MsgSec = DrainRatio1#ratio.ratio * 1000000, % msg/sec
-    QueueDuration = queue:len(State#q.message_buffer) / MsgSec, % seconds
+    QueueDuration =
+        case MsgSec == 0 of
+            true -> infinity;
+            false -> queue:len(State#q.message_buffer) / MsgSec % seconds
+        end,
     DesiredQueueDuration = rabbit_memory_monitor:report_queue_duration(
                              self(), QueueDuration),
-    ?LOGDEBUG("~p Queue duration current/desired ~p/~p~n",
-            [(State#q.q)#amqqueue.name, QueueDuration, DesiredQueueDuration]),
+    ?LOGDEBUG("TIMER ~p Queue length is ~8p, should be ~p~n",
+              [(State#q.q)#amqqueue.name, queue:len(State#q.message_buffer),
+               case DesiredQueueDuration of
+                   infinity -> infinity;
+                   _ -> MsgSec * DesiredQueueDuration
+               end]),
     noreply(State#q{drain_ratio = DrainRatio1});
 
 handle_cast({set_queue_duration, DesiredQueueDuration}, State) ->
     DrainRatio = State#q.drain_ratio,
-    DesiredBufLength = case DesiredQueueDuration of
-        infinity -> infinity;
-        _ -> DesiredQueueDuration * DrainRatio#ratio.ratio * 1000000
-    end,
-    %% Just to proove that something is happening.
-    ?LOGDEBUG("~p Queue length is~8p, should be ~p~n",
-                  [(State#q.q)#amqqueue.name, queue:len(State#q.message_buffer),
-                   DesiredBufLength]),
+    DesiredBufLength =
+        case DesiredQueueDuration of
+            infinity -> infinity;
+            _ -> DesiredQueueDuration * DrainRatio#ratio.ratio * 1000000
+        end,
+    ?LOGDEBUG("MAGIC ~p Queue length is ~8p, should be ~p~n",
+              [(State#q.q)#amqqueue.name, queue:len(State#q.message_buffer),
+               DesiredBufLength]),
     noreply(State).
-
 
 %% Based on kernel load average, as descibed:
 %% http://www.teamquest.com/resources/gunther/display/5/
@@ -852,14 +860,8 @@ update_ratio(_RatioRec = #ratio{ratio=Ratio, t0 = T0, next_msg_id = MsgCount0}, 
     MsgCount = MsgCount1 - MsgCount0,
     MsgUSec = MsgCount / Td, % msg/usec
     %% Td is in usec. We're interested in "load average" from last 30 seconds.
-    Ratio1 = calc_load(Ratio, 1.0/ (math:exp(Td/(30*1000000))), MsgUSec),
-    
-    #ratio{ratio = Ratio1, t0=T1, next_msg_id = MsgCount1}.
-
-
-send_memory_monitor_update(Pid) ->
-    gen_server2:cast(Pid, send_memory_monitor_update).
-    
+    Ratio1 = calc_load(Ratio, 1.0/ (math:exp(Td/(30*1000000))), MsgUSec),    
+    #ratio{ratio = Ratio1, t0=T1, next_msg_id = MsgCount1}.    
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
