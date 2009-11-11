@@ -822,8 +822,8 @@ handle_cast(send_memory_monitor_update, State) ->
     DrainRatio1 = update_ratio(State#q.drain_ratio, State#q.next_msg_id),
     MsgSec = DrainRatio1#ratio.ratio * 1000000, % msg/sec
     QueueDuration = queue:len(State#q.message_buffer) / MsgSec, % seconds
-    DesiredQueueDuration = rabbit_memory_monitor:push_queue_duration(
-                                                        self(), QueueDuration),
+    DesiredQueueDuration = rabbit_memory_monitor:report_queue_duration(
+                             self(), QueueDuration),
     ?LOGDEBUG("~p Queue duration current/desired ~p/~p~n",
             [(State#q.q)#amqqueue.name, QueueDuration, DesiredQueueDuration]),
     noreply(State#q{drain_ratio = DrainRatio1});
