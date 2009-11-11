@@ -422,9 +422,8 @@ get_counted_handle(SegNumA, State, {SegNumB, Hdl, ?SEGMENT_ENTRIES_COUNT})
     ok = file_handle_cache:append_write_buffer(Hdl),
     get_counted_handle(SegNumA, State, undefined);
 get_counted_handle(SegNumA, State = #qistate { partial_segments = Partials,
-                                               seg_ack_counts = AckCounts,
-                                               dir = Dir },
-                   {SegNumB, Hdl, Count}) ->
+                                               seg_ack_counts = AckCounts },
+                   {SegNumB, _Hdl, Count}) ->
     %% don't flush here because it's possible SegNumB has been deleted
     State1 =
         case dict:find(SegNumB, AckCounts) of
