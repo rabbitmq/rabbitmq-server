@@ -36,8 +36,7 @@
          ram_duration/1, fetch/1, ack/2, len/1, is_empty/1,
          maybe_start_prefetcher/1, purge/1, delete/1, requeue/2, tx_publish/2,
          tx_rollback/2, tx_commit/4, tx_commit_from_msg_store/4,
-         tx_commit_from_vq/1, needs_sync/1, can_flush_journal/1,
-         flush_journal/1, status/1]).
+         tx_commit_from_vq/1, needs_sync/1, full_flush_journal/1, status/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -150,8 +149,7 @@
       ([msg_id()], [ack()], {pid(), any()}, vqstate()) -> vqstate()).
 -spec(tx_commit_from_vq/1 :: (vqstate()) -> vqstate()).
 -spec(needs_sync/1 :: (vqstate()) -> boolean()).
--spec(can_flush_journal/1 :: (vqstate()) -> boolean()).
--spec(flush_journal/1 :: (vqstate()) -> vqstate()).
+-spec(full_flush_journal/1 :: (vqstate()) -> vqstate()).
 -spec(status/1 :: (vqstate()) -> [{atom(), any()}]).
 
 -endif.
@@ -485,12 +483,9 @@ needs_sync(#vqstate { on_sync = {_, _, []} }) ->
 needs_sync(_) ->
     true.
 
-can_flush_journal(#vqstate { index_state = IndexState }) ->
-    rabbit_queue_index:can_flush_journal(IndexState).
-
-flush_journal(State = #vqstate { index_state = IndexState }) ->
+full_flush_journal(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state =
-                     rabbit_queue_index:flush_journal(IndexState) }.
+                     rabbit_queue_index:full_flush_journal(IndexState) }.
 
 status(#vqstate { q1 = Q1, q2 = Q2, gamma = Gamma, q3 = Q3, q4 = Q4,
                   len = Len, on_sync = {_, _, From},

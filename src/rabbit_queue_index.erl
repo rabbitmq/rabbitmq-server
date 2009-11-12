@@ -32,10 +32,9 @@
 -module(rabbit_queue_index).
 
 -export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
-         write_delivered/2, write_acks/2, sync_seq_ids/3, can_flush_journal/1,
-         flush_journal/1, read_segment_entries/2, next_segment_boundary/1,
-         segment_size/0, find_lowest_seq_id_seg_and_next_seq_id/1,
-         start_msg_store/1]).
+         write_delivered/2, write_acks/2, sync_seq_ids/3, full_flush_journal/1,
+         read_segment_entries/2, next_segment_boundary/1, segment_size/0,
+         find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/1]).
 
 %%----------------------------------------------------------------------------
 %% The queue disk index
@@ -150,8 +149,7 @@
 -spec(write_delivered/2 :: (seq_id(), qistate()) -> qistate()).
 -spec(write_acks/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync_seq_ids/3 :: ([seq_id()], boolean(), qistate()) -> qistate()).
--spec(can_flush_journal/1 :: (qistate()) -> boolean()).
--spec(flush_journal/1 :: (qistate()) -> qistate()).
+-spec(full_flush_journal/1 :: (qistate()) -> qistate()).
 -spec(read_segment_entries/2 :: (seq_id(), qistate()) ->
              {[{msg_id(), seq_id(), boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
@@ -228,40 +226,10 @@ sync_seq_ids(SeqIds, SyncAckJournal, State) ->
               StateM
       end, State1, SegNumsSet).
 
-can_flush_journal(#qistate { journal_count = 0 }) ->
-    false;
-can_flush_journal(_) ->
-    true.
-
-flush_journal(State = #qistate { journal_count = 0 }) ->
+full_flush_journal(State = #qistate { journal_count = 0 }) ->
     State;
-flush_journal(State = #qistate { journal_ack_dict = JAckDict,
-                                 journal_del_dict = JDelDict,
-                                 journal_count    = JCount }) ->
-    SegNum = case dict:fetch_keys(JAckDict) of
-                 []    -> hd(dict:fetch_keys(JDelDict));
-                 [N|_] -> N
-             end,
-    Dels = seg_entries_from_dict(SegNum, JDelDict),
-    Acks = seg_entries_from_dict(SegNum, JAckDict),
-    State1 = append_dels_to_segment(SegNum, Dels, State),
-    State2 = append_acks_to_segment(SegNum, Acks, State1),
-    JCount1 = JCount - length(Dels) - length(Acks),
-    State3 = State2 #qistate { journal_del_dict = dict:erase(SegNum, JDelDict),
-                               journal_ack_dict = dict:erase(SegNum, JAckDict),
-                               journal_count    = JCount1 },
-    if
-        JCount1 == 0 ->
-            {Hdl, State4} = get_journal_handle(State3),
-            {ok, 0} = file_handle_cache:position(Hdl, bof),
-            ok = file_handle_cache:truncate(Hdl),
-            ok = file_handle_cache:sync(Hdl),
-            State4;
-        JCount1 > ?MAX_ACK_JOURNAL_ENTRY_COUNT ->
-            flush_journal(State3);
-        true ->
-            State3
-    end.
+full_flush_journal(State) ->
+    full_flush_journal(flush_journal(State)).
 
 read_segment_entries(InitSeqId, State) ->
     {SegNum, 0} = seq_id_to_seg_and_rel_seq_id(InitSeqId),
@@ -349,6 +317,47 @@ start_msg_store(DurableQueues) ->
 
 
 %%----------------------------------------------------------------------------
+%% Journal Flushing
+%%----------------------------------------------------------------------------
+
+flush_journal(State = #qistate { journal_count = 0 }) ->
+    State;
+flush_journal(State = #qistate { journal_ack_dict = JAckDict,
+                                 journal_del_dict = JDelDict,
+                                 journal_count    = JCount }) ->
+    SegNum = case dict:fetch_keys(JAckDict) of
+                 []    -> hd(dict:fetch_keys(JDelDict));
+                 [N|_] -> N
+             end,
+    Dels = seg_entries_from_dict(SegNum, JDelDict),
+    Acks = seg_entries_from_dict(SegNum, JAckDict),
+    State1 = append_dels_to_segment(SegNum, Dels, State),
+    State2 = append_acks_to_segment(SegNum, Acks, State1),
+    JCount1 = JCount - length(Dels) - length(Acks),
+    State3 = State2 #qistate { journal_del_dict = dict:erase(SegNum, JDelDict),
+                               journal_ack_dict = dict:erase(SegNum, JAckDict),
+                               journal_count    = JCount1 },
+    if
+        JCount1 == 0 ->
+            {Hdl, State4} = get_journal_handle(State3),
+            {ok, 0} = file_handle_cache:position(Hdl, bof),
+            ok = file_handle_cache:truncate(Hdl),
+            ok = file_handle_cache:sync(Hdl),
+            State4;
+        JCount1 > ?MAX_ACK_JOURNAL_ENTRY_COUNT ->
+            flush_journal(State3);
+        true ->
+            State3
+    end.
+
+maybe_full_flush(State = #qistate { journal_count = JCount }) ->
+    case JCount > ?MAX_ACK_JOURNAL_ENTRY_COUNT of
+        true  -> full_flush_journal(State);
+        false -> State
+    end.
+
+
+%%----------------------------------------------------------------------------
 %% Minor Helpers
 %%----------------------------------------------------------------------------
 
@@ -362,19 +371,6 @@ write_to_journal(BinList, SeqIds, Dict,
                   {add_seqid_to_dict(SeqId, Dict2), JCount2 + 1}
           end, {Dict, JCount}, SeqIds),
     {Dict1, State1 #qistate { journal_count = JCount1 }}.
-
-maybe_full_flush(State = #qistate { journal_count = JCount }) ->
-    case JCount > ?MAX_ACK_JOURNAL_ENTRY_COUNT of
-        true  -> full_flush_journal(State);
-        false -> State
-    end.
-
-full_flush_journal(State) ->
-    case can_flush_journal(State) of
-        true -> State1 = flush_journal(State),
-                full_flush_journal(State1);
-        false -> State
-    end.
 
 queue_name_to_dir_name(Name = #resource { kind = queue }) ->
     Bin = term_to_binary(Name),

@@ -1032,15 +1032,7 @@ queue_index_deliver(SeqIds, Qi) ->
       end, Qi, SeqIds).
 
 queue_index_flush_journal(Qi) ->
-    {_Oks, {false, Qi1}} =
-        rabbit_misc:unfold(
-          fun ({true, QiN}) ->
-                  QiM = rabbit_queue_index:flush_journal(QiN),
-                  {true, ok, {rabbit_queue_index:can_flush_journal(QiM), QiM}};
-              ({false, _QiN}) ->
-                  false
-          end, {true, Qi}),
-    Qi1.
+    rabbit_queue_index:full_flush_journal(Qi).
 
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
@@ -1071,7 +1063,6 @@ test_queue_index() ->
     ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
     %% should get length back as 0, as all the msgs were transient
     {0, Qi6} = rabbit_queue_index:init(test_queue()),
-    false = rabbit_queue_index:can_flush_journal(Qi6),
     {0, 10000, Qi7} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi6),
     {Qi8, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
@@ -1093,8 +1084,7 @@ test_queue_index() ->
     ok = verify_read_with_published(true, true, ReadC,
                                     lists:reverse(SeqIdsMsgIdsB)),
     Qi16 = rabbit_queue_index:write_acks(SeqIdsB, Qi15),
-    true = rabbit_queue_index:can_flush_journal(Qi16),
-    Qi17 = rabbit_queue_index:flush_journal(Qi16),
+    Qi17 = queue_index_flush_journal(Qi16),
     %% the entire first segment will have gone as they were firstly
     %% transient, and secondly ack'd
     SegmentSize = rabbit_queue_index:segment_size(),
@@ -1212,11 +1202,10 @@ test_variable_queue_dynamic_duration_change() ->
     {_SeqIds1, VQ7} = variable_queue_publish(true, 20, VQ6),
     {VQ8, AckTags1} = variable_queue_fetch(20, true, false, 20, VQ7),
     VQ9 = rabbit_variable_queue:ack(AckTags1, VQ8),
-    VQ10 = rabbit_variable_queue:flush_journal(VQ9),
-    VQ11 = rabbit_variable_queue:flush_journal(VQ10),
-    {empty, VQ12} = rabbit_variable_queue:fetch(VQ11),
+    VQ10 = rabbit_variable_queue:full_flush_journal(VQ9),
+    {empty, VQ11} = rabbit_variable_queue:fetch(VQ10),
 
-    rabbit_variable_queue:terminate(VQ12),
+    rabbit_variable_queue:terminate(VQ11),
 
     passed.
 
