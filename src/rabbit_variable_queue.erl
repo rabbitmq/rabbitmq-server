@@ -963,8 +963,7 @@ push_betas_to_gammas(State = #vqstate { q2 = Q2, gamma = Gamma, q3 = Q3,
             Limit = rabbit_queue_index:next_segment_boundary(SeqId),
             %% ASSERTION
             true = Gamma1SeqId == undefined orelse Gamma1SeqId > SeqIdMax,
-            case (Gamma1SeqId == undefined andalso SeqIdMax < Limit) orelse
-                Gamma1SeqId == Limit of
+            case SeqIdMax < Limit of
                 true -> %% already only holding LTE one segment indices in q3
                     State1;
                 false ->
