@@ -227,7 +227,7 @@ set_queue_ram_duration_target(
             State1;
        TargetRamMsgCount1 == undefined orelse
        TargetRamMsgCount < TargetRamMsgCount1 ->
-            State1;
+            maybe_start_prefetcher(State1);
        true ->
             reduce_memory_use(State1)
     end.
@@ -964,12 +964,15 @@ push_betas_to_gammas(State = #vqstate { q2 = Q2, gamma = Gamma, q3 = Q3,
     case queue:out(Q3) of
         {empty, _Q3} -> State1;
         {{value, #beta { seq_id = SeqId }}, _Q3a} -> 
+            {{value, #beta { seq_id = SeqIdMax }}, _Q3b} = queue:out_r(Q3),
             Limit = rabbit_queue_index:next_segment_boundary(SeqId),
-            case Gamma1SeqId of
-                Limit -> %% already only holding the minimum, nothing to do
+            %% ASSERTION
+            true = Gamma1SeqId == undefined orelse Gamma1SeqId > SeqIdMax,
+            case (Gamma1SeqId == undefined andalso SeqIdMax < Limit) orelse
+                Gamma1SeqId == Limit of
+                true -> %% already only holding LTE one segment indices in q3
                     State1;
-                _ when Gamma1SeqId == undefined orelse
-                (is_integer(Gamma1SeqId) andalso Gamma1SeqId > Limit) ->
+                false ->
                     %% ASSERTION (sadly large!)
                     %% This says that if Gamma1SeqId /= undefined then
                     %% the gap from Limit to Gamma1SeqId is an integer
