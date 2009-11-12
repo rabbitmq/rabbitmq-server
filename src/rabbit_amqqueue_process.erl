@@ -161,14 +161,10 @@ next_state1(State = #q{sync_timer_ref = undefined}, true) ->
     {start_sync_timer(State), 0};
 next_state1(State, true) ->
     {State, 0};
-next_state1(State = #q{sync_timer_ref = undefined,
-                       variable_queue_state = VQS}, false) ->
-    {State, case rabbit_variable_queue:can_flush_journal(VQS) of
-                true  -> 0;
-                false -> hibernate
-            end};
+next_state1(State = #q{sync_timer_ref = undefined}, false) ->
+    {State, hibernate};
 next_state1(State, false) ->
-    {stop_sync_timer(State), 0}.
+    {stop_sync_timer(State), hibernate}.
 
 ensure_egress_rate_timer(State = #q{egress_rate_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(?EGRESS_REMEASURE_INTERVAL, rabbit_amqqueue,
@@ -914,13 +910,6 @@ handle_info({'EXIT', _DownPid, normal}, State) ->
     %% just picking up the prefetcher here. It's safe to ignore it
     %% though, provided 'normal'
     noreply(State);
-
-handle_info(timeout, State = #q{variable_queue_state = VQS,
-                                sync_timer_ref = undefined}) ->
-    %% if sync_timer_ref is undefined then we must have set the
-    %% timeout to zero because we thought we could flush the journal
-    noreply(State#q{variable_queue_state =
-                    rabbit_variable_queue:flush_journal(VQS)});
 
 handle_info(timeout, State = #q{variable_queue_state = VQS}) ->
     noreply(
