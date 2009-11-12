@@ -50,6 +50,9 @@
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
+%% set to zero once QPid fix their negotiation
+-define(FRAME_MAX, 131072).
+-define(CHANNEL_MAX, 0).
 
 %---------------------------------------------------------------------------
 
@@ -563,9 +566,8 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
     User = rabbit_access_control:check_login(Mechanism, Response),
     ok = send_on_channel0(
            Sock,
-           #'connection.tune'{channel_max = 0,
-                              %% set to zero once QPid fix their negotiation
-                              frame_max = 131072,
+           #'connection.tune'{channel_max = ?CHANNEL_MAX,
+                              frame_max = ?FRAME_MAX,
                               heartbeat = 0}),
     State#v1{connection_state = tuning,
              connection = Connection#connection{user = User}};
@@ -575,14 +577,23 @@ handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
                State = #v1{connection_state = tuning,
                            connection = Connection,
                            sock = Sock}) ->
-    %% if we have a channel_max limit that the client wishes to
+    if (FrameMax =< ?FRAME_MIN_SIZE) or
+       (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
+            rabbit_misc:protocol_error(
+              mistuned, "peer sent tune_ok with invalid frame_max");
+    %% If we have a channel_max limit that the client wishes to
     %% exceed, die as per spec.  Not currently a problem, so we ignore
     %% the client's channel_max parameter.
-    rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
-    State#v1{connection_state = opening,
-             connection = Connection#connection{
-                            timeout_sec = ClientHeartbeat,
-                            frame_max = FrameMax}};
+%%        (?CHANNEL_MAX /= 0) and (ChannelMax > ?CHANNEL_MAX) ->
+%%             rabbit_misc:protocol_error(
+%%               mistuned, "peer sent tune_ok with invalid channel_max");
+       true ->
+            rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
+            State#v1{connection_state = opening,
+                     connection = Connection#connection{
+                                    timeout_sec = ClientHeartbeat,
+                                    frame_max = FrameMax}}
+    end;
 handle_method0(#'connection.open'{virtual_host = VHostPath},
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
