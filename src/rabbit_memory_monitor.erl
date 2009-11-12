@@ -228,10 +228,11 @@ internal_update(State = #state{memory_limit = Limit,
                       0 -> infinity;
                       _ -> Sum / Count
                   end,
-    DesiredDurationAvg1 = case AvgDuration of
-                              infinity -> infinity;
-                              AvgQueueDuration -> AvgQueueDuration * MemoryRatio
-                          end,
+    DesiredDurationAvg1 =
+        case AvgDuration of
+            infinity -> infinity;
+            AvgQueueDuration -> lists:max([0, AvgQueueDuration * MemoryRatio])
+        end,
     State1 = State#state{memory_ratio = MemoryRatio,
                          desired_duration = DesiredDurationAvg1},
 
