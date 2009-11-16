@@ -66,8 +66,6 @@ stop_rabbitmq () {
         $DAEMON stop_all > ${INIT_LOG_DIR}/shutdown_log 2> ${INIT_LOG_DIR}/shutdown_err
         RETVAL=$?
         if [ $RETVAL = 0 ] ; then
-            # Try to stop epmd if run by the rabbitmq user
-            pkill -u rabbitmq epmd || :
             [ -n "$LOCK_FILE" ] && rm -rf $LOCK_FILE
         else
             echo FAILED - check ${INIT_LOG_DIR}/shutdown_log, _err

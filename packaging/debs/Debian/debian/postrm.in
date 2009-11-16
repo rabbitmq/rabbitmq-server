@@ -40,6 +40,9 @@ case "$1" in
                 rm -f @RABBIT_LIB@/ebin/rabbit.$ext
         done
         if getent passwd rabbitmq >/dev/null; then
+                # Stop epmd if run by the rabbitmq user
+                pkill -u rabbitmq epmd || :
+
                 deluser rabbitmq
         fi
         if getent group rabbitmq >/dev/null; then
