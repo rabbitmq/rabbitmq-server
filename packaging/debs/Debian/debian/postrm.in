@@ -34,6 +34,11 @@ case "$1" in
         if [ -d /etc/rabbitmq ]; then
                 rm -r /etc/rabbitmq
         fi
+        # Remove traces of plugins
+        rm -rf @RABBIT_LIB@/priv @RABBIT_LIB@/plugins
+        for ext in rel script boot ; do
+                rm -f @RABBIT_LIB@/ebin/rabbit.$ext
+        done
         if getent passwd rabbitmq >/dev/null; then
                 deluser rabbitmq
         fi
