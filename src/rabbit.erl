@@ -141,16 +141,16 @@ start(normal, []) ->
                     check_empty_content_body_frame_size(),
 
                 ok = rabbit_alarm:start(),
-                MemoryWatermark = 
-                    application:get_env(os_mon, vm_memory_high_watermark),
-                ok = case MemoryWatermark of
-                         {ok, Float} when Float == 0 -> ok;
-                         {ok, Float} -> start_child(vm_memory_monitor, [Float]);
-                         undefined ->
-                             throw({undefined, os_mon,
-                                    vm_memory_high_watermark, settings})
+
+                {ok, MemoryWatermark} =
+                    application:get_env(vm_memory_high_watermark),
+                ok = case MemoryWatermark == 0 of
+                         true ->
+                             ok;
+                         false ->
+                             start_child(vm_memory_monitor, [MemoryWatermark])
                      end,
-                
+
                 ok = rabbit_amqqueue:start(),
 
                 ok = start_child(rabbit_router),
