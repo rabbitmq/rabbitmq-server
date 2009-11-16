@@ -931,22 +931,6 @@ test_msg_store() ->
     ok = rabbit_msg_store:release(MsgIds2ndHalf),
     %% read the second half again, just for fun (aka code coverage)
     ok = msg_store_read(MsgIds2ndHalf),
-    %% read the second half via peruse
-    lists:foldl(
-      fun (MsgId, ok) ->
-              rabbit_msg_store:peruse(MsgId,
-                                      fun ({ok, MsgId1}) when MsgId1 == MsgId ->
-                                              Self ! {peruse, MsgId1}
-                                      end),
-              receive
-                  {peruse, MsgId} ->
-                      ok
-              after
-                  10000 ->
-                      io:format("Failed to receive response via peruse~n"),
-                      throw(timeout)
-              end
-      end, ok, MsgIds2ndHalf),
     %% stop and restart, preserving every other msg in 2nd half
     ok = stop_msg_store(),
     ok = start_msg_store(fun ([]) -> finished;
@@ -1477,30 +1461,29 @@ test_variable_queue_prefetching_and_gammas_to_betas() ->
     assert_prop(S11, q2, 0),
     assert_prop(S11, q1, 0),
 
-    VQ12 = rabbit_variable_queue:maybe_start_prefetcher(VQ11),
-    S12 = rabbit_variable_queue:status(VQ12),
+    S12 = rabbit_variable_queue:status(VQ11),
     assert_prop(S12, prefetching, (Len4 - Prefetched) > 0),
     timer:sleep(2000),
     %% we have to fetch all of q4 before the prefetcher will be drained
-    {VQ13, AckTags1} =
-        variable_queue_fetch(Prefetched, false, false, Len4, VQ12),
-    {VQ16, Acks} =
+    {VQ12, AckTags1} =
+        variable_queue_fetch(Prefetched, false, false, Len4, VQ11),
+    {VQ15, Acks} =
         case Len4 == Prefetched of
             true ->
-                {VQ13, [AckTag2, AckTag1, AckTag, AckTags1]};
+                {VQ12, [AckTag2, AckTag1, AckTag, AckTags1]};
             false ->
                 Len5 = Len4 - Prefetched - 1,
-                {{_Msg3, false, AckTag3, Len5}, VQ14} =
-                    rabbit_variable_queue:fetch(VQ13),
-                assert_prop(rabbit_variable_queue:status(VQ14),
+                {{_Msg3, false, AckTag3, Len5}, VQ13} =
+                    rabbit_variable_queue:fetch(VQ12),
+                assert_prop(rabbit_variable_queue:status(VQ13),
                             prefetching, false),
-                {VQ15, AckTags2} =
-                    variable_queue_fetch(Len5, false, false, Len5, VQ14),
-                {VQ15, [AckTag3, AckTag2, AckTag1, AckTag, AckTags1, AckTags2]}
+                {VQ14, AckTags2} =
+                    variable_queue_fetch(Len5, false, false, Len5, VQ13),
+                {VQ14, [AckTag3, AckTag2, AckTag1, AckTag, AckTags1, AckTags2]}
         end,
-    VQ17 = rabbit_variable_queue:ack(lists:flatten(Acks), VQ16),
+    VQ16 = rabbit_variable_queue:ack(lists:flatten(Acks), VQ15),
 
-    {empty, VQ18} = rabbit_variable_queue:fetch(VQ17),
+    {empty, VQ17} = rabbit_variable_queue:fetch(VQ16),
 
-    rabbit_variable_queue:terminate(VQ18),
+    rabbit_variable_queue:terminate(VQ17),
     passed.

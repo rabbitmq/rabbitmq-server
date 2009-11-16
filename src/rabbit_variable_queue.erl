@@ -33,10 +33,10 @@
 
 -export([init/1, terminate/1, publish/2, publish_delivered/2,
          set_queue_ram_duration_target/2, remeasure_egress_rate/1,
-         ram_duration/1, fetch/1, ack/2, len/1, is_empty/1,
-         maybe_start_prefetcher/1, purge/1, delete/1, requeue/2, tx_publish/2,
-         tx_rollback/2, tx_commit/4, tx_commit_from_msg_store/4,
-         tx_commit_from_vq/1, needs_sync/1, full_flush_journal/1, status/1]).
+         ram_duration/1, fetch/1, ack/2, len/1, is_empty/1, purge/1, delete/1,
+         requeue/2, tx_publish/2, tx_rollback/2, tx_commit/4,
+         tx_commit_from_msg_store/4, tx_commit_from_vq/1, needs_sync/1,
+         full_flush_journal/1, status/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -56,7 +56,6 @@
           egress_rate,
           avg_egress_rate,
           egress_rate_timestamp,
-          prefetcher,
           len,
           on_sync
         }).
@@ -116,7 +115,6 @@
                egress_rate           :: float(),
                avg_egress_rate       :: float(),
                egress_rate_timestamp :: {integer(), integer(), integer()},
-               prefetcher            :: ('undefined' | pid()),
                len                   :: non_neg_integer(),
                on_sync               :: {[ack()], [msg_id()], [{pid(), any()}]}
               }).
@@ -137,7 +135,6 @@
 -spec(ack/2 :: ([ack()], vqstate()) -> vqstate()).
 -spec(len/1 :: (vqstate()) -> non_neg_integer()).
 -spec(is_empty/1 :: (vqstate()) -> boolean()).
--spec(maybe_start_prefetcher/1 :: (vqstate()) -> vqstate()).
 -spec(purge/1 :: (vqstate()) -> {non_neg_integer(), vqstate()}).
 -spec(delete/1 :: (vqstate()) -> vqstate()).
 -spec(requeue/2 :: ([{basic_message(), ack()}], vqstate()) -> vqstate()).
@@ -181,7 +178,6 @@ init(QueueName) ->
                    egress_rate = 0,
                    avg_egress_rate = 0,
                    egress_rate_timestamp = now(),
-                   prefetcher = undefined,
                    len = GammaCount,
                    on_sync = {[], [], []}
                   },
@@ -221,13 +217,10 @@ set_queue_ram_duration_target(
         end,
     State1 = State #vqstate { target_ram_msg_count = TargetRamMsgCount1,
                               duration_target = DurationTarget },
-    if TargetRamMsgCount == TargetRamMsgCount1 ->
-            State1;
-       TargetRamMsgCount1 == undefined orelse
-       TargetRamMsgCount < TargetRamMsgCount1 ->
-            maybe_start_prefetcher(State1);
-       true ->
-            reduce_memory_use(State1)
+    case TargetRamMsgCount1 == undefined orelse
+        TargetRamMsgCount1 >= TargetRamMsgCount of
+        true  -> State1;
+        false -> reduce_memory_use(State1)
     end.
 
 remeasure_egress_rate(State = #vqstate { egress_rate = OldEgressRate,
@@ -258,14 +251,11 @@ ram_duration(#vqstate { avg_egress_rate = AvgEgressRate,
     end.
 
 fetch(State =
-      #vqstate { q4 = Q4, ram_msg_count = RamMsgCount,
-                 out_counter = OutCount, prefetcher = Prefetcher,
+      #vqstate { q4 = Q4, ram_msg_count = RamMsgCount, out_counter = OutCount,
                  index_state = IndexState, len = Len }) ->
     case queue:out(Q4) of
-        {empty, _Q4} when Prefetcher == undefined ->
-            fetch_from_q3_or_gamma(State);
         {empty, _Q4} ->
-            fetch(drain_prefetcher(drain, State));
+            fetch_from_q3_or_gamma(State);
         {{value,
           #alpha { msg = Msg = #basic_message { guid = MsgId,
                                                 is_persistent = IsPersistent },
@@ -333,45 +323,12 @@ len(#vqstate { len = Len }) ->
 is_empty(State) ->
     0 == len(State).
 
-maybe_start_prefetcher(State = #vqstate { target_ram_msg_count = 0 }) ->
-    State;
-maybe_start_prefetcher(State = #vqstate { prefetcher = undefined }) ->
-    %% ensure we have as much index in RAM as we can
-    State1 = #vqstate { ram_msg_count = RamMsgCount,
-                        target_ram_msg_count = TargetRamMsgCount,
-                        q1 = Q1, q3 = Q3 } = maybe_gammas_to_betas(State),
-    case queue:is_empty(Q3) of
-        true -> %% nothing to do
-            State1;
-        false ->
-            %% prefetched content takes priority over q1
-            AvailableSpace =
-                case TargetRamMsgCount of
-                    undefined -> queue:len(Q3);
-                    _ -> (TargetRamMsgCount - RamMsgCount) + queue:len(Q1)
-                end,
-            PrefetchCount = lists:min([queue:len(Q3), AvailableSpace]),
-            case PrefetchCount =< 0 of
-                true -> State1;
-                false ->
-                    {PrefetchQueue, Q3a} = queue:split(PrefetchCount, Q3),
-                    {ok, Prefetcher} =
-                        rabbit_queue_prefetcher:start_link(PrefetchQueue),
-                    State1 #vqstate { q3 = Q3a, prefetcher = Prefetcher }
-            end
-    end;
-maybe_start_prefetcher(State) ->
-    State.
-
-purge(State = #vqstate { prefetcher = undefined, q4 = Q4,
-                         index_state = IndexState, len = Len }) ->
+purge(State = #vqstate { q4 = Q4, index_state = IndexState, len = Len }) ->
     {Q4Count, IndexState1} = remove_queue_entries(Q4, IndexState),
     {Len, State1} =
         purge1(Q4Count, State #vqstate { index_state = IndexState1,
                                          q4 = queue:new() }),
-    {Len, State1 #vqstate { len = 0 }};
-purge(State) ->
-    purge(drain_prefetcher(stop, State)).
+    {Len, State1 #vqstate { len = 0 }}.
 
 %% the only difference between purge and delete is that delete also
 %% needs to delete everything that's been delivered and not ack'd.
@@ -490,7 +447,7 @@ full_flush_journal(State = #vqstate { index_state = IndexState }) ->
 status(#vqstate { q1 = Q1, q2 = Q2, gamma = Gamma, q3 = Q3, q4 = Q4,
                   len = Len, on_sync = {_, _, From},
                   target_ram_msg_count = TargetRamMsgCount,
-                  ram_msg_count = RamMsgCount, prefetcher = Prefetcher,
+                  ram_msg_count = RamMsgCount, 
                   avg_egress_rate = AvgEgressRate }) ->
     [ {q1, queue:len(Q1)},
       {q2, queue:len(Q2)},
@@ -501,8 +458,7 @@ status(#vqstate { q1 = Q1, q2 = Q2, gamma = Gamma, q3 = Q3, q4 = Q4,
       {outstanding_txns, length(From)},
       {target_ram_msg_count, TargetRamMsgCount},
       {ram_msg_count, RamMsgCount},
-      {avg_egress_rate, AvgEgressRate},
-      {prefetching, Prefetcher /= undefined} ].
+      {avg_egress_rate, AvgEgressRate} ].
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -660,56 +616,13 @@ fetch_from_q3_or_gamma(State = #vqstate {
             fetch(State2)
     end.
 
-drain_prefetcher(_DrainOrStop, State = #vqstate { prefetcher = undefined }) ->
-    State;
-drain_prefetcher(DrainOrStop,
-                 State = #vqstate { prefetcher = Prefetcher, q1 = Q1, q2 = Q2,
-                                    gamma = #gamma { count = GammaCount },
-                                    q3 = Q3, q4 = Q4,
-                                    ram_msg_count = RamMsgCount }) ->
-    Fun = case DrainOrStop of
-              drain -> fun rabbit_queue_prefetcher:drain/1;
-              stop  -> fun rabbit_queue_prefetcher:drain_and_stop/1
-          end,
-    {Q3a, Q4a, Prefetcher1, RamMsgCountAdj} =
-        case Fun(Prefetcher) of
-            {empty, Betas} ->       %% drain or drain_and_stop
-                {queue:join(Betas, Q3), Q4, undefined, 0};
-            {finished, Alphas} ->   %% just drain
-                {Q3, queue:join(Q4, Alphas), undefined, queue:len(Alphas)};
-            {continuing, Alphas} -> %% just drain
-                {Q3, queue:join(Q4, Alphas), Prefetcher, queue:len(Alphas)};
-            {Alphas, Betas} ->      %% just drain_and_stop
-                {queue:join(Betas, Q3), queue:join(Q4, Alphas), undefined,
-                 queue:len(Alphas)}
-        end,
-    State1 = State #vqstate { prefetcher = Prefetcher1, q3 = Q3a, q4 = Q4a,
-                              ram_msg_count = RamMsgCount + RamMsgCountAdj },
-    %% don't join up with q1/q2 unless the prefetcher has stopped
-    State2 = case GammaCount == 0 andalso Prefetcher1 == undefined of
-                 true -> case queue:is_empty(Q3a) andalso queue:is_empty(Q2) of
-                             true ->
-                                 State1 #vqstate { q1 = queue:new(),
-                                                   q4 = queue:join(Q4a, Q1) };
-                             false ->
-                                 State1 #vqstate { q3 = queue:join(Q3a, Q2) }
-                         end;
-                 false -> State1
-             end,
-    maybe_push_q1_to_betas(State2).
-
 reduce_memory_use(State = #vqstate { ram_msg_count = RamMsgCount,
                                      target_ram_msg_count = TargetRamMsgCount })
   when TargetRamMsgCount == undefined orelse TargetRamMsgCount >= RamMsgCount ->
     State;
 reduce_memory_use(State =
                   #vqstate { target_ram_msg_count = TargetRamMsgCount }) ->
-    %% strictly, it's not necessary to stop the prefetcher this early,
-    %% but because of its potential effect on q1 and the
-    %% ram_msg_count, it's just much simpler to stop it sooner and
-    %% relaunch when we next hibernate.
-    State1 = maybe_push_q4_to_betas(maybe_push_q1_to_betas(
-                                      drain_prefetcher(stop, State))),
+    State1 = maybe_push_q4_to_betas(maybe_push_q1_to_betas(State)),
     case TargetRamMsgCount of
         0 -> push_betas_to_gammas(State1);
         _ -> State1
@@ -810,9 +723,9 @@ publish(neither, Msg = #basic_message { guid = MsgId,
 store_alpha_entry(Entry = #alpha {}, State =
                   #vqstate { q1 = Q1, q2 = Q2,
                              gamma = #gamma { count = GammaCount },
-                             q3 = Q3, q4 = Q4, prefetcher = Prefetcher }) ->
+                             q3 = Q3, q4 = Q4 }) ->
     case queue:is_empty(Q2) andalso GammaCount == 0 andalso
-        queue:is_empty(Q3) andalso Prefetcher == undefined of
+        queue:is_empty(Q3) of
         true ->
             State #vqstate { q4 = queue:in(Entry, Q4) };
         false ->

@@ -922,7 +922,6 @@ handle_info(Info, State) ->
     {stop, {unhandled_info, Info}, State}.
 
 handle_pre_hibernate(State = #q{ variable_queue_state = VQS }) ->
-    VQS1 = rabbit_variable_queue:maybe_start_prefetcher(VQS),
-    VQS2 = rabbit_variable_queue:full_flush_journal(VQS1),
+    VQS1 = rabbit_variable_queue:full_flush_journal(VQS),
     {hibernate, stop_egress_rate_timer(
-                  State#q{ variable_queue_state = VQS2 })}.
+                  State#q{ variable_queue_state = VQS1 })}.
