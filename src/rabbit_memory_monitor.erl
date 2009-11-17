@@ -70,7 +70,6 @@
 
 
 -module(rabbit_memory_monitor).
--include("rabbit.hrl").
 
 -behaviour(gen_server2).
 
@@ -84,7 +83,7 @@
                 queue_duration_sum,   %% sum of all queue_durations
                 queue_duration_count, %% number of elements in sum
                 memory_limit,         %% how much memory we intend to use
-                memory_ratio,         %% how much more memory we can use
+                memory_ratio,         %% limit / used
                 desired_duration,     %% the desired queue duration
                 callbacks             %% a dict of qpid -> {M,F,A}s
                }).
@@ -92,7 +91,7 @@
 -define(SERVER, ?MODULE).
 -define(DEFAULT_UPDATE_INTERVAL, 2500).
 -define(TABLE_NAME, ?MODULE).
--define(MAX_QUEUE_DURATION, 60*60*24). % 1 day
+-define(MAX_QUEUE_DURATION, 86400). %% 60*60*24 i.e. 1 day
 
 %% If user disabled vm_memory_monitor, let's assume 1GB of memory we can use.
 -define(MEMORY_SIZE_FOR_DISABLED_VMM, 1073741824).
@@ -153,18 +152,19 @@ handle_call({report_queue_duration, Pid, QueueDuration}, From,
                            queue_duration_count = Count,
                            queue_durations = Durations,
                            desired_duration = SendDuration}) ->
-    [{_Pid, PrevQueueDuration, PrevSendDuration}] = ets:lookup(Durations, Pid),
-    SendDuration1 =
-        case QueueDuration < 1 andalso PrevSendDuration == infinity of
-            true -> infinity;
-            false -> SendDuration
-        end,
-    gen_server2:reply(From, SendDuration1),
 
     QueueDuration1 = case QueueDuration > ?MAX_QUEUE_DURATION of
                          true  -> infinity;
                          false -> QueueDuration
                      end,
+    [{_Pid, PrevQueueDuration, PrevSendDuration}] = ets:lookup(Durations, Pid),
+
+    SendDuration1 =
+        case QueueDuration1 < 1 andalso PrevSendDuration == infinity of
+            true -> infinity;
+            false -> SendDuration
+        end,
+    gen_server2:reply(From, SendDuration1),
 
     {Sum1, Count1} =
             case {PrevQueueDuration, QueueDuration1} of
@@ -230,9 +230,13 @@ internal_update(State = #state{memory_limit = Limit,
                                callbacks = Callbacks}) ->
     %% available memory / used memory
     MemoryRatio = Limit / erlang:memory(total),
+    Sum1 = case MemoryRatio > 1.05 of
+               true -> Sum + 1;
+               false -> Sum
+           end,
     AvgDuration = case Count == 0 of
                       true  -> infinity;
-                      false -> Sum / Count
+                      false -> Sum1 / Count
                   end,
     DesiredDurationAvg1 =
         case AvgDuration == infinity orelse MemoryRatio > 2 of
