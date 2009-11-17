@@ -168,7 +168,7 @@ next_state1(State, false) ->
 
 ensure_egress_rate_timer(State = #q{egress_rate_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(?EGRESS_REMEASURE_INTERVAL, rabbit_amqqueue,
-                                   remeasure_egress_rate, [self()]),
+                                   remeasure_rates, [self()]),
     State#q{egress_rate_timer_ref = TRef};
 ensure_egress_rate_timer(State = #q{egress_rate_timer_ref = just_measured}) ->
     State#q{egress_rate_timer_ref = undefined};
@@ -867,8 +867,8 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
         end));
 
-handle_cast(remeasure_egress_rate, State = #q{variable_queue_state = VQS}) ->
-    VQS1 = rabbit_variable_queue:remeasure_egress_rate(VQS),
+handle_cast(remeasure_rates, State = #q{variable_queue_state = VQS}) ->
+    VQS1 = rabbit_variable_queue:remeasure_rates(VQS),
     RamDuration = rabbit_variable_queue:ram_duration(VQS1),
     DesiredDuration =
         rabbit_memory_monitor:report_queue_duration(self(), RamDuration),

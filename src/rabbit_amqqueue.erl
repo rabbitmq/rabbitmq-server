@@ -33,7 +33,7 @@
 
 -export([start/0, recover/1, find_durable_queues/0, declare/4, delete/3,
          purge/1]).
--export([internal_declare/2, internal_delete/1, remeasure_egress_rate/1,
+-export([internal_declare/2, internal_delete/1, remeasure_rates/1,
          set_queue_duration/2]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
@@ -114,7 +114,7 @@
 -spec(tx_commit_vq_callback/1 :: (pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
--spec(remeasure_egress_rate/1 :: (pid()) -> 'ok').
+-spec(remeasure_rates/1 :: (pid()) -> 'ok').
 -spec(set_queue_duration/2 :: (pid(), number()) -> 'ok').
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
@@ -374,8 +374,8 @@ internal_delete(QueueName) ->
               end
       end).
 
-remeasure_egress_rate(QPid) ->
-    gen_server2:pcast(QPid, 9, remeasure_egress_rate).    
+remeasure_rates(QPid) ->
+    gen_server2:pcast(QPid, 9, remeasure_rates).    
 
 set_queue_duration(QPid, Duration) ->
     gen_server2:pcast(QPid, 9, {set_queue_duration, Duration}).    

@@ -1167,7 +1167,7 @@ test_variable_queue_dynamic_duration_change() ->
     %% start by sending in a couple of segments worth
     Len1 = 2*SegmentSize,
     {_SeqIds, VQ1} = variable_queue_publish(false, Len1, VQ0),
-    VQ2 = rabbit_variable_queue:remeasure_egress_rate(VQ1),
+    VQ2 = rabbit_variable_queue:remeasure_rates(VQ1),
     {ok, _TRef} = timer:send_after(1000, {duration, 60,
                                           fun (V) -> (V*0.75)-1 end}),
     VQ3 = test_variable_queue_dynamic_duration_change_f(Len1, VQ2),
@@ -1203,7 +1203,7 @@ test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
                        _               -> Fun
                    end,
             {ok, _TRef} = timer:send_after(1000, {duration, N1, Fun1}),
-            VQ4 = rabbit_variable_queue:remeasure_egress_rate(VQ3),
+            VQ4 = rabbit_variable_queue:remeasure_rates(VQ3),
             VQ5 = %% /37 otherwise the duration is just to high to stress things
                 rabbit_variable_queue:set_queue_ram_duration_target(N/37, VQ4),
             io:format("~p:~n~p~n~n", [N, rabbit_variable_queue:status(VQ5)]),
