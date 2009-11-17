@@ -556,6 +556,14 @@ handle_method(#'basic.recover_async'{}, _, _State) ->
     rabbit_misc:protocol_error(
       not_allowed, "attempt to recover a transactional channel",[]);
 
+handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
+    {noreply, State2 = #ch{writer_pid = WriterPid}} =
+        handle_method(#'basic.recover_async'{requeue = Requeue},
+                      Content,
+                      State),
+    ok = rabbit_writer:send_command(WriterPid, #'basic.recover_ok'{}),
+    {noreply, State2};
+
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
