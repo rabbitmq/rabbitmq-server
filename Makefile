@@ -46,7 +46,7 @@ ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 all: $(TARGETS)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
-	escript generate_app $(EBIN_DIR) < $< > $@
+	escript generate_app $(EBIN_DIR) $@ < $<
 
 $(EBIN_DIR)/gen_server2.beam: $(SOURCE_DIR)/gen_server2.erl
 	erlc $(ERLC_OPTS) $<

@@ -132,52 +132,66 @@ create_frame(TypeInt, ChannelInt, Payload) ->
 %% I, D, T and F, as well as the QPid extensions b, d, f, l, s, t, x,
 %% and V.
 
-table_field_to_binary({FName, longstr, Value}) ->
-    [short_string_to_binary(FName), "S", long_string_to_binary(Value)];
+table_field_to_binary({FName, Type, Value}) ->
+    [short_string_to_binary(FName) | field_value_to_binary(Type, Value)].
 
-table_field_to_binary({FName, signedint, Value}) ->
-    [short_string_to_binary(FName), "I", <<Value:32/signed>>];
+field_value_to_binary(longstr, Value) ->
+    ["S", long_string_to_binary(Value)];
 
-table_field_to_binary({FName, decimal, {Before, After}}) ->
-    [short_string_to_binary(FName), "D", Before, <<After:32>>];
+field_value_to_binary(signedint, Value) ->
+    ["I", <<Value:32/signed>>];
 
-table_field_to_binary({FName, timestamp, Value}) ->
-    [short_string_to_binary(FName), "T", <<Value:64>>];
+field_value_to_binary(decimal, {Before, After}) ->
+    ["D", Before, <<After:32>>];
 
-table_field_to_binary({FName, table, Value}) ->
-    [short_string_to_binary(FName), "F", table_to_binary(Value)];
+field_value_to_binary(timestamp, Value) ->
+    ["T", <<Value:64>>];
 
-table_field_to_binary({FName, byte, Value}) ->
-    [short_string_to_binary(FName), "b", <<Value:8/unsigned>>];
+field_value_to_binary(table, Value) ->
+    ["F", table_to_binary(Value)];
 
-table_field_to_binary({FName, double, Value}) ->
-    [short_string_to_binary(FName), "d", <<Value:64/float>>];
+field_value_to_binary(array, Value) ->
+    ["A", array_to_binary(Value)];
 
-table_field_to_binary({FName, float, Value}) ->
-    [short_string_to_binary(FName), "f", <<Value:32/float>>];
+field_value_to_binary(byte, Value) ->
+    ["b", <<Value:8/unsigned>>];
 
-table_field_to_binary({FName, long, Value}) ->
-    [short_string_to_binary(FName), "l", <<Value:64/signed>>];
+field_value_to_binary(double, Value) ->
+    ["d", <<Value:64/float>>];
 
-table_field_to_binary({FName, short, Value}) ->
-    [short_string_to_binary(FName), "s", <<Value:16/signed>>];
+field_value_to_binary(float, Value) ->
+    ["f", <<Value:32/float>>];
 
-table_field_to_binary({FName, bool, Value}) ->
-    [short_string_to_binary(FName), "t", if Value -> 1; true -> 0 end];
+field_value_to_binary(long, Value) ->
+    ["l", <<Value:64/signed>>];
 
-table_field_to_binary({FName, binary, Value}) ->
-    [short_string_to_binary(FName), "x", long_string_to_binary(Value)];
+field_value_to_binary(short, Value) ->
+    ["s", <<Value:16/signed>>];
 
-table_field_to_binary({FName, void, _Value}) ->
-    [short_string_to_binary(FName), "V"].
+field_value_to_binary(bool, Value) ->
+    ["t", if Value -> 1; true -> 0 end];
+
+field_value_to_binary(binary, Value) ->
+    ["x", long_string_to_binary(Value)];
+
+field_value_to_binary(void, _Value) ->
+    ["V"].
 
 table_to_binary(Table) when is_list(Table) ->
     BinTable = generate_table(Table),
     [<<(size(BinTable)):32>>, BinTable].
 
+array_to_binary(Array) when is_list(Array) ->
+    BinArray = generate_array(Array),
+    [<<(size(BinArray)):32>>, BinArray].
+
 generate_table(Table) when is_list(Table) ->
     list_to_binary(lists:map(fun table_field_to_binary/1, Table)).
 
+generate_array(Array) when is_list(Array) ->
+    list_to_binary(lists:map(
+                     fun ({Type, Value}) -> field_value_to_binary(Type, Value) end,
+                     Array)).
 
 short_string_to_binary(String) when is_binary(String) and (size(String) < 256) ->
     [<<(size(String)):8>>, String];
@@ -186,12 +200,10 @@ short_string_to_binary(String) ->
     true = (StringLength < 256), % assertion
     [<<StringLength:8>>, String].
 
-
 long_string_to_binary(String) when is_binary(String) ->
     [<<(size(String)):32>>, String];
 long_string_to_binary(String) ->
     [<<(length(String)):32>>, String].
-
 
 encode_properties([], []) ->
     <<0, 0>>;
@@ -238,32 +250,7 @@ encode_property(longlongint, Int) ->
 encode_property(timestamp, Int) ->
     <<Int:64/unsigned>>;
 encode_property(table, Table) ->
-    encode_table(Table).
-
-
-encode_table(Table) ->
-    TableBin = list_to_binary(lists:map(fun encode_table_entry/1, Table)),
-    Len = size(TableBin),
-    <<Len:32/unsigned, TableBin:Len/binary>>.
-
-
-encode_table_entry({Name, longstr, Value}) ->
-    NLen = size(Name),
-    VLen = size(Value),
-    <<NLen:8/unsigned, Name:NLen/binary, "S", VLen:32/unsigned, Value:VLen/binary>>;
-encode_table_entry({Name, signedint, Value}) ->
-    NLen = size(Name),
-    <<NLen:8/unsigned, Name:NLen/binary, "I", Value:32/signed>>;
-encode_table_entry({Name, decimal, {Before, After}}) ->
-    NLen = size(Name),
-    <<NLen:8/unsigned, Name:NLen/binary, "D", Before:8/unsigned, After:32/unsigned>>;
-encode_table_entry({Name, timestamp, Value}) ->
-    NLen = size(Name),
-    <<NLen:8/unsigned, Name:NLen/binary, "T", Value:64/unsigned>>;
-encode_table_entry({Name, table, Value}) ->
-    NLen = size(Name),
-    TableBin = encode_table(Value),
-    <<NLen:8/unsigned, Name:NLen/binary, "F", TableBin/binary>>.
+    table_to_binary(Table).
 
 check_empty_content_body_frame_size() ->
     %% Intended to ensure that EMPTY_CONTENT_BODY_FRAME_SIZE is
