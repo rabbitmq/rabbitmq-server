@@ -138,14 +138,15 @@ init([]) ->
 
     {ok, TRef} = timer:apply_interval(?DEFAULT_UPDATE_INTERVAL,
                                       ?SERVER, update, []),
-    {ok, #state{timer                = TRef,
-                queue_durations      = ets:new(?TABLE_NAME, [set, private]),
-                queue_duration_sum   = 0.0,
-                queue_duration_count = 0,
-                memory_limit         = MemoryLimit,
-                memory_ratio         = 1.0,
-                desired_duration     = infinity,
-                callbacks            = dict:new()}}.
+    {ok, internal_update(
+           #state{timer                = TRef,
+                  queue_durations      = ets:new(?TABLE_NAME, [set, private]),
+                  queue_duration_sum   = 0.0,
+                  queue_duration_count = 0,
+                  memory_limit         = MemoryLimit,
+                  memory_ratio         = 1.0,
+                  desired_duration     = infinity,
+                  callbacks            = dict:new()})}.
 
 handle_call({report_queue_duration, Pid, QueueDuration}, From,
             State = #state{queue_duration_sum = Sum,
