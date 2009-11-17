@@ -224,10 +224,7 @@ set_queue_ram_duration_target(
                                      avg_ingress_rate = AvgIngressRate,
                                      target_ram_msg_count = TargetRamMsgCount
                                    }) ->
-    Rate = case 0 == AvgEgressRate of
-               true -> AvgIngressRate;
-               false -> AvgEgressRate
-           end,
+    Rate = AvgEgressRate + AvgIngressRate,
     TargetRamMsgCount1 =
         case DurationTarget of
             infinity -> undefined;
@@ -265,12 +262,9 @@ ram_duration(#vqstate { avg_egress_rate = AvgEgressRate,
                         avg_ingress_rate = AvgIngressRate,
                         ram_msg_count = RamMsgCount }) ->
     %% msgs / (msgs/sec) == sec
-    case AvgEgressRate == 0 of
-        true  -> case AvgIngressRate == 0 of
-                     true -> infinity;
-                     false -> RamMsgCount / AvgIngressRate
-                 end;
-        false -> RamMsgCount / AvgEgressRate
+    case AvgEgressRate == 0 andalso AvgIngressRate == 0 of
+        true  -> infinity;
+        false -> RamMsgCount / (AvgEgressRate + AvgIngressRate)
     end.
 
 fetch(State =

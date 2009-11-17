@@ -230,14 +230,14 @@ internal_update(State = #state{memory_limit = Limit,
                                callbacks = Callbacks}) ->
     %% available memory / used memory
     MemoryRatio = Limit / erlang:memory(total),
-    AvgDuration = case Count of
-                      0 -> infinity;
-                      _ -> Sum / Count
+    AvgDuration = case Count == 0 of
+                      true  -> infinity;
+                      false -> Sum / Count
                   end,
     DesiredDurationAvg1 =
-        case AvgDuration of
-            infinity -> infinity;
-            AvgQueueDuration -> lists:max([0, AvgQueueDuration * MemoryRatio])
+        case AvgDuration == infinity orelse MemoryRatio > 2 of
+            true  -> infinity;
+            false -> lists:max([0, AvgDuration * MemoryRatio])
         end,
     State1 = State#state{memory_ratio = MemoryRatio,
                          desired_duration = DesiredDurationAvg1},
@@ -245,7 +245,8 @@ internal_update(State = #state{memory_limit = Limit,
     %% only inform queues immediately if the desired duration has
     %% decreased
     case (DesiredDurationAvg == infinity andalso DesiredDurationAvg /= infinity)
-        orelse (DesiredDurationAvg1 < DesiredDurationAvg) of
+        orelse (DesiredDurationAvg1 /= infinity andalso
+                DesiredDurationAvg1 < DesiredDurationAvg) of
         true ->
             %% If we have pessimistic information, we need to inform
             %% queues to reduce it's memory usage when needed. This
@@ -261,7 +262,7 @@ internal_update(State = #state{memory_limit = Limit,
                                      ets:insert(Durations,
                                                 {Pid, QueueDuration,
                                                  DesiredDurationAvg1});
-                                 _ -> true
+                                 false -> true
                              end
                      end, true, Durations);
         false -> ok
