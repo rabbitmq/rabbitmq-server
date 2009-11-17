@@ -269,7 +269,7 @@ redeliver(QPid, Messages) ->
     gen_server2:cast(QPid, {redeliver, Messages}).
 
 requeue(QPid, MsgIds, ChPid) ->
-    gen_server2:cast(QPid, {requeue, MsgIds, ChPid}).
+    gen_server2:call(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
     gen_server2:cast(QPid, {ack, Txn, MsgIds, ChPid}).

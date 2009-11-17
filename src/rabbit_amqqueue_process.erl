@@ -704,7 +704,21 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
 handle_call(purge, _From, State = #q{message_buffer = MessageBuffer}) ->
     ok = purge_message_buffer(qname(State), MessageBuffer),
     reply({ok, queue:len(MessageBuffer)},
-          State#q{message_buffer = queue:new()}).
+          State#q{message_buffer = queue:new()});
+
+handle_call({requeue, MsgIds, ChPid}, _From, State) ->
+    case lookup_ch(ChPid) of
+        not_found ->
+            rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
+                               [ChPid]),
+            reply(ok, State);
+        C = #cr{unacked_messages = UAM} ->
+            {Messages, NewUAM} = collect_messages(MsgIds, UAM),
+            store_ch_record(C#cr{unacked_messages = NewUAM}),
+            reply(ok, deliver_or_enqueue_n(
+                        [{Message, true} || Message <- Messages], State))
+    end.
+
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
@@ -734,19 +748,6 @@ handle_cast({rollback, Txn}, State) ->
 
 handle_cast({redeliver, Messages}, State) ->
     noreply(deliver_or_enqueue_n(Messages, State));
-
-handle_cast({requeue, MsgIds, ChPid}, State) ->
-    case lookup_ch(ChPid) of
-        not_found ->
-            rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
-                               [ChPid]),
-            noreply(State);
-        C = #cr{unacked_messages = UAM} ->
-            {Messages, NewUAM} = collect_messages(MsgIds, UAM),
-            store_ch_record(C#cr{unacked_messages = NewUAM}),
-            noreply(deliver_or_enqueue_n(
-                      [{Message, true} || Message <- Messages], State))
-    end;
 
 handle_cast({unblock, ChPid}, State) ->
     noreply(
