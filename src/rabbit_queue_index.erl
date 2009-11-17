@@ -548,7 +548,7 @@ queue_index_walker([]) ->
 queue_index_walker([QueueName|QueueNames]) ->
     State = blank_state(QueueName),
     {Hdl, State1} = get_journal_handle(State),
-    {_JDelDict, JAckDict} = load_journal(Hdl, dict:new(), dict:new()),
+    {JAckDict, _JDelDict} = load_journal(Hdl, dict:new(), dict:new()),
     State2 = #qistate { dir = Dir } =
         close_handle(journal, State1 #qistate { journal_ack_dict = JAckDict }),
     SegNums = all_segment_nums(Dir),
