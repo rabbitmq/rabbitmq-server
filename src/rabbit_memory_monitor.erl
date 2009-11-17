@@ -241,7 +241,7 @@ internal_update(State = #state{memory_limit = Limit,
     DesiredDurationAvg1 =
         case AvgDuration == infinity orelse MemoryRatio > 2 of
             true  -> infinity;
-            false -> lists:max([0, AvgDuration * MemoryRatio])
+            false -> lists:max([0, trunc(AvgDuration * MemoryRatio)])
         end,
     State1 = State#state{memory_ratio = MemoryRatio,
                          desired_duration = DesiredDurationAvg1},
