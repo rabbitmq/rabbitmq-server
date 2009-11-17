@@ -153,14 +153,19 @@ handle_call({report_queue_duration, Pid, QueueDuration}, From,
                            queue_duration_count = Count,
                            queue_durations = Durations,
                            desired_duration = SendDuration}) ->
-    gen_server2:reply(From, SendDuration),
+    [{_Pid, PrevQueueDuration, PrevSendDuration}] = ets:lookup(Durations, Pid),
+    SendDuration1 =
+        case QueueDuration < 1 andalso PrevSendDuration == infinity of
+            true -> infinity;
+            false -> SendDuration
+        end,
+    gen_server2:reply(From, SendDuration1),
 
     QueueDuration1 = case QueueDuration > ?MAX_QUEUE_DURATION of
                          true  -> infinity;
                          false -> QueueDuration
                      end,
 
-    [{_Pid, PrevQueueDuration, _PrevSendDuration}] = ets:lookup(Durations, Pid),
     {Sum1, Count1} =
             case {PrevQueueDuration, QueueDuration1} of
                 {infinity, infinity} -> {Sum, Count};
@@ -168,7 +173,7 @@ handle_call({report_queue_duration, Pid, QueueDuration}, From,
                 {_, infinity}        -> {Sum - PrevQueueDuration, Count - 1};
                 {_, _} -> {Sum - PrevQueueDuration + QueueDuration1, Count}
             end,
-    true = ets:insert(Durations, {Pid, QueueDuration1, SendDuration}),
+    true = ets:insert(Durations, {Pid, QueueDuration1, SendDuration1}),
     {noreply, State#state{queue_duration_sum = Sum1,
                           queue_duration_count = Count1}};
 
