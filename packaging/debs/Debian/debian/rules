@@ -20,3 +20,4 @@ install/rabbitmq-server::
 	for script in rabbitmq-activate-plugins rabbitmq-deactivate-plugins; do \
 		install -p -D -m 0755 debian/rabbitmq-asroot-script-wrapper $(DEB_DESTDIR)usr/sbin/$$script; \
 	done
+	sed -e 's|@RABBIT_LIB@|/usr/lib/rabbitmq/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSION)|g' <debian/postrm.in >debian/postrm
