@@ -84,11 +84,10 @@
 %% The major invariant is that if the msg is to be a beta, q1 will be
 %% empty, and if it is to be a gamma then both q1 and q2 will be empty.
 %%
-%% When taking msgs out of the queue, if q4 is empty then we drain the
-%% prefetcher. If that doesn't help then we read directly from q3, or
-%% gamma, if q3 is empty. If q3 and gamma are empty then we have an
-%% invariant that q2 must be empty because q2 can only grow if gamma
-%% is non empty.
+%% When taking msgs out of the queue, if q4 is empty then we read
+%% directly from q3, or gamma, if q3 is empty. If q3 and gamma are
+%% empty then we have an invariant that q2 must be empty because q2
+%% can only grow if gamma is non empty.
 %%
 %% A further invariant is that if the queue is non empty, either q4 or
 %% q3 contains at least one entry. I.e. we never allow gamma to
