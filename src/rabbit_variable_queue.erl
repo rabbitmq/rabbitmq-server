@@ -483,14 +483,10 @@ status(#vqstate { q1 = Q1, q2 = Q2, gamma = Gamma, q3 = Q3, q4 = Q4,
 %% Minor helpers
 %%----------------------------------------------------------------------------
 
-update_rate(Now, Then, Count, Rate = {OThen, OCount}) ->
-    %% form the avg over the current periond and the previous
+update_rate(Now, Then, Count, {OThen, OCount}) ->
+    %% form the avg over the current period and the previous
     Avg = 1000000 * ((Count + OCount) / timer:now_diff(Now, OThen)),
-    Rate1 = case 0 == Count of
-                true -> Rate; %% keep the last period with activity
-                false -> {Then, Count}
-            end,
-    {Avg, Rate1}.
+    {Avg, {Then, Count}}.
 
 persistent_msg_ids(Pubs) ->
     [MsgId || Obj = #basic_message { guid = MsgId } <- Pubs,

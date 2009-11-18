@@ -39,7 +39,7 @@
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
 -define(SYNC_INTERVAL,                 5). %% milliseconds
--define(EGRESS_REMEASURE_INTERVAL,  5000).
+-define(RATES_REMEASURE_INTERVAL,  5000).
 
 -export([start_link/1]).
 
@@ -60,7 +60,7 @@
             active_consumers,
             blocked_consumers,
             sync_timer_ref,
-            egress_rate_timer_ref
+            rate_timer_ref
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -115,7 +115,7 @@ init(Q = #amqqueue { name = QName }) ->
                active_consumers = queue:new(),
                blocked_consumers = queue:new(),
                sync_timer_ref = undefined,
-               egress_rate_timer_ref = undefined
+               rate_timer_ref = undefined
               },
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -154,7 +154,7 @@ noreply(NewState) ->
     {noreply, NewState1, Timeout}.
 
 next_state(State = #q{variable_queue_state = VQS}) ->
-    next_state1(ensure_egress_rate_timer(State),
+    next_state1(ensure_rate_timer(State),
                 rabbit_variable_queue:needs_sync(VQS)).
 
 next_state1(State = #q{sync_timer_ref = undefined}, true) ->
@@ -166,22 +166,22 @@ next_state1(State = #q{sync_timer_ref = undefined}, false) ->
 next_state1(State, false) ->
     {stop_sync_timer(State), hibernate}.
 
-ensure_egress_rate_timer(State = #q{egress_rate_timer_ref = undefined}) ->
-    {ok, TRef} = timer:apply_after(?EGRESS_REMEASURE_INTERVAL, rabbit_amqqueue,
+ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
+    {ok, TRef} = timer:apply_after(?RATES_REMEASURE_INTERVAL, rabbit_amqqueue,
                                    remeasure_rates, [self()]),
-    State#q{egress_rate_timer_ref = TRef};
-ensure_egress_rate_timer(State = #q{egress_rate_timer_ref = just_measured}) ->
-    State#q{egress_rate_timer_ref = undefined};
-ensure_egress_rate_timer(State) ->
+    State#q{rate_timer_ref = TRef};
+ensure_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
+    State#q{rate_timer_ref = undefined};
+ensure_rate_timer(State) ->
     State.
 
-stop_egress_rate_timer(State = #q{egress_rate_timer_ref = undefined}) ->
+stop_rate_timer(State = #q{rate_timer_ref = undefined}) ->
     State;
-stop_egress_rate_timer(State = #q{egress_rate_timer_ref = just_measured}) ->
-    State#q{egress_rate_timer_ref = undefined};
-stop_egress_rate_timer(State = #q{egress_rate_timer_ref = TRef}) ->
+stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
+    State#q{rate_timer_ref = undefined};
+stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
-    State#q{egress_rate_timer_ref = undefined}.
+    State#q{rate_timer_ref = undefined}.
 
 start_sync_timer(State = #q{sync_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, rabbit_amqqueue,
@@ -874,16 +874,13 @@ handle_cast(remeasure_rates, State = #q{variable_queue_state = VQS}) ->
         rabbit_memory_monitor:report_queue_duration(self(), RamDuration),
     VQS2 = rabbit_variable_queue:set_queue_ram_duration_target(
              DesiredDuration, VQS1),
-    io:format("~p Reported ~p and got back ~p~n", [self(), RamDuration, DesiredDuration]),
-    io:format("~p~n", [rabbit_variable_queue:status(VQS2)]),
-    noreply(State#q{egress_rate_timer_ref = just_measured,
+    noreply(State#q{rate_timer_ref = just_measured,
                     variable_queue_state = VQS2});
 
 handle_cast({set_queue_duration, Duration},
             State = #q{variable_queue_state = VQS}) ->
     VQS1 = rabbit_variable_queue:set_queue_ram_duration_target(
              Duration, VQS),
-    io:format("~p was told to make duration ~p~n", [self(), Duration]),
     noreply(State#q{variable_queue_state = VQS1}).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
@@ -923,5 +920,9 @@ handle_info(Info, State) ->
 
 handle_pre_hibernate(State = #q{ variable_queue_state = VQS }) ->
     VQS1 = rabbit_variable_queue:full_flush_journal(VQS),
-    {hibernate, stop_egress_rate_timer(
-                  State#q{ variable_queue_state = VQS1 })}.
+    %% no activity for a while == 0 egress and ingress rates
+    DesiredDuration = 
+        rabbit_memory_monitor:report_queue_duration(self(), infinity),
+    VQS2 = rabbit_variable_queue:set_queue_ram_duration_target(
+             DesiredDuration, VQS1),
+    {hibernate, stop_rate_timer(State#q{variable_queue_state = VQS2})}.
