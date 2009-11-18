@@ -142,6 +142,7 @@ start(normal, []) ->
                     check_empty_content_body_frame_size(),
 
                 ok = rabbit_alarm:start(),
+                ok = start_child(file_handle_cache),
 
                 {ok, MemoryWatermark} =
                     application:get_env(vm_memory_high_watermark),

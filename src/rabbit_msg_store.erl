@@ -43,7 +43,6 @@
 
 -define(SERVER, ?MODULE).
 
--define(MAX_READ_FILE_HANDLES, 256).
 -define(FILE_SIZE_LIMIT,       (256*1024*1024)).
 -define(SYNC_INTERVAL,         5). %% milliseconds
 -define(HANDLE_CACHE_BUFFER_SIZE, 1048576). %% 1MB
