@@ -153,7 +153,8 @@ handle_call({report_queue_duration, Pid, QueueDuration}, From,
                            queue_durations = Durations,
                            desired_duration = SendDuration}) ->
 
-    QueueDuration1 = case QueueDuration > ?MAX_QUEUE_DURATION of
+    QueueDuration1 = case infinity == QueueDuration orelse
+                         QueueDuration > ?MAX_QUEUE_DURATION of
                          true  -> infinity;
                          false -> QueueDuration
                      end,
