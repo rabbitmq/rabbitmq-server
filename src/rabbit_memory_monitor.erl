@@ -34,40 +34,6 @@
 %% It receives statistics from all queues, counts the desired
 %% queue length (in seconds), and sends this information back to
 %% queues.
-%%
-%% Normally, messages are exchanged like that:
-%%
-%%           (1)      (2)                     (3)
-%% Timer      |        |
-%%            v        v
-%% Queue -----+--------+-----<***hibernated***>------------->
-%%            | ^      | ^                     ^
-%%            v |      v |                     |
-%% Monitor X--*-+--X---*-+--X------X----X-----X+----------->
-%%
-%% Or to put it in words. Queue periodically sends (casts) 'push_queue_duration'
-%% message to the Monitor (cases 1 and 2 on the asciiart above). Monitor
-%% _always_ replies with a 'set_queue_duration' cast. This way,
-%% we're pretty sure that the Queue is not hibernated.
-%% Monitor periodically recounts numbers ('X' on asciiart). If, during this
-%% update we notice that a queue was using too much memory, we send a message
-%% back. This will happen even if the queue is hibernated, as we really do want
-%% it to reduce its memory footprint.
-%%
-%%
-%% The main job of this module, is to make sure that all the queues have
-%% more or less the same number of seconds till become drained.
-%% This average, seconds-till-queue-is-drained, is then multiplied by
-%% the ratio of Total/Used memory. So, if we can 'afford' more memory to be
-%% used, we'll report greater number back to the queues. In the out of
-%% memory case, we are going to reduce the average drain-seconds.
-%% To acheive all this we need to accumulate the information from every
-%% queue, and count an average from that.
-%%
-%%  real_queue_duration_avg = avg([drain_from_queue_1, queue_2, queue_3, ...])
-%%  memory_overcommit = allowed_memory / used_memory
-%%  desired_queue_duration_avg = real_queue_duration_avg * memory_overcommit
-
 
 -module(rabbit_memory_monitor).
 
@@ -231,6 +197,9 @@ internal_update(State = #state{memory_limit = Limit,
                                callbacks = Callbacks}) ->
     %% available memory / used memory
     MemoryRatio = Limit / erlang:memory(total),
+    %% if all queues are pushed to disk, then Sum will be 0. If memory
+    %% then becomes available, unless we do the following, we will
+    %% never allow queues to come off disk.
     Sum1 = case MemoryRatio > 1.05 of
                true -> Sum + 1;
                false -> Sum
