@@ -163,176 +163,35 @@ close(Ref) ->
     end.
 
 read(Ref, Count) ->
-    case get_or_reopen(Ref) of
-        {ok, #handle { is_read = false }} ->
-            {error, not_open_for_reading};
-        {ok, Handle} ->
-            {Result, Handle1} =
-                case write_buffer(Handle) of
-                    {ok, Handle2 = #handle { hdl = Hdl, offset = Offset }} ->
-                        case file:read(Hdl, Count) of
-                            {ok, Data} = Obj ->
-                                Size = iolist_size(Data),
-                                {Obj,
-                                 Handle2 #handle { offset = Offset + Size }};
-                            eof -> {eof, Handle2 #handle { at_eof = true }};
-                            Error -> {Error, Handle2}
-                        end;
-                    {Error, Handle2} -> {Error, Handle2}
-                end,
-            put_handle(Ref, Handle1),
-            Result;
-        Error -> Error
-    end.
+    with_flushed_handles([Ref], Count, fun internal_read/2).
 
 append(Ref, Data) ->
-    case get_or_reopen(Ref) of
-        {ok, #handle { is_write = false }} ->
-            {error, not_open_for_writing};
-        {ok, Handle} ->
-            {Result, Handle1} =
-                case maybe_seek(eof, Handle) of
-                    {{ok, _Offset}, Handle2 = #handle { at_eof = true }} ->
-                        write_to_buffer(Data, Handle2);
-                    {{error, _} = Error, Handle2} ->
-                        {Error, Handle2}
-                end,
-            put_handle(Ref, Handle1),
-            Result;
-        Error -> Error
-    end.
+    with_handles([Ref], Data, fun internal_append/2).
 
 sync(Ref) ->
-    case get_or_reopen(Ref) of
-        {ok, #handle { is_dirty = false, write_buffer = [] }} ->
-            ok;
-        {ok, Handle} ->
-            %% write_buffer will set is_dirty, or leave it set if buffer empty
-            {Result, Handle1} =
-                case write_buffer(Handle) of
-                    {ok, Handle2 = #handle {
-                           hdl = Hdl, offset = Offset, is_dirty = true }} ->
-                        case file:sync(Hdl) of
-                            ok -> {ok,
-                                   Handle2 #handle { trusted_offset = Offset,
-                                                     is_dirty = false }};
-                            Error -> {Error, Handle2}
-                        end;
-                    Error -> {Error, Handle}
-                end,
-            put_handle(Ref, Handle1),
-            Result;
-        Error -> Error
-    end.
+    with_handles([Ref], ok, fun internal_sync/2).
 
 position(Ref, NewOffset) ->
-    case get_or_reopen(Ref) of
-        {ok, Handle} ->
-            {Result, Handle1} =
-                case write_buffer(Handle) of
-                    {ok, Handle2} -> maybe_seek(NewOffset, Handle2);
-                    {Error, Handle2} -> {Error, Handle2}
-                end,
-            put_handle(Ref, Handle1),
-            Result;
-        Error -> Error
-    end.
+    with_handles([Ref], NewOffset, fun internal_position/2).
 
 truncate(Ref) ->
-    case get_or_reopen(Ref) of
-        {ok, #handle { is_write = false }} ->
-            {error, not_open_for_writing};
-        {ok, Handle} ->
-            {Result, Handle1} =
-                case write_buffer(Handle) of
-                    {ok,
-                     Handle2 = #handle { hdl = Hdl, offset = Offset,
-                                         trusted_offset = TrustedOffset }} ->
-                        case file:truncate(Hdl) of
-                            ok ->
-                                {ok,
-                                 Handle2 #handle {
-                                   at_eof = true,
-                                   trusted_offset = lists:min([Offset,
-                                                               TrustedOffset])
-                                  }};
-                            Error -> {Error, Handle2}
-                        end;
-                    {Error, Handle2} -> {Error, Handle2}
-                end,
-            put_handle(Ref, Handle1),
-            Result;
-        Error -> Error
-    end.
+    with_handles([Ref], ok, fun internal_truncate/2).
 
 last_sync_offset(Ref) ->
-    case get_or_reopen(Ref) of
-        {ok, #handle { trusted_offset = TrustedOffset }} -> {ok, TrustedOffset};
-        Error -> Error
-    end.
+    with_handles([Ref], ok, fun internal_last_sync_offset/2).
 
 current_virtual_offset(Ref) ->
-    case get_or_reopen(Ref) of
-        {ok, #handle { at_eof = true, is_write = true, offset = Offset,
-                       write_buffer_size = Size }} ->
-            {ok, Offset + Size};
-        {ok, #handle { offset = Offset }} -> {ok, Offset};
-        Error -> Error
-    end.
+    with_handles([Ref], ok, fun internal_current_virtual_offset/2).
 
 current_raw_offset(Ref) ->
-    case get_or_reopen(Ref) of
-        {ok, #handle { offset = Offset }} -> {ok, Offset};
-        Error -> Error
-    end.    
+    with_handles([Ref], ok, fun internal_current_raw_offset/2).
 
 append_write_buffer(Ref) ->
-    case get_or_reopen(Ref) of
-        {ok, Handle} ->
-            {Result, Handle1} = write_buffer(Handle),
-            put_handle(Ref, Handle1),
-            Result;
-        Error -> Error
-    end.
+    with_flushed_handles([Ref], ok, fun internal_append_write_buffer/2).
 
 copy(Src, Dest, Count) ->
-    case get_or_reopen(Src) of
-        {ok, SHandle = #handle { is_read = true }} ->
-            case get_or_reopen(Dest) of
-                {ok, DHandle = #handle { is_write = true }} ->
-                    {Result, SHandle1, DHandle1} =
-                        case write_buffer(SHandle) of
-                            {ok, SHandle2 = #handle { hdl = SHdl,
-                                                      offset = SOffset }} ->
-                                case write_buffer(DHandle) of
-                                    {ok,
-                                     DHandle2 = #handle { hdl = DHdl,
-                                                          offset = DOffset }} ->
-                                        Result1 = file:copy(SHdl, DHdl, Count),
-                                        case Result1 of
-                                            {ok, Count1} ->
-                                                {Result1,
-                                                 SHandle2 #handle {
-                                                   offset = SOffset + Count1 },
-                                                 DHandle2 #handle {
-                                                   offset = DOffset + Count1 }};
-                                            Error ->
-                                                {Error, SHandle2, DHandle2}
-                                        end;
-                                    Error -> {Error, SHandle2, DHandle}
-                                end;
-                            Error -> {Error, SHandle, DHandle}
-                        end,
-                    put_handle(Src, SHandle1),
-                    put_handle(Dest, DHandle1),
-                    Result;
-                {ok, _} -> {error, destination_not_open_for_writing};
-                Error -> Error
-            end;
-        {ok, _} -> {error, source_not_open_for_reading};
-        Error -> Error
-    end.
-                                
+    with_flushed_handles([Src, Dest], Count, fun internal_copy/2).
+
 set_maximum_since_use(MaximumAge) ->
     Now = now(),
     lists:foreach(
@@ -359,6 +218,102 @@ increment() ->
     gen_server2:cast(?SERVER, increment).
 
 %%----------------------------------------------------------------------------
+%% Internal versions for the above
+%%----------------------------------------------------------------------------
+
+internal_read(_Count, [#handle { is_read = false }]) ->
+    {error, not_open_for_reading};
+internal_read(Count, [Handle = #handle { hdl = Hdl, offset = Offset }]) ->
+    case file:read(Hdl, Count) of
+        {ok, Data} = Obj ->
+            Size = iolist_size(Data),
+            {Obj, [Handle #handle { offset = Offset + Size }]};
+        eof -> {eof, [Handle #handle { at_eof = true }]};
+        Error -> {Error, [Handle]}
+    end.
+
+internal_append(_Data, [#handle { is_write = false }]) ->
+    {error, not_open_for_writing};
+internal_append(Data, [Handle]) ->
+    case maybe_seek(eof, Handle) of
+        {{ok, _Offset}, Handle1 = #handle { at_eof = true }} ->
+            {Result, Handle2} = write_to_buffer(Data, Handle1),
+            {Result, [Handle2]};
+        {{error, _} = Error, Handle1} ->
+            {Error, [Handle1]}
+    end.
+
+internal_sync(ok, [#handle { is_dirty = false, write_buffer = [] }]) ->
+    ok;
+internal_sync(ok, [Handle]) ->
+    %% write_buffer will set is_dirty, or leave it set if buffer empty
+    case write_buffer(Handle) of
+        {ok, Handle1 = #handle {hdl = Hdl, offset = Offset, is_dirty = true}} ->
+            case file:sync(Hdl) of
+                ok -> {ok, [Handle1 #handle { trusted_offset = Offset,
+                                              is_dirty = false }]};
+                Error -> {Error, [Handle1]}
+            end;
+        {Error, Handle1} -> {Error, [Handle1]}
+    end.
+
+internal_position(NewOffset, [Handle]) ->
+    case write_buffer(Handle) of
+        {ok, Handle1} -> {Result, Handle2} = maybe_seek(NewOffset, Handle1),
+                         {Result, [Handle2]};
+        {Error, Handle1} -> {Error, [Handle1]}
+    end.
+
+internal_truncate(ok, [#handle { is_write = false }]) ->
+            {error, not_open_for_writing};
+internal_truncate(ok, [Handle]) ->
+    case write_buffer(Handle) of
+        {ok, Handle1 = #handle { hdl = Hdl, offset = Offset,
+                                 trusted_offset = TrustedOffset }} ->
+            case file:truncate(Hdl) of
+                ok -> {ok,
+                       [Handle1 #handle {
+                          at_eof = true,
+                          trusted_offset = lists:min([Offset, TrustedOffset])
+                         }]};
+                Error -> {Error, [Handle1]}
+            end;
+        {Error, Handle1} -> {Error, Handle1}
+    end.
+
+internal_last_sync_offset(ok, [#handle { trusted_offset = TrustedOffset }]) ->
+    {ok, TrustedOffset}.
+
+internal_current_virtual_offset(ok, [#handle { at_eof = true, is_write = true,
+                                               offset = Offset,
+                                               write_buffer_size = Size }]) ->
+    {ok, Offset + Size};
+internal_current_virtual_offset(ok, [#handle { offset = Offset }]) ->
+    {ok, Offset}.
+
+internal_current_raw_offset(ok, [#handle { offset = Offset }]) ->
+    {ok, Offset}.
+
+internal_append_write_buffer(ok, [Handle]) ->
+    {ok, [Handle]}.
+
+internal_copy(Count, [SHandle = #handle { is_read = true, hdl = SHdl,
+                                          offset = SOffset },
+                      DHandle = #handle { is_write = true, hdl = DHdl,
+                                              offset = DOffset }]) ->
+    Result1 = file:copy(SHdl, DHdl, Count),
+    case Result1 of
+        {ok, Count1} ->
+            {Result1,
+             [SHandle #handle { offset = SOffset + Count1 },
+              DHandle #handle { offset = DOffset + Count1 }]};
+        Error ->
+            {Error, [SHandle, DHandle]}
+    end;
+internal_copy(_Count, _Handles) ->
+    {error, incorrect_handle_modes}.
+
+%%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
 
@@ -373,6 +328,44 @@ report_eldest() ->
               Tree
       end),
     ok.
+
+with_handles(Refs, Args, Fun) ->
+    ResHandles = lists:foldl(
+                   fun (Ref, {ok, HandlesAcc}) ->
+                           case get_or_reopen(Ref) of
+                               {ok, Handle} -> {ok, [Handle | HandlesAcc]};
+                               Error -> Error
+                           end;
+                       (_Ref, Error) -> Error
+                   end, {ok, []}, Refs),
+    case ResHandles of
+        {ok, Handles} ->
+            case erlang:apply(Fun, [Args, lists:reverse(Handles)]) of
+                {Result, Handles1} when is_list(Handles1) ->
+                    lists:zipwith(fun put_handle/2, Refs, Handles1),
+                    Result;
+                Result -> Result
+            end;
+        Error -> Error
+    end.
+
+with_flushed_handles(Refs, Args, Fun) ->
+    with_handles(
+      Refs, Args,
+      fun (Args1, Handles) ->
+              ResHandles1 =
+                  lists:foldl(
+                    fun (Handle, {ok, HandlesAcc}) ->
+                            {Res, Handle1} = write_buffer(Handle),
+                            {Res, [Handle1 | HandlesAcc]};
+                        (Handle, {Error, HandlesAcc}) ->
+                            {Error, [Handle | HandlesAcc]}
+                    end, {ok, []}, Handles),
+              case ResHandles1 of
+                  {ok, Handles1} -> erlang:apply(Fun, [Args1, lists:reverse(Handles1)]);
+                  {Error, Handles1} -> {Error, lists:reverse(Handles1)}
+              end
+      end).
 
 get_or_reopen(Ref) ->
     case get({Ref, fhc_handle}) of
