@@ -55,7 +55,7 @@
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
--export([unfold/2, ceil/1]).
+-export([unfold/2, ceil/1, cmd/1]).
 
 -import(mnesia).
 -import(lists).
@@ -126,6 +126,7 @@
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
+-spec(cmd/1 :: (string()) -> string()). 
 
 -endif.
 
@@ -488,4 +489,11 @@ ceil(N) ->
     case N - T of
         0 -> N;
         _ -> 1 + T
+    end.
+
+cmd(Command) ->
+    Exec = hd(string:tokens(Command, " ")),
+    case os:find_executable(Exec) of
+        false -> throw({command_not_found, Exec});
+        _     -> os:cmd(Command)
     end.

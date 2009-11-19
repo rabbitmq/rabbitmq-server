@@ -35,12 +35,18 @@
 
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
-         append_write_buffer/1, copy/3]).
+         append_write_buffer/1, copy/3, set_maximum_since_use/1]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-export([decrement/0, increment/0]).
+
 -define(SERVER, ?MODULE).
+-define(RESERVED_FOR_OTHERS, 50).
+-define(FILE_HANDLES_LIMIT_WINDOWS, 10000000).
+-define(FILE_HANDLES_LIMIT_OTHER, 1024).
+-define(FILE_HANDLES_CHECK_INTERVAL, 2000).
 
 %%----------------------------------------------------------------------------
 
@@ -65,6 +71,12 @@
           options,
           global_key,
           last_used_at
+        }).
+
+-record(fhc_state,
+        { elders,
+          limit,
+          count
         }).
 
 %%----------------------------------------------------------------------------
@@ -94,6 +106,7 @@
 -spec(append_write_buffer/1 :: (ref()) -> ok_or_error()).
 -spec(copy/3 :: (ref(), ref(), non_neg_integer()) ->
              ({'ok', integer()} | error())).
+-spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok'). 
 
 -endif.
 
@@ -128,7 +141,7 @@ open(Path, Mode, Options) ->
                                   reader_count = RCount1,
                                   has_writer = HasWriter orelse IsWriter }),
                             Ref = make_ref(),
-                            case open1(Path1, Mode1, Options, Ref, GRef) of
+                            case open1(Path1, Mode1, Options, Ref, GRef, bof) of
                                 {ok, _Handle} -> {ok, Ref};
                                 Error -> Error
                             end
@@ -146,54 +159,7 @@ open(Path, Mode, Options) ->
 close(Ref) ->
     case erase({Ref, fhc_handle}) of
         undefined -> ok;
-        Handle ->
-            case write_buffer(Handle) of
-                {ok, #handle { hdl = Hdl, global_key = GRef, is_dirty = IsDirty,
-                               is_read = IsReader, is_write = IsWriter,
-                               last_used_at = Then }} ->
-                    case Hdl of
-                        closed -> ok;
-                        _ -> ok = case IsDirty of
-                                      true -> file:sync(Hdl);
-                                      false -> ok
-                                  end,
-                             ok = file:close(Hdl),
-                             with_age_tree(
-                               fun (Tree) ->
-                                       Tree1 = gb_trees:delete(Then, Tree),
-                                       Oldest =
-                                           case gb_trees:is_empty(Tree1) of
-                                               true ->
-                                                   undefined;
-                                               false ->
-                                                   {Oldest1, _Ref} =
-                                                       gb_trees:smallest(Tree1),
-                                                   Oldest1
-                                           end,
-                                       gen_server2:cast(
-                                         ?SERVER, {self(), close, Oldest}),
-                                       Tree1
-                               end)
-                    end,
-                    #file { reader_count = RCount, has_writer = HasWriter,
-                            path = Path } = File = get({GRef, fhc_file}),
-                    RCount1 = case IsReader of
-                                  true -> RCount - 1;
-                                  false -> RCount
-                              end,
-                    HasWriter1 = HasWriter andalso not IsWriter,
-                    case RCount1 =:= 0 andalso not HasWriter1 of
-                        true -> erase({GRef, fhc_file}),
-                                erase({Path, fhc_path});
-                        false -> put({GRef, fhc_file},
-                                     File #file { reader_count = RCount1,
-                                                  has_writer = HasWriter1 })
-                    end,
-                    ok;
-                {Error, Handle1} ->
-                    put_handle(Ref, Handle1),
-                    Error
-            end
+        Handle -> close1(Ref, Handle, hard)
     end.
 
 read(Ref, Count) ->
@@ -367,18 +333,54 @@ copy(Src, Dest, Count) ->
         Error -> Error
     end.
                                 
+set_maximum_since_use(MaximumAge) ->
+    Now = now(),
+    lists:foreach(
+      fun ({{Ref, fhc_handle}, Handle =
+            #handle { hdl = Hdl, last_used_at = Then }}) ->
+              Age = timer:now_diff(Now, Then),
+              case Hdl /= closed andalso Age >= MaximumAge of
+                  true ->
+                      case close1(Ref, Handle, soft) of
+                          {ok, Handle1} ->
+                              put({Ref, fhc_handle}, Handle1);
+                          _ -> ok
+                      end;
+                  false -> ok
+              end;
+          (_KeyValuePair) -> ok
+      end, get()),
+    report_eldest().
+
+decrement() ->
+    gen_server2:cast(?SERVER, decrement).
+
+increment() ->
+    gen_server2:cast(?SERVER, increment).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
 
+report_eldest() ->
+    with_age_tree(
+      fun (Tree) ->
+              case gb_trees:is_empty(Tree) of
+                  true -> Tree;
+                  false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
+                           gen_server2:cast(?SERVER, {self(), update, Oldest})
+              end,
+              Tree
+      end),
+    ok.
+
 get_or_reopen(Ref) ->
     case get({Ref, fhc_handle}) of
         undefined -> {error, not_open, Ref};
         #handle { hdl = closed, mode = Mode, global_key = GRef,
-                  options = Options } ->
+                  options = Options, offset = Offset } ->
             #file { path = Path } = get({GRef, fhc_file}),
-            open1(Path, Mode, Options, Ref, GRef);
+            open1(Path, Mode, Options, Ref, GRef, Offset);
         Handle ->
             {ok, Handle}
     end.
@@ -395,12 +397,10 @@ with_age_tree(Fun) ->
 put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
     Now = now(),
     with_age_tree(
-      fun (Tree) ->
-              gb_trees:insert(Now, Ref, gb_trees:delete(Then, Tree))
-      end),
+      fun (Tree) -> gb_trees:insert(Now, Ref, gb_trees:delete(Then, Tree)) end),
     put({Ref, fhc_handle}, Handle #handle { last_used_at = Now }).
 
-open1(Path, Mode, Options, Ref, GRef) ->
+open1(Path, Mode, Options, Ref, GRef, Offset) ->
     case file:open(Path, Mode) of
         {ok, Hdl} ->
             WriteBufferSize =
@@ -411,14 +411,15 @@ open1(Path, Mode, Options, Ref, GRef) ->
                 end,
             Now = now(),
             Handle =
-                #handle { hdl = Hdl, offset = 0, trusted_offset = 0,
+                #handle { hdl = Hdl, offset = 0, trusted_offset = Offset,
                           write_buffer_size = 0, options = Options,
                           write_buffer_size_limit = WriteBufferSize,
                           write_buffer = [], at_eof = false, mode = Mode,
                           is_write = is_writer(Mode), is_read = is_reader(Mode),
                           global_key = GRef, last_used_at = Now,
                           is_dirty = false },
-            put({Ref, fhc_handle}, Handle),
+            {{ok, _Offset}, Handle1} = maybe_seek(Offset, Handle),
+            put({Ref, fhc_handle}, Handle1),
             with_age_tree(fun (Tree) ->
                                   Tree1 = gb_trees:insert(Now, Ref, Tree),
                                   {Oldest, _Ref} = gb_trees:smallest(Tree1),
@@ -426,9 +427,62 @@ open1(Path, Mode, Options, Ref, GRef) ->
                                                    {self(), open, Oldest}),
                                   Tree1
                           end),
-            {ok, Handle};
+            {ok, Handle1};
         {error, Reason} ->
             {error, Reason}
+    end.
+
+close1(Ref, Handle, SoftOrHard) ->
+    case write_buffer(Handle) of
+        {ok, #handle { hdl = Hdl, global_key = GRef, is_dirty = IsDirty,
+                       is_read = IsReader, is_write = IsWriter,
+                       last_used_at = Then } = Handle1 } ->
+            case Hdl of
+                closed -> ok;
+                _ -> ok = case IsDirty of
+                              true -> file:sync(Hdl);
+                              false -> ok
+                          end,
+                     ok = file:close(Hdl),
+                     with_age_tree(
+                       fun (Tree) ->
+                               Tree1 = gb_trees:delete(Then, Tree),
+                               Oldest =
+                                   case gb_trees:is_empty(Tree1) of
+                                       true -> undefined;
+                                       false ->
+                                           {Oldest1, _Ref} =
+                                               gb_trees:smallest(Tree1),
+                                           Oldest1
+                                   end,
+                               gen_server2:cast(
+                                 ?SERVER, {self(), close, Oldest}),
+                               Tree1
+                       end)
+            end,
+            case SoftOrHard of
+                hard ->
+                    #file { reader_count = RCount, has_writer = HasWriter,
+                            path = Path } = File = get({GRef, fhc_file}),
+                    RCount1 = case IsReader of
+                                  true -> RCount - 1;
+                                  false -> RCount
+                              end,
+                    HasWriter1 = HasWriter andalso not IsWriter,
+                    case RCount1 =:= 0 andalso not HasWriter1 of
+                        true -> erase({GRef, fhc_file}),
+                                erase({Path, fhc_path});
+                        false -> put({GRef, fhc_file},
+                                     File #file { reader_count = RCount1,
+                                                  has_writer = HasWriter1 })
+                    end,
+                    ok;
+                soft ->
+                    {ok, Handle1 #handle { hdl = closed }}
+            end;
+        {Error, Handle1} ->
+            put_handle(Ref, Handle1),
+            Error
     end.
 
 maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, at_eof = AtEoF,
@@ -514,14 +568,46 @@ needs_seek(_AtEoF, _CurOffset, _DesiredOffset) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, state}.
+    Limit = case application:get_env(file_handles_high_watermark) of
+                {ok, Watermark}
+                when is_integer(Watermark) andalso Watermark > 0 -> Watermark;
+                _ -> ulimit()
+            end,
+    rabbit_log:info("Limiting to approx ~p file handles~n", [Limit]),
+    {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0}}.
 
 handle_call(_Msg, _From, State) ->
     {reply, message_not_understood, State}.
 
-handle_cast(Msg, State) ->
-    io:format("~p~n", [Msg]),
-    {noreply, State}.
+handle_cast({Pid, open, EldestUnusedSince}, State =
+            #fhc_state { elders = Elders, count = Count }) ->
+    Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
+    {noreply, maybe_reduce(State #fhc_state { elders = Elders1,
+                                              count = Count + 1 })};
+
+handle_cast({Pid, update, EldestUnusedSince}, State =
+            #fhc_state { elders = Elders }) ->
+    Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
+    %% don't call maybe_reduce from here otherwise we can create a
+    %% storm of messages
+    {noreply, State #fhc_state { elders = Elders1 }};
+
+handle_cast({Pid, close, EldestUnusedSince}, State =
+            #fhc_state { elders = Elders, count = Count }) ->
+    Elders1 = case EldestUnusedSince of
+                  undefined -> dict:erase(Pid, Elders);
+                  _         -> dict:store(Pid, EldestUnusedSince, Elders)
+              end,
+    {noreply, State #fhc_state { elders = Elders1, count = Count - 1 }};
+
+handle_cast(increment, State = #fhc_state { count = Count }) ->
+    {noreply, maybe_reduce(State #fhc_state { count = Count + 1 })};
+
+handle_cast(decrement, State = #fhc_state { count = Count }) ->
+    {noreply, State #fhc_state { count = Count - 1 }};
+
+handle_cast(check_counts, State) ->
+    {noreply, maybe_reduce(State)}.
 
 handle_info(_Msg, State) ->
     {noreply, State}.
@@ -531,3 +617,58 @@ terminate(_Reason, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%----------------------------------------------------------------------------
+%% server helpers
+%%----------------------------------------------------------------------------
+
+maybe_reduce(State = #fhc_state { limit = Limit, count = Count,
+                                  elders = Elders })
+  when Limit /= infinity andalso Count >= Limit ->
+    Now = now(),
+    {Pids, Sum, ClientCount} =
+        dict:fold(fun (_Pid, undefined, Accs) ->
+                          Accs;
+                      (Pid, Eldest, {PidsAcc, SumAcc, CountAcc}) ->
+                          {[Pid|PidsAcc], SumAcc + timer:now_diff(Now, Eldest),
+                           CountAcc + 1}
+                  end, {[], 0, 0}, Elders),
+    %% ClientCount can't be 0.
+    AverageAge = Sum / ClientCount,
+    lists:foreach(fun (Pid) ->
+                          Pid ! {?MODULE, maximum_eldest_since_use, AverageAge}
+                  end, Pids),
+    {ok, _TRef} = timer:apply_after(?FILE_HANDLES_CHECK_INTERVAL, gen_server2,
+                                    cast, [?SERVER, check_counts]),
+    State;
+maybe_reduce(State) ->
+    State.
+
+%% Googling around suggests that Windows has a limit somewhere around 16M.
+%% eg http://blogs.technet.com/markrussinovich/archive/2009/09/29/3283844.aspx
+%% For everything else, assume ulimit exists. Further googling suggests that
+%% BSDs (incl OS X), solaris and linux all agree that ulimit -n is file handles
+ulimit() ->
+    try
+        %% under Linux, Solaris and FreeBSD, ulimit is a shell
+        %% builtin, not a command. In OS X, it's a command, but it's
+        %% still safe to call it this way:
+        case rabbit_misc:cmd("sh -c \"ulimit -n\"") of
+            "unlimited" -> infinity;
+            String = [C|_] when $0 =< C andalso C =< $9 ->
+                Num = list_to_integer(
+                        lists:takewhile(fun (D) -> $0 =< D andalso D =< $9 end,
+                                        String)) - ?RESERVED_FOR_OTHERS,
+                lists:max([1, Num]);
+            String ->
+                rabbit_log:warning("Unexpected result of \"ulimit -n\": ~p~n",
+                                   [String]),
+                throw({unexpected_result, String})
+        end
+    catch
+        throw:_ ->
+            case os:type() of
+                {win32, _OsName} -> ?FILE_HANDLES_LIMIT_WINDOWS;
+                _ -> ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
+            end
+    end.

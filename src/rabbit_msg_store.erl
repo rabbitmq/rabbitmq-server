@@ -414,7 +414,11 @@ handle_cast(sync, State) ->
     noreply(sync(State)).
 
 handle_info(timeout, State) ->
-    noreply(sync(State)).
+    noreply(sync(State));
+
+handle_info({file_handle_cache, maximum_eldest_since_use, Age}, State) ->
+    ok = file_handle_cache:set_maximum_since_use(Age),
+    noreply(State).
 
 terminate(_Reason, State = #msstate { msg_locations          = MsgLocations,
                                       file_summary           = FileSummary,

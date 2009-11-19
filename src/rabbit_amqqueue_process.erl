@@ -914,6 +914,10 @@ handle_info(timeout, State = #q{variable_queue_state = VQS}) ->
         State#q{variable_queue_state =
                 rabbit_variable_queue:tx_commit_from_vq(VQS)}));    
 
+handle_info({file_handle_cache, maximum_eldest_since_use, Age}, State) ->
+    ok = file_handle_cache:set_maximum_since_use(Age),
+    noreply(State);
+
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
