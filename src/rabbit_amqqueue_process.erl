@@ -281,13 +281,13 @@ possibly_unblock(State, ChPid, Update) ->
             store_ch_record(NewC),
             case ch_record_state_transition(C, NewC) of
                 ok      -> State;
-                unblock -> {NewBlockedeConsumers, NewActiveConsumers} =
+                unblock -> {NewBlockedConsumers, NewActiveConsumers} =
                                move_consumers(ChPid,
                                               State#q.blocked_consumers,
                                               State#q.active_consumers),
                            run_poke_burst(
                              State#q{active_consumers = NewActiveConsumers,
-                                     blocked_consumers = NewBlockedeConsumers})
+                                     blocked_consumers = NewBlockedConsumers})
             end
     end.
     
