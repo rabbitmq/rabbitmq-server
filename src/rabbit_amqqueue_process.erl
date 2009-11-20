@@ -171,7 +171,8 @@ deliver_immediately(Message, Delivered,
                     State = #q{q = #amqqueue{name = QName},
                                active_consumers = ActiveConsumers,
                                blocked_consumers = BlockedConsumers,
-                               next_msg_id = NextId}) ->
+                               next_msg_id = NextId,
+                               message_buffer = MessageBuffer}) ->
     ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Message]),
     case queue:out(ActiveConsumers) of
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
@@ -180,7 +181,8 @@ deliver_immediately(Message, Delivered,
             C = #cr{limiter_pid = LimiterPid,
                     unsent_message_count = Count,
                     unacked_messages = UAM} = ch_record(ChPid),
-            case rabbit_limiter:can_send(LimiterPid, self(), AckRequired) of
+            case rabbit_limiter:can_send(LimiterPid, self(), AckRequired,
+                                         queue:len(MessageBuffer)) of
                 true ->
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
@@ -202,7 +204,7 @@ deliver_immediately(Message, Delivered,
                                                    ActiveConsumersTail,
                                                    BlockedConsumers),
                                 {ActiveConsumers1,
-                                 queue:in(QEntry, BlockedConsumers1)}
+                                 queue:in_r(QEntry, BlockedConsumers1)}
                         end,
                     {offered, AckRequired,
                      State#q{active_consumers = NewActiveConsumers,
@@ -270,24 +272,29 @@ remove_consumers(ChPid, Queue) ->
 move_consumers(ChPid, From, To) ->
     {Kept, Removed} = lists:partition(fun ({CP, _}) -> CP /= ChPid end,
                                       queue:to_list(From)),
-    {queue:from_list(Kept), queue:join(To, queue:from_list(Removed))}.
+    {queue:from_list(Kept), queue:join(queue:from_list(Removed), To)}.
 
-possibly_unblock(State, ChPid, Update) ->
+possibly_unblock(State, ChPid, Update, Result) ->
     case lookup_ch(ChPid) of
         not_found ->
+            Result(false, State),
             State;
         C ->
             NewC = Update(C),
             store_ch_record(NewC),
             case ch_record_state_transition(C, NewC) of
-                ok      -> State;
-                unblock -> {NewBlockedConsumers, NewActiveConsumers} =
-                               move_consumers(ChPid,
-                                              State#q.blocked_consumers,
-                                              State#q.active_consumers),
-                           run_poke_burst(
-                             State#q{active_consumers = NewActiveConsumers,
-                                     blocked_consumers = NewBlockedConsumers})
+                ok ->
+                    Result(false, State),
+                    State;
+                unblock ->
+                    Result(true, State),
+                    {NewBlockedConsumers, NewActiveConsumers} =
+                        move_consumers(ChPid,
+                                       State#q.blocked_consumers,
+                                       State#q.active_consumers),
+                    run_poke_burst(
+                      State#q{active_consumers = NewActiveConsumers,
+                              blocked_consumers = NewBlockedConsumers})
             end
     end.
     
@@ -733,7 +740,16 @@ handle_call({claim_queue, ReaderPid}, _From, State = #q{owner = Owner,
             reply(ok, State);
         _ ->
             reply(locked, State)
-    end.
+    end;
+
+handle_call({unblock, ChPid}, From, State) ->
+    noreply(
+      possibly_unblock(State, ChPid,
+                       fun (C) -> C#cr{is_limit_active = false} end,
+                       fun (Unblocked, #q{message_buffer = MessageBuffer}) ->
+                               gen_server2:reply(From, Unblocked andalso not
+                                                 queue:is_empty(MessageBuffer))
+                       end)).
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
@@ -777,17 +793,12 @@ handle_cast({requeue, MsgIds, ChPid}, State) ->
                       [{Message, true} || Message <- Messages], State))
     end;
 
-handle_cast({unblock, ChPid}, State) ->
-    noreply(
-      possibly_unblock(State, ChPid,
-                       fun (C) -> C#cr{is_limit_active = false} end));
-
 handle_cast({notify_sent, ChPid}, State) ->
     noreply(
       possibly_unblock(State, ChPid,
                        fun (C = #cr{unsent_message_count = Count}) ->
                                C#cr{unsent_message_count = Count - 1}
-                       end));
+                       end, fun (_, _) -> ok end));
 
 handle_cast({limit, ChPid, LimiterPid}, State) ->
     noreply(
@@ -803,7 +814,7 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 end,
                 NewLimited = Limited andalso LimiterPid =/= undefined,
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
-        end)).
+        end, fun (_, _) -> ok end)).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->

@@ -36,7 +36,7 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([start_link/1, shutdown/1]).
--export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
+-export([limit/2, can_send/4, ack/2, register/2, unregister/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -47,7 +47,8 @@
 -spec(start_link/1 :: (pid()) -> pid()).
 -spec(shutdown/1 :: (maybe_pid()) -> 'ok').
 -spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
--spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
+-spec(can_send/4 :: (maybe_pid(), pid(), boolean(), non_neg_integer()) ->
+             boolean()).
 -spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
 -spec(unregister/2 :: (maybe_pid(), pid()) -> 'ok').
@@ -58,7 +59,7 @@
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
-              queues = dict:new(), % QPid -> {MonitorRef, Notify}
+              queues = dict:new(), % QPid -> {MonitorRef, Notify, Length}
               volume = 0}).
 %% 'Notify' is a boolean that indicates whether a queue should be
 %% notified of a change in the limit or volume that may allow it to
@@ -85,13 +86,13 @@ limit(LimiterPid, PrefetchCount) ->
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
-can_send(undefined, _QPid, _AckRequired) ->
+can_send(undefined, _QPid, _AckRequired, _Length) ->
     true;
-can_send(LimiterPid, QPid, AckRequired) ->
+can_send(LimiterPid, QPid, AckRequired, Length) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
-      fun () -> gen_server2:call(LimiterPid, {can_send, QPid, AckRequired},
-                                 infinity) end).
+      fun () -> gen_server2:call(LimiterPid, {can_send, QPid, AckRequired,
+                                              Length}, infinity) end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
@@ -111,13 +112,17 @@ unregister(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {unregister, QPid})
 init([ChPid]) ->
     {ok, #lim{ch_pid = ChPid} }.
 
-handle_call({can_send, QPid, AckRequired}, _From,
+handle_call({can_send, QPid, AckRequired, Length}, _From,
             State = #lim{volume = Volume}) ->
     case limit_reached(State) of
-        true  -> {reply, false, limit_queue(QPid, State)};
-        false -> {reply, true, State#lim{volume = if AckRequired -> Volume + 1;
-                                                     true        -> Volume
-                                                  end}}
+        true ->
+            {reply, false, limit_queue(QPid, Length, State)};
+        false ->
+            {reply, true,
+             update_length(QPid, Length,
+                           State#lim{volume = if AckRequired -> Volume + 1;
+                                                 true        -> Volume
+                                              end})}
     end.
 
 handle_cast(shutdown, State) ->
@@ -130,6 +135,7 @@ handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
                    true        -> Volume - Count
                 end,
+    io:format("~p OldVolume ~p ; Count ~p ; NewVolume ~p~n", [self(), Volume, Count, NewVolume]),
     {noreply, maybe_notify(State, State#lim{volume = NewVolume})};
 
 handle_cast({register, QPid}, State) ->
@@ -163,37 +169,83 @@ limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
 remember_queue(QPid, State = #lim{queues = Queues}) ->
     case dict:is_key(QPid, Queues) of
         false -> MRef = erlang:monitor(process, QPid),
-                 State#lim{queues = dict:store(QPid, {MRef, false}, Queues)};
+                 State#lim{queues = dict:store(QPid, {MRef, false, 0}, Queues)};
         true  -> State
     end.
 
 forget_queue(QPid, State = #lim{ch_pid = ChPid, queues = Queues}) ->
     case dict:find(QPid, Queues) of
-        {ok, {MRef, _}} ->
+        {ok, {MRef, _, _}} ->
             true = erlang:demonitor(MRef),
-            ok = rabbit_amqqueue:unblock(QPid, ChPid),
+            unblock(QPid, ChPid),
             State#lim{queues = dict:erase(QPid, Queues)};
         error -> State
     end.
 
-limit_queue(QPid, State = #lim{queues = Queues}) ->
-    UpdateFun = fun ({MRef, _}) -> {MRef, true} end,
+limit_queue(QPid, Length, State = #lim{queues = Queues}) ->
+    UpdateFun = fun ({MRef, _, _}) -> {MRef, true, Length} end,
     State#lim{queues = dict:update(QPid, UpdateFun, Queues)}.
 
-notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
-    {QList, NewQueues} =
-        dict:fold(fun (_QPid, {_, false}, Acc) -> Acc;
-                      (QPid, {MRef, true}, {L, D}) ->
-                          {[QPid | L], dict:store(QPid, {MRef, false}, D)}
-                  end, {[], Queues}, Queues),
-    case length(QList) of
-        0 -> ok;
-        L ->
-            %% We randomly vary the position of queues in the list,
-            %% thus ensuring that each queue has an equal chance of
-            %% being notified first.
-            {L1, L2} = lists:split(random:uniform(L), QList),
-            [ok = rabbit_amqqueue:unblock(Q, ChPid) || Q <- L2 ++ L1],
-            ok
-    end,
+update_length(QPid, Length, State = #lim{queues = Queues}) ->
+    UpdateFun = fun ({MRef, Notify, _}) -> {MRef, Notify, Length} end,
+    State#lim{queues = dict:update(QPid, UpdateFun, Queues)}.
+
+notify_queues(State = #lim{ch_pid = ChPid, queues = Queues,
+                           prefetch_count = PrefetchCount, volume = Volume}) ->
+    QList =
+        dict:fold(fun (_QPid, {_, false, _}, Acc) -> Acc;
+                      (QPid, {_MRef, true, Length}, L) ->
+                          gb_trees:enter(Length, QPid, L)
+                  end, gb_trees:empty(), Queues),
+    NewQueues =
+        case gb_trees:size(QList) of
+            0 -> Queues;
+            QCount ->
+                Capacity = PrefetchCount - Volume,
+                {BiggestLength, _QPid} = gb_trees:largest(QList),
+                BiggestLength1 = lists:max([2*BiggestLength, 1]),
+                %% try to tell enough queues that we guarantee we'll get
+                %% blocked again
+                {Capacity1, NewQueues1} =
+                    unblock_queue(ChPid, BiggestLength1, Capacity, QList,
+                                  Queues),
+                case 0 == Capacity1 of
+                    true -> NewQueues1;
+                    false -> %% just tell everyone
+                        {_Capacity2, NewQueues2} =
+                            unblock_queue(ChPid, 1, QCount, QList, NewQueues1),
+                        NewQueues2
+                end
+        end,
     State#lim{queues = NewQueues}.
+
+unblock_queue(_ChPid, _L, 0, _QList, Queues) ->
+    {0, Queues};
+unblock_queue(ChPid, L, QueueCount, QList, Queues) ->
+    UpdateFunUnBlock = fun ({MRef, _, Length}) -> {MRef, false, Length} end,
+    {Length, QPid, QList1} = gb_trees:take_largest(QList),
+    {_MRef, Blocked, Length} = dict:fetch(QPid, Queues),
+    {QueueCount1, Queues1} =
+        case Blocked of
+            false ->
+                {QueueCount, Queues};
+            true ->
+                %% if 0 == Length, and L == 1, we still need to inform the q
+                case Length + 1 >= random:uniform(L) of
+                    true -> case unblock(QPid, ChPid) of
+                                true -> {QueueCount - 1,
+                                         dict:update(QPid, UpdateFunUnBlock, Queues)};
+                                false -> {QueueCount, Queues}
+                            end;
+                    false -> {QueueCount, Queues}
+                end
+        end,
+    case gb_trees:is_empty(QList1) of
+        true -> {QueueCount1, Queues1};
+        false -> unblock_queue(ChPid, L, QueueCount1, QList1, Queues1)
+    end.
+
+unblock(QPid, ChPid) ->
+    rabbit_misc:with_exit_handler(
+      fun () -> false end,
+      fun () -> rabbit_amqqueue:unblock(QPid, ChPid) end).

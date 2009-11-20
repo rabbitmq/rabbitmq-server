@@ -100,7 +100,7 @@
                      'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
--spec(unblock/2 :: (pid(), pid()) -> 'ok').
+-spec(unblock/2 :: (pid(), pid()) -> boolean()).
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
@@ -306,7 +306,7 @@ notify_sent(QPid, ChPid) ->
     gen_server2:pcast(QPid, 8, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
-    gen_server2:pcast(QPid, 8, {unblock, ChPid}).
+    gen_server2:pcall(QPid, 8, {unblock, ChPid}).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
