@@ -203,9 +203,8 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 publish(X, Delivery) ->
     publish(X, [], Delivery).
 
-publish(X, Seen, Delivery = #delivery{
-                   message = #basic_message{routing_key = RK, content = C}}) ->
-    case rabbit_router:deliver(route(X, RK, C), Delivery) of
+publish(X = #exchange{type = Type}, Seen, Delivery) ->
+    case Type:publish(X, Delivery) of
         {_, []} = R ->
             #exchange{name = XName, arguments = Args} = X,
             case rabbit_misc:r_arg(XName, exchange, Args,
@@ -234,15 +233,6 @@ publish(X, Seen, Delivery = #delivery{
         R ->
             R
     end.
-
-%% return the list of qpids to which a message with a given routing
-%% key, sent to a particular exchange, should be delivered.
-%%
-%% The function ensures that a qpid appears in the return list exactly
-%% as many times as a message should be delivered to it. With the
-%% current exchange types that is at most once.
-route(X = #exchange{type = Type}, RoutingKey, Content) ->
-    Type:route(X, RoutingKey, Content).
 
 %% TODO: Should all of the route and binding management not be
 %% refactored to its own module, especially seeing as unbind will have

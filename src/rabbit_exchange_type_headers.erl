@@ -4,7 +4,7 @@
 
 -behaviour(rabbit_exchange_behaviour).
 
--export([description/0, route/3]).
+-export([description/0, publish/2]).
 -export([recover/1, init/1, delete/1, add_binding/2, delete_binding/2]).
 
 -ifdef(use_specs).
@@ -15,14 +15,16 @@ description() ->
     [{name, <<"headers">>},
      {description, <<"AMQP headers exchange, as per the AMQP specification">>}].
 
-route(#exchange{name = Name}, _RoutingKey, Content) ->
+publish(#exchange{name = Name},
+        Delivery = #delivery{message = #basic_message{content = Content}}) ->
     Headers = case (Content#content.properties)#'P_basic'.headers of
                   undefined -> [];
                   H         -> rabbit_misc:sort_arguments(H)
               end,
-    rabbit_router:match_bindings(Name, fun (#binding{args = Spec}) ->
-                                               headers_match(Spec, Headers)
-                                       end).
+    rabbit_router:deliver(rabbit_router:match_bindings(Name, fun (#binding{args = Spec}) ->
+                                                                     headers_match(Spec, Headers)
+                                                             end),
+                          Delivery).
 
 default_headers_match_kind() -> all.
 

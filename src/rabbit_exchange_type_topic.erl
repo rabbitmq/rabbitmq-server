@@ -3,7 +3,7 @@
 
 -behaviour(rabbit_exchange_behaviour).
 
--export([description/0, route/3]).
+-export([description/0, publish/2]).
 -export([recover/1, init/1, delete/1, add_binding/2, delete_binding/2]).
 
 -export([topic_matches/2]).
@@ -16,10 +16,13 @@ description() ->
     [{name, <<"topic">>},
      {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
-route(#exchange{name = Name}, RoutingKey, _Content) ->
-    rabbit_router:match_bindings(Name, fun (#binding{key = BindingKey}) ->
-                                               topic_matches(BindingKey, RoutingKey)
-                                       end).
+publish(#exchange{name = Name},
+        Delivery = #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
+    rabbit_router:deliver(rabbit_router:match_bindings(Name,
+                                                       fun (#binding{key = BindingKey}) ->
+                                                               topic_matches(BindingKey, RoutingKey)
+                                                       end),
+                          Delivery).
 
 split_topic_key(Key) ->
     {ok, KeySplit} = regexp:split(binary_to_list(Key), "\\."),
