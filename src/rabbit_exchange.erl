@@ -275,9 +275,16 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                              #route{binding = #binding{queue_name = QueueName, 
                                                        _ = '_'}}),
                            write)],
+    %% We need the keysort to group the bindings by exchange name, so
+    %% that cleanup_deleted_queue_bindings can inform the exchange of
+    %% its vanished bindings before maybe_auto_delete'ing the
+    %% exchange.
     ok = cleanup_deleted_queue_bindings(lists:keysort(#binding.exchange_name, DeletedBindings),
                                         none, []).
 
+%% Requires that its input binding list is sorted in exchange-name
+%% order, so that the grouping of bindings (for passing to
+%% cleanup_deleted_queue_bindings1) works properly.
 cleanup_deleted_queue_bindings([], ExchangeName, Bindings) ->
     cleanup_deleted_queue_bindings1(ExchangeName, Bindings);
 cleanup_deleted_queue_bindings([B = #binding{exchange_name = N} | Rest], ExchangeName, Bindings)
