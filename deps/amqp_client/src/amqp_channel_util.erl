@@ -173,6 +173,8 @@ is_channel_pid_registered(Pid, _Channels = {_, DictPN}) ->
     dict:is_key(Pid, DictPN).
 
 %% Returns an available channel number in the given channel dictionary
+channel_number(none, Channels, 0) ->
+    channel_number(none, Channels, ?MAX_CHANNEL_NUMBER);
 channel_number(none, _Channels = {TreeNP, _}, MaxChannel) ->
     case gb_trees:is_empty(TreeNP) of
         true ->
@@ -190,6 +192,8 @@ channel_number(none, _Channels = {TreeNP, _}, MaxChannel) ->
                    end
             end
     end;
+channel_number(ProposedNumber, Channels, 0) ->
+    channel_number(ProposedNumber, Channels, ?MAX_CHANNEL_NUMBER);
 channel_number(ProposedNumber, Channels, MaxChannel) ->
     IsNumberValid = ProposedNumber > 0 andalso
         ProposedNumber =< MaxChannel andalso

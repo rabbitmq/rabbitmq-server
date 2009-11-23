@@ -33,7 +33,6 @@
          handle_info/2]).
 
 -record(dc_state, {params = #amqp_params{},
-                   channel_max,
                    closing = false,
                    channels = amqp_channel_util:new_channel_dict()}).
 
