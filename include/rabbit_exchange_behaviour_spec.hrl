@@ -28,33 +28,14 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
+-ifdef(use_specs).
 
-%% TODO: much of this should be generated
+-spec(description/0 :: () -> [{atom(), any()}]).
+-spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
+-spec(recover/1 :: (exchange()) -> 'ok').
+-spec(init/1 :: (exchange()) -> 'ok').
+-spec(delete/1 :: (exchange()) -> 'ok').
+-spec(add_binding/2 :: (exchange(), binding()) -> 'ok').
+-spec(delete_binding/2 :: (exchange(), binding()) -> 'ok').
 
--type(amqp_field_type() ::
-      'longstr' | 'signedint' | 'decimal' | 'timestamp' |
-      'table' | 'byte' | 'double' | 'float' | 'long' |
-      'short' | 'bool' | 'binary' | 'void').
--type(amqp_property_type() ::
-      'shortstr' | 'longstr' | 'octet' | 'shortint' | 'longint' |
-      'longlongint' | 'timestamp' | 'bit' | 'table').
-%% we could make this more precise but ultimately are limited by
-%% dialyzer's lack of support for recursive types
--type(amqp_table() :: [{binary(), amqp_field_type(), any()}]).
-%% TODO: make this more precise
--type(amqp_class_id() :: non_neg_integer()).
-%% TODO: make this more precise
--type(amqp_properties() :: tuple()).
-%% TODO: make this more precise
--type(amqp_method() :: tuple()).
-%% TODO: make this more precise
--type(amqp_method_name() :: atom()).
--type(channel_number() :: non_neg_integer()).
--type(resource_name() :: binary()).
--type(routing_key() :: binary()).
--type(username() :: binary()).
--type(password() :: binary()).
--type(vhost() :: binary()).
--type(ctag() :: binary()).
--type(exchange_type() :: atom()).
--type(binding_key() :: binary()).
+-endif.
