@@ -37,6 +37,7 @@
 
 -export([description/0, publish/2]).
 -export([recover/1, init/1, delete/1, add_binding/2, delete_binding/2]).
+-include("rabbit_exchange_behaviour_spec.erl").
 
 -ifdef(use_specs).
 -spec(headers_match/2 :: (amqp_table(), amqp_table()) -> boolean()).
