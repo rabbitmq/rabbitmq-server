@@ -135,7 +135,13 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
       end).
 
 typename_to_plugin_module(T) when is_binary(T) ->
-    list_to_existing_atom("rabbit_exchange_type_" ++ binary_to_list(T)).
+    case catch list_to_existing_atom("rabbit_exchange_type_" ++ binary_to_list(T)) of
+        {'EXIT', {badarg, _}} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "invalid exchange type '~s'", [T]);
+        Module ->
+            Module
+    end.
 
 plugin_module_to_typename(M) when is_atom(M) ->
     "rabbit_exchange_type_" ++ S = atom_to_list(M),
