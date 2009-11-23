@@ -56,7 +56,7 @@
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1]).
--export([sort_arguments/1]).
+-export([sort_field_table/1]).
 
 -import(mnesia).
 -import(lists).
@@ -492,5 +492,5 @@ ceil(N) ->
     end.
 
 %% Sorts a list of AMQP table fields as per the AMQP spec
-sort_arguments(Arguments) ->
+sort_field_table(Arguments) ->
     lists:keysort(1, Arguments).

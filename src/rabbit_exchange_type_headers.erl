@@ -50,7 +50,7 @@ publish(#exchange{name = Name},
         Delivery = #delivery{message = #basic_message{content = Content}}) ->
     Headers = case (Content#content.properties)#'P_basic'.headers of
                   undefined -> [];
-                  H         -> rabbit_misc:sort_arguments(H)
+                  H         -> rabbit_misc:sort_field_table(H)
               end,
     rabbit_router:deliver(rabbit_router:match_bindings(Name, fun (#binding{args = Spec}) ->
                                                                      headers_match(Spec, Headers)
@@ -68,7 +68,7 @@ parse_x_match(Other) ->
 
 %% Horrendous matching algorithm. Depends for its merge-like
 %% (linear-time) behaviour on the lists:keysort
-%% (rabbit_misc:sort_arguments) that route/3 and
+%% (rabbit_misc:sort_field_table) that route/3 and
 %% rabbit_exchange:{add,delete}_binding/4 do.
 %%
 %%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

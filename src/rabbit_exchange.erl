@@ -376,7 +376,7 @@ binding_action(ExchangeName, QueueName, RoutingKey, Arguments, Fun) ->
               Fun(X, Q, #binding{exchange_name = ExchangeName,
                                  queue_name    = QueueName,
                                  key           = RoutingKey,
-                                 args          = rabbit_misc:sort_arguments(Arguments)})
+                                 args          = rabbit_misc:sort_field_table(Arguments)})
       end).
 
 sync_binding(Binding, Durable, Fun) ->
