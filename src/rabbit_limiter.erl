@@ -135,7 +135,6 @@ handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
                    true        -> Volume - Count
                 end,
-    io:format("~p OldVolume ~p ; Count ~p ; NewVolume ~p~n", [self(), Volume, Count, NewVolume]),
     {noreply, maybe_notify(State, State#lim{volume = NewVolume})};
 
 handle_cast({register, QPid}, State) ->
@@ -177,7 +176,7 @@ forget_queue(QPid, State = #lim{ch_pid = ChPid, queues = Queues}) ->
     case dict:find(QPid, Queues) of
         {ok, {MRef, _, _}} ->
             true = erlang:demonitor(MRef),
-            unblock(QPid, ChPid),
+            unblock(async, QPid, ChPid),
             State#lim{queues = dict:erase(QPid, Queues)};
         error -> State
     end.
@@ -207,22 +206,22 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues,
                 %% try to tell enough queues that we guarantee we'll get
                 %% blocked again
                 {Capacity1, NewQueues1} =
-                    unblock_queue(ChPid, BiggestLength1, Capacity, QList,
+                    unblock_queue(sync, ChPid, BiggestLength1, Capacity, QList,
                                   Queues),
                 case 0 == Capacity1 of
                     true -> NewQueues1;
                     false -> %% just tell everyone
                         {_Capacity2, NewQueues2} =
-                            unblock_queue(ChPid, 1, QCount, QList, NewQueues1),
+                            unblock_queue(async, ChPid, 1, QCount, QList,
+                                          NewQueues1),
                         NewQueues2
                 end
         end,
     State#lim{queues = NewQueues}.
 
-unblock_queue(_ChPid, _L, 0, _QList, Queues) ->
+unblock_queue(_Mode, _ChPid, _L, 0, _QList, Queues) ->
     {0, Queues};
-unblock_queue(ChPid, L, QueueCount, QList, Queues) ->
-    UpdateFunUnBlock = fun ({MRef, _, Length}) -> {MRef, false, Length} end,
+unblock_queue(Mode, ChPid, L, QueueCount, QList, Queues) ->
     {Length, QPid, QList1} = gb_trees:take_largest(QList),
     {_MRef, Blocked, Length} = dict:fetch(QPid, Queues),
     {QueueCount1, Queues1} =
@@ -232,20 +231,24 @@ unblock_queue(ChPid, L, QueueCount, QList, Queues) ->
             true ->
                 %% if 0 == Length, and L == 1, we still need to inform the q
                 case Length + 1 >= random:uniform(L) of
-                    true -> case unblock(QPid, ChPid) of
-                                true -> {QueueCount - 1,
-                                         dict:update(QPid, UpdateFunUnBlock, Queues)};
-                                false -> {QueueCount, Queues}
-                            end;
+                    true ->
+                        case unblock(Mode, QPid, ChPid) of
+                            true ->
+                                {QueueCount - 1,
+                                 dict:update(QPid, fun unblock_fun/1, Queues)};
+                            false -> {QueueCount, Queues}
+                        end;
                     false -> {QueueCount, Queues}
                 end
         end,
     case gb_trees:is_empty(QList1) of
         true -> {QueueCount1, Queues1};
-        false -> unblock_queue(ChPid, L, QueueCount1, QList1, Queues1)
+        false -> unblock_queue(Mode, ChPid, L, QueueCount1, QList1, Queues1)
     end.
 
-unblock(QPid, ChPid) ->
+unblock(Mode, QPid, ChPid) ->
     rabbit_misc:with_exit_handler(
       fun () -> false end,
-      fun () -> rabbit_amqqueue:unblock(QPid, ChPid) end).
+      fun () -> rabbit_amqqueue:unblock(Mode, QPid, ChPid) end).
+
+unblock_fun({MRef, _, Length}) -> {MRef, false, Length}.

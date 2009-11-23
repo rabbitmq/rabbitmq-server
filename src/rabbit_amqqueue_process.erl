@@ -814,7 +814,13 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 end,
                 NewLimited = Limited andalso LimiterPid =/= undefined,
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
-        end, fun (_, _) -> ok end)).
+        end, fun (_, _) -> ok end));
+
+handle_cast({unblock, ChPid}, State) ->
+    noreply(
+      possibly_unblock(State, ChPid,
+                       fun (C) -> C#cr{is_limit_active = false} end,
+                       fun (_, _) -> ok end)).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
