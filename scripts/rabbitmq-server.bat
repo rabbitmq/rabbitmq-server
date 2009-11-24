@@ -40,14 +40,6 @@ if "%RABBITMQ_NODENAME%"=="" (
     set RABBITMQ_NODENAME=rabbit
 )
 
-if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
-    set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
-)
-
-if "%RABBITMQ_NODE_PORT%"=="" (
-    set RABBITMQ_NODE_PORT=5672
-)
-
 if not exist "%ERLANG_HOME%\bin\erl.exe" (
     echo.
     echo ******************************
@@ -132,7 +124,6 @@ if exist "%RABBITMQ_CONFIG_FILE%.config" (
 +A30 ^
 -kernel inet_default_listen_options "[{nodelay, true}, {sndbuf, 16384}, {recbuf, 4096}]" ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
--rabbit tcp_listeners "[{\"%RABBITMQ_NODE_IP_ADDRESS%\", %RABBITMQ_NODE_PORT%}]" ^
 -kernel error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%.log"\"} ^
 %RABBITMQ_SERVER_ERL_ARGS% ^
 -sasl errlog_type error ^

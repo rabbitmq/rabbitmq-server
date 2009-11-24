@@ -40,14 +40,6 @@ if "%RABBITMQ_NODENAME%"=="" (
     set RABBITMQ_NODENAME=rabbit
 )
 
-if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
-    set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
-)
-
-if "%RABBITMQ_NODE_PORT%"=="" (
-    set RABBITMQ_NODE_PORT=5672
-)
-
 set RABBITMQ_PIDS_FILE=%RABBITMQ_BASE%\rabbitmq.pids
 set RABBITMQ_SCRIPT_HOME=%~sdp0%
 
