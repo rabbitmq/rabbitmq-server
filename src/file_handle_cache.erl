@@ -644,10 +644,12 @@ maybe_reduce(State = #fhc_state { limit = Limit, count = Count,
 maybe_reduce(State) ->
     State.
 
-%% Googling around suggests that Windows has a limit somewhere around 16M.
-%% eg http://blogs.technet.com/markrussinovich/archive/2009/09/29/3283844.aspx
-%% For everything else, assume ulimit exists. Further googling suggests that
-%% BSDs (incl OS X), solaris and linux all agree that ulimit -n is file handles
+%% Googling around suggests that Windows has a limit somewhere around
+%% 16M, eg
+%% http://blogs.technet.com/markrussinovich/archive/2009/09/29/3283844.aspx
+%% For everything else, assume ulimit exists. Further googling
+%% suggests that BSDs (incl OS X), solaris and linux all agree that
+%% ulimit -n is file handles
 ulimit() ->
     try
         %% under Linux, Solaris and FreeBSD, ulimit is a shell
@@ -665,12 +667,10 @@ ulimit() ->
                                    [String]),
                 throw({unexpected_result, String})
         end
-    catch
-        throw:_ ->
-            case os:type() of
-                {win32, _OsName} ->
-                    ?FILE_HANDLES_LIMIT_WINDOWS;
-                _ ->
-                    ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
-            end
+    catch _ -> case os:type() of
+                   {win32, _OsName} ->
+                       ?FILE_HANDLES_LIMIT_WINDOWS;
+                   _ ->
+                       ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
+               end
     end.
