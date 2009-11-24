@@ -507,27 +507,22 @@ maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, at_eof = AtEoF,
             {Error, Handle}
     end.
 
-needs_seek(AtEof, _CurOffset, DesiredOffset)
-  when DesiredOffset == cur orelse DesiredOffset == {cur, 0} ->
-    {AtEof, false};
-needs_seek(true, _CurOffset, DesiredOffset)
-  when DesiredOffset == eof orelse DesiredOffset == {eof, 0} ->
-    {true, false};
-needs_seek(false, _CurOffset, DesiredOffset)
-  when DesiredOffset == eof orelse DesiredOffset == {eof, 0} ->
-    {true, true};
-needs_seek(AtEof, 0, DesiredOffset)
-  when DesiredOffset == bof orelse DesiredOffset == {bof, 0} ->
-    {AtEof, false};
-needs_seek(AtEof, CurOffset, CurOffset) ->
-    {AtEof, false};
-needs_seek(true, CurOffset, {bof, DesiredOffset})
+needs_seek( AtEoF, _CurOffset,  cur     ) -> {AtEoF, false};
+needs_seek( AtEoF, _CurOffset,  {cur, 0}) -> {AtEoF, false};
+needs_seek(  true, _CurOffset,  eof     ) -> {true , false};
+needs_seek(  true, _CurOffset,  {eof, 0}) -> {true , false};
+needs_seek( false, _CurOffset,  eof     ) -> {true , true };
+needs_seek( false, _CurOffset,  {eof, 0}) -> {true , true };
+needs_seek( AtEoF,          0,  bof     ) -> {AtEoF, false};
+needs_seek( AtEoF,          0,  {bof, 0}) -> {AtEoF, false};
+needs_seek( AtEoF,  CurOffset, CurOffset) -> {AtEoF, false};
+needs_seek(  true,  CurOffset, {bof, DesiredOffset})
   when DesiredOffset >= CurOffset ->
     {true, true};
-needs_seek(true, _CurOffset, {cur, DesiredOffset})
+needs_seek(  true, _CurOffset, {cur, DesiredOffset})
   when DesiredOffset > 0 ->
     {true, true};
-needs_seek(true, CurOffset, DesiredOffset) %% same as {bof, DO}
+needs_seek(  true,  CurOffset, DesiredOffset) %% same as {bof, DO}
   when is_integer(DesiredOffset) andalso DesiredOffset >= CurOffset ->
     {true, true};
 %% because we can't really track size, we could well end up at EoF and not know
