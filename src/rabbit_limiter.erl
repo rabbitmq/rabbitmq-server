@@ -197,8 +197,8 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues,
     {QTree, LengthSum, NonZeroQCount} =
         dict:fold(fun (_QPid, {_, false, _}, Acc) -> Acc;
                       (QPid, {_MRef, true, Length}, {Tree, Sum, NZQCount}) ->
-                          Length1 = lists:max([1, Length]),
-                          {gb_trees:enter(Length, QPid, Tree), Length1,
+                          Sum1 = Sum + lists:max([1, Length]),
+                          {gb_trees:enter(Length, QPid, Tree), Sum1,
                            NZQCount + is_zero_num(Length)}
                   end, {gb_trees:empty(), 0, 0}, Queues),
     Queues1 =
