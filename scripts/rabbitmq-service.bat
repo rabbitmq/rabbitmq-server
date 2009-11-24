@@ -44,6 +44,16 @@ if "%RABBITMQ_NODENAME%"=="" (
     set RABBITMQ_NODENAME=rabbit
 )
 
+if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
+   if not "%RABBITMQ_NODE_PORT%"=="" (
+      set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
+   )
+) else (
+   if "%RABBITMQ_NODE_PORT%"=="" (
+      set RABBITMQ_NODE_PORT=5672
+   )
+)
+
 if "%ERLANG_SERVICE_MANAGER_PATH%"=="" (
     set ERLANG_SERVICE_MANAGER_PATH=C:\Program Files\erl5.6.5\erts-5.6.5\bin
 )
@@ -169,7 +179,12 @@ if exist "%RABBITMQ_CONFIG_FILE%.config" (
     set RABBITMQ_CONFIG_ARG=
 )
 
-
+set RABBITMQ_LISTEN_ARG=
+if not "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
+   if not "%RABBITMQ_NODE_PORT%"=="" (
+      set RABBITMQ_LISTEN_ARG=-rabbit tcp_listeners "[{\"%RABBITMQ_NODE_IP_ADDRESS%\", %RABBITMQ_NODE_PORT%}]"
+   )
+)
 
 set ERLANG_SERVICE_ARGUMENTS= ^
 %RABBITMQ_EBIN_PATH% ^
@@ -180,6 +195,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 +A30 ^
 -kernel inet_default_listen_options "[{nodelay,true},{sndbuf,16384},{recbuf,4096}]" ^
 -kernel inet_default_connect_options "[{nodelay,true}]" ^
+%RABBITMQ_LISTEN_ARG% ^
 -kernel error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%.log"\"} ^
 %RABBITMQ_SERVER_ERL_ARGS% ^
 -sasl errlog_type error ^
