@@ -189,48 +189,55 @@ update_length(QPid, Length, State = #lim{queues = Queues}) ->
     UpdateFun = fun ({MRef, Notify, _}) -> {MRef, Notify, Length} end,
     State#lim{queues = dict:update(QPid, UpdateFun, Queues)}.
 
+is_zero_num(0) -> 0;
+is_zero_num(_) -> 1.
+
 notify_queues(State = #lim{ch_pid = ChPid, queues = Queues,
                            prefetch_count = PrefetchCount, volume = Volume}) ->
-    QList =
+    {QTree, LengthSum, NonZeroQCount} =
         dict:fold(fun (_QPid, {_, false, _}, Acc) -> Acc;
-                      (QPid, {_MRef, true, Length}, L) ->
-                          gb_trees:enter(Length, QPid, L)
-                  end, gb_trees:empty(), Queues),
-    NewQueues =
-        case gb_trees:size(QList) of
+                      (QPid, {_MRef, true, Length}, {Tree, Sum, NZQCount}) ->
+                          Length1 = lists:max([1, Length]),
+                          {gb_trees:enter(Length, QPid, Tree), Length1,
+                           NZQCount + is_zero_num(Length)}
+                  end, {gb_trees:empty(), 0, 0}, Queues),
+    Queues1 =
+        case gb_trees:size(QTree) of
             0 -> Queues;
             QCount ->
                 Capacity = PrefetchCount - Volume,
-                {BiggestLength, _QPid} = gb_trees:largest(QList),
-                BiggestLength1 = lists:max([2*BiggestLength, 1]),
-                %% try to tell enough queues that we guarantee we'll get
-                %% blocked again
-                {Capacity1, NewQueues1} =
-                    unblock_queue(sync, ChPid, BiggestLength1, Capacity, QList,
-                                  Queues),
-                case 0 == Capacity1 of
-                    true -> NewQueues1;
-                    false -> %% just tell everyone
-                        {_Capacity2, NewQueues2} =
-                            unblock_queue(async, ChPid, 1, QCount, QList,
-                                          NewQueues1),
-                        NewQueues2
+                case Capacity >= NonZeroQCount of
+                    true -> unblock_all(ChPid, QCount, QTree, Queues);
+                    false ->
+                        %% try to tell enough queues that we guarantee
+                        %% we'll get blocked again
+                        {Capacity1, Queues2} =
+                            unblock_queues(
+                              sync, ChPid, LengthSum, Capacity, QTree, Queues),
+                        case 0 == Capacity1 of
+                            true -> Queues2;
+                            false -> %% just tell everyone
+                                unblock_all(ChPid, QCount, QTree, Queues2)
+                        end
                 end
         end,
-    State#lim{queues = NewQueues}.
+    State#lim{queues = Queues1}.
 
-unblock_queue(_Mode, _ChPid, _L, 0, _QList, Queues) ->
+unblock_all(ChPid, QCount, QTree, Queues) ->
+    {_Capacity2, Queues1} =
+        unblock_queues(async, ChPid, 1, QCount, QTree, Queues),
+    Queues1.
+
+unblock_queues(_Mode, _ChPid, _L, 0, _QList, Queues) ->
     {0, Queues};
-unblock_queue(Mode, ChPid, L, QueueCount, QList, Queues) ->
+unblock_queues(Mode, ChPid, L, QueueCount, QList, Queues) ->
     {Length, QPid, QList1} = gb_trees:take_largest(QList),
     {_MRef, Blocked, Length} = dict:fetch(QPid, Queues),
     {QueueCount1, Queues1} =
         case Blocked of
-            false ->
-                {QueueCount, Queues};
+            false -> {QueueCount, Queues};
             true ->
-                %% if 0 == Length, and L == 1, we still need to inform the q
-                case Length + 1 >= random:uniform(L) of
+                case 1 >= L orelse Length >= random:uniform(L) of
                     true ->
                         case unblock(Mode, QPid, ChPid) of
                             true ->
@@ -243,7 +250,8 @@ unblock_queue(Mode, ChPid, L, QueueCount, QList, Queues) ->
         end,
     case gb_trees:is_empty(QList1) of
         true -> {QueueCount1, Queues1};
-        false -> unblock_queue(Mode, ChPid, L, QueueCount1, QList1, Queues1)
+        false -> unblock_queues(Mode, ChPid, L - Length, QueueCount1, QList1,
+                                Queues1)
     end.
 
 unblock(sync, QPid, ChPid) -> rabbit_amqqueue:unblock_sync(QPid, ChPid);
