@@ -29,32 +29,24 @@
 %%   Contributor(s): ______________________________________.
 %%
 
-%% TODO: much of this should be generated
+-module(rabbit_exchange_type_fanout).
+-include("rabbit.hrl").
 
--type(amqp_field_type() ::
-      'longstr' | 'signedint' | 'decimal' | 'timestamp' |
-      'table' | 'byte' | 'double' | 'float' | 'long' |
-      'short' | 'bool' | 'binary' | 'void').
--type(amqp_property_type() ::
-      'shortstr' | 'longstr' | 'octet' | 'shortint' | 'longint' |
-      'longlongint' | 'timestamp' | 'bit' | 'table').
-%% we could make this more precise but ultimately are limited by
-%% dialyzer's lack of support for recursive types
--type(amqp_table() :: [{binary(), amqp_field_type(), any()}]).
-%% TODO: make this more precise
--type(amqp_class_id() :: non_neg_integer()).
-%% TODO: make this more precise
--type(amqp_properties() :: tuple()).
-%% TODO: make this more precise
--type(amqp_method() :: tuple()).
-%% TODO: make this more precise
--type(amqp_method_name() :: atom()).
--type(channel_number() :: non_neg_integer()).
--type(resource_name() :: binary()).
--type(routing_key() :: binary()).
--type(username() :: binary()).
--type(password() :: binary()).
--type(vhost() :: binary()).
--type(ctag() :: binary()).
--type(exchange_type() :: atom()).
--type(binding_key() :: binary()).
+-behaviour(rabbit_exchange_behaviour).
+
+-export([description/0, publish/2]).
+-export([recover/1, init/1, delete/1, add_binding/2, delete_binding/2]).
+-include("rabbit_exchange_behaviour_spec.hrl").
+
+description() ->
+    [{name, <<"fanout">>},
+     {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
+
+publish(#exchange{name = Name}, Delivery) ->
+    rabbit_router:deliver(rabbit_router:match_routing_key(Name, '_'), Delivery).
+
+recover(_X) -> ok.
+init(_X) -> ok.
+delete(_X) -> ok.
+add_binding(_X, _B) -> ok.
+delete_binding(_X, _B) -> ok.
