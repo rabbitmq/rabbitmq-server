@@ -134,7 +134,7 @@ open(Path, Mode, Options) ->
                             {error, writer_exists};
                         false ->
                             RCount1 = case is_reader(Mode1) of
-                                          true -> RCount + 1;
+                                          true  -> RCount + 1;
                                           false -> RCount
                                       end,
                             put({GRef, fhc_file},
@@ -144,7 +144,7 @@ open(Path, Mode, Options) ->
                             Ref = make_ref(),
                             case open1(Path1, Mode1, Options, Ref, GRef, bof) of
                                 {ok, _Handle} -> {ok, Ref};
-                                Error -> Error
+                                Error         -> Error
                             end
                     end;
                 undefined ->
@@ -160,7 +160,7 @@ open(Path, Mode, Options) ->
 close(Ref) ->
     case erase({Ref, fhc_handle}) of
         undefined -> ok;
-        Handle -> close1(Ref, Handle, hard)
+        Handle    -> close1(Ref, Handle, hard)
     end.
 
 read(Ref, Count) ->
@@ -202,13 +202,14 @@ set_maximum_since_use(MaximumAge) ->
               case Hdl /= closed andalso Age >= MaximumAge of
                   true ->
                       case close1(Ref, Handle, soft) of
-                          {ok, Handle1} ->
-                              put({Ref, fhc_handle}, Handle1);
-                          _ -> ok
+                          {ok, Handle1} -> put({Ref, fhc_handle}, Handle1);
+                          _             -> ok
                       end;
-                  false -> ok
+                  false ->
+                      ok
               end;
-          (_KeyValuePair) -> ok
+          (_KeyValuePair) ->
+              ok
       end, get()),
     report_eldest().
 
@@ -229,8 +230,10 @@ internal_read(Count, [Handle = #handle { hdl = Hdl, offset = Offset }]) ->
         {ok, Data} = Obj ->
             Size = iolist_size(Data),
             {Obj, [Handle #handle { offset = Offset + Size }]};
-        eof -> {eof, [Handle #handle { at_eof = true }]};
-        Error -> {Error, [Handle]}
+        eof ->
+            {eof, [Handle #handle { at_eof = true }]};
+        Error ->
+            {Error, [Handle]}
     end.
 
 internal_append(_Data, [#handle { is_write = false }]) ->
@@ -251,17 +254,18 @@ internal_sync(ok, [Handle]) ->
     case write_buffer(Handle) of
         {ok, Handle1 = #handle {hdl = Hdl, offset = Offset, is_dirty = true}} ->
             case file:sync(Hdl) of
-                ok -> {ok, [Handle1 #handle { trusted_offset = Offset,
-                                              is_dirty = false }]};
+                ok    -> {ok, [Handle1 #handle { trusted_offset = Offset,
+                                                 is_dirty = false }]};
                 Error -> {Error, [Handle1]}
             end;
-        {Error, Handle1} -> {Error, [Handle1]}
+        {Error, Handle1} ->
+            {Error, [Handle1]}
     end.
 
 internal_position(NewOffset, [Handle]) ->
     case write_buffer(Handle) of
-        {ok, Handle1} -> {Result, Handle2} = maybe_seek(NewOffset, Handle1),
-                         {Result, [Handle2]};
+        {ok, Handle1}    -> {Result, Handle2} = maybe_seek(NewOffset, Handle1),
+                            {Result, [Handle2]};
         {Error, Handle1} -> {Error, [Handle1]}
     end.
 
@@ -272,14 +276,16 @@ internal_truncate(ok, [Handle]) ->
         {ok, Handle1 = #handle { hdl = Hdl, offset = Offset,
                                  trusted_offset = TrustedOffset }} ->
             case file:truncate(Hdl) of
-                ok -> {ok,
-                       [Handle1 #handle {
-                          at_eof = true,
-                          trusted_offset = lists:min([Offset, TrustedOffset])
-                         }]};
-                Error -> {Error, [Handle1]}
+                ok ->
+                    {ok, [Handle1 #handle {
+                            at_eof = true,
+                            trusted_offset = lists:min([Offset, TrustedOffset])
+                           }]};
+                Error ->
+                    {Error, [Handle1]}
             end;
-        {Error, Handle1} -> {Error, Handle1}
+        {Error, Handle1} ->
+            {Error, Handle1}
     end.
 
 internal_last_sync_offset(ok, [#handle { trusted_offset = TrustedOffset }]) ->
@@ -302,9 +308,8 @@ internal_copy(Count, [SHandle = #handle { is_read = true, hdl = SHdl,
                                           offset = SOffset },
                       DHandle = #handle { is_write = true, hdl = DHdl,
                                               offset = DOffset }]) ->
-    Result1 = file:copy(SHdl, DHdl, Count),
-    case Result1 of
-        {ok, Count1} ->
+    case file:copy(SHdl, DHdl, Count) of
+        {ok, Count1} = Result1 ->
             {Result1,
              [SHandle #handle { offset = SOffset + Count1 },
               DHandle #handle { offset = DOffset + Count1 }]};
@@ -322,7 +327,7 @@ report_eldest() ->
     with_age_tree(
       fun (Tree) ->
               case gb_trees:is_empty(Tree) of
-                  true -> Tree;
+                  true  -> Tree;
                   false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
                            gen_server2:cast(?SERVER, {self(), update, Oldest})
               end,
@@ -335,9 +340,10 @@ with_handles(Refs, Args, Fun) ->
                    fun (Ref, {ok, HandlesAcc}) ->
                            case get_or_reopen(Ref) of
                                {ok, Handle} -> {ok, [Handle | HandlesAcc]};
-                               Error -> Error
+                               Error        -> Error
                            end;
-                       (_Ref, Error) -> Error
+                       (_Ref, Error) ->
+                           Error
                    end, {ok, []}, Refs),
     case ResHandles of
         {ok, Handles} ->
@@ -345,9 +351,11 @@ with_handles(Refs, Args, Fun) ->
                 {Result, Handles1} when is_list(Handles1) ->
                     lists:zipwith(fun put_handle/2, Refs, Handles1),
                     Result;
-                Result -> Result
+                Result ->
+                    Result
             end;
-        Error -> Error
+        Error ->
+            Error
     end.
 
 with_flushed_handles(Refs, Args, Fun) ->
@@ -370,7 +378,8 @@ with_flushed_handles(Refs, Args, Fun) ->
 
 get_or_reopen(Ref) ->
     case get({Ref, fhc_handle}) of
-        undefined -> {error, not_open, Ref};
+        undefined ->
+            {error, not_open, Ref};
         #handle { hdl = closed, mode = Mode, global_key = GRef,
                   options = Options, offset = Offset } ->
             #file { path = Path } = get({GRef, fhc_file}),
@@ -382,7 +391,7 @@ get_or_reopen(Ref) ->
 get_or_create_age_tree() ->
     case get(fhc_age_tree) of
         undefined -> gb_trees:empty();
-        AgeTree -> AgeTree
+        AgeTree   -> AgeTree
     end.
 
 with_age_tree(Fun) ->
@@ -399,8 +408,8 @@ open1(Path, Mode, Options, Ref, GRef, Offset) ->
         {ok, Hdl} ->
             WriteBufferSize =
                 case proplists:get_value(write_buffer, Options, unbuffered) of
-                    unbuffered -> 0;
-                    infinity -> infinity;
+                    unbuffered           -> 0;
+                    infinity             -> infinity;
                     N when is_integer(N) -> N
                 end,
             Now = now(),
@@ -432,40 +441,41 @@ close1(Ref, Handle, SoftOrHard) ->
                        is_read = IsReader, is_write = IsWriter,
                        last_used_at = Then } = Handle1 } ->
             case Hdl of
-                closed -> ok;
-                _ -> ok = case IsDirty of
-                              true -> file:sync(Hdl);
-                              false -> ok
-                          end,
-                     ok = file:close(Hdl),
-                     with_age_tree(
-                       fun (Tree) ->
-                               Tree1 = gb_trees:delete(Then, Tree),
-                               Oldest =
-                                   case gb_trees:is_empty(Tree1) of
-                                       true -> undefined;
-                                       false ->
-                                           {Oldest1, _Ref} =
-                                               gb_trees:smallest(Tree1),
-                                           Oldest1
-                                   end,
-                               gen_server2:cast(
-                                 ?SERVER, {self(), close, Oldest}),
-                               Tree1
-                       end)
+                closed ->
+                    ok;
+                _ ->
+                    ok = case IsDirty of
+                             true  -> file:sync(Hdl);
+                             false -> ok
+                         end,
+                    ok = file:close(Hdl),
+                    with_age_tree(
+                      fun (Tree) ->
+                              Tree1 = gb_trees:delete(Then, Tree),
+                              Oldest =
+                                  case gb_trees:is_empty(Tree1) of
+                                      true  ->  undefined;
+                                      false -> {Oldest1, _Ref} =
+                                                   gb_trees:smallest(Tree1),
+                                               Oldest1
+                                  end,
+                              gen_server2:cast(
+                                ?SERVER, {self(), close, Oldest}),
+                              Tree1
+                      end)
             end,
             case SoftOrHard of
                 hard ->
                     #file { reader_count = RCount, has_writer = HasWriter,
                             path = Path } = File = get({GRef, fhc_file}),
                     RCount1 = case IsReader of
-                                  true -> RCount - 1;
+                                  true  -> RCount - 1;
                                   false -> RCount
                               end,
                     HasWriter1 = HasWriter andalso not IsWriter,
                     case RCount1 =:= 0 andalso not HasWriter1 of
-                        true -> erase({GRef, fhc_file}),
-                                erase({Path, fhc_path});
+                        true  -> erase({GRef, fhc_file}),
+                                 erase({Path, fhc_path});
                         false -> put({GRef, fhc_file},
                                      File #file { reader_count = RCount1,
                                                   has_writer = HasWriter1 })
@@ -483,13 +493,14 @@ maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, at_eof = AtEoF,
                                          offset = Offset }) ->
     {AtEoF1, NeedsSeek} = needs_seek(AtEoF, Offset, NewOffset),
     Result = case NeedsSeek of
-                 true -> file:position(Hdl, NewOffset);
+                 true  -> file:position(Hdl, NewOffset);
                  false -> {ok, Offset}
              end,
     case Result of
         {ok, Offset1} ->
             {Result, Handle #handle { at_eof = AtEoF1, offset = Offset1 }};
-        {error, _} = Error -> {Error, Handle}
+        {error, _} = Error -> 
+            {Error, Handle}
     end.
 
 write_to_buffer(Data, Handle = #handle { hdl = Hdl, offset = Offset,
@@ -505,7 +516,7 @@ write_to_buffer(Data, Handle =
     Handle1 = Handle #handle { write_buffer = [ Data | WriteBuffer ],
                                write_buffer_size = Size1 },
     case Limit /= infinity andalso Size1 > Limit of
-        true -> write_buffer(Handle1);
+        true  -> write_buffer(Handle1);
         false -> {ok, Handle1}
     end.
 
@@ -563,9 +574,11 @@ needs_seek(_AtEoF, _CurOffset, _DesiredOffset) ->
 
 init([]) ->
     Limit = case application:get_env(file_handles_high_watermark) of
-                {ok, Watermark}
-                when is_integer(Watermark) andalso Watermark > 0 -> Watermark;
-                _ -> ulimit()
+                {ok, Watermark} when (is_integer(Watermark) andalso
+                                      Watermark > 0) ->
+                    Watermark;
+                _ ->
+                    ulimit()
             end,
     rabbit_log:info("Limiting to approx ~p file handles~n", [Limit]),
     {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0}}.
@@ -662,7 +675,9 @@ ulimit() ->
     catch
         throw:_ ->
             case os:type() of
-                {win32, _OsName} -> ?FILE_HANDLES_LIMIT_WINDOWS;
-                _ -> ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
+                {win32, _OsName} ->
+                    ?FILE_HANDLES_LIMIT_WINDOWS;
+                _ ->
+                    ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
             end
     end.
