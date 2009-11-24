@@ -238,9 +238,24 @@ internal_append(_Data, [#handle { is_write = false }]) ->
     {error, not_open_for_writing};
 internal_append(Data, [Handle]) ->
     case maybe_seek(eof, Handle) of
-        {{ok, _Offset}, Handle1 = #handle { at_eof = true }} ->
-            {Result, Handle2} = write_to_buffer(Data, Handle1),
-            {Result, [Handle2]};
+        {{ok, _Offset}, Handle1 = #handle { hdl = Hdl, offset = Offset,
+                                            write_buffer_size_limit = 0,
+                                            at_eof = true }} ->
+            Offset1 = Offset + iolist_size(Data),
+            {file:write(Hdl, Data),
+             [Handle1 #handle { is_dirty = true, offset = Offset1 }]};
+        {{ok, _Offset}, Handle1 = #handle { write_buffer = WriteBuffer,
+                                            write_buffer_size = Size,
+                                            write_buffer_size_limit = Limit,
+                                            at_eof = true }} ->
+            Size1 = Size + iolist_size(Data),
+            Handle2 = Handle1 #handle { write_buffer = [ Data | WriteBuffer ],
+                                        write_buffer_size = Size1 },
+            case Limit /= infinity andalso Size1 > Limit of
+                true  -> {Result, Handle3} = write_buffer(Handle2),
+                         {Result, [Handle3]};
+                false -> {ok, [Handle2]}
+            end;
         {{error, _} = Error, Handle1} ->
             {Error, [Handle1]}
     end.
@@ -528,23 +543,6 @@ needs_seek(  true,  CurOffset, DesiredOffset) %% same as {bof, DO}
 %% because we can't really track size, we could well end up at EoF and not know
 needs_seek(_AtEoF, _CurOffset, _DesiredOffset) ->
     {false, true}.
-
-write_to_buffer(Data, Handle = #handle { hdl = Hdl, offset = Offset,
-                                         write_buffer_size_limit = 0 }) ->
-    Offset1 = Offset + iolist_size(Data),
-    {file:write(Hdl, Data),
-     Handle #handle { is_dirty = true, offset = Offset1 }};
-write_to_buffer(Data, Handle =
-                #handle { write_buffer = WriteBuffer,
-                          write_buffer_size = Size,
-                          write_buffer_size_limit = Limit }) ->
-    Size1 = Size + iolist_size(Data),
-    Handle1 = Handle #handle { write_buffer = [ Data | WriteBuffer ],
-                               write_buffer_size = Size1 },
-    case Limit /= infinity andalso Size1 > Limit of
-        true  -> write_buffer(Handle1);
-        false -> {ok, Handle1}
-    end.
 
 write_buffer(Handle = #handle { write_buffer = [] }) ->
     {ok, Handle};
