@@ -196,17 +196,15 @@ copy(Src, Dest, Count) ->
 set_maximum_since_use(MaximumAge) ->
     Now = now(),
     lists:foreach(
-      fun ({{Ref, fhc_handle}, Handle =
-            #handle { hdl = Hdl, last_used_at = Then }}) ->
+      fun ({{Ref, fhc_handle}, Handle = #handle { hdl = Hdl,
+                                                  last_used_at = Then }}) ->
               Age = timer:now_diff(Now, Then),
               case Hdl /= closed andalso Age >= MaximumAge of
-                  true ->
-                      case close1(Ref, Handle, soft) of
-                          {ok, Handle1} -> put({Ref, fhc_handle}, Handle1);
-                          _             -> ok
-                      end;
-                  false ->
-                      ok
+                  true -> case close1(Ref, Handle, soft) of
+                              {ok, Handle1} -> put({Ref, fhc_handle}, Handle1);
+                              _             -> ok
+                          end;
+                  false -> ok
               end;
           (_KeyValuePair) ->
               ok
@@ -322,6 +320,12 @@ internal_copy(_Count, _Handles) ->
 %%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
+
+is_reader(Mode) -> lists:member(read, Mode).
+
+is_writer(Mode) -> lists:member(write, Mode).
+
+is_appender(Mode) -> lists:member(append, Mode).
 
 report_eldest() ->
     with_age_tree(
@@ -499,9 +503,36 @@ maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, at_eof = AtEoF,
     case Result of
         {ok, Offset1} ->
             {Result, Handle #handle { at_eof = AtEoF1, offset = Offset1 }};
-        {error, _} = Error -> 
+        {error, _} = Error ->
             {Error, Handle}
     end.
+
+needs_seek(AtEof, _CurOffset, DesiredOffset)
+  when DesiredOffset == cur orelse DesiredOffset == {cur, 0} ->
+    {AtEof, false};
+needs_seek(true, _CurOffset, DesiredOffset)
+  when DesiredOffset == eof orelse DesiredOffset == {eof, 0} ->
+    {true, false};
+needs_seek(false, _CurOffset, DesiredOffset)
+  when DesiredOffset == eof orelse DesiredOffset == {eof, 0} ->
+    {true, true};
+needs_seek(AtEof, 0, DesiredOffset)
+  when DesiredOffset == bof orelse DesiredOffset == {bof, 0} ->
+    {AtEof, false};
+needs_seek(AtEof, CurOffset, CurOffset) ->
+    {AtEof, false};
+needs_seek(true, CurOffset, {bof, DesiredOffset})
+  when DesiredOffset >= CurOffset ->
+    {true, true};
+needs_seek(true, _CurOffset, {cur, DesiredOffset})
+  when DesiredOffset > 0 ->
+    {true, true};
+needs_seek(true, CurOffset, DesiredOffset) %% same as {bof, DO}
+  when is_integer(DesiredOffset) andalso DesiredOffset >= CurOffset ->
+    {true, true};
+%% because we can't really track size, we could well end up at EoF and not know
+needs_seek(_AtEoF, _CurOffset, _DesiredOffset) ->
+    {false, true}.
 
 write_to_buffer(Data, Handle = #handle { hdl = Hdl, offset = Offset,
                                          write_buffer_size_limit = 0 }) ->
@@ -534,39 +565,6 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
         {error, _} = Error ->
             {Error, Handle}
     end.
-
-is_reader(Mode) -> lists:member(read, Mode).
-
-is_writer(Mode) -> lists:member(write, Mode).
-
-is_appender(Mode) -> lists:member(append, Mode).
-
-needs_seek(AtEof, _CurOffset, DesiredOffset)
-  when DesiredOffset == cur orelse DesiredOffset == {cur, 0} ->
-    {AtEof, false};
-needs_seek(true, _CurOffset, DesiredOffset)
-  when DesiredOffset == eof orelse DesiredOffset == {eof, 0} ->
-    {true, false};
-needs_seek(false, _CurOffset, DesiredOffset)
-  when DesiredOffset == eof orelse DesiredOffset == {eof, 0} ->
-    {true, true};
-needs_seek(AtEof, 0, DesiredOffset)
-  when DesiredOffset == bof orelse DesiredOffset == {bof, 0} ->
-    {AtEof, false};
-needs_seek(AtEof, CurOffset, CurOffset) ->
-    {AtEof, false};
-needs_seek(true, CurOffset, {bof, DesiredOffset})
-  when DesiredOffset >= CurOffset ->
-    {true, true};
-needs_seek(true, _CurOffset, {cur, DesiredOffset})
-  when DesiredOffset > 0 ->
-    {true, true};
-needs_seek(true, CurOffset, DesiredOffset) %% same as {bof, DO}
-  when is_integer(DesiredOffset) andalso DesiredOffset >= CurOffset ->
-    {true, true};
-%% because we can't really track size, we could well end up at EoF and not know
-needs_seek(_AtEoF, _CurOffset, _DesiredOffset) ->
-    {false, true}.
 
 %%----------------------------------------------------------------------------
 %% gen_server
