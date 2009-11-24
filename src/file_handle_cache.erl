@@ -94,7 +94,7 @@
 -spec(open/3 :: (string(), [any()], [any()]) -> ({'ok', ref()} | error())).
 -spec(close/1 :: (ref()) -> ('ok' | error())).
 -spec(read/2 :: (ref(), integer()) ->
-             ({'ok', ([char()]|binary())} | eof | error())). 
+             ({'ok', ([char()]|binary())} | eof | error())).
 -spec(append/2 :: (ref(), iodata()) -> ok_or_error()).
 -spec(sync/1 :: (ref()) ->  ok_or_error()).
 -spec(position/2 :: (ref(), position()) ->
@@ -106,7 +106,7 @@
 -spec(append_write_buffer/1 :: (ref()) -> ok_or_error()).
 -spec(copy/3 :: (ref(), ref(), non_neg_integer()) ->
              ({'ok', integer()} | error())).
--spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok'). 
+-spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 
 -endif.
 
@@ -115,7 +115,8 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], [{timeout, infinity}]).
+    gen_server2:start_link({local, ?SERVER}, ?MODULE, [],
+                           [{timeout, infinity}]).
 
 open(Path, Mode, Options) ->
     case is_appender(Mode) of
@@ -353,17 +354,17 @@ with_flushed_handles(Refs, Args, Fun) ->
     with_handles(
       Refs, Args,
       fun (Args1, Handles) ->
-              ResHandles1 =
-                  lists:foldl(
-                    fun (Handle, {ok, HandlesAcc}) ->
-                            {Res, Handle1} = write_buffer(Handle),
-                            {Res, [Handle1 | HandlesAcc]};
-                        (Handle, {Error, HandlesAcc}) ->
-                            {Error, [Handle | HandlesAcc]}
-                    end, {ok, []}, Handles),
-              case ResHandles1 of
-                  {ok, Handles1} -> erlang:apply(Fun, [Args1, lists:reverse(Handles1)]);
-                  {Error, Handles1} -> {Error, lists:reverse(Handles1)}
+              case lists:foldl(
+                     fun (Handle, {ok, HandlesAcc}) ->
+                             {Res, Handle1} = write_buffer(Handle),
+                             {Res, [Handle1 | HandlesAcc]};
+                         (Handle, {Error, HandlesAcc}) ->
+                             {Error, [Handle | HandlesAcc]}
+                     end, {ok, []}, Handles) of
+                  {ok, Handles1} ->
+                      erlang:apply(Fun, [Args1, lists:reverse(Handles1)]);
+                  {Error, Handles1} ->
+                      {Error, lists:reverse(Handles1)}
               end
       end).
 
