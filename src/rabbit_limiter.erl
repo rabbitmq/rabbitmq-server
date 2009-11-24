@@ -233,25 +233,30 @@ unblock_queues(_Mode, _ChPid, _L, 0, _QList, Queues) ->
 unblock_queues(Mode, ChPid, L, QueueCount, QList, Queues) ->
     {Length, QPid, QList1} = gb_trees:take_largest(QList),
     {_MRef, Blocked, Length} = dict:fetch(QPid, Queues),
-    {QueueCount1, Queues1} =
-        case Blocked of
-            false -> {QueueCount, Queues};
-            true ->
-                case 1 >= L orelse Length >= random:uniform(L) of
+    case Length == 0 andalso Mode == sync of
+        true -> {QueueCount, Queues};
+        false ->
+            {QueueCount1, Queues1} =
+                case Blocked of
+                    false -> {QueueCount, Queues};
                     true ->
-                        case unblock(Mode, QPid, ChPid) of
+                        case 1 >= L orelse Length >= random:uniform(L) of
                             true ->
-                                {QueueCount - 1,
-                                 dict:update(QPid, fun unblock_fun/1, Queues)};
+                                case unblock(Mode, QPid, ChPid) of
+                                    true ->
+                                        {QueueCount - 1,
+                                         dict:update(
+                                           QPid, fun unblock_fun/1, Queues)};
+                                    false -> {QueueCount, Queues}
+                                end;
                             false -> {QueueCount, Queues}
-                        end;
-                    false -> {QueueCount, Queues}
-                end
-        end,
-    case gb_trees:is_empty(QList1) of
-        true -> {QueueCount1, Queues1};
-        false -> unblock_queues(Mode, ChPid, L - Length, QueueCount1, QList1,
-                                Queues1)
+                        end
+                end,
+            case gb_trees:is_empty(QList1) of
+                true -> {QueueCount1, Queues1};
+                false -> unblock_queues(Mode, ChPid, L - Length, QueueCount1,
+                                        QList1, Queues1)
+            end
     end.
 
 unblock(sync, QPid, ChPid) -> rabbit_amqqueue:unblock_sync(QPid, ChPid);
