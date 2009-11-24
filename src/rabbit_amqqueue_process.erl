@@ -204,7 +204,7 @@ deliver_immediately(Message, Delivered,
                                                    ActiveConsumersTail,
                                                    BlockedConsumers),
                                 {ActiveConsumers1,
-                                 queue:in_r(QEntry, BlockedConsumers1)}
+                                 queue:in(QEntry, BlockedConsumers1)}
                         end,
                     {offered, AckRequired,
                      State#q{active_consumers = NewActiveConsumers,
@@ -272,7 +272,7 @@ remove_consumers(ChPid, Queue) ->
 move_consumers(ChPid, From, To) ->
     {Kept, Removed} = lists:partition(fun ({CP, _}) -> CP /= ChPid end,
                                       queue:to_list(From)),
-    {queue:from_list(Kept), queue:join(queue:from_list(Removed), To)}.
+    {queue:from_list(Kept), queue:join(To, queue:from_list(Removed))}.
 
 possibly_unblock(State, ChPid, Update, Result) ->
     case lookup_ch(ChPid) of
@@ -743,6 +743,13 @@ handle_call({claim_queue, ReaderPid}, _From, State = #q{owner = Owner,
     end;
 
 handle_call({unblock, ChPid}, From, State) ->
+    %% If we have been unblocked and if there are messages in the
+    %% queue then we can guarantee that our consumer will get some of
+    %% those messages. This is because if there were active consumers
+    %% then the queue would be empty (major invariant), thus if the
+    %% queue is not empty then we must be the only now-active
+    %% consumer.
+    %% However, this may be wrong in the future, eg with TTL.
     noreply(
       possibly_unblock(State, ChPid,
                        fun (C) -> C#cr{is_limit_active = false} end,

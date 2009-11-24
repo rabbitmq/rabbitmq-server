@@ -39,7 +39,7 @@
 -export([list/1, info/1, info/2, info_all/1, info_all/2]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
--export([notify_sent/2, unblock/3]).
+-export([notify_sent/2, unblock_async/2, unblock_sync/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
@@ -100,7 +100,8 @@
                      'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
--spec(unblock/3 :: (('sync' | 'async'), pid(), pid()) -> boolean()).
+-spec(unblock_async/2 :: (pid(), pid()) -> boolean()).
+-spec(unblock_sync/2 :: (pid(), pid()) -> boolean()).
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
@@ -305,11 +306,14 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
 notify_sent(QPid, ChPid) ->
     gen_server2:pcast(QPid, 8, {notify_sent, ChPid}).
 
-unblock(sync, QPid, ChPid) ->
-    gen_server2:pcall(QPid, 8, {unblock, ChPid}, 100);
-unblock(async, QPid, ChPid) ->
+unblock_async(QPid, ChPid) ->
     ok = gen_server2:pcast(QPid, 8, {unblock, ChPid}),
     false.
+
+unblock_sync(QPid, ChPid) ->
+    rabbit_misc:with_exit_handler(
+      fun () -> false end,
+      fun () -> gen_server2:pcall(QPid, 8, {unblock, ChPid}, 100) end).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(

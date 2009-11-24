@@ -246,9 +246,7 @@ unblock_queue(Mode, ChPid, L, QueueCount, QList, Queues) ->
         false -> unblock_queue(Mode, ChPid, L, QueueCount1, QList1, Queues1)
     end.
 
-unblock(Mode, QPid, ChPid) ->
-    rabbit_misc:with_exit_handler(
-      fun () -> false end,
-      fun () -> rabbit_amqqueue:unblock(Mode, QPid, ChPid) end).
+unblock(sync, QPid, ChPid) -> rabbit_amqqueue:unblock_sync(QPid, ChPid);
+unblock(async, QPid, ChPid) -> rabbit_amqqueue:unblock_async(QPid, ChPid).
 
 unblock_fun({MRef, _, Length}) -> {MRef, false, Length}.
