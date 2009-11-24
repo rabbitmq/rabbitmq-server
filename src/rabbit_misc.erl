@@ -128,6 +128,7 @@
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
 -spec(cmd/1 :: (string()) -> string()). 
+-spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
 
 -endif.
 
