@@ -34,7 +34,7 @@
 %% has a single process that's consuming all memory. In such a case,
 %% during garbage collection, Erlang tries to allocate a huge chunk of
 %% continuous memory, which can result in a crash or heavy swapping.
-%% 
+%%
 %% This module tries to warn Rabbit before such situations occur, so
 %% that it has a higher chance to avoid running out of memory.
 %%
@@ -91,13 +91,13 @@
 start_link(Args) ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE, [Args], []).
 
-init([MemFraction]) -> 
+init([MemFraction]) ->
     TotalMemory =
         case get_total_memory() of
             unknown ->
                 rabbit_log:warning(
                   "Unknown total memory size for your OS ~p. "
-                  "Assuming memory size is ~pMB.~n", 
+                  "Assuming memory size is ~pMB.~n",
                   [os:type(), trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/1048576)]),
                 ?MEMORY_SIZE_FOR_UNKNOWN_OS;
             M -> M
@@ -117,7 +117,7 @@ handle_call(get_vm_memory_high_watermark, _From, State) ->
 
 handle_call({set_vm_memory_high_watermark, MemFraction}, _From, State) ->
     MemLimit = get_mem_limit(MemFraction, State#state.total_memory),
-    rabbit_log:info("Memory alarm changed to ~p, ~p bytes.~n", 
+    rabbit_log:info("Memory alarm changed to ~p, ~p bytes.~n",
                     [MemFraction, MemLimit]),
     {reply, ok, State#state{memory_limit = MemLimit}};
 
@@ -134,22 +134,22 @@ handle_call(_Request, _From, State) ->
 handle_cast(update, State) ->
     {noreply, internal_update(State)};
 
-handle_cast(_Request, State) -> 
+handle_cast(_Request, State) ->
     {noreply, State}.
 
-handle_info(_Info, State) -> 
+handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) -> 
+terminate(_Reason, _State) ->
     ok.
 
-code_change(_OldVsn, State, _Extra) -> 
+code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
- 
+
 update() ->
     gen_server2:cast(?SERVER, update).
 
