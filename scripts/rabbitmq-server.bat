@@ -53,7 +53,7 @@ if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
 if not exist "%ERLANG_HOME%\bin\erl.exe" (
     echo.
     echo ******************************
-    echo ERLANG_HOME not set correctly. 
+    echo ERLANG_HOME not set correctly.
     echo ******************************
     echo.
     echo Please either set ERLANG_HOME to point to your Erlang installation or place the
@@ -116,7 +116,7 @@ if exist "%RABBITMQ_EBIN_ROOT%\rabbit.boot" (
 if "%RABBITMQ_CONFIG_FILE%"=="" (
     set RABBITMQ_CONFIG_FILE=%RABBITMQ_BASE%\rabbitmq
 )
-   
+
 if exist "%RABBITMQ_CONFIG_FILE%.config" (
     set RABBITMQ_CONFIG_ARG=-config "%RABBITMQ_CONFIG_FILE%"
 ) else (
@@ -126,7 +126,7 @@ if exist "%RABBITMQ_CONFIG_FILE%.config" (
 set RABBITMQ_LISTEN_ARG=
 if not "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
    if not "%RABBITMQ_NODE_PORT%"=="" (
-      set RABBITMQ_LISTEN_ARG=-rabbit tcp_listeners "[{\"%RABBITMQ_NODE_IP_ADDRESS%\", %RABBITMQ_NODE_PORT%}]"
+      set RABBITMQ_LISTEN_ARG=-rabbit tcp_listeners [{\""%RABBITMQ_NODE_IP_ADDRESS%"\","%RABBITMQ_NODE_PORT%"}]
    )
 )
 

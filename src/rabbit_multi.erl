@@ -99,12 +99,13 @@ Available commands:
 
 action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),
+    application:load(rabbit),
     N = list_to_integer(NodeCount),
     {NodePids, Running} =
         start_nodes(N, N, [], true,
                     rabbit_misc:nodeparts(
                       getenv("RABBITMQ_NODENAME")),
-                    list_to_integer(getenv("RABBITMQ_NODE_PORT")),
+                    get_node_tcp_listener(1 == N),
                     RpcTimeout),
     write_pids_file(NodePids),
     case Running of
@@ -158,26 +159,30 @@ action(rotate_logs, [Suffix], RpcTimeout) ->
 %% Running is a boolean exhibiting success at some moment
 start_nodes(0, _, PNodePid, Running, _, _, _) -> {PNodePid, Running};
 
+start_nodes(1, 1, [], true, NodeName, NodeListen, RpcTimeout) ->
+    {NodePid, Started} = start_single_node(rabbit_misc:makenode(NodeName),
+                                           RpcTimeout),
+    start_nodes(0, 1, [NodePid], Started, NodeName, NodeListen, RpcTimeout);
+
 start_nodes(N, Total, PNodePid, Running,
-            NodeNameBase, NodePortBase, RpcTimeout) ->
+            NodeNameBase, {NodeIpAddress, NodePortBase}, RpcTimeout) ->
     {NodePre, NodeSuff} = NodeNameBase,
     NodeNumber = Total - N,
-    NodePre1 = if NodeNumber == 0 ->
-                       %% For compatibility with running a single node
-                       NodePre;
-                  true ->           
-                       NodePre ++ "_" ++ integer_to_list(NodeNumber)
-               end,
+    NodePre1 = NodePre ++ "_" ++ integer_to_list(NodeNumber),
     {NodePid, Started} = start_node(rabbit_misc:makenode({NodePre1, NodeSuff}),
-                                    NodePortBase + NodeNumber,
+                                    {NodeIpAddress, NodePortBase + NodeNumber},
                                     RpcTimeout),
     start_nodes(N - 1, Total, [NodePid | PNodePid],
-                Started and Running,
-                NodeNameBase, NodePortBase, RpcTimeout).
+                Started and Running, NodeNameBase,
+                {NodeIpAddress, NodePortBase}, RpcTimeout).
 
-start_node(Node, NodePort, RpcTimeout) ->
+start_node(Node, {NodeIpAddress, NodePort}, RpcTimeout) ->
     os:putenv("RABBITMQ_NODENAME", atom_to_list(Node)),
     os:putenv("RABBITMQ_NODE_PORT", integer_to_list(NodePort)),
+    os:putenv("RABBITMQ_NODE_IP_ADDRESS", atom_to_list(NodeIpAddress)),
+    start_single_node(Node, RpcTimeout).
+
+start_single_node(Node, RpcTimeout) ->
     io:format("Starting node ~s...~n", [Node]),
     case rpc:call(Node, os, getpid, []) of
         {badrpc, _} ->
@@ -320,4 +325,22 @@ getenv(Var) ->
     case os:getenv(Var) of
         false -> throw({missing_env_var, Var});
         Value -> Value
+    end.
+
+get_node_tcp_listener(OneNode) ->
+    try
+        {list_to_atom(getenv("RABBITMQ_NODE_IP_ADDRESS")),
+         list_to_integer(getenv("RABBITMQ_NODE_PORT"))}
+    catch _ ->
+            case application:get_env(rabbit, tcp_listeners) of
+                {ok, [{_IpAddy, _Port} = Listener]} ->
+                    Listener;
+                {ok, _Other} when OneNode ->
+                    it_matters_not;
+                {ok, Other} ->
+                    throw({cannot_start_multiple_nodes, multiple_tcp_listeners,
+                           Other});
+                undefined ->
+                    throw({missing_configuration, tcp_listeners})
+            end
     end.
