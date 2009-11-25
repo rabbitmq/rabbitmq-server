@@ -31,7 +31,7 @@
 
 -module(file_handle_cache).
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
@@ -117,8 +117,7 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [],
-                           [{timeout, infinity}]).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], [{timeout, infinity}]).
 
 open(Path, Mode, Options) ->
     case is_appender(Mode) of
@@ -303,7 +302,7 @@ set_maximum_since_use(MaximumAge) ->
                                true  -> Tree;
                                false -> {Oldest, _Ref} =
                                             gb_trees:smallest(Tree),
-                                        gen_server2:cast(
+                                        gen_server:cast(
                                           ?SERVER, {update, self(), Oldest})
                            end,
                            Tree
@@ -313,10 +312,10 @@ set_maximum_since_use(MaximumAge) ->
     end.
 
 decrement() ->
-    gen_server2:cast(?SERVER, decrement).
+    gen_server:cast(?SERVER, decrement).
 
 increment() ->
-    gen_server2:cast(?SERVER, increment).
+    gen_server:cast(?SERVER, increment).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -419,8 +418,8 @@ open1(Path, Mode, Options, Ref, Offset) ->
             with_age_tree(fun (Tree) ->
                                   Tree1 = gb_trees:insert(Now, Ref, Tree),
                                   {Oldest, _Ref} = gb_trees:smallest(Tree1),
-                                  gen_server2:cast(?SERVER,
-                                                   {open, self(), Oldest}),
+                                  gen_server:cast(?SERVER,
+                                                  {open, self(), Oldest}),
                                   Tree1
                           end),
             {ok, Handle2};
@@ -452,7 +451,7 @@ close1(Ref, Handle, SoftOrHard) ->
                                                     gb_trees:smallest(Tree1),
                                                 Oldest1
                                         end,
-                                    gen_server2:cast(
+                                    gen_server:cast(
                                       ?SERVER, {close, self(), Oldest}),
                                     Tree1
                             end)
@@ -610,7 +609,7 @@ maybe_reduce(State = #fhc_state { limit = Limit, count = Count,
                                                 AverageAge}
                             end, Pids)
     end,
-    {ok, _TRef} = timer:apply_after(?FILE_HANDLES_CHECK_INTERVAL, gen_server2,
+    {ok, _TRef} = timer:apply_after(?FILE_HANDLES_CHECK_INTERVAL, gen_server,
                                     cast, [?SERVER, check_counts]),
     State;
 maybe_reduce(State) ->
