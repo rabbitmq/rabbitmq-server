@@ -122,16 +122,34 @@ start_link() ->
 
 open(Path, Mode, Options) ->
     case is_appender(Mode) of
-        true -> {error, append_not_supported};
+        true  ->
+            {error, append_not_supported};
         false ->
             Path1 = filename:absname(Path),
-            case get({Path1, fhc_file}) of
-                File = #file {} ->
-                    open_new_record(Path1, Mode, Options, File);
-                undefined ->
-                    File = #file { reader_count = 0, has_writer = false },
-                    put({Path1, fhc_file}, File),
-                    open_new_record(Path1, Mode, Options, File)
+            File1 = #file { reader_count = RCount, has_writer = HasWriter } =
+                case get({Path1, fhc_file}) of
+                    File = #file {} -> File;
+                    undefined       -> File = #file { reader_count = 0,
+                                                      has_writer = false },
+                                       put({Path1, fhc_file}, File),
+                                       File
+                end,
+            IsWriter = is_writer(Mode),
+            case IsWriter andalso HasWriter of
+                true  -> {error, writer_exists};
+                false -> RCount1 = case is_reader(Mode) of
+                                       true  -> RCount + 1;
+                                       false -> RCount
+                                   end,
+                         HasWriter1 = HasWriter orelse IsWriter,
+                         put({Path1, fhc_file},
+                             File1 #file { reader_count = RCount1,
+                                           has_writer = HasWriter1}),
+                         Ref = make_ref(),
+                         case open1(Path1, Mode, Options, Ref, bof) of
+                             {ok, _Handle} -> {ok, Ref};
+                             Error         -> Error
+                         end
             end
     end.
 
@@ -394,27 +412,6 @@ put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
     with_age_tree(
       fun (Tree) -> gb_trees:insert(Now, Ref, gb_trees:delete(Then, Tree)) end),
     put({Ref, fhc_handle}, Handle #handle { last_used_at = Now }).
-
-open_new_record(Path, Mode, Options, File =
-                #file { reader_count = RCount, has_writer = HasWriter }) ->
-    IsWriter = is_writer(Mode),
-    case IsWriter andalso HasWriter of
-        true ->
-            {error, writer_exists};
-        false ->
-            RCount1 = case is_reader(Mode) of
-                          true  -> RCount + 1;
-                          false -> RCount
-                      end,
-            put({Path, fhc_file},
-                File #file { reader_count = RCount1,
-                             has_writer = HasWriter orelse IsWriter }),
-            Ref = make_ref(),
-            case open1(Path, Mode, Options, Ref, bof) of
-                {ok, _Handle} -> {ok, Ref};
-                Error         -> Error
-            end
-    end.
 
 open1(Path, Mode, Options, Ref, Offset) ->
     case file:open(Path, Mode) of
