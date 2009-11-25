@@ -42,7 +42,7 @@
 
 -module(vm_memory_monitor).
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
 -export([start_link/1]).
 
@@ -89,13 +89,13 @@
 %%----------------------------------------------------------------------------
 
 start_link(Args) ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [Args], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [Args], []).
 
 init([MemFraction]) ->
     TotalMemory =
         case get_total_memory() of
             unknown ->
-                rabbit_log:warning(
+                error_logger:warning_msg(
                   "Unknown total memory size for your OS ~p. "
                   "Assuming memory size is ~pMB.~n",
                   [os:type(), trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/1048576)]),
@@ -103,7 +103,8 @@ init([MemFraction]) ->
             M -> M
         end,
     MemLimit = get_mem_limit(MemFraction, TotalMemory),
-    rabbit_log:info("Memory limit set to ~pMB.~n", [trunc(MemLimit/1048576)]),
+    error_logger:info_msg("Memory limit set to ~pMB.~n",
+                          [trunc(MemLimit/1048576)]),
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
     State = #state { total_memory = TotalMemory,
                      memory_limit = MemLimit,
@@ -117,8 +118,8 @@ handle_call(get_vm_memory_high_watermark, _From, State) ->
 
 handle_call({set_vm_memory_high_watermark, MemFraction}, _From, State) ->
     MemLimit = get_mem_limit(MemFraction, State#state.total_memory),
-    rabbit_log:info("Memory alarm changed to ~p, ~p bytes.~n",
-                    [MemFraction, MemLimit]),
+    error_logger:info_msg("Memory alarm changed to ~p, ~p bytes.~n",
+                          [MemFraction, MemLimit]),
     {reply, ok, State#state{memory_limit = MemLimit}};
 
 handle_call(get_check_interval, _From, State) ->
@@ -151,22 +152,22 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 update() ->
-    gen_server2:cast(?SERVER, update).
+    gen_server:cast(?SERVER, update).
 
 get_total_memory() ->
     get_total_memory(os:type()).
 
 get_check_interval() ->
-    gen_server2:call(?MODULE, get_check_interval).
+    gen_server:call(?MODULE, get_check_interval).
 
 set_check_interval(Fraction) ->
-    gen_server2:call(?MODULE, {set_check_interval, Fraction}).
+    gen_server:call(?MODULE, {set_check_interval, Fraction}).
 
 get_vm_memory_high_watermark() ->
-    gen_server2:call(?MODULE, get_vm_memory_high_watermark).
+    gen_server:call(?MODULE, get_vm_memory_high_watermark).
 
 set_vm_memory_high_watermark(Fraction) ->
-    gen_server2:call(?MODULE, {set_vm_memory_high_watermark, Fraction}).
+    gen_server:call(?MODULE, {set_vm_memory_high_watermark, Fraction}).
 
 %%----------------------------------------------------------------------------
 %% Server Internals
@@ -189,8 +190,9 @@ internal_update(State = #state { memory_limit = MemLimit,
     State #state {alarmed = NewAlarmed}.
 
 emit_update_info(State, MemUsed, MemLimit) ->
-    rabbit_log:info("vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
-                    [State, MemUsed, MemLimit]).
+    error_logger:info_msg(
+      "vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
+      [State, MemUsed, MemLimit]).
 
 start_timer(Timeout) ->
     {ok, TRef} = timer:apply_interval(Timeout, ?MODULE, update, []),
@@ -202,7 +204,7 @@ get_vm_limit() ->
     case erlang:system_info(wordsize) of
         4 -> 4294967296;     %% 4 GB for 32 bits  2^32
         8 -> 281474976710656 %% 256 TB for 64 bits 2^48
-             %% http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
+             %%http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
     end.
 
 get_mem_limit(MemFraction, TotalMemory) ->
