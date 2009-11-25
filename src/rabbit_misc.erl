@@ -55,7 +55,7 @@
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
--export([unfold/2, ceil/1, cmd/1]).
+-export([unfold/2, ceil/1]).
 -export([sort_field_table/1]).
 
 -import(mnesia).
@@ -127,7 +127,6 @@
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
--spec(cmd/1 :: (string()) -> string()). 
 -spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
 
 -endif.
@@ -496,10 +495,3 @@ ceil(N) ->
 %% Sorts a list of AMQP table fields as per the AMQP spec
 sort_field_table(Arguments) ->
     lists:keysort(1, Arguments).
-
-cmd(Command) ->
-    Exec = hd(string:tokens(Command, " ")),
-    case os:find_executable(Exec) of
-        false -> throw({command_not_found, Exec});
-        _     -> os:cmd(Command)
-    end.
