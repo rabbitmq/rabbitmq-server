@@ -206,24 +206,18 @@ append(Ref, Data) ->
       end).
 
 sync(Ref) ->
-    with_handles(
+    with_flushed_handles(
       [Ref],
       fun ([#handle { is_dirty = false, write_buffer = [] }]) ->
               ok;
-          ([Handle]) ->
-              %% write_buffer will set is_dirty, or leave it set if
-              %% buffer empty
-              case write_buffer(Handle) of
-                  {ok, Handle1 = #handle { hdl = Hdl, offset = Offset,
-                                           is_dirty = true }} ->
-                      case file:sync(Hdl) of
-                          ok    -> {ok, [Handle1 #handle {
-                                           trusted_offset = Offset,
-                                           is_dirty = false }]};
-                          Error -> {Error, [Handle1]}
-                      end;
-                  {Error, Handle1} ->
-                      {Error, [Handle1]}
+          ([Handle = #handle { hdl = Hdl, offset = Offset,
+                               is_dirty = true, write_buffer = [] }]) ->
+              case file:sync(Hdl) of
+                  ok ->
+                      {ok, [Handle #handle { trusted_offset = Offset,
+                                             is_dirty = false }]};
+                  Error ->
+                      {Error, [Handle]}
               end
       end).
 
