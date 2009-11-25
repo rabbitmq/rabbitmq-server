@@ -170,21 +170,26 @@ copy(Src, Dest, Count) ->
 
 set_maximum_since_use(MaximumAge) ->
     Now = now(),
-    lists:foreach(
-      fun ({{Ref, fhc_handle}, Handle = #handle { hdl = Hdl,
-                                                  last_used_at = Then }}) ->
+    Report =
+        lists:foldl(
+          fun ({{Ref, fhc_handle},
+                Handle = #handle { hdl = Hdl, last_used_at = Then }}, Rep) ->
               Age = timer:now_diff(Now, Then),
               case Hdl /= closed andalso Age >= MaximumAge of
                   true -> case close1(Ref, Handle, soft) of
-                              {ok, Handle1} -> put({Ref, fhc_handle}, Handle1);
-                              _             -> ok
+                              {ok, Handle1} -> put({Ref, fhc_handle}, Handle1),
+                                               false;
+                              _             -> Rep
                           end;
-                  false -> ok
+                  false -> Rep
               end;
-          (_KeyValuePair) ->
-              ok
-      end, get()),
-    report_eldest().
+              (_KeyValuePair, Rep) ->
+                  Rep
+          end, true, get()),
+    case Report of
+        true -> report_eldest();
+        false -> ok
+    end.
 
 decrement() ->
     gen_server2:cast(?SERVER, decrement).
@@ -323,7 +328,7 @@ report_eldest() ->
               case gb_trees:is_empty(Tree) of
                   true  -> Tree;
                   false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
-                           gen_server2:cast(?SERVER, {self(), update, Oldest})
+                           gen_server2:cast(?SERVER, {update, self(), Oldest})
               end,
               Tree
       end),
@@ -441,7 +446,7 @@ open1(Path, Mode, Options, Ref, Offset) ->
                                   Tree1 = gb_trees:insert(Now, Ref, Tree),
                                   {Oldest, _Ref} = gb_trees:smallest(Tree1),
                                   gen_server2:cast(?SERVER,
-                                                   {self(), open, Oldest}),
+                                                   {open, self(), Oldest}),
                                   Tree1
                           end),
             {ok, Handle1};
@@ -474,7 +479,7 @@ close1(Ref, Handle, SoftOrHard) ->
                                                Oldest1
                                   end,
                               gen_server2:cast(
-                                ?SERVER, {self(), close, Oldest}),
+                                ?SERVER, {close, self(), Oldest}),
                               Tree1
                       end)
             end,
@@ -571,20 +576,20 @@ init([]) ->
 handle_call(_Msg, _From, State) ->
     {reply, message_not_understood, State}.
 
-handle_cast({Pid, open, EldestUnusedSince}, State =
+handle_cast({open, Pid, EldestUnusedSince}, State =
             #fhc_state { elders = Elders, count = Count }) ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
     {noreply, maybe_reduce(State #fhc_state { elders = Elders1,
                                               count = Count + 1 })};
 
-handle_cast({Pid, update, EldestUnusedSince}, State =
+handle_cast({update, Pid, EldestUnusedSince}, State =
             #fhc_state { elders = Elders }) ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
     %% don't call maybe_reduce from here otherwise we can create a
     %% storm of messages
     {noreply, State #fhc_state { elders = Elders1 }};
 
-handle_cast({Pid, close, EldestUnusedSince}, State =
+handle_cast({close, Pid, EldestUnusedSince}, State =
             #fhc_state { elders = Elders, count = Count }) ->
     Elders1 = case EldestUnusedSince of
                   undefined -> dict:erase(Pid, Elders);
@@ -625,11 +630,15 @@ maybe_reduce(State = #fhc_state { limit = Limit, count = Count,
                           {[Pid|PidsAcc], SumAcc + timer:now_diff(Now, Eldest),
                            CountAcc + 1}
                   end, {[], 0, 0}, Elders),
-    %% ClientCount can't be 0.
-    AverageAge = Sum / ClientCount,
-    lists:foreach(fun (Pid) ->
-                          Pid ! {?MODULE, maximum_eldest_since_use, AverageAge}
-                  end, Pids),
+    case Pids of
+        [] -> ok;
+        _ ->
+            %% ClientCount can't be 0 if we have some pids
+            AverageAge = Sum / ClientCount,
+            lists:foreach(
+              fun (Pid) -> Pid ! {?MODULE, maximum_eldest_since_use, AverageAge}
+              end, Pids)
+    end,
     {ok, _TRef} = timer:apply_after(?FILE_HANDLES_CHECK_INTERVAL, gen_server2,
                                     cast, [?SERVER, check_counts]),
     State;
