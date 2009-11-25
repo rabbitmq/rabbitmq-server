@@ -414,15 +414,16 @@ open1(Path, Mode, Options, Ref, Offset) ->
                 end,
             Now = now(),
             Handle =
-                #handle { hdl = Hdl, offset = 0, trusted_offset = Offset,
+                #handle { hdl = Hdl, offset = 0, trusted_offset = 0,
                           write_buffer_size = 0, options = Options,
                           write_buffer_size_limit = WriteBufferSize,
                           write_buffer = [], at_eof = false, mode = Mode,
                           is_write = is_writer(Mode), is_read = is_reader(Mode),
                           path = Path, last_used_at = Now,
                           is_dirty = false },
-            {{ok, _Offset}, Handle1} = maybe_seek(Offset, Handle),
-            put({Ref, fhc_handle}, Handle1),
+            {{ok, Offset1}, Handle1} = maybe_seek(Offset, Handle),
+            Handle2 = Handle1 #handle { trusted_offset = Offset1 },
+            put({Ref, fhc_handle}, Handle2),
             with_age_tree(fun (Tree) ->
                                   Tree1 = gb_trees:insert(Now, Ref, Tree),
                                   {Oldest, _Ref} = gb_trees:smallest(Tree1),
@@ -430,7 +431,7 @@ open1(Path, Mode, Options, Ref, Offset) ->
                                                    {open, self(), Oldest}),
                                   Tree1
                           end),
-            {ok, Handle1};
+            {ok, Handle2};
         {error, Reason} ->
             {error, Reason}
     end.
