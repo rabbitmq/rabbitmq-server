@@ -570,7 +570,7 @@ init([]) ->
                 _ ->
                     ulimit()
             end,
-    rabbit_log:info("Limiting to approx ~p file handles~n", [Limit]),
+    error_logger:info_msg("Limiting to approx ~p file handles~n", [Limit]),
     {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0}}.
 
 handle_call(_Msg, _From, State) ->
@@ -664,8 +664,8 @@ ulimit() ->
                                         String)) - ?RESERVED_FOR_OTHERS,
                 lists:max([1, Num]);
             String ->
-                rabbit_log:warning("Unexpected result of \"ulimit -n\": ~p~n",
-                                   [String]),
+                error_logger:warning_msg(
+                  "Unexpected result of \"ulimit -n\": ~p~n", [String]),
                 throw({unexpected_result, String})
         end
     catch _ -> case os:type() of
