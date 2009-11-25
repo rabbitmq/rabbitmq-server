@@ -33,11 +33,16 @@
 
 %% A File Handle Cache
 %%
+%% This extends a subset of the functionality of the Erlang file
+%% module.
+%%
 %% Some constraints
 %% 1) This supports 1 writer, multiple readers per file. Nothing else.
-%% 2) Writes are all appends. You can not write to the middle of a
+%% 2) Do not open the same file from different processes. Bad things
+%% may happen.
+%% 3) Writes are all appends. You cannot write to the middle of a
 %% file, although you can truncate and then append if you want.
-%% 3) Although there is a write buffer, there is no read buffer. Feel
+%% 4) Although there is a write buffer, there is no read buffer. Feel
 %% free to use the read_ahead mode, but beware of the interaction
 %% between that buffer and the write buffer.
 %%
@@ -53,13 +58,11 @@
 %% would be after the write buffer is written out).
 %% 5) You can find out what the offset was when you last sync'd.
 %%
-%% In general, it mirrors exactly the common API with the file module.
-%%
 %% There is also a server component which serves to limit the number
 %% of open file handles in a "soft" way. By "soft", I mean that the
 %% server will never prevent a client from opening a handle, but may
-%% immediately tell it close the handle. Thus you can set the limit to
-%% zero and it will still all work correctly, it's just that
+%% immediately tell it to close the handle. Thus you can set the limit
+%% to zero and it will still all work correctly, it's just that
 %% effectively no caching will take place. The operation of limiting
 %% is as follows:
 %%
@@ -71,9 +74,9 @@
 %% handle. Thus the smallest key in this tree maps to the file handle
 %% that has not been used for the longest amount of time. This
 %% smallest key is included in the messages to the server. As such,
-%% the server keeps track of which file handle has least recently been
-%% used *at the point of the most recent open or close from each
-%% client*.
+%% the server keeps track of when the least recently used file handle
+%% was used *at the point of the most recent open or close* by each
+%% client.
 %%
 %% Note that this data can go very out of date, by the client using
 %% the least recently used handle.
@@ -81,23 +84,24 @@
 %% When the limit is reached, the server calculates the average age of
 %% the last reported least recently used file handle of all the
 %% clients. It then tells all the clients to close any handles not
-%% used for longer than this average. The client should call this back
-%% into set_maximum_since_use/1. However, it's highly possible this
-%% age will be too big because the client has used its file handles in
-%% the mean time. Thus at this point it reports to the server the
-%% current timestamp at which its least recently used file handle was
-%% last used. The server will check two seconds later that either it's
-%% back under the limit, in which case all is well again, or if not,
-%% it will calculate a new average age. Its data will be much more
-%% recent now, and so it's very likely that when this is communicated
-%% to the clients, the clients will close file handles.
+%% used for longer than this average. The client should receive this
+%% message and pass it into set_maximum_since_use/1. However, it's
+%% highly possible this age will be greater than the ages of all the
+%% handles the client knows of because the client has used its file
+%% handles in the mean time. Thus at this point it reports to the
+%% server the current timestamp at which its least recently used file
+%% handle was last used. The server will check two seconds later that
+%% either it's back under the limit, in which case all is well again,
+%% or if not, it will calculate a new average age. Its data will be
+%% much more recent now, and so it's very likely that when this is
+%% communicated to the clients, the clients will close file handles.
 %%
 %% The advantage of this scheme is that there is only communication
 %% from the client to the server on open, close, and when in the
 %% process of trying to reduce file handle usage. There is no
 %% communication from the client to the server on normal file handle
 %% operations. This scheme forms a feed back loop - the server doesn't
-%% care which file handles are close, just that some are, and it
+%% care which file handles are closed, just that some are, and it
 %% checks this repeatedly when over the limit. Given the guarantees of
 %% now(), even if there is just one file handle open, a limit of 1,
 %% and one client, it is certain that when the client calculates the
