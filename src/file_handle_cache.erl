@@ -161,19 +161,18 @@ close(Ref) ->
 
 read(Ref, Count) ->
     with_flushed_handles(
-      [Ref], fun ([#handle { is_read = false }]) ->
-                     {error, not_open_for_reading};
-                 ([Handle = #handle { hdl = Hdl, offset = Offset }]) ->
-                     case file:read(Hdl, Count) of
-                         {ok, Data} = Obj ->
-                             Size = iolist_size(Data),
-                             {Obj, [Handle #handle { offset = Offset + Size }]};
-                         eof ->
-                             {eof, [Handle #handle { at_eof = true }]};
-                         Error ->
-                             {Error, [Handle]}
-                     end
-             end).
+      [Ref],
+      fun ([#handle { is_read = false }]) ->
+              {error, not_open_for_reading};
+          ([Handle = #handle { hdl = Hdl, offset = Offset }]) ->
+              case file:read(Hdl, Count) of
+                  {ok, Data} = Obj -> Offset1 = Offset + iolist_size(Data),
+                                      {Obj,
+                                       [Handle #handle { offset = Offset1 }]};
+                  eof              -> {eof, [Handle #handle { at_eof = true }]};
+                  Error            -> {Error, [Handle]}
+              end
+      end).
 
 append(Ref, Data) ->
     with_handles(
@@ -192,8 +191,9 @@ append(Ref, Data) ->
                                             write_buffer_size = Size,
                                             write_buffer_size_limit = Limit,
                                             at_eof = true } = Handle1} ->
+                      WriteBuffer1 = [Data | WriteBuffer],
                       Size1 = Size + iolist_size(Data),
-                      Handle2 = Handle1 #handle { write_buffer = [ Data | WriteBuffer ],
+                      Handle2 = Handle1 #handle { write_buffer = WriteBuffer1,
                                                   write_buffer_size = Size1 },
                       case Limit /= infinity andalso Size1 > Limit of
                           true  -> {Result, Handle3} = write_buffer(Handle2),
@@ -211,16 +211,16 @@ sync(Ref) ->
       fun ([#handle { is_dirty = false, write_buffer = [] }]) ->
               ok;
           ([Handle]) ->
-              %% write_buffer will set is_dirty, or leave it set if buffer empty
+              %% write_buffer will set is_dirty, or leave it set if
+              %% buffer empty
               case write_buffer(Handle) of
                   {ok, Handle1 = #handle { hdl = Hdl, offset = Offset,
                                            is_dirty = true }} ->
                       case file:sync(Hdl) of
-                          ok ->
-                              {ok, [Handle1 #handle { trusted_offset = Offset,
-                                                      is_dirty = false }]};
-                          Error ->
-                              {Error, [Handle1]}
+                          ok    -> {ok, [Handle1 #handle {
+                                           trusted_offset = Offset,
+                                           is_dirty = false }]};
+                          Error -> {Error, [Handle1]}
                       end;
                   {Error, Handle1} ->
                       {Error, [Handle1]}
@@ -229,10 +229,10 @@ sync(Ref) ->
 
 position(Ref, NewOffset) ->
     with_flushed_handles(
-      [Ref], fun ([Handle]) ->
-                     {Result, Handle1} = maybe_seek(NewOffset, Handle),
-                     {Result, [Handle1]}
-             end).
+      [Ref],
+      fun ([Handle]) -> {Result, Handle1} = maybe_seek(NewOffset, Handle),
+                        {Result, [Handle1]}
+      end).
 
 truncate(Ref) ->
     with_flushed_handles(
@@ -240,14 +240,11 @@ truncate(Ref) ->
       fun ([Handle1 = #handle { hdl = Hdl, offset = Offset,
                                 trusted_offset = TrustedOffset }]) ->
               case file:truncate(Hdl) of
-                  ok ->
-                      {ok, [Handle1 #handle {
-                              at_eof = true,
-                              trusted_offset = lists:min([Offset,
-                                                          TrustedOffset])
-                             }]};
-                  Error ->
-                      {Error, [Handle1]}
+                  ok    -> TrustedOffset1 = lists:min([Offset, TrustedOffset]),
+                           {ok, [Handle1 #handle {
+                                   at_eof = true,
+                                   trusted_offset = TrustedOffset1 }]};
+                  Error -> {Error, [Handle1]}
               end
       end).
 
@@ -257,20 +254,19 @@ last_sync_offset(Ref) ->
                         end).
 
 current_virtual_offset(Ref) ->
-    with_handles([Ref],
-                 fun ([#handle { at_eof = true, is_write = true,
-                                 offset = Offset,
-                                 write_buffer_size = Size }]) ->
-                         {ok, Offset + Size};
-                     ([#handle { offset = Offset }]) ->
-                         {ok, Offset}
-                 end).
+    with_handles([Ref], fun ([#handle { at_eof = true, is_write = true,
+                                        offset = Offset,
+                                        write_buffer_size = Size }]) ->
+                                {ok, Offset + Size};
+                            ([#handle { offset = Offset }]) ->
+                                {ok, Offset}
+                        end).
 
 current_raw_offset(Ref) ->
-    with_handles([Ref], fun ([Handle]) -> {ok, Handle #handle.offset} end). 
+    with_handles([Ref], fun ([Handle]) -> {ok, Handle #handle.offset} end).
 
 append_write_buffer(Ref) ->
-    with_flushed_handles([Ref], fun ([Handle]) -> {ok, [Handle]} end). 
+    with_flushed_handles([Ref], fun ([Handle]) -> {ok, [Handle]} end).
 
 copy(Src, Dest, Count) ->
     with_flushed_handles(
