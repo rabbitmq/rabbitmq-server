@@ -623,26 +623,27 @@ maybe_reduce(State) ->
 %% suggests that BSDs (incl OS X), solaris and linux all agree that
 %% ulimit -n is file handles
 ulimit() ->
-    try
-        %% under Linux, Solaris and FreeBSD, ulimit is a shell
-        %% builtin, not a command. In OS X, it's a command, but it's
-        %% still safe to call it this way:
-        case rabbit_misc:cmd("sh -c \"ulimit -n\"") of
-            "unlimited" -> infinity;
-            String = [C|_] when $0 =< C andalso C =< $9 ->
-                Num = list_to_integer(
-                        lists:takewhile(fun (D) -> $0 =< D andalso D =< $9 end,
-                                        String)) - ?RESERVED_FOR_OTHERS,
-                lists:max([1, Num]);
-            String ->
-                error_logger:warning_msg(
-                  "Unexpected result of \"ulimit -n\": ~p~n", [String]),
-                throw({unexpected_result, String})
-        end
-    catch _ -> case os:type() of
-                   {win32, _OsName} ->
-                       ?FILE_HANDLES_LIMIT_WINDOWS;
-                   _ ->
-                       ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
-               end
+    case os:type() of
+        {win32, _OsName} ->
+            ?FILE_HANDLES_LIMIT_WINDOWS;
+        {unix, _OsName} ->
+            %% Under Linux, Solaris and FreeBSD, ulimit is a shell
+            %% builtin, not a command. In OS X, it's a command.
+            %% Fortunately, os:cmd invokes the cmd in a shell env, so
+            %% we're safe in all cases.
+            case os:cmd("ulimit -n") of
+                "unlimited" -> infinity;
+                String = [C|_] when $0 =< C andalso C =< $9 ->
+                    Num = list_to_integer(
+                            lists:takewhile(
+                              fun (D) -> $0 =< D andalso D =< $9 end, String)) -
+                        ?RESERVED_FOR_OTHERS,
+                    lists:max([1, Num]);
+                _ ->
+                    %% probably a variant of
+                    %% "/bin/sh: line 1: ulimit: command not found\n"
+                    ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
+            end;
+        _ ->
+            ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
     end.
