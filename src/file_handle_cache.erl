@@ -31,6 +31,86 @@
 
 -module(file_handle_cache).
 
+%% A File Handle Cache
+%%
+%% Some constraints
+%% 1) This supports 1 writer, multiple readers per file. Nothing else.
+%% 2) Writes are all appends. You can not write to the middle of a
+%% file, although you can truncate and then append if you want.
+%% 3) Although there is a write buffer, there is no read buffer. Feel
+%% free to use the read_ahead mode, but beware of the interaction
+%% between that buffer and the write buffer.
+%%
+%% Some benefits
+%% 1) You don't have to remember to call sync before close
+%% 2) Buffering is much more flexible than with plain file module, and
+%% you can control when the buffer gets flushed out. This means that
+%% you can rely on reads-after-writes working, without having to call
+%% the expensive sync.
+%% 3) Unnecessary calls to position and sync get optimised out.
+%% 4) You can find out what your 'real' offset is, and what your
+%% 'virtual' offset is (i.e. where the hdl really is, and where it
+%% would be after the write buffer is written out).
+%% 5) You can find out what the offset was when you last sync'd.
+%%
+%% In general, it mirrors exactly the common API with the file module.
+%%
+%% There is also a server component which serves to limit the number
+%% of open file handles in a "soft" way. By "soft", I mean that the
+%% server will never prevent a client from opening a handle, but may
+%% immediately tell it close the handle. Thus you can set the limit to
+%% zero and it will still all work correctly, it's just that
+%% effectively no caching will take place. The operation of limiting
+%% is as follows:
+%%
+%% On open and close, the client sends messages to the server
+%% informing it of opens and closes. This allows the server to keep
+%% track of the number of open handles. The client also keeps a
+%% gb_tree which is updated on every use of a file handle, mapping the
+%% time at which the file handle was last used (timestamp) to the
+%% handle. Thus the smallest key in this tree maps to the file handle
+%% that has not been used for the longest amount of time. This
+%% smallest key is included in the messages to the server. As such,
+%% the server keeps track of which file handle has least recently been
+%% used *at the point of the most recent open or close from each
+%% client*.
+%%
+%% Note that this data can go very out of date, by the client using
+%% the least recently used handle.
+%%
+%% When the limit is reached, the server calculates the average age of
+%% the last reported least recently used file handle of all the
+%% clients. It then tells all the clients to close any handles not
+%% used for longer than this average. The client should call this back
+%% into set_maximum_since_use/1. However, it's highly possible this
+%% age will be too big because the client has used its file handles in
+%% the mean time. Thus at this point it reports to the server the
+%% current timestamp at which its least recently used file handle was
+%% last used. The server will check two seconds later that either it's
+%% back under the limit, in which case all is well again, or if not,
+%% it will calculate a new average age. Its data will be much more
+%% recent now, and so it's very likely that when this is communicated
+%% to the clients, the clients will close file handles.
+%%
+%% The advantage of this scheme is that there is only communication
+%% from the client to the server on open, close, and when in the
+%% process of trying to reduce file handle usage. There is no
+%% communication from the client to the server on normal file handle
+%% operations. This scheme forms a feed back loop - the server doesn't
+%% care which file handles are close, just that some are, and it
+%% checks this repeatedly when over the limit. Given the guarantees of
+%% now(), even if there is just one file handle open, a limit of 1,
+%% and one client, it is certain that when the client calculates the
+%% age of the handle, it'll be greater than when the server calculated
+%% it, hence it should be closed.
+%%
+%% Handles which are closed as a result of the server are put into a
+%% "soft-closed" state in which the handle is closed (data flushed out
+%% and sync'd first) but the state is maintained. The handle will be
+%% fully reopened again as soon as needed, thus users of this library
+%% do not need to worry about their handles being closed by the server
+%% - reopening them when necessary is handled transparently.
+
 -behaviour(gen_server).
 
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
