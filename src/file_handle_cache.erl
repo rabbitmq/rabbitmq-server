@@ -52,8 +52,7 @@
 
 -record(file,
         { reader_count,
-          has_writer,
-          path
+          has_writer
         }).
 
 -record(handle,
@@ -69,7 +68,7 @@
           is_read,
           mode,
           options,
-          global_key,
+          path,
           last_used_at
         }).
 
@@ -123,37 +122,13 @@ open(Path, Mode, Options) ->
         true -> {error, append_not_supported};
         false ->
             Path1 = filename:absname(Path),
-            case get({Path1, fhc_path}) of
-                {gref, GRef} ->
-                    #file { reader_count = RCount, has_writer = HasWriter }
-                        = File = get({GRef, fhc_file}),
-                    Mode1 = lists:usort(Mode),
-                    IsWriter = is_writer(Mode1),
-                    case IsWriter andalso HasWriter of
-                        true ->
-                            {error, writer_exists};
-                        false ->
-                            RCount1 = case is_reader(Mode1) of
-                                          true  -> RCount + 1;
-                                          false -> RCount
-                                      end,
-                            put({GRef, fhc_file},
-                                File #file {
-                                  reader_count = RCount1,
-                                  has_writer = HasWriter orelse IsWriter }),
-                            Ref = make_ref(),
-                            case open1(Path1, Mode1, Options, Ref, GRef, bof) of
-                                {ok, _Handle} -> {ok, Ref};
-                                Error         -> Error
-                            end
-                    end;
+            case get({Path1, fhc_file}) of
+                File = #file {} ->
+                    open_new_record(Path1, Mode, Options, File);
                 undefined ->
-                    GRef = make_ref(),
-                    put({Path1, fhc_path}, {gref, GRef}),
-                    put({GRef, fhc_file},
-                        #file { reader_count = 0, has_writer = false,
-                                path = Path1 }),
-                    open(Path, Mode, Options)
+                    File = #file { reader_count = 0, has_writer = false },
+                    put({Path1, fhc_file}, File),
+                    open_new_record(Path1, Mode, Options, File)
             end
     end.
 
@@ -399,10 +374,9 @@ get_or_reopen(Ref) ->
     case get({Ref, fhc_handle}) of
         undefined ->
             {error, not_open, Ref};
-        #handle { hdl = closed, mode = Mode, global_key = GRef,
-                  options = Options, offset = Offset } ->
-            #file { path = Path } = get({GRef, fhc_file}),
-            open1(Path, Mode, Options, Ref, GRef, Offset);
+        #handle { hdl = closed, mode = Mode, options = Options,
+                  offset = Offset, path = Path } ->
+            open1(Path, Mode, Options, Ref, Offset);
         Handle ->
             {ok, Handle}
     end.
@@ -422,7 +396,28 @@ put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
       fun (Tree) -> gb_trees:insert(Now, Ref, gb_trees:delete(Then, Tree)) end),
     put({Ref, fhc_handle}, Handle #handle { last_used_at = Now }).
 
-open1(Path, Mode, Options, Ref, GRef, Offset) ->
+open_new_record(Path, Mode, Options, File =
+                #file { reader_count = RCount, has_writer = HasWriter }) ->
+    IsWriter = is_writer(Mode),
+    case IsWriter andalso HasWriter of
+        true ->
+            {error, writer_exists};
+        false ->
+            RCount1 = case is_reader(Mode) of
+                          true  -> RCount + 1;
+                          false -> RCount
+                      end,
+            put({Path, fhc_file},
+                File #file { reader_count = RCount1,
+                             has_writer = HasWriter orelse IsWriter }),
+            Ref = make_ref(),
+            case open1(Path, Mode, Options, Ref, bof) of
+                {ok, _Handle} -> {ok, Ref};
+                Error         -> Error
+            end
+    end.
+
+open1(Path, Mode, Options, Ref, Offset) ->
     case file:open(Path, Mode) of
         {ok, Hdl} ->
             WriteBufferSize =
@@ -438,7 +433,7 @@ open1(Path, Mode, Options, Ref, GRef, Offset) ->
                           write_buffer_size_limit = WriteBufferSize,
                           write_buffer = [], at_eof = false, mode = Mode,
                           is_write = is_writer(Mode), is_read = is_reader(Mode),
-                          global_key = GRef, last_used_at = Now,
+                          path = Path, last_used_at = Now,
                           is_dirty = false },
             {{ok, _Offset}, Handle1} = maybe_seek(Offset, Handle),
             put({Ref, fhc_handle}, Handle1),
@@ -456,7 +451,7 @@ open1(Path, Mode, Options, Ref, GRef, Offset) ->
 
 close1(Ref, Handle, SoftOrHard) ->
     case write_buffer(Handle) of
-        {ok, #handle { hdl = Hdl, global_key = GRef, is_dirty = IsDirty,
+        {ok, #handle { hdl = Hdl, path = Path, is_dirty = IsDirty,
                        is_read = IsReader, is_write = IsWriter,
                        last_used_at = Then } = Handle1 } ->
             case Hdl of
@@ -485,17 +480,16 @@ close1(Ref, Handle, SoftOrHard) ->
             end,
             case SoftOrHard of
                 hard ->
-                    #file { reader_count = RCount, has_writer = HasWriter,
-                            path = Path } = File = get({GRef, fhc_file}),
+                    #file { reader_count = RCount, has_writer = HasWriter } =
+                        File = get({Path, fhc_file}),
                     RCount1 = case IsReader of
                                   true  -> RCount - 1;
                                   false -> RCount
                               end,
                     HasWriter1 = HasWriter andalso not IsWriter,
                     case RCount1 =:= 0 andalso not HasWriter1 of
-                        true  -> erase({GRef, fhc_file}),
-                                 erase({Path, fhc_path});
-                        false -> put({GRef, fhc_file},
+                        true  -> erase({Path, fhc_file});
+                        false -> put({Path, fhc_file},
                                      File #file { reader_count = RCount1,
                                                   has_writer = HasWriter1 })
                     end,
