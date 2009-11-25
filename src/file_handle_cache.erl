@@ -213,11 +213,9 @@ sync(Ref) ->
           ([Handle = #handle { hdl = Hdl, offset = Offset,
                                is_dirty = true, write_buffer = [] }]) ->
               case file:sync(Hdl) of
-                  ok ->
-                      {ok, [Handle #handle { trusted_offset = Offset,
-                                             is_dirty = false }]};
-                  Error ->
-                      {Error, [Handle]}
+                  ok    -> {ok, [Handle #handle { trusted_offset = Offset,
+                                                  is_dirty = false }]};
+                  Error -> {Error, [Handle]}
               end
       end).
 
@@ -282,24 +280,35 @@ copy(Src, Dest, Count) ->
 
 set_maximum_since_use(MaximumAge) ->
     Now = now(),
-    Report =
-        lists:foldl(
-          fun ({{Ref, fhc_handle},
-                Handle = #handle { hdl = Hdl, last_used_at = Then }}, Rep) ->
-              Age = timer:now_diff(Now, Then),
-              case Hdl /= closed andalso Age >= MaximumAge of
-                  true -> case close1(Ref, Handle, soft) of
-                              {ok, Handle1} -> put({Ref, fhc_handle}, Handle1),
-                                               false;
-                              _             -> Rep
-                          end;
-                  false -> Rep
-              end;
-              (_KeyValuePair, Rep) ->
-                  Rep
-          end, true, get()),
-    case Report of
-        true -> report_eldest();
+    case lists:foldl(
+           fun ({{Ref, fhc_handle},
+                 Handle = #handle { hdl = Hdl, last_used_at = Then }}, Rep) ->
+                   Age = timer:now_diff(Now, Then),
+                   case Hdl /= closed andalso Age >= MaximumAge of
+                       true  -> case close1(Ref, Handle, soft) of
+                                    {ok, Handle1} ->
+                                        put({Ref, fhc_handle}, Handle1),
+                                        false;
+                                    _ ->
+                                        Rep
+                                end;
+                       false -> Rep
+                   end;
+               (_KeyValuePair, Rep) ->
+                   Rep
+           end, true, get()) of
+        true  -> with_age_tree(
+                   fun (Tree) ->
+                           case gb_trees:is_empty(Tree) of
+                               true  -> Tree;
+                               false -> {Oldest, _Ref} =
+                                            gb_trees:smallest(Tree),
+                                        gen_server2:cast(
+                                          ?SERVER, {update, self(), Oldest})
+                           end,
+                           Tree
+                   end),
+                 ok;
         false -> ok
     end.
 
@@ -310,11 +319,6 @@ increment() ->
     gen_server2:cast(?SERVER, increment).
 
 %%----------------------------------------------------------------------------
-%% Internal versions for the above
-%%----------------------------------------------------------------------------
-
-
-%%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
 
@@ -323,18 +327,6 @@ is_reader(Mode) -> lists:member(read, Mode).
 is_writer(Mode) -> lists:member(write, Mode).
 
 is_appender(Mode) -> lists:member(append, Mode).
-
-report_eldest() ->
-    with_age_tree(
-      fun (Tree) ->
-              case gb_trees:is_empty(Tree) of
-                  true  -> Tree;
-                  false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
-                           gen_server2:cast(?SERVER, {update, self(), Oldest})
-              end,
-              Tree
-      end),
-    ok.
 
 with_handles(Refs, Fun) ->
     ResHandles = lists:foldl(
@@ -442,47 +434,46 @@ close1(Ref, Handle, SoftOrHard) ->
                        is_read = IsReader, is_write = IsWriter,
                        last_used_at = Then } = Handle1 } ->
             case Hdl of
-                closed ->
-                    ok;
-                _ ->
-                    ok = case IsDirty of
-                             true  -> file:sync(Hdl);
-                             false -> ok
-                         end,
-                    ok = file:close(Hdl),
-                    with_age_tree(
-                      fun (Tree) ->
-                              Tree1 = gb_trees:delete(Then, Tree),
-                              Oldest =
-                                  case gb_trees:is_empty(Tree1) of
-                                      true  ->  undefined;
-                                      false -> {Oldest1, _Ref} =
-                                                   gb_trees:smallest(Tree1),
-                                               Oldest1
-                                  end,
-                              gen_server2:cast(
-                                ?SERVER, {close, self(), Oldest}),
-                              Tree1
-                      end)
+                closed -> ok;
+                _      -> ok = case IsDirty of
+                                   true  -> file:sync(Hdl);
+                                   false -> ok
+                               end,
+                          ok = file:close(Hdl),
+                          with_age_tree(
+                            fun (Tree) ->
+                                    Tree1 = gb_trees:delete(Then, Tree),
+                                    Oldest =
+                                        case gb_trees:is_empty(Tree1) of
+                                            true ->
+                                                undefined;
+                                            false ->
+                                                {Oldest1, _Ref} =
+                                                    gb_trees:smallest(Tree1),
+                                                Oldest1
+                                        end,
+                                    gen_server2:cast(
+                                      ?SERVER, {close, self(), Oldest}),
+                                    Tree1
+                            end)
             end,
             case SoftOrHard of
-                hard ->
-                    #file { reader_count = RCount, has_writer = HasWriter } =
-                        File = get({Path, fhc_file}),
-                    RCount1 = case IsReader of
-                                  true  -> RCount - 1;
-                                  false -> RCount
-                              end,
-                    HasWriter1 = HasWriter andalso not IsWriter,
-                    case RCount1 =:= 0 andalso not HasWriter1 of
-                        true  -> erase({Path, fhc_file});
-                        false -> put({Path, fhc_file},
-                                     File #file { reader_count = RCount1,
-                                                  has_writer = HasWriter1 })
-                    end,
-                    ok;
-                soft ->
-                    {ok, Handle1 #handle { hdl = closed }}
+                hard -> #file { reader_count = RCount,
+                                has_writer = HasWriter } = File =
+                            get({Path, fhc_file}),
+                        RCount1 = case IsReader of
+                                      true  -> RCount - 1;
+                                      false -> RCount
+                                  end,
+                        HasWriter1 = HasWriter andalso not IsWriter,
+                        case RCount1 =:= 0 andalso not HasWriter1 of
+                            true  -> erase({Path, fhc_file});
+                            false -> put({Path, fhc_file},
+                                         File #file { reader_count = RCount1,
+                                                      has_writer = HasWriter1 })
+                        end,
+                        ok;
+                soft -> {ok, Handle1 #handle { hdl = closed }}
             end;
         {Error, Handle1} ->
             put_handle(Ref, Handle1),
@@ -492,12 +483,11 @@ close1(Ref, Handle, SoftOrHard) ->
 maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, at_eof = AtEoF,
                                          offset = Offset }) ->
     {AtEoF1, NeedsSeek} = needs_seek(AtEoF, Offset, NewOffset),
-    Result = case NeedsSeek of
-                 true  -> file:position(Hdl, NewOffset);
-                 false -> {ok, Offset}
-             end,
-    case Result of
-        {ok, Offset1} ->
+    case (case NeedsSeek of
+              true  -> file:position(Hdl, NewOffset);
+              false -> {ok, Offset}
+          end) of
+        {ok, Offset1} = Result ->
             {Result, Handle #handle { at_eof = AtEoF1, offset = Offset1 }};
         {error, _} = Error ->
             {Error, Handle}
@@ -541,7 +531,7 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
     end.
 
 %%----------------------------------------------------------------------------
-%% gen_server
+%% gen_server callbacks
 %%----------------------------------------------------------------------------
 
 init([]) ->
@@ -614,12 +604,11 @@ maybe_reduce(State = #fhc_state { limit = Limit, count = Count,
                   end, {[], 0, 0}, Elders),
     case Pids of
         [] -> ok;
-        _ ->
-            %% ClientCount can't be 0 if we have some pids
-            AverageAge = Sum / ClientCount,
-            lists:foreach(
-              fun (Pid) -> Pid ! {?MODULE, maximum_eldest_since_use, AverageAge}
-              end, Pids)
+        _  -> AverageAge = Sum / ClientCount,
+              lists:foreach(fun (Pid) -> Pid ! {?MODULE,
+                                                maximum_eldest_since_use,
+                                                AverageAge}
+                            end, Pids)
     end,
     {ok, _TRef} = timer:apply_after(?FILE_HANDLES_CHECK_INTERVAL, gen_server2,
                                     cast, [?SERVER, check_counts]),
