@@ -85,6 +85,28 @@
 
 
 %%----------------------------------------------------------------------------
+%% Public API
+%%----------------------------------------------------------------------------
+
+update() ->
+    gen_server:cast(?SERVER, update).
+
+get_total_memory() ->
+    get_total_memory(os:type()).
+
+get_check_interval() ->
+    gen_server:call(?MODULE, get_check_interval).
+
+set_check_interval(Fraction) ->
+    gen_server:call(?MODULE, {set_check_interval, Fraction}).
+
+get_vm_memory_high_watermark() ->
+    gen_server:call(?MODULE, get_vm_memory_high_watermark).
+
+set_vm_memory_high_watermark(Fraction) ->
+    gen_server:call(?MODULE, {set_vm_memory_high_watermark, Fraction}).
+
+%%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
@@ -146,28 +168,6 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-%%----------------------------------------------------------------------------
-%% Public API
-%%----------------------------------------------------------------------------
-
-update() ->
-    gen_server:cast(?SERVER, update).
-
-get_total_memory() ->
-    get_total_memory(os:type()).
-
-get_check_interval() ->
-    gen_server:call(?MODULE, get_check_interval).
-
-set_check_interval(Fraction) ->
-    gen_server:call(?MODULE, {set_check_interval, Fraction}).
-
-get_vm_memory_high_watermark() ->
-    gen_server:call(?MODULE, get_vm_memory_high_watermark).
-
-set_vm_memory_high_watermark(Fraction) ->
-    gen_server:call(?MODULE, {set_vm_memory_high_watermark, Fraction}).
 
 %%----------------------------------------------------------------------------
 %% Server Internals
