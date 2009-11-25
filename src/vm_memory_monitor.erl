@@ -74,7 +74,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 :: (float()) -> ('ignore' | {'error', any()} | {'ok', pid()})).
+-spec(start_link/1 :: (float()) ->
+             ('ignore' | {'error', any()} | {'ok', pid()})).
 -spec(update/0 :: () -> 'ok').
 -spec(get_total_memory/0 :: () -> (non_neg_integer() | 'unknown')).
 -spec(get_memory_limit/0 :: () -> (non_neg_integer() | 'undefined')).
