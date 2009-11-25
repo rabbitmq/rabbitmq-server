@@ -631,7 +631,8 @@ ulimit() ->
             %% Fortunately, os:cmd invokes the cmd in a shell env, so
             %% we're safe in all cases.
             case os:cmd("ulimit -n") of
-                "unlimited" -> infinity;
+                "unlimited" ->
+                    infinity;
                 String = [C|_] when $0 =< C andalso C =< $9 ->
                     Num = list_to_integer(
                             lists:takewhile(
