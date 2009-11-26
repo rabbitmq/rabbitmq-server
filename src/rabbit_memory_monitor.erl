@@ -85,17 +85,16 @@
 %% fast moving queue, telling it a very small value will badly hurt
 %% it, unnecessarily: a fast moving queue will often oscillate between
 %% being empty and having a few thousand msgs in it, representing a
-%% few hundred milliseconds. SMALL_INFINITY_OSCILLATION_DURATION is a
-%% threshold: if a queue has been told a duration of infinity last
-%% time, and it's reporting a value <
-%% SMALL_INFINITY_OSCILLATION_DURATION then we send it back a duration
-%% of infinity, even if the current desired duration /= infinity. Thus
-%% for a queue which has been told infinity, it must report a duration
-%% >= SMALL_INFINITY_OSCILLATION_DURATION before it is told a
+%% few hundred milliseconds. SMALL_DURATION_THRESHOLD is a threshold:
+%% if a queue has been told a duration of infinity last time, and it's
+%% reporting a value < SMALL_DURATION_THRESHOLD then we send it back a
+%% duration of infinity, even if the current desired duration /=
+%% infinity. Thus for a queue which has been told infinity, it must
+%% report a duration >= SMALL_DURATION_THRESHOLD before it is told a
 %% non-infinity duration. This basically forms a threshold which
 %% effects faster queues more than slower queues and which accounts
 %% for natural fluctuations occurring in the queue length.
--define(SMALL_INFINITY_OSCILLATION_DURATION, 1.0).
+-define(SMALL_DURATION_THRESHOLD, 1.0).
 
 %% If user disabled vm_memory_monitor, let's assume 1GB of memory we can use.
 -define(MEMORY_SIZE_FOR_DISABLED_VMM, 1073741824).
@@ -169,7 +168,7 @@ handle_call({report_queue_duration, Pid, QueueDuration}, From,
 
     SendDuration1 =
         case QueueDuration /= infinity andalso PrevSendDuration == infinity
-            andalso QueueDuration < ?SMALL_INFINITY_OSCILLATION_DURATION of
+            andalso QueueDuration < ?SMALL_DURATION_THRESHOLD of
             true -> infinity;
             false -> SendDuration
         end,
