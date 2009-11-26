@@ -176,7 +176,7 @@ handle_cast(update, State) ->
     {noreply, internal_update(State)};
 
 handle_cast({deregister, Pid}, State) ->
-    {noreply, internal_deregister(Pid, State)};
+    {noreply, internal_deregister(Pid, true, State)};
 
 handle_cast(stop, State) ->
     {stop, normal, State};
@@ -185,7 +185,7 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason}, State) ->
-    {noreply, internal_deregister(Pid, State)};
+    {noreply, internal_deregister(Pid, false, State)};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -208,13 +208,17 @@ zero_clamp(Sum) ->
         false -> Sum
     end.
 
-internal_deregister(Pid, State = #state { queue_duration_sum = Sum,
-                                          queue_duration_count = Count,
-                                          queue_durations = Durations }) ->
+internal_deregister(Pid, Demonitor,
+                    State = #state { queue_duration_sum = Sum,
+                                     queue_duration_count = Count,
+                                     queue_durations = Durations }) ->
     case ets:lookup(Durations, Pid) of
         [] -> State;
         [#process { reported = PrevQueueDuration, monitor = MRef }] ->
-            true = erlang:demonitor(MRef),
+            true = case Demonitor of
+                       true -> erlang:demonitor(MRef);
+                       false -> true
+                   end,
             {Sum1, Count1} =
                 case PrevQueueDuration of
                     infinity -> {Sum, Count};
