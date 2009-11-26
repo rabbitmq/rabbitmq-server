@@ -81,7 +81,7 @@
 %% told a duration of infinity (eg if less than LIMIT_THRESHOLD memory
 %% is being used). Subsequently, the memory-monitor can calculate the
 %% desired duration as zero, or close to zero (eg now more memory is
-%% being used, but the sum of durations is very small). If it is a
+%% being used, and the sum of durations is very small). If it is a
 %% fast moving queue, telling it a very small value will badly hurt
 %% it, unnecessarily: a fast moving queue will often oscillate between
 %% being empty and having a few thousand msgs in it, representing a
