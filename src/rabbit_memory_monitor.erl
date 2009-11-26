@@ -252,9 +252,6 @@ internal_update(State = #state { memory_limit = Limit,
          DesiredDurationAvg1 >= DesiredDurationAvg) of
         true -> ok;
         false ->
-            %% If we have pessimistic information, we need to inform
-            %% queues to reduce it's memory usage when needed. This
-            %% sometimes wakes up queues from hibernation.
             true =
                 ets:foldl(
                   fun (Proc = #process { reported = QueueDuration,
