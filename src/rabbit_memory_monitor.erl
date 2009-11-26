@@ -77,25 +77,6 @@
 -define(SUM_INC_THRESHOLD, 0.95).
 -define(SUM_INC_AMOUNT, 1.0).
 
-%% A queue may report a duration of 0, or close to zero, and may be
-%% told a duration of infinity (eg if less than LIMIT_THRESHOLD memory
-%% is being used). Subsequently, the memory-monitor can calculate the
-%% desired duration as zero, or close to zero (eg now more memory is
-%% being used, and the sum of durations is very small). If it is a
-%% fast moving queue, telling it a very small value will badly hurt
-%% it, unnecessarily: a fast moving queue will often oscillate between
-%% being empty and having a few thousand msgs in it, representing a
-%% few hundred milliseconds. SMALL_DURATION_THRESHOLD is a threshold:
-%% if a queue has been told a duration of infinity last time, and it's
-%% reporting a value < SMALL_DURATION_THRESHOLD then we send it back a
-%% duration of infinity, even if the current desired duration /=
-%% infinity. Thus for a queue which has been told infinity, it must
-%% report a duration >= SMALL_DURATION_THRESHOLD before it is told a
-%% non-infinity duration. This basically forms a threshold which
-%% effects faster queues more than slower queues and which accounts
-%% for natural fluctuations occurring in the queue length.
--define(SMALL_DURATION_THRESHOLD, 1.0).
-
 %% If user disabled vm_memory_monitor, let's assume 1GB of memory we can use.
 -define(MEMORY_SIZE_FOR_DISABLED_VMM, 1073741824).
 
@@ -166,13 +147,7 @@ handle_call({report_queue_duration, Pid, QueueDuration}, From,
     [Proc = #process{reported = PrevQueueDuration, sent = PrevSendDuration}] =
         ets:lookup(Durations, Pid),
 
-    SendDuration1 =
-        case QueueDuration /= infinity andalso PrevSendDuration == infinity
-            andalso QueueDuration < ?SMALL_DURATION_THRESHOLD of
-            true -> infinity;
-            false -> SendDuration
-        end,
-    gen_server2:reply(From, SendDuration1),
+    gen_server2:reply(From, SendDuration),
 
     {Sum1, Count1} =
             case {PrevQueueDuration, QueueDuration} of
@@ -182,7 +157,7 @@ handle_call({report_queue_duration, Pid, QueueDuration}, From,
                 {_, _} -> {Sum - PrevQueueDuration + QueueDuration, Count}
             end,
     true = ets:insert(Durations, Proc#process{reported = QueueDuration,
-                                              sent = SendDuration1}),
+                                              sent = SendDuration}),
     {noreply, State#state{queue_duration_sum = zero_clamp(Sum1),
                           queue_duration_count = Count1}};
 
@@ -282,13 +257,9 @@ internal_update(State = #state{memory_limit = Limit,
                                        sent = PrevSendDuration}, true) ->
                           Send =
                               case {QueueDuration, PrevSendDuration} of
-                                  {infinity, infinity} ->
-                                      true;
-                                  {infinity, B} ->
-                                      DesiredDurationAvg1 < B;
-                                  {A, infinity} ->
-                                      DesiredDurationAvg1 < A andalso A >=
-                                          ?SMALL_INFINITY_OSCILLATION_DURATION;
+                                  {infinity, infinity} -> true;
+                                  {infinity, B} -> DesiredDurationAvg1 < B;
+                                  {A, infinity} -> DesiredDurationAvg1 < A;
                                   {A, B} ->
                                       DesiredDurationAvg1 < lists:min([A,B])
                               end,

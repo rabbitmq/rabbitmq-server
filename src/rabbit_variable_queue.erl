@@ -49,6 +49,7 @@
           duration_target,
           target_ram_msg_count,
           ram_msg_count,
+          ram_msg_count_prev,
           queue,
           index_state,
           next_seq_id,
@@ -110,6 +111,8 @@
                q4                    :: queue(),
                duration_target       :: non_neg_integer(),
                target_ram_msg_count  :: non_neg_integer(),
+               ram_msg_count         :: non_neg_integer(),
+               ram_msg_count_prev    :: non_neg_integer(),
                queue                 :: queue_name(),
                index_state           :: any(),
                next_seq_id           :: seq_id(),
@@ -174,9 +177,10 @@ init(QueueName) ->
         #vqstate { q1 = queue:new(), q2 = queue:new(),
                    gamma = Gamma,
                    q3 = queue:new(), q4 = queue:new(),
-                   target_ram_msg_count = undefined,
                    duration_target = undefined,
+                   target_ram_msg_count = undefined,
                    ram_msg_count = 0,
+                   ram_msg_count_prev = 0,
                    queue = QueueName,
                    index_state = IndexState1,
                    next_seq_id = NextSeqId,
@@ -243,6 +247,7 @@ remeasure_rates(State = #vqstate { egress_rate = Egress,
                                    rate_timestamp = Timestamp,
                                    in_counter = InCount,
                                    out_counter = OutCount,
+                                   ram_msg_count = RamMsgCount,
                                    duration_target = DurationTarget }) ->
     Now = now(),
     {AvgEgressRate, Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
@@ -255,15 +260,17 @@ remeasure_rates(State = #vqstate { egress_rate = Egress,
                        ingress_rate = Ingress1,
                        avg_ingress_rate = AvgIngressRate,
                        rate_timestamp = Now,
+                       ram_msg_count_prev = RamMsgCount,
                        out_counter = 0, in_counter = 0 }).
 
 ram_duration(#vqstate { avg_egress_rate = AvgEgressRate,
                         avg_ingress_rate = AvgIngressRate,
-                        ram_msg_count = RamMsgCount }) ->
+                        ram_msg_count = RamMsgCount,
+                        ram_msg_count_prev = RamMsgCountPrev }) ->
     %% msgs / (msgs/sec) == sec
     case AvgEgressRate == 0 andalso AvgIngressRate == 0 of
         true  -> infinity;
-        false -> RamMsgCount / (AvgEgressRate + AvgIngressRate)
+        false -> (RamMsgCountPrev + RamMsgCount) / (2 * (AvgEgressRate + AvgIngressRate))
     end.
 
 fetch(State =
@@ -463,7 +470,7 @@ full_flush_journal(State = #vqstate { index_state = IndexState }) ->
 status(#vqstate { q1 = Q1, q2 = Q2, gamma = Gamma, q3 = Q3, q4 = Q4,
                   len = Len, on_sync = {_, _, From},
                   target_ram_msg_count = TargetRamMsgCount,
-                  ram_msg_count = RamMsgCount, 
+                  ram_msg_count = RamMsgCount,
                   avg_egress_rate = AvgEgressRate,
                   avg_ingress_rate = AvgIngressRate }) ->
     [ {q1, queue:len(Q1)},
