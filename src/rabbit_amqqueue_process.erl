@@ -925,7 +925,7 @@ handle_info(Info, State) ->
     {stop, {unhandled_info, Info}, State}.
 
 handle_pre_hibernate(State = #q{ variable_queue_state = VQS }) ->
-    VQS1 = rabbit_variable_queue:full_flush_journal(VQS),
+    VQS1 = rabbit_variable_queue:flush_journal(VQS),
     %% no activity for a while == 0 egress and ingress rates
     DesiredDuration = 
         rabbit_memory_monitor:report_queue_duration(self(), infinity),

@@ -1065,7 +1065,7 @@ queue_index_deliver(SeqIds, Qi) ->
       end, Qi, SeqIds).
 
 queue_index_flush_journal(Qi) ->
-    rabbit_queue_index:full_flush_journal(Qi).
+    rabbit_queue_index:flush_journal(Qi).
 
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
@@ -1230,7 +1230,7 @@ test_variable_queue_dynamic_duration_change() ->
     {_SeqIds1, VQ7} = variable_queue_publish(true, 20, VQ6),
     {VQ8, AckTags1} = variable_queue_fetch(20, true, false, 20, VQ7),
     VQ9 = rabbit_variable_queue:ack(AckTags1, VQ8),
-    VQ10 = rabbit_variable_queue:full_flush_journal(VQ9),
+    VQ10 = rabbit_variable_queue:flush_journal(VQ9),
     {empty, VQ11} = rabbit_variable_queue:fetch(VQ10),
 
     rabbit_variable_queue:terminate(VQ11),
