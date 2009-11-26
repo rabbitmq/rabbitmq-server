@@ -73,8 +73,8 @@
 
 -define(CLEAN_FILENAME, "clean.dot").
 
--define(MAX_ACK_JOURNAL_ENTRY_COUNT, 32768).
--define(ACK_JOURNAL_FILENAME, "journal.jif").
+-define(MAX_JOURNAL_ENTRY_COUNT, 32768).
+-define(JOURNAL_FILENAME, "journal.jif").
 
 -define(DEL_BIT, 0).
 -define(ACK_BIT, 1).
@@ -84,7 +84,7 @@
 
 -define(REL_SEQ_BITS, 14).
 -define(REL_SEQ_BITS_BYTE_ALIGNED, (?REL_SEQ_BITS + 8 - (?REL_SEQ_BITS rem 8))).
--define(SEGMENT_ENTRIES_COUNT, 16384). %% trunc(math:pow(2,?REL_SEQ_BITS))).
+-define(SEGMENT_ENTRY_COUNT, 16384). %% trunc(math:pow(2,?REL_SEQ_BITS))).
 
 %% seq only is binary 00 followed by 14 bits of rel seq id
 %% (range: 0 - 16383)
@@ -103,7 +103,7 @@
 -define(PUBLISH_RECORD_LENGTH_BYTES, ?MSG_ID_BYTES + 2).
 
 %% 1 publish, 1 deliver, 1 ack per msg
--define(SEGMENT_TOTAL_SIZE, ?SEGMENT_ENTRIES_COUNT *
+-define(SEGMENT_TOTAL_SIZE, ?SEGMENT_ENTRY_COUNT *
         (?PUBLISH_RECORD_LENGTH_BYTES +
          (2 * ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES))).
 
@@ -250,7 +250,7 @@ next_segment_boundary(SeqId) ->
     reconstruct_seq_id(SegNum + 1, 0).
 
 segment_size() ->
-    ?SEGMENT_ENTRIES_COUNT.
+    ?SEGMENT_ENTRY_COUNT.
 
 find_lowest_seq_id_seg_and_next_seq_id(State = #qistate { dir = Dir }) ->
     SegNums = all_segment_nums(Dir),
@@ -344,14 +344,14 @@ flush_journal(State = #qistate { journal_ack_dict = JAckDict,
             ok = file_handle_cache:truncate(Hdl),
             ok = file_handle_cache:sync(Hdl),
             State4;
-        JCount1 > ?MAX_ACK_JOURNAL_ENTRY_COUNT ->
+        JCount1 > ?MAX_JOURNAL_ENTRY_COUNT ->
             flush_journal(State3);
         true ->
             State3
     end.
 
 maybe_full_flush(State = #qistate { journal_count = JCount }) ->
-    case JCount > ?MAX_ACK_JOURNAL_ENTRY_COUNT of
+    case JCount > ?MAX_JOURNAL_ENTRY_COUNT of
         true  -> full_flush_journal(State);
         false -> State
     end.
@@ -389,7 +389,7 @@ get_journal_handle(State = #qistate { dir = Dir, seg_num_handles = SegHdls }) ->
         {ok, Hdl} ->
             {Hdl, State};
         error ->
-            Path = filename:join(Dir, ?ACK_JOURNAL_FILENAME),
+            Path = filename:join(Dir, ?JOURNAL_FILENAME),
             Mode = [raw, binary, delayed_write, write, read, read_ahead],
             new_handle(journal, Path, Mode, State)
     end.
@@ -412,9 +412,9 @@ get_counted_handle(SegNum, State = #qistate { partial_segments = Partials },
     Count1 = Count + 1 + CountExtra,
     {State1 #qistate { partial_segments = Partials1 }, {SegNum, Hdl, Count1}};
 get_counted_handle(SegNum, State, {SegNum, Hdl, Count})
-  when Count < ?SEGMENT_ENTRIES_COUNT ->
+  when Count < ?SEGMENT_ENTRY_COUNT ->
     {State, {SegNum, Hdl, Count + 1}};
-get_counted_handle(SegNumA, State, {SegNumB, Hdl, ?SEGMENT_ENTRIES_COUNT})
+get_counted_handle(SegNumA, State, {SegNumB, Hdl, ?SEGMENT_ENTRY_COUNT})
   when SegNumA == SegNumB + 1 ->
     ok = file_handle_cache:append_write_buffer(Hdl),
     get_counted_handle(SegNumA, State, undefined);
@@ -480,10 +480,10 @@ bool_to_int(true ) -> 1;
 bool_to_int(false) -> 0.
 
 seq_id_to_seg_and_rel_seq_id(SeqId) ->
-    { SeqId div ?SEGMENT_ENTRIES_COUNT, SeqId rem ?SEGMENT_ENTRIES_COUNT }.
+    { SeqId div ?SEGMENT_ENTRY_COUNT, SeqId rem ?SEGMENT_ENTRY_COUNT }.
 
 reconstruct_seq_id(SegNum, RelSeq) ->
-    (SegNum * ?SEGMENT_ENTRIES_COUNT) + RelSeq.
+    (SegNum * ?SEGMENT_ENTRY_COUNT) + RelSeq.
 
 seg_num_to_path(Dir, SegNum) ->
     SegName = integer_to_list(SegNum),
@@ -606,7 +606,7 @@ read_and_prune_segments(State = #qistate { dir = Dir }) ->
                   %% the partial_segments dict
                   {PublishHandle1, Partials1} =
                       case PubCount of
-                          ?SEGMENT_ENTRIES_COUNT ->
+                          ?SEGMENT_ENTRY_COUNT ->
                               {PublishHandle, Partials};
                           0 ->
                               {PublishHandle, Partials};
@@ -649,7 +649,7 @@ scatter_journal(TotalMsgCount, State = #qistate { dir = Dir }) ->
     {TotalMsgCount2, State4} =
         dict:fold(fun replay_journal_acks_to_segment/3,
                   {TotalMsgCount1, State3}, ADict1),
-    JournalPath = filename:join(Dir, ?ACK_JOURNAL_FILENAME),
+    JournalPath = filename:join(Dir, ?JOURNAL_FILENAME),
     ok = file:delete(JournalPath),
     {TotalMsgCount2, State4}.
 
@@ -825,7 +825,7 @@ append_acks_to_segment(SegNum, Acks,
                end,
     AckTarget = case dict:find(SegNum, Partials) of
                     {ok, PubCount} -> PubCount;
-                    error          -> ?SEGMENT_ENTRIES_COUNT
+                    error          -> ?SEGMENT_ENTRY_COUNT
                 end,
     AckCount2 = AckCount + length(Acks),
     append_acks_to_segment(SegNum, AckCount2, Acks, AckTarget, State).
@@ -835,8 +835,8 @@ append_acks_to_segment(SegNum, AckCount, _Acks, AckCount, State =
     PubHdl1 = case PubHdl of
                   %% If we're adjusting the pubhdl here then there
                   %% will be no entry in partials, thus the target ack
-                  %% count must be SEGMENT_ENTRIES_COUNT
-                  {SegNum, Hdl, AckCount = ?SEGMENT_ENTRIES_COUNT}
+                  %% count must be SEGMENT_ENTRY_COUNT
+                  {SegNum, Hdl, AckCount = ?SEGMENT_ENTRY_COUNT}
                   when Hdl /= undefined ->
                       {SegNum + 1, undefined, 0};
                   _ ->
