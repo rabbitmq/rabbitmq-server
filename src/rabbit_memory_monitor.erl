@@ -112,7 +112,7 @@ deregister(Pid) ->
     gen_server2:cast(?SERVER, {deregister, Pid}).
 
 report_queue_duration(Pid, QueueDuration) ->
-    gen_server2:call(rabbit_memory_monitor,
+    gen_server2:call(?SERVER,
                      {report_queue_duration, Pid, QueueDuration}, infinity).
 
 stop() ->
