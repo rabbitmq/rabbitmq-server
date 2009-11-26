@@ -92,7 +92,7 @@
          transactions,
          memory
         ]).
-         
+
 %%----------------------------------------------------------------------------
 
 start_link(Q) ->
@@ -121,8 +121,10 @@ init(Q = #amqqueue { name = QName }) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown, #q{variable_queue_state = VQS}) ->
+    ok = rabbit_memory_monitor:deregister(self()),
     _VQS = rabbit_variable_queue:terminate(VQS);
 terminate(_Reason, State = #q{variable_queue_state = VQS}) ->
+    ok = rabbit_memory_monitor:deregister(self()),
     %% FIXME: How do we cancel active subscriptions?
     %% Ensure that any persisted tx messages are removed.
     %% TODO: wait for all in flight tx_commits to complete
