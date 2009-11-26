@@ -144,8 +144,7 @@ handle_call({report_queue_duration, Pid, QueueDuration}, From,
                            queue_durations = Durations,
                            desired_duration = SendDuration}) ->
 
-    [Proc = #process{reported = PrevQueueDuration, sent = PrevSendDuration}] =
-        ets:lookup(Durations, Pid),
+    [Proc = #process{reported=PrevQueueDuration}] = ets:lookup(Durations, Pid),
 
     gen_server2:reply(From, SendDuration),
 
