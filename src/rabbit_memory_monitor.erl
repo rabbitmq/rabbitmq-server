@@ -242,7 +242,7 @@ internal_update(State = #state{memory_limit = Limit,
                                queue_duration_count = Count}) ->
     MemoryRatio = erlang:memory(total) / Limit,
     DesiredDurationAvg1 =
-        case MemoryRatio < ?LIMIT_THRESHOLD of
+        case MemoryRatio < ?LIMIT_THRESHOLD orelse Count == 0 of
             true ->
                 infinity;
             false ->
@@ -250,10 +250,7 @@ internal_update(State = #state{memory_limit = Limit,
                            true -> Sum + ?SUM_INC_AMOUNT;
                            false -> Sum
                        end,
-                case Count == 0 of
-                    true  -> infinity;
-                    false -> (Sum1 / Count) / MemoryRatio
-                end
+                (Sum1 / Count) / MemoryRatio
         end,
     State1 = State#state{desired_duration = DesiredDurationAvg1},
 
