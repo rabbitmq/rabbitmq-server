@@ -46,13 +46,15 @@
         }).
 
 -record(gamma,
-        { seq_id,
-          count
+        { start_seq_id,
+          count,
+          end_seq_id %% note the end_seq_id is always >, not >=
         }).
 
 -ifdef(use_specs).
 
--type(gamma() :: #gamma { seq_id :: non_neg_integer(),
-                          count :: non_neg_integer () }).
+-type(gamma() :: #gamma { start_seq_id :: non_neg_integer(),
+                          count :: non_neg_integer (),
+                          end_seq_id :: non_neg_integer() }).
 
 -endif.

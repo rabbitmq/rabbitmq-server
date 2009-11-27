@@ -41,6 +41,7 @@
 -import(lists).
 
 -include("rabbit.hrl").
+-include("rabbit_queue.hrl").
 -include_lib("kernel/include/file.hrl").
 
 test_content_prop_roundtrip(Datum, Binary) ->
@@ -1201,13 +1202,16 @@ fresh_variable_queue() ->
     assert_prop(S0, len, 0),
     assert_prop(S0, q1, 0),
     assert_prop(S0, q2, 0),
-    assert_prop(S0, gamma, {gamma, undefined, 0}),
+    assert_prop(S0, gamma, #gamma { start_seq_id = undefined,
+                                    count = 0,
+                                    end_seq_id = undefined }),
     assert_prop(S0, q3, 0),
     assert_prop(S0, q4, 0),
     VQ.
 
 test_variable_queue() ->
     passed = test_variable_queue_dynamic_duration_change(),
+    passed = test_variable_queue_partial_segments_gamma_thing(),
     passed.
 
 test_variable_queue_dynamic_duration_change() ->
@@ -1260,3 +1264,50 @@ test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
     after 0 ->
             test_variable_queue_dynamic_duration_change_f(Len, VQ3)
     end.
+
+test_variable_queue_partial_segments_gamma_thing() ->
+    SegmentSize = rabbit_queue_index:segment_size(),
+    HalfSegment = SegmentSize div 2,
+    VQ0 = fresh_variable_queue(),
+    {_SeqIds, VQ1} =
+        variable_queue_publish(true, SegmentSize + HalfSegment, VQ0),
+    VQ2 = rabbit_variable_queue:remeasure_rates(VQ1),
+    VQ3 = rabbit_variable_queue:set_queue_ram_duration_target(0, VQ2),
+    %% one segment in q3 as betas, and half a segment in gamma
+    S3 = rabbit_variable_queue:status(VQ3),
+    io:format("~p~n", [S3]),
+    assert_prop(S3, gamma, #gamma { start_seq_id = SegmentSize,
+                                    count = HalfSegment,
+                                    end_seq_id = SegmentSize + HalfSegment }),
+    assert_prop(S3, q3, SegmentSize),
+    assert_prop(S3, len, SegmentSize + HalfSegment),
+    VQ4 = rabbit_variable_queue:set_queue_ram_duration_target(infinity, VQ3),
+    {[_SeqId], VQ5} = variable_queue_publish(true, 1, VQ4),
+    %% should have 1 alpha, but it's in the same segment as the gammas
+    S5 = rabbit_variable_queue:status(VQ5),
+    io:format("~p~n", [S5]),
+    assert_prop(S5, q1, 1),
+    assert_prop(S5, gamma, #gamma { start_seq_id = SegmentSize,
+                                    count = HalfSegment,
+                                    end_seq_id = SegmentSize + HalfSegment }),
+    assert_prop(S5, q3, SegmentSize),
+    assert_prop(S5, len, SegmentSize + HalfSegment + 1),
+    {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
+                                          SegmentSize + HalfSegment + 1, VQ5),
+    %% the half segment should now be in q3 as betas
+    S6 = rabbit_variable_queue:status(VQ6),
+    io:format("~p~n", [S6]),
+    assert_prop(S6, gamma, #gamma { start_seq_id = undefined,
+                                    count = 0,
+                                    end_seq_id = undefined }),
+    assert_prop(S6, q1, 1),
+    assert_prop(S6, q3, HalfSegment),
+    assert_prop(S6, len, HalfSegment + 1),
+    {VQ7, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
+                                           HalfSegment + 1, VQ6),
+    VQ8 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ7),
+    %% should be empty now
+    {empty, VQ9} = rabbit_variable_queue:fetch(VQ8),
+    rabbit_variable_queue:terminate(VQ9),
+
+    passed.
