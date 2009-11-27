@@ -65,8 +65,6 @@
 -record(basic_message, {exchange_name, routing_key, content,
                         guid, is_persistent}).
 
--record(dq_msg_loc, {queue_and_seq_id, is_delivered, is_persistent, msg_id}).
-
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
 
