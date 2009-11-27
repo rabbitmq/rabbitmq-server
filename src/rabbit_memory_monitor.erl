@@ -270,12 +270,13 @@ internal_update(State = #state { memory_limit = Limit,
                           case (case {QueueDuration, PrevSendDuration} of
                                     {infinity, infinity} ->
                                         true;
-                                    {infinity, B} ->
-                                        DesiredDurationAvg1 < B;
-                                    {A, infinity} ->
-                                        DesiredDurationAvg1 < A;
-                                    {A, B} ->
-                                        DesiredDurationAvg1 < lists:min([A,B])
+                                    {infinity, D} ->
+                                        DesiredDurationAvg1 < D;
+                                    {D, infinity} ->
+                                        DesiredDurationAvg1 < D;
+                                    {D1, D2} ->
+                                        DesiredDurationAvg1 <
+                                            lists:min([D1,D2])
                                 end) of
                               true ->
                                   ok = erlang:apply(
