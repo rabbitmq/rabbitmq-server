@@ -284,7 +284,8 @@ start_child(Mod) ->
 start_child(Mod, Args) ->
     {ok,_} = supervisor:start_child(rabbit_sup,
                                     {Mod, {Mod, start_link, Args},
-                                     transient, 5000, worker, [Mod]}),
+            %% 4294967295 is 2^32 - 1, which is the highest value allowed
+                                     transient, 4294967295, worker, [Mod]}),
     ok.
 
 ensure_working_log_handlers() ->

@@ -903,18 +903,12 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
         {ok, NewState}   -> noreply(NewState);
         {stop, NewState} -> {stop, normal, NewState}
     end;
-handle_info({'EXIT', _DownPid, normal}, State) ->
-    %% because we have trap_exit on, we'll pick up here the prefetcher
-    %% going down. We probably need to make sure that we really are
-    %% just picking up the prefetcher here. It's safe to ignore it
-    %% though, provided 'normal'
-    noreply(State);
 
 handle_info(timeout, State = #q{variable_queue_state = VQS}) ->
     noreply(
       run_message_queue(
         State#q{variable_queue_state =
-                rabbit_variable_queue:tx_commit_from_vq(VQS)}));    
+                rabbit_variable_queue:tx_commit_from_vq(VQS)}));
 
 handle_info({file_handle_cache, maximum_eldest_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -927,7 +921,7 @@ handle_info(Info, State) ->
 handle_pre_hibernate(State = #q{ variable_queue_state = VQS }) ->
     VQS1 = rabbit_variable_queue:flush_journal(VQS),
     %% no activity for a while == 0 egress and ingress rates
-    DesiredDuration = 
+    DesiredDuration =
         rabbit_memory_monitor:report_queue_duration(self(), infinity),
     VQS2 = rabbit_variable_queue:set_queue_ram_duration_target(
              DesiredDuration, VQS1),
