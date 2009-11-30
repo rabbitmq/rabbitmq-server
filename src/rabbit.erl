@@ -120,21 +120,20 @@ start(normal, []) ->
 
     print_banner(),
 
-    HookModules = discover_hooks(startup_hook),
-    io:format("Hooks: ~p~n", [HookModules]), %% TODO: DEBUG removeme
+    HookModules = discover_static_hooks(startup_hook),
 
     lists:foreach(
       fun ({Phase, Msg, Thunk}) ->
               io:format("starting ~-20s ...", [Msg]),
-              ok = run_hooks(HookModules, startup_hook, {pre, Phase}),
+              ok = run_static_hooks(HookModules, startup_hook, {pre, Phase}),
               Thunk(),
-              ok = run_hooks(HookModules, startup_hook, {post, Phase}),
+              ok = run_static_hooks(HookModules, startup_hook, {post, Phase}),
               io:format("done~n");
           ({Phase, Msg, M, F, A}) ->
               io:format("starting ~-20s ...", [Msg]),
-              ok = run_hooks(HookModules, startup_hook, {pre, Phase}),
+              ok = run_static_hooks(HookModules, startup_hook, {pre, Phase}),
               apply(M, F, A),
-              ok = run_hooks(HookModules, startup_hook, {post, Phase}),
+              ok = run_static_hooks(HookModules, startup_hook, {post, Phase}),
               io:format("done~n")
       end,
       [{database, "database",
@@ -377,15 +376,18 @@ log_rotation_result(ok, {error, SaslLogError}) ->
 log_rotation_result(ok, ok) ->
     ok.
 
-discover_hooks(Hook) ->
-    %% We rely here on the fact that plugins have all their code
-    %% loaded before rabbit is started, so we will be able to find
-    %% hook modules by name.
-    [M || {M, _} <- code:all_loaded(),
-          ok == io:format("? ~p~n", [M]), %% TODO: DEBUG removeme
-          case atom_to_list(M) of "rabbit_hook_" ++ _ -> true; _ -> false end,
+discover_static_hooks(Hook) ->
+    %% App files don't let us stick arbitrary keys in, so we do
+    %% something a bit icky here and go for "convention over
+    %% configuration", choosing to examine modules with names starting
+    %% with 'rabbit_static_hook_' to see if they have appropriate
+    %% exported hook functions.
+    [M || {App, _, _} <- application:loaded_applications(),
+          M <- begin {ok, Ms} = application:get_key(App, modules), Ms end,
+          case atom_to_list(M) of "rabbit_static_hook_" ++ _ -> true; _ -> false end,
+          {module, M} == code:load_file(M),
           erlang:function_exported(M, Hook, 1)].
 
-run_hooks(HookModules, Hook, Event) ->
+run_static_hooks(HookModules, Hook, Event) ->
     _ = [{M, Hook, ok} = {M, Hook, M:Hook(Event)} || M <- HookModules],
     ok.
