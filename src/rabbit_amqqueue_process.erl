@@ -90,7 +90,8 @@
          acks_uncommitted,
          consumers,
          transactions,
-         memory
+         memory,
+         raw_vq_status
         ]).
 
 %%----------------------------------------------------------------------------
@@ -585,6 +586,8 @@ i(transactions, _) ->
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
+i(raw_vq_status, State) ->
+    rabbit_variable_queue:status(State#q.variable_queue_state);
 i(Item, _) ->
     throw({bad_argument, Item}).
 

@@ -375,7 +375,7 @@ get_journal_handle(State = #qistate { dir = Dir, seg_num_handles = SegHdls }) ->
             {Hdl, State};
         error ->
             Path = filename:join(Dir, ?JOURNAL_FILENAME),
-            Mode = [raw, binary, delayed_write, write, read, read_ahead],
+            Mode = [raw, binary, write, read, read_ahead],
             new_handle(journal, Path, Mode, State)
     end.
 
@@ -426,7 +426,6 @@ get_seg_handle(SegNum, State = #qistate { dir = Dir, seg_num_handles = SegHdls }
         error ->
             new_handle(SegNum, seg_num_to_path(Dir, SegNum),
                        [binary, raw, read, write,
-                        {delayed_write, ?SEGMENT_TOTAL_SIZE, 1000},
                         {read_ahead, ?SEGMENT_TOTAL_SIZE}],
                        State)
     end.
