@@ -329,12 +329,13 @@ handle_channel_exit(Pid, Reason, #nc_state{closing = Closing} = State) ->
             {noreply, unregister_channel(Pid, State)};
         %% Channel terminating (server sent 'channel.close')
         {server_initiated_close, Code, _Text} = Msg when Closing =:= false ->
-            case rabbit_framing:is_amqp_hard_error_code(Code) of
-                true  -> ?LOG_WARN("Connection (~p) closing: channel (~p) " 
-                                   "received hard error from server~n",
-                                   [self(), Pid]),
-                         {stop, Msg, State};
-                false -> {noreply, unregister_channel(Pid, State)}
+            {IsHardError, _, _} = rabbit_framing:lookup_amqp_exception(
+                                      rabbit_framing:amqp_exception(Code)),
+            if IsHardError -> ?LOG_WARN("Connection (~p) closing: channel (~p) "
+                                        "received hard error from server~n",
+                                        [self(), Pid]),
+                              {stop, Msg, State};
+               true        -> {noreply, unregister_channel(Pid, State)}
             end;
         %% Channel terminating because of connection_closing
         {_Reason, _Code, _Text} when Closing =/= false ->
