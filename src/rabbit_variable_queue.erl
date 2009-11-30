@@ -702,8 +702,10 @@ test_keep_msg_in_ram(SeqId, #vqstate { target_ram_msg_count = TargetRamMsgCount,
             msg;
         _ ->
             case queue:is_empty(Q1) of
-                true -> index;
-                false -> msg %% can push out elders to disk
+                true  -> index;
+                %% Can push out elders (in q1) to disk. This may also
+                %% result in the msg itself going to disk and q2/q3.
+                false -> msg
             end
     end.
 
@@ -857,12 +859,11 @@ maybe_gammas_to_betas(State =
                                       q2 = queue:new(),
                                       q3 = queue:join(Q3a, Q2) };
                 N when N > 0 ->
-                    maybe_gammas_to_betas(
-                      State1 #vqstate {
-                        q3 = Q3a,
-                        gamma = #gamma { start_seq_id = Gamma1SeqId,
-                                         count = N,
-                                         end_seq_id = GammaSeqIdEnd } })
+                    State1 #vqstate {
+                      q3 = Q3a,
+                      gamma = #gamma { start_seq_id = Gamma1SeqId,
+                                       count = N,
+                                       end_seq_id = GammaSeqIdEnd } }
             end
     end.
 
