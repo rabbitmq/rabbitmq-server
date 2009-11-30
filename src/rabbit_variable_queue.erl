@@ -245,9 +245,7 @@ set_queue_ram_duration_target(
     case TargetRamMsgCount1 == undefined orelse
         TargetRamMsgCount1 >= TargetRamMsgCount of
         true  -> State1;
-        false -> State2 = reduce_memory_use(State1),
-                 garbage_collect(self()),
-                 State2
+        false -> reduce_memory_use(State1)
     end.
 
 remeasure_rates(State = #vqstate { egress_rate = Egress,
