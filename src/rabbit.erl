@@ -120,19 +120,26 @@ start(normal, []) ->
 
     print_banner(),
 
+    HookModules = discover_hooks(startup_hook),
+    io:format("Hooks: ~p~n", [HookModules]), %% TODO: DEBUG removeme
+
     lists:foreach(
-      fun ({Msg, Thunk}) ->
+      fun ({Phase, Msg, Thunk}) ->
               io:format("starting ~-20s ...", [Msg]),
+              ok = run_hooks(HookModules, startup_hook, {pre, Phase}),
               Thunk(),
+              ok = run_hooks(HookModules, startup_hook, {post, Phase}),
               io:format("done~n");
-          ({Msg, M, F, A}) ->
+          ({Phase, Msg, M, F, A}) ->
               io:format("starting ~-20s ...", [Msg]),
+              ok = run_hooks(HookModules, startup_hook, {pre, Phase}),
               apply(M, F, A),
+              ok = run_hooks(HookModules, startup_hook, {post, Phase}),
               io:format("done~n")
       end,
-      [{"database",
+      [{database, "database",
         fun () -> ok = rabbit_mnesia:init() end},
-       {"core processes",
+       {core_processes, "core processes",
         fun () ->
                 ok = start_child(rabbit_log),
                 ok = rabbit_hooks:start(),
@@ -156,28 +163,28 @@ start(normal, []) ->
                 ok = start_child(rabbit_router),
                 ok = start_child(rabbit_node_monitor)
         end},
-       {"recovery",
+       {recovery, "recovery",
         fun () ->
                 ok = maybe_insert_default_data(),
                 ok = rabbit_exchange:recover(),
                 ok = rabbit_amqqueue:recover()
         end},
-       {"persister",
+       {persister, "persister",
         fun () ->
                 ok = start_child(rabbit_persister)
         end},
-       {"guid generator",
+       {guid_generator, "guid generator",
         fun () ->
                 ok = start_child(rabbit_guid)
         end},
-       {"builtin applications",
+       {builtin_applications, "builtin applications",
         fun () ->
                 {ok, DefaultVHost} = application:get_env(default_vhost),
                 ok = error_logger:add_report_handler(
                        rabbit_error_logger, [DefaultVHost]),
                 ok = start_builtin_amq_applications()
         end},
-       {"TCP listeners",
+       {tcp_listeners, "TCP listeners",
         fun () ->
                 ok = rabbit_networking:start(),
                 {ok, TcpListeners} = application:get_env(tcp_listeners),
@@ -187,7 +194,7 @@ start(normal, []) ->
                   end,
                   TcpListeners)
         end},
-       {"SSL listeners",
+       {ssl_listeners, "SSL listeners",
         fun () ->
                 case application:get_env(ssl_listeners) of
                     {ok, []} ->
@@ -368,4 +375,17 @@ log_rotation_result({error, MainLogError}, ok) ->
 log_rotation_result(ok, {error, SaslLogError}) ->
     {error, {cannot_rotate_sasl_logs, SaslLogError}};
 log_rotation_result(ok, ok) ->
+    ok.
+
+discover_hooks(Hook) ->
+    %% We rely here on the fact that plugins have all their code
+    %% loaded before rabbit is started, so we will be able to find
+    %% hook modules by name.
+    [M || {M, _} <- code:all_loaded(),
+          ok == io:format("? ~p~n", [M]), %% TODO: DEBUG removeme
+          case atom_to_list(M) of "rabbit_hook_" ++ _ -> true; _ -> false end,
+          erlang:function_exported(M, Hook, 1)].
+
+run_hooks(HookModules, Hook, Event) ->
+    _ = [{M, Hook, ok} = {M, Hook, M:Hook(Event)} || M <- HookModules],
     ok.
