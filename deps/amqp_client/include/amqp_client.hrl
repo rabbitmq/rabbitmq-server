@@ -29,6 +29,8 @@
 -define(PROTOCOL_HEADER,
         <<"AMQP", 1, 1, ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR>>).
 
+-define(MAX_CHANNEL_NUMBER, 65535).
+
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
 -record(amqp_params, {username     = <<"guest">>,
@@ -36,17 +38,10 @@
                       virtual_host = <<"/">>,
                       host         = "localhost",
                       port         = ?PROTOCOL_PORT,
+                      channel_max  = 0,
+                      frame_max    = 0,
+                      heartbeat    = 0,
                       ssl_options  = none}).
-
--record(rpc_client_state, {channel,
-                           reply_queue,
-                           exchange,
-                           routing_key,
-                           continuations = dict:new(),
-                           correlation_id = 0}).
-
--record(rpc_server_state, {channel,
-                           handler}).
 
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).

@@ -33,7 +33,6 @@
          handle_info/2]).
 
 -record(dc_state, {params = #amqp_params{},
-                   channel_max,
                    closing = false,
                    channels = amqp_channel_util:new_channel_dict()}).
 
@@ -73,13 +72,6 @@ handle_cast(Message, State) ->
               [self(), Message]),
     {noreply, set_closing_state(abrupt, internal_error_closing(), State)}.
 
-%% This is sent by a channel which is shutdown by the server due to a hard error
-handle_info({connection_level_error, _, _} = Message, State) ->
-    {noreply, set_closing_state(abrupt,
-                                #dc_closing{reason = server_initiated_close,
-                                            reply = Message},
-                                State)};
-
 %% Shutdown message
 handle_info({shutdown, Reason}, State) ->
     {_, Code, _} = Reason,
@@ -104,9 +96,14 @@ code_change(_OldVsn, State, _Extra) ->
 handle_command({open_channel, ProposedNumber}, _From,
                State = #dc_state{params = Params,
                                  channels = Channels}) ->
-    {ChannelPid, NewChannels} =
-        amqp_channel_util:open_channel(ProposedNumber, direct, Params, Channels),
-    {reply, ChannelPid, State#dc_state{channels = NewChannels}};
+    try amqp_channel_util:open_channel(ProposedNumber, ?MAX_CHANNEL_NUMBER,
+                                       direct, Params, Channels) of
+        {ChannelPid, NewChannels} ->
+            {reply, ChannelPid, State#dc_state{channels = NewChannels}}
+    catch
+        error:out_of_channel_numbers = Error ->
+            {reply, {Error, ?MAX_CHANNEL_NUMBER}, State}
+    end;
 
 handle_command({close, Close}, From, State) ->
     {noreply, set_closing_state(flush, #dc_closing{reason = app_initiated_close,
@@ -189,7 +186,7 @@ internal_error_closing() ->
 %%---------------------------------------------------------------------------
 
 unregister_channel(Pid, State = #dc_state{channels = Channels}) ->
-    NewChannels = amqp_channel_util:unregister_channel({chpid, Pid}, Channels),
+    NewChannels = amqp_channel_util:unregister_channel_pid(Pid, Channels),
     NewState = State#dc_state{channels = NewChannels},
     check_trigger_all_channels_closed_event(NewState).
 
@@ -208,7 +205,7 @@ check_trigger_all_channels_closed_event(
 
 %% Standard handling of exit signals
 handle_exit(Pid, Reason, #dc_state{channels = Channels} = State) ->
-    case amqp_channel_util:is_channel_registered({chpid, Pid}, Channels) of
+    case amqp_channel_util:is_channel_pid_registered(Pid, Channels) of
         true  -> handle_channel_exit(Pid, Reason, State);
         false -> handle_other_pid_exit(Pid, Reason, State)
     end.
@@ -219,13 +216,17 @@ handle_channel_exit(Pid, Reason, #dc_state{closing = Closing} = State) ->
         %% Normal amqp_channel shutdown
         normal ->
             {noreply, unregister_channel(Pid, State)};
-        %% Channel terminating due to connection closing
-        {_Reason, _Code, _Text} when Closing =/= false ->
-            {noreply, unregister_channel(Pid, State)};
         %% Channel terminating (server sent 'channel.close')
-        {server_initiated_close, _Code, _Text} ->
-            %% TODO determine if it's either a soft or a hard error. Terminate
-            %% connection immediately if it's a hard error
+        {server_initiated_close, Code, _Text} = Msg when Closing =:= false ->
+            case rabbit_framing:is_amqp_hard_error_code(Code) of
+                true  -> ?LOG_WARN("Connection (~p) closing: channel (~p) " 
+                                   "received hard error from server~n",
+                                   [self(), Pid]),
+                         {stop, Msg, State};
+                false -> {noreply, unregister_channel(Pid, State)}
+            end;
+        %% Channel terminating due to connection closing
+        {_CloseReason, _Code, _Text} when Closing =/= false ->
             {noreply, unregister_channel(Pid, State)};
         %% amqp_channel dies with internal reason - this takes the entire
         %% connection down

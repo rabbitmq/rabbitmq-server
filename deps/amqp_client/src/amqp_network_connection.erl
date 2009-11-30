@@ -34,7 +34,7 @@
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0}, {active,false}, {nodelay, true}]).
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
--define(CLIENT_CLOSE_TIMEOUT, 5000).
+-define(CLIENT_CLOSE_TIMEOUT, 60000).
 -define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
 
 -record(nc_state, {params = #amqp_params{},
@@ -42,7 +42,7 @@
                    main_reader_pid,
                    channel0_writer_pid,
                    channel0_framing_pid,
-                   channel_max,
+                   max_channel,
                    heartbeat,
                    closing = false,
                    channels = amqp_channel_util:new_channel_dict()}).
@@ -75,7 +75,7 @@ handle_cast({method, Method, Content}, State) ->
 
 %% This is received after we have sent 'connection.close' to the server
 %% but timed out waiting for 'connection.close_ok' back
-handle_info(time_out_waiting_for_close_ok = Msg,
+handle_info(timeout_waiting_for_close_ok = Msg,
             State = #nc_state{closing = Closing}) ->
     ?LOG_WARN("Connection ~p closing: timed out waiting for"
               "'connection.close_ok'.", [self()]),
@@ -106,11 +106,16 @@ code_change(_OldVsn, State, _Extra) ->
 handle_command({open_channel, ProposedNumber}, _From,
                State = #nc_state{sock = Sock,
                                  main_reader_pid = MainReader,
-                                 channels = Channels}) ->
-    {ChannelPid, NewChannels} =
-        amqp_channel_util:open_channel(ProposedNumber, network,
-                                       {Sock, MainReader}, Channels),
-    {reply, ChannelPid, State#nc_state{channels = NewChannels}};
+                                 channels = Channels,
+                                 max_channel = MaxChannel}) ->
+    try amqp_channel_util:open_channel(ProposedNumber, MaxChannel, network,
+                                       {Sock, MainReader}, Channels) of
+        {ChannelPid, NewChannels} ->
+            {reply, ChannelPid, State#nc_state{channels = NewChannels}}
+    catch
+        error:out_of_channel_numbers = Error ->
+            {reply, {Error, MaxChannel}, State}
+    end;
 
 handle_command({close, #'connection.close'{} = Close}, From, State) ->
     {noreply, set_closing_state(flush, #nc_closing{reason = app_initiated_close,
@@ -250,7 +255,7 @@ internal_error_closing() ->
 %%---------------------------------------------------------------------------
 
 unregister_channel(Pid, State = #nc_state{channels = Channels}) ->
-    NewChannels = amqp_channel_util:unregister_channel({chpid, Pid}, Channels),
+    NewChannels = amqp_channel_util:unregister_channel_pid(Pid, Channels),
     NewState = State#nc_state{channels = NewChannels},
     check_trigger_all_channels_closed_event(NewState).
 
@@ -311,7 +316,7 @@ handle_exit(MainReaderPid, Reason,
 %% Handle exit from channel or other pid
 handle_exit(Pid, Reason,
             #nc_state{channels = Channels} = State) ->
-    case amqp_channel_util:is_channel_registered({chpid, Pid}, Channels) of
+    case amqp_channel_util:is_channel_pid_registered(Pid, Channels) of
         true  -> handle_channel_exit(Pid, Reason, State);
         false -> handle_other_pid_exit(Pid, Reason, State)
     end.
@@ -322,13 +327,17 @@ handle_channel_exit(Pid, Reason, #nc_state{closing = Closing} = State) ->
         %% Normal amqp_channel shutdown
         normal ->
             {noreply, unregister_channel(Pid, State)};
+        %% Channel terminating (server sent 'channel.close')
+        {server_initiated_close, Code, _Text} = Msg when Closing =:= false ->
+            case rabbit_framing:is_amqp_hard_error_code(Code) of
+                true  -> ?LOG_WARN("Connection (~p) closing: channel (~p) " 
+                                   "received hard error from server~n",
+                                   [self(), Pid]),
+                         {stop, Msg, State};
+                false -> {noreply, unregister_channel(Pid, State)}
+            end;
         %% Channel terminating because of connection_closing
         {_Reason, _Code, _Text} when Closing =/= false ->
-            {noreply, unregister_channel(Pid, State)};
-        %% Channel terminating (server sent 'channel.close')
-        {server_initiated_close, _Code, _Text} ->
-            %% TODO determine if it's either a soft or a hard error. Terminate
-            %% connection immediately if it's a hard error
             {noreply, unregister_channel(Pid, State)};
         %% amqp_channel dies with internal reason - this takes the entire
         %% connection down
@@ -393,25 +402,48 @@ do_handshake(State0 = #nc_state{sock = Sock}) ->
 
 network_handshake(State = #nc_state{channel0_writer_pid = Writer0,
                                     params = Params}) ->
-    #'connection.start'{} = handshake_recv(State),
+    Start = handshake_recv(State),
+    ok = check_version(Start),
     amqp_channel_util:do(network, Writer0, start_ok(State), none),
-    #'connection.tune'{channel_max = ChannelMax,
-                       frame_max = FrameMax,
-                       heartbeat = Heartbeat} = handshake_recv(State),
-    TuneOk = #'connection.tune_ok'{channel_max = ChannelMax,
-                                   frame_max = FrameMax,
-                                   heartbeat = Heartbeat},
+    Tune = handshake_recv(State),
+    TuneOk = negotiate_values(Tune, Params),
     amqp_channel_util:do(network, Writer0, TuneOk, none),
-    %% This is something where I don't understand the protocol,
-    %% What happens if the following command reaches the server
-    %% before the tune ok?
-    %% Or doesn't get sent at all?
     ConnectionOpen =
-        #'connection.open'{virtual_host = Params#amqp_params.virtual_host},
+        #'connection.open'{virtual_host = Params#amqp_params.virtual_host,
+                           insist = true},
     amqp_channel_util:do(network, Writer0, ConnectionOpen, none),
+    %% 'connection.redirect' not implemented (we use insist = true to cover)
     #'connection.open_ok'{} = handshake_recv(State),
-    %% TODO What should I do with the KnownHosts?
-    State#nc_state{channel_max = ChannelMax, heartbeat = Heartbeat}.
+    #'connection.tune_ok'{channel_max = ChannelMax,
+                          frame_max   = FrameMax,
+                          heartbeat   = Heartbeat} = TuneOk,
+    ?LOG_INFO("Negotiated maximums: (Channel = ~p, "
+              "Frame= ~p, Heartbeat=~p)~n",
+             [ChannelMax, FrameMax, Heartbeat]),
+    State#nc_state{max_channel = ChannelMax, heartbeat = Heartbeat}.
+
+check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
+                                  version_minor = ?PROTOCOL_VERSION_MINOR}) ->
+    ok;
+check_version(#'connection.start'{version_major = Major,
+                                  version_minor = Minor}) ->
+    exit({protocol_version_mismatch, Major, Minor}).
+
+negotiate_values(#'connection.tune'{channel_max = ServerChannelMax,
+                                    frame_max   = ServerFrameMax,
+                                    heartbeat   = ServerHeartbeat},
+                 #amqp_params{channel_max = ClientChannelMax,
+                              frame_max   = ClientFrameMax,
+                              heartbeat   = ClientHeartbeat}) ->
+    #'connection.tune_ok'{
+        channel_max = negotiate_max_value(ClientChannelMax, ServerChannelMax),
+        frame_max   = negotiate_max_value(ClientFrameMax, ServerFrameMax),
+        heartbeat   = negotiate_max_value(ClientHeartbeat, ServerHeartbeat)}.
+
+negotiate_max_value(Client, Server) when Client =:= 0; Server =:= 0 ->
+    lists:max([Client, Server]);
+negotiate_max_value(Client, Server) ->
+    lists:min([Client, Server]).
 
 start_ok(#nc_state{params = #amqp_params{username = Username,
                                          password = Password}}) ->

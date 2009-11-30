@@ -536,17 +536,14 @@ handle_info({connection_closing, CloseType, Reason},
     end;
 
 %% This is for a channel exception that is sent by the direct
-%% rabbit_channel process - in this case this process needs to tell
-%% the connection process whether this is a hard error or not
+%% rabbit_channel process
 %% @private
-handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName}},
-            State = #c_state{parent_connection = Connection}) ->
-    {ConError, Code, Text} = rabbit_framing:lookup_amqp_exception(ErrorName),
-    case ConError of
-        true  -> Connection ! {connection_level_error, Code, Text};
-        false -> ok
-    end,
-    {stop, {server_initiated_close, Code, Text}, State};
+handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName,
+                                                 explanation = Expl} = Error},
+            State = #c_state{number = Number}) ->
+    ?LOG_WARN("Channel ~p closing: server sent error ~p~n", [Number, Error]),
+    {_, Code, _} = rabbit_framing:lookup_amqp_exception(ErrorName),
+    {stop, {server_initiated_close, Code, Expl}, State};
 
 %%---------------------------------------------------------------------------
 %% Trap exits
