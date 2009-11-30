@@ -389,5 +389,6 @@ discover_static_hooks(Hook) ->
           erlang:function_exported(M, Hook, 1)].
 
 run_static_hooks(HookModules, Hook, Event) ->
-    _ = [{M, Hook, ok} = {M, Hook, M:Hook(Event)} || M <- HookModules],
-    ok.
+    ok = lists:foreach(fun (M) ->
+                          {M, Hook, ok} = {M, Hook, M:Hook(Event)}
+                  end, HookModules).
