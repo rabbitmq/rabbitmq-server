@@ -100,13 +100,15 @@ Available commands:
 action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),
     application:load(rabbit),
-    N = list_to_integer(NodeCount),
+    NodeName = rabbit_misc:nodeparts(getenv("RABBITMQ_NODENAME")),
     {NodePids, Running} =
-        start_nodes(N, N, [], true,
-                    rabbit_misc:nodeparts(
-                      getenv("RABBITMQ_NODENAME")),
-                    get_node_tcp_listener(1 == N),
-                    RpcTimeout),
+        case list_to_integer(NodeCount) of
+            1 -> {NodePid, Started} = start_node(rabbit_misc:makenode(NodeName),
+                                                 RpcTimeout),
+                 {[NodePid], Started};
+            N -> start_nodes(N, N, [], true, NodeName,
+                             get_node_tcp_listener(), RpcTimeout)
+        end,
     write_pids_file(NodePids),
     case Running of
         true  -> ok;
@@ -159,30 +161,26 @@ action(rotate_logs, [Suffix], RpcTimeout) ->
 %% Running is a boolean exhibiting success at some moment
 start_nodes(0, _, PNodePid, Running, _, _, _) -> {PNodePid, Running};
 
-start_nodes(1, 1, [], true, NodeName, NodeListen, RpcTimeout) ->
-    {NodePid, Started} = start_single_node(rabbit_misc:makenode(NodeName),
-                                           RpcTimeout),
-    start_nodes(0, 1, [NodePid], Started, NodeName, NodeListen, RpcTimeout);
-
 start_nodes(N, Total, PNodePid, Running,
             NodeNameBase, {NodeIpAddress, NodePortBase}, RpcTimeout) ->
     {NodePre, NodeSuff} = NodeNameBase,
     NodeNumber = Total - N,
-    NodePre1 = NodePre ++ "_" ++ integer_to_list(NodeNumber),
-    {NodePid, Started} = start_node(rabbit_misc:makenode({NodePre1, NodeSuff}),
-                                    {NodeIpAddress, NodePortBase + NodeNumber},
-                                    RpcTimeout),
+    NodePre1 = case NodeNumber of
+                   %% For compatibility with running a single node
+                   0 -> NodePre;
+                   _ -> NodePre ++ "_" ++ integer_to_list(NodeNumber)
+               end,
+    Node = rabbit_misc:makenode({NodePre1, NodeSuff}),
+    NodePort = NodePortBase + NodeNumber,
+    os:putenv("RABBITMQ_NODENAME", atom_to_list(Node)),
+    os:putenv("RABBITMQ_NODE_PORT", integer_to_list(NodePort)),
+    os:putenv("RABBITMQ_NODE_IP_ADDRESS", NodeIpAddress),
+    {NodePid, Started} = start_node(Node, RpcTimeout),
     start_nodes(N - 1, Total, [NodePid | PNodePid],
                 Started and Running, NodeNameBase,
                 {NodeIpAddress, NodePortBase}, RpcTimeout).
 
-start_node(Node, {NodeIpAddress, NodePort}, RpcTimeout) ->
-    os:putenv("RABBITMQ_NODENAME", atom_to_list(Node)),
-    os:putenv("RABBITMQ_NODE_PORT", integer_to_list(NodePort)),
-    os:putenv("RABBITMQ_NODE_IP_ADDRESS", atom_to_list(NodeIpAddress)),
-    start_single_node(Node, RpcTimeout).
-
-start_single_node(Node, RpcTimeout) ->
+start_node(Node, RpcTimeout) ->
     io:format("Starting node ~s...~n", [Node]),
     case rpc:call(Node, os, getpid, []) of
         {badrpc, _} ->
@@ -298,7 +296,7 @@ kill_wait(Pid, TimeLeft, Forceful) ->
     io:format(".", []),
     is_dead(Pid) orelse kill_wait(Pid, TimeLeft - ?RPC_SLEEP, Forceful).
 
-% Test using some OS clunkiness since we shouldn't trust 
+% Test using some OS clunkiness since we shouldn't trust
 % rpc:call(os, getpid, []) at this point
 is_dead(Pid) ->
     PidS = integer_to_list(Pid),
@@ -327,16 +325,14 @@ getenv(Var) ->
         Value -> Value
     end.
 
-get_node_tcp_listener(OneNode) ->
+get_node_tcp_listener() ->
     try
-        {list_to_atom(getenv("RABBITMQ_NODE_IP_ADDRESS")),
+        {getenv("RABBITMQ_NODE_IP_ADDRESS"),
          list_to_integer(getenv("RABBITMQ_NODE_PORT"))}
     catch _ ->
             case application:get_env(rabbit, tcp_listeners) of
                 {ok, [{_IpAddy, _Port} = Listener]} ->
                     Listener;
-                {ok, _Other} when OneNode ->
-                    it_matters_not;
                 {ok, Other} ->
                     throw({cannot_start_multiple_nodes, multiple_tcp_listeners,
                            Other});
