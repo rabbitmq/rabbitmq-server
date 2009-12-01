@@ -35,7 +35,7 @@
          resolve_channel_number/2, resolve_channel_pid/2,
          is_channel_number_registered/2, is_channel_pid_registered/2,
          channel_number/3]).
--export([broadcast_to_channels/2]).
+-export([broadcast_to_channels/2, handle_exit/4]).
 
 %%---------------------------------------------------------------------------
 %% Opening channels
@@ -220,3 +220,36 @@ find_available_number(It, Candidate) ->
 broadcast_to_channels(Message, _Channels = {_, DictPN}) ->
     dict:map(fun(ChannelPid, _) -> ChannelPid ! Message, ok end, DictPN),
     ok.
+
+handle_exit(Pid, Reason, Channels, Closing) ->
+    case is_channel_pid_registered(Pid, Channels) of
+        true  -> handle_channel_exit(Pid, Reason, Closing);
+        false -> ?LOG_WARN("Connection (~p) closing: received unexpected "
+                           "exit signal from (~p). Reason: ~p~n",
+                           [self(), Pid, Reason]),
+                 other
+    end.
+
+handle_channel_exit(_Pid, normal, _Closing) ->
+    %% Normal amqp_channel shutdown
+    normal;
+handle_channel_exit(Pid, {server_initiated_close, Code, _Text}, false) ->
+    %% Channel terminating (server sent 'channel.close')
+    {IsHardError, _, _} = rabbit_framing:lookup_amqp_exception(
+                            rabbit_framing:amqp_exception(Code)),
+    case IsHardError of
+        true  -> ?LOG_WARN("Connection (~p) closing: channel (~p) "
+                           "received hard error from server~n", [self(), Pid]),
+                 stop;
+        false -> normal
+    end;
+handle_channel_exit(_Pid, {_CloseReason, _Code, _Text}, Closing)
+  when Closing =/= false ->
+    %% Channel terminating due to connection closing
+    normal;
+handle_channel_exit(Pid, Reason, _Closing) ->
+    %% amqp_channel dies with internal reason - this takes
+    %% the entire connection down
+    ?LOG_WARN("Connection (~p) closing: channel (~p) died. Reason: ~p~n",
+              [self(), Pid, Reason]),
+    close.
