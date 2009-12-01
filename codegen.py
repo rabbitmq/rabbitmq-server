@@ -244,19 +244,10 @@ def genErl(spec):
         print 'lookup_amqp_exception(%s) -> {%s, ?%s, <<"%s">>};' % \
               (n.lower(), hardErrorBoolStr, n, n)
 
-    def genIsAmqpHardErrorCode(c,v,cls):
-        mCls = messageConstantClass(cls)
-        if mCls == 'SOFT_ERROR' : genIsAmqpHardErrorCode1(c,'false')
-        elif mCls == 'HARD_ERROR' : genIsAmqpHardErrorCode1(c,'true')
-        elif mCls == '' : pass
-        else: raise 'Unkown constant class', cls
-
-    def genIsAmqpHardErrorCode1(c,hardErrorBoolStr):
+    def genAmqpException(c,v,cls):
         n = erlangConstantName(c)
-        print 'is_amqp_hard_error_code(?%s) -> %s;' % \
-            (n, hardErrorBoolStr)
-        print 'is_amqp_hard_error_code(%s) -> %s;' % \
-            (n.lower(), hardErrorBoolStr)
+        print 'amqp_exception(?%s) -> %s;' % \
+            (n, n.lower())
 
     methods = spec.allMethods()
 
@@ -274,7 +265,7 @@ def genErl(spec):
 -export([encode_method_fields/1]).
 -export([encode_properties/1]).
 -export([lookup_amqp_exception/1]).
--export([is_amqp_hard_error_code/1]).
+-export([amqp_exception/1]).
 
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
@@ -313,12 +304,8 @@ bitvalue(undefined) -> 0.
     print "  rabbit_log:warning(\"Unknown AMQP error code '~p'~n\", [Code]),"
     print "  {true, ?INTERNAL_ERROR, <<\"INTERNAL_ERROR\">>}."
 
-    for(c,v,cls) in spec.constants: genIsAmqpHardErrorCode(c,v,cls)
-    print "is_amqp_hard_error_code(Code) when is_integer(Code) ->"
-    print "  true;"
-    print "is_amqp_hard_error_code(Code) ->"
-    print "  rabbit_log:warning(\"Unknown AMQP error code '~p'~n\", [Code]),"
-    print "  true."
+    for(c,v,cls) in spec.constants: genAmqpException(c,v,cls)
+    print "amqp_exception(_Code) -> undefined."
 
 def genHrl(spec):
     def erlType(domain):
