@@ -161,8 +161,7 @@ action(rotate_logs, [Suffix], RpcTimeout) ->
 %% Running is a boolean exhibiting success at some moment
 start_nodes(0, _, PNodePid, Running, _, _, _) -> {PNodePid, Running};
 
-start_nodes(N, Total, PNodePid, Running,
-            NodeNameBase, {NodeIpAddress, NodePortBase}, RpcTimeout) ->
+start_nodes(N, Total, PNodePid, Running, NodeNameBase, Listener, RpcTimeout) ->
     {NodePre, NodeSuff} = NodeNameBase,
     NodeNumber = Total - N,
     NodePre1 = case NodeNumber of
@@ -171,14 +170,18 @@ start_nodes(N, Total, PNodePid, Running,
                    _ -> NodePre ++ "_" ++ integer_to_list(NodeNumber)
                end,
     Node = rabbit_misc:makenode({NodePre1, NodeSuff}),
-    NodePort = NodePortBase + NodeNumber,
     os:putenv("RABBITMQ_NODENAME", atom_to_list(Node)),
-    os:putenv("RABBITMQ_NODE_PORT", integer_to_list(NodePort)),
-    os:putenv("RABBITMQ_NODE_IP_ADDRESS", NodeIpAddress),
+    case Listener of
+        {NodeIpAddress, NodePortBase} ->
+            NodePort = NodePortBase + NodeNumber,
+            os:putenv("RABBITMQ_NODE_PORT", integer_to_list(NodePort)),
+            os:putenv("RABBITMQ_NODE_IP_ADDRESS", NodeIpAddress);
+        undefined ->
+            ok
+    end,
     {NodePid, Started} = start_node(Node, RpcTimeout),
     start_nodes(N - 1, Total, [NodePid | PNodePid],
-                Started and Running, NodeNameBase,
-                {NodeIpAddress, NodePortBase}, RpcTimeout).
+                Started and Running, NodeNameBase, Listener, RpcTimeout).
 
 start_node(Node, RpcTimeout) ->
     io:format("Starting node ~s...~n", [Node]),
@@ -333,6 +336,8 @@ get_node_tcp_listener() ->
             case application:get_env(rabbit, tcp_listeners) of
                 {ok, [{_IpAddy, _Port} = Listener]} ->
                     Listener;
+                {ok, []} ->
+                    undefined;
                 {ok, Other} ->
                     throw({cannot_start_multiple_nodes, multiple_tcp_listeners,
                            Other});
