@@ -204,42 +204,13 @@ check_trigger_all_channels_closed_event(
 %%---------------------------------------------------------------------------
 
 %% Standard handling of exit signals
-handle_exit(Pid, Reason, #dc_state{channels = Channels} = State) ->
-    case amqp_channel_util:is_channel_pid_registered(Pid, Channels) of
-        true  -> handle_channel_exit(Pid, Reason, State);
-        false -> handle_other_pid_exit(Pid, Reason, State)
+handle_exit(Pid, Reason,
+            #dc_state{channels = Channels, closing = Closing} = State) ->
+    case amqp_channel_util:handle_exit(Pid, Reason, Channels, Closing) of
+        stop   -> {stop, Reason, State};
+        normal -> {noreply, unregister_channel(Pid, State)};
+        close  -> {noreply, set_closing_state(abrupt, internal_error_closing(),
+                                              unregister_channel(Pid, State))};
+        other  -> {noreply, set_closing_state(abrupt, internal_error_closing(),
+                                              State)}
     end.
-
-%% Handle channel exit
-handle_channel_exit(Pid, Reason, #dc_state{closing = Closing} = State) ->
-    case Reason of
-        %% Normal amqp_channel shutdown
-        normal ->
-            {noreply, unregister_channel(Pid, State)};
-        %% Channel terminating (server sent 'channel.close')
-        {server_initiated_close, Code, _Text} = Msg when Closing =:= false ->
-            case rabbit_framing:is_amqp_hard_error_code(Code) of
-                true  -> ?LOG_WARN("Connection (~p) closing: channel (~p) " 
-                                   "received hard error from server~n",
-                                   [self(), Pid]),
-                         {stop, Msg, State};
-                false -> {noreply, unregister_channel(Pid, State)}
-            end;
-        %% Channel terminating due to connection closing
-        {_CloseReason, _Code, _Text} when Closing =/= false ->
-            {noreply, unregister_channel(Pid, State)};
-        %% amqp_channel dies with internal reason - this takes the entire
-        %% connection down
-        _ ->
-            ?LOG_WARN("Connection (~p) closing: channel (~p) died. Reason: ~p~n",
-                      [self(), Pid, Reason]),
-            State1 = unregister_channel(Pid, State),
-            State2 = set_closing_state(abrupt, internal_error_closing(), State1),
-            {noreply, State2}
-    end.
-
-%% Handle other pid exit
-handle_other_pid_exit(Pid, Reason, State) ->
-    ?LOG_WARN("Connection (~p) closing: received unexpected exit signal "
-              "from (~p). Reason: ~p~n", [self(), Pid, Reason]),
-    {noreply, set_closing_state(abrupt, internal_error_closing(), State)}.
