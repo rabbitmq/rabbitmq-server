@@ -596,14 +596,12 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
-                                  type = TypeNameBin,
                                   passive = true,
                                   nowait = NoWait},
               _, State = #ch{ virtual_host = VHostPath }) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_configure_permitted(ExchangeName, State),
-    X = rabbit_exchange:lookup_or_die(ExchangeName),
-    ok = rabbit_exchange:assert_type(X, rabbit_exchange:check_type(TypeNameBin)),
+    _ = rabbit_exchange:lookup_or_die(ExchangeName),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
 handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
