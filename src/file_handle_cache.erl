@@ -194,8 +194,8 @@
 -spec(copy/3 :: (ref(), ref(), non_neg_integer()) ->
              ({'ok', integer()} | error())).
 -spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
--spec(delete/1 :: (ref()) -> ok_or_error()). 
--spec(discard_write_buffer/1 :: (ref()) -> ok_or_error()). 
+-spec(delete/1 :: (ref()) -> ok_or_error()).
+-spec(discard_write_buffer/1 :: (ref()) -> ok_or_error()).
 
 -endif.
 
@@ -366,11 +366,12 @@ copy(Src, Dest, Count) ->
 
 delete(Ref) ->
     case erase({Ref, fhc_handle}) of
-        undefined -> ok;
+        undefined ->
+            ok;
         Handle = #handle { path = Path } ->
-            Handle1 = Handle #handle { is_dirty = false, write_buffer = [] },
-            case close1(Ref, Handle1, hard) of
-                ok -> file:delete(Path);
+            case close1(Ref, Handle #handle { is_dirty = false,
+                                              write_buffer = [] }, hard) of
+                ok    -> file:delete(Path);
                 Error -> Error
             end
     end.
