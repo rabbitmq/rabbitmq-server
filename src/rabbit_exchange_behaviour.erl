@@ -35,16 +35,14 @@
 
 behaviour_info(callbacks) ->
     [
-     %% Called *outside* mnesia transactions.
      {description, 0},
      {publish, 2},
 
-     %% Called *inside* mnesia transactions, must be idempotent.
-     {recover, 1}, %% like init, but called on server startup for durable exchanges
-     {init, 1}, %% like recover, but called on declaration when previously absent
-     {delete, 1}, %% called on deletion
-     {add_binding, 2},
-     {delete_binding, 2}
+     {declare, 1}, %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
+     {init, 1}, %% called after declaration when previously absent, or during recovery
+     {delete, 1}, %% called after exchange deletion
+     {add_binding, 2}, %% called after a binding has been added
+     {delete_binding, 2} %% called after a binding has been deleted
     ];
 behaviour_info(_Other) ->
     undefined.
