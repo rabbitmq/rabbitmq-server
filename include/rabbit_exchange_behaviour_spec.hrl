@@ -32,7 +32,6 @@
 
 -spec(description/0 :: () -> [{atom(), any()}]).
 -spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
--spec(recover/1 :: (exchange()) -> 'ok').
 -spec(init/1 :: (exchange()) -> 'ok').
 -spec(delete/1 :: (exchange()) -> 'ok').
 -spec(add_binding/2 :: (exchange(), binding()) -> 'ok').
