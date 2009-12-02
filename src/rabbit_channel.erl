@@ -592,7 +592,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                         Durable,
                                         Args)
         end,
-    ok = rabbit_exchange:assert_type(X, CheckedType),
+    ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable, Args),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
