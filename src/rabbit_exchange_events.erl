@@ -71,8 +71,8 @@ handle_table_event({write, rabbit_route, #route{binding = B}, [], _ActivityId}) 
 handle_table_event({delete, rabbit_route, #route{binding = B}, _OldRecs, _ActivityId}) ->
     %% Deleted binding.
     ok = with_exchange(B, fun (X = #exchange{type = Type}) -> Type:delete_binding(X, B) end);
-handle_table_event(Event) ->
-    exit({unhandled_table_event, Event}).
+handle_table_event(_Event) ->
+    {error, unhandled_table_event}.
 
 %%---------------------------------------------------------------------------
 
@@ -88,7 +88,15 @@ handle_cast(Request, State) ->
     {stop, {unhandled_cast, Request}, State}.
 
 handle_info({mnesia_table_event, Event}, State) ->
-    ok = handle_table_event(Event),
+    case catch handle_table_event(Event) of
+        {'EXIT', Reason} ->
+            rabbit_log:error("Exchange event callback failed~n~p~n", [[{event, Event},
+                                                                       {reason, Reason}]]);
+        ok ->
+            ok;
+        {error, unhandled_table_event} ->
+            rabbit_log:error("Unexpected mnesia_table_event~n~p~n", [Event])
+    end,
     {noreply, State};
 handle_info(Info, State) ->
     {stop, {unhandled_info, Info}, State}.
