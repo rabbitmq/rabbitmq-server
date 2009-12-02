@@ -35,7 +35,7 @@
 -behaviour(rabbit_exchange_behaviour).
 
 -export([description/0, publish/2]).
--export([init/1, delete/1, add_binding/2, delete_binding/2]).
+-export([declare/1, init/1, delete/1, add_binding/2, delete_binding/2]).
 -include("rabbit_exchange_behaviour_spec.hrl").
 
 description() ->
@@ -46,6 +46,7 @@ publish(#exchange{name = Name},
         Delivery = #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
     rabbit_router:deliver(rabbit_router:match_routing_key(Name, RoutingKey), Delivery).
 
+declare(_X) -> ok.
 init(_X) -> ok.
 delete(_X) -> ok.
 add_binding(_X, _B) -> ok.

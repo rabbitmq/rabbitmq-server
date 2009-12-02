@@ -36,7 +36,7 @@
 -behaviour(rabbit_exchange_behaviour).
 
 -export([description/0, publish/2]).
--export([init/1, delete/1, add_binding/2, delete_binding/2]).
+-export([declare/1, init/1, delete/1, add_binding/2, delete_binding/2]).
 -include("rabbit_exchange_behaviour_spec.hrl").
 
 -ifdef(use_specs).
@@ -120,6 +120,7 @@ headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest],
         end,
     headers_match(PRest, DRest, AllMatch1, AnyMatch1, MatchKind).
 
+declare(_X) -> ok.
 init(_X) -> ok.
 delete(_X) -> ok.
 add_binding(_X, _B) -> ok.

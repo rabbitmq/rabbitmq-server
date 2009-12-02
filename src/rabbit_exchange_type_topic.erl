@@ -35,7 +35,7 @@
 -behaviour(rabbit_exchange_behaviour).
 
 -export([description/0, publish/2]).
--export([init/1, delete/1, add_binding/2, delete_binding/2]).
+-export([declare/1, init/1, delete/1, add_binding/2, delete_binding/2]).
 -include("rabbit_exchange_behaviour_spec.hrl").
 
 -export([topic_matches/2]).
@@ -83,6 +83,7 @@ last_topic_match(P, R, []) ->
 last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
     topic_matches1(P, R) or last_topic_match(P, [BacktrackNext | R], BacktrackList).
 
+declare(_X) -> ok.
 init(_X) -> ok.
 delete(_X) -> ok.
 add_binding(_X, _B) -> ok.

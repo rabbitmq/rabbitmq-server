@@ -38,10 +38,11 @@ behaviour_info(callbacks) ->
      {description, 0},
      {publish, 2},
 
+     {declare, 1}, %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
      {init, 1}, %% called after declaration when previously absent, or during recovery
-     {delete, 1}, %% called after deletion
-     {add_binding, 2}, %% called after a new binding has appeared
-     {delete_binding, 2} %% called after a binding has been removed
+     {delete, 1}, %% called after exchange deletion
+     {add_binding, 2}, %% called after a binding has been added
+     {delete_binding, 2} %% called after a binding has been deleted
     ];
 behaviour_info(_Other) ->
     undefined.
