@@ -58,14 +58,14 @@ with_exchange(#binding{exchange_name = ExchangeName}, Fun) ->
             ok
     end.
 
-handle_table_event({write, rabbit_exchange, X = #exchange{type = Type}, [], _ActivityId}) ->
+handle_table_event({write, rabbit_exchange, X = #exchange{type = Type}, _OldRecs, _ActivityId}) ->
     %% Exchange created/recovered.
     ok = Type:init(X);
 handle_table_event({delete, rabbit_exchange, {rabbit_exchange, _ExchangeName},
                     [X = #exchange{type = Type}], _ActivityId}) ->
     %% Exchange deleted.
     ok = Type:delete(X);
-handle_table_event({write, rabbit_route, #route{binding = B}, [], _ActivityId}) ->
+handle_table_event({write, rabbit_route, #route{binding = B}, _OldRecs, _ActivityId}) ->
     %% New binding.
     ok = with_exchange(B, fun (X = #exchange{type = Type}) -> Type:add_binding(X, B) end);
 handle_table_event({delete, rabbit_route, #route{binding = B}, _OldRecs, _ActivityId}) ->
