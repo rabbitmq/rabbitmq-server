@@ -119,7 +119,8 @@
 
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
-         append_write_buffer/1, copy/3, set_maximum_since_use/1]).
+         append_write_buffer/1, copy/3, set_maximum_since_use/1, delete/1,
+         discard_write_buffer/1]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -193,6 +194,8 @@
 -spec(copy/3 :: (ref(), ref(), non_neg_integer()) ->
              ({'ok', integer()} | error())).
 -spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
+-spec(delete/1 :: (ref()) -> ok_or_error()). 
+-spec(discard_write_buffer/1 :: (ref()) -> ok_or_error()). 
 
 -endif.
 
@@ -359,6 +362,27 @@ copy(Src, Dest, Count) ->
               end;
           (_Handles) ->
               {error, incorrect_handle_modes}
+      end).
+
+delete(Ref) ->
+    case erase({Ref, fhc_handle}) of
+        undefined -> ok;
+        Handle = #handle { path = Path } ->
+            Handle1 = Handle #handle { is_dirty = false, write_buffer = [] },
+            case close1(Ref, Handle1, hard) of
+                ok -> file:delete(Path);
+                Error -> Error
+            end
+    end.
+
+discard_write_buffer(Ref) ->
+    with_handles(
+      [Ref],
+      fun ([#handle { write_buffer = [] }]) ->
+              ok;
+          ([Handle = #handle { write_buffer_size = Size, offset = Offset }]) ->
+              {ok, [Handle #handle { write_buffer = [], write_buffer_size = 0,
+                                     offset = Offset - Size }]}
       end).
 
 set_maximum_since_use(MaximumAge) ->
