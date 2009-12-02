@@ -1078,6 +1078,8 @@ verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
     ko.
 
 test_queue_index() ->
+    SegmentSize = rabbit_queue_index:segment_size(),
+    TwoSegs = SegmentSize + SegmentSize,
     stop_msg_store(),
     ok = empty_test_queue(),
     SeqIdsA = lists:seq(0,9999),
@@ -1086,7 +1088,7 @@ test_queue_index() ->
     {0, 0, Qi1} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi0),
     {Qi2, SeqIdsMsgIdsA} = queue_index_publish(SeqIdsA, false, Qi1),
-    {0, 10000, Qi3} =
+    {0, SegSize, Qi3} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi2),
     {ReadA, Qi4} = rabbit_queue_index:read_segment_entries(0, Qi3),
     ok = verify_read_with_published(false, false, ReadA,
@@ -1097,10 +1099,10 @@ test_queue_index() ->
     ok = rabbit_queue_index:start_msg_store([test_amqqueue(true)]),
     %% should get length back as 0, as all the msgs were transient
     {0, Qi6} = rabbit_queue_index:init(test_queue()),
-    {0, 10000, Qi7} =
+    {0, SegSize, Qi7} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi6),
     {Qi8, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
-    {0, 20000, Qi9} =
+    {0, TwoSegs, Qi9} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi8),
     {ReadB, Qi10} = rabbit_queue_index:read_segment_entries(0, Qi9),
     ok = verify_read_with_published(false, true, ReadB,
@@ -1111,7 +1113,7 @@ test_queue_index() ->
     %% should get length back as 10000
     LenB = length(SeqIdsB),
     {LenB, Qi12} = rabbit_queue_index:init(test_queue()),
-    {0, 20000, Qi13} =
+    {0, TwoSegs, Qi13} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi12),
     Qi14 = queue_index_deliver(SeqIdsB, Qi13),
     {ReadC, Qi15} = rabbit_queue_index:read_segment_entries(0, Qi14),
@@ -1119,10 +1121,8 @@ test_queue_index() ->
                                     lists:reverse(SeqIdsMsgIdsB)),
     Qi16 = rabbit_queue_index:write_acks(SeqIdsB, Qi15),
     Qi17 = queue_index_flush_journal(Qi16),
-    %% the entire first segment will have gone as they were firstly
-    %% transient, and secondly ack'd
-    SegmentSize = rabbit_queue_index:segment_size(),
-    {SegmentSize, 20000, Qi18} =
+    %% Everything will have gone now because #pubs == #acks
+    {0, 0, Qi18} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi17),
     _Qi19 = rabbit_queue_index:terminate(Qi18),
     ok = stop_msg_store(),

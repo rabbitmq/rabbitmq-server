@@ -460,7 +460,7 @@ tx_commit_from_vq(State = #vqstate { on_sync = {SAcks, SPubs, SFroms} }) ->
                   {SeqIdsAcc1, StateN1}
           end, {[], State1}, lists:flatten(lists:reverse(SPubs))),
     IndexState1 =
-        rabbit_queue_index:sync_seq_ids(PubSeqIds, [] /= SAcks, IndexState),
+        rabbit_queue_index:sync_seq_ids(PubSeqIds, IndexState),
     [ gen_server2:reply(From, ok) || From <- lists:reverse(SFroms) ],
     State2 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }.
 
