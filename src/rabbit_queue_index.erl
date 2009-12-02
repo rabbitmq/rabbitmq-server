@@ -41,7 +41,7 @@
 %%----------------------------------------------------------------------------
 %% ---- Journal details ----
 
--define(MAX_JOURNAL_ENTRY_COUNT, 32768).
+-define(MAX_JOURNAL_ENTRY_COUNT, 262144).
 -define(JOURNAL_FILENAME, "journal.jif").
 
 -define(PUB_PERSIST_JPREFIX, 2#00).
