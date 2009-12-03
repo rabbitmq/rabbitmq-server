@@ -110,7 +110,7 @@
                     #segment { pubs            :: non_neg_integer(),
                                acks            :: non_neg_integer(),
                                handle          :: hdl(),
-                               journal_entries :: dict(),
+                               journal_entries :: array(),
                                path            :: file_path(),
                                num             :: non_neg_integer()
                              })).
@@ -260,17 +260,18 @@ flush_journal(State = #qistate { segments = Segments, dir = Dir }) ->
                           SegmentsN;
                       false ->
                           Segment1 =
-                              case 0 == dict:size(JEntries) of
+                              case 0 == array:sparse_size(JEntries) of
                                   true ->
                                       SegmentsN;
                                   false ->
                                       {Hdl, Segment2} =
                                           get_segment_handle(Segment),
-                                      dict:fold(fun write_entry_to_segment/3,
-                                                Hdl, JEntries),
+                                      array:sparse_foldl(
+                                        fun write_entry_to_segment/3, Hdl,
+                                        JEntries),
                                       ok = file_handle_cache:sync(Hdl),
                                       Segment2 #segment { journal_entries =
-                                                          dict:new() }
+                                                          journal_new() }
                               end,
                           segment_store(Segment1, SegmentsN)
                   end
@@ -418,6 +419,9 @@ blank_state(QueueName) ->
                dirty_count    = 0
              }.
 
+journal_new() ->
+    array:new([{default, undefined}]).
+
 rev_sort(List) ->
     lists:sort(fun (A, B) -> B < A end, List).
 
@@ -483,7 +487,7 @@ segment_find(Seg, {Segments, _, Dir}) -> %% no match
         error -> #segment { pubs = 0,
                             acks = 0,
                             handle = undefined,
-                            journal_entries = dict:new(),
+                            journal_entries = journal_new(),
                             path = seg_num_to_path(Dir, Seg),
                             num = Seg
                           }
@@ -730,22 +734,19 @@ add_to_journal(SeqId, Action, State = #qistate { dirty_count = DCount,
 %% have dels or acks in the journal without the corresponding
 %% pub. Also, always want to keep acks. Things must occur in the right
 %% order though.
-add_to_journal(RelSeq, Action, SegJDict) ->
-    case dict:is_key(RelSeq, SegJDict) of
-        true ->
-            dict:update(RelSeq,
-                        fun ({PubRecord, no_del, no_ack}) when Action == del ->
-                                {PubRecord, del, no_ack};
-                            ({PubRecord, Del, no_ack}) when Action == ack ->
-                                {PubRecord, Del, ack}
-                        end, SegJDict);
-        false ->
-            dict:store(RelSeq,
-                       case Action of
-                           del -> {no_pub, del, no_ack};
-                           ack -> {no_pub, no_del, ack};
-                           {_Msg, _IsPersistent} -> {Action, no_del, no_ack}
-                       end, SegJDict)
+add_to_journal(RelSeq, Action, SegJArray) ->
+    case array:get(RelSeq, SegJArray) of
+        undefined ->
+            array:set(RelSeq,
+                      case Action of
+                          {_Msg, _IsPersistent} -> {Action, no_del, no_ack};
+                          del                   -> {no_pub,    del, no_ack};
+                          ack                   -> {no_pub, no_del,    ack}
+                      end, SegJArray);
+        ({PubRecord, no_del, no_ack}) when Action == del ->
+            array:set(RelSeq, {PubRecord, del, no_ack}, SegJArray);
+        ({PubRecord,    Del, no_ack}) when Action == ack ->
+            array:set(RelSeq, {PubRecord, Del,    ack}, SegJArray)
     end.
 
 %% Combine what we have just read from a segment file with what we're
@@ -753,13 +754,14 @@ add_to_journal(RelSeq, Action, SegJDict) ->
 %% duplicates. Used when providing segment entries to the variable
 %% queue.
 journal_plus_segment(JEntries, SegDict) ->
-    dict:fold(fun (RelSeq, JObj, SegDictOut) ->
-                      SegEntry = case dict:find(RelSeq, SegDictOut) of
-                                     error -> not_found;
-                                     {ok, SObj = {_, _, _}} -> SObj
-                                 end,
-                      journal_plus_segment(JObj, SegEntry, RelSeq, SegDictOut)
-              end, SegDict, JEntries).
+    array:sparse_foldl(
+      fun (RelSeq, JObj, SegDictOut) ->
+              SegEntry = case dict:find(RelSeq, SegDictOut) of
+                             error -> not_found;
+                             {ok, SObj = {_, _, _}} -> SObj
+                         end,
+              journal_plus_segment(JObj, SegEntry, RelSeq, SegDictOut)
+      end, SegDict, JEntries).
 
 %% Here, the OutDict is the SegDict which we may be adding to (for
 %% items only in the journal), modifying (bits in both), or erasing
@@ -791,96 +793,96 @@ journal_plus_segment({no_pub, no_del, ack},
                      RelSeq, OutDict) ->
     dict:erase(RelSeq, OutDict).
 
-
 %% Remove from the journal entries for a segment, items that are
 %% duplicates of entries found in the segment itself. Used on start up
 %% to clean up the journal.
 journal_minus_segment(JEntries, SegDict) ->
-    dict:fold(fun (RelSeq, JObj, {JEntriesOut, PubsRemoved, AcksRemoved}) ->
-                      SegEntry = case dict:find(RelSeq, SegDict) of
-                                     error -> not_found;
-                                     {ok, SObj = {_, _, _}} -> SObj
-                                 end,
-                      journal_minus_segment(JObj, SegEntry, RelSeq, JEntriesOut,
-                                            PubsRemoved, AcksRemoved)
-              end, {dict:new(), 0, 0}, JEntries).
+    array:sparse_foldl(
+      fun (RelSeq, JObj, {JEntriesOut, PubsRemoved, AcksRemoved}) ->
+              SegEntry = case dict:find(RelSeq, SegDict) of
+                             error -> not_found;
+                             {ok, SObj = {_, _, _}} -> SObj
+                         end,
+              journal_minus_segment(JObj, SegEntry, RelSeq, JEntriesOut,
+                                    PubsRemoved, AcksRemoved)
+      end, {journal_new(), 0, 0}, JEntries).
 
-%% Here, the OutDict is a fresh journal that we're filling with valid
+%% Here, the OutArray is a fresh journal that we're filling with valid
 %% entries. PubsRemoved and AcksRemoved only get increased when the a
 %% publish or ack is in both the journal and the segment.
 
 %% Both the same. Must be at least the publish
 journal_minus_segment(Obj, Obj = {{_MsgId, _IsPersistent}, _Del, no_ack},
-                      _RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {OutDict, PubsRemoved + 1, AcksRemoved};
+                      _RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {OutArray, PubsRemoved + 1, AcksRemoved};
 journal_minus_segment(Obj, Obj = {{_MsgId, _IsPersistent}, _Del, ack},
-                      _RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {OutDict, PubsRemoved + 1, AcksRemoved + 1};
+                      _RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {OutArray, PubsRemoved + 1, AcksRemoved + 1};
 
 %% Just publish in journal
 journal_minus_segment(Obj = {{_MsgId, _IsPersistent}, no_del, no_ack},
                       not_found,
-                      RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {dict:store(RelSeq, Obj, OutDict), PubsRemoved, AcksRemoved};
+                      RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {array:set(RelSeq, Obj, OutArray), PubsRemoved, AcksRemoved};
 
 %% Just deliver in journal
 journal_minus_segment(Obj = {no_pub, del, no_ack},
                       {{_MsgId, _IsPersistent}, no_del, no_ack},
-                      RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {dict:store(RelSeq, Obj, OutDict), PubsRemoved, AcksRemoved};
+                      RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {array:set(RelSeq, Obj, OutArray), PubsRemoved, AcksRemoved};
 journal_minus_segment({no_pub, del, no_ack},
                       {{_MsgId, _IsPersistent}, del, no_ack},
-                      _RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {OutDict, PubsRemoved, AcksRemoved};
+                      _RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {OutArray, PubsRemoved, AcksRemoved};
 
 %% Just ack in journal
 journal_minus_segment(Obj = {no_pub, no_del, ack},
                       {{_MsgId, _IsPersistent}, del, no_ack},
-                      RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {dict:store(RelSeq, Obj, OutDict), PubsRemoved, AcksRemoved};
+                      RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {array:set(RelSeq, Obj, OutArray), PubsRemoved, AcksRemoved};
 journal_minus_segment({no_pub, no_del, ack},
                       {{_MsgId, _IsPersistent}, del, ack},
-                      _RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {OutDict, PubsRemoved, AcksRemoved};
+                      _RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {OutArray, PubsRemoved, AcksRemoved};
 
 %% Publish and deliver in journal
 journal_minus_segment(Obj = {{_MsgId, _IsPersistent}, del, no_ack},
                       not_found,
-                      RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {dict:store(RelSeq, Obj, OutDict), PubsRemoved, AcksRemoved};
+                      RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {array:set(RelSeq, Obj, OutArray), PubsRemoved, AcksRemoved};
 journal_minus_segment({PubRecord, del, no_ack},
                       {PubRecord = {_MsgId, _IsPersistent}, no_del, no_ack},
-                      RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {dict:store(RelSeq, {no_pub, del, no_ack}, OutDict),
+                      RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {array:set(RelSeq, {no_pub, del, no_ack}, OutArray),
      PubsRemoved + 1, AcksRemoved};
 
 %% Deliver and ack in journal
 journal_minus_segment(Obj = {no_pub, del, ack},
                       {{_MsgId, _IsPersistent}, no_del, no_ack},
-                      RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {dict:store(RelSeq, Obj, OutDict), PubsRemoved, AcksRemoved};
+                      RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {array:set(RelSeq, Obj, OutArray), PubsRemoved, AcksRemoved};
 journal_minus_segment({no_pub, del, ack},
                       {{_MsgId, _IsPersistent}, del, no_ack},
-                      RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {dict:store(RelSeq, {no_pub, no_del, ack}, OutDict),
+                      RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {array:set(RelSeq, {no_pub, no_del, ack}, OutArray),
      PubsRemoved, AcksRemoved};
 journal_minus_segment({no_pub, del, ack},
                       {{_MsgId, _IsPersistent}, del, ack},
-                      _RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {OutDict, PubsRemoved, AcksRemoved + 1};
+                      _RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {OutArray, PubsRemoved, AcksRemoved + 1};
 
 %% Publish, deliver and ack in journal
 journal_minus_segment({{_MsgId, _IsPersistent}, del, ack},
                       not_found,
-                      _RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {OutDict, PubsRemoved, AcksRemoved};
+                      _RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {OutArray, PubsRemoved, AcksRemoved};
 journal_minus_segment({PubRecord, del, ack},
                       {PubRecord = {_MsgId, _IsPersistent}, no_del, no_ack},
-                      RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {dict:store(RelSeq, {no_pub, del, ack}, OutDict),
+                      RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {array:set(RelSeq, {no_pub, del, ack}, OutArray),
      PubsRemoved + 1, AcksRemoved};
 journal_minus_segment({PubRecord, del, ack},
                       {PubRecord = {_MsgId, _IsPersistent}, del, no_ack},
-                      RelSeq, OutDict, PubsRemoved, AcksRemoved) ->
-    {dict:store(RelSeq, {no_pub, no_del, ack}, OutDict),
+                      RelSeq, OutArray, PubsRemoved, AcksRemoved) ->
+    {array:set(RelSeq, {no_pub, no_del, ack}, OutArray),
      PubsRemoved + 1, AcksRemoved}.
