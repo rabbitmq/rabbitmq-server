@@ -262,7 +262,7 @@ flush_journal(State = #qistate { segments = Segments, dir = Dir }) ->
                           Segment1 =
                               case 0 == array:sparse_size(JEntries) of
                                   true ->
-                                      SegmentsN;
+                                      Segment;
                                   false ->
                                       {Hdl, Segment2} =
                                           get_segment_handle(Segment),
