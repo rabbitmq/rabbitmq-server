@@ -266,10 +266,7 @@ flush_journal(State) ->
                   end
           end, State1 #qistate { segments = dict:new() }, Segments),
     {JournalHdl, State3} = get_journal_handle(State2),
-    ok = file_handle_cache:discard_write_buffer(JournalHdl),
-    {ok, 0} = file_handle_cache:position(JournalHdl, bof),
-    ok = file_handle_cache:truncate(JournalHdl),
-    ok = file_handle_cache:sync(JournalHdl),
+    ok = file_handle_cache:clear(JournalHdl),
     State3 #qistate { dirty_count = 0 }.
 
 read_segment_entries(InitSeqId, State) ->

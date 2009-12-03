@@ -299,11 +299,8 @@ handle_call({read, MsgId}, _From, State =
                     not_found ->
                         ok = case CurFile =:= File andalso {ok, Offset} >=
                                  file_handle_cache:current_raw_offset(CurHdl) of
-                                 true ->
-                                     file_handle_cache:append_write_buffer(
-                                       CurHdl);
-                                 false ->
-                                     ok
+                                 true  -> file_handle_cache:flush(CurHdl);
+                                 false -> ok
                              end,
                         {Hdl, State2} = get_read_handle(File, State),
                         {ok, Offset} = file_handle_cache:position(Hdl, Offset),
@@ -736,8 +733,7 @@ recover_crashed_compactions1(Dir, FileNames, TmpFileName) ->
             {ok, TmpHdl} = open_file(Dir, TmpFileName, ?READ_AHEAD_MODE),
             {ok, TmpSize} = file_handle_cache:copy(TmpHdl, MainHdl, TmpSize),
             ok = file_handle_cache:close(MainHdl),
-            ok = file_handle_cache:close(TmpHdl),
-            ok = file:delete(TmpPath),
+            ok = file_handle_cache:delete(TmpHdl),
 
             {ok, _MainMessages, MsgIdsMain} =
                 scan_file_for_valid_messages_msg_ids(
