@@ -91,7 +91,7 @@ setup_reply_queue(State = #rpc_c_state{channel = Channel}) ->
 %% Registers this RPC client instance as a consumer to handle rpc responses
 setup_consumer(#rpc_c_state{channel = Channel,
                             reply_queue = Q}) ->
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()).
+    amqp_channel:call(Channel, #'basic.consume'{queue = Q}).
 
 %% Publishes to the broker, stores the From address against
 %% the correlation id and increments the correlationid for
