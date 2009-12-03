@@ -119,8 +119,7 @@
 
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
-         flush/1, copy/3, set_maximum_since_use/1, delete/1,
-         clear/1]).
+         flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -382,14 +381,15 @@ clear(Ref) ->
       fun ([#handle { at_eof = true, write_buffer_size = 0, offset = 0 }]) ->
               ok;
           ([Handle = #handle { write_buffer_size = Size, offset = Offset }]) ->
-              Handle1 =
-                  Handle #handle { write_buffer = [], write_buffer_size = 0,
-                                   offset = Offset - Size },
+              Handle1 = Handle #handle { write_buffer = [],
+                                         write_buffer_size = 0,
+                                         offset = Offset - Size },
               case maybe_seek(bof, Handle1) of
                   {{ok, 0}, Handle2 = #handle { hdl = Hdl }} ->
                       case file:truncate(Hdl) of
-                          ok -> {ok, [Handle2 #handle { at_eof = true,
-                                                        trusted_offset = 0 }]};
+                          ok    -> {ok, [Handle2 #handle {
+                                           at_eof = true,
+                                           trusted_offset = 0 }]};
                           Error -> {Error, [Handle2]}
                       end;
                   Error ->
