@@ -260,18 +260,16 @@ flush_journal(State = #qistate { segments = Segments, dir = Dir }) ->
                           SegmentsN;
                       false ->
                           Segment1 =
-                              case 0 == array:sparse_size(JEntries) of
-                                  true ->
-                                      Segment;
-                                  false ->
-                                      {Hdl, Segment2} =
-                                          get_segment_handle(Segment),
-                                      array:sparse_foldl(
-                                        fun write_entry_to_segment/3, Hdl,
-                                        JEntries),
-                                      ok = file_handle_cache:sync(Hdl),
-                                      Segment2 #segment { journal_entries =
-                                                          journal_new() }
+                              case array:sparse_size(JEntries) of
+                                  0 -> Segment;
+                                  _ -> {Hdl, Segment2} =
+                                           get_segment_handle(Segment),
+                                       array:sparse_foldl(
+                                         fun write_entry_to_segment/3, Hdl,
+                                         JEntries),
+                                       ok = file_handle_cache:sync(Hdl),
+                                       Segment2 #segment { journal_entries =
+                                                           journal_new() }
                               end,
                           segment_store(Segment1, SegmentsN)
                   end
@@ -318,7 +316,7 @@ find_lowest_seq_id_seg_and_next_seq_id(State) ->
     %% SegNums is sorted, ascending.
     {LowSeqIdSeg, NextSeqId} =
         case SegNums of
-            []            -> {0, 0};
+            []         -> {0, 0};
             [MinSeg|_] -> {reconstruct_seq_id(MinSeg, 0),
                            reconstruct_seq_id(1 + lists:last(SegNums), 0)}
         end,
