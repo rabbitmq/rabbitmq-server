@@ -242,7 +242,7 @@ sync()             -> gen_server2:pcast(?SERVER, 9, sync). %% internal
 
 init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
     process_flag(trap_exit, true),
-    
+
     ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
 
     MsgLocations = ets:new(?MSG_LOC_NAME,
@@ -266,7 +266,7 @@ init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
                   },
 
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
-    FileNames = 
+    FileNames =
         sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION, Dir)),
     TmpFileNames =
         sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION_TMP, Dir)),
@@ -515,7 +515,7 @@ remove_message(MsgId, State = #msstate { file_summary = FileSummary }) ->
                 ets:lookup(FileSummary, File),
             ContiguousTop1 = lists:min([ContiguousTop, Offset]),
             ValidTotalSize1 = ValidTotalSize - TotalSize,
-            true = ets:insert(FileSummary, FSEntry #file_summary { 
+            true = ets:insert(FileSummary, FSEntry #file_summary {
                                              valid_total_size = ValidTotalSize1,
                                              contiguous_top = ContiguousTop1 }),
             {compact, File};
@@ -542,7 +542,7 @@ close_all_handles(State = #msstate { file_handle_cache = FHC }) ->
 
 get_read_handle(FileNum, State = #msstate { file_handle_cache = FHC }) ->
     case dict:find(FileNum, FHC) of
-        {ok, Hdl} -> {Hdl, State}; 
+        {ok, Hdl} -> {Hdl, State};
         error -> new_handle(FileNum, filenum_to_name(FileNum),
                             [read | ?BINARY_MODE], State)
     end.
@@ -619,7 +619,6 @@ index_search_by_file(File, #msstate { msg_locations = MsgLocations }) ->
                end, ets:match_object(MsgLocations,
                                      #msg_location { file = File, _ = '_' })).
 
-    
 index_delete_by_file(File, #msstate { msg_locations = MsgLocations }) ->
     MatchHead = #msg_location { file = File, _ = '_' },
     ets:select_delete(MsgLocations, [{MatchHead, [], [true]}]),
@@ -918,7 +917,7 @@ combine_file(File, State = #msstate { file_summary = FileSummary,
 adjust_meta_and_combine(
   LeftObj = #file_summary {
     file = LeftFile, valid_total_size = LeftValidData, right = RightFile },
-  RightObj = #file_summary { 
+  RightObj = #file_summary {
     file = RightFile, valid_total_size = RightValidData, left = LeftFile,
     right = RightRight },
   State = #msstate { file_size_limit = FileSizeLimit,
