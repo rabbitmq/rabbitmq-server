@@ -249,29 +249,32 @@ sync_seq_ids(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
 
 flush_journal(State = #qistate { dirty_count = 0 }) ->
     State;
-flush_journal(State = #qistate { segments = Segments }) ->
+flush_journal(State = #qistate { segments = Segments, dir = Dir }) ->
     Segments1 =
         segment_fold(
           fun (_Seg, #segment { journal_entries = JEntries, pubs = PubCount,
                                 acks = AckCount } = Segment, SegmentsN) ->
                   case PubCount > 0 andalso PubCount == AckCount of
                       true ->
-                          segment_erase(delete_segment(Segment), SegmentsN);
+                          ok = delete_segment(Segment),
+                          SegmentsN;
                       false ->
-                          case 0 == dict:size(JEntries) of
-                              true ->
-                                  SegmentsN;
-                              false ->
-                                  {Hdl, Segment1} = get_segment_handle(Segment),
-                                  dict:fold(fun write_entry_to_segment/3,
-                                            Hdl, JEntries),
-                                  ok = file_handle_cache:sync(Hdl),
-                                  segment_store(
-                                    Segment1 #segment { journal_entries =
-                                                        dict:new() }, SegmentsN)
-                          end
+                          Segment1 =
+                              case 0 == dict:size(JEntries) of
+                                  true ->
+                                      SegmentsN;
+                                  false ->
+                                      {Hdl, Segment2} =
+                                          get_segment_handle(Segment),
+                                      dict:fold(fun write_entry_to_segment/3,
+                                                Hdl, JEntries),
+                                      ok = file_handle_cache:sync(Hdl),
+                                      Segment2 #segment { journal_entries =
+                                                          dict:new() }
+                              end,
+                          segment_store(Segment1, SegmentsN)
                   end
-          end, Segments, Segments),
+          end, segment_new(Dir), Segments),
     {JournalHdl, State1} =
         get_journal_handle(State #qistate { segments = Segments1 }),
     ok = file_handle_cache:clear(JournalHdl),
@@ -428,11 +431,10 @@ seg_num_to_path(Dir, Seg) ->
     SegName = integer_to_list(Seg),
     filename:join(Dir, SegName ++ ?SEGMENT_EXTENSION).
 
-delete_segment(Segment = #segment { handle = undefined }) ->
-    Segment;
-delete_segment(Segment = #segment { handle = Hdl }) ->
-    ok = file_handle_cache:delete(Hdl),
-    Segment #segment { handle = undefined }.
+delete_segment(#segment { handle = undefined }) ->
+    ok;
+delete_segment(#segment { handle = Hdl }) ->
+    ok = file_handle_cache:delete(Hdl).
 
 detect_clean_shutdown(Dir) ->
     case file:delete(filename:join(Dir, ?CLEAN_FILENAME)) of
@@ -520,16 +522,6 @@ segment_map(Fun, {Segments, CachedSegments, Dir}) ->
 segment_fetch_keys({Segments, CachedSegments, _Dir}) ->
     lists:map(fun (Segment) -> Segment#segment.num end, CachedSegments) ++
         dict:fetch_keys(Segments).
-
-segment_erase(#segment { handle = undefined, num = Num },
-              {Segments, [#segment { num = Num } | Rest], Dir}) ->
-    {Segments, Rest, Dir}; %% 1 or (2, matches head)
-segment_erase(#segment { handle = undefined, num = Num },
-              {Segments, [Head, #segment { num = Num }], Dir}) ->
-    {Segments, [Head], Dir}; %% 2, matches tail
-segment_erase(#segment { handle = undefined, num = Num },
-              {Segments, CachedSegments, Dir}) ->
-    {dict:erase(Num, Segments), CachedSegments, Dir}.
 
 segment_new(Dir) ->
     {dict:new(), [], Dir}.
