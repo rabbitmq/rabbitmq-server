@@ -420,7 +420,7 @@ blank_state(QueueName) ->
              }.
 
 journal_new() ->
-    array:new([{default, undefined}]).
+    array:new([{default, undefined}, fixed, {size, ?SEGMENT_ENTRY_COUNT}]).
 
 rev_sort(List) ->
     lists:sort(fun (A, B) -> B < A end, List).
