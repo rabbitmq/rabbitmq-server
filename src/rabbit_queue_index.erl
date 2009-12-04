@@ -269,7 +269,7 @@ flush_journal(State = #qistate { segments = Segments }) ->
                                          JEntries),
                                        ok = file_handle_cache:sync(Hdl),
                                        Segment2 #segment { journal_entries =
-                                                           journal_new() }
+                                                           array_new() }
                               end,
                           segment_store(Segment1, SegmentsN)
                   end
@@ -416,7 +416,7 @@ blank_state(QueueName) ->
                dirty_count    = 0
              }.
 
-journal_new() ->
+array_new() ->
     array:new([{default, undefined}, fixed, {size, ?SEGMENT_ENTRY_COUNT}]).
 
 seq_id_to_seg_and_rel_seq_id(SeqId) ->
@@ -482,7 +482,7 @@ segment_new(Seg, Dir) ->
     #segment { pubs = 0,
                acks = 0,
                handle = undefined,
-               journal_entries = journal_new(),
+               journal_entries = array_new(),
                path = seg_num_to_path(Dir, Seg),
                num = Seg
              }.
@@ -605,12 +605,12 @@ load_segment(KeepAcks,
                     end,
     case SegmentExists of
         false ->
-            {journal_new(), 0, 0, Segment};
+            {array_new(), 0, 0, Segment};
         true ->
             {Hdl, Segment1} = get_segment_handle(Segment),
             {ok, 0} = file_handle_cache:position(Hdl, bof),
             {SegEntries, PubCount, AckCount} =
-                load_segment_entries(KeepAcks, Hdl, journal_new(), 0, 0),
+                load_segment_entries(KeepAcks, Hdl, array_new(), 0, 0),
             {SegEntries, PubCount, AckCount, Segment1}
     end.
 
@@ -809,7 +809,7 @@ journal_minus_segment(JEntries, SegEntries) ->
                          end,
               journal_minus_segment(JObj, SegEntry, RelSeq, JEntriesOut,
                                     PubsRemoved, AcksRemoved)
-      end, {journal_new(), 0, 0}, JEntries).
+      end, {array_new(), 0, 0}, JEntries).
 
 %% Here, the Out is a fresh journal that we're filling with valid
 %% entries. PubsRemoved and AcksRemoved only get increased when the a
