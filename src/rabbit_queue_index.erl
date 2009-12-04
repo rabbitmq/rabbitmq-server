@@ -726,10 +726,10 @@ add_to_journal(SeqId, Action, State = #qistate { dirty_count = DCount,
                      segments = segment_store(Segment1, Segments) };
 
 add_to_journal(RelSeq, Action, Segment =
-               #segment { journal_entries = SegJournal,
+               #segment { journal_entries = JEntries,
                           pubs = PubCount, acks = AckCount }) ->
-    SegJournal1 = add_to_journal(RelSeq, Action, SegJournal),
-    Segment1 = Segment #segment { journal_entries = SegJournal1 },
+    JEntries1 = add_to_journal(RelSeq, Action, JEntries),
+    Segment1 = Segment #segment { journal_entries = JEntries1 },
     case Action of
         del                     -> Segment1;
         ack                     -> Segment1 #segment { acks = AckCount + 1 };
