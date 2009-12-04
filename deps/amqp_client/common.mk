@@ -56,7 +56,12 @@ DIST_DIR=dist
 DEPS_DIR=deps
 DOC_DIR=doc
 
-ERL_LIBS ?=
+ifeq ("$(ERL_LIBS)", "")
+	ERL_LIBS :=
+else
+	ERL_LIBS := :$(ERL_LIBS)
+endif
+
 ERL_PATH ?=
 
 DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
@@ -81,7 +86,7 @@ TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 BROKER_HEADERS=$(wildcard $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl)
 BROKER_SOURCES=$(wildcard $(BROKER_DIR)/$(SOURCE_DIR)/*.erl)
 
-LIBS_PATH=ERL_LIBS=$(DEPS_DIR):$(DIST_DIR):$(ERL_LIBS)
+LIBS_PATH=ERL_LIBS=$(DEPS_DIR):$(DIST_DIR)$(ERL_LIBS)
 LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR) $(ERL_PATH)
 
 COVER_START := -s cover start -s rabbit_misc enable_cover ../rabbitmq-erlang-client
