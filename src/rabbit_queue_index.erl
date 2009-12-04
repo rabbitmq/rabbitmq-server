@@ -605,7 +605,7 @@ load_segment(KeepAcks,
                     end,
     case SegmentExists of
         false ->
-            {dict:new(), 0, 0, Segment};
+            {journal_new(), 0, 0, Segment};
         true ->
             {Hdl, Segment1} = get_segment_handle(Segment),
             {ok, 0} = file_handle_cache:position(Hdl, bof),
