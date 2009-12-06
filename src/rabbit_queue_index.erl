@@ -273,16 +273,13 @@ read_segment_entries(InitSeqId, State = #qistate { segments = Segments,
                                                    dir = Dir }) ->
     {Seg, 0} = seq_id_to_seg_and_rel_seq_id(InitSeqId),
     Segment = segment_find_or_new(Seg, Dir, Segments),
-    {SegEntries, _PubCount, _AckCount,
-     Segment1 = #segment { journal_entries = JEntries }} =
-        load_segment(false, Segment),
-    SegEntries1 = journal_plus_segment(JEntries, SegEntries),
-    %% deliberately sort the list desc, because foldl will reverse it
+    {SegEntries, _PubCount, _AckCount, Segment1} = load_segment(false, Segment),
+    #segment { journal_entries = JEntries } = Segment1,
     {array:sparse_foldr(
        fun (RelSeq, {{MsgId, IsPersistent}, IsDelivered, no_ack}, Acc) ->
                [ {MsgId, reconstruct_seq_id(Seg, RelSeq),
                   IsPersistent, IsDelivered == del} | Acc ]
-       end, [], SegEntries1),
+       end, [], journal_plus_segment(JEntries, SegEntries)),
      State #qistate { segments = segment_store(Segment1, Segments) }}.
 
 next_segment_boundary(SeqId) ->
@@ -714,11 +711,11 @@ add_to_journal(SeqId, Action, State = #qistate { dirty_count = DCount,
     State #qistate { dirty_count = DCount + 1,
                      segments = segment_store(Segment1, Segments) };
 
-add_to_journal(RelSeq, Action, Segment =
-               #segment { journal_entries = JEntries,
-                          pubs = PubCount, acks = AckCount }) ->
-    JEntries1 = add_to_journal(RelSeq, Action, JEntries),
-    Segment1 = Segment #segment { journal_entries = JEntries1 },
+add_to_journal(RelSeq, Action,
+               Segment = #segment { journal_entries = JEntries,
+                                    pubs = PubCount, acks = AckCount }) ->
+    Segment1 = Segment #segment {
+                 journal_entries = add_to_journal(RelSeq, Action, JEntries) },
     case Action of
         del                     -> Segment1;
         ack                     -> Segment1 #segment { acks = AckCount + 1 };
