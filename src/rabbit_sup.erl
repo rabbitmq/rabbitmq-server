@@ -43,4 +43,6 @@ start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 init([]) ->
+    ok = rabbit_exchange:create_type_registry(),
+
     {ok, {{one_for_one, 10, 10}, []}}.
