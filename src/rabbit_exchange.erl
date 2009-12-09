@@ -33,6 +33,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
+-export([create_type_registry/0, register_type/2]).
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
          list/1, info/1, info/2, info_all/1, info_all/2,
          publish/2]).
@@ -94,6 +95,23 @@
 
 -define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
 
+create_type_registry() ->
+    rabbit_exchange_type_modules =
+        ets:new(rabbit_exchange_type_modules, [public, set, named_table]),
+    rabbit_exchange_type_names =
+        ets:new(rabbit_exchange_type_names, [public, set, named_table]),
+    ok = register_type(<<"direct">>, rabbit_exchange_type_direct),
+    ok = register_type(<<"fanout">>, rabbit_exchange_type_fanout),
+    ok = register_type(<<"headers">>, rabbit_exchange_type_headers),
+    ok = register_type(<<"topic">>, rabbit_exchange_type_topic),
+    ok.
+
+register_type(TypeName, ModuleName)
+  when is_binary(TypeName), is_atom(ModuleName) ->
+    true = ets:insert(rabbit_exchange_type_modules, {TypeName, ModuleName}),
+    true = ets:insert(rabbit_exchange_type_names, {ModuleName, TypeName}),
+    ok.
+
 recover() ->
     ok = rabbit_misc:table_foreach(
            fun(Exchange) -> ok = mnesia:write(rabbit_exchange,
@@ -135,17 +153,17 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
       end).
 
 typename_to_plugin_module(T) when is_binary(T) ->
-    case catch list_to_existing_atom("rabbit_exchange_type_" ++ binary_to_list(T)) of
-        {'EXIT', {badarg, _}} ->
+    case ets:lookup(rabbit_exchange_type_modules, T) of
+        [{_, Module}] ->
+            Module;
+        [] ->
             rabbit_misc:protocol_error(
-              command_invalid, "invalid exchange type '~s'", [T]);
-        Module ->
-            Module
+              command_invalid, "invalid exchange type '~s'", [T])
     end.
 
 plugin_module_to_typename(M) when is_atom(M) ->
-    "rabbit_exchange_type_" ++ S = atom_to_list(M),
-    list_to_binary(S).
+    [{_, TypeName}] = ets:lookup(rabbit_exchange_type_names, M),
+    TypeName.
 
 check_type(T) ->
     Module = typename_to_plugin_module(T),
