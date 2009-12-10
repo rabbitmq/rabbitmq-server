@@ -160,36 +160,31 @@ node_listeners(Node) ->
 on_node_down(Node) ->
     ok = mnesia:dirty_delete(rabbit_listener, Node).
 
-start_client(Sock) ->
+start_client(Sock, SockTransform) ->
     {ok, Child} = supervisor:start_child(rabbit_tcp_client_sup, []),
     ok = rabbit_net:controlling_process(Sock, Child),
-    Child ! {go, Sock},
+    Child ! {go, Sock, SockTransform},
     Child.
 
+start_client(Sock) ->
+    start_client(Sock, fun (S) -> {ok, S} end).
+
 start_ssl_client(SslOpts, Sock) ->
-    case rabbit_net:peername(Sock) of
-        {ok, {PeerAddress, PeerPort}} ->
-            PeerIp = inet_parse:ntoa(PeerAddress),
-            case ssl:ssl_accept(Sock, SslOpts) of
-                {ok, SslSock} ->
-                    rabbit_log:info("upgraded TCP connection "
-                                    "from ~s:~p to SSL~n",
-                                    [PeerIp, PeerPort]),
-                    RabbitSslSock = #ssl_socket{tcp = Sock, ssl = SslSock},
-                    start_client(RabbitSslSock);
-                {error, Reason} ->
-                    gen_tcp:close(Sock),
-                    rabbit_log:error("failed to upgrade TCP connection "
-                                     "from ~s:~p to SSL: ~n~p~n",
-                                     [PeerIp, PeerPort, Reason]),
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            gen_tcp:close(Sock),
-            rabbit_log:error("failed to upgrade TCP connection to SSL: ~p~n",
-                             [Reason]),
-            {error, Reason}
-    end.
+    start_client(
+      Sock,
+      fun (Sock1) ->
+              case catch ssl:ssl_accept(Sock1, SslOpts) of
+                  {ok, SslSock} ->
+                      rabbit_log:info("upgraded TCP connection ~p to SSL~n",
+                                      [self()]),
+                      {ok, #ssl_socket{tcp = Sock1, ssl = SslSock}};
+                  {error, Reason} ->
+                      {error, {ssl_upgrade_error, Reason}};
+                  {'EXIT', Reason} ->
+                      {error, {ssl_upgrade_failure, Reason}}
+              
+              end
+      end).
 
 connections() ->
     [Pid || {_, Pid, _, _} <- supervisor:which_children(

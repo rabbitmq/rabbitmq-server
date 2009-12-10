@@ -142,7 +142,8 @@ start_link() ->
 init(Parent) ->
     Deb = sys:debug_options([]),
     receive
-        {go, Sock} -> start_connection(Parent, Deb, Sock)
+        {go, Sock, SockTransform} ->
+            start_connection(Parent, Deb, Sock, SockTransform)
     end.
 
 system_continue(Parent, Deb, State) ->
@@ -192,27 +193,27 @@ teardown_profiling(Value) ->
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
-peername(Sock) ->   
-    try
-        {Address, Port} = inet_op(fun () -> rabbit_net:peername(Sock) end),
-        AddressS = inet_parse:ntoa(Address),
-        {AddressS, Port}
-    catch
-        Ex -> rabbit_log:error("error on TCP connection ~p:~p~n",
-                               [self(), Ex]),
-              rabbit_log:info("closing TCP connection ~p", [self()]),
-              exit(normal)
+socket_op(Sock, Fun) ->   
+    case Fun(Sock) of
+        {ok, Res}       -> Res;
+        {error, Reason} -> rabbit_log:error("error on TCP connection ~p:~p~n",
+                                            [self(), Reason]),
+                           rabbit_log:info("closing TCP connection ~p~n",
+                                           [self()]),
+                           exit(normal)
     end.
 
-start_connection(Parent, Deb, ClientSock) ->
+start_connection(Parent, Deb, Sock, SockTransform) ->
     process_flag(trap_exit, true),
-    {PeerAddressS, PeerPort} = peername(ClientSock),
+    {PeerAddress, PeerPort} = socket_op(Sock, fun rabbit_net:peername/1),
+    PeerAddressS = inet_parse:ntoa(PeerAddress),
+    rabbit_log:info("starting TCP connection ~p from ~s:~p~n",
+                    [self(), PeerAddressS, PeerPort]),
+    ClientSock = socket_op(Sock, SockTransform),
+    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
+                      handshake_timeout),
     ProfilingValue = setup_profiling(),
     try 
-        rabbit_log:info("starting TCP connection ~p from ~s:~p~n",
-                        [self(), PeerAddressS, PeerPort]),
-        erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
-                          handshake_timeout),
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
                                     connection = #connection{
