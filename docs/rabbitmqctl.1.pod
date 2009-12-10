@@ -198,9 +198,9 @@ whether the queue will be deleted when no longer used
 
 queue arguments
 
-=item node
+=item pid
 
-node on which the process associated with the queue resides
+id of the Erlang process associated with the queue
 
 =item messages_ready
 
@@ -297,7 +297,7 @@ I<user>, I<peer_address>, I<peer_port> and I<state> are assumed.
 
 =item node
 
-node on which the process associated with the connection resides
+id of the Erlang process associated with the connection
 
 =item address
 
