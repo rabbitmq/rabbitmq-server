@@ -185,8 +185,8 @@ exchange name, queue name, routing key and arguments, in that order.
 
 <ConnectionInfoItem> must be a member of the list [node, address, port, 
 peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
-recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
-user, peer_address, peer_port and state.
+client_properties, recv_oct, recv_cnt, send_oct, send_cnt, send_pend].
+The default is to display user, peer_address, peer_port and state.
 
 "),
     halt(1).
@@ -362,8 +362,11 @@ format_info_item(Key, Items) ->
         Value when is_binary(Value) -> 
             escape(Value);
         Value when is_atom(Value) ->
-             escape(atom_to_list(Value));
-        Value -> 
+            escape(atom_to_list(Value));
+        Value = [{TableEntryKey, TableEntryType, _TableEntryValue} | _]
+        when is_binary(TableEntryKey) andalso is_atom(TableEntryType) ->
+            io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
+        Value ->
             io_lib:format("~w", [Value])
     end.
 
@@ -406,3 +409,13 @@ escape_char([], Acc) ->
 list_replace(Find, Replace, List) ->
     [case X of Find -> Replace; _ -> X end || X <- List].
 
+prettify_amqp_table(Table) ->
+    [{escape(K), prettify_typed_amqp_value(T, V)} || {K, T, V} <- Table].
+
+prettify_typed_amqp_value(Type, Value) ->
+    case Type of
+        longstr -> escape(Value);
+        table   -> prettify_amqp_table(Value);
+        array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
+        _       -> Value
+    end.
