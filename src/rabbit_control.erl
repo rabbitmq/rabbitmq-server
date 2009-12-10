@@ -388,7 +388,7 @@ rpc_call(Node, Mod, Fun, Args) ->
 %% characters.  We don't escape characters above 127, since they may
 %% form part of UTF-8 strings.
 
-escape(Bin) when binary(Bin) ->
+escape(Bin) when is_binary(Bin) ->
     escape(binary_to_list(Bin));
 escape(L) when is_list(L) ->
     escape_char(lists:reverse(L), []).
