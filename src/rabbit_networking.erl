@@ -53,6 +53,9 @@
         %% {delay_send, true}, 
         {exit_on_close, false}
     ]).
+
+-define(SSL_TIMEOUT, 5).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -173,7 +176,7 @@ start_ssl_client(SslOpts, Sock) ->
     start_client(
       Sock,
       fun (Sock1) ->
-              case catch ssl:ssl_accept(Sock1, SslOpts) of
+              case catch ssl:ssl_accept(Sock1, SslOpts, ?SSL_TIMEOUT * 1000) of
                   {ok, SslSock} ->
                       rabbit_log:info("upgraded TCP connection ~p to SSL~n",
                                       [self()]),
