@@ -395,7 +395,7 @@ escape(L) when is_list(L) ->
 
 escape_char([$\\ | T], Acc) ->
     escape_char(T, [$\\, $\\ | Acc]);
-escape_char([X | T], Acc) when X > 32, X /= 127 ->
+escape_char([X | T], Acc) when X >= 32, X /= 127 ->
     escape_char(T, [X | Acc]);
 escape_char([X | T], Acc) ->
     escape_char(T, [$\\, $0 + (X bsr 6), $0 + (X band 8#070 bsr 3),
