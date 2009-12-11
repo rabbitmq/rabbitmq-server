@@ -57,7 +57,6 @@
 -define(SEGMENT_EXTENSION, ".idx").
 
 -define(REL_SEQ_BITS, 14).
--define(REL_SEQ_BITS_BYTE_ALIGNED, (?REL_SEQ_BITS + 8 - (?REL_SEQ_BITS rem 8))).
 -define(SEGMENT_ENTRY_COUNT, 16384). %% trunc(math:pow(2,?REL_SEQ_BITS))).
 
 %% seq only is binary 00 followed by 14 bits of rel seq id
@@ -604,24 +603,18 @@ load_segment(KeepAcks,
     end.
 
 load_segment_entries(KeepAcks, Hdl, SegEntries, PubCount, AckCount) ->
-    case file_handle_cache:read(Hdl, 1) of
+    case file_handle_cache:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES) of
         {ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-                MSB:(8-?REL_SEQ_ONLY_PREFIX_BITS)>>} ->
-            {ok, LSB} = file_handle_cache:read(
-                          Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES - 1),
-            <<RelSeq:?REL_SEQ_BITS_BYTE_ALIGNED>> = <<MSB, LSB/binary>>,
+                RelSeq:?REL_SEQ_BITS>>} ->
             {AckCount1, SegEntries1} =
                 deliver_or_ack_msg(KeepAcks, RelSeq, AckCount, SegEntries),
             load_segment_entries(KeepAcks, Hdl, SegEntries1, PubCount,
                                  AckCount1);
         {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
-                IsPersistentNum:1, MSB:(7-?PUBLISH_PREFIX_BITS)>>} ->
+                IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
             %% because we specify /binary, and binaries are complete
             %% bytes, the size spec is in bytes, not bits.
-            {ok, <<LSB:1/binary, MsgId:?MSG_ID_BYTES/binary>>} =
-                file_handle_cache:read(
-                  Hdl, ?PUBLISH_RECORD_LENGTH_BYTES - 1),
-            <<RelSeq:?REL_SEQ_BITS_BYTE_ALIGNED>> = <<MSB, LSB/binary>>,
+            {ok, MsgId} = file_handle_cache:read(Hdl, ?MSG_ID_BYTES),
             SegEntries1 =
                 array:set(RelSeq,
                           {{MsgId, 1 == IsPersistentNum}, no_del, no_ack},
