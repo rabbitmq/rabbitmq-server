@@ -340,6 +340,11 @@ connection timeout
 
 maximum frame size (bytes)
 
+=item client_properties
+
+informational properties transmitted by the client during connection
+establishment
+
 =item recv_oct
 
 octets received

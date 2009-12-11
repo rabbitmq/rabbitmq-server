@@ -58,7 +58,7 @@
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
          recv_oct, recv_cnt, send_oct, send_cnt, send_pend,
-         state, channels, user, vhost, timeout, frame_max]).
+         state, channels, user, vhost, timeout, frame_max, client_properties]).
 
 %% connection lifecycle
 %%
@@ -219,7 +219,8 @@ start_connection(Parent, Deb, ClientSock) ->
                                       user = none,
                                       timeout_sec = ?HANDSHAKE_TIMEOUT,
                                       frame_max = ?FRAME_MIN_SIZE,
-                                      vhost = none},
+                                      vhost = none,
+                                      client_properties = none},
                                     callback = uninitialized_callback,
                                     recv_ref = none,
                                     connection_state = pre_init},
@@ -558,7 +559,8 @@ handle_method0(MethodName, FieldsBin, State) ->
     end.
 
 handle_method0(#'connection.start_ok'{mechanism = Mechanism,
-                                      response = Response},
+                                      response = Response,
+                                      client_properties = ClientProperties},
                State = #v1{connection_state = starting,
                            connection = Connection,
                            sock = Sock}) ->
@@ -570,7 +572,9 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                               frame_max = 131072,
                               heartbeat = 0}),
     State#v1{connection_state = tuning,
-             connection = Connection#connection{user = User}};
+             connection = Connection#connection{
+                            user = User,
+                            client_properties = ClientProperties}};
 handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
                                      frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
@@ -689,6 +693,9 @@ i(timeout, #v1{connection = #connection{timeout_sec = Timeout}}) ->
     Timeout;
 i(frame_max, #v1{connection = #connection{frame_max = FrameMax}}) ->
     FrameMax;
+i(client_properties, #v1{connection = #connection{
+                           client_properties = ClientProperties}}) ->
+    ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
 
