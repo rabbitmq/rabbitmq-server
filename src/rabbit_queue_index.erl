@@ -171,9 +171,9 @@ init(Name) ->
         lists:foldl(
           fun (Seg, {Segments2, CountAcc, DCountAcc}) ->
                   Segment = segment_find_or_new(Seg, Dir, Segments2),
-                  {SegEntries, _PubCount, _AckCount, Segment1} =
+                  {SegEntries, PubCount, AckCount, Segment1} =
                       load_segment(false, Segment),
-                  {Segment2 = #segment { pubs = PubCount, acks = AckCount },
+                  {Segment2 = #segment { pubs = PubCount1, acks = AckCount1 },
                    DCountAcc1} =
                       array:sparse_foldl(
                         fun (RelSeq, {{MsgId, _IsPersistent}, Del, no_ack},
@@ -183,9 +183,11 @@ init(Name) ->
                                       rabbit_msg_store:contains(MsgId),
                                       CleanShutdown, Del, RelSeq, Segment3),
                                 {Segment4, DCountAcc2 + DCountDelta}
-                        end, {Segment1, DCountAcc}, SegEntries),
+                        end, {Segment1 #segment { pubs = PubCount,
+                                                  acks = AckCount }, DCountAcc},
+                        SegEntries),
                   {segment_store(Segment2, Segments2),
-                   CountAcc + PubCount - AckCount, DCountAcc1}
+                   CountAcc + PubCount1 - AckCount1, DCountAcc1}
           end, {Segments, 0, DCount}, AllSegs),
     {Count, State2 #qistate { segments = Segments1, dirty_count = DCount1 }}.
 
