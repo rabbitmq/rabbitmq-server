@@ -41,31 +41,43 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([boot_database/0, boot_core_processes/0, boot_recovery/0,
-         boot_persister/0, boot_guid_generator/0,
-         boot_builtin_applications/0, boot_tcp_listeners/0,
+-export([boot_core_processes/0,
+         boot_recovery/0,
+         boot_tcp_listeners/0,
          boot_ssl_listeners/0]).
 
--rabbit_boot_step({database, [{mfa, {?MODULE, boot_database, []}}]}).
+-rabbit_boot_step({database, [{mfa, {rabbit_mnesia, init, []}}]}).
 -rabbit_boot_step({core_processes, [{description, "core processes"},
                                     {mfa, {?MODULE, boot_core_processes, []}},
-                                    {post, database}]}).
+                                    {post, database},
+                                    {pre, core_initialized}]}).
+-rabbit_boot_step({core_initialized, [{description, "core initialized"}]}).
+
 -rabbit_boot_step({recovery, [{mfa, {?MODULE, boot_recovery, []}},
-                              {post, core_processes}]}).
--rabbit_boot_step({persister, [{mfa, {?MODULE, boot_persister, []}},
+                              {post, core_initialized}]}).
+-rabbit_boot_step({persister, [{mfa, {rabbit_sup, start_child, [rabbit_persister]}},
                                {post, recovery}]}).
 -rabbit_boot_step({guid_generator, [{description, "guid generator"},
-                                    {mfa, {?MODULE, boot_guid_generator, []}},
-                                    {post, persister}]}).
--rabbit_boot_step({builtin_applications, [{description, "builtin applications"},
-                                          {mfa, {?MODULE, boot_builtin_applications, []}},
-                                          {post, guid_generator}]}).
+                                    {mfa, {rabbit_sup, start_child, [rabbit_guid]}},
+                                    {post, persister},
+                                    {pre, routing_ready}]}).
+-rabbit_boot_step({routing_ready, [{description, "message delivery logic ready"}]}).
+
+-rabbit_boot_step({log_relay, [{description, "error log relay"},
+                               {mfa, {rabbit_error_logger, boot, []}},
+                               {post, routing_ready}]}).
+
 -rabbit_boot_step({tcp_listeners, [{description, "TCP listeners"},
                                    {mfa, {?MODULE, boot_tcp_listeners, []}},
-                                   {post, builtin_applications}]}).
+                                   {post, log_relay},
+                                   {pre, networking_listening}]}).
 -rabbit_boot_step({ssl_listeners, [{description, "SSL listeners"},
                                    {mfa, {?MODULE, boot_ssl_listeners, []}},
-                                   {post, tcp_listeners}]}).
+                                   {post, tcp_listeners},
+                                   {pre, networking_listening}]}).
+
+-rabbit_boot_step({networking_listening, [{description, "network listeners available"}]}).
+
 %%---------------------------------------------------------------------------
 
 -import(application).
@@ -177,9 +189,9 @@ run_boot_step({StepName, Attributes}) ->
                   end,
     case [MFA || {mfa, MFA} <- Attributes] of
         [] ->
-            io:format("progress: ~s~n", [Description]);
+            io:format("progress -- ~s~n", [Description]);
         MFAs ->
-            io:format("starting: ~-20s ...", [Description]),
+            io:format("starting ~-20s ...", [Description]),
             [case catch apply(M,F,A) of
                  {'EXIT', Reason} -> boot_error("FAILED~nReason: ~p~n", [Reason]);
                  ok -> ok
@@ -258,11 +270,8 @@ add_boot_step_dep(G, RunsSecond, RunsFirst) ->
 
 %%---------------------------------------------------------------------------
 
-boot_database() ->
-    ok = rabbit_mnesia:init().
-
 boot_core_processes() ->
-    ok = start_child(rabbit_log),
+    ok = rabbit_sup:start_child(rabbit_log),
     ok = rabbit_hooks:start(),
 
     ok = rabbit_binary_generator:check_empty_content_body_frame_size(),
@@ -274,29 +283,18 @@ boot_core_processes() ->
              true ->
                  ok;
              false ->
-                 start_child(vm_memory_monitor, [MemoryWatermark])
+                 rabbit_sup:start_child(vm_memory_monitor, [MemoryWatermark])
          end,
 
     ok = rabbit_amqqueue:start(),
 
-    ok = start_child(rabbit_router),
-    ok = start_child(rabbit_node_monitor).
+    ok = rabbit_sup:start_child(rabbit_router),
+    ok = rabbit_sup:start_child(rabbit_node_monitor).
 
 boot_recovery() ->
     ok = maybe_insert_default_data(),
     ok = rabbit_exchange:recover(),
     ok = rabbit_amqqueue:recover().
-
-boot_persister() ->
-    ok = start_child(rabbit_persister).
-
-boot_guid_generator() ->
-    ok = start_child(rabbit_guid).
-
-boot_builtin_applications() ->
-    {ok, DefaultVHost} = application:get_env(default_vhost),
-    ok = error_logger:add_report_handler(rabbit_error_logger, [DefaultVHost]),
-    ok = start_builtin_amq_applications().
 
 boot_tcp_listeners() ->
     ok = rabbit_networking:start(),
@@ -376,15 +374,6 @@ print_banner() ->
     lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
     io:nl().
 
-start_child(Mod) ->
-    start_child(Mod, []).
-
-start_child(Mod, Args) ->
-    {ok,_} = supervisor:start_child(rabbit_sup,
-                                    {Mod, {Mod, start_link, Args},
-                                     transient, 100, worker, [Mod]}),
-    ok.
-
 ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),
     ok = ensure_working_log_handler(error_logger_file_h,
@@ -440,12 +429,6 @@ insert_default_data() ->
                                                DefaultConfigurePerm,
                                                DefaultWritePerm,
                                                DefaultReadPerm),
-    ok.
-
-start_builtin_amq_applications() ->
-    %%TODO: we may want to create a separate supervisor for these so
-    %%they don't bring down the entire app when they die and fail to
-    %%restart
     ok.
 
 rotate_logs(File, Suffix, Handler) ->
