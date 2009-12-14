@@ -33,11 +33,35 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
+-export([prepare/0, start/0, finish_boot/1, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
 
 -export([start/2, stop/1]).
 
 -export([log_location/1]).
+
+%%---------------------------------------------------------------------------
+%% Boot steps.
+-export([boot_database/0, boot_core_processes/0, boot_recovery/0,
+         boot_persister/0, boot_guid_generator/0,
+         boot_builtin_applications/0, boot_tcp_listeners/0,
+         boot_ssl_listeners/0]).
+
+-rabbit_boot_step({boot_database/0, [{description, "database"}]}).
+-rabbit_boot_step({boot_core_processes/0, [{description, "core processes"},
+                                           {post, {?MODULE, boot_database/0}}]}).
+-rabbit_boot_step({boot_recovery/0, [{description, "recovery"},
+                                     {post, {?MODULE, boot_core_processes/0}}]}).
+-rabbit_boot_step({boot_persister/0, [{description, "persister"},
+                                      {post, {?MODULE, boot_recovery/0}}]}).
+-rabbit_boot_step({boot_guid_generator/0, [{description, "guid generator"},
+                                           {post, {?MODULE, boot_persister/0}}]}).
+-rabbit_boot_step({boot_builtin_applications/0, [{description, "builtin applications"},
+                                                 {post, {?MODULE, boot_guid_generator/0}}]}).
+-rabbit_boot_step({boot_tcp_listeners/0, [{description, "TCP listeners"},
+                                          {post, {?MODULE, boot_builtin_applications/0}}]}).
+-rabbit_boot_step({boot_ssl_listeners/0, [{description, "SSL listeners"},
+                                          {post, {?MODULE, boot_tcp_listeners/0}}]}).
+%%---------------------------------------------------------------------------
 
 -import(application).
 -import(mnesia).
@@ -59,6 +83,8 @@
 
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
+-spec(finish_boot/1 :: ([any()]) -> 'ok').
+-spec(run_boot_steps/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
 -spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
@@ -115,103 +141,99 @@ rotate_logs(BinarySuffix) ->
 %%--------------------------------------------------------------------
 
 start(normal, []) ->
+    {ok, _SupPid} = rabbit_sup:start_link().
 
-    {ok, SupPid} = rabbit_sup:start_link(),
+finish_boot(BootSteps) ->
+    %% We set our group_leader so we appear to OTP to be part of the
+    %% rabbit application.
+    case application_controller:get_master(rabbit) of
+        undefined ->
+            exit({?MODULE, finish_boot, could_not_find_rabbit});
+        MasterPid when is_pid(MasterPid) ->
+            group_leader(MasterPid, self())
+    end,
 
     print_banner(),
-
-    HookModules = discover_static_hooks(startup_hook),
-
-    lists:foreach(
-      fun ({Phase, Msg, Thunk}) ->
-              io:format("starting ~-20s ...", [Msg]),
-              ok = run_static_hooks(HookModules, startup_hook, {pre, Phase}),
-              Thunk(),
-              ok = run_static_hooks(HookModules, startup_hook, {post, Phase}),
-              io:format("done~n");
-          ({Phase, Msg, M, F, A}) ->
-              io:format("starting ~-20s ...", [Msg]),
-              ok = run_static_hooks(HookModules, startup_hook, {pre, Phase}),
-              apply(M, F, A),
-              ok = run_static_hooks(HookModules, startup_hook, {post, Phase}),
-              io:format("done~n")
-      end,
-      [{database, "database",
-        fun () -> ok = rabbit_mnesia:init() end},
-       {core_processes, "core processes",
-        fun () ->
-                ok = start_child(rabbit_log),
-                ok = rabbit_hooks:start(),
-
-                ok = rabbit_binary_generator:
-                    check_empty_content_body_frame_size(),
-
-                ok = rabbit_alarm:start(),
-
-                {ok, MemoryWatermark} =
-                    application:get_env(vm_memory_high_watermark),
-                ok = case MemoryWatermark == 0 of
-                         true ->
-                             ok;
-                         false ->
-                             start_child(vm_memory_monitor, [MemoryWatermark])
-                     end,
-
-                ok = rabbit_amqqueue:start(),
-
-                ok = start_child(rabbit_router),
-                ok = start_child(rabbit_node_monitor)
-        end},
-       {recovery, "recovery",
-        fun () ->
-                ok = maybe_insert_default_data(),
-                ok = rabbit_exchange:recover(),
-                ok = rabbit_amqqueue:recover()
-        end},
-       {persister, "persister",
-        fun () ->
-                ok = start_child(rabbit_persister)
-        end},
-       {guid_generator, "guid generator",
-        fun () ->
-                ok = start_child(rabbit_guid)
-        end},
-       {builtin_applications, "builtin applications",
-        fun () ->
-                {ok, DefaultVHost} = application:get_env(default_vhost),
-                ok = error_logger:add_report_handler(
-                       rabbit_error_logger, [DefaultVHost]),
-                ok = start_builtin_amq_applications()
-        end},
-       {tcp_listeners, "TCP listeners",
-        fun () ->
-                ok = rabbit_networking:start(),
-                {ok, TcpListeners} = application:get_env(tcp_listeners),
-                lists:foreach(
-                  fun ({Host, Port}) ->
-                          ok = rabbit_networking:start_tcp_listener(Host, Port)
-                  end,
-                  TcpListeners)
-        end},
-       {ssl_listeners, "SSL listeners",
-        fun () ->
-                case application:get_env(ssl_listeners) of
-                    {ok, []} ->
-                        ok;
-                    {ok, SslListeners} ->
-                        ok = rabbit_misc:start_applications([crypto, ssl]),
-
-                        {ok, SslOpts} = application:get_env(ssl_options),
-
-                        [rabbit_networking:start_ssl_listener
-                         (Host, Port, SslOpts) || {Host, Port} <- SslListeners],
-                        ok
-                end
-        end}]),
-
+    [ok = run_boot_step(Step) || Step <- BootSteps],
     io:format("~nbroker running~n"),
+    ok.
 
-    {ok, SupPid}.
+run_boot_step({ModFunSpec = {Module, {Fun, 0}}, Attributes}) ->
+    Description = case lists:keysearch(description, 1, Attributes) of
+                      {value, {_, D}} -> D;
+                      false -> lists:flatten(io_lib:format("~w:~w", [Module, Fun]))
+                  end,
+    io:format("starting ~-20s ...", [Description]),
+    case catch Module:Fun() of
+        {'EXIT', Reason} ->
+            io:format("FAILED~nReason: ~p~n", [Reason]),
+            ChainedReason = {?MODULE, finish_boot, failed, ModFunSpec, Reason},
+            error_logger:error_report(ChainedReason),
+            timer:sleep(1000),
+            exit(ChainedReason);
+        ok ->
+            io:format("done~n"),
+            ok
+    end.
+
+boot_database() ->
+    ok = rabbit_mnesia:init().
+
+boot_core_processes() ->
+    ok = start_child(rabbit_log),
+    ok = rabbit_hooks:start(),
+
+    ok = rabbit_binary_generator:check_empty_content_body_frame_size(),
+
+    ok = rabbit_alarm:start(),
+
+    {ok, MemoryWatermark} = application:get_env(vm_memory_high_watermark),
+    ok = case MemoryWatermark == 0 of
+             true ->
+                 ok;
+             false ->
+                 start_child(vm_memory_monitor, [MemoryWatermark])
+         end,
+
+    ok = rabbit_amqqueue:start(),
+
+    ok = start_child(rabbit_router),
+    ok = start_child(rabbit_node_monitor).
+
+boot_recovery() ->
+    ok = maybe_insert_default_data(),
+    ok = rabbit_exchange:recover(),
+    ok = rabbit_amqqueue:recover().
+
+boot_persister() ->
+    ok = start_child(rabbit_persister).
+
+boot_guid_generator() ->
+    ok = start_child(rabbit_guid).
+
+boot_builtin_applications() ->
+    {ok, DefaultVHost} = application:get_env(default_vhost),
+    ok = error_logger:add_report_handler(rabbit_error_logger, [DefaultVHost]),
+    ok = start_builtin_amq_applications().
+
+boot_tcp_listeners() ->
+    ok = rabbit_networking:start(),
+    {ok, TcpListeners} = application:get_env(tcp_listeners),
+    [ok = rabbit_networking:start_tcp_listener(Host, Port)
+     || {Host, Port} <- TcpListeners],
+    ok.
+
+boot_ssl_listeners() ->
+    case application:get_env(ssl_listeners) of
+        {ok, []} ->
+            ok;
+        {ok, SslListeners} ->
+            ok = rabbit_misc:start_applications([crypto, ssl]),
+            {ok, SslOpts} = application:get_env(ssl_options),
+            [rabbit_networking:start_ssl_listener(Host, Port, SslOpts)
+             || {Host, Port} <- SslListeners],
+            ok
+    end.
 
 stop(_State) ->
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
@@ -375,20 +397,3 @@ log_rotation_result(ok, {error, SaslLogError}) ->
     {error, {cannot_rotate_sasl_logs, SaslLogError}};
 log_rotation_result(ok, ok) ->
     ok.
-
-discover_static_hooks(Hook) ->
-    %% App files don't let us stick arbitrary keys in, so we do
-    %% something a bit icky here and go for "convention over
-    %% configuration", choosing to examine modules with names starting
-    %% with 'rabbit_static_hook_' to see if they have appropriate
-    %% exported hook functions.
-    [M || {App, _, _} <- application:loaded_applications(),
-          M <- begin {ok, Ms} = application:get_key(App, modules), Ms end,
-          case atom_to_list(M) of "rabbit_static_hook_" ++ _ -> true; _ -> false end,
-          {module, M} == code:load_file(M),
-          erlang:function_exported(M, Hook, 1)].
-
-run_static_hooks(HookModules, Hook, Event) ->
-    ok = lists:foreach(fun (M) ->
-                          {M, Hook, ok} = {M, Hook, M:Hook(Event)}
-                  end, HookModules).

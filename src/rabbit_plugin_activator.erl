@@ -96,12 +96,20 @@ start() ->
         {ok, Module, Warnings} ->
             %% This gets lots of spurious no-source warnings when we
             %% have .ez files, so we want to supress them to prevent
-            %% hiding real issues.
+            %% hiding real issues. On Ubuntu, we also get warnings
+            %% about kernel/stdlib sources being out of date, which we
+            %% also ignore for the same reason.
             WarningStr = Module:format_warning(
                            [W || W <- Warnings,
                                  case W of
                                      {warning, {source_not_found, _}} -> false;
-                                     _                                -> true
+                                     {warning, {obj_out_of_date, {_,_,WApp,_,_}}}
+                                       when WApp == mnesia;
+                                            WApp == stdlib;
+                                            WApp == kernel;
+                                            WApp == sasl;
+                                            WApp == os_mon -> false;
+                                     _ -> true
                                  end]),
             case length(WarningStr) of
                 0 -> ok;
@@ -113,7 +121,7 @@ start() ->
                   [ScriptFile, Module:format_error(Error)])
     end,
 
-    case post_process_script(ScriptFile) of
+    case post_process_script(ScriptFile, boot_steps(AllApps)) of
         ok -> ok;
         {error, Reason} ->
             error("post processing of boot script file ~s failed:~n~w",
@@ -139,6 +147,37 @@ determine_version(App) ->
     application:load(App),
     {ok, Vsn} = application:get_key(App, vsn),
     {App, Vsn}.
+
+boot_steps(AllApps) ->
+    [application:load(App) || App <- AllApps],
+    Modules = lists:usort(
+                lists:append([Modules
+                              || {ok, Modules} <- [application:get_key(App, modules)
+                                                   || App <- AllApps]])),
+    UnsortedSteps =
+        lists:flatmap(fun (Module) ->
+                              [{{Module, FunSpec}, Attributes}
+                               || {rabbit_boot_step, [{FunSpec, Attributes}]}
+                                      <- Module:module_info(attributes)]
+                      end, Modules),
+    sort_boot_steps(UnsortedSteps).
+
+sort_boot_steps(UnsortedSteps) ->
+    G = digraph:new(),
+    [digraph:add_vertex(G, ModFunSpec, Step) || Step = {ModFunSpec, _Attrs} <- UnsortedSteps],
+    lists:foreach(fun ({ModFunSpec, Attributes}) ->
+                          [digraph:add_edge(G, ModFunSpec, PostModFunSpec)
+                           || {post, PostModFunSpec} <- Attributes],
+                          [digraph:add_edge(G, PreModFunSpec, ModFunSpec)
+                           || {pre, PreModFunSpec} <- Attributes]
+                  end, UnsortedSteps),
+    SortedStepsRev = [begin
+                          {ModFunSpec, Step} = digraph:vertex(G, ModFunSpec),
+                          Step
+                      end || ModFunSpec <- digraph_utils:topsort(G)],
+    SortedSteps = lists:reverse(SortedStepsRev),
+    digraph:delete(G),
+    SortedSteps.
 
 assert_dir(Dir) ->
     case filelib:is_dir(Dir) of
@@ -219,10 +258,12 @@ expand_dependencies(Current, [Next|Rest]) ->
             expand_dependencies(sets:add_element(Next, Current), Rest ++ Unique)
     end.
 
-post_process_script(ScriptFile) ->
+post_process_script(ScriptFile, BootSteps) ->
     case file:consult(ScriptFile) of
         {ok, [{script, Name, Entries}]} ->
-            NewEntries = process_entries(Entries),
+            NewEntries = lists:flatmap(fun (Entry) ->
+                                               process_entry(Entry, BootSteps)
+                                       end, Entries),
             case file:open(ScriptFile, [write]) of
                 {ok, Fd} ->
                     io:format(Fd, "%% script generated at ~w ~w~n~p.~n",
@@ -236,13 +277,12 @@ post_process_script(ScriptFile) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entries([]) ->
-    [];
-process_entries([Entry = {apply,{application,start_boot,[stdlib,permanent]}} |
-                 Rest]) ->
-    [Entry, {apply,{rabbit,prepare,[]}} | Rest];
-process_entries([Entry|Rest]) ->
-    [Entry | process_entries(Rest)].
+process_entry(Entry = {apply,{application,start_boot,[stdlib,permanent]}}, _BootSteps) ->
+    [Entry, {apply,{rabbit,prepare,[]}}];
+process_entry(Entry = {progress, started}, BootSteps) ->
+    [{apply,{rabbit,finish_boot,[BootSteps]}}, Entry];
+process_entry(Entry, _BootSteps) ->
+    [Entry].
 
 error(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
