@@ -57,7 +57,6 @@ ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
 all: $(TARGETS)
-	./scripts/rabbitmq-activate-plugins
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) $@ < $<

@@ -121,7 +121,7 @@ start() ->
                   [ScriptFile, Module:format_error(Error)])
     end,
 
-    case post_process_script(ScriptFile, boot_steps(AllApps)) of
+    case post_process_script(ScriptFile) of
         ok -> ok;
         {error, Reason} ->
             error("post processing of boot script file ~s failed:~n~w",
@@ -147,69 +147,6 @@ determine_version(App) ->
     application:load(App),
     {ok, Vsn} = application:get_key(App, vsn),
     {App, Vsn}.
-
-boot_steps(AllApps) ->
-    [application:load(App) || App <- AllApps],
-    Modules = lists:usort(
-                lists:append([Modules
-                              || {ok, Modules} <- [application:get_key(App, modules)
-                                                   || App <- AllApps]])),
-    UnsortedSteps =
-        lists:flatmap(fun (Module) ->
-                              [{{Module, FunSpec}, Attributes}
-                               || {rabbit_boot_step, [{FunSpec, Attributes}]}
-                                      <- Module:module_info(attributes)]
-                      end, Modules),
-    sort_boot_steps(UnsortedSteps).
-
-sort_boot_steps(UnsortedSteps) ->
-    G = digraph:new([acyclic]),
-    [digraph:add_vertex(G, ModFunSpec, Step) || Step = {ModFunSpec, _Attrs} <- UnsortedSteps],
-    lists:foreach(fun ({ModFunSpec, Attributes}) ->
-                          [add_boot_step_dep(G, ModFunSpec, PostModFunSpec)
-                           || {post, PostModFunSpec} <- Attributes],
-                          [add_boot_step_dep(G, PreModFunSpec, ModFunSpec)
-                           || {pre, PreModFunSpec} <- Attributes]
-                  end, UnsortedSteps),
-    SortedStepsRev = [begin
-                          {ModFunSpec, Step} = digraph:vertex(G, ModFunSpec),
-                          Step
-                      end || ModFunSpec <- digraph_utils:topsort(G)],
-    SortedSteps = lists:reverse(SortedStepsRev),
-    digraph:delete(G),
-    check_boot_steps(SortedSteps).
-
-add_boot_step_dep(G, RunsSecond, RunsFirst) ->
-    case digraph:add_edge(G, RunsSecond, RunsFirst) of
-        {error, Reason} ->
-            error("Could not add boot step dependency of ~s on ~s:~n~s",
-                  [format_modfunspec(RunsSecond), format_modfunspec(RunsFirst),
-                   case Reason of
-                       {bad_vertex, V} ->
-                           io_lib:format("Boot step not registered: ~s~n",
-                                         [format_modfunspec(V)]);
-                       {bad_edge, [First | Rest]} ->
-                           [io_lib:format("Cyclic dependency: ~s", [format_modfunspec(First)]),
-                            [io_lib:format(" depends on ~s", [format_modfunspec(Next)])
-                             || Next <- Rest],
-                            io_lib:format(" depends on ~s~n", [format_modfunspec(First)])]
-                   end]);
-        _ ->
-            ok
-    end.
-
-check_boot_steps(SortedSteps) ->
-    case [ModFunSpec || {ModFunSpec = {Module, {Fun, Arity}}, _} <- SortedSteps,
-                        not erlang:function_exported(Module, Fun, Arity)] of
-        [] ->
-            SortedSteps;
-        MissingFunctions ->
-            error("Boot steps not exported:~s~n",
-                  [[[" ", format_modfunspec(MFS)] || MFS <- MissingFunctions]])
-    end.
-
-format_modfunspec({Module, {Fun, Arity}}) ->
-    lists:flatten(io_lib:format("~w:~w/~b", [Module, Fun, Arity])).
 
 assert_dir(Dir) ->
     case filelib:is_dir(Dir) of
@@ -290,12 +227,10 @@ expand_dependencies(Current, [Next|Rest]) ->
             expand_dependencies(sets:add_element(Next, Current), Rest ++ Unique)
     end.
 
-post_process_script(ScriptFile, BootSteps) ->
+post_process_script(ScriptFile) ->
     case file:consult(ScriptFile) of
         {ok, [{script, Name, Entries}]} ->
-            NewEntries = lists:flatmap(fun (Entry) ->
-                                               process_entry(Entry, BootSteps)
-                                       end, Entries),
+            NewEntries = lists:flatmap(fun process_entry/1, Entries),
             case file:open(ScriptFile, [write]) of
                 {ok, Fd} ->
                     io:format(Fd, "%% script generated at ~w ~w~n~p.~n",
@@ -309,11 +244,9 @@ post_process_script(ScriptFile, BootSteps) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entry(Entry = {apply,{application,start_boot,[stdlib,permanent]}}, _BootSteps) ->
+process_entry(Entry = {apply,{application,start_boot,[stdlib,permanent]}}) ->
     [Entry, {apply,{rabbit,prepare,[]}}];
-process_entry(Entry = {progress, started}, BootSteps) ->
-    [{apply,{rabbit,finish_boot,[BootSteps]}}, Entry];
-process_entry(Entry, _BootSteps) ->
+process_entry(Entry) ->
     [Entry].
 
 error(Fmt, Args) ->

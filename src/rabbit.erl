@@ -33,7 +33,7 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, finish_boot/1, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
 
 -export([start/2, stop/1]).
 
@@ -80,11 +80,9 @@
 
 -type(log_location() :: 'tty' | 'undefined' | string()).
 -type(file_suffix() :: binary()).
--type(boot_step() :: {{atom(), {atom(), 0}}, [{atom(), any()}]}).
 
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
--spec(finish_boot/1 :: ([boot_step()]) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
 -spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
@@ -141,24 +139,33 @@ rotate_logs(BinarySuffix) ->
 %%--------------------------------------------------------------------
 
 start(normal, []) ->
-    {ok, _SupPid} = rabbit_sup:start_link().
-
-finish_boot(BootSteps) ->
-    %% We set our group_leader so we appear to OTP to be part of the
-    %% rabbit application.
-    case application_controller:get_master(rabbit) of
-        undefined ->
-            exit({?MODULE, finish_boot, could_not_find_rabbit});
-        MasterPid when is_pid(MasterPid) ->
-            group_leader(MasterPid, self())
-    end,
+    {ok, SupPid} = rabbit_sup:start_link(),
 
     print_banner(),
-    [ok = run_boot_step(Step) || Step <- BootSteps],
+    [ok = run_boot_step(Step) || Step <- boot_steps()],
     io:format("~nbroker running~n"),
+
+    {ok, SupPid}.
+
+
+stop(_State) ->
+    terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
+    ok = rabbit_alarm:stop(),
+    ok = case rabbit_mnesia:is_clustered() of
+             true  -> rabbit_amqqueue:on_node_down(node());
+             false -> rabbit_mnesia:empty_ram_only_tables()
+         end,
     ok.
 
-run_boot_step({ModFunSpec = {Module, {Fun, 0}}, Attributes}) ->
+%%---------------------------------------------------------------------------
+
+boot_error(Format, Args) ->
+    io:format(Format, Args),
+    error_logger:error_msg(Format, Args),
+    timer:sleep(1000),
+    exit({?MODULE, failure_during_boot}).
+
+run_boot_step({{Module, {Fun, 0}}, Attributes}) ->
     Description = case lists:keysearch(description, 1, Attributes) of
                       {value, {_, D}} -> D;
                       false -> lists:flatten(io_lib:format("~w:~w", [Module, Fun]))
@@ -166,15 +173,77 @@ run_boot_step({ModFunSpec = {Module, {Fun, 0}}, Attributes}) ->
     io:format("starting ~-20s ...", [Description]),
     case catch Module:Fun() of
         {'EXIT', Reason} ->
-            io:format("FAILED~nReason: ~p~n", [Reason]),
-            ChainedReason = {?MODULE, finish_boot, failed, ModFunSpec, Reason},
-            error_logger:error_report(ChainedReason),
-            timer:sleep(1000),
-            exit(ChainedReason);
+            boot_error("FAILED~nReason: ~p~n", [Reason]);
         ok ->
             io:format("done~n"),
             ok
     end.
+
+boot_steps() ->
+    AllApps = [App || {App, _, _} <- application:loaded_applications()],
+    Modules = lists:usort(
+                lists:append([Modules
+                              || {ok, Modules} <- [application:get_key(App, modules)
+                                                   || App <- AllApps]])),
+    UnsortedSteps =
+        lists:flatmap(fun (Module) ->
+                              [{{Module, FunSpec}, Attributes}
+                               || {rabbit_boot_step, [{FunSpec, Attributes}]}
+                                      <- Module:module_info(attributes)]
+                      end, Modules),
+    sort_boot_steps(UnsortedSteps).
+
+sort_boot_steps(UnsortedSteps) ->
+    G = digraph:new([acyclic]),
+    [digraph:add_vertex(G, ModFunSpec, Step) || Step = {ModFunSpec, _Attrs} <- UnsortedSteps],
+    lists:foreach(fun ({ModFunSpec, Attributes}) ->
+                          [add_boot_step_dep(G, ModFunSpec, PostModFunSpec)
+                           || {post, PostModFunSpec} <- Attributes],
+                          [add_boot_step_dep(G, PreModFunSpec, ModFunSpec)
+                           || {pre, PreModFunSpec} <- Attributes]
+                  end, UnsortedSteps),
+    SortedStepsRev = [begin
+                          {ModFunSpec, Step} = digraph:vertex(G, ModFunSpec),
+                          Step
+                      end || ModFunSpec <- digraph_utils:topsort(G)],
+    SortedSteps = lists:reverse(SortedStepsRev),
+    digraph:delete(G),
+    check_boot_steps(SortedSteps).
+
+add_boot_step_dep(G, RunsSecond, RunsFirst) ->
+    case digraph:add_edge(G, RunsSecond, RunsFirst) of
+        {error, Reason} ->
+            boot_error(
+              "Could not add boot step dependency of ~s on ~s:~n~s",
+              [format_modfunspec(RunsSecond), format_modfunspec(RunsFirst),
+               case Reason of
+                   {bad_vertex, V} ->
+                       io_lib:format("Boot step not registered: ~s~n",
+                                     [format_modfunspec(V)]);
+                   {bad_edge, [First | Rest]} ->
+                       [io_lib:format("Cyclic dependency: ~s", [format_modfunspec(First)]),
+                        [io_lib:format(" depends on ~s", [format_modfunspec(Next)])
+                         || Next <- Rest],
+                        io_lib:format(" depends on ~s~n", [format_modfunspec(First)])]
+               end]);
+        _ ->
+            ok
+    end.
+
+check_boot_steps(SortedSteps) ->
+    case [ModFunSpec || {ModFunSpec = {Module, {Fun, Arity}}, _} <- SortedSteps,
+                        not erlang:function_exported(Module, Fun, Arity)] of
+        [] ->
+            SortedSteps;
+        MissingFunctions ->
+            boot_error("Boot steps not exported:~s~n",
+                       [[[" ", format_modfunspec(MFS)] || MFS <- MissingFunctions]])
+    end.
+
+format_modfunspec({Module, {Fun, Arity}}) ->
+    lists:flatten(io_lib:format("~w:~w/~b", [Module, Fun, Arity])).
+
+%%---------------------------------------------------------------------------
 
 boot_database() ->
     ok = rabbit_mnesia:init().
@@ -234,15 +303,6 @@ boot_ssl_listeners() ->
              || {Host, Port} <- SslListeners],
             ok
     end.
-
-stop(_State) ->
-    terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
-    ok = rabbit_alarm:stop(),
-    ok = case rabbit_mnesia:is_clustered() of
-             true  -> rabbit_amqqueue:on_node_down(node());
-             false -> rabbit_mnesia:empty_ram_only_tables()
-         end,
-    ok.
 
 %---------------------------------------------------------------------------
 
