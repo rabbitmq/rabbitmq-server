@@ -80,11 +80,11 @@
 
 -type(log_location() :: 'tty' | 'undefined' | string()).
 -type(file_suffix() :: binary()).
+-type(boot_step() :: {{atom(), {atom(), 0}}, [{atom(), any()}]}).
 
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
--spec(finish_boot/1 :: ([any()]) -> 'ok').
--spec(run_boot_steps/0 :: () -> 'ok').
+-spec(finish_boot/1 :: ([boot_step()]) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
 -spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
