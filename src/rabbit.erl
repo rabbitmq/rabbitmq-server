@@ -46,21 +46,26 @@
          boot_builtin_applications/0, boot_tcp_listeners/0,
          boot_ssl_listeners/0]).
 
--rabbit_boot_step({boot_database/0, [{description, "database"}]}).
--rabbit_boot_step({boot_core_processes/0, [{description, "core processes"},
-                                           {post, {?MODULE, boot_database/0}}]}).
--rabbit_boot_step({boot_recovery/0, [{description, "recovery"},
-                                     {post, {?MODULE, boot_core_processes/0}}]}).
--rabbit_boot_step({boot_persister/0, [{description, "persister"},
-                                      {post, {?MODULE, boot_recovery/0}}]}).
--rabbit_boot_step({boot_guid_generator/0, [{description, "guid generator"},
-                                           {post, {?MODULE, boot_persister/0}}]}).
--rabbit_boot_step({boot_builtin_applications/0, [{description, "builtin applications"},
-                                                 {post, {?MODULE, boot_guid_generator/0}}]}).
--rabbit_boot_step({boot_tcp_listeners/0, [{description, "TCP listeners"},
-                                          {post, {?MODULE, boot_builtin_applications/0}}]}).
--rabbit_boot_step({boot_ssl_listeners/0, [{description, "SSL listeners"},
-                                          {post, {?MODULE, boot_tcp_listeners/0}}]}).
+-rabbit_boot_step({database, [{mfa, {?MODULE, boot_database, []}}]}).
+-rabbit_boot_step({core_processes, [{description, "core processes"},
+                                    {mfa, {?MODULE, boot_core_processes, []}},
+                                    {post, database}]}).
+-rabbit_boot_step({recovery, [{mfa, {?MODULE, boot_recovery, []}},
+                              {post, core_processes}]}).
+-rabbit_boot_step({persister, [{mfa, {?MODULE, boot_persister, []}},
+                               {post, recovery}]}).
+-rabbit_boot_step({guid_generator, [{description, "guid generator"},
+                                    {mfa, {?MODULE, boot_guid_generator, []}},
+                                    {post, persister}]}).
+-rabbit_boot_step({builtin_applications, [{description, "builtin applications"},
+                                          {mfa, {?MODULE, boot_builtin_applications, []}},
+                                          {post, guid_generator}]}).
+-rabbit_boot_step({tcp_listeners, [{description, "TCP listeners"},
+                                   {mfa, {?MODULE, boot_tcp_listeners, []}},
+                                   {post, builtin_applications}]}).
+-rabbit_boot_step({ssl_listeners, [{description, "SSL listeners"},
+                                   {mfa, {?MODULE, boot_ssl_listeners, []}},
+                                   {post, tcp_listeners}]}).
 %%---------------------------------------------------------------------------
 
 -import(application).
@@ -160,21 +165,25 @@ stop(_State) ->
 %%---------------------------------------------------------------------------
 
 boot_error(Format, Args) ->
-    io:format(Format, Args),
+    io:format("BOOT ERROR: " ++ Format, Args),
     error_logger:error_msg(Format, Args),
     timer:sleep(1000),
     exit({?MODULE, failure_during_boot}).
 
-run_boot_step({{Module, {Fun, 0}}, Attributes}) ->
+run_boot_step({StepName, Attributes}) ->
     Description = case lists:keysearch(description, 1, Attributes) of
                       {value, {_, D}} -> D;
-                      false -> lists:flatten(io_lib:format("~w:~w", [Module, Fun]))
+                      false -> StepName
                   end,
-    io:format("starting ~-20s ...", [Description]),
-    case catch Module:Fun() of
-        {'EXIT', Reason} ->
-            boot_error("FAILED~nReason: ~p~n", [Reason]);
-        ok ->
+    case [MFA || {mfa, MFA} <- Attributes] of
+        [] ->
+            io:format("progress: ~s~n", [Description]);
+        MFAs ->
+            io:format("starting: ~-20s ...", [Description]),
+            [case catch apply(M,F,A) of
+                 {'EXIT', Reason} -> boot_error("FAILED~nReason: ~p~n", [Reason]);
+                 ok -> ok
+             end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
     end.
@@ -187,61 +196,65 @@ boot_steps() ->
                                                    || App <- AllApps]])),
     UnsortedSteps =
         lists:flatmap(fun (Module) ->
-                              [{{Module, FunSpec}, Attributes}
-                               || {rabbit_boot_step, [{FunSpec, Attributes}]}
+                              [{StepName, Attributes}
+                               || {rabbit_boot_step, [{StepName, Attributes}]}
                                       <- Module:module_info(attributes)]
                       end, Modules),
     sort_boot_steps(UnsortedSteps).
 
 sort_boot_steps(UnsortedSteps) ->
     G = digraph:new([acyclic]),
-    [digraph:add_vertex(G, ModFunSpec, Step) || Step = {ModFunSpec, _Attrs} <- UnsortedSteps],
-    lists:foreach(fun ({ModFunSpec, Attributes}) ->
-                          [add_boot_step_dep(G, ModFunSpec, PostModFunSpec)
-                           || {post, PostModFunSpec} <- Attributes],
-                          [add_boot_step_dep(G, PreModFunSpec, ModFunSpec)
-                           || {pre, PreModFunSpec} <- Attributes]
+
+    %% Add vertices, with duplicate checking.
+    [case digraph:vertex(G, StepName) of
+         false -> digraph:add_vertex(G, StepName, Step);
+         _ -> boot_error("Duplicate boot step name: ~w~n", [StepName])
+     end || Step = {StepName, _Attrs} <- UnsortedSteps],
+
+    %% Add edges, detecting cycles and missing vertices.
+    lists:foreach(fun ({StepName, Attributes}) ->
+                          [add_boot_step_dep(G, StepName, PrecedingStepName)
+                           || {post, PrecedingStepName} <- Attributes],
+                          [add_boot_step_dep(G, SucceedingStepName, StepName)
+                           || {pre, SucceedingStepName} <- Attributes]
                   end, UnsortedSteps),
+
+    %% Use topological sort to find a consistent ordering (if there is
+    %% one, otherwise fail).
     SortedStepsRev = [begin
-                          {ModFunSpec, Step} = digraph:vertex(G, ModFunSpec),
+                          {StepName, Step} = digraph:vertex(G, StepName),
                           Step
-                      end || ModFunSpec <- digraph_utils:topsort(G)],
+                      end || StepName <- digraph_utils:topsort(G)],
     SortedSteps = lists:reverse(SortedStepsRev),
+
     digraph:delete(G),
-    check_boot_steps(SortedSteps).
+
+    %% Check that all mentioned {M,F,A} triples are exported.
+    case [{StepName, {M,F,A}} || {StepName, Attributes} <- SortedSteps,
+                                 {mfa, {M,F,A}} <- Attributes,
+                                 not erlang:function_exported(M, F, length(A))] of
+        [] ->
+            SortedSteps;
+        MissingFunctions ->
+            boot_error("Boot step functions not exported: ~p~n", [MissingFunctions])
+    end.
 
 add_boot_step_dep(G, RunsSecond, RunsFirst) ->
     case digraph:add_edge(G, RunsSecond, RunsFirst) of
         {error, Reason} ->
-            boot_error(
-              "Could not add boot step dependency of ~s on ~s:~n~s",
-              [format_modfunspec(RunsSecond), format_modfunspec(RunsFirst),
+            boot_error("Could not add boot step dependency of ~w on ~w:~n~s",
+              [RunsSecond, RunsFirst,
                case Reason of
                    {bad_vertex, V} ->
-                       io_lib:format("Boot step not registered: ~s~n",
-                                     [format_modfunspec(V)]);
+                       io_lib:format("Boot step not registered: ~w~n", [V]);
                    {bad_edge, [First | Rest]} ->
-                       [io_lib:format("Cyclic dependency: ~s", [format_modfunspec(First)]),
-                        [io_lib:format(" depends on ~s", [format_modfunspec(Next)])
-                         || Next <- Rest],
-                        io_lib:format(" depends on ~s~n", [format_modfunspec(First)])]
+                       [io_lib:format("Cyclic dependency: ~w", [First]),
+                        [io_lib:format(" depends on ~w", [Next]) || Next <- Rest],
+                        io_lib:format(" depends on ~w~n", [First])]
                end]);
         _ ->
             ok
     end.
-
-check_boot_steps(SortedSteps) ->
-    case [ModFunSpec || {ModFunSpec = {Module, {Fun, Arity}}, _} <- SortedSteps,
-                        not erlang:function_exported(Module, Fun, Arity)] of
-        [] ->
-            SortedSteps;
-        MissingFunctions ->
-            boot_error("Boot steps not exported:~s~n",
-                       [[[" ", format_modfunspec(MFS)] || MFS <- MissingFunctions]])
-    end.
-
-format_modfunspec({Module, {Fun, Arity}}) ->
-    lists:flatten(io_lib:format("~w:~w/~b", [Module, Fun, Arity])).
 
 %%---------------------------------------------------------------------------
 
