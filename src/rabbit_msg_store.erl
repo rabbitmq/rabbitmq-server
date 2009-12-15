@@ -792,11 +792,12 @@ build_index(Files, State) ->
 
 build_index(Left, [], FilesToCompact, State) ->
     ok = index_delete_by_file(undefined, State),
-    Offset = case lists:reverse(index_search_by_file(Left, State)) of
-                 [] -> 0;
-                 [#msg_location { offset = MaxOffset,
-                                  total_size = TotalSize } | _] ->
-                     MaxOffset + TotalSize
+    Offset = case index_search_by_file(Left, State) of
+                 []   -> 0;
+                 List -> #msg_location { offset = MaxOffset,
+                                         total_size = TotalSize } =
+                             lists:last(List),
+                         MaxOffset + TotalSize
              end,
     {Offset, compact(FilesToCompact, %% this never includes the current file
                      State #msstate { current_file = Left })};
