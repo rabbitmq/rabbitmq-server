@@ -384,15 +384,16 @@ maybe_flush_journal(State) ->
     State.
 
 all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
-    sets:to_list(
-      lists:foldl(
-        fun (SegName, Set) ->
-                sets:add_element(
-                  list_to_integer(
-                    lists:takewhile(fun(C) -> $0 =< C andalso C =< $9 end,
-                                    SegName)), Set)
-        end, sets:from_list(segment_fetch_keys(Segments)),
-        filelib:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir))).
+    lists:sort(
+      sets:to_list(
+        lists:foldl(
+          fun (SegName, Set) ->
+                  sets:add_element(
+                    list_to_integer(
+                      lists:takewhile(fun(C) -> $0 =< C andalso C =< $9 end,
+                                      SegName)), Set)
+          end, sets:from_list(segment_fetch_keys(Segments)),
+          filelib:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)))).
 
 blank_state(QueueName) ->
     StrName = queue_name_to_dir_name(QueueName),
