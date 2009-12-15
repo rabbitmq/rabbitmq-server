@@ -124,6 +124,9 @@ init(Q = #amqqueue { name = QName }) ->
 terminate(shutdown, #q{variable_queue_state = VQS}) ->
     ok = rabbit_memory_monitor:deregister(self()),
     _VQS = rabbit_variable_queue:terminate(VQS);
+terminate({shutdown, _}, #q{variable_queue_state = VQS}) ->
+    ok = rabbit_memory_monitor:deregister(self()),
+    _VQS = rabbit_variable_queue:terminate(VQS);
 terminate(_Reason, State = #q{variable_queue_state = VQS}) ->
     ok = rabbit_memory_monitor:deregister(self()),
     %% FIXME: How do we cancel active subscriptions?
