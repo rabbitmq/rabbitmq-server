@@ -67,7 +67,7 @@
               {nodes, [erlang_node()]} |
               {running_nodes, [erlang_node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
--spec(start_child/2 :: (atom(), [any()]) -> 'ok'). 
+-spec(start_child/2 :: (atom(), [any()]) -> 'ok').
 
 -endif.
 
@@ -80,7 +80,7 @@ prepare() ->
 start() ->
     try
         ok = prepare(),
-        ok = rabbit_misc:start_applications(?APPS) 
+        ok = rabbit_misc:start_applications(?APPS)
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
@@ -90,7 +90,12 @@ stop() ->
     ok = rabbit_misc:stop_applications(?APPS).
 
 stop_and_halt() ->
-    case catch stop() of _ -> ok end.
+    try
+        stop()
+    after
+        init:stop()
+    end,
+    ok.
 
 status() ->
     [{running_applications, application:which_applications()}] ++
@@ -214,7 +219,7 @@ stop(_State) ->
 %---------------------------------------------------------------------------
 
 log_location(Type) ->
-    case application:get_env(Type, case Type of 
+    case application:get_env(Type, case Type of
                                        kernel -> error_logger;
                                        sasl   -> sasl_error_logger
                                    end) of
@@ -305,7 +310,7 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
                              throw({error, {cannot_log_to_tty,
                                             TTYHandler, not_installed}})
                      end;
-        _         -> case lists:member(NewFHandler, Handlers) of 
+        _         -> case lists:member(NewFHandler, Handlers) of
                          true  -> ok;
                          false -> case rotate_logs(LogLocation, "",
                                                    OldFHandler, NewFHandler) of
