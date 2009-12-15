@@ -90,14 +90,6 @@ stop() ->
     ok = rabbit_misc:stop_applications(?APPS).
 
 stop_and_halt() ->
-    spawn(fun () ->
-                  SleepTime = 1000,
-                  rabbit_log:info("Stop-and-halt request received; "
-                                  "halting in ~p milliseconds~n",
-                                  [SleepTime]),
-                  timer:sleep(SleepTime),
-                  init:stop()
-          end),
     case catch stop() of _ -> ok end.
 
 status() ->
