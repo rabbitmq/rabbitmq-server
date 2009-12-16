@@ -68,9 +68,9 @@
 %% set of connection_params. If a different vhost or credential set is required,
 %% start_direct/1 should be used.
 start_direct() ->
-    start_direct(#connection_params{}).
+    start_direct(#amqp_params{}).
 
-%% @spec (connection_params()) -> [Connection]
+%% @spec (amqp_params()) -> [Connection]
 %% where
 %%      Connection = pid()
 %% @doc Starts a direct connection to a RabbitMQ server, assuming that
@@ -87,9 +87,9 @@ start_direct(Params) ->
 %% start_direct_link/1 should be used. The resulting
 %% process is linked to the invoking process.
 start_direct_link() ->
-    start_direct_link(#connection_params{}).
+    start_direct_link(#amqp_params{}).
 
-%% @spec (connection_params()) -> [Connection]
+%% @spec (amqp_params()) -> [Connection]
 %% where
 %%      Connection = pid()
 %% @doc Starts a direct connection to a RabbitMQ server, assuming that
@@ -98,7 +98,7 @@ start_direct_link() ->
 start_direct_link(Params) ->
     start_direct_internal(Params, true).
 
-start_direct_internal(#connection_params{} = Params, ProcLink) ->
+start_direct_internal(#amqp_params{} = Params, ProcLink) ->
     {ok, Pid} = start_internal(Params, amqp_direct_connection, ProcLink),
     Pid.
 
@@ -137,8 +137,8 @@ start_network_link() ->
 start_network_link(Params) ->
     start_network_internal(Params, true).
 
-start_network_internal(#connection_params{} = AmqpParams, ProcLink) ->
-    {ok, Pid} = start_internal(AmqpParams, amqp_network_connection, ProcLink),
+start_network_internal(#connection_params{} = ConnectionParams, ProcLink) ->
+    {ok, Pid} = start_internal(ConnectionParams, amqp_network_connection, ProcLink),
     Pid.
 
 start_internal(Params, Module, _Link = true) when is_atom(Module) ->

@@ -97,20 +97,33 @@ channel_death_test(Connection) ->
     ok.
 
 non_existent_user_test() ->
-    Params = #connection_params{username = test_util:uuid(),
-                          password = test_util:uuid()},
+    Params = #connection_params{
+                amqp = #amqp_params{
+                  username = test_util:uuid(),
+                  password = test_util:uuid()}
+             },
     ?assertError(_, amqp_connection:start_network(Params)).
 
 invalid_password_test() ->
-    Params = #connection_params{username = <<"guest">>,
-                          password = test_util:uuid()},
+    Params = #connection_params{
+                amqp = #amqp_params{
+                  username = <<"guest">>,
+                  password = test_util:uuid()
+                }
+             },
     ?assertError(_, amqp_connection:start_network(Params)).
 
 non_existent_vhost_test() ->
-    Params = #connection_params{virtual_host = test_util:uuid()},
+    Params = #connection_params{
+      amqp = #amqp_params{virtual_host = test_util:uuid()}
+    },
     ?assertError(_, amqp_connection:start_network(Params)).
 
 no_permission_test() ->
-    Params = #connection_params{username = <<"test_user_no_perm">>,
-                          password = <<"test_user_no_perm">>},
+    Params = #connection_params{
+                amqp = #amqp_params {
+                  username = <<"test_user_no_perm">>,
+                  password = <<"test_user_no_perm">>
+                }
+            },
     ?assertError(_, amqp_connection:start_network(Params)).

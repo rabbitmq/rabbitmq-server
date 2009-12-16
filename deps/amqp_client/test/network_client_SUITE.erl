@@ -85,7 +85,7 @@ pub_and_close_test_() ->
 
 channel_tune_negotiation_test() ->
     amqp_connection:close(amqp_connection:start_network(
-                            #connection_params{ channel_max = 10 })).
+                            #connection_params{ amqp = #amqp_params {channel_max = 10 }})).
 
 %%---------------------------------------------------------------------------
 %% Negative Tests
