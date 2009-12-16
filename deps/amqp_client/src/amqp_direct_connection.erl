@@ -32,7 +32,7 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
--record(dc_state, {params = #amqp_params{},
+-record(dc_state, {params = #connection_params{},
                    closing = false,
                    channels = amqp_channel_util:new_channel_dict()}).
 
@@ -45,7 +45,7 @@
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init(AmqpParams = #amqp_params{username = User,
+init(AmqpParams = #connection_params{username = User,
                                password = Pass,
                                virtual_host = VHost}) ->
     process_flag(trap_exit, true),

@@ -33,7 +33,7 @@
 
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
--record(amqp_params, {username     = <<"guest">>,
+-record(connection_params, {username     = <<"guest">>,
                       password     = <<"guest">>,
                       virtual_host = <<"/">>,
                       host         = "localhost",

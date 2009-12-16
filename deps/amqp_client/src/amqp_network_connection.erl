@@ -37,7 +37,7 @@
 -define(CLIENT_CLOSE_TIMEOUT, 60000).
 -define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
 
--record(nc_state, {params = #amqp_params{},
+-record(nc_state, {params = #connection_params{},
                    sock,
                    main_reader_pid,
                    channel0_writer_pid,
@@ -329,7 +329,7 @@ handle_exit(Pid, Reason,
 %% Handshake
 %%---------------------------------------------------------------------------
 
-handshake(State = #nc_state{params = #amqp_params{host = Host,
+handshake(State = #nc_state{params = #connection_params{host = Host,
                                                   port = Port,
                                                   ssl_options = none}}) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
@@ -338,7 +338,7 @@ handshake(State = #nc_state{params = #amqp_params{host = Host,
                                      [Reason]),
                            exit(Reason)
     end;
-handshake(State = #nc_state{params = #amqp_params{host = Host,
+handshake(State = #nc_state{params = #connection_params{host = Host,
                                                   port = Port,
                                                   ssl_options = SslOpts}}) ->
     rabbit_misc:start_applications([crypto, ssl]),
@@ -379,7 +379,7 @@ network_handshake(State = #nc_state{channel0_writer_pid = Writer0,
     TuneOk = negotiate_values(Tune, Params),
     amqp_channel_util:do(network, Writer0, TuneOk, none),
     ConnectionOpen =
-        #'connection.open'{virtual_host = Params#amqp_params.virtual_host,
+        #'connection.open'{virtual_host = Params#connection_params.virtual_host,
                            insist = true},
     amqp_channel_util:do(network, Writer0, ConnectionOpen, none),
     %% 'connection.redirect' not implemented (we use insist = true to cover)
@@ -402,7 +402,7 @@ check_version(#'connection.start'{version_major = Major,
 negotiate_values(#'connection.tune'{channel_max = ServerChannelMax,
                                     frame_max   = ServerFrameMax,
                                     heartbeat   = ServerHeartbeat},
-                 #amqp_params{channel_max = ClientChannelMax,
+                 #connection_params{channel_max = ClientChannelMax,
                               frame_max   = ClientFrameMax,
                               heartbeat   = ClientHeartbeat}) ->
     #'connection.tune_ok'{
@@ -415,7 +415,7 @@ negotiate_max_value(Client, Server) when Client =:= 0; Server =:= 0 ->
 negotiate_max_value(Client, Server) ->
     lists:min([Client, Server]).
 
-start_ok(#nc_state{params = #amqp_params{username = Username,
+start_ok(#nc_state{params = #connection_params{username = Username,
                                          password = Password}}) ->
     %% TODO This eagerly starts the amqp_client application in order to
     %% to get the version from the app descriptor, which may be
