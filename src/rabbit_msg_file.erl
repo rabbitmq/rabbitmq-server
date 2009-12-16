@@ -59,7 +59,7 @@
 -spec(read/2 :: (io_device(), msg_size()) ->
              ({'ok', {msg_id(), msg()}} | {'error', any()})).
 -spec(scan/1 :: (io_device()) ->
-             {'ok', [{msg_id(), msg_size(), position()}]}).
+             {'ok', [{msg_id(), msg_size(), position()}], position()}).
 
 -endif.
 
@@ -95,14 +95,14 @@ scan(FileHdl) -> scan(FileHdl, 0, []).
 
 scan(FileHdl, Offset, Acc) ->
     case read_next(FileHdl, Offset) of
-        eof -> {ok, Acc};
+        eof -> {ok, Acc, Offset};
         {corrupted, NextOffset} ->
             scan(FileHdl, NextOffset, Acc);
         {ok, {MsgId, TotalSize, NextOffset}} ->
             scan(FileHdl, NextOffset, [{MsgId, TotalSize, Offset} | Acc]);
         _KO ->
             %% bad message, but we may still have recovered some valid messages
-            {ok, Acc}
+            {ok, Acc, Offset}
     end.
 
 read_next(FileHdl, Offset) ->
