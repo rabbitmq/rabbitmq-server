@@ -332,18 +332,24 @@ handle_exit(Pid, Reason,
 %% Handshake
 %%---------------------------------------------------------------------------
 
-handshake(State = #nc_state{tcp_params = #tcp_params{host = Host,
-                                                  port = Port,
-                                                  ssl_options = none}}) ->
+port_for(#tcp_params{port = -1, ssl_options = none}) -> ?PROTOCOL_PORT;
+port_for(#tcp_params{port = -1}) -> ?SSL_PROTOCOL_PORT;
+port_for(#tcp_params{port = Port}) -> Port.
+
+handshake(State = #nc_state{tcp_params = TCPParams = 
+                              #tcp_params{host = Host,
+                                          ssl_options = none}}) ->
+    Port = port_for(TCPParams), 
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock}      -> do_handshake(State#nc_state{sock = Sock});
         {error, Reason} -> ?LOG_WARN("Could not start the network driver: ~p~n",
                                      [Reason]),
                            exit(Reason)
     end;
-handshake(State = #nc_state{tcp_params = #tcp_params{host = Host,
-                                                  port = Port,
-                                                  ssl_options = SslOpts}}) ->
+handshake(State = #nc_state{tcp_params = TCPParams = 
+                              #tcp_params{host = Host,
+                                          ssl_options = SslOpts}}) ->
+    Port = port_for(TCPParams),
     rabbit_misc:start_applications([crypto, ssl]),
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->

@@ -29,13 +29,15 @@
 -define(PROTOCOL_HEADER,
         <<"AMQP", 1, 1, ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR>>).
 
+-define(SSL_PROTOCOL_PORT, 5671).
+
 -define(MAX_CHANNEL_NUMBER, 65535).
 
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
 -record(tcp_params, {
                   host         = "localhost",
-                  port         = ?PROTOCOL_PORT,
+                  port         = -1,
                   ssl_options  = none
 }).
 
