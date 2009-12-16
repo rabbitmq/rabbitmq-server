@@ -39,8 +39,8 @@
 
 %% We unpack the tcp_params and amqp_params into nc_state rather than having
 %% a connection_params field for convenience in pattern matching.
--record(nc_state, {tcp_params = #tcp_params{},
-                   amqp_params = #amqp_params{},
+-record(nc_state, {tcp_params,
+                   amqp_params,
                    sock,
                    main_reader_pid,
                    channel0_writer_pid,
