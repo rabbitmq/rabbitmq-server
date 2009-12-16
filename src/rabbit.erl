@@ -46,37 +46,54 @@
          boot_tcp_listeners/0,
          boot_ssl_listeners/0]).
 
--rabbit_boot_step({database, [{mfa, {rabbit_mnesia, init, []}}]}).
--rabbit_boot_step({core_processes, [{description, "core processes"},
-                                    {mfa, {?MODULE, boot_core_processes, []}},
-                                    {post, database},
-                                    {pre, core_initialized}]}).
--rabbit_boot_step({core_initialized, [{description, "core initialized"}]}).
+-rabbit_boot_step({database,
+                   [{mfa,         {rabbit_mnesia, init, []}}]}).
 
--rabbit_boot_step({recovery, [{mfa, {?MODULE, boot_recovery, []}},
-                              {post, core_initialized}]}).
--rabbit_boot_step({persister, [{mfa, {rabbit_sup, start_child, [rabbit_persister]}},
-                               {post, recovery}]}).
--rabbit_boot_step({guid_generator, [{description, "guid generator"},
-                                    {mfa, {rabbit_sup, start_child, [rabbit_guid]}},
-                                    {post, persister},
-                                    {pre, routing_ready}]}).
--rabbit_boot_step({routing_ready, [{description, "message delivery logic ready"}]}).
+-rabbit_boot_step({core_processes,
+                   [{description, "core processes"},
+                    {mfa,         {?MODULE, boot_core_processes, []}},
+                    {post,        database},
+                    {pre,         core_initialized}]}).
 
--rabbit_boot_step({log_relay, [{description, "error log relay"},
-                               {mfa, {rabbit_error_logger, boot, []}},
-                               {post, routing_ready}]}).
+-rabbit_boot_step({core_initialized,
+                   [{description, "core initialized"}]}).
 
--rabbit_boot_step({tcp_listeners, [{description, "TCP listeners"},
-                                   {mfa, {?MODULE, boot_tcp_listeners, []}},
-                                   {post, log_relay},
-                                   {pre, networking_listening}]}).
--rabbit_boot_step({ssl_listeners, [{description, "SSL listeners"},
-                                   {mfa, {?MODULE, boot_ssl_listeners, []}},
-                                   {post, tcp_listeners},
-                                   {pre, networking_listening}]}).
+-rabbit_boot_step({recovery,
+                   [{mfa,         {?MODULE, boot_recovery, []}},
+                    {post,        core_initialized}]}).
 
--rabbit_boot_step({networking_listening, [{description, "network listeners available"}]}).
+-rabbit_boot_step({persister,
+                   [{mfa,         {rabbit_sup, start_child, [rabbit_persister]}},
+                    {post,        recovery}]}).
+
+-rabbit_boot_step({guid_generator,
+                   [{description, "guid generator"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_guid]}},
+                    {post,        persister},
+                    {pre,         routing_ready}]}).
+
+-rabbit_boot_step({routing_ready,
+                   [{description, "message delivery logic ready"}]}).
+
+-rabbit_boot_step({log_relay,
+                   [{description, "error log relay"},
+                    {mfa,         {rabbit_error_logger, boot, []}},
+                    {post,        routing_ready}]}).
+
+-rabbit_boot_step({tcp_listeners,
+                   [{description, "TCP listeners"},
+                    {mfa,         {?MODULE, boot_tcp_listeners, []}},
+                    {post,        log_relay},
+                    {pre,         networking_listening}]}).
+
+-rabbit_boot_step({ssl_listeners,
+                   [{description, "SSL listeners"},
+                    {mfa,         {?MODULE, boot_ssl_listeners, []}},
+                    {post,        tcp_listeners},
+                    {pre,         networking_listening}]}).
+
+-rabbit_boot_step({networking_listening,
+                   [{description, "network listeners available"}]}).
 
 %%---------------------------------------------------------------------------
 
@@ -120,7 +137,7 @@ prepare() ->
 start() ->
     try
         ok = prepare(),
-        ok = rabbit_misc:start_applications(?APPS) 
+        ok = rabbit_misc:start_applications(?APPS)
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
@@ -185,7 +202,7 @@ boot_error(Format, Args) ->
 run_boot_step({StepName, Attributes}) ->
     Description = case lists:keysearch(description, 1, Attributes) of
                       {value, {_, D}} -> D;
-                      false -> StepName
+                      false           -> StepName
                   end,
     case [MFA || {mfa, MFA} <- Attributes] of
         [] ->
@@ -193,8 +210,10 @@ run_boot_step({StepName, Attributes}) ->
         MFAs ->
             io:format("starting ~-20s ...", [Description]),
             [case catch apply(M,F,A) of
-                 {'EXIT', Reason} -> boot_error("FAILED~nReason: ~p~n", [Reason]);
-                 ok -> ok
+                 {'EXIT', Reason} ->
+                     boot_error("FAILED~nReason: ~p~n", [Reason]);
+                 ok ->
+                     ok
              end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
@@ -204,8 +223,9 @@ boot_steps() ->
     AllApps = [App || {App, _, _} <- application:loaded_applications()],
     Modules = lists:usort(
                 lists:append([Modules
-                              || {ok, Modules} <- [application:get_key(App, modules)
-                                                   || App <- AllApps]])),
+                              || {ok, Modules} <-
+                                     [application:get_key(App, modules)
+                                      || App <- AllApps]])),
     UnsortedSteps =
         lists:flatmap(fun (Module) ->
                               [{StepName, Attributes}
@@ -220,7 +240,7 @@ sort_boot_steps(UnsortedSteps) ->
     %% Add vertices, with duplicate checking.
     [case digraph:vertex(G, StepName) of
          false -> digraph:add_vertex(G, StepName, Step);
-         _ -> boot_error("Duplicate boot step name: ~w~n", [StepName])
+         _     -> boot_error("Duplicate boot step name: ~w~n", [StepName])
      end || Step = {StepName, _Attrs} <- UnsortedSteps],
 
     %% Add edges, detecting cycles and missing vertices.
@@ -242,13 +262,13 @@ sort_boot_steps(UnsortedSteps) ->
     digraph:delete(G),
 
     %% Check that all mentioned {M,F,A} triples are exported.
-    case [{StepName, {M,F,A}} || {StepName, Attributes} <- SortedSteps,
-                                 {mfa, {M,F,A}} <- Attributes,
-                                 not erlang:function_exported(M, F, length(A))] of
-        [] ->
-            SortedSteps;
-        MissingFunctions ->
-            boot_error("Boot step functions not exported: ~p~n", [MissingFunctions])
+    case [{StepName, {M,F,A}}
+          || {StepName, Attributes} <- SortedSteps,
+             {mfa, {M,F,A}} <- Attributes,
+             not erlang:function_exported(M, F, length(A))] of
+        []               -> SortedSteps;
+        MissingFunctions -> boot_error("Boot step functions not exported: ~p~n",
+                                       [MissingFunctions])
     end.
 
 add_boot_step_dep(G, RunsSecond, RunsFirst) ->
@@ -261,7 +281,8 @@ add_boot_step_dep(G, RunsSecond, RunsFirst) ->
                        io_lib:format("Boot step not registered: ~w~n", [V]);
                    {bad_edge, [First | Rest]} ->
                        [io_lib:format("Cyclic dependency: ~w", [First]),
-                        [io_lib:format(" depends on ~w", [Next]) || Next <- Rest],
+                        [io_lib:format(" depends on ~w", [Next])
+                         || Next <- Rest],
                         io_lib:format(" depends on ~w~n", [First])]
                end]);
         _ ->
@@ -318,7 +339,7 @@ boot_ssl_listeners() ->
 %---------------------------------------------------------------------------
 
 log_location(Type) ->
-    case application:get_env(Type, case Type of 
+    case application:get_env(Type, case Type of
                                        kernel -> error_logger;
                                        sasl   -> sasl_error_logger
                                    end) of
@@ -399,7 +420,7 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
                              throw({error, {cannot_log_to_tty,
                                             TTYHandler, not_installed}})
                      end;
-        _         -> case lists:member(NewFHandler, Handlers) of 
+        _         -> case lists:member(NewFHandler, Handlers) of
                          true  -> ok;
                          false -> case rotate_logs(LogLocation, "",
                                                    OldFHandler, NewFHandler) of
