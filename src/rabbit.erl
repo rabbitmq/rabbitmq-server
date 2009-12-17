@@ -41,16 +41,59 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([boot_core_processes/0,
-         maybe_insert_default_data/0]).
+-export([maybe_insert_default_data/0]).
+
+-rabbit_boot_step({codec_correctness_check,
+                   [{description, "codec correctness check"},
+                    {mfa,         {rabbit_binary_generator,
+                                   check_empty_content_body_frame_size,
+                                   []}}]}).
 
 -rabbit_boot_step({database,
-                   [{mfa,         {rabbit_mnesia, init, []}}]}).
+                   [{mfa,         {rabbit_mnesia, init, []}},
+                    {pre,         kernel_ready}]}).
 
--rabbit_boot_step({core_processes,
-                   [{description, "core processes"},
-                    {mfa,         {?MODULE, boot_core_processes, []}},
-                    {post,        database},
+-rabbit_boot_step({rabbit_exchange_type,
+                   [{description, "exchange type registry"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_exchange_type]}},
+                    {pre,         kernel_ready}]}).
+
+-rabbit_boot_step({rabbit_log,
+                   [{description, "logging server"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_log]}},
+                    {pre,         kernel_ready}]}).
+
+-rabbit_boot_step({rabbit_hooks,
+                   [{description, "internal event notification system"},
+                    {mfa,         {rabbit_hooks, start, []}},
+                    {pre,         kernel_ready}]}).
+
+-rabbit_boot_step({kernel_ready,
+                   [{description, "kernel ready"}]}).
+
+-rabbit_boot_step({rabbit_alarm,
+                   [{description, "alarm handler"},
+                    {mfa,         {rabbit_alarm, start, []}},
+                    {post,        kernel_ready},
+                    {pre,         core_initialized}]}).
+
+-rabbit_boot_step({rabbit_amqqueue_sup,
+                   [{description, "queue supervisor"},
+                    {mfa,         {rabbit_amqqueue, start, []}},
+                    {post,        kernel_ready},
+                    {pre,         core_initialized}]}).
+
+-rabbit_boot_step({rabbit_router,
+                   [{description, "cluster router"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_router]}},
+                    {post,        kernel_ready},
+                    {pre,         core_initialized}]}).
+
+-rabbit_boot_step({rabbit_node_monitor,
+                   [{description, "node monitor"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_node_monitor]}},
+                    {post,        kernel_ready},
+                    {post,        rabbit_amqqueue_sup},
                     {pre,         core_initialized}]}).
 
 -rabbit_boot_step({core_initialized,
@@ -210,7 +253,7 @@ run_boot_step({StepName, Attributes}) ->
         [] ->
             io:format("progress -- ~s~n", [Description]);
         MFAs ->
-            io:format("starting ~-20s ...", [Description]),
+            io:format("starting ~-40s ...", [Description]),
             [case catch apply(M,F,A) of
                  {'EXIT', Reason} ->
                      boot_error("FAILED~nReason: ~p~n", [Reason]);
@@ -292,30 +335,6 @@ add_boot_step_dep(G, RunsSecond, RunsFirst) ->
     end.
 
 %%---------------------------------------------------------------------------
-
-boot_core_processes() ->
-    ok = rabbit_sup:start_child(rabbit_exchange_type),
-    ok = rabbit_sup:start_child(rabbit_log),
-    ok = rabbit_hooks:start(),
-
-    ok = rabbit_binary_generator:check_empty_content_body_frame_size(),
-
-    ok = rabbit_alarm:start(),
-
-    {ok, MemoryWatermark} = application:get_env(vm_memory_high_watermark),
-    ok = case MemoryWatermark == 0 of
-             true ->
-                 ok;
-             false ->
-                 rabbit_sup:start_child(vm_memory_monitor, [MemoryWatermark])
-         end,
-
-    ok = rabbit_amqqueue:start(),
-
-    ok = rabbit_sup:start_child(rabbit_router),
-    ok = rabbit_sup:start_child(rabbit_node_monitor).
-
-%---------------------------------------------------------------------------
 
 log_location(Type) ->
     case application:get_env(Type, case Type of
