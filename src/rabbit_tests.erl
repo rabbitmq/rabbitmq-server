@@ -1005,6 +1005,9 @@ test_msg_store() ->
     %% this should force some sort of sync internally otherwise misread
     ok = msg_store_read(MsgIds1stHalf),
     ok = rabbit_msg_store:remove(MsgIds1stHalf),
+    %% restart empty
+    ok = stop_msg_store(),
+    ok = start_msg_store_empty(), %% now safe to reuse msg_ids
     %% push a lot of msgs in...
     BigCount = 100000,
     MsgIdsBig = lists:seq(1, BigCount),
