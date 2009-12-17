@@ -487,9 +487,9 @@ unfold(Fun, Acc, Init) ->
 
 ceil(N) ->
     T = trunc(N),
-    case N - T of
-        0 -> N;
-        _ -> 1 + T
+    case N == T of
+        true  -> T;
+        false -> 1 + T
     end.
 
 %% Sorts a list of AMQP table fields as per the AMQP spec
