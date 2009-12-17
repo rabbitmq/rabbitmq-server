@@ -41,20 +41,32 @@ if "%RABBITMQ_NODENAME%"=="" (
 )
 
 if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
-    set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
-)
-
-if "%RABBITMQ_NODE_PORT%"=="" (
-    set RABBITMQ_NODE_PORT=5672
+   if not "%RABBITMQ_NODE_PORT%"=="" (
+      set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
+   )
+) else (
+   if "%RABBITMQ_NODE_PORT%"=="" (
+      set RABBITMQ_NODE_PORT=5672
+   )
 )
 
 set RABBITMQ_PIDS_FILE=%RABBITMQ_BASE%\rabbitmq.pids
 set RABBITMQ_SCRIPT_HOME=%~sdp0%
 
+if "%RABBITMQ_CONFIG_FILE%"=="" (
+    set RABBITMQ_CONFIG_FILE=%RABBITMQ_BASE%\rabbitmq
+)
+
+if exist "%RABBITMQ_CONFIG_FILE%.config" (
+    set RABBITMQ_CONFIG_ARG=-config "%RABBITMQ_CONFIG_FILE%"
+) else (
+    set RABBITMQ_CONFIG_ARG=
+)
+
 if not exist "%ERLANG_HOME%\bin\erl.exe" (
     echo.
     echo ******************************
-    echo ERLANG_HOME not set correctly. 
+    echo ERLANG_HOME not set correctly.
     echo ******************************
     echo.
     echo Please either set ERLANG_HOME to point to your Erlang installation or place the
@@ -68,6 +80,7 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
 -noinput -hidden ^
 %RABBITMQ_MULTI_ERL_ARGS% ^
 -sname rabbitmq_multi ^
+%RABBITMQ_CONFIG_ARG% ^
 -s rabbit_multi ^
 %RABBITMQ_MULTI_START_ARGS% ^
 -extra %*
