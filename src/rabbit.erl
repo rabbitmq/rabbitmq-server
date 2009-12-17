@@ -292,6 +292,7 @@ add_boot_step_dep(G, RunsSecond, RunsFirst) ->
 %%---------------------------------------------------------------------------
 
 boot_core_processes() ->
+    ok = rabbit_sup:start_child(rabbit_exchange_type),
     ok = rabbit_sup:start_child(rabbit_log),
     ok = rabbit_hooks:start(),
 
