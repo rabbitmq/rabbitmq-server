@@ -42,9 +42,7 @@
 %%---------------------------------------------------------------------------
 %% Boot steps.
 -export([boot_core_processes/0,
-         boot_recovery/0,
-         boot_tcp_listeners/0,
-         boot_ssl_listeners/0]).
+         maybe_insert_default_data/0]).
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}}]}).
@@ -58,13 +56,24 @@
 -rabbit_boot_step({core_initialized,
                    [{description, "core initialized"}]}).
 
--rabbit_boot_step({recovery,
-                   [{mfa,         {?MODULE, boot_recovery, []}},
+-rabbit_boot_step({empty_db_check,
+                   [{description, "empty DB check"},
+                    {mfa,         {?MODULE, maybe_insert_default_data, []}},
                     {post,        core_initialized}]}).
+
+-rabbit_boot_step({exchange_recovery,
+                   [{description, "exchange recovery"},
+                    {mfa,         {rabbit_exchange, recover, []}},
+                    {post,        empty_db_check}]}).
+
+-rabbit_boot_step({queue_recovery,
+                   [{description, "queue recovery"},
+                    {mfa,         {rabbit_amqqueue, recover, []}},
+                    {post,        exchange_recovery}]}).
 
 -rabbit_boot_step({persister,
                    [{mfa,         {rabbit_sup, start_child, [rabbit_persister]}},
-                    {post,        recovery}]}).
+                    {post,        queue_recovery}]}).
 
 -rabbit_boot_step({guid_generator,
                    [{description, "guid generator"},
@@ -80,16 +89,9 @@
                     {mfa,         {rabbit_error_logger, boot, []}},
                     {post,        routing_ready}]}).
 
--rabbit_boot_step({tcp_listeners,
-                   [{description, "TCP listeners"},
-                    {mfa,         {?MODULE, boot_tcp_listeners, []}},
+-rabbit_boot_step({networking,
+                   [{mfa,         {rabbit_networking, boot, []}},
                     {post,        log_relay},
-                    {pre,         networking_listening}]}).
-
--rabbit_boot_step({ssl_listeners,
-                   [{description, "SSL listeners"},
-                    {mfa,         {?MODULE, boot_ssl_listeners, []}},
-                    {post,        tcp_listeners},
                     {pre,         networking_listening}]}).
 
 -rabbit_boot_step({networking_listening,
@@ -312,30 +314,6 @@ boot_core_processes() ->
 
     ok = rabbit_sup:start_child(rabbit_router),
     ok = rabbit_sup:start_child(rabbit_node_monitor).
-
-boot_recovery() ->
-    ok = maybe_insert_default_data(),
-    ok = rabbit_exchange:recover(),
-    ok = rabbit_amqqueue:recover().
-
-boot_tcp_listeners() ->
-    ok = rabbit_networking:start(),
-    {ok, TcpListeners} = application:get_env(tcp_listeners),
-    [ok = rabbit_networking:start_tcp_listener(Host, Port)
-     || {Host, Port} <- TcpListeners],
-    ok.
-
-boot_ssl_listeners() ->
-    case application:get_env(ssl_listeners) of
-        {ok, []} ->
-            ok;
-        {ok, SslListeners} ->
-            ok = rabbit_misc:start_applications([crypto, ssl]),
-            {ok, SslOpts} = application:get_env(ssl_options),
-            [rabbit_networking:start_ssl_listener(Host, Port, SslOpts)
-             || {Host, Port} <- SslListeners],
-            ok
-    end.
 
 %---------------------------------------------------------------------------
 
