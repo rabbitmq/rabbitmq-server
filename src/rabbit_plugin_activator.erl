@@ -44,7 +44,7 @@
 
 -ifdef(use_specs).
 
--spec(start/0 :: () -> no_return()). 
+-spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
 
 -endif.
@@ -73,7 +73,7 @@ start() ->
     %% Build the entire set of dependencies - this will load the
     %% applications along the way
     AllApps = case catch sets:to_list(expand_dependencies(RequiredApps)) of
-                  {failed_to_load_app, App, Err} -> 
+                  {failed_to_load_app, App, Err} ->
                       error("failed to load application ~s:~n~p", [App, Err]);
                   AppList ->
                       AppList
@@ -82,8 +82,8 @@ start() ->
     {rabbit, RabbitVersion} = proplists:lookup(rabbit, AppVersions),
 
     %% Build the overall release descriptor
-    RDesc = {release, 
-             {"rabbit", RabbitVersion}, 
+    RDesc = {release,
+             {"rabbit", RabbitVersion},
              {erts, erlang:system_info(version)},
              AppVersions},
 
@@ -93,15 +93,15 @@ start() ->
     %% Compile the script
     ScriptFile = RootName ++ ".script",
     case systools:make_script(RootName, [local, silent]) of
-        {ok, Module, Warnings} -> 
+        {ok, Module, Warnings} ->
             %% This gets lots of spurious no-source warnings when we
             %% have .ez files, so we want to supress them to prevent
             %% hiding real issues.
             WarningStr = Module:format_warning(
-                           [W || W <- Warnings, 
-                                 case W of 
-                                     {warning, {source_not_found, _}} -> false; 
-                                     _                                -> true 
+                           [W || W <- Warnings,
+                                 case W of
+                                     {warning, {source_not_found, _}} -> false;
+                                     _                                -> true
                                  end]),
             case length(WarningStr) of
                 0 -> ok;
@@ -136,8 +136,8 @@ get_env(Key, Default) ->
     end.
 
 determine_version(App) ->
-    application:load(App), 
-    {ok, Vsn} = application:get_key(App, vsn), 
+    application:load(App),
+    {ok, Vsn} = application:get_key(App, vsn),
     {App, Vsn}.
 
 assert_dir(Dir) ->
@@ -236,7 +236,7 @@ post_process_script(ScriptFile) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entries([]) -> 
+process_entries([]) ->
     [];
 process_entries([Entry = {apply,{application,start_boot,[stdlib,permanent]}} |
                  Rest]) ->
