@@ -104,9 +104,8 @@
 -define(FILE_EXTENSION,        ".rdq").
 -define(FILE_EXTENSION_TMP,    ".rdt").
 -define(CACHE_ETS_NAME,        rabbit_disk_queue_cache).
-%% We run GC whenever the amount of garbage is >= GARBAGE_FRACTION *
-%% Total Valid Data
--define(GARBAGE_FRACTION,      1.0).
+%% We run GC whenever (garbage / sum_file_size) > ?GARBAGE_FRACTION
+-define(GARBAGE_FRACTION,      0.5).
 
 -define(BINARY_MODE,     [raw, binary]).
 -define(READ_MODE,       [read]).
@@ -938,7 +937,7 @@ maybe_compact(State = #msstate { sum_valid_data = SumValid,
                                  sum_file_size = SumFileSize,
                                  gc_pid = undefined,
                                  file_summary = FileSummary })
-  when (SumFileSize - SumValid) > ?GARBAGE_FRACTION * SumValid ->
+  when (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
     %% Pid = spawn_link(fun() ->
     %%                          io:format("GC process!~n")
     %%                          %% gen_server2:pcast(?SERVER, 9, {gc_finished, self(),}),
