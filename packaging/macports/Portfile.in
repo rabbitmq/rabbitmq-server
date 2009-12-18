@@ -3,7 +3,7 @@
 
 PortSystem 1.0
 name		rabbitmq-server
-version		1.7.0
+version		@VERSION@
 revision	0
 categories	net 
 maintainers	tonyg@rabbitmq.com
@@ -15,13 +15,13 @@ long_description	\
     robust and scalable implementation of an AMQP broker.
 
 
-homepage        http://www.rabbitmq.com/
-master_sites    http://www.rabbitmq.com/releases/rabbitmq-server/v${version}/
+homepage        @BASE_URL@
+master_sites    @BASE_URL@releases/rabbitmq-server/v${version}/
 
 checksums \
-    md5 4505ca0fd8718439bd6f5e2af2379e56 \
-    sha1 84fb86d403057bb808c1b51deee0c1fca3bf7bef \
-    rmd160 092f90946825cc3eb277019805e24db637a559f4
+    md5 @md5@ \
+    sha1 @sha1@ \
+    rmd160 @rmd160@
 
 depends_build   port:erlang
 depends_run     port:erlang
