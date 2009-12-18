@@ -127,6 +127,7 @@
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
+-spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
 
 -endif.
 
