@@ -10,7 +10,6 @@
              rabbit_binary_generator,
              rabbit_binary_parser,
              rabbit_channel,
-	     rabbit_exchange_behaviour,
              rabbit_misc,
              rabbit_net,
              rabbit_heartbeat,
