@@ -6,7 +6,16 @@ VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g
 # The URL at which things really get deployed
 REAL_WEB_URL=http://www.rabbitmq.com/
 
-DEST=macports/net/rabbitmq-server
+# The user@host for an OSX machine with macports installed, which is
+# used to generate the macports index files.  That step will be
+# skipped if this variable is not set.  If you do set it, you might
+# also want to set SSH_OPTS, which allows adding ssh options, e.g. to
+# specify a key that will get into the OSX machine without a
+# passphrase.
+MACPORTS_USERHOST=
+
+MACPORTS_DIR=macports
+DEST=$(MACPORTS_DIR)/net/rabbitmq-server
 
 dirs:
 	mkdir -p $(DEST)/files
@@ -26,6 +35,20 @@ macports: dirs $(DEST)/Portfile
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|sudo -u rabbitmq -H /bin/sh -c|' \
 	    $(DEST)/files/rabbitmq-script-wrapper
 	cp patch-org.macports.rabbitmq-server.plist.diff $(DEST)/files
+
+macports_index:
+	if [ -n "$(MACPORTS_USERHOST)" ] ; then \
+	  tar cf - -C $(MACPORTS_DIR) . | ssh $(SSH_OPTS) lshift@macrabbit ' \
+	    d="/tmp/mkportindex.$$$$" ; \
+	    mkdir $$d \
+	      && cd $$d \
+	      && tar xf - \
+	      && /opt/local/bin/portindex >/dev/null \
+	      && tar cf - PortIndex* \
+	      && cd \
+	      && rm -rf $$d' \
+	    | tar xf - -C $(MACPORTS_DIR) ; \
+	fi
 
 clean:
 	rm -rf $(DEST) checksums.sed
