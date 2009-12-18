@@ -134,6 +134,7 @@ start(normal, []) ->
         fun () -> ok = rabbit_mnesia:init() end},
        {"core processes",
         fun () ->
+                ok = start_child(rabbit_exchange_type),
                 ok = start_child(rabbit_log),
                 ok = rabbit_hooks:start(),
 
