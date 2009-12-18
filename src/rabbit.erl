@@ -140,9 +140,17 @@ start(normal, []) ->
                 ok = rabbit_binary_generator:
                     check_empty_content_body_frame_size(),
 
-                {ok, MemoryAlarms} = application:get_env(memory_alarms),
-                ok = rabbit_alarm:start(MemoryAlarms),
-                
+                ok = rabbit_alarm:start(),
+
+                {ok, MemoryWatermark} =
+                    application:get_env(vm_memory_high_watermark),
+                ok = case MemoryWatermark == 0 of
+                         true ->
+                             ok;
+                         false ->
+                             start_child(vm_memory_monitor, [MemoryWatermark])
+                     end,
+
                 ok = rabbit_amqqueue:start(),
 
                 ok = start_child(rabbit_router),
@@ -202,6 +210,10 @@ start(normal, []) ->
 stop(_State) ->
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
+    ok = case rabbit_mnesia:is_clustered() of
+             true  -> rabbit_amqqueue:on_node_down(node());
+             false -> rabbit_mnesia:empty_ram_only_tables()
+         end,
     ok.
 
 %---------------------------------------------------------------------------
@@ -264,8 +276,11 @@ print_banner() ->
     io:nl().
 
 start_child(Mod) ->
+    start_child(Mod, []).
+
+start_child(Mod, Args) ->
     {ok,_} = supervisor:start_child(rabbit_sup,
-                                    {Mod, {Mod, start_link, []},
+                                    {Mod, {Mod, start_link, Args},
                                      transient, 100, worker, [Mod]}),
     ok.
 

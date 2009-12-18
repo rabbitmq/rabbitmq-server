@@ -30,6 +30,8 @@ REM
 REM   Contributor(s): ______________________________________.
 REM
 
+setlocal
+
 if "%RABBITMQ_SERVICENAME%"=="" (
     set RABBITMQ_SERVICENAME=RabbitMQ
 )
@@ -43,15 +45,17 @@ if "%RABBITMQ_NODENAME%"=="" (
 )
 
 if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
-    set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
-)
-
-if "%RABBITMQ_NODE_PORT%"=="" (
-    set RABBITMQ_NODE_PORT=5672
+   if not "%RABBITMQ_NODE_PORT%"=="" (
+      set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
+   )
+) else (
+   if "%RABBITMQ_NODE_PORT%"=="" (
+      set RABBITMQ_NODE_PORT=5672
+   )
 )
 
 if "%ERLANG_SERVICE_MANAGER_PATH%"=="" (
-    set ERLANG_SERVICE_MANAGER_PATH=C:\Program Files\erl5.5.5\erts-5.5.5\bin
+    set ERLANG_SERVICE_MANAGER_PATH=C:\Program Files\erl5.6.5\erts-5.6.5\bin
 )
 
 set CONSOLE_FLAG=
@@ -69,7 +73,7 @@ if not exist "%ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe" (
     echo ERLANG_SERVICE_MANAGER_PATH not set correctly. 
     echo **********************************************
     echo.
-    echo %ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe not found!
+    echo "%ERLANG_SERVICE_MANAGER_PATH%\erlsrv.exe" not found!
     echo Please set ERLANG_SERVICE_MANAGER_PATH to the folder containing "erlsrv.exe".
     echo.
     exit /B 1
@@ -91,17 +95,17 @@ rem Log management (rotation, filtering based on size...) is left as an exercise
 
 set BACKUP_EXTENSION=.1
 
-set LOGS="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log"
-set SASL_LOGS="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log"
+set LOGS=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log
+set SASL_LOGS=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log
 
-set LOGS_BACKUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log%BACKUP_EXTENSION%"
-set SASL_LOGS_BACKUP="%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXTENSION%"
+set LOGS_BACKUP=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%.log%BACKUP_EXTENSION%
+set SASL_LOGS_BACKUP=%RABBITMQ_BASE%\log\%RABBITMQ_NODENAME%-sasl.log%BACKUP_EXTENSION%
 
-if exist %LOGS% (
-	type %LOGS% >> %LOGS_BACKUP%
+if exist "%LOGS%" (
+	type "%LOGS%" >> "%LOGS_BACKUP%"
 )
-if exist %SASL_LOGS% (
-	type %SASL_LOGS% >> %SASL_LOGS_BACKUP%
+if exist "%SASL_LOGS%" (
+	type "%SASL_LOGS%" >> "%SASL_LOGS_BACKUP%"
 )
 
 rem End of log management
@@ -156,26 +160,49 @@ if errorlevel 1 (
     echo %RABBITMQ_SERVICENAME% service is already present - only updating service parameters
 )
 
-set RABBIT_EBIN=%~dp0..\ebin
+set RABBITMQ_EBIN_ROOT=%~dp0..\ebin
+if exist "%RABBITMQ_EBIN_ROOT%\rabbit.boot" (
+    echo Using Custom Boot File "%RABBITMQ_EBIN_ROOT%\rabbit.boot"
+    set RABBITMQ_BOOT_FILE=%RABBITMQ_EBIN_ROOT%\rabbit
+    set RABBITMQ_EBIN_PATH=
+) else (
+    set RABBITMQ_BOOT_FILE=start_sasl
+    set RABBITMQ_EBIN_PATH=-pa "%RABBITMQ_EBIN_ROOT%"
+)
+if "%RABBITMQ_CONFIG_FILE%"=="" (
+    set RABBITMQ_CONFIG_FILE=%RABBITMQ_BASE%\rabbitmq
+)
+   
+if exist "%RABBITMQ_CONFIG_FILE%.config" (
+    set RABBITMQ_CONFIG_ARG=-config "%RABBITMQ_CONFIG_FILE%"
+) else (
+    set RABBITMQ_CONFIG_ARG=
+)
+
+set RABBITMQ_LISTEN_ARG=
+if not "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
+   if not "%RABBITMQ_NODE_PORT%"=="" (
+      set RABBITMQ_LISTEN_ARG=-rabbit tcp_listeners "[{\"%RABBITMQ_NODE_IP_ADDRESS%\", %RABBITMQ_NODE_PORT%}]"
+   )
+)
 
 set ERLANG_SERVICE_ARGUMENTS= ^
--pa "%RABBIT_EBIN%" ^
--boot start_sasl ^
+%RABBITMQ_EBIN_PATH% ^
+-boot "%RABBITMQ_BOOT_FILE%" ^
+%RABBITMQ_CONFIG_ARG% ^
 -s rabbit ^
 +W w ^
 +A30 ^
 -kernel inet_default_listen_options "[{nodelay,true},{sndbuf,16384},{recbuf,4096}]" ^
 -kernel inet_default_connect_options "[{nodelay,true}]" ^
--rabbit tcp_listeners "[{\"%RABBITMQ_NODE_IP_ADDRESS%\",%RABBITMQ_NODE_PORT%}]" ^
+%RABBITMQ_LISTEN_ARG% ^
 -kernel error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%.log"\"} ^
+%RABBITMQ_SERVER_ERL_ARGS% ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%-sasl.log"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
--os_mon start_os_sup false ^
--os_mon memsup_system_only true ^
--os_mon system_memory_high_watermark 0.95 ^
 -mnesia dir \""%RABBITMQ_MNESIA_DIR%"\" ^
 %CLUSTER_CONFIG% ^
 %RABBITMQ_SERVER_START_ARGS% ^
@@ -202,3 +229,5 @@ goto END
 
 
 :END
+
+endlocal

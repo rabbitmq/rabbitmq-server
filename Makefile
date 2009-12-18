@@ -15,7 +15,20 @@ TARGETS=$(EBIN_DIR)/rabbit.app $(BEAM_TARGETS)
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.pod, %.gz, $(wildcard docs/*.[0-9].pod))
 
+ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python
+else
+ifeq ($(shell python2.6 -c 'import simplejson' 2>/dev/null && echo yes),yes)
+PYTHON=python2.6
+else
+ifeq ($(shell python2.5 -c 'import simplejson' 2>/dev/null && echo yes),yes)
+PYTHON=python2.5
+else
+# Hmm. Missing simplejson?
+PYTHON=python
+endif
+endif
+endif
 
 BASIC_PLT=basic.plt
 RABBIT_PLT=rabbit.plt
@@ -46,7 +59,7 @@ ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 all: $(TARGETS)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
-	escript generate_app $(EBIN_DIR) < $< > $@
+	escript generate_app $(EBIN_DIR) $@ < $<
 
 $(EBIN_DIR)/gen_server2.beam: $(SOURCE_DIR)/gen_server2.erl
 	erlc $(ERLC_OPTS) $<
