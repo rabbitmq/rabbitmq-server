@@ -126,6 +126,7 @@
 %%%   handle_pre_hibernate(State)
 %%%
 %%%    ==> {hibernate, State}
+%%%        {insomniate, State}
 %%%        {stop, Reason, State}
 %%%              Reason = normal | shutdown | Term, terminate(State) is called
 %%%
@@ -545,6 +546,9 @@ pre_hibernate(Parent, Name, State, Mod, TimeoutState, Queue, Debug) ->
                 {hibernate, NState} ->
                     hibernate(Parent, Name, NState, Mod, TimeoutState, Queue,
                               Debug);
+                {insomniate, NState} ->
+                    process_next_msg(Parent, Name, NState, Mod, hibernate,
+                                     TimeoutState, Queue, Debug);
                 Reply ->
                     handle_common_termination(Reply, Name, pre_hibernate,
                                               Mod, State, Debug)
