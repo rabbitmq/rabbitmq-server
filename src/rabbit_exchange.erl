@@ -134,18 +134,18 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
               end
       end).
 
-typename_to_plugin_module(T) ->
-    case rabbit_exchange_type:lookup_module(T) of
-        {ok, Module} ->
-            Module;
-        {error, not_found} ->
+typename_to_plugin_module(T) when is_binary(T) ->
+    case catch list_to_existing_atom("rabbit_exchange_type_" ++ binary_to_list(T)) of
+        {'EXIT', {badarg, _}} ->
             rabbit_misc:protocol_error(
-              command_invalid, "invalid exchange type '~s'", [T])
+              command_invalid, "invalid exchange type '~s'", [T]);
+        Module ->
+            Module
     end.
 
-plugin_module_to_typename(M) ->
-    {ok, TypeName} = rabbit_exchange_type:lookup_name(M),
-    TypeName.
+plugin_module_to_typename(M) when is_atom(M) ->
+    "rabbit_exchange_type_" ++ S = atom_to_list(M),
+    list_to_binary(S).
 
 check_type(T) ->
     Module = typename_to_plugin_module(T),
