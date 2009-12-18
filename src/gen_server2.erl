@@ -25,8 +25,11 @@
 %% handle_pre_hibernate/1 and handle_post_hibernate/1. These will be
 %% called immediately prior to and post hibernation, respectively. If
 %% handle_pre_hibernate returns {hibernate, NewState} then the process
-%% will hibernate. If the module does not implement
-%% handle_pre_hibernate/1 then the default action is to hibernate.
+%% will hibernate. If handle_pre_hibernate returns {insomniate,
+%% NewState} then the process will go around again, trying to receive
+%% for up to the current timeout value before attempting to hibernate
+%% again. If the module does not implement handle_pre_hibernate/1 then
+%% the default action is to hibernate.
 %%
 %% 6) init can return a 4th arg, {backoff, InitialTimeout,
 %% MinimumTimeout, DesiredHibernatePeriod} (all in
@@ -36,7 +39,7 @@
 %% InitialTimeout supplied from init). After this timeout has
 %% occurred, hibernation will occur as normal. Upon awaking, a new
 %% current timeout value will be calculated.
-%% 
+%%
 %% The purpose is that the gen_server2 takes care of adjusting the
 %% current timeout value such that the process will increase the
 %% timeout value repeatedly if it is unable to sleep for the

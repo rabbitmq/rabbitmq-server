@@ -39,7 +39,7 @@
 -export([sync/0]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+         terminate/2, code_change/3, handle_pre_hibernate/1]).
 
 -define(SERVER, ?MODULE).
 
@@ -111,6 +111,9 @@
 -define(READ_MODE,       [read]).
 -define(READ_AHEAD_MODE, [read_ahead | ?READ_MODE]).
 -define(WRITE_MODE,      [write]).
+
+-define(HIBERNATE_AFTER_MIN,        1000).
+-define(DESIRED_HIBERNATE,         10000).
 
 %% The components:
 %%
@@ -299,7 +302,8 @@ init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
     {ok, Offset} = file_handle_cache:position(FileHdl, Offset),
     ok = file_handle_cache:truncate(FileHdl),
 
-    {ok, State1 #msstate { current_file_handle = FileHdl }}.
+    {ok, State1 #msstate { current_file_handle = FileHdl }, hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({read, MsgId}, From, State) ->
     case read_message(MsgId, State) of
@@ -424,6 +428,13 @@ terminate(_Reason, State = #msstate { msg_locations          = MsgLocations,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+handle_pre_hibernate(State) ->
+    {Result, State1} = maybe_compact1(State),
+    {case Result of
+        true  -> insomniate;
+        false -> hibernate
+     end, State1}.
+
 %%----------------------------------------------------------------------------
 %% general helper functions
 %%----------------------------------------------------------------------------
@@ -437,11 +448,11 @@ reply(Reply, State) ->
     {reply, Reply, State1, Timeout}.
 
 next_state(State = #msstate { on_sync = [], sync_timer_ref = undefined }) ->
-    {State, infinity};
+    {State, hibernate};
 next_state(State = #msstate { sync_timer_ref = undefined }) ->
     {start_sync_timer(State), 0};
 next_state(State = #msstate { on_sync = [] }) ->
-    {stop_sync_timer(State), infinity};
+    {stop_sync_timer(State), hibernate};
 next_state(State) ->
     {State, 0}.
 
@@ -933,19 +944,23 @@ maybe_roll_to_new_file(Offset,
 maybe_roll_to_new_file(_, State) ->
     State.
 
-maybe_compact(State = #msstate { sum_valid_data = SumValid,
-                                 sum_file_size = SumFileSize,
-                                 gc_pid = undefined,
-                                 file_summary = FileSummary })
+maybe_compact(State) ->
+    {_Bool, State1} = maybe_compact1(State),
+    State1.
+
+maybe_compact1(State = #msstate { sum_valid_data = SumValid,
+                                  sum_file_size = SumFileSize,
+                                  gc_pid = undefined,
+                                  file_summary = FileSummary })
   when (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
     %% Pid = spawn_link(fun() ->
     %%                          io:format("GC process!~n")
     %%                          %% gen_server2:pcast(?SERVER, 9, {gc_finished, self(),}),
     %%                          end),
     %% State #msstate { gc_pid = Pid };
-    State;
-maybe_compact(State) ->
-    State.
+    {true, State};
+maybe_compact1(State) ->
+    {false, State}.
 
 compact(Files, State) ->
     %% smallest number, hence eldest, hence left-most, first
