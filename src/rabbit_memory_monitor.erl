@@ -65,7 +65,7 @@
 %% of the system. In short, we aim to stay some distance away from
 %% when the memory alarms will go off, which cause channel.flow.
 %% Note that all other Thresholds are relative to this scaling.
--define(MEMORY_LIMIT_SCALING, 0.6).
+-define(MEMORY_LIMIT_SCALING, 0.4).
 
 -define(LIMIT_THRESHOLD, 0.5). %% don't limit queues when mem use is < this
 
