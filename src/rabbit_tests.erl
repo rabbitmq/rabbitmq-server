@@ -302,7 +302,7 @@ test_topic_match(P, R) ->
     test_topic_match(P, R, true).
 
 test_topic_match(P, R, Expected) ->
-    case rabbit_exchange_type_topic:topic_matches(list_to_binary(P), list_to_binary(R)) of
+    case rabbit_exchange:topic_matches(list_to_binary(P), list_to_binary(R)) of
         Expected ->
             passed;
         _ ->
