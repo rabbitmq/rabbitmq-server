@@ -52,10 +52,11 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     FullCommand = init:get_plain_arguments(),
     #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
         parse_args(FullCommand, #params{quiet = false,
-                                        node = rabbit_misc:localnode(rabbit)}),
+                                        node = rabbit_misc:makenode(NodeStr)}),
     Inform = case Quiet of
                  true  -> fun(_Format, _Args1) -> ok end;
                  false -> fun(Format, Args1) ->
@@ -80,20 +81,41 @@ start() ->
         {error, Reason} ->
             error("~p", [Reason]),
             halt(2);
+        {badrpc, Reason} ->
+            error("unable to connect to node ~w: ~w", [Node, Reason]),
+            print_badrpc_diagnostics(Node),
+            halt(2);
         Other ->
             error("~p", [Other]),
             halt(2)
     end.
 
-error(Format, Args) ->
-    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
+fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
+
+error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
+
+print_badrpc_diagnostics(Node) ->
+    fmt_stderr("diagnostics:", []),
+    {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
+    case net_adm:names(NodeHost) of
+        {error, EpmdReason} ->
+            fmt_stderr("- unable to connect to epmd on ~s: ~w",
+                       [NodeHost, EpmdReason]);
+        {ok, NamePorts} ->
+            fmt_stderr("- nodes and their ports on ~s: ~p",
+                       [NodeHost, [{list_to_atom(Name), Port} ||
+                                      {Name, Port} <- NamePorts]])
+            end,
+    fmt_stderr("- current node: ~w", [node()]),
+    case init:get_argument(home) of
+        {ok, [[Home]]} -> fmt_stderr("- current node home dir: ~s", [Home]);
+        Other          -> fmt_stderr("- no current node home dir: ~p", [Other])
+    end,
+    fmt_stderr("- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]),
+    ok.
 
 parse_args(["-n", NodeS | Args], Params) ->
-    Node = case lists:member($@, NodeS) of
-               true  -> list_to_atom(NodeS);
-               false -> rabbit_misc:localnode(list_to_atom(NodeS))
-           end,
-    parse_args(Args, Params#params{node = Node});
+    parse_args(Args, Params#params{node = rabbit_misc:makenode(NodeS)});
 parse_args(["-q" | Args], Params) ->
     parse_args(Args, Params#params{quiet = true});
 parse_args([Command | Args], Params) ->
@@ -151,7 +173,7 @@ The list_queues, list_exchanges and list_bindings commands accept an optional
 virtual host parameter for which to display results. The default value is \"/\".
 
 <QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
-arguments, node, messages_ready, messages_unacknowledged, messages_uncommitted, 
+arguments, pid, messages_ready, messages_unacknowledged, messages_uncommitted, 
 messages, acks_uncommitted, consumers, transactions, memory]. The default is 
  to display name and (number of) messages.
 
@@ -159,12 +181,12 @@ messages, acks_uncommitted, consumers, transactions, memory]. The default is
 auto_delete, arguments]. The default is to display name and type.
 
 The output format for \"list_bindings\" is a list of rows containing 
-exchange name, routing key, queue name and arguments, in that order.
+exchange name, queue name, routing key and arguments, in that order.
 
-<ConnectionInfoItem> must be a member of the list [node, address, port, 
+<ConnectionInfoItem> must be a member of the list [pid, address, port, 
 peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
-recv_oct, recv_cnt, send_oct, send_cnt, send_pend]. The default is to display 
-user, peer_address and peer_port.
+client_properties, recv_oct, recv_cnt, send_oct, send_cnt, send_pend].
+The default is to display user, peer_address, peer_port and state.
 
 "),
     halt(1).
@@ -197,9 +219,11 @@ action(cluster, Node, ClusterNodeSs, Inform) ->
 
 action(status, Node, [], Inform) ->
     Inform("Status of node ~p", [Node]),
-    Res = call(Node, {rabbit, status, []}),
-    io:format("~p~n", [Res]),
-    ok;
+    case call(Node, {rabbit, status, []}) of
+        {badrpc, _} = Res -> Res;
+        Res               -> io:format("~p~n", [Res]),
+                             ok
+    end;
 
 action(rotate_logs, Node, [], Inform) ->
     Inform("Reopening logs for node ~p", [Node]),
@@ -255,8 +279,7 @@ action(list_vhost_users, Node, Args = [_VHostPath], Inform) ->
 action(list_queues, Node, Args, Inform) ->
     Inform("Listing queues", []),
     {VHostArg, RemainingArgs} = parse_vhost_flag(Args),
-    ArgAtoms = list_replace(node, pid, 
-                            default_if_empty(RemainingArgs, [name, messages])),
+    ArgAtoms = default_if_empty(RemainingArgs, [name, messages]),
     display_info_list(rpc_call(Node, rabbit_amqqueue, info_all,
                                [VHostArg, ArgAtoms]),
                       ArgAtoms);
@@ -272,7 +295,7 @@ action(list_exchanges, Node, Args, Inform) ->
 action(list_bindings, Node, Args, Inform) ->
     Inform("Listing bindings", []),
     {VHostArg, _} = parse_vhost_flag(Args),
-    InfoKeys = [exchange_name, routing_key, queue_name, args],
+    InfoKeys = [exchange_name, queue_name, routing_key, args],
     display_info_list(
       [lists:zip(InfoKeys, tuple_to_list(X)) ||
           X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])], 
@@ -281,8 +304,7 @@ action(list_bindings, Node, Args, Inform) ->
 
 action(list_connections, Node, Args, Inform) ->
     Inform("Listing connections", []),
-    ArgAtoms = list_replace(node, pid, 
-                            default_if_empty(Args, [user, peer_address, peer_port])),
+    ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port, state]),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms).
@@ -303,7 +325,7 @@ default_if_empty(List, Default) when is_list(List) ->
     end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
-    lists:foreach(
+    lists:foreach(fun (Result) -> display_row([format_info_item(X, Result) ||
       fun (Result) ->
               io:fwrite(
                 lists:flatten(
@@ -318,24 +340,31 @@ display_info_list(Results, InfoItemKeys) when is_list(Results) ->
 display_info_list(Other, _) ->
     Other.
 
-format_info_item(Items, Key) ->
-    {value, Info = {Key, Value}} = lists:keysearch(Key, 1, Items),
-    case Info of
-        {_, #resource{name = Name}} ->
-            url_encode(Name);
-        _ when Key =:= address; Key =:= peer_address andalso is_tuple(Value) ->
+format_info_item(Key, Items) ->
+    case proplists:get_value(Key, Items) of
+        #resource{name = Name} ->
+            escape(Name);
+        Value when Key =:= address; Key =:= peer_address andalso
+                   is_tuple(Value) ->
             inet_parse:ntoa(Value);
-        _ when is_pid(Value) ->
-            atom_to_list(node(Value));
-        _ when is_binary(Value) -> 
-            url_encode(Value);
-        _ -> 
+        Value when is_pid(Value) ->
+            pid_to_string(Value);
+        Value when is_binary(Value) -> 
+            escape(Value);
+        Value when is_atom(Value) ->
+            escape(atom_to_list(Value));
+        Value = [{TableEntryKey, TableEntryType, _TableEntryValue} | _]
+        when is_binary(TableEntryKey) andalso is_atom(TableEntryType) ->
+            io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
+        Value ->
             io_lib:format("~w", [Value])
     end.
 
 display_list(L) when is_list(L) ->
     lists:foreach(fun (I) ->
-                          io:format("~s~n", [binary_to_list(I)])
+                          io:format("~s~n", [escape(I)]);
+                          display_row([escape(V)
+                                       || V <- tuple_to_list(I)])
                   end,
                   lists:sort(L)),
     ok;
@@ -347,32 +376,39 @@ call(Node, {Mod, Fun, Args}) ->
 rpc_call(Node, Mod, Fun, Args) ->
     rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
 
-%% url_encode is lifted from ibrowse, modified to preserve some characters
-url_encode(Bin) when binary(Bin) ->
-    url_encode_char(lists:reverse(binary_to_list(Bin)), []).
+%% escape does C-style backslash escaping of non-printable ASCII
+%% characters.  We don't escape characters above 127, since they may
+%% form part of UTF-8 strings.
 
-url_encode_char([X | T], Acc) when X >= $a, X =< $z ->
-    url_encode_char(T, [X | Acc]);
-url_encode_char([X | T], Acc) when X >= $A, X =< $Z ->
-    url_encode_char(T, [X | Acc]);
-url_encode_char([X | T], Acc) when X >= $0, X =< $9 ->
-    url_encode_char(T, [X | Acc]);
-url_encode_char([X | T], Acc)
-  when X == $-; X == $_; X == $.; X == $~;
-       X == $!; X == $*; X == $'; X == $(;
-       X == $); X == $;; X == $:; X == $@;
-       X == $&; X == $=; X == $+; X == $$;
-       X == $,; X == $/; X == $?; X == $%;
-       X == $#; X == $[; X == $] ->
-    url_encode_char(T, [X | Acc]);
-url_encode_char([X | T], Acc) ->
-    url_encode_char(T, [$%, d2h(X bsr 4), d2h(X band 16#0f) | Acc]);
-url_encode_char([], Acc) ->
+escape(Bin) when is_binary(Bin) ->
+    escape(binary_to_list(Bin));
+escape(L) when is_list(L) ->
+    escape_char(lists:reverse(L), []).
+
+escape_char([$\\ | T], Acc) ->
+    escape_char(T, [$\\, $\\ | Acc]);
+escape_char([X | T], Acc) when X >= 32, X /= 127 ->
+    escape_char(T, [X | Acc]);
+escape_char([X | T], Acc) ->
+    escape_char(T, [$\\, $0 + (X bsr 6), $0 + (X band 8#070 bsr 3),
+                    $0 + (X band 7) | Acc]);
+escape_char([], Acc) ->
     Acc.
 
-d2h(N) when N<10 -> N+$0;
-d2h(N) -> N+$a-10.
+prettify_amqp_table(Table) ->
+    [{escape(K), prettify_typed_amqp_value(T, V)} || {K, T, V} <- Table].
 
-list_replace(Find, Replace, List) ->
-    [case X of Find -> Replace; _ -> X end || X <- List].
+prettify_typed_amqp_value(Type, Value) ->
+    case Type of
+        longstr -> escape(Value);
+        table   -> prettify_amqp_table(Value);
+        array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
+        _       -> Value
+    end.
 
+%% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and 8.7)
+pid_to_string(Pid) ->
+    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,_Cre:8>>
+        = term_to_binary(Pid),
+    Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
+    lists:flatten(io_lib:format("<~w.~B.~B>", [Node, Id, Ser])).

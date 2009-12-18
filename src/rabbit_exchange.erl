@@ -30,7 +30,6 @@
 %%
 
 -module(rabbit_exchange).
--include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
@@ -41,7 +40,7 @@
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
--export([check_type/1, assert_type/2, topic_matches/2, headers_match/2]).
+-export([check_type/1, assert_type/2]).
 
 %% EXTENDED API
 -export([list_exchange_bindings/1]).
@@ -50,7 +49,6 @@
 -import(mnesia).
 -import(sets).
 -import(lists).
--import(qlc).
 -import(regexp).
 
 %%----------------------------------------------------------------------------
@@ -64,7 +62,7 @@
                             'exchange_not_found' |
                             'exchange_and_queue_not_found'}).
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 :: (exchange_name(), exchange_type(), bool(), bool(),
+-spec(declare/5 :: (exchange_name(), exchange_type(), boolean(), boolean(),
                     amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
 -spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
@@ -90,9 +88,7 @@
              [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
 -spec(delete_queue_bindings/1 :: (queue_name()) -> 'ok').
 -spec(delete_transient_queue_bindings/1 :: (queue_name()) -> 'ok').
--spec(topic_matches/2 :: (binary(), binary()) -> bool()).
--spec(headers_match/2 :: (amqp_table(), amqp_table()) -> bool()).
--spec(delete/2 :: (exchange_name(), bool()) ->
+-spec(delete/2 :: (exchange_name(), boolean()) ->
              'ok' | not_found() | {'error', 'in_use'}).
 -spec(list_queue_bindings/1 :: (queue_name()) -> 
               [{exchange_name(), routing_key(), amqp_table()}]).
@@ -124,6 +120,7 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                          durable = Durable,
                          auto_delete = AutoDelete,
                          arguments = Args},
+    ok = Type:declare(Exchange),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:wread({rabbit_exchange, ExchangeName}) of
@@ -138,17 +135,31 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
               end
       end).
 
-check_type(<<"fanout">>) ->
-    fanout;
-check_type(<<"direct">>) ->
-    direct;
-check_type(<<"topic">>) ->
-    topic;
-check_type(<<"headers">>) ->
-    headers;
+typename_to_plugin_module(T) ->
+    case rabbit_exchange_type:lookup_module(T) of
+        {ok, Module} ->
+            Module;
+        {error, not_found} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "invalid exchange type '~s'", [T])
+    end.
+
+plugin_module_to_typename(M) ->
+    {ok, TypeName} = rabbit_exchange_type:lookup_name(M),
+    TypeName.
+
 check_type(T) ->
-    rabbit_misc:protocol_error(
-      command_invalid, "invalid exchange type '~s'", [T]).
+    Module = typename_to_plugin_module(T),
+    case catch Module:description() of
+        {'EXIT', {undef, [{_, description, []} | _]}} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "invalid exchange type '~s'", [T]);
+        {'EXIT', _} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "problem loading exchange type '~s'", [T]);
+        _ ->
+            Module
+    end.
 
 assert_type(#exchange{ type = ActualType }, RequiredType)
   when ActualType == RequiredType ->
@@ -156,7 +167,9 @@ assert_type(#exchange{ type = ActualType }, RequiredType)
 assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
     rabbit_misc:protocol_error(
       not_allowed, "cannot redeclare ~s of type '~s' with type '~s'",
-      [rabbit_misc:rs(Name), ActualType, RequiredType]).
+      [rabbit_misc:rs(Name),
+       plugin_module_to_typename(ActualType),
+       plugin_module_to_typename(RequiredType)]).
 
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_exchange, Name}).
@@ -182,7 +195,7 @@ map(VHostPath, F) ->
 infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 
 i(name,        #exchange{name        = Name})       -> Name;
-i(type,        #exchange{type        = Type})       -> Type;
+i(type,        #exchange{type        = Type})       -> plugin_module_to_typename(Type);
 i(durable,     #exchange{durable     = Durable})    -> Durable;
 i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
 i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
@@ -210,9 +223,8 @@ simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
                              persistent_key = none},
     simple_publish(Mandatory, Immediate, Message).
 
-%% Usable by Erlang code that wants to publish messages.
-simple_publish(Mandatory, Immediate,
-               Message = #basic_message{exchange_name = ExchangeName,
+publish(X = #exchange{type = Type}, Seen, Delivery) ->
+    case Type:publish(X, Delivery) of
                                         routing_key = RoutingKey,
 					content = Content}) ->
     case lookup(ExchangeName) of
@@ -225,72 +237,6 @@ simple_publish(Mandatory, Immediate,
 
 sort_arguments(Arguments) ->
     lists:keysort(1, Arguments).
-
-%% return the list of qpids to which a message with a given routing
-%% key, sent to a particular exchange, should be delivered.
-%%
-%% The function ensures that a qpid appears in the return list exactly
-%% as many times as a message should be delivered to it. With the
-%% current exchange types that is at most once.
-route(X = #exchange{type = topic}, RoutingKey, _Content) ->
-    match_bindings(X, fun (#binding{key = BindingKey}) ->
-                              topic_matches(BindingKey, RoutingKey)
-                      end);
-
-route(X = #exchange{type = headers}, _RoutingKey, Content) ->
-    Headers = case (Content#content.properties)#'P_basic'.headers of
-                  undefined -> [];
-                  H         -> sort_arguments(H)
-              end,
-    match_bindings(X, fun (#binding{args = Spec}) ->
-                              headers_match(Spec, Headers)
-                      end);
-
-route(X = #exchange{type = fanout}, _RoutingKey, _Content) ->
-    match_routing_key(X, '_');
-
-route(X = #exchange{type = direct}, RoutingKey, _Content) ->
-    match_routing_key(X, RoutingKey).
-
-%% TODO: Maybe this should be handled by a cursor instead.
-%% TODO: This causes a full scan for each entry with the same exchange
-match_bindings(#exchange{name = Name}, Match) ->
-    Query = qlc:q([QName || #route{binding = Binding = #binding{
-                                               exchange_name = ExchangeName,
-                                               queue_name = QName}} <-
-                                mnesia:table(rabbit_route),
-                            ExchangeName == Name,
-                            Match(Binding)]),
-    lookup_qpids(
-      try
-          mnesia:async_dirty(fun qlc:e/1, [Query])
-      catch exit:{aborted, {badarg, _}} ->
-              %% work around OTP-7025, which was fixed in R12B-1, by
-              %% falling back on a less efficient method
-              [QName || #route{binding = Binding = #binding{
-                                           queue_name = QName}} <-
-                            mnesia:dirty_match_object(
-                              rabbit_route,
-                              #route{binding = #binding{exchange_name = Name,
-                                                        _ = '_'}}),
-                        Match(Binding)]
-      end).
-
-match_routing_key(#exchange{name = Name}, RoutingKey) ->
-    MatchHead = #route{binding = #binding{exchange_name = Name,
-                                          queue_name = '$1',
-                                          key = RoutingKey,
-                                          _ = '_'}},
-    lookup_qpids(mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
-
-lookup_qpids(Queues) ->
-    sets:fold(
-      fun(Key, Acc) ->
-              case mnesia:dirty_read({rabbit_queue, Key}) of
-                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
-                  []                      -> Acc
-              end
-      end, [], sets:from_list(Queues)).
 
 %% TODO: Should all of the route and binding management not be
 %% refactored to its own module, especially seeing as unbind will have
@@ -411,7 +357,7 @@ sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
     Binding = #binding{exchange_name = ExchangeName,
                        queue_name = QueueName,
                        key = RoutingKey,
-                       args = sort_arguments(Arguments)},
+                                 args          = rabbit_misc:sort_field_table(Arguments)})
     ok = case Durable of
              true  -> Fun(rabbit_durable_route,
                           #route{binding = Binding}, write);
@@ -465,94 +411,6 @@ reverse_binding(#binding{exchange_name = Exchange,
                      queue_name = Queue,
                      key = Key,
                      args = Args}.
-
-default_headers_match_kind() -> all.
-
-parse_x_match(<<"all">>) -> all;
-parse_x_match(<<"any">>) -> any;
-parse_x_match(Other) ->
-    rabbit_log:warning("Invalid x-match field value ~p; expected all or any",
-                       [Other]),
-    default_headers_match_kind().
-
-%% Horrendous matching algorithm. Depends for its merge-like
-%% (linear-time) behaviour on the lists:keysort (sort_arguments) that
-%% route/3 and sync_binding/6 do.
-%%
-%%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-%% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
-%%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-%%
-headers_match(Pattern, Data) ->
-    MatchKind = case lists:keysearch(<<"x-match">>, 1, Pattern) of
-                    {value, {_, longstr, MK}} -> parse_x_match(MK);
-                    {value, {_, Type, MK}} ->
-                        rabbit_log:warning("Invalid x-match field type ~p "
-                                           "(value ~p); expected longstr",
-                                           [Type, MK]),
-                        default_headers_match_kind();
-                    _ -> default_headers_match_kind()
-                end,
-    headers_match(Pattern, Data, true, false, MatchKind).
-
-headers_match([], _Data, AllMatch, _AnyMatch, all) ->
-    AllMatch;
-headers_match([], _Data, _AllMatch, AnyMatch, any) ->
-    AnyMatch;
-headers_match([{<<"x-", _/binary>>, _PT, _PV} | PRest], Data,
-              AllMatch, AnyMatch, MatchKind) ->
-    headers_match(PRest, Data, AllMatch, AnyMatch, MatchKind);
-headers_match(_Pattern, [], _AllMatch, AnyMatch, MatchKind) ->
-    headers_match([], [], false, AnyMatch, MatchKind);
-headers_match(Pattern = [{PK, _PT, _PV} | _], [{DK, _DT, _DV} | DRest],
-              AllMatch, AnyMatch, MatchKind) when PK > DK ->
-    headers_match(Pattern, DRest, AllMatch, AnyMatch, MatchKind);
-headers_match([{PK, _PT, _PV} | PRest], Data = [{DK, _DT, _DV} | _],
-              _AllMatch, AnyMatch, MatchKind) when PK < DK ->
-    headers_match(PRest, Data, false, AnyMatch, MatchKind);
-headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest],
-              AllMatch, AnyMatch, MatchKind) when PK == DK ->
-    {AllMatch1, AnyMatch1} =
-        if
-            %% It's not properly specified, but a "no value" in a
-            %% pattern field is supposed to mean simple presence of
-            %% the corresponding data field. I've interpreted that to
-            %% mean a type of "void" for the pattern field.
-            PT == void -> {AllMatch, true};
-            %% Similarly, it's not specified, but I assume that a
-            %% mismatched type causes a mismatched value.
-            PT =/= DT  -> {false, AnyMatch};
-            PV == DV   -> {AllMatch, true};
-            true       -> {false, AnyMatch}
-        end,
-    headers_match(PRest, DRest, AllMatch1, AnyMatch1, MatchKind).
-
-split_topic_key(Key) ->
-    {ok, KeySplit} = regexp:split(binary_to_list(Key), "\\."),
-    KeySplit.
-
-topic_matches(PatternKey, RoutingKey) ->
-    P = split_topic_key(PatternKey),
-    R = split_topic_key(RoutingKey),
-    topic_matches1(P, R).
-
-topic_matches1(["#"], _R) ->
-    true;
-topic_matches1(["#" | PTail], R) ->
-    last_topic_match(PTail, [], lists:reverse(R));
-topic_matches1([], []) ->
-    true;
-topic_matches1(["*" | PatRest], [_ | ValRest]) ->
-    topic_matches1(PatRest, ValRest);
-topic_matches1([PatElement | PatRest], [ValElement | ValRest]) when PatElement == ValElement ->
-    topic_matches1(PatRest, ValRest);
-topic_matches1(_, _) ->
-    false.
-
-last_topic_match(P, R, []) ->
-    topic_matches1(P, R);
-last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
-    topic_matches1(P, R) or last_topic_match(P, [BacktrackNext | R], BacktrackList).
 
 delete(ExchangeName, _IfUnused = true) ->
     call_with_exchange(ExchangeName, fun conditional_delete/1);

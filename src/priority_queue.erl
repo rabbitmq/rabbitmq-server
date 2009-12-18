@@ -67,8 +67,8 @@
 -type(pqueue() ::  squeue() | {pqueue, [{priority(), squeue()}]}).
 
 -spec(new/0 :: () -> pqueue()).
--spec(is_queue/1 :: (any()) -> bool()).
--spec(is_empty/1 :: (pqueue()) -> bool()).
+-spec(is_queue/1 :: (any()) -> boolean()).
+-spec(is_empty/1 :: (pqueue()) -> boolean()).
 -spec(len/1 :: (pqueue()) -> non_neg_integer()).
 -spec(to_list/1 :: (pqueue()) -> [{priority(), any()}]).
 -spec(in/2 :: (any(), pqueue()) -> pqueue()).

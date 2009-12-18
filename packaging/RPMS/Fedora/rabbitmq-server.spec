@@ -56,6 +56,7 @@ install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmqctl
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-multi
 install -p -D -m 0755 %{_rabbit_asroot_wrapper} %{buildroot}%{_sbindir}/rabbitmq-activate-plugins
+install -p -D -m 0755 %{_rabbit_asroot_wrapper} %{buildroot}%{_sbindir}/rabbitmq-deactivate-plugins
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
@@ -74,9 +75,8 @@ echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm
 %pre
 
 if [ $1 -gt 1 ]; then
-  #Upgrade - stop and remove previous instance of rabbitmq-server init.d script
+  # Upgrade - stop previous instance of rabbitmq-server init.d script
   /sbin/service rabbitmq-server stop
-  /sbin/chkconfig --del rabbitmq-server
 fi
 
 # create rabbitmq group
@@ -118,6 +118,9 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Mon Oct 5 2009 David Wragg <dpw@lshift.net> 1.7.0-1
+- New upstream release
+
 * Wed Jun 17 2009 Matthias Radestock <matthias@lshift.net> 1.6.0-1
 - New upstream release
 

@@ -30,20 +30,8 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-NODENAME=rabbit
-
 . `dirname $0`/rabbitmq-env
 
-[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
-[ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
+RABBITMQ_EBIN=${RABBITMQ_HOME}/ebin
 
-exec erl \
-    -pa "${RABBITMQ_HOME}/ebin" \
-    -noinput \
-    -hidden \
-    ${RABBITMQ_CTL_ERL_ARGS} \
-    -sname rabbitmqctl$$ \
-    -s rabbit_control \
-    -nodename $RABBITMQ_NODENAME \
-    -extra "$@"
-	
+rm -f ${RABBITMQ_EBIN}/rabbit.rel ${RABBITMQ_EBIN}/rabbit.script ${RABBITMQ_EBIN}/rabbit.boot

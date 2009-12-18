@@ -34,7 +34,7 @@
 
 -record(vhost, {virtual_host, dummy}).
 
--record(connection, {user, timeout_sec, frame_max, vhost}).
+-record(connection, {user, timeout_sec, frame_max, vhost, client_properties}).
 
 -record(content,
         {class_id,
@@ -65,7 +65,10 @@
 
 -record(dq_msg_loc, {queue_and_seq_id, is_delivered, msg_id}).
 
+-record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
+
+-record(amqp_error, {name, explanation, method = none}).
 
 %%----------------------------------------------------------------------------
 
@@ -75,7 +78,8 @@
 
 -type(maybe(T) :: T | 'none').
 -type(erlang_node() :: atom()).
--type(socket() :: port()).
+-type(ssl_socket() :: #ssl_socket{}).
+-type(socket() :: port() | ssl_socket()).
 -type(thunk(T) :: fun(() -> T)).
 -type(info_key() :: atom()).
 -type(info() :: {info_key(), any()}).
@@ -95,15 +99,15 @@
             password :: password()}).
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
-                durable       :: bool(),
-                auto_delete   :: bool(),
+                durable       :: boolean(),
+                auto_delete   :: boolean(),
                 arguments     :: amqp_table(),
                 pid           :: maybe(pid())}).
 -type(exchange() ::
       #exchange{name        :: exchange_name(),
                 type        :: exchange_type(),
-                durable     :: bool(),
-                auto_delete :: bool(),
+                durable     :: boolean(),
+                auto_delete :: boolean(),
                 arguments   :: amqp_table()}).
 -type(binding() ::
       #binding{exchange_name    :: exchange_name(),
@@ -134,14 +138,14 @@
                      is_persistent  :: bool()}).
 -type(message() :: basic_message()).
 -type(delivery() ::
-      #delivery{mandatory :: bool(),
-                immediate :: bool(),
+      #delivery{mandatory :: boolean(),
+                immediate :: boolean(),
                 txn       :: maybe(txn()),
                 sender    :: pid(),
                 message   :: message()}).
 %% this really should be an abstract type
 -type(msg_id() :: non_neg_integer()).
--type(msg() :: {queue_name(), pid(), msg_id(), bool(), message()}).
+-type(msg() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
 -type(listener() ::
       #listener{node     :: erlang_node(),
                 protocol :: atom(),
@@ -149,7 +153,10 @@
                 port     :: non_neg_integer()}).
 -type(not_found() :: {'error', 'not_found'}).
 -type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
-
+-type(amqp_error() ::
+      #amqp_error{name        :: atom(),
+                  explanation :: string(),
+                  method      :: atom()}).
 -endif.
 
 %%----------------------------------------------------------------------------

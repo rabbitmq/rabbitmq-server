@@ -42,7 +42,7 @@
          terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(SERIAL_FILENAME, "rabbit_guid").
+-define(SERIAL_FILENAME, "rabbit_serial").
 
 -record(state, {serial}).
 
@@ -64,14 +64,18 @@ start_link() ->
                           [update_disk_serial()], []).
 
 update_disk_serial() ->
-    Filename = filename:join(mnesia:system_info(directory), ?SERIAL_FILENAME),
-    Serial = case file:read_file(Filename) of
-                 {ok, Content} ->
-                     binary_to_term(Content);
-                 {error, _} ->
-                     0
+    Filename = filename:join(rabbit_mnesia:dir(), ?SERIAL_FILENAME),
+    Serial = case rabbit_misc:read_term_file(Filename) of
+                 {ok, [Num]}     -> Num;
+                 {error, enoent} -> rabbit_persister:serial();
+                 {error, Reason} ->
+                     throw({error, {cannot_read_serial_file, Filename, Reason}})
              end,
-    ok = file:write_file(Filename, term_to_binary(Serial + 1)),
+    case rabbit_misc:write_term_file(Filename, [Serial + 1]) of
+        ok -> ok;
+        {error, Reason1} ->
+            throw({error, {cannot_write_serial_file, Filename, Reason1}})
+    end,
     Serial.
 
 %% generate a guid that is monotonically increasing per process.
@@ -100,13 +104,8 @@ guid() ->
 %% generate a readable string representation of a guid. Note that any
 %% monotonicity of the guid is not preserved in the encoding.
 string_guid(Prefix) ->
-    %% we use the (undocumented) ssl_base64 module here because it is
-    %% present throughout OTP R11 and R12 whereas base64 only becomes
-    %% available in R11B-4.
-    %%
-    %% TODO: once debian stable and EPEL have moved from R11B-2 to
-    %% R11B-4 or later we should change this to use base64.
-    Prefix ++ "-" ++ ssl_base64:encode(erlang:md5(term_to_binary(guid()))).
+    Prefix ++ "-" ++ base64:encode_to_string(
+                       erlang:md5(term_to_binary(guid()))).
 
 binstring_guid(Prefix) ->
     list_to_binary(string_guid(Prefix)).

@@ -132,6 +132,35 @@ test_priority_queue() ->
     {true, false, 2, [{2, bar}, {1, foo}], [bar, foo]} =
         test_priority_queue(Q10),
 
+    %% merge 2 * 2-element multi-different-priority Qs
+    Q11 = priority_queue:join(Q6, Q5),
+    {true, false, 4, [{1, bar}, {0, foo}, {0, foo}, {0, bar}],
+     [bar, foo, foo, bar]} = test_priority_queue(Q11),
+
+    %% and the other way around
+    Q12 = priority_queue:join(Q5, Q6),
+    {true, false, 4, [{1, bar}, {0, foo}, {0, bar}, {0, foo}],
+     [bar, foo, bar, foo]} = test_priority_queue(Q12),
+
+    %% merge with negative priorities
+    Q13 = priority_queue:join(Q4, Q5),
+    {true, false, 3, [{0, foo}, {0, bar}, {-1, foo}], [foo, bar, foo]} =
+        test_priority_queue(Q13),
+
+    %% and the other way around
+    Q14 = priority_queue:join(Q5, Q4),
+    {true, false, 3, [{0, foo}, {0, bar}, {-1, foo}], [foo, bar, foo]} =
+        test_priority_queue(Q14),
+
+    %% joins with empty queues:
+    Q1 = priority_queue:join(Q, Q1),
+    Q1 = priority_queue:join(Q1, Q),
+
+    %% insert with priority into non-empty zero-priority queue
+    Q15 = priority_queue:in(baz, 1, Q5),
+    {true, false, 3, [{1, baz}, {0, foo}, {0, bar}], [baz, foo, bar]} =
+        test_priority_queue(Q15),
+
     passed.
 
 priority_queue_in_all(Q, L) ->
@@ -157,7 +186,7 @@ test_simple_n_element_queue(N) ->
     passed.
 
 test_unfold() ->
-    {[], test} = rabbit_misc:unfold(fun (V) -> false end, test),
+    {[], test} = rabbit_misc:unfold(fun (_V) -> false end, test),
     List = lists:seq(2,20,2),
     {List, 0} = rabbit_misc:unfold(fun (0) -> false;
                                        (N) -> {true, N*2, N-1}
@@ -166,6 +195,7 @@ test_unfold() ->
 
 test_parsing() ->
     passed = test_content_properties(),
+    passed = test_field_values(),
     passed.
 
 test_content_properties() ->
@@ -191,9 +221,12 @@ test_content_properties() ->
                                            [{<<"one">>, signedint, 1},
                                             {<<"two">>, signedint, 2}]}]}],
                                 <<
-                                 16#8000:16,                % flags
-                                 % properties:
+                                 % property-flags
+                                 16#8000:16,
 
+                                 % property-list:
+
+                                 % table
                                  117:32,                % table length in bytes
 
                                  11,"a signedint",        % name
@@ -222,11 +255,56 @@ test_content_properties() ->
         V -> exit({got_success_but_expected_failure, V})
     end.
 
+test_field_values() ->
+    %% FIXME this does not test inexact numbers (double and float) yet,
+    %% because they won't pass the equality assertions
+    test_content_prop_roundtrip(
+      [{table, [{<<"longstr">>, longstr, <<"Here is a long string">>},
+                {<<"signedint">>, signedint, 12345},
+                {<<"decimal">>, decimal, {3, 123456}},
+                {<<"timestamp">>, timestamp, 109876543209876},
+                {<<"table">>, table, [{<<"one">>, signedint, 54321},
+                                      {<<"two">>, longstr, <<"A long string">>}]},
+                {<<"byte">>, byte, 255},
+                {<<"long">>, long, 1234567890},
+                {<<"short">>, short, 655},
+                {<<"bool">>, bool, true},
+                {<<"binary">>, binary, <<"a binary string">>},
+                {<<"void">>, void, undefined},
+                {<<"array">>, array, [{signedint, 54321},
+                                      {longstr, <<"A long string">>}]}
+
+               ]}],
+      <<
+       % property-flags
+       16#8000:16,
+       % table length in bytes
+       228:32,
+
+       7,"longstr",   "S", 21:32, "Here is a long string",      %      = 34
+       9,"signedint", "I", 12345:32/signed,                     % + 15 = 49
+       7,"decimal",   "D", 3, 123456:32,                        % + 14 = 63
+       9,"timestamp", "T", 109876543209876:64,                  % + 19 = 82
+       5,"table",     "F", 31:32, % length of table             % + 11 = 93
+                           3,"one", "I", 54321:32,              % +  9 = 102
+                           3,"two", "S", 13:32, "A long string",% + 22 = 124
+       4,"byte",      "b", 255:8,                               % +  7 = 131
+       4,"long",      "l", 1234567890:64,                       % + 14 = 145
+       5,"short",     "s", 655:16,                              % +  9 = 154
+       4,"bool",      "t", 1,                                   % +  7 = 161
+       6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188 
+       4,"void",      "V",                                      % +  6 = 194
+       5,"array",     "A", 23:32,                               % + 11 = 205
+                           "I", 54321:32,                       % +  5 = 210
+                           "S", 13:32, "A long string"          % + 18 = 228
+       >>),
+    passed.
+
 test_topic_match(P, R) ->
     test_topic_match(P, R, true).
 
 test_topic_match(P, R, Expected) ->
-    case rabbit_exchange:topic_matches(list_to_binary(P), list_to_binary(R)) of
+    case rabbit_exchange_type_topic:topic_matches(list_to_binary(P), list_to_binary(R)) of
         Expected ->
             passed;
         _ ->
@@ -468,7 +546,7 @@ test_cluster_management() ->
     ok = control_action(cluster, ["invalid1@invalid",
                                   "invalid2@invalid"]),
 
-    SecondaryNode = rabbit_misc:localnode(hare),
+    SecondaryNode = rabbit_misc:makenode("hare"),
     case net_adm:ping(SecondaryNode) of
         pong -> passed = test_cluster_management2(SecondaryNode);
         pang -> io:format("Skipping clustering tests with node ~p~n",
@@ -636,7 +714,10 @@ test_server_status() ->
     {ok, _} = rabbit_amqqueue:delete(Q, false, false),
 
     %% list connections
-    [#listener{host = H, port = P} | _] = rabbit_networking:active_listeners(),
+    [#listener{host = H, port = P} | _] =
+        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
+              N =:= node()],
+
     {ok, C} = gen_tcp:connect(H, P, []),
     timer:sleep(100),
     ok = info_action(
