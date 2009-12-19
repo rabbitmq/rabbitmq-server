@@ -426,7 +426,10 @@ handle_info(timeout, State) ->
 
 handle_info({file_handle_cache, maximum_eldest_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State).
+    noreply(State);
+
+handle_info({'EXIT', _Pid, Reason}, State) ->
+    {stop, Reason, State}.
 
 terminate(_Reason, State = #msstate { msg_locations          = MsgLocations,
                                       file_summary           = FileSummary,
