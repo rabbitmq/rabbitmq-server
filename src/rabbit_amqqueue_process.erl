@@ -920,6 +920,9 @@ handle_info({file_handle_cache, maximum_eldest_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
 
+handle_info({'EXIT', _Pid, Reason}, State) ->
+    {stop, Reason, State};
+
 handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
