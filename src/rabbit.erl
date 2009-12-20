@@ -150,12 +150,11 @@ start(normal, []) ->
                              start_child(vm_memory_monitor, [MemoryWatermark])
                      end,
 
-                ok = rabbit_amqqueue:start(),
+                ok = start_child(rabbit_memory_monitor),
+                ok = start_child(rabbit_guid),
 
                 ok = start_child(rabbit_router),
-                ok = start_child(rabbit_guid),
-                ok = start_child(rabbit_node_monitor),
-                ok = start_child(rabbit_memory_monitor)
+                ok = start_child(rabbit_node_monitor)
         end},
        {"recovery",
         fun () ->
@@ -163,6 +162,9 @@ start(normal, []) ->
                 ok = rabbit_exchange:recover(),
                 DurableQueues = rabbit_amqqueue:find_durable_queues(),
                 ok = rabbit_queue_index:start_msg_store(DurableQueues),
+
+                ok = rabbit_amqqueue:start(),
+
                 {ok, _RealDurableQueues} = rabbit_amqqueue:recover(DurableQueues)
                 %% TODO - RealDurableQueues is a subset of
                 %% DurableQueues. It may have queues removed which

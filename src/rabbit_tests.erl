@@ -921,7 +921,7 @@ msg_store_write(MsgIds) ->
     ok = lists:foldl(
            fun (MsgId, ok) -> rabbit_msg_store:write(MsgId, MsgId) end,
            ok, MsgIds).
-                            
+
 test_msg_store() ->
     stop_msg_store(),
     ok = start_msg_store_empty(),
@@ -1016,16 +1016,23 @@ test_msg_store() ->
            fun (MsgId, ok) ->
                    rabbit_msg_store:write(msg_id_bin(MsgId), Payload)
            end, ok, MsgIdsBig),
-    %% .., then remove even numbers ascending, and odd numbers
-    %% descending. This hits the GC.
+    %% .., then 3s by 1...
     ok = lists:foldl(
            fun (MsgId, ok) ->
-                   rabbit_msg_store:remove([msg_id_bin(
-                                              case MsgId rem 2 of
-                                                  0 -> MsgId;
-                                                  1 -> BigCount - MsgId
-                                              end)])
-           end, ok, MsgIdsBig),
+                   rabbit_msg_store:remove([msg_id_bin(MsgId)])
+           end, ok, lists:seq(BigCount, 1, -3)),
+    %% .., then remove 3s by 2, from the young end first. This hits
+    %% GC (under 50% good data left, but no empty files. Must GC).
+    ok = lists:foldl(
+           fun (MsgId, ok) ->
+                   rabbit_msg_store:remove([msg_id_bin(MsgId)])
+           end, ok, lists:seq(BigCount-1, 1, -3)),
+    %% .., then remove 3s by 3, from the young end first. This hits
+    %% GC...
+    ok = lists:foldl(
+           fun (MsgId, ok) ->
+                   rabbit_msg_store:remove([msg_id_bin(MsgId)])
+           end, ok, lists:seq(BigCount-2, 1, -3)),
     %% ensure empty
     false = msg_store_contains(false, [msg_id_bin(M) || M <- MsgIdsBig]),
     %% restart empty
