@@ -37,10 +37,7 @@
 -define(CLIENT_CLOSE_TIMEOUT, 60000).
 -define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
 
-%% We unpack the tcp_params and amqp_params into nc_state rather than having
-%% a connection_params field for convenience in pattern matching.
--record(nc_state, {tcp_params,
-                   amqp_params,
+-record(nc_state, {params = #amqp_params{},
                    sock,
                    main_reader_pid,
                    channel0_writer_pid,
@@ -59,9 +56,9 @@
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init(#connection_params{tcp = TCPParams, amqp = AMQPParams}) ->
+init(AmqpParams) ->
     process_flag(trap_exit, true),
-    State0 = handshake(#nc_state{tcp_params = TCPParams, amqp_params = AMQPParams}),
+    State0 = handshake(#nc_state{params = AmqpParams}),
     {ok, State0}.
 
 %% Standard handling of an app initiated command
@@ -332,24 +329,18 @@ handle_exit(Pid, Reason,
 %% Handshake
 %%---------------------------------------------------------------------------
 
-port_for(#tcp_params{port = -1, ssl_options = none}) -> ?PROTOCOL_PORT;
-port_for(#tcp_params{port = -1}) -> ?SSL_PROTOCOL_PORT;
-port_for(#tcp_params{port = Port}) -> Port.
-
-handshake(State = #nc_state{tcp_params = TCPParams = 
-                              #tcp_params{host = Host,
-                                          ssl_options = none}}) ->
-    Port = port_for(TCPParams), 
+handshake(State = #nc_state{params = #amqp_params{host = Host,
+                                                  port = Port,
+                                                  ssl_options = none}}) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock}      -> do_handshake(State#nc_state{sock = Sock});
         {error, Reason} -> ?LOG_WARN("Could not start the network driver: ~p~n",
                                      [Reason]),
                            exit(Reason)
     end;
-handshake(State = #nc_state{tcp_params = TCPParams = 
-                              #tcp_params{host = Host,
-                                          ssl_options = SslOpts}}) ->
-    Port = port_for(TCPParams),
+handshake(State = #nc_state{params = #amqp_params{host = Host,
+                                                  port = Port,
+                                                  ssl_options = SslOpts}}) ->
     rabbit_misc:start_applications([crypto, ssl]),
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
@@ -380,7 +371,7 @@ do_handshake(State0 = #nc_state{sock = Sock}) ->
     State2.
 
 network_handshake(State = #nc_state{channel0_writer_pid = Writer0,
-                                    amqp_params = Params}) ->
+                                    params = Params}) ->
     Start = handshake_recv(State),
     ok = check_version(Start),
     amqp_channel_util:do(network, Writer0, start_ok(State), none),
@@ -424,8 +415,8 @@ negotiate_max_value(Client, Server) when Client =:= 0; Server =:= 0 ->
 negotiate_max_value(Client, Server) ->
     lists:min([Client, Server]).
 
-start_ok(#nc_state{amqp_params = #amqp_params{username = Username,
-                                              password = Password}}) ->
+start_ok(#nc_state{params = #amqp_params{username = Username,
+                                         password = Password}}) ->
     %% TODO This eagerly starts the amqp_client application in order to
     %% to get the version from the app descriptor, which may be
     %% overkill - maybe there is a more suitable point to boot the app

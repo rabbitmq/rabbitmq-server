@@ -29,32 +29,19 @@
 -define(PROTOCOL_HEADER,
         <<"AMQP", 1, 1, ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR>>).
 
--define(SSL_PROTOCOL_PORT, 5671).
-
 -define(MAX_CHANNEL_NUMBER, 65535).
 
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
--record(tcp_params, {
-                  host         = "localhost",
-                  port         = -1,
-                  ssl_options  = none
-}).
-
--record(amqp_params, {
-                  username     = <<"guest">>,
-                  password     = <<"guest">>,
-                  virtual_host = <<"/">>,
-                  channel_max  = 0,
-                  frame_max    = 0,
-                  heartbeat    = 0
-}).
-
--record(connection_params, {
-                  amqp         = #amqp_params{},
-                  tcp          = #tcp_params{}
-}).
-
+-record(amqp_params, {username     = <<"guest">>,
+                      password     = <<"guest">>,
+                      virtual_host = <<"/">>,
+                      host         = "localhost",
+                      port         = ?PROTOCOL_PORT,
+                      channel_max  = 0,
+                      frame_max    = 0,
+                      heartbeat    = 0,
+                      ssl_options  = none}).
 
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).
