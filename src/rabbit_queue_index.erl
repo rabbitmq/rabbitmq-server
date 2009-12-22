@@ -34,7 +34,8 @@
 -export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
          write_delivered/2, write_acks/2, sync_seq_ids/2, flush_journal/1,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
-         find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/1]).
+         find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/0,
+         start_msg_store/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -137,6 +138,7 @@
 -spec(segment_size/0 :: () -> non_neg_integer()).
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
+-spec(start_msg_store/0 :: () -> 'ok').
 -spec(start_msg_store/1 :: ([amqqueue()]) -> 'ok').
 
 -endif.
@@ -309,6 +311,13 @@ find_lowest_seq_id_seg_and_next_seq_id(State) ->
         end,
     {LowSeqIdSeg, NextSeqId, State}.
 
+start_msg_store() ->
+    DurableQueues = rabbit_amqqueue:find_durable_queues(),
+    ok = start_msg_store(DurableQueues),
+    ok = rabbit_amqqueue:start(),
+    {ok, _RealDurableQueues} = rabbit_amqqueue:recover(DurableQueues),
+    ok.
+
 start_msg_store(DurableQueues) ->
     DurableDict =
         dict:from_list([ {queue_name_to_dir_name(Queue #amqqueue.name),
@@ -335,7 +344,7 @@ start_msg_store(DurableQueues) ->
                   end
           end, {[], []}, Directories),
     MsgStoreDir = filename:join(rabbit_mnesia:dir(), "msg_store"),
-    ok = rabbit:start_child(rabbit_msg_store, [MsgStoreDir,
+    ok = rabbit_sup:start_child(rabbit_msg_store, [MsgStoreDir,
                                                fun queue_index_walker/1,
                                                DurableQueueNames]),
     lists:foreach(fun (DirName) ->

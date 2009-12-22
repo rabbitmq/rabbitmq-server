@@ -37,7 +37,13 @@
 
 -behaviour(gen_event).
 
+-export([boot/0]).
+
 -export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2, handle_info/2]).
+
+boot() ->
+    {ok, DefaultVHost} = application:get_env(default_vhost),
+    ok = error_logger:add_report_handler(?MODULE, [DefaultVHost]).
 
 init([DefaultVHost]) ->
     #exchange{} = rabbit_exchange:declare(

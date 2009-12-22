@@ -33,7 +33,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0]).
+-export([start_link/0, start_child/1, start_child/2]).
 
 -export([init/1]).
 
@@ -41,6 +41,16 @@
 
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+
+start_child(Mod) ->
+    start_child(Mod, []).
+
+start_child(Mod, Args) ->
+    {ok, _} = supervisor:start_child(
+                ?SERVER, {Mod, {Mod, start_link, Args},
+                          %% 16#ffffffff is the highest value allowed
+                          transient, 16#ffffffff, worker, [Mod]}),
+    ok.
 
 init([]) ->
     {ok, {{one_for_one, 10, 10}, []}}.

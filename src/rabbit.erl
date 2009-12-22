@@ -37,7 +37,100 @@
 
 -export([start/2, stop/1]).
 
--export([log_location/1, start_child/2]).
+-export([log_location/1]).
+
+%%---------------------------------------------------------------------------
+%% Boot steps.
+-export([maybe_insert_default_data/0]).
+
+-rabbit_boot_step({codec_correctness_check,
+                   [{description, "codec correctness check"},
+                    {mfa,         {rabbit_binary_generator,
+                                   check_empty_content_body_frame_size,
+                                   []}}]}).
+
+-rabbit_boot_step({database,
+                   [{mfa,         {rabbit_mnesia, init, []}},
+                    {pre,         kernel_ready}]}).
+
+-rabbit_boot_step({rabbit_log,
+                   [{description, "logging server"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_log]}},
+                    {pre,         kernel_ready}]}).
+
+-rabbit_boot_step({rabbit_hooks,
+                   [{description, "internal event notification system"},
+                    {mfa,         {rabbit_hooks, start, []}},
+                    {pre,         kernel_ready}]}).
+
+-rabbit_boot_step({kernel_ready,
+                   [{description, "kernel ready"}]}).
+
+-rabbit_boot_step({rabbit_alarm,
+                   [{description, "alarm handler"},
+                    {mfa,         {rabbit_alarm, start, []}},
+                    {post,        kernel_ready},
+                    {pre,         core_initialized}]}).
+
+-rabbit_boot_step({rabbit_memory_monitor,
+                   [{description, "memory moniter"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_memory_monitor]}},
+                    {post,        rabbit_alarm},
+                    {pre,         core_initialized}]}).
+
+-rabbit_boot_step({guid_generator,
+                   [{description, "guid generator"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_guid]}},
+                    {post,        kernel_ready},
+                    {pre,         core_initialized}]}).
+
+-rabbit_boot_step({rabbit_router,
+                   [{description, "cluster router"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_router]}},
+                    {post,        kernel_ready},
+                    {pre,         core_initialized}]}).
+
+-rabbit_boot_step({rabbit_node_monitor,
+                   [{description, "node monitor"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_node_monitor]}},
+                    {post,        kernel_ready},
+                    {pre,         core_initialized}]}).
+
+-rabbit_boot_step({core_initialized,
+                   [{description, "core initialized"}]}).
+
+-rabbit_boot_step({empty_db_check,
+                   [{description, "empty DB check"},
+                    {mfa,         {?MODULE, maybe_insert_default_data, []}},
+                    {post,        core_initialized}]}).
+
+-rabbit_boot_step({exchange_recovery,
+                   [{description, "exchange recovery"},
+                    {mfa,         {rabbit_exchange, recover, []}},
+                    {post,        empty_db_check}]}).
+
+-rabbit_boot_step({message_store_queue_sup_queue_recovery,
+                   [{description, "message store, queue supervisor and queue recovery"},
+                    {mfa,         {rabbit_queue_index, start_msg_store, []}},
+                    {post,        exchange_recovery}]}).
+
+-rabbit_boot_step({routing_ready,
+                   [{description, "message delivery logic ready"}]}).
+
+-rabbit_boot_step({log_relay,
+                   [{description, "error log relay"},
+                    {mfa,         {rabbit_error_logger, boot, []}},
+                    {post,        routing_ready}]}).
+
+-rabbit_boot_step({networking,
+                   [{mfa,         {rabbit_networking, boot, []}},
+                    {post,        log_relay},
+                    {pre,         networking_listening}]}).
+
+-rabbit_boot_step({networking_listening,
+                   [{description, "network listeners available"}]}).
+
+%%---------------------------------------------------------------------------
 
 -import(application).
 -import(mnesia).
@@ -67,7 +160,6 @@
               {nodes, [erlang_node()]} |
               {running_nodes, [erlang_node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
--spec(start_child/2 :: (atom(), [any()]) -> 'ok').
 
 -endif.
 
@@ -113,101 +205,14 @@ rotate_logs(BinarySuffix) ->
 %%--------------------------------------------------------------------
 
 start(normal, []) ->
-
     {ok, SupPid} = rabbit_sup:start_link(),
 
     print_banner(),
-
-    lists:foreach(
-      fun ({Msg, Thunk}) ->
-              io:format("starting ~-20s ...", [Msg]),
-              Thunk(),
-              io:format("done~n");
-          ({Msg, M, F, A}) ->
-              io:format("starting ~-20s ...", [Msg]),
-              apply(M, F, A),
-              io:format("done~n")
-      end,
-      [{"database",
-        fun () -> ok = rabbit_mnesia:init() end},
-       {"core processes",
-        fun () ->
-                ok = start_child(rabbit_log),
-                ok = rabbit_hooks:start(),
-
-                ok = rabbit_binary_generator:
-                    check_empty_content_body_frame_size(),
-
-                ok = rabbit_alarm:start(),
-                ok = start_child(file_handle_cache),
-
-                {ok, MemoryWatermark} =
-                    application:get_env(vm_memory_high_watermark),
-                ok = case MemoryWatermark == 0 of
-                         true ->
-                             ok;
-                         false ->
-                             start_child(vm_memory_monitor, [MemoryWatermark])
-                     end,
-
-                ok = start_child(rabbit_memory_monitor),
-                ok = start_child(rabbit_guid),
-
-                ok = start_child(rabbit_router),
-                ok = start_child(rabbit_node_monitor)
-        end},
-       {"recovery",
-        fun () ->
-                ok = maybe_insert_default_data(),
-                ok = rabbit_exchange:recover(),
-                DurableQueues = rabbit_amqqueue:find_durable_queues(),
-                ok = rabbit_queue_index:start_msg_store(DurableQueues),
-
-                ok = rabbit_amqqueue:start(),
-
-                {ok, _RealDurableQueues} = rabbit_amqqueue:recover(DurableQueues)
-                %% TODO - RealDurableQueues is a subset of
-                %% DurableQueues. It may have queues removed which
-                %% have since been recreated on another node in our
-                %% cluster. We need to remove DurableQueues --
-                %% RealDurableQueues somehow. See also bug 20916
-        end},
-       {"builtin applications",
-        fun () ->
-                {ok, DefaultVHost} = application:get_env(default_vhost),
-                ok = error_logger:add_report_handler(
-                       rabbit_error_logger, [DefaultVHost]),
-                ok = start_builtin_amq_applications()
-        end},
-       {"TCP listeners",
-        fun () ->
-                ok = rabbit_networking:start(),
-                {ok, TcpListeners} = application:get_env(tcp_listeners),
-                lists:foreach(
-                  fun ({Host, Port}) ->
-                          ok = rabbit_networking:start_tcp_listener(Host, Port)
-                  end,
-                  TcpListeners)
-        end},
-       {"SSL listeners",
-        fun () ->
-                case application:get_env(ssl_listeners) of
-                    {ok, []} ->
-                        ok;
-                    {ok, SslListeners} ->
-                        ok = rabbit_misc:start_applications([crypto, ssl]),
-
-                        {ok, SslOpts} = application:get_env(ssl_options),
-
-                        [rabbit_networking:start_ssl_listener
-                         (Host, Port, SslOpts) || {Host, Port} <- SslListeners],
-                        ok
-                end
-        end}]),
-
+    [ok = run_boot_step(Step) || Step <- boot_steps()],
     io:format("~nbroker running~n"),
 
     {ok, SupPid}.
+
 
 stop(_State) ->
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
@@ -218,7 +223,105 @@ stop(_State) ->
          end,
     ok.
 
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
+
+boot_error(Format, Args) ->
+    io:format("BOOT ERROR: " ++ Format, Args),
+    error_logger:error_msg(Format, Args),
+    timer:sleep(1000),
+    exit({?MODULE, failure_during_boot}).
+
+run_boot_step({StepName, Attributes}) ->
+    Description = case lists:keysearch(description, 1, Attributes) of
+                      {value, {_, D}} -> D;
+                      false           -> StepName
+                  end,
+    case [MFA || {mfa, MFA} <- Attributes] of
+        [] ->
+            io:format("progress -- ~s~n", [Description]);
+        MFAs ->
+            io:format("starting ~-60s ...", [Description]),
+            [case catch apply(M,F,A) of
+                 {'EXIT', Reason} ->
+                     boot_error("FAILED~nReason: ~p~n", [Reason]);
+                 ok ->
+                     ok
+             end || {M,F,A} <- MFAs],
+            io:format("done~n"),
+            ok
+    end.
+
+boot_steps() ->
+    AllApps = [App || {App, _, _} <- application:loaded_applications()],
+    Modules = lists:usort(
+                lists:append([Modules
+                              || {ok, Modules} <-
+                                     [application:get_key(App, modules)
+                                      || App <- AllApps]])),
+    UnsortedSteps =
+        lists:flatmap(fun (Module) ->
+                              [{StepName, Attributes}
+                               || {rabbit_boot_step, [{StepName, Attributes}]}
+                                      <- Module:module_info(attributes)]
+                      end, Modules),
+    sort_boot_steps(UnsortedSteps).
+
+sort_boot_steps(UnsortedSteps) ->
+    G = digraph:new([acyclic]),
+
+    %% Add vertices, with duplicate checking.
+    [case digraph:vertex(G, StepName) of
+         false -> digraph:add_vertex(G, StepName, Step);
+         _     -> boot_error("Duplicate boot step name: ~w~n", [StepName])
+     end || Step = {StepName, _Attrs} <- UnsortedSteps],
+
+    %% Add edges, detecting cycles and missing vertices.
+    lists:foreach(fun ({StepName, Attributes}) ->
+                          [add_boot_step_dep(G, StepName, PrecedingStepName)
+                           || {post, PrecedingStepName} <- Attributes],
+                          [add_boot_step_dep(G, SucceedingStepName, StepName)
+                           || {pre, SucceedingStepName} <- Attributes]
+                  end, UnsortedSteps),
+
+    %% Use topological sort to find a consistent ordering (if there is
+    %% one, otherwise fail).
+    SortedStepsRev = [begin
+                          {StepName, Step} = digraph:vertex(G, StepName),
+                          Step
+                      end || StepName <- digraph_utils:topsort(G)],
+    SortedSteps = lists:reverse(SortedStepsRev),
+
+    digraph:delete(G),
+
+    %% Check that all mentioned {M,F,A} triples are exported.
+    case [{StepName, {M,F,A}}
+          || {StepName, Attributes} <- SortedSteps,
+             {mfa, {M,F,A}} <- Attributes,
+             not erlang:function_exported(M, F, length(A))] of
+        []               -> SortedSteps;
+        MissingFunctions -> boot_error("Boot step functions not exported: ~p~n",
+                                       [MissingFunctions])
+    end.
+
+add_boot_step_dep(G, RunsSecond, RunsFirst) ->
+    case digraph:add_edge(G, RunsSecond, RunsFirst) of
+        {error, Reason} ->
+            boot_error("Could not add boot step dependency of ~w on ~w:~n~s",
+              [RunsSecond, RunsFirst,
+               case Reason of
+                   {bad_vertex, V} ->
+                       io_lib:format("Boot step not registered: ~w~n", [V]);
+                   {bad_edge, [First | Rest]} ->
+                       [io_lib:format("Cyclic dependency: ~w", [First]),
+                        [io_lib:format(" depends on ~w", [Next])
+                         || Next <- Rest],
+                        io_lib:format(" depends on ~w~n", [First])]
+               end]);
+        _ ->
+            ok
+    end.
+
+%%---------------------------------------------------------------------------
 
 log_location(Type) ->
     case application:get_env(Type, case Type of
@@ -277,16 +380,6 @@ print_banner() ->
     lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
     io:nl().
 
-start_child(Mod) ->
-    start_child(Mod, []).
-
-start_child(Mod, Args) ->
-    {ok,_} = supervisor:start_child(rabbit_sup,
-                                    {Mod, {Mod, start_link, Args},
-            %% 4294967295 is 2^32 - 1, which is the highest value allowed
-                                     transient, 4294967295, worker, [Mod]}),
-    ok.
-
 ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),
     ok = ensure_working_log_handler(error_logger_file_h,
@@ -342,12 +435,6 @@ insert_default_data() ->
                                                DefaultConfigurePerm,
                                                DefaultWritePerm,
                                                DefaultReadPerm),
-    ok.
-
-start_builtin_amq_applications() ->
-    %%TODO: we may want to create a separate supervisor for these so
-    %%they don't bring down the entire app when they die and fail to
-    %%restart
     ok.
 
 rotate_logs(File, Suffix, Handler) ->

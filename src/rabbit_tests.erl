@@ -881,8 +881,8 @@ start_msg_store_empty() ->
     start_msg_store(fun (ok) -> finished end, ok).
 
 start_msg_store(MsgRefDeltaGen, MsgRefDeltaGenInit) ->
-    rabbit:start_child(rabbit_msg_store, [msg_store_dir(), MsgRefDeltaGen,
-                                          MsgRefDeltaGenInit]).
+    rabbit_sup:start_child(rabbit_msg_store, [msg_store_dir(), MsgRefDeltaGen,
+                                              MsgRefDeltaGenInit]).
 
 stop_msg_store() ->
     case supervisor:terminate_child(rabbit_sup, rabbit_msg_store) of

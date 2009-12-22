@@ -221,8 +221,8 @@ start_queue_process(Q = #amqqueue{name = QueueName}) ->
     case supervisor:start_child(
            rabbit_amqqueue_sup,
            {QueueName, {rabbit_amqqueue_process, start_link, [Q]},
-            %% 4294967295 is 2^32 - 1, which is the highest value allowed
-            temporary, 4294967295, worker, [rabbit_amqqueue_process]}) of
+            %% 16#ffffffff is the biggest value allowed
+            temporary, 16#ffffffff, worker, [rabbit_amqqueue_process]}) of
         {ok, Pid} ->
             Q#amqqueue{pid = Pid};
         {error, already_present} ->
