@@ -31,7 +31,7 @@
 
 -module(rabbit_networking).
 
--export([start/0, start_tcp_listener/2, start_ssl_listener/3, 
+-export([boot/0, start/0, start_tcp_listener/2, start_ssl_listener/3, 
         stop_tcp_listener/2, on_node_down/1, active_listeners/0, 
         node_listeners/1, connections/0, connection_info/1, 
         connection_info/2, connection_info_all/0, 
@@ -81,6 +81,27 @@
 -endif.
 
 %%----------------------------------------------------------------------------
+
+boot() ->
+    ok = start(),
+    ok = boot_tcp(),
+    ok = boot_ssl().
+
+boot_tcp() ->
+    {ok, TcpListeners} = application:get_env(tcp_listeners),
+    [ok = start_tcp_listener(Host, Port) || {Host, Port} <- TcpListeners],
+    ok.
+
+boot_ssl() ->
+    case application:get_env(ssl_listeners) of
+        {ok, []} ->
+            ok;
+        {ok, SslListeners} ->
+            ok = rabbit_misc:start_applications([crypto, ssl]),
+            {ok, SslOpts} = application:get_env(ssl_options),
+            [start_ssl_listener(Host, Port, SslOpts) || {Host, Port} <- SslListeners],
+            ok
+    end.
 
 start() ->
     {ok,_} = supervisor:start_child(
