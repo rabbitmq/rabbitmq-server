@@ -30,14 +30,14 @@
 %%
 
 -module(rabbit_msg_store_ets_index).
--export([init/0, lookup/2, insert/2, update/2, update_fields/3, delete/2,
+-export([init/1, lookup/2, insert/2, update/2, update_fields/3, delete/2,
          delete_by_file/2, terminate/1]).
 
 -define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
 
 -include("rabbit_msg_store.hrl").
 
-init() ->
+init(_Dir) ->
     ets:new(?MSG_LOC_NAME, [set, public, {keypos, #msg_location.msg_id}]).
 
 lookup(Key, MsgLocations) ->

@@ -244,8 +244,14 @@ init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
 
     ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
 
-    IndexModule = rabbit_msg_store_ets_index,
-    IndexState = IndexModule:init(),
+    IndexModule =
+        case application:get_env(rabbit_msg_store_index_module) of
+            {ok, Module} -> Module;
+            _            -> rabbit_msg_store_ets_index
+        end,
+    rabbit_log:info("Using ~p to provide index for message store~n",
+                    [IndexModule]),
+    IndexState = IndexModule:init(Dir),
 
     InitFile = 0,
     FileSummary = ets:new(?FILE_SUMMARY_ETS_NAME,
