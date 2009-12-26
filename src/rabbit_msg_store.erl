@@ -244,7 +244,7 @@ init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
 
     ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
 
-    {ok, IndexModule} = application:get_env(rabbit_msg_store_index_module),
+    {ok, IndexModule} = application:get_env(msg_store_index_module),
     rabbit_log:info("Using ~p to provide index for message store~n",
                     [IndexModule]),
     IndexState = IndexModule:init(Dir),
