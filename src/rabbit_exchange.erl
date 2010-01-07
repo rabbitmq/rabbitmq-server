@@ -93,6 +93,7 @@
 %%----------------------------------------------------------------------------
 
 -define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
+-define(MAX_RETRIES, 9).
 
 recover() ->
     ok = rabbit_misc:table_foreach(
@@ -112,21 +113,44 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                          type = Type,
                          durable = Durable,
                          auto_delete = AutoDelete,
-                         arguments = Args},
-    ok = Type:declare(Exchange),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:wread({rabbit_exchange, ExchangeName}) of
-                  [] -> ok = mnesia:write(rabbit_exchange, Exchange, write),
-                        if Durable ->
-                                ok = mnesia:write(rabbit_durable_exchange,
-                                                  Exchange, write);
-                           true -> ok
-                        end,
-                        Exchange;
-                  [ExistingX] -> ExistingX
-              end
-      end).
+                         arguments = Args,
+                         complete = false},
+    case mnesia:sync_transaction(
+           fun () ->
+                   case mnesia:wread({rabbit_exchange, ExchangeName}) of
+                       [] -> ok = mnesia:write(rabbit_exchange, Exchange, write),
+                             if Durable ->
+                                     ok = mnesia:write(rabbit_durable_exchange,
+                                                       Exchange, write);
+                                true -> ok
+                             end,
+                             {new, Exchange};
+                       [ExistingX = #exchange{ complete = true}] ->
+                           {existing, ExistingX};
+                       [_UncommittedX] ->
+                           %% make mnesia repeat the transaction until it
+                           %% gets a definite answer
+                           exit({aborted,
+                                 erlang:make_tuple(6, cyclic)})
+                   end
+           end, [], ?MAX_RETRIES) of
+        {atomic, {existing, X}} -> X;
+        {atomic, {new, X}} ->
+            NewExchange = X#exchange{ complete = true },
+            try
+                ok = Type:init(NewExchange)
+            catch
+                _:Err ->
+                    rabbit_misc:execute_mnesia_transaction(
+                      fun () ->
+                              mnesia:delete(rabbit_exchange, ExchangeName) end),
+                    throw(Err)
+            end,
+            rabbit_misc:execute_mnesia_transaction(
+              fun () ->
+                      mnesia:write(NewExchange) end),
+            NewExchange
+    end.
 
 typename_to_plugin_module(T) ->
     case rabbit_exchange_type:lookup_module(T) of
@@ -165,7 +189,10 @@ assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
        plugin_module_to_typename(RequiredType)]).
 
 lookup(Name) ->
-    rabbit_misc:dirty_read({rabbit_exchange, Name}).
+    case rabbit_misc:dirty_read({rabbit_exchange, Name}) of
+        Res = {ok, #exchange{ complete = true }} -> Res;
+        _ -> {error, not_found}
+    end.
 
 lookup_or_die(Name) ->
     case lookup(Name) of
@@ -176,7 +203,9 @@ lookup_or_die(Name) ->
 list(VHostPath) ->
     mnesia:dirty_match_object(
       rabbit_exchange,
-      #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
+      #exchange{name = rabbit_misc:r(VHostPath, exchange),
+                complete = true,
+                _ = '_'}).
 
 map(VHostPath, F) ->
     %% TODO: there is scope for optimisation here, e.g. using a
@@ -308,8 +337,8 @@ continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 call_with_exchange(Exchange, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun() -> case mnesia:read({rabbit_exchange, Exchange}) of
-                   []  -> {error, not_found};
-                   [X] -> Fun(X)
+                   [X = #exchange{ complete = true }] -> Fun(X);
+                   _  -> {error, not_found}
                end
       end).
 
@@ -317,10 +346,12 @@ call_with_exchange_and_queue(Exchange, Queue, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun() -> case {mnesia:read({rabbit_exchange, Exchange}),
                      mnesia:read({rabbit_queue, Queue})} of
-                   {[X], [Q]} -> Fun(X, Q);
-                   {[ ], [_]} -> {error, exchange_not_found};
-                   {[_], [ ]} -> {error, queue_not_found};
-                   {[ ], [ ]} -> {error, exchange_and_queue_not_found}
+                   {[X = #exchange{ complete = true }], [Q]} ->
+                       Fun(X, Q);
+                   {[#exchange{ complete = true }], [ ]} ->
+                       {error, queue_not_found};
+                   { _ , [_]} -> {error, exchange_not_found};
+                   { _ , [ ]} -> {error, exchange_and_queue_not_found}
                end
       end).
 

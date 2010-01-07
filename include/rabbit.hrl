@@ -49,7 +49,7 @@
 
 -record(resource, {virtual_host, kind, name}).
 
--record(exchange, {name, type, durable, auto_delete, arguments}).
+-record(exchange, {name, type, durable, auto_delete, arguments, complete = false}).
 
 -record(amqqueue, {name, durable, auto_delete, arguments, pid}).
 
@@ -57,7 +57,7 @@
 -record(route, {binding, value = const}).
 -record(reverse_route, {reverse_binding, value = const}).
 
--record(binding, {exchange_name, key, queue_name, args = []}).
+-record(binding, {exchange_name, key, queue_name, args = [], complete = false}).
 -record(reverse_binding, {queue_name, key, exchange_name, args = []}).
 
 -record(listener, {node, protocol, host, port}).
@@ -112,11 +112,13 @@
                 type        :: exchange_type(),
                 durable     :: boolean(),
                 auto_delete :: boolean(),
-                arguments   :: amqp_table()}).
+                arguments   :: amqp_table(),
+                complete    :: boolean()}).
 -type(binding() ::
       #binding{exchange_name    :: exchange_name(),
                queue_name       :: queue_name(),
-               key              :: binding_key()}).
+               key              :: binding_key(),
+               complete         :: boolean()}).
 %% TODO: make this more precise by tying specific class_ids to
 %% specific properties
 -type(undecoded_content() ::
