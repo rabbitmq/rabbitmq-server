@@ -33,7 +33,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, gc/2, stop/0]).
+-export([start_link/3, gc/2, stop/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -41,7 +41,6 @@
 -record(gcstate,
         {dir,
          index_state,
-         file_summary,
          index_module
         }).
 
@@ -51,9 +50,9 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Dir, IndexState, FileSummary, IndexModule) ->
+start_link(Dir, IndexState, IndexModule) ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE,
-                           [Dir, IndexState, FileSummary, IndexModule],
+                           [Dir, IndexState, IndexModule],
                            [{timeout, infinity}]).
 
 gc(Source, Destination) ->
@@ -64,9 +63,9 @@ stop() ->
 
 %%----------------------------------------------------------------------------
 
-init([Dir, IndexState, FileSummary, IndexModule]) ->
+init([Dir, IndexState, IndexModule]) ->
     {ok, #gcstate { dir = Dir, index_state = IndexState,
-                    file_summary = FileSummary, index_module = IndexModule },
+                    index_module = IndexModule },
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -89,23 +88,22 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-adjust_meta_and_combine(SourceFile, DestFile,
-                        State = #gcstate { file_summary = FileSummary }) ->
+adjust_meta_and_combine(SourceFile, DestFile, State) ->
 
     [SourceObj = #file_summary {
        valid_total_size = SourceValidData, left = DestFile,
        file_size = SourceFileSize, locked = true }] =
-        ets:lookup(FileSummary, SourceFile),
+        ets:lookup(?FILE_SUMMARY_ETS_NAME, SourceFile),
     [DestObj = #file_summary {
        valid_total_size = DestValidData, right = SourceFile,
        file_size = DestFileSize, locked = true }] =
-        ets:lookup(FileSummary, DestFile),
+        ets:lookup(?FILE_SUMMARY_ETS_NAME, DestFile),
 
     TotalValidData = DestValidData + SourceValidData,
     ok = combine_files(SourceObj, DestObj, State),
     %% don't update dest.right, because it could be changing at the same time
     true =
-        ets:update_element(FileSummary, DestFile,
+        ets:update_element(?FILE_SUMMARY_ETS_NAME, DestFile,
                            [{#file_summary.valid_total_size, TotalValidData},
                             {#file_summary.contiguous_top,   TotalValidData},
                             {#file_summary.file_size,        TotalValidData}]),
