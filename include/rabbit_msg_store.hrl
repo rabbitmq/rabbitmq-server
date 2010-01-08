@@ -34,7 +34,7 @@
 
 -record(file_summary,
         {file, valid_total_size, contiguous_top, left, right, file_size,
-         locked}).
+         locked, readers}).
 
 -define(BINARY_MODE,     [raw, binary]).
 -define(READ_MODE,       [read]).
@@ -52,3 +52,4 @@
 
 -define(FILE_SUMMARY_ETS_NAME, rabbit_msg_store_file_summary).
 -define(CACHE_ETS_NAME,        rabbit_msg_store_cache).
+-define(FILE_HANDLES_ETS_NAME, rabbit_msg_store_file_handles).

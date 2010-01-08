@@ -91,23 +91,33 @@ code_change(_OldVsn, State, _Extra) ->
 adjust_meta_and_combine(SourceFile, DestFile, State) ->
 
     [SourceObj = #file_summary {
+       readers = SourceReaders,
        valid_total_size = SourceValidData, left = DestFile,
        file_size = SourceFileSize, locked = true }] =
         ets:lookup(?FILE_SUMMARY_ETS_NAME, SourceFile),
     [DestObj = #file_summary {
+       readers = DestReaders,
        valid_total_size = DestValidData, right = SourceFile,
        file_size = DestFileSize, locked = true }] =
         ets:lookup(?FILE_SUMMARY_ETS_NAME, DestFile),
 
-    TotalValidData = DestValidData + SourceValidData,
-    ok = combine_files(SourceObj, DestObj, State),
-    %% don't update dest.right, because it could be changing at the same time
-    true =
-        ets:update_element(?FILE_SUMMARY_ETS_NAME, DestFile,
-                           [{#file_summary.valid_total_size, TotalValidData},
-                            {#file_summary.contiguous_top,   TotalValidData},
-                            {#file_summary.file_size,        TotalValidData}]),
-    SourceFileSize + DestFileSize - TotalValidData.
+    case SourceReaders =:= 0 andalso DestReaders =:= 0 of
+        true ->
+            TotalValidData = DestValidData + SourceValidData,
+            ok = combine_files(SourceObj, DestObj, State),
+            %% don't update dest.right, because it could be changing
+            %% at the same time
+            true = ets:update_element(
+                     ?FILE_SUMMARY_ETS_NAME, DestFile,
+                     [{#file_summary.valid_total_size, TotalValidData},
+                      {#file_summary.contiguous_top,   TotalValidData},
+                      {#file_summary.file_size,        TotalValidData}]),
+            SourceFileSize + DestFileSize - TotalValidData;
+        false ->
+            io:format("sleeping!~n"),
+            timer:sleep(100),
+            adjust_meta_and_combine(SourceFile, DestFile, State)
+    end.
 
 combine_files(#file_summary { file = Source,
                               valid_total_size = SourceValid,

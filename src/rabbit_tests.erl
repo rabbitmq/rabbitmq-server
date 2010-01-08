@@ -911,11 +911,13 @@ msg_store_sync(MsgIds) ->
             throw(timeout)
     end.
 
-msg_store_read(MsgIds) ->
-    ok =
-        lists:foldl(
-          fun (MsgId, ok) -> {ok, MsgId} = rabbit_msg_store:read(MsgId), ok end,
-          ok, MsgIds).
+msg_store_read(MsgIds, MSCState) ->
+    lists:foldl(
+      fun (MsgId, MSCStateM) ->
+              {{ok, MsgId}, MSCStateN} = rabbit_msg_store:read(MsgId, MSCStateM),
+              MSCStateN
+      end,
+      MSCState, MsgIds).
 
 msg_store_write(MsgIds) ->
     ok = lists:foldl(
@@ -966,9 +968,10 @@ test_msg_store() ->
     %% should hit a different code path
     ok = msg_store_sync(MsgIds1stHalf),
     %% read them all
-    ok = msg_store_read(MsgIds),
+    MSCState = rabbit_msg_store:client_init(),
+    MSCState1 = msg_store_read(MsgIds, MSCState),
     %% read them all again - this will hit the cache, not disk
-    ok = msg_store_read(MsgIds),
+    MSCState2 = msg_store_read(MsgIds, MSCState1),
     %% remove them all
     ok = rabbit_msg_store:remove(MsgIds),
     %% check first half doesn't exist
@@ -976,11 +979,12 @@ test_msg_store() ->
     %% check second half does exist
     true = msg_store_contains(true, MsgIds2ndHalf),
     %% read the second half again
-    ok = msg_store_read(MsgIds2ndHalf),
+    MSCState3 = msg_store_read(MsgIds2ndHalf, MSCState2),
     %% release the second half, just for fun (aka code coverage)
     ok = rabbit_msg_store:release(MsgIds2ndHalf),
     %% read the second half again, just for fun (aka code coverage)
-    ok = msg_store_read(MsgIds2ndHalf),
+    MSCState4 = msg_store_read(MsgIds2ndHalf, MSCState3),
+    ok = rabbit_msg_store:client_terminate(MSCState4),
     %% stop and restart, preserving every other msg in 2nd half
     ok = stop_msg_store(),
     ok = start_msg_store(fun ([]) -> finished;
@@ -1003,19 +1007,28 @@ test_msg_store() ->
     %% publish the first half again
     ok = msg_store_write(MsgIds1stHalf),
     %% this should force some sort of sync internally otherwise misread
-    ok = msg_store_read(MsgIds1stHalf),
+    ok = rabbit_msg_store:client_terminate(
+           msg_store_read(MsgIds1stHalf, rabbit_msg_store:client_init())),
     ok = rabbit_msg_store:remove(MsgIds1stHalf),
     %% restart empty
     ok = stop_msg_store(),
     ok = start_msg_store_empty(), %% now safe to reuse msg_ids
     %% push a lot of msgs in...
     BigCount = 100000,
-    MsgIdsBig = lists:seq(1, BigCount),
+    MsgIdsBig = [msg_id_bin(X) || X <- lists:seq(1, BigCount)],
     Payload = << 0:65536 >>,
     ok = lists:foldl(
            fun (MsgId, ok) ->
-                   rabbit_msg_store:write(msg_id_bin(MsgId), Payload)
+                   rabbit_msg_store:write(MsgId, Payload)
            end, ok, MsgIdsBig),
+    %% now read them to ensure we hit the fast client-side reading
+    ok = rabbit_msg_store:client_terminate(
+           lists:foldl(
+             fun (MsgId, MSCStateM) ->
+                     {{ok, Payload}, MSCStateN} =
+                         rabbit_msg_store:read(MsgId, MSCStateM),
+                     MSCStateN
+             end, rabbit_msg_store:client_init(), MsgIdsBig)),
     %% .., then 3s by 1...
     ok = lists:foldl(
            fun (MsgId, ok) ->
@@ -1034,7 +1047,7 @@ test_msg_store() ->
                    rabbit_msg_store:remove([msg_id_bin(MsgId)])
            end, ok, lists:seq(BigCount-2, 1, -3)),
     %% ensure empty
-    false = msg_store_contains(false, [msg_id_bin(M) || M <- MsgIdsBig]),
+    false = msg_store_contains(false, MsgIdsBig),
     %% restart empty
     ok = stop_msg_store(),
     ok = start_msg_store_empty(),

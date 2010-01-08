@@ -61,7 +61,8 @@
           avg_ingress_rate,
           rate_timestamp,
           len,
-          on_sync
+          on_sync,
+          msg_store_read_state
         }).
 
 -include("rabbit.hrl").
@@ -124,7 +125,8 @@
                avg_ingress_rate      :: float(),
                rate_timestamp        :: {integer(), integer(), integer()},
                len                   :: non_neg_integer(),
-               on_sync               :: {[ack()], [msg_id()], [{pid(), any()}]}
+               on_sync               :: {[ack()], [msg_id()], [{pid(), any()}]},
+               msg_store_read_state  :: any()
               }).
 
 -spec(init/1 :: (queue_name()) -> vqstate()).
@@ -198,11 +200,14 @@ init(QueueName) ->
                    avg_ingress_rate = 0,
                    rate_timestamp = Now,
                    len = GammaCount,
-                   on_sync = {[], [], []}
+                   on_sync = {[], [], []},
+                   msg_store_read_state = rabbit_msg_store:client_init()
                   },
     maybe_gammas_to_betas(State).
 
-terminate(State = #vqstate { index_state = IndexState }) ->
+terminate(State = #vqstate { index_state = IndexState,
+                             msg_store_read_state = MSCState }) ->
+    rabbit_msg_store:client_terminate(MSCState),
     State #vqstate { index_state = rabbit_queue_index:terminate(IndexState) }.
 
 publish(Msg, State) ->
@@ -618,7 +623,8 @@ remove_queue_entries(Q, IndexState) ->
 
 fetch_from_q3_or_gamma(State = #vqstate {
                          q1 = Q1, q2 = Q2, gamma = #gamma { count = GammaCount },
-                         q3 = Q3, q4 = Q4, ram_msg_count = RamMsgCount }) ->
+                         q3 = Q3, q4 = Q4, ram_msg_count = RamMsgCount,
+                         msg_store_read_state = MSCState }) ->
     case queue:out(Q3) of
         {empty, _Q3} ->
             0 = GammaCount, %% ASSERTION
@@ -629,15 +635,16 @@ fetch_from_q3_or_gamma(State = #vqstate {
           #beta { msg_id = MsgId, seq_id = SeqId, is_delivered = IsDelivered,
                   is_persistent = IsPersistent, index_on_disk = IndexOnDisk }},
          Q3a} ->
-            {ok, Msg = #basic_message { is_persistent = IsPersistent,
-                                        guid = MsgId }} =
-                rabbit_msg_store:read(MsgId),
+            {{ok, Msg = #basic_message { is_persistent = IsPersistent,
+                                        guid = MsgId }}, MSCState1} =
+                rabbit_msg_store:read(MsgId, MSCState),
             Q4a = queue:in(
                     #alpha { msg = Msg, seq_id = SeqId,
                              is_delivered = IsDelivered, msg_on_disk = true,
                              index_on_disk = IndexOnDisk }, Q4),
             State1 = State #vqstate { q3 = Q3a, q4 = Q4a,
-                                      ram_msg_count = RamMsgCount + 1 },
+                                      ram_msg_count = RamMsgCount + 1,
+                                      msg_store_read_state = MSCState1 },
             State2 =
                 case {queue:is_empty(Q3a), 0 == GammaCount} of
                     {true, true} ->
