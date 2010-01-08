@@ -270,26 +270,14 @@ read(MsgId, CState) ->
                                 false ->
                                     %% ok, we're definitely safe to
                                     %% continue - a GC can't start up
-                                    %% now
-                                    Self = self(),
-                                    CState1 =
-                                        case ets:lookup(?FILE_HANDLES_ETS_NAME,
-                                                        {File, self()}) of
-                                            [{Key, close}] ->
-                                                CState2 =
-                                                    close_handle(File, CState),
-                                                true = ets:insert(
-                                                         ?FILE_HANDLES_ETS_NAME,
-                                                         {Key, open}),
-                                                CState2;
-                                            [{_Key, open}] ->
-                                                CState;
-                                            [] ->
-                                                true = ets:insert_new(
-                                                         ?FILE_HANDLES_ETS_NAME,
-                                                         {{File, Self}, open}),
-                                                CState
-                                        end,
+                                    %% now, and isn't running, so
+                                    %% nothing will tell us from now
+                                    %% on to close the handle if it's
+                                    %% already open.
+                                    %% this is fine to fail (already exists)
+                                    ets:insert_new(?FILE_HANDLES_ETS_NAME,
+                                                   {{File, self()}, open}),
+                                    CState1 = close_all_indicated(CState),
                                     {Hdl, CState3} =
                                         get_read_handle(File, CState1),
                                     {ok, Offset} =
@@ -330,6 +318,13 @@ read(MsgId, CState) ->
                     {{ok, Msg}, CState}
             end
     end.
+
+close_all_indicated(CState) ->
+    Objs = ets:match_object(?FILE_HANDLES_ETS_NAME, {{'_', self()}, close}),
+    lists:foldl(fun ({Key = {File, _Self}, close}, CStateM) ->
+                        true = ets:delete(?FILE_HANDLES_ETS_NAME, Key),
+                        close_handle(File, CStateM)
+                end, CState, Objs).
 
 contains(MsgId)     -> gen_server2:call(?SERVER, {contains, MsgId}, infinity).
 remove(MsgIds)      -> gen_server2:cast(?SERVER, {remove, MsgIds}).
@@ -1119,7 +1114,7 @@ maybe_compact(State) ->
 
 mark_handle_to_close(File) ->
     lists:foldl(
-      fun ({Key, opened}, true) ->
+      fun ({Key, open}, true) ->
               try
                   true = ets:update_element(?FILE_HANDLES_ETS_NAME,
                                             Key, {2, close})
@@ -1127,7 +1122,7 @@ mark_handle_to_close(File) ->
                       true
               end
       end,
-      true, ets:match_object(?FILE_HANDLES_ETS_NAME, {{File, '_'}, opened})).
+      true, ets:match_object(?FILE_HANDLES_ETS_NAME, {{File, '_'}, open})).
 
 find_files_to_gc(_N, '$end_of_table') ->
     undefined;
