@@ -276,7 +276,7 @@ read(MsgId, CState) ->
                                     %% already open.
                                     %% this is fine to fail (already exists)
                                     ets:insert_new(?FILE_HANDLES_ETS_NAME,
-                                                   {{File, self()}, open}),
+                                                   {{self(), File}, open}),
                                     CState1 = close_all_indicated(CState),
                                     {Hdl, CState3} =
                                         get_read_handle(File, CState1),
@@ -320,8 +320,8 @@ read(MsgId, CState) ->
     end.
 
 close_all_indicated(CState) ->
-    Objs = ets:match_object(?FILE_HANDLES_ETS_NAME, {{'_', self()}, close}),
-    lists:foldl(fun ({Key = {File, _Self}, close}, CStateM) ->
+    Objs = ets:match_object(?FILE_HANDLES_ETS_NAME, {{self(), '_'}, close}),
+    lists:foldl(fun ({Key = {_Self, File}, close}, CStateM) ->
                         true = ets:delete(?FILE_HANDLES_ETS_NAME, Key),
                         close_handle(File, CStateM)
                 end, CState, Objs).
@@ -740,9 +740,9 @@ close_handle(Key, FHC) ->
 
 close_all_handles(CState = #client_msstate { file_handle_cache = FHC }) ->
     Self = self(),
-    ok = dict:fold(fun (Key, Hdl, ok) ->
+    ok = dict:fold(fun (File, Hdl, ok) ->
                            true =
-                               ets:delete(?FILE_HANDLES_ETS_NAME, {Key, Self}),
+                               ets:delete(?FILE_HANDLES_ETS_NAME, {Self, File}),
                            file_handle_cache:close(Hdl)
                    end, ok, FHC),
     CState #client_msstate { file_handle_cache = dict:new() };
@@ -1122,7 +1122,7 @@ mark_handle_to_close(File) ->
                       true
               end
       end,
-      true, ets:match_object(?FILE_HANDLES_ETS_NAME, {{File, '_'}, open})).
+      true, ets:match_object(?FILE_HANDLES_ETS_NAME, {{'_', File}, open})).
 
 find_files_to_gc(_N, '$end_of_table') ->
     undefined;
