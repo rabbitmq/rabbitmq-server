@@ -114,7 +114,6 @@ adjust_meta_and_combine(SourceFile, DestFile, State) ->
                       {#file_summary.file_size,        TotalValidData}]),
             SourceFileSize + DestFileSize - TotalValidData;
         false ->
-            io:format("sleeping!~n"),
             timer:sleep(100),
             adjust_meta_and_combine(SourceFile, DestFile, State)
     end.
