@@ -119,15 +119,13 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
            fun () ->
                    case mnesia:wread({rabbit_exchange, ExchangeName}) of
                        [] -> ok = mnesia:write(rabbit_exchange, Exchange, write),
-                             if Durable ->
-                                     ok = mnesia:write(rabbit_durable_exchange,
-                                                       Exchange, write);
-                                true -> ok
-                             end,
+                             %io:format("New exchange ~p~n", [Exchange]),
                              {new, Exchange};
                        [ExistingX = #exchange{ complete = true}] ->
+                           %io:format("Existing exchange ~p~n", [ExistingX]),
                            {existing, ExistingX};
-                       [_UncommittedX] ->
+                       [UncommittedX] ->
+                           %io:format("Incomplete exchange ~p~n", [UncommittedX]),
                            %% make mnesia repeat the transaction until it
                            %% gets a definite answer
                            exit({aborted,
@@ -148,7 +146,13 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
             end,
             rabbit_misc:execute_mnesia_transaction(
               fun () ->
-                      mnesia:write(NewExchange) end),
+                      %io:format("Completed exchange ~p~n", [NewExchange]),
+                      mnesia:write(rabbit_exchange, NewExchange, write),
+                      if Durable -> ok = mnesia:write(rabbit_durable_exchange,
+                                                      NewExchange, write);
+                         true    -> ok
+                      end
+              end),
             NewExchange
     end.
 
