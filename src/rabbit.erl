@@ -155,8 +155,7 @@ start(normal, []) ->
                 ok = rabbit_amqqueue:start(),
 
                 ok = start_child(rabbit_router),
-                ok = start_child(rabbit_node_monitor),
-                ok = start_child(rabbit_exchange_events)
+                ok = start_child(rabbit_node_monitor)
         end},
        {"recovery",
         fun () ->
