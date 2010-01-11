@@ -93,7 +93,9 @@
 %%----------------------------------------------------------------------------
 
 -define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
--define(MAX_RETRIES, 9).
+%% Retry indefinitely.  This requires that the exchange type hooks
+%% should themselves time out, and throw an error on doing so.
+-define(MAX_RETRIES, infinity).
 
 recover() ->
     ok = rabbit_misc:table_foreach(
