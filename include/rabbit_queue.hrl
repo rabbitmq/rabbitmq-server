@@ -29,23 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--record(alpha,
-        { msg,
-          seq_id,
-          is_delivered,
-          msg_on_disk,
-          index_on_disk
-        }).
-
--record(beta,
-        { msg_id,
-          seq_id,
-          is_persistent,
-          is_delivered,
-          index_on_disk
-        }).
-
--record(gamma,
+-record(delta,
         { start_seq_id,
           count,
           end_seq_id %% note the end_seq_id is always >, not >=
@@ -53,7 +37,7 @@
 
 -ifdef(use_specs).
 
--type(gamma() :: #gamma { start_seq_id :: non_neg_integer(),
+-type(delta() :: #delta { start_seq_id :: non_neg_integer(),
                           count :: non_neg_integer (),
                           end_seq_id :: non_neg_integer() }).
 
