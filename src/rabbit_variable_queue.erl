@@ -78,12 +78,6 @@
           index_on_disk
         }).
 
-%% If there are N msgs in the q, and M of them are betas, then it is
-%% required that RAM_INDEX_BETA_RATIO * (M/N) * M of those have their
-%% index on disk.  Eg if RAM_INDEX_BETA_RATIO is 1.0, and there are 36
-%% msgs in the queue, of which 12 are betas, then 4 of those betas
-%% must have their index on disk.
--define(RAM_INDEX_BETA_RATIO, 0.8).
 %% When we discover, on publish, that we should write some indices to
 %% disk for some betas, the RAM_INDEX_BATCH_SIZE sets the number of
 %% betas that we must be due to write indices for before we do any
@@ -598,7 +592,7 @@ permitted_ram_index_count(#vqstate { len = Len, q2 = Q2, q3 = Q3 }) ->
         BetaLength ->
             %% the fraction of the queue that are betas
             BetaFrac = BetaLength / Len,
-            BetaLength - trunc(BetaFrac * BetaLength * ?RAM_INDEX_BETA_RATIO)
+            BetaLength - trunc(BetaFrac * BetaLength)
     end.
 
 
