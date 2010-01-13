@@ -54,10 +54,10 @@
 -record(amqqueue, {name, durable, auto_delete, arguments, pid}).
 
 %% mnesia doesn't like unary records, so we add a dummy 'value' field
--record(route, {binding, value = const}).
--record(reverse_route, {reverse_binding, value = const}).
+-record(route, {binding, state = creating}).
+-record(reverse_route, {reverse_binding, state = creating}).
 
--record(binding, {exchange_name, key, queue_name, args = [], state = creating}).
+-record(binding, {exchange_name, key, queue_name, args = []}).
 -record(reverse_binding, {queue_name, key, exchange_name, args = []}).
 
 -record(listener, {node, protocol, host, port}).
@@ -118,8 +118,7 @@
 -type(binding() ::
       #binding{exchange_name    :: exchange_name(),
                queue_name       :: queue_name(),
-               key              :: binding_key(),
-               state            :: record_state()}).
+               key              :: binding_key()}).
 %% TODO: make this more precise by tying specific class_ids to
 %% specific properties
 -type(undecoded_content() ::

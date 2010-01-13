@@ -131,7 +131,7 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                          arguments = Args,
                          state = creating},
     case retrying_transaction(
-           fun (Abort) ->
+           fun (Retry) ->
                    case mnesia:wread({rabbit_exchange, ExchangeName}) of
                        [] -> ok = mnesia:write(rabbit_exchange, Exchange, write),
                              %io:format("New exchange ~p~n", [Exchange]),
@@ -141,7 +141,7 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                            {existing, ExistingX};
                        [UncommittedX] ->
                            %io:format("Incomplete exchange ~p~n", [UncommittedX]),
-                           Abort()
+                           Retry()
                    end
            end) of
         {existing, X} -> X;
@@ -296,13 +296,13 @@ delete_exchange_bindings(ExchangeName) ->
                        write)],
     ok.
 
-delete_queue_bindings(QueueName) ->
+delete_queue_bindings(QueueName, Retry) ->
     delete_queue_bindings(QueueName, fun delete_forward_routes/1).
 
-delete_transient_queue_bindings(QueueName) ->
+delete_transient_queue_bindings(QueueName, Retry) ->
     delete_queue_bindings(QueueName, fun delete_transient_forward_routes/1).
 
-delete_queue_bindings(QueueName, FwdDeleteFun) ->
+delete_queue_bindings(QueueName, FwdDeleteFun, Retry) ->
     Exchanges = exchanges_for_queue(QueueName),
     [begin
          ok = FwdDeleteFun(reverse_route(Route)),
@@ -351,71 +351,123 @@ continue('$end_of_table')    -> false;
 continue({[_|_], _})         -> true;
 continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
+%% The following call_with_x procedures will retry until the named
+%% exchange has a definite state; i.e., it is 'complete', or doesn't
+%% exist.
+
 call_with_exchange(Exchange, Fun) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun() -> case mnesia:read({rabbit_exchange, Exchange}) of
-                   [X = #exchange{ state = State }] when State /= creating ->
-                       Fun(X);
-                   _  ->
-                       {error, not_found}
-               end
+    retrying_transaction(
+      fun(Retry) -> case mnesia:read({rabbit_exchange, Exchange}) of
+                        [X = #exchange{ state = complete }] ->
+                            Fun(X, Retry);
+                        []  ->
+                            {error, not_found};
+                        [_] -> Retry()
+                    end
       end).
 
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun() -> case {mnesia:read({rabbit_exchange, Exchange}),
-                     mnesia:read({rabbit_queue, Queue})} of
-                   {[X = #exchange{ state = State }], [Q]}
-                   when State /= creating ->
-                       Fun(X, Q);
-                   {[#exchange{ state = State }], [ ]}
-                   when State /= creating ->
-                       {error, queue_not_found};
-                   { _ , [_]} -> {error, exchange_not_found};
-                   { _ , [ ]} -> {error, exchange_and_queue_not_found}
-               end
+    retrying_transaction(
+      fun(Retry) -> case {mnesia:read({rabbit_exchange, Exchange}),
+                          mnesia:read({rabbit_queue, Queue})} of
+                        {[X = #exchange{ state = complete }], [Q]} ->
+                            Fun(X, Q, Retry);
+                        {[X = #exchange{ state = complete }], [ ]} ->
+                            {error, queue_not_found};
+                        {[_] ,  _ } -> Retry();
+                        {[ ] , [_]} -> {error, exchange_not_found};
+                        {[ ] , [ ]} -> {error, exchange_and_queue_not_found}
+                    end
       end).
 
+
 add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
-    binding_action(
-      ExchangeName, QueueName, RoutingKey, Arguments,
-      fun (X, Q, B) ->
-              if Q#amqqueue.durable and not(X#exchange.durable) ->
-                      {error, durability_settings_incompatible};
-                 true -> ok = sync_binding(B, Q#amqqueue.durable,
-                                           fun mnesia:write/3)
-              end
-      end).
+    case binding_action(
+           ExchangeName, QueueName, RoutingKey, Arguments,
+           fun (X, Q, B, Retry) ->
+                   case mnesia:read({rabbit_route, B}) of
+                       [#route{ state = complete }] -> {existing, X, B};
+                       [_] -> Retry();
+                       [ ] ->
+                           sync_binding(
+                             B, Q#amqqueue.durable, creating, fun mnesia:write/3),
+                           {new, X, B}
+                   end
+           end) of
+        {existing, X, B} -> B;
+        {new, X = #exchange{ type = Type }, B} ->
+            Backout = fun() ->
+                              rabbit_misc:execute_mnesia_transaction(
+                                fun () ->
+                                        sync_binding(
+                                          B, false, creating, fun mnesia:delete/3)
+                                end)
+                      end,             
+            try
+                ok = Type:add_binding(X, B)
+            catch
+                _:Err ->
+                    Backout(),
+                    throw(Err)
+            end,
+            %% FIXME TODO WARNING AWOOGA the exchange or queue may have been created again
+            case call_with_exchange_and_queue(
+                   ExchangeName, QueueName,
+                   fun (X, Q, Retry) ->
+                           sync_binding(B, false, complete, fun mnesia:write/3),
+                           ok = case X#exchange.durable of
+                                    true  -> mnesia:write(rabbit_durable_route,
+                                                          #route{binding = Binding}, write);
+                                    false -> ok
+                                end
+                   end) of
+                NotFound = {error, _} ->
+                    Backout(),
+                    NotFound;
+                SuccessResult -> SuccessResult
+            end
+    end.
+
+%% add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
+%%     binding_action(
+%%       ExchangeName, QueueName, RoutingKey, Arguments,
+%%       fun (X, Q, B) ->
+%%               if Q#amqqueue.durable and not(X#exchange.durable) ->
+%%                       {error, durability_settings_incompatible};
+%%                  true -> 
+                      
+%%                       ok = sync_binding(B, Q#amqqueue.durable,
+%%                                         fun mnesia:write/3)
+%%               end
+%%       end).
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
     binding_action(
       ExchangeName, QueueName, RoutingKey, Arguments,
-      fun (X, Q, B) ->
+      fun (X, Q, B, Retry) ->
               case mnesia:match_object(rabbit_route, #route{binding = B},
                                        write) of
                   [] -> {error, binding_not_found};
-                  _  -> ok = sync_binding(B, Q#amqqueue.durable,
+                  _  -> ok = sync_binding(B, Q#amqqueue.durable, deleting,
                                           fun mnesia:delete_object/3),
-                        maybe_auto_delete(X)
+                        maybe_auto_delete(X, Retry)
               end
       end).
 
 binding_action(ExchangeName, QueueName, RoutingKey, Arguments, Fun) ->
     call_with_exchange_and_queue(
       ExchangeName, QueueName,
-      fun (X, Q) ->
-              Fun(X, Q, #binding{exchange_name = ExchangeName,
-                                 queue_name    = QueueName,
-                                 key           = RoutingKey,
-                                 args          = rabbit_misc:sort_field_table(Arguments)})
+      fun (X, Q, Retry) ->
+              Fun(X, Q,
+                  #binding{exchange_name = ExchangeName,
+                           queue_name    = QueueName,
+                           key           = RoutingKey,
+                           args          = rabbit_misc:sort_field_table(Arguments)},
+                  Retry)
       end).
 
-sync_binding(Binding, Durable, Fun) ->
-    ok = case Durable of
-             true  -> Fun(rabbit_durable_route,
-                          #route{binding = Binding}, write);
-             false -> ok
-         end,
+% TODO remove durable
+sync_binding(Binding, Durable, State, Fun) ->
     {Route, ReverseRoute} = route_with_reverse(Binding),
     ok = Fun(rabbit_route, Route, write),
     ok = Fun(rabbit_reverse_route, ReverseRoute, write),
@@ -466,17 +518,17 @@ reverse_binding(#binding{exchange_name = Exchange,
                      args = Args}.
 
 delete(ExchangeName, _IfUnused = true) ->
-    call_with_exchange(ExchangeName, fun conditional_delete/1);
+    call_with_exchange(ExchangeName, fun conditional_delete/2);
 delete(ExchangeName, _IfUnused = false) ->
-    call_with_exchange(ExchangeName, fun unconditional_delete/1).
+    call_with_exchange(ExchangeName, fun unconditional_delete/2).
 
-maybe_auto_delete(#exchange{auto_delete = false}) ->
+maybe_auto_delete(#exchange{auto_delete = false}, _) ->
     ok;
-maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
-    conditional_delete(Exchange),
+maybe_auto_delete(Exchange = #exchange{auto_delete = true}, Retry) ->
+    conditional_delete(Exchange, Retry),
     ok.
 
-conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
+conditional_delete(Exchange = #exchange{name = ExchangeName}, Retry) ->
     Match = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
     %% we need to check for durable routes here too in case a bunch of
     %% routes to durable queues have been removed temporarily as a
@@ -486,7 +538,7 @@ conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
         true   -> {error, in_use}
     end.
 
-unconditional_delete(#exchange{name = ExchangeName}) ->
+unconditional_delete(#exchange{name = ExchangeName}, Retry) ->
     ok = delete_exchange_bindings(ExchangeName),
     ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
     ok = mnesia:delete({rabbit_exchange, ExchangeName}).
