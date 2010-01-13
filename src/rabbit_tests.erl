@@ -239,7 +239,8 @@ test_bpqueue() ->
                    fun (foo) -> true;
                        (_) -> false
                    end,
-                   fun (V, Num) -> {bar, -V, V - Num} end,
+                   fun (2, _Num) -> stop;
+                       (V, Num)  -> {bar, -V, V - Num} end,
                    0, Qn)
          end,
 
@@ -248,14 +249,15 @@ test_bpqueue() ->
                    fun (foo) -> true;
                        (_) -> false
                    end,
-                   fun (V, Num) -> {bar, -V, V - Num} end,
+                   fun (2, _Num) -> stop;
+                       (V, Num)  -> {bar, -V, V - Num} end,
                    0, Qn)
          end,
 
-    {Q9, 1} = F1(Q1), %% 2 - (1 - 0) == 1
-    [{bar, [-1, -2, 3]}] = bpqueue:to_list(Q9),
-    {Q10, -1} = F2(Q1), %% 1 - (2 - 0) == -1
-    [{bar, [-1, -2, 3]}] = bpqueue:to_list(Q10),
+    {Q9, 1} = F1(Q1),
+    [{bar, [-1]}, {foo, [2]}, {bar, [3]}] = bpqueue:to_list(Q9),
+    {Q10, 0} = F2(Q1),
+    [{foo, [1, 2]}, {bar, [3]}] = bpqueue:to_list(Q10),
 
     {Q11, 0} = F1(Q),
     [] = bpqueue:to_list(Q11),

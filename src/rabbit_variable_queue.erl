@@ -78,8 +78,20 @@
           index_on_disk
         }).
 
--define(RAM_INDEX_TARGET_RATIO, 256).
--define(RAM_INDEX_MAX_WORK, 32).
+%% If there are N msgs in the q, and M of them are betas, then it is
+%% required that RAM_INDEX_BETA_RATIO * (M/N) * M of those have their
+%% index on disk.  Eg if RAM_INDEX_BETA_RATIO is 1.0, and there are 36
+%% msgs in the queue, of which 12 are betas, then 4 of those betas
+%% must have their index on disk.
+-define(RAM_INDEX_BETA_RATIO, 0.8).
+%% When we discover, on publish, that we should write some indices to
+%% disk for some betas, the RAM_INDEX_BATCH_SIZE sets the number of
+%% betas that we must be due to write indices for before we do any
+%% work at all. This is both a minimum and a maximum - we don't write
+%% fewer than RAM_INDEX_BATCH_SIZE indices out in one go, and we don't
+%% write more - we can always come back on the next publish to do
+%% more.
+-define(RAM_INDEX_BATCH_SIZE, 1024).
 
 %%----------------------------------------------------------------------------
 
@@ -577,6 +589,26 @@ beta_fold_no_index_on_disk(Fun, Init, Q) ->
                          Fun(Value, Acc)
                  end, Init, Q).
 
+permitted_ram_index_count(#vqstate { len = 0 }) ->
+    undefined;
+permitted_ram_index_count(#vqstate { len = Len, q2 = Q2, q3 = Q3 }) ->
+    case bpqueue:len(Q2) + bpqueue:len(Q3) of
+        0 ->
+            undefined;
+        BetaLength ->
+            %% the fraction of the queue that are betas
+            BetaFrac = BetaLength / Len,
+            BetaLength - trunc(BetaFrac * BetaLength * ?RAM_INDEX_BETA_RATIO)
+    end.
+
+
+should_force_index_to_disk(State =
+                           #vqstate { ram_index_count = RamIndexCount }) ->
+    case permitted_ram_index_count(State) of
+        undefined -> false;
+        Permitted -> RamIndexCount >= Permitted
+    end.
+
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
@@ -771,17 +803,10 @@ publish(msg, MsgStatus, State = #vqstate { index_state = IndexState,
 
 publish(index, MsgStatus, State =
         #vqstate { index_state = IndexState, q1 = Q1,
-                   ram_index_count = RamIndexCount,
-                   target_ram_msg_count = TargetRamMsgCount }) ->
+                   ram_index_count = RamIndexCount }) ->
     MsgStatus1 = #msg_status { msg_on_disk = true } =
         maybe_write_msg_to_disk(true, MsgStatus),
-    ForceIndex = case TargetRamMsgCount of
-                     undefined ->
-                         false;
-                     _ ->
-                         RamIndexCount >= (?RAM_INDEX_TARGET_RATIO *
-                                           TargetRamMsgCount)
-                 end,
+    ForceIndex = should_force_index_to_disk(State),
     {MsgStatus2, IndexState1} =
         maybe_write_index_to_disk(ForceIndex, MsgStatus1, IndexState),
     RamIndexCount1 = case MsgStatus2 #msg_status.index_on_disk of
@@ -872,17 +897,24 @@ maybe_write_index_to_disk(_Force, MsgStatus, IndexState) ->
 %% Phase changes
 %%----------------------------------------------------------------------------
 
-limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount,
-                                   target_ram_msg_count = TargetRamMsgCount })
-  when RamIndexCount > ?RAM_INDEX_TARGET_RATIO * TargetRamMsgCount ->
-    Reduction = lists:min([?RAM_INDEX_MAX_WORK,
-                           RamIndexCount - (?RAM_INDEX_TARGET_RATIO *
-                                            TargetRamMsgCount)]),
-    {Reduction1, State1} = limit_q2_ram_index(Reduction, State),
-    {_Reduction2, State2} = limit_q3_ram_index(Reduction1, State1),
-    State2;
-limit_ram_index(State) ->
-    State.
+limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount }) ->
+    case permitted_ram_index_count(State) of
+        undefined ->
+            State;
+        Permitted when RamIndexCount > Permitted ->
+            Reduction = lists:min([RamIndexCount - Permitted,
+                                   ?RAM_INDEX_BATCH_SIZE]),
+            case Reduction < ?RAM_INDEX_BATCH_SIZE of
+                true ->
+                    State;
+                false ->
+                    {Reduction1, State1} = limit_q2_ram_index(Reduction, State),
+                    {_Red2, State2} = limit_q3_ram_index(Reduction1, State1),
+                    State2
+            end;
+        _ ->
+            State
+    end.
 
 limit_q2_ram_index(Reduction, State = #vqstate { q2 = Q2 })
   when Reduction > 0 ->
@@ -908,9 +940,9 @@ limit_ram_index(MapFoldFilterFun, Q, Reduction, State =
     {Qa, {Reduction1, IndexState1}} =
         MapFoldFilterFun(
           fun erlang:'not'/1,
-          fun (MsgStatus, {0, _IndexStateN} = Acc) ->
+          fun (MsgStatus, {0, _IndexStateN}) ->
                   false = MsgStatus #msg_status.index_on_disk, %% ASSERTION
-                  {false, MsgStatus, Acc};
+                  stop;
               (MsgStatus, {N, IndexStateN}) when N > 0 ->
                   false = MsgStatus #msg_status.index_on_disk, %% ASSERTION
                   {MsgStatus1, IndexStateN1} =
@@ -986,19 +1018,12 @@ maybe_push_alphas_to_betas(_Generator, _Consumer, _Q, State =
 maybe_push_alphas_to_betas(
   Generator, Consumer, Q, State =
   #vqstate { ram_msg_count = RamMsgCount, ram_index_count = RamIndexCount,
-             target_ram_msg_count = TargetRamMsgCount,
              index_state = IndexState }) ->
     case Generator(Q) of
         {empty, _Q} -> State;
         {{value, MsgStatus}, Qa} ->
             MsgStatus1 = maybe_write_msg_to_disk(true, MsgStatus),
-            ForceIndex = case TargetRamMsgCount of
-                             undefined ->
-                                 false;
-                             _ ->
-                                 RamIndexCount >= (?RAM_INDEX_TARGET_RATIO *
-                                                   TargetRamMsgCount)
-                         end,
+            ForceIndex = should_force_index_to_disk(State),
             {MsgStatus2, IndexState1} =
                 maybe_write_index_to_disk(ForceIndex, MsgStatus1, IndexState),
             RamIndexCount1 = case MsgStatus2 #msg_status.index_on_disk of
