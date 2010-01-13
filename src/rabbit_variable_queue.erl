@@ -78,7 +78,7 @@
           index_on_disk
         }).
 
--define(RAM_INDEX_TARGET_RATIO, 1024).
+-define(RAM_INDEX_TARGET_RATIO, 256).
 -define(RAM_INDEX_MAX_WORK, 32).
 
 %%----------------------------------------------------------------------------
@@ -878,7 +878,6 @@ limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount,
     Reduction = lists:min([?RAM_INDEX_MAX_WORK,
                            RamIndexCount - (?RAM_INDEX_TARGET_RATIO *
                                             TargetRamMsgCount)]),
-    io:format("~p~n", [Reduction]),
     {Reduction1, State1} = limit_q2_ram_index(Reduction, State),
     {_Reduction2, State2} = limit_q3_ram_index(Reduction1, State1),
     State2;
