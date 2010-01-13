@@ -55,6 +55,7 @@ all_tests() ->
     passed = test_queue_index(),
     passed = test_variable_queue(),
     passed = test_priority_queue(),
+    passed = test_bpqueue(),
     passed = test_unfold(),
     passed = test_parsing(),
     passed = test_topic_matching(),
@@ -180,6 +181,88 @@ test_priority_queue(Q) ->
      priority_queue:len(Q),
      priority_queue:to_list(Q),
      priority_queue_out_all(Q)}.
+
+test_bpqueue() ->
+    Q = bpqueue:new(),
+    true = bpqueue:is_empty(Q),
+    0 = bpqueue:len(Q),
+
+    Q1 = bpqueue:in(bar, 3, bpqueue:in(foo, 2, bpqueue:in(foo, 1, Q))),
+    false = bpqueue:is_empty(Q1),
+    3 = bpqueue:len(Q1),
+    [{foo, [1, 2]}, {bar, [3]}] = bpqueue:to_list(Q1),
+
+    Q2 = bpqueue:in_r(bar, 3, bpqueue:in_r(foo, 2, bpqueue:in_r(foo, 1, Q))),
+    false = bpqueue:is_empty(Q2),
+    3 = bpqueue:len(Q2),
+    [{bar, [3]}, {foo, [2, 1]}] = bpqueue:to_list(Q2),
+
+    {empty, _Q} = bpqueue:out(Q),
+    {{value, foo, 1}, Q3} = bpqueue:out(Q1),
+    {{value, foo, 2}, Q4} = bpqueue:out(Q3),
+    {{value, bar, 3}, _Q5} = bpqueue:out(Q4),
+
+    {empty, _Q} = bpqueue:out_r(Q),
+    {{value, foo, 1}, Q6} = bpqueue:out_r(Q2),
+    {{value, foo, 2}, Q7} = bpqueue:out_r(Q6),
+    {{value, bar, 3}, _Q8} = bpqueue:out_r(Q7),
+
+    [{foo, [1, 2]}, {bar, [3]}] = bpqueue:to_list(bpqueue:join(Q, Q1)),
+    [{bar, [3]}, {foo, [2, 1]}] = bpqueue:to_list(bpqueue:join(Q2, Q)),
+    [{foo, [1, 2]}, {bar, [3, 3]}, {foo, [2,1]}] =
+        bpqueue:to_list(bpqueue:join(Q1, Q2)),
+
+    [{foo, [1, 2]}, {bar, [3]}, {foo, [1, 2]}, {bar, [3]}] =
+        bpqueue:to_list(bpqueue:join(Q1, Q1)),
+
+    [{foo, [1, 2]}, {bar, [3]}] =
+        bpqueue:to_list(
+          bpqueue:from_list(
+            [{x, []}, {foo, [1]}, {y, []}, {foo, [2]}, {bar, [3]}, {z, []}])),
+
+    [{undefined, [a]}] = bpqueue:to_list(bpqueue:from_list([{undefined, [a]}])),
+
+    {4, [a,b,c,d]} =
+        bpqueue:fold(
+          fun (Prefix, Value, {Prefix, Acc}) ->
+                  {Prefix + 1, [Value | Acc]}
+          end,
+          {0, []}, bpqueue:from_list([{0,[d]}, {1,[c]}, {2,[b]}, {3,[a]}])),
+
+    ok = bpqueue:fold(fun (Prefix, Value, ok) -> {error, Prefix, Value} end,
+                      ok, Q),
+
+    [] = bpqueue:to_list(Q),
+
+    F1 = fun (Qn) ->
+                 bpqueue:map_fold_filter_l(
+                   fun (foo) -> true;
+                       (_) -> false
+                   end,
+                   fun (V, Num) -> {bar, -V, V - Num} end,
+                   0, Qn)
+         end,
+
+    F2 = fun (Qn) ->
+                 bpqueue:map_fold_filter_r(
+                   fun (foo) -> true;
+                       (_) -> false
+                   end,
+                   fun (V, Num) -> {bar, -V, V - Num} end,
+                   0, Qn)
+         end,
+
+    {Q9, 1} = F1(Q1), %% 2 - (1 - 0) == 1
+    [{bar, [-1, -2, 3]}] = bpqueue:to_list(Q9),
+    {Q10, -1} = F2(Q1), %% 1 - (2 - 0) == -1
+    [{bar, [-1, -2, 3]}] = bpqueue:to_list(Q10),
+
+    {Q11, 0} = F1(Q),
+    [] = bpqueue:to_list(Q11),
+    {Q12, 0} = F2(Q),
+    [] = bpqueue:to_list(Q12),
+
+    passed.
 
 test_simple_n_element_queue(N) ->
     Items = lists:seq(1, N),

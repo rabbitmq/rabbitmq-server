@@ -78,7 +78,8 @@
           index_on_disk
         }).
 
--define(RAM_INDEX_TARGET_RATIO, 32768).
+-define(RAM_INDEX_TARGET_RATIO, 1024).
+-define(RAM_INDEX_MAX_WORK, 32).
 
 %%----------------------------------------------------------------------------
 
@@ -226,7 +227,8 @@ terminate(State = #vqstate { index_state = IndexState,
     State #vqstate { index_state = rabbit_queue_index:terminate(IndexState) }.
 
 publish(Msg, State) ->
-    publish(Msg, false, false, State).
+    State1 = limit_ram_index(State),
+    publish(Msg, false, false, State1).
 
 publish_delivered(Msg = #basic_message { guid = MsgId,
                                          is_persistent = IsPersistent },
@@ -869,6 +871,56 @@ maybe_write_index_to_disk(_Force, MsgStatus, IndexState) ->
 %%----------------------------------------------------------------------------
 %% Phase changes
 %%----------------------------------------------------------------------------
+
+limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount,
+                                   target_ram_msg_count = TargetRamMsgCount })
+  when RamIndexCount > ?RAM_INDEX_TARGET_RATIO * TargetRamMsgCount ->
+    Reduction = lists:min([?RAM_INDEX_MAX_WORK,
+                           RamIndexCount - (?RAM_INDEX_TARGET_RATIO *
+                                            TargetRamMsgCount)]),
+    io:format("~p~n", [Reduction]),
+    {Reduction1, State1} = limit_q2_ram_index(Reduction, State),
+    {_Reduction2, State2} = limit_q3_ram_index(Reduction1, State1),
+    State2;
+limit_ram_index(State) ->
+    State.
+
+limit_q2_ram_index(Reduction, State = #vqstate { q2 = Q2 })
+  when Reduction > 0 ->
+    {Q2a, Reduction1, State1} = limit_ram_index(fun bpqueue:map_fold_filter_l/4,
+                                                Q2, Reduction, State),
+    {Reduction1, State1 #vqstate { q2 = Q2a }};
+limit_q2_ram_index(Reduction, State) ->
+    {Reduction, State}.
+
+limit_q3_ram_index(Reduction, State = #vqstate { q3 = Q3 })
+  when Reduction > 0 ->
+    %% use the _r version so that we prioritise the msgs closest to
+    %% delta, and least soon to be delivered
+    {Q3a, Reduction1, State1} = limit_ram_index(fun bpqueue:map_fold_filter_r/4,
+                                                Q3, Reduction, State),
+    {Reduction1, State1 #vqstate { q3 = Q3a }};
+limit_q3_ram_index(Reduction, State) ->
+    {Reduction, State}.
+
+limit_ram_index(MapFoldFilterFun, Q, Reduction, State =
+                #vqstate { ram_index_count = RamIndexCount,
+                           index_state = IndexState }) ->
+    {Qa, {Reduction1, IndexState1}} =
+        MapFoldFilterFun(
+          fun erlang:'not'/1,
+          fun (MsgStatus, {0, _IndexStateN} = Acc) ->
+                  false = MsgStatus #msg_status.index_on_disk, %% ASSERTION
+                  {false, MsgStatus, Acc};
+              (MsgStatus, {N, IndexStateN}) when N > 0 ->
+                  false = MsgStatus #msg_status.index_on_disk, %% ASSERTION
+                  {MsgStatus1, IndexStateN1} =
+                      maybe_write_index_to_disk(true, MsgStatus, IndexStateN),
+                  {true, MsgStatus1, {N-1, IndexStateN1}}
+          end, {Reduction, IndexState}, Q),
+    RamIndexCount1 = RamIndexCount - (Reduction - Reduction1),
+    {Qa, Reduction1, State #vqstate { index_state = IndexState1,
+                                      ram_index_count = RamIndexCount1 }}.
 
 maybe_deltas_to_betas(State = #vqstate { delta = #delta { count = 0 } }) ->
     State;
