@@ -95,17 +95,23 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
 
 recover() ->
-    ok = rabbit_misc:table_foreach(
-           fun(Exchange) -> ok = mnesia:write(rabbit_exchange,
-                                              Exchange, write)
-           end, rabbit_durable_exchange),
-    ok = rabbit_misc:table_foreach(
-           fun(Route) -> {_, ReverseRoute} = route_with_reverse(Route),
+    [begin
+         #exchange{ type = Type } = X,
+         Type:recover(X)
+     end || X <-
+                rabbit_misc:table_fold(
+                  fun(Exchange, Acc) -> ok = mnesia:write(rabbit_exchange,
+                                                          Exchange, write),
+                                        [Exchange | Acc]
+                  end, [], rabbit_durable_exchange)],
+    ok = rabbit_misc:table_fold(
+           fun(Route, ok) -> {_, ReverseRoute} = route_with_reverse(Route),
                          ok = mnesia:write(rabbit_route,
                                            Route, write),
                          ok = mnesia:write(rabbit_reverse_route,
-                                           ReverseRoute, write)
-           end, rabbit_durable_route).
+                                           ReverseRoute, write),
+                         ok
+           end, ok, rabbit_durable_route).
 
 declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
     Exchange = #exchange{name = ExchangeName,
@@ -113,6 +119,9 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                          durable = Durable,
                          auto_delete = AutoDelete,
                          arguments = Args},
+    %% Don't ignore the return value; we want to upset things if it
+    %% isn't ok.
+    ok = Type:validate(Exchange),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    case mnesia:wread({rabbit_exchange, ExchangeName}) of
@@ -127,7 +136,7 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                    end
            end) of
         {new, X} ->
-            ok = Type:declare(X),
+            ok = Type:init(X),
             X;
         {existing, X} ->
             X;
