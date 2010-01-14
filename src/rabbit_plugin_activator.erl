@@ -96,12 +96,20 @@ start() ->
         {ok, Module, Warnings} ->
             %% This gets lots of spurious no-source warnings when we
             %% have .ez files, so we want to supress them to prevent
-            %% hiding real issues.
+            %% hiding real issues. On Ubuntu, we also get warnings
+            %% about kernel/stdlib sources being out of date, which we
+            %% also ignore for the same reason.
             WarningStr = Module:format_warning(
                            [W || W <- Warnings,
                                  case W of
                                      {warning, {source_not_found, _}} -> false;
-                                     _                                -> true
+                                     {warning, {obj_out_of_date, {_,_,WApp,_,_}}}
+                                       when WApp == mnesia;
+                                            WApp == stdlib;
+                                            WApp == kernel;
+                                            WApp == sasl;
+                                            WApp == os_mon -> false;
+                                     _ -> true
                                  end]),
             case length(WarningStr) of
                 0 -> ok;
@@ -222,7 +230,7 @@ expand_dependencies(Current, [Next|Rest]) ->
 post_process_script(ScriptFile) ->
     case file:consult(ScriptFile) of
         {ok, [{script, Name, Entries}]} ->
-            NewEntries = process_entries(Entries),
+            NewEntries = lists:flatmap(fun process_entry/1, Entries),
             case file:open(ScriptFile, [write]) of
                 {ok, Fd} ->
                     io:format(Fd, "%% script generated at ~w ~w~n~p.~n",
@@ -236,13 +244,10 @@ post_process_script(ScriptFile) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entries([]) ->
-    [];
-process_entries([Entry = {apply,{application,start_boot,[stdlib,permanent]}} |
-                 Rest]) ->
-    [Entry, {apply,{rabbit,prepare,[]}} | Rest];
-process_entries([Entry|Rest]) ->
-    [Entry | process_entries(Rest)].
+process_entry(Entry = {apply,{application,start_boot,[stdlib,permanent]}}) ->
+    [Entry, {apply,{rabbit,prepare,[]}}];
+process_entry(Entry) ->
+    [Entry].
 
 error(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
