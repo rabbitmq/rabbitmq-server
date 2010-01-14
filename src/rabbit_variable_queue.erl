@@ -85,7 +85,7 @@
 %% fewer than RAM_INDEX_BATCH_SIZE indices out in one go, and we don't
 %% write more - we can always come back on the next publish to do
 %% more.
--define(RAM_INDEX_BATCH_SIZE, 1024).
+-define(RAM_INDEX_BATCH_SIZE, 64).
 
 %%----------------------------------------------------------------------------
 
