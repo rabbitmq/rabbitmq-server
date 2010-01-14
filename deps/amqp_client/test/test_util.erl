@@ -46,13 +46,11 @@
 %%
 %% This is an example of how the client interaction should work
 %%
-%%   Connection = amqp_connection:start(#amqp_params{}),
+%%   Connection = amqp_connection:start_network(),
 %%   Channel = amqp_connection:open_channel(Connection),
 %%   %%...do something useful
-%%   ChannelClose = #'channel.close'{ %% set the appropriate fields },
-%%   amqp_channel:call(Channel, ChannelClose),
-%%   ConnectionClose = #'connection.close'{ %% set the appropriate fields },
-%%   amqp_connection:close(Connection, ConnectionClose).
+%%   amqp_channel:close(Channel),
+%%   amqp_connection:close(Connection).
 %%
 
 lifecycle_test(Connection) ->
