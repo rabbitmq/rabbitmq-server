@@ -585,13 +585,14 @@ beta_fold_no_index_on_disk(Fun, Init, Q) ->
 
 permitted_ram_index_count(#vqstate { len = 0 }) ->
     undefined;
-permitted_ram_index_count(#vqstate { len = Len, q2 = Q2, q3 = Q3 }) ->
+permitted_ram_index_count(#vqstate { len = Len, q2 = Q2, q3 = Q3,
+                                     delta = #delta { count = DeltaCount } }) ->
     case bpqueue:len(Q2) + bpqueue:len(Q3) of
         0 ->
             undefined;
         BetaLength ->
             %% the fraction of the queue that are betas
-            BetaFrac = BetaLength / Len,
+            BetaFrac = BetaLength / (Len - DeltaCount),
             BetaLength - trunc(BetaFrac * BetaLength)
     end.
 
