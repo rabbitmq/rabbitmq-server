@@ -33,9 +33,9 @@
 -spec(description/0 :: () -> [{atom(), any()}]).
 -spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
 -spec(validate/1 :: (exchange()) -> 'ok').
--spec(init/1 :: (exchange()) -> 'ok').
--spec(recover/1 :: (exchange()) -> 'ok').
--spec(delete/1 :: (exchange()) -> 'ok').
+-spec(create/1 :: (exchange()) -> 'ok').
+-spec(recover/2 :: (exchange(), list(binding())) -> 'ok').
+-spec(delete/2 :: (exchange(), list(binding())) -> 'ok').
 -spec(add_binding/2 :: (exchange(), binding()) -> 'ok').
 -spec(delete_binding/2 :: (exchange(), binding()) -> 'ok').
 

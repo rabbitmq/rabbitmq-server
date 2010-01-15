@@ -35,7 +35,7 @@
 -behaviour(rabbit_exchange_behaviour).
 
 -export([description/0, publish/2]).
--export([validate/1, init/1, recover/1, delete/1, add_binding/2, delete_binding/2]).
+-export([validate/1, create/1, recover/2, delete/2, add_binding/2, delete_binding/2]).
 -include("rabbit_exchange_behaviour_spec.hrl").
 
 -export([topic_matches/2]).
@@ -84,8 +84,8 @@ last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
     topic_matches1(P, R) or last_topic_match(P, [BacktrackNext | R], BacktrackList).
 
 validate(_X) -> ok.
-init(_X) -> ok.
-recover(_X) -> ok.
-delete(_X) -> ok.
+create(_X) -> ok.
+recover(_X, _Bs) -> ok.
+delete(_X, _Bs) -> ok.
 add_binding(_X, _B) -> ok.
 delete_binding(_X, _B) -> ok.
