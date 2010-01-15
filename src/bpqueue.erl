@@ -37,7 +37,7 @@
 %% prefix. len/1 returns the flattened length of the queue and is O(1)
 
 -export([new/0, is_empty/1, len/1, in/3, in_r/3, out/1, out_r/1, join/2,
-         fold/3, from_list/1, to_list/1, map_fold_filter_l/4,
+         foldl/3, foldr/3, from_list/1, to_list/1, map_fold_filter_l/4,
          map_fold_filter_r/4]).
 
 %%----------------------------------------------------------------------------
@@ -58,7 +58,8 @@
 -spec(out/1 :: (bpqueue()) -> result()).
 -spec(out_r/1 :: (bpqueue()) -> result()).
 -spec(join/2 :: (bpqueue(), bpqueue()) -> bpqueue()).
--spec(fold/3 :: (fun ((prefix(), value(), B) -> B), B, bpqueue()) -> B).
+-spec(foldl/3 :: (fun ((prefix(), value(), B) -> B), B, bpqueue()) -> B).
+-spec(foldr/3 :: (fun ((prefix(), value(), B) -> B), B, bpqueue()) -> B).
 -spec(from_list/1 :: ([{prefix(), [value()]}]) -> bpqueue()).
 -spec(to_list/1 :: (bpqueue()) -> [{prefix(), [value()]}]).
 -spec(map_fold_filter_l/4 ::
@@ -87,24 +88,21 @@ len({N, _Q}) ->
 
 in(Prefix, Value, {0, Q}) ->
     {1, queue:in({Prefix, queue:in(Value, Q)}, Q)};
-in(Prefix, Value, {N, Q}) ->
-    {N+1,
-     case queue:out_r(Q) of
-         {{value, {Prefix, InnerQ}}, Q1} ->
-             queue:in({Prefix, queue:in(Value, InnerQ)}, Q1);
-         {{value, {_Prefix, _InnerQ}}, _Q1} ->
-             queue:in({Prefix, queue:in(Value, queue:new())}, Q)
-     end}.
+in(Prefix, Value, BPQ) ->
+    in1({fun queue:in/2, fun queue:out_r/1}, Prefix, Value, BPQ).
 
-in_r(Prefix, Value, {0, Q}) ->
-    {1, queue:in({Prefix, queue:in(Value, Q)}, Q)};
-in_r(Prefix, Value, {N, Q}) ->
+in_r(Prefix, Value, BPQ = {0, _Q}) ->
+    in(Prefix, Value, BPQ);
+in_r(Prefix, Value, BPQ) ->
+    in1({fun queue:in_r/2, fun queue:out/1}, Prefix, Value, BPQ).
+
+in1({In, Out}, Prefix, Value, {N, Q}) ->
     {N+1,
-     case queue:out(Q) of
+     case Out(Q) of
          {{value, {Prefix, InnerQ}}, Q1} ->
-             queue:in_r({Prefix, queue:in_r(Value, InnerQ)}, Q1);
+             In({Prefix, In(Value, InnerQ)}, Q1);
          {{value, {_Prefix, _InnerQ}}, _Q1} ->
-             queue:in_r({Prefix, queue:in(Value, queue:new())}, Q)
+             In({Prefix, queue:in(Value, queue:new())}, Q)
      end}.
 
 in_q(Prefix, Queue, BPQ = {0, Q}) ->
@@ -112,54 +110,45 @@ in_q(Prefix, Queue, BPQ = {0, Q}) ->
         0 -> BPQ;
         N -> {N, queue:in({Prefix, Queue}, Q)}
     end;
-in_q(Prefix, Queue, BPQ = {N, Q}) ->
-    case queue:len(Queue) of
-        0 -> BPQ;
-        M -> {N + M,
-              case queue:out_r(Q) of
-                  {{value, {Prefix, InnerQ}}, Q1} ->
-                      queue:in({Prefix, queue:join(InnerQ, Queue)}, Q1);
-                  {{value, {_Prefix, _InnerQ}}, _Q1} ->
-                      queue:in({Prefix, Queue}, Q)
-              end}
-    end.
+in_q(Prefix, Queue, BPQ) ->
+    in_q1({fun queue:in/2, fun queue:out_r/1, fun queue:join/2},
+          Prefix, Queue, BPQ).
 
-in_q_r(Prefix, Queue, BPQ = {0, Q}) ->
-    case queue:len(Queue) of
-        0 -> BPQ;
-        N -> {N, queue:in({Prefix, Queue}, Q)}
-    end;
-in_q_r(Prefix, Queue, BPQ = {N, Q}) ->
+in_q_r(Prefix, Queue, BPQ = {0, _Q}) ->
+    in_q(Prefix, Queue, BPQ);
+in_q_r(Prefix, Queue, BPQ) ->
+    in_q1({fun queue:in_r/2, fun queue:out/1,
+           fun (T, H) -> queue:join(H, T) end},
+          Prefix, Queue, BPQ).
+
+in_q1({In, Out, Join}, Prefix, Queue, BPQ = {N, Q}) ->
     case queue:len(Queue) of
         0 -> BPQ;
         M -> {N + M,
-              case queue:out(Q) of
+              case Out(Q) of
                   {{value, {Prefix, InnerQ}}, Q1} ->
-                      queue:in_r({Prefix, queue:join(Queue, InnerQ)}, Q1);
+                      In({Prefix, Join(InnerQ, Queue)}, Q1);
                   {{value, {_Prefix, _InnerQ}}, _Q1} ->
-                      queue:in_r({Prefix, Queue}, Q)
+                      In({Prefix, Queue}, Q)
               end}
     end.
 
 out({0, _Q} = BPQ) ->
     {empty, BPQ};
-out({N, Q}) ->
-    {{value, {Prefix, InnerQ}}, Q1} = queue:out(Q),
-    {{value, Value}, InnerQ1} = queue:out(InnerQ),
-    Q2 = case queue:is_empty(InnerQ1) of
-             true  -> Q1;
-             false -> queue:in_r({Prefix, InnerQ1}, Q1)
-         end,
-    {{value, Prefix, Value}, {N-1, Q2}}.
+out(BPQ) ->
+    out1({fun queue:in_r/2, fun queue:out/1}, BPQ).
 
 out_r({0, _Q} = BPQ) ->
     {empty, BPQ};
-out_r({N, Q}) ->
-    {{value, {Prefix, InnerQ}}, Q1} = queue:out_r(Q),
-    {{value, Value}, InnerQ1} = queue:out_r(InnerQ),
+out_r(BPQ) ->
+    out1({fun queue:in/2, fun queue:out_r/1}, BPQ).
+
+out1({In, Out}, {N, Q}) ->
+    {{value, {Prefix, InnerQ}}, Q1} = Out(Q),
+    {{value, Value}, InnerQ1} = Out(InnerQ),
     Q2 = case queue:is_empty(InnerQ1) of
              true  -> Q1;
-             false -> queue:in({Prefix, InnerQ1}, Q1)
+             false -> In({Prefix, InnerQ1}, Q1)
          end,
     {{value, Prefix, Value}, {N-1, Q2}}.
 
@@ -179,25 +168,30 @@ join({NHead, QHead}, {NTail, QTail}) ->
              queue:join(QHead, QTail)
      end}.
 
-fold(_Fun, Init, {0, _Q}) ->
+foldl(_Fun, Init, {0, _Q}) ->
     Init;
-fold(Fun, Init, {_N, Q}) ->
-    fold1(Fun, Init, Q).
+foldl(Fun, Init, {_N, Q}) ->
+    fold1(fun queue:out/1, Fun, Init, Q).
 
-fold1(Fun, Init, Q) ->
-    case queue:out(Q) of
+foldr(_Fun, Init, {0, _Q}) ->
+    Init;
+foldr(Fun, Init, {_N, Q}) ->
+    fold1(fun queue:out_r/1, Fun, Init, Q).
+
+fold1(Out, Fun, Init, Q) ->
+    case Out(Q) of
         {empty, _Q} ->
             Init;
         {{value, {Prefix, InnerQ}}, Q1} ->
-            fold1(Fun, fold1(Fun, Prefix, Init, InnerQ), Q1)
+            fold1(Out, Fun, fold1(Out, Fun, Prefix, Init, InnerQ), Q1)
     end.
 
-fold1(Fun, Prefix, Init, InnerQ) ->
-    case queue:out(InnerQ) of
+fold1(Out, Fun, Prefix, Init, InnerQ) ->
+    case Out(InnerQ) of
         {empty, _Q} ->
             Init;
         {{value, Value}, InnerQ1} ->
-            fold1(Fun, Prefix, Fun(Prefix, Value, Init), InnerQ1)
+            fold1(Out, Fun, Prefix, Fun(Prefix, Value, Init), InnerQ1)
     end.
 
 from_list(List) ->
@@ -239,105 +233,64 @@ to_list1({Prefix, InnerQ}) ->
 map_fold_filter_l(_PFilter, _Fun, Init, BPQ = {0, _Q}) ->
     {BPQ, Init};
 map_fold_filter_l(PFilter, Fun, Init, {N, Q}) ->
-    map_fold_filter_l1(N, PFilter, Fun, Init, Q, new()).
-
-map_fold_filter_l1(Len, PFilter, Fun, Init, Q, QNew) ->
-    case queue:out(Q) of
-        {empty, _Q} ->
-            {QNew, Init};
-        {{value, {Prefix, InnerQ}}, Q1} ->
-            case PFilter(Prefix) of
-                true ->
-                    {Init1, QNew1, Cont} =
-                        map_fold_filter_l2(
-                          Fun, Prefix, Prefix, Init, InnerQ, QNew, queue:new()),
-                    case Cont of
-                        false ->
-                            {join(QNew1, {Len - len(QNew1), Q1}), Init1};
-                        true ->
-                            map_fold_filter_l1(
-                              Len, PFilter, Fun, Init1, Q1, QNew1)
-                    end;
-                false ->
-                    map_fold_filter_l1(
-                      Len, PFilter, Fun, Init, Q1, in_q(Prefix, InnerQ, QNew))
-            end
-    end.
-
-map_fold_filter_l2(Fun, OrigPrefix, Prefix, Init, InnerQ, QNew, InnerQNew) ->
-    case queue:out(InnerQ) of
-        {empty, _Q} ->
-            {Init, in_q(OrigPrefix, InnerQ,
-                        in_q(Prefix, InnerQNew, QNew)), true};
-        {{value, Value}, InnerQ1} ->
-            case Fun(Value, Init) of
-                stop ->
-                    {Init, in_q(OrigPrefix, InnerQ,
-                                in_q(Prefix, InnerQNew, QNew)), false};
-                {Prefix1, Value1, Init1} ->
-                    case Prefix1 =:= Prefix of
-                        true ->
-                            map_fold_filter_l2(
-                              Fun, OrigPrefix, Prefix, Init1, InnerQ1, QNew,
-                              queue:in(Value1, InnerQNew));
-                        false ->
-                            map_fold_filter_l2(
-                              Fun, OrigPrefix, Prefix1, Init1, InnerQ1,
-                              in_q(Prefix, InnerQNew, QNew),
-                              queue:in(Value1, queue:new()))
-                    end
-            end
-    end.
+    map_fold_filter1(
+      {fun queue:out/1, fun queue:in/2, fun in_q/3, fun join/2},
+      N, PFilter, Fun, Init, Q, new()).
 
 map_fold_filter_r(_PFilter, _Fun, Init, BPQ = {0, _Q}) ->
     {BPQ, Init};
 map_fold_filter_r(PFilter, Fun, Init, {N, Q}) ->
-    map_fold_filter_r1(N, PFilter, Fun, Init, Q, new()).
+    map_fold_filter1(
+      {fun queue:out_r/1, fun queue:in_r/2, fun in_q_r/3,
+       fun (T, H) -> join(H, T) end},
+      N, PFilter, Fun, Init, Q, new()).
 
-map_fold_filter_r1(Len, PFilter, Fun, Init, Q, QNew) ->
-    case queue:out_r(Q) of
+map_fold_filter1(
+  Funs = {Out, _In, InQ, Join}, Len, PFilter, Fun, Init, Q, QNew) ->
+    case Out(Q) of
         {empty, _Q} ->
             {QNew, Init};
         {{value, {Prefix, InnerQ}}, Q1} ->
             case PFilter(Prefix) of
                 true ->
                     {Init1, QNew1, Cont} =
-                        map_fold_filter_r2(
-                          Fun, Prefix, Prefix, Init, InnerQ, QNew, queue:new()),
+                        map_fold_filter2(
+                          Funs, Fun, Prefix, Prefix, Init, InnerQ, QNew, queue:new()),
                     case Cont of
                         false ->
-                            {join({Len - len(QNew1), Q1}, QNew1), Init1};
+                            {Join(QNew1, {Len - len(QNew1), Q1}), Init1};
                         true ->
-                            map_fold_filter_r1(
-                              Len, PFilter, Fun, Init1, Q1, QNew1)
+                            map_fold_filter1(
+                              Funs, Len, PFilter, Fun, Init1, Q1, QNew1)
                     end;
                 false ->
-                    map_fold_filter_r1(
-                      Len, PFilter, Fun, Init, Q1, in_q_r(Prefix, InnerQ, QNew))
+                    map_fold_filter1(
+                      Funs, Len, PFilter, Fun, Init, Q1, InQ(Prefix, InnerQ, QNew))
             end
     end.
 
-map_fold_filter_r2(Fun, OrigPrefix, Prefix, Init, InnerQ, QNew, InnerQNew) ->
-    case queue:out_r(InnerQ) of
+map_fold_filter2(Funs = {Out, In, InQ, _Join}, Fun, OrigPrefix, Prefix, Init,
+                 InnerQ, QNew, InnerQNew) ->
+    case Out(InnerQ) of
         {empty, _Q} ->
-            {Init, in_q_r(OrigPrefix, InnerQ,
-                          in_q_r(Prefix, InnerQNew, QNew)), true};
+            {Init, InQ(OrigPrefix, InnerQ,
+                       InQ(Prefix, InnerQNew, QNew)), true};
         {{value, Value}, InnerQ1} ->
             case Fun(Value, Init) of
                 stop ->
-                    {Init, in_q_r(OrigPrefix, InnerQ,
-                                  in_q_r(Prefix, InnerQNew, QNew)), false};
+                    {Init, InQ(OrigPrefix, InnerQ,
+                               InQ(Prefix, InnerQNew, QNew)), false};
                 {Prefix1, Value1, Init1} ->
                     case Prefix1 =:= Prefix of
                         true ->
-                            map_fold_filter_r2(
-                              Fun, OrigPrefix, Prefix, Init1, InnerQ1, QNew,
-                              queue:in_r(Value1, InnerQNew));
+                            map_fold_filter2(
+                              Funs, Fun, OrigPrefix, Prefix, Init1, InnerQ1, QNew,
+                              In(Value1, InnerQNew));
                         false ->
-                            map_fold_filter_r2(
-                              Fun, OrigPrefix, Prefix1, Init1, InnerQ1,
-                              in_q_r(Prefix, InnerQNew, QNew),
-                              queue:in(Value1, queue:new()))
+                            map_fold_filter2(
+                              Funs, Fun, OrigPrefix, Prefix1, Init1, InnerQ1,
+                              InQ(Prefix, InnerQNew, QNew),
+                              In(Value1, queue:new()))
                     end
             end
     end.

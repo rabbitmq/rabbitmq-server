@@ -223,14 +223,14 @@ test_bpqueue() ->
     [{undefined, [a]}] = bpqueue:to_list(bpqueue:from_list([{undefined, [a]}])),
 
     {4, [a,b,c,d]} =
-        bpqueue:fold(
+        bpqueue:foldl(
           fun (Prefix, Value, {Prefix, Acc}) ->
                   {Prefix + 1, [Value | Acc]}
           end,
           {0, []}, bpqueue:from_list([{0,[d]}, {1,[c]}, {2,[b]}, {3,[a]}])),
 
-    ok = bpqueue:fold(fun (Prefix, Value, ok) -> {error, Prefix, Value} end,
-                      ok, Q),
+    ok = bpqueue:foldl(fun (Prefix, Value, ok) -> {error, Prefix, Value} end,
+                       ok, Q),
 
     [] = bpqueue:to_list(Q),
 
