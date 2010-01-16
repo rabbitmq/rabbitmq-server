@@ -246,7 +246,7 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
                               in_counter = InCount + 1 },
     MsgStatus = #msg_status {
       msg = Msg, msg_id = MsgId, seq_id = SeqId, is_persistent = IsPersistent,
-      is_delivered = false, msg_on_disk = false, index_on_disk = false },
+      is_delivered = true, msg_on_disk = false, index_on_disk = false },
     MsgStatus1 = maybe_write_msg_to_disk(false, MsgStatus),
     case MsgStatus1 #msg_status.msg_on_disk of
         true ->
