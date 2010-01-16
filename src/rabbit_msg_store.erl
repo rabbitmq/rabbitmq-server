@@ -794,7 +794,7 @@ get_read_handle(FileNum, FHC, Dir) ->
         error ->
             {ok, Hdl} = rabbit_msg_store_misc:open_file(
                           Dir, rabbit_msg_store_misc:filenum_to_name(FileNum),
-                          [read | ?BINARY_MODE]),
+                          ?READ_MODE),
             {Hdl, dict:store(FileNum, Hdl, FHC) }
     end.
 
