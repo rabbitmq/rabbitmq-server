@@ -579,21 +579,23 @@ combine_deltas(#delta { start_seq_id = SeqIdLow,  count = CountLow},
     #delta { start_seq_id = SeqIdLow, count = Count, end_seq_id = SeqIdEnd }.
 
 beta_fold_no_index_on_disk(Fun, Init, Q) ->
-    bpqueue:fold(fun (_Prefix, Value, Acc) ->
-                         Fun(Value, Acc)
-                 end, Init, Q).
+    bpqueue:foldr(fun (_Prefix, Value, Acc) ->
+                          Fun(Value, Acc)
+                  end, Init, Q).
 
 permitted_ram_index_count(#vqstate { len = 0 }) ->
     undefined;
 permitted_ram_index_count(#vqstate { len = Len, q2 = Q2, q3 = Q3,
                                      delta = #delta { count = DeltaCount } }) ->
-    case bpqueue:len(Q2) + bpqueue:len(Q3) of
-        0 ->
+    AlphaBetaLen = Len - DeltaCount,
+    case AlphaBetaLen == 0 of
+        true ->
             undefined;
-        BetaLength ->
-            %% the fraction of the queue that are betas
-            BetaFrac = BetaLength / (Len - DeltaCount),
-            BetaLength - trunc(BetaFrac * BetaLength)
+        false ->
+            BetaLen = bpqueue:len(Q2) + bpqueue:len(Q3),
+            %% the fraction of the alphas+betas that are betas
+            BetaFrac =  BetaLen / AlphaBetaLen,
+            BetaLen - trunc(BetaFrac * BetaLen)
     end.
 
 
