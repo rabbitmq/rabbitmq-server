@@ -36,6 +36,8 @@ macports: dirs $(DEST)/Portfile
 	    $(DEST)/files/rabbitmq-script-wrapper
 	cp patch-org.macports.rabbitmq-server.plist.diff $(DEST)/files
 
+# This target ssh's into the OSX host in order to finalize the
+# macports repo
 macports_index:
 	if [ -n "$(MACPORTS_USERHOST)" ] ; then \
 	  tar cf - -C $(MACPORTS_DIR) . | ssh $(SSH_OPTS) lshift@macrabbit ' \
@@ -43,8 +45,8 @@ macports_index:
 	    mkdir $$d \
 	      && cd $$d \
 	      && tar xf - \
-	      && /opt/local/bin/portindex >/dev/null \
-	      && tar cf - PortIndex* \
+	      && /opt/local/bin/portindex -a -o . >/dev/null \
+	      && tar cf - . \
 	      && cd \
 	      && rm -rf $$d' \
 	    | tar xf - -C $(MACPORTS_DIR) ; \
