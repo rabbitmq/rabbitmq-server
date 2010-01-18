@@ -38,9 +38,11 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([register/2, lookup_module/1, lookup_name/1]).
+-export([register/2, binary_to_type/1, lookup_module/1, lookup_name/1]).
 
 -define(SERVER, ?MODULE).
+
+%% TODO specs
 
 %%---------------------------------------------------------------------------
 
@@ -52,7 +54,10 @@ start_link() ->
 register(TypeName, ModuleName) ->
     gen_server:call(?SERVER, {register, TypeName, ModuleName}).
 
-lookup_module(T) when is_binary(T) ->
+binary_to_type(TypeBin) when is_binary(TypeBin) ->
+    list_to_atom(binary_to_list(TypeBin)).
+
+lookup_module(T) when is_atom(T) ->
     case ets:lookup(rabbit_exchange_type_modules, T) of
         [{_, Module}] ->
             {ok, Module};
@@ -68,7 +73,8 @@ lookup_name(M) when is_atom(M) ->
 
 internal_register(TypeName, ModuleName)
   when is_binary(TypeName), is_atom(ModuleName) ->
-    true = ets:insert(rabbit_exchange_type_modules, {TypeName, ModuleName}),
+    true = ets:insert(rabbit_exchange_type_modules,
+                      {binary_to_type(TypeName), ModuleName}),
     true = ets:insert(rabbit_exchange_type_names, {ModuleName, TypeName}),
     ok.
 

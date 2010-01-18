@@ -123,7 +123,7 @@ recover_with_bindings([B = #binding{exchange_name = N} | Rest],
   when N =:= Name ->
     recover_with_bindings(Rest, Xs, [B | Bindings]);
 recover_with_bindings(Bs, [X = #exchange{ type = Type } | Xs], Bindings) ->
-    Type:recover(X, Bindings),
+    (type_to_module(Type)):recover(X, Bindings),
     recover_with_bindings(Bs, Xs, []);
 recover_with_bindings([], [], []) ->
     ok.
@@ -137,7 +137,8 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
     %% We want to upset things if it isn't ok; this is different from
     %% the other hooks invocations, where we tend to ignore the return
     %% value.
-    ok = Type:validate(Exchange),
+    TypeModule = (type_to_module(Type)),
+    ok = TypeModule:validate(Exchange),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    case mnesia:wread({rabbit_exchange, ExchangeName}) of
@@ -154,13 +155,13 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                            {existing, ExistingX}
                    end
            end) of
-        {new, X}      -> Type:create(X),
+        {new, X}      -> TypeModule:create(X),
                          X;
         {existing, X} -> X;
         Err           -> Err
     end.
 
-typename_to_plugin_module(T) ->
+type_to_module(T) ->
     case rabbit_exchange_type:lookup_module(T) of
         {ok, Module}       -> Module;
         {error, not_found} -> rabbit_misc:protocol_error(
@@ -168,12 +169,9 @@ typename_to_plugin_module(T) ->
                                 "invalid exchange type '~s'", [T])
     end.
 
-plugin_module_to_typename(M) ->
-    {ok, TypeName} = rabbit_exchange_type:lookup_name(M),
-    TypeName.
-
-check_type(T) ->
-    Module = typename_to_plugin_module(T),
+check_type(TypeBin) ->
+    T = rabbit_exchange_type:binary_to_type(TypeBin),
+    Module = type_to_module(T),
     case catch Module:description() of
         {'EXIT', {undef, [{_, description, []} | _]}} ->
             rabbit_misc:protocol_error(
@@ -182,7 +180,7 @@ check_type(T) ->
             rabbit_misc:protocol_error(
               command_invalid, "problem loading exchange type '~s'", [T]);
         _ ->
-            Module
+            T
     end.
 
 assert_type(#exchange{ type = ActualType }, RequiredType)
@@ -192,8 +190,8 @@ assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
     rabbit_misc:protocol_error(
       not_allowed, "cannot redeclare ~s of type '~s' with type '~s'",
       [rabbit_misc:rs(Name),
-       plugin_module_to_typename(ActualType),
-       plugin_module_to_typename(RequiredType)]).
+       ActualType,
+       RequiredType]).
 
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_exchange, Name}).
@@ -217,7 +215,7 @@ map(VHostPath, F) ->
 infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 
 i(name,        #exchange{name        = Name})       -> Name;
-i(type,        #exchange{type        = Type})       -> plugin_module_to_typename(Type);
+i(type,        #exchange{type        = Type})       -> Type;
 i(durable,     #exchange{durable     = Durable})    -> Durable;
 i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
 i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
@@ -235,7 +233,7 @@ publish(X, Delivery) ->
     publish(X, [], Delivery).
 
 publish(X = #exchange{type = Type}, Seen, Delivery) ->
-    case Type:publish(X, Delivery) of
+    case (type_to_module(Type)):publish(X, Delivery) of
         {_, []} = R ->
             #exchange{name = XName, arguments = Args} = X,
             case rabbit_misc:r_arg(XName, exchange, Args,
@@ -306,9 +304,9 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                               none, [], []),
     fun () ->
             lists:foreach(fun ({{deleted, X = #exchange{ type = Type}}, Bs}) ->
-                                  Type:delete(X, Bs);
+                                  (type_to_module(Type)):delete(X, Bs);
                               ({{_, X = #exchange{ type = Type }}, Bs}) ->
-                                  [Type:delete_binding(X, B) || B <- Bs]
+                                  [(type_to_module(Type)):delete_binding(X, B) || B <- Bs]
                           end, BindingsWithExchanges)
     end.
 
@@ -392,7 +390,7 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                    end
            end) of
         {new, Exchange = #exchange{ type = Type }, Binding} ->
-            Type:add_binding(Exchange, Binding);
+            (type_to_module(Type)):add_binding(Exchange, Binding);
         {existing, _, _} ->
             ok;
         Err = {error, _}  ->
@@ -412,11 +410,12 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                    end
            end) of
         {{deleted, X = #exchange{ type = Type }}, B} ->
-            Type:delete_binding(X, B),
-            Type:delete(X),
+            Module = (type_to_module(Type)),
+            Module:delete_binding(X, B),
+            Module:delete(X),
             ok;
         {{no_delete, X = #exchange{ type = Type }}, B} ->
-            Type:delete_binding(X, B),
+            (type_to_module(Type)):delete_binding(X, B),
             ok;
         Err ->
             Err
@@ -495,7 +494,7 @@ delete(ExchangeName, IfUnused) ->
           end,
     case call_with_exchange(ExchangeName, Fun) of
         {deleted, X = #exchange{ type = Type }, Bs} ->
-            Type:delete(X, Bs),
+            (type_to_module(Type)):delete(X, Bs),
             ok;
         Err ->
             Err
