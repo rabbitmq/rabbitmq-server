@@ -154,22 +154,18 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                            {existing, ExistingX}
                    end
            end) of
-        {new, X} ->
-            Type:create(X),
-            X;
-        {existing, X} ->
-            X;
-        Err ->
-            Err
+        {new, X}      -> Type:create(X),
+                         X;
+        {existing, X} -> X;
+        Err           -> Err
     end.
 
 typename_to_plugin_module(T) ->
     case rabbit_exchange_type:lookup_module(T) of
-        {ok, Module} ->
-            Module;
-        {error, not_found} ->
-            rabbit_misc:protocol_error(
-              command_invalid, "invalid exchange type '~s'", [T])
+        {ok, Module}       -> Module;
+        {error, not_found} -> rabbit_misc:protocol_error(
+                                command_invalid,
+                                "invalid exchange type '~s'", [T])
     end.
 
 plugin_module_to_typename(M) ->
@@ -204,7 +200,7 @@ lookup(Name) ->
 
 lookup_or_die(Name) ->
     case lookup(Name) of
-        {ok, X} -> X;
+        {ok, X}            -> X;
         {error, not_found} -> rabbit_misc:not_found(Name)
     end.
 
@@ -249,20 +245,18 @@ publish(X = #exchange{type = Type}, Seen, Delivery) ->
                 AName ->
                     NewSeen = [XName | Seen],
                     case lists:member(AName, NewSeen) of
-                        true ->
-                            R;
-                        false ->
-                            case lookup(AName) of
-                                {ok, AX} ->
-                                    publish(AX, NewSeen, Delivery);
-                                {error, not_found} ->
-                                    rabbit_log:warning(
-                                      "alternate exchange for ~s "
-                                      "does not exist: ~s",
-                                      [rabbit_misc:rs(XName),
+                        true  -> R;
+                        false -> case lookup(AName) of
+                                     {ok, AX} ->
+                                         publish(AX, NewSeen, Delivery);
+                                     {error, not_found} ->
+                                         rabbit_log:warning(
+                                           "alternate exchange for ~s "
+                                           "does not exist: ~s",
+                                           [rabbit_misc:rs(XName),
                                        rabbit_misc:rs(AName)]),
-                                    R
-                            end
+                                         R
+                                 end
                     end
             end;
         R ->
@@ -299,13 +293,13 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
              ok = mnesia:delete_object(rabbit_reverse_route,
                                        ReverseRoute, write),
              Route#route.binding
-         end || ReverseRoute <- mnesia:match_object(
-                                  rabbit_reverse_route,
-                                  reverse_route(
-                                    #route{binding = #binding{
-                                             queue_name = QueueName, 
-                                             _ = '_'}}),
-                                  write)],
+         end || ReverseRoute
+                    <- mnesia:match_object(
+                         rabbit_reverse_route,
+                         reverse_route(#route{binding = #binding{
+                                                queue_name = QueueName, 
+                                                _          = '_'}}),
+                         write)],
     BindingsWithExchanges = cleanup_deleted_queue_bindings(
                               lists:keysort(#binding.exchange_name,
                                             DeletedBindings),
@@ -411,12 +405,10 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
            fun (X, Q, B) ->
                    case mnesia:match_object(rabbit_route, #route{binding = B},
                                             write) of
-                       [] -> 
-                           {error, binding_not_found};
-                       _  -> 
-                           ok = sync_binding(B, Q#amqqueue.durable,
-                                             fun mnesia:delete_object/3),
-                           {maybe_auto_delete(X), B}
+                       [] -> {error, binding_not_found};
+                       _  -> ok = sync_binding(B, Q#amqqueue.durable,
+                                               fun mnesia:delete_object/3),
+                             {maybe_auto_delete(X), B}
                    end
            end) of
         {{deleted, X = #exchange{ type = Type }}, B} ->
@@ -479,22 +471,22 @@ reverse_route(#reverse_route{reverse_binding = Binding}) ->
     #route{binding = reverse_binding(Binding)}.
 
 reverse_binding(#reverse_binding{exchange_name = Exchange,
-                                 queue_name = Queue,
-                                 key = Key,
-                                 args = Args}) ->
+                                 queue_name    = Queue,
+                                 key           = Key,
+                                 args          = Args}) ->
     #binding{exchange_name = Exchange,
              queue_name    = Queue,
              key           = Key,
              args          = Args};
 
 reverse_binding(#binding{exchange_name = Exchange,
-                         queue_name = Queue,
-                         key = Key,
-                         args = Args}) ->
+                         queue_name    = Queue,
+                         key           = Key,
+                         args          = Args}) ->
     #reverse_binding{exchange_name = Exchange,
-                     queue_name = Queue,
-                     key = Key,
-                     args = Args}.
+                     queue_name    = Queue,
+                     key           = Key,
+                     args          = Args}.
 
 delete(ExchangeName, IfUnused) ->
     Fun = if
@@ -513,10 +505,8 @@ maybe_auto_delete(Exchange = #exchange{auto_delete = false}) ->
     {no_delete, Exchange};
 maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
     case conditional_delete(Exchange) of
-        {error, in_use} ->
-            {no_delete, Exchange};
-        Other ->
-            Other
+        {error, in_use} -> {no_delete, Exchange};
+        Other           -> Other
     end.
 
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
