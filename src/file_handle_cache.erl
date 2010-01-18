@@ -124,7 +124,7 @@
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([decrement/0, increment/0]).
+-export([release/0, obtain/0]).
 
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 50).
@@ -159,7 +159,8 @@
 -record(fhc_state,
         { elders,
           limit,
-          count
+          count,
+          obtains
         }).
 
 %%----------------------------------------------------------------------------
@@ -431,11 +432,11 @@ set_maximum_since_use(MaximumAge) ->
         false -> ok
     end.
 
-decrement() ->
-    gen_server:cast(?SERVER, decrement).
+release() ->
+    gen_server:cast(?SERVER, release).
 
-increment() ->
-    gen_server:cast(?SERVER, increment).
+obtain() ->
+    gen_server:call(?SERVER, obtain, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -662,10 +663,17 @@ init([]) ->
                     ulimit()
             end,
     error_logger:info_msg("Limiting to approx ~p file handles~n", [Limit]),
-    {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0}}.
+    {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0,
+                      obtains = [] }}.
 
-handle_call(_Msg, _From, State) ->
-    {reply, message_not_understood, State}.
+handle_call(obtain, From, State = #fhc_state { count = Count }) ->
+    State1 = #fhc_state { count = Count1, limit = Limit, obtains = Obtains } =
+        maybe_reduce(State #fhc_state { count = Count + 1 }),
+    case Limit /= infinity andalso Count1 >= Limit of
+        true  -> {noreply, State1 #fhc_state { obtains = [From | Obtains],
+                                               count = Count1 - 1 }};
+        false -> {reply, ok, State1}
+    end.
 
 handle_cast({open, Pid, EldestUnusedSince}, State =
             #fhc_state { elders = Elders, count = Count }) ->
@@ -686,13 +694,11 @@ handle_cast({close, Pid, EldestUnusedSince}, State =
                   undefined -> dict:erase(Pid, Elders);
                   _         -> dict:store(Pid, EldestUnusedSince, Elders)
               end,
-    {noreply, State #fhc_state { elders = Elders1, count = Count - 1 }};
+    {noreply, process_obtains(State #fhc_state { elders = Elders1,
+                                                 count = Count - 1 })};
 
-handle_cast(increment, State = #fhc_state { count = Count }) ->
-    {noreply, maybe_reduce(State #fhc_state { count = Count + 1 })};
-
-handle_cast(decrement, State = #fhc_state { count = Count }) ->
-    {noreply, State #fhc_state { count = Count - 1 }};
+handle_cast(release, State = #fhc_state { count = Count }) ->
+    {noreply, process_obtains(State #fhc_state { count = Count - 1 })};
 
 handle_cast(check_counts, State) ->
     {noreply, maybe_reduce(State)}.
@@ -709,6 +715,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% server helpers
 %%----------------------------------------------------------------------------
+
+process_obtains(State = #fhc_state { obtains = [] }) ->
+    State;
+process_obtains(State = #fhc_state { limit = Limit, count = Count })
+  when Limit /= infinity andalso Count >= Limit ->
+    State;
+process_obtains(State = #fhc_state { limit = Limit, count = Count,
+                                     obtains = Obtains }) ->
+    Take = lists:min([length(Obtains), Limit - Count]),
+    {Obtainable, ObtainsNewRev} = lists:split(Take, lists:reverse(Obtains)),
+    [gen_server:reply(From, ok) || From <- Obtainable],
+    State #fhc_state { count = Count + Take,
+                       obtains = lists:reverse(ObtainsNewRev) }.
 
 maybe_reduce(State = #fhc_state { limit = Limit, count = Count,
                                   elders = Elders })

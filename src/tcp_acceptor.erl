@@ -48,16 +48,14 @@ start_link(Callback, LSock) ->
 %%--------------------------------------------------------------------
 
 init({Callback, LSock}) ->
-    case prim_inet:async_accept(LSock, -1) of
-        {ok, Ref} -> {ok, #state{callback=Callback, sock=LSock, ref=Ref}};
-        Error -> {stop, {cannot_accept, Error}}
-    end.
+    gen_server:cast(self(), accept),
+    {ok, #state{callback=Callback, sock=LSock, ref=undefined}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(accept, State) ->
+    accept(State).
 
 handle_info({inet_async, LSock, Ref, {ok, Sock}},
             State = #state{callback={M,F,A}, sock=LSock, ref=Ref}) ->
@@ -83,10 +81,7 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
     end,
 
     %% accept more
-    case prim_inet:async_accept(LSock, -1) of
-        {ok, NRef} -> {noreply, State#state{ref=NRef}};
-        Error -> {stop, {cannot_accept, Error}, none}
-    end;
+    accept(State);
 handle_info({inet_async, LSock, Ref, {error, closed}},
             State=#state{sock=LSock, ref=Ref}) ->
     %% It would be wrong to attempt to restart the acceptor when we
@@ -104,3 +99,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
+
+accept(State = #state{sock=LSock}) ->
+    ok = file_handle_cache:obtain(),
+    case prim_inet:async_accept(LSock, -1) of
+        {ok, Ref} -> {noreply, State#state{ref=Ref}};
+        Error     -> {stop,    {cannot_accept, Error}}
+    end.
