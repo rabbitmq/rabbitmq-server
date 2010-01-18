@@ -695,12 +695,12 @@ remove_message(MsgId, State = #msstate { sum_valid_data = SumValid,
     #msg_location { ref_count = RefCount, file = File,
                     offset = Offset, total_size = TotalSize } =
         index_lookup(MsgId, State),
-    true = case File =:= CurFile of
-               true  -> ets:delete(?CUR_FILE_CACHE_ETS_NAME, MsgId);
-               false -> true
-           end,
     case RefCount of
         1 ->
+            true = case File =:= CurFile of
+                       true  -> ets:delete(?CUR_FILE_CACHE_ETS_NAME, MsgId);
+                       false -> true
+                   end,
             ok = remove_cache_entry(MsgId),
             [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
                                        contiguous_top = ContiguousTop,
