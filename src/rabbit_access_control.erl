@@ -242,12 +242,12 @@ add_vhost(VHostPath) ->
                              rabbit_misc:r(VHostPath, exchange, Name),
                              Type, true, false, []) ||
                               {Name,Type} <-
-                                  [{<<"">>,           rabbit_exchange_type_direct},
-                                   {<<"amq.direct">>, rabbit_exchange_type_direct},
-                                   {<<"amq.topic">>,  rabbit_exchange_type_topic},
-                                   {<<"amq.match">>,  rabbit_exchange_type_headers}, %% per 0-9-1 pdf
-                                   {<<"amq.headers">>,  rabbit_exchange_type_headers}, %% per 0-9-1 xml
-                                   {<<"amq.fanout">>, rabbit_exchange_type_fanout}]],
+                                  [{<<"">>,           direct},
+                                   {<<"amq.direct">>, direct},
+                                   {<<"amq.topic">>,  topic},
+                                   {<<"amq.match">>,  headers}, %% per 0-9-1 pdf
+                                   {<<"amq.headers">>,  headers}, %% per 0-9-1 xml
+                                   {<<"amq.fanout">>, fanout}]],
                           ok;
                       [_] ->
                           mnesia:abort({vhost_already_exists, VHostPath})

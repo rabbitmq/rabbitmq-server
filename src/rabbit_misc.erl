@@ -56,7 +56,6 @@
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1]).
--export([sort_field_table/1]).
 
 -import(mnesia).
 -import(lists).
@@ -98,7 +97,7 @@
 -spec(enable_cover/1 :: (string()) -> ok_or_error()).
 -spec(report_cover/1 :: (string()) -> 'ok').
 -spec(throw_on_error/2 ::
-      (atom(), thunk({error, any()} | {ok, A} | A)) -> A). 
+      (atom(), thunk({error, any()} | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (username(), thunk(A)) -> A).
@@ -127,7 +126,6 @@
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
--spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
 
 -endif.
 
@@ -341,6 +339,9 @@ intersperse(Sep, [E|T]) -> [E, Sep | intersperse(Sep, T)].
 %% This is a modified version of Luke Gorrie's pmap -
 %% http://lukego.livejournal.com/6753.html - that doesn't care about
 %% the order in which results are received.
+%%
+%% WARNING: This is is deliberately lightweight rather than robust -- if F
+%% throws, upmap will hang forever, so make sure F doesn't throw!
 upmap(F, L) ->
     Parent = self(),
     Ref = make_ref(),
@@ -429,7 +430,7 @@ append_file(File, _, Suffix) ->
 ensure_parent_dirs_exist(Filename) ->
     case filelib:ensure_dir(Filename) of
         ok              -> ok;
-        {error, Reason} -> 
+        {error, Reason} ->
             throw({error, {cannot_create_parent_dirs, Filename, Reason}})
     end.
 
@@ -491,7 +492,3 @@ ceil(N) ->
         0 -> N;
         _ -> 1 + T
     end.
-
-%% Sorts a list of AMQP table fields as per the AMQP spec
-sort_field_table(Arguments) ->
-    lists:keysort(1, Arguments).
