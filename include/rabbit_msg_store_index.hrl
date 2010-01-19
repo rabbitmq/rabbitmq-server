@@ -29,46 +29,30 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_msg_store_ets_index).
+%%----------------------------------------------------------------------------
 
--behaviour(rabbit_msg_store_index).
+-ifdef(use_specs).
 
--export([init/1, lookup/2, insert/2, update/2, update_fields/3, delete/2,
-         delete_by_file/2, terminate/1]).
+-type(msg_id() :: binary()).
+-type(dir() :: any()).
+-type(index_state() :: any()).
+-type(keyvalue() :: any()).
+-type(fieldpos() :: non_neg_integer()).
+-type(fieldvalue() :: any()).
 
--define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
+-spec(init/1 :: (dir()) -> index_state()).
+-spec(lookup/2 :: (msg_id(), index_state()) -> ('not_found' | keyvalue())).
+-spec(insert/2 :: (keyvalue(), index_state()) -> 'ok').
+-spec(update/2 :: (keyvalue(), index_state()) -> 'ok').
+-spec(update_fields/3 :: (msg_id(), ({fieldpos(), fieldvalue()} |
+                                     [{fieldpos(), fieldvalue()}]),
+                          index_state()) -> 'ok').
+-spec(delete/2 :: (msg_id(), index_state()) -> 'ok').
+-spec(delete_by_file/2 :: (fieldvalue(), index_state()) -> 'ok').
+-spec(terminate/1 :: (index_state()) -> any()).
 
--include("rabbit_msg_store_index.hrl").
+-endif.
 
-init(_Dir) ->
-    ets:new(?MSG_LOC_NAME, [set, public, {keypos, #msg_location.msg_id}]).
+%%----------------------------------------------------------------------------
 
-lookup(Key, MsgLocations) ->
-    case ets:lookup(MsgLocations, Key) of
-        []      -> not_found;
-        [Entry] -> Entry
-    end.
-
-insert(Obj, MsgLocations) ->
-    true = ets:insert_new(MsgLocations, Obj),
-    ok.
-
-update(Obj, MsgLocations) ->
-    true = ets:insert(MsgLocations, Obj),
-    ok.
-
-update_fields(Key, Updates, MsgLocations) ->
-    true = ets:update_element(MsgLocations, Key, Updates),
-    ok.
-
-delete(Key, MsgLocations) ->
-    true = ets:delete(MsgLocations, Key),
-    ok.
-
-delete_by_file(File, MsgLocations) ->
-    MatchHead = #msg_location { file = File, _ = '_' },
-    ets:select_delete(MsgLocations, [{MatchHead, [], [true]}]),
-    ok.
-
-terminate(MsgLocations) ->
-    ets:delete(MsgLocations).
+-include("rabbit_msg_store.hrl").
