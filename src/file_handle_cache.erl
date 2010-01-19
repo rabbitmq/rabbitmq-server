@@ -115,6 +115,14 @@
 %% fully reopened again as soon as needed, thus users of this library
 %% do not need to worry about their handles being closed by the server
 %% - reopening them when necessary is handled transparently.
+%%
+%% The server also supports obtain and release_on_death. obtain/0
+%% blocks until a file descriptor is available. release_on_death/1
+%% takes a pid and monitors the pid, reducing the count by 1 when the
+%% pid dies. Thus the assumption is that obtain/0 is called first, and
+%% when that returns, release_on_death/1 is called with the pid who
+%% "owns" the file descriptor. This is, for example, used to track the
+%% use of file descriptors through network sockets.
 
 -behaviour(gen_server).
 
