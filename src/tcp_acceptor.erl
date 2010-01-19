@@ -61,7 +61,7 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
             State = #state{callback={M,F,A}, sock=LSock, ref=Ref}) ->
 
     %% patch up the socket so it looks like one we got from
-    %% gen_tcp:accept/1 
+    %% gen_tcp:accept/1
     {ok, Mod} = inet_db:lookup_socket(LSock),
     inet_db:register_socket(Sock, Mod),
 
@@ -73,7 +73,7 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
                               [inet_parse:ntoa(Address), Port,
                                inet_parse:ntoa(PeerAddress), PeerPort]),
         %% handle
-        apply(M, F, A ++ [Sock])
+        file_handle_cache:release_on_death(apply(M, F, A ++ [Sock]))
     catch {inet_error, Reason} ->
             gen_tcp:close(Sock),
             error_logger:error_msg("unable to accept TCP connection: ~p~n",

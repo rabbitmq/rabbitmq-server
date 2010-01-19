@@ -124,7 +124,7 @@
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([release/0, obtain/0]).
+-export([release_on_death/1, obtain/0]).
 
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 50).
@@ -432,8 +432,8 @@ set_maximum_since_use(MaximumAge) ->
         false -> ok
     end.
 
-release() ->
-    gen_server:cast(?SERVER, release).
+release_on_death(Pid) when is_pid(Pid) ->
+    gen_server:cast(?SERVER, {release_on_death, Pid}).
 
 obtain() ->
     gen_server:call(?SERVER, obtain, infinity).
@@ -697,14 +697,16 @@ handle_cast({close, Pid, EldestUnusedSince}, State =
     {noreply, process_obtains(State #fhc_state { elders = Elders1,
                                                  count = Count - 1 })};
 
-handle_cast(release, State = #fhc_state { count = Count }) ->
-    {noreply, process_obtains(State #fhc_state { count = Count - 1 })};
-
 handle_cast(check_counts, State) ->
-    {noreply, maybe_reduce(State)}.
+    {noreply, maybe_reduce(State)};
 
-handle_info(_Msg, State) ->
+handle_cast({release_on_death, Pid}, State) ->
+    _MRef = erlang:monitor(process, Pid),
     {noreply, State}.
+
+handle_info({'DOWN', _MRef, process, _Pid, _Reason},
+            State = #fhc_state { count = Count }) ->
+    {noreply, process_obtains(State #fhc_state { count = Count - 1 })}.
 
 terminate(_Reason, State) ->
     State.
