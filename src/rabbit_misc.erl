@@ -493,6 +493,6 @@ ceil(N) ->
 
 queue_fold(Fun, Init, Q) ->
     case queue:out(Q) of
-        {empty, _Q} -> Init;
+        {empty, _Q}      -> Init;
         {{value, V}, Q1} -> queue_fold(Fun, Fun(V, Init), Q1)
     end.
