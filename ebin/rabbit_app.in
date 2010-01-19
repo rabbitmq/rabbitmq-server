@@ -18,6 +18,7 @@
          {ssl_listeners, []},
          {ssl_options, []},
          {vm_memory_high_watermark, 0.4},
+         {msg_store_index_module, rabbit_msg_store_ets_index},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},

@@ -43,6 +43,4 @@ start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 init([]) ->
-    {ok, {{simple_one_for_one, 10, 10},
-          [{rabbit_amqqueue, {rabbit_amqqueue_process, start_link, []},
-            temporary, brutal_kill, worker, [rabbit_amqqueue_process]}]}}.
+    {ok, {{one_for_one, 10, 10}, []}}.

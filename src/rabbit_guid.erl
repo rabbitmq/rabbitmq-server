@@ -67,7 +67,7 @@ update_disk_serial() ->
     Filename = filename:join(rabbit_mnesia:dir(), ?SERIAL_FILENAME),
     Serial = case rabbit_misc:read_term_file(Filename) of
                  {ok, [Num]}     -> Num;
-                 {error, enoent} -> rabbit_persister:serial();
+                 {error, enoent} -> 0;
                  {error, Reason} ->
                      throw({error, {cannot_read_serial_file, Filename, Reason}})
              end,
@@ -99,13 +99,12 @@ guid() ->
             {S, I}   -> {S, I+1}
         end,
     put(guid, G),
-    G.
+    erlang:md5(term_to_binary(G)).
 
 %% generate a readable string representation of a guid. Note that any
 %% monotonicity of the guid is not preserved in the encoding.
 string_guid(Prefix) ->
-    Prefix ++ "-" ++ base64:encode_to_string(
-                       erlang:md5(term_to_binary(guid()))).
+    Prefix ++ "-" ++ base64:encode_to_string(guid()).
 
 binstring_guid(Prefix) ->
     list_to_binary(string_guid(Prefix)).
