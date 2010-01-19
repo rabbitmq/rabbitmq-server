@@ -63,6 +63,11 @@
                     {mfa,         {rabbit_hooks, start, []}},
                     {pre,         kernel_ready}]}).
 
+-rabbit_boot_step({file_handle_cache,
+                   [{description, "file handle cache server"},
+                    {mfa,         {rabbit_sup, start_child, [file_handle_cache]}},
+                    {pre,         kernel_ready}]}).
+
 -rabbit_boot_step({kernel_ready,
                    [{description, "kernel ready"}]}).
 
