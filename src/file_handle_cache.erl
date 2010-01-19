@@ -88,19 +88,20 @@
 %% message and pass it into set_maximum_since_use/1. However, it's
 %% highly possible this age will be greater than the ages of all the
 %% handles the client knows of because the client has used its file
-%% handles in the mean time. Thus at this point it reports to the
-%% server the current timestamp at which its least recently used file
-%% handle was last used. The server will check two seconds later that
-%% either it's back under the limit, in which case all is well again,
-%% or if not, it will calculate a new average age. Its data will be
-%% much more recent now, and so it's very likely that when this is
-%% communicated to the clients, the clients will close file handles.
+%% handles in the mean time. Thus at this point the client reports to
+%% the server the current timestamp at which its least recently used
+%% file handle was last used. The server will check two seconds later
+%% that either it's back under the limit, in which case all is well
+%% again, or if not, it will calculate a new average age. Its data
+%% will be much more recent now, and so it's very likely that when
+%% this is communicated to the clients, the clients will close file
+%% handles.
 %%
 %% The advantage of this scheme is that there is only communication
 %% from the client to the server on open, close, and when in the
 %% process of trying to reduce file handle usage. There is no
 %% communication from the client to the server on normal file handle
-%% operations. This scheme forms a feed back loop - the server doesn't
+%% operations. This scheme forms a feed-back loop - the server doesn't
 %% care which file handles are closed, just that some are, and it
 %% checks this repeatedly when over the limit. Given the guarantees of
 %% now(), even if there is just one file handle open, a limit of 1,
