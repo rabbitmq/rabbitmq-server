@@ -113,8 +113,9 @@
 
 %% The components:
 %%
-%% MsgLocation: this is an ets table which contains:
+%% MsgLocation: this is a mapping from MsgId to #msg_location{}:
 %%              {MsgId, RefCount, File, Offset, TotalSize}
+%%              By default, it's in ets, but it's also pluggable.
 %% FileSummary: this is an ets table which contains:
 %%              {File, ValidTotalSize, ContiguousTop, Left, Right}
 %%
@@ -126,7 +127,7 @@
 %% eldest file.
 %%
 %% We need to keep track of which messages are in which files (this is
-%% the MsgLocation table); how much useful data is in each file and
+%% the MsgLocation mapping); how much useful data is in each file and
 %% which files are on the left and right of each other. This is the
 %% purpose of the FileSummary table.
 %%
@@ -136,26 +137,31 @@
 %% valid data right at the start of each file. These are needed for
 %% garbage collection.
 %%
-%% When we discover that either a file is now empty or that it can be
-%% combined with the useful data in either its left or right file, we
-%% compact the two files together. This keeps disk utilisation high
-%% and aids performance.
+%% When we discover that a file is now empty, we delete it. When we
+%% discover that it can be combined with the useful data in either its
+%% left or right neighbour, and overall, across all the files, we have
+%% ((the amount of garbage) / (the sum of all file sizes)) >
+%% ?GARBAGE_FRACTION, we start a garbage collection run concurrently,
+%% which will compact the two files together. This keeps disk
+%% utilisation high and aids performance. We deliberately do this
+%% lazily in order to prevent doing GC on files which are soon to be
+%% emptied (and hence deleted) soon.
 %%
-%% Given the compaction between two files, the left file is considered
-%% the ultimate destination for the good data in the right file. If
-%% necessary, the good data in the left file which is fragmented
-%% throughout the file is written out to a temporary file, then read
-%% back in to form a contiguous chunk of good data at the start of the
-%% left file. Thus the left file is garbage collected and
-%% compacted. Then the good data from the right file is copied onto
-%% the end of the left file. MsgLocation and FileSummary tables are
-%% updated.
+%% Given the compaction between two files, the left file (i.e. elder
+%% file) is considered the ultimate destination for the good data in
+%% the right file. If necessary, the good data in the left file which
+%% is fragmented throughout the file is written out to a temporary
+%% file, then read back in to form a contiguous chunk of good data at
+%% the start of the left file. Thus the left file is garbage collected
+%% and compacted. Then the good data from the right file is copied
+%% onto the end of the left file. MsgLocation and FileSummary tables
+%% are updated.
 %%
 %% On startup, we scan the files we discover, dealing with the
 %% possibilites of a crash have occured during a compaction (this
 %% consists of tidyup - the compaction is deliberately designed such
 %% that data is duplicated on disk rather than risking it being lost),
-%% and rebuild the ets tables (MsgLocation, FileSummary).
+%% and rebuild the FileSummary ets table and MsgLocation mapping.
 %%
 %% So, with this design, messages move to the left. Eventually, they
 %% should end up in a contiguous block on the left and are then never
@@ -215,7 +221,8 @@
 %%
 %% Messages are reference-counted. When a message with the same id is
 %% written several times we only store it once, and only remove it
-%% from the store when it has been removed the same number of times.
+%% from the store when it has been removed the same number of
+%% times.
 %%
 %% The reference counts do not persist. Therefore the initialisation
 %% function must be provided with a generator that produces ref count
@@ -228,6 +235,29 @@
 %% are read from several processes they are read back as the same
 %% binary object rather than multiples of identical binary
 %% objects.
+%%
+%% Reads can be performed directly by clients without calling to the
+%% server. This is safe because multiple file handles can be used to
+%% read files. However, locking is used by the concurrent GC to make
+%% sure that reads are not attempted from files which are in the
+%% process of being garbage collected.
+%%
+%% The server automatically defers reads, removes and contains calls
+%% that occur which refer to files which are currently being
+%% GC'd. Contains calls are only deferred in order to ensure they do
+%% not overtake removes.
+%%
+%% The current file to which messages are being written has a
+%% write-back cache. This is written to immediately by the client and
+%% can be read from by the client too. This means that there are only
+%% ever writes made to the current file, thus eliminating delays due
+%% to flushing write buffers in order to be able to safely read from
+%% the current file. The one exception to this is that on start up,
+%% the cache is not populated with msgs found in the current file, and
+%% thus in this case only, reads may have to come from the file
+%% itself. The effect of this is that even if the msg_store process is
+%% heavily overloaded, clients can still write and read messages with
+%% very low latency and not block at all.
 
 %%----------------------------------------------------------------------------
 %% public API
