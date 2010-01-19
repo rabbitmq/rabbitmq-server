@@ -533,16 +533,16 @@ handle_method(#'basic.recover'{requeue = false},
                    ok;
                ({DeliveryTag, ConsumerTag,
                  {QName, QPid, MsgId, _Redelivered, Message}}, ok) ->
-                   %% Was sent as a proper consumer delivery.  Resend it as
-                   %% before.
+                   %% Was sent as a proper consumer delivery.  Resend
+                   %% it as before.
                    %%
                    %% FIXME: What should happen if the consumer's been
                    %% cancelled since?
                    %%
                    %% FIXME: should we allocate a fresh DeliveryTag?
-                   ok = internal_deliver(
-                          WriterPid, false, ConsumerTag, DeliveryTag,
-                          {QName, QPid, MsgId, true, Message})
+                   internal_deliver(
+                     WriterPid, false, ConsumerTag, DeliveryTag,
+                     {QName, QPid, MsgId, true, Message})
            end, ok, UAMQ),
     %% No answer required, apparently!
     {noreply, State};
