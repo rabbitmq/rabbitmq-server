@@ -266,7 +266,7 @@ requeue(QPid, MsgIds, ChPid) ->
     gen_server2:cast(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
-    gen_server2:cast(QPid, {ack, Txn, MsgIds, ChPid}).
+    gen_server2:pcast(QPid, 8, {ack, Txn, MsgIds, ChPid}).
 
 commit_all(QPids, Txn) ->
     safe_pmap_ok(
