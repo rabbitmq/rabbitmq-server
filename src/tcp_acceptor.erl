@@ -104,5 +104,5 @@ accept(State = #state{sock=LSock}) ->
     ok = file_handle_cache:obtain(),
     case prim_inet:async_accept(LSock, -1) of
         {ok, Ref} -> {noreply, State#state{ref=Ref}};
-        Error     -> {stop,    {cannot_accept, Error}}
+        Error     -> {stop, {cannot_accept, Error}, State}
     end.
