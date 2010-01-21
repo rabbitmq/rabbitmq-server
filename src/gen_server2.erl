@@ -179,6 +179,8 @@
 
 -import(error_logger, [format/2]).
 
+-define(DRAIN_PER_PROCESS, 1000).
+
 %%%=========================================================================
 %%%  Specs. These exist only to shut up dialyzer's warnings
 %%%=========================================================================
@@ -474,8 +476,13 @@ loop(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
                      drain(Queue), Debug).
 
 drain(Queue) ->
+    drain(Queue, ?DRAIN_PER_PROCESS).
+
+drain(Queue, 0) ->
+    Queue;
+drain(Queue, N) ->
     receive
-        Input -> drain(in(Input, Queue))
+        Input -> drain(in(Input, Queue), N - 1)
     after 0 -> Queue
     end.
 
