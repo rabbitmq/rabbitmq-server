@@ -84,7 +84,7 @@
 %% The duration indicated to us by the memory_monitor is used to
 %% calculate, given our current ingress and egress rates, how many
 %% messages we should hold in RAM. When we need to push alphas to
-%% betas or betas to gammas, we favour writing on messages that are
+%% betas or betas to gammas, we favour writing out messages that are
 %% further from the head of the queue. This minimises writes to disk,
 %% as the messages closer to the tail of the queue stay in the queue
 %% for longer, thus do not need to be replaced as quickly by sending
