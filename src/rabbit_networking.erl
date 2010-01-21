@@ -31,7 +31,7 @@
 
 -module(rabbit_networking).
 
--export([start/0, start_tcp_listener/2, start_ssl_listener/3, 
+-export([boot/0, start/0, start_tcp_listener/2, start_ssl_listener/3, 
         stop_tcp_listener/2, on_node_down/1, active_listeners/0, 
         node_listeners/1, connections/0, connection_info/1, 
         connection_info/2, connection_info_all/0, 
@@ -53,6 +53,9 @@
         %% {delay_send, true}, 
         {exit_on_close, false}
     ]).
+
+-define(SSL_TIMEOUT, 5). %% seconds
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -78,6 +81,27 @@
 -endif.
 
 %%----------------------------------------------------------------------------
+
+boot() ->
+    ok = start(),
+    ok = boot_tcp(),
+    ok = boot_ssl().
+
+boot_tcp() ->
+    {ok, TcpListeners} = application:get_env(tcp_listeners),
+    [ok = start_tcp_listener(Host, Port) || {Host, Port} <- TcpListeners],
+    ok.
+
+boot_ssl() ->
+    case application:get_env(ssl_listeners) of
+        {ok, []} ->
+            ok;
+        {ok, SslListeners} ->
+            ok = rabbit_misc:start_applications([crypto, ssl]),
+            {ok, SslOpts} = application:get_env(ssl_options),
+            [start_ssl_listener(Host, Port, SslOpts) || {Host, Port} <- SslListeners],
+            ok
+    end.
 
 start() ->
     {ok,_} = supervisor:start_child(
@@ -160,36 +184,31 @@ node_listeners(Node) ->
 on_node_down(Node) ->
     ok = mnesia:dirty_delete(rabbit_listener, Node).
 
-start_client(Sock) ->
+start_client(Sock, SockTransform) ->
     {ok, Child} = supervisor:start_child(rabbit_tcp_client_sup, []),
     ok = rabbit_net:controlling_process(Sock, Child),
-    Child ! {go, Sock},
+    Child ! {go, Sock, SockTransform},
     Child.
 
+start_client(Sock) ->
+    start_client(Sock, fun (S) -> {ok, S} end).
+
 start_ssl_client(SslOpts, Sock) ->
-    case rabbit_net:peername(Sock) of
-        {ok, {PeerAddress, PeerPort}} ->
-            PeerIp = inet_parse:ntoa(PeerAddress),
-            case ssl:ssl_accept(Sock, SslOpts) of
-                {ok, SslSock} ->
-                    rabbit_log:info("upgraded TCP connection "
-                                    "from ~s:~p to SSL~n",
-                                    [PeerIp, PeerPort]),
-                    RabbitSslSock = #ssl_socket{tcp = Sock, ssl = SslSock},
-                    start_client(RabbitSslSock);
-                {error, Reason} ->
-                    gen_tcp:close(Sock),
-                    rabbit_log:error("failed to upgrade TCP connection "
-                                     "from ~s:~p to SSL: ~n~p~n",
-                                     [PeerIp, PeerPort, Reason]),
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            gen_tcp:close(Sock),
-            rabbit_log:error("failed to upgrade TCP connection to SSL: ~p~n",
-                             [Reason]),
-            {error, Reason}
-    end.
+    start_client(
+      Sock,
+      fun (Sock1) ->
+              case catch ssl:ssl_accept(Sock1, SslOpts, ?SSL_TIMEOUT * 1000) of
+                  {ok, SslSock} ->
+                      rabbit_log:info("upgraded TCP connection ~p to SSL~n",
+                                      [self()]),
+                      {ok, #ssl_socket{tcp = Sock1, ssl = SslSock}};
+                  {error, Reason} ->
+                      {error, {ssl_upgrade_error, Reason}};
+                  {'EXIT', Reason} ->
+                      {error, {ssl_upgrade_failure, Reason}}
+              
+              end
+      end).
 
 connections() ->
     [Pid || {_, Pid, _, _} <- supervisor:which_children(

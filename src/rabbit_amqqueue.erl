@@ -164,15 +164,23 @@ internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    case mnesia:wread({rabbit_queue, QueueName}) of
-                       [] -> ok = store_queue(Q),
-                             case WantDefaultBinding of
-                                 true -> add_default_binding(Q);
-                                 false -> ok
-                             end,
-                             Q;
-                       [ExistingQ] -> ExistingQ
+                       [] ->
+                           case mnesia:read(
+                                  {rabbit_durable_queue, QueueName}) of
+                               []  -> ok = store_queue(Q),
+                                      case WantDefaultBinding of
+                                          true  -> add_default_binding(Q);
+                                          false -> ok
+                                      end,
+                                      Q;
+                               [_] -> not_found %% existing Q on stopped node
+                           end;
+                       [ExistingQ] ->
+                           ExistingQ
                    end
            end) of
+        not_found -> exit(Q#amqqueue.pid, shutdown),
+                     rabbit_misc:not_found(QueueName);
         Q         -> Q;
         ExistingQ -> exit(Q#amqqueue.pid, shutdown),
                      ExistingQ
@@ -259,7 +267,7 @@ requeue(QPid, MsgIds, ChPid) ->
     gen_server2:cast(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
-    gen_server2:cast(QPid, {ack, Txn, MsgIds, ChPid}).
+    gen_server2:pcast(QPid, 8, {ack, Txn, MsgIds, ChPid}).
 
 commit_all(QPids, Txn) ->
     safe_pmap_ok(
