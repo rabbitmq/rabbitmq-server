@@ -243,7 +243,7 @@ run_boot_step({StepName, Attributes}) ->
                   end,
     case [MFA || {mfa, MFA} <- Attributes] of
         [] ->
-            io:format("progress -- ~s~n", [Description]);
+            io:format("-- ~s~n", [Description]);
         MFAs ->
             io:format("starting ~-60s ...", [Description]),
             [case catch apply(M,F,A) of
