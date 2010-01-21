@@ -298,16 +298,20 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                                                 queue_name = QueueName, 
                                                 _          = '_'}}),
                          write)],
-    BindingsWithExchanges = cleanup_deleted_queue_bindings(
-                              lists:keysort(#binding.exchange_name,
-                                            DeletedBindings),
-                              none, [], []),
+    Cleanup = cleanup_deleted_queue_bindings(
+                lists:keysort(#binding.exchange_name,
+                              DeletedBindings),
+                none, [], []),
     fun () ->
-            lists:foreach(fun ({{deleted, X = #exchange{ type = Type}}, Bs}) ->
-                                  (type_to_module(Type)):delete(X, Bs);
-                              ({{_, X = #exchange{ type = Type }}, Bs}) ->
-                                  [(type_to_module(Type)):delete_binding(X, B) || B <- Bs]
-                          end, BindingsWithExchanges)
+            lists:foreach(
+              fun ({{auto_deleted, X = #exchange{ type = Type}}, Bs}) ->
+                      Module = type_to_module(Type),
+                      [Module:delete_binding(X, B) || B <- Bs],
+                      Module:delete(X, []);
+                  ({{no_delete, X = #exchange{ type = Type }}, Bs}) ->
+                      Module = type_to_module(Type),
+                      [Module:delete_binding(X, B) || B <- Bs]
+              end, Cleanup)
     end.
 
 %% Requires that its input binding list is sorted in exchange-name
@@ -409,16 +413,14 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                              {maybe_auto_delete(X), B}
                    end
            end) of
-        {{deleted, X = #exchange{ type = Type }}, B} ->
-            Module = (type_to_module(Type)),
+        {{auto_deleted, X = #exchange{ type = Type }}, B} ->
+            Module = type_to_module(Type),
             Module:delete_binding(X, B),
-            Module:delete(X),
+            Module:delete(X, []),
             ok;
         {{no_delete, X = #exchange{ type = Type }}, B} ->
             (type_to_module(Type)):delete_binding(X, B),
-            ok;
-        Err ->
-            Err
+            ok
     end.
 
 binding_action(ExchangeName, QueueName, RoutingKey, Arguments, Fun) ->
@@ -496,16 +498,16 @@ delete(ExchangeName, IfUnused) ->
         {deleted, X = #exchange{ type = Type }, Bs} ->
             (type_to_module(Type)):delete(X, Bs),
             ok;
-        Err ->
-            Err
+        InUse = {error, in_use} ->
+            InUse
     end.
 
 maybe_auto_delete(Exchange = #exchange{auto_delete = false}) ->
     {no_delete, Exchange};
 maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
     case conditional_delete(Exchange) of
-        {error, in_use} -> {no_delete, Exchange};
-        Other           -> Other
+        {error, in_use}  -> {no_delete, Exchange};
+        {deleted, X, []} -> {auto_deleted, X}
     end.
 
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
