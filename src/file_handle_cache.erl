@@ -738,7 +738,8 @@ process_obtains(State = #fhc_state { limit = Limit, count = Count,
     Take = ObtainsLen - lists:min([ObtainsLen, Limit - Count]),
     {ObtainsNew, ObtainableRev} = lists:split(Take, Obtains),
     [gen_server:reply(From, ok) || From <- ObtainableRev],
-    State #fhc_state { count = Count + Take, obtains = ObtainsNew }.
+    State #fhc_state { count = Count + length(ObtainableRev),
+                       obtains = ObtainsNew }.
 
 maybe_reduce(State = #fhc_state { limit = Limit, count = Count,
                                   elders = Elders })
