@@ -100,8 +100,8 @@
 %% This module is also responsible for scanning the queue index files
 %% and seeding the message store on start up.
 
-%% Note that in general, the representation of a message as the tuple:
-%% {('no_pub'|{MsgId, IsPersistent}), ('del'|'no_del'),
+%% Note that in general, the representation of a message's state as
+%% the tuple: {('no_pub'|{MsgId, IsPersistent}), ('del'|'no_del'),
 %% ('ack'|'no_ack')} is richer than strictly necessary for most
 %% operations. However, for startup, and to ensure the safe and
 %% correct combination of journal entries with entries read from the
