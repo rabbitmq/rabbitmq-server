@@ -32,7 +32,8 @@
 -module(rabbit_mnesia).
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
-         cluster/1, reset/0, force_reset/0]).
+         cluster/1, reset/0, force_reset/0, is_clustered/0,
+         empty_ram_only_tables/0]).
 
 -export([table_names/0]).
 
@@ -54,6 +55,8 @@
 -spec(cluster/1 :: ([erlang_node()]) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
+-spec(is_clustered/0 :: () -> boolean()). 
+-spec(empty_ram_only_tables/0 :: () -> 'ok'). 
 -spec(create_tables/0 :: () -> 'ok').
 
 -endif.
@@ -98,59 +101,51 @@ cluster(ClusterNodes) ->
 reset()       -> reset(false).
 force_reset() -> reset(true).
 
+is_clustered() ->
+    RunningNodes = mnesia:system_info(running_db_nodes),
+    [node()] /= RunningNodes andalso [] /= RunningNodes.
+
+empty_ram_only_tables() ->
+    Node = node(),
+    lists:foreach(
+      fun (TabName) ->
+          case lists:member(Node, mnesia:table_info(TabName, ram_copies)) of
+              true  -> {atomic, ok} = mnesia:clear_table(TabName);
+              false -> ok
+          end
+      end, table_names()),
+    ok.
+
 %%--------------------------------------------------------------------
 
 table_definitions() ->
-    [{rabbit_user,
-      [{record_name, user},
-       {attributes, record_info(fields, user)},
-       {disc_copies, [node()]}]},
-     {rabbit_user_permission,
-      [{record_name, user_permission},
-       {attributes, record_info(fields, user_permission)},
-       {disc_copies, [node()]}]},
-     {rabbit_vhost,
-      [{record_name, vhost},
-       {attributes, record_info(fields, vhost)},
-       {disc_copies, [node()]}]},
-     {rabbit_config,
-      [{disc_copies, [node()]}]},
-     {rabbit_listener,
-      [{record_name, listener},
-       {attributes, record_info(fields, listener)},
-       {type, bag}]},
-     {rabbit_durable_route,
-      [{record_name, route},
-       {attributes, record_info(fields, route)},
-       {disc_copies, [node()]}]},
-     {rabbit_route,
-      [{record_name, route},
-       {attributes, record_info(fields, route)},
-       {type, ordered_set}]},
-     {rabbit_reverse_route,
-      [{record_name, reverse_route},
-       {attributes, record_info(fields, reverse_route)},
-       {type, ordered_set}]},
-     {rabbit_durable_exchange,
-      [{record_name, exchange},
-       {attributes, record_info(fields, exchange)},
-       {disc_copies, [node()]}]},
-     {rabbit_exchange,
-      [{record_name, exchange},
-       {attributes, record_info(fields, exchange)}]},
-     {rabbit_durable_queue,
-      [{record_name, amqqueue},
-       {attributes, record_info(fields, amqqueue)},
-       {disc_copies, [node()]}]},
-     {rabbit_queue,
-      [{record_name, amqqueue},
-       {attributes, record_info(fields, amqqueue)}]},
-     {rabbit_disk_queue,
-      [{record_name, dq_msg_loc},
-       {attributes, record_info(fields, dq_msg_loc)},
-       {disc_copies, [node()]},
-       {local_content, true}]}
-    ].
+    [{user, [{disc_copies, [node()]},
+             {attributes, record_info(fields, user)}]},
+     {user_vhost, [{type, bag},
+                   {disc_copies, [node()]},
+                   {attributes, record_info(fields, user_vhost)},
+                   {index, [virtual_host]}]},
+     {vhost, [{disc_copies, [node()]},
+              {attributes, record_info(fields, vhost)}]},
+     {rabbit_config, [{disc_copies, [node()]}]},
+     {listener, [{type, bag},
+                 {attributes, record_info(fields, listener)}]},
+     {durable_routes, [{disc_copies, [node()]},
+                       {record_name, route},
+                       {attributes, record_info(fields, route)}]},
+     {route, [{type, ordered_set},
+              {attributes, record_info(fields, route)}]},
+     {reverse_route, [{type, ordered_set}, 
+                      {attributes, record_info(fields, reverse_route)}]},
+     {durable_exchanges, [{disc_copies, [node()]},
+                          {record_name, exchange},
+                          {attributes, record_info(fields, exchange)}]},
+     {exchange, [{attributes, record_info(fields, exchange)}]},
+     {durable_queues, [{disc_copies, [node()]},
+                       {record_name, amqqueue},
+                       {attributes, record_info(fields, amqqueue)}]},
+     {amqqueue, [{attributes, record_info(fields, amqqueue)},
+                 {index, [pid]}]}].
 
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
@@ -184,8 +179,7 @@ ensure_mnesia_not_running() ->
 
 check_schema_integrity() ->
     %%TODO: more thorough checks
-    case catch [mnesia:table_info(Tab, version)
-                || Tab <- table_names()] of
+    case catch [mnesia:table_info(Tab, version) || Tab <- table_names()] of
         {'EXIT', Reason} -> {error, Reason};
         _ -> ok
     end.
@@ -261,8 +255,8 @@ init_db(ClusterNodes) ->
                             %% NB: we cannot use rabbit_log here since
                             %% it may not have been started yet
                             error_logger:warning_msg(
-                              "schema integrity check failed: ~p~n"
-                              "moving database to backup location "
+                              "schema integrity check failed: ~p~n" ++
+                              "moving database to backup location " ++
                               "and recreating schema from scratch~n",
                               [Reason]),
                             ok = move_db(),

@@ -46,9 +46,13 @@ SCRIPT=`basename $0`
 
 if [ `id -u` = 0 ] ; then
     su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
+elif [ `id -u` = `id -u rabbitmq` ] ; then
+    /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
 else
     /usr/lib/rabbitmq/bin/${SCRIPT}
-    echo -e "\nOnly root should run ${SCRIPT}\n"
+    echo
+    echo "Only root or rabbitmq should run ${SCRIPT}"
+    echo
     exit 1
 fi
 

@@ -39,7 +39,10 @@
 -define(INTEGER_SIZE_BITS,       (8 * ?INTEGER_SIZE_BYTES)).
 -define(WRITE_OK_SIZE_BITS,      8).
 -define(WRITE_OK_MARKER,         255).
--define(FILE_PACKING_ADJUSTMENT, (1 + (2 * (?INTEGER_SIZE_BYTES)))).
+-define(FILE_PACKING_ADJUSTMENT, (1 + ?INTEGER_SIZE_BYTES)).
+-define(MSG_ID_SIZE_BYTES,       16).
+-define(MSG_ID_SIZE_BITS,        (8 * ?MSG_ID_SIZE_BYTES)).
+-define(SIZE_AND_MSG_ID_BYTES,   (?MSG_ID_SIZE_BYTES + ?INTEGER_SIZE_BYTES)).
 
 %%----------------------------------------------------------------------------
 
@@ -56,36 +59,34 @@
 -spec(read/2 :: (io_device(), msg_size()) ->
              ({'ok', {msg_id(), msg()}} | {'error', any()})).
 -spec(scan/1 :: (io_device()) ->
-             {'ok', [{msg_id(), msg_size(), position()}]}).
+             {'ok', [{msg_id(), msg_size(), position()}], position()}).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-append(FileHdl, MsgId, MsgBody) when is_binary(MsgId) ->
+append(FileHdl, MsgId, MsgBody)
+  when is_binary(MsgId) andalso size(MsgId) =< ?MSG_ID_SIZE_BYTES ->
     MsgBodyBin  = term_to_binary(MsgBody),
-    [MsgIdSize, MsgBodyBinSize] = Sizes = [size(B) || B <- [MsgId, MsgBodyBin]],
-    Size = lists:sum(Sizes),
-    case file:write(FileHdl, <<Size:?INTEGER_SIZE_BITS,
-                               MsgIdSize:?INTEGER_SIZE_BITS,
-                               MsgId:MsgIdSize/binary,
-                               MsgBodyBin:MsgBodyBinSize/binary,
-                               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
+    MsgBodyBinSize = size(MsgBodyBin),
+    Size = MsgBodyBinSize + ?MSG_ID_SIZE_BYTES,
+    case file_handle_cache:append(FileHdl,
+                                  <<Size:?INTEGER_SIZE_BITS,
+                                   MsgId:?MSG_ID_SIZE_BYTES/binary,
+                                   MsgBodyBin:MsgBodyBinSize/binary,
+                                   ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
         ok -> {ok, Size + ?FILE_PACKING_ADJUSTMENT};
         KO -> KO
     end.
 
 read(FileHdl, TotalSize) ->
     Size = TotalSize - ?FILE_PACKING_ADJUSTMENT,
-    SizeWriteOkBytes = Size + 1,
-    case file:read(FileHdl, TotalSize) of
+    BodyBinSize = Size - ?MSG_ID_SIZE_BYTES,
+    case file_handle_cache:read(FileHdl, TotalSize) of
         {ok, <<Size:?INTEGER_SIZE_BITS,
-               MsgIdSize:?INTEGER_SIZE_BITS,
-               Rest:SizeWriteOkBytes/binary>>} ->
-            BodyBinSize = Size - MsgIdSize,
-            <<MsgId:MsgIdSize/binary,
-              MsgBodyBin:BodyBinSize/binary,
-              ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>> = Rest,
+               MsgId:?MSG_ID_SIZE_BYTES/binary,
+               MsgBodyBin:BodyBinSize/binary,
+               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>} ->
             {ok, {MsgId, binary_to_term(MsgBodyBin)}};
         KO -> KO
     end.
@@ -94,53 +95,46 @@ scan(FileHdl) -> scan(FileHdl, 0, []).
 
 scan(FileHdl, Offset, Acc) ->
     case read_next(FileHdl, Offset) of
-        eof -> {ok, Acc};
+        eof -> {ok, Acc, Offset};
         {corrupted, NextOffset} ->
             scan(FileHdl, NextOffset, Acc);
         {ok, {MsgId, TotalSize, NextOffset}} ->
             scan(FileHdl, NextOffset, [{MsgId, TotalSize, Offset} | Acc]);
         _KO ->
             %% bad message, but we may still have recovered some valid messages
-            {ok, Acc}
+            {ok, Acc, Offset}
     end.
 
 read_next(FileHdl, Offset) ->
-    TwoIntegers = 2 * ?INTEGER_SIZE_BYTES,
-    case file:read(FileHdl, TwoIntegers) of
-        {ok, <<Size:?INTEGER_SIZE_BITS, MsgIdSize:?INTEGER_SIZE_BITS>>} ->
-            if Size == 0 -> eof; %% Nothing we can do other than stop
-               MsgIdSize == 0 ->
-                    %% current message corrupted, try skipping past it
-                    ExpectedAbsPos = Offset + Size + ?FILE_PACKING_ADJUSTMENT,
-                    case file:position(FileHdl, {cur, Size + 1}) of
-                        {ok, ExpectedAbsPos} -> {corrupted, ExpectedAbsPos};
-                        {ok, _SomeOtherPos}  -> eof; %% seek failed, so give up
-                        KO                   -> KO
-                    end;
-               true -> %% all good, let's continue
-                    case file:read(FileHdl, MsgIdSize) of
-                        {ok, <<MsgId:MsgIdSize/binary>>} ->
-                            TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
-                            ExpectedAbsPos = Offset + TotalSize - 1,
-                            case file:position(
-                                   FileHdl, {cur, Size - MsgIdSize}) of
-                                {ok, ExpectedAbsPos} ->
-                                    NextOffset = ExpectedAbsPos + 1,
-                                    case file:read(FileHdl, 1) of
-                                        {ok, <<?WRITE_OK_MARKER:
-                                               ?WRITE_OK_SIZE_BITS>>} ->
-                                            {ok, {MsgId,
-                                                  TotalSize, NextOffset}};
-                                        {ok, _SomeOtherData} ->
-                                            {corrupted, NextOffset};
-                                        KO -> KO
-                                    end;
-                                {ok, _SomeOtherPos} ->
-                                    %% seek failed, so give up
-                                    eof;
+    case file_handle_cache:read(FileHdl, ?SIZE_AND_MSG_ID_BYTES) of
+        %% Here we take option 5 from
+        %% http://www.erlang.org/cgi-bin/ezmlm-cgi?2:mss:1569 in which
+        %% we read the MsgId as a number, and then convert it back to
+        %% a binary in order to work around bugs in Erlang's GC.
+        {ok, <<Size:?INTEGER_SIZE_BITS, MsgIdNum:?MSG_ID_SIZE_BITS>>} ->
+            case Size of
+                0 -> eof; %% Nothing we can do other than stop
+                _ ->
+                    TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
+                    ExpectedAbsPos = Offset + TotalSize - 1,
+                    case file_handle_cache:position(
+                           FileHdl, {cur, Size - ?MSG_ID_SIZE_BYTES}) of
+                        {ok, ExpectedAbsPos} ->
+                            NextOffset = ExpectedAbsPos + 1,
+                            case file_handle_cache:read(FileHdl, 1) of
+                                {ok,
+                                 <<?WRITE_OK_MARKER: ?WRITE_OK_SIZE_BITS>>} ->
+                                    <<MsgId:?MSG_ID_SIZE_BYTES/binary>> =
+                                        <<MsgIdNum:?MSG_ID_SIZE_BITS>>,
+                                    {ok, {MsgId, TotalSize, NextOffset}};
+                                {ok, _SomeOtherData} ->
+                                    {corrupted, NextOffset};
                                 KO -> KO
                             end;
-                        Other -> Other
+                        {ok, _SomeOtherPos} ->
+                            %% seek failed, so give up
+                            eof;
+                        KO -> KO
                     end
             end;
         Other -> Other

@@ -47,14 +47,14 @@
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
--export([localnode/1, nodehost/1, cookie_hash/0, tcp_name/3]).
+-export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
 -export([intersperse/2, upmap/2, map_in_order/2]).
 -export([table_foreach/2]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([read_term_file/1, write_term_file/2]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
--export([start_applications/1, stop_applications/1]).
+-export([unfold/2, ceil/1]).
 -export([unfold/2, ceil/1]).
 
 -import(mnesia).
@@ -105,8 +105,8 @@
 -spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
--spec(localnode/1 :: (atom()) -> erlang_node()).
--spec(nodehost/1 :: (erlang_node()) -> string()).
+-spec(makenode/1 :: ({string(), string()} | string()) -> erlang_node()).
+-spec(nodeparts/1 :: (erlang_node() | string()) -> {string(), string()}).
 -spec(cookie_hash/0 :: () -> string()).
 -spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
@@ -121,12 +121,15 @@
 -spec(write_term_file/2 :: (string(), [any()]) -> ok_or_error()).
 -spec(append_file/2 :: (string(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_misc.erl
+-spec(format_stderr/2 :: (string(), [any()]) -> 'true').
+=======
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
-
+              
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -274,7 +277,7 @@ filter_exit_map(F, L) ->
 
 with_user(Username, Thunk) ->
     fun () ->
-            case mnesia:read({rabbit_user, Username}) of
+            case mnesia:read({user, Username}) of
                 [] ->
                     mnesia:abort({no_such_user, Username});
                 [_U] ->
@@ -284,7 +287,7 @@ with_user(Username, Thunk) ->
 
 with_vhost(VHostPath, Thunk) ->
     fun () ->
-            case mnesia:read({rabbit_vhost, VHostPath}) of
+            case mnesia:read({vhost, VHostPath}) of
                 [] ->
                     mnesia:abort({no_such_vhost, VHostPath});
                 [_V] ->
@@ -308,16 +311,22 @@ execute_mnesia_transaction(TxFun) ->
 ensure_ok(ok, _) -> ok;
 ensure_ok({error, Reason}, ErrorTag) -> throw({error, {ErrorTag, Reason}}).
 
-localnode(Name) ->
-    list_to_atom(lists:append([atom_to_list(Name), "@", nodehost(node())])).
+makenode({Prefix, Suffix}) ->
+    list_to_atom(lists:append([Prefix, "@", Suffix]));
+makenode(NodeStr) ->
+    makenode(nodeparts(NodeStr)).
 
-nodehost(Node) ->
-    %% This is horrible, but there doesn't seem to be a way to split a
-    %% nodename into its constituent parts.
-    tl(lists:dropwhile(fun (E) -> E =/= $@ end, atom_to_list(Node))).
+nodeparts(Node) when is_atom(Node) ->
+    nodeparts(atom_to_list(Node));
+nodeparts(NodeStr) ->
+    case lists:splitwith(fun (E) -> E =/= $@ end, NodeStr) of
+        {Prefix, []}     -> {_, Suffix} = nodeparts(node()),
+                            {Prefix, Suffix};
+        {Prefix, Suffix} -> {Prefix, tl(Suffix)}
+    end.
 
 cookie_hash() ->
-    ssl_base64:encode(erlang:md5(atom_to_list(erlang:get_cookie()))).
+    base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
 
 tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->
@@ -426,6 +435,11 @@ ensure_parent_dirs_exist(Filename) ->
     end.
 
 format_stderr(Fmt, Args) ->
+<<<<<<< /tmp/rabbitmq-server/src/rabbit_misc.erl
+    Port = open_port({fd, 0, 2}, [out]),
+    port_command(Port, io_lib:format(Fmt, Args)),
+    port_close(Port).
+=======
     case os:type() of
         {unix, _} ->
             Port = open_port({fd, 0, 2}, [out]),

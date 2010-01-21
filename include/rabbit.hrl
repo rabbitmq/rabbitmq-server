@@ -30,13 +30,11 @@
 %%
 
 -record(user, {username, password}).
--record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
--record(user_permission, {user_vhost, permission}).
 
 -record(vhost, {virtual_host, dummy}).
 
--record(connection, {user, timeout_sec, frame_max, vhost}).
+-record(connection, {user, timeout_sec, frame_max, vhost, client_properties}).
 
 -record(content,
         {class_id,
@@ -65,7 +63,7 @@
 -record(basic_message, {exchange_name, routing_key, content,
                         guid, is_persistent}).
 
--record(dq_msg_loc, {queue_and_seq_id, is_delivered, is_persistent, msg_id}).
+-record(dq_msg_loc, {queue_and_seq_id, is_delivered, msg_id}).
 
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
@@ -85,13 +83,9 @@
 -type(thunk(T) :: fun(() -> T)).
 -type(info_key() :: atom()).
 -type(info() :: {info_key(), any()}).
--type(regexp() :: binary()).
--type(file_path() :: any()).
--type(io_device() :: any()).
--type(file_open_mode() :: any()).
 
 %% this is really an abstract type, but dialyzer does not support them
--type(guid() :: binary()).
+-type(guid() :: any()).
 -type(txn() :: guid()).
 -type(pkey() :: guid()).
 -type(r(Kind) ::
@@ -103,10 +97,6 @@
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
--type(permission() ::
-      #permission{configure :: regexp(),
-                  write     :: regexp(),
-                  read      :: regexp()}).
 -type(amqqueue() ::
       #amqqueue{name          :: queue_name(),
                 durable       :: boolean(),
@@ -134,16 +124,10 @@
                properties            :: amqp_properties(),
                properties_bin        :: 'none',
                payload_fragments_rev :: [binary()]}).
--type(unencoded_content() :: undecoded_content()).
 -type(decoded_content() ::
       #content{class_id              :: amqp_class_id(),
                properties            :: amqp_properties(),
                properties_bin        :: maybe(binary()),
-               payload_fragments_rev :: [binary()]}).
--type(encoded_content() ::
-      #content{class_id              :: amqp_class_id(),
-               properties            :: maybe(amqp_properties()),
-               properties_bin        :: binary(),
                payload_fragments_rev :: [binary()]}).
 -type(content() :: undecoded_content() | decoded_content()).
 -type(basic_message() ::
@@ -151,7 +135,7 @@
                      routing_key    :: routing_key(),
                      content        :: content(),
                      guid           :: guid(),
-                     is_persistent  :: boolean()}).
+                     is_persistent  :: bool()}).
 -type(message() :: basic_message()).
 -type(delivery() ::
       #delivery{mandatory :: boolean(),
@@ -159,6 +143,9 @@
                 txn       :: maybe(txn()),
                 sender    :: pid(),
                 message   :: message()}).
+%% this really should be an abstract type
+-type(msg_id() :: non_neg_integer()).
+-type(msg() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
 -type(listener() ::
       #listener{node     :: erlang_node(),
                 protocol :: atom(),

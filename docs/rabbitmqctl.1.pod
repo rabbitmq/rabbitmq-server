@@ -19,7 +19,7 @@ It performs all actions by connecting to one of the broker's nodes.
 =head1 OPTIONS
 
 =over 
-
+   
 =item B<-n> I<node>
 
 Default node is C<rabbit@server>, where server is the local host.  On
@@ -44,15 +44,15 @@ messages are suppressed when quiet mode is in effect.
 =over
 
 =item stop
-
+    
 Stop the Erlang node on which RabbitMQ broker is running.
-
+    
 =item stop_app
-
+    
 Stop the RabbitMQ application, leaving the Erlang node running.  This
 command is typically run prior to performing other management actions
 that require the RabbitMQ application to be stopped, e.g. I<reset>.
-
+    
 =item start_app
 
 Start the RabbitMQ application.  This command is typically run prior
@@ -77,7 +77,7 @@ The same as I<reset> command, but resets the node unconditionally,
 regardless of the current management database state and cluster
 configuration.  It should only be used as a last resort if the
 database or cluster configuration has been corrupted.
-
+    
 =item rotate_logs [suffix]
 
 Instruct the RabbitMQ node to rotate the log files. The RabbitMQ
@@ -90,7 +90,7 @@ error occurs while appending the contents of the old log file, the
 operation behaves in the same way as if no I<suffix> was specified.
 This command might be helpful when you are e.g. writing your own
 logrotate script and you do not want to restart the RabbitMQ node.
-
+    
 =item cluster I<clusternode> ...
 
 Instruct the node to become member of a cluster with the specified
@@ -99,13 +99,12 @@ L<http://www.rabbitmq.com/clustering.html> for more information about
 clustering.
 
 =back
-
+    
 =head2 USER MANAGEMENT
-
+    
 =over
-
+    
 =item add_user I<username> I<password>
-
 Create a user named I<username> with (initial) password I<password>.
 
 =item delete_user I<username>
@@ -121,20 +120,23 @@ Change the password for the user named I<username> to I<newpassword>.
 List all users, one per line.
 
 =back
-
+    
 =head2 ACCESS CONTROL
 
 =over
-
+    
 =item add_vhost I<vhostpath>
+<<<<<<< local
+    That command deletes also all its exchanges, queues and user mappings.
+=======
+>>>>>>> other
 
 Create a new virtual host called I<vhostpath>.
-
+    
 =item delete_vhost I<vhostpath>
-
 Delete a virtual host I<vhostpath>.  This command deletes also all its
 exchanges, queues and user mappings.  
-
+    
 =item list_vhosts
 
 List all virtual hosts, one per line.
@@ -164,7 +166,7 @@ List the permissions of the user named I<username> across all virtual
 hosts.
 
 =back
-
+    
 =head2 SERVER STATUS
 
 =over
@@ -198,9 +200,9 @@ whether the queue will be deleted when no longer used
 
 queue arguments
 
-=item node
+=item pid
 
-node on which the process associated with the queue resides
+id of the Erlang process associated with the queue
 
 =item messages_ready
 
@@ -287,7 +289,7 @@ exchange arguments
 =item list_bindings [-p I<vhostpath>]
 
 List bindings by virtual host. Each line printed describes a binding,
-with the exchange name, routing key, queue name and arguments,
+with the exchange name, queue name, routing key and arguments,
 separated by tab characters.
 
 =item list_connections [I<connectioninfoitem> ...]
@@ -305,7 +307,7 @@ I<user>, I<peer_address>, I<peer_port> and I<state> are assumed.
 
 =item node
 
-node on which the process associated with the connection resides
+id of the Erlang process associated with the connection
 
 =item address
 
@@ -322,7 +324,7 @@ peer address
 =item peer_port
 
 peer port
-
+    
 =item state
 
 connection state (B<pre-init>, B<starting>, B<tuning>, B<opening>,
@@ -348,6 +350,11 @@ connection timeout
 
 maximum frame size (bytes)
 
+=item client_properties
+
+informational properties transmitted by the client during connection
+establishment
+
 =item recv_oct
 
 octets received
@@ -367,7 +374,7 @@ packets sent
 =item send_pend
 
 send queue size
-
+    
 =back
 
 The list_queues, list_exchanges and list_bindings commands accept an
@@ -437,12 +444,12 @@ Create a user named foo with (initial) password bar at the Erlang node
 rabbit@test:
 
     rabbitmqctl -n rabbit@test add_user foo bar
-
+    
 Grant user named foo access to the virtual host called test at the
 default Erlang node:
 
     rabbitmqctl map_user_vhost foo test
-
+    
 Append the current logs' content to the files with ".1" suffix and reopen
 them:
 

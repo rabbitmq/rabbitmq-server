@@ -10,12 +10,24 @@ SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
-BEAM_TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
-TARGETS=$(EBIN_DIR)/rabbit.app $(BEAM_TARGETS)
+TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam,$(SOURCES))
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.pod, %.gz, $(wildcard docs/*.[0-9].pod))
 
+ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python
+else
+ifeq ($(shell python2.6 -c 'import simplejson' 2>/dev/null && echo yes),yes)
+PYTHON=python2.6
+else
+ifeq ($(shell python2.5 -c 'import simplejson' 2>/dev/null && echo yes),yes)
+PYTHON=python2.5
+else
+# Hmm. Missing simplejson?
+PYTHON=python
+endif
+endif
+endif
 
 BASIC_PLT=basic.plt
 RABBIT_PLT=rabbit.plt
@@ -23,7 +35,7 @@ RABBIT_PLT=rabbit.plt
 ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
 # only available in R13B01 upwards (R13B01 is eshell 5.7.2)
-#
+# 
 # NB: the test assumes that version number will only contain single digits
 USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.1" ]; then echo "true"; else echo "false"; fi)
 endif
@@ -45,15 +57,10 @@ ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
 all: $(TARGETS)
 
-$(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
-	escript generate_app $(EBIN_DIR) < $< > $@
-
-$(EBIN_DIR)/gen_server2.beam: $(SOURCE_DIR)/gen_server2.erl
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit.hrl
 	erlc $(ERLC_OPTS) $<
-
+#	ERLC_EMULATOR="erl -smp" erlc $(ERLC_OPTS) $<
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit.hrl $(EBIN_DIR)/gen_server2.beam
-	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
-#	ERLC_EMULATOR="erl -smp" erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_PATH) $@
@@ -65,7 +72,7 @@ dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
 		"rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(BEAM_TARGETS)\"))."
 
-# rabbit.plt is used by rabbitmq-erlang-client's dialyze make target
+dialyze: $(TARGETS)
 create-plt: $(RABBIT_PLT)
 
 $(RABBIT_PLT): $(BEAM_TARGETS) $(BASIC_PLT)
@@ -83,7 +90,7 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 
 clean:
 	rm -f $(EBIN_DIR)/*.beam
-	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
+	rm -f $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
 	rm -f docs/*.[0-9].gz
 	rm -f $(RABBIT_PLT)
@@ -97,12 +104,13 @@ BASIC_SCRIPT_ENVIRONMENT_SETTINGS=\
 	RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
 	RABBITMQ_NODE_PORT="$(RABBITMQ_NODE_PORT)" \
 	RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
-	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)"
+	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)" \
+	RABBITMQ_LOAD_PATH="$(RABBITMQ_LOAD_PATH)"
 
 run: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_ALLOW_INPUT=true \
-		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+		RABBITMQ_SERVER_START_ARGS="-s rabbit $(RABBITMQ_SERVER_START_ARGS)" \
 		./scripts/rabbitmq-server
 
 run-node: all
@@ -153,8 +161,13 @@ srcdist: distclean
 		>> $(TARGET_SRC_DIR)/INSTALL
 	cp README.in $(TARGET_SRC_DIR)/README
 	elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
+<<<<<<< /tmp/rabbitmq-server/Makefile
+		>> $(TARGET_SRC_DIR)/README
+	sed -i 's/%%VERSION%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit.app
+=======
 		>> $(TARGET_SRC_DIR)/BUILD
 	sed -i.save 's/%%VSN%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in && rm -f $(TARGET_SRC_DIR)/ebin/rabbit_app.in.save
+>>>>>>> /tmp/Makefile~other.J-SLyR
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
 	cp codegen.py Makefile generate_app calculate-relative $(TARGET_SRC_DIR)

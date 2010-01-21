@@ -58,7 +58,7 @@
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
          recv_oct, recv_cnt, send_oct, send_cnt, send_pend,
-         state, channels, user, vhost, timeout, frame_max]).
+         state, channels, user, vhost, timeout, frame_max, client_properties]).
 
 %% connection lifecycle
 %%
@@ -101,17 +101,11 @@
 %%   receive frame -> ignore, *closing*
 %%   handshake_timeout -> ignore, *closing*
 %%   heartbeat timeout -> *throw*
-%%   channel exit with hard error
-%%   -> log error, wait for channels to terminate forcefully, start
-%%      terminate_connection timer, send close, *closed*
-%%   channel exit with soft error
+%%   channel exit ->
+%%     if abnormal exit then log error
+%%     if last channel to exit then send connection.close_ok, start
+%%        terminate_connection timer, *closing*
 %%   -> log error, mark channel as closing
-%%      if last channel to exit then send connection.close_ok,
-%%         start terminate_connection timer, *closed*
-%%      else *closing*
-%%   channel exits normally
-%%   -> if last channel to exit then send connection.close_ok,
-%%      start terminate_connection timer, *closed*
 %% closed:
 %%   socket close -> *terminate*
 %%   receive connection.close_ok -> self() ! terminate_connection,
@@ -142,7 +136,8 @@ start_link() ->
 init(Parent) ->
     Deb = sys:debug_options([]),
     receive
-        {go, Sock} -> start_connection(Parent, Deb, Sock)
+        {go, Sock, SockTransform} ->
+            start_connection(Parent, Deb, Sock, SockTransform)
     end.
 
 system_continue(Parent, Deb, State) ->
@@ -167,8 +162,7 @@ setup_profiling() ->
     Value = rabbit_misc:get_config(profiling_enabled, false),
     case Value of
         once ->
-            rabbit_log:info("Enabling profiling for this connection, "
-                            "and disabling for subsequent.~n"),
+            rabbit_log:info("Enabling profiling for this connection, and disabling for subsequent.~n"),
             rabbit_misc:set_config(profiling_enabled, false),
             fprof:trace(start);
         true ->
@@ -192,34 +186,36 @@ teardown_profiling(Value) ->
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
-peername(Sock) ->   
-    try
-        {Address, Port} = inet_op(fun () -> rabbit_net:peername(Sock) end),
-        AddressS = inet_parse:ntoa(Address),
-        {AddressS, Port}
-    catch
-        Ex -> rabbit_log:error("error on TCP connection ~p:~p~n",
-                               [self(), Ex]),
-              rabbit_log:info("closing TCP connection ~p", [self()]),
-              exit(normal)
+socket_op(Sock, Fun) ->   
+    case Fun(Sock) of
+        {ok, Res}       -> Res;
+        {error, Reason} -> rabbit_log:error("error on TCP connection ~p:~p~n",
+                                            [self(), Reason]),
+                           rabbit_log:info("closing TCP connection ~p~n",
+                                           [self()]),
+                           exit(normal)
     end.
 
-start_connection(Parent, Deb, ClientSock) ->
+start_connection(Parent, Deb, Sock, SockTransform) ->
     process_flag(trap_exit, true),
-    {PeerAddressS, PeerPort} = peername(ClientSock),
+    {PeerAddress, PeerPort} = socket_op(Sock, fun rabbit_net:peername/1),
+    PeerAddressS = inet_parse:ntoa(PeerAddress),
+    rabbit_log:info("starting TCP connection ~p from ~s:~p~n",
+                    [self(), PeerAddressS, PeerPort]),
+    ClientSock = socket_op(Sock, SockTransform),
+    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
+                      handshake_timeout),
     ProfilingValue = setup_profiling(),
     try 
-        rabbit_log:info("starting TCP connection ~p from ~s:~p~n",
-                        [self(), PeerAddressS, PeerPort]),
-        erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
-                          handshake_timeout),
+        file_handle_cache:increment(),
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
                                     connection = #connection{
                                       user = none,
                                       timeout_sec = ?HANDSHAKE_TIMEOUT,
                                       frame_max = ?FRAME_MIN_SIZE,
-                                      vhost = none},
+                                      vhost = none,
+                                      client_properties = none},
                                     callback = uninitialized_callback,
                                     recv_ref = none,
                                     connection_state = pre_init},
@@ -232,6 +228,7 @@ start_connection(Parent, Deb, ClientSock) ->
                end)("exception on TCP connection ~p from ~s:~p~n~p~n",
                     [self(), PeerAddressS, PeerPort, Ex])
     after
+        file_handle_cache:decrement(),
         rabbit_log:info("closing TCP connection ~p from ~s:~p~n",
                         [self(), PeerAddressS, PeerPort]),
         %% We don't close the socket explicitly. The reader is the
@@ -280,8 +277,6 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             exit(Reason);
         {channel_exit, _Chan, E = {writer, send_failed, _Error}} ->
             throw(E);
-        {channel_exit, Channel, Reason} ->
-            mainloop(Parent, Deb, handle_channel_exit(Channel, Reason, State));
         {'EXIT', Pid, Reason} ->
             mainloop(Parent, Deb, handle_dependent_exit(Pid, Reason, State));
         terminate_connection ->
@@ -334,16 +329,30 @@ close_channel(Channel, State) ->
     put({channel, Channel}, closing),
     State.
 
+<<<<<<< local
 handle_channel_exit(Channel, Reason, State) ->
     handle_exception(State, Channel, Reason).
 
+handle_dependent_exit(Pid, Reason,
+                      State = #v1{connection_state = closing}) ->
+    case channel_cleanup(Pid) of
+        undefined -> exit({abnormal_dependent_exit, Pid, Reason});
+        Channel ->
+            case Reason of
+                normal -> ok;
+                _      -> log_channel_error(closing, Channel, Reason)
+            end,
+            maybe_close(State)
+    end;
+=======
+>>>>>>> other
 handle_dependent_exit(Pid, normal, State) ->
     erase({chpid, Pid}),
-    maybe_close(State);
+    State;
 handle_dependent_exit(Pid, Reason, State) ->
     case channel_cleanup(Pid) of
         undefined -> exit({abnormal_dependent_exit, Pid, Reason});
-        Channel   -> maybe_close(handle_exception(State, Channel, Reason))
+        Channel   -> handle_exception(State, Channel, Reason)
     end.
 
 channel_cleanup(Pid) ->
@@ -384,8 +393,7 @@ wait_for_channel_termination(N, TimerRef) ->
                         normal -> ok;
                         _ ->
                             rabbit_log:error(
-                              "connection ~p, channel ~p - "
-                              "error while terminating:~n~p~n",
+                              "connection ~p, channel ~p - error while terminating:~n~p~n",
                               [self(), Channel, Reason])
                     end,
                     wait_for_channel_termination(N-1, TimerRef)
@@ -394,15 +402,13 @@ wait_for_channel_termination(N, TimerRef) ->
             exit(channel_termination_timeout)
     end.
 
-maybe_close(State = #v1{connection_state = closing}) ->
+maybe_close(State) ->
     case all_channels() of
         [] -> ok = send_on_channel0(
                      State#v1.sock, #'connection.close_ok'{}),
               close_connection(State);
         _  -> State
-    end;
-maybe_close(State) ->
-    State.
+    end.
 
 handle_frame(Type, 0, Payload, State = #v1{connection_state = CS})
   when CS =:= closing; CS =:= closed ->
@@ -558,7 +564,8 @@ handle_method0(MethodName, FieldsBin, State) ->
     end.
 
 handle_method0(#'connection.start_ok'{mechanism = Mechanism,
-                                      response = Response},
+                                      response = Response,
+                                      client_properties = ClientProperties},
                State = #v1{connection_state = starting,
                            connection = Connection,
                            sock = Sock}) ->
@@ -570,7 +577,9 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                               frame_max = 131072,
                               heartbeat = 0}),
     State#v1{connection_state = tuning,
-             connection = Connection#connection{user = User}};
+             connection = Connection#connection{
+                            user = User,
+                            client_properties = ClientProperties}};
 handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
                                      frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
@@ -589,9 +598,9 @@ handle_method0(#'connection.open'{virtual_host = VHostPath,
                                   insist = Insist},
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
-                                          user = User},
+                                           user = #user{username = Username}},
                            sock = Sock}) ->
-    ok = rabbit_access_control:check_vhost_access(User, VHostPath),
+    ok = rabbit_access_control:check_vhost_access(Username, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     KnownHosts = format_listeners(rabbit_networking:active_listeners()),
     Redirects = compute_redirects(Insist),
@@ -689,6 +698,9 @@ i(timeout, #v1{connection = #connection{timeout_sec = Timeout}}) ->
     Timeout;
 i(frame_max, #v1{connection = #connection{frame_max = FrameMax}}) ->
     FrameMax;
+i(client_properties, #v1{connection = #connection{
+                           client_properties = ClientProperties}}) ->
+    ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
 

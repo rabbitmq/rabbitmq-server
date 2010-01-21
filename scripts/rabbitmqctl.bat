@@ -30,6 +30,8 @@ REM
 REM   Contributor(s): ______________________________________.
 REM
 
+setlocal
+
 if "%RABBITMQ_NODENAME%"=="" (
     set RABBITMQ_NODENAME=rabbit
 )
@@ -47,3 +49,5 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
 )
 
 "%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden %RABBITMQ_CTL_ERL_ARGS% -sname rabbitmqctl -s rabbit_control -nodename %RABBITMQ_NODENAME% -extra %*
+
+endlocal

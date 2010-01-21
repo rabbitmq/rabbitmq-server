@@ -36,7 +36,8 @@
 
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
          list/1, info/1, info/2, info_all/1, info_all/2,
-         publish/2]).
+         simple_publish/6, simple_publish/3,
+         route/3]).
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
@@ -56,6 +57,8 @@
 
 -ifdef(use_specs).
 
+-type(publish_res() :: {'ok', [pid()]} |
+      not_found() | {'error', 'unroutable' | 'not_delivered'}).
 -type(bind_res() :: 'ok' | {'error',
                             'queue_not_found' |
                             'exchange_not_found' |
@@ -72,7 +75,11 @@
 -spec(info/2 :: (exchange(), [info_key()]) -> [info()]).
 -spec(info_all/1 :: (vhost()) -> [[info()]]).
 -spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
--spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
+-spec(simple_publish/6 ::
+      (bool(), bool(), exchange_name(), routing_key(), binary(), binary()) ->
+             publish_res()).
+-spec(simple_publish/3 :: (bool(), bool(), message()) -> publish_res()).
+-spec(route/3 :: (exchange(), routing_key(), decoded_content()) -> [pid()]).
 -spec(add_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'durability_settings_incompatible'}).
@@ -117,6 +124,7 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                          durable = Durable,
                          auto_delete = AutoDelete,
                          arguments = Args},
+    ok = Type:declare(Exchange),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:wread({rabbit_exchange, ExchangeName}) of
@@ -157,7 +165,9 @@ lookup(Name) ->
 lookup_or_die(Name) ->
     case lookup(Name) of
         {ok, X} -> X;
-        {error, not_found} -> rabbit_misc:not_found(Name)
+        {error, not_found} ->
+            rabbit_misc:protocol_error(
+              not_found, "no ~s", [rabbit_misc:rs(Name)])
     end.
 
 list(VHostPath) ->
@@ -187,39 +197,30 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-publish(X, Delivery) ->
-    publish(X, [], Delivery).
+%% Usable by Erlang code that wants to publish messages.
+simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
+               ContentTypeBin, BodyBin) ->
+    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
+    Content = #content{class_id = ClassId,
+                       properties = #'P_basic'{content_type = ContentTypeBin},
+                       properties_bin = none,
+                       payload_fragments_rev = [BodyBin]},
+    Message = #basic_message{exchange_name = ExchangeName,
+                             routing_key = RoutingKeyBin,
+                             content = Content,
+                             persistent_key = none},
+    simple_publish(Mandatory, Immediate, Message).
 
 publish(X, Seen, Delivery = #delivery{
                    message = #basic_message{routing_key = RK, content = C}}) ->
     case rabbit_router:deliver(route(X, RK, C), Delivery) of
-        {_, []} = R ->
-            #exchange{name = XName, arguments = Args} = X,
-            case rabbit_misc:r_arg(XName, exchange, Args,
-                                   <<"alternate-exchange">>) of
-                undefined ->
-                    R;
-                AName ->
-                    NewSeen = [XName | Seen],
-                    case lists:member(AName, NewSeen) of
-                        true ->
-                            R;
-                        false ->
-                            case lookup(AName) of
-                                {ok, AX} ->
-                                    publish(AX, NewSeen, Delivery);
-                                {error, not_found} ->
-                                    rabbit_log:warning(
-                                      "alternate exchange for ~s "
-                                      "does not exist: ~s",
-                                      [rabbit_misc:rs(XName),
-                                       rabbit_misc:rs(AName)]),
-                                    R
-                            end
-                    end
-            end;
-        R ->
-            R
+					content = Content}) ->
+    case lookup(ExchangeName) of
+        {ok, Exchange} ->
+            QPids = route(Exchange, RoutingKey, Content),
+            rabbit_router:deliver(QPids, Mandatory, Immediate,
+                                  none, Message);
+        {error, Error} -> {error, Error}
     end.
 
 %% return the list of qpids to which a message with a given routing
@@ -346,13 +347,16 @@ exchanges_for_queue(QueueName) ->
       sets:from_list(
         mnesia:select(rabbit_reverse_route, [{MatchHead, [], ['$1']}]))).
 
-contains(Table, MatchHead) ->
+has_bindings(ExchangeName) ->
+    MatchHead = #route{binding = #binding{exchange_name = ExchangeName,
+                                          _ = '_'}},
     try
-        continue(mnesia:select(Table, [{MatchHead, [], ['$_']}], 1, read))
+        continue(mnesia:select(rabbit_route, [{MatchHead, [], ['$_']}],
+                               1, read))
     catch exit:{aborted, {badarg, _}} ->
             %% work around OTP-7025, which was fixed in R12B-1, by
             %% falling back on a less efficient method
-            case mnesia:match_object(Table, MatchHead, read) of
+            case mnesia:match_object(rabbit_route, MatchHead, read) of
                 []    -> false;
                 [_|_] -> true
             end
@@ -382,40 +386,31 @@ call_with_exchange_and_queue(Exchange, Queue, Fun) ->
       end).
 
 add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
-    binding_action(
-      ExchangeName, QueueName, RoutingKey, Arguments,
+    call_with_exchange_and_queue(
+      ExchangeName, QueueName,
       fun (X, Q, B) ->
               if Q#amqqueue.durable and not(X#exchange.durable) ->
                       {error, durability_settings_incompatible};
-                 true -> ok = sync_binding(B, Q#amqqueue.durable,
+                 true -> ok = sync_binding(
                                            fun mnesia:write/3)
               end
       end).
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
-    binding_action(
-      ExchangeName, QueueName, RoutingKey, Arguments,
-      fun (X, Q, B) ->
-              case mnesia:match_object(rabbit_route, #route{binding = B},
-                                       write) of
-                  [] -> {error, binding_not_found};
-                  _  -> ok = sync_binding(B, Q#amqqueue.durable,
-                                          fun mnesia:delete_object/3),
-                        maybe_auto_delete(X)
-              end
-      end).
-
-binding_action(ExchangeName, QueueName, RoutingKey, Arguments, Fun) ->
     call_with_exchange_and_queue(
       ExchangeName, QueueName,
       fun (X, Q) ->
-              Fun(X, Q, #binding{exchange_name = ExchangeName,
-                                 queue_name    = QueueName,
-                                 key           = RoutingKey,
-                                 args          = sort_arguments(Arguments)})
+              ok = sync_binding(
+                     ExchangeName, QueueName, RoutingKey, Arguments,
+      fun (X, Q, B) ->
+              maybe_auto_delete(X)
       end).
 
-sync_binding(Binding, Durable, Fun) ->
+sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
+    Binding = #binding{exchange_name = ExchangeName,
+                       queue_name = QueueName,
+                       key = RoutingKey,
+                                 args          = sort_arguments(Arguments)})
     ok = case Durable of
              true  -> Fun(rabbit_durable_route,
                           #route{binding = Binding}, write);
@@ -570,11 +565,7 @@ maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
     ok.
 
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
-    Match = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
-    %% we need to check for durable routes here too in case a bunch of
-    %% routes to durable queues have been removed temporarily as a
-    %% result of a node failure
-    case contains(rabbit_route, Match) orelse contains(rabbit_durable_route, Match) of
+    case has_bindings(ExchangeName) of
         false  -> unconditional_delete(Exchange);
         true   -> {error, in_use}
     end.

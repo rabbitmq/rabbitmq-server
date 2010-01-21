@@ -11,7 +11,6 @@ syntax: regexp
 ^include/rabbit_framing\.hrl$
 ^src/rabbit_framing\.erl$
 ^rabbit\.plt$
-^basic.plt$
 ^ebin/rabbit\.(app|rel|boot|script)$
 ^plugins/
 ^priv/plugins/
