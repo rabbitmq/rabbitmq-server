@@ -59,7 +59,8 @@
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
-              queues = dict:new(), % QPid -> {MonitorRef, Notify, Length}
+              limited   = dict:new(), % QPid -> {MonitorRef, Length}
+              unlimited = dict:new(), % QPid -> {MonitorRef, Length}
               volume = 0}).
 %% 'Notify' is a boolean that indicates whether a queue should be
 %% notified of a change in the limit or volume that may allow it to
@@ -165,101 +166,134 @@ maybe_notify(OldState, NewState) ->
 limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
     Limit =/= 0 andalso Volume >= Limit.
 
-remember_queue(QPid, State = #lim{queues = Queues}) ->
-    case dict:is_key(QPid, Queues) of
+remember_queue(QPid, State = #lim{limited = Limited, unlimited = Unlimited}) ->
+    case dict:is_key(QPid, Limited) orelse dict:is_key(QPid, Unlimited) of
         false -> MRef = erlang:monitor(process, QPid),
-                 State#lim{queues = dict:store(QPid, {MRef, false, 0}, Queues)};
+                 State#lim{unlimited = dict:store(QPid, {MRef, 0}, Unlimited)};
         true  -> State
     end.
 
-forget_queue(QPid, State = #lim{ch_pid = ChPid, queues = Queues}) ->
+forget_queue(QPid, State = #lim{ch_pid = ChPid, limited = Limited,
+                                unlimited = Unlimited}) ->
+    Limited1 = forget_queue(ChPid, QPid, Limited, true),
+    Unlimited1 = forget_queue(ChPid, QPid, Unlimited, false),
+    State#lim{limited = Limited1, unlimited = Unlimited1}.
+
+forget_queue(ChPid, QPid, Queues, NeedsUnblocking) ->
     case dict:find(QPid, Queues) of
-        {ok, {MRef, _, _}} ->
+        {ok, {MRef, _}} ->
             true = erlang:demonitor(MRef),
-            unblock(async, QPid, ChPid),
-            State#lim{queues = dict:erase(QPid, Queues)};
-        error -> State
+            (not NeedsUnblocking) orelse unblock(async, QPid, ChPid),
+            dict:erase(QPid, Queues);
+        error ->
+            Queues
     end.
 
-limit_queue(QPid, Length, State = #lim{queues = Queues}) ->
-    UpdateFun = fun ({MRef, _, _}) -> {MRef, true, Length} end,
-    State#lim{queues = dict:update(QPid, UpdateFun, Queues)}.
+limit_queue(QPid, Length, State = #lim{unlimited = Unlimited,
+                                       limited = Limited}) ->
+    {MRef, _} = case dict:find(QPid, Unlimited) of
+                    error        -> dict:fetch(QPid, Limited);
+                    {ok, Result} -> Result
+                end,
+    Unlimited1 = dict:erase(QPid, Unlimited),
+    Limited1 = dict:store(QPid, {MRef, Length}, Limited),
+    State#lim{unlimited = Unlimited1, limited = Limited1}.
 
-update_length(QPid, Length, State = #lim{queues = Queues}) ->
-    UpdateFun = fun ({MRef, Notify, _}) -> {MRef, Notify, Length} end,
-    State#lim{queues = dict:update(QPid, UpdateFun, Queues)}.
+%% knows that the queue is unlimited
+update_length(QPid, Length, State = #lim{unlimited = Unlimited,
+                                         limited = Limited}) ->
+    UpdateFun = fun ({MRef, _}) -> {MRef, Length} end,
+    case dict:is_key(QPid, Unlimited) of
+        true  -> State#lim{unlimited = dict:update(QPid, UpdateFun, Unlimited)};
+        false -> State#lim{limited = dict:update(QPid, UpdateFun, Limited)}
+    end.
 
 is_zero_num(0) -> 0;
 is_zero_num(_) -> 1.
 
-notify_queues(State = #lim{ch_pid = ChPid, queues = Queues,
-                           prefetch_count = PrefetchCount, volume = Volume}) ->
-    {QTree, LengthSum, NonZeroQCount} =
-        dict:fold(fun (_QPid, {_, false, _}, Acc) -> Acc;
-                      (QPid, {_MRef, true, Length}, {Tree, Sum, NZQCount}) ->
+notify_queues(#lim{ch_pid = ChPid, limited = Limited, unlimited = Unlimited,
+                   prefetch_count = PrefetchCount, volume = Volume} = State) ->
+    Capacity = PrefetchCount - Volume,
+    {QDict, LengthSum, NonZeroQCount} =
+        dict:fold(fun (QPid, {_MRef, Length}, {Dict, Sum, NZQCount}) ->
                           Sum1 = Sum + lists:max([1, Length]),
-                          {gb_trees:enter(Length, QPid, Tree), Sum1,
+                          {orddict:append(Length, QPid, Dict), Sum1,
                            NZQCount + is_zero_num(Length)}
-                  end, {gb_trees:empty(), 0, 0}, Queues),
-    Queues1 =
-        case gb_trees:size(QTree) of
-            0 -> Queues;
+                  end, {orddict:new(), 0, 0}, Limited),
+    {Unlimited1, Limited1} =
+        case orddict:size(QDict) of
+            0 -> {Unlimited, Limited};
             QCount ->
-                Capacity = PrefetchCount - Volume,
+                QTree = gb_trees:from_orddict(QDict),
                 case Capacity >= NonZeroQCount of
-                    true -> unblock_all(ChPid, QCount, QTree, Queues);
+                    true ->
+                        unblock_all(ChPid, QCount, QTree, Unlimited, Limited);
                     false ->
                         %% try to tell enough queues that we guarantee
                         %% we'll get blocked again
-                        {Capacity1, Queues2} =
+                        {Capacity1, Unlimited2, Limited2} =
                             unblock_queues(
-                              sync, ChPid, LengthSum, Capacity, QTree, Queues),
+                              sync, ChPid, LengthSum, Capacity, QTree,
+                              Unlimited, Limited),
                         case 0 == Capacity1 of
-                            true -> Queues2;
+                            true ->
+                                {Unlimited2, Limited2};
                             false -> %% just tell everyone
-                                unblock_all(ChPid, QCount, QTree, Queues2)
+                                unblock_all(ChPid, QCount, QTree, Unlimited2,
+                                            Limited2)
                         end
                 end
         end,
-    State#lim{queues = Queues1}.
+    State#lim{unlimited = Unlimited1, limited = Limited1}.
 
-unblock_all(ChPid, QCount, QTree, Queues) ->
-    {_Capacity2, Queues1} =
-        unblock_queues(async, ChPid, 1, QCount, QTree, Queues),
-    Queues1.
+unblock_all(ChPid, QCount, QTree, Unlimited, Limited) ->
+    {_Capacity2, Unlimited1, Limited1} =
+        unblock_queues(async, ChPid, 1, QCount, QTree, Unlimited, Limited),
+    {Unlimited1, Limited1}.
 
-unblock_queues(_Mode, _ChPid, _L, 0, _QList, Queues) ->
-    {0, Queues};
-unblock_queues(Mode, ChPid, L, QueueCount, QList, Queues) ->
-    {Length, QPid, QList1} = gb_trees:take_largest(QList),
-    {_MRef, Blocked, Length} = dict:fetch(QPid, Queues),
-    case Length == 0 andalso Mode == sync of
-        true -> {QueueCount, Queues};
-        false ->
-            {QueueCount1, Queues1} =
-                case Blocked of
-                    false -> {QueueCount, Queues};
-                    true ->
+unblock_queues(_Mode, _ChPid, _L, 0, _QList, Unlimited, Limited) ->
+    {0, Unlimited, Limited};
+unblock_queues(Mode, ChPid, L, QueueCount, QList, Unlimited, Limited) ->
+    {Length, QPids, QList1} = gb_trees:take_largest(QList),
+    unblock_queues(Mode, ChPid, L, QueueCount, QList1, Unlimited, Limited,
+                   Length, QPids).
+
+unblock_queues(Mode, ChPid, L, QueueCount, QList, Unlimited, Limited, Length,
+               []) ->
+    case gb_trees:is_empty(QList) of
+        true  -> {QueueCount, Unlimited, Limited};
+        false -> unblock_queues(Mode, ChPid, L - Length, QueueCount, QList,
+                                Unlimited, Limited)
+    end;
+unblock_queues(Mode, ChPid, L, QueueCount, QList, Unlimited, Limited, Length,
+               [QPid|QPids]) ->
+    case dict:find(QPid, Limited) of
+        error ->
+            %% We're reusing the gb_tree in multiple calls to
+            %% unblock_queues and so we may well be trying to unblock
+            %% already-unblocked queues. Just recurse
+            unblock_queues(Mode, ChPid, L, QueueCount, QList, Unlimited,
+                           Limited, Length, QPids);
+        {ok, Value = {_MRef, Length}} ->
+            case Length == 0 andalso Mode == sync of
+                true -> {QueueCount, Unlimited, Limited};
+                false ->
+                    {QueueCount1, Unlimited1, Limited1} =
                         case 1 >= L orelse Length >= random:uniform(L) of
                             true ->
                                 case unblock(Mode, QPid, ChPid) of
                                     true ->
                                         {QueueCount - 1,
-                                         dict:update(
-                                           QPid, fun unblock_fun/1, Queues)};
-                                    false -> {QueueCount, Queues}
+                                         dict:store(QPid, Value, Unlimited),
+                                         dict:erase(QPid, Limited)};
+                                    false -> {QueueCount, Unlimited, Limited}
                                 end;
-                            false -> {QueueCount, Queues}
-                        end
-                end,
-            case gb_trees:is_empty(QList1) of
-                true -> {QueueCount1, Queues1};
-                false -> unblock_queues(Mode, ChPid, L - Length, QueueCount1,
-                                        QList1, Queues1)
+                            false -> {QueueCount, Unlimited, Limited}
+                        end,
+                    unblock_queues(Mode, ChPid, L - Length, QueueCount1, QList,
+                                   Unlimited1, Limited1, Length, QPids)
             end
     end.
 
 unblock(sync, QPid, ChPid) -> rabbit_amqqueue:unblock_sync(QPid, ChPid);
 unblock(async, QPid, ChPid) -> rabbit_amqqueue:unblock_async(QPid, ChPid).
-
-unblock_fun({MRef, _, Length}) -> {MRef, false, Length}.
