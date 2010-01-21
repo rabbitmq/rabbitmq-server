@@ -39,6 +39,98 @@
          flush_journal/1, status/1]).
 
 %%----------------------------------------------------------------------------
+%% Definitions:
+
+%% alpha: this is a message where both the message itself, and its
+%%        position within the queue are held in RAM
+%%
+%% beta: this is a message where the message itself is only held on
+%%        disk, but its position within the queue is held in RAM.
+%%
+%% gamma: this is a message where the message itself is only held on
+%%        disk, but its position is both in RAM and on disk.
+%%
+%% delta: this is a collection of messages, represented by a single
+%%        term, where the messages and their position are only held on
+%%        disk.
+%%
+%% Note that for persistent messages, the message and its position
+%% within the queue are always held on disk, *in addition* to being in
+%% one of the above classifications.
+
+%% Also note that within this code, the term gamma never
+%% appears. Instead, gammas are defined by betas who have had their
+%% queue position recorded on disk.
+
+%% In general, messages move q1 -> q2 -> delta -> q3 -> q4, though
+%% many of these steps are frequently skipped. q1 and q4 only hold
+%% alphas, q2 and q3 hold both betas and gammas (as queues of queues,
+%% using the bpqueue module where the block prefix determines whether
+%% they're betas or gammas). When a message arrives, its
+%% classification is determined. It is then added to the rightmost
+%% appropriate queue.
+
+%% If a new message is determined to be a beta or gamma, q1 is
+%% empty. If a new message is determined to be a delta, q1 and q2 are
+%% empty (and actually q4 too).
+
+%% When removing messages from a queue, if q4 is empty then q3 is read
+%% directly. If q3 becomes empty then the next segment's worth of
+%% messages from delta are read into q3, reducing the size of
+%% delta. If the queue is non empty, either q4 or q3 contain
+%% entries. It is never permitted for delta to hold all the messages
+%% in the queue.
+
+%% The duration indicated to us by the memory_monitor is used to
+%% calculate, given our current ingress and egress rates, how many
+%% messages we should hold in RAM. When we need to push alphas to
+%% betas or betas to gammas, we favour writing on messages that are
+%% further from the head of the queue. This minimises writes to disk,
+%% as the messages closer to the tail of the queue stay in the queue
+%% for longer, thus do not need to be replaced as quickly by sending
+%% other messages to disk.
+
+%% Whilst messages are pushed to disk and forgotten from RAM as soon
+%% as requested by a new setting of the queue RAM duration, the
+%% inverse is not true: we only load messages back into RAM as
+%% demanded as the queue is read from. Thus only publishes to the
+%% queue will take up available spare capacity.
+
+%% If a queue is full of transient messages, then the transition from
+%% betas to deltas will be potentially very expensive as millions of
+%% entries must be written to disk by the queue_index module. This can
+%% badly stall the queue. In order to avoid this, the proportion of
+%% gammas / (betas+gammas) must not be lower than (betas+gammas) /
+%% (alphas+betas+gammas). Thus as the queue grows, and the proportion
+%% of alphas shrink, the proportion of gammas will grow, thus at the
+%% point at which betas and gammas must be converted to deltas, there
+%% should be very few betas remaining, thus the transition is fast (no
+%% work needs to be done for the gamma -> delta transition).
+
+%% The conversion of betas to gammas is done on publish, in batches of
+%% exactly ?RAM_INDEX_BATCH_SIZE. This value should not be too small,
+%% otherwise the frequent operations on the queues of q2 and q3 will
+%% not be effectively amortised, nor should it be too big, otherwise a
+%% publish will take too long as it attempts to do too much work and
+%% thus stalls the queue. Therefore, it must be just right. This
+%% approach is preferable to doing work on a new queue-duration
+%% because converting all the indicated betas to gammas at that point
+%% can be far too expensive, thus requiring batching and segmented
+%% work anyway, and furthermore, if we're not getting any publishes
+%% anyway then the queue is either being drained or has no
+%% consumers. In the latter case, an expensive beta to delta
+%% transition doesn't matter, and in the former case the queue's
+%% shrinking length makes it unlikely (though not impossible) that the
+%% duration will become 0.
+
+%% In the queue we only keep track of messages that are pending
+%% delivery. This is fine for queue purging, but can be expensive for
+%% queue deletion: for queue deletion we must scan all the way through
+%% all remaining segments in the queue index (we start by doing a
+%% purge) and delete messages from the msg_store that we find in the
+%% queue index.
+
+%%----------------------------------------------------------------------------
 
 -record(vqstate,
         { q1,
@@ -86,36 +178,6 @@
 %% write more - we can always come back on the next publish to do
 %% more.
 -define(RAM_INDEX_BATCH_SIZE, 64).
-
-%%----------------------------------------------------------------------------
-
-%% WRONG - UPDATE ME!
-
-%% Basic premise is that msgs move from q1 -> q2 -> delta -> q3 -> q4
-%% but they can only do so in the right form. q1 and q4 only hold
-%% alphas (msgs in ram), q2 and q3 only hold betas (msg on disk, index
-%% in ram), and delta is just a count of the number of index entries
-%% on disk at that stage (msg on disk, index on disk).
-%%
-%% When a msg arrives, we decide in which form it should be. It is
-%% then added to the right-most appropriate queue, maintaining
-%% order. Thus if the msg is to be an alpha, it will be added to q1,
-%% unless all of q2, delta and q3 are empty, in which case it will go
-%% to q4. If it is to be a beta, it will be added to q2 unless delta
-%% is empty, in which case it will go to q3.
-%%
-%% The major invariant is that if the msg is to be a beta, q1 will be
-%% empty, and if it is to be a delta then both q1 and q2 will be empty.
-%%
-%% When taking msgs out of the queue, if q4 is empty then we read
-%% directly from q3, or delta, if q3 is empty. If q3 and delta are
-%% empty then we have an invariant that q2 must be empty because q2
-%% can only grow if delta is non empty.
-%%
-%% A further invariant is that if the queue is non empty, either q4 or
-%% q3 contains at least one entry. I.e. we never allow delta to
-%% contain all msgs in the queue.  Also, if q4 is non empty and delta
-%% is non empty then q3 must be non empty.
 
 %%----------------------------------------------------------------------------
 
