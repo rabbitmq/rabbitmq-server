@@ -75,6 +75,8 @@ def erlangize(s):
 
 AmqpMethod.erlangName = lambda m: "'" + erlangize(m.klass.name) + '.' + erlangize(m.name) + "'"
 
+AmqpClass.erlangName = lambda c: "'" + erlangize(c.name) + "'"
+
 def erlangConstantName(s):
     return '_'.join(re.split('[- ]', s.upper()))
 
@@ -145,6 +147,9 @@ def genErl(spec):
 
     def genLookupMethodName(m):
         print "lookup_method_name({%d, %d}) -> %s;" % (m.klass.index, m.index, m.erlangName())
+
+    def genLookupClassName(c):
+        print "lookup_class_name(%d) -> %s;" % (c.index, c.erlangName())
 
     def genMethodId(m):
         print "method_id(%s) -> {%d, %d};" % (m.erlangName(), m.klass.index, m.index)
@@ -290,6 +295,7 @@ def genErl(spec):
 -include("rabbit_framing.hrl").
 
 -export([lookup_method_name/1]).
+-export([lookup_class_name/1]).
 
 -export([method_id/1]).
 -export([method_has_content/1]).
@@ -308,6 +314,9 @@ bitvalue(undefined) -> 0.
 """
     for m in methods: genLookupMethodName(m)
     print "lookup_method_name({_ClassId, _MethodId} = Id) -> exit({unknown_method_id, Id})."
+
+    for c in spec.allClasses(): genLookupClassName(c)
+    print "lookup_class_name(ClassId) -> exit({unknown_class_id, ClassId})."
 
     for m in methods: genMethodId(m)
     print "method_id(Name) -> exit({unknown_method_name, Name})."
