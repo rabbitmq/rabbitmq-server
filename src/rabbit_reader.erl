@@ -213,8 +213,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
-    try 
-        file_handle_cache:increment(),
+    try
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
                                     connection = #connection{
@@ -235,7 +234,6 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                end)("exception on TCP connection ~p from ~s:~p~n~p~n",
                     [self(), PeerAddressS, PeerPort, Ex])
     after
-        file_handle_cache:decrement(),
         rabbit_log:info("closing TCP connection ~p from ~s:~p~n",
                         [self(), PeerAddressS, PeerPort]),
         %% We don't close the socket explicitly. The reader is the

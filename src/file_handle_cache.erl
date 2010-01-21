@@ -115,6 +115,14 @@
 %% fully reopened again as soon as needed, thus users of this library
 %% do not need to worry about their handles being closed by the server
 %% - reopening them when necessary is handled transparently.
+%%
+%% The server also supports obtain and release_on_death. obtain/0
+%% blocks until a file descriptor is available. release_on_death/1
+%% takes a pid and monitors the pid, reducing the count by 1 when the
+%% pid dies. Thus the assumption is that obtain/0 is called first, and
+%% when that returns, release_on_death/1 is called with the pid who
+%% "owns" the file descriptor. This is, for example, used to track the
+%% use of file descriptors through network sockets.
 
 -behaviour(gen_server).
 
@@ -125,7 +133,7 @@
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([decrement/0, increment/0]).
+-export([release_on_death/1, obtain/0]).
 
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 50).
@@ -160,7 +168,8 @@
 -record(fhc_state,
         { elders,
           limit,
-          count
+          count,
+          obtains
         }).
 
 %%----------------------------------------------------------------------------
@@ -432,11 +441,11 @@ set_maximum_since_use(MaximumAge) ->
         false -> ok
     end.
 
-decrement() ->
-    gen_server:cast(?SERVER, decrement).
+release_on_death(Pid) when is_pid(Pid) ->
+    gen_server:cast(?SERVER, {release_on_death, Pid}).
 
-increment() ->
-    gen_server:cast(?SERVER, increment).
+obtain() ->
+    gen_server:call(?SERVER, obtain, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -663,10 +672,17 @@ init([]) ->
                     ulimit()
             end,
     error_logger:info_msg("Limiting to approx ~p file handles~n", [Limit]),
-    {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0}}.
+    {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0,
+                      obtains = [] }}.
 
-handle_call(_Msg, _From, State) ->
-    {reply, message_not_understood, State}.
+handle_call(obtain, From, State = #fhc_state { count = Count }) ->
+    State1 = #fhc_state { count = Count1, limit = Limit, obtains = Obtains } =
+        maybe_reduce(State #fhc_state { count = Count + 1 }),
+    case Limit /= infinity andalso Count1 >= Limit of
+        true  -> {noreply, State1 #fhc_state { obtains = [From | Obtains],
+                                               count = Count1 - 1 }};
+        false -> {reply, ok, State1}
+    end.
 
 handle_cast({open, Pid, EldestUnusedSince}, State =
             #fhc_state { elders = Elders, count = Count }) ->
@@ -687,19 +703,19 @@ handle_cast({close, Pid, EldestUnusedSince}, State =
                   undefined -> dict:erase(Pid, Elders);
                   _         -> dict:store(Pid, EldestUnusedSince, Elders)
               end,
-    {noreply, State #fhc_state { elders = Elders1, count = Count - 1 }};
-
-handle_cast(increment, State = #fhc_state { count = Count }) ->
-    {noreply, maybe_reduce(State #fhc_state { count = Count + 1 })};
-
-handle_cast(decrement, State = #fhc_state { count = Count }) ->
-    {noreply, State #fhc_state { count = Count - 1 }};
+    {noreply, process_obtains(State #fhc_state { elders = Elders1,
+                                                 count = Count - 1 })};
 
 handle_cast(check_counts, State) ->
-    {noreply, maybe_reduce(State)}.
+    {noreply, maybe_reduce(State)};
 
-handle_info(_Msg, State) ->
+handle_cast({release_on_death, Pid}, State) ->
+    _MRef = erlang:monitor(process, Pid),
     {noreply, State}.
+
+handle_info({'DOWN', _MRef, process, _Pid, _Reason},
+            State = #fhc_state { count = Count }) ->
+    {noreply, process_obtains(State #fhc_state { count = Count - 1 })}.
 
 terminate(_Reason, State) ->
     State.
@@ -710,6 +726,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% server helpers
 %%----------------------------------------------------------------------------
+
+process_obtains(State = #fhc_state { obtains = [] }) ->
+    State;
+process_obtains(State = #fhc_state { limit = Limit, count = Count })
+  when Limit /= infinity andalso Count >= Limit ->
+    State;
+process_obtains(State = #fhc_state { limit = Limit, count = Count,
+                                     obtains = Obtains }) ->
+    ObtainsLen = length(Obtains),
+    ObtainableLen = lists:min([ObtainsLen, Limit - Count]),
+    Take = ObtainsLen - ObtainableLen,
+    {ObtainsNew, ObtainableRev} = lists:split(Take, Obtains),
+    [gen_server:reply(From, ok) || From <- ObtainableRev],
+    State #fhc_state { count = Count + ObtainableLen, obtains = ObtainsNew }.
 
 maybe_reduce(State = #fhc_state { limit = Limit, count = Count,
                                   elders = Elders })
