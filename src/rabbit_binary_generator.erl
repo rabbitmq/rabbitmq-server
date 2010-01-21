@@ -46,7 +46,7 @@
          build_heartbeat_frame/0]).
 -export([generate_table/1, encode_properties/2]).
 -export([check_empty_content_body_frame_size/0]).
--export([map_exception/2, amqp_exception/1]).
+-export([map_exception/2]).
 
 -import(lists).
 
@@ -66,8 +66,6 @@
 -spec(check_empty_content_body_frame_size/0 :: () -> 'ok').
 -spec(map_exception/2 :: (non_neg_integer(), amqp_error()) ->
         {bool(), non_neg_integer(), amqp_method()}).
--spec(amqp_exception/1 :: (amqp_error()) -> {bool(), non_neg_integer(), binary(),
-        non_neg_integer(), non_neg_integer()}).
 
 -endif.
 
@@ -268,10 +266,16 @@ check_empty_content_body_frame_size() ->
                   ComputedSize, ?EMPTY_CONTENT_BODY_FRAME_SIZE})
     end.
 
+%% NB: this function is also used by the Erlang client
 map_exception(Channel, Reason) ->
-    {SuggestedClose, ReplyCode, ReplyText, ClassId, MethodId} =
-        amqp_exception(Reason),
+    {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
+        lookup_amqp_exception(Reason),
     ShouldClose = SuggestedClose or (Channel == 0),
+    {ClassId, MethodId} = case FailedMethod of
+                              {_, _} -> FailedMethod;
+                              none -> {0, 0};
+                              _ -> rabbit_framing:method_id(FailedMethod)
+                          end,
     {CloseChannel, CloseMethod} =
         case ShouldClose of
             true -> {0, #'connection.close'{reply_code = ReplyCode,
@@ -284,17 +288,6 @@ map_exception(Channel, Reason) ->
                                                 method_id = MethodId}}
         end,
     {ShouldClose, CloseChannel, CloseMethod}.
-
-%% NB: this function is also used by the Erlang client
-amqp_exception(Reason) ->
-    {ShouldClose, ReplyCode, ReplyText, FailedMethod} =
-        lookup_amqp_exception(Reason),
-    {ClassId, MethodId} = case FailedMethod of
-                              {_, _} -> FailedMethod;
-                              none   -> {0, 0};
-                              _      -> rabbit_framing:method_id(FailedMethod)
-                          end,
-    {ShouldClose, ReplyCode, ReplyText, ClassId, MethodId}.
 
 %% FIXME: this clause can go when we move to AMQP spec >=8.1
 lookup_amqp_exception(#amqp_error{name        = precondition_failed,
