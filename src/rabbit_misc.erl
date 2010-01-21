@@ -56,6 +56,7 @@
 -export([format_stderr/2]).
 -export([unfold/2, ceil/1]).
 -export([unfold/2, ceil/1]).
+-export([sort_field_table/1]).
 
 -import(mnesia).
 -import(lists).
@@ -129,7 +130,12 @@
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
+<<<<<<< local
               
+=======
+-spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
+
+>>>>>>> other
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -497,3 +503,7 @@ ceil(N) ->
         0 -> N;
         _ -> 1 + T
     end.
+
+%% Sorts a list of AMQP table fields as per the AMQP spec
+sort_field_table(Arguments) ->
+    lists:keysort(1, Arguments).

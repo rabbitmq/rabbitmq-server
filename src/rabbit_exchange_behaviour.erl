@@ -29,32 +29,20 @@
 %%   Contributor(s): ______________________________________.
 %%
 
-%% TODO: much of this should be generated
+-module(rabbit_exchange_behaviour).
 
--type(amqp_field_type() ::
-      'longstr' | 'signedint' | 'decimal' | 'timestamp' |
-      'table' | 'byte' | 'double' | 'float' | 'long' |
-      'short' | 'bool' | 'binary' | 'void').
--type(amqp_property_type() ::
-      'shortstr' | 'longstr' | 'octet' | 'shortint' | 'longint' |
-      'longlongint' | 'timestamp' | 'bit' | 'table').
-%% we could make this more precise but ultimately are limited by
-%% dialyzer's lack of support for recursive types
--type(amqp_table() :: [{binary(), amqp_field_type(), any()}]).
-%% TODO: make this more precise
--type(amqp_class_id() :: non_neg_integer()).
-%% TODO: make this more precise
--type(amqp_properties() :: tuple()).
-%% TODO: make this more precise
--type(amqp_method() :: tuple()).
-%% TODO: make this more precise
--type(amqp_method_name() :: atom()).
--type(channel_number() :: non_neg_integer()).
--type(resource_name() :: binary()).
--type(routing_key() :: binary()).
--type(username() :: binary()).
--type(password() :: binary()).
--type(vhost() :: binary()).
--type(ctag() :: binary()).
--type(exchange_type() :: atom()).
--type(binding_key() :: binary()).
+-export([behaviour_info/1]).
+
+behaviour_info(callbacks) ->
+    [
+     {description, 0},
+     {publish, 2},
+
+     {declare, 1}, %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
+     {init, 1}, %% called after declaration when previously absent, or during recovery
+     {delete, 1}, %% called after exchange deletion
+     {add_binding, 2}, %% called after a binding has been added
+     {delete_binding, 2} %% called after a binding has been deleted
+    ];
+behaviour_info(_Other) ->
+    undefined.

@@ -30,7 +30,6 @@
 %%
 
 -module(rabbit_exchange).
--include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
@@ -41,7 +40,7 @@
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
--export([check_type/1, assert_type/2, topic_matches/2, headers_match/2]).
+-export([check_type/1, assert_type/2]).
 
 %% EXTENDED API
 -export([list_exchange_bindings/1]).
@@ -50,7 +49,6 @@
 -import(mnesia).
 -import(sets).
 -import(lists).
--import(qlc).
 -import(regexp).
 
 %%----------------------------------------------------------------------------
@@ -90,8 +88,6 @@
              [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
 -spec(delete_queue_bindings/1 :: (queue_name()) -> 'ok').
 -spec(delete_transient_queue_bindings/1 :: (queue_name()) -> 'ok').
--spec(topic_matches/2 :: (binary(), binary()) -> boolean()).
--spec(headers_match/2 :: (amqp_table(), amqp_table()) -> boolean()).
 -spec(delete/2 :: (exchange_name(), boolean()) ->
              'ok' | not_found() | {'error', 'in_use'}).
 -spec(list_queue_bindings/1 :: (queue_name()) -> 
@@ -104,6 +100,9 @@
 %%----------------------------------------------------------------------------
 
 -define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
+%% Retry indefinitely.  This requires that the exchange type hooks
+%% should themselves time out, and throw an error on doing so.
+-define(MAX_RETRIES, infinity).
 
 recover() ->
     ok = rabbit_misc:table_foreach(
@@ -118,11 +117,25 @@ recover() ->
                                            ReverseRoute, write)
            end, rabbit_durable_route).
 
+%% The argument is a thunk that will abort the current attempt,
+%% leading mnesia to retry.
+retrying_transaction(Func1) ->
+    case mnesia:sync_transaction(
+           Func1, [(fun () ->
+                         exit({aborted, erlang:make_tuple(6, cyclic)})
+                    end)], ?MAX_RETRIES) of
+        {atomic, Result} -> Result;
+        {aborted, nomore} ->
+            rabbit_misc:protocol_error(
+              internal_error, "exhausted retries for transaction", [])
+    end.
+
 declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
     Exchange = #exchange{name = ExchangeName,
                          type = Type,
                          durable = Durable,
                          auto_delete = AutoDelete,
+<<<<<<< local
                          arguments = Args},
     ok = Type:declare(Exchange),
     rabbit_misc:execute_mnesia_transaction(
@@ -138,18 +151,73 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                   [ExistingX] -> ExistingX
               end
       end).
+=======
+                         arguments = Args,
+                         state = creating},
+    case retrying_transaction(
+           fun (Retry) ->
+                   case mnesia:wread({rabbit_exchange, ExchangeName}) of
+                       [] -> ok = mnesia:write(rabbit_exchange, Exchange, write),
+                             %io:format("New exchange ~p~n", [Exchange]),
+                             {new, Exchange};
+                       [ExistingX = #exchange{ state = complete }] ->
+                           %io:format("Existing exchange ~p~n", [ExistingX]),
+                           {existing, ExistingX};
+                       [UncommittedX] ->
+                           %io:format("Incomplete exchange ~p~n", [UncommittedX]),
+                           Retry()
+                   end
+           end) of
+        {existing, X} -> X;
+        {new, X} ->
+            NewExchange = X#exchange{ state = complete },
+            try
+                ok = Type:init(NewExchange)
+            catch
+                _:Err ->
+                    rabbit_misc:execute_mnesia_transaction(
+                      fun () ->
+                              mnesia:delete(rabbit_exchange, ExchangeName, write) end),
+                    throw(Err)
+            end,
+            rabbit_misc:execute_mnesia_transaction(
+              fun () ->
+                      %io:format("Completed exchange ~p~n", [NewExchange]),
+                      mnesia:write(rabbit_exchange, NewExchange, write),
+                      if Durable -> ok = mnesia:write(rabbit_durable_exchange,
+                                                      NewExchange, write);
+                         true    -> ok
+                      end
+              end),
+            NewExchange
+    end.
+>>>>>>> other
 
-check_type(<<"fanout">>) ->
-    fanout;
-check_type(<<"direct">>) ->
-    direct;
-check_type(<<"topic">>) ->
-    topic;
-check_type(<<"headers">>) ->
-    headers;
+typename_to_plugin_module(T) ->
+    case rabbit_exchange_type:lookup_module(T) of
+        {ok, Module} ->
+            Module;
+        {error, not_found} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "invalid exchange type '~s'", [T])
+    end.
+
+plugin_module_to_typename(M) ->
+    {ok, TypeName} = rabbit_exchange_type:lookup_name(M),
+    TypeName.
+
 check_type(T) ->
-    rabbit_misc:protocol_error(
-      command_invalid, "invalid exchange type '~s'", [T]).
+    Module = typename_to_plugin_module(T),
+    case catch Module:description() of
+        {'EXIT', {undef, [{_, description, []} | _]}} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "invalid exchange type '~s'", [T]);
+        {'EXIT', _} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "problem loading exchange type '~s'", [T]);
+        _ ->
+            Module
+    end.
 
 assert_type(#exchange{ type = ActualType }, RequiredType)
   when ActualType == RequiredType ->
@@ -157,10 +225,15 @@ assert_type(#exchange{ type = ActualType }, RequiredType)
 assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
     rabbit_misc:protocol_error(
       not_allowed, "cannot redeclare ~s of type '~s' with type '~s'",
-      [rabbit_misc:rs(Name), ActualType, RequiredType]).
+      [rabbit_misc:rs(Name),
+       plugin_module_to_typename(ActualType),
+       plugin_module_to_typename(RequiredType)]).
 
 lookup(Name) ->
-    rabbit_misc:dirty_read({rabbit_exchange, Name}).
+    case rabbit_misc:dirty_read({rabbit_exchange, Name}) of
+        Res = {ok, #exchange{ state = State }} when State /= creating -> Res;
+        _ -> {error, not_found}
+    end.
 
 lookup_or_die(Name) ->
     case lookup(Name) of
@@ -171,9 +244,12 @@ lookup_or_die(Name) ->
     end.
 
 list(VHostPath) ->
-    mnesia:dirty_match_object(
-      rabbit_exchange,
-      #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
+    [X || X = #exchange{ state = State } <- 
+              mnesia:dirty_match_object(
+                rabbit_exchange,
+                #exchange{name = rabbit_misc:r(VHostPath, exchange),
+                          _ = '_'}),
+          State /= creating].
 
 map(VHostPath, F) ->
     %% TODO: there is scope for optimisation here, e.g. using a
@@ -183,7 +259,7 @@ map(VHostPath, F) ->
 infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 
 i(name,        #exchange{name        = Name})       -> Name;
-i(type,        #exchange{type        = Type})       -> Type;
+i(type,        #exchange{type        = Type})       -> plugin_module_to_typename(Type);
 i(durable,     #exchange{durable     = Durable})    -> Durable;
 i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
 i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
@@ -211,6 +287,7 @@ simple_publish(Mandatory, Immediate, ExchangeName, RoutingKeyBin,
                              persistent_key = none},
     simple_publish(Mandatory, Immediate, Message).
 
+<<<<<<< local
 publish(X, Seen, Delivery = #delivery{
                    message = #basic_message{routing_key = RK, content = C}}) ->
     case rabbit_router:deliver(route(X, RK, C), Delivery) of
@@ -221,76 +298,38 @@ publish(X, Seen, Delivery = #delivery{
             rabbit_router:deliver(QPids, Mandatory, Immediate,
                                   none, Message);
         {error, Error} -> {error, Error}
+=======
+publish(X = #exchange{type = Type}, Seen, Delivery) ->
+    case Type:publish(X, Delivery) of
+        {_, []} = R ->
+            #exchange{name = XName, arguments = Args} = X,
+            case rabbit_misc:r_arg(XName, exchange, Args,
+                                   <<"alternate-exchange">>) of
+                undefined ->
+                    R;
+                AName ->
+                    NewSeen = [XName | Seen],
+                    case lists:member(AName, NewSeen) of
+                        true ->
+                            R;
+                        false ->
+                            case lookup(AName) of
+                                {ok, AX} ->
+                                    publish(AX, NewSeen, Delivery);
+                                {error, not_found} ->
+                                    rabbit_log:warning(
+                                      "alternate exchange for ~s "
+                                      "does not exist: ~s",
+                                      [rabbit_misc:rs(XName),
+                                       rabbit_misc:rs(AName)]),
+                                    R
+                            end
+                    end
+            end;
+        R ->
+            R
+>>>>>>> other
     end.
-
-%% return the list of qpids to which a message with a given routing
-%% key, sent to a particular exchange, should be delivered.
-%%
-%% The function ensures that a qpid appears in the return list exactly
-%% as many times as a message should be delivered to it. With the
-%% current exchange types that is at most once.
-route(X = #exchange{type = topic}, RoutingKey, _Content) ->
-    match_bindings(X, fun (#binding{key = BindingKey}) ->
-                              topic_matches(BindingKey, RoutingKey)
-                      end);
-
-route(X = #exchange{type = headers}, _RoutingKey, Content) ->
-    Headers = case (Content#content.properties)#'P_basic'.headers of
-                  undefined -> [];
-                  H         -> sort_arguments(H)
-              end,
-    match_bindings(X, fun (#binding{args = Spec}) ->
-                              headers_match(Spec, Headers)
-                      end);
-
-route(X = #exchange{type = fanout}, _RoutingKey, _Content) ->
-    match_routing_key(X, '_');
-
-route(X = #exchange{type = direct}, RoutingKey, _Content) ->
-    match_routing_key(X, RoutingKey).
-
-sort_arguments(Arguments) ->
-    lists:keysort(1, Arguments).
-
-%% TODO: Maybe this should be handled by a cursor instead.
-%% TODO: This causes a full scan for each entry with the same exchange
-match_bindings(#exchange{name = Name}, Match) ->
-    Query = qlc:q([QName || #route{binding = Binding = #binding{
-                                               exchange_name = ExchangeName,
-                                               queue_name = QName}} <-
-                                mnesia:table(rabbit_route),
-                            ExchangeName == Name,
-                            Match(Binding)]),
-    lookup_qpids(
-      try
-          mnesia:async_dirty(fun qlc:e/1, [Query])
-      catch exit:{aborted, {badarg, _}} ->
-              %% work around OTP-7025, which was fixed in R12B-1, by
-              %% falling back on a less efficient method
-              [QName || #route{binding = Binding = #binding{
-                                           queue_name = QName}} <-
-                            mnesia:dirty_match_object(
-                              rabbit_route,
-                              #route{binding = #binding{exchange_name = Name,
-                                                        _ = '_'}}),
-                        Match(Binding)]
-      end).
-
-match_routing_key(#exchange{name = Name}, RoutingKey) ->
-    MatchHead = #route{binding = #binding{exchange_name = Name,
-                                          queue_name = '$1',
-                                          key = RoutingKey,
-                                          _ = '_'}},
-    lookup_qpids(mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
-
-lookup_qpids(Queues) ->
-    sets:fold(
-      fun(Key, Acc) ->
-              case mnesia:dirty_read({rabbit_queue, Key}) of
-                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
-                  []                      -> Acc
-              end
-      end, [], sets:from_list(Queues)).
 
 %% TODO: Should all of the route and binding management not be
 %% refactored to its own module, especially seeing as unbind will have
@@ -308,13 +347,13 @@ delete_exchange_bindings(ExchangeName) ->
                        write)],
     ok.
 
-delete_queue_bindings(QueueName) ->
+delete_queue_bindings(QueueName, Retry) ->
     delete_queue_bindings(QueueName, fun delete_forward_routes/1).
 
-delete_transient_queue_bindings(QueueName) ->
+delete_transient_queue_bindings(QueueName, Retry) ->
     delete_queue_bindings(QueueName, fun delete_transient_forward_routes/1).
 
-delete_queue_bindings(QueueName, FwdDeleteFun) ->
+delete_queue_bindings(QueueName, FwdDeleteFun, Retry) ->
     Exchanges = exchanges_for_queue(QueueName),
     [begin
          ok = FwdDeleteFun(reverse_route(Route)),
@@ -366,26 +405,38 @@ continue('$end_of_table')    -> false;
 continue({[_|_], _})         -> true;
 continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
+%% The following call_with_x procedures will retry until the named
+%% exchange has a definite state; i.e., it is 'complete', or doesn't
+%% exist.
+
 call_with_exchange(Exchange, Fun) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun() -> case mnesia:read({rabbit_exchange, Exchange}) of
-                   []  -> {error, not_found};
-                   [X] -> Fun(X)
-               end
+    retrying_transaction(
+      fun(Retry) -> case mnesia:read({rabbit_exchange, Exchange}) of
+                        [X = #exchange{ state = complete }] ->
+                            Fun(X, Retry);
+                        []  ->
+                            {error, not_found};
+                        [_] -> Retry()
+                    end
       end).
 
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun() -> case {mnesia:read({rabbit_exchange, Exchange}),
-                     mnesia:read({rabbit_queue, Queue})} of
-                   {[X], [Q]} -> Fun(X, Q);
-                   {[ ], [_]} -> {error, exchange_not_found};
-                   {[_], [ ]} -> {error, queue_not_found};
-                   {[ ], [ ]} -> {error, exchange_and_queue_not_found}
-               end
+    retrying_transaction(
+      fun(Retry) -> case {mnesia:read({rabbit_exchange, Exchange}),
+                          mnesia:read({rabbit_queue, Queue})} of
+                        {[X = #exchange{ state = complete }], [Q]} ->
+                            Fun(X, Q, Retry);
+                        {[X = #exchange{ state = complete }], [ ]} ->
+                            {error, queue_not_found};
+                        {[_] ,  _ } -> Retry();
+                        {[ ] , [_]} -> {error, exchange_not_found};
+                        {[ ] , [ ]} -> {error, exchange_and_queue_not_found}
+                    end
       end).
 
+
 add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
+<<<<<<< local
     call_with_exchange_and_queue(
       ExchangeName, QueueName,
       fun (X, Q, B) ->
@@ -395,17 +446,104 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                                            fun mnesia:write/3)
               end
       end).
+=======
+    case binding_action(
+           ExchangeName, QueueName, RoutingKey, Arguments,
+           fun (X, Q, B, Retry) ->
+                   case mnesia:read({rabbit_route, B}) of
+                       [#route{ state = complete }] -> {existing, X, B};
+                       [_] -> Retry();
+                       [ ] ->
+                           sync_binding(
+                             B, Q#amqqueue.durable, creating, fun mnesia:write/3),
+                           {new, X, B}
+                   end
+           end) of
+        {existing, X, B} -> B;
+        {new, X = #exchange{ type = Type }, B} ->
+            Backout = fun() ->
+                              rabbit_misc:execute_mnesia_transaction(
+                                fun () ->
+                                        sync_binding(
+                                          B, false, creating, fun mnesia:delete/3)
+                                end)
+                      end,             
+            try
+                ok = Type:add_binding(X, B)
+            catch
+                _:Err ->
+                    Backout(),
+                    throw(Err)
+            end,
+            %% FIXME TODO WARNING AWOOGA the exchange or queue may have been created again
+            case call_with_exchange_and_queue(
+                   ExchangeName, QueueName,
+                   fun (X, Q, Retry) ->
+                           sync_binding(B, false, complete, fun mnesia:write/3),
+                           ok = case X#exchange.durable of
+                                    true  -> mnesia:write(rabbit_durable_route,
+                                                          #route{binding = Binding}, write);
+                                    false -> ok
+                                end
+                   end) of
+                NotFound = {error, _} ->
+                    Backout(),
+                    NotFound;
+                SuccessResult -> SuccessResult
+            end
+    end.
+
+%% add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
+%%     binding_action(
+%%       ExchangeName, QueueName, RoutingKey, Arguments,
+%%       fun (X, Q, B) ->
+%%               if Q#amqqueue.durable and not(X#exchange.durable) ->
+%%                       {error, durability_settings_incompatible};
+%%                  true -> 
+                      
+%%                       ok = sync_binding(B, Q#amqqueue.durable,
+%%                                         fun mnesia:write/3)
+%%               end
+%%       end).
+>>>>>>> other
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
+<<<<<<< local
+=======
+    binding_action(
+      ExchangeName, QueueName, RoutingKey, Arguments,
+      fun (X, Q, B, Retry) ->
+              case mnesia:match_object(rabbit_route, #route{binding = B},
+                                       write) of
+                  [] -> {error, binding_not_found};
+                  _  -> ok = sync_binding(B, Q#amqqueue.durable, deleting,
+                                          fun mnesia:delete_object/3),
+                        maybe_auto_delete(X, Retry)
+              end
+      end).
+
+binding_action(ExchangeName, QueueName, RoutingKey, Arguments, Fun) ->
+>>>>>>> other
     call_with_exchange_and_queue(
       ExchangeName, QueueName,
+<<<<<<< local
       fun (X, Q) ->
               ok = sync_binding(
                      ExchangeName, QueueName, RoutingKey, Arguments,
       fun (X, Q, B) ->
               maybe_auto_delete(X)
+=======
+      fun (X, Q, Retry) ->
+              Fun(X, Q,
+                  #binding{exchange_name = ExchangeName,
+                           queue_name    = QueueName,
+                           key           = RoutingKey,
+                           args          = rabbit_misc:sort_field_table(Arguments)},
+                  Retry)
+>>>>>>> other
       end).
 
+<<<<<<< local
 sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
     Binding = #binding{exchange_name = ExchangeName,
                        queue_name = QueueName,
@@ -416,6 +554,10 @@ sync_binding(ExchangeName, QueueName, RoutingKey, Arguments, Durable, Fun) ->
                           #route{binding = Binding}, write);
              false -> ok
          end,
+=======
+% TODO remove durable
+sync_binding(Binding, Durable, State, Fun) ->
+>>>>>>> other
     {Route, ReverseRoute} = route_with_reverse(Binding),
     ok = Fun(rabbit_route, Route, write),
     ok = Fun(rabbit_reverse_route, ReverseRoute, write),
@@ -465,112 +607,33 @@ reverse_binding(#binding{exchange_name = Exchange,
                      key = Key,
                      args = Args}.
 
-default_headers_match_kind() -> all.
-
-parse_x_match(<<"all">>) -> all;
-parse_x_match(<<"any">>) -> any;
-parse_x_match(Other) ->
-    rabbit_log:warning("Invalid x-match field value ~p; expected all or any",
-                       [Other]),
-    default_headers_match_kind().
-
-%% Horrendous matching algorithm. Depends for its merge-like
-%% (linear-time) behaviour on the lists:keysort (sort_arguments) that
-%% route/3 and {add,delete}_binding/4 do.
-%%
-%%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-%% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
-%%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-%%
-headers_match(Pattern, Data) ->
-    MatchKind = case lists:keysearch(<<"x-match">>, 1, Pattern) of
-                    {value, {_, longstr, MK}} -> parse_x_match(MK);
-                    {value, {_, Type, MK}} ->
-                        rabbit_log:warning("Invalid x-match field type ~p "
-                                           "(value ~p); expected longstr",
-                                           [Type, MK]),
-                        default_headers_match_kind();
-                    _ -> default_headers_match_kind()
-                end,
-    headers_match(Pattern, Data, true, false, MatchKind).
-
-headers_match([], _Data, AllMatch, _AnyMatch, all) ->
-    AllMatch;
-headers_match([], _Data, _AllMatch, AnyMatch, any) ->
-    AnyMatch;
-headers_match([{<<"x-", _/binary>>, _PT, _PV} | PRest], Data,
-              AllMatch, AnyMatch, MatchKind) ->
-    headers_match(PRest, Data, AllMatch, AnyMatch, MatchKind);
-headers_match(_Pattern, [], _AllMatch, AnyMatch, MatchKind) ->
-    headers_match([], [], false, AnyMatch, MatchKind);
-headers_match(Pattern = [{PK, _PT, _PV} | _], [{DK, _DT, _DV} | DRest],
-              AllMatch, AnyMatch, MatchKind) when PK > DK ->
-    headers_match(Pattern, DRest, AllMatch, AnyMatch, MatchKind);
-headers_match([{PK, _PT, _PV} | PRest], Data = [{DK, _DT, _DV} | _],
-              _AllMatch, AnyMatch, MatchKind) when PK < DK ->
-    headers_match(PRest, Data, false, AnyMatch, MatchKind);
-headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest],
-              AllMatch, AnyMatch, MatchKind) when PK == DK ->
-    {AllMatch1, AnyMatch1} =
-        if
-            %% It's not properly specified, but a "no value" in a
-            %% pattern field is supposed to mean simple presence of
-            %% the corresponding data field. I've interpreted that to
-            %% mean a type of "void" for the pattern field.
-            PT == void -> {AllMatch, true};
-            %% Similarly, it's not specified, but I assume that a
-            %% mismatched type causes a mismatched value.
-            PT =/= DT  -> {false, AnyMatch};
-            PV == DV   -> {AllMatch, true};
-            true       -> {false, AnyMatch}
-        end,
-    headers_match(PRest, DRest, AllMatch1, AnyMatch1, MatchKind).
-
-split_topic_key(Key) ->
-    {ok, KeySplit} = regexp:split(binary_to_list(Key), "\\."),
-    KeySplit.
-
-topic_matches(PatternKey, RoutingKey) ->
-    P = split_topic_key(PatternKey),
-    R = split_topic_key(RoutingKey),
-    topic_matches1(P, R).
-
-topic_matches1(["#"], _R) ->
-    true;
-topic_matches1(["#" | PTail], R) ->
-    last_topic_match(PTail, [], lists:reverse(R));
-topic_matches1([], []) ->
-    true;
-topic_matches1(["*" | PatRest], [_ | ValRest]) ->
-    topic_matches1(PatRest, ValRest);
-topic_matches1([PatElement | PatRest], [ValElement | ValRest]) when PatElement == ValElement ->
-    topic_matches1(PatRest, ValRest);
-topic_matches1(_, _) ->
-    false.
-
-last_topic_match(P, R, []) ->
-    topic_matches1(P, R);
-last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
-    topic_matches1(P, R) or last_topic_match(P, [BacktrackNext | R], BacktrackList).
-
 delete(ExchangeName, _IfUnused = true) ->
-    call_with_exchange(ExchangeName, fun conditional_delete/1);
+    call_with_exchange(ExchangeName, fun conditional_delete/2);
 delete(ExchangeName, _IfUnused = false) ->
-    call_with_exchange(ExchangeName, fun unconditional_delete/1).
+    call_with_exchange(ExchangeName, fun unconditional_delete/2).
 
-maybe_auto_delete(#exchange{auto_delete = false}) ->
+maybe_auto_delete(#exchange{auto_delete = false}, _) ->
     ok;
-maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
-    conditional_delete(Exchange),
+maybe_auto_delete(Exchange = #exchange{auto_delete = true}, Retry) ->
+    conditional_delete(Exchange, Retry),
     ok.
 
+<<<<<<< local
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     case has_bindings(ExchangeName) of
+=======
+conditional_delete(Exchange = #exchange{name = ExchangeName}, Retry) ->
+    Match = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
+    %% we need to check for durable routes here too in case a bunch of
+    %% routes to durable queues have been removed temporarily as a
+    %% result of a node failure
+    case contains(rabbit_route, Match) orelse contains(rabbit_durable_route, Match) of
+>>>>>>> other
         false  -> unconditional_delete(Exchange);
         true   -> {error, in_use}
     end.
 
-unconditional_delete(#exchange{name = ExchangeName}) ->
+unconditional_delete(#exchange{name = ExchangeName}, Retry) ->
     ok = delete_exchange_bindings(ExchangeName),
     ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
     ok = mnesia:delete({rabbit_exchange, ExchangeName}).

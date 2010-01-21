@@ -254,7 +254,95 @@ start(normal, []) ->
     {ok, SupPid} = rabbit_sup:start_link(),
 
     print_banner(),
+<<<<<<< local
     [ok = run_boot_step(Step) || Step <- boot_steps()],
+=======
+
+    lists:foreach(
+      fun ({Msg, Thunk}) ->
+              io:format("starting ~-20s ...", [Msg]),
+              Thunk(),
+              io:format("done~n");
+          ({Msg, M, F, A}) ->
+              io:format("starting ~-20s ...", [Msg]),
+              apply(M, F, A),
+              io:format("done~n")
+      end,
+      [{"database",
+        fun () -> ok = rabbit_mnesia:init() end},
+       {"core processes",
+        fun () ->
+                ok = start_child(rabbit_exchange_type),
+                ok = start_child(rabbit_log),
+                ok = rabbit_hooks:start(),
+
+                ok = rabbit_binary_generator:
+                    check_empty_content_body_frame_size(),
+
+                ok = rabbit_alarm:start(),
+
+                {ok, MemoryWatermark} =
+                    application:get_env(vm_memory_high_watermark),
+                ok = case MemoryWatermark == 0 of
+                         true ->
+                             ok;
+                         false ->
+                             start_child(vm_memory_monitor, [MemoryWatermark])
+                     end,
+
+                ok = rabbit_amqqueue:start(),
+
+                ok = start_child(rabbit_router),
+                ok = start_child(rabbit_node_monitor)
+        end},
+       {"recovery",
+        fun () ->
+                ok = maybe_insert_default_data(),
+                ok = rabbit_exchange:recover(),
+                ok = rabbit_amqqueue:recover()
+        end},
+       {"persister",
+        fun () ->
+                ok = start_child(rabbit_persister)
+        end},
+       {"guid generator",
+        fun () ->
+                ok = start_child(rabbit_guid)
+        end},
+       {"builtin applications",
+        fun () ->
+                {ok, DefaultVHost} = application:get_env(default_vhost),
+                ok = error_logger:add_report_handler(
+                       rabbit_error_logger, [DefaultVHost]),
+                ok = start_builtin_amq_applications()
+        end},
+       {"TCP listeners",
+        fun () ->
+                ok = rabbit_networking:start(),
+                {ok, TcpListeners} = application:get_env(tcp_listeners),
+                lists:foreach(
+                  fun ({Host, Port}) ->
+                          ok = rabbit_networking:start_tcp_listener(Host, Port)
+                  end,
+                  TcpListeners)
+        end},
+       {"SSL listeners",
+        fun () ->
+                case application:get_env(ssl_listeners) of
+                    {ok, []} ->
+                        ok;
+                    {ok, SslListeners} ->
+                        ok = rabbit_misc:start_applications([crypto, ssl]),
+
+                        {ok, SslOpts} = application:get_env(ssl_options),
+
+                        [rabbit_networking:start_ssl_listener
+                         (Host, Port, SslOpts) || {Host, Port} <- SslListeners],
+                        ok
+                end
+        end}]),
+
+>>>>>>> other
     io:format("~nbroker running~n"),
 
     {ok, SupPid}.

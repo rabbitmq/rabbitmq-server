@@ -47,13 +47,13 @@
 
 -record(resource, {virtual_host, kind, name}).
 
--record(exchange, {name, type, durable, auto_delete, arguments}).
+-record(exchange, {name, type, durable, auto_delete, arguments, state = creating}).
 
 -record(amqqueue, {name, durable, auto_delete, arguments, pid, pinned = false}).
 
 %% mnesia doesn't like unary records, so we add a dummy 'value' field
--record(route, {binding, value = const}).
--record(reverse_route, {reverse_binding, value = const}).
+-record(route, {binding, state = creating}).
+-record(reverse_route, {reverse_binding, state = creating}).
 
 -record(binding, {exchange_name, key, queue_name, args = []}).
 -record(reverse_binding, {queue_name, key, exchange_name, args = []}).
@@ -83,6 +83,11 @@
 -type(thunk(T) :: fun(() -> T)).
 -type(info_key() :: atom()).
 -type(info() :: {info_key(), any()}).
+<<<<<<< local
+=======
+-type(regexp() :: binary()).
+-type(record_state() :: 'creating' | 'deleting' | 'complete').
+>>>>>>> other
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: any()).
@@ -108,7 +113,8 @@
                 type        :: exchange_type(),
                 durable     :: boolean(),
                 auto_delete :: boolean(),
-                arguments   :: amqp_table()}).
+                arguments   :: amqp_table(),
+                state       :: record_state()}).
 -type(binding() ::
       #binding{exchange_name    :: exchange_name(),
                queue_name       :: queue_name(),
