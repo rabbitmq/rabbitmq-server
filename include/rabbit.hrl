@@ -67,7 +67,7 @@
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
 
--record(amqp_error, {name, explanation, method = none}).
+-record(amqp_error, {name, explanation = "", method = none}).
 
 %%----------------------------------------------------------------------------
 

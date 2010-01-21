@@ -727,7 +727,8 @@ handle_exception(State = #v1{connection_state = CS}, Channel, Reason) ->
     send_exception(State, Channel, Reason).
 
 send_exception(State, Channel, Reason) ->
-    {ShouldClose, CloseChannel, CloseMethod} = map_exception(Channel, Reason),
+    {ShouldClose, CloseChannel, CloseMethod} =
+        rabbit_binary_generator:map_exception(Channel, Reason),
     NewState = case ShouldClose of
                    true  -> terminate_channels(),
                             close_connection(State);
@@ -736,50 +737,3 @@ send_exception(State, Channel, Reason) ->
     ok = rabbit_writer:internal_send_command(
            NewState#v1.sock, CloseChannel, CloseMethod),
     NewState.
-
-map_exception(Channel, Reason) ->
-    {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
-        lookup_amqp_exception(Reason),
-    ShouldClose = SuggestedClose or (Channel == 0),
-    {ClassId, MethodId} = case FailedMethod of
-                              {_, _} -> FailedMethod;
-                              none -> {0, 0};
-                              _ -> rabbit_framing:method_id(FailedMethod)
-                          end,
-    {CloseChannel, CloseMethod} =
-        case ShouldClose of
-            true -> {0, #'connection.close'{reply_code = ReplyCode,
-                                            reply_text = ReplyText,
-                                            class_id = ClassId,
-                                            method_id = MethodId}};
-            false -> {Channel, #'channel.close'{reply_code = ReplyCode,
-                                                reply_text = ReplyText,
-                                                class_id = ClassId,
-                                                method_id = MethodId}}
-        end,
-    {ShouldClose, CloseChannel, CloseMethod}.
-
-%% FIXME: this clause can go when we move to AMQP spec >=8.1
-lookup_amqp_exception(#amqp_error{name        = precondition_failed,
-                                  explanation = Expl,
-                                  method      = Method}) ->
-    ExplBin = amqp_exception_explanation(<<"PRECONDITION_FAILED">>, Expl),
-    {false, 406, ExplBin, Method};
-lookup_amqp_exception(#amqp_error{name        = Name,
-                                  explanation = Expl,
-                                  method      = Method}) ->
-    {ShouldClose, Code, Text} = rabbit_framing:lookup_amqp_exception(Name),
-    ExplBin = amqp_exception_explanation(Text, Expl),
-    {ShouldClose, Code, ExplBin, Method};
-lookup_amqp_exception(Other) ->
-    rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
-    {ShouldClose, Code, Text} =
-        rabbit_framing:lookup_amqp_exception(internal_error),
-    {ShouldClose, Code, Text, none}.
-
-amqp_exception_explanation(Text, Expl) ->
-    ExplBin = list_to_binary(Expl),
-    CompleteTextBin = <<Text/binary, " - ", ExplBin/binary>>,
-    if size(CompleteTextBin) > 255 -> <<CompleteTextBin:252/binary, "...">>;
-       true                        -> CompleteTextBin
-    end.
