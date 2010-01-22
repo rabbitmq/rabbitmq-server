@@ -23,6 +23,8 @@ macports: dirs $(DEST)/Portfile
 	for f in rabbitmq-asroot-script-wrapper rabbitmq-script-wrapper ; do \
 	  cp $(COMMON_DIR)/$$f $(DEST)/files ; \
 	done
+	sed -i -e 's|@SU_RABBITMQ_SH_C@|sudo -u rabbitmq -H /bin/sh -c|' \
+	    $(DEST)/files/rabbitmq-script-wrapper
 	cp patch-org.macports.rabbitmq-server.plist.diff $(DEST)/files
 
 clean:
