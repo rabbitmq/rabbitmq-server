@@ -60,8 +60,8 @@
 -spec(do/3 :: (pid(), amqp_method(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
--spec(deliver/4 :: (pid(), ctag(), bool(), msg()) -> 'ok').
--spec(conserve_memory/2 :: (pid(), bool()) -> 'ok').
+-spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 
 -endif.
 
@@ -125,11 +125,11 @@ handle_cast({method, Method, Content}, State) ->
         stop ->
             {stop, normal, State#ch{state = terminating}}
     catch
-        exit:{amqp, Error, Explanation, none} ->
-            ok = notify_queues(internal_rollback(State)),
-            Reason = {amqp, Error, Explanation,
-                      rabbit_misc:method_record_type(Method)},
-            State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
+        exit:Reason = #amqp_error{} ->
+            ok = rollback_and_notify(State),
+            MethodName = rabbit_misc:method_record_type(Method),
+            State#ch.reader_pid ! {channel_exit, State#ch.channel,
+                                   Reason#amqp_error{method = MethodName}},
             {stop, normal, State#ch{state = terminating}};
         exit:normal ->
             {stop, normal, State};
@@ -175,7 +175,7 @@ terminate(_Reason, #ch{writer_pid = WriterPid, limiter_pid = LimiterPid,
 
 terminate(Reason, State = #ch{writer_pid = WriterPid,
                               limiter_pid = LimiterPid}) ->
-    Res = notify_queues(internal_rollback(State)),
+    Res = rollback_and_notify(State),
     case Reason of
         normal -> ok = Res;
         _      -> ok
@@ -260,12 +260,6 @@ expand_routing_key_shortcut(<<>>, <<>>,
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
-die_precondition_failed(Fmt, Params) ->
-    %% FIXME: 406 should be replaced with precondition_failed when we
-    %% move to AMQP spec >=8.1
-    rabbit_misc:protocol_error({false, 406, <<"PRECONDITION_FAILED">>},
-                               Fmt, Params).
-
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
 %%
@@ -297,7 +291,7 @@ handle_method(_Method, _, #ch{state = starting}) ->
     rabbit_misc:protocol_error(channel_error, "expected 'channel.open'", []);
 
 handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
-    ok = notify_queues(internal_rollback(State)),
+    ok = rollback_and_notify(State),
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
     stop;
 
@@ -532,24 +526,24 @@ handle_method(#'basic.recover'{requeue = false},
               _, State = #ch{ transaction_id = none,
                               writer_pid = WriterPid,
                               unacked_message_q = UAMQ }) ->
-    lists:foreach(
-      fun ({_DeliveryTag, none, _Msg}) ->
-              %% Was sent as a basic.get_ok. Don't redeliver
-              %% it. FIXME: appropriate?
-              ok;
-          ({DeliveryTag, ConsumerTag,
-            {QName, QPid, MsgId, _Redelivered, Message}}) ->
-              %% Was sent as a proper consumer delivery.  Resend it as
-              %% before.
-              %%
-              %% FIXME: What should happen if the consumer's been
-              %% cancelled since?
-              %%
-              %% FIXME: should we allocate a fresh DeliveryTag?
-              ok = internal_deliver(
+    ok = rabbit_misc:queue_fold(
+           fun ({_DeliveryTag, none, _Msg}, ok) ->
+                   %% Was sent as a basic.get_ok. Don't redeliver
+                   %% it. FIXME: appropriate?
+                   ok;
+               ({DeliveryTag, ConsumerTag,
+                 {QName, QPid, MsgId, _Redelivered, Message}}, ok) ->
+                   %% Was sent as a proper consumer delivery.  Resend
+                   %% it as before.
+                   %%
+                   %% FIXME: What should happen if the consumer's been
+                   %% cancelled since?
+                   %%
+                   %% FIXME: should we allocate a fresh DeliveryTag?
+                   internal_deliver(
                      WriterPid, false, ConsumerTag, DeliveryTag,
                      {QName, QPid, MsgId, true, Message})
-      end, queue:to_list(UAMQ)),
+           end, ok, UAMQ),
     %% No answer required, apparently!
     {noreply, State};
 
@@ -610,8 +604,8 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
         {error, not_found} ->
             rabbit_misc:not_found(ExchangeName);
         {error, in_use} ->
-            die_precondition_failed(
-              "~s in use", [rabbit_misc:rs(ExchangeName)]);
+            rabbit_misc:protocol_error(
+              precondition_failed, "~s in use", [rabbit_misc:rs(ExchangeName)]);
         ok ->
             return_ok(State, NoWait,  #'exchange.delete_ok'{})
     end;
@@ -685,11 +679,11 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
            QueueName,
            fun (Q) -> rabbit_amqqueue:delete(Q, IfUnused, IfEmpty) end) of
         {error, in_use} ->
-            die_precondition_failed(
-              "~s in use", [rabbit_misc:rs(QueueName)]);
+            rabbit_misc:protocol_error(
+              precondition_failed, "~s in use", [rabbit_misc:rs(QueueName)]);
         {error, not_empty} ->
-            die_precondition_failed(
-              "~s not empty", [rabbit_misc:rs(QueueName)]);
+            rabbit_misc:protocol_error(
+              precondition_failed, "~s not empty", [rabbit_misc:rs(QueueName)]);
         {ok, PurgedMessageCount} ->
             return_ok(State, NoWait,
                       #'queue.delete_ok'{
@@ -872,8 +866,13 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
                              internal_error, "rollback failed: ~w", [Errors])
     end.
 
+rollback_and_notify(State = #ch{transaction_id = none}) ->
+    notify_queues(State);
+rollback_and_notify(State) ->
+    notify_queues(internal_rollback(State)).
+
 fold_per_queue(F, Acc0, UAQ) ->
-    D = lists:foldl(
+    D = rabbit_misc:queue_fold(
           fun ({_DTag, _CTag,
                 {_QName, QPid, MsgId, _Redelivered, _Message}}, D) ->
                   %% dict:append would be simpler and avoid the
@@ -884,7 +883,7 @@ fold_per_queue(F, Acc0, UAQ) ->
                               fun (MsgIds) -> [MsgId | MsgIds] end,
                               [MsgId],
                               D)
-          end, dict:new(), queue:to_list(UAQ)),
+          end, dict:new(), UAQ),
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
 
@@ -913,9 +912,9 @@ consumer_queues(Consumers) ->
 notify_limiter(undefined, _Acked) ->
     ok;
 notify_limiter(LimiterPid, Acked) ->
-    case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
-                         ({_, _, _}, Acc)    -> Acc + 1
-                     end, 0, queue:to_list(Acked)) of
+    case rabbit_misc:queue_fold(fun ({_, none, _}, Acc) -> Acc;
+                                    ({_, _, _}, Acc)    -> Acc + 1
+                                end, 0, Acked) of
         0     -> ok;
         Count -> rabbit_limiter:ack(LimiterPid, Count)
     end.

@@ -180,6 +180,20 @@
 -import(error_logger, [format/2]).
 
 %%%=========================================================================
+%%%  Specs. These exist only to shut up dialyzer's warnings
+%%%=========================================================================
+
+-ifdef(use_specs).
+
+-spec(handle_common_termination/6 ::
+      (any(), any(), any(), atom(), any(), any()) -> no_return()). 
+
+-spec(hibernate/7 ::
+      (pid(), any(), any(), atom(), any(), queue(), any()) -> no_return()).
+
+-endif.
+
+%%%=========================================================================
 %%%  API
 %%%=========================================================================
 
@@ -437,7 +451,10 @@ unregister_name({local,Name}) ->
 unregister_name({global,Name}) ->
     _ = global:unregister_name(Name);
 unregister_name(Pid) when is_pid(Pid) ->
-    Pid.
+    Pid;
+% Under R12 let's just ignore it, as we have a single term as Name.
+% On R13 it will never get here, as we get tuple with 'local/global' atom.
+unregister_name(_Name) -> ok.
 
 extend_backoff(undefined) ->
     undefined;

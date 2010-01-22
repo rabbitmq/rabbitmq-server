@@ -32,22 +32,8 @@ REM
 
 setlocal
 
-if "%RABBITMQ_NODENAME%"=="" (
-    set RABBITMQ_NODENAME=rabbit
-)
+set RABBITMQ_EBIN_DIR=%~dp0..\ebin
 
-if not exist "%ERLANG_HOME%\bin\erl.exe" (
-    echo.
-    echo ******************************
-    echo ERLANG_HOME not set correctly. 
-    echo ******************************
-    echo.
-    echo Please either set ERLANG_HOME to point to your Erlang installation or place the
-    echo RabbitMQ server distribution in the Erlang lib folder.
-    echo.
-    exit /B
-)
-
-"%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden %RABBITMQ_CTL_ERL_ARGS% -sname rabbitmqctl -s rabbit_control -nodename %RABBITMQ_NODENAME% -extra %*
+del /f "%RABBITMQ_EBIN_DIR%"\rabbit.rel "%RABBITMQ_EBIN_DIR%"\rabbit.script "%RABBITMQ_EBIN_DIR%"\rabbit.boot
 
 endlocal

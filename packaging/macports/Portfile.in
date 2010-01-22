@@ -3,10 +3,10 @@
 
 PortSystem 1.0
 name		rabbitmq-server
-version		1.6.0
-revision	0
+version		@VERSION@
+revision	1
 categories	net 
-maintainers	tonyg@rabbitmq.com
+maintainers	rabbitmq.com:tonyg
 platforms	darwin
 description	The RabbitMQ AMQP Server
 long_description	\
@@ -15,16 +15,31 @@ long_description	\
     robust and scalable implementation of an AMQP broker.
 
 
-homepage        http://www.rabbitmq.com/
-master_sites    http://www.rabbitmq.com/releases/rabbitmq-server/v${version}/
+homepage        @BASE_URL@
+master_sites    @BASE_URL@releases/rabbitmq-server/v${version}/
 
 checksums \
-    md5 af3b0d868d58e5aefb4f0837b82ca010 \
-    sha1 1834c670d076fa9878223aacaa35a5a6528f1d86 \
-    rmd160 d6c9de4e1fb48c6ceb1cb5d717ca2afb5e3266fe
+    md5 @md5@ \
+    sha1 @sha1@ \
+    rmd160 @rmd160@
 
-depends_build   port:erlang port:py25-simplejson
+depends_build   port:erlang
 depends_run     port:erlang
+
+platform darwin 7 {
+    depends_build-append port:py25-simplejson
+    build.args      PYTHON=${prefix}/bin/python2.5
+}
+platform darwin 8 {
+    depends_build-append port:py25-simplejson
+    build.args      PYTHON=${prefix}/bin/python2.5
+}
+platform darwin 9 {
+    depends_build-append port:py25-simplejson
+    build.args      PYTHON=${prefix}/bin/python2.5
+}
+# no need for simplejson on Snow Leopard or higher
+
 
 set serveruser  rabbitmq
 set servergroup rabbitmq
@@ -34,12 +49,11 @@ set mnesiadbdir ${prefix}/var/lib/rabbitmq/mnesia
 set plistloc ${prefix}/etc/LaunchDaemons/org.macports.rabbitmq-server
 set sbindir ${destroot}${prefix}/lib/rabbitmq/bin
 set wrappersbin ${destroot}${prefix}/sbin
+set realsbin ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin
 
 use_configure   no
 
 use_parallel_build yes
-
-build.args      PYTHON=${prefix}/bin/python2.5
 
 destroot.destdir \
     TARGET_DIR=${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version} \
@@ -61,23 +75,23 @@ post-destroot {
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
 
     reinplace -E "s:(/etc/rabbitmq/rabbitmq.conf):${prefix}\\1:g" \
-        ${sbindir}/rabbitmq-env
+        ${realsbin}/rabbitmq-env
     reinplace -E "s:(CLUSTER_CONFIG_FILE)=/:\\1=${prefix}/:" \
-        ${sbindir}/rabbitmq-multi \
-        ${sbindir}/rabbitmq-server \
-        ${sbindir}/rabbitmqctl
+        ${realsbin}/rabbitmq-multi \
+        ${realsbin}/rabbitmq-server \
+        ${realsbin}/rabbitmqctl
     reinplace -E "s:(LOG_BASE)=/:\\1=${prefix}/:" \
-        ${sbindir}/rabbitmq-multi \
-        ${sbindir}/rabbitmq-server \
-        ${sbindir}/rabbitmqctl
+        ${realsbin}/rabbitmq-multi \
+        ${realsbin}/rabbitmq-server \
+        ${realsbin}/rabbitmqctl
     reinplace -E "s:(MNESIA_BASE)=/:\\1=${prefix}/:" \
-        ${sbindir}/rabbitmq-multi \
-        ${sbindir}/rabbitmq-server \
-        ${sbindir}/rabbitmqctl
+        ${realsbin}/rabbitmq-multi \
+        ${realsbin}/rabbitmq-server \
+        ${realsbin}/rabbitmqctl
     reinplace -E "s:(PIDS_FILE)=/:\\1=${prefix}/:" \
-        ${sbindir}/rabbitmq-multi \
-        ${sbindir}/rabbitmq-server \
-        ${sbindir}/rabbitmqctl
+        ${realsbin}/rabbitmq-multi \
+        ${realsbin}/rabbitmq-server \
+        ${realsbin}/rabbitmqctl
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-multi
@@ -94,6 +108,7 @@ post-destroot {
                 ${wrappersbin}/rabbitmq-activate-plugins
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
+    file copy ${wrappersbin}/rabbitmq-activate-plugins ${wrappersbin}/rabbitmq-deactivate-plugins
 }
 
 pre-install {

@@ -104,13 +104,8 @@ guid() ->
 %% generate a readable string representation of a guid. Note that any
 %% monotonicity of the guid is not preserved in the encoding.
 string_guid(Prefix) ->
-    %% we use the (undocumented) ssl_base64 module here because it is
-    %% present throughout OTP R11 and R12 whereas base64 only becomes
-    %% available in R11B-4.
-    %%
-    %% TODO: once debian stable and EPEL have moved from R11B-2 to
-    %% R11B-4 or later we should change this to use base64.
-    Prefix ++ "-" ++ ssl_base64:encode(erlang:md5(term_to_binary(guid()))).
+    Prefix ++ "-" ++ base64:encode_to_string(
+                       erlang:md5(term_to_binary(guid()))).
 
 binstring_guid(Prefix) ->
     list_to_binary(string_guid(Prefix)).
