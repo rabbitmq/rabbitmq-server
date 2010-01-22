@@ -17,6 +17,8 @@ MACPORTS_USERHOST=
 MACPORTS_DIR=macports
 DEST=$(MACPORTS_DIR)/net/rabbitmq-server
 
+all: macports
+
 dirs:
 	mkdir -p $(DEST)/files
 
