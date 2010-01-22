@@ -19,6 +19,7 @@ syntax: regexp
 ^packaging/RPMS/Fedora/(BUILD|RPMS|SOURCES|SPECS|SRPMS)$
 ^packaging/debs/Debian/rabbitmq-server_.*\.(dsc|(diff|tar)\.gz|deb|changes)$
 ^packaging/debs/apt-repository/debian$
+^packaging/macports/macports$
 ^packaging/generic-unix/rabbitmq-server-generic-unix-.*\.tar\.gz$
 ^packaging/windows/rabbitmq-server-windows-.*\.zip$
 
