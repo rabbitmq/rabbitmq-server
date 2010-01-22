@@ -213,7 +213,7 @@ set ERLANG_SERVICE_ARGUMENTS=%ERLANG_SERVICE_ARGUMENTS:"=\"%
 
 "%ERLANG_SERVICE_MANAGER_PATH%\erlsrv" set %RABBITMQ_SERVICENAME% ^
 -machine "%ERLANG_SERVICE_MANAGER_PATH%\erl.exe" ^
--env ERL_CRASH_DUMP="%RABBITMQ_BASE_UNIX%/log" ^
+-env ERL_CRASH_DUMP="%RABBITMQ_BASE_UNIX%/erl_crash.dump" ^
 -workdir "%RABBITMQ_BASE%" ^
 -stopaction "rabbit:stop_and_halt()." ^
 -sname %RABBITMQ_NODENAME% ^

@@ -26,6 +26,8 @@ package: clean
 	    -e 's|^DEFAULTS_FILE=.*$$|DEFAULTS_FILE=/etc/default/rabbitmq|' \
 	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=|' \
 	    $(UNPACKED_DIR)/debian/rabbitmq-server.init
+	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
+	    $(UNPACKED_DIR)/debian/rabbitmq-script-wrapper
 	chmod a+x $(UNPACKED_DIR)/debian/rules
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
 	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -rfakeroot $(SIGNING)

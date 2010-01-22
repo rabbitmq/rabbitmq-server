@@ -45,7 +45,7 @@ cd /var/lib/rabbitmq
 SCRIPT=`basename $0`
 
 if [ `id -u` = 0 ] ; then
-    su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
+    @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
 elif [ `id -u` = `id -u rabbitmq` ] ; then
     /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
 else
