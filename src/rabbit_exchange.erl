@@ -342,41 +342,16 @@ delete_transient_queue_bindings(QueueName) ->
     delete_queue_bindings(QueueName, fun delete_transient_forward_routes/1).
 
 delete_queue_bindings(QueueName, FwdDeleteFun) ->
-    DeletedBindings =
-        [begin
-             FwdRoute = reverse_route(Route),
-             ok = FwdDeleteFun(FwdRoute),
-             ok = mnesia:delete_object(rabbit_reverse_route, Route, write),
-             FwdRoute#route.binding
-         end || Route <- mnesia:match_object(
-                           rabbit_reverse_route,
-                           reverse_route(
-                             #route{binding = #binding{queue_name = QueueName, 
-                                                       _ = '_'}}),
-                           write)],
-    %% We need the keysort to group the bindings by exchange name, so
-    %% that cleanup_deleted_queue_bindings can inform the exchange of
-    %% its vanished bindings.
-    ok = cleanup_deleted_queue_bindings(lists:keysort(#binding.exchange_name, DeletedBindings),
-                                   none, []).
-
-%% Requires that its input binding list is sorted in exchange-name
-%% order, so that the grouping of bindings (for passing to
-%% cleanup_deleted_queue_bindings1) works properly.
-cleanup_deleted_queue_bindings([], ExchangeName, Bindings) ->
-    cleanup_deleted_queue_bindings1(ExchangeName, Bindings);
-cleanup_deleted_queue_bindings([B = #binding{exchange_name = N} | Rest], ExchangeName, Bindings)
-  when N =:= ExchangeName ->
-    cleanup_deleted_queue_bindings(Rest, ExchangeName, [B | Bindings]);
-cleanup_deleted_queue_bindings([B = #binding{exchange_name = N} | Rest], ExchangeName, Bindings) ->
-    cleanup_deleted_queue_bindings1(ExchangeName, Bindings),
-    cleanup_deleted_queue_bindings(Rest, N, [B]).
-
-cleanup_deleted_queue_bindings1(none, []) ->
-    ok;
-cleanup_deleted_queue_bindings1(ExchangeName, Bindings) ->
-    [X = #exchange{type = Type}] = mnesia:read({rabbit_exchange, ExchangeName}),
-    [ok = Type:delete_binding(X, B) || B <- Bindings],
+    Exchanges = exchanges_for_queue(QueueName),
+    [begin
+         ok = FwdDeleteFun(reverse_route(Route)),
+         ok = mnesia:delete_object(rabbit_reverse_route, Route, write)
+     end || Route <- mnesia:match_object(
+                       rabbit_reverse_route,
+                       reverse_route(
+                         #route{binding = #binding{queue_name = QueueName, 
+                                                   _ = '_'}}),
+                       write)],
     ok.
 
 delete_forward_routes(Route) ->
@@ -436,8 +411,7 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
       fun (X = #exchange{type = Type}, Q, B) ->
               InnerFun(X, Q),
               ok = sync_binding(B, Q#amqqueue.durable,
-                                fun mnesia:write/3),
-              ok = Type:add_binding(X, B)
+                                fun mnesia:write/3)
       end).
 
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
@@ -450,8 +424,7 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                   _  ->
                       InnerFun(X, Q),
                       ok = sync_binding(B, Q#amqqueue.durable,
-                                        fun mnesia:delete_object/3),
-                      ok = Type:delete_binding(X, B)
+                                        fun mnesia:delete_object/3)
               end
       end).
 
