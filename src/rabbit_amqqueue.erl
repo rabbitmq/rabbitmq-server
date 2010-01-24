@@ -171,7 +171,6 @@ find_durable_queues() ->
       end).
 
 declare(QueueName, Durable, AutoDelete, Args) ->
-    prune_queue_childspecs(),
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
@@ -217,30 +216,9 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-start_queue_process(Q = #amqqueue{name = QueueName}) ->
-    case supervisor:start_child(
-           rabbit_amqqueue_sup,
-           {QueueName, {rabbit_amqqueue_process, start_link, [Q]},
-            %% 16#ffffffff is the biggest value allowed
-            temporary, 16#ffffffff, worker, [rabbit_amqqueue_process]}) of
-        {ok, Pid} ->
-            Q#amqqueue{pid = Pid};
-        {error, already_present} ->
-            supervisor:delete_child(rabbit_amqqueue_sup, QueueName),
-            start_queue_process(Q);
-        {error, {already_started, _QPid}} ->
-            case rabbit_misc:execute_mnesia_transaction(
-                   fun () ->
-                           case mnesia:wread({rabbit_queue, QueueName}) of
-                               %% it's vanished in the mean time, try again
-                               [] -> try_again;
-                               [ExistingQ] -> ExistingQ
-                           end
-                   end) of
-                try_again -> start_queue_process(Q);
-                ExistingQ -> ExistingQ
-            end
-    end.
+start_queue_process(Q) ->
+    {ok, Pid} = supervisor2:start_child(rabbit_amqqueue_sup, [Q]),
+    Q#amqqueue{pid = Pid}.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
     Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
@@ -288,7 +266,6 @@ stat_all() ->
     lists:map(fun stat/1, rabbit_misc:dirty_read_all(rabbit_queue)).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    prune_queue_childspecs(),
     gen_server2:call(QPid, {delete, IfUnused, IfEmpty}, infinity).
 
 purge(#amqqueue{ pid = QPid }) -> gen_server2:call(QPid, purge, infinity).
@@ -387,14 +364,6 @@ remeasure_rates(QPid) ->
 
 set_queue_duration(QPid, Duration) ->
     gen_server2:pcast(QPid, 9, {set_queue_duration, Duration}).    
-
-prune_queue_childspecs() ->
-    lists:foreach(
-      fun ({Name, undefined, _Type, _Mods}) ->
-              supervisor:delete_child(rabbit_amqqueue_sup, Name);
-          (_) -> ok
-      end, supervisor:which_children(rabbit_amqqueue_sup)),
-    ok.
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(

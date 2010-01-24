@@ -31,7 +31,7 @@
 
 -module(rabbit_amqqueue_sup).
 
--behaviour(supervisor).
+-behaviour(supervisor2).
 
 -export([start_link/0]).
 
@@ -40,7 +40,10 @@
 -define(SERVER, ?MODULE).
 
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
 
 init([]) ->
-    {ok, {{one_for_one, 10, 10}, []}}.
+    {ok, {{simple_one_for_one_terminate, 10, 10},
+          [{amqqueue, {rabbit_amqqueue_process, start_link, []},
+            %% 16#ffffffff is the biggest value allowed
+            temporary, 16#ffffffff, worker, [rabbit_amqqueue_process]}]}}.
