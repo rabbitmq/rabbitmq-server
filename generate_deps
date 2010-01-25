@@ -51,6 +51,8 @@ write_deps(Hdl, IncludeDir, {include, Include}) ->
     ok = file:write(Hdl, [" ", IncludeDir, "/", Include]).
 
 detect_deps(Path) ->
+    %% The easiest way to detect includes is to make them fail, so we
+    %% deliberately do not set the include path here.
     {ok, Forms} = epp:parse_file(Path, [], [{use_specs, true}]),
     lists:foldl(
       fun ({attribute, _LineNumber, behaviour, Behaviour}, Deps) ->
