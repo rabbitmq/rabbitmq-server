@@ -118,6 +118,9 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Fri Jan 22 2010 Matthew Sackman <matthew@lshift.net> 1.7.1-1
+- New Upstream Release
+
 * Mon Oct 5 2009 David Wragg <dpw@lshift.net> 1.7.0-1
 - New upstream release
 
