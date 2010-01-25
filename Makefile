@@ -9,9 +9,10 @@ RABBITMQ_LOG_BASE ?= $(TMPDIR)
 SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
+DEPS_FILE=deps.mk
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 BEAM_TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
-TARGETS=$(EBIN_DIR)/rabbit.app $(BEAM_TARGETS)
+TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.pod, %.gz, $(wildcard docs/*.[0-9].pod))
 
@@ -56,29 +57,28 @@ ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
 ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
-all: $(TARGETS)
+all: $(DEPS_FILE) $(TARGETS)
+
+$(DEPS_FILE): $(SOURCES)
+	escript generate_deps $(INCLUDE_DIR) $(SOURCE_DIR) $(DEPS_FILE)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) $@ < $<
 
-$(EBIN_DIR)/gen_server2.beam: $(SOURCE_DIR)/gen_server2.erl
-	erlc $(ERLC_OPTS) $<
-
-$(EBIN_DIR)/supervisor2.beam: $(SOURCE_DIR)/supervisor2.erl
-	erlc $(ERLC_OPTS) $<
-
-$(EBIN_DIR)/rabbit_msg_store_index.beam: $(SOURCE_DIR)/rabbit_msg_store_index.erl
-	erlc $(ERLC_OPTS) $<
-
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit.hrl $(EBIN_DIR)/gen_server2.beam $(EBIN_DIR)/supervisor2.beam $(EBIN_DIR)/rabbit_msg_store_index.beam
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 #	ERLC_EMULATOR="erl -smp" erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
+
+$(INCLUDE_DIR)/%.hrl:
+	@touch $@
 
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_PATH) $@
 
 $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_PATH) $@
+
+$(EBIN_DIR)/rabbit_framing.beam: $(INCLUDE_DIR)/rabbit_framing.hrl
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
@@ -106,6 +106,7 @@ clean:
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
 	rm -f docs/*.[0-9].gz
 	rm -f $(RABBIT_PLT)
+	rm -f $(DEPS_FILE)
 
 cleandb:
 	rm -rf $(RABBITMQ_MNESIA_DIR)/*
@@ -226,3 +227,5 @@ install: all docs_all install_dirs
 install_dirs:
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(TARGET_DIR)/sbin
+
+-include $(DEPS_FILE)
