@@ -12,7 +12,9 @@ main([IncludeDir, ErlDir, TargetFile]) ->
     HrlFiles = [filename:join(IncludeDir, FileName) ||
                    FileName <- IncludeDirContents],
     Headers = sets:from_list(IncludeDirContents),
-    Deps = lists:foldl(fun make_deps/2, dict:new(), ErlFiles ++ HrlFiles),
+    Deps = lists:foldl(fun (Path, Deps1) ->
+                               dict:store(Path, detect_deps(Path), Deps1)
+                       end, dict:new(), ErlFiles ++ HrlFiles),
     Deps1 = dict:map(
               fun (_Path, Dep) ->
                       lists:filter(
@@ -48,14 +50,13 @@ write_deps(Hdl, _IncludeDir, {module, Behaviour}) ->
 write_deps(Hdl, IncludeDir, {include, Include}) ->
     ok = file:write(Hdl, [" ", IncludeDir, "/", Include]).
 
-make_deps(Path, Deps) ->
+detect_deps(Path) ->
     {ok, Forms} = epp:parse_file(Path, [], [{use_specs, true}]),
-    Behaviours = lists:foldl(fun detect_deps/2, [], Forms),
-    dict:store(Path, Behaviours, Deps).
-
-detect_deps({attribute, _LineNumber, behaviour, Behaviour}, Deps) ->
-    [{module, Behaviour} | Deps];
-detect_deps({error, {_LineNumber, epp, {include, file, Include}}}, Deps) ->
-    [{include, Include} | Deps];
-detect_deps(_Form, Deps) ->
-    Deps.
+    lists:foldl(
+      fun ({attribute, _LineNumber, behaviour, Behaviour}, Deps) ->
+              [{module, Behaviour} | Deps];
+          ({error, {_LineNumber, epp, {include, file, Include}}}, Deps) ->
+              [{include, Include} | Deps];
+          (_Form, Deps) ->
+              Deps
+      end, [], Forms).
