@@ -16,7 +16,7 @@ main([IncludeDir, ErlDir, TargetFile]) ->
     Deps1 = lists:foldl(fun (Path, Acc) -> make_deps(Path, Acc) end,
                         Deps, HrlFiles),
     Deps2 = dict:map(
-              fun (_Module, Dep) ->
+              fun (_Path, Dep) ->
                       lists:filter(
                         fun ({module, Behaviour}) ->
                                 sets:is_element(Behaviour, Modules);
@@ -26,23 +26,20 @@ main([IncludeDir, ErlDir, TargetFile]) ->
               end, Deps1),
     {ok, Hdl} = file:open(TargetFile, [write, delayed_write]),
     dict:fold(
-      fun (_Module, [], ok) ->
+      fun (_Path, [], ok) ->
               ok;
-          (Module, Dep, ok) ->
-              case lists:suffix(".hrl", Module) of
+          (Path, Dep, ok) ->
+              case lists:suffix(".hrl", Path) of
                   false ->
+                      Module = filename:basename(Path, ".erl"),
                       ok = file:write(Hdl, ["$(EBIN_DIR)/", Module, ".beam:"]),
                       lists:foreach(
-                        fun (E) ->
-                                write_deps(Hdl, IncludeDir, E)
-                        end, Dep),
+                        fun (E) -> write_deps(Hdl, IncludeDir, E) end, Dep),
                       file:write(Hdl, [" ", ErlDir, "/", Module, ".erl\n"]);
                   true ->
-                      ok = file:write(Hdl, [IncludeDir, "/", Module, ":"]),
+                      ok = file:write(Hdl, [Path, ":"]),
                       lists:foreach(
-                        fun (E) ->
-                                write_deps(Hdl, IncludeDir, E)
-                        end, Dep),
+                        fun (E) -> write_deps(Hdl, IncludeDir, E) end, Dep),
                       file:write(Hdl, "\n")
               end
       end, ok, Deps2),
@@ -61,7 +58,7 @@ make_deps(Path, Deps) ->
     Behaviours =
         lists:foldl(fun (Form, Acc) -> detect_deps(Form, Acc) end,
                     [], Forms),
-    dict:store(filename:basename(Path, ".erl"), Behaviours, Deps).
+    dict:store(Path, Behaviours, Deps).
 
 detect_deps({attribute, _LineNumber, behaviour, Behaviour}, Deps) ->
     [{module, Behaviour} | Deps];
