@@ -1,3 +1,14 @@
+%% This file is a copy of supervisor.erl from the R13B-3 Erlang/OTP
+%% distribution, with the following modifications:
+%%
+%% 1) the module name is supervisor2
+%%
+%% 2) there is a new strategy called
+%% simple_one_for_one_terminate. This is exactly the same as for
+%% simple_one_for_one, except that children *are* explicitly killed as
+%% per the shutdown component of the child_spec.
+%%
+%% All modifications are (C) 2010 LShift Ltd.
 %%
 %% %CopyrightBegin%
 %% 
@@ -16,7 +27,7 @@
 %% 
 %% %CopyrightEnd%
 %%
--module(supervisor).
+-module(supervisor2).
 
 -behaviour(gen_server).
 
@@ -53,7 +64,10 @@
 		child_type,
 		modules = []}).
 
--define(is_simple(State), State#state.strategy =:= simple_one_for_one).
+-define(is_simple(State), State#state.strategy =:= simple_one_for_one orelse
+        State#state.strategy =:= simple_one_for_one_terminate).
+-define(is_terminate_simple(State),
+        State#state.strategy =:= simple_one_for_one_terminate).
 
 behaviour_info(callbacks) ->
     [{init,1}];
@@ -66,10 +80,10 @@ behaviour_info(_Other) ->
 %%% SupName = {local, atom()} | {global, atom()}.
 %%% ---------------------------------------------------
 start_link(Mod, Args) ->
-    gen_server:start_link(supervisor, {self, Mod, Args}, []).
+    gen_server:start_link(supervisor2, {self, Mod, Args}, []).
  
 start_link(SupName, Mod, Args) ->
-    gen_server:start_link(SupName, supervisor, {SupName, Mod, Args}, []).
+    gen_server:start_link(SupName, supervisor2, {SupName, Mod, Args}, []).
  
 %%% ---------------------------------------------------
 %%% Interface functions.
@@ -231,10 +245,11 @@ handle_call({start_child, EArgs}, _From, State) when ?is_simple(State) ->
 	    {reply, What, State}
     end;
 
-%%% The requests terminate_child, delete_child and restart_child are 
-%%% invalid for simple_one_for_one supervisors. 
+%%% The requests terminate_child, delete_child and restart_child are
+%%% invalid for simple_one_for_one and simple_one_for_one_terminate
+%%% supervisors.
 handle_call({_Req, _Data}, _From, State) when ?is_simple(State) ->
-    {reply, {error, simple_one_for_one}, State};
+    {reply, {error, State#state.strategy}, State};
 
 handle_call({start_child, ChildSpec}, _From, State) ->
     case check_childspec(ChildSpec) of
@@ -326,6 +341,10 @@ handle_info(Msg, State) ->
 %%
 %% Terminate this server.
 %%
+terminate(_Reason, State) when ?is_terminate_simple(State) ->
+    terminate_simple_children(
+      hd(State#state.children), State#state.dynamics, State#state.name),
+    ok;
 terminate(_Reason, State) ->
     terminate_children(State#state.children, State#state.name),
     ok.
@@ -488,7 +507,9 @@ restart(Child, State) ->
 	    {shutdown, remove_child(Child, NState)}
     end.
 
-restart(simple_one_for_one, Child, State) ->
+restart(Strategy, Child, State)
+  when Strategy =:= simple_one_for_one orelse
+       Strategy =:= simple_one_for_one_terminate ->
     #child{mfa = {M, F, A}} = Child,
     Dynamics = ?DICT:erase(Child#child.pid, State#state.dynamics),
     case do_start_child_i(M, F, A) of
@@ -548,6 +569,12 @@ terminate_children([Child | Children], SupName, Res) ->
     terminate_children(Children, SupName, [NChild | Res]);
 terminate_children([], _SupName, Res) ->
     Res.
+
+terminate_simple_children(Child, Dynamics, SupName) ->
+    dict:fold(fun (Pid, _Args, _Any) ->
+                      do_terminate(Child#child{pid = Pid}, SupName)
+              end, ok, Dynamics),
+    ok.
 
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
     case shutdown(Child#child.pid,
@@ -718,11 +745,12 @@ init_state1(SupName, {Strategy, MaxIntensity, Period}, Mod, Args) ->
 init_state1(_SupName, Type, _, _) ->
     {invalid_type, Type}.
 
-validStrategy(simple_one_for_one) -> true;
-validStrategy(one_for_one)        -> true;
-validStrategy(one_for_all)        -> true;
-validStrategy(rest_for_one)       -> true;
-validStrategy(What)               -> throw({invalid_strategy, What}).
+validStrategy(simple_one_for_one_terminate) -> true;
+validStrategy(simple_one_for_one)           -> true;
+validStrategy(one_for_one)                  -> true;
+validStrategy(one_for_all)                  -> true;
+validStrategy(rest_for_one)                 -> true;
+validStrategy(What)                         -> throw({invalid_strategy, What}).
 
 validIntensity(Max) when is_integer(Max),
                          Max >=  0 -> true;
