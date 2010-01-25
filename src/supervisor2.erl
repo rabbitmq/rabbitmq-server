@@ -1,7 +1,7 @@
 %% This file is a copy of supervisor.erl from the R13B-3 Erlang/OTP
 %% distribution, with the following modifications:
 %%
-%% 1) the module name is gen_server2
+%% 1) the module name is supervisor2
 %%
 %% 2) there is a new strategy called
 %% simple_one_for_one_terminate. This is exactly the same as for
@@ -347,8 +347,9 @@ handle_info(Msg, State) ->
 %% Terminate this server.
 %%
 terminate(_Reason, State) when ?is_terminate_simple(State) ->
-    ok = terminate_simple_children(
-           hd(State#state.children), State#state.dynamics, State#state.name);
+    terminate_simple_children(
+      hd(State#state.children), State#state.dynamics, State#state.name),
+    ok;
 terminate(_Reason, State) ->
     terminate_children(State#state.children, State#state.name),
     ok.
@@ -575,17 +576,10 @@ terminate_children([], _SupName, Res) ->
     Res.
 
 terminate_simple_children(Child, Dynamics, SupName) ->
-    ok = dict:fold(
-           fun (Pid, _Args, ok) ->
-                   case shutdown(Pid, Child#child.shutdown) of
-                       ok ->
-                           ok;
-                       {error, OtherReason} ->
-                           report_error(shutdown_error, OtherReason, Child,
-                                        SupName),
-                           ok
-                   end
-           end, ok, Dynamics).
+    dict:fold(fun (Pid, _Args, _Any) ->
+                      do_terminate(Child#child{pid = Pid}, SupName)
+              end, ok, Dynamics),
+    ok.
 
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
     case shutdown(Child#child.pid,
