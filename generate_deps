@@ -51,10 +51,9 @@ write_deps(Hdl, _IncludeDir, {module, Behaviour}) ->
     ok = file:write(Hdl, [" $(EBIN_DIR)/", atom_to_list(Behaviour), ".beam"]);
 write_deps(Hdl, IncludeDir, {include, Include}) ->
     ok = file:write(Hdl, [" ", IncludeDir, "/", Include]).
-    
 
 make_deps(Path, Deps) ->
-    {ok, Forms} = epp:parse_file(Path, [], []),
+    {ok, Forms} = epp:parse_file(Path, [], [{use_specs, true}]),
     Behaviours =
         lists:foldl(fun (Form, Acc) -> detect_deps(Form, Acc) end,
                     [], Forms),

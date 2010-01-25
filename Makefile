@@ -6,10 +6,11 @@ RABBITMQ_SERVER_START_ARGS ?=
 RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
 
+DEPS_FILE=deps.mk
 SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
-DEPS_FILE=deps.mk
+INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 BEAM_TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
@@ -59,7 +60,7 @@ ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
 all: $(DEPS_FILE) $(TARGETS)
 
-$(DEPS_FILE): $(SOURCES)
+$(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	escript generate_deps $(INCLUDE_DIR) $(SOURCE_DIR) $(DEPS_FILE)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
