@@ -50,9 +50,7 @@ write_deps(Hdl, IncludeDir, {include, Include}) ->
 
 make_deps(Path, Deps) ->
     {ok, Forms} = epp:parse_file(Path, [], [{use_specs, true}]),
-    Behaviours =
-        lists:foldl(fun (Form, Acc) -> detect_deps(Form, Acc) end,
-                    [], Forms),
+    Behaviours = lists:foldl(fun detect_deps/2, [], Forms),
     dict:store(Path, Behaviours, Deps).
 
 detect_deps({attribute, _LineNumber, behaviour, Behaviour}, Deps) ->
