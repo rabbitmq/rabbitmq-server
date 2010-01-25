@@ -29,6 +29,7 @@ $(DEST)/Portfile: Portfile.in
 	done >checksums.sed
 	sed -e "s|@VERSION@|$(VERSION)|g;s|@BASE_URL@|$(REAL_WEB_URL)|g" \
 	    -f checksums.sed <$^ >$@
+	rm checksums.sed
 
 macports: dirs $(DEST)/Portfile
 	for f in rabbitmq-asroot-script-wrapper rabbitmq-script-wrapper ; do \
