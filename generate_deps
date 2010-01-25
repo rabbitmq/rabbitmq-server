@@ -1,5 +1,6 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
+-mode(compile).
 
 main([IncludeDir, ErlDir, TargetFile]) ->
     ErlDirContents = filelib:wildcard("*.erl", ErlDir),
@@ -11,11 +12,8 @@ main([IncludeDir, ErlDir, TargetFile]) ->
     HrlFiles = [filename:join(IncludeDir, FileName) ||
                    FileName <- IncludeDirContents],
     Headers = sets:from_list(IncludeDirContents),
-    Deps = lists:foldl(fun (Path, Acc) -> make_deps(Path, Acc) end,
-                       dict:new(), ErlFiles),
-    Deps1 = lists:foldl(fun (Path, Acc) -> make_deps(Path, Acc) end,
-                        Deps, HrlFiles),
-    Deps2 = dict:map(
+    Deps = lists:foldl(fun make_deps/2, dict:new(), ErlFiles ++ HrlFiles),
+    Deps1 = dict:map(
               fun (_Path, Dep) ->
                       lists:filter(
                         fun ({module, Behaviour}) ->
@@ -23,7 +21,7 @@ main([IncludeDir, ErlDir, TargetFile]) ->
                             ({include, Include}) ->
                                 sets:is_element(Include, Headers)
                         end, Dep)
-              end, Deps1),
+              end, Deps),
     {ok, Hdl} = file:open(TargetFile, [write, delayed_write]),
     dict:fold(
       fun (_Path, [], ok) ->
@@ -33,16 +31,14 @@ main([IncludeDir, ErlDir, TargetFile]) ->
                   false ->
                       Module = filename:basename(Path, ".erl"),
                       ok = file:write(Hdl, ["$(EBIN_DIR)/", Module, ".beam:"]),
-                      lists:foreach(
-                        fun (E) -> write_deps(Hdl, IncludeDir, E) end, Dep),
+                      [write_deps(Hdl, IncludeDir, E) || E <- Dep],
                       file:write(Hdl, [" ", ErlDir, "/", Module, ".erl\n"]);
                   true ->
                       ok = file:write(Hdl, [Path, ":"]),
-                      lists:foreach(
-                        fun (E) -> write_deps(Hdl, IncludeDir, E) end, Dep),
+                      [write_deps(Hdl, IncludeDir, E) || E <- Dep],
                       file:write(Hdl, "\n")
               end
-      end, ok, Deps2),
+      end, ok, Deps1),
     ok = file:write(Hdl, [TargetFile, ": ", escript:script_name(), "\n"]),
     ok = file:sync(Hdl),
     ok = file:close(Hdl).
