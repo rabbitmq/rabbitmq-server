@@ -540,6 +540,8 @@ tx_commit_from_msg_store(Pubs, AckTags, From,
                                  [Pubs | SPubs],
                                  [From | SFroms] }}.
 
+tx_commit_from_vq(State = #vqstate { on_sync = {_, _, []} }) ->
+    State;
 tx_commit_from_vq(State = #vqstate { on_sync = {SAcks, SPubs, SFroms} }) ->
     State1 = ack(lists:flatten(SAcks), State),
     {PubSeqIds, State2 = #vqstate { index_state = IndexState }} =
