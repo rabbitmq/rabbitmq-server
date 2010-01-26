@@ -1,0 +1,7 @@
+~$
+\.beam$
+^dist/
+^deps/
+^toke$
+^priv$
+^build/
