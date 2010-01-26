@@ -10,9 +10,9 @@ DEPS_FILE=deps.mk
 SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
-INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
-SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
-BEAM_TARGETS=$(EBIN_DIR)/rabbit_framing.beam $(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
+INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
+SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing.erl
+BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.pod, %.gz, $(wildcard docs/*.[0-9].pod))
@@ -75,8 +75,6 @@ $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.p
 
 $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_PATH) $@
-
-$(EBIN_DIR)/rabbit_framing.beam: $(INCLUDE_DIR)/rabbit_framing.hrl
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
