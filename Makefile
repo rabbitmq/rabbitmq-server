@@ -70,9 +70,6 @@ $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 #	ERLC_EMULATOR="erl -smp" erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 
-$(INCLUDE_DIR)/%.hrl:
-	@touch $@
-
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_PATH) $@
 

@@ -8,57 +8,45 @@ main([IncludeDir, ErlDir, TargetFile]) ->
     Modules = sets:from_list(
                 [list_to_atom(filename:basename(FileName, ".erl")) ||
                     FileName <- ErlDirContents]),
-    IncludeDirContents = filelib:wildcard("*.hrl", IncludeDir),
-    HrlFiles = [filename:join(IncludeDir, FileName) ||
-                   FileName <- IncludeDirContents],
-    Headers = sets:from_list(IncludeDirContents),
-    Deps = lists:foldl(fun (Path, Deps1) ->
-                               dict:store(Path, detect_deps(Path), Deps1)
-                       end, dict:new(), ErlFiles ++ HrlFiles),
-    Deps1 = dict:map(
-              fun (_Path, Dep) ->
-                      lists:filter(
-                        fun ({module, Behaviour}) ->
-                                sets:is_element(Behaviour, Modules);
-                            ({include, Include}) ->
-                                sets:is_element(Include, Headers)
-                        end, Dep)
-              end, Deps),
+    Headers = sets:from_list(
+                [filename:join(IncludeDir, FileName) ||
+                    FileName <- filelib:wildcard("*.hrl", IncludeDir)]),
+    Deps = lists:foldl(
+             fun (Path, Deps1) ->
+                     dict:store(Path,
+                                detect_deps(IncludeDir, Modules, Headers, Path),
+                                Deps1)
+             end, dict:new(), ErlFiles),
     {ok, Hdl} = file:open(TargetFile, [write, delayed_write]),
     dict:fold(
       fun (_Path, [], ok) ->
               ok;
           (Path, Dep, ok) ->
-              case lists:suffix(".hrl", Path) of
-                  false ->
-                      Module = filename:basename(Path, ".erl"),
-                      ok = file:write(Hdl, ["$(EBIN_DIR)/", Module, ".beam:"]),
-                      [write_deps(Hdl, IncludeDir, E) || E <- Dep],
-                      file:write(Hdl, [" ", ErlDir, "/", Module, ".erl\n"]);
-                  true ->
-                      ok = file:write(Hdl, [Path, ":"]),
-                      [write_deps(Hdl, IncludeDir, E) || E <- Dep],
-                      file:write(Hdl, "\n")
-              end
-      end, ok, Deps1),
+              Module = filename:basename(Path, ".erl"),
+              ok = file:write(Hdl, ["$(EBIN_DIR)/", Module, ".beam:"]),
+              ok = sets:fold(
+                     fun (E, ok) -> file:write(Hdl, [" ", E]) end, ok, Dep),
+              file:write(Hdl, [" ", ErlDir, "/", Module, ".erl\n"])
+      end, ok, Deps),
     ok = file:write(Hdl, [TargetFile, ": ", escript:script_name(), "\n"]),
     ok = file:sync(Hdl),
     ok = file:close(Hdl).
 
-write_deps(Hdl, _IncludeDir, {module, Behaviour}) ->
-    ok = file:write(Hdl, [" $(EBIN_DIR)/", atom_to_list(Behaviour), ".beam"]);
-write_deps(Hdl, IncludeDir, {include, Include}) ->
-    ok = file:write(Hdl, [" ", IncludeDir, "/", Include]).
-
-detect_deps(Path) ->
-    %% The easiest way to detect includes is to make them fail, so we
-    %% deliberately do not set the include path here.
-    {ok, Forms} = epp:parse_file(Path, [], [{use_specs, true}]),
+detect_deps(IncludeDir, Modules, Headers, Path) ->
+    {ok, Forms} = epp:parse_file(Path, [IncludeDir], [{use_specs, true}]),
     lists:foldl(
       fun ({attribute, _LineNumber, behaviour, Behaviour}, Deps) ->
-              [{module, Behaviour} | Deps];
-          ({error, {_LineNumber, epp, {include, file, Include}}}, Deps) ->
-              [{include, Include} | Deps];
+              case sets:is_element(Behaviour, Modules) of
+                  true  -> sets:add_element(["$(EBIN_DIR)/",
+                                             atom_to_list(Behaviour),
+                                             ".beam"], Deps);
+                  false -> Deps
+              end;
+          ({attribute, _LineNumber, file, {FileName, _LineNumber}}, Deps) ->
+              case sets:is_element(FileName, Headers) of
+                  true  -> sets:add_element(FileName, Deps);
+                  false -> Deps
+              end;
           (_Form, Deps) ->
               Deps
-      end, [], Forms).
+      end, sets:new(), Forms).
