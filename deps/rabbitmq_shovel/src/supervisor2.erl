@@ -32,6 +32,7 @@
 %% Internal exports
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3]).
 -export([handle_cast/2]).
+-export([delayed_restart/2]).
 
 -define(DICT, dict).
 
@@ -43,7 +44,8 @@
 		period,
 		restarts = [],
 	        module,
-	        args}).
+	        args,
+                delay_timers}).
 
 -record(child, {pid = undefined,  % pid is undefined when child is not running
 		name,
@@ -104,6 +106,9 @@ check_childspecs(ChildSpecs) when is_list(ChildSpecs) ->
 	Error -> {error, Error}
     end;
 check_childspecs(X) -> {error, {badarg, X}}.
+
+delayed_restart(Supervisor, RestartDetails) ->
+    gen_server:cast(Supervisor, {delayed_restart, RestartDetails}).
 
 %%% ---------------------------------------------------
 %%% 
@@ -300,6 +305,20 @@ handle_call(which_children, _From, State) ->
     {reply, Resp, State}.
 
 
+handle_cast({delayed_restart, {RestartType, Reason, Child}},
+            State = #state{children = [Child]}) when ?is_simple(State) ->
+    {ok, NState} = do_restart(RestartType, Reason, Child, State),
+    {noreply, NState};
+handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
+  when not ?is_simple(State) ->
+    case get_child(Child#child.name, State) of
+        {value, Child} ->
+            {ok, NState} = do_restart(RestartType, Reason, Child, State),
+            {noreply, NState};
+        _ ->
+            {noreply, State}
+    end;
+
 %%% Hopefully cause a function-clause as there is no API function
 %%% that utilizes cast.
 handle_cast(null, State) ->
@@ -476,7 +495,14 @@ do_restart(transient, Reason, Child, State) ->
 do_restart(temporary, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     NState = state_del_child(Child, State),
-    {ok, NState}.
+    {ok, NState};
+do_restart({RestartType, 0}, Reason, Child, State) ->
+    do_restart(RestartType, Reason, Child, State);
+do_restart({RestartType, Delay}, Reason, Child, State) ->
+    {ok, TRef} = timer:apply_after(Delay*1000, ?MODULE, delayed_restart,
+                                   [self(), {RestartType, Reason, Child}]),
+    {ok, State#state{delay_timers =
+                     sets:add_element(TRef, State#state.delay_timers)}}.
 
 restart(Child, State) ->
     case add_restart(State) of
@@ -714,7 +740,8 @@ init_state1(SupName, {Strategy, MaxIntensity, Period}, Mod, Args) ->
 	       intensity = MaxIntensity,
 	       period = Period,
 	       module = Mod,
-	       args = Args}};
+	       args = Args,
+               delay_timers = sets:new()}};
 init_state1(_SupName, Type, _, _) ->
     {invalid_type, Type}.
 
@@ -741,7 +768,9 @@ supname(N,_)      -> N.
 %%%    {Name, Func, RestartType, Shutdown, ChildType, Modules}
 %%% where Name is an atom
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
-%%%       RestartType is permanent | temporary | transient
+%%%       RestartType is permanent | temporary | transient |
+%%%                      {permanent, Delay} | {temporary, Delay} |
+%%%                      {transient, Delay} where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
 %%%       Modules = [atom()] | dynamic
@@ -787,10 +816,18 @@ validFunc({M, F, A}) when is_atom(M),
                           is_list(A) -> true;
 validFunc(Func)                      -> throw({invalid_mfa, Func}).
 
-validRestartType(permanent)   -> true;
-validRestartType(temporary)   -> true;
-validRestartType(transient)   -> true;
-validRestartType(RestartType) -> throw({invalid_restart_type, RestartType}).
+validRestartType(permanent)          -> true;
+validRestartType(temporary)          -> true;
+validRestartType(transient)          -> true;
+validRestartType({permanent, Delay}) -> validDelay(Delay);
+validRestartType({temporary, Delay}) -> validDelay(Delay);
+validRestartType({transient, Delay}) -> validDelay(Delay);
+validRestartType(RestartType)        -> throw({invalid_restart_type,
+                                               RestartType}).
+
+validDelay(Delay) when is_integer(Delay),
+                       Delay >= 0 -> true;
+validDelay(What)                  -> throw({invalid_delay, What}).
 
 validShutdown(Shutdown, _) 
   when is_integer(Shutdown), Shutdown > 0 -> true;
