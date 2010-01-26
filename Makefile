@@ -61,7 +61,7 @@ ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 all: $(DEPS_FILE) $(TARGETS)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
-	escript generate_deps $(INCLUDE_DIR) $(SOURCE_DIR) $(DEPS_FILE)
+	escript generate_deps $(INCLUDE_DIR) $(SOURCE_DIR) \$$\(EBIN_DIR\) $(DEPS_FILE)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) $@ < $<
