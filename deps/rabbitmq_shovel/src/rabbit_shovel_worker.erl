@@ -22,30 +22,29 @@
 -module(rabbit_shovel_worker).
 -behaviour(gen_server).
 
--export([start_link/0]).
+-export([start_link/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
-start_link() ->
-  gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link(Sleep) ->
+  gen_server:start_link(?MODULE, [Sleep], []).
 
 %---------------------------
 % Gen Server Implementation
 % --------------------------
 
-init([]) ->
+init([Sleep]) ->
     io:format("~p alive!~n", [self()]),
     gen_server:cast(self(), die_soon),
-    {ok, ok}.
+    {ok, Sleep}.
 
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
-handle_cast(die_soon, State) ->
-    Sleep = 2000,
+handle_cast(die_soon, Sleep) ->
     io:format("~p dying in ~p~n", [self(), Sleep]),
     timer:sleep(Sleep),
-    {stop, normal, State}.
+    {stop, normal, Sleep}.
 
 handle_info(_Info, State) ->
     {noreply, State}.

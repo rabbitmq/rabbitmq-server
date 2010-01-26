@@ -29,9 +29,15 @@ start_link() ->
 
 init([]) ->
     {ok, {{one_for_one, 1, 1},
-          [{rabbit_shovel_worker,
-            {rabbit_shovel_worker, start_link, []},
-            {permanent, 5},
+          [{rabbit_shovel_workerA,
+            {rabbit_shovel_worker, start_link, [10000]},
+            {permanent, 1},
+            16#ffffffff,
+            worker,
+            [rabbit_shovel_worker]},
+           {rabbit_shovel_workerB,
+            {rabbit_shovel_worker, start_link, [500]},
+            {permanent, 3},
             16#ffffffff,
             worker,
             [rabbit_shovel_worker]}

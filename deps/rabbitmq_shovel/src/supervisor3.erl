@@ -19,6 +19,13 @@
 %%    Delay has passed *and* the MaxT and MaxR parameters allow the
 %%    child to be restarted.
 %%
+%%    Also note that the Delay is a *minimum*. There is no guarantee
+%%    that the child will be restarted within that time, especially if
+%%    other processes are dying and being restarted at the same time -
+%%    essentially we have to wait for the delay to have passed and for
+%%    the MaxT and MaxR parameters to permit the child to be
+%%    restarted. This may require waiting for longer than Delay.
+%%
 %% All modifications are (C) 2010 LShift Ltd.
 %%
 %% %CopyrightBegin%
