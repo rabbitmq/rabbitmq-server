@@ -1,3 +1,25 @@
+%% This file is a copy of supervisor.erl from the R13B-3 Erlang/OTP
+%% distribution, with the following modifications:
+%%
+%% 1) the module name is supervisor3
+%%
+%% 2) child specifications can contain, as the restart type, a tuple
+%%    {permanent, Delay} | {transient, Delay} where Delay >= 0. The
+%%    delay, in seconds, indicates what should happen if a child, upon
+%%    being restarted, exceeds the MaxT and MaxR parameters. Thus, if
+%%    a child exits, it is restarted as normal. If it exits
+%%    sufficiently quickly and often to exceed the boundaries set by
+%%    the MaxT and MaxR parameters, and a Delay is specified, then
+%%    rather than stopping the supervisor, the supervisor instead
+%%    continues and tries to start up the child again, Delay seconds
+%%    later.
+%%
+%%    Note that you can never restart more frequently than the MaxT
+%%    and MaxR parameters allow: i.e. you must wait until *both* the
+%%    Delay has passed *and* the MaxT and MaxR parameters allow the
+%%    child to be restarted.
+%%
+%% All modifications are (C) 2010 LShift Ltd.
 %%
 %% %CopyrightBegin%
 %% 
@@ -16,7 +38,7 @@
 %% 
 %% %CopyrightEnd%
 %%
--module(supervisor2).
+-module(supervisor3).
 
 -behaviour(gen_server).
 
@@ -44,8 +66,7 @@
 		period,
 		restarts = [],
 	        module,
-	        args,
-                delay_timers}).
+	        args}).
 
 -record(child, {pid = undefined,  % pid is undefined when child is not running
 		name,
@@ -68,10 +89,10 @@ behaviour_info(_Other) ->
 %%% SupName = {local, atom()} | {global, atom()}.
 %%% ---------------------------------------------------
 start_link(Mod, Args) ->
-    gen_server:start_link(supervisor, {self, Mod, Args}, []).
+    gen_server:start_link(supervisor3, {self, Mod, Args}, []).
  
 start_link(SupName, Mod, Args) ->
-    gen_server:start_link(SupName, supervisor, {SupName, Mod, Args}, []).
+    gen_server:start_link(SupName, supervisor3, {SupName, Mod, Args}, []).
  
 %%% ---------------------------------------------------
 %%% Interface functions.
@@ -310,7 +331,7 @@ handle_cast({delayed_restart, {RestartType, Reason, Child}},
     {ok, NState} = do_restart(RestartType, Reason, Child, State),
     {noreply, NState};
 handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
-  when not ?is_simple(State) ->
+  when not (?is_simple(State)) ->
     case get_child(Child#child.name, State) of
         {value, Child} ->
             {ok, NState} = do_restart(RestartType, Reason, Child, State),
@@ -480,6 +501,16 @@ restart_child(Pid, Reason, State) ->
 	    {ok, State}
     end.
 
+do_restart({RestartType, Delay}, Reason, Child, State) ->
+    case restart1(Child, State) of
+        {ok, NState} ->
+            {ok, NState};
+        {terminate, NState} ->
+            {ok, _TRef} = timer:apply_after(
+                            trunc(Delay*1000), ?MODULE, delayed_restart,
+                            [self(), {{RestartType, Delay}, Reason, Child}]),
+            {ok, NState}
+    end;
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
@@ -495,26 +526,32 @@ do_restart(transient, Reason, Child, State) ->
 do_restart(temporary, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     NState = state_del_child(Child, State),
-    {ok, NState};
-do_restart({RestartType, 0}, Reason, Child, State) ->
-    do_restart(RestartType, Reason, Child, State);
-do_restart({RestartType, Delay}, Reason, Child, State) ->
-    {ok, TRef} = timer:apply_after(Delay*1000, ?MODULE, delayed_restart,
-                                   [self(), {RestartType, Reason, Child}]),
-    {ok, State#state{delay_timers =
-                     sets:add_element(TRef, State#state.delay_timers)}}.
+    {ok, NState}.
 
 restart(Child, State) ->
     case add_restart(State) of
 	{ok, NState} ->
-	    restart(NState#state.strategy, Child, NState);
+	    restart(NState#state.strategy, Child, NState, fun restart/2);
 	{terminate, NState} ->
 	    report_error(shutdown, reached_max_restart_intensity,
 			 Child, State#state.name),
 	    {shutdown, remove_child(Child, NState)}
     end.
 
-restart(simple_one_for_one, Child, State) ->
+restart1(Child, State) ->
+    case add_restart(State) of
+	{ok, NState} ->
+	    restart(NState#state.strategy, Child, NState, fun restart1/2);
+	{terminate, _NState} ->
+            %% we've reached the max restart intensity, but the
+            %% add_restart will have added to the restarts
+            %% field. Given we don't want to die here, we need to go
+            %% back to the old restarts field otherwise we'll never
+            %% attempt to restart later.
+            {terminate, State}
+    end.
+
+restart(simple_one_for_one, Child, State, Restart) ->
     #child{mfa = {M, F, A}} = Child,
     Dynamics = ?DICT:erase(Child#child.pid, State#state.dynamics),
     case do_start_child_i(M, F, A) of
@@ -526,9 +563,9 @@ restart(simple_one_for_one, Child, State) ->
 	    {ok, NState};
 	{error, Error} ->
 	    report_error(start_error, Error, Child, State#state.name),
-	    restart(Child, State)
+	    Restart(Child, State)
     end;
-restart(one_for_one, Child, State) ->
+restart(one_for_one, Child, State, Restart) ->
     case do_start_child(State#state.name, Child) of
 	{ok, Pid} ->
 	    NState = replace_child(Child#child{pid = Pid}, State),
@@ -538,25 +575,25 @@ restart(one_for_one, Child, State) ->
 	    {ok, NState};
 	{error, Reason} ->
 	    report_error(start_error, Reason, Child, State#state.name),
-	    restart(Child, State)
+	    Restart(Child, State)
     end;
-restart(rest_for_one, Child, State) ->
+restart(rest_for_one, Child, State, Restart) ->
     {ChAfter, ChBefore} = split_child(Child#child.pid, State#state.children),
     ChAfter2 = terminate_children(ChAfter, State#state.name),
     case start_children(ChAfter2, State#state.name) of
 	{ok, ChAfter3} ->
 	    {ok, State#state{children = ChAfter3 ++ ChBefore}};
 	{error, ChAfter3} ->
-	    restart(Child, State#state{children = ChAfter3 ++ ChBefore})
+	    Restart(Child, State#state{children = ChAfter3 ++ ChBefore})
     end;
-restart(one_for_all, Child, State) ->
+restart(one_for_all, Child, State, Restart) ->
     Children1 = del_child(Child#child.pid, State#state.children),
     Children2 = terminate_children(Children1, State#state.name),
     case start_children(Children2, State#state.name) of
 	{ok, NChs} ->
 	    {ok, State#state{children = NChs}};
 	{error, NChs} ->
-	    restart(Child, State#state{children = NChs})
+	    Restart(Child, State#state{children = NChs})
     end.
 
 %%-----------------------------------------------------------------
@@ -740,8 +777,7 @@ init_state1(SupName, {Strategy, MaxIntensity, Period}, Mod, Args) ->
 	       intensity = MaxIntensity,
 	       period = Period,
 	       module = Mod,
-	       args = Args,
-               delay_timers = sets:new()}};
+	       args = Args}};
 init_state1(_SupName, Type, _, _) ->
     {invalid_type, Type}.
 
@@ -769,7 +805,7 @@ supname(N,_)      -> N.
 %%% where Name is an atom
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
 %%%       RestartType is permanent | temporary | transient |
-%%%                      {permanent, Delay} | {temporary, Delay} |
+%%%                      {permanent, Delay} |
 %%%                      {transient, Delay} where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
@@ -820,12 +856,11 @@ validRestartType(permanent)          -> true;
 validRestartType(temporary)          -> true;
 validRestartType(transient)          -> true;
 validRestartType({permanent, Delay}) -> validDelay(Delay);
-validRestartType({temporary, Delay}) -> validDelay(Delay);
 validRestartType({transient, Delay}) -> validDelay(Delay);
 validRestartType(RestartType)        -> throw({invalid_restart_type,
                                                RestartType}).
 
-validDelay(Delay) when is_integer(Delay),
+validDelay(Delay) when is_number(Delay),
                        Delay >= 0 -> true;
 validDelay(What)                  -> throw({invalid_delay, What}).
 
