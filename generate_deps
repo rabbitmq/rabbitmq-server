@@ -42,7 +42,7 @@ detect_deps(IncludeDir, Modules, Headers, Path) ->
                                              ".beam"], Deps);
                   false -> Deps
               end;
-          ({attribute, _LineNumber, file, {FileName, _LineNumber}}, Deps) ->
+          ({attribute, _LineNumber, file, {FileName, _LineNumber1}}, Deps) ->
               case sets:is_element(FileName, Headers) of
                   true  -> sets:add_element(FileName, Deps);
                   false -> Deps
