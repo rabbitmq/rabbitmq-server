@@ -51,7 +51,8 @@
 
 -export([update/0, get_total_memory/0,
          get_check_interval/0, set_check_interval/1,
-         get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1]).
+         get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1,
+         get_memory_limit/0]).
 
 
 -define(SERVER, ?MODULE).
@@ -77,6 +78,7 @@
              ('ignore' | {'error', any()} | {'ok', pid()})).
 -spec(update/0 :: () -> 'ok').
 -spec(get_total_memory/0 :: () -> (non_neg_integer() | 'unknown')).
+-spec(get_memory_limit/0 :: () -> (non_neg_integer() | 'undefined')).
 -spec(get_check_interval/0 :: () -> non_neg_integer()).
 -spec(set_check_interval/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_vm_memory_high_watermark/0 :: () -> float()).
@@ -107,6 +109,9 @@ get_vm_memory_high_watermark() ->
 set_vm_memory_high_watermark(Fraction) ->
     gen_server:call(?MODULE, {set_vm_memory_high_watermark, Fraction},
                     infinity).
+
+get_memory_limit() ->
+    gen_server:call(?MODULE, get_memory_limit, infinity).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -152,6 +157,9 @@ handle_call(get_check_interval, _From, State) ->
 handle_call({set_check_interval, Timeout}, _From, State) ->
     {ok, cancel} = timer:cancel(State#state.timer),
     {reply, ok, State#state{timeout = Timeout, timer = start_timer(Timeout)}};
+
+handle_call(get_memory_limit, _From, State) ->
+    {reply, State#state.memory_limit, State};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
