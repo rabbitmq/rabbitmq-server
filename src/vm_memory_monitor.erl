@@ -110,11 +110,7 @@ set_vm_memory_high_watermark(Fraction) ->
     gen_server:call(?MODULE, {set_vm_memory_high_watermark, Fraction}).
 
 get_memory_limit() ->
-    try
-        gen_server2:call(?MODULE, get_memory_limit)
-    catch
-        exit:{noproc, _} -> undefined
-    end.
+    gen_server:call(?MODULE, get_memory_limit).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks

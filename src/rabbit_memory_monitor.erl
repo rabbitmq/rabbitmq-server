@@ -124,9 +124,10 @@ stop() ->
 
 init([]) ->
     MemoryLimit = trunc(?MEMORY_LIMIT_SCALING *
-                        (case vm_memory_monitor:get_memory_limit() of
-                             undefined -> ?MEMORY_SIZE_FOR_DISABLED_VMM;
-                             Limit     -> Limit
+                        (try
+                             vm_memory_monitor:get_memory_limit()
+                         catch
+                             exit:{noproc, _} -> ?MEMORY_SIZE_FOR_DISABLED_VMM
                          end)),
 
     {ok, TRef} = timer:apply_interval(?DEFAULT_UPDATE_INTERVAL,
