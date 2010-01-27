@@ -275,7 +275,7 @@ ensure_content_encoded(Content = #content{properties = Props}) ->
 clear_encoded_content(Content = #content{properties_bin = none}) ->
     Content;
 clear_encoded_content(Content = #content{properties = none}) ->
-    %% Only clear when we can rebuild the properties later in
+    %% Only clear when we can rebuild the properties_bin later in
     %% accordance to the content record definition comment - maximum
     %% one of properties and properties_bin can be 'none'
     Content;
