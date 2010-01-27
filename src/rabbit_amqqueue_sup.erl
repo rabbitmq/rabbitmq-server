@@ -44,6 +44,6 @@ start_link() ->
 
 init([]) ->
     {ok, {{simple_one_for_one_terminate, 10, 10},
-          [{amqqueue, {rabbit_amqqueue_process, start_link, []},
+          [{rabbit_amqqueue, {rabbit_amqqueue_process, start_link, []},
             %% 16#ffffffff is the biggest value allowed
             temporary, 16#ffffffff, worker, [rabbit_amqqueue_process]}]}}.
