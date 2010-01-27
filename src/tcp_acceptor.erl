@@ -49,13 +49,16 @@ start_link(Callback, LSock) ->
 
 init({Callback, LSock}) ->
     gen_server:cast(self(), accept),
-    {ok, #state{callback=Callback, sock=LSock, ref=undefined}}.
+    {ok, #state{callback=Callback, sock=LSock}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast(accept, State) ->
-    accept(State).
+    accept(State);
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
 
 handle_info({inet_async, LSock, Ref, {ok, Sock}},
             State = #state{callback={M,F,A}, sock=LSock, ref=Ref}) ->
