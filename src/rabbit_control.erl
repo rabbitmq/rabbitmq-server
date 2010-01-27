@@ -159,8 +159,8 @@ Available commands:
   list_bindings  [-p <VHostPath>] 
   list_connections [<ConnectionInfoItem> ...]
 
-Quiet output mode is selected with the \"-q\" flag. Informational messages
-are suppressed when quiet mode is in effect.
+Quiet output mode is selected with the \"-q\" flag. Informational
+messages are suppressed when quiet mode is in effect.
 
 <node> should be the name of the master node of the RabbitMQ
 cluster. It defaults to the node named \"rabbit\" on the local
@@ -169,24 +169,27 @@ usually be rabbit@server (unless RABBITMQ_NODENAME has been set to
 some non-default value at broker startup time). The output of hostname
 -s is usually the correct suffix to use after the \"@\" sign.
 
-The list_queues, list_exchanges and list_bindings commands accept an optional
-virtual host parameter for which to display results. The default value is \"/\".
+The list_queues, list_exchanges and list_bindings commands accept an
+optional virtual host parameter for which to display results. The
+default value is \"/\".
 
-<QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
-arguments, pid, messages_ready, messages_unacknowledged, messages_uncommitted, 
-messages, acks_uncommitted, consumers, transactions, memory]. The default is 
- to display name and (number of) messages.
+<QueueInfoItem> must be a member of the list [name, durable,
+auto_delete, arguments, pid, messages_ready, messages_unacknowledged,
+messages_uncommitted, messages, acks_uncommitted, consumers,
+transactions, memory]. The default is to display name and (number of)
+messages.
 
-<ExchangeInfoItem> must be a member of the list [name, type, durable, 
+<ExchangeInfoItem> must be a member of the list [name, type, durable,
 auto_delete, arguments]. The default is to display name and type.
 
-The output format for \"list_bindings\" is a list of rows containing 
+The output format for \"list_bindings\" is a list of rows containing
 exchange name, queue name, routing key and arguments, in that order.
 
-<ConnectionInfoItem> must be a member of the list [pid, address, port, 
-peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
-client_properties, recv_oct, recv_cnt, send_oct, send_cnt, send_pend].
-The default is to display user, peer_address, peer_port and state.
+<ConnectionInfoItem> must be a member of the list [pid, address, port,
+peer_address, peer_port, state, channels, user, vhost, timeout,
+frame_max, client_properties, recv_oct, recv_cnt, send_oct, send_cnt,
+send_pend].  The default is to display user, peer_address, peer_port
+and state.
 
 "),
     halt(1).
