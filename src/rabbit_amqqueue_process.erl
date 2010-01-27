@@ -85,7 +85,7 @@
          consumers,
          transactions,
          memory]).
-         
+
 %%----------------------------------------------------------------------------
 
 start_link(Q) ->
@@ -166,7 +166,7 @@ record_current_channel_tx(ChPid, Txn) ->
     %% as a side effect this also starts monitoring the channel (if
     %% that wasn't happening already)
     store_ch_record((ch_record(ChPid))#cr{txn = Txn}).
-    
+
 deliver_immediately(Message, Delivered,
                     State = #q{q = #amqqueue{name = QName},
                                active_consumers = ActiveConsumers,
@@ -290,7 +290,7 @@ possibly_unblock(State, ChPid, Update) ->
                                      blocked_consumers = NewBlockedConsumers})
             end
     end.
-    
+
 should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
 should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).
@@ -453,7 +453,7 @@ all_tx() ->
 mark_tx_persistent(Txn) ->
     Tx = lookup_tx(Txn),
     store_tx(Txn, Tx#tx{is_persistent = true}).
-    
+
 is_tx_persistent(Txn) ->
     #tx{is_persistent = Res} = lookup_tx(Txn),
     Res.

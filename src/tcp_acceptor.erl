@@ -63,7 +63,7 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
             State = #state{callback={M,F,A}, sock=LSock, ref=Ref}) ->
 
     %% patch up the socket so it looks like one we got from
-    %% gen_tcp:accept/1 
+    %% gen_tcp:accept/1
     {ok, Mod} = inet_db:lookup_socket(LSock),
     inet_db:register_socket(Sock, Mod),
 

@@ -54,7 +54,7 @@
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     FullCommand = init:get_plain_arguments(),
-    #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
+    #params{quiet = Quiet, node = Node, command = Command, args = Args} =
         parse_args(FullCommand, #params{quiet = false,
                                         node = rabbit_misc:makenode(NodeStr)}),
     Inform = case Quiet of
@@ -156,7 +156,7 @@ Available commands:
 
   list_queues    [-p <VHostPath>] [<QueueInfoItem> ...]
   list_exchanges [-p <VHostPath>] [<ExchangeInfoItem> ...]
-  list_bindings  [-p <VHostPath>] 
+  list_bindings  [-p <VHostPath>]
   list_connections [<ConnectionInfoItem> ...]
 
 Quiet output mode is selected with the \"-q\" flag. Informational
@@ -290,7 +290,7 @@ action(list_bindings, Node, Args, Inform) ->
     InfoKeys = [exchange_name, queue_name, routing_key, args],
     display_info_list(
       [lists:zip(InfoKeys, tuple_to_list(X)) ||
-          X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])], 
+          X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])],
       InfoKeys),
     ok;
 
@@ -320,9 +320,9 @@ action(list_permissions, Node, VHost, [], Inform) ->
                              [VHost]})).
 
 parse_vhost_flag(Args) when is_list(Args) ->
-    case Args of 
+    case Args of
         ["-p", VHost | RemainingArgs] ->
-            {VHost, RemainingArgs};  
+            {VHost, RemainingArgs};
         RemainingArgs ->
             {"/", RemainingArgs}
     end.
@@ -332,9 +332,9 @@ parse_vhost_flag_bin(Args) ->
     {list_to_binary(VHost), RemainingArgs}.
 
 default_if_empty(List, Default) when is_list(List) ->
-    if List == [] -> 
-        Default; 
-       true -> 
+    if List == [] ->
+        Default;
+       true ->
         [list_to_atom(X) || X <- List]
     end.
 
@@ -359,7 +359,7 @@ format_info_item(Key, Items) ->
             inet_parse:ntoa(Value);
         Value when is_pid(Value) ->
             pid_to_string(Value);
-        Value when is_binary(Value) -> 
+        Value when is_binary(Value) ->
             escape(Value);
         Value when is_atom(Value) ->
             escape(atom_to_list(Value));

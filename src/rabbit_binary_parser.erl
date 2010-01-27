@@ -139,7 +139,7 @@ parse_properties(Bit, [Type | TypeListRest], Acc, FirstShort,
         end,
     parse_properties(Bit + 1, TypeListRest, [Value | Acc], FirstShort,
                      Remainder, Rest).
- 
+
 parse_property(shortstr, <<Len:8/unsigned, String:Len/binary, Rest/binary>>) ->
     {String, Rest};
 parse_property(longstr, <<Len:32/unsigned, String:Len/binary, Rest/binary>>) ->

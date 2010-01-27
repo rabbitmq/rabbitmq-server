@@ -55,8 +55,8 @@
 -spec(cluster/1 :: ([erlang_node()]) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
--spec(is_clustered/0 :: () -> boolean()). 
--spec(empty_ram_only_tables/0 :: () -> 'ok'). 
+-spec(is_clustered/0 :: () -> boolean()).
+-spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 
 -endif.
@@ -173,7 +173,7 @@ replicated_table_names() ->
     ].
 
 dir() -> mnesia:system_info(directory).
-    
+
 ensure_mnesia_dir() ->
     MnesiaDir = dir() ++ "/",
     case filelib:ensure_dir(MnesiaDir) of
@@ -389,7 +389,7 @@ wait_for_replicated_tables() -> wait_for_tables(replicated_table_names()).
 
 wait_for_tables() -> wait_for_tables(table_names()).
 
-wait_for_tables(TableNames) -> 
+wait_for_tables(TableNames) ->
     case check_schema_integrity() of
         ok ->
             case mnesia:wait_for_tables(TableNames, 30000) of

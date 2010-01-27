@@ -485,7 +485,7 @@ handle_method(#'basic.qos'{global = true}, _, _State) ->
     rabbit_misc:protocol_error(not_implemented, "global=true", []);
 
 handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
-    rabbit_misc:protocol_error(not_implemented, 
+    rabbit_misc:protocol_error(not_implemented,
                                "prefetch_size!=0 (~w)", [Size]);
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
@@ -756,9 +756,9 @@ handle_method(_MethodRecord, _Content, _State) ->
 
 binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                ReturnMethod, NoWait, State = #ch{virtual_host = VHostPath}) ->
-    %% FIXME: connection exception (!) on failure?? 
+    %% FIXME: connection exception (!) on failure??
     %% (see rule named "failure" in spec-XML)
-    %% FIXME: don't allow binding to internal exchanges - 
+    %% FIXME: don't allow binding to internal exchanges -
     %% including the one named "" !
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_write_permitted(QueueName, State),
@@ -894,7 +894,7 @@ limit_queues(LPid, #ch{consumer_mapping = Consumers}) ->
     rabbit_amqqueue:limit_all(consumer_queues(Consumers), self(), LPid).
 
 consumer_queues(Consumers) ->
-    [QPid || QueueName <- 
+    [QPid || QueueName <-
                  sets:to_list(
                    dict:fold(fun (_ConsumerTag, QueueName, S) ->
                                      sets:add_element(QueueName, S)
