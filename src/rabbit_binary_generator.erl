@@ -46,6 +46,7 @@
          build_heartbeat_frame/0]).
 -export([generate_table/1, encode_properties/2]).
 -export([check_empty_content_body_frame_size/0]).
+-export([ensure_content_encoded/1, clear_encoded_content/1]).
 
 -import(lists).
 
@@ -63,6 +64,8 @@
 -spec(generate_table/1 :: (amqp_table()) -> binary()).
 -spec(encode_properties/2 :: ([amqp_property_type()], [any()]) -> binary()).
 -spec(check_empty_content_body_frame_size/0 :: () -> 'ok').
+-spec(ensure_content_encoded/1 :: (content()) -> encoded_content()).
+-spec(clear_encoded_content/1 :: (content()) -> unencoded_content()).
 
 -endif.
 
@@ -262,3 +265,19 @@ check_empty_content_body_frame_size() ->
             exit({incorrect_empty_content_body_frame_size,
                   ComputedSize, ?EMPTY_CONTENT_BODY_FRAME_SIZE})
     end.
+
+ensure_content_encoded(Content = #content{properties_bin = PropsBin})
+  when PropsBin =/= 'none' ->
+    Content;
+ensure_content_encoded(Content = #content{properties = Props}) ->
+    Content #content{properties_bin = rabbit_framing:encode_properties(Props)}.
+
+clear_encoded_content(Content = #content{properties_bin = none}) ->
+    Content;
+clear_encoded_content(Content = #content{properties = none}) ->
+    %% Only clear when we can rebuild the properties_bin later in
+    %% accordance to the content record definition comment - maximum
+    %% one of properties and properties_bin can be 'none'
+    Content;
+clear_encoded_content(Content = #content{}) ->
+    Content#content{properties_bin = none}.

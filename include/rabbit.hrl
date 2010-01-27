@@ -128,10 +128,16 @@
                properties            :: amqp_properties(),
                properties_bin        :: 'none',
                payload_fragments_rev :: [binary()]}).
+-type(unencoded_content() :: undecoded_content()).
 -type(decoded_content() ::
       #content{class_id              :: amqp_class_id(),
                properties            :: amqp_properties(),
                properties_bin        :: maybe(binary()),
+               payload_fragments_rev :: [binary()]}).
+-type(encoded_content() ::
+      #content{class_id              :: amqp_class_id(),
+               properties            :: maybe(amqp_properties()),
+               properties_bin        :: binary(),
                payload_fragments_rev :: [binary()]}).
 -type(content() :: undecoded_content() | decoded_content()).
 -type(basic_message() ::
