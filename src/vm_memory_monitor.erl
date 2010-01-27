@@ -96,16 +96,17 @@ get_total_memory() ->
     get_total_memory(os:type()).
 
 get_check_interval() ->
-    gen_server:call(?MODULE, get_check_interval).
+    gen_server:call(?MODULE, get_check_interval, infinity).
 
 set_check_interval(Fraction) ->
-    gen_server:call(?MODULE, {set_check_interval, Fraction}).
+    gen_server:call(?MODULE, {set_check_interval, Fraction}, infinity).
 
 get_vm_memory_high_watermark() ->
-    gen_server:call(?MODULE, get_vm_memory_high_watermark).
+    gen_server:call(?MODULE, get_vm_memory_high_watermark, infinity).
 
 set_vm_memory_high_watermark(Fraction) ->
-    gen_server:call(?MODULE, {set_vm_memory_high_watermark, Fraction}).
+    gen_server:call(?MODULE, {set_vm_memory_high_watermark, Fraction},
+                    infinity).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
