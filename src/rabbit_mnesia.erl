@@ -162,8 +162,7 @@ table_definitions() ->
        {disc_copies, [node()]}]},
      {rabbit_queue,
       [{record_name, amqqueue},
-       {attributes, record_info(fields, amqqueue)}]}
-    ].
+       {attributes, record_info(fields, amqqueue)}]}].
 
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
@@ -197,8 +196,7 @@ ensure_mnesia_not_running() ->
 
 check_schema_integrity() ->
     %%TODO: more thorough checks
-    case catch [mnesia:table_info(Tab, version)
-                || Tab <- table_names()] of
+    case catch [mnesia:table_info(Tab, version) || Tab <- table_names()] of
         {'EXIT', Reason} -> {error, Reason};
         _ -> ok
     end.
