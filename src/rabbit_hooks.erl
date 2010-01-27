@@ -61,8 +61,8 @@ unsubscribe(Hook, HandlerName) ->
 trigger(Hook, Args) ->
     Hooks = ets:lookup(?TableName, Hook),
     [case catch apply(M, F, [Hook, Name, Args | A]) of
-        {'EXIT', Reason} -> 
-            rabbit_log:warning("Failed to execute handler ~p for hook ~p: ~p", 
+        {'EXIT', Reason} ->
+            rabbit_log:warning("Failed to execute handler ~p for hook ~p: ~p",
                                [Name, Hook, Reason]);
         _ -> ok
      end || {_, Name, {M, F, A}} <- Hooks],

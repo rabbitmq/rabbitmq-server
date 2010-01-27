@@ -59,7 +59,7 @@
       (pid(), pid(), pid(), amqp_method(), content()) -> 'ok').
 -spec(internal_send_command/3 ::
       (socket(), channel_number(), amqp_method()) -> 'ok').
--spec(internal_send_command/5 :: 
+-spec(internal_send_command/5 ::
       (socket(), channel_number(), amqp_method(),
        content(), non_neg_integer()) -> 'ok').
 

@@ -245,7 +245,7 @@ record_current_channel_tx(ChPid, Txn) ->
     %% as a side effect this also starts monitoring the channel (if
     %% that wasn't happening already)
     store_ch_record((ch_record(ChPid))#cr{txn = Txn}).
-    
+
 deliver_msgs_to_consumers(
   Funs = {PredFun, DeliverFun}, FunAcc,
   State = #q{q = #amqqueue{name = QName},
@@ -432,7 +432,7 @@ possibly_unblock(State, ChPid, Update) ->
                                      blocked_consumers = NewBlockedConsumers})
             end
     end.
-    
+
 should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
 should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).

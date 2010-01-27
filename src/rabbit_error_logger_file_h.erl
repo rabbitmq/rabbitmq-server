@@ -56,7 +56,7 @@ init({{File, Suffix}, []}) ->
 init({{File, _}, error}) ->
     init(File);
 %% Used only when swapping handlers without performing
-%% log rotation 
+%% log rotation
 init({File, []}) ->
     init(File);
 init({File, _Type} = FileInfo) ->
