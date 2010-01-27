@@ -10,8 +10,7 @@
 %%
 %%   The Original Code is RabbitMQ-shovel.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
+%%   The Initial Developers of the Original Code are LShift Ltd.
 %%
 %%   Copyright (C) 2010 LShift Ltd.
 %%
