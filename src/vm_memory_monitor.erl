@@ -78,6 +78,7 @@
              ('ignore' | {'error', any()} | {'ok', pid()})).
 -spec(update/0 :: () -> 'ok').
 -spec(get_total_memory/0 :: () -> (non_neg_integer() | 'unknown')).
+-spec(get_vm_limit/0 :: () -> (non_neg_integer() | 'unknown')).
 -spec(get_memory_limit/0 :: () -> (non_neg_integer() | 'undefined')).
 -spec(get_check_interval/0 :: () -> non_neg_integer()).
 -spec(set_check_interval/1 :: (non_neg_integer()) -> 'ok').
@@ -96,6 +97,9 @@ update() ->
 
 get_total_memory() ->
     get_total_memory(os:type()).
+
+get_vm_limit() ->
+    get_vm_limit(os:type()).
 
 get_check_interval() ->
     gen_server:call(?MODULE, get_check_interval, infinity).
@@ -208,9 +212,17 @@ start_timer(Timeout) ->
     {ok, TRef} = timer:apply_interval(Timeout, ?MODULE, update, []),
     TRef.
 
+%% According to http://msdn.microsoft.com/en-us/library/aa366778(VS.85).aspx
+%% Windows has 2GB and 8TB of address space for 32 and 64 bit accordingly.
+get_vm_limit({win32,_OSname}) ->
+    case erlang:system_info(wordsize) of
+        4 -> 2147483648;     %% 2 GB for 32 bits  2^31
+        8 -> 8796093022208   %% 8 TB for 64 bits  2^42
+    end;
+
 %% On a 32-bit machine, if you're using more than 2 gigs of RAM you're
 %% in big trouble anyway.
-get_vm_limit() ->
+get_vm_limit(_OsType) ->
     case erlang:system_info(wordsize) of
         4 -> 4294967296;     %% 4 GB for 32 bits  2^32
         8 -> 281474976710656 %% 256 TB for 64 bits 2^48
@@ -251,18 +263,14 @@ get_total_memory({unix,freebsd}) ->
     PageCount * PageSize;
 
 get_total_memory({win32,_OSname}) ->
-    [Result|_] = os_mon_sysinfo:get_mem_info(),
-    {ok, [_MemLoad, TotPhys, _AvailPhys,
-          _TotPage, _AvailPage, _TotV, _AvailV], _RestStr} =
-        io_lib:fread("~d~d~d~d~d~d~d", Result),
-    %% Due to erlang bug, on some windows boxes this number is less than zero.
-    %% for example Windows 7 64 bit with 4Gigs of RAM:
+    %% Due to erlang print format bug, on windows boxes the memory size is
+    %% broken. For example Windows 7 64 bit with 4Gigs of RAM we get negative
+    %% memory size:
     %% > os_mon_sysinfo:get_mem_info().
     %% ["76 -1658880 1016913920 -1 -1021628416 2147352576 2134794240\n"]
-    case TotPhys < 1 of
-        true    -> unknown;
-        false   -> TotPhys
-    end;
+    %% Due to that bug, we actually don't know anything. Even if the number is
+    %% postive we can't be sure if it's sane.
+    unknown;
 
 get_total_memory({unix, linux}) ->
     File = read_proc_file("/proc/meminfo"),
