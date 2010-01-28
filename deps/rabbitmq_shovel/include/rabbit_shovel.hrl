@@ -23,6 +23,7 @@
 
 -record(endpoint,
         {amqp_params,
+         queue_or_exchange,
          resource_declarations
         }).
 

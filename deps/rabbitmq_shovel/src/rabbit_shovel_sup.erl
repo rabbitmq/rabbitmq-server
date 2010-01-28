@@ -87,7 +87,7 @@ parse_shovel_config(ShovelName, ShovelConfig) ->
                                                fun (V) -> {V, Pos} end, Acc)}
                           end, {2, Dict}, Fields),
                     try
-                        {ok, run_ok_error_reader_state_monad(
+                        {ok, run_reader_state_monad(
                                [{fun parse_uris/3, sources},
                                 {fun parse_uris/3, destinations},
                                 {fun parse_non_negative_integer/3, qos},
@@ -113,29 +113,85 @@ parse_shovel_config(ShovelName, ShovelConfig) ->
     end.
 
 %% --=: Combined state-reader monad implementation start :=--
-run_ok_error_reader_state_monad(FunList, State, Reader) ->
-    case lists:foldl(fun ok_error_reader_state_monad/2,
-                     {ok, State, Reader},
-                     FunList) of
-        {ok, State1, _Reader} -> State1;
-        {error, Reason}       -> throw({error, Reason})
-    end.
+run_reader_state_monad(FunList, State, Reader) ->
+    {ok, State1, _Reader} =
+        lists:foldl(fun reader_state_monad/2,
+                    {ok, State, Reader},
+                    FunList),
+    State1.
 
-ok_error_reader_state_monad({Fun, Key}, {ok, State, Reader}) ->
-    case Fun(dict:fetch(Key, Reader), Key, State) of
-        {ok, State1}    -> {ok, State1, Reader};
-        {error, Reason} -> {error, Reason}
-    end;
-ok_error_reader_state_monad(_, {error, Reason}) ->
-    {error, Reason}.
+reader_state_monad({Fun, Key}, {ok, State, Reader}) ->
+    {ok, State1} = Fun(dict:fetch(Key, Reader), Key, State),
+    {ok, State1, Reader}.
+
+%% --=: Plain state monad implementation start :=--
+run_state_monad(FunList, State) ->
+    {ok, State1} =
+        lists:foldl(fun state_monad/2, {ok, State}, FunList),
+    State1.
+
+state_monad(Fun, {ok, State}) ->
+    Fun(State).
 
 return(State) -> {ok, State}.
 
-fail(Reason) -> {error, Reason}.
-%% --=: Combined state-reader monad implementation end :=--
+fail(Reason) -> throw({error, Reason}).
+%% --=: end :=--
 
-parse_uris({Uris, Pos}, _FieldName, Shovel) ->
-    return(setelement(Pos, Shovel, Uris)).
+parse_uris({{Uris = [Uri|_], QueueExchange, ResourceDecls}, Pos}, _FieldName,
+           Shovel) when is_list(Uri) ->
+    Len = length(Uris),
+    {[], ParsedUris} =
+        run_state_monad(lists:duplicate(Len, fun parse_uri/1), {Uris, []}),
+    Endpoint = #endpoint { amqp_params = ParsedUris,
+                           queue_or_exchange = QueueExchange,
+                           resource_declarations = ResourceDecls },
+    return(setelement(Pos, Shovel, Endpoint));
+parse_uris({{Uri, QueueExchange, ResourceDecls}, Pos}, FieldName, Shovel)
+  when is_list(Uri) ->
+    parse_uris({{[Uri], QueueExchange, ResourceDecls}, Pos}, FieldName, Shovel);
+parse_uris({{Uri, QueueExchange}, Pos}, FieldName, Shovel) when is_list(Uri) ->
+    parse_uris({{Uri, QueueExchange, undefined}, Pos}, FieldName, Shovel);
+parse_uris({NotUri, _Pos}, FieldName, _Shovel) ->
+    fail({require_something_closer_to_a_uri_and_queue_or_exchange,
+          FieldName, NotUri}).
+
+parse_uri({[Uri | Uris], Acc}) ->
+    case uri_parser:parse(Uri, [{host, undefined}, {path, "/"}]) of
+        {error, Reason} ->
+            fail({unable_to_parse_uri, Uri, Reason});
+        Parsed ->
+            Endpoint =
+                run_state_monad(
+                  [fun (_) ->
+                           case lists:keysearch(scheme, 1, Parsed) of
+                               {value, {scheme, "amqp"}} ->
+                                   build_endpoint(Parsed);
+                               {value, {scheme, "amqps"}} ->
+                                   build_ssl_endpoint(Parsed);
+                               {value, {scheme, Scheme}} ->
+                                   fail({unexpected_uri_scheme, Scheme, Uri})
+                           end
+                  end], undefined),
+            return({Uris, [Endpoint | Acc]})
+    end.
+
+build_endpoint(ParsedUri) ->
+    {value, {host, Host}} = lists:keysearch(host, 1, ParsedUri),
+    {value, {path, Path}} = lists:keysearch(path, 1, ParsedUri),
+    Params = #amqp_params { host = Host, virtual_host = list_to_binary(Path) },
+    Params1 =
+        case lists:keysearch(userinfo, 1, ParsedUri) of
+            {value, {userinfo, [Username, Password | _ ]}} ->
+                Params #amqp_params { username = list_to_binary(Username),
+                                      password = list_to_binary(Password) };
+            _ ->
+                Params
+        end,
+    return(Params1).
+
+build_ssl_endpoint(ParsedUri) ->
+    #amqp_params{}.
 
 parse_non_negative_integer({N, Pos}, _FieldName, Shovel)
   when is_integer(N) andalso N >= 0 ->
