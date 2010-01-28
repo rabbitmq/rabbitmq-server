@@ -218,7 +218,8 @@ get_vm_limit() ->
     end.
 
 get_mem_limit(MemFraction, TotalMemory) ->
-    lists:min([trunc(TotalMemory * MemFraction), get_vm_limit()]).
+    AvMem = lists:min([TotalMemory, get_vm_limit()]),
+    trunc(AvMem * MemFraction).
 
 %%----------------------------------------------------------------------------
 %% Internal Helpers
@@ -254,7 +255,14 @@ get_total_memory({win32,_OSname}) ->
     {ok, [_MemLoad, TotPhys, _AvailPhys,
           _TotPage, _AvailPage, _TotV, _AvailV], _RestStr} =
         io_lib:fread("~d~d~d~d~d~d~d", Result),
-    TotPhys;
+    %% Due to erlang bug, on some windows boxes this number is less than zero.
+    %% for example Windows 7 64 bit with 4Gigs of RAM:
+    %% > os_mon_sysinfo:get_mem_info().
+    %% ["76 -1658880 1016913920 -1 -1021628416 2147352576 2134794240\n"]
+    case TotPhys < 1 of
+        true    -> unknown;
+        false   -> TotPhys
+    end;
 
 get_total_memory({unix, linux}) ->
     File = read_proc_file("/proc/meminfo"),
