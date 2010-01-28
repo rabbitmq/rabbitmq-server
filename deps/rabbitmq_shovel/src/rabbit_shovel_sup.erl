@@ -139,20 +139,20 @@ fail(Reason) -> throw({error, Reason}).
 %% --=: end :=--
 
 parse_endpoint({ok, {Endpoint, Pos}}, FieldName, Shovel) ->
-    Brokers = case lists:keysearch(brokers, 1, Endpoint) of
-                  {value, {brokers, [B|_] = Bs}} when is_list(B) ->
-                      Bs;
-                  {value, {brokers, B}} ->
-                      fail({require_a_list_of_brokers, B, FieldName});
-                  false ->
-                      case lists:keysearch(broker, 1, Endpoint) of
-                          {value, {broker, B}} when is_list(B) ->
+    Brokers = case proplists:get_value(brokers, Endpoint) of
+                  undefined ->
+                      case proplists:get_value(broker, Endpoint) of
+                          undefined ->
+                              fail({require_broker_or_brokers, FieldName});
+                          B when is_list(B) ->
                               [B];
-                          {value, {broker, B}} ->
-                              fail({broker_should_be_string_uri, B, FieldName});
-                          false ->
-                              fail({require_broker_or_brokers, FieldName})
-                      end
+                          B ->
+                              fail({broker_should_be_string_uri, B, FieldName})
+                      end;
+                  [B|_] = Bs when is_list(B) ->
+                      Bs;
+                  B ->
+                      fail({require_a_list_of_brokers, B, FieldName})
               end,
     {[], Brokers1} = run_state_monad(
                        lists:duplicate(length(Brokers), fun parse_uri/1),
@@ -163,24 +163,22 @@ parse_endpoint({ok, {Endpoint, Pos}}, FieldName, Shovel) ->
                              destinations -> exchange
                          end,
     QueueExchange =
-        case lists:keysearch(QueueExchangeField, 1, Endpoint) of
-            {value, {_Field, Value}} when is_binary(Value) ->
-                Value;
-            {value, {queue, private}} ->
+        case proplists:get_value(QueueExchangeField, Endpoint) of
+            undefined ->
+                fail({field_required, QueueExchangeField, FieldName});
+            private when QueueExchangeField =:= queue ->
                 private;
-            {value, {_Field, Value}} ->
-                fail({need_list_for_field, QueueExchangeField, Value, FieldName});
-            false ->
-                fail({field_required, QueueExchangeField, FieldName})
+            Value when is_binary(Value) ->
+                Value;
+            Value ->
+                fail({need_binary_for_field, QueueExchangeField, Value, FieldName})
         end,
 
     ResourceDecls =
-        case lists:keysearch(declarations, 1, Endpoint) of
-            false ->
-                [];
-            {value, {declarations, Decls}} when is_list(Decls) ->
+        case proplists:get_value(declarations, Endpoint, []) of
+            Decls when is_list(Decls) ->
                 Decls;
-            {value, {declarations, Decls}} ->
+            Decls ->
                 fail({declarations_should_be_a_list, Decls, FieldName})
         end,
     {[], ResourceDecls1} =
@@ -218,12 +216,12 @@ parse_uri({[Uri | Uris], Acc}) ->
             Endpoint =
                 run_state_monad(
                   [fun (_) ->
-                           case lists:keysearch(scheme, 1, Parsed) of
-                               {value, {scheme, "amqp"}} ->
+                           case proplists:get_value(scheme, Parsed) of
+                               "amqp" ->
                                    build_plain_broker(Parsed);
-                               {value, {scheme, "amqps"}} ->
+                               "amqps" ->
                                    build_ssl_broker(Parsed);
-                               {value, {scheme, Scheme}} ->
+                               Scheme ->
                                    fail({unexpected_uri_scheme, Scheme, Uri})
                            end
                    end], undefined),
@@ -231,14 +229,13 @@ parse_uri({[Uri | Uris], Acc}) ->
     end.
 
 build_broker(ParsedUri) ->
-    {value, {host, Host}} = lists:keysearch(host, 1, ParsedUri),
-    {value, {port, Port}} = lists:keysearch(port, 1, ParsedUri),
-    {value, {path, Path}} = lists:keysearch(path, 1, ParsedUri),
+    [Host, Port, Path] =
+        [proplists:get_value(F, ParsedUri) || F <- [host, port, path]],
     Params = #amqp_params { host = Host, port = Port,
                             virtual_host = list_to_binary(Path) },
     Params1 =
-        case lists:keysearch(userinfo, 1, ParsedUri) of
-            {value, {userinfo, [Username, Password | _ ]}} ->
+        case proplists:get_value(userinfo, ParsedUri) of
+            [Username, Password | _ ] ->
                 Params #amqp_params { username = list_to_binary(Username),
                                       password = list_to_binary(Password) };
             _ ->
@@ -255,7 +252,7 @@ build_plain_broker(ParsedUri) ->
 
 build_ssl_broker(ParsedUri) ->
     Params = run_state_monad([fun build_broker/1], ParsedUri),
-    {value, {'query', Query}} = lists:keysearch('query', 1, ParsedUri),
+    Query = proplists:get_value('query', ParsedUri),
     SSLOptions = run_reader_state_monad(
                    [{fun find_path_parameter/3,    "cacertfile"},
                     {fun find_path_parameter/3,    "certfile"},
