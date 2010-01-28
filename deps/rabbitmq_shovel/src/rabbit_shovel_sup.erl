@@ -34,21 +34,22 @@ start_link() ->
     end.
 
 init([Configurations]) ->
-    io:format("Configs: ~p~n", [dict:to_list(Configurations)]),
-    {ok, {{one_for_one, 10, 1},
-          [{rabbit_shovel_worker_a,
-            {rabbit_shovel_worker, start_link, [10000]},
-            {permanent, 1},
-            16#ffffffff,
-            worker,
-            [rabbit_shovel_worker]},
-           {rabbit_shovel_worker_b,
-            {rabbit_shovel_worker, start_link, [5]},
-            {permanent, 3},
-            16#ffffffff,
-            worker,
-            [rabbit_shovel_worker]}
-          ]}}.
+    Len = dict:size(Configurations),
+    {ok, {{one_for_one, 2*Len, 2}, make_child_specs(Configurations)}}.
+
+make_child_specs(Configurations) ->
+    dict:fold(
+      fun (ShovelName, ShovelConfig, Acc) ->
+              [{ShovelName,
+                {rabbit_shovel_worker, start_link, [ShovelName, ShovelConfig]},
+                case ShovelConfig #shovel.reconnect of
+                    0 -> temporary;
+                    N -> {transient, N}
+                end,
+                16#ffffffff,
+                worker,
+                [rabbit_shovel_worker]} | Acc]
+      end, [], Configurations).
 
 parse_configuration(undefined) ->
     {error, no_shovels_configured};
@@ -57,7 +58,8 @@ parse_configuration({ok, Env}) ->
 
 parse_configuration([], Acc) ->
     {ok, Acc};
-parse_configuration([{ShovelName, ShovelConfig} | Env], Acc) ->
+parse_configuration([{ShovelName, ShovelConfig} | Env], Acc)
+  when is_atom(ShovelName) ->
     case dict:is_key(ShovelName, Acc) of
         true ->
             {error, {duplicate_shovel_definition, ShovelName}};
@@ -69,7 +71,9 @@ parse_configuration([{ShovelName, ShovelConfig} | Env], Acc) ->
                 {error, Reason} ->
                     {error, Reason}
             end
-    end.
+    end;
+parse_configuration(_, _Acc) ->
+    {error, require_list_of_shovel_configurations_with_atom_names}.
 
 parse_shovel_config(ShovelName, ShovelConfig) ->
     Dict = dict:from_list(ShovelConfig),
