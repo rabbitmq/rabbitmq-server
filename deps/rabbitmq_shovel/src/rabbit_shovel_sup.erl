@@ -157,14 +157,15 @@ parse_endpoint({ok, {Endpoint, Pos}}, FieldName, Shovel) ->
     {[], Brokers1} = run_state_monad(
                        lists:duplicate(length(Brokers), fun parse_uri/1),
                        {Brokers, []}),
+
     QueueExchangeField = case FieldName of
                              sources      -> queue;
                              destinations -> exchange
                          end,
     QueueExchange =
         case lists:keysearch(QueueExchangeField, 1, Endpoint) of
-            {value, {_Field, Value}} when is_list(Value) ->
-                list_to_binary(Value);
+            {value, {_Field, Value}} when is_binary(Value) ->
+                Value;
             {value, {queue, private}} ->
                 private;
             {value, {_Field, Value}} ->
@@ -172,19 +173,41 @@ parse_endpoint({ok, {Endpoint, Pos}}, FieldName, Shovel) ->
             false ->
                 fail({field_required, QueueExchangeField, FieldName})
         end,
+
     ResourceDecls =
-        case lists:keysearch(resource_declarations, 1, Endpoint) of
+        case lists:keysearch(declarations, 1, Endpoint) of
             false ->
                 [];
-            {value, {resource_declarations, Decls}} when is_list(Decls) ->
+            {value, {declarations, Decls}} when is_list(Decls) ->
                 Decls;
-            {value, {resource_declarations, Decls}} ->
-                fail({resource_declarations_should_be_a_list, Decls, FieldName})
+            {value, {declarations, Decls}} ->
+                fail({declarations_should_be_a_list, Decls, FieldName})
         end,
+    {[], ResourceDecls1} =
+        run_state_monad(
+          lists:duplicate(length(ResourceDecls), fun parse_declaration/1),
+          {ResourceDecls, []}),
+
     Result = #endpoint { amqp_params = Brokers1,
                          queue_or_exchange = QueueExchange,
-                         resource_declarations = ResourceDecls },
+                         resource_declarations = lists:reverse(ResourceDecls1) },
     return(setelement(Pos, Shovel, Result)).
+
+parse_declaration({[{Method, Props} | Rest], Acc}) ->
+    FieldNames = rabbit_framing:method_fieldnames(Method),
+    case proplists:get_keys(Props) -- FieldNames of
+        []            -> ok;
+        UnknownFields -> fail({unknown_fields, Method, UnknownFields})
+    end,
+    {Res, _Idx} = lists:foldl(
+                 fun (K, {R, Idx}) ->
+                         NewR = case proplists:get_value(K, Props) of
+                                    undefined -> R;
+                                    V         -> setelement(Idx, R, V)
+                                end,
+                         {NewR, Idx + 1}
+                 end, {rabbit_framing:method_record(Method), 2}, FieldNames),
+    return({Rest, [Res | Acc]}).
 
 parse_uri({[Uri | Uris], Acc}) ->
     case uri_parser:parse(Uri, [{host, undefined}, {path, "/"},
