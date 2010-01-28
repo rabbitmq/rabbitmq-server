@@ -216,16 +216,16 @@ start_timer(Timeout) ->
 %% Windows has 2GB and 8TB of address space for 32 and 64 bit accordingly.
 get_vm_limit({win32,_OSname}) ->
     case erlang:system_info(wordsize) of
-        4 -> 2147483648;     %% 2 GB for 32 bits  2^31
-        8 -> 8796093022208   %% 8 TB for 64 bits  2^42
+        4 -> 2*1024*1024*1024;          %% 2 GB for 32 bits  2^31
+        8 -> 8*1024*1024*1024*1024      %% 8 TB for 64 bits  2^42
     end;
 
 %% On a 32-bit machine, if you're using more than 2 gigs of RAM you're
 %% in big trouble anyway.
 get_vm_limit(_OsType) ->
     case erlang:system_info(wordsize) of
-        4 -> 4294967296;     %% 4 GB for 32 bits  2^32
-        8 -> 281474976710656 %% 256 TB for 64 bits 2^48
+        4 -> 4*1024*1024*1024;          %% 4 GB for 32 bits  2^32
+        8 -> 256*1024*1024*1024*1024    %% 256 TB for 64 bits 2^48
              %%http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
     end.
 
