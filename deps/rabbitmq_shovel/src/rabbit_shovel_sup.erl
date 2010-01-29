@@ -170,8 +170,6 @@ parse_endpoint({ok, {Endpoint, Pos}}, FieldName, Shovel) ->
         case proplists:get_value(QueueExchangeField, Endpoint) of
             undefined ->
                 fail({field_required, QueueExchangeField, FieldName});
-            private when QueueExchangeField =:= queue ->
-                private;
             Value when is_binary(Value) ->
                 Value;
             Value ->

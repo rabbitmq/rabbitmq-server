@@ -45,15 +45,55 @@ handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 handle_cast(init, State) ->
-    %% Todo.
-    {noreply, State}.
+    random:seed(now()),
+
+    {InboundConn, InboundChan} =
+        make_conn_and_chan(
+          ((State #state.config) #shovel.sources) #endpoint.amqp_params),
+    {OutboundConn, OutboundChan} =
+        make_conn_and_chan(
+          ((State #state.config) #shovel.destinations) #endpoint.amqp_params),
+
+    create_resources(OutboundChan, ((State #state.config) #shovel.destinations)
+                     #endpoint.resource_declarations),
+
+    create_resources(InboundChan, ((State #state.config) #shovel.sources)
+                     #endpoint.resource_declarations),
+
+    {noreply,
+     State #state { inbound_conn = InboundConn, inbound_ch = InboundChan,
+                    outbound_conn = OutboundConn, outbound_ch = OutboundChan,
+                    tx_counter = 0 }}.
 
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(Reason, _State) ->
-    io:format("~p terminating with reason ~p~n", [self(), Reason]),
+terminate(_Reason,
+          #state { inbound_conn = undefined, inbound_ch = undefined,
+                   outbound_conn = undefined, outbound_ch = undefined }) ->
+    ok;
+terminate(_Reason, State) ->
+    amqp_channel:close(State #state.inbound_ch),
+    amqp_connection:close(State #state.inbound_conn),
+    amqp_channel:close(State #state.outbound_ch),
+    amqp_connection:close(State #state.outbound_conn),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+make_conn_and_chan(AmqpParams) ->
+    AmqpParam = lists:nth(random:uniform(length(AmqpParams)), AmqpParams),
+    Conn = case AmqpParam #amqp_params.host of
+               undefined -> amqp_connection:start_direct_link(AmqpParam);
+               _         -> amqp_connection:start_network_link(AmqpParam)
+           end,
+    Chan = amqp_connection:open_channel(Conn),
+    {Conn, Chan}.
+
+create_resources(Chan, Declarations) ->
+    true = lists:foldl(
+             fun (Method, true) ->
+                     rabbit_framing:method_call_and_response(
+                       Method, amqp_channel:call(Chan, Method))
+             end, true, Declarations).
