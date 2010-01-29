@@ -31,10 +31,10 @@
 
 -module(rabbit_networking).
 
--export([boot/0, start/0, start_tcp_listener/2, start_ssl_listener/3, 
-        stop_tcp_listener/2, on_node_down/1, active_listeners/0, 
-        node_listeners/1, connections/0, connection_info/1, 
-        connection_info/2, connection_info_all/0, 
+-export([boot/0, start/0, start_tcp_listener/2, start_ssl_listener/3,
+        stop_tcp_listener/2, on_node_down/1, active_listeners/0,
+        node_listeners/1, connections/0, connection_info/1,
+        connection_info/2, connection_info_all/0,
         connection_info_all/1]).
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/3]).
@@ -46,11 +46,11 @@
 -include_lib("kernel/include/inet.hrl").
 
 -define(RABBIT_TCP_OPTS, [
-        binary, 
-        {packet, raw}, % no packaging 
-        {reuseaddr, true}, % allow rebind without waiting 
-        %% {nodelay, true}, % TCP_NODELAY - disable Nagle's alg.  
-        %% {delay_send, true}, 
+        binary,
+        {packet, raw}, % no packaging
+        {reuseaddr, true}, % allow rebind without waiting
+        %% {nodelay, true}, % TCP_NODELAY - disable Nagle's alg.
+        %% {delay_send, true},
         {exit_on_close, false}
     ]).
 
@@ -206,7 +206,7 @@ start_ssl_client(SslOpts, Sock) ->
                       {error, {ssl_upgrade_error, Reason}};
                   {'EXIT', Reason} ->
                       {error, {ssl_upgrade_failure, Reason}}
-              
+
               end
       end).
 

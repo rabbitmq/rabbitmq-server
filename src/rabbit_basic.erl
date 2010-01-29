@@ -46,7 +46,7 @@
 
 -spec(publish/1 :: (delivery()) -> publish_result()).
 -spec(delivery/4 :: (boolean(), boolean(), maybe(txn()), message()) ->
-             delivery()). 
+             delivery()).
 -spec(message/4 :: (exchange_name(), routing_key(), properties_input(),
                     binary()) -> message()).
 -spec(properties/1 :: (properties_input()) -> amqp_properties()).

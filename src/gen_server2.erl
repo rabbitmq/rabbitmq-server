@@ -36,7 +36,7 @@
 %% InitialTimeout supplied from init). After this timeout has
 %% occurred, hibernation will occur as normal. Upon awaking, a new
 %% current timeout value will be calculated.
-%% 
+%%
 %% The purpose is that the gen_server2 takes care of adjusting the
 %% current timeout value such that the process will increase the
 %% timeout value repeatedly if it is unable to sleep for the

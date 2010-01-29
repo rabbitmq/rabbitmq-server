@@ -69,7 +69,7 @@ init({IPAddress, Port, SocketOpts,
                                   [Label, inet_parse:ntoa(LIPAddress), LPort]),
             apply(M, F, A ++ [IPAddress, Port]),
             {ok, #state{sock = LSock,
-                        on_startup = OnStartup, on_shutdown = OnShutdown, 
+                        on_startup = OnStartup, on_shutdown = OnShutdown,
                         label = Label}};
         {error, Reason} ->
             error_logger:error_msg(

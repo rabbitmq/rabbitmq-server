@@ -293,7 +293,7 @@ limit_all(QPids, ChPid, LimiterPid) ->
       fun (_) -> ok end,
       fun (QPid) -> gen_server2:cast(QPid, {limit, ChPid, LimiterPid}) end,
       QPids).
-    
+
 claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
     gen_server2:call(QPid, {claim_queue, ReaderPid}, infinity).
 
@@ -302,7 +302,7 @@ basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
 
 basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid, LimiterPid,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
-    gen_server2:call(QPid, {basic_consume, NoAck, ReaderPid, ChPid, 
+    gen_server2:call(QPid, {basic_consume, NoAck, ReaderPid, ChPid,
                             LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg},
                      infinity).
 
