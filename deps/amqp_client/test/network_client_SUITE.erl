@@ -116,6 +116,12 @@ channel_writer_death_test() ->
 
 channel_death_test() ->
     negative_test_util:channel_death_test(new_connection()).
+
+shortstr_overflow_property_test() ->
+    negative_test_util:shortstr_overflow_property_test(new_connection()).
+
+shortstr_overflow_field_test() ->
+    negative_test_util:shortstr_overflow_field_test(new_connection()).
     
 %%---------------------------------------------------------------------------
 %% Common Functions
