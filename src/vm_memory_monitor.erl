@@ -37,8 +37,6 @@
 %%
 %% This module tries to warn Rabbit before such situations occur, so
 %% that it has a higher chance to avoid running out of memory.
-%%
-%% This code depends on Erlang os_mon application.
 
 -module(vm_memory_monitor).
 
