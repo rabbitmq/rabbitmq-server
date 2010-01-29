@@ -51,22 +51,22 @@
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
-                    {pre,         kernel_ready}]}).
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_log,
                    [{description, "logging server"},
                     {mfa,         {rabbit_sup, start_child, [rabbit_log]}},
-                    {pre,         kernel_ready}]}).
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_hooks,
                    [{description, "internal event notification system"},
                     {mfa,         {rabbit_hooks, start, []}},
-                    {pre,         kernel_ready}]}).
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({file_handle_cache,
                    [{description, "file handle cache server"},
                     {mfa,         {rabbit_sup, start_child, [file_handle_cache]}},
-                    {pre,         kernel_ready}]}).
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({kernel_ready,
                    [{description, "kernel ready"}]}).
@@ -74,32 +74,32 @@
 -rabbit_boot_step({rabbit_alarm,
                    [{description, "alarm handler"},
                     {mfa,         {rabbit_alarm, start, []}},
-                    {post,        kernel_ready},
-                    {pre,         core_initialized}]}).
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
 
 -rabbit_boot_step({rabbit_memory_monitor,
                    [{description, "memory moniter"},
                     {mfa,         {rabbit_sup, start_child, [rabbit_memory_monitor]}},
-                    {post,        rabbit_alarm},
-                    {pre,         core_initialized}]}).
+                    {requires,    rabbit_alarm},
+                    {enables,     core_initialized}]}).
 
 -rabbit_boot_step({guid_generator,
                    [{description, "guid generator"},
                     {mfa,         {rabbit_sup, start_child, [rabbit_guid]}},
-                    {post,        kernel_ready},
-                    {pre,         core_initialized}]}).
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
 
 -rabbit_boot_step({rabbit_router,
                    [{description, "cluster router"},
                     {mfa,         {rabbit_sup, start_child, [rabbit_router]}},
-                    {post,        kernel_ready},
-                    {pre,         core_initialized}]}).
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
 
 -rabbit_boot_step({rabbit_node_monitor,
                    [{description, "node monitor"},
                     {mfa,         {rabbit_sup, start_child, [rabbit_node_monitor]}},
-                    {post,        kernel_ready},
-                    {pre,         core_initialized}]}).
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
 
 -rabbit_boot_step({core_initialized,
                    [{description, "core initialized"}]}).
@@ -107,17 +107,17 @@
 -rabbit_boot_step({empty_db_check,
                    [{description, "empty DB check"},
                     {mfa,         {?MODULE, maybe_insert_default_data, []}},
-                    {post,        core_initialized}]}).
+                    {requires,    core_initialized}]}).
 
 -rabbit_boot_step({exchange_recovery,
                    [{description, "exchange recovery"},
                     {mfa,         {rabbit_exchange, recover, []}},
-                    {post,        empty_db_check}]}).
+                    {requires,    empty_db_check}]}).
 
 -rabbit_boot_step({message_store_queue_sup_queue_recovery,
                    [{description, "message store, queue supervisor and queue recovery"},
                     {mfa,         {rabbit_queue_index, start_msg_store, []}},
-                    {post,        exchange_recovery}]}).
+                    {requires,    exchange_recovery}]}).
 
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"}]}).
@@ -125,12 +125,12 @@
 -rabbit_boot_step({log_relay,
                    [{description, "error log relay"},
                     {mfa,         {rabbit_error_logger, boot, []}},
-                    {post,        routing_ready}]}).
+                    {requires,    routing_ready}]}).
 
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
-                    {post,        log_relay},
-                    {pre,         networking_listening}]}).
+                    {requires,    log_relay},
+                    {enables,     networking_listening}]}).
 
 -rabbit_boot_step({networking_listening,
                    [{description, "network listeners available"}]}).
@@ -283,9 +283,9 @@ sort_boot_steps(UnsortedSteps) ->
     %% Add edges, detecting cycles and missing vertices.
     lists:foreach(fun ({StepName, Attributes}) ->
                           [add_boot_step_dep(G, StepName, PrecedingStepName)
-                           || {post, PrecedingStepName} <- Attributes],
+                           || {requires, PrecedingStepName} <- Attributes],
                           [add_boot_step_dep(G, SucceedingStepName, StepName)
-                           || {pre, SucceedingStepName} <- Attributes]
+                           || {enables, SucceedingStepName} <- Attributes]
                   end, UnsortedSteps),
 
     %% Use topological sort to find a consistent ordering (if there is
