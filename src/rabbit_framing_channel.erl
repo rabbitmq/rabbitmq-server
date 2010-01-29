@@ -115,7 +115,7 @@ collect_content_payload(ChannelPid, RemainingByteCount, Acc) ->
             collect_content_payload(ChannelPid,
                                     RemainingByteCount - size(FragmentBin),
                                     [FragmentBin | Acc]);
-        _ -> 
+        _ ->
             rabbit_misc:protocol_error(
               command_invalid,
               "expected content body, got non content body frame instead",

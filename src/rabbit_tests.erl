@@ -105,7 +105,7 @@ test_priority_queue() ->
     {true, false, 2, [{1, bar}, {0, foo}], [bar, foo]} =
         test_priority_queue(Q6),
 
-    %% merge 1-element priority Q with 1-element no-priority Q 
+    %% merge 1-element priority Q with 1-element no-priority Q
     Q7 = priority_queue:join(priority_queue:in(foo, 1, Q),
                              priority_queue:in(bar, Q)),
     {true, false, 2, [{1, foo}, {0, bar}], [foo, bar]} =
@@ -290,7 +290,7 @@ test_field_values() ->
        4,"long",      "l", 1234567890:64,                       % + 14 = 145
        5,"short",     "s", 655:16,                              % +  9 = 154
        4,"bool",      "t", 1,                                   % +  7 = 161
-       6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188 
+       6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188
        4,"void",      "V",                                      % +  6 = 194
        5,"array",     "A", 23:32,                               % + 11 = 205
                            "I", 54321:32,                       % +  5 = 210
@@ -423,7 +423,7 @@ test_log_management_during_startup() ->
                            {sasl_report_tty_h, []}]),
     ok = control_action(start_app, []),
 
-    %% start application with tty logging and 
+    %% start application with tty logging and
     %% proper handlers not installed
     ok = control_action(stop_app, []),
     ok = error_logger:tty(false),
@@ -455,7 +455,7 @@ test_log_management_during_startup() ->
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
-                        log_rotation_no_write_permission_dir_test}); 
+                        log_rotation_no_write_permission_dir_test});
             {error, {cannot_log_to_file, _, _}} -> ok
          end,
 
@@ -476,7 +476,7 @@ test_log_management_during_startup() ->
     ok = file:del_dir(TmpDir),
 
     %% start application with standard error_logger_file_h
-    %% handler not installed 
+    %% handler not installed
     ok = application:set_env(kernel, error_logger, {file, MainLog}),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
@@ -584,7 +584,7 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
-    
+
     %% convert a disk node into a ram node
     ok = control_action(cluster, ["invalid1@invalid",
                                   "invalid2@invalid"]),
@@ -760,11 +760,11 @@ test_hooks() ->
     {[arg1, arg2], 1, 3} = get(arg_hook_test_fired),
 
     %% Invoking Pids
-    Remote = fun() -> 
-        receive 
-            {rabbitmq_hook,[remote_test,test,[],Target]} -> 
+    Remote = fun() ->
+        receive
+            {rabbitmq_hook,[remote_test,test,[],Target]} ->
                 Target ! invoked
-        end 
+        end
     end,
     P = spawn(Remote),
     rabbit_hooks:subscribe(remote_test, test, {rabbit_hooks, notify_remote, [P, [self()]]}),
@@ -790,7 +790,7 @@ control_action(Command, Node, Args) ->
         ok ->
             io:format("done.~n"),
             ok;
-        Other -> 
+        Other ->
             io:format("failed.~n"),
             Other
     end.

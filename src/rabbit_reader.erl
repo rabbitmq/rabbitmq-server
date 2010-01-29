@@ -193,7 +193,7 @@ teardown_profiling(Value) ->
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
-socket_op(Sock, Fun) ->   
+socket_op(Sock, Fun) ->
     case Fun(Sock) of
         {ok, Res}       -> Res;
         {error, Reason} -> rabbit_log:error("error on TCP connection ~p:~p~n",
@@ -213,7 +213,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
-    try 
+    try
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
                                     connection = #connection{
@@ -271,7 +271,7 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
                             [Reason], none));
                true -> ok
             end,
-            %% this is what we are expected to do according to 
+            %% this is what we are expected to do according to
             %% http://www.erlang.org/doc/man/sys.html
             %%
             %% If we wanted to be *really* nice we should wait for a
@@ -671,7 +671,7 @@ i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
 i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
-                                   SockStat =:= recv_cnt; 
+                                   SockStat =:= recv_cnt;
                                    SockStat =:= send_oct;
                                    SockStat =:= send_cnt;
                                    SockStat =:= send_pend ->

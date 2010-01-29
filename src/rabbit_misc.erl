@@ -55,7 +55,7 @@
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
--export([unfold/2, ceil/1]).
+-export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
 
 -import(mnesia).
@@ -127,6 +127,7 @@
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
+-spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue()) -> B).
 -spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
 
 -endif.
@@ -490,9 +491,15 @@ unfold(Fun, Acc, Init) ->
 
 ceil(N) ->
     T = trunc(N),
-    case N - T of
-        0 -> N;
-        _ -> 1 + T
+    case N == T of
+        true  -> T;
+        false -> 1 + T
+    end.
+
+queue_fold(Fun, Init, Q) ->
+    case queue:out(Q) of
+        {empty, _Q}      -> Init;
+        {{value, V}, Q1} -> queue_fold(Fun, Fun(V, Init), Q1)
     end.
 
 %% Sorts a list of AMQP table fields as per the AMQP spec

@@ -77,15 +77,15 @@
 -spec(delete_binding/4 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table()) ->
              bind_res() | {'error', 'binding_not_found'}).
--spec(list_bindings/1 :: (vhost()) -> 
+-spec(list_bindings/1 :: (vhost()) ->
              [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
 -spec(delete_queue_bindings/1 :: (queue_name()) -> fun(() -> none())).
 -spec(delete_transient_queue_bindings/1 :: (queue_name()) -> fun(() -> none())).
 -spec(delete/2 :: (exchange_name(), boolean()) ->
              'ok' | not_found() | {'error', 'in_use'}).
--spec(list_queue_bindings/1 :: (queue_name()) -> 
+-spec(list_queue_bindings/1 :: (queue_name()) ->
               [{exchange_name(), routing_key(), amqp_table()}]).
--spec(list_exchange_bindings/1 :: (exchange_name()) -> 
+-spec(list_exchange_bindings/1 :: (exchange_name()) ->
               [{queue_name(), routing_key(), amqp_table()}]).
 
 -endif.
@@ -449,7 +449,7 @@ list_bindings(VHostPath) ->
     [{ExchangeName, QueueName, RoutingKey, Arguments} ||
         #route{binding = #binding{
                  exchange_name = ExchangeName,
-                 key           = RoutingKey, 
+                 key           = RoutingKey,
                  queue_name    = QueueName,
                  args          = Arguments}}
             <- mnesia:dirty_match_object(
@@ -540,7 +540,7 @@ list_exchange_bindings(ExchangeName) ->
     [{QueueName, RoutingKey, Arguments} ||
         #route{binding = #binding{queue_name = QueueName,
                                   key = RoutingKey,
-                                  args = Arguments}} 
+                                  args = Arguments}}
             <- mnesia:dirty_match_object(rabbit_route, Route)].
 
 % Refactoring is left as an exercise for the reader
@@ -550,5 +550,5 @@ list_queue_bindings(QueueName) ->
     [{ExchangeName, RoutingKey, Arguments} ||
         #route{binding = #binding{exchange_name = ExchangeName,
                                   key = RoutingKey,
-                                  args = Arguments}} 
+                                  args = Arguments}}
             <- mnesia:dirty_match_object(rabbit_route, Route)].

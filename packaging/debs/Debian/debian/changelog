@@ -1,3 +1,9 @@
+rabbitmq-server (1.7.1-1) intrepid; urgency=low
+
+  * New Upstream Release
+
+ -- Matthew Sackman <matthew@lshift.net>  Fri, 22 Jan 2010 14:14:29 +0000
+
 rabbitmq-server (1.7.0-1) intrepid; urgency=low
 
   * New Upstream Release
