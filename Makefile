@@ -224,6 +224,4 @@ install_dirs:
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(TARGET_DIR)/sbin
 
-ifneq ($(MAKECMDGOALS),clean)
 -include $(DEPS_FILE)
-endif
