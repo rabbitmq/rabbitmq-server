@@ -23,7 +23,6 @@
 
 -record(endpoint,
         {amqp_params,
-         queue_or_exchange,
          resource_declarations
         }).
 
@@ -34,5 +33,7 @@
          auto_ack,
          tx_size,
          delivery_mode,
+         publish_fields,
+         queue,
          reconnect
         }).

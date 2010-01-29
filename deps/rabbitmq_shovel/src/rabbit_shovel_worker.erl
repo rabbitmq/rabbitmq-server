@@ -44,41 +44,36 @@ init([Name, Config]) ->
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
-handle_cast(init, State) ->
+handle_cast(init, State = #state { config = Config }) ->
     random:seed(now()),
 
     {InboundConn, InboundChan} =
-        make_conn_and_chan(
-          ((State #state.config) #shovel.sources) #endpoint.amqp_params),
+        make_conn_and_chan((Config #shovel.sources) #endpoint.amqp_params),
     {OutboundConn, OutboundChan} =
-        make_conn_and_chan(
-          ((State #state.config) #shovel.destinations) #endpoint.amqp_params),
+        make_conn_and_chan((Config #shovel.destinations) #endpoint.amqp_params),
 
-    create_resources(OutboundChan, ((State #state.config) #shovel.destinations)
+    create_resources(OutboundChan, (Config #shovel.destinations)
                      #endpoint.resource_declarations),
 
-    create_resources(InboundChan, ((State #state.config) #shovel.sources)
+    create_resources(InboundChan, (Config #shovel.sources)
                      #endpoint.resource_declarations),
 
     #'basic.qos_ok'{} =
         amqp_channel:call(InboundChan,
-                          #'basic.qos'{ prefetch_count =
-                                        (State #state.config) #shovel.qos }),
+                          #'basic.qos'{ prefetch_count = Config #shovel.qos }),
 
-    ok = case (State #state.config) #shovel.tx_size of
+    ok = case Config #shovel.tx_size of
                  0 -> ok;
                  _ -> #'tx.select_ok'{} =
                           amqp_channel:call(OutboundChan, #'tx.select'{}),
                       ok
          end,
 
-    QueueName =
-        ((State #state.config) #shovel.sources) #endpoint.queue_or_exchange,
-    AutoAck = (State #state.config) #shovel.auto_ack,
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(
           InboundChan,
-          #'basic.consume'{queue = QueueName, no_ack = AutoAck},
+          #'basic.consume'{queue = Config #shovel.queue,
+                           no_ack = Config #shovel.auto_ack},
           self()),
 
     {noreply,
@@ -97,10 +92,9 @@ handle_info({#'basic.deliver'{ delivery_tag = Tag, routing_key = RoutingKey },
                  keep -> Props;
                  Mode -> Props #'P_basic'{ delivery_mode = Mode }
              end,
-    Exchange = (Config #shovel.destinations) #endpoint.queue_or_exchange,
     ok = amqp_channel:call(OutboundChan,
-                           #'basic.publish'{ routing_key = RoutingKey,
-                                             exchange = Exchange },
+                           (Config #shovel.publish_fields)(
+                             #'basic.publish'{ routing_key = RoutingKey }),
                            Msg #amqp_msg{ props = Props1 }),
     {Ack, AckMulti, TxCounter1} =
         case {Config #shovel.tx_size, TxCounter} of

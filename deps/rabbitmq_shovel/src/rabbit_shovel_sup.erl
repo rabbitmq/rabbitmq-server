@@ -98,6 +98,8 @@ parse_shovel_config(ShovelName, ShovelConfig) ->
                                 {fun parse_boolean/3, auto_ack},
                                 {fun parse_non_negative_integer/3, tx_size},
                                 {fun parse_delivery_mode/3, delivery_mode},
+                                {fun parse_binary/3, queue},
+                                {fun parse_publish_fields/3, publish_fields},
                                 {fun parse_non_negative_integer/3, reconnect}
                                ], #shovel{}, Dict1)}
                     catch throw:{error, Reason} ->
@@ -162,20 +164,6 @@ parse_endpoint({ok, {Endpoint, Pos}}, FieldName, Shovel) ->
                        lists:duplicate(length(Brokers), fun parse_uri/1),
                        {Brokers, []}),
 
-    QueueExchangeField = case FieldName of
-                             sources      -> queue;
-                             destinations -> exchange
-                         end,
-    QueueExchange =
-        case proplists:get_value(QueueExchangeField, Endpoint) of
-            undefined ->
-                fail({field_required, QueueExchangeField, FieldName});
-            Value when is_binary(Value) ->
-                Value;
-            Value ->
-                fail({need_binary_for_field, QueueExchangeField, Value, FieldName})
-        end,
-
     ResourceDecls =
         case proplists:get_value(declarations, Endpoint, []) of
             Decls when is_list(Decls) ->
@@ -189,7 +177,6 @@ parse_endpoint({ok, {Endpoint, Pos}}, FieldName, Shovel) ->
           {ResourceDecls, []}),
 
     Result = #endpoint { amqp_params = Brokers1,
-                         queue_or_exchange = QueueExchange,
                          resource_declarations = lists:reverse(ResourceDecls1) },
     return(setelement(Pos, Shovel, Result)).
 
@@ -291,13 +278,52 @@ parse_non_negative_integer({ok, {N, _Pos}}, FieldName, _Shovel) ->
 parse_non_negative_integer(error, FieldName, _Shovel) ->
     fail({require_field, FieldName}).
 
-parse_boolean({ok, {Bool, Pos}}, _FieldName, Shovel)
-  when is_boolean(Bool) ->
+parse_boolean({ok, {Bool, Pos}}, _FieldName, Shovel) when is_boolean(Bool) ->
     return(setelement(Pos, Shovel, Bool));
-parse_boolean({ok, {NotABool}, _Pos}, FieldName, _Shovel) ->
+parse_boolean({ok, {NotABool, _Pos}}, FieldName, _Shovel) ->
     fail({require_boolean_in_field, FieldName, NotABool});
 parse_boolean(error, FieldName, _Shovel) ->
     fail({require_field, FieldName}).
+
+parse_binary({ok, {Binary, Pos}}, _FieldName, Shovel) when is_binary(Binary) ->
+    return(setelement(Pos, Shovel, Binary));
+parse_binary({ok, {NotABinary, _Pos}}, FieldName, _Shovel) ->
+    fail({require_binary_in_field, FieldName, NotABinary});
+parse_binary(error, FieldName, _Shovel) ->
+    fail({require_field, FieldName}).
+
+parse_publish_fields({ok, {Fields, Pos}}, _FieldName, Shovel)
+  when is_list(Fields) ->
+    ValidFields = rabbit_framing:method_fieldnames('basic.publish'),
+    SuppliedFields = proplists:get_keys(Fields),
+    case SuppliedFields -- ValidFields of
+        [] ->
+            FieldIndices =
+                make_field_indices(ValidFields, SuppliedFields, Fields),
+            Fun = fun (Publish) ->
+                          lists:foldl(fun ({Pos1, Value}, Pub) ->
+                                              setelement(Pos1, Pub, Value)
+                                      end, Publish, FieldIndices)
+                  end,
+            return(setelement(Pos, Shovel, Fun));
+        Unexpected ->
+            fail({unexpected_fields_for_publish, Unexpected, ValidFields})
+    end;
+parse_publish_fields({ok, {Fields, _Pos}}, FieldName, _Shovel) ->
+    fail({require_list, FieldName, Fields});
+parse_publish_fields(error, FieldName, _Shovel) ->
+    fail({require_field, FieldName}).
+
+make_field_indices(Valid, Supplied, Fields) ->
+    make_field_indices(Valid, Supplied, Fields, 2, []).
+
+make_field_indices(_Valid, [], _Fields, _Idx, Acc) ->
+    lists:reverse(Acc);
+make_field_indices([F|Valid], [F|Supplied], Fields, Idx, Acc) ->
+    Value = proplists:get_value(F, Fields),
+    make_field_indices(Valid, Supplied, Fields, Idx+1, [{Idx, Value}|Acc]);
+make_field_indices([_V|Valid], Supplied, Fields, Idx, Acc) ->
+    make_field_indices(Valid, Supplied, Fields, Idx+1, Acc).
 
 parse_delivery_mode({ok, {N, Pos}}, _FieldName, Shovel)
   when N =:= 0 orelse N =:= 2 ->
