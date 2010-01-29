@@ -31,20 +31,22 @@
                 tx_counter, name, config}).
 
 start_link(Name, Config) ->
-  gen_server:start_link(?MODULE, [Name, Config], []).
+    rabbit_shovel_status:report(Name, starting),
+    gen_server:start_link(?MODULE, [Name, Config], []).
 
 %---------------------------
 % Gen Server Implementation
 %---------------------------
 
 init([Name, Config]) ->
+    process_flag(trap_exit, true),
     gen_server:cast(self(), init),
     {ok, #state { name = Name, config = Config }}.
 
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
-handle_cast(init, State = #state { config = Config }) ->
+handle_cast(init, State = #state { name = Name, config = Config }) ->
     random:seed(now()),
 
     {InboundConn, InboundChan} =
@@ -76,6 +78,7 @@ handle_cast(init, State = #state { config = Config }) ->
                            no_ack = Config #shovel.auto_ack},
           self()),
 
+    rabbit_shovel_status:report(Name, running),
     {noreply,
      State #state { inbound_conn = InboundConn, inbound_ch = InboundChan,
                     outbound_conn = OutboundConn, outbound_ch = OutboundChan,
@@ -113,15 +116,18 @@ handle_info({#'basic.deliver'{ delivery_tag = Tag, routing_key = RoutingKey },
     end,
     {noreply, State #state { tx_counter = TxCounter1 }}.
 
-terminate(_Reason,
+terminate(Reason,
           #state { inbound_conn = undefined, inbound_ch = undefined,
-                   outbound_conn = undefined, outbound_ch = undefined }) ->
+                   outbound_conn = undefined, outbound_ch = undefined,
+                   name = Name }) ->
+    rabbit_shovel_status:report(Name, {terminated, Reason}),
     ok;
-terminate(_Reason, State) ->
+terminate(Reason, State) ->
     amqp_channel:close(State #state.inbound_ch),
     amqp_connection:close(State #state.inbound_conn),
     amqp_channel:close(State #state.outbound_ch),
     amqp_connection:close(State #state.outbound_conn),
+    rabbit_shovel_status:report(State #state.name, {terminated, Reason}),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

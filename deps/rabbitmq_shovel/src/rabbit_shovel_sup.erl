@@ -35,7 +35,13 @@ start_link() ->
 
 init([Configurations]) ->
     Len = dict:size(Configurations),
-    {ok, {{one_for_one, 2*Len, 2}, make_child_specs(Configurations)}}.
+    ChildSpecs = [{rabbit_shovel_status,
+                   {rabbit_shovel_status, start_link, []},
+                   transient,
+                   16#ffffffff,
+                   worker,
+                   [rabbit_shovel_status]} | make_child_specs(Configurations)],
+    {ok, {{one_for_one, 2*Len, 2}, ChildSpecs}}.
 
 make_child_specs(Configurations) ->
     dict:fold(
