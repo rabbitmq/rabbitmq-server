@@ -166,6 +166,14 @@ def genErl(spec):
     def genMethodFieldNames(m):
         print "method_fieldnames(%s) -> %s;" % (m.erlangName(), fieldNameList(m.arguments))
 
+    def genMethodCallResponse(m, methods):
+        if not m.erlangName().endswith("_ok'"):
+            responseName = "'" + erlangize(m.klass.name) + '.' + erlangize(m.name) + "_ok'"
+            filtered = filter(lambda n: n.erlangName() == responseName, methods)
+            if len(filtered) == 1:
+                print "method_call_and_response(#%s{}, #%s{}) -> true;" % (m.erlangName(),
+                                                                           responseName)
+
     def packMethodFields(fields):
         packed = []
         bitfield = None
@@ -299,6 +307,7 @@ def genErl(spec):
 -export([is_method_synchronous/1]).
 -export([method_record/1]).
 -export([method_fieldnames/1]).
+-export([method_call_and_response/2]).
 -export([decode_method_fields/2]).
 -export([decode_properties/2]).
 -export([encode_method_fields/1]).
@@ -327,6 +336,9 @@ bitvalue(undefined) -> 0.
 
     for m in methods: genMethodFieldNames(m)
     print "method_fieldnames(Name) -> exit({unknown_method_name, Name})."
+
+    for m in methods: genMethodCallResponse(m, methods)
+    print "method_call_and_response(_Call, _Response) -> false."
 
     for m in methods: genDecodeMethodFields(m)
     print "decode_method_fields(Name, BinaryFields) ->"
