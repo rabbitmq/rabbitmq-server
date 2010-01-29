@@ -147,8 +147,4 @@ make_conn_and_chan(AmqpParams) ->
     {Conn, Chan}.
 
 create_resources(Chan, Declarations) ->
-    true = lists:foldl(
-             fun (Method, true) ->
-                     rabbit_framing:method_call_and_response(
-                       Method, amqp_channel:call(Chan, Method))
-             end, true, Declarations).
+    [amqp_channel:call(Chan, Method) || Method <- Declarations].
