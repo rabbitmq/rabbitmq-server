@@ -38,6 +38,7 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
+-export([subscribe/3]).
 -export([close/1, close/3]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
@@ -166,6 +167,21 @@ close(Channel, Code, Text) ->
 %% Consumer registration (API)
 %%---------------------------------------------------------------------------
 
+%% @type consume() = #'basic.consume'{}.
+%% The AMQP command that is used to  subscribe a consumer to a queue.
+%% @spec (Channel, consume(), Consumer) -> amqp_command()
+%% where
+%%      Channel = pid()
+%%      Consumer = pid()
+%% @doc Creates a subscription to a queue. This subscribes a consumer pid to 
+%% the queue defined in the #'basic.consume'{} command record. Note that both
+%% both the process invoking this method and the supplied consumer process
+%% receive an acknowledgement of the subscription. The calling process will
+%% receive the acknowledgement as the return value of this function, whereas
+%% the consumer process will receive the notification asynchronously.
+subscribe(Channel, BasicConsume = #'basic.consume'{}, Consumer) ->
+    gen_server:call(Channel, {subscribe, BasicConsume, Consumer}, infinity).
+
 %% @spec (Channel, ReturnHandler) -> ok
 %% where
 %%      Channel = pid()
@@ -188,7 +204,7 @@ register_flow_handler(Channel, FlowHandler) ->
 %% RPC mechanism
 %%---------------------------------------------------------------------------
 
-rpc_top_half(Method, Content, From,
+rpc_top_half(Method, Content, From, 
              State0 = #c_state{rpc_requests = RequestQueue}) ->
     % Enqueue the incoming RPC request to serialize RPC dispatching
     State1 = State0#c_state{
@@ -308,20 +324,21 @@ handle_regular_method(
         #'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk, none,
         #c_state{tagged_sub_requests = Tagged,
                  anon_sub_requests = Anon} = State) ->
-    {ConsumerPid, State0} =
+    {_From, Consumer, State0} =
         case dict:find(ConsumerTag, Tagged) of
-            {ok, Pid} ->
+            {ok, {F, C}} ->
                 NewTagged = dict:erase(ConsumerTag,Tagged),
-                {Pid, State#c_state{tagged_sub_requests = NewTagged}};
+                {F, C, State#c_state{tagged_sub_requests = NewTagged}};
             error ->
                 case queue:out(Anon) of
                     {empty, _} ->
                         exit({anonymous_queue_empty, ConsumerTag});
-                    {{value, Pid}, NewAnon} ->
-                        {Pid, State#c_state{anon_sub_requests = NewAnon}}
+                    {{value, {F, C}}, NewAnon} ->
+                        {F, C, State#c_state{anon_sub_requests = NewAnon}}
                 end
         end,
-    State1 = register_consumer(ConsumerTag, ConsumerPid, State0),
+    Consumer ! ConsumeOk,
+    State1 = register_consumer(ConsumerTag, Consumer, State0),
     {noreply, rpc_bottom_half(ConsumeOk, State1)};
 
 handle_regular_method(
@@ -384,29 +401,6 @@ init({ParentConnection, ChannelNumber, Driver, StartArgs}) ->
                             writer_pid = WriterPid},
     {ok, InitialState}.
 
-handle_call({call, #'basic.consume'{consumer_tag = Tag} = Method,
-             none}, From = {Pid, _Tag},
-            State = #c_state{tagged_sub_requests = Tagged,
-                             anon_sub_requests = Anon}) ->
-    case check_block(Method, none, State) of
-        ok ->
-            {NewMethod, NewState} =
-                if Tag =:= undefined orelse size(Tag) == 0 ->
-                       NewAnon = queue:in(Pid, Anon),
-                       {Method#'basic.consume'{consumer_tag = <<"">>},
-                        State#c_state{anon_sub_requests = NewAnon}};
-                   is_binary(Tag) ->
-                       %% TODO test whether this tag already exists, either in
-                       %% the pending tagged request map or in general as
-                       %% already subscribed consumer
-                       NewTagged = dict:store(Tag, Pid, Tagged),
-                       {Method, State#c_state{tagged_sub_requests = NewTagged}}
-                end,
-            {noreply, rpc_top_half(NewMethod, none, From, NewState)};
-        BlockReply ->
-            {reply, BlockReply, State}
-    end;
-
 %% Standard implementation of the call/{2,3} command
 %% @private
 handle_call({call, Method, AmqpMsg}, From, State) ->
@@ -421,6 +415,31 @@ handle_call({call, Method, AmqpMsg}, From, State) ->
                               {reply, ok, State}
                       end;
         BlockReply -> {reply, BlockReply, State}
+    end;
+
+%% Standard implementation of the subscribe/3 command
+%% @private
+handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer},
+            From, #c_state{tagged_sub_requests = Tagged,
+                           anon_sub_requests = Anon} = State) ->
+    case check_block(Method, none, State) of
+        ok ->
+            {NewMethod, NewState} =
+                if Tag =:= undefined orelse size(Tag) == 0 ->
+                       NewAnon = queue:in({From,Consumer}, Anon),
+                       {Method#'basic.consume'{consumer_tag = <<"">>},
+                        State#c_state{anon_sub_requests = NewAnon}};
+                   is_binary(Tag) ->
+                       %% TODO test whether this tag already exists, either in
+                       %% the pending tagged request map or in general as
+                       %% already subscribed consumer
+                       NewTagged = dict:store(Tag,{From,Consumer}, Tagged),
+                       {Method,
+                        State#c_state{tagged_sub_requests = NewTagged}}
+                end,
+            {noreply, rpc_top_half(NewMethod, none, From, NewState)};
+        BlockReply ->
+            {reply, BlockReply, State}
     end.
 
 %% Standard implementation of the cast/{2,3} command
