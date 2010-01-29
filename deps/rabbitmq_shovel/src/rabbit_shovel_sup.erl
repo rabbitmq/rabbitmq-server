@@ -194,7 +194,9 @@ parse_declaration({[{Method, Props} | Rest], Acc}) ->
                                 end,
                          {NewR, Idx + 1}
                  end, {rabbit_framing:method_record(Method), 2}, FieldNames),
-    return({Rest, [Res | Acc]}).
+    return({Rest, [Res | Acc]});
+parse_declaration({[Method | Rest], Acc}) ->
+    parse_declaration({[{Method, []} | Rest], Acc}).
 
 parse_uri({[Uri | Uris], Acc}) ->
     case uri_parser:parse(Uri, [{host, undefined}, {path, "/"},
