@@ -261,13 +261,13 @@ get_total_memory({unix,freebsd}) ->
     PageCount * PageSize;
 
 get_total_memory({win32,_OSname}) ->
-    %% Due to erlang print format bug, on windows boxes the memory size is
+    %% Due to the Erlang print format bug, on Windows boxes the memory size is
     %% broken. For example Windows 7 64 bit with 4Gigs of RAM we get negative
     %% memory size:
     %% > os_mon_sysinfo:get_mem_info().
     %% ["76 -1658880 1016913920 -1 -1021628416 2147352576 2134794240\n"]
-    %% Due to that bug, we actually don't know anything. Even if the number is
-    %% postive we can't be sure if it's sane.
+    %% Due to this bug, we don't actually know anything. Even if the number is
+    %% postive we can't be sure if it's correct.
     unknown;
 
 get_total_memory({unix, linux}) ->
