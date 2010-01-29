@@ -181,10 +181,6 @@ declare(QueueName, Durable, AutoDelete, Args) ->
 internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   %% we could still find that mnesia has another
-                   %% entry here because the queue may exist on
-                   %% another node, beyond the knowledge of our own
-                   %% local queue_sup.
                    case mnesia:wread({rabbit_queue, QueueName}) of
                        [] ->
                            case mnesia:read(
