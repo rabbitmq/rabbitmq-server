@@ -35,6 +35,7 @@ setlocal
 rem Preserve values that might contain exclamation marks before
 rem enabling delayed expansion
 set DP0=%~dp0
+set STAR=%*
 
 setlocal enabledelayedexpansion
 
@@ -158,7 +159,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -mnesia dir \""!RABBITMQ_MNESIA_DIR!"\" ^
 !CLUSTER_CONFIG! ^
 !RABBITMQ_SERVER_START_ARGS! ^
-!*
+!STAR!
 
 endlocal
 endlocal
