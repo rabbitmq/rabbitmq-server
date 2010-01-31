@@ -1,0 +1,267 @@
+RabbitMQ-shovel
+===============
+
+
+Introduction
+------------
+
+This is a plug-in for RabbitMQ that shovels messages from a queue on
+one broker to an exchange on another broker. The two brokers may be
+the same. The plug-in allows several shovels to be specified at the
+same time. Each shovel may have a number of source and destination
+brokers specified, and one of each is chosen whenever the shovel
+attempts to make a connection: this permits simple round-rabbit load
+balancing.
+
+Resources can be declared upon connection to both the source and
+destination brokers, and parameters can be specified for both the
+reception and publishing of messages.
+
+
+Requirements
+------------
+
+Currently, you must build the server from source, under branch
+bug16653. You must also have checked out the rabbitmq-public-umbrella
+hg repository, and have the rabbitmq-erlang-client built. From
+scratch, the following commands should build RabbitMQ with the shovel
+plug-in:
+
+hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella
+cd rabbitmq-public-umbrella
+hg clone http://hg.rabbitmq.com/rabbitmq-erlang-client
+hg clone http://hg.rabbitmq.com/rabbitmq-server
+hg clone http://hg.rabbitmq.com/rabbitmq-shovel
+cd rabbitmq-server
+hg up -C bug16653
+make -j
+mkdir -p plugins
+cd plugins
+ln -s ../../rabbitmq-erlang-client
+ln -s ../../rabbitmq-shovel
+cd ../../rabbitmq-erlang-client
+make
+cd ../rabbitmq-shovel
+make
+cd ../rabbitmq-server
+./scripts/rabbitmq-activate-plugins
+make cleandb run
+
+
+Configuration
+-------------
+
+The RabbitMQ configuration file specifies the shovel
+configurations. This exists by default, in
+/etc/rabbitmq/rabbitmq.config under Linux systems,
+%RABBITMQ_BASE%\rabbitmq.config under Windows or somewhere else under
+OS X. This file configures both RabbitMQ-server and all the plugins
+installed in it. It is an Erlang-syntax file of the form:
+
+[{section1, [section1-config]},
+ {section2, [section2-config]},
+ ...
+ {sectionN, [sectionN-config]}
+].
+
+thus a list of tuples, where the left element of each tuple names the
+applications being configured. Don't forget the last element of the
+list doesn't have a trailing comma, and don't forget the full-stop is
+needed after closing the list. Hence if you configure RabbitMQ-server
+and the RabbitMQ-shovel, then the configuration file may have a
+structure like this:
+
+[{rabbit,        [configuration-for-RabbitMQ-server]},
+ {rabbit-shovel, [configuration-for-RabbitMQ-shovel]}
+].
+
+A full example of the shovel configuration is:
+
+{rabbit_shovel,
+  [{shovels,
+    [{my_first_shovel,
+      [{sources,      [{brokers,
+                          ["amqp://fred:secret@host1.domain/my_vhost",
+                           "amqp://john:secret@host2.domain/my_vhost"
+                          ]},
+                       {declarations,
+                          ['queue.declare',
+                           {'queue.bind',
+                                  [{exchange, <<"my_exchange">>},
+                                   {queue,    <<>>}]}
+                          ]}]},
+       {destinations, [{broker, "amqp://"},
+                       {declarations,
+                          [{'exchange.declare',
+                                  [{exchange, <<"my_exchange">>},
+                                   {type, <<"direct">>},
+                                   durable]}
+                          ]}]},
+       {queue, <<>>},
+       {qos, 10},
+       {auto_ack, false},
+       {tx_size, 0},
+       {delivery_mode, keep},
+       {publish_fields, [{exchange, <<"my_exchange">>},
+                         {routing_key, <<"from_shovel">>}]},
+       {reconnect, 5}
+      ]}
+     ]
+   }]
+}
+
+Firstly, all shovels are named. Here we have one shovel, called
+'my_first_shovel'. We can have multiple shovels if you wish. Every
+shovel must have all sub-fields specified: sources, destinations, qos,
+auto_ack, delivery_mode, publish_fields, reconnect.
+
+
+Sources and Destinations
+------------------------
+
+Sources and destinations specify respectively where messages are
+fetched from and delivered too. One of 'broker' and 'brokers' must be
+specified, and 'broker' is simply shorthand for when only one broker
+needs specifying. Using 'brokers' allows a list of brokers to be
+specified: whenever the connection to a broker is lost, another one is
+chosen at random from the list and a connection attempt is made to
+that. The syntax for broker URIs is:
+
+amqp://username:password@host:port/vhost
+
+If username or password are omitted, the default values of guest and
+guest are used. If the vhost is omitted, the default value of / is
+used. If the host is omitted, then the plugin uses the "direct"
+connection internally rather than a network connection: this means it
+connects to the RabbitMQ-server node on which it is running without
+going through the network stack. This is much more efficient. If port
+is omitted then the default value is used (5672 or 5671 if SSL is
+used).
+
+SSL is implemented, for which additional parameters are needed:
+
+amqps://username:password@host:port/vhost?cacertfile=/path/to/cacert.pem&certfile=/path/to/certfile.pem&keyfile=/path/to/keyfile.pem&verify=verifyOption&fail_if_no_peer_cert=failOption
+
+All five parameters (3 paths: cacertfile, certfile and keyfile; 2
+options: verify, fail_if_no_peer_cert) must be specified. See the SSL
+guide at http://www.rabbitmq.com/ssl.html#configure-erlang for details
+of SSL in RabbitMQ in general and specifically for the Erlang client
+(on which the shovel is built).
+
+Note that SSL cannot be used with the direct connection (i.e. a host
+must be specified when using SSL), and that it is preferable to use
+the non-SSL direct connection to using SSL to connect to the same node
+that's running the shovel.
+
+
+Resource Declarations
+---------------------
+
+Both sources and destinations can have an optional 'declarations'
+clause. The value of this is a key, consisting of AMQP Methods. If
+default values are sufficient, then the method name alone can be
+specified - e.g. 'queue.declare'. If parameters need to be set then
+the method should be given as a tuple, with the right hand side a
+proplist specifying which fields need altering from their default
+values. E.g:
+    {'exchange.declare',[{exchange, <<"my_exchange">>},
+                         {type, <<"direct">>},
+                         durable]},
+
+One very useful feature here is the Most-Recently-Declared-Queue
+feature, in which RabbitMQ remembers the name of the most recently
+declared queue. This means that you can declare a private queue, and
+then bind it to exchanges without ever needing to know its name.
+
+
+queue :: binary
+---------------
+
+This feature specifies the name of the queue on the source brokers to
+consume from. This queue must exist. Use the resource declarations to
+create the queue (or ensure it exists) first. Note again that the
+Most-Recently-Declared-Queue feature can be used here, thus an
+anonymous queue can be used.
+
+
+qos :: non-negative-integer
+---------------------------
+
+The shovel consumes from a queue. The QoS controls how many messages
+are sent to the shovel in advance of the message the shovel is
+currently processing.
+
+
+auto_ack :: boolean
+-------------------
+
+Setting this to 'true' turns on the no_ack flag when subscribing to
+the source queue.
+
+
+tx_size :: non-negative-integer
+-------------------------------
+
+When set to 0, transactions are not used. Other values make publishes
+transactional, with a commit every N messages. In lieu of the auto-ack
+option, when transactions are not used, messages are acknowledged to
+the source immediately after every publish. When transactions are
+used, acks are only issued to the source on receipt of the commit-ok
+message from the destination. This can thus be used to guarantee that
+messages are only acknowledged (and thus forgotten about by the source
+broker) when they are guaranteed to have been received by the
+destination broker.
+
+
+delivery_mode :: 'keep' | 0 | 2
+-------------------------------
+
+This affects the delivery_mode field when publishing to the
+destination. A value of 'keep' means that the same delivery_mode
+should be used as when the message was originally published to the
+source broker. 0 and 2 override the original setting.
+
+
+publish_fields
+--------------
+
+This is a list of tuples which override fields in the publish method
+when publishing to the destination. This can be used to direct
+messages to a particular exchange on the destination, for example, or
+change the routing key. By default, the routing key of the message as
+it is received by the shovel is passed through, but this can be
+overridden as necessary.
+
+
+reconnect :: non-negative-integer
+---------------------------------
+
+When an error occurs, the shovel will disconnect from both the source
+and destination broker immediately. This will force uncommitted
+transactions at the destination to be rolled back, and delivered but
+unacknowledged messages from the source to be requeued. The shovel
+will then try connecting again. If this is unsuccessful, then it's not
+a good idea for the shovel to very quickly and repeatedly try to
+reconnect. The value specified here is the number of seconds to wait
+between each connection attempt.
+
+Note that if set to 0, the shovel will never try to reconnect: it'll
+stop after the first error.
+
+
+Obtaining shovel statuses
+-------------------------
+
+From the broker Erlang prompt, call
+rabbit_shovel_status:status(). This will return a list, with one row
+for each configured shovel. Each row has three fields: the shovel
+name, the shovel status, and the timestamp (a local calendar time of
+{{YYYY,MM,DD},{HH,MM,SS}}). There are 3 possible statuses:
+
+'starting': The shovel is starting up, connecting and creating
+resources.
+
+'running': The shovel is up and running, shovelling messages.
+
+{'terminated', Reason}: Something's gone wrong. The Reason should give
+a further indication of where the fault lies.
