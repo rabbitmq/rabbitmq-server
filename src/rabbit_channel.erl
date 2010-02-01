@@ -58,7 +58,8 @@
          vhost,
          transactional,
          consumer_count,
-         messages_unacknowledged]).
+         messages_unacknowledged,
+         prefetch_count]).
 
 %%----------------------------------------------------------------------------
 
@@ -1010,5 +1011,7 @@ i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->
     dict:size(ConsumerMapping);
 i(messages_unacknowledged, #ch{unacked_message_q = UAMQ}) ->
     queue:len(UAMQ);
+i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
+    rabbit_limiter:get_limit(LimiterPid);
 i(Item, _) ->
     throw({bad_argument, Item}).
