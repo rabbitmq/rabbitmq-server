@@ -16,7 +16,7 @@
 %% 
 %% %CopyrightEnd%
 %%
--module(pg2).
+-module(pg_local).
 
 -export([create/1, delete/1, join/2, leave/2]).
 -export([get_members/1, get_local_members/1]).
