@@ -367,6 +367,62 @@ send queue size
 
 =back
 
+=over
+
+=item list_channels [I<channelinfoitem> ...]
+
+List channel information. Each line printed describes a channel,
+I<channelinfoitem> values separated by tab characters.  If no
+I<channelinfoitem>s are specified then I<pid>, I<user>,
+I<transactional>, I<consumer_count>, and I<messages_unacknowledged>
+are assumed.
+
+The list includes channels which are part of ordinary AMQP connections
+(as listed by list_connections) and channels created by various
+plug-ins and other extensions.
+
+=back
+
+=head3 Channel information items
+
+=over
+
+=item pid
+
+id of the Erlang process associated with the channel
+
+=item connection
+
+id of the Erlang process associated with the connection to which the
+channel belongs.
+
+=item user
+
+username associated with the channel
+
+=item vhost
+
+virtual host in which the channel operates
+
+=item transactional
+
+true if the channel is in transactional mode, false otherwise
+
+=item consumer_count
+
+number of logical AMQP consumers retrieving messages via the channel
+
+=item messages_unacknowledged
+
+number of messages delivered to via this channel but not yet
+acknowledged
+
+=item prefetch_count
+
+QoS prefetch count limit in force, 0 if unlimited
+
+=back
+
 The list_queues, list_exchanges and list_bindings commands accept an
 optional virtual host parameter for which to display results,
 defaulting to I<"/">. The default can be overridden with the B<-p>
