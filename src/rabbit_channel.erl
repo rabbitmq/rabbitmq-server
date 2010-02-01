@@ -37,7 +37,7 @@
 
 -export([start_link/5, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2]).
--export([all/0]).
+-export([list/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
@@ -63,7 +63,7 @@
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
 -spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
--spec(all/0 :: () -> [pid()]).
+-spec(list/0 :: () -> [pid()]).
 
 -endif.
 
@@ -93,7 +93,7 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 conserve_memory(Pid, Conserve) ->
     gen_server2:pcast(Pid, 9, {conserve_memory, Conserve}).
 
-all() ->
+list() ->
     pg_local:get_members(rabbit_channels).
 
 %%---------------------------------------------------------------------------
