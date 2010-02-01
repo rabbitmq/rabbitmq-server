@@ -44,7 +44,7 @@ parse(AbsURI, Defaults) ->
 	{error, Reason} ->
 	    {error, Reason};
 	{Scheme, Rest} ->
-            case (catch parse_uri_rest(Rest)) of
+            case (catch parse_uri_rest(Rest, true)) of
                 [_|_] = List ->
                     merge_keylists([{scheme, Scheme} | List], Defaults);
                 _ ->
@@ -58,13 +58,13 @@ parse(AbsURI, Defaults) ->
 parse_scheme(AbsURI) ->
     split_uri(AbsURI, ":", {error, no_scheme}, 1, 1).
 
-parse_uri_rest("//" ++ URIPart) ->
+parse_uri_rest("//" ++ URIPart, true) ->
     %% we have an authority
     {Authority, PathQueryFrag} =
 	split_uri(URIPart, "/|\\?|#", {URIPart, ""}, 1, 0),
     AuthorityParts = parse_authority(Authority),
-    parse_uri_rest(PathQueryFrag) ++ AuthorityParts;
-parse_uri_rest(PathQueryFrag) ->
+    parse_uri_rest(PathQueryFrag, false) ++ AuthorityParts;
+parse_uri_rest(PathQueryFrag, _Bool) ->
     %% no authority, just a path and maybe query
     {PathQuery, Frag} =
         split_uri(PathQueryFrag, "#", {PathQueryFrag, ""}, 1, 1),
