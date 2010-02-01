@@ -394,7 +394,7 @@ id of the Erlang process associated with the channel
 =item connection
 
 id of the Erlang process associated with the connection to which the
-channel belongs.
+channel belongs
 
 =item user
 
