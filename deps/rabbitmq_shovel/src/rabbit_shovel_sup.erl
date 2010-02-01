@@ -205,7 +205,7 @@ parse_declaration({[Method | Rest], Acc}) ->
     parse_declaration({[{Method, []} | Rest], Acc}).
 
 parse_uri({[Uri | Uris], Acc}) ->
-    case uri_parser:parse(Uri, [{host, undefined}, {path, "/"},
+    case uri_parser:parse(Uri, [{host, undefined}, {path, undefined},
                                 {port, undefined}, {'query', []}]) of
         {error, Reason} ->
             fail({unable_to_parse_uri, Uri, Reason});
@@ -228,8 +228,11 @@ parse_uri({[Uri | Uris], Acc}) ->
 build_broker(ParsedUri) ->
     [Host, Port, Path] =
         [proplists:get_value(F, ParsedUri) || F <- [host, port, path]],
-    Params = #amqp_params { host = Host, port = Port,
-                            virtual_host = list_to_binary(Path) },
+    VHost = case Path of
+                undefined -> <<"/">>;
+                [$/|Rest] -> list_to_binary(Rest)
+            end,
+    Params = #amqp_params { host = Host, port = Port, virtual_host = VHost },
     Params1 =
         case proplists:get_value(userinfo, ParsedUri) of
             [Username, Password | _ ] ->
