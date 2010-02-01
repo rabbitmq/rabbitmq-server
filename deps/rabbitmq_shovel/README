@@ -151,15 +151,15 @@ of SSL in RabbitMQ in general and specifically for the Erlang client
 
 Note that SSL cannot be used with the direct connection (i.e. a host
 must be specified when using SSL), and that it is preferable to use
-the non-SSL direct connection to using SSL to connect to the same node
-that's running the shovel.
+the non-SSL direct connection when connecting to the same node that's
+running the shovel.
 
 
 Resource Declarations
 ---------------------
 
 Both sources and destinations can have an optional 'declarations'
-clause. The value of this is a key, consisting of AMQP Methods. If
+clause. The value of this is a list, consisting of AMQP Methods. If
 default values are sufficient, then the method name alone can be
 specified - e.g. 'queue.declare'. If parameters need to be set then
 the method should be given as a tuple, with the right hand side a
@@ -178,11 +178,12 @@ then bind it to exchanges without ever needing to know its name.
 queue :: binary
 ---------------
 
-This feature specifies the name of the queue on the source brokers to
-consume from. This queue must exist. Use the resource declarations to
-create the queue (or ensure it exists) first. Note again that the
+This parameter specifies the name of the queue on the source brokers
+to consume from. This queue must exist. Use the resource declarations
+to create the queue (or ensure it exists) first. Note again that the
 Most-Recently-Declared-Queue feature can be used here, thus an
-anonymous queue can be used.
+anonymous queue can be used: use <<>> to indicate the
+Most-Recently-Declared-Queue.
 
 
 qos :: non-negative-integer
