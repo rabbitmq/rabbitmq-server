@@ -29,6 +29,7 @@ plug-in:
 
 hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella
 cd rabbitmq-public-umbrella
+hg clone http://hg.rabbitmq.com/rabbitmq-codegen
 hg clone http://hg.rabbitmq.com/rabbitmq-erlang-client
 hg clone http://hg.rabbitmq.com/rabbitmq-server
 hg clone http://hg.rabbitmq.com/rabbitmq-shovel
