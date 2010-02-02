@@ -202,6 +202,22 @@ queue arguments
 
 id of the Erlang process associated with the queue
 
+=item owner_pid
+
+id of the Erlang process representing the connection which is the
+exclusive owner of the queue, or empty if the queue is non-exclusive
+
+=item exclusive_consumer_pid
+
+id of the Erlang process representing the channel of the exclusive
+consumer subscribed to this queue, or empty if there is no exclusive
+consumer
+
+=item exclusive_consumer_tag
+
+consumer tag of the exclusive consumer subscribed to this queue, or
+empty if there is no exclusive consumer
+
 =item messages_ready
 
 number of messages ready to be delivered to clients
