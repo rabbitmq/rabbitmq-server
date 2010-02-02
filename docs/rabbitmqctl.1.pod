@@ -371,9 +371,9 @@ send queue size
 
 =item list_channels [I<channelinfoitem> ...]
 
-List channel information. Each line printed describes a channel,
-I<channelinfoitem> values separated by tab characters.  If no
-I<channelinfoitem>s are specified then I<pid>, I<user>,
+List channel information. Each line printed describes a channel, with
+the requested I<channelinfoitem> values separated by tab characters.
+If no I<channelinfoitem>s are specified then I<pid>, I<user>,
 I<transactional>, I<consumer_count>, and I<messages_unacknowledged>
 are assumed.
 
@@ -414,8 +414,7 @@ number of logical AMQP consumers retrieving messages via the channel
 
 =item messages_unacknowledged
 
-number of messages delivered to via this channel but not yet
-acknowledged
+number of messages delivered via this channel but not yet acknowledged
 
 =item prefetch_count
 
