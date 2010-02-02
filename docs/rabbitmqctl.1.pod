@@ -422,6 +422,14 @@ QoS prefetch count limit in force, 0 if unlimited
 
 =back
 
+=item list_consumers
+
+List consumers, i.e. subscriptions to a queue's message stream. Each
+line printed shows, separated by tab characters, the id of the channel
+process via which the subscription was created and is managed, the
+consumer tag which uniquely identifies the subscription within a
+channel, and the name of the queue subscribed to.
+
 The list_queues, list_exchanges and list_bindings commands accept an
 optional virtual host parameter for which to display results,
 defaulting to I<"/">. The default can be overridden with the B<-p>
