@@ -53,10 +53,11 @@
                    [{mfa,         {rabbit_mnesia, init, []}},
                     {enables,     kernel_ready}]}).
 
--rabbit_boot_step({rabbit_exchange_type,
+-rabbit_boot_step({rabbit_exchange_type_registry,
                    [{description, "exchange type registry"},
-                    {mfa,         {rabbit_sup, start_child, [rabbit_exchange_type]}},
-                    {enables,         kernel_ready}]}).
+                    {mfa,         {rabbit_sup, start_child,
+                                   [rabbit_exchange_type_registry]}},
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_log,
                    [{description, "logging server"},

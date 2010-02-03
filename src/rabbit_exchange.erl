@@ -162,7 +162,7 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
     end.
 
 type_to_module(T) ->
-    case rabbit_exchange_type:lookup_module(T) of
+    case rabbit_exchange_type_registry:lookup_module(T) of
         {ok, Module}       -> Module;
         {error, not_found} -> rabbit_misc:protocol_error(
                                 command_invalid,
@@ -170,7 +170,7 @@ type_to_module(T) ->
     end.
 
 check_type(TypeBin) ->
-    T = rabbit_exchange_type:binary_to_type(TypeBin),
+    T = rabbit_exchange_type_registry:binary_to_type(TypeBin),
     Module = type_to_module(T),
     case catch Module:description() of
         {'EXIT', {undef, [{_, description, []} | _]}} ->

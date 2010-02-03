@@ -31,76 +31,19 @@
 
 -module(rabbit_exchange_type).
 
--behaviour(gen_server).
+-export([behaviour_info/1]).
 
--export([start_link/0]).
+behaviour_info(callbacks) ->
+    [
+     {description, 0},
+     {publish, 2},
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
-
--export([register/2, binary_to_type/1, lookup_module/1]).
-
--define(SERVER, ?MODULE).
-
-%% TODO specs
-
-%%---------------------------------------------------------------------------
-
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-%%---------------------------------------------------------------------------
-
-register(TypeName, ModuleName) ->
-    gen_server:call(?SERVER, {register, TypeName, ModuleName}).
-
-binary_to_type(TypeBin) when is_binary(TypeBin) ->
-    list_to_atom(binary_to_list(TypeBin)).
-
-lookup_module(T) when is_atom(T) ->
-    case ets:lookup(rabbit_exchange_type_modules, T) of
-        [{_, Module}] ->
-            {ok, Module};
-        [] ->
-            {error, not_found}
-    end.
-
-%%---------------------------------------------------------------------------
-
-internal_register(TypeName, ModuleName)
-  when is_binary(TypeName), is_atom(ModuleName) ->
-    true = ets:insert(rabbit_exchange_type_modules,
-                      {binary_to_type(TypeName), ModuleName}),
-    ok.
-
-%%---------------------------------------------------------------------------
-
-init([]) ->
-    rabbit_exchange_type_modules =
-        ets:new(rabbit_exchange_type_modules, [protected, set, named_table]),
-
-    %% TODO: split out into separate boot startup steps.
-    ok = internal_register(<<"direct">>, rabbit_exchange_type_direct),
-    ok = internal_register(<<"fanout">>, rabbit_exchange_type_fanout),
-    ok = internal_register(<<"headers">>, rabbit_exchange_type_headers),
-    ok = internal_register(<<"topic">>, rabbit_exchange_type_topic),
-
-    {ok, none}.
-
-handle_call({register, TypeName, ModuleName}, _From, State) ->
-    ok = internal_register(TypeName, ModuleName),
-    {reply, ok, State};
-handle_call(Request, _From, State) ->
-    {stop, {unhandled_call, Request}, State}.
-
-handle_cast(Request, State) ->
-    {stop, {unhandled_cast, Request}, State}.
-
-handle_info(Message, State) ->
-    {stop, {unhandled_info, Message}, State}.
-
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+     {validate, 1}, %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
+     {create, 1}, %% called after declaration when previously absent
+     {recover, 2}, %% called when recovering
+     {delete, 2}, %% called after exchange deletion
+     {add_binding, 2}, %% called after a binding has been added
+     {delete_binding, 2} %% called after a binding has been deleted
+    ];
+behaviour_info(_Other) ->
+    undefined.
