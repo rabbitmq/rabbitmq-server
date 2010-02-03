@@ -81,6 +81,9 @@ start() ->
         {error, Reason} ->
             error("~p", [Reason]),
             halt(2);
+        {badrpc, {'EXIT', Reason}} ->
+            error("~p", [Reason]),
+            halt(2);
         {badrpc, Reason} ->
             error("unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
