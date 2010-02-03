@@ -1001,12 +1001,11 @@ terminate(#ch{writer_pid = WriterPid, limiter_pid = LimiterPid}) ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(pid,            _)                           -> self();
-i(connection,     #ch{reader_pid = ReaderPid}) -> ReaderPid;
-i(user,           #ch{username = Username})    -> Username;
-i(vhost,          #ch{virtual_host = VHost})   -> VHost;
-i(transactional,  #ch{transaction_id = none})  -> false;
-i(transactional,  #ch{transaction_id = _})     -> true;
+i(pid,            _)                                 -> self();
+i(connection,     #ch{reader_pid       = ReaderPid}) -> ReaderPid;
+i(user,           #ch{username         = Username})  -> Username;
+i(vhost,          #ch{virtual_host     = VHost})     -> VHost;
+i(transactional,  #ch{transaction_id   = TxnKey})    -> TxnKey =/= none;
 i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->
     dict:size(ConsumerMapping);
 i(messages_unacknowledged, #ch{unacked_message_q = UAMQ}) ->
