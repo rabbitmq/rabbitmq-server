@@ -498,8 +498,8 @@ delete(ExchangeName, IfUnused) ->
         {deleted, X = #exchange{ type = Type }, Bs} ->
             (type_to_module(Type)):delete(X, Bs),
             ok;
-        InUse = {error, in_use} ->
-            InUse
+        Error = {error, _InUseOrNotFound} ->
+            Error
     end.
 
 maybe_auto_delete(Exchange = #exchange{auto_delete = false}) ->
