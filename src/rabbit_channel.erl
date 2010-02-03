@@ -39,7 +39,8 @@
 -export([send_command/2, deliver/4, conserve_memory/2]).
 -export([list/0, info/1, info/2, info_all/0, info_all/1]).
 
--export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
+-export([init/1, terminate/2, code_change/3,
+         handle_call/3, handle_cast/2, handle_info/2, handle_pre_hibernate/1]).
 
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
@@ -47,7 +48,8 @@
              username, virtual_host,
              most_recently_declared_queue, consumer_mapping}).
 
--define(HIBERNATE_AFTER, 1000).
+-define(HIBERNATE_AFTER_MIN, 1000).
+-define(DESIRED_HIBERNATE, 10000).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -145,7 +147,9 @@ init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
              username                = Username,
              virtual_host            = VHost,
              most_recently_declared_queue = <<>>,
-             consumer_mapping        = dict:new()}}.
+             consumer_mapping        = dict:new()},
+     hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
@@ -206,11 +210,11 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
     State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
     {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
-    {stop, Reason, State};
+    {stop, Reason, State}.
 
-handle_info(timeout, State) ->
+handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
-    {noreply, State, hibernate}.
+    {hibernate, State}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -228,9 +232,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState) -> {reply, Reply, NewState, ?HIBERNATE_AFTER}.
+reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 
-noreply(NewState) -> {noreply, NewState, ?HIBERNATE_AFTER}.
+noreply(NewState) -> {noreply, NewState, hibernate}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
