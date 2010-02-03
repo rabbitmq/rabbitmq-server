@@ -77,13 +77,6 @@ internal_register(TypeName, ModuleName)
 
 init([]) ->
     ?ETS_NAME = ets:new(?ETS_NAME, [protected, set, named_table]),
-
-    %% TODO: split out into separate boot startup steps.
-    ok = internal_register(<<"direct">>, rabbit_exchange_type_direct),
-    ok = internal_register(<<"fanout">>, rabbit_exchange_type_fanout),
-    ok = internal_register(<<"headers">>, rabbit_exchange_type_headers),
-    ok = internal_register(<<"topic">>, rabbit_exchange_type_topic),
-
     {ok, none}.
 
 handle_call({register, TypeName, ModuleName}, _From, State) ->

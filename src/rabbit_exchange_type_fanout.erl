@@ -38,6 +38,13 @@
 -export([validate/1, create/1, recover/2, delete/2, add_binding/2, delete_binding/2]).
 -include("rabbit_exchange_type_spec.hrl").
 
+-rabbit_boot_step({?MODULE,
+                   [{description, "exchange type fanout"},
+                    {mfa,         {rabbit_exchange_type_registry, register,
+                                   [<<"fanout">>, ?MODULE]}},
+                    {requires,    rabbit_exchange_type_registry},
+                    {enables,     kernel_ready}]}).
+
 description() ->
     [{name, <<"fanout">>},
      {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
