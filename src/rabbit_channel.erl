@@ -56,6 +56,7 @@
 -define(INFO_KEYS,
         [pid,
          connection,
+         number,
          user,
          vhost,
          transactional,
@@ -1007,6 +1008,7 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid,            _)                                 -> self();
 i(connection,     #ch{reader_pid       = ReaderPid}) -> ReaderPid;
+i(number,         #ch{channel          = Channel})   -> Channel;
 i(user,           #ch{username         = Username})  -> Username;
 i(vhost,          #ch{virtual_host     = VHost})     -> VHost;
 i(transactional,  #ch{transaction_id   = TxnKey})    -> TxnKey =/= none;
