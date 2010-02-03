@@ -420,7 +420,9 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
             ok;
         {{no_delete, X = #exchange{ type = Type }}, B} ->
             (type_to_module(Type)):delete_binding(X, B),
-            ok
+            ok;
+        Err = {error, _}  ->
+            Err
     end.
 
 binding_action(ExchangeName, QueueName, RoutingKey, Arguments, Fun) ->
