@@ -325,8 +325,9 @@ internal_delete(QueueName) ->
                       [_] ->
                           ok = mnesia:delete({rabbit_queue, QueueName}),
                           ok = mnesia:delete({rabbit_durable_queue, QueueName}),
-                          %% we want to execute some things,
-                          %% as decided by rabbit_exchange, after the transaction.
+                          %% we want to execute some things, as
+                          %% decided by rabbit_exchange, after the
+                          %% transaction.
                           rabbit_exchange:delete_queue_bindings(QueueName)
                   end
           end) of
@@ -343,15 +344,16 @@ on_node_down(Node) ->
               fun () ->
                       qlc:fold(
                         fun (QueueName, Acc) ->
-                                Post = rabbit_exchange:delete_transient_queue_bindings(
-                                         QueueName),
+                                Post = rabbit_exchange:
+                                    delete_transient_queue_bindings(QueueName),
                                 ok = mnesia:delete({rabbit_queue, QueueName}),
                                 [Post | Acc]
                         end,
                         [],
-                        qlc:q([QueueName || #amqqueue{name = QueueName, pid = Pid}
-                                                <- mnesia:table(rabbit_queue),
-                                            node(Pid) == Node]))
+                        qlc:q([QueueName ||
+                                  #amqqueue{name = QueueName, pid = Pid}
+                                      <- mnesia:table(rabbit_queue),
+                                  node(Pid) == Node]))
               end)],
     ok.
 

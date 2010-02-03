@@ -96,12 +96,12 @@
 
 recover() ->
     Exs = rabbit_misc:table_fold(
-            fun(Exchange, Acc) -> ok = mnesia:write(rabbit_exchange,
-                                                    Exchange, write),
-                                  [Exchange | Acc]
+            fun(Exchange, Acc) ->
+                    ok = mnesia:write(rabbit_exchange, Exchange, write),
+                    [Exchange | Acc]
             end, [], rabbit_durable_exchange),
     Bs = rabbit_misc:table_fold(
-           fun(Route = #route{ binding = B}, Acc) ->
+           fun(Route = #route{binding = B}, Acc) ->
                    {_, ReverseRoute} = route_with_reverse(Route),
                    ok = mnesia:write(rabbit_route,
                                      Route, write),
@@ -118,11 +118,10 @@ recover_with_bindings(Bs, Exs) ->
       lists:keysort(#exchange.name, Exs), []).
 
 recover_with_bindings([B = #binding{exchange_name = N} | Rest],
-                   Xs = [#exchange{ name = Name} | _],
-                   Bindings)
-  when N =:= Name ->
+                      Xs = [#exchange{name = Name} | _],
+                      Bindings) when N =:= Name ->
     recover_with_bindings(Rest, Xs, [B | Bindings]);
-recover_with_bindings(Bs, [X = #exchange{ type = Type } | Xs], Bindings) ->
+recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
     (type_to_module(Type)):recover(X, Bindings),
     recover_with_bindings(Bs, Xs, []);
 recover_with_bindings([], [], []) ->
@@ -137,18 +136,19 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
     %% We want to upset things if it isn't ok; this is different from
     %% the other hooks invocations, where we tend to ignore the return
     %% value.
-    TypeModule = (type_to_module(Type)),
+    TypeModule = type_to_module(Type),
     ok = TypeModule:validate(Exchange),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    case mnesia:wread({rabbit_exchange, ExchangeName}) of
                        [] ->
                            ok = mnesia:write(rabbit_exchange, Exchange, write),
-                           if Durable ->
-                                   ok = mnesia:write(rabbit_durable_exchange,
+                           ok = case Durable of
+                                    true ->
+                                        mnesia:write(rabbit_durable_exchange,
                                                      Exchange, write);
-                              true ->
-                                   ok
+                                    false ->
+                                        ok
                            end,
                            {new, Exchange};
                        [ExistingX] ->
@@ -189,9 +189,7 @@ assert_type(#exchange{ type = ActualType }, RequiredType)
 assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
     rabbit_misc:protocol_error(
       not_allowed, "cannot redeclare ~s of type '~s' with type '~s'",
-      [rabbit_misc:rs(Name),
-       ActualType,
-       RequiredType]).
+      [rabbit_misc:rs(Name), ActualType, RequiredType]).
 
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_exchange, Name}).
@@ -252,7 +250,7 @@ publish(X = #exchange{type = Type}, Seen, Delivery) ->
                                            "alternate exchange for ~s "
                                            "does not exist: ~s",
                                            [rabbit_misc:rs(XName),
-                                       rabbit_misc:rs(AName)]),
+                                            rabbit_misc:rs(AName)]),
                                          R
                                  end
                     end
@@ -295,12 +293,11 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                     <- mnesia:match_object(
                          rabbit_reverse_route,
                          reverse_route(#route{binding = #binding{
-                                                queue_name = QueueName, 
+                                                queue_name = QueueName,
                                                 _          = '_'}}),
                          write)],
     Cleanup = cleanup_deleted_queue_bindings(
-                lists:keysort(#binding.exchange_name,
-                              DeletedBindings),
+                lists:keysort(#binding.exchange_name, DeletedBindings),
                 none, [], []),
     fun () ->
             lists:foreach(
@@ -384,7 +381,7 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                            {error, durability_settings_incompatible};
                       true ->
                            case mnesia:read(rabbit_route, B) of
-                               [] -> 
+                               [] ->
                                    sync_binding(B, Q#amqqueue.durable,
                                                 fun mnesia:write/3),
                                    {new, X, B};
@@ -492,12 +489,12 @@ reverse_binding(#binding{exchange_name = Exchange,
                      args          = Args}.
 
 delete(ExchangeName, IfUnused) ->
-    Fun = if
-              IfUnused -> fun conditional_delete/1;
-              true     -> fun unconditional_delete/1
+    Fun = case IfUnused of
+              true  -> fun conditional_delete/1;
+              false -> fun unconditional_delete/1
           end,
     case call_with_exchange(ExchangeName, Fun) of
-        {deleted, X = #exchange{ type = Type }, Bs} ->
+        {deleted, X = #exchange{type = Type}, Bs} ->
             (type_to_module(Type)):delete(X, Bs),
             ok;
         Error = {error, _InUseOrNotFound} ->
@@ -519,8 +516,8 @@ conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     %% result of a node failure
     case contains(rabbit_route, Match) orelse
          contains(rabbit_durable_route, Match) of
-        false  -> unconditional_delete(Exchange);
-        true   -> {error, in_use}
+        true   -> {error, in_use};
+        false  -> unconditional_delete(Exchange)
     end.
 
 unconditional_delete(Exchange = #exchange{name = ExchangeName}) ->

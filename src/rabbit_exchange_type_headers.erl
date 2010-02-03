@@ -36,7 +36,8 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, publish/2]).
--export([validate/1, create/1, recover/2, delete/2, add_binding/2, delete_binding/2]).
+-export([validate/1, create/1, recover/2, delete/2, add_binding/2,
+         delete_binding/2]).
 -include("rabbit_exchange_type_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
@@ -60,9 +61,10 @@ publish(#exchange{name = Name},
                   undefined -> [];
                   H         -> rabbit_misc:sort_field_table(H)
               end,
-    rabbit_router:deliver(rabbit_router:match_bindings(Name, fun (#binding{args = Spec}) ->
-                                                                     headers_match(Spec, Headers)
-                                                             end),
+    rabbit_router:deliver(rabbit_router:match_bindings(
+                            Name, fun (#binding{args = Spec}) ->
+                                          headers_match(Spec, Headers)
+                                  end),
                           Delivery).
 
 default_headers_match_kind() -> all.

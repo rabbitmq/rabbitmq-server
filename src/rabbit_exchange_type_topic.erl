@@ -35,7 +35,8 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, publish/2]).
--export([validate/1, create/1, recover/2, delete/2, add_binding/2, delete_binding/2]).
+-export([validate/1, create/1, recover/2, delete/2, add_binding/2,
+         delete_binding/2]).
 -include("rabbit_exchange_type_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
@@ -55,12 +56,12 @@ description() ->
     [{name, <<"topic">>},
      {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
-publish(#exchange{name = Name},
-        Delivery = #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:deliver(rabbit_router:match_bindings(Name,
-                                                       fun (#binding{key = BindingKey}) ->
-                                                               topic_matches(BindingKey, RoutingKey)
-                                                       end),
+publish(#exchange{name = Name}, Delivery =
+        #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
+    rabbit_router:deliver(rabbit_router:match_bindings(
+                            Name, fun (#binding{key = BindingKey}) ->
+                                          topic_matches(BindingKey, RoutingKey)
+                                  end),
                           Delivery).
 
 split_topic_key(Key) ->
@@ -80,7 +81,8 @@ topic_matches1([], []) ->
     true;
 topic_matches1(["*" | PatRest], [_ | ValRest]) ->
     topic_matches1(PatRest, ValRest);
-topic_matches1([PatElement | PatRest], [ValElement | ValRest]) when PatElement == ValElement ->
+topic_matches1([PatElement | PatRest], [ValElement | ValRest])
+  when PatElement == ValElement ->
     topic_matches1(PatRest, ValRest);
 topic_matches1(_, _) ->
     false.
@@ -88,7 +90,8 @@ topic_matches1(_, _) ->
 last_topic_match(P, R, []) ->
     topic_matches1(P, R);
 last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
-    topic_matches1(P, R) or last_topic_match(P, [BacktrackNext | R], BacktrackList).
+    topic_matches1(P, R) or
+        last_topic_match(P, [BacktrackNext | R], BacktrackList).
 
 validate(_X) -> ok.
 create(_X) -> ok.
