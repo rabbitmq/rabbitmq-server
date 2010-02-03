@@ -159,6 +159,8 @@ Available commands:
   list_bindings  [-p <VHostPath>]
   list_connections [<ConnectionInfoItem> ...]
 
+  close_connection <ConnectionPid> <ExplanationString>
+
 Quiet output mode is selected with the \"-q\" flag. Informational
 messages are suppressed when quiet mode is in effect.
 
@@ -301,6 +303,11 @@ action(list_connections, Node, Args, Inform) ->
                                [ArgAtoms]),
                       ArgAtoms);
 
+action(close_connection, Node, [PidStr, Explanation], Inform) ->
+    Inform("Closing connection ~s", [PidStr]),
+    rpc_call(Node, rabbit_reader, shutdown,
+             [string_to_pid(PidStr), Explanation]);
+
 action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
     action(Command, Node, VHost, RemainingArgs, Inform).
@@ -423,3 +430,50 @@ pid_to_string(Pid) ->
         = term_to_binary(Pid),
     Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
     lists:flatten(io_lib:format("<~w.~B.~B>", [Node, Id, Ser])).
+
+string_to_pid(Str) ->
+    ErrorFun = fun () -> throw({error, {invalid_pid_syntax, Str}}) end,
+    %% TODO: simplify this code by using the 're' module, once we drop
+    %% support for R11
+    %%
+    %% 1) sanity check
+    %% The \ before the trailing $ is only there to keep emacs
+    %% font-lock from getting confused.
+    case regexp:first_match(Str, "^<.*\.[0-9]+\.[0-9]+>\$") of
+        {match, _, _} ->
+            %% 2) strip <>
+            Str1 = string:substr(Str, 2, string:len(Str) - 2),
+            %% 3) extract three constituent parts, taking care to
+            %% handle dots in the node part (hence the reverse and concat)
+            [SerStr, IdStr | Rest] = lists:reverse(string:tokens(Str1, ".")),
+            NodeStr = lists:concat(lists:reverse(Rest)),
+            %% 4) construct a triple term from the three parts
+            TripleStr = lists:flatten(io_lib:format("{~s,~s,~s}.",
+                                                    [NodeStr, IdStr, SerStr])),
+            %% 5) parse the triple
+            Tokens = case erl_scan:string(TripleStr) of
+                         {ok, Tokens1, _} -> Tokens1;
+                         {error, _, _}    -> ErrorFun()
+                     end,
+            Term = case erl_parse:parse_term(Tokens) of
+                       {ok, Term1} -> Term1;
+                       {error, _}  -> ErrorFun()
+                   end,
+            {Node, Id, Ser} =
+                case Term of
+                    {Node1, Id1, Ser1} when is_atom(Node1) andalso
+                                            is_integer(Id1) andalso
+                                            is_integer(Ser1) ->
+                        Term;
+                    _ ->
+                        ErrorFun()
+                end,
+            %% 6) turn the triple into a pid - see pid_to_string
+            <<131,NodeEnc/binary>> = term_to_binary(Node),
+            binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,0:8>>);
+        nomatch ->
+            ErrorFun();
+        Error ->
+            %% invalid regexp - shouldn't happen
+            throw(Error)
+    end.
