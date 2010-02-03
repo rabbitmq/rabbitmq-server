@@ -516,8 +516,8 @@ conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     %% result of a node failure
     case contains(rabbit_route, Match) orelse
          contains(rabbit_durable_route, Match) of
-        true   -> {error, in_use};
-        false  -> unconditional_delete(Exchange)
+        false  -> unconditional_delete(Exchange);
+        true   -> {error, in_use}
     end.
 
 unconditional_delete(Exchange = #exchange{name = ExchangeName}) ->
