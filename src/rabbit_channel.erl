@@ -37,7 +37,7 @@
 
 -export([start_link/5, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2]).
--export([list/0, info/1, info/2, info_all/0, info_all/1]).
+-export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2, handle_pre_hibernate/1]).
@@ -77,6 +77,7 @@
 -spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
+-spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (pid()) -> [info()]).
 -spec(info/2 :: (pid(), [info_key()]) -> [info()]).
 -spec(info_all/0 :: () -> [[info()]]).
@@ -112,6 +113,8 @@ conserve_memory(Pid, Conserve) ->
 
 list() ->
     pg_local:get_members(rabbit_channels).
+
+info_keys() -> ?INFO_KEYS.
 
 info(Pid) ->
     gen_server2:pcall(Pid, 9, info, infinity).

@@ -717,6 +717,12 @@ test_server_status() ->
                      rabbit_networking:connection_info_keys(), false),
     ok = gen_tcp:close(C),
 
+    %% list channels
+    Writer = spawn(fun () -> receive shutdown -> ok end end),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
+    ok = info_action(list_channels, rabbit_channel:info_keys(), false),
+    ok = rabbit_channel:shutdown(Ch),
+
     passed.
 
 test_hooks() ->
