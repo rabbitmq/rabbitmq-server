@@ -695,18 +695,10 @@ test_server_status() ->
                         false, false, []),
 
     %% list queues
-    ok = info_action(
-           list_queues,
-           [name, durable, auto_delete, arguments, pid,
-            messages_ready, messages_unacknowledged, messages_uncommitted,
-            messages, acks_uncommitted, consumers, transactions, memory],
-           true),
+    ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
 
     %% list exchanges
-    ok = info_action(
-           list_exchanges,
-           [name, type, durable, auto_delete, arguments],
-           true),
+    ok = info_action(list_exchanges, rabbit_exchange:info_keys(), true),
 
     %% list bindings
     ok = control_action(list_bindings, []),
@@ -721,12 +713,8 @@ test_server_status() ->
 
     {ok, C} = gen_tcp:connect(H, P, []),
     timer:sleep(100),
-    ok = info_action(
-           list_connections,
-           [pid, address, port, peer_address, peer_port, state,
-            channels, user, vhost, timeout, frame_max,
-            recv_oct, recv_cnt, send_oct, send_cnt, send_pend],
-           false),
+    ok = info_action(list_connections,
+                     rabbit_networking:connection_info_keys(), false),
     ok = gen_tcp:close(C),
 
     passed.
