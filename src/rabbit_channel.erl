@@ -37,8 +37,7 @@
 
 -export([start_link/5, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2]).
--export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
-         consumers/1, consumers_all/0]).
+-export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2, handle_pre_hibernate/1]).
@@ -83,8 +82,6 @@
 -spec(info/2 :: (pid(), [info_key()]) -> [info()]).
 -spec(info_all/0 :: () -> [[info()]]).
 -spec(info_all/1 :: ([info_key()]) -> [[info()]]).
--spec(consumers/1 :: (pid()) -> [{binary(), queue_name()}]).
--spec(consumers_all/0 :: () -> [{pid(), binary(), queue_name()}]).
 
 -endif.
 
@@ -134,16 +131,6 @@ info_all() ->
 info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
-consumers(Pid) ->
-    gen_server2:pcall(Pid, 9, consumers, infinity).
-
-consumers_all() ->
-    lists:concat(
-      rabbit_misc:filter_exit_map(
-        fun (C) ->
-                [{C, Tag, QueueName} || {Tag, QueueName} <- consumers(C)]
-        end, list())).
-
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
@@ -176,10 +163,6 @@ handle_call({info, Items}, _From, State) ->
         reply({ok, infos(Items, State)}, State)
     catch Error -> reply({error, Error}, State)
     end;
-
-handle_call(consumers, _From,
-            State = #ch{consumer_mapping = ConsumerMapping}) ->
-    reply(dict:to_list(ConsumerMapping), State);
 
 handle_call(_Request, _From, State) ->
     noreply(State).
