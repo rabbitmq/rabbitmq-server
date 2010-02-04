@@ -37,10 +37,11 @@
 
 -export([start_link/5, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2]).
--export([list/0, info/1, info/2, info_all/0, info_all/1,
+-export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
          consumers/1, consumers_all/0]).
 
--export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
+-export([init/1, terminate/2, code_change/3,
+         handle_call/3, handle_cast/2, handle_info/2, handle_pre_hibernate/1]).
 
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
@@ -48,13 +49,15 @@
              username, virtual_host,
              most_recently_declared_queue, consumer_mapping}).
 
--define(HIBERNATE_AFTER, 1000).
+-define(HIBERNATE_AFTER_MIN, 1000).
+-define(DESIRED_HIBERNATE, 10000).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 -define(INFO_KEYS,
         [pid,
          connection,
+         number,
          user,
          vhost,
          transactional,
@@ -75,6 +78,7 @@
 -spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
+-spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (pid()) -> [info()]).
 -spec(info/2 :: (pid(), [info_key()]) -> [info()]).
 -spec(info_all/0 :: () -> [[info()]]).
@@ -112,6 +116,8 @@ conserve_memory(Pid, Conserve) ->
 
 list() ->
     pg_local:get_members(rabbit_channels).
+
+info_keys() -> ?INFO_KEYS.
 
 info(Pid) ->
     gen_server2:pcall(Pid, 9, info, infinity).
@@ -158,7 +164,9 @@ init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
              username                = Username,
              virtual_host            = VHost,
              most_recently_declared_queue = <<>>,
-             consumer_mapping        = dict:new()}}.
+             consumer_mapping        = dict:new()},
+     hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
@@ -223,11 +231,11 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
     State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
     {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
-    {stop, Reason, State};
+    {stop, Reason, State}.
 
-handle_info(timeout, State) ->
+handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
-    {noreply, State, hibernate}.
+    {hibernate, State}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -245,9 +253,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState) -> {reply, Reply, NewState, ?HIBERNATE_AFTER}.
+reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 
-noreply(NewState) -> {noreply, NewState, ?HIBERNATE_AFTER}.
+noreply(NewState) -> {noreply, NewState, hibernate}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -1018,12 +1026,12 @@ terminate(#ch{writer_pid = WriterPid, limiter_pid = LimiterPid}) ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(pid,            _)                           -> self();
-i(connection,     #ch{reader_pid = ReaderPid}) -> ReaderPid;
-i(user,           #ch{username = Username})    -> Username;
-i(vhost,          #ch{virtual_host = VHost})   -> VHost;
-i(transactional,  #ch{transaction_id = none})  -> false;
-i(transactional,  #ch{transaction_id = _})     -> true;
+i(pid,            _)                                 -> self();
+i(connection,     #ch{reader_pid       = ReaderPid}) -> ReaderPid;
+i(number,         #ch{channel          = Channel})   -> Channel;
+i(user,           #ch{username         = Username})  -> Username;
+i(vhost,          #ch{virtual_host     = VHost})     -> VHost;
+i(transactional,  #ch{transaction_id   = TxnKey})    -> TxnKey =/= none;
 i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->
     dict:size(ConsumerMapping);
 i(messages_unacknowledged, #ch{unacked_message_q = UAMQ}) ->

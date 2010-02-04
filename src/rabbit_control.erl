@@ -193,10 +193,10 @@ frame_max, client_properties, recv_oct, recv_cnt, send_oct, send_cnt,
 send_pend].  The default is to display user, peer_address, peer_port
 and state.
 
-<ChannelInfoItem> must be a member of the list [pid, connection, user,
-vhost, transactional, consumer_count, messages_unacknowledged,
-prefetch_count]. The default is to display pid, user, transactional,
-consumer_count, messages_unacknowledged.
+<ChannelInfoItem> must be a member of the list [pid, connection,
+number, user, vhost, transactional, consumer_count,
+messages_unacknowledged, prefetch_count]. The default is to display
+pid, user, transactional, consumer_count, messages_unacknowledged.
 
 The output format for \"list_consumers\" is a list of rows containing
 the channel process id, consumer tag and queue name, in that order.

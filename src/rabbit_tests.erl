@@ -49,6 +49,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     passed = test_priority_queue(),
+    passed = test_pg_local(),
     passed = test_unfold(),
     passed = test_parsing(),
     passed = test_topic_matching(),
@@ -182,6 +183,28 @@ test_simple_n_element_queue(N) ->
     ToListRes = [{0, X} || X <- Items],
     {true, false, N, ToListRes, Items} = test_priority_queue(Q),
     passed.
+
+test_pg_local() ->
+    [P, Q] = [spawn(fun () -> receive X -> X end end) || _ <- [x, x]],
+    check_pg_local(ok, [], []),
+    check_pg_local(pg_local:join(a, P), [P], []), 
+    check_pg_local(pg_local:join(b, P), [P], [P]),
+    check_pg_local(pg_local:join(a, P), [P, P], [P]),
+    check_pg_local(pg_local:join(a, Q), [P, P, Q], [P]),
+    check_pg_local(pg_local:join(b, Q), [P, P, Q], [P, Q]),
+    check_pg_local(pg_local:join(b, Q), [P, P, Q], [P, Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [P, Q], [P, Q, Q]),
+    check_pg_local(pg_local:leave(b, P), [P, Q], [Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [Q], [Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [Q], [Q, Q]),
+    [X ! done || X <- [P, Q]],
+    check_pg_local(ok, [], []),
+    passed.
+
+check_pg_local(ok, APids, BPids) ->
+    ok = pg_local:sync(),
+    [true, true] = [lists:sort(Pids) == lists:sort(pg_local:get_members(Key)) ||
+                       {Key, Pids} <- [{a, APids}, {b, BPids}]].
 
 test_unfold() ->
     {[], test} = rabbit_misc:unfold(fun (_V) -> false end, test),
@@ -695,18 +718,10 @@ test_server_status() ->
                         false, false, []),
 
     %% list queues
-    ok = info_action(
-           list_queues,
-           [name, durable, auto_delete, arguments, pid,
-            messages_ready, messages_unacknowledged, messages_uncommitted,
-            messages, acks_uncommitted, consumers, transactions, memory],
-           true),
+    ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
 
     %% list exchanges
-    ok = info_action(
-           list_exchanges,
-           [name, type, durable, auto_delete, arguments],
-           true),
+    ok = info_action(list_exchanges, rabbit_exchange:info_keys(), true),
 
     %% list bindings
     ok = control_action(list_bindings, []),
@@ -721,13 +736,15 @@ test_server_status() ->
 
     {ok, C} = gen_tcp:connect(H, P, []),
     timer:sleep(100),
-    ok = info_action(
-           list_connections,
-           [pid, address, port, peer_address, peer_port, state,
-            channels, user, vhost, timeout, frame_max,
-            recv_oct, recv_cnt, send_oct, send_cnt, send_pend],
-           false),
+    ok = info_action(list_connections,
+                     rabbit_networking:connection_info_keys(), false),
     ok = gen_tcp:close(C),
+
+    %% list channels
+    Writer = spawn(fun () -> receive shutdown -> ok end end),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
+    ok = info_action(list_channels, rabbit_channel:info_keys(), false),
+    ok = rabbit_channel:shutdown(Ch),
 
     passed.
 

@@ -396,6 +396,11 @@ id of the Erlang process associated with the channel
 id of the Erlang process associated with the connection to which the
 channel belongs
 
+=item number
+
+the number of the channel, which uniquely identifies it within a
+connection
+
 =item user
 
 username associated with the channel
