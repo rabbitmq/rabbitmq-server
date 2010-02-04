@@ -242,10 +242,10 @@ consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
 
 basic_recover_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
-    #'queue.declare_ok'{queue = Q}
-        = amqp_channel:call(Channel, #'queue.declare'{}),
-    #'basic.consume_ok'{consumer_tag = Tag} 
-        = amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q},
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Channel, #'queue.declare'{}),
+    #'basic.consume_ok'{consumer_tag = Tag} =
+        amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q},
                                  self()),
     receive
         #'basic.consume_ok'{consumer_tag = Tag} -> ok
@@ -572,8 +572,7 @@ setup_publish(Channel) ->
                        q = <<"a.b.c">>,
                        x = <<"x">>,
                        bind_key = <<"a.b.c.*">>,
-                       payload = <<"foobar">>
-                       },
+                       payload = <<"foobar">>},
     setup_publish(Channel, Publish).
 
 setup_publish(Channel, #publish{routing_key = RoutingKey,
