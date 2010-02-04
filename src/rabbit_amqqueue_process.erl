@@ -547,6 +547,15 @@ handle_call({info, Items}, _From, State) ->
     catch Error -> reply({error, Error}, State)
     end;
 
+handle_call(consumers, _From,
+            State = #q{active_consumers = ActiveConsumers,
+                       blocked_consumers = BlockedConsumers}) ->
+    reply(rabbit_misc:queue_fold(
+            fun ({ChPid, #consumer{tag = ConsumerTag,
+                                   ack_required = AckRequired}}, Acc) ->
+                    [{ChPid, ConsumerTag, AckRequired} | Acc]
+            end, [], queue:join(ActiveConsumers, BlockedConsumers)), State);
+
 handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
     %% Synchronous, "immediate" delivery mode
     %%
