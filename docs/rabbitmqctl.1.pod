@@ -421,6 +421,11 @@ number of logical AMQP consumers retrieving messages via the channel
 
 number of messages delivered via this channel but not yet acknowledged
 
+=item acks_uncommitted
+
+number of acknowledgements received in an as yet uncommitted
+transaction
+
 =item prefetch_count
 
 QoS prefetch count limit in force, 0 if unlimited

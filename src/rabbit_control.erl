@@ -194,8 +194,9 @@ and state.
 
 <ChannelInfoItem> must be a member of the list [pid, connection,
 number, user, vhost, transactional, consumer_count,
-messages_unacknowledged, prefetch_count]. The default is to display
-pid, user, transactional, consumer_count, messages_unacknowledged.
+messages_unacknowledged, acks_uncommitted, prefetch_count]. The
+default is to display pid, user, transactional, consumer_count,
+messages_unacknowledged.
 
 "),
     halt(1).

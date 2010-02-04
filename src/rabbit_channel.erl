@@ -62,6 +62,7 @@
          transactional,
          consumer_count,
          messages_unacknowledged,
+         acks_uncommitted,
          prefetch_count]).
 
 %%----------------------------------------------------------------------------
@@ -1017,8 +1018,11 @@ i(vhost,          #ch{virtual_host     = VHost})     -> VHost;
 i(transactional,  #ch{transaction_id   = TxnKey})    -> TxnKey =/= none;
 i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->
     dict:size(ConsumerMapping);
-i(messages_unacknowledged, #ch{unacked_message_q = UAMQ}) ->
-    queue:len(UAMQ);
+i(messages_unacknowledged, #ch{unacked_message_q = UAMQ,
+                               uncommitted_ack_q = UAQ}) ->
+    queue:len(UAMQ) + queue:len(UAQ);
+i(acks_uncommitted, #ch{uncommitted_ack_q = UAQ}) ->
+    queue:len(UAQ);
 i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
     rabbit_limiter:get_limit(LimiterPid);
 i(Item, _) ->
