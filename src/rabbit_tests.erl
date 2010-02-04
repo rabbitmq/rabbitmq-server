@@ -715,9 +715,11 @@ test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
     Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
-    Q = #amqqueue{} = rabbit_amqqueue:declare(
-                        rabbit_misc:r(<<"/">>, queue, <<"foo">>),
-                        false, false, []),
+    [Q, Q2] = [#amqqueue{} = rabbit_amqqueue:declare(
+                               rabbit_misc:r(<<"/">>, queue, Name),
+                               false, false, []) ||
+                  Name <- [<<"foo">>, <<"bar">>]],
+
     ok = rabbit_amqqueue:claim_queue(Q, self()),
     ok = rabbit_amqqueue:basic_consume(Q, true, self(), Ch, undefined,
                                        <<"ctag">>, true, undefined),
@@ -749,7 +751,7 @@ test_server_status() ->
     ok = control_action(list_consumers, []),
 
     %% cleanup
-    {ok, _} = rabbit_amqqueue:delete(Q, false, false),
+    [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
     ok = rabbit_channel:shutdown(Ch),
 
     passed.
