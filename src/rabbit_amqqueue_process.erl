@@ -39,7 +39,7 @@
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 
--export([start_link/1]).
+-export([start_link/1, info_keys/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
@@ -88,9 +88,10 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) ->
-    gen_server2:start_link(?MODULE, Q, []).
+start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
+info_keys() -> ?INFO_KEYS.
+    
 %%----------------------------------------------------------------------------
 
 init(Q) ->

@@ -4,6 +4,7 @@ syntax: glob
 *.swp
 *.patch
 erl_crash.dump
+deps.mk
 
 syntax: regexp
 ^cover/
