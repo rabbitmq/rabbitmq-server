@@ -33,7 +33,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/0, info/1, info/2, shutdown/2]).
+-export([start_link/0, info_keys/0, info/1, info/2, shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
@@ -129,6 +129,7 @@
 
 -ifdef(use_specs).
 
+-spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (pid()) -> [info()]).
 -spec(info/2 :: (pid(), [info_key()]) -> [info()]).
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
@@ -158,6 +159,8 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
+
+info_keys() -> ?INFO_KEYS.
 
 info(Pid) ->
     gen_server:call(Pid, info, infinity).

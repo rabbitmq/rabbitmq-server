@@ -36,7 +36,7 @@
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/2, redeliver/2, requeue/3, ack/4]).
--export([list/1, info/1, info/2, info_all/1, info_all/2]).
+-export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2, unblock/2]).
@@ -69,6 +69,7 @@
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
 -spec(list/1 :: (vhost()) -> [amqqueue()]).
+-spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (amqqueue()) -> [info()]).
 -spec(info/2 :: (amqqueue(), [info_key()]) -> [info()]).
 -spec(info_all/1 :: (vhost()) -> [[info()]]).
@@ -221,6 +222,8 @@ list(VHostPath) ->
     mnesia:dirty_match_object(
       rabbit_queue,
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
+
+info_keys() -> rabbit_amqqueue_process:info_keys().
 
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
