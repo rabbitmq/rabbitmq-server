@@ -142,6 +142,7 @@ Available commands:
   cluster <ClusterNode> ...
   status
   rotate_logs [Suffix]
+  close_connection <ConnectionPid> <ExplanationString>
 
   add_user        <UserName> <Password>
   delete_user     <UserName>
@@ -161,8 +162,6 @@ Available commands:
   list_exchanges [-p <VHostPath>] [<ExchangeInfoItem> ...]
   list_bindings  [-p <VHostPath>]
   list_connections [<ConnectionInfoItem> ...]
-
-  close_connection <ConnectionPid> <ExplanationString>
 
 Quiet output mode is selected with the \"-q\" flag. Informational
 messages are suppressed when quiet mode is in effect.
@@ -240,6 +239,11 @@ action(rotate_logs, Node, Args = [Suffix], Inform) ->
     Inform("Rotating logs to files with suffix ~p", [Suffix]),
     call(Node, {rabbit, rotate_logs, Args});
 
+action(close_connection, Node, [PidStr, Explanation], Inform) ->
+    Inform("Closing connection ~s", [PidStr]),
+    rpc_call(Node, rabbit_reader, shutdown,
+             [rabbit_misc:string_to_pid(PidStr), Explanation]);
+
 action(add_user, Node, Args = [Username, _Password], Inform) ->
     Inform("Creating user ~p", [Username]),
     call(Node, {rabbit_access_control, add_user, Args});
@@ -305,11 +309,6 @@ action(list_connections, Node, Args, Inform) ->
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
-
-action(close_connection, Node, [PidStr, Explanation], Inform) ->
-    Inform("Closing connection ~s", [PidStr]),
-    rpc_call(Node, rabbit_reader, shutdown,
-             [rabbit_misc:string_to_pid(PidStr), Explanation]);
 
 action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
