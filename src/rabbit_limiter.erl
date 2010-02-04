@@ -35,7 +35,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
--export([start_link/1, shutdown/1]).
+-export([start_link/2, shutdown/1]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 
 %%----------------------------------------------------------------------------
@@ -44,7 +44,7 @@
 
 -type(maybe_pid() :: pid() | 'undefined').
 
--spec(start_link/1 :: (pid()) -> pid()).
+-spec(start_link/2 :: (pid(), non_neg_integer()) -> pid()).
 -spec(shutdown/1 :: (maybe_pid()) -> 'ok').
 -spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
 -spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
@@ -68,8 +68,8 @@
 %% API
 %%----------------------------------------------------------------------------
 
-start_link(ChPid) ->
-    {ok, Pid} = gen_server:start_link(?MODULE, [ChPid], []),
+start_link(ChPid, UnackedMsgCount) ->
+    {ok, Pid} = gen_server:start_link(?MODULE, [ChPid, UnackedMsgCount], []),
     Pid.
 
 shutdown(undefined) ->
@@ -108,8 +108,8 @@ unregister(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {unregister, QPid})
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([ChPid]) ->
-    {ok, #lim{ch_pid = ChPid} }.
+init([ChPid, UnackedMsgCount]) ->
+    {ok, #lim{ch_pid = ChPid, volume = UnackedMsgCount}}.
 
 handle_call({can_send, QPid, AckRequired}, _From,
             State = #lim{volume = Volume}) ->

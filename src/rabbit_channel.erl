@@ -489,12 +489,14 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
                                "prefetch_size!=0 (~w)", [Size]);
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
-              _, State = #ch{ limiter_pid = LimiterPid }) ->
+              _, State = #ch{ limiter_pid = LimiterPid,
+                              unacked_message_q = UAMQ }) ->
     NewLimiterPid = case {LimiterPid, PrefetchCount} of
                         {undefined, 0} ->
                             undefined;
                         {undefined, _} ->
-                            LPid = rabbit_limiter:start_link(self()),
+                            LPid = rabbit_limiter:start_link(self(),
+                                                             queue:len(UAMQ)),
                             ok = limit_queues(LPid, State),
                             LPid;
                         {_, 0} ->
