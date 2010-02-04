@@ -38,7 +38,7 @@
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(alarms, {alertees, vm_memory_high_watermark = false}).
+-record(alarms, {alertees, vm_memory_high_watermark = false, flap_state}).
 
 %%----------------------------------------------------------------------------
 
@@ -75,7 +75,8 @@ register(Pid, HighMemMFA) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #alarms{alertees = dict:new()}}.
+    {ok, #alarms{alertees = dict:new(),
+                 flap_state = rabbit_alarm_flap_limiter:init()}}.
 
 handle_call({register, Pid, {M, F, A} = HighMemMFA},
             State = #alarms{alertees = Alertess}) ->
@@ -91,12 +92,22 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, {vm_memory_high_watermark, []}}, State) ->
-    ok = alert(true, State#alarms.alertees),
-    {ok, State#alarms{vm_memory_high_watermark = true}};
+    {Res, FState} = rabbit_alarm_flap_limiter:set(State#alarms.flap_state),
+    State1 = State#alarms{flap_state = FState},
+    {ok, case Res of
+             true  -> ok = alert(true, State#alarms.alertees),
+                      State1#alarms{vm_memory_high_watermark = true};
+             false -> State1
+         end};
 
 handle_event({clear_alarm, vm_memory_high_watermark}, State) ->
-    ok = alert(false, State#alarms.alertees),
-    {ok, State#alarms{vm_memory_high_watermark = false}};
+    {Res, FState} = rabbit_alarm_flap_limiter:clear(State#alarms.flap_state),
+    State1 = State#alarms{flap_state = FState},
+    {ok, case Res of
+             true  -> ok = alert(false, State#alarms.alertees),
+                      State1#alarms{vm_memory_high_watermark = false};
+             false -> State1
+         end};
 
 handle_event(_Event, State) ->
     {ok, State}.
