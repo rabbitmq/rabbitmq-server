@@ -712,10 +712,15 @@ test_user_management() ->
 
 test_server_status() ->
 
-    %% create a queue so we have something to list
+    %% create a few things so there is some useful information to list
+    Writer = spawn(fun () -> receive shutdown -> ok end end),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
     Q = #amqqueue{} = rabbit_amqqueue:declare(
                         rabbit_misc:r(<<"/">>, queue, <<"foo">>),
                         false, false, []),
+    ok = rabbit_amqqueue:claim_queue(Q, self()),
+    ok = rabbit_amqqueue:basic_consume(Q, true, self(), Ch, undefined,
+                                       <<"ctag">>, true, undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -725,9 +730,6 @@ test_server_status() ->
 
     %% list bindings
     ok = control_action(list_bindings, []),
-
-    %% cleanup
-    {ok, _} = rabbit_amqqueue:delete(Q, false, false),
 
     %% list connections
     [#listener{host = H, port = P} | _] =
@@ -741,9 +743,13 @@ test_server_status() ->
     ok = gen_tcp:close(C),
 
     %% list channels
-    Writer = spawn(fun () -> receive shutdown -> ok end end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
     ok = info_action(list_channels, rabbit_channel:info_keys(), false),
+
+    %% list consumers
+    ok = control_action(list_consumers, []),
+
+    %% cleanup
+    {ok, _} = rabbit_amqqueue:delete(Q, false, false),
     ok = rabbit_channel:shutdown(Ch),
 
     passed.
