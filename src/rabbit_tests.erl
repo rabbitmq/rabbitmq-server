@@ -31,7 +31,7 @@
 
 -module(rabbit_tests).
 
--export([all_tests/0, test_parsing/0, test_server_status/0]).
+-export([all_tests/0, test_parsing/0]).
 
 %% Exported so the hook mechanism can call back
 -export([handle_hook/3, bad_handle_hook/3, extra_arg_hook/5]).
