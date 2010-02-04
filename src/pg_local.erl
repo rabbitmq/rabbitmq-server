@@ -35,6 +35,7 @@
 -module(pg_local).
 
 -export([join/2, leave/2, get_members/1]).
+-export([sync/0]). %% intended for testing only; not part of official API
 -export([start/0,start_link/0,init/1,handle_call/3,handle_cast/2,handle_info/2,
          terminate/2]).
 
@@ -49,6 +50,8 @@
 -spec(join/2 :: (name(), pid()) -> 'ok').
 -spec(leave/2 :: (name(), pid()) -> 'ok').
 -spec(get_members/1 :: (name()) -> [pid()]).
+
+-spec(sync/0 :: () -> 'ok').
 
 -endif.
 
@@ -78,6 +81,10 @@ get_members(Name) ->
     ensure_started(),
     group_members(Name).
 
+sync() ->
+    ensure_started(),
+    gen_server:call(?MODULE, sync).
+
 %%%
 %%% Callback functions from gen_server
 %%%
@@ -87,6 +94,9 @@ get_members(Name) ->
 init([]) ->
     pg_local_table = ets:new(pg_local_table, [ordered_set, protected, named_table]),
     {ok, #state{}}.
+
+handle_call(sync, _From, S) ->
+    {reply, ok, S};
 
 handle_call(Request, From, S) ->
     error_logger:warning_msg("The pg_local server received an unexpected message:\n"
