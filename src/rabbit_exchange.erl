@@ -35,7 +35,7 @@
 -include("rabbit_framing.hrl").
 
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1,
-         list/1, info/1, info/2, info_all/1, info_all/2,
+         list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          publish/2]).
 -export([add_binding/4, delete_binding/4, list_bindings/1]).
 -export([delete/2]).
@@ -68,6 +68,7 @@
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
 -spec(list/1 :: (vhost()) -> [exchange()]).
+-spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (exchange()) -> [info()]).
 -spec(info/2 :: (exchange(), [info_key()]) -> [info()]).
 -spec(info_all/1 :: (vhost()) -> [[info()]]).
@@ -164,6 +165,8 @@ list(VHostPath) ->
     mnesia:dirty_match_object(
       rabbit_exchange,
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
+
+info_keys() -> ?INFO_KEYS.
 
 map(VHostPath, F) ->
     %% TODO: there is scope for optimisation here, e.g. using a

@@ -284,7 +284,7 @@ separated by tab characters.
 
 =item list_connections [I<connectioninfoitem> ...]
 
-List queue information by virtual host. Each line printed describes an
+List current AMQP connections. Each line printed describes a
 connection, with the requested I<connectioninfoitem> values separated
 by tab characters.  If no I<connectioninfoitem>s are specified then
 I<user>, I<peer_address>, I<peer_port> and I<state> are assumed.
@@ -295,7 +295,7 @@ I<user>, I<peer_address>, I<peer_port> and I<state> are assumed.
 
 =over
 
-=item node
+=item pid
 
 id of the Erlang process associated with the connection
 

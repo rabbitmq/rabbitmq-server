@@ -41,7 +41,7 @@
 -define(SYNC_INTERVAL,                 5). %% milliseconds
 -define(RATES_REMEASURE_INTERVAL,  5000).
 
--export([start_link/1]).
+-export([start_link/1, info_keys/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1]).
@@ -96,9 +96,10 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) ->
-    gen_server2:start_link(?MODULE, Q, []).
+start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
+info_keys() -> ?INFO_KEYS.
+    
 %%----------------------------------------------------------------------------
 
 init(Q = #amqqueue { name = QName }) ->
