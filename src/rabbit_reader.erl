@@ -33,7 +33,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/0, info_keys/0, info/1, info/2]).
+-export([start_link/0, info_keys/0, info/1, info/2, shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
@@ -132,6 +132,7 @@
 -spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (pid()) -> [info()]).
 -spec(info/2 :: (pid(), [info_key()]) -> [info()]).
+-spec(shutdown/2 :: (pid(), string()) -> 'ok').
 
 -endif.
 
@@ -139,6 +140,9 @@
 
 start_link() ->
     {ok, proc_lib:spawn_link(?MODULE, init, [self()])}.
+
+shutdown(Pid, Explanation) ->
+    gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
 init(Parent) ->
     Deb = sys:debug_options([]),
@@ -267,13 +271,8 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
         {inet_async, Sock, Ref, {error, Reason}} ->
             throw({inet_error, Reason});
         {'EXIT', Parent, Reason} ->
-            if State#v1.connection_state =:= running ->
-                    send_exception(State, 0,
-                        rabbit_misc:amqp_error(connection_forced,
-                            "broker forced connection closure with reason '~w'",
-                            [Reason], none));
-               true -> ok
-            end,
+            terminate(io_lib:format("broker forced connection closure "
+                                    "with reason '~w'", [Reason]), State),
             %% this is what we are expected to do according to
             %% http://www.erlang.org/doc/man/sys.html
             %%
@@ -301,6 +300,13 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             end;
         timeout ->
             throw({timeout, State#v1.connection_state});
+        {'$gen_call', From, {shutdown, Explanation}} ->
+            {ForceTermination, NewState} = terminate(Explanation, State),
+            gen_server:reply(From, ok),
+            case ForceTermination of
+                force  -> ok;
+                normal -> mainloop(Parent, Deb, NewState)
+            end;
         {'$gen_call', From, info} ->
             gen_server:reply(From, infos(?INFO_KEYS, State)),
             mainloop(Parent, Deb, State);
@@ -322,6 +328,13 @@ switch_callback(OldState, NewCallback, Length) ->
                               OldState#v1.sock, Length, infinity) end),
     OldState#v1{callback = NewCallback,
                 recv_ref = Ref}.
+
+terminate(Explanation, State = #v1{connection_state = running}) ->
+    {normal, send_exception(State, 0,
+                            rabbit_misc:amqp_error(
+                              connection_forced, Explanation, [], none))};
+terminate(_Explanation, State) ->
+    {force, State}.
 
 close_connection(State = #v1{connection = #connection{
                                timeout_sec = TimeoutSec}}) ->
