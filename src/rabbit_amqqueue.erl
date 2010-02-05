@@ -100,7 +100,8 @@
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
 -spec(basic_consume/8 ::
-      (amqqueue(), boolean(), pid(), pid(), pid(), ctag(), boolean(), any()) ->
+      (amqqueue(), boolean(), pid(), pid(), pid() | 'undefined', ctag(),
+       boolean(), any()) ->
              'ok' | {'error', 'queue_owned_by_another_connection' |
                      'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
