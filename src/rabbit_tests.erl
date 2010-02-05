@@ -49,6 +49,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     passed = test_priority_queue(),
+    passed = test_pg_local(),
     passed = test_unfold(),
     passed = test_parsing(),
     passed = test_topic_matching(),
@@ -182,6 +183,28 @@ test_simple_n_element_queue(N) ->
     ToListRes = [{0, X} || X <- Items],
     {true, false, N, ToListRes, Items} = test_priority_queue(Q),
     passed.
+
+test_pg_local() ->
+    [P, Q] = [spawn(fun () -> receive X -> X end end) || _ <- [x, x]],
+    check_pg_local(ok, [], []),
+    check_pg_local(pg_local:join(a, P), [P], []), 
+    check_pg_local(pg_local:join(b, P), [P], [P]),
+    check_pg_local(pg_local:join(a, P), [P, P], [P]),
+    check_pg_local(pg_local:join(a, Q), [P, P, Q], [P]),
+    check_pg_local(pg_local:join(b, Q), [P, P, Q], [P, Q]),
+    check_pg_local(pg_local:join(b, Q), [P, P, Q], [P, Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [P, Q], [P, Q, Q]),
+    check_pg_local(pg_local:leave(b, P), [P, Q], [Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [Q], [Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [Q], [Q, Q]),
+    [X ! done || X <- [P, Q]],
+    check_pg_local(ok, [], []),
+    passed.
+
+check_pg_local(ok, APids, BPids) ->
+    ok = pg_local:sync(),
+    [true, true] = [lists:sort(Pids) == lists:sort(pg_local:get_members(Key)) ||
+                       {Key, Pids} <- [{a, APids}, {b, BPids}]].
 
 test_unfold() ->
     {[], test} = rabbit_misc:unfold(fun (_V) -> false end, test),
@@ -716,6 +739,12 @@ test_server_status() ->
     ok = info_action(list_connections,
                      rabbit_networking:connection_info_keys(), false),
     ok = gen_tcp:close(C),
+
+    %% list channels
+    Writer = spawn(fun () -> receive shutdown -> ok end end),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
+    ok = info_action(list_channels, rabbit_channel:info_keys(), false),
+    ok = rabbit_channel:shutdown(Ch),
 
     passed.
 

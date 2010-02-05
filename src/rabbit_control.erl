@@ -158,6 +158,7 @@ Available commands:
   list_exchanges [-p <VHostPath>] [<ExchangeInfoItem> ...]
   list_bindings  [-p <VHostPath>]
   list_connections [<ConnectionInfoItem> ...]
+  list_channels [<ChannelInfoItem> ...]
 
 Quiet output mode is selected with the \"-q\" flag. Informational
 messages are suppressed when quiet mode is in effect.
@@ -190,6 +191,12 @@ peer_address, peer_port, state, channels, user, vhost, timeout,
 frame_max, client_properties, recv_oct, recv_cnt, send_oct, send_cnt,
 send_pend].  The default is to display user, peer_address, peer_port
 and state.
+
+<ChannelInfoItem> must be a member of the list [pid, connection,
+number, user, vhost, transactional, consumer_count,
+messages_unacknowledged, acks_uncommitted, prefetch_count]. The
+default is to display pid, user, transactional, consumer_count,
+messages_unacknowledged.
 
 "),
     halt(1).
@@ -299,6 +306,13 @@ action(list_connections, Node, Args, Inform) ->
     ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port, state]),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
+                      ArgAtoms);
+
+action(list_channels, Node, Args, Inform) ->
+    Inform("Listing channels", []),
+    ArgAtoms = default_if_empty(Args, [pid, user, transactional, consumer_count,
+                                       messages_unacknowledged]),
+    display_info_list(rpc_call(Node, rabbit_channel, info_all, [ArgAtoms]),
                       ArgAtoms);
 
 action(Command, Node, Args, Inform) ->

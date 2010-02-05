@@ -37,8 +37,10 @@
 
 -export([start_link/5, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2]).
+-export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 
--export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
+-export([init/1, terminate/2, code_change/3,
+         handle_call/3, handle_cast/2, handle_info/2, handle_pre_hibernate/1]).
 
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
@@ -46,9 +48,22 @@
              username, virtual_host,
              most_recently_declared_queue, consumer_mapping}).
 
--define(HIBERNATE_AFTER, 1000).
+-define(HIBERNATE_AFTER_MIN, 1000).
+-define(DESIRED_HIBERNATE, 10000).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
+
+-define(INFO_KEYS,
+        [pid,
+         connection,
+         number,
+         user,
+         vhost,
+         transactional,
+         consumer_count,
+         messages_unacknowledged,
+         acks_uncommitted,
+         prefetch_count]).
 
 %%----------------------------------------------------------------------------
 
@@ -62,6 +77,12 @@
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
 -spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
+-spec(list/0 :: () -> [pid()]).
+-spec(info_keys/0 :: () -> [info_key()]).
+-spec(info/1 :: (pid()) -> [info()]).
+-spec(info/2 :: (pid(), [info_key()]) -> [info()]).
+-spec(info_all/0 :: () -> [[info()]]).
+-spec(info_all/1 :: ([info_key()]) -> [[info()]]).
 
 -endif.
 
@@ -91,12 +112,33 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 conserve_memory(Pid, Conserve) ->
     gen_server2:pcast(Pid, 9, {conserve_memory, Conserve}).
 
+list() ->
+    pg_local:get_members(rabbit_channels).
+
+info_keys() -> ?INFO_KEYS.
+
+info(Pid) ->
+    gen_server2:pcall(Pid, 9, info, infinity).
+
+info(Pid, Items) ->
+    case gen_server2:pcall(Pid, 9, {info, Items}, infinity) of
+        {ok, Res}      -> Res;
+        {error, Error} -> throw(Error)
+    end.
+
+info_all() ->
+    rabbit_misc:filter_exit_map(fun (C) -> info(C) end, list()).
+
+info_all(Items) ->
+    rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
+
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
     rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
+    ok = pg_local:join(rabbit_channels, self()),
     {ok, #ch{state                   = starting,
              channel                 = Channel,
              reader_pid              = ReaderPid,
@@ -110,7 +152,18 @@ init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
              username                = Username,
              virtual_host            = VHost,
              most_recently_declared_queue = <<>>,
-             consumer_mapping        = dict:new()}}.
+             consumer_mapping        = dict:new()},
+     hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+handle_call(info, _From, State) ->
+    reply(infos(?INFO_KEYS, State), State);
+
+handle_call({info, Items}, _From, State) ->
+    try
+        reply({ok, infos(Items, State)}, State)
+    catch Error -> reply({error, Error}, State)
+    end;
 
 handle_call(_Request, _From, State) ->
     noreply(State).
@@ -162,33 +215,31 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
     State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
     {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
-    {stop, Reason, State};
+    {stop, Reason, State}.
 
-handle_info(timeout, State) ->
+handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
-    {noreply, State, hibernate}.
+    {hibernate, State}.
 
-terminate(_Reason, #ch{writer_pid = WriterPid, limiter_pid = LimiterPid,
-                       state = terminating}) ->
-    rabbit_writer:shutdown(WriterPid),
-    rabbit_limiter:shutdown(LimiterPid);
+terminate(_Reason, State = #ch{state = terminating}) ->
+    terminate(State);
 
-terminate(Reason, State = #ch{writer_pid = WriterPid,
-                              limiter_pid = LimiterPid}) ->
+terminate(Reason, State) ->
     Res = rollback_and_notify(State),
     case Reason of
         normal -> ok = Res;
         _      -> ok
     end,
-    rabbit_writer:shutdown(WriterPid),
-    rabbit_limiter:shutdown(LimiterPid).
+    terminate(State).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%---------------------------------------------------------------------------
 
-noreply(NewState) -> {noreply, NewState, ?HIBERNATE_AFTER}.
+reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
+
+noreply(NewState) -> {noreply, NewState, hibernate}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -951,3 +1002,28 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
                         WriterPid, QPid, self(), M, Content);
              false -> rabbit_writer:send_command(WriterPid, M, Content)
          end.
+
+terminate(#ch{writer_pid = WriterPid, limiter_pid = LimiterPid}) ->
+    pg_local:leave(rabbit_channels, self()),
+    rabbit_writer:shutdown(WriterPid),
+    rabbit_limiter:shutdown(LimiterPid).
+
+infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+
+i(pid,            _)                                 -> self();
+i(connection,     #ch{reader_pid       = ReaderPid}) -> ReaderPid;
+i(number,         #ch{channel          = Channel})   -> Channel;
+i(user,           #ch{username         = Username})  -> Username;
+i(vhost,          #ch{virtual_host     = VHost})     -> VHost;
+i(transactional,  #ch{transaction_id   = TxnKey})    -> TxnKey =/= none;
+i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->
+    dict:size(ConsumerMapping);
+i(messages_unacknowledged, #ch{unacked_message_q = UAMQ,
+                               uncommitted_ack_q = UAQ}) ->
+    queue:len(UAMQ) + queue:len(UAQ);
+i(acks_uncommitted, #ch{uncommitted_ack_q = UAQ}) ->
+    queue:len(UAQ);
+i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
+    rabbit_limiter:get_limit(LimiterPid);
+i(Item, _) ->
+    throw({bad_argument, Item}).
