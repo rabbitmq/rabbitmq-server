@@ -163,6 +163,7 @@ Available commands:
   list_bindings  [-p <VHostPath>]
   list_connections [<ConnectionInfoItem> ...]
   list_channels [<ChannelInfoItem> ...]
+  list_consumers [-p <VHostPath>]
 
 Quiet output mode is selected with the \"-q\" flag. Informational
 messages are suppressed when quiet mode is in effect.
@@ -202,6 +203,11 @@ number, user, vhost, transactional, consumer_count,
 messages_unacknowledged, acks_uncommitted, prefetch_count]. The
 default is to display pid, user, transactional, consumer_count,
 messages_unacknowledged.
+
+The output format for \"list_consumers\" is a list of rows containing,
+in order, the queue name, channel process id, consumer tag, and a
+boolean indicating whether acknowledgements are expected from the
+consumer.
 
 "),
     halt(1).
@@ -308,8 +314,7 @@ action(list_bindings, Node, Args, Inform) ->
     display_info_list(
       [lists:zip(InfoKeys, tuple_to_list(X)) ||
           X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])],
-      InfoKeys),
-    ok;
+      InfoKeys);
 
 action(list_connections, Node, Args, Inform) ->
     Inform("Listing connections", []),
@@ -324,6 +329,15 @@ action(list_channels, Node, Args, Inform) ->
                                        messages_unacknowledged]),
     display_info_list(rpc_call(Node, rabbit_channel, info_all, [ArgAtoms]),
                       ArgAtoms);
+
+action(list_consumers, Node, Args, Inform) ->
+    Inform("Listing consumers", []),
+    {VHostArg, _} = parse_vhost_flag_bin(Args),
+    InfoKeys = [queue_name, channel_pid, consumer_tag, ack_required],
+    display_info_list(
+      [lists:zip(InfoKeys, tuple_to_list(X)) ||
+          X <- rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg])],
+      InfoKeys);
 
 action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
