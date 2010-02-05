@@ -734,11 +734,14 @@ test_server_status() ->
         [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
               N =:= node()],
 
-    {ok, C} = gen_tcp:connect(H, P, []),
+    {ok, _C} = gen_tcp:connect(H, P, []),
     timer:sleep(100),
     ok = info_action(list_connections,
                      rabbit_networking:connection_info_keys(), false),
-    ok = gen_tcp:close(C),
+    %% close_connection
+    [ConnPid] = rabbit_networking:connections(),
+    ok = control_action(close_connection, [rabbit_misc:pid_to_string(ConnPid),
+                                           "go away"]),
 
     %% list channels
     Writer = spawn(fun () -> receive shutdown -> ok end end),

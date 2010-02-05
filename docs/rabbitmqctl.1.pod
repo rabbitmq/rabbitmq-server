@@ -98,6 +98,13 @@ nodes determined by I<clusternode> option(s). See
 L<http://www.rabbitmq.com/clustering.html> for more information about
 clustering.
 
+=item close_connection I<connectionpid> I<explanation>
+
+Instruct the broker to close the connection associated with the Erlang
+process id I<connectionpid> (see also the I<list_connections>
+command), passing the I<explanation> string to the connected client as
+part of the AMQP connection shutdown protocol.
+
 =back
 
 =head2 USER MANAGEMENT
