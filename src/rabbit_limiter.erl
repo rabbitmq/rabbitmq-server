@@ -31,12 +31,13 @@
 
 -module(rabbit_limiter).
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([start_link/2, shutdown/1]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
+-export([get_limit/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -51,6 +52,7 @@
 -spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
 -spec(unregister/2 :: (maybe_pid(), pid()) -> 'ok').
+-spec(get_limit/1 :: (maybe_pid()) -> non_neg_integer()).
 
 -endif.
 
@@ -69,7 +71,7 @@
 %%----------------------------------------------------------------------------
 
 start_link(ChPid, UnackedMsgCount) ->
-    {ok, Pid} = gen_server:start_link(?MODULE, [ChPid, UnackedMsgCount], []),
+    {ok, Pid} = gen_server2:start_link(?MODULE, [ChPid, UnackedMsgCount], []),
     Pid.
 
 shutdown(undefined) ->
@@ -104,6 +106,13 @@ register(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {register, QPid}).
 unregister(undefined, _QPid) -> ok;
 unregister(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {unregister, QPid}).
 
+get_limit(undefined) ->
+    0;
+get_limit(Pid) ->
+    rabbit_misc:with_exit_handler(
+      fun () -> 0 end,
+      fun () -> gen_server2:pcall(Pid, 9, get_limit, infinity) end).
+
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
@@ -118,7 +127,10 @@ handle_call({can_send, QPid, AckRequired}, _From,
         false -> {reply, true, State#lim{volume = if AckRequired -> Volume + 1;
                                                      true        -> Volume
                                                   end}}
-    end.
+    end;
+
+handle_call(get_limit, _From, State = #lim{prefetch_count = PrefetchCount}) ->
+    {reply, PrefetchCount, State}.
 
 handle_cast(shutdown, State) ->
     {stop, normal, State};

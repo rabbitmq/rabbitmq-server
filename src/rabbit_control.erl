@@ -81,6 +81,9 @@ start() ->
         {error, Reason} ->
             error("~p", [Reason]),
             halt(2);
+        {badrpc, {'EXIT', Reason}} ->
+            error("~p", [Reason]),
+            halt(2);
         {badrpc, Reason} ->
             error("unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
@@ -139,6 +142,7 @@ Available commands:
   cluster <ClusterNode> ...
   status
   rotate_logs [Suffix]
+  close_connection <ConnectionPid> <ExplanationString>
 
   add_user        <UserName> <Password>
   delete_user     <UserName>
@@ -158,6 +162,8 @@ Available commands:
   list_exchanges [-p <VHostPath>] [<ExchangeInfoItem> ...]
   list_bindings  [-p <VHostPath>]
   list_connections [<ConnectionInfoItem> ...]
+  list_channels [<ChannelInfoItem> ...]
+  list_consumers [-p <VHostPath>]
 
 Quiet output mode is selected with the \"-q\" flag. Informational
 messages are suppressed when quiet mode is in effect.
@@ -174,7 +180,8 @@ optional virtual host parameter for which to display results. The
 default value is \"/\".
 
 <QueueInfoItem> must be a member of the list [name, durable,
-auto_delete, arguments, pid, messages_ready, messages_unacknowledged,
+auto_delete, arguments, pid, owner_pid, exclusive_consumer_pid,
+exclusive_consumer_tag, messages_ready, messages_unacknowledged,
 messages_uncommitted, messages, acks_uncommitted, consumers,
 transactions, memory]. The default is to display name and (number of)
 messages.
@@ -190,6 +197,17 @@ peer_address, peer_port, state, channels, user, vhost, timeout,
 frame_max, client_properties, recv_oct, recv_cnt, send_oct, send_cnt,
 send_pend].  The default is to display user, peer_address, peer_port
 and state.
+
+<ChannelInfoItem> must be a member of the list [pid, connection,
+number, user, vhost, transactional, consumer_count,
+messages_unacknowledged, acks_uncommitted, prefetch_count]. The
+default is to display pid, user, transactional, consumer_count,
+messages_unacknowledged.
+
+The output format for \"list_consumers\" is a list of rows containing,
+in order, the queue name, channel process id, consumer tag, and a
+boolean indicating whether acknowledgements are expected from the
+consumer.
 
 "),
     halt(1).
@@ -234,6 +252,11 @@ action(rotate_logs, Node, [], Inform) ->
 action(rotate_logs, Node, Args = [Suffix], Inform) ->
     Inform("Rotating logs to files with suffix ~p", [Suffix]),
     call(Node, {rabbit, rotate_logs, Args});
+
+action(close_connection, Node, [PidStr, Explanation], Inform) ->
+    Inform("Closing connection ~s", [PidStr]),
+    rpc_call(Node, rabbit_networking, close_connection,
+             [rabbit_misc:string_to_pid(PidStr), Explanation]);
 
 action(add_user, Node, Args = [Username, _Password], Inform) ->
     Inform("Creating user ~p", [Username]),
@@ -291,8 +314,7 @@ action(list_bindings, Node, Args, Inform) ->
     display_info_list(
       [lists:zip(InfoKeys, tuple_to_list(X)) ||
           X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])],
-      InfoKeys),
-    ok;
+      InfoKeys);
 
 action(list_connections, Node, Args, Inform) ->
     Inform("Listing connections", []),
@@ -300,6 +322,22 @@ action(list_connections, Node, Args, Inform) ->
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
+
+action(list_channels, Node, Args, Inform) ->
+    Inform("Listing channels", []),
+    ArgAtoms = default_if_empty(Args, [pid, user, transactional, consumer_count,
+                                       messages_unacknowledged]),
+    display_info_list(rpc_call(Node, rabbit_channel, info_all, [ArgAtoms]),
+                      ArgAtoms);
+
+action(list_consumers, Node, Args, Inform) ->
+    Inform("Listing consumers", []),
+    {VHostArg, _} = parse_vhost_flag_bin(Args),
+    InfoKeys = [queue_name, channel_pid, consumer_tag, ack_required],
+    display_info_list(
+      [lists:zip(InfoKeys, tuple_to_list(X)) ||
+          X <- rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg])],
+      InfoKeys);
 
 action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
@@ -358,7 +396,7 @@ format_info_item(Key, Items) ->
                    is_tuple(Value) ->
             inet_parse:ntoa(Value);
         Value when is_pid(Value) ->
-            pid_to_string(Value);
+            rabbit_misc:pid_to_string(Value);
         Value when is_binary(Value) ->
             escape(Value);
         Value when is_atom(Value) ->
@@ -416,10 +454,3 @@ prettify_typed_amqp_value(Type, Value) ->
         array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
         _       -> Value
     end.
-
-%% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and 8.7)
-pid_to_string(Pid) ->
-    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,_Cre:8>>
-        = term_to_binary(Pid),
-    Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
-    lists:flatten(io_lib:format("<~w.~B.~B>", [Node, Id, Ser])).

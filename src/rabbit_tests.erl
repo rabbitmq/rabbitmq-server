@@ -49,6 +49,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     passed = test_priority_queue(),
+    passed = test_pg_local(),
     passed = test_unfold(),
     passed = test_parsing(),
     passed = test_topic_matching(),
@@ -182,6 +183,28 @@ test_simple_n_element_queue(N) ->
     ToListRes = [{0, X} || X <- Items],
     {true, false, N, ToListRes, Items} = test_priority_queue(Q),
     passed.
+
+test_pg_local() ->
+    [P, Q] = [spawn(fun () -> receive X -> X end end) || _ <- [x, x]],
+    check_pg_local(ok, [], []),
+    check_pg_local(pg_local:join(a, P), [P], []), 
+    check_pg_local(pg_local:join(b, P), [P], [P]),
+    check_pg_local(pg_local:join(a, P), [P, P], [P]),
+    check_pg_local(pg_local:join(a, Q), [P, P, Q], [P]),
+    check_pg_local(pg_local:join(b, Q), [P, P, Q], [P, Q]),
+    check_pg_local(pg_local:join(b, Q), [P, P, Q], [P, Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [P, Q], [P, Q, Q]),
+    check_pg_local(pg_local:leave(b, P), [P, Q], [Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [Q], [Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [Q], [Q, Q]),
+    [X ! done || X <- [P, Q]],
+    check_pg_local(ok, [], []),
+    passed.
+
+check_pg_local(ok, APids, BPids) ->
+    ok = pg_local:sync(),
+    [true, true] = [lists:sort(Pids) == lists:sort(pg_local:get_members(Key)) ||
+                       {Key, Pids} <- [{a, APids}, {b, BPids}]].
 
 test_unfold() ->
     {[], test} = rabbit_misc:unfold(fun (_V) -> false end, test),
@@ -689,10 +712,17 @@ test_user_management() ->
 
 test_server_status() ->
 
-    %% create a queue so we have something to list
-    Q = #amqqueue{} = rabbit_amqqueue:declare(
-                        rabbit_misc:r(<<"/">>, queue, <<"foo">>),
-                        false, false, []),
+    %% create a few things so there is some useful information to list
+    Writer = spawn(fun () -> receive shutdown -> ok end end),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
+    [Q, Q2] = [#amqqueue{} = rabbit_amqqueue:declare(
+                               rabbit_misc:r(<<"/">>, queue, Name),
+                               false, false, []) ||
+                  Name <- [<<"foo">>, <<"bar">>]],
+
+    ok = rabbit_amqqueue:claim_queue(Q, self()),
+    ok = rabbit_amqqueue:basic_consume(Q, true, self(), Ch, undefined,
+                                       <<"ctag">>, true, undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -703,19 +733,29 @@ test_server_status() ->
     %% list bindings
     ok = control_action(list_bindings, []),
 
-    %% cleanup
-    {ok, _} = rabbit_amqqueue:delete(Q, false, false),
-
     %% list connections
     [#listener{host = H, port = P} | _] =
         [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
               N =:= node()],
 
-    {ok, C} = gen_tcp:connect(H, P, []),
+    {ok, _C} = gen_tcp:connect(H, P, []),
     timer:sleep(100),
     ok = info_action(list_connections,
                      rabbit_networking:connection_info_keys(), false),
-    ok = gen_tcp:close(C),
+    %% close_connection
+    [ConnPid] = rabbit_networking:connections(),
+    ok = control_action(close_connection, [rabbit_misc:pid_to_string(ConnPid),
+                                           "go away"]),
+
+    %% list channels
+    ok = info_action(list_channels, rabbit_channel:info_keys(), false),
+
+    %% list consumers
+    ok = control_action(list_consumers, []),
+
+    %% cleanup
+    [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
+    ok = rabbit_channel:shutdown(Ch),
 
     passed.
 
