@@ -523,7 +523,7 @@ string_to_pid(Str) ->
     %% 1) sanity check
     %% The \ before the trailing $ is only there to keep emacs
     %% font-lock from getting confused.
-    case regexp:first_match(Str, "^<.*\.[0-9]+\.[0-9]+>\$") of
+    case regexp:first_match(Str, "^<.*\\.[0-9]+\\.[0-9]+>\$") of
         {match, _, _} ->
             %% 2) strip <>
             Str1 = string:substr(Str, 2, string:len(Str) - 2),
