@@ -175,7 +175,8 @@ optional virtual host parameter for which to display results. The
 default value is \"/\".
 
 <QueueInfoItem> must be a member of the list [name, durable,
-auto_delete, arguments, pid, messages_ready, messages_unacknowledged,
+auto_delete, arguments, pid, owner_pid, exclusive_consumer_pid,
+exclusive_consumer_tag, messages_ready, messages_unacknowledged,
 messages_uncommitted, messages, acks_uncommitted, consumers,
 transactions, memory]. The default is to display name and (number of)
 messages.
