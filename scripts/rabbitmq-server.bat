@@ -139,7 +139,7 @@ if not "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
 -s rabbit ^
 +W w ^
 +A30 ^
--kernel inet_default_listen_options "[{nodelay, true}, {sndbuf, 16384}, {recbuf, 4096}]" ^
+-kernel inet_default_listen_options "[{nodelay, true}]" ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 %RABBITMQ_LISTEN_ARG% ^
 -kernel error_logger {file,\""%RABBITMQ_LOG_BASE%/%RABBITMQ_NODENAME%.log"\"} ^
