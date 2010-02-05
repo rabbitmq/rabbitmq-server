@@ -241,7 +241,7 @@ action(rotate_logs, Node, Args = [Suffix], Inform) ->
 
 action(close_connection, Node, [PidStr, Explanation], Inform) ->
     Inform("Closing connection ~s", [PidStr]),
-    rpc_call(Node, rabbit_reader, shutdown,
+    rpc_call(Node, rabbit_networking, close_connection,
              [rabbit_misc:string_to_pid(PidStr), Explanation]);
 
 action(add_user, Node, Args = [Username, _Password], Inform) ->
