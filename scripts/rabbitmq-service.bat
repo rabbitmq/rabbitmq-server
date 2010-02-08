@@ -66,7 +66,9 @@ if "%ERLANG_SERVICE_MANAGER_PATH%"=="" (
         echo.
         exit /B
     )
-    set ERLANG_SERVICE_MANAGER_PATH=%ERLANG_HOME%\erts-5.7.4\bin
+    for /f "delims=" %%i in ('dir /ad/b "%ERLANG_HOME%"') do if exist "%ERLANG_HOME%\%%i\bin\erlsrv.exe" (
+        set ERLANG_SERVICE_MANAGER_PATH=%ERLANG_HOME%\%%i\bin
+    )
 )
 
 set CONSOLE_FLAG=
