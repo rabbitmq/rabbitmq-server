@@ -34,9 +34,8 @@ setlocal
 
 rem Preserve values that might contain exclamation marks before
 rem enabling delayed expansion
-set DP0=%~dp0
+set TDP0=%~dp0
 set STAR=%*
-
 setlocal enabledelayedexpansion
 
 if "!RABBITMQ_BASE!"=="" (
@@ -111,7 +110,7 @@ set CLUSTER_CONFIG=-rabbit cluster_config \""!RABBITMQ_CLUSTER_CONFIG_FILE:\=/!"
 if "!RABBITMQ_MNESIA_DIR!"=="" (
     set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-mnesia
 )
-set RABBITMQ_EBIN_ROOT=!DP0!..\ebin
+set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 if exist "!RABBITMQ_EBIN_ROOT!\rabbit.boot" (
     echo Using Custom Boot File "!RABBITMQ_EBIN_ROOT!\rabbit.boot"
     set RABBITMQ_BOOT_FILE=!RABBITMQ_EBIN_ROOT!\rabbit

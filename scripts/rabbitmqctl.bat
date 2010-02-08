@@ -32,11 +32,17 @@ REM
 
 setlocal
 
-if "%RABBITMQ_NODENAME%"=="" (
+rem Preserve values that might contain exclamation marks before
+rem enabling delayed expansion
+set TDP0=%~dp0
+set STAR=%*
+setlocal enabledelayedexpansion
+
+if "!RABBITMQ_NODENAME!"=="" (
     set RABBITMQ_NODENAME=rabbit
 )
 
-if not exist "%ERLANG_HOME%\bin\erl.exe" (
+if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
     echo ******************************
     echo ERLANG_HOME not set correctly. 
@@ -48,6 +54,7 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
     exit /B
 )
 
-"%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden %RABBITMQ_CTL_ERL_ARGS% -sname rabbitmqctl -s rabbit_control -nodename %RABBITMQ_NODENAME% -extra %*
+"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden !RABBITMQ_CTL_ERL_ARGS! -sname rabbitmqctl -s rabbit_control -nodename !RABBITMQ_NODENAME! -extra !STAR!
 
+endlocal
 endlocal
