@@ -261,14 +261,29 @@ get_total_memory({unix,freebsd}) ->
     PageCount * PageSize;
 
 get_total_memory({win32,_OSname}) ->
-    %% Due to the Erlang print format bug, on Windows boxes the memory size is
-    %% broken. For example Windows 7 64 bit with 4Gigs of RAM we get negative
-    %% memory size:
+    %% Due to the Erlang print format bug, on Windows boxes the memory
+    %% size is broken. For example Windows 7 64 bit with 4Gigs of RAM
+    %% we get negative memory size:
     %% > os_mon_sysinfo:get_mem_info().
     %% ["76 -1658880 1016913920 -1 -1021628416 2147352576 2134794240\n"]
-    %% Due to this bug, we don't actually know anything. Even if the number is
-    %% postive we can't be sure if it's correct.
-    unknown;
+    %% Due to this bug, we don't actually know anything. Even if the
+    %% number is postive we can't be sure if it's correct. This only
+    %% affects us on os_mon versions prior to 2.2.1.
+    case application:get_key(os_mon, vsn) of
+        undefined ->
+            unknown;
+        {ok, Version} ->
+            case rabbit_misc:version_compare(Version, "2.2.1", lt) of
+                true -> %% os_mon is < 2.2.1, so we know nothing
+                    unknown;
+                false ->
+                    [Result|_] = os_mon_sysinfo:get_mem_info(),
+                    {ok, [_MemLoad, TotPhys, _AvailPhys,
+                          _TotPage, _AvailPage, _TotV, _AvailV], _RestStr} =
+                        io_lib:fread("~d~d~d~d~d~d~d", Result),
+                    TotPhys
+            end
+    end;
 
 get_total_memory({unix, linux}) ->
     File = read_proc_file("/proc/meminfo"),

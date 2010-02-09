@@ -45,17 +45,30 @@ if "%RABBITMQ_NODENAME%"=="" (
 )
 
 if "%RABBITMQ_NODE_IP_ADDRESS%"=="" (
-   if not "%RABBITMQ_NODE_PORT%"=="" (
-      set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
-   )
+    if not "%RABBITMQ_NODE_PORT%"=="" (
+       set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
+    )
 ) else (
-   if "%RABBITMQ_NODE_PORT%"=="" (
-      set RABBITMQ_NODE_PORT=5672
-   )
+    if "%RABBITMQ_NODE_PORT%"=="" (
+       set RABBITMQ_NODE_PORT=5672
+    )
 )
 
 if "%ERLANG_SERVICE_MANAGER_PATH%"=="" (
-    set ERLANG_SERVICE_MANAGER_PATH=C:\Program Files\erl5.6.5\erts-5.6.5\bin
+    if not exist "%ERLANG_HOME%\bin\erl.exe" (
+        echo.
+        echo ******************************
+        echo ERLANG_HOME not set correctly.
+        echo ******************************
+        echo.
+        echo Please either set ERLANG_HOME to point to your Erlang installation or place the
+        echo RabbitMQ server distribution in the Erlang lib folder.
+        echo.
+        exit /B
+    )
+    for /f "delims=" %%i in ('dir /ad/b "%ERLANG_HOME%"') do if exist "%ERLANG_HOME%\%%i\bin\erlsrv.exe" (
+        set ERLANG_SERVICE_MANAGER_PATH=%ERLANG_HOME%\%%i\bin
+    )
 )
 
 set CONSOLE_FLAG=
