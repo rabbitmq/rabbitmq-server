@@ -36,7 +36,8 @@
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/2, redeliver/2, requeue/3, ack/4]).
--export([list/1, info/1, info/2, info_all/1, info_all/2]).
+-export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
+-export([consumers/1, consumers_all/1]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2, unblock/2]).
@@ -69,10 +70,14 @@
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
 -spec(list/1 :: (vhost()) -> [amqqueue()]).
+-spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (amqqueue()) -> [info()]).
 -spec(info/2 :: (amqqueue(), [info_key()]) -> [info()]).
 -spec(info_all/1 :: (vhost()) -> [[info()]]).
 -spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
+-spec(consumers/1 :: (amqqueue()) -> [{pid(), ctag(), boolean()}]).
+-spec(consumers_all/1 ::
+      (vhost()) -> [{queue_name(), pid(), ctag(), boolean()}]).
 -spec(stat/1 :: (amqqueue()) -> qstats()).
 -spec(stat_all/0 :: () -> [qstats()]).
 -spec(delete/3 ::
@@ -95,7 +100,8 @@
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
              {'ok', non_neg_integer(), msg()} | 'empty').
 -spec(basic_consume/8 ::
-      (amqqueue(), boolean(), pid(), pid(), pid(), ctag(), boolean(), any()) ->
+      (amqqueue(), boolean(), pid(), pid(), pid() | 'undefined', ctag(),
+       boolean(), any()) ->
              'ok' | {'error', 'queue_owned_by_another_connection' |
                      'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
@@ -222,6 +228,8 @@ list(VHostPath) ->
       rabbit_queue,
       #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
 
+info_keys() -> rabbit_amqqueue_process:info_keys().
+
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
 info(#amqqueue{ pid = QPid }) ->
@@ -236,6 +244,16 @@ info(#amqqueue{ pid = QPid }, Items) ->
 info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
+
+consumers(#amqqueue{ pid = QPid }) ->
+    gen_server2:pcall(QPid, 9, consumers, infinity).
+
+consumers_all(VHostPath) ->
+    lists:concat(
+      map(VHostPath,
+          fun (Q) -> [{Q#amqqueue.name, ChPid, ConsumerTag, AckRequired} ||
+                         {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]
+          end)).
 
 stat(#amqqueue{pid = QPid}) -> gen_server2:call(QPid, stat, infinity).
 

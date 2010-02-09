@@ -196,12 +196,16 @@ generate_array(Array) when is_list(Array) ->
                      fun ({Type, Value}) -> field_value_to_binary(Type, Value) end,
                      Array)).
 
-short_string_to_binary(String) when is_binary(String) and (size(String) < 256) ->
-    [<<(size(String)):8>>, String];
+short_string_to_binary(String) when is_binary(String) ->
+    Len = size(String),
+    if Len < 256 -> [<<(size(String)):8>>, String];
+       true      -> exit(content_properties_shortstr_overflow)
+    end;
 short_string_to_binary(String) ->
     StringLength = length(String),
-    true = (StringLength < 256), % assertion
-    [<<StringLength:8>>, String].
+    if StringLength < 256 -> [<<StringLength:8>>, String];
+       true               -> exit(content_properties_shortstr_overflow)
+    end.
 
 long_string_to_binary(String) when is_binary(String) ->
     [<<(size(String)):32>>, String];
@@ -239,7 +243,10 @@ encode_properties(Bit, [T | TypeList], [Value | ValueList], FirstShortAcc, Flags
     end.
 
 encode_property(shortstr, String) ->
-    Len = size(String), <<Len:8/unsigned, String:Len/binary>>;
+    Len = size(String),
+    if Len < 256 -> <<Len:8/unsigned, String:Len/binary>>;
+       true      -> exit(content_properties_shortstr_overflow)
+    end;
 encode_property(longstr, String) ->
     Len = size(String), <<Len:32/unsigned, String:Len/binary>>;
 encode_property(octet, Int) ->

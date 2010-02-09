@@ -56,6 +56,8 @@
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
+-export([pid_to_string/1, string_to_pid/1]).
+-export([version_compare/2, version_compare/3]).
 
 -import(mnesia).
 -import(lists).
@@ -127,6 +129,8 @@
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
 -spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue()) -> B).
+-spec(pid_to_string/1 :: (pid()) -> string()).
+-spec(string_to_pid/1 :: (string()) -> pid()).
 
 -endif.
 
@@ -498,4 +502,96 @@ queue_fold(Fun, Init, Q) ->
     case queue:out(Q) of
         {empty, _Q}      -> Init;
         {{value, V}, Q1} -> queue_fold(Fun, Fun(V, Init), Q1)
+    end.
+
+%% This provides a string representation of a pid that is the same
+%% regardless of what node we are running on. The representation also
+%% permits easy identification of the pid's node.
+pid_to_string(Pid) when is_pid(Pid) ->
+    %% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and
+    %% 8.7)
+    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,_Cre:8>>
+        = term_to_binary(Pid),
+    Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
+    lists:flatten(io_lib:format("<~w.~B.~B>", [Node, Id, Ser])).
+
+%% inverse of above
+string_to_pid(Str) ->
+    ErrorFun = fun () -> throw({error, {invalid_pid_syntax, Str}}) end,
+    %% TODO: simplify this code by using the 're' module, once we drop
+    %% support for R11
+    %%
+    %% 1) sanity check
+    %% The \ before the trailing $ is only there to keep emacs
+    %% font-lock from getting confused.
+    case regexp:first_match(Str, "^<.*\\.[0-9]+\\.[0-9]+>\$") of
+        {match, _, _} ->
+            %% 2) strip <>
+            Str1 = string:substr(Str, 2, string:len(Str) - 2),
+            %% 3) extract three constituent parts, taking care to
+            %% handle dots in the node part (hence the reverse and concat)
+            [SerStr, IdStr | Rest] = lists:reverse(string:tokens(Str1, ".")),
+            NodeStr = lists:concat(lists:reverse(Rest)),
+            %% 4) construct a triple term from the three parts
+            TripleStr = lists:flatten(io_lib:format("{~s,~s,~s}.",
+                                                    [NodeStr, IdStr, SerStr])),
+            %% 5) parse the triple
+            Tokens = case erl_scan:string(TripleStr) of
+                         {ok, Tokens1, _} -> Tokens1;
+                         {error, _, _}    -> ErrorFun()
+                     end,
+            Term = case erl_parse:parse_term(Tokens) of
+                       {ok, Term1} -> Term1;
+                       {error, _}  -> ErrorFun()
+                   end,
+            {Node, Id, Ser} =
+                case Term of
+                    {Node1, Id1, Ser1} when is_atom(Node1) andalso
+                                            is_integer(Id1) andalso
+                                            is_integer(Ser1) ->
+                        Term;
+                    _ ->
+                        ErrorFun()
+                end,
+            %% 6) turn the triple into a pid - see pid_to_string
+            <<131,NodeEnc/binary>> = term_to_binary(Node),
+            binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,0:8>>);
+        nomatch ->
+            ErrorFun();
+        Error ->
+            %% invalid regexp - shouldn't happen
+            throw(Error)
+    end.
+
+version_compare(A, B, lte) ->
+    case version_compare(A, B) of
+        eq -> true;
+        lt -> true;
+        gt -> false
+    end;
+version_compare(A, B, gte) ->
+    case version_compare(A, B) of
+        eq -> true;
+        gt -> true;
+        lt -> false
+    end;
+version_compare(A, B, Result) ->
+    Result =:= version_compare(A, B).
+
+version_compare([], []) ->
+    eq;
+version_compare([], _ ) ->
+    lt; %% 2.3 < 2.3.1
+version_compare(_ , []) ->
+    gt; %% 2.3.1 > 2.3
+version_compare(A,  B) ->
+    {AStr, ATl} = lists:splitwith(fun (X) -> X =/= $. end, A),
+    {BStr, BTl} = lists:splitwith(fun (X) -> X =/= $. end, B),
+    ANum = list_to_integer(AStr),
+    BNum = list_to_integer(BStr),
+    if ANum =:= BNum -> ATl1 = lists:dropwhile(fun (X) -> X =:= $. end, ATl),
+                        BTl1 = lists:dropwhile(fun (X) -> X =:= $. end, BTl),
+                        version_compare(ATl1, BTl1);
+       ANum < BNum   -> lt;
+       ANum > BNum   -> gt
     end.
