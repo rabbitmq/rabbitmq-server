@@ -57,6 +57,7 @@
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([pid_to_string/1, string_to_pid/1]).
+-export([version_compare/2, version_compare/3]).
 
 -import(mnesia).
 -import(lists).
@@ -560,4 +561,37 @@ string_to_pid(Str) ->
         Error ->
             %% invalid regexp - shouldn't happen
             throw(Error)
+    end.
+
+version_compare(A, B, lte) ->
+    case version_compare(A, B) of
+        eq -> true;
+        lt -> true;
+        gt -> false
+    end;
+version_compare(A, B, gte) ->
+    case version_compare(A, B) of
+        eq -> true;
+        gt -> true;
+        lt -> false
+    end;
+version_compare(A, B, Result) ->
+    Result =:= version_compare(A, B).
+
+version_compare([], []) ->
+    eq;
+version_compare([], _ ) ->
+    lt; %% 2.3 < 2.3.1
+version_compare(_ , []) ->
+    gt; %% 2.3.1 > 2.3
+version_compare(A,  B) ->
+    {AStr, ATl} = lists:splitwith(fun (X) -> X =/= $. end, A),
+    {BStr, BTl} = lists:splitwith(fun (X) -> X =/= $. end, B),
+    ANum = list_to_integer(AStr),
+    BNum = list_to_integer(BStr),
+    if ANum =:= BNum -> ATl1 = lists:dropwhile(fun (X) -> X =:= $. end, ATl),
+                        BTl1 = lists:dropwhile(fun (X) -> X =:= $. end, BTl),
+                        version_compare(ATl1, BTl1);
+       ANum < BNum   -> lt;
+       ANum > BNum   -> gt
     end.

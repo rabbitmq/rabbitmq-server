@@ -32,7 +32,13 @@ REM
 
 setlocal
 
-if not exist "%ERLANG_HOME%\bin\erl.exe" (
+rem Preserve values that might contain exclamation marks before
+rem enabling delayed expansion
+set TDP0=%~dp0
+set STAR=%*
+setlocal enabledelayedexpansion
+
+if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
     echo ******************************
     echo ERLANG_HOME not set correctly. 
@@ -44,17 +50,18 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
     exit /B
 )
 
-set RABBITMQ_PLUGINS_DIR=%~dp0..\plugins
-set RABBITMQ_PLUGINS_EXPAND_DIR=%~dp0..\priv\plugins
-set RABBITMQ_EBIN_DIR=%~dp0..\ebin
+set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
+set RABBITMQ_PLUGINS_EXPAND_DIR=!TDP0!..\priv\plugins
+set RABBITMQ_EBIN_DIR=!TDP0!..\ebin
 
-"%ERLANG_HOME%\bin\erl.exe" ^
--pa "%RABBITMQ_EBIN_DIR%" ^
+"!ERLANG_HOME!\bin\erl.exe" ^
+-pa "!RABBITMQ_EBIN_DIR!" ^
 -noinput -hidden ^
 -s rabbit_plugin_activator ^
--rabbit plugins_dir \""%RABBITMQ_PLUGINS_DIR:\=/%"\" ^
--rabbit plugins_expand_dir \""%RABBITMQ_PLUGINS_EXPAND_DIR:\=/%"\" ^
--rabbit rabbit_ebin  \""%RABBITMQ_EBIN_DIR:\=/%"\" ^
--extra %*
+-rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
+-rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
+-rabbit rabbit_ebin  \""!RABBITMQ_EBIN_DIR:\=/!"\" ^
+-extra !STAR!
 
+endlocal
 endlocal
