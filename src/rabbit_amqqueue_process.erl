@@ -519,7 +519,8 @@ all_tx_record() ->
 record_pending_message(Txn, ChPid, Message) ->
     Tx = #tx{pending_messages = Pending} = lookup_tx(Txn),
     record_current_channel_tx(ChPid, Txn),
-    store_tx(Txn, Tx #tx { pending_messages = [Message | Pending] }).
+    store_tx(Txn, Tx #tx { pending_messages = [Message | Pending],
+                           ch_pid = ChPid }).
 
 record_pending_acks(Txn, ChPid, MsgIds) ->
     Tx = #tx{pending_acks = Pending} = lookup_tx(Txn),
