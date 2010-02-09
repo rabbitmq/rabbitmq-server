@@ -329,7 +329,7 @@ client_read1(#msg_location { msg_id = MsgId, ref_count = RefCount, file = File }
             Defer();
         _ ->
             ets:update_counter(?FILE_SUMMARY_ETS_NAME, File,
-                               {#file_summary.readers, 1}),
+                               {#file_summary.readers, +1}),
             Release = fun() ->
                               ets:update_counter(?FILE_SUMMARY_ETS_NAME, File,
                                                  {#file_summary.readers, -1})
@@ -462,11 +462,11 @@ handle_cast({write, MsgId, Msg},
                                 msg_id = MsgId, ref_count = 1, file = CurFile,
                                 offset = CurOffset, total_size = TotalSize },
                               State),
-            [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
-                                       contiguous_top = ContiguousTop,
-                                       right = undefined,
-                                       locked = false,
-                                       file_size = FileSize }] =
+            [#file_summary { valid_total_size = ValidTotalSize,
+                             contiguous_top = ContiguousTop,
+                             right = undefined,
+                             locked = false,
+                             file_size = FileSize }] =
                 ets:lookup(?FILE_SUMMARY_ETS_NAME, CurFile),
             ValidTotalSize1 = ValidTotalSize + TotalSize,
             ContiguousTop1 = if CurOffset =:= ContiguousTop ->
@@ -474,11 +474,12 @@ handle_cast({write, MsgId, Msg},
                                      ValidTotalSize1;
                                 true -> ContiguousTop
                              end,
-            true = ets:insert(?FILE_SUMMARY_ETS_NAME,
-                              FSEntry #file_summary {
-                                valid_total_size = ValidTotalSize1,
-                                contiguous_top = ContiguousTop1,
-                                file_size = FileSize + TotalSize }),
+            true = ets:update_element(
+                     ?FILE_SUMMARY_ETS_NAME,
+                     CurFile,
+                     [{#file_summary.valid_total_size, ValidTotalSize1},
+                      {#file_summary.contiguous_top, ContiguousTop1},
+                      {#file_summary.file_size, FileSize + TotalSize}]),
             NextOffset = CurOffset + TotalSize,
             noreply(maybe_compact(maybe_roll_to_new_file(
                                     NextOffset, State #msstate
@@ -536,7 +537,8 @@ handle_cast({gc_done, Reclaimed, Source, Dest},
     %% we always move data left, so Source has gone and was on the
     %% right, so need to make dest = source.right.left, and also
     %% dest.right = source.right
-    [#file_summary { left = Dest, right = SourceRight, locked = true }] =
+    [#file_summary { left = Dest, right = SourceRight, locked = true,
+                     readers = 0 }] =
         ets:lookup(?FILE_SUMMARY_ETS_NAME, Source),
     %% this could fail if SourceRight == undefined
     ets:update_element(?FILE_SUMMARY_ETS_NAME, SourceRight,
@@ -736,9 +738,9 @@ remove_message(MsgId, State = #msstate { sum_valid_data = SumValid,
                        false -> true
                    end,
             ok = remove_cache_entry(MsgId),
-            [FSEntry = #file_summary { valid_total_size = ValidTotalSize,
-                                       contiguous_top = ContiguousTop,
-                                       locked = Locked }] =
+            [#file_summary { valid_total_size = ValidTotalSize,
+                             contiguous_top = ContiguousTop,
+                             locked = Locked }] =
                 ets:lookup(?FILE_SUMMARY_ETS_NAME, File),
             case Locked of
                 true ->
@@ -747,10 +749,11 @@ remove_message(MsgId, State = #msstate { sum_valid_data = SumValid,
                     ok = index_delete(MsgId, State),
                     ContiguousTop1 = lists:min([ContiguousTop, Offset]),
                     ValidTotalSize1 = ValidTotalSize - TotalSize,
-                    true = ets:insert(?FILE_SUMMARY_ETS_NAME,
-                                      FSEntry #file_summary {
-                                        valid_total_size = ValidTotalSize1,
-                                        contiguous_top = ContiguousTop1 }),
+                    true = ets:update_element(
+                             ?FILE_SUMMARY_ETS_NAME,
+                             File,
+                             [{#file_summary.valid_total_size, ValidTotalSize1},
+                              {#file_summary.contiguous_top, ContiguousTop1}]),
                     State1 = delete_file_if_empty(File, State),
                     State1 #msstate { sum_valid_data = SumValid - TotalSize }
             end;
