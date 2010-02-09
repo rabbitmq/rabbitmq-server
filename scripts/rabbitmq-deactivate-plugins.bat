@@ -32,8 +32,14 @@ REM
 
 setlocal
 
-set RABBITMQ_EBIN_DIR=%~dp0..\ebin
+rem Preserve values that might contain exclamation marks before
+rem enabling delayed expansion
+set TDP0=%~dp0
+setlocal enabledelayedexpansion
 
-del /f "%RABBITMQ_EBIN_DIR%"\rabbit.rel "%RABBITMQ_EBIN_DIR%"\rabbit.script "%RABBITMQ_EBIN_DIR%"\rabbit.boot
+set RABBITMQ_EBIN_DIR=!TDP0!..\ebin
 
+del /f "!RABBITMQ_EBIN_DIR!"\rabbit.rel "!RABBITMQ_EBIN_DIR!"\rabbit.script "!RABBITMQ_EBIN_DIR!"\rabbit.boot
+
+endlocal
 endlocal

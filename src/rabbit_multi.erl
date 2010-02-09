@@ -187,7 +187,7 @@ start_node(Node, RpcTimeout) ->
     io:format("Starting node ~s...~n", [Node]),
     case rpc:call(Node, os, getpid, []) of
         {badrpc, _} ->
-            Port = run_cmd(script_filename()),
+            Port = run_rabbitmq_server(),
             Started = wait_for_rabbit_to_start(Node, RpcTimeout, Port),
             Pid = case rpc:call(Node, os, getpid, []) of
                       {badrpc, _} -> throw(cannot_get_pid);
@@ -217,8 +217,22 @@ wait_for_rabbit_to_start(Node, RpcTimeout, Port) ->
                  end
     end.
 
-run_cmd(FullPath) ->
-    erlang:open_port({spawn, FullPath}, [nouse_stdio]).
+run_rabbitmq_server() ->
+    with_os([{unix, fun run_rabbitmq_server_unix/0},
+             {win32, fun run_rabbitmq_server_win32/0}]).
+
+run_rabbitmq_server_unix() ->
+    FullPath = getenv("RABBITMQ_SCRIPT_HOME") ++ "/rabbitmq-server",
+    erlang:open_port({spawn_executable, FullPath},
+                     [{arg0, FullPath}, {args, ["-noinput"]}, nouse_stdio]).
+
+run_rabbitmq_server_win32() ->
+    Cmd = filename:nativename(os:find_executable("cmd")),
+    CmdLine = "\"" ++ getenv("RABBITMQ_SCRIPT_HOME")
+                                         ++ "\\rabbitmq-server.bat\" -noinput",
+    erlang:open_port({spawn_executable, Cmd},
+                     [{arg0, Cmd}, {args, ["/q", "/s", "/c", CmdLine]},
+                      nouse_stdio, hide]).
 
 is_rabbit_running(Node, RpcTimeout) ->
     case rpc:call(Node, rabbit, status, [], RpcTimeout) of
@@ -235,13 +249,6 @@ with_os(Handlers) ->
         undefined -> throw({unsupported_os, OsFamily});
         Handler   -> Handler()
     end.
-
-script_filename() ->
-    ScriptHome = getenv("RABBITMQ_SCRIPT_HOME"),
-    ScriptName = with_os(
-                   [{unix , fun () -> "rabbitmq-server" end},
-                    {win32, fun () -> "rabbitmq-server.bat" end}]),
-    ScriptHome ++ "/" ++ ScriptName ++ " -noinput".
 
 pids_file() -> getenv("RABBITMQ_PIDS_FILE").
 
