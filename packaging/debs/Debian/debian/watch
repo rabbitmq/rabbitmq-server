@@ -1,4 +1,0 @@
-version=3
-
-http://www.rabbitmq.com/releases/rabbitmq-server/v(.*)/rabbitmq-server-(\d.*)\.tar\.gz \
-	debian uupdate

@@ -1,5 +1,0 @@
-# Copy this to /etc/conf.d after making the appropriate changes and removing the comments
-# more information on rabbit clusters can be found at http://www.rabbitmq.com/clustering.html
-
-# replace HOSTNAME with your hostname
-[rabbit@HOSTNAME]
