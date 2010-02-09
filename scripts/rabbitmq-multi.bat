@@ -35,7 +35,6 @@ setlocal
 rem Preserve values that might contain exclamation marks before
 rem enabling delayed expansion
 set TDP0=%~dp0
-set TSDP0=%~sdp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
@@ -58,7 +57,7 @@ if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 )
 
 set RABBITMQ_PIDS_FILE=!RABBITMQ_BASE!\rabbitmq.pids
-set RABBITMQ_SCRIPT_HOME=!TSDP0!
+set RABBITMQ_SCRIPT_HOME=!TDP0!
 
 if "!RABBITMQ_CONFIG_FILE!"=="" (
     set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
