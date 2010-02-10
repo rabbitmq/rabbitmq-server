@@ -248,12 +248,11 @@ record_current_channel_tx(ChPid, Txn) ->
     %% that wasn't happening already)
     store_ch_record((ch_record(ChPid))#cr{txn = Txn}).
 
-deliver_msgs_to_consumers(
-  Funs = {PredFun, DeliverFun}, FunAcc,
-  State = #q{q = #amqqueue{name = QName},
-             active_consumers = ActiveConsumers,
-             blocked_consumers = BlockedConsumers,
-             next_msg_id = NextId}) ->
+deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
+                          State = #q{q = #amqqueue{name = QName},
+                                     active_consumers = ActiveConsumers,
+                                     blocked_consumers = BlockedConsumers,
+                                     next_msg_id = NextId}) ->
     case queue:out(ActiveConsumers) of
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
                                             ack_required = AckRequired}}},
