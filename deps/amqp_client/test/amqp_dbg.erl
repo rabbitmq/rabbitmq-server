@@ -20,7 +20,7 @@
 %%
 %%   All Rights Reserved.
 %%
-%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+%%   Contributor(s): __________________________
 
 
 -module(amqp_dbg).
