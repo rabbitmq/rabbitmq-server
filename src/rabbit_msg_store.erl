@@ -274,17 +274,27 @@ write(MsgId, Msg) ->
     gen_server2:cast(?SERVER, {write, MsgId, Msg}).
 
 read(MsgId, CState) ->
-    Defer = fun() ->
-                    {gen_server2:call(?SERVER, {read, MsgId}, infinity), CState}
-            end,
-    case index_lookup(MsgId, CState) of
+    %% 1. Check the dedup cache
+    case fetch_and_increment_cache(MsgId) of
         not_found ->
-            Defer();
-        MsgLocation ->
-            case fetch_and_increment_cache(MsgId) of
-                not_found -> client_read1(MsgLocation, Defer, CState);
-                Msg       -> {{ok, Msg}, CState}
-            end
+            %% 2. Check the cur file cache
+            case ets:lookup(?CUR_FILE_CACHE_ETS_NAME, MsgId) of
+                [] ->
+                    Defer =
+                        fun() -> {gen_server2:call(
+                                    ?SERVER, {read, MsgId}, infinity), CState}
+                        end,
+                    case index_lookup(MsgId, CState) of
+                        not_found   -> Defer();
+                        MsgLocation -> client_read1(MsgLocation, Defer, CState)
+                    end;
+                [{MsgId, _FileOrUndefined, Msg}] ->
+                    %% Although we've found it, we don't know the
+                    %% refcount, so can't insert into dedup cache
+                    {{ok, Msg}, CState}
+            end;
+        Msg ->
+            {{ok, Msg}, CState}
     end.
 
 contains(MsgId)     -> gen_server2:call(?SERVER, {contains, MsgId}, infinity).
@@ -318,11 +328,11 @@ client_read1(MsgLocation = #msg_location { msg_id = MsgId, file = File }, Defer,
         [] -> %% File has been GC'd and no longer exists. Go around again.
             read(MsgId, CState);
         [#file_summary { locked = Locked, right = Right }] ->
-            client_read2(MsgLocation, Locked, Right, Defer, CState)
+            client_read2(Locked, Right, MsgLocation, Defer, CState)
     end.
 
-client_read2(#msg_location { msg_id = MsgId, ref_count = RefCount },
-             false, undefined, Defer, CState) ->
+client_read2(false, undefined, #msg_location {
+                      msg_id = MsgId, ref_count = RefCount }, Defer, CState) ->
     case ets:lookup(?CUR_FILE_CACHE_ETS_NAME, MsgId) of
         [] ->
             Defer(); %% may have rolled over
@@ -330,13 +340,14 @@ client_read2(#msg_location { msg_id = MsgId, ref_count = RefCount },
             ok = maybe_insert_into_cache(RefCount, MsgId, Msg),
             {{ok, Msg}, CState}
     end;
-client_read2(_MsgLocation, true, _Right, Defer, _CState) ->
+client_read2(true, _Right, _MsgLocation, Defer, _CState) ->
     %% Of course, in the mean time, the GC could have run and our msg
     %% is actually in a different file, unlocked. However, defering is
     %% the safest and simplest thing to do.
     Defer();
-client_read2(#msg_location { msg_id = MsgId, ref_count = RefCount,
-                            file = File }, false, _Right, Defer, CState) ->
+client_read2(false, _Right, #msg_location {
+                      msg_id = MsgId, ref_count = RefCount, file = File },
+             Defer, CState) ->
     %% It's entirely possible that everything we're doing from here on
     %% is for the wrong file, or a non-existent file, as a GC may have
     %% finished.
@@ -892,12 +903,12 @@ fetch_and_increment_cache(MsgId) ->
 decrement_cache(MsgId) ->
     true = try case ets:update_counter(?CACHE_ETS_NAME, MsgId, {3, -1}) of
                    N when N =< 0 -> true = ets:delete(?CACHE_ETS_NAME, MsgId);
-                   _N -> true
+                   _N            -> true
                end
            catch error:badarg ->
                    %% MsgId is not in there because although it's been
                    %% delivered, it's never actually been read (think:
-                   %% persistent message in mixed queue)
+                   %% persistent message held in RAM)
                    true
            end,
     ok.
