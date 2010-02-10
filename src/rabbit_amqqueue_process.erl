@@ -746,10 +746,10 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             reply(ok, State);
         C = #cr{consumer_count = ConsumerCount, limiter_pid = LimiterPid} ->
             store_ch_record(C#cr{consumer_count = ConsumerCount - 1}),
-            ok = case ConsumerCount of
-                     1 -> rabbit_limiter:unregister(LimiterPid, self());
-                     _ -> ok
-                 end,
+            case ConsumerCount of
+                1 -> ok = rabbit_limiter:unregister(LimiterPid, self());
+                _ -> ok
+            end,
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,
@@ -805,9 +805,8 @@ handle_call({claim_queue, ReaderPid}, _From,
                     %% pid...
                     reply(locked, State);
                 ok ->
-                    reply(ok,
-                          State#q{ owner = {ReaderPid, erlang:monitor(
-                                                         process, ReaderPid)} })
+                    MonitorRef = erlang:monitor(process, ReaderPid),
+                    reply(ok, State#q{owner = {ReaderPid, MonitorRef}})
             end;
         {ReaderPid, _MonitorRef} ->
             reply(ok, State);
