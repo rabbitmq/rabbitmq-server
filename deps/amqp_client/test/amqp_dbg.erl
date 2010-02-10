@@ -33,9 +33,9 @@
 
 
 tracer() ->
-    {ok, _} = dbg:tracer(),
+    Ret = dbg:tracer(),
     {ok, _} = dbg:p(all, c),
-    ok.
+    Ret.
 
 all() ->
     network_connection_lifecycle(),
@@ -43,22 +43,34 @@ all() ->
     channel_lifecycle(),
     methods().
 
+%% Use this to track a network connection's lifecycle - starting (handshake),
+%% starting the main reader, changing to closing state,
+%% triggering all_channels_closed_event and terminating
 network_connection_lifecycle() ->
     {ok, _} = dbg:tpl(amqp_main_reader, start, return_ms()),
     tpl_funcs(amqp_network_connection,
               [set_closing_state, all_channels_closed_event, handshake,
                terminate], []).
 
+%% Use this to track a direct connection's lifecycle - starting, changing
+%% to closing state, triggering all_channels_closed_event and terminating
 direct_connection_lifecycle() ->
     tpl_funcs(amqp_direct_connection,
               [set_closing_state, all_channels_closed_event, init, terminate],
               []).
 
+%% Use this to track a channel's lifecycle - starting the channel process,
+%% starting a channel infrastructure (returns associated pid's) and
+%% terminating a channel infrastructure
 channel_lifecycle() ->
-    tpl_funcs_ms(amqp_channel_util,[{open_channel, []},
-                                     {start_channel_infrastructure, return_ms()},
-                                     {terminate_channel_infrastructure, []}]).
+    tpl_funcs_ms(amqp_channel_util,
+                 [{open_channel, []},
+                  {start_channel_infrastructure, return_ms()},
+                  {terminate_channel_infrastructure, []}]).
 
+%% Use this to track methods between client and broker - calls to
+%% amqp_channel_util:do are methods sent *to* the server; calls to
+%% handle_method and handshake_recv are methods *from* server
 methods() ->
     tpl_list([{amqp_channel_util, do, []},
               {amqp_channel, handle_method, []},
@@ -70,19 +82,15 @@ methods() ->
 %%---------------------------------------------------------------------------
 
 tpl_list(ArgsList) ->
-    lists:foreach(fun({Module, Func, Ms}) ->
-                      {ok, _} = dbg:tpl(Module, Func, Ms)
-                  end, ArgsList),
+    [{ok, _} = dbg:tpl(Module, Func, Ms) || {Module, Func, Ms} <- ArgsList],
     ok.
 
 tpl_funcs_ms(Module, FuncMsList) ->
-    lists:foreach(fun({Func, Ms}) -> {ok, _} = dbg:tpl(Module, Func, Ms) end,
-                  FuncMsList),
+    [{ok, _} = dbg:tpl(Module, Func, Ms) || {Func, Ms} <- FuncMsList],
     ok.
 
 tpl_funcs(Module, FuncList, Ms) ->
-    lists:foreach(fun(Func) -> {ok, _} = dbg:tpl(Module, Func, Ms) end,
-                  FuncList),
+    [{ok, _} = dbg:tpl(Module, Func, Ms) || Func <- FuncList],
     ok.
 
 return_ms() ->
