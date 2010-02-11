@@ -320,7 +320,8 @@ should_auto_delete(State) -> is_unused(State).
 
 handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
     case lookup_ch(DownPid) of
-        not_found -> {ok, State};
+        not_found ->
+            {ok, State};
         #cr{monitor_ref = MonitorRef, ch_pid = ChPid, txn = Txn,
             unacked_messages = UAM} ->
             erlang:demonitor(MonitorRef),
@@ -496,7 +497,7 @@ purge_message_buffer(QName, MessageBuffer) ->
                          queue:to_list(MessageBuffer)] |
          lists:map(
            fun (#cr{unacked_messages = UAM}) ->
-                   [Message || {_MessageId, Message} <- dict:to_list(UAM)]
+                   [Message || {_MsgId, Message} <- dict:to_list(UAM)]
            end,
            all_ch_record())],
     %% the simplest, though certainly not the most obvious or
