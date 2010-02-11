@@ -440,7 +440,8 @@ should_auto_delete(State) -> is_unused(State).
 
 handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
     case lookup_ch(DownPid) of
-        not_found -> {ok, State};
+        not_found ->
+            {ok, State};
         #cr{monitor_ref = MonitorRef, ch_pid = ChPid, txn = Txn,
             unacked_messages = UAM} ->
             erlang:demonitor(MonitorRef),
@@ -448,24 +449,22 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
             State1 = State#q{
                        exclusive_consumer = case Holder of
                                                 {ChPid, _} -> none;
-                                                Other -> Other
+                                                Other      -> Other
                                             end,
                        active_consumers = remove_consumers(
                                             ChPid, State#q.active_consumers),
                        blocked_consumers = remove_consumers(
                                              ChPid, State#q.blocked_consumers)},
             case should_auto_delete(State1) of
-                true  ->
-                    {stop, State1};
-                false -> 
-                    State2 = case Txn of
-                                 none -> State1;
-                                 _    -> rollback_transaction(Txn, State1)
-                             end,
-                    {ok,
-                      deliver_or_requeue_n(
-                        [MsgWithAck ||
-                            {_MsgId, MsgWithAck} <- dict:to_list(UAM)], State2)}
+                true  -> {stop, State1};
+                false -> State2 = case Txn of
+                                      none -> State1;
+                                      _    -> rollback_transaction(Txn, State1)
+                                  end,
+                         {ok, deliver_or_requeue_n(
+                                [MsgWithAck ||
+                                    {_MsgId, MsgWithAck} <- dict:to_list(UAM)],
+                                State2)}
             end
     end.
 
