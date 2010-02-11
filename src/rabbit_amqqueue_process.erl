@@ -226,6 +226,26 @@ deliver_immediately(Message, IsDelivered,
             {not_offered, State}
     end.
 
+run_message_queue(State = #q{message_buffer = MessageBuffer}) ->
+    run_message_queue(MessageBuffer, State).
+
+run_message_queue(MessageBuffer, State) ->
+    case queue:out(MessageBuffer) of
+        {{value, {Message, IsDelivered}}, BufferTail} ->
+            case deliver_immediately(Message, IsDelivered, State) of
+                {offered, true, NewState} ->
+                    persist_delivery(qname(State), Message, IsDelivered),
+                    run_message_queue(BufferTail, NewState);
+                {offered, false, NewState} ->
+                    persist_auto_ack(qname(State), Message),
+                    run_message_queue(BufferTail, NewState);
+                {not_offered, NewState} ->
+                    NewState#q{message_buffer = MessageBuffer}
+            end;
+        {empty, _} ->
+            State#q{message_buffer = MessageBuffer}
+    end.
+
 attempt_delivery(none, _ChPid, Message, State) ->
     case deliver_immediately(Message, false, State) of
         {offered, false, State1} ->
@@ -346,26 +366,6 @@ check_exclusive_access(none, true, State) ->
     case is_unused(State) of
         true  -> ok;
         false -> in_use
-    end.
-
-run_message_queue(State = #q{message_buffer = MessageBuffer}) ->
-    run_message_queue(MessageBuffer, State).
-
-run_message_queue(MessageBuffer, State) ->
-    case queue:out(MessageBuffer) of
-        {{value, {Message, IsDelivered}}, BufferTail} ->
-            case deliver_immediately(Message, IsDelivered, State) of
-                {offered, true, NewState} ->
-                    persist_delivery(qname(State), Message, IsDelivered),
-                    run_message_queue(BufferTail, NewState);
-                {offered, false, NewState} ->
-                    persist_auto_ack(qname(State), Message),
-                    run_message_queue(BufferTail, NewState);
-                {not_offered, NewState} ->
-                    NewState#q{message_buffer = MessageBuffer}
-            end;
-        {empty, _} ->
-            State#q{message_buffer = MessageBuffer}
     end.
 
 is_unused(State) -> queue:is_empty(State#q.active_consumers) andalso
