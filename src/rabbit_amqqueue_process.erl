@@ -266,7 +266,6 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                 true ->
                     {{Msg, IsDelivered, AckTag}, FunAcc1, State1} =
                         DeliverFun(AckRequired, FunAcc, State),
-                    ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Msg]),
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
                       {QName, self(), NextId, IsDelivered, Msg}),
