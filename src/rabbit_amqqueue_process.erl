@@ -325,27 +325,26 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
             unacked_messages = UAM} ->
             erlang:demonitor(MonitorRef),
             erase({ch, ChPid}),
-            case Txn of
-                none -> ok;
-                _    -> ok = rollback_work(Txn, qname(State)),
-                        erase_tx(Txn)
-            end,
-            NewState =
-                deliver_or_enqueue_n(
-                  [{Message, true} ||
-                      {_Messsage_id, Message} <- dict:to_list(UAM)],
-                  State#q{
-                    exclusive_consumer = case Holder of
-                                             {ChPid, _} -> none;
-                                             Other -> Other
-                                         end,
-                    active_consumers = remove_consumers(
-                                         ChPid, State#q.active_consumers),
-                    blocked_consumers = remove_consumers(
-                                          ChPid, State#q.blocked_consumers)}),
-            case should_auto_delete(NewState) of
-                false -> {ok, NewState};
-                true  -> {stop, NewState}
+            State1 = State#q{
+                       exclusive_consumer = case Holder of
+                                                {ChPid, _} -> none;
+                                                Other      -> Other
+                                            end,
+                       active_consumers = remove_consumers(
+                                            ChPid, State#q.active_consumers),
+                       blocked_consumers = remove_consumers(
+                                             ChPid, State#q.blocked_consumers)},
+            case should_auto_delete(State1) of
+                true  -> {stop, State1};
+                false -> case Txn of
+                             none -> ok;
+                             _    -> ok = rollback_work(Txn, qname(State1)),
+                                     erase_tx(Txn)
+                         end,
+                         {ok, deliver_or_enqueue_n(
+                                [{Message, true} ||
+                                    {_MsgId, Message} <- dict:to_list(UAM)],
+                                State1)}
             end
     end.
 
