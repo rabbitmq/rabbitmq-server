@@ -27,9 +27,11 @@
 
 -include_lib("stdlib/include/ms_transform.hrl").
 
--export([tracer/0, all/0]).
--export([network_connection_lifecycle/0, direct_connection_lifecycle/0,
-         channel_lifecycle/0, methods/0]).
+-export([tracer/0, all/0, c_all/0]).
+-export([network_connection_lifecycle/0, c_network_connection_lifecycle/0,
+         direct_connection_lifecycle/0, c_direct_connection_lifecycle/0,
+         channel_lifecycle/0, c_channel_lifecycle/0,
+         methods/0, c_methods/0]).
 
 
 tracer() ->
@@ -38,59 +40,83 @@ tracer() ->
     Ret.
 
 all() ->
-    network_connection_lifecycle(),
-    direct_connection_lifecycle(),
-    channel_lifecycle(),
-    methods().
+    tpl_list(all_args()).
+
+c_all() ->
+    ctpl_list(all_args()).
 
 %% Use this to track a network connection's lifecycle - starting (handshake),
 %% starting the main reader, changing to closing state,
 %% triggering all_channels_closed_event and terminating
 network_connection_lifecycle() ->
-    {ok, _} = dbg:tpl(amqp_main_reader, start, return_ms()),
-    tpl_funcs(amqp_network_connection,
-              [set_closing_state, all_channels_closed_event, handshake,
-               terminate], []).
+    tpl_list(ncl_args()).
+
+c_network_connection_lifecycle() ->
+    ctpl_list(ncl_args()).
 
 %% Use this to track a direct connection's lifecycle - starting, changing
 %% to closing state, triggering all_channels_closed_event and terminating
 direct_connection_lifecycle() ->
-    tpl_funcs(amqp_direct_connection,
-              [set_closing_state, all_channels_closed_event, init, terminate],
-              []).
+    tpl_list(dcl_args()).
+
+c_direct_connection_lifecycle() ->
+    ctpl_list(dcl_args()).
 
 %% Use this to track a channel's lifecycle - starting the channel process,
 %% starting a channel infrastructure (returns associated pid's) and
 %% terminating a channel infrastructure
 channel_lifecycle() ->
-    tpl_funcs_ms(amqp_channel_util,
-                 [{open_channel, []},
-                  {start_channel_infrastructure, return_ms()},
-                  {terminate_channel_infrastructure, []}]).
+    tpl_list(cl_args()).
+
+c_channel_lifecycle() ->
+    ctpl_list(cl_args()).
 
 %% Use this to track methods between client and broker - calls to
 %% amqp_channel_util:do are methods sent *to* the server; calls to
 %% handle_method and handshake_recv are methods *from* server
 methods() ->
-    tpl_list([{amqp_channel_util, do, []},
-              {amqp_channel, handle_method, []},
-              {amqp_network_connection, handle_method, []},
-              {amqp_network_connection, handshake_recv, return_ms()}]).
+    tpl_list(m_args()).
+
+c_methods() ->
+    ctpl_list(m_args()).
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
+all_args() ->
+    ncl_args() ++ dcl_args() ++ cl_args() ++ m_args().
+
+ncl_args() ->
+    [{amqp_main_reader, start, return_ms()},
+     {amqp_network_connection, set_closing_state, []},
+     {amqp_network_connection, all_channels_closed_event, []},
+     {amqp_network_connection, handshake, []},
+     {amqp_network_connection, terminate, []}].
+
+dcl_args() ->
+    [{amqp_direct_connection, set_closing_state, []},
+     {amqp_direct_connection, all_channels_closed_event, []},
+     {amqp_direct_connection, init, []},
+     {amqp_direct_connection, terminate, []}].
+
+cl_args() ->
+    [{amqp_channel_util, open_channel, []},
+     {amqp_channel_util, start_channel_infrastructure, return_ms()},
+     {amqp_channel_util, terminate_channel_infrastructure, []}].
+
+m_args() ->
+    [{amqp_channel_util, do, []},
+     {amqp_channel, handle_method, []},
+     {amqp_network_connection, handle_method, []},
+     {amqp_network_connection, handshake_recv, return_ms()}].
+
 tpl_list(ArgsList) ->
     [{ok, _} = dbg:tpl(Module, Func, Ms) || {Module, Func, Ms} <- ArgsList],
     ok.
 
-tpl_funcs_ms(Module, FuncMsList) ->
-    [{ok, _} = dbg:tpl(Module, Func, Ms) || {Func, Ms} <- FuncMsList],
-    ok.
-
-tpl_funcs(Module, FuncList, Ms) ->
-    [{ok, _} = dbg:tpl(Module, Func, Ms) || Func <- FuncList],
+ctpl_list(ArgsList) ->
+    [{ok, _} = dbg:ctpl(Module, Func) || {Module, Func, _} <- ArgsList],
     ok.
 
 return_ms() ->
