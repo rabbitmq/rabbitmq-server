@@ -335,7 +335,7 @@ run_message_queue(State = #q { variable_queue_state = VQS }) ->
     VQS1 = rabbit_variable_queue:ack(AutoAcks, State1 #q.variable_queue_state),
     State1 #q { variable_queue_state = VQS1 }.
 
-attempt_immediate_delivery(none, _ChPid, Message, State) ->
+attempt_delivery(none, _ChPid, Message, State) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1) ->
@@ -352,14 +352,14 @@ attempt_immediate_delivery(none, _ChPid, Message, State) ->
                 {{Message, false, AckTag}, true, State2}
         end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
-attempt_immediate_delivery(Txn, ChPid, Message, State) ->
+attempt_delivery(Txn, ChPid, Message, State) ->
     VQS = rabbit_variable_queue:tx_publish(
             Message, State #q.variable_queue_state),
     record_pending_message(Txn, ChPid, Message),
     {true, State #q { variable_queue_state = VQS }}.
 
 deliver_or_enqueue(Txn, ChPid, Message, State) ->
-    case attempt_immediate_delivery(Txn, ChPid, Message, State) of
+    case attempt_delivery(Txn, ChPid, Message, State) of
         {true, NewState} ->
             {true, NewState};
         {false, NewState} ->
@@ -640,8 +640,7 @@ handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
     %% just all ready-to-consume queues get the message, with unready
     %% queues discarding the message?
     %%
-    {Delivered, NewState} =
-        attempt_immediate_delivery(Txn, ChPid, Message, State),
+    {Delivered, NewState} = attempt_delivery(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
 handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
