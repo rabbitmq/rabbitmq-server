@@ -544,6 +544,7 @@ commit_transaction(Txn, From, State) ->
     {RunQueue, VQS} =
         rabbit_variable_queue:tx_commit(
           PendingMessagesOrdered, Acks, From, State #q.variable_queue_state),
+    erase_tx(Txn),
     {RunQueue, State #q { variable_queue_state = VQS }}.
 
 rollback_transaction(Txn, State) ->
@@ -650,7 +651,6 @@ handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
 
 handle_call({commit, Txn}, From, State) ->
     {RunQueue, NewState} = commit_transaction(Txn, From, State),
-    erase_tx(Txn),
     noreply(case RunQueue of
                 true -> run_message_queue(NewState);
                 false -> NewState
