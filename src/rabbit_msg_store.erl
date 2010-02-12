@@ -531,12 +531,16 @@ handle_cast({write, MsgId, Msg},
                                     { sum_valid_data = SumValid + TotalSize,
                                       sum_file_size = SumFileSize + TotalSize }
                                    )));
-        #msg_location { ref_count = RefCount } ->
+        #msg_location { ref_count = RefCount, file = File } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
             ok = index_update_fields(MsgId,
                                      {#msg_location.ref_count, RefCount + 1},
                                      State),
+            true = case File == CurFile of
+                       true  -> true;
+                       false -> ets:delete(?CUR_FILE_CACHE_ETS_NAME, MsgId)
+                   end,
             noreply(State)
     end;
 
