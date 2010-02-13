@@ -119,7 +119,6 @@ shortstr_overflow_field_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
     SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
     Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
-    Payload = <<"foobar">>,
     test_util:setup_exchange(Channel, Q, X, Key),
     ?assertExit(_, amqp_channel:subscribe(
                        Channel, #'basic.consume'{queue = Q, no_ack = true,

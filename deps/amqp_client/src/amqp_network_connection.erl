@@ -45,6 +45,7 @@
                    max_channel,
                    heartbeat,
                    closing = false,
+                   server_properties,
                    channels = amqp_channel_util:new_channel_dict()}).
 
 -record(nc_closing, {reason,
@@ -66,7 +67,10 @@ handle_call({command, Command}, From, #nc_state{closing = Closing} = State) ->
     case Closing of
         false -> handle_command(Command, From, State);
         _     -> {reply, closing, State}
-    end.
+    end;
+
+handle_call({infos, Items}, _From, State) ->
+    {reply, [{Item, i(Item, State)} || Item <- Items], State}.
 
 %% Standard handling of a method sent by the broker (this is received from
 %% framing0)
@@ -144,6 +148,19 @@ handle_method(#'connection.close_ok'{}, none,
     if ReplyCode =:= 200 -> {stop, normal, State};
        true              -> {stop, closing_to_reason(Closing), State}
     end.
+
+%%---------------------------------------------------------------------------
+%% Infos
+%%---------------------------------------------------------------------------
+
+i(server_properties, State) -> State#nc_state.server_properties;
+i(is_closing,        State) -> State#nc_state.closing =/= false;
+i(amqp_params,       State) -> State#nc_state.params;
+i(max_channel,       State) -> State#nc_state.max_channel;
+i(heartbeat,         State) -> State#nc_state.heartbeat;
+i(num_channels,      State) -> amqp_channel_util:num_channels(
+                                   State#nc_state.channels);
+i(_,                _State) -> invalid_info_item.
 
 %%---------------------------------------------------------------------------
 %% Closing
@@ -373,6 +390,7 @@ do_handshake(State0 = #nc_state{sock = Sock}) ->
 network_handshake(State = #nc_state{channel0_writer_pid = Writer0,
                                     params = Params}) ->
     Start = handshake_recv(State),
+    #'connection.start'{server_properties = ServerProperties} = Start,
     ok = check_version(Start),
     amqp_channel_util:do(network, Writer0, start_ok(State), none),
     Tune = handshake_recv(State),
@@ -390,7 +408,9 @@ network_handshake(State = #nc_state{channel0_writer_pid = Writer0,
     ?LOG_INFO("Negotiated maximums: (Channel = ~p, "
               "Frame= ~p, Heartbeat=~p)~n",
              [ChannelMax, FrameMax, Heartbeat]),
-    State#nc_state{max_channel = ChannelMax, heartbeat = Heartbeat}.
+    State#nc_state{max_channel = ChannelMax,
+                   heartbeat = Heartbeat,
+                   server_properties = ServerProperties}.
 
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
                                   version_minor = ?PROTOCOL_VERSION_MINOR}) ->

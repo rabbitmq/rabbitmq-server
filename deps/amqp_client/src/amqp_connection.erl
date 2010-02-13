@@ -36,6 +36,7 @@
 -export([start_direct/0, start_direct/1, start_direct_link/0, start_direct_link/1]).
 -export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
 -export([close/1, close/3]).
+-export([infos/2]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -186,6 +187,30 @@ close(ConnectionPid, Code, Text) ->
                                 class_id   = 0,
                                 method_id  = 0},
     command(ConnectionPid, {close, Close}).
+
+%% @spec (ConnectionPid, Items) -> ResultList
+%% where
+%%      ConnectionPid = pid()
+%%      Items = [Item]
+%%      ResultList = [{Item, Result}]
+%%      Result = term()
+%% @doc Returns information about the connection, as specified by the Items
+%% list. Item may be any of the following:
+%%      server_properties - returns the server_properties fiels sent by the
+%%          server while establishing the connection
+%%      is_closing - returns true if the connection is in the process of closing
+%%          and false otherwise
+%%      amqp_params - returns the #amqp_params{} structure used to start the
+%%          connection
+%%      num_channels - returns the number of channels currently open under the
+%%          connection (excluding channel 0)
+%%      max_channel - returns the max_channel value negotiated with the server
+%%          (only for the network connection)
+%%      heartbeat - returns the heartbeat value negotiated with the server
+%%          (only for the network connection)
+%%      any other value - returns invalid_info_item
+infos(ConnectionPid, Items) ->
+    gen_server:call(ConnectionPid, {infos, Items}, infinity).
 
 command(ConnectionPid, Command) ->
     gen_server:call(ConnectionPid, {command, Command}, infinity).
