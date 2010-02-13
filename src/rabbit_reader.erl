@@ -39,6 +39,8 @@
 
 -export([init/1, mainloop/3]).
 
+-export([server_properties/0]).
+
 -export([analyze_frame/2]).
 
 -import(gen_tcp).
@@ -133,6 +135,7 @@
 -spec(info/1 :: (pid()) -> [info()]).
 -spec(info/2 :: (pid(), [info_key()]) -> [info()]).
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
+-spec(server_properties/0 :: () -> amqp_table()).
 
 -endif.
 
@@ -197,6 +200,16 @@ teardown_profiling(Value) ->
             fprof:profile(),
             fprof:analyse([{dest, []}, {cols, 100}])
     end.
+
+server_properties() ->
+    {ok, Product} = application:get_key(rabbit, id),
+    {ok, Version} = application:get_key(rabbit, vsn),
+    [{list_to_binary(K), longstr, list_to_binary(V)} ||
+        {K, V} <- [{"product",     Product},
+                   {"version",     Version},
+                   {"platform",    "Erlang/OTP"},
+                   {"copyright",   ?COPYRIGHT_MESSAGE},
+                   {"information", ?INFORMATION_MESSAGE}]].
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
@@ -510,21 +523,12 @@ handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
     case check_version({ProtocolMajor, ProtocolMinor},
                        {?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR}) of
         true ->
-            {ok, Product} = application:get_key(id),
-            {ok, Version} = application:get_key(vsn),
             ok = send_on_channel0(
                    Sock,
                    #'connection.start'{
                      version_major = ?PROTOCOL_VERSION_MAJOR,
                      version_minor = ?PROTOCOL_VERSION_MINOR,
-                     server_properties =
-                     [{list_to_binary(K), longstr, list_to_binary(V)} ||
-                         {K, V} <-
-                             [{"product",     Product},
-                              {"version",     Version},
-                              {"platform",    "Erlang/OTP"},
-                              {"copyright",   ?COPYRIGHT_MESSAGE},
-                              {"information", ?INFORMATION_MESSAGE}]],
+                     server_properties = server_properties(),
                      mechanisms = <<"PLAIN AMQPLAIN">>,
                      locales = <<"en_US">> }),
             {State#v1{connection = Connection#connection{
