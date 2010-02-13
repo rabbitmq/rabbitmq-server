@@ -34,7 +34,7 @@
 
 -record(dc_state, {params = #amqp_params{},
                    closing = false,
-                   server_properties = not_implemented,
+                   server_properties,
                    channels = amqp_channel_util:new_channel_dict()}).
 
 -record(dc_closing, {reason,
@@ -58,7 +58,9 @@ init(AmqpParams = #amqp_params{username = User,
     rabbit_access_control:check_vhost_access(#user{username = User,
                                                    password = Pass},
                                              VHost),
-    {ok, #dc_state{params = AmqpParams}}.
+    ServerProperties = rabbit_reader:server_properties(),
+    {ok, #dc_state{params = AmqpParams,
+                   server_properties = ServerProperties}}.
 
 %% Standard handling of an app initiated command
 handle_call({command, Command}, From, #dc_state{closing = Closing} = State) ->
@@ -67,7 +69,7 @@ handle_call({command, Command}, From, #dc_state{closing = Closing} = State) ->
         _     -> {reply, closing, State}
     end;
 
-handle_call({infos, Items}, _From, State) ->
+handle_call({info, Items}, _From, State) ->
     {reply, [{Item, i(Item, State)} || Item <- Items], State}.
 
 %% No cast implemented

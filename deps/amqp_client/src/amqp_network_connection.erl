@@ -69,7 +69,7 @@ handle_call({command, Command}, From, #nc_state{closing = Closing} = State) ->
         _     -> {reply, closing, State}
     end;
 
-handle_call({infos, Items}, _From, State) ->
+handle_call({info, Items}, _From, State) ->
     {reply, [{Item, i(Item, State)} || Item <- Items], State}.
 
 %% Standard handling of a method sent by the broker (this is received from

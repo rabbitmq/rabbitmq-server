@@ -36,7 +36,7 @@
 -export([start_direct/0, start_direct/1, start_direct_link/0, start_direct_link/1]).
 -export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
 -export([close/1, close/3]).
--export([infos/2]).
+-export([info/2]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -209,8 +209,8 @@ close(ConnectionPid, Code, Text) ->
 %%      heartbeat - returns the heartbeat value negotiated with the server
 %%          (only for the network connection)
 %%      any other value - returns invalid_info_item
-infos(ConnectionPid, Items) ->
-    gen_server:call(ConnectionPid, {infos, Items}, infinity).
+info(ConnectionPid, Items) ->
+    gen_server:call(ConnectionPid, {info, Items}, infinity).
 
 command(ConnectionPid, Command) ->
     gen_server:call(ConnectionPid, {command, Command}, infinity).
