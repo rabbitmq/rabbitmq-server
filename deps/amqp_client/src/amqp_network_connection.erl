@@ -416,7 +416,8 @@ negotiate_max_value(Client, Server) ->
     lists:min([Client, Server]).
 
 start_ok(#nc_state{params = #amqp_params{username = Username,
-                                         password = Password}}) ->
+                                         password = Password,
+                                         client_properties = UserProps}}) ->
     %% TODO This eagerly starts the amqp_client application in order to
     %% to get the version from the app descriptor, which may be
     %% overkill - maybe there is a more suitable point to boot the app
@@ -425,20 +426,24 @@ start_ok(#nc_state{params = #amqp_params{username = Username,
     LoginTable = [{<<"LOGIN">>, longstr, Username},
                   {<<"PASSWORD">>, longstr, Password}],
     #'connection.start_ok'{
-        client_properties = [
-            {<<"product">>,   longstr, <<"RabbitMQ">>},
-            {<<"version">>,   longstr, list_to_binary(Vsn)},
-            {<<"platform">>,  longstr, <<"Erlang">>},
-            {<<"copyright">>, longstr,
-             <<"Copyright (C) 2007-2009 LShift Ltd., "
-               "Cohesive Financial Technologies LLC., "
-               "and Rabbit Technologies Ltd.">>},
-            {<<"information">>, longstr,
-             <<"Licensed under the MPL.  "
-               "See http://www.rabbitmq.com/">>}
-            ],
+        client_properties = client_properties(UserProps, Vsn),
         mechanism = <<"AMQPLAIN">>,
         response = rabbit_binary_generator:generate_table(LoginTable)}.
+
+client_properties(UserProperties, Vsn) ->
+    Default = [{<<"product">>,   longstr, <<"RabbitMQ">>},
+               {<<"version">>,   longstr, list_to_binary(Vsn)},
+               {<<"platform">>,  longstr, <<"Erlang">>},
+               {<<"copyright">>, longstr,
+                <<"Copyright (C) 2007-2009 LShift Ltd., "
+                  "Cohesive Financial Technologies LLC., "
+                  "and Rabbit Technologies Ltd.">>},
+               {<<"information">>, longstr,
+                <<"Licensed under the MPL.  "
+                  "See http://www.rabbitmq.com/">>}],
+    lists:foldl(fun({K, _, _} = Tuple, Acc) ->
+                    lists:keystore(K, 1, Acc, Tuple)
+                end, Default, UserProperties).
 
 handshake_recv(#nc_state{main_reader_pid = MainReaderPid}) ->
     receive
