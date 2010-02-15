@@ -1216,16 +1216,10 @@ maybe_compact(State) ->
     State.
 
 mark_handle_to_close(File) ->
-    lists:foldl(
-      fun ({Key, open}, true) ->
-              try
-                  true = ets:update_element(?FILE_HANDLES_ETS_NAME,
-                                            Key, {2, close})
-              catch error:badarg -> %% client has deleted concurrently, no prob
-                      true
-              end
-      end,
-      true, ets:match_object(?FILE_HANDLES_ETS_NAME, {{'_', File}, open})).
+    [ ets:update_element(?FILE_HANDLES_ETS_NAME, Key, {2, close})
+      || {Key, open} <- ets:match_object(?FILE_HANDLES_ETS_NAME,
+                                         {{'_', File}, open}) ],
+    true.
 
 find_files_to_gc(_N, '$end_of_table') ->
     undefined;
