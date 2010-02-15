@@ -363,15 +363,6 @@ delete_forward_routes(Route) ->
 delete_transient_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write).
 
-exchanges_for_queue(QueueName) ->
-    MatchHead = reverse_route(
-                  #route{binding = #binding{exchange_name = '$1',
-                                            queue_name = QueueName,
-                                            _ = '_'}}),
-    sets:to_list(
-      sets:from_list(
-        mnesia:select(rabbit_reverse_route, [{MatchHead, [], ['$1']}]))).
-
 contains(Table, MatchHead) ->
     try
         continue(mnesia:select(Table, [{MatchHead, [], ['$_']}], 1, read))

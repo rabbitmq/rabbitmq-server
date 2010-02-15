@@ -600,7 +600,7 @@ handle_method(#'basic.recover_async'{requeue = false},
                    internal_deliver(
                      WriterPid, false, ConsumerTag, DeliveryTag,
                      {QName, QPid, MsgId, true, Message})
-           end, queue:to_list(UAMQ)),
+           end, ok, UAMQ),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
     {noreply, State};

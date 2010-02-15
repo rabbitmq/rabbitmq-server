@@ -601,7 +601,7 @@ handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
     if (FrameMax =< ?FRAME_MIN_SIZE) or
        (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
             rabbit_misc:protocol_error(
-              mistuned, "peer sent tune_ok with invalid frame_max");
+              mistuned, "peer sent tune_ok with invalid frame_max", []);
     %% If we have a channel_max limit that the client wishes to
     %% exceed, die as per spec.  Not currently a problem, so we ignore
     %% the client's channel_max parameter.
