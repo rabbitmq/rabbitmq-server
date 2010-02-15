@@ -345,7 +345,6 @@ delete_transient_queue_bindings(QueueName) ->
     delete_queue_bindings(QueueName, fun delete_transient_forward_routes/1).
 
 delete_queue_bindings(QueueName, FwdDeleteFun) ->
-    Exchanges = exchanges_for_queue(QueueName),
     [begin
          ok = FwdDeleteFun(reverse_route(Route)),
          ok = mnesia:delete_object(rabbit_reverse_route, Route, write)
@@ -411,7 +410,7 @@ call_with_exchange_and_queue(Exchange, Queue, Fun) ->
 add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
     binding_action(
       ExchangeName, QueueName, RoutingKey, Arguments,
-      fun (X = #exchange{type = Type}, Q, B) ->
+      fun (X, Q, B) ->
               InnerFun(X, Q),
               ok = sync_binding(B, Q#amqqueue.durable,
                                 fun mnesia:write/3)
@@ -420,7 +419,7 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
 delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
     binding_action(
       ExchangeName, QueueName, RoutingKey, Arguments,
-      fun (X = #exchange{type = Type}, Q, B) ->
+      fun (X, Q, B) ->
               case mnesia:match_object(rabbit_route, #route{binding = B},
                                        write) of
                   [] -> {error, binding_not_found};

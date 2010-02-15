@@ -759,7 +759,7 @@ test_server_status() ->
                                false, false, [], none) ||
                   Name <- [<<"foo">>, <<"bar">>]],
 
-    ok = rabbit_amqqueue:basic_consume(Q, true, self(), Ch, undefined,
+    ok = rabbit_amqqueue:basic_consume(Q, true, Ch, undefined,
                                        <<"ctag">>, true, undefined),
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),

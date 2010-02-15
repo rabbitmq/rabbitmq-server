@@ -479,7 +479,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                    fun (Q) ->
                            check_queue_exclusivity(ReaderPid, Q),
                            rabbit_amqqueue:basic_consume(
-                             Q, NoAck, ReaderPid, self(), LimiterPid,
+                             Q, NoAck, self(), LimiterPid,
                              ActualConsumerTag, ExclusiveConsume,
                              ok_msg(NoWait, #'basic.consume_ok'{
                                       consumer_tag = ActualConsumerTag}))
