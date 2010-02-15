@@ -31,7 +31,7 @@
 
 -module(rabbit_tests).
 
--compile(export_all).
+-compile([export_all]).
 
 -export([all_tests/0, test_parsing/0]).
 
@@ -277,7 +277,7 @@ test_simple_n_element_queue(N) ->
 test_pg_local() ->
     [P, Q] = [spawn(fun () -> receive X -> X end end) || _ <- [x, x]],
     check_pg_local(ok, [], []),
-    check_pg_local(pg_local:join(a, P), [P], []), 
+    check_pg_local(pg_local:join(a, P), [P], []),
     check_pg_local(pg_local:join(b, P), [P], [P]),
     check_pg_local(pg_local:join(a, P), [P, P], [P]),
     check_pg_local(pg_local:join(a, Q), [P, P, Q], [P]),
@@ -287,7 +287,10 @@ test_pg_local() ->
     check_pg_local(pg_local:leave(b, P), [P, Q], [Q, Q]),
     check_pg_local(pg_local:leave(a, P), [Q], [Q, Q]),
     check_pg_local(pg_local:leave(a, P), [Q], [Q, Q]),
-    [X ! done || X <- [P, Q]],
+    [begin X ! done,
+           Ref = erlang:monitor(process, X),
+           receive {'DOWN', Ref, process, X, _Info} -> ok end
+     end  || X <- [P, Q]],
     check_pg_local(ok, [], []),
     passed.
 
