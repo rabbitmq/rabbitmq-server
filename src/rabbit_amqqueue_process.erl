@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -39,7 +39,7 @@
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 
--export([start_link/1]).
+-export([start_link/1, info_keys/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 
@@ -76,6 +76,9 @@
          auto_delete,
          arguments,
          pid,
+         owner_pid,
+         exclusive_consumer_pid,
+         exclusive_consumer_tag,
          messages_ready,
          messages_unacknowledged,
          messages_uncommitted,
@@ -84,12 +87,13 @@
          consumers,
          transactions,
          memory]).
-         
+
 %%----------------------------------------------------------------------------
 
-start_link(Q) ->
-    gen_server2:start_link(?MODULE, Q, []).
+start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
+info_keys() -> ?INFO_KEYS.
+    
 %%----------------------------------------------------------------------------
 
 init(Q) ->
@@ -168,13 +172,12 @@ record_current_channel_tx(ChPid, Txn) ->
     %% as a side effect this also starts monitoring the channel (if
     %% that wasn't happening already)
     store_ch_record((ch_record(ChPid))#cr{txn = Txn}).
-    
-deliver_immediately(Message, Delivered,
+
+deliver_immediately(Message, IsDelivered,
                     State = #q{q = #amqqueue{name = QName},
                                active_consumers = ActiveConsumers,
                                blocked_consumers = BlockedConsumers,
                                next_msg_id = NextId}) ->
-    ?LOGDEBUG("AMQQUEUE ~p DELIVERY:~n~p~n", [QName, Message]),
     case queue:out(ActiveConsumers) of
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
                                             ack_required = AckRequired}}},
@@ -186,7 +189,7 @@ deliver_immediately(Message, Delivered,
                 true ->
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
-                      {QName, self(), NextId, Delivered, Message}),
+                      {QName, self(), NextId, IsDelivered, Message}),
                     NewUAM = case AckRequired of
                                  true  -> dict:store(NextId, Message, UAM);
                                  false -> UAM
@@ -217,12 +220,32 @@ deliver_immediately(Message, Delivered,
                                        ActiveConsumers,
                                        BlockedConsumers),
                     deliver_immediately(
-                      Message, Delivered,
+                      Message, IsDelivered,
                       State#q{active_consumers = NewActiveConsumers,
                               blocked_consumers = NewBlockedConsumers})
             end;
         {empty, _} ->
             {not_offered, State}
+    end.
+
+run_message_queue(State = #q{message_buffer = MessageBuffer}) ->
+    run_message_queue(MessageBuffer, State).
+
+run_message_queue(MessageBuffer, State) ->
+    case queue:out(MessageBuffer) of
+        {{value, {Message, IsDelivered}}, BufferTail} ->
+            case deliver_immediately(Message, IsDelivered, State) of
+                {offered, true, NewState} ->
+                    persist_delivery(qname(State), Message, IsDelivered),
+                    run_message_queue(BufferTail, NewState);
+                {offered, false, NewState} ->
+                    persist_auto_ack(qname(State), Message),
+                    run_message_queue(BufferTail, NewState);
+                {not_offered, NewState} ->
+                    NewState#q{message_buffer = MessageBuffer}
+            end;
+        {empty, _} ->
+            State#q{message_buffer = MessageBuffer}
     end.
 
 attempt_delivery(none, _ChPid, Message, State) ->
@@ -252,8 +275,8 @@ deliver_or_enqueue(Txn, ChPid, Message, State) ->
     end.
 
 deliver_or_enqueue_n(Messages, State = #q{message_buffer = MessageBuffer}) ->
-    run_poke_burst(queue:join(MessageBuffer, queue:from_list(Messages)),
-                   State).
+    run_message_queue(queue:join(MessageBuffer, queue:from_list(Messages)),
+                      State).
 
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
@@ -287,44 +310,44 @@ possibly_unblock(State, ChPid, Update) ->
                                move_consumers(ChPid,
                                               State#q.blocked_consumers,
                                               State#q.active_consumers),
-                           run_poke_burst(
+                           run_message_queue(
                              State#q{active_consumers = NewActiveConsumers,
                                      blocked_consumers = NewBlockedConsumers})
             end
     end.
-    
+
 should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
 should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).
 
 handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
     case lookup_ch(DownPid) of
-        not_found -> {ok, State};
+        not_found ->
+            {ok, State};
         #cr{monitor_ref = MonitorRef, ch_pid = ChPid, txn = Txn,
             unacked_messages = UAM} ->
             erlang:demonitor(MonitorRef),
             erase({ch, ChPid}),
-            case Txn of
-                none -> ok;
-                _    -> ok = rollback_work(Txn, qname(State)),
-                        erase_tx(Txn)
-            end,
-            NewState =
-                deliver_or_enqueue_n(
-                  [{Message, true} ||
-                      {_Messsage_id, Message} <- dict:to_list(UAM)],
-                  State#q{
-                    exclusive_consumer = case Holder of
-                                             {ChPid, _} -> none;
-                                             Other -> Other
-                                         end,
-                    active_consumers = remove_consumers(
-                                         ChPid, State#q.active_consumers),
-                    blocked_consumers = remove_consumers(
-                                          ChPid, State#q.blocked_consumers)}),
-            case should_auto_delete(NewState) of
-                false -> {ok, NewState};
-                true  -> {stop, NewState}
+            State1 = State#q{
+                       exclusive_consumer = case Holder of
+                                                {ChPid, _} -> none;
+                                                Other      -> Other
+                                            end,
+                       active_consumers = remove_consumers(
+                                            ChPid, State#q.active_consumers),
+                       blocked_consumers = remove_consumers(
+                                             ChPid, State#q.blocked_consumers)},
+            case should_auto_delete(State1) of
+                true  -> {stop, State1};
+                false -> case Txn of
+                             none -> ok;
+                             _    -> ok = rollback_work(Txn, qname(State1)),
+                                     erase_tx(Txn)
+                         end,
+                         {ok, deliver_or_enqueue_n(
+                                [{Message, true} ||
+                                    {_MsgId, Message} <- dict:to_list(UAM)],
+                                State1)}
             end
     end.
 
@@ -341,26 +364,6 @@ check_exclusive_access(none, true, State) ->
     case is_unused(State) of
         true  -> ok;
         false -> in_use
-    end.
-
-run_poke_burst(State = #q{message_buffer = MessageBuffer}) ->
-    run_poke_burst(MessageBuffer, State).
-
-run_poke_burst(MessageBuffer, State) ->
-    case queue:out(MessageBuffer) of
-        {{value, {Message, Delivered}}, BufferTail} ->
-            case deliver_immediately(Message, Delivered, State) of
-                {offered, true, NewState} ->
-                    persist_delivery(qname(State), Message, Delivered),
-                    run_poke_burst(BufferTail, NewState);
-                {offered, false, NewState} ->
-                    persist_auto_ack(qname(State), Message),
-                    run_poke_burst(BufferTail, NewState);
-                {not_offered, NewState} ->
-                    NewState#q{message_buffer = MessageBuffer}
-            end;
-        {empty, _} ->
-            State#q{message_buffer = MessageBuffer}
     end.
 
 is_unused(State) -> queue:is_empty(State#q.active_consumers) andalso
@@ -385,10 +388,10 @@ persist_delivery(_QName, _Message,
                  true) ->
     ok;
 persist_delivery(_QName, #basic_message{persistent_key = none},
-                 _Delivered) ->
+                 _IsDelivered) ->
     ok;
 persist_delivery(QName, #basic_message{persistent_key = PKey},
-                 _Delivered) ->
+                 _IsDelivered) ->
     persist_work(none, QName, [{deliver, {QName, PKey}}]).
 
 persist_acks(Txn, QName, Messages) ->
@@ -451,7 +454,7 @@ all_tx() ->
 mark_tx_persistent(Txn) ->
     Tx = lookup_tx(Txn),
     store_tx(Txn, Tx#tx{is_persistent = true}).
-    
+
 is_tx_persistent(Txn) ->
     #tx{is_persistent = Res} = lookup_tx(Txn),
     Res.
@@ -488,11 +491,11 @@ collect_messages(MsgIds, UAM) ->
 
 purge_message_buffer(QName, MessageBuffer) ->
     Messages =
-        [[Message || {Message, _Delivered} <-
+        [[Message || {Message, _IsDelivered} <-
                          queue:to_list(MessageBuffer)] |
          lists:map(
            fun (#cr{unacked_messages = UAM}) ->
-                   [Message || {_MessageId, Message} <- dict:to_list(UAM)]
+                   [Message || {_MsgId, Message} <- dict:to_list(UAM)]
            end,
            all_ch_record())],
     %% the simplest, though certainly not the most obvious or
@@ -508,6 +511,18 @@ i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
 i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
 i(pid, _) ->
     self();
+i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
+    '';
+i(owner_pid, #q{q = #amqqueue{exclusive_owner = ReaderPid}}) ->
+    ReaderPid;
+i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
+    '';
+i(exclusive_consumer_pid, #q{exclusive_consumer = {ChPid, _ConsumerTag}}) ->
+    ChPid;
+i(exclusive_consumer_tag, #q{exclusive_consumer = none}) ->
+    '';
+i(exclusive_consumer_tag, #q{exclusive_consumer = {_ChPid, ConsumerTag}}) ->
+    ConsumerTag;
 i(messages_ready, #q{message_buffer = MessageBuffer}) ->
     queue:len(MessageBuffer);
 i(messages_unacknowledged, _) ->
@@ -543,6 +558,15 @@ handle_call({info, Items}, _From, State) ->
         reply({ok, infos(Items, State)}, State)
     catch Error -> reply({error, Error}, State)
     end;
+
+handle_call(consumers, _From,
+            State = #q{active_consumers = ActiveConsumers,
+                       blocked_consumers = BlockedConsumers}) ->
+    reply(rabbit_misc:queue_fold(
+            fun ({ChPid, #consumer{tag = ConsumerTag,
+                                   ack_required = AckRequired}}, Acc) ->
+                    [{ChPid, ConsumerTag, AckRequired} | Acc]
+            end, [], queue:join(ActiveConsumers, BlockedConsumers)), State);
 
 handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
     %% Synchronous, "immediate" delivery mode
@@ -590,18 +614,18 @@ handle_call({basic_get, ChPid, NoAck}, _From,
                        next_msg_id = NextId,
                        message_buffer = MessageBuffer}) ->
     case queue:out(MessageBuffer) of
-        {{value, {Message, Delivered}}, BufferTail} ->
+        {{value, {Message, IsDelivered}}, BufferTail} ->
             AckRequired = not(NoAck),
             case AckRequired of
                 true  ->
-                    persist_delivery(QName, Message, Delivered),
+                    persist_delivery(QName, Message, IsDelivered),
                     C = #cr{unacked_messages = UAM} = ch_record(ChPid),
                     NewUAM = dict:store(NextId, Message, UAM),
                     store_ch_record(C#cr{unacked_messages = NewUAM});
                 false ->
                     persist_auto_ack(QName, Message)
             end,
-            Msg = {QName, self(), NextId, Delivered, Message},
+            Msg = {QName, self(), NextId, IsDelivered, Message},
             reply({ok, queue:len(BufferTail), Msg},
                   State#q{message_buffer = BufferTail,
                           next_msg_id = NextId + 1});
@@ -611,8 +635,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
 
 handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
              ConsumerTag, ExclusiveConsume, OkMsg},
-            _From, State = #q{q = #amqqueue{exclusive_owner = Owner},
-                              exclusive_consumer = ExistingHolder}) ->
+            _From, State = #q{exclusive_consumer = ExistingHolder}) ->
     case check_exclusive_access(ExistingHolder, ExclusiveConsume,
                                 State) of
         in_use ->
@@ -623,15 +646,14 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                                  ack_required = not(NoAck)},
             store_ch_record(C#cr{consumer_count = ConsumerCount +1,
                                  limiter_pid = LimiterPid}),
-            if ConsumerCount == 0 ->
-                    ok = rabbit_limiter:register(LimiterPid, self());
-               true ->
-                    ok
+            case ConsumerCount of
+                0 -> rabbit_limiter:register(LimiterPid, self());
+                _ -> ok
             end,
-            ExclusiveConsumer =
-                if ExclusiveConsume -> {ChPid, ConsumerTag};
-                   true             -> ExistingHolder
-                end,
+            ExclusiveConsumer = case ExclusiveConsume of
+                                    true  -> {ChPid, ConsumerTag};
+                                    false -> ExistingHolder
+                                end,
             State1 = State#q{has_had_consumers = true,
                              exclusive_consumer = ExclusiveConsumer},
             ok = maybe_send_reply(ChPid, OkMsg),
@@ -642,7 +664,7 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                                add_consumer(
                                  ChPid, Consumer,
                                  State1#q.blocked_consumers)};
-                    false -> run_poke_burst(
+                    false -> run_message_queue(
                                State1#q{
                                  active_consumers =
                                  add_consumer(
@@ -660,10 +682,9 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             reply(ok, State);
         C = #cr{consumer_count = ConsumerCount, limiter_pid = LimiterPid} ->
             store_ch_record(C#cr{consumer_count = ConsumerCount - 1}),
-            if ConsumerCount == 1 ->
-                    ok = rabbit_limiter:unregister(LimiterPid, self());
-               true ->
-                    ok
+            case ConsumerCount of
+                1 -> ok = rabbit_limiter:unregister(LimiterPid, self());
+                _ -> ok
             end,
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
@@ -685,8 +706,8 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
 handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
                                     message_buffer = MessageBuffer,
                                     active_consumers = ActiveConsumers}) ->
-    reply({ok, Name, queue:len(MessageBuffer), queue:len(ActiveConsumers)},
-          State);
+    Length = queue:len(MessageBuffer),
+    reply({ok, Name, Length, queue:len(ActiveConsumers)}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{message_buffer = MessageBuffer}) ->

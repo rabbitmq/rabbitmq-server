@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -46,7 +46,7 @@
 
 -spec(publish/1 :: (delivery()) -> publish_result()).
 -spec(delivery/4 :: (boolean(), boolean(), maybe(txn()), message()) ->
-             delivery()). 
+             delivery()).
 -spec(message/4 :: (exchange_name(), routing_key(), properties_input(),
                     binary()) -> message()).
 -spec(properties/1 :: (properties_input()) -> amqp_properties()).

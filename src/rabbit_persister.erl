@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -57,7 +57,7 @@
 
 -record(pstate, {log_handle, entry_count, deadline,
                  pending_logs, pending_replies,
-                 snapshot}).             
+                 snapshot}).
 
 %% two tables for efficient persistency
 %% one maps a key to a message
@@ -166,7 +166,7 @@ handle_call({transaction, Key, MessageList}, From, State) ->
     do_noreply(internal_commit(From, Key, NewState));
 handle_call({commit_transaction, TxnKey}, From, State) ->
     do_noreply(internal_commit(From, TxnKey, State));
-handle_call(force_snapshot, _From, State) -> 
+handle_call(force_snapshot, _From, State) ->
     do_reply(ok, flush(true, State));
 handle_call(serial, _From,
             State = #pstate{snapshot = #psnapshot{serial = Serial}}) ->
@@ -211,7 +211,7 @@ internal_dirty_work(MessageList, State) ->
     log_work(fun (ML) -> {dirty_work, ML} end,
              MessageList, State).
 
-internal_commit(From, Key, State = #pstate{snapshot = Snapshot}) -> 
+internal_commit(From, Key, State = #pstate{snapshot = Snapshot}) ->
     Unit = {commit_transaction, Key},
     NewSnapshot = internal_integrate1(Unit, Snapshot),
     complete(From, Unit, State#pstate{snapshot = NewSnapshot}).
@@ -243,7 +243,7 @@ log_work(CreateWorkUnit, MessageList,
                fun(M = {publish, Message, QK = {_QName, PKey}}) ->
                        case ets:lookup(Messages, PKey) of
                            [_] -> {tied, QK};
-                           []  -> ets:insert(Messages, {PKey, Message}), 
+                           []  -> ets:insert(Messages, {PKey, Message}),
                                   M
                        end;
                   (M) -> M
@@ -252,7 +252,7 @@ log_work(CreateWorkUnit, MessageList,
     NewSnapshot = internal_integrate1(Unit, Snapshot),
     log(State#pstate{snapshot = NewSnapshot}, Unit).
 
-log(State = #pstate{deadline = ExistingDeadline, pending_logs = Logs}, 
+log(State = #pstate{deadline = ExistingDeadline, pending_logs = Logs},
     Message) ->
     State#pstate{deadline = compute_deadline(?LOG_BUNDLE_DELAY,
                                              ExistingDeadline),
@@ -365,7 +365,7 @@ prune_table(Tab, Keys) ->
     true = ets:safe_fixtable(Tab, true),
     ok = prune_table(Tab, Keys, ets:first(Tab)),
     true = ets:safe_fixtable(Tab, false).
-    
+
 prune_table(_Tab, _Keys, '$end_of_table') -> ok;
 prune_table(Tab, Keys, Key) ->
     case sets:is_element(Key, Keys) of
@@ -374,7 +374,7 @@ prune_table(Tab, Keys, Key) ->
     end,
     prune_table(Tab, Keys, ets:next(Tab, Key)).
 
-internal_load_snapshot(LogHandle, 
+internal_load_snapshot(LogHandle,
                        Snapshot = #psnapshot{messages = Messages,
                                              queues = Queues}) ->
     {K, [Loaded_Snapshot | Items]} = disk_log:chunk(LogHandle, start),
@@ -435,9 +435,9 @@ accumulate_requeues({{QName, PKey}, Delivered}, Acc) ->
 requeue(QName, Requeues, Messages) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, #amqqueue{pid = QPid}} ->
-            RequeueMessages = 
+            RequeueMessages =
                 [{{QName, PKey}, Message, Delivered} ||
-                    {PKey, Delivered} <- Requeues, 
+                    {PKey, Delivered} <- Requeues,
                     {_, Message} <- ets:lookup(Messages, PKey)],
             rabbit_amqqueue:redeliver(
               QPid,
@@ -459,7 +459,7 @@ replay([], LogHandle, K, Snapshot) ->
         {K1, Items} ->
             replay(Items, LogHandle, K1, Snapshot);
         {K1, Items, Badbytes} ->
-            rabbit_log:warning("~p bad bytes recovering persister log~n", 
+            rabbit_log:warning("~p bad bytes recovering persister log~n",
                                [Badbytes]),
             replay(Items, LogHandle, K1, Snapshot);
         eof -> Snapshot

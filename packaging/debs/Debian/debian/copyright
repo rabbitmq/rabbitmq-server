@@ -5,7 +5,7 @@ It was downloaded from http://www.rabbitmq.com/
 
 The file codegen/amqp-0.8.json is covered by the following terms:
 
-        "Copyright (C) 2008-2009 LShift Ltd, Cohesive Financial Technologies LLC,
+        "Copyright (C) 2008-2010 LShift Ltd, Cohesive Financial Technologies LLC,
         and Rabbit Technologies Ltd
         
         Permission is hereby granted, free of charge, to any person
@@ -39,11 +39,11 @@ Authors and Copyright are as described below:
      are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
      Technologies LLC, and Rabbit Technologies Ltd.
 
-     Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+     Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
      Ltd. Portions created by Cohesive Financial Technologies LLC are
-     Copyright (C) 2007-2009 Cohesive Financial Technologies
+     Copyright (C) 2007-2010 Cohesive Financial Technologies
      LLC. Portions created by Rabbit Technologies Ltd are Copyright
-     (C) 2007-2009 Rabbit Technologies Ltd.
+     (C) 2007-2010 Rabbit Technologies Ltd.
 
 
                           MOZILLA PUBLIC LICENSE
@@ -502,11 +502,11 @@ EXHIBIT A -Mozilla Public License.
      are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
      Technologies LLC, and Rabbit Technologies Ltd.
 
-     Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+     Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
      Ltd. Portions created by Cohesive Financial Technologies LLC are
-     Copyright (C) 2007-2009 Cohesive Financial Technologies
+     Copyright (C) 2007-2010 Cohesive Financial Technologies
      LLC. Portions created by Rabbit Technologies Ltd are Copyright
-     (C) 2007-2009 Rabbit Technologies Ltd.
+     (C) 2007-2010 Rabbit Technologies Ltd.
 
      All Rights Reserved.
 
@@ -524,7 +524,7 @@ EXHIBIT A -Mozilla Public License.
 If you have any questions regarding licensing, please contact us at 
 info@rabbitmq.com.
 
-The Debian packaging is (C) 2007-2009, Rabbit Technologies Ltd. <info@rabbitmq.com>
+The Debian packaging is (C) 2007-2010, Rabbit Technologies Ltd. <info@rabbitmq.com>
 and is licensed under the MPL 1.1, see above.
 
 

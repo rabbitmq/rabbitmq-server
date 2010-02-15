@@ -36,7 +36,7 @@
 %% InitialTimeout supplied from init). After this timeout has
 %% occurred, hibernation will occur as normal. Upon awaking, a new
 %% current timeout value will be calculated.
-%% 
+%%
 %% The purpose is that the gen_server2 takes care of adjusting the
 %% current timeout value such that the process will increase the
 %% timeout value repeatedly if it is unable to sleep for the
@@ -57,7 +57,7 @@
 %% being used. Instead it'll wait for the current timeout as described
 %% above.
 
-%% All modifications are (C) 2009 LShift Ltd.
+%% All modifications are (C) 2009-2010 LShift Ltd.
 
 %% ``The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in

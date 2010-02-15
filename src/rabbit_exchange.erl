@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -35,7 +35,7 @@
 -include("rabbit_framing.hrl").
 
 -export([recover/0, declare/4, lookup/1, lookup_or_die/1,
-         list/1, info/1, info/2, info_all/1, info_all/2,
+         list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          publish/2]).
 -export([add_binding/5, delete_binding/5, list_bindings/1]).
 -export([delete/2]).
@@ -70,6 +70,7 @@
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
 -spec(list/1 :: (vhost()) -> [exchange()]).
+-spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (exchange()) -> [info()]).
 -spec(info/2 :: (exchange(), [info_key()]) -> [info()]).
 -spec(info_all/1 :: (vhost()) -> [[info()]]).
@@ -81,7 +82,7 @@
 -spec(delete_binding/5 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table(), inner_fun()) ->
              bind_res() | {'error', 'binding_not_found'}).
--spec(list_bindings/1 :: (vhost()) -> 
+-spec(list_bindings/1 :: (vhost()) ->
              [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
 -spec(delete_queue_bindings/1 :: (queue_name()) -> 'ok').
 -spec(delete_transient_queue_bindings/1 :: (queue_name()) -> 'ok').
@@ -89,9 +90,9 @@
 -spec(headers_match/2 :: (amqp_table(), amqp_table()) -> boolean()).
 -spec(delete/2 :: (exchange_name(), boolean()) ->
              'ok' | not_found() | {'error', 'in_use'}).
--spec(list_queue_bindings/1 :: (queue_name()) -> 
+-spec(list_queue_bindings/1 :: (queue_name()) ->
               [{exchange_name(), routing_key(), amqp_table()}]).
--spec(list_exchange_bindings/1 :: (exchange_name()) -> 
+-spec(list_exchange_bindings/1 :: (exchange_name()) ->
               [{queue_name(), routing_key(), amqp_table()}]).
 
 -endif.
@@ -193,6 +194,8 @@ list(VHostPath) ->
     mnesia:dirty_match_object(
       rabbit_exchange,
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
+
+info_keys() -> ?INFO_KEYS.
 
 map(VHostPath, F) ->
     %% TODO: there is scope for optimisation here, e.g. using a
@@ -349,7 +352,7 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
      end || Route <- mnesia:match_object(
                        rabbit_reverse_route,
                        reverse_route(
-                         #route{binding = #binding{queue_name = QueueName, 
+                         #route{binding = #binding{queue_name = QueueName,
                                                    _ = '_'}}),
                        write)],
     ok.
@@ -453,7 +456,7 @@ list_bindings(VHostPath) ->
     [{ExchangeName, QueueName, RoutingKey, Arguments} ||
         #route{binding = #binding{
                  exchange_name = ExchangeName,
-                 key           = RoutingKey, 
+                 key           = RoutingKey,
                  queue_name    = QueueName,
                  args          = Arguments}}
             <- mnesia:dirty_match_object(
@@ -614,7 +617,7 @@ list_exchange_bindings(ExchangeName) ->
     [{QueueName, RoutingKey, Arguments} ||
         #route{binding = #binding{queue_name = QueueName,
                                   key = RoutingKey,
-                                  args = Arguments}} 
+                                  args = Arguments}}
             <- mnesia:dirty_match_object(rabbit_route, Route)].
 
 % Refactoring is left as an exercise for the reader
@@ -624,5 +627,5 @@ list_queue_bindings(QueueName) ->
     [{ExchangeName, RoutingKey, Arguments} ||
         #route{binding = #binding{exchange_name = ExchangeName,
                                   key = RoutingKey,
-                                  args = Arguments}} 
+                                  args = Arguments}}
             <- mnesia:dirty_match_object(rabbit_route, Route)].

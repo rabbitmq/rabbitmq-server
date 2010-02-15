@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -40,7 +40,7 @@
 
 -ifdef(use_specs).
 
--type(stat_option() :: 
+-type(stat_option() ::
 	'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
 	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
 -type(error() :: {'error', any()}).
@@ -50,11 +50,11 @@
 -spec(controlling_process/2 :: (socket(), pid()) -> 'ok' | error()).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
 -spec(send/2 :: (socket(), binary() | iolist()) -> 'ok' | error()).
--spec(peername/1 :: (socket()) -> 
+-spec(peername/1 :: (socket()) ->
         {'ok', {ip_address(), non_neg_integer()}} | error()).
--spec(sockname/1 :: (socket()) -> 
+-spec(sockname/1 :: (socket()) ->
         {'ok', {ip_address(), non_neg_integer()}} | error()).
--spec(getstat/2 :: (socket(), [stat_option()]) -> 
+-spec(getstat/2 :: (socket(), [stat_option()]) ->
         {'ok', [{stat_option(), integer()}]} | error()).
 
 -endif.
@@ -66,8 +66,8 @@ async_recv(Sock, Length, Timeout) when is_record(Sock, ssl_socket) ->
     Pid = self(),
     Ref = make_ref(),
 
-    spawn(fun() -> Pid ! {inet_async, Sock, Ref, 
-                    ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)} 
+    spawn(fun() -> Pid ! {inet_async, Sock, Ref,
+                    ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)}
         end),
 
     {ok, Ref};
