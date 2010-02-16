@@ -230,6 +230,7 @@ build_broker(ParsedUri) ->
         [proplists:get_value(F, ParsedUri) || F <- [host, port, path]],
     VHost = case Path of
                 undefined -> <<"/">>;
+                [$/]      -> <<"/">>;
                 [$/|Rest] -> list_to_binary(Rest)
             end,
     Params = #amqp_params { host = Host, port = Port, virtual_host = VHost },
@@ -257,7 +258,7 @@ build_ssl_broker(ParsedUri) ->
                    [{fun find_path_parameter/3,    "cacertfile"},
                     {fun find_path_parameter/3,    "certfile"},
                     {fun find_path_parameter/3,    "keyfile"},
-                    {fun find_boolean_parameter/3, "verify"},
+                    {fun find_atom_parameter/3,    "verify"},
                     {fun find_boolean_parameter/3, "fail_if_no_peer_cert"}],
                    [], dict:from_list(Query)),
     Params1 = Params #amqp_params { ssl_options = SSLOptions },
@@ -280,6 +281,13 @@ find_boolean_parameter({ok, Value}, FieldName, Acc) ->
     end;
 find_boolean_parameter(error, FieldName, _Acc) ->
     fail({require_boolean_field, list_to_atom(FieldName)}).
+
+find_atom_parameter({ok, Value}, FieldName, Acc) ->
+    ValueAtom = list_to_atom(Value),
+    Field = list_to_atom(FieldName),
+    return([{Field, ValueAtom} | Acc]);
+find_atom_parameter(error, FieldName, _Acc) ->
+    fail({required_field, list_to_atom(FieldName)}).
 
 parse_non_negative_integer({ok, {N, Pos}}, _FieldName, Shovel)
   when is_integer(N) andalso N >= 0 ->
