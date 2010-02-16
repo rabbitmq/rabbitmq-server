@@ -280,10 +280,9 @@ read(MsgId, CState) ->
             %% 2. Check the cur file cache
             case ets:lookup(?CUR_FILE_CACHE_ETS_NAME, MsgId) of
                 [] ->
-                    Defer =
-                        fun() -> {gen_server2:call(
-                                    ?SERVER, {read, MsgId}, infinity), CState}
-                        end,
+                    Defer = fun() -> {gen_server2:pcall(
+                                        ?SERVER, 2, {read, MsgId}, infinity),
+                                      CState} end,
                     case index_lookup(MsgId, CState) of
                         not_found   -> Defer();
                         MsgLocation -> client_read1(MsgLocation, Defer, CState)
