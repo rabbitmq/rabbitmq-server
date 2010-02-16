@@ -49,9 +49,9 @@ handle_call(_Msg, _From, State) ->
 handle_cast(init, State = #state { name = Name, config = Config }) ->
     random:seed(now()),
 
-    {InboundConn, InboundChan} =
+    {InboundConn, InboundChan, InboundParams} =
         make_conn_and_chan((Config #shovel.sources) #endpoint.amqp_params),
-    {OutboundConn, OutboundChan} =
+    {OutboundConn, OutboundChan, OutboundParams} =
         make_conn_and_chan((Config #shovel.destinations) #endpoint.amqp_params),
 
     create_resources(OutboundChan, (Config #shovel.destinations)
@@ -78,7 +78,8 @@ handle_cast(init, State = #state { name = Name, config = Config }) ->
                            no_ack = Config #shovel.auto_ack},
           self()),
 
-    rabbit_shovel_status:report(Name, running),
+    rabbit_shovel_status:report(Name, {running, {source, InboundParams},
+                                                {destination, OutboundParams}}),
     {noreply,
      State #state { inbound_conn = InboundConn, inbound_ch = InboundChan,
                     outbound_conn = OutboundConn, outbound_ch = OutboundChan,
@@ -144,7 +145,7 @@ make_conn_and_chan(AmqpParams) ->
                _         -> amqp_connection:start_network_link(AmqpParam)
            end,
     Chan = amqp_connection:open_channel(Conn),
-    {Conn, Chan}.
+    {Conn, Chan, AmqpParam}.
 
 create_resources(Chan, Declarations) ->
     [amqp_channel:call(Chan, Method) || Method <- Declarations].
