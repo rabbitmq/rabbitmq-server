@@ -22,7 +22,7 @@ dist:
 
 	mv $(SOURCE_DIR) $(TARGET_DIR)
 	pod2text --loose rabbitmq-service.pod $(TARGET_DIR)/readme-service.txt
-	unix2dos $(TARGET_DIR)/readme-service.txt
+	todos $(TARGET_DIR)/readme-service.txt
 	zip -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(TARGET_DIR)
 

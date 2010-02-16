@@ -19,11 +19,11 @@ REM   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
 REM   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 REM   Technologies LLC, and Rabbit Technologies Ltd.
 REM
-REM   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+REM   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 REM   Ltd. Portions created by Cohesive Financial Technologies LLC are
-REM   Copyright (C) 2007-2009 Cohesive Financial Technologies
+REM   Copyright (C) 2007-2010 Cohesive Financial Technologies
 REM   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-REM   (C) 2007-2009 Rabbit Technologies Ltd.
+REM   (C) 2007-2010 Rabbit Technologies Ltd.
 REM
 REM   All Rights Reserved.
 REM
@@ -32,11 +32,17 @@ REM
 
 setlocal
 
-if "%RABBITMQ_NODENAME%"=="" (
+rem Preserve values that might contain exclamation marks before
+rem enabling delayed expansion
+set TDP0=%~dp0
+set STAR=%*
+setlocal enabledelayedexpansion
+
+if "!RABBITMQ_NODENAME!"=="" (
     set RABBITMQ_NODENAME=rabbit
 )
 
-if not exist "%ERLANG_HOME%\bin\erl.exe" (
+if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
     echo ******************************
     echo ERLANG_HOME not set correctly. 
@@ -48,6 +54,7 @@ if not exist "%ERLANG_HOME%\bin\erl.exe" (
     exit /B
 )
 
-"%ERLANG_HOME%\bin\erl.exe" -pa "%~dp0..\ebin" -noinput -hidden %RABBITMQ_CTL_ERL_ARGS% -sname rabbitmqctl -s rabbit_control -nodename %RABBITMQ_NODENAME% -extra %*
+"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden !RABBITMQ_CTL_ERL_ARGS! -sname rabbitmqctl -s rabbit_control -nodename !RABBITMQ_NODENAME! -extra !STAR!
 
+endlocal
 endlocal

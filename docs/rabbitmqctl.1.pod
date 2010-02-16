@@ -98,6 +98,13 @@ nodes determined by I<clusternode> option(s). See
 L<http://www.rabbitmq.com/clustering.html> for more information about
 clustering.
 
+=item close_connection I<connectionpid> I<explanation>
+
+Instruct the broker to close the connection associated with the Erlang
+process id I<connectionpid> (see also the I<list_connections>
+command), passing the I<explanation> string to the connected client as
+part of the AMQP connection shutdown protocol.
+
 =back
 
 =head2 USER MANAGEMENT
@@ -202,6 +209,22 @@ queue arguments
 
 id of the Erlang process associated with the queue
 
+=item owner_pid
+
+id of the Erlang process representing the connection which is the
+exclusive owner of the queue, or empty if the queue is non-exclusive
+
+=item exclusive_consumer_pid
+
+id of the Erlang process representing the channel of the exclusive
+consumer subscribed to this queue, or empty if there is no exclusive
+consumer
+
+=item exclusive_consumer_tag
+
+consumer tag of the exclusive consumer subscribed to this queue, or
+empty if there is no exclusive consumer
+
 =item messages_ready
 
 number of messages ready to be delivered to clients
@@ -284,7 +307,7 @@ separated by tab characters.
 
 =item list_connections [I<connectioninfoitem> ...]
 
-List queue information by virtual host. Each line printed describes an
+List current AMQP connections. Each line printed describes a
 connection, with the requested I<connectioninfoitem> values separated
 by tab characters.  If no I<connectioninfoitem>s are specified then
 I<user>, I<peer_address>, I<peer_port> and I<state> are assumed.
@@ -295,7 +318,7 @@ I<user>, I<peer_address>, I<peer_port> and I<state> are assumed.
 
 =over
 
-=item node
+=item pid
 
 id of the Erlang process associated with the connection
 
@@ -367,10 +390,87 @@ send queue size
 
 =back
 
-The list_queues, list_exchanges and list_bindings commands accept an
-optional virtual host parameter for which to display results,
-defaulting to I<"/">. The default can be overridden with the B<-p>
-flag.
+=over
+
+=item list_channels [I<channelinfoitem> ...]
+
+List channel information. Each line printed describes a channel, with
+the requested I<channelinfoitem> values separated by tab characters.
+If no I<channelinfoitem>s are specified then I<pid>, I<user>,
+I<transactional>, I<consumer_count>, and I<messages_unacknowledged>
+are assumed.
+
+The list includes channels which are part of ordinary AMQP connections
+(as listed by list_connections) and channels created by various
+plug-ins and other extensions.
+
+=back
+
+=head3 Channel information items
+
+=over
+
+=item pid
+
+id of the Erlang process associated with the channel
+
+=item connection
+
+id of the Erlang process associated with the connection to which the
+channel belongs
+
+=item number
+
+the number of the channel, which uniquely identifies it within a
+connection
+
+=item user
+
+username associated with the channel
+
+=item vhost
+
+virtual host in which the channel operates
+
+=item transactional
+
+true if the channel is in transactional mode, false otherwise
+
+=item consumer_count
+
+number of logical AMQP consumers retrieving messages via the channel
+
+=item messages_unacknowledged
+
+number of messages delivered via this channel but not yet acknowledged
+
+=item acks_uncommitted
+
+number of acknowledgements received in an as yet uncommitted
+transaction
+
+=item prefetch_count
+
+QoS prefetch count limit in force, 0 if unlimited
+
+=back
+
+=item list_consumers
+
+List consumers, i.e. subscriptions to a queue's message stream. Each
+line printed shows, separated by tab characters, the name of the queue
+subscribed to, the id of the channel process via which the
+subscription was created and is managed, the consumer tag which
+uniquely identifies the subscription within a channel, and a boolean
+indicating whether acknowledgements are expected for messages
+delivered to this consumer.
+
+=back
+
+The list_queues, list_exchanges, list_bindings and list_consumers
+commands accept an optional virtual host parameter for which to
+display results, defaulting to I<"/">. The default can be overridden
+with the B<-p> flag.
 
 =head1 OUTPUT ESCAPING
 
