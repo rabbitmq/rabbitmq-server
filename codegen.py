@@ -291,9 +291,6 @@ def genErl(spec):
         print 'amqp_exception(?%s) -> %s;' % \
             (n, n.lower())
 
-    def genClassPropsFieldnames(cls):
-        print "class_properties_fieldnames('P_%s') -> %s;" % (erlangize(cls.name), fieldNameList(cls.fields))
-
     methods = spec.allMethods()
 
     printFileHeader()
@@ -313,7 +310,6 @@ def genErl(spec):
 -export([encode_properties/1]).
 -export([lookup_amqp_exception/1]).
 -export([amqp_exception/1]).
--export([class_properties_fieldnames/1]).
 
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
@@ -357,9 +353,6 @@ bitvalue(undefined) -> 0.
 
     for(c,v,cls) in spec.constants: genAmqpException(c,v,cls)
     print "amqp_exception(_Code) -> undefined."
-
-    for c in spec.allClasses(): genClassPropsFieldnames(c)
-    print "class_properties_fieldnames(PropName) -> exit({unknown_class_properties_name, PropName})."
 
 def genHrl(spec):
     def erlType(domain):
