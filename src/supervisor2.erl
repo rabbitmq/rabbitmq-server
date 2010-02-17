@@ -80,10 +80,10 @@ behaviour_info(_Other) ->
 %%% SupName = {local, atom()} | {global, atom()}.
 %%% ---------------------------------------------------
 start_link(Mod, Args) ->
-    gen_server:start_link(supervisor2, {self, Mod, Args}, []).
+    gen_server:start_link(?MODULE, {self, Mod, Args}, []).
  
 start_link(SupName, Mod, Args) ->
-    gen_server:start_link(SupName, supervisor2, {SupName, Mod, Args}, []).
+    gen_server:start_link(SupName, ?MODULE, {SupName, Mod, Args}, []).
  
 %%% ---------------------------------------------------
 %%% Interface functions.
