@@ -66,8 +66,7 @@ parse_uri_rest("//" ++ URIPart, true) ->
     parse_uri_rest(PathQueryFrag, false) ++ AuthorityParts;
 parse_uri_rest(PathQueryFrag, _Bool) ->
     %% no authority, just a path and maybe query
-    {PathQuery, Frag} =
-        split_uri(PathQueryFrag, "#", {PathQueryFrag, ""}),
+    {PathQuery, Frag} = split_uri(PathQueryFrag, "#", {PathQueryFrag, ""}),
     {Path, QueryString} = split_uri(PathQuery, "\\?", {PathQuery, ""}),
     QueryPropList = split_query(QueryString),
     [{path, Path}, {'query', QueryPropList}, {fragment, Frag}].
@@ -96,11 +95,8 @@ parse_host_port(HostPort) ->
 
 split_query(Query) ->
     case inets_regexp:split(Query, "&") of
-        {ok, [""]} ->
-            [];
-        {ok, QParams} ->
-            lists:map(fun(Param) -> split_uri(Param, "=", Param) end,
-                      QParams)
+        {ok, [""]}    -> [];
+        {ok, QParams} -> [split_uri(Param, "=", Param) || Param <- QParams]
     end.
 
 split_uri(UriPart, SplitChar, NoMatchResult) ->
