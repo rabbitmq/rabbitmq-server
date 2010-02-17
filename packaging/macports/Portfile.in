@@ -4,9 +4,9 @@
 PortSystem 1.0
 name		rabbitmq-server
 version		@VERSION@
-revision	1
+revision	0
 categories	net 
-maintainers	rabbitmq.com:tonyg
+maintainers	paperplanes.de:meyer rabbitmq.com:tonyg openmaintainer
 platforms	darwin
 description	The RabbitMQ AMQP Server
 long_description	\
