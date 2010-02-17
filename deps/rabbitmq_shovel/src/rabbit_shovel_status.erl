@@ -49,7 +49,7 @@ init([]) ->
     {ok, #state {}}.
 
 handle_call(status, _From, State) ->
-    Entries = ets:match_object(?ETS_NAME, #entry{ _ = '_' }),
+    Entries = ets:tab2list(?ETS_NAME),
     {reply, [{Entry #entry.name, Entry #entry.info, Entry #entry.timestamp}
              || Entry <- Entries], State}.
 
