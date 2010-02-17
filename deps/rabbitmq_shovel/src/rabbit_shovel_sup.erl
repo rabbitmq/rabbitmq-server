@@ -105,9 +105,9 @@ parse_shovel_config(ShovelName, ShovelConfig) ->
                                 {fun parse_non_negative_integer/3, qos},
                                 {fun parse_boolean/3, auto_ack},
                                 {fun parse_non_negative_integer/3, tx_size},
-                                {fun parse_delivery_mode/3, delivery_mode},
                                 {fun parse_binary/3, queue},
-                                {fun parse_publish_fields/3, publish_fields},
+                                make_parse_publish(publish_fields),
+                                make_parse_publish(publish_properties),
                                 {fun parse_non_negative_integer/3, reconnect}
                                ], #shovel{}, Dict1)}
                     catch throw:{error, Reason} ->
@@ -312,9 +312,24 @@ parse_binary({ok, {NotABinary, _Pos}}, FieldName, _Shovel) ->
 parse_binary(error, FieldName, _Shovel) ->
     fail({require_field, FieldName}).
 
-parse_publish_fields({ok, {Fields, Pos}}, _FieldName, Shovel)
-  when is_list(Fields) ->
-    ValidFields = rabbit_framing:method_fieldnames('basic.publish'),
+make_parse_publish(publish_fields) ->
+    {make_parse_publish1(rabbit_framing:method_fieldnames('basic.publish')),
+     publish_fields};
+make_parse_publish(publish_properties) ->
+    {make_parse_publish1(rabbit_framing:class_properties_fieldnames('P_basic')),
+     publish_properties}.
+
+make_parse_publish1(ValidFields) ->
+    fun ({ok, {Fields, Pos}}, FieldName, Shovel)
+          when is_list(Fields) ->
+            make_publish_fun(Fields, Pos, Shovel, ValidFields, FieldName);
+        ({ok, {Fields, _Pos}}, FieldName, _Shovel) ->
+            fail({require_list, FieldName, Fields});
+        (error, FieldName, _Shovel) ->
+            fail({require_field, FieldName})
+    end.
+
+make_publish_fun(Fields, Pos, Shovel, ValidFields, FieldName) ->
     SuppliedFields = proplists:get_keys(Fields),
     case SuppliedFields -- ValidFields of
         [] ->
@@ -327,12 +342,8 @@ parse_publish_fields({ok, {Fields, Pos}}, _FieldName, Shovel)
                   end,
             return(setelement(Pos, Shovel, Fun));
         Unexpected ->
-            fail({unexpected_fields_for_publish, Unexpected, ValidFields})
-    end;
-parse_publish_fields({ok, {Fields, _Pos}}, FieldName, _Shovel) ->
-    fail({require_list, FieldName, Fields});
-parse_publish_fields(error, FieldName, _Shovel) ->
-    fail({require_field, FieldName}).
+            fail({unexpected_fields, FieldName, Unexpected, ValidFields})
+    end.
 
 make_field_indices(Valid, Supplied, Fields) ->
     make_field_indices(Valid, Supplied, Fields, 2, []).
@@ -344,13 +355,3 @@ make_field_indices([F|Valid], [F|Supplied], Fields, Idx, Acc) ->
     make_field_indices(Valid, Supplied, Fields, Idx+1, [{Idx, Value}|Acc]);
 make_field_indices([_V|Valid], Supplied, Fields, Idx, Acc) ->
     make_field_indices(Valid, Supplied, Fields, Idx+1, Acc).
-
-parse_delivery_mode({ok, {N, Pos}}, _FieldName, Shovel)
-  when N =:= 0 orelse N =:= 2 ->
-    return(setelement(Pos, Shovel, N));
-parse_delivery_mode({ok, {keep, Pos}}, _FieldName, Shovel) ->
-    return(setelement(Pos, Shovel, keep));
-parse_delivery_mode({ok, {N, _Pos}}, FieldName, _Shovel) ->
-    fail({require_valid_delivery_mode_in_field, FieldName, N});
-parse_delivery_mode(error, FieldName, _Shovel) ->
-    fail({require_field, FieldName}).

@@ -32,8 +32,8 @@
          qos,
          auto_ack,
          tx_size,
-         delivery_mode,
          publish_fields,
+         publish_properties,
          queue,
          reconnect
         }).

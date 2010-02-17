@@ -102,7 +102,7 @@ A full example of the shovel configuration is:
        {qos, 10},
        {auto_ack, false},
        {tx_size, 0},
-       {delivery_mode, keep},
+       {publish_properties, [{delivery_mode, 2}]},
        {publish_fields, [{exchange, <<"my_exchange">>},
                          {routing_key, <<"from_shovel">>}]},
        {reconnect, 5}
@@ -115,15 +115,15 @@ Firstly, all shovels are named. Here we have one shovel, called
 'my_first_shovel'. We can have multiple shovels if you wish. Secondly,
 every shovel must have the subfields sources, destinations and queue
 specified, whereas the other fields (qos, auto_ack, tx_size,
-delivery_mode, publish_fields, reconnect) are optional and have
+publish_properties, publish_fields, reconnect) are optional and have
 defaults as follows:
 
-{qos,            0}
-{auto_ack,       false}
-{tx_size,        0}
-{delivery_mode,  keep}
-{publish_fields, []}
-{reconnect,      5}
+{qos,                 0}
+{auto_ack,            false}
+{tx_size,             0}
+{publish_properties,  []}
+{publish_fields,      []}
+{reconnect,           5}
 
 Sources and Destinations
 ------------------------
@@ -223,13 +223,18 @@ broker) when they are guaranteed to have been received by the
 destination broker.
 
 
-delivery_mode :: 'keep' | 0 | 2
--------------------------------
+publish_properties
+------------------
 
-This affects the delivery_mode field when publishing to the
-destination. A value of 'keep' means that the same delivery_mode
-should be used as when the message was originally published to the
-source broker. 0 and 2 override the original setting.
+This is a list of tuples which override fields in the basic class
+properties when publishing to the destination. This can be used to
+override any of the following fields: content_type, content_encoding,
+headers, delivery_mode, priority, correlation_id, reply_to,
+expiration, message_id, timestamp, type, user_id, app_id, cluster_id.
+
+By default, all the properties of the basic class that are received
+with the delivery are passed through to the destination, but this
+field can be used to override them.
 
 
 publish_fields
