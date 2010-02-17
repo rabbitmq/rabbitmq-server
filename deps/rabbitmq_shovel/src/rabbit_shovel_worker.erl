@@ -25,6 +25,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
 -record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,

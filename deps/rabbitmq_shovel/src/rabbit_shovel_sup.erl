@@ -23,6 +23,7 @@
 
 -export([start_link/0, init/1]).
 
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
 start_link() ->

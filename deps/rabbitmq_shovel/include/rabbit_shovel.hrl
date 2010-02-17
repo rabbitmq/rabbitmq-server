@@ -19,8 +19,6 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--include_lib("amqp_client/include/amqp_client.hrl").
-
 -record(endpoint,
         {amqp_params,
          resource_declarations
