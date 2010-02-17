@@ -113,8 +113,9 @@ A full example of the shovel configuration is:
 
 Firstly, all shovels are named. Here we have one shovel, called
 'my_first_shovel'. We can have multiple shovels if you wish. Every
-shovel must have all sub-fields specified: sources, destinations, qos,
-auto_ack, delivery_mode, publish_fields, reconnect.
+shovel must have all sub-fields specified: sources, destinations,
+queue, qos, auto_ack, tx_size, delivery_mode, publish_fields,
+reconnect.
 
 
 Sources and Destinations
@@ -261,9 +262,13 @@ name, the shovel status, and the timestamp (a local calendar time of
 {{YYYY,MM,DD},{HH,MM,SS}}). There are 3 possible statuses:
 
 'starting': The shovel is starting up, connecting and creating
-resources.
+    resources.
 
-'running': The shovel is up and running, shovelling messages.
+{'running', {'source', Source},
+            {'destination', Destination}}:
+    The shovel is up and running, shovelling messages. Source and
+    Destination give the connection parameters used to connect to the
+    endpoints.
 
 {'terminated', Reason}: Something's gone wrong. The Reason should give
-a further indication of where the fault lies.
+    a further indication of where the fault lies.
