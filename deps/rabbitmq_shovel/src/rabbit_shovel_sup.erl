@@ -60,25 +60,27 @@ make_child_specs(Configurations) ->
 parse_configuration(undefined) ->
     {error, no_shovels_configured};
 parse_configuration({ok, Env}) ->
-    parse_configuration(Env, dict:new()).
+    {ok, Defaults} = application:get_env(defaults),
+    parse_configuration(Defaults, Env, dict:new()).
 
-parse_configuration([], Acc) ->
+parse_configuration(_Defaults, [], Acc) ->
     {ok, Acc};
-parse_configuration([{ShovelName, ShovelConfig} | Env], Acc)
+parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
   when is_atom(ShovelName) ->
     case dict:is_key(ShovelName, Acc) of
         true ->
             {error, {duplicate_shovel_definition, ShovelName}};
         false ->
-            case parse_shovel_config(ShovelName, ShovelConfig) of
+            ShovelConfig1 = lists:ukeysort(1, ShovelConfig ++ Defaults),
+            case parse_shovel_config(ShovelName, ShovelConfig1) of
                 {ok, Config} ->
                     parse_configuration(
-                      Env, dict:store(ShovelName, Config, Acc));
+                      Defaults, Env, dict:store(ShovelName, Config, Acc));
                 {error, Reason} ->
                     {error, Reason}
             end
     end;
-parse_configuration(_, _Acc) ->
+parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations_with_atom_names}.
 
 parse_shovel_config(ShovelName, ShovelConfig) ->

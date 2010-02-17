@@ -8,6 +8,12 @@
     rabbit_shovel_worker
   ]},
   {registered, []},
-  {env, []},
+  {env, [{defaults, [{qos,            0},
+                     {auto_ack,       false},
+                     {tx_size,        0},
+                     {delivery_mode,  keep},
+                     {publish_fields, []},
+                     {reconnect,      5}]
+         }]},
   {mod, {rabbit_shovel, []}},
   {applications, [kernel, stdlib, rabbit]}]}.
