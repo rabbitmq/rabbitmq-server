@@ -56,7 +56,7 @@ parse(AbsURI, Defaults) ->
 %%% Internal functions
 %%%========================================================================
 parse_scheme(AbsURI) ->
-    split_uri(AbsURI, ":", {error, no_scheme}, 1, 1).
+    split_uri(AbsURI, ":", {error, no_scheme}).
 
 parse_uri_rest("//" ++ URIPart, true) ->
     %% we have an authority
@@ -67,13 +67,13 @@ parse_uri_rest("//" ++ URIPart, true) ->
 parse_uri_rest(PathQueryFrag, _Bool) ->
     %% no authority, just a path and maybe query
     {PathQuery, Frag} =
-        split_uri(PathQueryFrag, "#", {PathQueryFrag, ""}, 1, 1),
-    {Path, QueryString} = split_uri(PathQuery, "\\?", {PathQuery, ""}, 1, 1),
+        split_uri(PathQueryFrag, "#", {PathQueryFrag, ""}),
+    {Path, QueryString} = split_uri(PathQuery, "\\?", {PathQuery, ""}),
     QueryPropList = split_query(QueryString),
     [{path, Path}, {'query', QueryPropList}, {fragment, Frag}].
 
 parse_authority(Authority) ->
-    {UserInfo, HostPort} = split_uri(Authority, "@", {"", Authority}, 1, 1),
+    {UserInfo, HostPort} = split_uri(Authority, "@", {"", Authority}),
     UserInfoSplit = case inets_regexp:split(UserInfo, ":") of
                         {ok, [""]} -> [];
                         {ok, UIS } -> UIS
@@ -81,14 +81,14 @@ parse_authority(Authority) ->
     [{userinfo, UserInfoSplit} | parse_host_port(HostPort)].
 
 parse_host_port("[" ++ HostPort) -> %ipv6
-    {Host, ColonPort} = split_uri(HostPort, "\\]", {HostPort, ""}, 1, 1),
+    {Host, ColonPort} = split_uri(HostPort, "\\]", {HostPort, ""}),
     [{host, Host} | case split_uri(ColonPort, ":", not_found, 0, 1) of
                         not_found -> [];
                         {_, Port} -> [{port, list_to_integer(Port)}]
                     end];
 
 parse_host_port(HostPort) ->
-    {Host, Port} = split_uri(HostPort, ":", {HostPort, not_found}, 1, 1),
+    {Host, Port} = split_uri(HostPort, ":", {HostPort, not_found}),
     [{host, Host} | case Port of
                         not_found -> [];
                         _         -> [{port, list_to_integer(Port)}]
@@ -99,9 +99,12 @@ split_query(Query) ->
         {ok, [""]} ->
             [];
         {ok, QParams} ->
-            lists:map(fun(Param) -> split_uri(Param, "=", Param, 1, 1) end,
+            lists:map(fun(Param) -> split_uri(Param, "=", Param) end,
                       QParams)
     end.
+
+split_uri(UriPart, SplitChar, NoMatchResult) ->
+    split_uri(UriPart, SplitChar, NoMatchResult, 1, 1).
 
 split_uri(UriPart, SplitChar, NoMatchResult, SkipLeft, SkipRight) ->
     case inets_regexp:first_match(UriPart, SplitChar) of
@@ -113,13 +116,7 @@ split_uri(UriPart, SplitChar, NoMatchResult, SkipLeft, SkipRight) ->
     end.
 
 merge_keylists(A, B) ->
-    lists:ukeysort(1, lists:foldl(
-                        fun ({Key, ""}, Acc) ->
-                                case lists:keysearch(Key, 1, B) of
-                                    {value, Pair} -> [Pair | Acc];
-                                    false         -> [{Key, ""} | Acc]
-                                end;
-                            (Pair, Acc) ->
-                                [Pair | Acc]
-                        end, [], A) ++ B).
-
+    {AEmpty, ANonEmpty} = lists:partition(fun ({_Key, V}) -> V =:= [] end, A),
+    [AEmptyS, ANonEmptyS, BS] =
+        [lists:ukeysort(1, X) || X <- [AEmpty, ANonEmpty, B]],
+    lists:ukeymerge(1, lists:ukeymerge(1, ANonEmptyS, BS), AEmptyS).
