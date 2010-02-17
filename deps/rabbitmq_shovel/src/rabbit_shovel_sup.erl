@@ -313,11 +313,9 @@ parse_binary(error, FieldName, _Shovel) ->
     fail({require_field, FieldName}).
 
 make_parse_publish(publish_fields) ->
-    {make_parse_publish1(rabbit_framing:method_fieldnames('basic.publish')),
-     publish_fields};
+    {make_parse_publish1(record_info(fields, 'basic.publish')), publish_fields};
 make_parse_publish(publish_properties) ->
-    {make_parse_publish1(rabbit_framing:class_properties_fieldnames('P_basic')),
-     publish_properties}.
+    {make_parse_publish1(record_info(fields, 'P_basic')), publish_properties}.
 
 make_parse_publish1(ValidFields) ->
     fun ({ok, {Fields, Pos}}, FieldName, Shovel)
