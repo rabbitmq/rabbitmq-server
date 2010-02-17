@@ -90,8 +90,8 @@ handle_info(#'basic.consume_ok'{}, State) ->
 
 handle_info({#'basic.deliver'{ delivery_tag = Tag, routing_key = RoutingKey },
              Msg = #amqp_msg{ props = Props = #'P_basic'{} }},
-            State = #state{ inbound_ch = InboundChan, outbound_ch = OutboundChan,
-                            config = Config, tx_counter = TxCounter }) ->
+            State = #state{ tx_counter = TxCounter, inbound_ch = InboundChan,
+                            outbound_ch = OutboundChan, config = Config }) ->
     Props1 = case Config #shovel.delivery_mode of
                  keep -> Props;
                  Mode -> Props #'P_basic'{ delivery_mode = Mode }
