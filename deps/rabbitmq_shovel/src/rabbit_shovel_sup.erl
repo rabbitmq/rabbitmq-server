@@ -135,26 +135,15 @@ parse_shovel_config(ShovelName, ShovelConfig) ->
 %% and a combinator for constructing a final value (hence is also a
 %% catamorphism).
 run_reader_state_monad(FunList, Comb, State, Reader) ->
-    {ok, _Comb, State1, _Reader} =
-        lists:foldl(fun reader_state_monad/2,
-                    {ok, Comb, State, Reader},
-                    FunList),
-    State1.
-
-reader_state_monad({Fun, Key}, {ok, Comb, State, Reader}) ->
-    {ok, Value} = Fun(dict:find(Key, Reader), Key),
-    {ok, Comb, Comb(Value, State), Reader}.
+    lists:foldl(fun ({Fun, Key}, StateN) ->
+                        Comb(Fun(dict:find(Key, Reader), Key), StateN)
+                end, State, FunList).
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
-    {ok, State1} =
-        lists:foldl(fun state_monad/2, {ok, State}, FunList),
-    State1.
+    lists:foldl(fun (Fun, StateN) -> Fun(StateN) end, State, FunList).
 
-state_monad(Fun, {ok, State}) ->
-    Fun(State).
-
-return(State) -> {ok, State}.
+return(State) -> State.
 
 fail(Reason) -> throw({error, Reason}).
 %% --=: end :=--
