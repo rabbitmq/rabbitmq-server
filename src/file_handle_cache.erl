@@ -133,10 +133,10 @@
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([release_on_death/1, obtain/0]).
+-export([release_on_death/1, obtain/0, register_callback/3]).
 
 -define(SERVER, ?MODULE).
--define(RESERVED_FOR_OTHERS, 50).
+-define(RESERVED_FOR_OTHERS, 100).
 -define(FILE_HANDLES_LIMIT_WINDOWS, 10000000).
 -define(FILE_HANDLES_LIMIT_OTHER, 1024).
 -define(FILE_HANDLES_CHECK_INTERVAL, 2000).
@@ -169,7 +169,8 @@
         { elders,
           limit,
           count,
-          obtains
+          obtains,
+          callbacks
         }).
 
 %%----------------------------------------------------------------------------
@@ -184,6 +185,7 @@
 -type(position() :: ('bof' | 'eof' | {'bof',integer()} | {'eof',integer()}
                      | {'cur',integer()} | integer())).
 
+-spec(register_callback/3 :: (atom(), atom(), [any()]) -> 'ok').
 -spec(open/3 ::
       (string(), [any()],
        [{'write_buffer', (non_neg_integer()|'infinity'|'unbuffered')}]) ->
@@ -215,6 +217,10 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], [{timeout, infinity}]).
 
+register_callback(M, F, A)
+  when is_atom(M) andalso is_atom(F) andalso is_list(A) ->
+    gen_server:call(?SERVER, {register_callback, self(), {M, F, A}}, infinity).
+
 open(Path, Mode, Options) ->
     case is_appender(Mode) of
         true  ->
@@ -241,7 +247,7 @@ open(Path, Mode, Options) ->
                              File1 #file { reader_count = RCount1,
                                            has_writer = HasWriter1}),
                          Ref = make_ref(),
-                         case open1(Path1, Mode, Options, Ref, bof) of
+                         case open1(Path1, Mode, Options, Ref, bof, new) of
                              {ok, _Handle} -> {ok, Ref};
                              Error         -> Error
                          end
@@ -504,7 +510,7 @@ get_or_reopen(Ref) ->
             {error, not_open, Ref};
         #handle { hdl = closed, mode = Mode, options = Options,
                   offset = Offset, path = Path } ->
-            open1(Path, Mode, Options, Ref, Offset);
+            open1(Path, Mode, Options, Ref, Offset, reopen);
         Handle ->
             {ok, Handle}
     end.
@@ -524,8 +530,12 @@ put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
       fun (Tree) -> gb_trees:insert(Now, Ref, gb_trees:delete(Then, Tree)) end),
     put({Ref, fhc_handle}, Handle #handle { last_used_at = Now }).
 
-open1(Path, Mode, Options, Ref, Offset) ->
-    case file:open(Path, Mode) of
+open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
+    Mode1 = case NewOrReopen of
+                new    -> Mode;
+                reopen -> [read | Mode]
+            end,
+    case file:open(Path, Mode1) of
         {ok, Hdl} ->
             WriteBufferSize =
                 case proplists:get_value(write_buffer, Options, unbuffered) of
@@ -561,31 +571,36 @@ close1(Ref, Handle, SoftOrHard) ->
     case write_buffer(Handle) of
         {ok, #handle { hdl = Hdl, path = Path, is_dirty = IsDirty,
                        is_read = IsReader, is_write = IsWriter,
-                       last_used_at = Then } = Handle1 } ->
-            case Hdl of
-                closed -> ok;
-                _      -> ok = case IsDirty of
-                                   true  -> file:sync(Hdl);
-                                   false -> ok
-                               end,
-                          ok = file:close(Hdl),
-                          with_age_tree(
-                            fun (Tree) ->
-                                    Tree1 = gb_trees:delete(Then, Tree),
-                                    Oldest =
-                                        case gb_trees:is_empty(Tree1) of
-                                            true ->
-                                                undefined;
-                                            false ->
-                                                {Oldest1, _Ref} =
-                                                    gb_trees:smallest(Tree1),
-                                                Oldest1
-                                        end,
-                                    gen_server:cast(
-                                      ?SERVER, {close, self(), Oldest}),
-                                    Tree1
-                            end)
-            end,
+                       last_used_at = Then, offset = Offset } = Handle1 } ->
+            Handle2 =
+                case Hdl of
+                    closed ->
+                        ok;
+                    _ ->
+                        ok = case IsDirty of
+                                 true  -> file:sync(Hdl);
+                                 false -> ok
+                             end,
+                        ok = file:close(Hdl),
+                        with_age_tree(
+                          fun (Tree) ->
+                                  Tree1 = gb_trees:delete(Then, Tree),
+                                  Oldest =
+                                      case gb_trees:is_empty(Tree1) of
+                                          true ->
+                                              undefined;
+                                          false ->
+                                              {Oldest1, _Ref} =
+                                                  gb_trees:smallest(Tree1),
+                                              Oldest1
+                                      end,
+                                  gen_server:cast(
+                                    ?SERVER, {close, self(), Oldest}),
+                                  Tree1
+                          end),
+                        Handle1 #handle { trusted_offset = Offset,
+                                          is_dirty = false }
+                end,
             case SoftOrHard of
                 hard -> #file { reader_count = RCount,
                                 has_writer = HasWriter } = File =
@@ -602,7 +617,7 @@ close1(Ref, Handle, SoftOrHard) ->
                                                       has_writer = HasWriter1 })
                         end,
                         ok;
-                soft -> {ok, Handle1 #handle { hdl = closed }}
+                soft -> {ok, Handle2 #handle { hdl = closed }}
             end;
         {Error, Handle1} ->
             put_handle(Ref, Handle1),
@@ -673,7 +688,7 @@ init([]) ->
             end,
     error_logger:info_msg("Limiting to approx ~p file handles~n", [Limit]),
     {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0,
-                      obtains = [] }}.
+                      obtains = [], callbacks = dict:new() }}.
 
 handle_call(obtain, From, State = #fhc_state { count = Count }) ->
     State1 = #fhc_state { count = Count1, limit = Limit, obtains = Obtains } =
@@ -682,7 +697,12 @@ handle_call(obtain, From, State = #fhc_state { count = Count }) ->
         true  -> {noreply, State1 #fhc_state { obtains = [From | Obtains],
                                                count = Count1 - 1 }};
         false -> {reply, ok, State1}
-    end.
+    end;
+
+handle_call({register_callback, Pid, MFA}, _From,
+            State = #fhc_state { callbacks = Callbacks }) ->
+    {reply, ok,
+     State #fhc_state { callbacks = dict:store(Pid, MFA, Callbacks) }}.
 
 handle_cast({open, Pid, EldestUnusedSince}, State =
             #fhc_state { elders = Elders, count = Count }) ->
@@ -713,9 +733,11 @@ handle_cast({release_on_death, Pid}, State) ->
     _MRef = erlang:monitor(process, Pid),
     {noreply, State}.
 
-handle_info({'DOWN', _MRef, process, _Pid, _Reason},
-            State = #fhc_state { count = Count }) ->
-    {noreply, process_obtains(State #fhc_state { count = Count - 1 })}.
+handle_info({'DOWN', _MRef, process, Pid, _Reason},
+            State = #fhc_state { count = Count, callbacks = Callbacks }) ->
+    {noreply, process_obtains(
+                State #fhc_state { count = Count - 1,
+                                   callbacks = dict:erase(Pid, Callbacks) })}.
 
 terminate(_Reason, State) ->
     State.
@@ -742,7 +764,7 @@ process_obtains(State = #fhc_state { limit = Limit, count = Count,
     State #fhc_state { count = Count + ObtainableLen, obtains = ObtainsNew }.
 
 maybe_reduce(State = #fhc_state { limit = Limit, count = Count,
-                                  elders = Elders })
+                                  elders = Elders, callbacks = Callbacks })
   when Limit /= infinity andalso Count >= Limit ->
     Now = now(),
     {Pids, Sum, ClientCount} =
@@ -755,10 +777,16 @@ maybe_reduce(State = #fhc_state { limit = Limit, count = Count,
     case Pids of
         [] -> ok;
         _  -> AverageAge = Sum / ClientCount,
-              lists:foreach(fun (Pid) -> Pid ! {?MODULE,
-                                                maximum_eldest_since_use,
-                                                AverageAge}
-                            end, Pids)
+              lists:foreach(
+                fun (Pid) ->
+                        case dict:find(Pid, Callbacks) of
+                            error ->
+                                Pid ! {?MODULE, maximum_eldest_since_use,
+                                       AverageAge};
+                            {ok, {M, F, A}} ->
+                                apply(M, F, A ++ [AverageAge])
+                        end
+                end, Pids)
     end,
     {ok, _TRef} = timer:apply_after(?FILE_HANDLES_CHECK_INTERVAL, gen_server,
                                     cast, [?SERVER, check_counts]),

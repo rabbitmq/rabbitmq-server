@@ -34,7 +34,7 @@
 -export([start/0, recover/1, find_durable_queues/0, declare/4, delete/3,
          purge/1]).
 -export([internal_declare/2, internal_delete/1, remeasure_rates/1,
-         set_queue_duration/2]).
+         set_queue_duration/2, set_maximum_since_use/2]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/2, redeliver/2, requeue/3, ack/4]).
@@ -122,6 +122,7 @@
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(remeasure_rates/1 :: (pid()) -> 'ok').
 -spec(set_queue_duration/2 :: (pid(), number()) -> 'ok').
+-spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
 
@@ -374,10 +375,13 @@ internal_delete(QueueName) ->
       end).
 
 remeasure_rates(QPid) ->
-    gen_server2:pcast(QPid, 9, remeasure_rates).    
+    gen_server2:pcast(QPid, 9, remeasure_rates).
 
 set_queue_duration(QPid, Duration) ->
-    gen_server2:pcast(QPid, 9, {set_queue_duration, Duration}).    
+    gen_server2:pcast(QPid, 9, {set_queue_duration, Duration}).
+
+set_maximum_since_use(QPid, Age) ->
+    gen_server2:pcast(QPid, 9, {set_maximum_since_use, Age}).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(

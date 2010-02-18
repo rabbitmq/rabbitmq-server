@@ -102,12 +102,14 @@
 start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
 info_keys() -> ?INFO_KEYS.
-    
+
 %%----------------------------------------------------------------------------
 
 init(Q = #amqqueue { name = QName }) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
+    ok = file_handle_cache:register_callback(
+           rabbit_amqqueue, set_maximum_since_use, [self()]),
     ok = rabbit_memory_monitor:register
            (self(), {rabbit_amqqueue, set_queue_duration, [self()]}),
     VQS = rabbit_variable_queue:init(QName),
@@ -907,7 +909,11 @@ handle_cast({set_queue_duration, Duration},
             State = #q{variable_queue_state = VQS}) ->
     VQS1 = rabbit_variable_queue:set_queue_ram_duration_target(
              Duration, VQS),
-    noreply(State#q{variable_queue_state = VQS1}).
+    noreply(State#q{variable_queue_state = VQS1});
+
+handle_cast({set_maximum_since_use, Age}, State) ->
+    ok = file_handle_cache:set_maximum_since_use(Age),
+    noreply(State).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
             State = #q{owner = {DownPid, MonitorRef}}) ->
@@ -933,10 +939,6 @@ handle_info(timeout, State = #q{variable_queue_state = VQS}) ->
       run_message_queue(
         State#q{variable_queue_state =
                 rabbit_variable_queue:tx_commit_from_vq(VQS)}));
-
-handle_info({file_handle_cache, maximum_eldest_since_use, Age}, State) ->
-    ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State);
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};

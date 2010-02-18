@@ -36,7 +36,7 @@
 -export([start_link/3, write/2, read/2, contains/1, remove/1, release/1,
          sync/2, client_init/0, client_terminate/1]).
 
--export([sync/0, gc_done/3]). %% internal
+-export([sync/0, gc_done/3, set_maximum_since_use/1]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, handle_pre_hibernate/1]).
@@ -98,6 +98,7 @@
 -spec(release/1 :: ([msg_id()]) -> 'ok').
 -spec(sync/2 :: ([msg_id()], fun (() -> any())) -> 'ok').
 -spec(gc_done/3 :: (non_neg_integer(), file_num(), file_num()) -> 'ok').
+-spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(client_init/0 :: () -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 
@@ -305,6 +306,9 @@ sync()              -> gen_server2:pcast(?SERVER, 9, sync). %% internal
 gc_done(Reclaimed, Source, Destination) ->
     gen_server2:pcast(?SERVER, 9, {gc_done, Reclaimed, Source, Destination}).
 
+set_maximum_since_use(Age) ->
+    gen_server2:pcast(?SERVER, 9, {set_maximum_since_use, Age}).
+
 client_init() ->
     {IState, IModule, Dir} =
         gen_server2:call(?SERVER, new_client_state, infinity),
@@ -421,6 +425,9 @@ close_all_indicated(CState) ->
 
 init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
     process_flag(trap_exit, true),
+
+    ok =
+        file_handle_cache:register_callback(?MODULE, set_maximum_since_use, []),
 
     ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
 
@@ -597,14 +604,14 @@ handle_cast({gc_done, Reclaimed, Source, Dest},
     true = ets:delete(?FILE_SUMMARY_ETS_NAME, Source),
     noreply(run_pending(
               State #msstate { sum_file_size = SumFileSize - Reclaimed,
-                               gc_active = false })).
+                               gc_active = false }));
+
+handle_cast({set_maximum_since_use, Age}, State) ->
+    ok = file_handle_cache:set_maximum_since_use(Age),
+    noreply(State).
 
 handle_info(timeout, State) ->
     noreply(sync(State));
-
-handle_info({file_handle_cache, maximum_eldest_since_use, Age}, State) ->
-    ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State);
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
@@ -746,6 +753,7 @@ read_from_disk(#msg_location { msg_id = MsgId, ref_count = RefCount,
                 throw({error, {misread, [{old_state, State},
                                          {file_num,  File},
                                          {offset,    Offset},
+                                         {msg_id,    MsgId},
                                          {read,      Rest},
                                          {proc_dict, get()}
                                         ]}})
