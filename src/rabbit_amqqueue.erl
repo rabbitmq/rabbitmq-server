@@ -304,7 +304,7 @@ requeue(QPid, MsgIds, ChPid) ->
     gen_server2:cast(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
-    gen_server2:pcast(QPid, 8, {ack, Txn, MsgIds, ChPid}).
+    gen_server2:pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
 
 commit_all(QPids, Txn) ->
     safe_pmap_ok(
@@ -349,17 +349,17 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
                           infinity).
 
 notify_sent(QPid, ChPid) ->
-    gen_server2:pcast(QPid, 8, {notify_sent, ChPid}).
+    gen_server2:pcast(QPid, 7, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
-    gen_server2:pcast(QPid, 8, {unblock, ChPid}).
+    gen_server2:pcast(QPid, 7, {unblock, ChPid}).
 
 tx_commit_msg_store_callback(QPid, Pubs, AckTags, From) ->
-    gen_server2:pcast(QPid, 8,
+    gen_server2:pcast(QPid, 7,
                       {tx_commit_msg_store_callback, Pubs, AckTags, From}).
 
 tx_commit_vq_callback(QPid) ->
-    gen_server2:pcast(QPid, 8, tx_commit_vq_callback).
+    gen_server2:pcast(QPid, 7, tx_commit_vq_callback).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
@@ -375,13 +375,13 @@ internal_delete(QueueName) ->
       end).
 
 remeasure_rates(QPid) ->
-    gen_server2:pcast(QPid, 9, remeasure_rates).
+    gen_server2:pcast(QPid, 8, remeasure_rates).
 
 set_queue_duration(QPid, Duration) ->
-    gen_server2:pcast(QPid, 9, {set_queue_duration, Duration}).
+    gen_server2:pcast(QPid, 8, {set_queue_duration, Duration}).
 
 set_maximum_since_use(QPid, Age) ->
-    gen_server2:pcast(QPid, 9, {set_maximum_since_use, Age}).
+    gen_server2:pcast(QPid, 8, {set_maximum_since_use, Age}).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_transaction(

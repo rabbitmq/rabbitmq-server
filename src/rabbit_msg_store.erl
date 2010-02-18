@@ -301,13 +301,13 @@ contains(MsgId)     -> gen_server2:call(?SERVER, {contains, MsgId}, infinity).
 remove(MsgIds)      -> gen_server2:cast(?SERVER, {remove, MsgIds}).
 release(MsgIds)     -> gen_server2:cast(?SERVER, {release, MsgIds}).
 sync(MsgIds, K)     -> gen_server2:cast(?SERVER, {sync, MsgIds, K}).
-sync()              -> gen_server2:pcast(?SERVER, 9, sync). %% internal
+sync()              -> gen_server2:pcast(?SERVER, 8, sync). %% internal
 
 gc_done(Reclaimed, Source, Destination) ->
-    gen_server2:pcast(?SERVER, 9, {gc_done, Reclaimed, Source, Destination}).
+    gen_server2:pcast(?SERVER, 8, {gc_done, Reclaimed, Source, Destination}).
 
 set_maximum_since_use(Age) ->
-    gen_server2:pcast(?SERVER, 9, {set_maximum_since_use, Age}).
+    gen_server2:pcast(?SERVER, 8, {set_maximum_since_use, Age}).
 
 client_init() ->
     {IState, IModule, Dir} =
