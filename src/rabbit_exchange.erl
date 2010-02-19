@@ -304,13 +304,13 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                 none, [], []),
     fun () ->
             lists:foreach(
-              fun ({{auto_deleted, X = #exchange{ type = Type }}, Bs}) ->
+              fun ({{IsDeleted, X = #exchange{ type = Type }}, Bs}) ->
                       Module = type_to_module(Type),
                       [Module:delete_binding(X, B) || B <- Bs],
-                      Module:delete(X, []);
-                  ({{no_delete, X = #exchange{ type = Type }}, Bs}) ->
-                      Module = type_to_module(Type),
-                      [Module:delete_binding(X, B) || B <- Bs]
+                      case IsDeleted of
+                          auto_deleted -> Module:delete(X, []);
+                          no_delete    -> ok
+                      end
               end, Cleanup)
     end.
 
