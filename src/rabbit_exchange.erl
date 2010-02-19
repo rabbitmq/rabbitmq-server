@@ -118,9 +118,9 @@ recover_with_bindings(Bs, Exs) ->
       lists:keysort(#binding.exchange_name, Bs),
       lists:keysort(#exchange.name, Exs), []).
 
-recover_with_bindings([B = #binding{exchange_name = N} | Rest],
+recover_with_bindings([B = #binding{exchange_name = Name} | Rest],
                       Xs = [#exchange{name = Name} | _],
-                      Bindings) when N =:= Name ->
+                      Bindings) ->
     recover_with_bindings(Rest, Xs, [B | Bindings]);
 recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
     (type_to_module(Type)):recover(X, Bindings),
@@ -304,7 +304,7 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                 none, [], []),
     fun () ->
             lists:foreach(
-              fun ({{auto_deleted, X = #exchange{ type = Type}}, Bs}) ->
+              fun ({{auto_deleted, X = #exchange{ type = Type }}, Bs}) ->
                       Module = type_to_module(Type),
                       [Module:delete_binding(X, B) || B <- Bs],
                       Module:delete(X, []);
@@ -319,9 +319,9 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
 %% cleanup_deleted_queue_bindings1) works properly.
 cleanup_deleted_queue_bindings([], ExchangeName, Bindings, Acc) ->
     cleanup_deleted_queue_bindings1(ExchangeName, Bindings, Acc);
-cleanup_deleted_queue_bindings([B = #binding{exchange_name = N} | Rest],
-                               ExchangeName, Bindings, Acc)
-  when N =:= ExchangeName ->
+cleanup_deleted_queue_bindings(
+  [B = #binding{exchange_name = ExchangeName} | Rest],
+  ExchangeName, Bindings, Acc) ->
     cleanup_deleted_queue_bindings(Rest, ExchangeName, [B | Bindings], Acc);
 cleanup_deleted_queue_bindings([B = #binding{exchange_name = N} | Rest],
                                ExchangeName, Bindings, Acc) ->
