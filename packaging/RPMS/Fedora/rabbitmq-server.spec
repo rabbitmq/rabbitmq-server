@@ -65,12 +65,12 @@ mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
 #Build the list of files
-rm -f %{_builddir}/filelist.%{name}.rpm
-echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm 
+rm -f %{_builddir}/%{name}.files
+echo '%defattr(-,root,root, -)' >> %{_builddir}/%{name}.files 
 (cd %{buildroot}; \
     find . -type f ! -regex '\.%{_sysconfdir}.*' \
         ! -regex '\.\(%{_rabbit_erllibdir}\|%{_rabbit_libdir}\).*' \
-        | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
+        | sed -e 's/^\.//' >> %{_builddir}/%{name}.files)
 
 %pre
 
@@ -103,7 +103,7 @@ if [ $1 = 0 ]; then
   # Leave rabbitmq user and group
 fi
 
-%files -f ../filelist.%{name}.rpm
+%files -f ../%{name}.files
 %defattr(-,root,root,-)
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
