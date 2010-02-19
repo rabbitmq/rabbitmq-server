@@ -19,11 +19,11 @@ REM   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
 REM   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 REM   Technologies LLC, and Rabbit Technologies Ltd.
 REM
-REM   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+REM   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 REM   Ltd. Portions created by Cohesive Financial Technologies LLC are
-REM   Copyright (C) 2007-2009 Cohesive Financial Technologies
+REM   Copyright (C) 2007-2010 Cohesive Financial Technologies
 REM   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-REM   (C) 2007-2009 Rabbit Technologies Ltd.
+REM   (C) 2007-2010 Rabbit Technologies Ltd.
 REM
 REM   All Rights Reserved.
 REM
@@ -32,8 +32,14 @@ REM
 
 setlocal
 
-set RABBITMQ_EBIN_DIR=%~dp0..\ebin
+rem Preserve values that might contain exclamation marks before
+rem enabling delayed expansion
+set TDP0=%~dp0
+setlocal enabledelayedexpansion
 
-del /f "%RABBITMQ_EBIN_DIR%"\rabbit.rel "%RABBITMQ_EBIN_DIR%"\rabbit.script "%RABBITMQ_EBIN_DIR%"\rabbit.boot
+set RABBITMQ_EBIN_DIR=!TDP0!..\ebin
 
+del /f "!RABBITMQ_EBIN_DIR!"\rabbit.rel "!RABBITMQ_EBIN_DIR!"\rabbit.script "!RABBITMQ_EBIN_DIR!"\rabbit.boot
+
+endlocal
 endlocal
