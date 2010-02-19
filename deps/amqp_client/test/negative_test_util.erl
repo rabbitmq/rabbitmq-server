@@ -96,6 +96,40 @@ channel_death_test(Connection) ->
     ?assertNot(is_process_alive(Connection)),
     ok.
 
+%% Attempting to send a shortstr longer than 255 bytes in a property field
+%% should fail - this only applies to the network case
+shortstr_overflow_property_test(Connection) ->
+    Channel = amqp_connection:open_channel(Connection),
+    SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
+    Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
+    Payload = <<"foobar">>,
+    test_util:setup_exchange(Channel, Q, X, Key),
+    Publish = #'basic.publish'{exchange = X, routing_key = Key},
+    PBasic = #'P_basic'{content_type = SentString},
+    AmqpMsg = #amqp_msg{payload = Payload, props = PBasic},
+    amqp_channel:call(Channel, Publish, AmqpMsg),
+    timer:sleep(300),
+    ?assertNot(is_process_alive(Channel)),
+    ?assertNot(is_process_alive(Connection)),
+    ok.
+
+%% Attempting to send a shortstr longer than 255 bytes in a method's field
+%% should fail - this only applies to the network case
+shortstr_overflow_field_test(Connection) ->
+    Channel = amqp_connection:open_channel(Connection),
+    SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
+    Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
+    Payload = <<"foobar">>,
+    test_util:setup_exchange(Channel, Q, X, Key),
+    ?assertExit(_, amqp_channel:subscribe(
+                       Channel, #'basic.consume'{queue = Q, no_ack = true,
+                                                  consumer_tag = SentString},
+                       self())),
+    timer:sleep(300),
+    ?assertNot(is_process_alive(Channel)),
+    ?assertNot(is_process_alive(Connection)),
+    ok.
+
 non_existent_user_test() ->
     Params = #amqp_params{username = test_util:uuid(),
                           password = test_util:uuid()},
