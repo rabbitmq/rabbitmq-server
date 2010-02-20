@@ -69,17 +69,14 @@ parse_configuration(_Defaults, [], Acc) ->
 parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
   when is_atom(ShovelName) ->
     case dict:is_key(ShovelName, Acc) of
-        true ->
-            {error, {duplicate_shovel_definition, ShovelName}};
-        false ->
-            ShovelConfig1 = lists:ukeysort(1, ShovelConfig ++ Defaults),
-            case parse_shovel_config(ShovelName, ShovelConfig1) of
-                {ok, Config} ->
-                    parse_configuration(
-                      Defaults, Env, dict:store(ShovelName, Config, Acc));
-                {error, Reason} ->
-                    {error, Reason}
-            end
+        true  -> {error, {duplicate_shovel_definition, ShovelName}};
+        false -> ShovelConfig1 = lists:ukeysort(1, ShovelConfig ++ Defaults),
+                 case parse_shovel_config(ShovelName, ShovelConfig1) of
+                     {ok, Config} -> parse_configuration(
+                                       Defaults, Env,
+                                       dict:store(ShovelName, Config, Acc));
+                     Other        -> Other
+                 end
     end;
 parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations_with_atom_names}.
@@ -212,12 +209,10 @@ parse_uri({[Uri | Uris], Acc}) ->
                 run_state_monad(
                   [fun (_) ->
                            case proplists:get_value(scheme, Parsed) of
-                               "amqp" ->
-                                   build_plain_broker(Parsed);
-                               "amqps" ->
-                                   build_ssl_broker(Parsed);
-                               Scheme ->
-                                   fail({unexpected_uri_scheme, Scheme, Uri})
+                               "amqp"  -> build_plain_broker(Parsed);
+                               "amqps" -> build_ssl_broker(Parsed);
+                               Scheme  -> fail({unexpected_uri_scheme,
+                                                Scheme, Uri})
                            end
                    end], undefined),
             return({Uris, [Endpoint | Acc]})
@@ -231,15 +226,13 @@ build_broker(ParsedUri) ->
                 [$/|Rest] -> list_to_binary(Rest)
             end,
     Params = #amqp_params { host = Host, port = Port, virtual_host = VHost },
-    Params1 =
-        case proplists:get_value(userinfo, ParsedUri) of
-            [Username, Password | _ ] ->
-                Params #amqp_params { username = list_to_binary(Username),
-                                      password = list_to_binary(Password) };
-            _ ->
-                Params
-        end,
-    return(Params1).
+    return(case proplists:get_value(userinfo, ParsedUri) of
+               [Username, Password | _ ] ->
+                   Params #amqp_params { username = list_to_binary(Username),
+                                         password = list_to_binary(Password) };
+               _ ->
+                   Params
+           end).
 
 build_plain_broker(ParsedUri) ->
     Params = run_state_monad([fun build_broker/1], ParsedUri),
