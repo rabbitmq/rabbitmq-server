@@ -284,7 +284,7 @@ find_atom_parameter({ok, Value}, FieldName) ->
     Field = list_to_atom(FieldName),
     return({Field, ValueAtom});
 find_atom_parameter(error, FieldName) ->
-    fail({required_field, list_to_atom(FieldName)}).
+    fail({require_field, list_to_atom(FieldName)}).
 
 parse_non_negative_integer({ok, {N, Pos}}, _FieldName)
   when is_integer(N) andalso N >= 0 ->
