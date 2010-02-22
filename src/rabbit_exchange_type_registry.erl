@@ -55,8 +55,15 @@ start_link() ->
 register(TypeName, ModuleName) ->
     gen_server:call(?SERVER, {register, TypeName, ModuleName}).
 
+%% This is used with user-supplied arguments (e.g., on exchange
+%% declare), so we restrict it to existing atoms only.  This means it
+%% can throw a badarg, indicating that the type cannot have been
+%% registered.
 binary_to_type(TypeBin) when is_binary(TypeBin) ->
-    list_to_atom(binary_to_list(TypeBin)).
+    case catch list_to_existing_atom(binary_to_list(TypeBin)) of
+        {'EXIT', {badarg, _}} -> {error, not_found};
+        TypeAtom              -> TypeAtom
+    end.
 
 lookup_module(T) when is_atom(T) ->
     case ets:lookup(?ETS_NAME, T) of
@@ -68,9 +75,13 @@ lookup_module(T) when is_atom(T) ->
 
 %%---------------------------------------------------------------------------
 
+internal_binary_to_type(TypeBin) when is_binary(TypeBin) ->
+    list_to_atom(binary_to_list(TypeBin)).
+
 internal_register(TypeName, ModuleName)
   when is_binary(TypeName), is_atom(ModuleName) ->
-    true = ets:insert(?ETS_NAME, {binary_to_type(TypeName), ModuleName}),
+    true = ets:insert(?ETS_NAME,
+                      {internal_binary_to_type(TypeName), ModuleName}),
     ok.
 
 %%---------------------------------------------------------------------------

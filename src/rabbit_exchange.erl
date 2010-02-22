@@ -162,6 +162,7 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
         Err           -> Err
     end.
 
+%% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
     case rabbit_exchange_type_registry:lookup_module(T) of
         {ok, Module}       -> Module;
@@ -170,18 +171,25 @@ type_to_module(T) ->
                                 "invalid exchange type '~s'", [T])
     end.
 
+%% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
-    T = rabbit_exchange_type_registry:binary_to_type(TypeBin),
-    Module = type_to_module(T),
-    case catch Module:description() of
-        {'EXIT', {undef, [{_, description, []} | _]}} ->
+    case rabbit_exchange_type_registry:binary_to_type(TypeBin) of
+        {error, not_found} ->
             rabbit_misc:protocol_error(
-              command_invalid, "invalid exchange type '~s'", [T]);
-        {'EXIT', _} ->
-            rabbit_misc:protocol_error(
-              command_invalid, "problem loading exchange type '~s'", [T]);
-        _ ->
-            T
+              command_invalid, "unknown exchange type '~s'", [TypeBin]);
+        T ->
+            Module = type_to_module(T),
+            %% sanity check
+            case catch Module:description() of
+                {'EXIT', {undef, [{_, description, []} | _]}} ->
+                    rabbit_misc:protocol_error(
+                      command_invalid, "invalid exchange type '~s'", [T]);
+                {'EXIT', _} ->
+                    rabbit_misc:protocol_error(
+                      command_invalid, "problem loading exchange type '~s'", [T]);
+                _ ->
+                    T
+            end
     end.
 
 assert_type(#exchange{ type = ActualType }, RequiredType)
