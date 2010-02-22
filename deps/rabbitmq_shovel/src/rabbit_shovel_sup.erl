@@ -140,7 +140,7 @@ run_reader_state_monad(FunList, Comb, State, Reader) ->
 run_state_monad(FunList, State) ->
     lists:foldl(fun (Fun, StateN) -> Fun(StateN) end, State, FunList).
 
-return(State) -> State.
+return(V) -> V.
 
 fail(Reason) -> throw({error, Reason}).
 %% --=: end :=--
@@ -205,16 +205,11 @@ parse_uri({[Uri | Uris], Acc}) ->
         {error, Reason} ->
             fail({unable_to_parse_uri, Uri, Reason});
         Parsed ->
-            Endpoint =
-                run_state_monad(
-                  [fun (_) ->
-                           case proplists:get_value(scheme, Parsed) of
-                               "amqp"  -> build_plain_broker(Parsed);
-                               "amqps" -> build_ssl_broker(Parsed);
-                               Scheme  -> fail({unexpected_uri_scheme,
-                                                Scheme, Uri})
-                           end
-                   end], undefined),
+            Endpoint = case proplists:get_value(scheme, Parsed) of
+                           "amqp"  -> build_plain_broker(Parsed);
+                           "amqps" -> build_ssl_broker(Parsed);
+                           Scheme  -> fail({unexpected_uri_scheme, Scheme, Uri})
+                       end,
             return({Uris, [Endpoint | Acc]})
     end.
 
@@ -226,23 +221,23 @@ build_broker(ParsedUri) ->
                 [$/|Rest] -> list_to_binary(Rest)
             end,
     Params = #amqp_params { host = Host, port = Port, virtual_host = VHost },
-    return(case proplists:get_value(userinfo, ParsedUri) of
-               [Username, Password | _ ] ->
-                   Params #amqp_params { username = list_to_binary(Username),
-                                         password = list_to_binary(Password) };
-               _ ->
-                   Params
-           end).
+    case proplists:get_value(userinfo, ParsedUri) of
+        [Username, Password | _ ] ->
+            Params #amqp_params { username = list_to_binary(Username),
+                                  password = list_to_binary(Password) };
+        _ ->
+            Params
+    end.
 
 build_plain_broker(ParsedUri) ->
-    Params = run_state_monad([fun build_broker/1], ParsedUri),
-    return(case Params #amqp_params.port of
-               undefined -> Params #amqp_params { port = ?PROTOCOL_PORT };
-               _         -> Params
-           end).
+    Params = build_broker(ParsedUri),
+    case Params #amqp_params.port of
+        undefined -> Params #amqp_params { port = ?PROTOCOL_PORT };
+        _         -> Params
+    end.
 
 build_ssl_broker(ParsedUri) ->
-    Params = run_state_monad([fun build_broker/1], ParsedUri),
+    Params = build_broker(ParsedUri),
     Query = proplists:get_value('query', ParsedUri),
     SSLOptions = run_reader_state_monad(
                    [{fun find_path_parameter/2,    "cacertfile"},
@@ -252,10 +247,10 @@ build_ssl_broker(ParsedUri) ->
                     {fun find_boolean_parameter/2, "fail_if_no_peer_cert"}],
                    fun (E, L) -> [E | L] end, [], dict:from_list(Query)),
     Params1 = Params #amqp_params { ssl_options = SSLOptions },
-    return(case Params1 #amqp_params.port of
-               undefined -> Params1 #amqp_params { port = ?PROTOCOL_PORT - 1 };
-               _         -> Params1
-           end).
+    case Params1 #amqp_params.port of
+        undefined -> Params1 #amqp_params { port = ?PROTOCOL_PORT - 1 };
+        _         -> Params1
+    end.
 
 find_path_parameter({ok, Value}, FieldName) ->
     return({list_to_atom(FieldName), Value});
