@@ -60,6 +60,9 @@ test() ->
     #'queue.bind_ok'{} =
         amqp_channel:call(Chan, #'queue.bind' { queue = Q, exchange = ?EXCHANGE,
                                                 routing_key = ?FROM_SHOVEL }),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind' { queue = Q, exchange = ?EXCHANGE,
+                                                routing_key = ?TO_SHOVEL }),
 
     #'basic.consume_ok'{ consumer_tag = CTag } =
         amqp_channel:subscribe(Chan,
@@ -87,6 +90,18 @@ test() ->
                                             content_type  = ?SHOVELLED }
                    }} ->
             ok = amqp_channel:call(Chan, #'basic.ack'{ delivery_tag = AckTag })
+    after ?TIMEOUT -> throw(timeout)
+    end,
+
+
+    receive
+        {#'basic.deliver' { consumer_tag = CTag, delivery_tag = AckTag1,
+                            routing_key = ?TO_SHOVEL },
+         #amqp_msg { payload = <<42>>,
+                     props   = #'P_basic' { delivery_mode = 2,
+                                            content_type  = ?UNSHOVELLED }
+                   }} ->
+            ok = amqp_channel:call(Chan, #'basic.ack'{ delivery_tag = AckTag1 })
     after ?TIMEOUT -> throw(timeout)
     end,
 
