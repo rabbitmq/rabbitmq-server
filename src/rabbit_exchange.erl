@@ -422,16 +422,15 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                              {maybe_auto_delete(X), B}
                    end
            end) of
-        {{auto_deleted, X = #exchange{ type = Type }}, B} ->
+        Err = {error, _}  ->
+            Err;
+        {{Action, X = #exchange{ type = Type }}, B} ->
             Module = type_to_module(Type),
             Module:delete_binding(X, B),
-            Module:delete(X, []),
-            ok;
-        {{no_delete, X = #exchange{ type = Type }}, B} ->
-            (type_to_module(Type)):delete_binding(X, B),
-            ok;
-        Err = {error, _}  ->
-            Err
+            case Action of
+                auto_delete -> Module:delete(X, []), ok;
+                no_delete   -> ok
+            end
     end.
 
 binding_action(ExchangeName, QueueName, RoutingKey, Arguments, Fun) ->
