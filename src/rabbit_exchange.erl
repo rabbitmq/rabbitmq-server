@@ -300,16 +300,14 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                                                 _          = '_'}}),
                          write)],
     Cleanup = cleanup_deleted_queue_bindings(
-                lists:keysort(#binding.exchange_name, DeletedBindings),
-                none, [], []),
+                lists:keysort(#binding.exchange_name, DeletedBindings), []),
     fun () ->
             lists:foreach(
               fun ({{IsDeleted, X = #exchange{ type = Type }}, Bs}) ->
                       Module = type_to_module(Type),
-                      [Module:delete_binding(X, B) || B <- Bs],
                       case IsDeleted of
-                          auto_deleted -> Module:delete(X, []);
-                          no_delete    -> ok
+                          auto_deleted -> Module:delete(X, Bs);
+                          no_delete    -> [Module:delete_binding(X, B) || B <- Bs]
                       end
               end, Cleanup)
     end.
@@ -317,22 +315,25 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
 %% Requires that its input binding list is sorted in exchange-name
 %% order, so that the grouping of bindings (for passing to
 %% cleanup_deleted_queue_bindings1) works properly.
-cleanup_deleted_queue_bindings([], ExchangeName, Bindings, Acc) ->
-    cleanup_deleted_queue_bindings1(ExchangeName, Bindings, Acc);
-cleanup_deleted_queue_bindings(
-  [B = #binding{exchange_name = ExchangeName} | Rest],
-  ExchangeName, Bindings, Acc) ->
-    cleanup_deleted_queue_bindings(Rest, ExchangeName, [B | Bindings], Acc);
-cleanup_deleted_queue_bindings([B = #binding{exchange_name = N} | Rest],
-                               ExchangeName, Bindings, Acc) ->
-    NewAcc = cleanup_deleted_queue_bindings1(ExchangeName, Bindings, Acc),
-    cleanup_deleted_queue_bindings(Rest, N, [B], NewAcc).
-
-cleanup_deleted_queue_bindings1(none, [], Acc) ->
+cleanup_deleted_queue_bindings([], Acc) ->
     Acc;
-cleanup_deleted_queue_bindings1(ExchangeName, Bindings, Acc) ->
+cleanup_deleted_queue_bindings(
+  [B = #binding{exchange_name = ExchangeName} | Bs], Acc) ->
+    cleanup_deleted_queue_bindings(ExchangeName, Bs, [B], Acc).
+
+cleanup_deleted_queue_bindings(
+  ExchangeName, [B = #binding{exchange_name = ExchangeName} | Bs],
+  Bindings, Acc) ->
+    cleanup_deleted_queue_bindings(ExchangeName, Bs, [B | Bindings], Acc);
+cleanup_deleted_queue_bindings(ExchangeName, Deleted, Bindings, Acc) ->
+    %% either Deleted is [], or its head has a non-matching ExchangeName
+    NewAcc = [cleanup_deleted_queue_bindings1(ExchangeName, Bindings) | Acc],
+    cleanup_deleted_queue_bindings(Deleted, NewAcc).
+
+cleanup_deleted_queue_bindings1(ExchangeName, Bindings) ->
     [X] = mnesia:read({rabbit_exchange, ExchangeName}),
-    [{maybe_auto_delete(X), Bindings} | Acc].
+    {maybe_auto_delete(X), Bindings}.
+
 
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
