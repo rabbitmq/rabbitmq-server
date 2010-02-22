@@ -98,17 +98,17 @@ parse_shovel_config(ShovelName, ShovelConfig) ->
                           end, {2, Dict}, Fields),
                     try
                         {ok, run_reader_state_monad(
-                               [{fun parse_endpoint/2, sources},
-                                {fun parse_endpoint/2, destinations},
-                                {fun parse_non_negative_integer/2, qos},
-                                {fun parse_boolean/2, auto_ack},
-                                {fun parse_non_negative_integer/2, tx_size},
-                                {fun parse_binary/2, queue},
+                               [{fun parse_endpoint/1, sources},
+                                {fun parse_endpoint/1, destinations},
+                                {fun parse_non_negative_integer/1, qos},
+                                {fun parse_boolean/1, auto_ack},
+                                {fun parse_non_negative_integer/1, tx_size},
+                                {fun parse_binary/1, queue},
                                 make_parse_publish(publish_fields),
                                 make_parse_publish(publish_properties),
-                                {fun parse_non_negative_integer/2, reconnect}
+                                {fun parse_non_negative_integer/1, reconnect}
                                ],
-                               fun ({Value, Pos}, Shovel) ->
+                               fun (_Key, {Value, Pos}, Shovel) ->
                                        setelement(Pos, Shovel, Value)
                                end, #shovel{}, Dict1)}
                     catch throw:{error, Reason} ->
@@ -133,7 +133,13 @@ parse_shovel_config(ShovelName, ShovelConfig) ->
 %% catamorphism).
 run_reader_state_monad(FunList, Comb, State, Reader) ->
     lists:foldl(fun ({Fun, Key}, StateN) ->
-                        Comb(Fun(dict:find(Key, Reader), Key), StateN)
+                        case dict:find(Key, Reader) of
+                            {ok, Value} -> try Comb(Key, Fun(Value), StateN)
+                                           catch throw:{error, Reason} ->
+                                                   fail({Key, Reason})
+                                           end;
+                            error       -> fail({missing, Key})
+                        end
                 end, State, FunList).
 
 %% --=: Plain state monad implementation start :=--
@@ -145,21 +151,21 @@ return(V) -> V.
 fail(Reason) -> throw({error, Reason}).
 %% --=: end :=--
 
-parse_endpoint({ok, {Endpoint, Pos}}, FieldName) ->
+parse_endpoint({Endpoint, Pos}) ->
     Brokers = case proplists:get_value(brokers, Endpoint) of
                   undefined ->
                       case proplists:get_value(broker, Endpoint) of
                           undefined ->
-                              fail({require_broker_or_brokers, FieldName});
+                              fail({require_broker_or_brokers});
                           B when is_list(B) ->
                               [B];
                           B ->
-                              fail({broker_should_be_string_uri, B, FieldName})
+                              fail({broker_should_be_string_uri, B})
                       end;
                   [B|_] = Bs when is_list(B) ->
                       Bs;
                   B ->
-                      fail({require_a_list_of_brokers, B, FieldName})
+                      fail({require_a_list_of_brokers, B})
               end,
     {[], Brokers1} = run_state_monad(
                        lists:duplicate(length(Brokers), fun parse_uri/1),
@@ -170,7 +176,7 @@ parse_endpoint({ok, {Endpoint, Pos}}, FieldName) ->
             Decls when is_list(Decls) ->
                 Decls;
             Decls ->
-                fail({declarations_should_be_a_list, Decls, FieldName})
+                fail({declarations_should_be_a_list, Decls})
         end,
     {[], ResourceDecls1} =
         run_state_monad(
@@ -240,61 +246,45 @@ build_ssl_broker(ParsedUri) ->
     Params = build_broker(ParsedUri),
     Query = proplists:get_value('query', ParsedUri),
     SSLOptions = run_reader_state_monad(
-                   [{fun find_path_parameter/2,    "cacertfile"},
-                    {fun find_path_parameter/2,    "certfile"},
-                    {fun find_path_parameter/2,    "keyfile"},
-                    {fun find_atom_parameter/2,    "verify"},
-                    {fun find_boolean_parameter/2, "fail_if_no_peer_cert"}],
-                   fun (E, L) -> [E | L] end, [], dict:from_list(Query)),
+                   [{fun find_path_parameter/1,    "cacertfile"},
+                    {fun find_path_parameter/1,    "certfile"},
+                    {fun find_path_parameter/1,    "keyfile"},
+                    {fun find_atom_parameter/1,    "verify"},
+                    {fun find_boolean_parameter/1, "fail_if_no_peer_cert"}],
+                   fun (K, V, L) -> [{list_to_atom(K), V} | L] end,
+                   [], dict:from_list(Query)),
     Params1 = Params #amqp_params { ssl_options = SSLOptions },
     case Params1 #amqp_params.port of
         undefined -> Params1 #amqp_params { port = ?PROTOCOL_PORT - 1 };
         _         -> Params1
     end.
 
-find_path_parameter({ok, Value}, FieldName) ->
-    return({list_to_atom(FieldName), Value});
-find_path_parameter(error, FieldName) ->
-    fail({require_field, list_to_atom(FieldName)}).
+find_path_parameter(Value) -> return(Value).
 
-find_boolean_parameter({ok, Value}, FieldName) ->
+find_boolean_parameter(Value) ->
     Bool = list_to_atom(Value),
-    Field = list_to_atom(FieldName),
     case is_boolean(Bool) of
-        true  -> return({Field, Bool});
-        false -> fail({require_boolean_for_field, Field, Bool})
-    end;
-find_boolean_parameter(error, FieldName) ->
-    fail({require_boolean_field, list_to_atom(FieldName)}).
+        true  -> return(Bool);
+        false -> fail({require_boolean_value, Bool})
+    end.
 
-find_atom_parameter({ok, Value}, FieldName) ->
-    ValueAtom = list_to_atom(Value),
-    Field = list_to_atom(FieldName),
-    return({Field, ValueAtom});
-find_atom_parameter(error, FieldName) ->
-    fail({require_field, list_to_atom(FieldName)}).
+find_atom_parameter(Value) ->
+    return(list_to_atom(Value)).
 
-parse_non_negative_integer({ok, {N, Pos}}, _FieldName)
-  when is_integer(N) andalso N >= 0 ->
+parse_non_negative_integer({N, Pos}) when is_integer(N) andalso N >= 0 ->
     return({N, Pos});
-parse_non_negative_integer({ok, {N, _Pos}}, FieldName) ->
-    fail({require_non_negative_integer_in_field, FieldName, N});
-parse_non_negative_integer(error, FieldName) ->
-    fail({require_field, FieldName}).
+parse_non_negative_integer({N, _Pos}) ->
+    fail({require_non_negative_integer, N}).
 
-parse_boolean({ok, {Bool, Pos}}, _FieldName) when is_boolean(Bool) ->
+parse_boolean({Bool, Pos}) when is_boolean(Bool) ->
     return({Bool, Pos});
-parse_boolean({ok, {NotABool, _Pos}}, FieldName) ->
-    fail({require_boolean_in_field, FieldName, NotABool});
-parse_boolean(error, FieldName) ->
-    fail({require_field, FieldName}).
+parse_boolean({NotABool, _Pos}) ->
+    fail({require_boolean, NotABool}).
 
-parse_binary({ok, {Binary, Pos}}, _FieldName) when is_binary(Binary) ->
+parse_binary({Binary, Pos}) when is_binary(Binary) ->
     return({Binary, Pos});
-parse_binary({ok, {NotABinary, _Pos}}, FieldName) ->
-    fail({require_binary_in_field, FieldName, NotABinary});
-parse_binary(error, FieldName) ->
-    fail({require_field, FieldName}).
+parse_binary({NotABinary, _Pos}) ->
+    fail({require_binary, NotABinary}).
 
 make_parse_publish(publish_fields) ->
     {make_parse_publish1(record_info(fields, 'basic.publish')), publish_fields};
@@ -302,16 +292,14 @@ make_parse_publish(publish_properties) ->
     {make_parse_publish1(record_info(fields, 'P_basic')), publish_properties}.
 
 make_parse_publish1(ValidFields) ->
-    fun ({ok, {Fields, Pos}}, FieldName)
+    fun ({Fields, Pos})
           when is_list(Fields) ->
-            make_publish_fun(Fields, Pos, ValidFields, FieldName);
-        ({ok, {Fields, _Pos}}, FieldName) ->
-            fail({require_list, FieldName, Fields});
-        (error, FieldName) ->
-            fail({require_field, FieldName})
+            make_publish_fun(Fields, Pos, ValidFields);
+        ({Fields, _Pos}) ->
+            fail({require_list, Fields})
     end.
 
-make_publish_fun(Fields, Pos, ValidFields, FieldName) ->
+make_publish_fun(Fields, Pos, ValidFields) ->
     SuppliedFields = proplists:get_keys(Fields),
     case SuppliedFields -- ValidFields of
         [] ->
@@ -324,7 +312,7 @@ make_publish_fun(Fields, Pos, ValidFields, FieldName) ->
                   end,
             return({Fun, Pos});
         Unexpected ->
-            fail({unexpected_fields, FieldName, Unexpected, ValidFields})
+            fail({unexpected_fields, Unexpected, ValidFields})
     end.
 
 make_field_indices(Valid, Supplied, Fields) ->
