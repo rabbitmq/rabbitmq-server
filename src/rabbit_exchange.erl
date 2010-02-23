@@ -178,18 +178,7 @@ check_type(TypeBin) ->
             rabbit_misc:protocol_error(
               command_invalid, "unknown exchange type '~s'", [TypeBin]);
         T ->
-            Module = type_to_module(T),
-            %% sanity check
-            case catch Module:description() of
-                {'EXIT', {undef, [{_, description, []} | _]}} ->
-                    rabbit_misc:protocol_error(
-                      command_invalid, "invalid exchange type '~s'", [T]);
-                {'EXIT', _} ->
-                    rabbit_misc:protocol_error(
-                      command_invalid, "problem loading exchange type '~s'", [T]);
-                _ ->
-                    T
-            end
+            type_to_module(T)
     end.
 
 assert_type(#exchange{ type = ActualType }, RequiredType)

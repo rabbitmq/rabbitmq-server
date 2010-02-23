@@ -89,9 +89,22 @@ internal_binary_to_type(TypeBin) when is_binary(TypeBin) ->
 
 internal_register(TypeName, ModuleName)
   when is_binary(TypeName), is_atom(ModuleName) ->
+    ok = sanity_check_module(ModuleName),
     true = ets:insert(?ETS_NAME,
                       {internal_binary_to_type(TypeName), ModuleName}),
     ok.
+
+sanity_check_module(Module) ->
+    case catch lists:member(rabbit_exchange_type,
+                            lists:flatten(
+                              [Bs || {Attr, Bs} <-
+                                         Module:module_info(attributes),
+                                     Attr =:= behavior orelse
+                                         Attr =:= behaviour])) of
+        {'EXIT', {undef, _}}  -> {error, not_module};
+        false                 -> {error, not_exchange_type};
+        true                  -> ok
+    end.
 
 %%---------------------------------------------------------------------------
 
