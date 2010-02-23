@@ -145,7 +145,7 @@ terminate(_Reason, State = #q{variable_queue_state = VQS}) ->
     %% called internal_delete first, we would then have a race between
     %% the disk delete and a new queue with the same name being
     %% created and published to.
-    _VQS = rabbit_variable_queue:delete(VQS1),
+    _VQS = rabbit_variable_queue:delete_and_terminate(VQS1),
     ok = rabbit_amqqueue:internal_delete(qname(State)).
 
 code_change(_OldVsn, State, _Extra) ->
