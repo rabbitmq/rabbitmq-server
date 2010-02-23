@@ -505,7 +505,7 @@ maybe_auto_delete(Exchange = #exchange{auto_delete = false}) ->
     {no_delete, Exchange};
 maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
     case conditional_delete(Exchange) of
-        {error, in_use}  -> {no_delete, Exchange};
+        {error, in_use}         -> {no_delete, Exchange};
         {deleted, Exchange, []} -> {auto_deleted, Exchange}
     end.
 
