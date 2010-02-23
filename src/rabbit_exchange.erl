@@ -178,7 +178,8 @@ check_type(TypeBin) ->
             rabbit_misc:protocol_error(
               command_invalid, "unknown exchange type '~s'", [TypeBin]);
         T ->
-            type_to_module(T)
+            _Module = type_to_module(T),
+            T
     end.
 
 assert_type(#exchange{ type = ActualType }, RequiredType)
