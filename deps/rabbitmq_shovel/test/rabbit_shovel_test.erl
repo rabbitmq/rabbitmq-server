@@ -93,6 +93,9 @@ test() ->
     after ?TIMEOUT -> throw(timeout)
     end,
 
+    [{test_shovel,
+      {running, {source, _Source}, {destination, _Destination}}, _Time}] =
+        rabbit_shovel_status:status(),
 
     receive
         {#'basic.deliver' { consumer_tag = CTag, delivery_tag = AckTag1,
@@ -108,4 +111,5 @@ test() ->
     amqp_channel:close(Chan),
     amqp_connection:close(Conn),
 
+    ok = application:stop(rabbit_shovel),
     passed.
