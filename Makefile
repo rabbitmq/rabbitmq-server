@@ -11,11 +11,12 @@ SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
-SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing.erl
+SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing.erl $(SOURCE_DIR)/rabbitmqctl_usage.erl $(SOURCE_DIR)/rabbitmqmulti_usage.erl
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://stage.rabbitmq.com/
-MANPAGES=$(patsubst %.pod, %.gz, $(wildcard docs/*.[0-9].pod))
+MANPAGES=$(patsubst %.xml, %.gz, $(wildcard docs/*.[0-9].xml))
+USAGES=$(patsubst %.1.xml, %.usage.erl, $(wildcard docs/*.[0-9].xml))
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python
@@ -76,6 +77,12 @@ $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.p
 $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_PATH) $@
 
+$(SOURCE_DIR)/rabbitmqctl_usage.erl: docs/rabbitmqctl.usage.erl
+	cp docs/rabbitmqctl.usage.erl $@
+
+$(SOURCE_DIR)/rabbitmqmulti_usage.erl: docs/rabbitmq-multi.usage.erl
+	cp docs/rabbitmq-multi.usage.erl $@
+
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
 		"rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(BEAM_TARGETS)\"))."
@@ -99,8 +106,8 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
-	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
-	rm -f docs/*.[0-9].gz
+	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl $(SOURCE_DIR)/rabbitmqctl_usage.erl codegen.pyc
+	rm -f docs/*.[0-9].gz docs/*.usage.erl docs/*.html docs/*.erl
 	rm -f $(RABBIT_PLT)
 	rm -f $(DEPS_FILE)
 
@@ -188,16 +195,23 @@ distclean: clean
 	rm -rf dist
 	find . -regex '.*\(~\|#\|\.swp\|\.dump\)' -exec rm {} \;
 
-%.gz: %.pod
-	pod2man \
-		-n `echo $$(basename $*) | sed -e 's/\.[[:digit:]]\+//'` \
-		-s `echo $$(basename $*) | sed -e 's/.*\.\([^.]\+\)/\1/'` \
-		-c "RabbitMQ AMQP Server" \
-		-d "" \
-		-r "" \
-		$< | gzip --best > $@
+# xmlto can not read from standard input, so we mess with a tmp file.
+%.gz: %.xml
+	xsltproc docs/examples-to-end.xsl $< > $<.tmp && \
+	xmlto man -o docs $<.tmp && \
+	gzip -f docs/`basename $< .xml`
+	rm -f $<.tmp
 
-docs_all: $(MANPAGES)
+%.usage.erl: %.1.xml
+	echo -n "%% Generated, do not edit!\n-module(`basename $< .1.xml | tr -d -`_usage).\n-export([usage/0]).\nusage() -> io:format(\"" > docs/`basename $< .1.xml`.usage.erl
+	xsltproc docs/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | fmt -s >> docs/`basename $< .1.xml`.usage.erl
+	echo '"), halt(1).' >> docs/`basename $< .1.xml`.usage.erl
+
+docs/rabbitmqctl.html: docs/rabbitmqctl.1.xml
+	xmlto html docs/rabbitmqctl.1.xml
+	mv -f index.html docs/rabbitmqctl.html
+
+docs_all: $(MANPAGES) docs/rabbitmqctl.html
 
 install: SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
 install: all docs_all install_dirs
