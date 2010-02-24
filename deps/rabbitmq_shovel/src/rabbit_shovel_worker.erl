@@ -19,7 +19,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 -module(rabbit_shovel_worker).
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([start_link/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -33,7 +33,7 @@
 
 start_link(Name, Config) ->
     rabbit_shovel_status:report(Name, starting),
-    gen_server:start_link(?MODULE, [Name, Config], []).
+    gen_server2:start_link(?MODULE, [Name, Config], []).
 
 %---------------------------
 % Gen Server Implementation
@@ -41,7 +41,7 @@ start_link(Name, Config) ->
 
 init([Name, Config]) ->
     process_flag(trap_exit, true),
-    gen_server:cast(self(), init),
+    gen_server2:cast(self(), init),
     {ok, #state{name = Name, config = Config}}.
 
 handle_call(_Msg, _From, State) ->
