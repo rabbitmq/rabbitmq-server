@@ -93,11 +93,10 @@ handle_info({#'basic.deliver'{delivery_tag = Tag, routing_key = RoutingKey},
              Msg = #amqp_msg{props = Props = #'P_basic'{}}},
             State = #state{tx_counter = TxCounter, inbound_ch = InboundChan,
                            outbound_ch = OutboundChan, config = Config}) ->
-    Props1 = (Config#shovel.publish_properties)(Props),
-    ok = amqp_channel:call(OutboundChan,
-                           (Config#shovel.publish_fields)(
-                             #'basic.publish'{ routing_key = RoutingKey }),
-                           Msg#amqp_msg{props = Props1}),
+    Method = #'basic.publish'{routing_key = RoutingKey},
+    Method1 = (Config#shovel.publish_fields)(Method),
+    Msg1 = Msg#amqp_msg{props = (Config#shovel.publish_properties)(Props)},
+    ok = amqp_channel:call(OutboundChan, Method1, Msg1),
     {Ack, AckMulti, TxCounter1} =
         case {Config#shovel.tx_size, TxCounter + 1} of
             {0, _}            -> {true,  false, TxCounter};
