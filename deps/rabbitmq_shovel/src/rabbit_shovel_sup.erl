@@ -191,13 +191,13 @@ parse_declaration({[{Method, Props} | Rest], Acc}) ->
         UnknownFields -> fail({unknown_fields, Method, UnknownFields})
     end,
     {Res, _Idx} = lists:foldl(
-                 fun (K, {R, Idx}) ->
-                         NewR = case proplists:get_value(K, Props) of
-                                    undefined -> R;
-                                    V         -> setelement(Idx, R, V)
-                                end,
-                         {NewR, Idx + 1}
-                 end, {rabbit_framing:method_record(Method), 2}, FieldNames),
+                    fun (K, {R, Idx}) ->
+                            NewR = case proplists:get_value(K, Props) of
+                                       undefined -> R;
+                                       V         -> setelement(Idx, R, V)
+                                   end,
+                            {NewR, Idx + 1}
+                    end, {rabbit_framing:method_record(Method), 2}, FieldNames),
     return({Rest, [Res | Acc]});
 parse_declaration({[Method | Rest], Acc}) ->
     parse_declaration({[{Method, []} | Rest], Acc}).
@@ -301,8 +301,7 @@ make_parse_publish(publish_properties) ->
     {make_parse_publish1(record_info(fields, 'P_basic')), publish_properties}.
 
 make_parse_publish1(ValidFields) ->
-    fun ({Fields, Pos})
-          when is_list(Fields) ->
+    fun ({Fields, Pos}) when is_list(Fields) ->
             make_publish_fun(Fields, Pos, ValidFields);
         ({Fields, _Pos}) ->
             fail({require_list, Fields})
