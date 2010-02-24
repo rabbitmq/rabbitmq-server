@@ -31,6 +31,95 @@
 -define(TIMEOUT,     1000).
 
 test() ->
+    %% various ways of breaking the config
+    {error, {no_shovels_configured, _}} = application:start(rabbit_shovel),
+
+    require_list_of_shovel_configurations =
+        test_broken_shovel_configs(invalid_config),
+
+    require_list_of_shovel_configurations =
+        test_broken_shovel_configs([{test_shovel, invalid_shovel_config}]),
+
+    Config = [{sources, [{broker, "amqp://"}]},
+              {destinations, [{broker, "amqp://"}]},
+              {queue, <<"">>}],
+
+    {duplicate_shovel_definition, test_shovel} =
+        test_broken_shovel_configs(
+          [{test_shovel, Config}, {test_shovel, Config}]),
+
+    {missing_shovel_configuration_parameters, test_shovel, Missing} =
+        test_broken_shovel_configs([{test_shovel, []}]),
+    [destinations, queue, sources] = lists:sort(Missing),
+
+    {unrecognised_shovel_configuration_parameters, test_shovel, [invalid]} =
+        test_broken_shovel_configs(
+          [{test_shovel, [{invalid, invalid} | Config]}]),
+
+    {require_list, invalid} =
+        test_broken_shovel_sources(invalid),
+
+    {missing_endpoint_parameter, broker_or_brokers} =
+        test_broken_shovel_sources([]),
+
+    {expected_list, brokers, invalid} =
+        test_broken_shovel_sources([{brokers, invalid}]),
+
+    {expected_string_uri, 42} =
+        test_broken_shovel_sources([{brokers, [42]}]),
+
+    {unexpected_uri_scheme, "invalid", "invalid://"} =
+        test_broken_shovel_sources([{broker, "invalid://"}]),
+
+    {unable_to_parse_uri, "invalid", no_scheme} =
+        test_broken_shovel_sources([{broker, "invalid"}]),
+
+    {expected_list,declarations, invalid} =
+        test_broken_shovel_sources([{broker, "amqp://"},
+                                    {declarations, invalid}]),
+    {unknown_method_name, 42} =
+        test_broken_shovel_sources([{broker, "amqp://"},
+                                    {declarations, [42]}]),
+
+    {expected_method_field_list, 'queue.declare', 42} =
+        test_broken_shovel_sources([{broker, "amqp://"},
+                                    {declarations, [{'queue.declare', 42}]}]),
+
+    {unknown_fields, 'queue.declare', [invalid]} =
+        test_broken_shovel_sources(
+          [{broker, "amqp://"},
+           {declarations, [{'queue.declare', [invalid]}]}]),
+
+    {invalid_configuration_parameter, qos,
+     {require_non_negative_integer, invalid}} =
+        test_broken_shovel_config([{qos, invalid} | Config]),
+
+    {invalid_configuration_parameter, auto_ack,
+     {require_boolean, invalid}} =
+        test_broken_shovel_config([{auto_ack, invalid} | Config]),
+
+    {invalid_configuration_parameter, queue,
+     {require_binary, invalid}} =
+        test_broken_shovel_config([{sources, [{broker, "amqp://"}]},
+                                   {destinations, [{broker, "amqp://"}]},
+                                   {queue, invalid}]),
+
+    {invalid_configuration_parameter, publish_properties,
+     {require_list, invalid}} =
+        test_broken_shovel_config([{publish_properties, invalid} | Config]),
+
+    {invalid_configuration_parameter, publish_properties,
+     {unexpected_fields, [invalid], _}} =
+        test_broken_shovel_config([{publish_properties, [invalid]} | Config]),
+
+    {missing_ssl_parameter, fail_if_no_peer_cert, _} =
+        test_broken_shovel_sources([{broker, "amqps://username:password@host:5673/vhost?cacertfile=/path/to/cacert.pem&certfile=/path/to/certfile.pem&keyfile=/path/to/keyfile.pem&verify=verify_peer"}]),
+
+    {invalid_ssl_parameter, fail_if_no_peer_cert, "42", _,
+     {require_boolean, '42'}} =
+        test_broken_shovel_sources([{broker, "amqps://username:password@host:5673/vhost?cacertfile=/path/to/cacert.pem&certfile=/path/to/certfile.pem&keyfile=/path/to/keyfile.pem&verify=verify_peer&fail_if_no_peer_cert=42"}]),
+
+    %% a working config
     application:set_env(
       rabbit_shovel,
       shovels,
@@ -113,3 +202,20 @@ test() ->
 
     ok = application:stop(rabbit_shovel),
     passed.
+
+test_broken_shovel_configs(Configs) ->
+    application:set_env(rabbit_shovel, shovels, Configs),
+    {error, {Error, _}} = application:start(rabbit_shovel),
+    Error.
+
+test_broken_shovel_config(Config) ->
+    {error_when_parsing_shovel_configuration, test_shovel, Error} =
+        test_broken_shovel_configs([{test_shovel, Config}]),
+    Error.
+
+test_broken_shovel_sources(Sources) ->
+    {invalid_configuration_parameter, sources, Error} =
+        test_broken_shovel_config([{sources, Sources},
+                                   {destinations, [{broker, "amqp://"}]},
+                                   {queue, <<"">>}]),
+    Error.

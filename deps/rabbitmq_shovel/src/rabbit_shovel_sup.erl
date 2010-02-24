@@ -67,7 +67,7 @@ parse_configuration({ok, Env}) ->
 parse_configuration(_Defaults, [], Acc) ->
     {ok, Acc};
 parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
-  when is_atom(ShovelName) ->
+  when is_atom(ShovelName) andalso is_list(ShovelConfig) ->
     case dict:is_key(ShovelName, Acc) of
         true  -> {error, {duplicate_shovel_definition, ShovelName}};
         false -> ShovelConfig1 = lists:ukeysort(1, ShovelConfig ++ Defaults),
@@ -79,52 +79,42 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
                  end
     end;
 parse_configuration(_Defaults, _, _Acc) ->
-    {error, require_list_of_shovel_configurations_with_atom_names}.
+    {error, require_list_of_shovel_configurations}.
 
 parse_shovel_config(ShovelName, ShovelConfig) ->
     Dict = dict:from_list(ShovelConfig),
-    case dict:size(Dict) == length(ShovelConfig) of
-        true ->
-            Fields = record_info(fields, shovel),
-            Keys = dict:fetch_keys(Dict),
-            case {Keys -- Fields, Fields -- Keys} of
-                {[], []} ->
-                    {_Pos, Dict1} =
-                        lists:foldl(
-                          fun (FieldName, {Pos, Acc}) ->
-                                  {Pos + 1,
-                                   dict:update(FieldName,
-                                               fun (V) -> {V, Pos} end, Acc)}
-                          end, {2, Dict}, Fields),
-                    try
-                        {ok, parse_shovel_config(Dict1)}
-                    catch throw:{error, Reason} ->
-                            {error, {error_when_parsing_shovel_configuration,
-                                     ShovelName, Reason}}
-                    end;
-                {[], Missing} ->
-                    {error, {missing_shovel_configuration_parameters,
-                             ShovelName, Missing}};
-                {Unknown, _} ->
-                    {error, {unrecognised_shovel_configuration_parameters,
-                             ShovelName, Unknown}}
+    Fields = record_info(fields, shovel),
+    Keys = dict:fetch_keys(Dict),
+    case {Keys -- Fields, Fields -- Keys} of
+        {[], []} ->
+            {_Pos, Dict1} =
+                lists:foldl(
+                  fun (FieldName, {Pos, Acc}) ->
+                          {Pos + 1,
+                           dict:update(FieldName, fun (V) -> {V, Pos} end, Acc)}
+                  end, {2, Dict}, Fields),
+            try
+                {ok, parse_shovel_config(Dict1)}
+            catch throw:{error, Reason} ->
+                    {error, {error_when_parsing_shovel_configuration,
+                             ShovelName, Reason}}
             end;
-        false ->
-            {error, {duplicate_or_missing_shovel_configuration_parameters,
-                     ShovelName}}
+        {[], Missing} ->
+            {error, {missing_shovel_configuration_parameters,
+                     ShovelName, Missing}};
+        {Unknown, _} ->
+            {error, {unrecognised_shovel_configuration_parameters,
+                     ShovelName, Unknown}}
     end.
 
 parse_shovel_config(Dict) ->
     lists:foldl(
       fun ({Fun, Key}, Shovel) ->
-              case dict:find(Key, Dict) of
-                  {ok, Value} -> try {ParsedValue, Pos} = Fun(Value),
-                                     setelement(Pos, Shovel, ParsedValue)
-                                 catch throw:{error, Reason} ->
-                                         fail({invalid_configuration_parameter,
-                                               Key, Reason})
-                                 end;
-                  error       -> fail({missing_configuration_parameter, Key})
+              {ok, Value} = dict:find(Key, Dict),
+              try {ParsedValue, Pos} = Fun(Value),
+                  setelement(Pos, Shovel, ParsedValue)
+              catch throw:{error, Reason} ->
+                      fail({invalid_configuration_parameter, Key, Reason})
               end
       end,
       #shovel{},
@@ -147,19 +137,15 @@ return(V) -> V.
 fail(Reason) -> throw({error, Reason}).
 %% --=: end :=--
 
-parse_endpoint({Endpoint, Pos}) ->
+parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
     Brokers = case proplists:get_value(brokers, Endpoint) of
                   undefined ->
                       case proplists:get_value(broker, Endpoint) of
-                          undefined ->
-                              fail({missing_endpoint_parameter,
-                                    broker_or_brokers});
-                          B when is_list(B) ->
-                              [B];
-                          B ->
-                              fail({expected_string_uri, broker, B})
+                          undefined -> fail({missing_endpoint_parameter,
+                                             broker_or_brokers});
+                          B         -> [B]
                       end;
-                  [B|_] = Bs when is_list(B) ->
+                  Bs when is_list(Bs) ->
                       Bs;
                   B ->
                       fail({expected_list, brokers, B})
@@ -182,10 +168,14 @@ parse_endpoint({Endpoint, Pos}) ->
 
     return({#endpoint { amqp_params = Brokers1,
                         resource_declarations = lists:reverse(ResourceDecls1)},
-            Pos}).
+            Pos});
+parse_endpoint({Endpoint, _Pos}) ->
+    fail({require_list, Endpoint}).
 
-parse_declaration({[{Method, Props} | Rest], Acc}) ->
-    FieldNames = rabbit_framing:method_fieldnames(Method),
+parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
+    FieldNames = try rabbit_framing:method_fieldnames(Method)
+                 catch exit:Reason -> fail(Reason)
+                 end,
     case proplists:get_keys(Props) -- FieldNames of
         []            -> ok;
         UnknownFields -> fail({unknown_fields, Method, UnknownFields})
@@ -199,10 +189,12 @@ parse_declaration({[{Method, Props} | Rest], Acc}) ->
                             {NewR, Idx + 1}
                     end, {rabbit_framing:method_record(Method), 2}, FieldNames),
     return({Rest, [Res | Acc]});
+parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
+    fail({expected_method_field_list, Method, Props});
 parse_declaration({[Method | Rest], Acc}) ->
     parse_declaration({[{Method, []} | Rest], Acc}).
 
-parse_uri({[Uri | Uris], Acc}) ->
+parse_uri({[Uri | Uris], Acc}) when is_list(Uri) ->
     case uri_parser:parse(Uri, [{host, undefined}, {path, "/"},
                                 {port, undefined}, {'query', []}]) of
         {error, Reason} ->
@@ -214,7 +206,9 @@ parse_uri({[Uri | Uris], Acc}) ->
                            Scheme  -> fail({unexpected_uri_scheme, Scheme, Uri})
                        end,
             return({Uris, [Endpoint | Acc]})
-    end.
+    end;
+parse_uri({[Uri | _Uris], _Acc}) ->
+    fail({expected_string_uri, Uri}).
 
 build_broker(ParsedUri) ->
     [Host, Port, Path] =
@@ -250,10 +244,10 @@ build_ssl_broker(ParsedUri) ->
                       {_, Value} -> try ParsedValue = Fun(Value),
                                         [{Key, ParsedValue} | L]
                                     catch throw:{error, Reason} ->
-                                            fail({invalid_query_parameter,
-                                                  Key, Reason})
+                                            fail({invalid_ssl_parameter,
+                                                  Key, Value, Query, Reason})
                                     end;
-                      false      -> fail({missing_query_parameter, Key})
+                      false      -> fail({missing_ssl_parameter, Key, Query})
                   end
           end,
           [],
