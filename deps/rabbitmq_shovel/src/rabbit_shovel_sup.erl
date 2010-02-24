@@ -49,7 +49,7 @@ make_child_specs(Configurations) ->
       fun (ShovelName, ShovelConfig, Acc) ->
               [{ShovelName,
                 {rabbit_shovel_worker, start_link, [ShovelName, ShovelConfig]},
-                case ShovelConfig #shovel.reconnect of
+                case ShovelConfig#shovel.reconnect of
                     0 -> temporary;
                     N -> {transient, N}
                 end,
@@ -166,8 +166,8 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
           lists:duplicate(length(ResourceDecls), fun parse_declaration/1),
           {ResourceDecls, []}),
 
-    return({#endpoint { amqp_params = Brokers1,
-                        resource_declarations = lists:reverse(ResourceDecls1)},
+    return({#endpoint{amqp_params = Brokers1,
+                      resource_declarations = lists:reverse(ResourceDecls1)},
             Pos});
 parse_endpoint({Endpoint, _Pos}) ->
     fail({require_list, Endpoint}).
@@ -217,19 +217,19 @@ build_broker(ParsedUri) ->
                 "/"       -> <<"/">>;
                 [$/|Rest] -> list_to_binary(Rest)
             end,
-    Params = #amqp_params { host = Host, port = Port, virtual_host = VHost },
+    Params = #amqp_params{host = Host, port = Port, virtual_host = VHost},
     case proplists:get_value(userinfo, ParsedUri) of
         [Username, Password | _ ] ->
-            Params #amqp_params { username = list_to_binary(Username),
-                                  password = list_to_binary(Password) };
+            Params#amqp_params{username = list_to_binary(Username),
+                               password = list_to_binary(Password)};
         _ ->
             Params
     end.
 
 build_plain_broker(ParsedUri) ->
     Params = build_broker(ParsedUri),
-    case Params #amqp_params.port of
-        undefined -> Params #amqp_params { port = ?PROTOCOL_PORT };
+    case Params#amqp_params.port of
+        undefined -> Params#amqp_params{port = ?PROTOCOL_PORT};
         _         -> Params
     end.
 
@@ -256,9 +256,9 @@ build_ssl_broker(ParsedUri) ->
            {fun find_path_parameter/1,    keyfile},
            {fun find_atom_parameter/1,    verify},
            {fun find_boolean_parameter/1, fail_if_no_peer_cert}]),
-    Params1 = Params #amqp_params { ssl_options = SSLOptions },
-    case Params1 #amqp_params.port of
-        undefined -> Params1 #amqp_params { port = ?PROTOCOL_PORT - 1 };
+    Params1 = Params#amqp_params{ssl_options = SSLOptions},
+    case Params1#amqp_params.port of
+        undefined -> Params1#amqp_params{port = ?PROTOCOL_PORT - 1};
         _         -> Params1
     end.
 

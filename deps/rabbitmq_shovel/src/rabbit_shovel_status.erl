@@ -46,16 +46,16 @@ status() ->
 init([]) ->
     ?ETS_NAME = ets:new(?ETS_NAME,
                         [named_table, {keypos, #entry.name}, private]),
-    {ok, #state {}}.
+    {ok, #state{}}.
 
 handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
-    {reply, [{Entry #entry.name, Entry #entry.info, Entry #entry.timestamp}
+    {reply, [{Entry#entry.name, Entry#entry.info, Entry#entry.timestamp}
              || Entry <- Entries], State}.
 
 handle_cast({report, Name, Info, Timestamp}, State) ->
-    true = ets:insert(?ETS_NAME, #entry{ name = Name, info = Info,
-                                         timestamp = Timestamp }),
+    true = ets:insert(?ETS_NAME, #entry{name = Name, info = Info,
+                                        timestamp = Timestamp}),
     {noreply, State}.
 
 handle_info(_Info, State) ->
