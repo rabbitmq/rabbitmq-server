@@ -103,14 +103,14 @@ parse_shovel_config(ShovelName, ShovelConfig) ->
                                      ShovelName, Reason}}
                     end;
                 {[], Missing} ->
-                    {error, {missing_shovel_configuration_keys,
+                    {error, {missing_shovel_configuration_parameters,
                              ShovelName, Missing}};
                 {Unknown, _} ->
-                    {error, {unrecognised_shovel_configuration_keys,
+                    {error, {unrecognised_shovel_configuration_parameters,
                              ShovelName, Unknown}}
             end;
         false ->
-            {error, {duplicate_or_missing_fields_in_shovel_definition,
+            {error, {duplicate_or_missing_shovel_configuration_parameters,
                      ShovelName}}
     end.
 
@@ -152,16 +152,17 @@ parse_endpoint({Endpoint, Pos}) ->
                   undefined ->
                       case proplists:get_value(broker, Endpoint) of
                           undefined ->
-                              fail({require_broker_or_brokers});
+                              fail({missing_endpoint_parameter,
+                                    broker_or_brokers});
                           B when is_list(B) ->
                               [B];
                           B ->
-                              fail({broker_should_be_string_uri, B})
+                              fail({expected_string_uri, broker, B})
                       end;
                   [B|_] = Bs when is_list(B) ->
                       Bs;
                   B ->
-                      fail({require_a_list_of_brokers, B})
+                      fail({expected_list, brokers, B})
               end,
     {[], Brokers1} = run_state_monad(
                        lists:duplicate(length(Brokers), fun parse_uri/1),
@@ -172,7 +173,7 @@ parse_endpoint({Endpoint, Pos}) ->
             Decls when is_list(Decls) ->
                 Decls;
             Decls ->
-                fail({declarations_should_be_a_list, Decls})
+                fail({expected_list, declarations, Decls})
         end,
     {[], ResourceDecls1} =
         run_state_monad(
@@ -273,7 +274,7 @@ find_boolean_parameter(Value) ->
     Bool = list_to_atom(Value),
     case is_boolean(Bool) of
         true  -> return(Bool);
-        false -> fail({require_boolean_value, Bool})
+        false -> fail({require_boolean, Bool})
     end.
 
 find_atom_parameter(Value) ->
