@@ -99,13 +99,13 @@ handle_info({#'basic.deliver'{ delivery_tag = Tag, routing_key = RoutingKey },
                              #'basic.publish'{ routing_key = RoutingKey }),
                            Msg #amqp_msg{ props = Props1 }),
     {Ack, AckMulti, TxCounter1} =
-        case {Config #shovel.tx_size, TxCounter} of
+        case {Config #shovel.tx_size, TxCounter + 1} of
             {0, _}            -> {true,  false, TxCounter};
             {N, N}            -> #'tx.commit_ok'{} =
                                      amqp_channel:call(OutboundChan,
                                                        #'tx.commit'{}),
                                  {true,  true,  0};
-            {N, M} when N > M -> {false, false, M + 1}
+            {N, M} when N > M -> {false, false, M}
         end,
     case Ack andalso not (Config #shovel.auto_ack) of
         true -> amqp_channel:cast(InboundChan,
