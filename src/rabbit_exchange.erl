@@ -305,7 +305,7 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                       Module = type_to_module(Type),
                       case IsDeleted of
                           auto_deleted -> Module:delete(X, Bs);
-                          no_delete    -> [Module:delete_binding(X, B) || B <- Bs]
+                          no_delete    -> Module:remove_bindings(X, Bs)
                       end
               end, Cleanup)
     end.
@@ -416,10 +416,9 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
             Err;
         {{Action, X = #exchange{ type = Type }}, B} ->
             Module = type_to_module(Type),
-            Module:delete_binding(X, B),
             case Action of
-                auto_delete -> Module:delete(X, []), ok;
-                no_delete   -> ok
+                auto_delete -> Module:delete(X, [B]);
+                no_delete   -> Module:remove_bindings(X, [B])
             end
     end.
 

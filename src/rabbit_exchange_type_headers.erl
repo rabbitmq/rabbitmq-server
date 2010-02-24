@@ -37,7 +37,7 @@
 
 -export([description/0, publish/2]).
 -export([validate/1, create/1, recover/2, delete/2,
-         add_binding/2, delete_binding/2]).
+         add_binding/2, remove_bindings/2]).
 -include("rabbit_exchange_type_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
@@ -134,4 +134,4 @@ create(_X) -> ok.
 recover(_X, _Bs) -> ok.
 delete(_X, _Bs) -> ok.
 add_binding(_X, _B) -> ok.
-delete_binding(_X, _B) -> ok.
+remove_bindings(_X, _Bs) -> ok.

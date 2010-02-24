@@ -47,14 +47,15 @@ behaviour_info(callbacks) ->
      %% called when recovering
      {recover, 2},
 
-     %% called after exchange deletion
+     %% called after exchange deletion.
      {delete, 2},
 
      %% called after a binding has been added
      {add_binding, 2},
 
-     %% called after a binding has been deleted
-     {delete_binding, 2}
+     %% called after bindings have been deleted.
+     {remove_bindings, 2}
+
     ];
 behaviour_info(_Other) ->
     undefined.

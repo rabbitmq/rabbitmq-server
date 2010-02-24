@@ -37,6 +37,6 @@
 -spec(recover/2 :: (exchange(), list(binding())) -> 'ok').
 -spec(delete/2 :: (exchange(), list(binding())) -> 'ok').
 -spec(add_binding/2 :: (exchange(), binding()) -> 'ok').
--spec(delete_binding/2 :: (exchange(), binding()) -> 'ok').
+-spec(remove_bindings/2 :: (exchange(), list(binding())) -> 'ok').
 
 -endif.
