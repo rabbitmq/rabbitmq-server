@@ -47,19 +47,19 @@ init([Name, Config]) ->
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
-handle_cast(init, State = #state { name = Name, config = Config }) ->
+handle_cast(init, State = #state {name = Name, config = Config}) ->
     random:seed(now()),
-
+    #shovel{ sources = Sources, destinations = Destinations} = Config,
     {InboundConn, InboundChan, InboundParams} =
-        make_conn_and_chan((Config #shovel.sources) #endpoint.amqp_params),
+        make_conn_and_chan(Sources #endpoint.amqp_params),
     {OutboundConn, OutboundChan, OutboundParams} =
-        make_conn_and_chan((Config #shovel.destinations) #endpoint.amqp_params),
+        make_conn_and_chan(Destinations #endpoint.amqp_params),
 
-    create_resources(OutboundChan, (Config #shovel.destinations)
-                     #endpoint.resource_declarations),
+    create_resources(InboundChan,
+                     Sources #endpoint.resource_declarations),
 
-    create_resources(InboundChan, (Config #shovel.sources)
-                     #endpoint.resource_declarations),
+    create_resources(OutboundChan,
+                     Destinations #endpoint.resource_declarations),
 
     #'basic.qos_ok'{} =
         amqp_channel:call(InboundChan,
