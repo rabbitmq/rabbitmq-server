@@ -97,20 +97,7 @@ parse_shovel_config(ShovelName, ShovelConfig) ->
                                                fun (V) -> {V, Pos} end, Acc)}
                           end, {2, Dict}, Fields),
                     try
-                        {ok, run_reader_state_monad(
-                               [{fun parse_endpoint/1, sources},
-                                {fun parse_endpoint/1, destinations},
-                                {fun parse_non_negative_integer/1, qos},
-                                {fun parse_boolean/1, auto_ack},
-                                {fun parse_non_negative_integer/1, tx_size},
-                                {fun parse_binary/1, queue},
-                                make_parse_publish(publish_fields),
-                                make_parse_publish(publish_properties),
-                                {fun parse_non_negative_integer/1, reconnect}
-                               ],
-                               fun (_Key, {Value, Pos}, Shovel) ->
-                                       setelement(Pos, Shovel, Value)
-                               end, #shovel{}, Dict1)}
+                        {ok, parse_shovel_config(Dict1)}
                     catch throw:{error, Reason} ->
                             {error, {error_when_parsing_shovel_configuration,
                                      ShovelName, Reason}}
@@ -127,20 +114,29 @@ parse_shovel_config(ShovelName, ShovelConfig) ->
                      ShovelName}}
     end.
 
-%% --=: Combined state-reader monad implementation start :=--
-%% This is really a state + reader monad with an implicit initial ask,
-%% and a combinator for constructing a final value (hence is also a
-%% catamorphism).
-run_reader_state_monad(FunList, Comb, State, Reader) ->
-    lists:foldl(fun ({Fun, Key}, StateN) ->
-                        case dict:find(Key, Reader) of
-                            {ok, Value} -> try Comb(Key, Fun(Value), StateN)
-                                           catch throw:{error, Reason} ->
-                                                   fail({Key, Reason})
-                                           end;
-                            error       -> fail({missing, Key})
-                        end
-                end, State, FunList).
+parse_shovel_config(Dict) ->
+    lists:foldl(
+      fun ({Fun, Key}, Shovel) ->
+              case dict:find(Key, Dict) of
+                  {ok, Value} -> try {ParsedValue, Pos} = Fun(Value),
+                                     setelement(Pos, Shovel, ParsedValue)
+                                 catch throw:{error, Reason} ->
+                                         fail({invalid_configuration_parameter,
+                                               Key, Reason})
+                                 end;
+                  error       -> fail({missing_configuration_parameter, Key})
+              end
+      end,
+      #shovel{},
+      [{fun parse_endpoint/1,             sources},
+       {fun parse_endpoint/1,             destinations},
+       {fun parse_non_negative_integer/1, qos},
+       {fun parse_boolean/1,              auto_ack},
+       {fun parse_non_negative_integer/1, tx_size},
+       {fun parse_binary/1,               queue},
+       make_parse_publish(publish_fields),
+       make_parse_publish(publish_properties),
+       {fun parse_non_negative_integer/1, reconnect}]).
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
@@ -245,14 +241,26 @@ build_plain_broker(ParsedUri) ->
 build_ssl_broker(ParsedUri) ->
     Params = build_broker(ParsedUri),
     Query = proplists:get_value('query', ParsedUri),
-    SSLOptions = run_reader_state_monad(
-                   [{fun find_path_parameter/1,    "cacertfile"},
-                    {fun find_path_parameter/1,    "certfile"},
-                    {fun find_path_parameter/1,    "keyfile"},
-                    {fun find_atom_parameter/1,    "verify"},
-                    {fun find_boolean_parameter/1, "fail_if_no_peer_cert"}],
-                   fun (K, V, L) -> [{list_to_atom(K), V} | L] end,
-                   [], dict:from_list(Query)),
+    SSLOptions =
+        lists:foldl(
+          fun ({Fun, Key}, L) ->
+                  KeyString = atom_to_list(Key),
+                  case lists:keyfind(KeyString, 1, Query) of
+                      {_, Value} -> try ParsedValue = Fun(Value),
+                                        [{Key, ParsedValue} | L]
+                                    catch throw:{error, Reason} ->
+                                            fail({invalid_query_parameter,
+                                                  Key, Reason})
+                                    end;
+                      false      -> fail({missing_query_parameter, Key})
+                  end
+          end,
+          [],
+          [{fun find_path_parameter/1,    cacertfile},
+           {fun find_path_parameter/1,    certfile},
+           {fun find_path_parameter/1,    keyfile},
+           {fun find_atom_parameter/1,    verify},
+           {fun find_boolean_parameter/1, fail_if_no_peer_cert}]),
     Params1 = Params #amqp_params { ssl_options = SSLOptions },
     case Params1 #amqp_params.port of
         undefined -> Params1 #amqp_params { port = ?PROTOCOL_PORT - 1 };
