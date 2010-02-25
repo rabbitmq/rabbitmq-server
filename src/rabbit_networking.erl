@@ -117,15 +117,25 @@ start() ->
                 transient, infinity, supervisor, [tcp_client_sup]}),
     ok.
 
+getaddr(Host) ->
+     % inet_parse:address takes care of ip string, like "0.0.0.0"
+     % inet:getaddr returns immediately for ip tuple {0,0,0,0},
+     %  and runs 'inet_gethost' port process for dns lookups.
+     % On Windows inet:getaddr runs dns resolver for ip string, which may fail.
+    case inet_parse:address(Host) of
+        {ok, IPAddress1} -> IPAddress1;
+        {error, _} ->
+            case inet:getaddr(Host, inet) of
+                {ok, IPAddress2} -> IPAddress2;
+                {error, Reason} ->
+                    error_logger:error_msg("invalid host ~p - ~p~n",
+                                           [Host, Reason]),
+                    throw({error, {invalid_host, Host, Reason}})
+            end
+    end.
+
 check_tcp_listener_address(NamePrefix, Host, Port) ->
-    IPAddress =
-        case inet:getaddr(Host, inet) of
-            {ok, IPAddress1} -> IPAddress1;
-            {error, Reason} ->
-                error_logger:error_msg("invalid host ~p - ~p~n",
-                                       [Host, Reason]),
-                throw({error, {invalid_host, Host, Reason}})
-        end,
+    IPAddress = getaddr(Host),
     if is_integer(Port) andalso (Port >= 0) andalso (Port =< 65535) -> ok;
        true -> error_logger:error_msg("invalid port ~p - not 0..65535~n",
                                       [Port]),
@@ -157,7 +167,7 @@ start_listener(Host, Port, Label, OnConnect) ->
     ok.
 
 stop_tcp_listener(Host, Port) ->
-    {ok, IPAddress} = inet:getaddr(Host, inet),
+    IPAddress = getaddr(Host),
     Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
     ok = supervisor:terminate_child(rabbit_sup, Name),
     ok = supervisor:delete_child(rabbit_sup, Name),
