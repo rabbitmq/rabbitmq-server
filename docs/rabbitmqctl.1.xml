@@ -1,5 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.docbook.org/xml/4.5/docbookx.dtd">
+<!-- 
+ There is some extra magic in this document besides the usual DocBook semantics
+ to allow us to derive manpages, HTML and usage messages from the same source 
+ document.
+
+ Examples need to be moved to the end for man pages. To this end, <para>s and
+ <screen>s with role="example" will be moved, and with role="example-prefix" 
+ will be removed.
+
+ The usage messages are more involved. We have some magic in usage.xsl to pull
+ out the command synopsis, global option and subcommand synopses. We also pull
+ out <para>s with role="usage".
+
+ Finally we construct lists of possible values for subcommand options, if the 
+ subcommand's <varlistentry> has role="usage-has-option-list". The option which
+ takes the values should be marked with role="usage-option-list".
+-->
+
 <refentry lang="en">
   <refentryinfo>
     <productname>RabbitMQ Server</productname>
@@ -49,7 +67,7 @@
       <varlistentry>
         <term><option>-n</option> <replaceable>node</replaceable></term>
         <listitem>
-          <para>
+          <para role="usage">
             Default node is "rabbit@server", where server is the local host.  On
             a host named "server.example.com", the node name of the RabbitMQ
             Erlang node will usually be rabbit@server (unless RABBITMQ_NODENAME
@@ -505,7 +523,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>set_permissions <option>-p <replaceable>vhostpath</replaceable></option> <replaceable>username</replaceable> <replaceable>regexp</replaceable> <replaceable>regexp</replaceable> <replaceable>regexp</replaceable></term>
+          <term>set_permissions <option>-p <replaceable>vhostpath</replaceable></option> <replaceable>username</replaceable> <replaceable>configurable</replaceable> <replaceable>writable</replaceable> <replaceable>readable</replaceable></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -517,8 +535,16 @@
                 <listitem><para>The name of the user to grant access to the specified virtual host.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>regexp</term>
-                <listitem><para>The regular expressions for matching resource names for which the user is granted configure, write and read permissions, respectively.</para></listitem>
+                <term>configurable</term>
+                <listitem><para>A regular expression matching resource names for which the user is granted configure permissions.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>writable</term>
+                <listitem><para>A regular expression matching resource names for which the user is granted write permissions.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>readable</term>
+                <listitem><para>A regular expression matching resource names for which the user is granted read permissions.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
@@ -621,8 +647,8 @@
         specified immediately after the query.
       </para>
       <variablelist>
-        <varlistentry>
-          <term>list_queues <option>-p <replaceable>vhostpath</replaceable></option> <option><replaceable>queueinfoitem</replaceable> ...</option></term>
+        <varlistentry role="usage-has-option-list">
+          <term>list_queues <option>-p <replaceable>vhostpath</replaceable></option> <option role="usage-option-list"><replaceable>queueinfoitem</replaceable> ...</option></term>
           <listitem>
             <para>
               Returns queue details. Queue details of the <command>/</command> virtual host
@@ -725,8 +751,8 @@
           </listitem>
         </varlistentry>
 
-        <varlistentry>
-          <term>list_exchanges <option>-p <replaceable>vhostpath</replaceable></option> <option><replaceable>queueinfoitem</replaceable> ...</option></term>
+        <varlistentry role="usage-has-option-list">
+          <term>list_exchanges <option>-p <replaceable>vhostpath</replaceable></option> <option role="usage-option-list"><replaceable>exchangeinfoitem</replaceable> ...</option></term>
           <listitem>
             <para>
               Returns exchange details. Exchange details of the <command>/</command> virtual host
@@ -793,8 +819,8 @@
           </listitem>
         </varlistentry>
 
-        <varlistentry id="list_connections">
-          <term>list_connections <option><replaceable>connectioninfoitem</replaceable> ...</option></term>
+        <varlistentry id="list_connections" role="usage-has-option-list">
+          <term>list_connections <option role="usage-option-list"><replaceable>connectioninfoitem</replaceable> ...</option></term>
           <listitem>
             <para>
               Returns TCP/IP connection statistics.
@@ -893,8 +919,8 @@
           </listitem>
         </varlistentry>
 
-        <varlistentry>
-          <term>list_channels <option><replaceable>channelinfoitem</replaceable> ...</option></term>
+        <varlistentry role="usage-has-option-list">
+          <term>list_channels <option role="usage-option-list"><replaceable>channelinfoitem</replaceable> ...</option></term>
           <listitem>
             <para>
               Returns information on all current channels, the logical

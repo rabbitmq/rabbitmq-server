@@ -204,7 +204,7 @@ distclean: clean
 
 %.usage.erl: %.1.xml
 	echo -n "%% Generated, do not edit!\n-module(`basename $< .1.xml | tr -d -`_usage).\n-export([usage/0]).\nusage() -> io:format(\"" > docs/`basename $< .1.xml`.usage.erl
-	xsltproc docs/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | fmt -s >> docs/`basename $< .1.xml`.usage.erl
+	xsltproc docs/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | fmt -85 -s >> docs/`basename $< .1.xml`.usage.erl
 	echo '"), halt(1).' >> docs/`basename $< .1.xml`.usage.erl
 
 docs/rabbitmqctl.html: docs/rabbitmqctl.1.xml

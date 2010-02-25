@@ -22,6 +22,8 @@
   <xsl:text> </xsl:text>
 </xsl:for-each>
 
+<xsl:text>&#10;</xsl:text>
+
 <!-- List options (any variable list in a section called "Options"). --> 
 <xsl:for-each select=".//*[title='Options']/variablelist">
   <xsl:if test="position() = 1">&#10;Options:&#10;</xsl:if>
@@ -34,9 +36,15 @@
   </xsl:for-each>
 </xsl:for-each>
 
+<!-- Any paragraphs which have been marked as role="usage" (principally for global flags). --> 
+<xsl:text>&#10;</xsl:text>
+<xsl:for-each select="//para[@role='usage']">
+<xsl:value-of select="normalize-space(.)"/><xsl:text>&#10;&#10;</xsl:text>
+</xsl:for-each>
+
 <!-- List commands (any first-level variable list in a section called "Commands"). --> 
 <xsl:for-each select=".//*[title='Commands']/variablelist | .//*[title='Commands']/refsect2/variablelist">
-  <xsl:if test="position() = 1">&#10;Commands:&#10;</xsl:if>
+  <xsl:if test="position() = 1">Commands:&#10;</xsl:if>
   <xsl:for-each select="varlistentry">
     <xsl:text>    </xsl:text>
     <xsl:apply-templates select="term"/>
@@ -45,20 +53,14 @@
   <xsl:text>&#10;</xsl:text>
 </xsl:for-each>
 
-<!-- Any paragraphs which have been marked as role="usage" (principally for global flags). --> 
-<xsl:for-each select="//para[@role='usage']">
-<xsl:value-of select="normalize-space(.)"/><xsl:text>&#10;&#10;</xsl:text>
-</xsl:for-each>
-
-<!-- Any second-level variable lists (principally for options for subcommands). --> 
-<xsl:for-each select=".//*[title='Commands']//variablelist//variablelist">
-  <xsl:for-each select="varlistentry">&lt;<xsl:apply-templates select="term"/>&gt; - <xsl:apply-templates select="listitem"/>
-      <xsl:text>&#10;</xsl:text>
-  </xsl:for-each>
-  <xsl:text>&#10;</xsl:text>
+<!-- Any second-level variable lists (for options for subcommands). --> 
+<xsl:for-each select=".//*[title='Commands']//varlistentry[@role='usage-has-option-list']">
+&lt;<xsl:value-of select="term/option[@role='usage-option-list']/replaceable"/>&gt; must be a member of the list [<xsl:for-each select="listitem/variablelist/varlistentry"><xsl:apply-templates select="term"/><xsl:if test="not(position() = last())">, </xsl:if></xsl:for-each>].
 </xsl:for-each>
 
 </xsl:template>
+
+<xsl:template match="option">[<xsl:apply-templates/>]</xsl:template>
 
 <xsl:template match="replaceable">&lt;<xsl:value-of select="normalize-space(.)"/>&gt;</xsl:template>
 
