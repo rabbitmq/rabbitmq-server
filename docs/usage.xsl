@@ -23,8 +23,8 @@
 </xsl:for-each>
 
 <!-- List options (any variable list in a section called "Options"). --> 
-Options:
 <xsl:for-each select=".//*[title='Options']/variablelist">
+  <xsl:if test="position() = 1">&#10;Options:&#10;</xsl:if>
   <xsl:for-each select="varlistentry">
     <xsl:text>    </xsl:text>
     <xsl:for-each select=".//term">
@@ -35,8 +35,8 @@ Options:
 </xsl:for-each>
 
 <!-- List commands (any first-level variable list in a section called "Commands"). --> 
-Commands:
-<xsl:for-each select=".//*[title='Commands']/refsect2/variablelist">
+<xsl:for-each select=".//*[title='Commands']/variablelist | .//*[title='Commands']/refsect2/variablelist">
+  <xsl:if test="position() = 1">&#10;Commands:&#10;</xsl:if>
   <xsl:for-each select="varlistentry">
     <xsl:text>    </xsl:text>
     <xsl:apply-templates select="term"/>

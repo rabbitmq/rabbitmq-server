@@ -28,4 +28,4 @@ syntax: regexp
 
 ^docs/.*\.[15]\.gz$
 ^docs/rabbitmqctl.html$
-^docs/.*\.[15]\.usage.erl$
+^docs/.*\.usage.erl$
