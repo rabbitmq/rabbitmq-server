@@ -35,9 +35,9 @@ start_link(Name, Config) ->
     rabbit_shovel_status:report(Name, starting),
     gen_server2:start_link(?MODULE, [Name, Config], []).
 
-%---------------------------
-% Gen Server Implementation
-%---------------------------
+%%---------------------------
+%% Gen Server Implementation
+%%---------------------------
 
 init([Name, Config]) ->
     process_flag(trap_exit, true),
@@ -130,9 +130,9 @@ terminate(Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%---------------------------
-% Helpers
-%---------------------------
+%%---------------------------
+%% Helpers
+%%---------------------------
 
 make_conn_and_chan(AmqpParams) ->
     AmqpParam = lists:nth(random:uniform(length(AmqpParams)), AmqpParams),
