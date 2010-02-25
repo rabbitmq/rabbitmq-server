@@ -523,7 +523,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>set_permissions <option>-p <replaceable>vhostpath</replaceable></option> <replaceable>username</replaceable> <replaceable>configurable</replaceable> <replaceable>writable</replaceable> <replaceable>readable</replaceable></term>
+          <term>set_permissions <option>-p <replaceable>vhostpath</replaceable></option> <replaceable>username</replaceable> <replaceable>configure</replaceable> <replaceable>write</replaceable> <replaceable>read</replaceable></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -535,15 +535,15 @@
                 <listitem><para>The name of the user to grant access to the specified virtual host.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>configurable</term>
+                <term>configure</term>
                 <listitem><para>A regular expression matching resource names for which the user is granted configure permissions.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>writable</term>
+                <term>write</term>
                 <listitem><para>A regular expression matching resource names for which the user is granted write permissions.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>readable</term>
+                <term>read</term>
                 <listitem><para>A regular expression matching resource names for which the user is granted read permissions.</para></listitem>
               </varlistentry>
             </variablelist>
