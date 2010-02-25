@@ -248,8 +248,8 @@ it is received by the shovel is passed through, but this can be
 overridden as necessary.
 
 
-reconnect_delay :: non-negative-integer
----------------------------------------
+reconnect_delay :: non-negative-number
+--------------------------------------
 
 When an error occurs, the shovel will disconnect from both the source
 and destination broker immediately. This will force uncommitted
@@ -257,11 +257,14 @@ transactions at the destination to be rolled back, and delivered but
 unacknowledged messages from the source to be requeued. The shovel
 will then try connecting again. If this is unsuccessful, then it's not
 a good idea for the shovel to very quickly and repeatedly try to
-reconnect. The value specified here is the number of seconds to wait
-between each connection attempt.
+reconnect. The value specified here is determines the delay, in
+seconds, between each connection attempt.
 
 Note that if set to 0, the shovel will never try to reconnect: it'll
 stop after the first error.
+
+Also, the value can be a floating point number, thus permitting the
+specification of delays at a granularity smaller than whole seconds.
 
 
 Obtaining shovel statuses

@@ -126,7 +126,7 @@ parse_shovel_config(Dict) ->
        {fun parse_binary/1,               queue},
        make_parse_publish(publish_fields),
        make_parse_publish(publish_properties),
-       {fun parse_non_negative_integer/1, reconnect_delay}]).
+       {fun parse_non_negative_number/1,  reconnect_delay}]).
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
@@ -278,6 +278,11 @@ parse_non_negative_integer({N, Pos}) when is_integer(N) andalso N >= 0 ->
     return({N, Pos});
 parse_non_negative_integer({N, _Pos}) ->
     fail({require_non_negative_integer, N}).
+
+parse_non_negative_number({N, Pos}) when is_number(N) andalso N >= 0 ->
+    return({N, Pos});
+parse_non_negative_number({N, _Pos}) ->
+    fail({require_non_negative_number, N}).
 
 parse_boolean({Bool, Pos}) when is_boolean(Bool) ->
     return({Bool, Pos});
