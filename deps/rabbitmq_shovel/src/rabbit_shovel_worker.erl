@@ -63,7 +63,8 @@ handle_cast(init, State = #state{name = Name, config = Config}) ->
 
     #'basic.qos_ok'{} =
         amqp_channel:call(InboundChan,
-                          #'basic.qos'{prefetch_count = Config#shovel.qos}),
+                          #'basic.qos'{
+                            prefetch_count = Config#shovel.prefetch_count}),
 
     ok = case Config#shovel.tx_size of
                  0 -> ok;

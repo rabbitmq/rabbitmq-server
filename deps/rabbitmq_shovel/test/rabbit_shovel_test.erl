@@ -90,9 +90,9 @@ test() ->
           [{broker, "amqp://"},
            {declarations, [{'queue.declare', [invalid]}]}]),
 
-    {invalid_configuration_parameter, qos,
+    {invalid_configuration_parameter, prefetch_count,
      {require_non_negative_integer, invalid}} =
-        test_broken_shovel_config([{qos, invalid} | Config]),
+        test_broken_shovel_config([{prefetch_count, invalid} | Config]),
 
     {invalid_configuration_parameter, auto_ack,
      {require_boolean, invalid}} =

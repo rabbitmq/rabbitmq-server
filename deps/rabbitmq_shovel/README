@@ -99,13 +99,13 @@ A full example of the shovel configuration is:
                                    durable]}
                           ]}]},
        {queue, <<>>},
-       {qos, 10},
+       {prefetch_count, 10},
        {auto_ack, false},
        {tx_size, 0},
        {publish_properties, [{delivery_mode, 2}]},
        {publish_fields, [{exchange, <<"my_exchange">>},
                          {routing_key, <<"from_shovel">>}]},
-       {reconnect, 5}
+       {reconnect_delay, 5}
       ]}
      ]
    }]
@@ -114,16 +114,16 @@ A full example of the shovel configuration is:
 Firstly, all shovels are named. Here we have one shovel, called
 'my_first_shovel'. We can have multiple shovels if you wish. Secondly,
 every shovel must have the subfields sources, destinations and queue
-specified, whereas the other fields (qos, auto_ack, tx_size,
-publish_properties, publish_fields, reconnect) are optional and have
-defaults as follows:
+specified, whereas the other fields (prefetch_count, auto_ack,
+tx_size, publish_properties, publish_fields, reconnect_delay) are
+optional and have defaults as follows:
 
-{qos,                 0}
+{prefetch_count,      0}
 {auto_ack,            false}
 {tx_size,             0}
 {publish_properties,  []}
 {publish_fields,      []}
-{reconnect,           5}
+{reconnect_delay,     5}
 
 Sources and Destinations
 ------------------------
@@ -194,12 +194,12 @@ anonymous queue can be used: use <<>> to indicate the
 Most-Recently-Declared-Queue.
 
 
-qos :: non-negative-integer
----------------------------
+prefetch_count :: non-negative-integer
+--------------------------------------
 
-The shovel consumes from a queue. The QoS controls how many messages
-are sent to the shovel in advance of the message the shovel is
-currently processing.
+The shovel consumes from a queue. This parameter imposes a limit on
+the number of messages which are sent to the shovel in advance of the
+message the shovel is currently processing.
 
 
 auto_ack :: boolean
@@ -248,8 +248,8 @@ it is received by the shovel is passed through, but this can be
 overridden as necessary.
 
 
-reconnect :: non-negative-integer
----------------------------------
+reconnect_delay :: non-negative-integer
+---------------------------------------
 
 When an error occurs, the shovel will disconnect from both the source
 and destination broker immediately. This will force uncommitted

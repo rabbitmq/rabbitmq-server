@@ -49,7 +49,7 @@ make_child_specs(Configurations) ->
       fun (ShovelName, ShovelConfig, Acc) ->
               [{ShovelName,
                 {rabbit_shovel_worker, start_link, [ShovelName, ShovelConfig]},
-                case ShovelConfig#shovel.reconnect of
+                case ShovelConfig#shovel.reconnect_delay of
                     0 -> temporary;
                     N -> {transient, N}
                 end,
@@ -120,13 +120,13 @@ parse_shovel_config(Dict) ->
       #shovel{},
       [{fun parse_endpoint/1,             sources},
        {fun parse_endpoint/1,             destinations},
-       {fun parse_non_negative_integer/1, qos},
+       {fun parse_non_negative_integer/1, prefetch_count},
        {fun parse_boolean/1,              auto_ack},
        {fun parse_non_negative_integer/1, tx_size},
        {fun parse_binary/1,               queue},
        make_parse_publish(publish_fields),
        make_parse_publish(publish_properties),
-       {fun parse_non_negative_integer/1, reconnect}]).
+       {fun parse_non_negative_integer/1, reconnect_delay}]).
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
