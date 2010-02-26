@@ -8,8 +8,8 @@
 <xsl:template match="*"/>
 
 <!-- Copy every element through, deliberately losing all attributes -->
-<xsl:template match="node()" mode="copy">
-  <xsl:copy><xsl:apply-templates select="node()" mode="copy"/></xsl:copy>
+<xsl:template match="node()">
+  <xsl:copy><xsl:apply-templates select="node()"/></xsl:copy>
 </xsl:template>
 
 <!-- Copy the root node, and munge the outer part of the page -->
@@ -31,7 +31,7 @@
         <doc:heading>Table of Contents</doc:heading>
       </doc:toc>
 
-      <xsl:apply-templates select="body/div[@class='refentry']" mode="copy"/>
+      <xsl:apply-templates select="body/div[@class='refentry']"/>
     </doc:div>
   </body>
 </html>
@@ -39,27 +39,27 @@
 
 <!-- Specific instructions to revert the DocBook HTML to be more like our ad-hoc XML schema -->
 
-<xsl:template match="div[@class='refsect1'] | div[@class='refnamediv'] | div[@class='refsynopsisdiv']" mode="copy">
+<xsl:template match="div[@class='refsect1'] | div[@class='refnamediv'] | div[@class='refsynopsisdiv']">
   <doc:section name="{@title}">
-    <xsl:apply-templates select="node()" mode="copy"/>
+    <xsl:apply-templates select="node()"/>
   </doc:section>
 </xsl:template>
 
-<xsl:template match="div[@class='refsect2']" mode="copy">
+<xsl:template match="div[@class='refsect2']">
   <doc:subsection name="{@title}">
-    <xsl:apply-templates select="node()" mode="copy"/>
+    <xsl:apply-templates select="node()"/>
   </doc:subsection>
 </xsl:template>
 
-<xsl:template match="h2 | h3" mode="copy">
+<xsl:template match="h2 | h3">
   <doc:heading>
-    <xsl:apply-templates select="node()" mode="copy"/>
+    <xsl:apply-templates select="node()"/>
   </doc:heading>
 </xsl:template>
 
-<xsl:template match="pre[@class='screen']" mode="copy">
+<xsl:template match="pre[@class='screen']">
   <pre class="sourcecode">
-    <xsl:apply-templates select="node()" mode="copy"/>
+    <xsl:apply-templates select="node()"/>
   </pre>
 </xsl:template>
 
