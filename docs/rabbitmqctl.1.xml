@@ -646,6 +646,12 @@
         optional <command>vhost</command> parameter. This parameter, if present,  must be
         specified immediately after the query.
       </para>
+      <para role="usage">
+        The list_queues, list_exchanges and list_bindings commands accept an
+        optional virtual host parameter for which to display results. The
+        default value is "/".
+      </para>
+
       <variablelist>
         <varlistentry role="usage-has-option-list">
           <term>list_queues <option>-p <replaceable>vhostpath</replaceable></option> <option role="usage-option-list"><replaceable>queueinfoitem</replaceable> ...</option></term>
@@ -815,6 +821,10 @@
               this default.  Each result row will contain an exchange
               name, queue name, routing key and binding arguments, in
               that order. Non-ASCII characters will be URL-encoded.
+            </para>
+            <para role="usage">
+              The output format for "list_bindings" is a list of rows containing
+              exchange name, queue name, routing key and arguments, in that order.
             </para>
           </listitem>
         </varlistentry>
@@ -1012,6 +1022,12 @@
               the subscription within a channel, and a boolean
               indicating whether acknowledgements are expected for
               messages delivered to this consumer.
+            </para>
+            <para role="usage">
+              The output format for "list_consumers" is a list of rows containing,
+              in order, the queue name, channel process id, consumer tag, and a
+              boolean indicating whether acknowledgements are expected from the
+              consumer.
             </para>
           </listitem>
         </varlistentry>
