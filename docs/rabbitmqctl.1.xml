@@ -747,9 +747,7 @@
             <para role="example-prefix">
               For example:
             </para>
-            <screen role="example">
-              rabbitmqctl list_queues -p /myvhost messages consumers
-            </screen>
+            <screen role="example">rabbitmqctl list_queues -p /myvhost messages consumers</screen>
             <para role="example">
               This command displays the depth and number of consumers for each
               queue of the virtual host named <command>/myvhost</command>.
@@ -800,9 +798,7 @@
             <para role="example-prefix">
               For example:
             </para>
-            <screen role="example">
-              rabbitmqctl list_exchanges -p /myvhost name type
-            </screen>
+            <screen role="example">rabbitmqctl list_exchanges -p /myvhost name type</screen>
             <para role="example">
               This command displays the name and type for each
               exchange of the virtual host named <command>/myvhost</command>.
@@ -919,9 +915,7 @@
             <para role="example-prefix">
               For example:
             </para>
-            <screen role="example">
-              rabbitmqctl list_connections send_pend server_port
-            </screen>
+            <screen role="example">rabbitmqctl list_connections send_pend server_port</screen>
             <para role="example">
               This command displays the send queue size and server port for each
               connection.
@@ -1000,9 +994,7 @@
             <para role="example-prefix">
               For example:
             </para>
-            <screen role="example">
-              rabbitmqctl list_channels connection messages_unacknowledged
-            </screen>
+            <screen role="example">rabbitmqctl list_channels connection messages_unacknowledged</screen>
             <para role="example">
               This command displays the connection process and count
               of unacknowledged messages for each channel.
