@@ -207,11 +207,17 @@ distclean: clean
 	xsltproc docs/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | fmt -s >> docs/`basename $< .1.xml`.usage.erl
 	echo '"), halt(1).' >> docs/`basename $< .1.xml`.usage.erl
 
-docs/rabbitmqctl.html: docs/rabbitmqctl.1.xml
-	xmlto html docs/rabbitmqctl.1.xml
-	mv -f index.html docs/rabbitmqctl.html
+# This evil with grep and sed is due to the remarkable ugliness otherwise
+# experienced trying to get XSLT to work with an input doc where all nodes are
+# in a namespace.
+rabbitmqctl.xml: docs/rabbitmqctl.1.xml
+	xmlto xhtml docs/rabbitmqctl.1.xml
+	cat index.html | grep -v DOCTYPE | sed -e s,xmlns=\"http://www.w3.org/1999/xhtml\",, | xsltproc docs/html-to-website-xml.xsl - | xmllint --format - > rabbitmqctl.xml
+	rm index.html
+	# TODO how should this really be deployed?
+	cp rabbitmqctl.xml ../rabbitmq-website/site/
 
-docs_all: $(MANPAGES) docs/rabbitmqctl.html
+docs_all: $(MANPAGES) rabbitmqctl.xml
 
 install: SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
 install: all docs_all install_dirs
