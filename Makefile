@@ -196,13 +196,13 @@ distclean: clean
 	find . -regex '.*\(~\|#\|\.swp\|\.dump\)' -exec rm {} \;
 
 # xmlto can not read from standard input, so we mess with a tmp file.
-%.gz: %.xml
+%.gz: %.xml docs/examples-to-end.xsl
 	xsltproc docs/examples-to-end.xsl $< > $<.tmp && \
 	xmlto man -o docs $<.tmp && \
 	gzip -f docs/`basename $< .xml`
 	rm -f $<.tmp
 
-%.usage.erl: %.1.xml
+%.usage.erl: %.1.xml docs/usage.xsl
 	echo -n "%% Generated, do not edit!\n-module(`basename $< .1.xml | tr -d -`_usage).\n-export([usage/0]).\nusage() -> io:format(\"" > docs/`basename $< .1.xml`.usage.erl
 	xsltproc docs/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | fmt -s >> docs/`basename $< .1.xml`.usage.erl
 	echo '"), halt(1).' >> docs/`basename $< .1.xml`.usage.erl
@@ -212,7 +212,7 @@ distclean: clean
 # in a namespace.
 # Also we rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.
-rabbitmqctl.xml: docs/rabbitmqctl.1.xml
+rabbitmqctl.xml: docs/rabbitmqctl.1.xml docs/html-to-website-xml.xsl
 	cp docs/rabbitmqctl.1.xml rabbitmqctl.xml && xmlto xhtml-nochunks rabbitmqctl.xml ; rm rabbitmqctl.xml
 	cat rabbitmqctl.html | grep -v DOCTYPE | sed -e s,xmlns=\"http://www.w3.org/1999/xhtml\",, | xsltproc docs/html-to-website-xml.xsl - | xmllint --format - > rabbitmqctl.xml
 	rm rabbitmqctl.html
