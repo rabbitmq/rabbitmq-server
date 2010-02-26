@@ -210,10 +210,12 @@ distclean: clean
 # This evil with grep and sed is due to the remarkable ugliness otherwise
 # experienced trying to get XSLT to work with an input doc where all nodes are
 # in a namespace.
+# Also we rename the file before xmlto sees it since xmlto will use the name of
+# the file to make internal links.
 rabbitmqctl.xml: docs/rabbitmqctl.1.xml
-	xmlto xhtml docs/rabbitmqctl.1.xml
-	cat index.html | grep -v DOCTYPE | sed -e s,xmlns=\"http://www.w3.org/1999/xhtml\",, | xsltproc docs/html-to-website-xml.xsl - | xmllint --format - > rabbitmqctl.xml
-	rm index.html
+	cp docs/rabbitmqctl.1.xml rabbitmqctl.xml && xmlto xhtml-nochunks rabbitmqctl.xml ; rm rabbitmqctl.xml
+	cat rabbitmqctl.html | grep -v DOCTYPE | sed -e s,xmlns=\"http://www.w3.org/1999/xhtml\",, | xsltproc docs/html-to-website-xml.xsl - | xmllint --format - > rabbitmqctl.xml
+	rm rabbitmqctl.html
 	# TODO how should this really be deployed?
 	cp rabbitmqctl.xml ../rabbitmq-website/site/
 

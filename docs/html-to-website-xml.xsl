@@ -7,9 +7,9 @@
 
 <xsl:template match="*"/>
 
-<!-- Copy every element through, deliberately losing all attributes -->
-<xsl:template match="node()">
-  <xsl:copy><xsl:apply-templates select="node()"/></xsl:copy>
+<!-- Copy every element through -->
+<xsl:template match="@*|node()">
+  <xsl:copy><xsl:apply-templates select="@*|node()"/></xsl:copy>
 </xsl:template>
 
 <!-- Copy the root node, and munge the outer part of the page -->
