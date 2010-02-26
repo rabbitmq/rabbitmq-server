@@ -612,7 +612,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>list_user_permissions <option>-p <replaceable>vhostpath</replaceable></option></term>
+          <term>list_user_permissions <option>-p <replaceable>vhostpath</replaceable></option> <replaceable>username</replaceable></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -1003,7 +1003,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>rabbitmqctl list_consumers</term>
+          <term>list_consumers</term>
           <listitem>
             <para>
               List consumers, i.e. subscriptions to a queue's message
