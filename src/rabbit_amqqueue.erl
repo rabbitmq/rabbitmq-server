@@ -284,7 +284,7 @@ requeue(QPid, MsgIds, ChPid) ->
     gen_server2:cast(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
-    gen_server2:pcast(QPid, 8, {ack, Txn, MsgIds, ChPid}).
+    gen_server2:pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
 
 commit_all(QPids, Txn) ->
     safe_pmap_ok(
@@ -329,10 +329,10 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
                           infinity).
 
 notify_sent(QPid, ChPid) ->
-    gen_server2:pcast(QPid, 8, {notify_sent, ChPid}).
+    gen_server2:pcast(QPid, 7, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
-    gen_server2:pcast(QPid, 8, {unblock, ChPid}).
+    gen_server2:pcast(QPid, 7, {unblock, ChPid}).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
