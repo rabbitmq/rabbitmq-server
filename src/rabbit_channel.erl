@@ -110,7 +110,7 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
 conserve_memory(Pid, Conserve) ->
-    gen_server2:pcast(Pid, 9, {conserve_memory, Conserve}).
+    gen_server2:pcast(Pid, 8, {conserve_memory, Conserve}).
 
 list() ->
     pg_local:get_members(rabbit_channels).
