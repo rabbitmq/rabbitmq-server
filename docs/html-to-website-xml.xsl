@@ -63,6 +63,12 @@
   </pre>
 </xsl:template>
 
+<xsl:template match="code[@class='option']">
+  [<code class="option">
+    <xsl:apply-templates select="node()"/>
+  </code>]
+</xsl:template>
+
 
 </xsl:stylesheet>
 
