@@ -121,25 +121,24 @@ parse_shovel_config_proplist(Config) ->
     end.
 
 parse_shovel_config_dict(Dict) ->
-    lists:foldl(
-      fun ({Fun, Key}, Shovel) ->
-              {ok, Value} = dict:find(Key, Dict),
-              try {ParsedValue, Pos} = Fun(Value),
-                  setelement(Pos, Shovel, ParsedValue)
-              catch throw:{error, Reason} ->
-                      fail({invalid_parameter_value, Key, Reason})
-              end
-      end,
-      #shovel{},
-      [{fun parse_endpoint/1,             sources},
-       {fun parse_endpoint/1,             destinations},
-       {fun parse_non_negative_integer/1, prefetch_count},
-       {fun parse_boolean/1,              auto_ack},
-       {fun parse_non_negative_integer/1, tx_size},
-       {fun parse_binary/1,               queue},
-       make_parse_publish(publish_fields),
-       make_parse_publish(publish_properties),
-       {fun parse_non_negative_number/1,  reconnect_delay}]).
+    run_state_monad(
+      [fun (Shovel) -> {ok, Value} = dict:find(Key, Dict),
+                       try {ParsedValue, Pos} = Fun(Value),
+                           return(setelement(Pos, Shovel, ParsedValue))
+                       catch throw:{error, Reason} ->
+                               fail({invalid_parameter_value, Key, Reason})
+                       end
+       end || {Fun, Key} <-
+                  [{fun parse_endpoint/1,             sources},
+                   {fun parse_endpoint/1,             destinations},
+                   {fun parse_non_negative_integer/1, prefetch_count},
+                   {fun parse_boolean/1,              auto_ack},
+                   {fun parse_non_negative_integer/1, tx_size},
+                   {fun parse_binary/1,               queue},
+                   make_parse_publish(publish_fields),
+                   make_parse_publish(publish_properties),
+                   {fun parse_non_negative_number/1,  reconnect_delay}]],
+      #shovel{}).
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
@@ -250,25 +249,25 @@ build_ssl_broker(ParsedUri) ->
     Params = build_broker(ParsedUri),
     Query = proplists:get_value('query', ParsedUri),
     SSLOptions =
-        lists:foldl(
-          fun ({Fun, Key}, L) ->
-                  KeyString = atom_to_list(Key),
-                  case lists:keyfind(KeyString, 1, Query) of
-                      {_, Value} -> try ParsedValue = Fun(Value),
-                                        [{Key, ParsedValue} | L]
-                                    catch throw:{error, Reason} ->
-                                            fail({invalid_ssl_parameter,
-                                                  Key, Value, Query, Reason})
-                                    end;
-                      false      -> fail({missing_ssl_parameter, Key, Query})
-                  end
-          end,
-          [],
-          [{fun find_path_parameter/1,    cacertfile},
-           {fun find_path_parameter/1,    certfile},
-           {fun find_path_parameter/1,    keyfile},
-           {fun find_atom_parameter/1,    verify},
-           {fun find_boolean_parameter/1, fail_if_no_peer_cert}]),
+        run_state_monad(
+          [fun (L) -> KeyString = atom_to_list(Key),
+                      case lists:keyfind(KeyString, 1, Query) of
+                          {_, Value} ->
+                              try [{Key, Fun(Value)} | L]
+                              catch throw:{error, Reason} ->
+                                      fail({invalid_ssl_parameter,
+                                            Key, Value, Query, Reason})
+                              end;
+                          false ->
+                              fail({missing_ssl_parameter, Key, Query})
+                      end
+           end || {Fun, Key} <-
+                      [{fun find_path_parameter/1,    cacertfile},
+                       {fun find_path_parameter/1,    certfile},
+                       {fun find_path_parameter/1,    keyfile},
+                       {fun find_atom_parameter/1,    verify},
+                       {fun find_boolean_parameter/1, fail_if_no_peer_cert}]],
+          []),
     Params1 = Params#amqp_params{ssl_options = SSLOptions},
     case Params1#amqp_params.port of
         undefined -> Params1#amqp_params{port = ?PROTOCOL_PORT - 1};
