@@ -70,75 +70,64 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
   when is_atom(ShovelName) andalso is_list(ShovelConfig) ->
     case dict:is_key(ShovelName, Acc) of
         true  -> {error, {duplicate_shovel_definition, ShovelName}};
-        false -> case enrich_shovel_config(ShovelName, ShovelConfig,
-                                           Defaults) of
-                     {ok, ShovelConfig1} ->
-                         case parse_shovel_config(ShovelName, ShovelConfig1) of
-                             {ok, Config} ->
-                                 Acc1 = dict:store(ShovelName, Config, Acc),
-                                 parse_configuration(Defaults, Env, Acc1);
-                             Error ->
-                                 Error
-                         end;
-                     Error ->
-                         Error
+        false -> case parse_shovel_config(ShovelName, ShovelConfig,
+                                          Defaults) of
+                     {ok, Config} -> parse_configuration(
+                                       Defaults, Env,
+                                       dict:store(ShovelName, Config, Acc));
+                     Error        -> Error
                  end
     end;
 parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations}.
 
-enrich_shovel_config(ShovelName, Config, Defaults) ->
+parse_shovel_config(ShovelName, Config, Defaults) ->
+    try
+        {ok, run_state_monad(
+               [fun enrich_shovel_config/1,
+                fun parse_shovel_config_proplist/1,
+                fun parse_shovel_config_dict/1],
+               {Config, Defaults})}
+    catch throw:{error, Reason} ->
+            {error, {invalid_shovel_configuration, ShovelName, Reason}}
+    end.
+
+enrich_shovel_config({Config, Defaults}) ->
     Config1 = proplists:unfold(Config),
     case [E || E <- Config1, not (is_tuple(E) andalso tuple_size(E) == 2)] of
         []      -> case duplicate_keys(Config1) of
-                       []   -> {ok, lists:ukeysort(1, Config1 ++ Defaults)};
-                       Dups -> {error,
-                                {duplicate_shovel_configuration_parameters,
-                                 ShovelName, Dups}}
+                       []   -> return(lists:ukeysort(1, Config1 ++ Defaults));
+                       Dups -> fail({duplicate_parameters, Dups})
                    end;
-        Invalid -> {error, {invalid_shovel_configuration_parameters,
-                            ShovelName, Invalid}}
+        Invalid -> fail({invalid_parameters, Invalid})
     end.
 
-duplicate_keys(PropList) ->
-    proplists:get_keys(
-      lists:foldl(fun (K, L) -> lists:keydelete(K, 1, L) end, PropList,
-                  proplists:get_keys(PropList))).
-
-parse_shovel_config(ShovelName, ShovelConfig) ->
-    Dict = dict:from_list(ShovelConfig),
+parse_shovel_config_proplist(Config) ->
+    Dict = dict:from_list(Config),
     Fields = record_info(fields, shovel),
     Keys = dict:fetch_keys(Dict),
     case {Keys -- Fields, Fields -- Keys} of
-        {[], []} ->
-            {_Pos, Dict1} =
-                lists:foldl(
-                  fun (FieldName, {Pos, Acc}) ->
-                          {Pos + 1,
-                           dict:update(FieldName, fun (V) -> {V, Pos} end, Acc)}
-                  end, {2, Dict}, Fields),
-            try
-                {ok, parse_shovel_config(Dict1)}
-            catch throw:{error, Reason} ->
-                    {error, {error_when_parsing_shovel_configuration,
-                             ShovelName, Reason}}
-            end;
-        {[], Missing} ->
-            {error, {missing_shovel_configuration_parameters,
-                     ShovelName, Missing}};
-        {Unknown, _} ->
-            {error, {unrecognised_shovel_configuration_parameters,
-                     ShovelName, Unknown}}
+        {[], []}      -> {_Pos, Dict1} =
+                             lists:foldl(
+                               fun (FieldName, {Pos, Acc}) ->
+                                       {Pos + 1,
+                                        dict:update(FieldName,
+                                                    fun (V) -> {V, Pos} end,
+                                                    Acc)}
+                               end, {2, Dict}, Fields),
+                         return(Dict1);
+        {[], Missing} -> fail({missing_parameters, Missing});
+        {Unknown, _}  -> fail({unrecognised_parameters, Unknown})
     end.
 
-parse_shovel_config(Dict) ->
+parse_shovel_config_dict(Dict) ->
     lists:foldl(
       fun ({Fun, Key}, Shovel) ->
               {ok, Value} = dict:find(Key, Dict),
               try {ParsedValue, Pos} = Fun(Value),
                   setelement(Pos, Shovel, ParsedValue)
               catch throw:{error, Reason} ->
-                      fail({invalid_configuration_parameter, Key, Reason})
+                      fail({invalid_parameter_value, Key, Reason})
               end
       end,
       #shovel{},
@@ -356,3 +345,8 @@ make_field_indices([F|Valid], [F|Supplied], Fields, Idx, Acc) ->
     make_field_indices(Valid, Supplied, Fields, Idx+1, [{Idx, Value}|Acc]);
 make_field_indices([_V|Valid], Supplied, Fields, Idx, Acc) ->
     make_field_indices(Valid, Supplied, Fields, Idx+1, Acc).
+
+duplicate_keys(PropList) ->
+    proplists:get_keys(
+      lists:foldl(fun (K, L) -> lists:keydelete(K, 1, L) end, PropList,
+                  proplists:get_keys(PropList))).

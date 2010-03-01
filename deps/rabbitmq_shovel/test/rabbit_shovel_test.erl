@@ -48,22 +48,18 @@ test() ->
         test_broken_shovel_configs(
           [{test_shovel, Config}, {test_shovel, Config}]),
 
-    {invalid_shovel_configuration_parameters, test_shovel,
-     [{invalid, invalid, invalid}]} =
-        test_broken_shovel_configs(
-          [{test_shovel, [{invalid, invalid, invalid} | Config]}]),
+    {invalid_parameters, [{invalid, invalid, invalid}]} =
+        test_broken_shovel_config([{invalid, invalid, invalid} | Config]),
 
-    {duplicate_shovel_configuration_parameters, test_shovel, [queue]} =
-        test_broken_shovel_configs(
-          [{test_shovel, [{queue, <<"">>} | Config]}]),
+    {duplicate_parameters, [queue]} =
+        test_broken_shovel_config([{queue, <<"">>} | Config]),
 
-    {missing_shovel_configuration_parameters, test_shovel, Missing} =
-        test_broken_shovel_configs([{test_shovel, []}]),
+    {missing_parameters, Missing} =
+        test_broken_shovel_config([]),
     [destinations, queue, sources] = lists:sort(Missing),
 
-    {unrecognised_shovel_configuration_parameters, test_shovel, [invalid]} =
-        test_broken_shovel_configs(
-          [{test_shovel, [{invalid, invalid} | Config]}]),
+    {unrecognised_parameters, [invalid]} =
+        test_broken_shovel_config([{invalid, invalid} | Config]),
 
     {require_list, invalid} =
         test_broken_shovel_sources(invalid),
@@ -99,25 +95,25 @@ test() ->
           [{broker, "amqp://"},
            {declarations, [{'queue.declare', [invalid]}]}]),
 
-    {invalid_configuration_parameter, prefetch_count,
+    {invalid_parameter_value, prefetch_count,
      {require_non_negative_integer, invalid}} =
         test_broken_shovel_config([{prefetch_count, invalid} | Config]),
 
-    {invalid_configuration_parameter, auto_ack,
+    {invalid_parameter_value, auto_ack,
      {require_boolean, invalid}} =
         test_broken_shovel_config([{auto_ack, invalid} | Config]),
 
-    {invalid_configuration_parameter, queue,
+    {invalid_parameter_value, queue,
      {require_binary, invalid}} =
         test_broken_shovel_config([{sources, [{broker, "amqp://"}]},
                                    {destinations, [{broker, "amqp://"}]},
                                    {queue, invalid}]),
 
-    {invalid_configuration_parameter, publish_properties,
+    {invalid_parameter_value, publish_properties,
      {require_list, invalid}} =
         test_broken_shovel_config([{publish_properties, invalid} | Config]),
 
-    {invalid_configuration_parameter, publish_properties,
+    {invalid_parameter_value, publish_properties,
      {unexpected_fields, [invalid], _}} =
         test_broken_shovel_config([{publish_properties, [invalid]} | Config]),
 
@@ -219,12 +215,12 @@ test_broken_shovel_configs(Configs) ->
     Error.
 
 test_broken_shovel_config(Config) ->
-    {error_when_parsing_shovel_configuration, test_shovel, Error} =
+    {invalid_shovel_configuration, test_shovel, Error} =
         test_broken_shovel_configs([{test_shovel, Config}]),
     Error.
 
 test_broken_shovel_sources(Sources) ->
-    {invalid_configuration_parameter, sources, Error} =
+    {invalid_parameter_value, sources, Error} =
         test_broken_shovel_config([{sources, Sources},
                                    {destinations, [{broker, "amqp://"}]},
                                    {queue, <<"">>}]),
