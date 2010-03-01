@@ -48,6 +48,10 @@ test() ->
         test_broken_shovel_configs(
           [{test_shovel, Config}, {test_shovel, Config}]),
 
+    {duplicate_shovel_configuration_parameters, test_shovel, [queue]} =
+        test_broken_shovel_configs(
+          [{test_shovel, [{queue, <<"">>} | Config]}]),
+
     {missing_shovel_configuration_parameters, test_shovel, Missing} =
         test_broken_shovel_configs([{test_shovel, []}]),
     [destinations, queue, sources] = lists:sort(Missing),

@@ -70,16 +70,28 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
   when is_atom(ShovelName) andalso is_list(ShovelConfig) ->
     case dict:is_key(ShovelName, Acc) of
         true  -> {error, {duplicate_shovel_definition, ShovelName}};
-        false -> ShovelConfig1 = lists:ukeysort(1, ShovelConfig ++ Defaults),
-                 case parse_shovel_config(ShovelName, ShovelConfig1) of
-                     {ok, Config} -> parse_configuration(
-                                       Defaults, Env,
-                                       dict:store(ShovelName, Config, Acc));
-                     Other        -> Other
+        false -> case duplicate_keys(ShovelConfig) of
+                     []   -> ShovelConfig1 = ShovelConfig ++ Defaults,
+                             case parse_shovel_config(
+                                    ShovelName,
+                                    lists:ukeysort(1, ShovelConfig1)) of
+                                 {ok, Config} ->
+                                     Acc1 = dict:store(ShovelName, Config, Acc),
+                                     parse_configuration(Defaults, Env, Acc1);
+                                 Other ->
+                                     Other
+                             end;
+                     Dups -> {error, {duplicate_shovel_configuration_parameters,
+                                      ShovelName, Dups}}
                  end
     end;
 parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations}.
+
+duplicate_keys(PropList) ->
+    proplists:get_keys(
+      lists:foldl(fun (K, L) -> lists:keydelete(K, 1, L) end, PropList,
+                  proplists:get_keys(PropList))).
 
 parse_shovel_config(ShovelName, ShovelConfig) ->
     Dict = dict:from_list(ShovelConfig),
