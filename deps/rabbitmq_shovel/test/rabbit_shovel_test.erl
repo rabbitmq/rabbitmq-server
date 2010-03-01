@@ -48,6 +48,11 @@ test() ->
         test_broken_shovel_configs(
           [{test_shovel, Config}, {test_shovel, Config}]),
 
+    {invalid_shovel_configuration_parameters, test_shovel,
+     [{invalid, invalid, invalid}]} =
+        test_broken_shovel_configs(
+          [{test_shovel, [{invalid, invalid, invalid} | Config]}]),
+
     {duplicate_shovel_configuration_parameters, test_shovel, [queue]} =
         test_broken_shovel_configs(
           [{test_shovel, [{queue, <<"">>} | Config]}]),

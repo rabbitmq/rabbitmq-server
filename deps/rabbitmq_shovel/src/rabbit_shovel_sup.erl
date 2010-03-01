@@ -70,23 +70,35 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
   when is_atom(ShovelName) andalso is_list(ShovelConfig) ->
     case dict:is_key(ShovelName, Acc) of
         true  -> {error, {duplicate_shovel_definition, ShovelName}};
-        false -> case duplicate_keys(ShovelConfig) of
-                     []   -> ShovelConfig1 = ShovelConfig ++ Defaults,
-                             case parse_shovel_config(
-                                    ShovelName,
-                                    lists:ukeysort(1, ShovelConfig1)) of
-                                 {ok, Config} ->
-                                     Acc1 = dict:store(ShovelName, Config, Acc),
-                                     parse_configuration(Defaults, Env, Acc1);
-                                 Other ->
-                                     Other
-                             end;
-                     Dups -> {error, {duplicate_shovel_configuration_parameters,
-                                      ShovelName, Dups}}
+        false -> case enrich_shovel_config(ShovelName, ShovelConfig,
+                                           Defaults) of
+                     {ok, ShovelConfig1} ->
+                         case parse_shovel_config(ShovelName, ShovelConfig1) of
+                             {ok, Config} ->
+                                 Acc1 = dict:store(ShovelName, Config, Acc),
+                                 parse_configuration(Defaults, Env, Acc1);
+                             Error ->
+                                 Error
+                         end;
+                     Error ->
+                         Error
                  end
     end;
 parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations}.
+
+enrich_shovel_config(ShovelName, Config, Defaults) ->
+    Config1 = proplists:unfold(Config),
+    case [E || E <- Config1, not (is_tuple(E) andalso tuple_size(E) == 2)] of
+        []      -> case duplicate_keys(Config1) of
+                       []   -> {ok, lists:ukeysort(1, Config1 ++ Defaults)};
+                       Dups -> {error,
+                                {duplicate_shovel_configuration_parameters,
+                                 ShovelName, Dups}}
+                   end;
+        Invalid -> {error, {invalid_shovel_configuration_parameters,
+                            ShovelName, Invalid}}
+    end.
 
 duplicate_keys(PropList) ->
     proplists:get_keys(
