@@ -58,7 +58,7 @@
 </xsl:template>
 
 <!-- Option lists in command usage -->
-<xsl:template match="varlistentry[@role='usage-has-option-list']" mode="command-usage">&lt;<xsl:value-of select="term/option[@role='usage-option-list']/replaceable"/>&gt; must be a member of the list [<xsl:for-each select="listitem/variablelist/varlistentry"><xsl:apply-templates select="term"/><xsl:if test="not(position() = last())">, </xsl:if></xsl:for-each>].<xsl:text>&#10;&#10;</xsl:text></xsl:template>
+<xsl:template match="varlistentry[@role='usage-has-option-list']" mode="command-usage">&lt;<xsl:value-of select="term/cmdsynopsis/arg[@role='usage-option-list']/replaceable"/>&gt; must be a member of the list [<xsl:for-each select="listitem/variablelist/varlistentry"><xsl:apply-templates select="term"/><xsl:if test="not(position() = last())">, </xsl:if></xsl:for-each>].<xsl:text>&#10;&#10;</xsl:text></xsl:template>
 
 <!-- Usage paras in command usage -->
 <xsl:template match="para[@role='usage']" mode="command-usage">
