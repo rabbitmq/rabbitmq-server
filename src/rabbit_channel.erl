@@ -542,23 +542,15 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
                                "prefetch_size!=0 (~w)", [Size]);
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
-              _, State = #ch{ limiter_pid = LimiterPid,
-                              unacked_message_q = UAMQ }) ->
+              _, State = #ch{limiter_pid = LimiterPid}) ->
     LimiterPid1 = case {LimiterPid, PrefetchCount} of
-                      {undefined, 0} ->
-                          undefined;
-                      {undefined, _} ->
-                          LPid = rabbit_limiter:start_link(self(),
-                                                           queue:len(UAMQ)),
-                          ok = limit_queues(LPid, State),
-                          LPid;
-                      {_, _} ->
-                          LimiterPid
+                      {undefined, 0} -> undefined;
+                      {undefined, _} -> start_limiter(State);
+                      {_, _}         -> LimiterPid
                   end,
     LimiterPid2 = case rabbit_limiter:limit(LimiterPid1, PrefetchCount) of
                       ok      -> LimiterPid1;
-                      stopped -> ok = limit_queues(undefined, State),
-                                 undefined
+                      stopped -> unlimit_queues(State)
                   end,
     {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
 
@@ -793,9 +785,24 @@ handle_method(#'tx.rollback'{}, _, #ch{transaction_id = none}) ->
 handle_method(#'tx.rollback'{}, _, State) ->
     {reply, #'tx.rollback_ok'{}, internal_rollback(State)};
 
-handle_method(#'channel.flow'{active = _}, _, State) ->
-    %% FIXME: implement
-    {reply, #'channel.flow_ok'{active = true}, State};
+handle_method(#'channel.flow'{active = true}, _,
+              State = #ch{limiter_pid = LimiterPid}) ->
+    LimiterPid1 = case rabbit_limiter:unblock(LimiterPid) of
+                      ok      -> LimiterPid;
+                      stopped -> unlimit_queues(State)
+                  end,
+    {reply, #'channel.flow_ok'{active = true},
+     State#ch{limiter_pid = LimiterPid1}};
+
+handle_method(#'channel.flow'{active = false}, _,
+              State = #ch{limiter_pid = LimiterPid}) ->
+    LimiterPid1 = case LimiterPid =:= undefined of
+                      true  -> start_limiter(State);
+                      false -> LimiterPid
+                  end,
+    ok = rabbit_limiter:block(LimiterPid1),
+    {reply, #'channel.flow_ok'{active = false},
+     State#ch{limiter_pid = LimiterPid1}};
 
 handle_method(#'channel.flow_ok'{active = _}, _, State) ->
     %% TODO: We may want to correlate this to channel.flow messages we
@@ -942,8 +949,17 @@ fold_per_queue(F, Acc0, UAQ) ->
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
 
+start_limiter(State = #ch{unacked_message_q = UAMQ}) ->
+    LPid = rabbit_limiter:start_link(self(), queue:len(UAMQ)),
+    ok = limit_queues(LPid, State),
+    LPid.
+
 notify_queues(#ch{consumer_mapping = Consumers}) ->
     rabbit_amqqueue:notify_down_all(consumer_queues(Consumers), self()).
+
+unlimit_queues(State) ->
+    ok = limit_queues(undefined, State),
+    undefined.
 
 limit_queues(LPid, #ch{consumer_mapping = Consumers}) ->
     rabbit_amqqueue:limit_all(consumer_queues(Consumers), self(), LPid).
