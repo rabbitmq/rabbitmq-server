@@ -203,9 +203,9 @@ distclean: clean
 	rm -f $<.tmp
 
 %.usage.erl: %.1.xml docs/usage.xsl
-	echo -n "%% Generated, do not edit!\n-module(`basename $< .1.xml | tr -d -`_usage).\n-export([usage/0]).\nusage() -> io:format(\"" > docs/`basename $< .1.xml`.usage.erl
-	xsltproc docs/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | fmt -s >> docs/`basename $< .1.xml`.usage.erl
-	echo '"), halt(1).' >> docs/`basename $< .1.xml`.usage.erl
+	xsltproc --stringparam modulename "`basename $< .1.xml | tr -d -`_usage" \
+	  docs/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | sed -e s/%QUOTE%/\\\"/g | \
+	  fmt -s > docs/`basename $< .1.xml`.usage.erl
 
 # This evil with grep and sed is due to the remarkable ugliness otherwise
 # experienced trying to get XSLT to work with an input doc where all nodes are

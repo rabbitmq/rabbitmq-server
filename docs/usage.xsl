@@ -6,6 +6,8 @@
                 exclude-result-prefixes="exsl"
                 version='1.0'>
 
+<xsl:param name="modulename"/>
+
 <xsl:output method="text"
               encoding="UTF-8"
               indent="no"/>
@@ -13,7 +15,10 @@
 <xsl:preserve-space elements="term" />
 
 <xsl:template match="/">
-<!-- Pull out cmdsynopsis to show the command usage line. -->Usage:
+<!-- Pull out cmdsynopsis to show the command usage line. -->%% Generated, do not edit!
+-module(<xsl:value-of select="$modulename" />).
+-export([usage/0]).
+usage() -> io:format(%QUOTE%Usage:
 <xsl:value-of select="refentry/refsynopsisdiv/cmdsynopsis/command"/> 
 <xsl:text> </xsl:text>
 <xsl:for-each select="refentry/refsynopsisdiv/cmdsynopsis/arg">
@@ -55,6 +60,7 @@
 </xsl:for-each>
 
 <xsl:apply-templates select=".//*[title='Commands']/refsect2" mode="command-usage" />
+%QUOTE%), halt(1).
 </xsl:template>
 
 <!-- Option lists in command usage -->
