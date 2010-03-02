@@ -47,7 +47,7 @@
 
 -spec(start_link/2 :: (pid(), non_neg_integer()) -> pid()).
 -spec(shutdown/1 :: (maybe_pid()) -> 'ok').
--spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
+-spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok' | 'stopped').
 -spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
 -spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
@@ -77,13 +77,12 @@ start_link(ChPid, UnackedMsgCount) ->
 shutdown(undefined) ->
     ok;
 shutdown(LimiterPid) ->
-    unlink(LimiterPid),
     gen_server2:cast(LimiterPid, shutdown).
 
 limit(undefined, 0) ->
     ok;
 limit(LimiterPid, PrefetchCount) ->
-    gen_server2:cast(LimiterPid, {limit, PrefetchCount}).
+    gen_server2:call(LimiterPid, {limit, PrefetchCount}).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
@@ -130,13 +129,17 @@ handle_call({can_send, QPid, AckRequired}, _From,
     end;
 
 handle_call(get_limit, _From, State = #lim{prefetch_count = PrefetchCount}) ->
-    {reply, PrefetchCount, State}.
+    {reply, PrefetchCount, State};
+
+handle_call({limit, PrefetchCount}, _From, State) ->
+    State1 = maybe_notify(State, State#lim{prefetch_count = PrefetchCount}),
+    case PrefetchCount == 0 of
+        true  -> {stop, normal, stopped, State1};
+        false -> {reply, ok, State1}
+    end.
 
 handle_cast(shutdown, State) ->
     {stop, normal, State};
-
-handle_cast({limit, PrefetchCount}, State) ->
-    {noreply, maybe_notify(State, State#lim{prefetch_count = PrefetchCount})};
 
 handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;

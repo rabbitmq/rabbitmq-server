@@ -214,6 +214,8 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #ch{writer_pid = WriterPid}) ->
     State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
     {stop, normal, State};
+handle_info({'EXIT', _OldLimiterPid, normal}, State) ->
+    {noreply, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
 
@@ -542,23 +544,23 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
               _, State = #ch{ limiter_pid = LimiterPid,
                               unacked_message_q = UAMQ }) ->
-    NewLimiterPid = case {LimiterPid, PrefetchCount} of
-                        {undefined, 0} ->
-                            undefined;
-                        {undefined, _} ->
-                            LPid = rabbit_limiter:start_link(self(),
-                                                             queue:len(UAMQ)),
-                            ok = limit_queues(LPid, State),
-                            LPid;
-                        {_, 0} ->
-                            ok = rabbit_limiter:shutdown(LimiterPid),
-                            ok = limit_queues(undefined, State),
-                            undefined;
-                        {_, _} ->
-                            LimiterPid
-                    end,
-    ok = rabbit_limiter:limit(NewLimiterPid, PrefetchCount),
-    {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = NewLimiterPid}};
+    LimiterPid1 = case {LimiterPid, PrefetchCount} of
+                      {undefined, 0} ->
+                          undefined;
+                      {undefined, _} ->
+                          LPid = rabbit_limiter:start_link(self(),
+                                                           queue:len(UAMQ)),
+                          ok = limit_queues(LPid, State),
+                          LPid;
+                      {_, _} ->
+                          LimiterPid
+                  end,
+    LimiterPid2 = case rabbit_limiter:limit(LimiterPid1, PrefetchCount) of
+                      ok      -> LimiterPid1;
+                      stopped -> ok = limit_queues(undefined, State),
+                                 undefined
+                  end,
+    {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
 
 handle_method(#'basic.recover'{requeue = true},
               _, State = #ch{ transaction_id = none,
