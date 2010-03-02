@@ -39,5 +39,45 @@
 </refentry>
 </xsl:template>
 
+<!--
+ We show all the subcommands using XML that looks like this:
+
+  <term>
+    <cmdsynopsis>
+      <command>list_connections</command> 
+      <arg choice="opt">
+      <replaceable>connectioninfoitem</replaceable>
+       ...
+      </arg>
+    </cmdsynopsis>
+  </term>
+
+ However, while DocBook renders this sensibly for HTML, for some reason it
+ doen't show anything inside <cmdsynopsis> at all for man pages. I think what
+ we're doing is semantically correct so this is a bug in DocBook. The following
+ rules essentially do what DocBook does when <cmdsynopsis> is not inside a 
+ <term>.
+-->
+
+<xsl:template match="term/cmdsynopsis">
+  <xsl:apply-templates mode="docbook-bug"/>
+</xsl:template>
+
+<xsl:template match="command" mode="docbook-bug">
+  <emphasis role="bold"><xsl:apply-templates mode="docbook-bug"/></emphasis>
+</xsl:template>
+
+<xsl:template match="arg[@choice='opt']" mode="docbook-bug">
+  [<xsl:apply-templates mode="docbook-bug"/>]
+</xsl:template>
+
+<xsl:template match="arg[@choice='req']" mode="docbook-bug">
+  {<xsl:apply-templates mode="docbook-bug"/>}
+</xsl:template>
+
+<xsl:template match="replaceable" mode="docbook-bug">
+  <emphasis><xsl:apply-templates mode="docbook-bug"/></emphasis>
+</xsl:template>
+
 </xsl:stylesheet>
 
