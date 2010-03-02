@@ -101,7 +101,7 @@
 
       <variablelist>
         <varlistentry>
-          <term>stop</term>
+          <term><cmdsynopsis><command>stop</command></cmdsynopsis></term>
           <listitem>
             <para>
               Stops the Erlang node on which RabbitMQ is running. To
@@ -118,7 +118,7 @@
         </varlistentry>
 
         <varlistentry id="stop_app">
-          <term>stop_app</term>
+          <term><cmdsynopsis><command>stop_app</command></cmdsynopsis></term>
           <listitem>
             <para>
               Stops the RabbitMQ application, leaving the Erlang node
@@ -140,7 +140,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>start_app</term>
+          <term><cmdsynopsis><command>start_app</command></cmdsynopsis></term>
           <listitem>
             <para>
               Starts the RabbitMQ application.
@@ -161,7 +161,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>status</term>
+          <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
           <listitem>
             <para>
               Displays various information about the RabbitMQ broker,
@@ -179,7 +179,7 @@
         </varlistentry>
 
         <varlistentry id="reset">
-          <term>reset</term>
+          <term><cmdsynopsis><command>reset</command></cmdsynopsis></term>
           <listitem>
             <para>
               Return a RabbitMQ node to its virgin state.
@@ -204,7 +204,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>force_reset</term>
+          <term><cmdsynopsis><command>force_reset</command></cmdsynopsis></term>
           <listitem>
             <para>
               Forcefully return a RabbitMQ node to its virgin state.
@@ -231,7 +231,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>rotate_logs <replaceable>suffix</replaceable></term>
+          <term><cmdsynopsis><command>rotate_logs</command> <arg choice="req"><replaceable>suffix</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Instruct the RabbitMQ node to rotate the log files.
@@ -271,7 +271,7 @@
 
       <variablelist>
         <varlistentry>
-          <term>cluster <replaceable>clusternode</replaceable></term>
+          <term><cmdsynopsis><command>cluster</command> <arg choice="req"><replaceable>clusternode</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -342,7 +342,7 @@
 
       <variablelist>
         <varlistentry>
-          <term>close_connection <replaceable>connectionpid</replaceable> <replaceable>explanation</replaceable></term>
+          <term><cmdsynopsis><command>close_connection</command> <arg choice="req"><replaceable>connectionpid</replaceable></arg> <arg choice="req"><replaceable>explanation</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -380,7 +380,7 @@
 
       <variablelist>
         <varlistentry>
-          <term>add_user <replaceable>username</replaceable> <replaceable>password</replaceable></term>
+          <term><cmdsynopsis><command>add_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -403,7 +403,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>delete_user <replaceable>username</replaceable></term>
+          <term><cmdsynopsis><command>delete_user</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -421,7 +421,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>change_password <replaceable>username</replaceable> <replaceable>newpassword</replaceable></term>
+          <term><cmdsynopsis><command>change_password</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>newpassword</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -444,7 +444,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>list_users</term>
+          <term><cmdsynopsis><command>list_users</command></cmdsynopsis></term>
           <listitem>
             <para>Lists users</para>
             <para role="example-prefix">For example:</para>
@@ -462,7 +462,7 @@
 
       <variablelist>
         <varlistentry>
-          <term>add_vhost <replaceable>vhostpath</replaceable></term>
+          <term><cmdsynopsis><command>add_vhost</command> <arg choice="req"><replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -483,7 +483,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>delete_vhost <replaceable>vhostpath</replaceable></term>
+          <term><cmdsynopsis><command>delete_vhost</command> <arg choice="req"><replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -508,7 +508,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>list_vhosts</term>
+          <term><cmdsynopsis><command>list_vhosts</command></cmdsynopsis></term>
           <listitem>
             <para>
               Lists virtual hosts.
@@ -523,7 +523,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>set_permissions <option>-p <replaceable>vhostpath</replaceable></option> <replaceable>username</replaceable> <replaceable>configure</replaceable> <replaceable>write</replaceable> <replaceable>read</replaceable></term>
+          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>configure</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -563,7 +563,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>clear_permissions <option>-p <replaceable>vhostpath</replaceable></option> <replaceable>username</replaceable></term>
+          <term><cmdsynopsis><command>clear_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -589,7 +589,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>list_permissions <option>-p <replaceable>vhostpath</replaceable></option></term>
+          <term><cmdsynopsis><command>list_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -612,7 +612,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>list_user_permissions <option>-p <replaceable>vhostpath</replaceable></option> <replaceable>username</replaceable></term>
+          <term><cmdsynopsis><command>list_user_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -654,7 +654,7 @@
 
       <variablelist>
         <varlistentry role="usage-has-option-list">
-          <term>list_queues <option>-p <replaceable>vhostpath</replaceable></option> <option role="usage-option-list"><replaceable>queueinfoitem</replaceable> ...</option></term>
+          <term><cmdsynopsis><command>list_queues</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>queueinfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
               Returns queue details. Queue details of the <command>/</command> virtual host
@@ -756,7 +756,7 @@
         </varlistentry>
 
         <varlistentry role="usage-has-option-list">
-          <term>list_exchanges <option>-p <replaceable>vhostpath</replaceable></option> <option role="usage-option-list"><replaceable>exchangeinfoitem</replaceable> ...</option></term>
+          <term><cmdsynopsis><command>list_exchanges</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>exchangeinfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
               Returns exchange details. Exchange details of the <command>/</command> virtual host
@@ -809,7 +809,7 @@
 
       <variablelist>
         <varlistentry>
-          <term>list_bindings <option>-p <replaceable>vhostpath</replaceable></option></term>
+          <term><cmdsynopsis><command>list_bindings</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               By default the bindings for the <command>/</command> virtual
@@ -826,7 +826,7 @@
         </varlistentry>
 
         <varlistentry id="list_connections" role="usage-has-option-list">
-          <term>list_connections <option role="usage-option-list"><replaceable>connectioninfoitem</replaceable> ...</option></term>
+          <term><cmdsynopsis><command>list_connections</command> <arg choice="opt" role="usage-option-list"><replaceable>connectioninfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
               Returns TCP/IP connection statistics.
@@ -924,7 +924,7 @@
         </varlistentry>
 
         <varlistentry role="usage-has-option-list">
-          <term>list_channels <option role="usage-option-list"><replaceable>channelinfoitem</replaceable> ...</option></term>
+          <term><cmdsynopsis><command>list_channels</command> <arg choice="opt" role="usage-option-list"><replaceable>channelinfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
               Returns information on all current channels, the logical
@@ -1003,7 +1003,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term>list_consumers</term>
+          <term><cmdsynopsis><command>list_consumers</command></cmdsynopsis></term>
           <listitem>
             <para>
               List consumers, i.e. subscriptions to a queue's message
