@@ -45,8 +45,9 @@
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
-             username, virtual_host,
-             most_recently_declared_queue, consumer_mapping}).
+             username, virtual_host, most_recently_declared_queue,
+             consumer_mapping, blocking
+            }).
 
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
@@ -152,7 +153,8 @@ init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
              username                = Username,
              virtual_host            = VHost,
              most_recently_declared_queue = <<>>,
-             consumer_mapping        = dict:new()},
+             consumer_mapping        = dict:new(),
+             blocking                = dict:new()},
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -190,6 +192,9 @@ handle_cast({method, Method, Content}, State) ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
 
+handle_cast({from_queue, QPid}, State) ->
+    {noreply, queue_blocked(QPid, State)};
+
 handle_cast(terminate, State) ->
     {stop, normal, State};
 
@@ -217,7 +222,9 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
 handle_info({'EXIT', _OldLimiterPid, normal}, State) ->
     {noreply, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
-    {stop, Reason, State}.
+    {stop, Reason, State};
+handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+    {noreply, queue_blocked(QPid, State)}.
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
@@ -332,6 +339,22 @@ check_name(Kind, NameBin = <<"amq.", _/binary>>) ->
       "~s name '~s' contains reserved prefix 'amq.*'",[Kind, NameBin]);
 check_name(_Kind, NameBin) ->
     NameBin.
+
+queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
+    case dict:find(QPid, Blocking) of
+        error      -> State;
+        {ok, MRef} -> true = erlang:demonitor(MRef),
+                      Blocking1 = dict:erase(QPid, Blocking),
+                      ok = case dict:size(Blocking1) =:= 0 of
+                               true ->
+                                   rabbit_writer:send_command(
+                                     State#ch.writer_pid,
+                                     #'channel.flow_ok'{active = false});
+                               false ->
+                                   ok
+                           end,
+                      State#ch{blocking = Blocking1}
+    end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
     {reply, #'channel.open_ok'{}, State#ch{state = running}};
@@ -795,15 +818,21 @@ handle_method(#'channel.flow'{active = true}, _,
      State#ch{limiter_pid = LimiterPid1}};
 
 handle_method(#'channel.flow'{active = false}, _,
-              State = #ch{limiter_pid = LimiterPid}) ->
+              State = #ch{limiter_pid = LimiterPid,
+                          consumer_mapping = Consumers}) ->
     LimiterPid1 = case LimiterPid =:= undefined of
                       true  -> start_limiter(State);
                       false -> LimiterPid
                   end,
     ok = rabbit_limiter:block(LimiterPid1),
-    %% FIXME: need to go and notify the queues and not reply now
-    {reply, #'channel.flow_ok'{active = false},
-     State#ch{limiter_pid = LimiterPid1}};
+    Me = self(),
+    Fun = fun(QPid) -> gen_server2:cast(Me, {from_queue, QPid}) end,
+    Queues = [begin MRef = erlang:monitor(process, QPid),
+                    rabbit_amqqueue:invoke(QPid, Fun),
+                    {QPid, MRef}
+              end || QPid <- consumer_queues(Consumers)],
+    {noreply, State#ch{limiter_pid = LimiterPid1,
+                       blocking = dict:from_list(Queues)}};
 
 handle_method(#'channel.flow_ok'{active = _}, _, State) ->
     %% TODO: We may want to correlate this to channel.flow messages we
