@@ -828,8 +828,8 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
         end));
 
-handle_cast({invoke, Fun}, State) ->
-    Fun(self()),
+handle_cast({flush, ChPid}, State) ->
+    ok = rabbit_channel:flushed(ChPid, self()),
     noreply(State).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},

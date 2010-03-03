@@ -36,7 +36,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/5, do/2, do/3, shutdown/1]).
--export([send_command/2, deliver/4, conserve_memory/2]).
+-export([send_command/2, deliver/4, conserve_memory/2, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 
 -export([init/1, terminate/2, code_change/3,
@@ -78,6 +78,7 @@
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
 -spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
+-spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (pid()) -> [info()]).
@@ -112,6 +113,9 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 
 conserve_memory(Pid, Conserve) ->
     gen_server2:pcast(Pid, 8, {conserve_memory, Conserve}).
+
+flushed(Pid, QPid) ->
+    gen_server2:cast(Pid, {flushed, QPid}).
 
 list() ->
     pg_local:get_members(rabbit_channels).
@@ -192,7 +196,7 @@ handle_cast({method, Method, Content}, State) ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
 
-handle_cast({from_queue, QPid}, State) ->
+handle_cast({flushed, QPid}, State) ->
     {noreply, queue_blocked(QPid, State)};
 
 handle_cast(terminate, State) ->
@@ -825,12 +829,9 @@ handle_method(#'channel.flow'{active = false}, _,
                       false -> LimiterPid
                   end,
     ok = rabbit_limiter:block(LimiterPid1),
-    Me = self(),
-    Fun = fun(QPid) -> gen_server2:cast(Me, {from_queue, QPid}) end,
-    Queues = [begin MRef = erlang:monitor(process, QPid),
-                    rabbit_amqqueue:invoke(QPid, Fun),
-                    {QPid, MRef}
-              end || QPid <- consumer_queues(Consumers)],
+    QPids = consumer_queues(Consumers),
+    Queues = [{QPid, erlang:monitor(process, QPid)} || QPid <- QPids],
+    ok = rabbit_amqqueue:flush_all(self(), QPids),
     case Queues =:= [] of
         true  -> {reply, #'channel.flow_ok'{active = false}, State};
         false -> {noreply, State#ch{limiter_pid = LimiterPid1,

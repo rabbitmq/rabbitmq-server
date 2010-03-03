@@ -40,7 +40,7 @@
 -export([consumers/1, consumers_all/1]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
--export([notify_sent/2, unblock/2, invoke/2]).
+-export([notify_sent/2, unblock/2, flush_all/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
@@ -107,7 +107,7 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
--spec(invoke/2 :: (pid(), (fun ((pid()) -> any()))) -> 'ok').
+-spec(flush_all/2 :: (pid(), [pid()]) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
@@ -335,8 +335,11 @@ notify_sent(QPid, ChPid) ->
 unblock(QPid, ChPid) ->
     gen_server2:pcast(QPid, 7, {unblock, ChPid}).
 
-invoke(QPid, Fun) ->
-    gen_server2:cast(QPid, {invoke, Fun}).
+flush_all(ChPid, QPids) ->
+    safe_pmap_ok(
+      fun (_) -> ok end,
+      fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end,
+      QPids).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
