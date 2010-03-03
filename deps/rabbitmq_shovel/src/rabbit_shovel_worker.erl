@@ -29,7 +29,7 @@
 -include("rabbit_shovel.hrl").
 
 -record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,
-                tx_counter, name, config}).
+                tx_counter, name, config, blocked, msg_buf}).
 
 start_link(Name, Config) ->
     rabbit_shovel_status:report(Name, starting),
@@ -73,6 +73,8 @@ handle_cast(init, State = #state{name = Name, config = Config}) ->
                       ok
          end,
 
+    ok = amqp_channel:register_flow_handler(InboundChan, self()),
+
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(
           InboundChan,
@@ -85,35 +87,33 @@ handle_cast(init, State = #state{name = Name, config = Config}) ->
     {noreply,
      State#state{inbound_conn = InboundConn, inbound_ch = InboundChan,
                  outbound_conn = OutboundConn, outbound_ch = OutboundChan,
-                 tx_counter = 0}}.
+                 tx_counter = 0, blocked = false, msg_buf = queue:new()}}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
 handle_info({#'basic.deliver'{delivery_tag = Tag, routing_key = RoutingKey},
              Msg = #amqp_msg{props = Props = #'P_basic'{}}},
-            State = #state{tx_counter = TxCounter, inbound_ch = InboundChan,
-                           outbound_ch = OutboundChan, config = Config}) ->
+            State = #state{config = Config}) ->
     Method = #'basic.publish'{routing_key = RoutingKey},
     Method1 = (Config#shovel.publish_fields)(Method),
     Msg1 = Msg#amqp_msg{props = (Config#shovel.publish_properties)(Props)},
-    ok = amqp_channel:call(OutboundChan, Method1, Msg1),
-    {Ack, AckMulti, TxCounter1} =
-        case {Config#shovel.tx_size, TxCounter + 1} of
-            {0, _}            -> {true,  false, TxCounter};
-            {N, N}            -> #'tx.commit_ok'{} =
-                                     amqp_channel:call(OutboundChan,
-                                                       #'tx.commit'{}),
-                                 {true,  true,  0};
-            {N, M} when N > M -> {false, false, M}
-        end,
-    case Ack andalso not (Config#shovel.auto_ack) of
-        true -> amqp_channel:cast(InboundChan,
-                                  #'basic.ack'{delivery_tag = Tag,
-                                               multiple = AckMulti});
-        _    -> ok
+    {noreply, publish(Tag, Method1, Msg1, State)};
+
+handle_info(#'channel.flow'{active = true} = Flow, State) ->
+    State1 = #state{inbound_ch = InboundChan, blocked = Blocked} =
+        drain_buffer(State#state{blocked = false}),
+    case Blocked of
+        true  -> ok;
+        false -> #'channel.flow_ok'{active = true} =
+                     amqp_channel:call(InboundChan, Flow)
     end,
-    {noreply, State#state{tx_counter = TxCounter1}}.
+    {noreply, State1};
+
+handle_info(#'channel.flow'{active = false} = Flow,
+            State = #state{inbound_ch = InboundChan}) ->
+    #'channel.flow_ok'{active = false} = amqp_channel:call(InboundChan, Flow),
+    {noreply, State#state{blocked = true}}.
 
 terminate(Reason, #state{inbound_conn = undefined, inbound_ch = undefined,
                          outbound_conn = undefined, outbound_ch = undefined,
@@ -134,6 +134,49 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------
 %% Helpers
 %%---------------------------
+
+publish(Tag, Method, Msg,
+        State = #state{tx_counter = TxCounter, inbound_ch = InboundChan,
+                       outbound_ch = OutboundChan, config = Config,
+                       blocked = false, msg_buf = MsgBuf}) ->
+    case amqp_channel:call(OutboundChan, Method, Msg) of
+        ok ->
+            {Ack, AckMulti, TxCounter1} =
+                case {Config#shovel.tx_size, TxCounter + 1} of
+                    {0, _}            -> {true,  false, TxCounter};
+                    {N, N}            -> #'tx.commit_ok'{} =
+                                             amqp_channel:call(OutboundChan,
+                                                               #'tx.commit'{}),
+                                         {true,  true,  0};
+                    {N, M} when N > M -> {false, false, M}
+                end,
+            case Ack andalso not (Config#shovel.auto_ack) of
+                true -> amqp_channel:cast(InboundChan,
+                                          #'basic.ack'{delivery_tag = Tag,
+                                                       multiple = AckMulti});
+                _    -> ok
+            end,
+            State#state{tx_counter = TxCounter1};
+        blocked ->
+            #'channel.flow_ok'{active = false} =
+                amqp_channel:call(InboundChan, #'channel.flow'{active = false}),
+            State#state{blocked = true,
+                        msg_buf = queue:in_r({Tag, Method, Msg}, MsgBuf)}
+    end;
+publish(Tag, Method, Msg, State = #state{blocked = true, msg_buf = MsgBuf}) ->
+    State#state{msg_buf = queue:in({Tag, Method, Msg}, MsgBuf)}.
+
+drain_buffer(State = #state{blocked = false, msg_buf = MsgBuf}) ->
+    case queue:out(MsgBuf) of
+        {empty, _MsgBuf} ->
+            State;
+        {{value, {Tag, Method, Msg}}, MsgBuf1} ->
+            State1 = publish(Tag, Method, Msg, State#state{msg_buf = MsgBuf1}),
+            case State1#state.blocked of
+                true  -> State1;
+                false -> drain_buffer(State1)
+            end
+    end.
 
 make_conn_and_chan(AmqpParams) ->
     AmqpParam = lists:nth(random:uniform(length(AmqpParams)), AmqpParams),
