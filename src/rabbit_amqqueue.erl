@@ -107,7 +107,7 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
--spec(flush_all/2 :: (pid(), [pid()]) -> 'ok').
+-spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
@@ -335,7 +335,7 @@ notify_sent(QPid, ChPid) ->
 unblock(QPid, ChPid) ->
     gen_server2:pcast(QPid, 7, {unblock, ChPid}).
 
-flush_all(ChPid, QPids) ->
+flush_all(QPids, ChPid) ->
     safe_pmap_ok(
       fun (_) -> ok end,
       fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end,
