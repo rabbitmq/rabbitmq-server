@@ -458,12 +458,23 @@ handle_frame(Type, Channel, Payload, State) ->
                     ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame),
                     State;
                 closing ->
-                    %% According to the spec, after sending a
-                    %% channel.close we must ignore all frames except
-                    %% channel.close_ok.
+                    %% According to the spec, after sending a channel.close we
+                    %% must ignore all frames except channel.close_ok, and
+                    %% (from 0.9.1 onwards) channel.close (this was introduced
+                    %% to avoid a race when both client and server send a
+                    %% close at about the same time).
                     case AnalyzedFrame of
                         {method, 'channel.close_ok', _} ->
                             erase({channel, Channel});
+                        {method, 'channel.close', _} ->
+                            %% This should only occur *very* rarely. So rather
+                            %% than complicating the channel closing logic we
+                            %% spin up an new writer; send a close_ok and take
+                            %% it down again.
+                            #v1{sock = Sock, connection = #connection{frame_max = FrameMax}} = State,
+                            WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
+                            ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
+                            ok = rabbit_writer:shutdown(WriterPid);
                         _ -> ok
                     end,
                     State;
