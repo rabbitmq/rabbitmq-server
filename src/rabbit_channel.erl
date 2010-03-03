@@ -831,8 +831,11 @@ handle_method(#'channel.flow'{active = false}, _,
                     rabbit_amqqueue:invoke(QPid, Fun),
                     {QPid, MRef}
               end || QPid <- consumer_queues(Consumers)],
-    {noreply, State#ch{limiter_pid = LimiterPid1,
-                       blocking = dict:from_list(Queues)}};
+    case Queues =:= [] of
+        true  -> {reply, #'channel.flow_ok'{active = false}, State};
+        false -> {noreply, State#ch{limiter_pid = LimiterPid1,
+                                    blocking = dict:from_list(Queues)}}
+    end;
 
 handle_method(#'channel.flow_ok'{active = _}, _, State) ->
     %% TODO: We may want to correlate this to channel.flow messages we
