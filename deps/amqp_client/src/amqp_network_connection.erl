@@ -160,7 +160,7 @@ i(max_channel,       State) -> State#nc_state.max_channel;
 i(heartbeat,         State) -> State#nc_state.heartbeat;
 i(num_channels,      State) -> amqp_channel_util:num_channels(
                                    State#nc_state.channels);
-i(_,                _State) -> invalid_info_item.
+i(Item,             _State) -> throw({bad_argument, Item}).
 
 %%---------------------------------------------------------------------------
 %% Closing

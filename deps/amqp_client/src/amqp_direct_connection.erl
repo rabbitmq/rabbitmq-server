@@ -126,7 +126,7 @@ i(is_closing,        State) -> State#dc_state.closing =/= false;
 i(amqp_params,       State) -> State#dc_state.params;
 i(num_channels,      State) -> amqp_channel_util:num_channels(
                                    State#dc_state.channels);
-i(_,                _State) -> invalid_info_item.
+i(Item,             _State) -> throw({bad_argument, Item}).
 
 %%---------------------------------------------------------------------------
 %% Closing
