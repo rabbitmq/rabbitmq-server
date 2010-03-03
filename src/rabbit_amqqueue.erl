@@ -43,7 +43,7 @@
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, tx_commit_msg_store_callback/4,
-         tx_commit_vq_callback/1]).
+         tx_commit_vq_callback/1, flush_all/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
@@ -118,6 +118,7 @@
 -spec(tx_commit_msg_store_callback/4 ::
       (pid(), [message()], [acktag()], {pid(), any()}) -> 'ok').
 -spec(tx_commit_vq_callback/1 :: (pid()) -> 'ok').
+-spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(remeasure_rates/1 :: (pid()) -> 'ok').
@@ -360,6 +361,12 @@ tx_commit_msg_store_callback(QPid, Pubs, AckTags, From) ->
 
 tx_commit_vq_callback(QPid) ->
     gen_server2:pcast(QPid, 7, tx_commit_vq_callback).
+
+flush_all(QPids, ChPid) ->
+    safe_pmap_ok(
+      fun (_) -> ok end,
+      fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end,
+      QPids).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(

@@ -895,6 +895,10 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
         end));
 
+handle_cast({flush, ChPid}, State) ->
+    ok = rabbit_channel:flushed(ChPid, self()),
+    noreply(State);
+
 handle_cast(remeasure_rates, State = #q{variable_queue_state = VQS}) ->
     VQS1 = rabbit_variable_queue:remeasure_rates(VQS),
     RamDuration = rabbit_variable_queue:ram_duration(VQS1),
