@@ -46,8 +46,7 @@
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
-             consumer_mapping, blocking
-            }).
+             consumer_mapping, blocking}).
 
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
@@ -347,13 +346,11 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
         error      -> State;
         {ok, MRef} -> true = erlang:demonitor(MRef),
                       Blocking1 = dict:erase(QPid, Blocking),
-                      ok = case dict:size(Blocking1) =:= 0 of
-                               true ->
-                                   rabbit_writer:send_command(
-                                     State#ch.writer_pid,
-                                     #'channel.flow_ok'{active = false});
-                               false ->
-                                   ok
+                      ok = case dict:size(Blocking1) of
+                               0 -> rabbit_writer:send_command(
+                                      State#ch.writer_pid,
+                                      #'channel.flow_ok'{active = false});
+                               _ -> ok
                            end,
                       State#ch{blocking = Blocking1}
     end.
@@ -822,18 +819,18 @@ handle_method(#'channel.flow'{active = true}, _,
 handle_method(#'channel.flow'{active = false}, _,
               State = #ch{limiter_pid = LimiterPid,
                           consumer_mapping = Consumers}) ->
-    LimiterPid1 = case LimiterPid =:= undefined of
-                      true  -> start_limiter(State);
-                      false -> LimiterPid
+    LimiterPid1 = case LimiterPid of
+                      undefined -> start_limiter(State);
+                      Other     -> Other
                   end,
     ok = rabbit_limiter:block(LimiterPid1),
     QPids = consumer_queues(Consumers),
     Queues = [{QPid, erlang:monitor(process, QPid)} || QPid <- QPids],
     ok = rabbit_amqqueue:flush_all(QPids, self()),
-    case Queues =:= [] of
-        true  -> {reply, #'channel.flow_ok'{active = false}, State};
-        false -> {noreply, State#ch{limiter_pid = LimiterPid1,
-                                    blocking = dict:from_list(Queues)}}
+    case Queues of
+        [] -> {reply, #'channel.flow_ok'{active = false}, State};
+        _  -> {noreply, State#ch{limiter_pid = LimiterPid1,
+                                 blocking = dict:from_list(Queues)}}
     end;
 
 handle_method(#'channel.flow_ok'{active = _}, _, State) ->
