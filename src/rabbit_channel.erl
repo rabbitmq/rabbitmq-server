@@ -223,8 +223,6 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #ch{writer_pid = WriterPid}) ->
     State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
     {stop, normal, State};
-handle_info({'EXIT', _OldLimiterPid, normal}, State) ->
-    {noreply, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
