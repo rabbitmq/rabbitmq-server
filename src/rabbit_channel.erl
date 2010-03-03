@@ -829,10 +829,10 @@ handle_method(#'channel.flow'{active = false}, _,
     QPids = consumer_queues(Consumers),
     Queues = [{QPid, erlang:monitor(process, QPid)} || QPid <- QPids],
     ok = rabbit_amqqueue:flush_all(QPids, self()),
-    case Queues =:= [] of
-        true  -> {reply, #'channel.flow_ok'{active = false}, State};
-        false -> {noreply, State#ch{limiter_pid = LimiterPid1,
-                                    blocking = dict:from_list(Queues)}}
+    case Queues of
+        [] -> {reply, #'channel.flow_ok'{active = false}, State};
+        _  -> {noreply, State#ch{limiter_pid = LimiterPid1,
+                                 blocking = dict:from_list(Queues)}}
     end;
 
 handle_method(#'channel.flow_ok'{active = _}, _, State) ->

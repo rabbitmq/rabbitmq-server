@@ -197,9 +197,9 @@ maybe_notify(OldState, NewState) ->
     case (limit_reached(OldState) orelse is_blocked(OldState)) andalso
         not (limit_reached(NewState) orelse is_blocked(NewState)) of
         true  -> NewState1 = notify_queues(NewState),
-                 {case NewState1#lim.prefetch_count == 0 of
-                      true  -> stop;
-                      false -> cont
+                 {case NewState1#lim.prefetch_count of
+                      0 -> stop;
+                      _ -> cont
                   end, NewState1};
         false -> {cont, NewState}
     end.
