@@ -467,14 +467,8 @@ handle_frame(Type, Channel, Payload, State) ->
                         {method, 'channel.close_ok', _} ->
                             erase({channel, Channel});
                         {method, 'channel.close', _} ->
-                            %% This should only occur *very* rarely. So rather
-                            %% than complicating the channel closing logic we
-                            %% spin up an new writer; send a close_ok and take
-                            %% it down again.
-                            #v1{sock = Sock, connection = #connection{frame_max = FrameMax}} = State,
-                            WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
-                            ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
-                            ok = rabbit_writer:shutdown(WriterPid);
+                            ok = rabbit_writer:internal_send_command(
+                                   State#v1.sock, Channel, #'channel.close_ok'{});
                         _ -> ok
                     end,
                     State;
