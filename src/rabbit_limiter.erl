@@ -139,31 +139,27 @@ handle_call({can_send, QPid, AckRequired}, _From,
             State = #lim{volume = Volume}) ->
     case limit_reached(State) of
         true  -> {reply, false, limit_queue(QPid, State)};
-        false -> {reply, true, State#lim{volume = if AckRequired -> Volume + 1;
-                                                     true        -> Volume
-                                                  end}}
+        false -> {reply, true,  State#lim{volume = if AckRequired -> Volume + 1;
+                                                      true        -> Volume
+                                                   end}}
     end;
 
 handle_call(get_limit, _From, State = #lim{prefetch_count = PrefetchCount}) ->
     {reply, PrefetchCount, State};
 
-handle_call({limit, PrefetchCount}, _From, State = #lim{blocked = true}) ->
-    {reply, ok, State#lim{prefetch_count = PrefetchCount}};
 handle_call({limit, PrefetchCount}, _From, State) ->
-    State1 = maybe_notify(State, State#lim{prefetch_count = PrefetchCount}),
-    case PrefetchCount == 0 of
-        true  -> {stop, normal, stopped, State1};
-        false -> {reply, ok, State1}
+    case maybe_notify(State, State#lim{prefetch_count = PrefetchCount}) of
+        {cont, State1} -> {reply, ok, State1};
+        {stop, State1} -> {stop, normal, stopped, State1}
     end;
 
 handle_call(block, _From, State) ->
     {reply, ok, State#lim{blocked = true}};
 
-handle_call(unblock, _From, State = #lim{prefetch_count = PrefetchCount}) ->
-    State1 = maybe_notify(State, State#lim{blocked = false}),
-    case PrefetchCount == 0 of
-        true  -> {stop, normal, stopped, State1};
-        false -> {reply, ok, State1}
+handle_call(unblock, _From, State) ->
+    case maybe_notify(State, State#lim{blocked = false}) of
+        {cont, State1} -> {reply, ok, State1};
+        {stop, State1} -> {stop, normal, stopped, State1}
     end.
 
 handle_cast(shutdown, State) ->
@@ -173,7 +169,10 @@ handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
                    true        -> Volume - Count
                 end,
-    {noreply, maybe_notify(State, State#lim{volume = NewVolume})};
+    case maybe_notify(State, State#lim{volume = NewVolume}) of
+        {cont, State1} -> {noreply, State1};
+        {stop, State1} -> {stop, normal, State1}
+    end;
 
 handle_cast({register, QPid}, State) ->
     {noreply, remember_queue(QPid, State)};
@@ -195,10 +194,14 @@ code_change(_, State, _) ->
 %%----------------------------------------------------------------------------
 
 maybe_notify(OldState, NewState) ->
-    case (limit_reached(OldState) andalso not limit_reached(NewState)) orelse
-        (is_blocked(OldState) andalso not is_blocked(NewState)) of
-        true  -> notify_queues(NewState);
-        false -> NewState
+    case (limit_reached(OldState) orelse is_blocked(OldState)) andalso
+        not (limit_reached(NewState) orelse is_blocked(NewState)) of
+        true  -> NewState1 = notify_queues(NewState),
+                 {case NewState1#lim.prefetch_count == 0 of
+                      true  -> stop;
+                      false -> cont
+                  end, NewState1};
+        false -> {cont, NewState}
     end.
 
 limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->

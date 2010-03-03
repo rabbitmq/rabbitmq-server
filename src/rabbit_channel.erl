@@ -801,6 +801,7 @@ handle_method(#'channel.flow'{active = false}, _,
                       false -> LimiterPid
                   end,
     ok = rabbit_limiter:block(LimiterPid1),
+    %% FIXME: need to go and notify the queues and not reply now
     {reply, #'channel.flow_ok'{active = false},
      State#ch{limiter_pid = LimiterPid1}};
 
