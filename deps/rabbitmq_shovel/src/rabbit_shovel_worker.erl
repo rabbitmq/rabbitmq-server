@@ -73,7 +73,7 @@ handle_cast(init, State = #state{name = Name, config = Config}) ->
                       ok
          end,
 
-    ok = amqp_channel:register_flow_handler(InboundChan, self()),
+    ok = amqp_channel:register_flow_handler(OutboundChan, self()),
 
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(
