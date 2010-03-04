@@ -782,17 +782,15 @@ contains_message(MsgId, From, State = #msstate { gc_active = GCActive }) ->
             end
     end.
 
-remove_message(MsgId, State = #msstate { sum_valid_data = SumValid,
-                                         current_file = CurFile }) ->
+remove_message(MsgId, State = #msstate { sum_valid_data = SumValid }) ->
     #msg_location { ref_count = RefCount, file = File,
                     offset = Offset, total_size = TotalSize } =
         index_lookup(MsgId, State),
     case RefCount of
         1 ->
-            true = case File =:= CurFile of
-                       true  -> ets:delete(?CUR_FILE_CACHE_ETS_NAME, MsgId);
-                       false -> true
-                   end,
+            %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
+            %% there may be further writes in the mailbox for the same
+            %% msg.
             ok = remove_cache_entry(MsgId),
             [#file_summary { valid_total_size = ValidTotalSize,
                              contiguous_top = ContiguousTop,
