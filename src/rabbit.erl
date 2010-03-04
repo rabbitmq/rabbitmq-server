@@ -122,8 +122,9 @@
 
 -rabbit_boot_step({message_store_queue_sup_queue_recovery,
                    [{description, "message store, queue supervisor and queue recovery"},
-                    {mfa,         {rabbit_queue_index, start_msg_store, []}},
-                    {requires,    exchange_recovery}]}).
+                    {mfa,         {rabbit_amqqueue, start, []}},
+                    {requires,    exchange_recovery},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"}]}).
