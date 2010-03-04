@@ -123,7 +123,7 @@
 -rabbit_boot_step({message_store_queue_sup_queue_recovery,
                    [{description, "message store, queue supervisor and queue recovery"},
                     {mfa,         {rabbit_amqqueue, start, []}},
-                    {requires,    exchange_recovery},
+                    {requires,    empty_db_check},
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({routing_ready,
