@@ -49,13 +49,14 @@
 -export([ensure_ok/2]).
 -export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
 -export([intersperse/2, upmap/2, map_in_order/2]).
--export([table_foreach/2]).
+-export([table_fold/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([read_term_file/1, write_term_file/2]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
+-export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
 
@@ -114,7 +115,7 @@
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(table_foreach/2 :: (fun ((any()) -> any()), atom()) -> 'ok').
+-spec(table_fold/3 :: (fun ((any(), A) -> A), A, atom()) -> A).
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
@@ -129,6 +130,7 @@
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> number()).
 -spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue()) -> B).
+-spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
 -spec(pid_to_string/1 :: (pid()) -> string()).
 -spec(string_to_pid/1 :: (string()) -> pid()).
 
@@ -357,20 +359,20 @@ map_in_order(F, L) ->
     lists:reverse(
       lists:foldl(fun (E, Acc) -> [F(E) | Acc] end, [], L)).
 
-%% For each entry in a table, execute a function in a transaction.
-%% This is often far more efficient than wrapping a tx around the lot.
+%% Fold over each entry in a table, executing the cons function in a
+%% transaction.  This is often far more efficient than wrapping a tx
+%% around the lot.
 %%
 %% We ignore entries that have been modified or removed.
-table_foreach(F, TableName) ->
-    lists:foreach(
-      fun (E) -> execute_mnesia_transaction(
+table_fold(F, Acc0, TableName) ->
+    lists:foldl(
+      fun (E, Acc) -> execute_mnesia_transaction(
                    fun () -> case mnesia:match_object(TableName, E, read) of
-                                 [] -> ok;
-                                 _  -> F(E)
+                                 [] -> Acc;
+                                 _  -> F(E, Acc)
                              end
                    end)
-      end, dirty_read_all(TableName)),
-    ok.
+      end, Acc0, dirty_read_all(TableName)).
 
 dirty_read_all(TableName) ->
     mnesia:dirty_select(TableName, [{'$1',[],['$1']}]).
@@ -503,6 +505,10 @@ queue_fold(Fun, Init, Q) ->
         {empty, _Q}      -> Init;
         {{value, V}, Q1} -> queue_fold(Fun, Fun(V, Init), Q1)
     end.
+
+%% Sorts a list of AMQP table fields as per the AMQP spec
+sort_field_table(Arguments) ->
+    lists:keysort(1, Arguments).
 
 %% This provides a string representation of a pid that is the same
 %% regardless of what node we are running on. The representation also

@@ -56,5 +56,5 @@
 -type(password() :: binary()).
 -type(vhost() :: binary()).
 -type(ctag() :: binary()).
--type(exchange_type() :: 'direct' | 'topic' | 'fanout').
+-type(exchange_type() :: atom()).
 -type(binding_key() :: binary()).
