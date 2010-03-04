@@ -71,5 +71,11 @@
   </pre>
 </xsl:template>
 
+<xsl:template match="div[@class='cmdsynopsis']">
+  <div class="cmdsynopsis" id="{p/code[@class='command']}">
+    <xsl:apply-templates select="node()"/>
+  </div>
+</xsl:template>
+
 </xsl:stylesheet>
 
