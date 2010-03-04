@@ -132,14 +132,14 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    DurableQueues = rabbit_amqqueue:find_durable_queues(),
+    DurableQueues = find_durable_queues(),
     ok = rabbit_queue_index:start_msg_store(DurableQueues),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
-    {ok, _RealDurableQueues} = rabbit_amqqueue:recover(DurableQueues),
+    {ok, _RealDurableQueues} = recover(DurableQueues),
     ok.
 
 recover(DurableQueues) ->
