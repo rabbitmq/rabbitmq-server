@@ -44,7 +44,7 @@ machine.
       <title>Commands</title>
       <variablelist>
         <varlistentry>
-          <term>start_all <replaceable>count</replaceable></term>
+          <term><cmdsynopsis><command>start_all</command> <arg choice="req"><replaceable>count</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
 Start count nodes with unique names, listening on all IP addresses and
@@ -59,7 +59,7 @@ on sequential ports starting from 5672.
         </varlistentry>
 
         <varlistentry>
-          <term>status</term>
+          <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
           <listitem>
             <para>
 Print the status of all running RabbitMQ nodes.
@@ -68,7 +68,7 @@ Print the status of all running RabbitMQ nodes.
         </varlistentry>
 
         <varlistentry>
-          <term>stop_all</term>
+          <term><cmdsynopsis><command>stop_all</command></cmdsynopsis></term>
           <listitem>
             <para>
 Stop all local RabbitMQ nodes,
@@ -77,7 +77,7 @@ Stop all local RabbitMQ nodes,
         </varlistentry>
 
         <varlistentry>
-          <term>rotate_logs</term>
+          <term><cmdsynopsis><command>rotate_logs</command></cmdsynopsis></term>
           <listitem>
             <para>
 Rotate log files for all local and running RabbitMQ nodes.

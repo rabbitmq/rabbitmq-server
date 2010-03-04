@@ -3,6 +3,8 @@
                 xmlns:doc="http://www.rabbitmq.com/namespaces/ad-hoc/doc"
                 version='1.0'>
 
+<xsl:param name="original"/>
+
 <xsl:output method="xml" doctype-public="bug in xslt processor requires fake doctype" doctype-system="otherwise css isn't included" />
 
 <xsl:template match="*"/>
@@ -17,13 +19,19 @@
 <xsl:processing-instruction name="xml-stylesheet">type="text/xml" href="page.xsl"</xsl:processing-instruction>
 <html xmlns:doc="http://www.rabbitmq.com/namespaces/ad-hoc/doc">
   <head>
-    <title>rabbitmqctl(1) manual page</title>
+    <title><xsl:value-of select="document($original)/refentry/refnamediv/refname"/>(<xsl:value-of select="document($original)/refentry/refmeta/manvolnum"/>) manual page</title>
   </head>
   <body>
     <doc:div>
       <p>
-        This is the manual page for the <code>rabbitmqctl</code> command. For 
-        more general documentation, please see the 
+        This is the manual page for 
+        <code><xsl:value-of select="document($original)/refentry/refnamediv/refname"/>(<xsl:value-of select="document($original)/refentry/refmeta/manvolnum"/>)</code>. 
+      </p>
+      <p>
+        <a href="manpages.html">See a list of all manual pages</a>.
+      </p>
+      <p>
+         For more general documentation, please see the 
         <a href="admin-guide.html">administrator's guide</a>.
       </p>
 

@@ -68,7 +68,7 @@ environment variable names, with the <envar>RABBITMQ_</envar> prefix removed:
         <para role="example">
             This is an example of a complete
             <filename>/etc/rabbitmq/rabbitmq.conf</filename> file that overrides the default Erlang
-            node name from "rabbit" to "hare":
+            node name from "rabbit" to "hare".
         </para>
 
     </refsect1>

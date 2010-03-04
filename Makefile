@@ -16,6 +16,7 @@ BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard docs/*.[0-9].xml))
+WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard docs/*.[0-9].xml))
 USAGES=$(patsubst %.1.xml, %.usage.erl, $(wildcard docs/*.[0-9].xml))
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
@@ -107,7 +108,7 @@ clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl $(SOURCE_DIR)/rabbitmqctl_usage.erl codegen.pyc
-	rm -f docs/*.[0-9].gz docs/*.usage.erl docs/*.html docs/*.erl
+	rm -f docs/*.[0-9].gz docs/*.usage.erl docs/*.man.xml docs/*.erl
 	rm -f $(RABBIT_PLT)
 	rm -f $(DEPS_FILE)
 
@@ -212,14 +213,16 @@ distclean: clean
 # in a namespace.
 # Also we rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.
-rabbitmqctl.xml: docs/rabbitmqctl.1.xml docs/html-to-website-xml.xsl
-	cp docs/rabbitmqctl.1.xml rabbitmqctl.xml && xmlto xhtml-nochunks rabbitmqctl.xml ; rm rabbitmqctl.xml
-	cat rabbitmqctl.html | grep -v DOCTYPE | sed -e s,xmlns=\"http://www.w3.org/1999/xhtml\",, | xsltproc docs/html-to-website-xml.xsl - | xmllint --format - > rabbitmqctl.xml
-	rm rabbitmqctl.html
-	# TODO how should this really be deployed?
-	cp rabbitmqctl.xml ../rabbitmq-website/site/
+%.man.xml: %.xml docs/html-to-website-xml.xsl
+	cp $< `basename $< .xml`.xml && \
+		xmlto xhtml-nochunks `basename $< .xml`.xml ; rm `basename $< .xml`.xml
+	cat `basename $< .xml`.html | grep -v DOCTYPE | \
+		sed -e s,xmlns=\"http://www.w3.org/1999/xhtml\",, | \
+		xsltproc  --stringparam original `basename $<` \
+		docs/html-to-website-xml.xsl - | xmllint --format - > $@
+	rm `basename $< .xml`.html
 
-docs_all: $(MANPAGES) rabbitmqctl.xml
+docs_all: $(MANPAGES) $(WEB_MANPAGES)
 
 install: SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
 install: all docs_all install_dirs
