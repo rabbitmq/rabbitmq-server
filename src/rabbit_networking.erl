@@ -118,10 +118,10 @@ start() ->
     ok.
 
 getaddr(Host) ->
-     % inet_parse:address takes care of ip string, like "0.0.0.0"
-     % inet:getaddr returns immediately for ip tuple {0,0,0,0},
-     %  and runs 'inet_gethost' port process for dns lookups.
-     % On Windows inet:getaddr runs dns resolver for ip string, which may fail.
+    %% inet_parse:address takes care of ip string, like "0.0.0.0"
+    %% inet:getaddr returns immediately for ip tuple {0,0,0,0},
+    %%  and runs 'inet_gethost' port process for dns lookups.
+    %% On Windows inet:getaddr runs dns resolver for ip string, which may fail.
     case inet_parse:address(Host) of
         {ok, IPAddress1} -> IPAddress1;
         {error, _} ->
