@@ -30,12 +30,15 @@
 %%
 
 -module(rabbit_router).
+-include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
 -behaviour(gen_server2).
 
 -export([start_link/0,
-         deliver/2]).
+         deliver/2,
+         match_bindings/2,
+         match_routing_key/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -128,6 +131,46 @@ deliver_per_node(NodeQPids, Delivery) ->
                    {Routed, lists:append(Handled)}).
 
 -endif.
+
+%% TODO: Maybe this should be handled by a cursor instead.
+%% TODO: This causes a full scan for each entry with the same exchange
+match_bindings(Name, Match) ->
+    Query = qlc:q([QName || #route{binding = Binding = #binding{
+                                               exchange_name = ExchangeName,
+                                               queue_name = QName}} <-
+                                mnesia:table(rabbit_route),
+                            ExchangeName == Name,
+                            Match(Binding)]),
+    lookup_qpids(
+      try
+          mnesia:async_dirty(fun qlc:e/1, [Query])
+      catch exit:{aborted, {badarg, _}} ->
+              %% work around OTP-7025, which was fixed in R12B-1, by
+              %% falling back on a less efficient method
+              [QName || #route{binding = Binding = #binding{
+                                           queue_name = QName}} <-
+                            mnesia:dirty_match_object(
+                              rabbit_route,
+                              #route{binding = #binding{exchange_name = Name,
+                                                        _ = '_'}}),
+                        Match(Binding)]
+      end).
+
+match_routing_key(Name, RoutingKey) ->
+    MatchHead = #route{binding = #binding{exchange_name = Name,
+                                          queue_name = '$1',
+                                          key = RoutingKey,
+                                          _ = '_'}},
+    lookup_qpids(mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
+
+lookup_qpids(Queues) ->
+    sets:fold(
+      fun(Key, Acc) ->
+              case mnesia:dirty_read({rabbit_queue, Key}) of
+                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
+                  []                      -> Acc
+              end
+      end, [], sets:from_list(Queues)).
 
 %%--------------------------------------------------------------------
 
