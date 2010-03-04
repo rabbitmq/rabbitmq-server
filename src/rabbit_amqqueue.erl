@@ -369,17 +369,25 @@ flush_all(QPids, ChPid) ->
       QPids).
 
 internal_delete(QueueName) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:wread({rabbit_queue, QueueName}) of
-                  []  -> {error, not_found};
-                  [_] ->
-                      ok = rabbit_exchange:delete_queue_bindings(QueueName),
-                      ok = mnesia:delete({rabbit_queue, QueueName}),
-                      ok = mnesia:delete({rabbit_durable_queue, QueueName}),
-                      ok
-              end
-      end).
+    case
+        rabbit_misc:execute_mnesia_transaction(
+          fun () ->
+                  case mnesia:wread({rabbit_queue, QueueName}) of
+                      []  -> {error, not_found};
+                      [_] ->
+                          ok = mnesia:delete({rabbit_queue, QueueName}),
+                          ok = mnesia:delete({rabbit_durable_queue, QueueName}),
+                          %% we want to execute some things, as
+                          %% decided by rabbit_exchange, after the
+                          %% transaction.
+                          rabbit_exchange:delete_queue_bindings(QueueName)
+                  end
+          end) of
+        Err = {error, _} -> Err;
+        PostHook ->
+            PostHook(),
+            ok
+    end.
 
 remeasure_rates(QPid) ->
     gen_server2:pcast(QPid, 8, remeasure_rates).
@@ -391,20 +399,20 @@ set_maximum_since_use(QPid, Age) ->
     gen_server2:pcast(QPid, 8, {set_maximum_since_use, Age}).
 
 on_node_down(Node) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              qlc:fold(
-                fun (QueueName, Acc) ->
-                        ok = rabbit_exchange:delete_transient_queue_bindings(
-                               QueueName),
-                        ok = mnesia:delete({rabbit_queue, QueueName}),
-                        Acc
-                end,
-                ok,
-                qlc:q([QueueName || #amqqueue{name = QueueName, pid = Pid}
-                                        <- mnesia:table(rabbit_queue),
-                                    node(Pid) == Node]))
-      end).
+    [Hook() ||
+        Hook <- rabbit_misc:execute_mnesia_transaction(
+                  fun () ->
+                          qlc:e(qlc:q([delete_queue(QueueName) ||
+                                          #amqqueue{name = QueueName, pid = Pid}
+                                              <- mnesia:table(rabbit_queue),
+                                          node(Pid) == Node]))
+                  end)],
+    ok.
+
+delete_queue(QueueName) ->
+    Post = rabbit_exchange:delete_transient_queue_bindings(QueueName),
+    ok = mnesia:delete({rabbit_queue, QueueName}),
+    Post.
 
 pseudo_queue(QueueName, Pid) ->
     #amqqueue{name = QueueName,
