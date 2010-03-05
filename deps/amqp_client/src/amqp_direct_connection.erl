@@ -34,12 +34,16 @@
 
 -record(dc_state, {params = #amqp_params{},
                    closing = false,
+                   server_properties,
                    channels = amqp_channel_util:new_channel_dict()}).
 
 -record(dc_closing, {reason,
                      close = none, %% At least one of close and reply has to be
                      reply = none, %%     none at any given moment
                      from = none}).
+
+-define(INFO_KEYS,
+        (amqp_connection:info_keys() ++ [])).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -57,14 +61,22 @@ init(AmqpParams = #amqp_params{username = User,
     rabbit_access_control:check_vhost_access(#user{username = User,
                                                    password = Pass},
                                              VHost),
-    {ok, #dc_state{params = AmqpParams}}.
+    ServerProperties = rabbit_reader:server_properties(),
+    {ok, #dc_state{params = AmqpParams,
+                   server_properties = ServerProperties}}.
 
 %% Standard handling of an app initiated command
 handle_call({command, Command}, From, #dc_state{closing = Closing} = State) ->
     case Closing of
         false -> handle_command(Command, From, State);
         _     -> {reply, closing, State}
-    end.
+    end;
+
+handle_call({info, Items}, _From, State) ->
+    {reply, [{Item, i(Item, State)} || Item <- Items], State};
+
+handle_call(info_keys, _From, State) ->
+    {reply, ?INFO_KEYS, State}.
 
 %% No cast implemented
 handle_cast(Message, State) ->
@@ -110,6 +122,17 @@ handle_command({close, Close}, From, State) ->
                                                    close = Close,
                                                    from = From},
                                 State)}.
+
+%%---------------------------------------------------------------------------
+%% Infos
+%%---------------------------------------------------------------------------
+
+i(server_properties, State) -> State#dc_state.server_properties;
+i(is_closing,        State) -> State#dc_state.closing =/= false;
+i(amqp_params,       State) -> State#dc_state.params;
+i(num_channels,      State) -> amqp_channel_util:num_channels(
+                                   State#dc_state.channels);
+i(Item,             _State) -> throw({bad_argument, Item}).
 
 %%---------------------------------------------------------------------------
 %% Closing

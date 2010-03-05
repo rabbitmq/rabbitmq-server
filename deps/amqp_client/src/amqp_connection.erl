@@ -36,6 +36,10 @@
 -export([start_direct/0, start_direct/1, start_direct_link/0, start_direct_link/1]).
 -export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
 -export([close/1, close/3]).
+-export([info/2, info_keys/1, info_keys/0]).
+
+-define(COMMON_INFO_KEYS,
+        [server_properties, is_closing, amqp_params, num_channels]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -186,6 +190,62 @@ close(ConnectionPid, Code, Text) ->
                                 class_id   = 0,
                                 method_id  = 0},
     command(ConnectionPid, {close, Close}).
+
+%%---------------------------------------------------------------------------
+%% Other functions
+%%---------------------------------------------------------------------------
+
+%% @spec (ConnectionPid, Items) -> ResultList
+%% where
+%%      ConnectionPid = pid()
+%%      Items = [Item]
+%%      ResultList = [{Item, Result}]
+%%      Item = atom()
+%%      Result = term()
+%% @doc Returns information about the connection, as specified by the Items
+%% list. Item may be any atom returned by info_keys/1:
+%%      server_properties - returns the server_properties fiels sent by the
+%%          server while establishing the connection
+%%      is_closing - returns true if the connection is in the process of closing
+%%          and false otherwise
+%%      amqp_params - returns the #amqp_params{} structure used to start the
+%%          connection
+%%      num_channels - returns the number of channels currently open under the
+%%          connection (excluding channel 0)
+%%      max_channel - returns the max_channel value negotiated with the server
+%%          (only for the network connection)
+%%      heartbeat - returns the heartbeat value negotiated with the server
+%%          (only for the network connection)
+%%      any other value - throws an exception
+info(ConnectionPid, Items) ->
+    gen_server:call(ConnectionPid, {info, Items}, infinity).
+
+%% @spec (ConnectionPid) -> Items
+%% where
+%%      ConnectionPid = pid()
+%%      Items = [Item]
+%%      Item = atom()
+%% @doc Returns a list of atoms that can be used in conjunction with info/2.
+%% Note that the list differs from a type of connection to another (network vs.
+%% direct). Use info_keys/0 to get a list of info keys that can be used for
+%% any connection.
+info_keys(ConnectionPid) ->
+    gen_server:call(ConnectionPid, info_keys, infinity).
+
+%% @spec () -> Items
+%% where
+%%      Items = [Item]
+%%      Item = atom()
+%% @doc Returns a list of atoms that can be used in conjunction with info/2.
+%% These are general info keys, which can be used in any type of connection.
+%% Other info keys may exist for a specific type. To get the full list of
+%% atoms that can be used for a certain connection, use info_keys/1.
+info_keys() ->
+    ?COMMON_INFO_KEYS.
+
+%%---------------------------------------------------------------------------
+%% Internal plumbing
+%%---------------------------------------------------------------------------
 
 command(ConnectionPid, Command) ->
     gen_server:call(ConnectionPid, {command, Command}, infinity).
