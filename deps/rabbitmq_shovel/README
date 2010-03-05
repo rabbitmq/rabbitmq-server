@@ -243,7 +243,7 @@ publish_fields
 This is a list of tuples which override fields in the publish method
 when publishing to the destination. This can be used to direct
 messages to a particular exchange on the destination, for example, or
-change the routing key. By default, the routing key and the exchange
+change the routing key. By default, the exchange and the routing key
 of the message as it is received by the shovel is passed through, but
 this can be overridden as necessary.
 
