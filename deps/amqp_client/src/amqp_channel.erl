@@ -219,7 +219,9 @@ rpc_bottom_half(Reply, State = #c_state{rpc_requests = RequestQueue}) ->
         {empty, _} ->
             exit(empty_rpc_bottom_half);
         {{value, {From, _Method, _Content}}, NewRequestQueue} ->
-            gen_server:reply(From, Reply),
+            case From of none -> ok;
+                         _    -> gen_server:reply(From, Reply)
+            end,
             do_rpc(State#c_state{rpc_requests = NewRequestQueue})
     end.
 
@@ -446,11 +448,22 @@ handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer}
 %% @private
 handle_cast({cast, Method, AmqpMsg} = Cast, State) ->
     case check_block(Method, AmqpMsg, State) of
-        ok         -> do(Method, build_content(AmqpMsg), State);
-        BlockReply -> ?LOG_INFO("Channel (~p): discarding method in cast ~p."
-                                "Reason: ~p~n", [self(), Cast, BlockReply])
-    end,
-    {noreply, State};
+        ok ->
+            Content = build_content(AmqpMsg),
+            case rabbit_framing:is_method_synchronous(Method) of
+                true  -> ?LOG_WARN("Channel (~p): casting synchronous method "
+                                   "~p.~n"
+                                   "The reply will be ignored!~n",
+                                   [self(), Method]),
+                         {noreply, rpc_top_half(Method, Content, none, State)};
+                false -> do(Method, Content, State),
+                         {noreply, State}
+            end;
+        BlockReply ->
+            ?LOG_WARN("Channel (~p): discarding method in cast ~p.~n"
+                      "Reason: ~p~n", [self(), Cast, BlockReply]),
+            {noreply, State}
+    end;
 
 %% Registers a handler to process return messages
 %% @private
