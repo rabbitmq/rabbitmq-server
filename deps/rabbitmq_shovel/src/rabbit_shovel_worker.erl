@@ -100,19 +100,18 @@ handle_info({#'basic.deliver'{delivery_tag = Tag, routing_key = RoutingKey},
     Msg1 = Msg#amqp_msg{props = (Config#shovel.publish_properties)(Props)},
     {noreply, publish(Tag, Method1, Msg1, State)};
 
-handle_info(#'channel.flow'{active = true} = Flow, State) ->
-    State1 = #state{inbound_ch = InboundChan, blocked = Blocked} =
-        drain_buffer(State#state{blocked = false}),
-    case Blocked of
+handle_info(#'channel.flow'{active = true},
+            State = #state{inbound_ch = InboundChan}) ->
+    State1 = drain_buffer(State#state{blocked = false}),
+    case State1#state.blocked of
         true  -> ok;
-        false -> #'channel.flow_ok'{active = true} =
-                     amqp_channel:call(InboundChan, Flow)
+        false -> channel_flow(InboundChan, true)
     end,
     {noreply, State1};
 
-handle_info(#'channel.flow'{active = false} = Flow,
+handle_info(#'channel.flow'{active = false},
             State = #state{inbound_ch = InboundChan}) ->
-    #'channel.flow_ok'{active = false} = amqp_channel:call(InboundChan, Flow),
+    channel_flow(InboundChan, false),
     {noreply, State#state{blocked = true}}.
 
 terminate(Reason, #state{inbound_conn = undefined, inbound_ch = undefined,
@@ -158,25 +157,27 @@ publish(Tag, Method, Msg,
             end,
             State#state{tx_counter = TxCounter1};
         blocked ->
-            #'channel.flow_ok'{active = false} =
-                amqp_channel:call(InboundChan, #'channel.flow'{active = false}),
+            channel_flow(InboundChan, false),
             State#state{blocked = true,
                         msg_buf = queue:in_r({Tag, Method, Msg}, MsgBuf)}
     end;
 publish(Tag, Method, Msg, State = #state{blocked = true, msg_buf = MsgBuf}) ->
     State#state{msg_buf = queue:in({Tag, Method, Msg}, MsgBuf)}.
 
+drain_buffer(State = #state{blocked = true}) ->
+    State;
 drain_buffer(State = #state{blocked = false, msg_buf = MsgBuf}) ->
     case queue:out(MsgBuf) of
         {empty, _MsgBuf} ->
             State;
         {{value, {Tag, Method, Msg}}, MsgBuf1} ->
-            State1 = publish(Tag, Method, Msg, State#state{msg_buf = MsgBuf1}),
-            case State1#state.blocked of
-                true  -> State1;
-                false -> drain_buffer(State1)
-            end
+            drain_buffer(publish(Tag, Method, Msg,
+                                 State#state{msg_buf = MsgBuf1}))
     end.
+
+channel_flow(Chan, Active) ->
+    #'channel.flow_ok'{active = Active} =
+        amqp_channel:call(Chan, #'channel.flow'{active = Active}).
 
 make_conn_and_chan(AmqpParams) ->
     AmqpParam = lists:nth(random:uniform(length(AmqpParams)), AmqpParams),
