@@ -119,7 +119,7 @@
 
 start() ->
     {ok,_} = supervisor:start_child(
-               rabbit_sup,
+               rabbit_restartable_sup,
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),

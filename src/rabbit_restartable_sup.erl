@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_sup).
+-module(rabbit_restartable_sup).
 
 -behaviour(supervisor).
 
@@ -51,7 +51,4 @@ start_child(Mod, Args) ->
     ok.
 
 init([]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{rabbit_restartable_sup,
-            {rabbit_restartable_sup, start_link, []},
-            transient, 100, supervisor, [rabbit_restartable_sup]}]}}.
+    {ok, {{one_for_one, 10, 10}, []}}.
