@@ -89,7 +89,7 @@ handle_cast(init, State = #state{config = Config}) ->
                     tx_counter = 0, blocked = false, msg_buf = queue:new(),
                     inbound_params = InboundParams,
                     outbound_params = OutboundParams},
-    ok = active_status(running, State1),
+    ok = report_status(running, State1),
     {noreply, State1}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
@@ -105,17 +105,17 @@ handle_info({#'basic.deliver'{delivery_tag = Tag, routing_key = RoutingKey},
 
 handle_info(#'channel.flow'{active = true},
             State = #state{inbound_ch = InboundChan}) ->
-    ok = active_status(running, State),
+    ok = report_status(running, State),
     State1 = drain_buffer(State#state{blocked = false}),
     ok = case State1#state.blocked of
-             true  -> active_status(blocked, State);
+             true  -> report_status(blocked, State);
              false -> channel_flow(InboundChan, true)
          end,
     {noreply, State1};
 
 handle_info(#'channel.flow'{active = false},
             State = #state{inbound_ch = InboundChan}) ->
-    ok = active_status(blocked, State),
+    ok = report_status(blocked, State),
     ok = channel_flow(InboundChan, false),
     {noreply, State#state{blocked = true}}.
 
@@ -138,6 +138,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------
 %% Helpers
 %%---------------------------
+
+report_status(Verb, State) ->
+    rabbit_shovel_status:report(
+      State#state.name, {Verb, {source, State#state.inbound_params},
+                         {destination, State#state.outbound_params}}).
 
 publish(Tag, Method, Msg,
         State = #state{tx_counter = TxCounter, inbound_ch = InboundChan,
@@ -162,18 +167,13 @@ publish(Tag, Method, Msg,
             end,
             State#state{tx_counter = TxCounter1};
         blocked ->
-            ok = active_status(blocked, State),
+            ok = report_status(blocked, State),
             ok = channel_flow(InboundChan, false),
             State#state{blocked = true,
                         msg_buf = queue:in_r({Tag, Method, Msg}, MsgBuf)}
     end;
 publish(Tag, Method, Msg, State = #state{blocked = true, msg_buf = MsgBuf}) ->
     State#state{msg_buf = queue:in({Tag, Method, Msg}, MsgBuf)}.
-
-active_status(Verb, State) ->
-    rabbit_shovel_status:report(
-      State#state.name, {Verb, {source, State#state.inbound_params},
-                         {destination, State#state.outbound_params}}).
 
 drain_buffer(State = #state{blocked = true}) ->
     State;
