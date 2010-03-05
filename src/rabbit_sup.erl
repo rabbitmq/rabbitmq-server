@@ -54,4 +54,4 @@ init([]) ->
     {ok, {{one_for_all, 0, 1},
           [{rabbit_restartable_sup,
             {rabbit_restartable_sup, start_link, []},
-            transient, 100, supervisor, [rabbit_restartable_sup]}]}}.
+            transient, infinity, supervisor, [rabbit_restartable_sup]}]}}.
