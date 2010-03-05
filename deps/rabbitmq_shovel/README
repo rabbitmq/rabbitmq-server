@@ -279,11 +279,21 @@ name, the shovel status, and the timestamp (a local calendar time of
 'starting': The shovel is starting up, connecting and creating
     resources.
 
-{'running', {'source', Source},
-            {'destination', Destination}}:
-    The shovel is up and running, shovelling messages. Source and
-    Destination give the connection parameters used to connect to the
-    endpoints.
+{'running'|'blocked', {'source', Source},
+                      {'destination', Destination}}:
+
+    When 'running', the shovel is up and running, shovelling
+    messages. When 'blocked', the destination has raised channel.flow,
+    preventing the shovel from sending messages to the
+    destination. The shovel will raise channel.flow to the source,
+    asking the source to stop sending further messages to the
+    shovel. Any messages that are received by the shovel before the
+    source observes the channel.flow are correctly buffered and
+    maintained in order, and are published to the destination as soon
+    as the destination drops the channel.flow block.
+
+    Source and Destination give the connection parameters used to
+    connect to the endpoints.
 
 {'terminated', Reason}: Something's gone wrong. The Reason should give
     a further indication of where the fault lies.
