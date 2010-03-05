@@ -95,10 +95,11 @@ handle_cast(init, State = #state{config = Config}) ->
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
-handle_info({#'basic.deliver'{delivery_tag = Tag, routing_key = RoutingKey},
+handle_info({#'basic.deliver'{delivery_tag = Tag, routing_key = RoutingKey,
+                              exchange = Exchange},
              Msg = #amqp_msg{props = Props = #'P_basic'{}}},
             State = #state{config = Config}) ->
-    Method = #'basic.publish'{routing_key = RoutingKey},
+    Method = #'basic.publish'{routing_key = RoutingKey, exchange = Exchange},
     Method1 = (Config#shovel.publish_fields)(Method),
     Msg1 = Msg#amqp_msg{props = (Config#shovel.publish_properties)(Props)},
     {noreply, publish(Tag, Method1, Msg1, State)};
