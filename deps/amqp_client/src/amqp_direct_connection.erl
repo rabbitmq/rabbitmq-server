@@ -42,6 +42,9 @@
                      reply = none, %%     none at any given moment
                      from = none}).
 
+-define(INFO_KEYS,
+        (amqp_connection:info_keys() ++ [])).
+
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
@@ -70,7 +73,10 @@ handle_call({command, Command}, From, #dc_state{closing = Closing} = State) ->
     end;
 
 handle_call({info, Items}, _From, State) ->
-    {reply, [{Item, i(Item, State)} || Item <- Items], State}.
+    {reply, [{Item, i(Item, State)} || Item <- Items], State};
+
+handle_call(info_keys, _From, State) ->
+    {reply, ?INFO_KEYS, State}.
 
 %% No cast implemented
 handle_cast(Message, State) ->

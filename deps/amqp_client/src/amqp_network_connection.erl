@@ -53,6 +53,9 @@
                      from = none,
                      phase = terminate_channels}).
 
+-define(INFO_KEYS,
+        (amqp_connection:info_keys() ++ [max_channel, heartbeat])).
+
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
@@ -70,7 +73,10 @@ handle_call({command, Command}, From, #nc_state{closing = Closing} = State) ->
     end;
 
 handle_call({info, Items}, _From, State) ->
-    {reply, [{Item, i(Item, State)} || Item <- Items], State}.
+    {reply, [{Item, i(Item, State)} || Item <- Items], State};
+
+handle_call(info_keys, _From, State) ->
+    {reply, ?INFO_KEYS, State}.
 
 %% Standard handling of a method sent by the broker (this is received from
 %% framing0)
