@@ -169,8 +169,8 @@ start_listener(Host, Port, Label, OnConnect) ->
 stop_tcp_listener(Host, Port) ->
     IPAddress = getaddr(Host),
     Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
-    ok = supervisor:terminate_child(rabbit_sup, Name),
-    ok = supervisor:delete_child(rabbit_sup, Name),
+    ok = supervisor:terminate_child(rabbit_restartable_sup, Name),
+    ok = supervisor:delete_child(rabbit_restartable_sup, Name),
     ok.
 
 tcp_listener_started(IPAddress, Port) ->
