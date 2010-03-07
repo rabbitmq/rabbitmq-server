@@ -9,5 +9,5 @@ Vcs-Browser: http://hg.rabbitmq.com/rabbitmq-stomp
 
 Package: rabbitmq-stomp
 Architecture: all
-Depends: rabbitmq-server, ejabberd
+Depends: rabbitmq-server
 Description: A STOMP (Simple Text-Oriented Messaging Protocol) gateway for RabbitMQ
