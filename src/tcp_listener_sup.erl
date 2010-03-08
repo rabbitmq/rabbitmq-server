@@ -37,6 +37,8 @@
 
 -export([init/1]).
 
+-include("rabbit.hrl").
+
 start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
            AcceptCallback, Label) ->
     start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
@@ -63,4 +65,4 @@ init({IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
                            [IPAddress, Port, SocketOpts,
                             ConcurrentAcceptorCount, Name,
                             OnStartup, OnShutdown, Label]},
-            transient, 100, worker, [tcp_listener]}]}}.
+            transient, ?MAX_WAIT, worker, [tcp_listener]}]}}.
