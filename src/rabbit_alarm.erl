@@ -60,7 +60,7 @@ start() ->
              true ->
                  ok;
              false ->
-                 rabbit_restartable_sup:start_child(vm_memory_monitor,
+                 rabbit_sup:start_restartable_child(vm_memory_monitor,
                                                     [MemoryWatermark])
          end,
     ok.
