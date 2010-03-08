@@ -18,40 +18,25 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
+%%   (C) 2007-2009 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
 %%   Contributor(s): ______________________________________.
 %%
+-ifdef(use_specs).
 
--module(rabbit_sup).
+-spec(description/0 :: () -> [{atom(), any()}]).
+-spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
+-spec(validate/1 :: (exchange()) -> 'ok').
+-spec(create/1 :: (exchange()) -> 'ok').
+-spec(recover/2 :: (exchange(), list(binding())) -> 'ok').
+-spec(delete/2 :: (exchange(), list(binding())) -> 'ok').
+-spec(add_binding/2 :: (exchange(), binding()) -> 'ok').
+-spec(remove_bindings/2 :: (exchange(), list(binding())) -> 'ok').
 
--behaviour(supervisor).
-
--export([start_link/0, start_child/1, start_child/2]).
-
--export([init/1]).
-
--define(SERVER, ?MODULE).
-
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-start_child(Mod) ->
-    start_child(Mod, []).
-
-start_child(Mod, Args) ->
-    {ok, _} = supervisor:start_child(?SERVER, {Mod, {Mod, start_link, Args},
-                                               transient, 100, worker, [Mod]}),
-    ok.
-
-init([]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{rabbit_restartable_sup,
-            {rabbit_restartable_sup, start_link, []},
-            transient, infinity, supervisor, [rabbit_restartable_sup]}]}}.
+-endif.
