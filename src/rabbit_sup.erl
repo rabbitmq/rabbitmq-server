@@ -38,6 +38,8 @@
 
 -export([init/1]).
 
+-include("rabbit.hrl").
+
 -define(SERVER, ?MODULE).
 
 start_link() ->
@@ -47,8 +49,9 @@ start_child(Mod) ->
     start_child(Mod, []).
 
 start_child(Mod, Args) ->
-    {ok, _} = supervisor:start_child(?SERVER, {Mod, {Mod, start_link, Args},
-                                               transient, 100, worker, [Mod]}),
+    {ok, _} = supervisor:start_child(?SERVER,
+                                     {Mod, {Mod, start_link, Args},
+                                      transient, ?MAX_WAIT, worker, [Mod]}),
     ok.
 
 start_restartable_child(Mod) ->

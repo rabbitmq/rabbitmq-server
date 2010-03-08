@@ -37,8 +37,11 @@
 
 -export([init/1]).
 
+-include("rabbit.hrl").
+
 start_link(Name, {_M, _F, _A} = Fun) ->
     supervisor:start_link({local, Name}, ?MODULE, [Fun]).
 
 init([{Mod, _F, _A} = Fun]) ->
-    {ok, {{one_for_one, 10, 10}, [{Mod, Fun, transient, 100, worker, [Mod]}]}}.
+    {ok, {{one_for_one, 10, 10},
+          [{Mod, Fun, transient, ?MAX_WAIT, worker, [Mod]}]}}.
