@@ -33,7 +33,8 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_child/1, start_child/2]).
+-export([start_link/0, start_child/1, start_child/2,
+         start_restartable_child/1, start_restartable_child/2]).
 
 -export([init/1]).
 
@@ -50,8 +51,17 @@ start_child(Mod, Args) ->
                                                transient, 100, worker, [Mod]}),
     ok.
 
+start_restartable_child(Mod) ->
+    start_restartable_child(Mod, []).
+
+start_restartable_child(Mod, Args) ->
+    Name = list_to_atom(atom_to_list(Mod) ++ "_sup"),
+    {ok, _} = supervisor:start_child(
+                ?SERVER,
+                {Name, {rabbit_restartable_sup, start_link,
+                        [Name, {Mod, start_link, Args}]},
+                 transient, infinity, supervisor, [rabbit_restartable_sup]}),
+    ok.
+
 init([]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{rabbit_restartable_sup,
-            {rabbit_restartable_sup, start_link, []},
-            transient, infinity, supervisor, [rabbit_restartable_sup]}]}}.
+    {ok, {{one_for_all, 0, 1}, []}}.
