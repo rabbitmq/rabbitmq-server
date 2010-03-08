@@ -72,7 +72,7 @@
 
 -rabbit_boot_step({file_handle_cache,
                    [{description, "file handle cache server"},
-                    {mfa,         {rabbit_sup, start_child,
+                    {mfa,         {rabbit_restartable_sup, start_child,
                                    [file_handle_cache]}},
                     {enables,     kernel_ready}]}).
 
@@ -87,7 +87,7 @@
 
 -rabbit_boot_step({rabbit_memory_monitor,
                    [{description, "memory moniter"},
-                    {mfa,         {rabbit_sup, start_child,
+                    {mfa,         {rabbit_restartable_sup, start_child,
                                    [rabbit_memory_monitor]}},
                     {requires,    rabbit_alarm},
                     {enables,     core_initialized}]}).
