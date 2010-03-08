@@ -35,7 +35,8 @@ main([IncludeDir, ErlDir, EbinDir, TargetFile]) ->
 detect_deps(IncludeDir, EbinDir, Modules, Headers, Path) ->
     {ok, Forms} = epp:parse_file(Path, [IncludeDir], [{use_specs, true}]),
     lists:foldl(
-      fun ({attribute, _LineNumber, behaviour, Behaviour}, Deps) ->
+      fun ({attribute, _LineNumber, Attribute, Behaviour}, Deps)
+          when Attribute =:= behaviour orelse Attribute =:= behavior ->
               case sets:is_element(Behaviour, Modules) of
                   true  -> sets:add_element(
                              [EbinDir, "/", atom_to_list(Behaviour), ".beam"],
