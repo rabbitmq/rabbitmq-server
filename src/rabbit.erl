@@ -61,7 +61,8 @@
 
 -rabbit_boot_step({rabbit_log,
                    [{description, "logging server"},
-                    {mfa,         {rabbit_sup, start_child, [rabbit_log]}},
+                    {mfa,         {rabbit_restartable_sup, start_child,
+                                   [rabbit_log]}},
                     {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_hooks,
@@ -71,7 +72,8 @@
 
 -rabbit_boot_step({file_handle_cache,
                    [{description, "file handle cache server"},
-                    {mfa,         {rabbit_sup, start_child, [file_handle_cache]}},
+                    {mfa,         {rabbit_sup, start_child,
+                                   [file_handle_cache]}},
                     {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({kernel_ready,
@@ -85,25 +87,29 @@
 
 -rabbit_boot_step({rabbit_memory_monitor,
                    [{description, "memory moniter"},
-                    {mfa,         {rabbit_sup, start_child, [rabbit_memory_monitor]}},
+                    {mfa,         {rabbit_sup, start_child,
+                                   [rabbit_memory_monitor]}},
                     {requires,    rabbit_alarm},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({guid_generator,
                    [{description, "guid generator"},
-                    {mfa,         {rabbit_sup, start_child, [rabbit_guid]}},
+                    {mfa,         {rabbit_restartable_sup, start_child,
+                                   [rabbit_guid]}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({rabbit_router,
                    [{description, "cluster router"},
-                    {mfa,         {rabbit_sup, start_child, [rabbit_router]}},
+                    {mfa,         {rabbit_restartable_sup, start_child,
+                                   [rabbit_router]}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({rabbit_node_monitor,
                    [{description, "node monitor"},
-                    {mfa,         {rabbit_sup, start_child, [rabbit_node_monitor]}},
+                    {mfa,         {rabbit_restartable_sup, start_child,
+                                   [rabbit_node_monitor]}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 

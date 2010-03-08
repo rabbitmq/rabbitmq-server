@@ -109,7 +109,7 @@ boot_ssl() ->
 
 start() ->
     {ok,_} = supervisor:start_child(
-               rabbit_sup,
+               rabbit_restartable_sup,
                {rabbit_tcp_client_sup,
                 {tcp_client_sup, start_link,
                  [{local, rabbit_tcp_client_sup},
@@ -156,7 +156,7 @@ start_listener(Host, Port, Label, OnConnect) ->
     {IPAddress, Name} =
         check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
     {ok,_} = supervisor:start_child(
-               rabbit_sup,
+               rabbit_restartable_sup,
                {Name,
                 {tcp_listener_sup, start_link,
                  [IPAddress, Port, ?RABBIT_TCP_OPTS ,
@@ -169,8 +169,8 @@ start_listener(Host, Port, Label, OnConnect) ->
 stop_tcp_listener(Host, Port) ->
     IPAddress = getaddr(Host),
     Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
-    ok = supervisor:terminate_child(rabbit_sup, Name),
-    ok = supervisor:delete_child(rabbit_sup, Name),
+    ok = supervisor:terminate_child(rabbit_restartable_sup, Name),
+    ok = supervisor:delete_child(rabbit_restartable_sup, Name),
     ok.
 
 tcp_listener_started(IPAddress, Port) ->
