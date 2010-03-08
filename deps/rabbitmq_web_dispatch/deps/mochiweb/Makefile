@@ -35,3 +35,7 @@ $(CHECKOUT_DIR):
 	cp -r $(LIB_PACKAGE_DIR)/include $(INCLUDE_DIR)
 	zip $(LIB_PACKAGE_NAME) $(LIB_PACKAGE_DIR)/
 	zip -r $(LIB_PACKAGE_NAME) $(LIB_PACKAGE_DIR)/$(EBIN_DIR)/
+
+echo-revision:
+	@echo $(REVISION)
+
