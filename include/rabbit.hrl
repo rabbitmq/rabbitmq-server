@@ -175,6 +175,8 @@
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2010 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
 
+-define(MAX_WAIT, 16#ffffffff).
+
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).
 -define(LOGDEBUG(F,A), rabbit_log:debug(F,A)).

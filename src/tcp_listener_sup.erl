@@ -63,4 +63,4 @@ init({IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
                            [IPAddress, Port, SocketOpts,
                             ConcurrentAcceptorCount, Name,
                             OnStartup, OnShutdown, Label]},
-            transient, 100, worker, [tcp_listener]}]}}.
+            transient, 16#ffffffff, worker, [tcp_listener]}]}}.

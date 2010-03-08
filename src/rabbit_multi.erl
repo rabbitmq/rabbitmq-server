@@ -50,8 +50,8 @@
 start() ->
     RpcTimeout =
         case init:get_argument(maxwait) of
-            {ok, [[N1]]} -> 1000 * list_to_integer(N1);
-            _            -> 16#ffffffff %% max allowed value according to docs
+            {ok,[[N1]]} -> 1000 * list_to_integer(N1);
+            _           -> ?MAX_WAIT
         end,
     case init:get_plain_arguments() of
         [] ->

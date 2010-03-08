@@ -206,7 +206,7 @@ ensure_started() ->
     case whereis(?MODULE) of
         undefined ->
             C = {pg_local, {?MODULE, start_link, []}, permanent,
-                 1000, worker, [?MODULE]},
+                 16#ffffffff, worker, [?MODULE]},
             supervisor:start_child(kernel_safe_sup, C);
         PgLocalPid ->
             {ok, PgLocalPid}

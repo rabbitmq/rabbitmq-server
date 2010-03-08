@@ -57,11 +57,9 @@ start() ->
     ok = alarm_handler:add_alarm_handler(?MODULE, []),
     {ok, MemoryWatermark} = application:get_env(vm_memory_high_watermark),
     ok = case MemoryWatermark == 0 of
-             true ->
-                 ok;
-             false ->
-                 rabbit_restartable_sup:start_child(vm_memory_monitor,
-                                                    [MemoryWatermark])
+             true  -> ok;
+             false -> rabbit_sup:start_restartable_child(vm_memory_monitor,
+                                                         [MemoryWatermark])
          end,
     ok.
 

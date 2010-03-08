@@ -135,7 +135,7 @@ start() ->
     DurableQueues = find_durable_queues(),
     ok = rabbit_queue_index:start_msg_store(DurableQueues),
     {ok,_} = supervisor:start_child(
-               rabbit_restartable_sup,
+               rabbit_sup,
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),

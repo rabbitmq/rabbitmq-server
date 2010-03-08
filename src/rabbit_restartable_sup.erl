@@ -33,22 +33,15 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_child/1, start_child/2]).
+-export([start_link/2]).
 
 -export([init/1]).
 
--define(SERVER, ?MODULE).
+-include("rabbit.hrl").
 
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+start_link(Name, {_M, _F, _A} = Fun) ->
+    supervisor:start_link({local, Name}, ?MODULE, [Fun]).
 
-start_child(Mod) ->
-    start_child(Mod, []).
-
-start_child(Mod, Args) ->
-    {ok, _} = supervisor:start_child(?SERVER, {Mod, {Mod, start_link, Args},
-                                               transient, 100, worker, [Mod]}),
-    ok.
-
-init([]) ->
-    {ok, {{one_for_one, 10, 10}, []}}.
+init([{Mod, _F, _A} = Fun]) ->
+    {ok, {{one_for_one, 10, 10},
+          [{Mod, Fun, transient, ?MAX_WAIT, worker, [Mod]}]}}.
