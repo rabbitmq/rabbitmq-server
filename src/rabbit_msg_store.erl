@@ -547,7 +547,7 @@ handle_cast({write, MsgId, Msg},
                                     { sum_valid_data = SumValid + TotalSize,
                                       sum_file_size = SumFileSize + TotalSize }
                                    )));
-        #msg_location { ref_count = RefCount, file = File } ->
+        #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
             ok = index_update_fields(MsgId,
