@@ -233,6 +233,7 @@ rabbit_validate() {
 }
 
 rabbit_status() {
+    local rc
     $RABBITMQ_CTL $NODENAME_ARG status
     rc=$?
     case "$rc" in
@@ -249,10 +250,11 @@ rabbit_status() {
 }
 
 rabbit_start() {
+    local rc
     $RABBITMQ_MULTI start_all 1 > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err &
     rc=$?
 
-    if [ $rc != 0 ]; then
+    if [ "$rc" != 0 ]; then
 	ocf_log err "rabbitmq-server start command failed: $RABBITMQ_MULTI start_all 1, $rc"
   	return $rc
     fi
@@ -263,25 +265,25 @@ rabbit_start() {
     while [ $start_wait = 1 ]; do
 	rabbit_status
 	rc=$?
-	if [ $rc = $OCF_SUCCESS ]; then
+	if [ "$rc" = $OCF_SUCCESS ]; then
 	    start_wait=0
 
-	elif [ $rc != $OCF_NOT_RUNNING ]; then
+	elif [ "$rc" != $OCF_NOT_RUNNING ]; then
 	    ocf_log info "rabbitmq-server start failed: $rc"
-	    return $rc
+	    return $OCF_ERR_GENERIC
 	fi
         sleep 2
     done
     
-    ocf_log info "rabbitmq-server started"
     return $OCF_SUCCESS
 }
 
 rabbit_stop() {
-    $RABBITMQ_CTL $NODENAME_ARG stop &
+    local rc
+    $RABBITMQ_MULTI stop_all &
     rc=$?
 
-    if [ $rc != 0 ]; then
+    if [ "$rc" != 0 ]; then
 	ocf_log err "rabbitmq-server stop command failed: $RABBITMQ_CTL $NODENAME_ARG stop, $rc"
   	return $rc
     fi
@@ -292,17 +294,16 @@ rabbit_stop() {
     while [ $stop_wait = 1 ]; do
 	rabbit_status
 	rc=$?
-	if [ $rc = $OCF_NOT_RUNNING ]; then
+	if [ "$rc" = $OCF_NOT_RUNNING ]; then
 	    stop_wait=0
-
-	elif [ $rc != $OCF_SUCCESS ]; then
+            break
+	elif [ "$rc" != $OCF_SUCCESS ]; then
 	    ocf_log info "rabbitmq-server stop failed: $rc"
-	    return $rc
+	    return $OCF_ERR_GENERIC
 	fi
         sleep 2
     done
     
-    ocf_log info "rabbitmq-server stopped"
     return $OCF_SUCCESS
 }
 
@@ -326,12 +327,16 @@ rabbit_validate || exit
 
 case $__OCF_ACTION in
     start)
-	rabbit_start;;
+	rabbit_start
+        ;;
     stop)
-	rabbit_stop;;
+	rabbit_stop
+        ;;
     monitor)
-	rabbit_monitor;;
+	rabbit_monitor
+        ;;
     validate-all)
+        exit $OCF_SUCCESS
 	;;
     *)
 	rabbit_usage
@@ -339,6 +344,4 @@ case $__OCF_ACTION in
 	;;
 esac
 
-rc=$?
-ocf_log debug "${OCF_RESOURCE_INSTANCE} $__OCF_ACTION : $rc"
-exit $rc
+exit $?
