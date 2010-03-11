@@ -84,7 +84,6 @@ The path to the rabbitmq-multi script
 <content type="string" default="${OCF_RESKEY_multi_default}" />
 </parameter>
 
-<parameters>
 <parameter name="crt" unique="0" required="0">
 <longdesc lang="en">
 The path to the rabbitmqctl script
@@ -93,7 +92,6 @@ The path to the rabbitmqctl script
 <content type="string" default="${OCF_RESKEY_ctl_default}" />
 </parameter>
 
-<parameters>
 <parameter name="nodename" unique="0" required="0">
 <longdesc lang="en">
 The node name for rabbitmq-server
@@ -204,32 +202,32 @@ export \
 rabbit_validate() {
     if [ ! -x $RABBITMQ_MULTI ]; then
 	ocf_log err "rabbitmq-server multi $RABBITMQ_MULTI does not exist or is not executable";
-	return $OCF_ERR_INSTALLED;
+	return $OCF_ERR_ARGS;
     fi
 
     if [ ! -x $RABBITMQ_CTL ]; then
 	ocf_log err "rabbitmq-server ctl $RABBITMQ_CTL does not exist or is not executable";
-	return $OCF_ERR_INSTALLED;
+	return $OCF_ERR_ARGS;
     fi
 
     if [ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && [ ! -a $RABBITMQ_CLUSTER_CONFIG_FILE ]; then
 	ocf_log err "rabbitmq-server cluster_config_file $RABBITMQ_CLUSTER_CONFIG_FILE does not exist or is not a file";
-	return $OCF_ERR_CONFIGURED;
+	return $OCF_ERR_ARGS;
     fi
 
     if [ ! -z $RABBITMQ_CONFIG_FILE ] && [ ! -a $RABBITMQ_CONFIG_FILE ]; then
 	ocf_log err "rabbitmq-server config_file $RABBITMQ_CONFIG_FILE does not exist or is not a file";
-	return $OCF_ERR_CONFIGURED;
+	return $OCF_ERR_ARGS;
     fi
 
     if [ ! -z $RABBITMQ_LOG_BASE ] && [ ! -d $RABBITMQ_LOG_BASE ]; then
 	ocf_log err "rabbitmq-server log_base $RABBITMQ_LOG_BASE does not exist or is not a directory";
-	return $OCF_ERR_CONFIGURED;
+	return $OCF_ERR_ARGS;
     fi
 	
     if [ ! -z $RABBITMQ_MNESIA_BASE ] && [ ! -d $RABBITMQ_MNESIA_BASE ]; then
 	ocf_log err "rabbitmq-server mnesia_base $RABBITMQ_MNESIA_BASE does not exist or is not a directory";
-	return $OCF_ERR_CONFIGURED;
+	return $OCF_ERR_ARGS;
     fi
 	
     return $OCF_SUCCESS
@@ -307,11 +305,11 @@ rabbit_stop() {
     
     ocf_log info "rabbitmq-server stopped"
     return $OCF_SUCCESS
-
 }
 
 rabbit_monitor() {
     rabbit_status
+    return $?
 }
 
 case $__OCF_ACTION in
