@@ -40,6 +40,7 @@ cp %{S:2} %{_rabbit_wrapper}
 sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
 cp %{S:4} %{_rabbit_asroot_wrapper}
 sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_asroot_wrapper}
+cp %{S:5} %{_rabbit_server_ocf}
 make %{?_smp_mflags}
 
 %install
