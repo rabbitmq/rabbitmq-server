@@ -234,7 +234,7 @@ rabbit_validate() {
 
 rabbit_status() {
     local rc
-    $RABBITMQ_CTL $NODENAME_ARG status
+    $RABBITMQ_CTL $NODENAME_ARG status > /dev/null 2> /dev/null
     rc=$?
     case "$rc" in
 	0)
@@ -284,7 +284,7 @@ rabbit_stop() {
     rc=$?
 
     if [ "$rc" != 0 ]; then
-	ocf_log err "rabbitmq-server stop command failed: $RABBITMQ_CTL $NODENAME_ARG stop, $rc"
+	ocf_log err "rabbitmq-server stop command failed: $RABBITMQ_MULTI stop_all, $rc"
   	return $rc
     fi
 
