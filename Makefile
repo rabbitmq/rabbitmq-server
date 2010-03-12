@@ -208,18 +208,15 @@ distclean: clean
 	  docs/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | sed -e s/%QUOTE%/\\\"/g | \
 	  fmt -s > docs/`basename $< .1.xml`.usage.erl
 
-# This evil with grep and sed is due to the remarkable ugliness otherwise
-# experienced trying to get XSLT to work with an input doc where all nodes are
-# in a namespace.
-# Also we rename the file before xmlto sees it since xmlto will use the name of
+# We rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.
 %.man.xml: %.xml docs/html-to-website-xml.xsl
 	cp $< `basename $< .xml`.xml && \
 		xmlto xhtml-nochunks `basename $< .xml`.xml ; rm `basename $< .xml`.xml
-	cat `basename $< .xml`.html | grep -v DOCTYPE | \
-		sed -e s,xmlns=\"http://www.w3.org/1999/xhtml\",, | \
-		xsltproc  --stringparam original `basename $<` \
-		docs/html-to-website-xml.xsl - | xmllint --format - > $@
+	cat `basename $< .xml`.html | \
+	    xsltproc --novalid docs/remove-namespaces.xsl - | \
+		xsltproc --stringparam original `basename $<` docs/html-to-website-xml.xsl - | \
+		xmllint --format - > $@
 	rm `basename $< .xml`.html
 
 docs_all: $(MANPAGES) $(WEB_MANPAGES)
