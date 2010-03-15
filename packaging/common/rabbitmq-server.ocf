@@ -209,12 +209,12 @@ rabbit_validate() {
 	return $OCF_ERR_ARGS;
     fi
 
-    if [ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && [ ! -a $RABBITMQ_CLUSTER_CONFIG_FILE ]; then
+    if [ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && [ ! -e $RABBITMQ_CLUSTER_CONFIG_FILE ]; then
 	ocf_log err "rabbitmq-server cluster_config_file $RABBITMQ_CLUSTER_CONFIG_FILE does not exist or is not a file";
 	return $OCF_ERR_ARGS;
     fi
 
-    if [ ! -z $RABBITMQ_CONFIG_FILE ] && [ ! -a $RABBITMQ_CONFIG_FILE ]; then
+    if [ ! -z $RABBITMQ_CONFIG_FILE ] && [ ! -e $RABBITMQ_CONFIG_FILE ]; then
 	ocf_log err "rabbitmq-server config_file $RABBITMQ_CONFIG_FILE does not exist or is not a file";
 	return $OCF_ERR_ARGS;
     fi
@@ -223,12 +223,12 @@ rabbit_validate() {
 	ocf_log err "rabbitmq-server log_base $RABBITMQ_LOG_BASE does not exist or is not a directory";
 	return $OCF_ERR_ARGS;
     fi
-	
+
     if [ ! -z $RABBITMQ_MNESIA_BASE ] && [ ! -d $RABBITMQ_MNESIA_BASE ]; then
 	ocf_log err "rabbitmq-server mnesia_base $RABBITMQ_MNESIA_BASE does not exist or is not a directory";
 	return $OCF_ERR_ARGS;
     fi
-	
+
     return $OCF_SUCCESS
 }
 
@@ -274,7 +274,7 @@ rabbit_start() {
 	fi
         sleep 2
     done
-    
+
     return $OCF_SUCCESS
 }
 
@@ -303,7 +303,7 @@ rabbit_stop() {
 	fi
         sleep 2
     done
-    
+
     return $OCF_SUCCESS
 }
 
