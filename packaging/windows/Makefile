@@ -22,7 +22,7 @@ dist:
 
 	mv $(SOURCE_DIR) $(TARGET_DIR)
 	mkdir -p $(TARGET_DIR)
-	xmlto xhtml-nochunks rabbitmq-service.xml
+	xmlto -o . xhtml-nochunks ../../docs/rabbitmq-service.xml
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
 	todos $(TARGET_DIR)/readme-service.txt

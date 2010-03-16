@@ -16,7 +16,7 @@ BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard docs/*.[0-9].xml))
-WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard docs/*.[0-9].xml))
+WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard docs/*.[0-9].xml) docs/rabbitmq-service.xml)
 USAGES=$(patsubst %.1.xml, %.usage.erl, $(wildcard docs/*.[0-9].xml))
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
