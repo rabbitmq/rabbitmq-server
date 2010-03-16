@@ -9,12 +9,12 @@
     </refentryinfo>
 
     <refmeta>
-        <refentrytitle>rabbitmq-service</refentrytitle>
+        <refentrytitle>rabbitmq-service.bat</refentrytitle>
         <refmiscinfo class="manual">RabbitMQ Server</refmiscinfo>
     </refmeta>
 
     <refnamediv>
-        <refname>rabbitmq-service</refname>
+        <refname>rabbitmq-service.bat</refname>
         <refpurpose>manage RabbitMQ AMQP service</refpurpose>
     </refnamediv>
 
