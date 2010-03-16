@@ -27,5 +27,5 @@ syntax: regexp
 ^packaging/windows/rabbitmq-server-windows-.*\.zip$
 
 ^docs/.*\.[15]\.gz$
-^docs/.*.man.xml$
+^docs/.*\.man\.xml$
 ^docs/.*\.usage.erl$
