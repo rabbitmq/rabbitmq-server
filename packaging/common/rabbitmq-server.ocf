@@ -84,7 +84,7 @@ The path to the rabbitmq-multi script
 <content type="string" default="${OCF_RESKEY_multi_default}" />
 </parameter>
 
-<parameter name="crt" unique="0" required="0">
+<parameter name="ctl" unique="0" required="0">
 <longdesc lang="en">
 The path to the rabbitmqctl script
 </longdesc>
