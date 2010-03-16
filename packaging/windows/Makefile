@@ -21,10 +21,13 @@ dist:
 	rm -rf $(SOURCE_DIR)/docs
 
 	mv $(SOURCE_DIR) $(TARGET_DIR)
-	pod2text --loose rabbitmq-service.pod $(TARGET_DIR)/readme-service.txt
+	mkdir -p $(TARGET_DIR)
+	xmlto xhtml-nochunks rabbitmq-service.xml
+	elinks -dump -no-references -no-numbering rabbitmq-service.html \
+		> $(TARGET_DIR)/readme-service.txt
 	todos $(TARGET_DIR)/readme-service.txt
 	zip -r $(TARGET_ZIP).zip $(TARGET_DIR)
-	rm -rf $(TARGET_DIR)
+	rm -rf $(TARGET_DIR) rabbitmq-service.html
 
 clean: clean_partial
 	rm -f rabbitmq-server-windows-*.zip
