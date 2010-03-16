@@ -133,7 +133,6 @@ type to <code>Automatic</code> using the service control panel.
           <listitem>
             <para>
 Defaults to RabbitMQ.
-This is the location of log and database directories.
             </para>
           </listitem>
         </varlistentry>
@@ -194,7 +193,7 @@ manager.
         </varlistentry>
 
         <varlistentry>
-          <term>CLUSTER_CONFIG_FILE</term>
+          <term>RABBITMQ_CLUSTER_CONFIG_FILE</term>
           <listitem>
             <para>
 If this file is
@@ -212,7 +211,7 @@ for details.
 Set this varable to <code>new</code> or <code>reuse</code> to have the console 
 output from the server redirected to a file named <code>SERVICENAME</code>.debug
 in the  application data directory of the user that installed the service.
-Under Vista this will be <filename>C:\Documents and Settings\User\AppData\username\SERVICENAME</filename>.
+Under Vista this will be <filename>C:\Users\AppData\username\SERVICENAME</filename>.
 Under previous versions of Windows this will be 
 <filename>C:\Documents and Settings\username\Application Data\SERVICENAME</filename>.
 If <code>RABBITMQ_CONSOLE_LOG</code> is set to <code>new</code> then a new file will be
