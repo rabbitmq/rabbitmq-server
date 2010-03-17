@@ -480,7 +480,7 @@ drain(Queue) ->
     end.
 
 process_next_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue, Debug) ->
-    case priority_queue:out(Queue) of
+    case priority_queue:pout(Queue) of
         {{value, Msg}, Queue1} ->
             process_msg(Parent, Name, State, Mod,
                         Time, TimeoutState, Queue1, Debug, Msg);
