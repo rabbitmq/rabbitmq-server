@@ -62,6 +62,8 @@ all_tests() ->
     passed = test_user_management(),
     passed = test_server_status(),
     passed = test_hooks(),
+    passed = test_delegates_async(),
+    passed = test_delegates_sync(),
     passed.
 
 test_priority_queue() ->
@@ -810,6 +812,94 @@ test_hooks() ->
        throw(timeout)
     end,
     passed.
+
+test_delegates_async() ->
+    SecondaryNode = rabbit_misc:makenode("hare"),
+
+    Self = self(),
+    Sender = fun(Pid) -> Pid ! {invoked, Self} end,
+
+    Receiver = fun() ->
+        receive
+            {invoked, Pid} ->
+                Pid ! response,
+                ok
+        after 100 ->
+            io:format("Async message not sent~n"),
+            throw(timeout)
+        end
+    end,
+
+    delegate:delegate_async(spawn(Receiver), Sender),
+    delegate:delegate_async(spawn(SecondaryNode, Receiver), Sender),
+    await_response(2),
+
+    LocalPids = [spawn(Receiver) || _ <- lists:seq(1,10)],
+    RemotePids = [spawn(SecondaryNode, Receiver) || _ <- lists:seq(1,10)],
+    delegate:delegate_async(LocalPids ++ RemotePids, Sender),
+    await_response(20),
+
+    passed.
+
+await_response(0) ->
+    ok;
+
+await_response(Count) ->
+    receive
+        response -> ok,
+        await_response(Count - 1)
+    after 100 ->
+        io:format("Async reply not received~n"),
+        throw(timeout)
+    end.
+
+test_delegates_sync() ->
+    SecondaryNode = rabbit_misc:makenode("hare"),
+    "foo" = delegate:delegate_sync(node(), fun() -> "foo" end),
+    "bar" = delegate:delegate_sync(SecondaryNode, fun() -> "bar" end),
+
+    Sender = fun(Pid) ->
+        gen_server2:call(Pid, invoked)
+    end,
+
+    Responder = fun() ->
+        receive
+            {'$gen_call', From, invoked} ->
+                gen_server2:reply(From, response)
+        after 100 ->
+            io:format("Sync hook not invoked~n"),
+            throw(timeout)
+        end
+    end,
+
+    BadResponder = fun() ->
+        receive
+            {'$gen_call', _From, invoked} ->
+                throw(exception)
+        after 100 ->
+            io:format("Crashing sync hook not invoked~n"),
+            throw(timeout)
+        end
+    end,
+
+    response = delegate:delegate_sync(spawn(Responder), Sender),
+    response = delegate:delegate_sync(spawn(SecondaryNode, Responder), Sender),
+
+    {'EXIT', _} = delegate:delegate_sync(spawn(BadResponder), Sender),
+    {'EXIT', _} = delegate:delegate_sync(spawn(SecondaryNode, BadResponder), Sender),
+
+    LocalGoodPids = [spawn(Responder) || _ <- lists:seq(1,2)],
+    RemoteGoodPids = [spawn(Responder) || _ <- lists:seq(1,2)],
+    LocalBadPids = [spawn(SecondaryNode, BadResponder) || _ <- lists:seq(1,2)],
+    RemoteBadPids = [spawn(SecondaryNode, BadResponder) || _ <- lists:seq(1,2)],
+
+    [response, response, response, response] =
+        delegate:delegate_sync(LocalGoodPids ++ RemoteGoodPids, Sender),
+    [{'EXIT', _}, {'EXIT', _}, {'EXIT', _}, {'EXIT', _}] =
+        delegate:delegate_sync(LocalBadPids ++ RemoteBadPids, Sender),
+
+    passed.
+
 
 %---------------------------------------------------------------------
 
