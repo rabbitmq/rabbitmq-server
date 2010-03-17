@@ -45,13 +45,14 @@
 start_link(Hash) ->
     gen_server2:start_link({local, server(Hash)},
                            ?MODULE, [], []).
+
 delegate_sync(Node, Thunk) when is_atom(Node) ->
     gen_server2:call({server(), Node}, {thunk, Thunk}, infinity);
 
 delegate_sync(Pid, FPid) when is_pid(Pid) ->
-    [[Res]] = delegate_per_node([{node(Pid), [Pid]}],
-                                f_pid_node(fun delegate_sync/2, FPid)),
-    Res;
+    [[{Status, Res, _}]] = delegate_per_node([{node(Pid), [Pid]}],
+                                             f_pid_node(fun delegate_sync/2, FPid)),
+    {Status, Res};
 
 delegate_sync(Pids, FPid) when is_list(Pids) ->
     lists:flatten(
@@ -63,11 +64,13 @@ delegate_async(Node, Thunk) when is_atom(Node) ->
 
 delegate_async(Pid, FPid) when is_pid(Pid) ->
     delegate_per_node([{node(Pid), [Pid]}],
-                      f_pid_node(fun delegate_async/2, FPid));
+                      f_pid_node(fun delegate_async/2, FPid)),
+    ok;
 
 delegate_async(Pids, FPid) when is_list(Pids) ->
     delegate_per_node(split_per_node(Pids),
-                      f_pid_node(fun delegate_async/2, FPid)).
+                      f_pid_node(fun delegate_async/2, FPid)),
+    ok.
 
 %%----------------------------------------------------------------------------
 
@@ -90,14 +93,17 @@ f_pid_node(DelegateFun, FPid) ->
 % we improve this?
 delegate_per_node([{Node, Pids}], FPidNode) when Node == node() ->
     % optimisation
-    [[FPidNode(Pid, node()) || Pid <- Pids]];
+    [[add_pid(FPidNode(Pid, Node), Pid) || Pid <- Pids]];
 
 delegate_per_node(NodePids, FPidNode) ->
     rabbit_misc:upmap(
           fun ({Node, Pids}) ->
-              [FPidNode(Pid, Node) || Pid <- Pids]
+              [add_pid(FPidNode(Pid, Node), Pid) || Pid <- Pids]
           end,
           NodePids).
+
+add_pid({Status, Result}, Pid) -> {Status, Result, Pid};
+add_pid(Status, Pid) -> {Status, Pid}.
 
 server() ->
     server(erlang:phash(self(), ?DELEGATE_PROCESSES)).
@@ -111,7 +117,13 @@ init([]) ->
     {ok, no_state}.
 
 handle_call({thunk, Thunk}, _From, State) ->
-    {reply, catch Thunk(), State}.
+    Res = case catch Thunk() of
+        {'EXIT', Reason} ->
+            {error, {'EXIT', Reason}};
+        Result ->
+        {ok, Result}
+        end,
+    {reply, Res, State}.
 
 handle_cast({thunk, Thunk}, State) ->
     catch Thunk(),

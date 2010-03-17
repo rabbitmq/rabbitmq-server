@@ -830,13 +830,13 @@ test_delegates_async() ->
         end
     end,
 
-    delegate:delegate_async(spawn(Receiver), Sender),
-    delegate:delegate_async(spawn(SecondaryNode, Receiver), Sender),
+    ok = delegate:delegate_async(spawn(Receiver), Sender),
+    ok = delegate:delegate_async(spawn(SecondaryNode, Receiver), Sender),
     await_response(2),
 
     LocalPids = [spawn(Receiver) || _ <- lists:seq(1,10)],
     RemotePids = [spawn(SecondaryNode, Receiver) || _ <- lists:seq(1,10)],
-    delegate:delegate_async(LocalPids ++ RemotePids, Sender),
+    ok = delegate:delegate_async(LocalPids ++ RemotePids, Sender),
     await_response(20),
 
     passed.
@@ -855,8 +855,8 @@ await_response(Count) ->
 
 test_delegates_sync() ->
     SecondaryNode = rabbit_misc:makenode("hare"),
-    "foo" = delegate:delegate_sync(node(), fun() -> "foo" end),
-    "bar" = delegate:delegate_sync(SecondaryNode, fun() -> "bar" end),
+    {ok, "foo"} = delegate:delegate_sync(node(), fun() -> "foo" end),
+    {ok, "bar"} = delegate:delegate_sync(SecondaryNode, fun() -> "bar" end),
 
     Sender = fun(Pid) ->
         gen_server2:call(Pid, invoked)
@@ -882,21 +882,33 @@ test_delegates_sync() ->
         end
     end,
 
-    response = delegate:delegate_sync(spawn(Responder), Sender),
-    response = delegate:delegate_sync(spawn(SecondaryNode, Responder), Sender),
+    {ok, response} = delegate:delegate_sync(spawn(Responder), Sender),
+    {ok, response} = delegate:delegate_sync(spawn(SecondaryNode, Responder), Sender),
 
-    {'EXIT', _} = delegate:delegate_sync(spawn(BadResponder), Sender),
-    {'EXIT', _} = delegate:delegate_sync(spawn(SecondaryNode, BadResponder), Sender),
+    {error, _} = delegate:delegate_sync(spawn(BadResponder), Sender),
+    {error, _} = delegate:delegate_sync(spawn(SecondaryNode, BadResponder), Sender),
 
     LocalGoodPids = [spawn(Responder) || _ <- lists:seq(1,2)],
     RemoteGoodPids = [spawn(Responder) || _ <- lists:seq(1,2)],
     LocalBadPids = [spawn(SecondaryNode, BadResponder) || _ <- lists:seq(1,2)],
     RemoteBadPids = [spawn(SecondaryNode, BadResponder) || _ <- lists:seq(1,2)],
 
-    [response, response, response, response] =
-        delegate:delegate_sync(LocalGoodPids ++ RemoteGoodPids, Sender),
-    [{'EXIT', _}, {'EXIT', _}, {'EXIT', _}, {'EXIT', _}] =
-        delegate:delegate_sync(LocalBadPids ++ RemoteBadPids, Sender),
+    GoodRes = delegate:delegate_sync(LocalGoodPids ++ RemoteGoodPids, Sender),
+    [{ok, response, _}, {ok, response, _},
+     {ok, response, _}, {ok, response, _}] = GoodRes,
+
+    BadRes = delegate:delegate_sync(LocalBadPids ++ RemoteBadPids, Sender),
+    [{error, _, _}, {error, _, _},
+     {error, _, _}, {error, _, _}] = BadRes,
+
+    GoodResPids = [Pid || {_, _, Pid} <- GoodRes],
+    BadResPids = [Pid || {_, _, Pid} <- BadRes],
+
+    Good = ordsets:from_list(LocalGoodPids ++ RemoteGoodPids),
+    Good = ordsets:from_list(GoodResPids),
+
+    Bad = ordsets:from_list(LocalBadPids ++ RemoteBadPids),
+    Bad = ordsets:from_list(BadResPids),
 
     passed.
 
