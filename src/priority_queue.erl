@@ -163,17 +163,16 @@ pout({pqueue, [{P, Len, Q}]}) ->
            end,
     {R, NewQ};
 pout({pqueue, Queues}) ->
-    {Total, Weights, _, _} =
-        lists:foldr(fun ({P, Len, _Q}, {T, Ws, NP, OldP}) ->
-                            NP1 = NP + case OldP of
-                                           undefined -> 1;
-                                           _         -> OldP - P
-                                       end,
-                            W = Len * NP1,
-                            {T + W, [W | Ws], NP1, P}
-                    end, {0, [], 0, undefined}, Queues),
+    {Total, Weights} =
+        lists:foldr(fun ({P, Len, _Q}, {T, Ws}) ->
+                            W = Len * case P < 0 of
+                                          true  -> 1 - P;
+                                          false -> 1 / (P + 1)
+                                      end,
+                            {T + W, [W | Ws]}
+                    end, {0, []}, Queues),
     {LHS, [{P, Len, Q} | RHS]} =
-        pout(random:uniform(Total) - 1, Weights, [], Queues),
+        pout(random:uniform(trunc(Total)) - 1, Weights, [], Queues),
     {R, Q1} = out(Q),
     NewQ = case {LHS, is_empty(Q1), RHS} of
                {[], true, []} ->
