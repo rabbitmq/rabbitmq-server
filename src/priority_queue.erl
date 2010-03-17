@@ -175,8 +175,6 @@ pout({pqueue, Queues}) ->
         pout(random:uniform(trunc(Total)) - 1, Weights, [], Queues),
     {R, Q1} = out(Q),
     NewQ = case {LHS, is_empty(Q1), RHS} of
-               {[], true, []} ->
-                   {queue, [], []};
                {[], true, [{0, _Len, OnlyQ}]} ->
                    OnlyQ;
                {[{0, _Len, OnlyQ}], true, []} ->
