@@ -39,6 +39,8 @@
 
 -export([init/1, mainloop/3]).
 
+-export([server_properties/0]).
+
 -export([analyze_frame/2]).
 
 -import(gen_tcp).
@@ -136,6 +138,7 @@
 -spec(info/1 :: (pid()) -> [info()]).
 -spec(info/2 :: (pid(), [info_key()]) -> [info()]).
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
+-spec(server_properties/0 :: () -> amqp_table()).
 
 -endif.
 
@@ -200,6 +203,16 @@ teardown_profiling(Value) ->
             fprof:profile(),
             fprof:analyse([{dest, []}, {cols, 100}])
     end.
+
+server_properties() ->
+    {ok, Product} = application:get_key(rabbit, id),
+    {ok, Version} = application:get_key(rabbit, vsn),
+    [{list_to_binary(K), longstr, list_to_binary(V)} ||
+        {K, V} <- [{"product",     Product},
+                   {"version",     Version},
+                   {"platform",    "Erlang/OTP"},
+                   {"copyright",   ?COPYRIGHT_MESSAGE},
+                   {"information", ?INFORMATION_MESSAGE}]].
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
@@ -530,26 +543,17 @@ handle_input(handshake, Other, #v1{sock = Sock}) ->
 handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
 
-%% Offer a protocol version to the client..  Connection.start only
+%% Offer a protocol version to the client.  Connection.start only
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
 %% are similar enough that clients will be happy with either.
 protocol_negotiate(ProtocolMajor, ProtocolMinor, _ProtocolRevision,
                    State = #v1{sock = Sock, connection = Connection}) ->
-    {ok, Product} = application:get_key(id),
-    {ok, Version} = application:get_key(vsn),
     ok = send_on_channel0(
            Sock,
            #'connection.start'{
              version_major = ProtocolMajor,
              version_minor = ProtocolMinor,
-             server_properties =
-             [{list_to_binary(K), longstr, list_to_binary(V)} ||
-                 {K, V} <-
-                     [{"product",     Product},
-                      {"version",     Version},
-                      {"platform",    "Erlang/OTP"},
-                      {"copyright",   ?COPYRIGHT_MESSAGE},
-                      {"information", ?INFORMATION_MESSAGE}]],
+             server_properties = server_properties(),
              mechanisms = <<"PLAIN AMQPLAIN">>,
              locales = <<"en_US">> }),
     {State#v1{connection = Connection#connection{

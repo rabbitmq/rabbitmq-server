@@ -126,7 +126,7 @@ def printFileHeader():
 %%
 %%   Contributor(s): ______________________________________.
 %%"""
-    
+
 def genErl(spec):
     def erlType(domain):
         return erlangTypeMap[spec.resolveDomain(domain)]
@@ -151,7 +151,7 @@ def genErl(spec):
 
     def genMethodHasContent(m):
         print "method_has_content(%s) -> %s;" % (m.erlangName(), str(m.hasContent).lower())
-    
+
     def genMethodIsSynchronous(m):
         hasNoWait = "nowait" in fieldNameList(m.arguments)
         if m.isSynchronous and hasNoWait:
@@ -218,6 +218,9 @@ def genErl(spec):
                 print "  if F%dLen > 255 -> exit(method_field_shortstr_overflow); true -> ok end," % (f.index)
             else:
                 pass
+
+    def genMethodRecord(m):
+        print "method_record(%s) -> #%s{};" % (m.erlangName(), m.erlangName())
 
     def genDecodeMethodFields(m):
         packedFields = packMethodFields(m.arguments)
@@ -299,6 +302,7 @@ def genErl(spec):
 -export([method_id/1]).
 -export([method_has_content/1]).
 -export([is_method_synchronous/1]).
+-export([method_record/1]).
 -export([method_fieldnames/1]).
 -export([decode_method_fields/2]).
 -export([decode_properties/2]).
@@ -322,6 +326,9 @@ bitvalue(undefined) -> 0.
 
     for m in methods: genMethodIsSynchronous(m)
     print "is_method_synchronous(Name) -> exit({unknown_method_name, Name})."
+
+    for m in methods: genMethodRecord(m)
+    print "method_record(Name) -> exit({unknown_method_name, Name})."
 
     for m in methods: genMethodFieldNames(m)
     print "method_fieldnames(Name) -> exit({unknown_method_name, Name})."
@@ -362,7 +369,7 @@ def genHrl(spec):
                 result += ' = ' + conv_fn(field.defaultvalue)
             return result
         return ', '.join([fillField(f) for f in fields])
-    
+
     methods = spec.allMethods()
 
     printFileHeader()
@@ -387,7 +394,7 @@ def generateErl(specPath):
 
 def generateHrl(specPath):
     genHrl(AmqpSpec(specPath))
-    
+
 if __name__ == "__main__":
     do_main(generateHrl, generateErl)
 

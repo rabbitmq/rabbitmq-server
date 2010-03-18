@@ -1,4 +1,4 @@
-%%   The contents of this file are subject to the Mozilla Public Licenses
+%%   The contents of this file are subject to the Mozilla Public License
 %%   Version 1.1 (the "License"); you may not use this file except in
 %%   compliance with the License. You may obtain a copy of the License at
 %%   http://www.mozilla.org/MPL/
@@ -36,7 +36,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/5, do/2, do/3, shutdown/1]).
--export([send_command/2, deliver/4, conserve_memory/2]).
+-export([send_command/2, deliver/4, conserve_memory/2, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 
 -export([init/1, terminate/2, code_change/3,
@@ -45,8 +45,8 @@
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
-             username, virtual_host,
-             most_recently_declared_queue, consumer_mapping}).
+             username, virtual_host, most_recently_declared_queue,
+             consumer_mapping, blocking}).
 
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
@@ -77,6 +77,7 @@
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
 -spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
+-spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (pid()) -> [info()]).
@@ -110,7 +111,10 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
 conserve_memory(Pid, Conserve) ->
-    gen_server2:pcast(Pid, 9, {conserve_memory, Conserve}).
+    gen_server2:pcast(Pid, 8, {conserve_memory, Conserve}).
+
+flushed(Pid, QPid) ->
+    gen_server2:cast(Pid, {flushed, QPid}).
 
 list() ->
     pg_local:get_members(rabbit_channels).
@@ -152,7 +156,8 @@ init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
              username                = Username,
              virtual_host            = VHost,
              most_recently_declared_queue = <<>>,
-             consumer_mapping        = dict:new()},
+             consumer_mapping        = dict:new(),
+             blocking                = dict:new()},
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -190,6 +195,9 @@ handle_cast({method, Method, Content}, State) ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
 
+handle_cast({flushed, QPid}, State) ->
+    {noreply, queue_blocked(QPid, State)};
+
 handle_cast(terminate, State) ->
     {stop, normal, State};
 
@@ -215,7 +223,9 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
     State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
     {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
-    {stop, Reason, State}.
+    {stop, Reason, State};
+handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+    {noreply, queue_blocked(QPid, State)}.
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
@@ -294,7 +304,7 @@ check_read_permitted(Resource, #ch{ username = Username}) ->
 
 check_queue_exclusivity(ReaderPid, Q) ->
     case Q of
-        #amqqueue{ exclusive_owner = none} -> Q;
+        #amqqueue{ exclusive_owner = none}       -> Q;
         #amqqueue{ exclusive_owner = ReaderPid } -> Q;
         _ -> rabbit_misc:protocol_error(resource_locked,
                                         "cannot obtain exclusive access to locked ~s",
@@ -339,6 +349,20 @@ check_name(Kind, NameBin = <<"amq.", _/binary>>) ->
       "~s name '~s' contains reserved prefix 'amq.*'",[Kind, NameBin]);
 check_name(_Kind, NameBin) ->
     NameBin.
+
+queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
+    case dict:find(QPid, Blocking) of
+        error      -> State;
+        {ok, MRef} -> true = erlang:demonitor(MRef),
+                      Blocking1 = dict:erase(QPid, Blocking),
+                      ok = case dict:size(Blocking1) of
+                               0 -> rabbit_writer:send_command(
+                                      State#ch.writer_pid,
+                                      #'channel.flow_ok'{active = false});
+                               _ -> ok
+                           end,
+                      State#ch{blocking = Blocking1}
+    end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
     {reply, #'channel.open_ok'{}, State#ch{state = running}};
@@ -543,25 +567,17 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
                                "prefetch_size!=0 (~w)", [Size]);
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
-              _, State = #ch{ limiter_pid = LimiterPid,
-                              unacked_message_q = UAMQ }) ->
-    NewLimiterPid = case {LimiterPid, PrefetchCount} of
-                        {undefined, 0} ->
-                            undefined;
-                        {undefined, _} ->
-                            LPid = rabbit_limiter:start_link(self(),
-                                                             queue:len(UAMQ)),
-                            ok = limit_queues(LPid, State),
-                            LPid;
-                        {_, 0} ->
-                            ok = rabbit_limiter:shutdown(LimiterPid),
-                            ok = limit_queues(undefined, State),
-                            undefined;
-                        {_, _} ->
-                            LimiterPid
-                    end,
-    ok = rabbit_limiter:limit(NewLimiterPid, PrefetchCount),
-    {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = NewLimiterPid}};
+              _, State = #ch{limiter_pid = LimiterPid}) ->
+    LimiterPid1 = case {LimiterPid, PrefetchCount} of
+                      {undefined, 0} -> undefined;
+                      {undefined, _} -> start_limiter(State);
+                      {_, _}         -> LimiterPid
+                  end,
+    LimiterPid2 = case rabbit_limiter:limit(LimiterPid1, PrefetchCount) of
+                      ok      -> LimiterPid1;
+                      stopped -> unlimit_queues(State)
+                  end,
+    {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
 
 handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{ transaction_id = none,
@@ -818,9 +834,31 @@ handle_method(#'tx.rollback'{}, _, #ch{transaction_id = none}) ->
 handle_method(#'tx.rollback'{}, _, State) ->
     {reply, #'tx.rollback_ok'{}, internal_rollback(State)};
 
-handle_method(#'channel.flow'{active = _}, _, State) ->
-    %% FIXME: implement
-    {reply, #'channel.flow_ok'{active = true}, State};
+handle_method(#'channel.flow'{active = true}, _,
+              State = #ch{limiter_pid = LimiterPid}) ->
+    LimiterPid1 = case rabbit_limiter:unblock(LimiterPid) of
+                      ok      -> LimiterPid;
+                      stopped -> unlimit_queues(State)
+                  end,
+    {reply, #'channel.flow_ok'{active = true},
+     State#ch{limiter_pid = LimiterPid1}};
+
+handle_method(#'channel.flow'{active = false}, _,
+              State = #ch{limiter_pid = LimiterPid,
+                          consumer_mapping = Consumers}) ->
+    LimiterPid1 = case LimiterPid of
+                      undefined -> start_limiter(State);
+                      Other     -> Other
+                  end,
+    ok = rabbit_limiter:block(LimiterPid1),
+    QPids = consumer_queues(Consumers),
+    Queues = [{QPid, erlang:monitor(process, QPid)} || QPid <- QPids],
+    ok = rabbit_amqqueue:flush_all(QPids, self()),
+    case Queues of
+        [] -> {reply, #'channel.flow_ok'{active = false}, State};
+        _  -> {noreply, State#ch{limiter_pid = LimiterPid1,
+                                 blocking = dict:from_list(Queues)}}
+    end;
 
 handle_method(#'channel.flow_ok'{active = _}, _, State) ->
     %% TODO: We may want to correlate this to channel.flow messages we
@@ -970,8 +1008,17 @@ fold_per_queue(F, Acc0, UAQ) ->
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
 
+start_limiter(State = #ch{unacked_message_q = UAMQ}) ->
+    LPid = rabbit_limiter:start_link(self(), queue:len(UAMQ)),
+    ok = limit_queues(LPid, State),
+    LPid.
+
 notify_queues(#ch{consumer_mapping = Consumers}) ->
     rabbit_amqqueue:notify_down_all(consumer_queues(Consumers), self()).
+
+unlimit_queues(State) ->
+    ok = limit_queues(undefined, State),
+    undefined.
 
 limit_queues(LPid, #ch{consumer_mapping = Consumers}) ->
     rabbit_amqqueue:limit_all(consumer_queues(Consumers), self(), LPid).

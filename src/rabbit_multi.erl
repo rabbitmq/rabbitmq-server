@@ -51,7 +51,7 @@ start() ->
     RpcTimeout =
         case init:get_argument(maxwait) of
             {ok,[[N1]]} -> 1000 * list_to_integer(N1);
-            _ -> 30000
+            _           -> ?MAX_WAIT
         end,
     case init:get_plain_arguments() of
         [] ->
@@ -222,9 +222,8 @@ run_rabbitmq_server() ->
              {win32, fun run_rabbitmq_server_win32/0}]).
 
 run_rabbitmq_server_unix() ->
-    FullPath = getenv("RABBITMQ_SCRIPT_HOME") ++ "/rabbitmq-server",
-    erlang:open_port({spawn_executable, FullPath},
-                     [{arg0, FullPath}, {args, ["-noinput"]}, nouse_stdio]).
+    CmdLine = getenv("RABBITMQ_SCRIPT_HOME") ++ "/rabbitmq-server -noinput",
+    erlang:open_port({spawn, CmdLine}, [nouse_stdio]).
 
 run_rabbitmq_server_win32() ->
     Cmd = filename:nativename(os:find_executable("cmd")),

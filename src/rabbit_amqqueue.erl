@@ -39,7 +39,7 @@
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
--export([notify_sent/2, unblock/2]).
+-export([notify_sent/2, unblock/2, flush_all/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
@@ -105,6 +105,7 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
+-spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
@@ -143,8 +144,7 @@ recover_durable_queues() ->
                           rabbit_misc:execute_mnesia_transaction(
                             fun () -> case mnesia:match_object(
                                              rabbit_durable_queue, RecoveredQ, read) of
-                                          [_] -> ok = Action(),
-                                                 true;
+                                          [_] -> {true, Action()};
                                           []  -> false
                                       end
                             end)
@@ -153,12 +153,17 @@ recover_durable_queues() ->
                   true ->
                       Q = start_queue_process(RecoveredQ), 
                       case DoIfSameQueue(fun () -> store_queue(Q) end) of
-                          true  -> ok;
-                          false -> exit(Q#amqqueue.pid, shutdown)
+                          {true, ok}  -> ok;
+                          false       -> exit(Q#amqqueue.pid, shutdown)
                       end;
                   false ->
-                      DoIfSameQueue(
-                        fun () -> internal_delete2(RecoveredQ#amqqueue.name) end)
+                      case DoIfSameQueue(
+                             fun () -> 
+                                     internal_delete2(RecoveredQ#amqqueue.name)
+                             end) of
+                          {true, Hook} -> Hook();
+                          false        -> ok
+                      end
               end
       end,
       %% TODO: use dirty ops instead
@@ -298,7 +303,7 @@ requeue(QPid, MsgIds, ChPid) ->
     gen_server2:call(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
-    gen_server2:pcast(QPid, 8, {ack, Txn, MsgIds, ChPid}).
+    gen_server2:pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
 
 commit_all(QPids, Txn) ->
     safe_pmap_ok(
@@ -340,40 +345,57 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
                           infinity).
 
 notify_sent(QPid, ChPid) ->
-    gen_server2:pcast(QPid, 8, {notify_sent, ChPid}).
+    gen_server2:pcast(QPid, 7, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
-    gen_server2:pcast(QPid, 8, {unblock, ChPid}).
+    gen_server2:pcast(QPid, 7, {unblock, ChPid}).
+
+flush_all(QPids, ChPid) ->
+    safe_pmap_ok(
+      fun (_) -> ok end,
+      fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end,
+      QPids).
 
 internal_delete2(QueueName) ->
-    ok = rabbit_exchange:delete_queue_bindings(QueueName),
     ok = mnesia:delete({rabbit_queue, QueueName}),
-    ok = mnesia:delete({rabbit_durable_queue, QueueName}).
+    ok = mnesia:delete({rabbit_durable_queue, QueueName}),
+    %% this is last because it returns a post-transaction callback
+    rabbit_exchange:delete_queue_bindings(QueueName).
 
 internal_delete(QueueName) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:wread({rabbit_queue, QueueName}) of
-                  []  -> {error, not_found};
-                  [_] -> internal_delete2(QueueName)
-              end
-      end).
+    case
+        rabbit_misc:execute_mnesia_transaction(
+          fun () ->
+                  case mnesia:wread({rabbit_queue, QueueName}) of
+                      []  -> {error, not_found};
+                      [_] -> internal_delete2(QueueName)
+                  end
+          end) of
+        Err = {error, _} ->
+            Err;
+        %% we want to execute some things, as
+        %% decided by rabbit_exchange, after the
+        %% transaction.
+        PostHook ->
+            PostHook(),
+            ok
+    end.
 
 on_node_down(Node) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              qlc:fold(
-                fun (QueueName, Acc) ->
-                        ok = rabbit_exchange:delete_transient_queue_bindings(
-                               QueueName),
-                        ok = mnesia:delete({rabbit_queue, QueueName}),
-                        Acc
-                end,
-                ok,
-                qlc:q([QueueName || #amqqueue{name = QueueName, pid = Pid}
-                                        <- mnesia:table(rabbit_queue),
-                                    node(Pid) == Node]))
-      end).
+    [Hook() ||
+        Hook <- rabbit_misc:execute_mnesia_transaction(
+                  fun () ->
+                          qlc:e(qlc:q([delete_queue(QueueName) ||
+                                          #amqqueue{name = QueueName, pid = Pid}
+                                              <- mnesia:table(rabbit_queue),
+                                          node(Pid) == Node]))
+                  end)],
+    ok.
+
+delete_queue(QueueName) ->
+    Post = rabbit_exchange:delete_transient_queue_bindings(QueueName),
+    ok = mnesia:delete({rabbit_queue, QueueName}),
+    Post.
 
 pseudo_queue(QueueName, Pid) ->
     #amqqueue{name = QueueName,
