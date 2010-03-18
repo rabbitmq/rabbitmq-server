@@ -214,7 +214,7 @@
 	{
 	    "id": 50,
 	    "methods": [{"id": 10,
-			 "arguments": [{"type": "short", "name": "deprecated-ticket", "default-value": 1},
+			 "arguments": [{"type": "short", "name": "deprecated-ticket", "default-value": 0},
                            {"type": "shortstr", "name": "queue", "default-value": ""},
 				       {"type": "bit", "name": "passive", "default-value": false},
 				       {"type": "bit", "name": "durable", "default-value": false},
