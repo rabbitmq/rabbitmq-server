@@ -403,10 +403,8 @@ network_handshake(State = #nc_state{channel0_writer_pid = Writer0,
     TuneOk = negotiate_values(Tune, Params),
     amqp_channel_util:do(network, Writer0, TuneOk, none),
     ConnectionOpen =
-        #'connection.open'{virtual_host = Params#amqp_params.virtual_host,
-                           insist = true},
+        #'connection.open'{virtual_host = Params#amqp_params.virtual_host},
     amqp_channel_util:do(network, Writer0, ConnectionOpen, none),
-    %% 'connection.redirect' not implemented (we use insist = true to cover)
     #'connection.open_ok'{} = handshake_recv(State),
     #'connection.tune_ok'{channel_max = ChannelMax,
                           frame_max   = FrameMax,
