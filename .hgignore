@@ -11,6 +11,8 @@ syntax: regexp
 ^dist/
 ^include/rabbit_framing\.hrl$
 ^src/rabbit_framing\.erl$
+^src/rabbitmqctl_usage\.erl$
+^src/rabbitmqmulti_usage\.erl$
 ^rabbit\.plt$
 ^basic.plt$
 ^ebin/rabbit\.(app|rel|boot|script)$
@@ -25,3 +27,5 @@ syntax: regexp
 ^packaging/windows/rabbitmq-server-windows-.*\.zip$
 
 ^docs/.*\.[15]\.gz$
+^docs/.*\.man\.xml$
+^docs/.*\.usage.erl$
