@@ -86,7 +86,7 @@ stop() ->
     ok.
 
 usage() -> 
-    rabbitmq_multi_usage:usage().
+    rabbit_multi_usage:usage().
 
 action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),

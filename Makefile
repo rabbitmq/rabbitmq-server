@@ -63,7 +63,7 @@ ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
 define usage_xml_to_erl
-  $(patsubst $(DOCS_DIR)/%.1.xml, $(SOURCE_DIR)/%_usage.erl, $(subst -,_,$(1)))
+  $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, $(SOURCE_DIR)/rabbit_%_usage.erl, $(subst -,_,$(1))))
 endef
 
 define usage_dep
