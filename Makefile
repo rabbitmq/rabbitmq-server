@@ -246,4 +246,10 @@ install_dirs:
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(TARGET_DIR)/sbin
 
+# Note that all targets which depend on clean must have clean in their
+# name.  Also any target that doesn't depend on clean should not have
+# clean in its name, unless you know that you don't need any of the
+# automatic dependency generation for that target (eg cleandb).
+ifeq "$(findstring clean,$(MAKECMDGOALS))" ""
 -include $(DEPS_FILE)
+endif
