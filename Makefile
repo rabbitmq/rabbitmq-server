@@ -206,7 +206,7 @@ distclean: clean
 %.usage.erl: %.1.xml docs/usage.xsl
 	xsltproc --stringparam modulename "`basename $< .1.xml | tr -d -`_usage" \
 	  docs/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | sed -e s/%QUOTE%/\\\"/g | \
-	  fmt -s > docs/`basename $< .1.xml`.usage.erl
+	  fold -s > docs/`basename $< .1.xml`.usage.erl
 
 # We rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.
