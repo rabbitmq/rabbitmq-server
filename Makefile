@@ -250,6 +250,9 @@ install_dirs:
 # name.  Also any target that doesn't depend on clean should not have
 # clean in its name, unless you know that you don't need any of the
 # automatic dependency generation for that target (eg cleandb).
-ifeq "$(findstring clean,$(MAKECMDGOALS))" ""
+
+# We want to load the dep file if *any* target *doesn't* contain
+# "clean" - i.e. if removing all clean-like targets leaves something
+ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(MAKECMDGOALS))))" ""
 -include $(DEPS_FILE)
 endif
