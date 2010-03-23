@@ -129,7 +129,7 @@ get_worker_pid(WId) ->
     [{WId, Pid, _Type, _Modules} | _] =
         lists:dropwhile(fun ({Id, _Pid, _Type, _Modules})
                               when Id =:= WId -> false;
-                            (_)             -> true
+                            (_)               -> true
                         end,
                         supervisor:which_children(worker_pool_sup)),
     Pid.
