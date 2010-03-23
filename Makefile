@@ -246,4 +246,20 @@ install_dirs:
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(TARGET_DIR)/sbin
 
+# Note that all targets which depend on clean must have clean in their
+# name.  Also any target that doesn't depend on clean should not have
+# clean in its name, unless you know that you don't need any of the
+# automatic dependency generation for that target (eg cleandb).
+
+# We want to load the dep file if *any* target *doesn't* contain
+# "clean" - i.e. if removing all clean-like targets leaves something
+
+ifeq "$(MAKECMDGOALS)" ""
+TESTABLEGOALS:=$(.DEFAULT_GOAL)
+else
+TESTABLEGOALS:=$(MAKECMDGOALS)
+endif
+
+ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 -include $(DEPS_FILE)
+endif
