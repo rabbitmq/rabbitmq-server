@@ -253,6 +253,13 @@ install_dirs:
 
 # We want to load the dep file if *any* target *doesn't* contain
 # "clean" - i.e. if removing all clean-like targets leaves something
-ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(MAKECMDGOALS))))" ""
+
+ifeq "$(MAKECMDGOALS)" ""
+TESTABLEGOALS:=$(.DEFAULT_GOAL)
+else
+TESTABLEGOALS:=$(MAKECMDGOALS)
+endif
+
+ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 -include $(DEPS_FILE)
 endif
