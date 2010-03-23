@@ -46,6 +46,7 @@
 -spec(stop/0 :: () -> 'ok').
 -spec(action/4 :: (atom(), erlang_node(), [string()],
                    fun ((string(), [any()]) -> 'ok')) -> 'ok').
+-spec(usage/0 :: () -> no_return()).
 
 -endif.
 
@@ -129,7 +130,7 @@ parse_args([], _) ->
 stop() ->
     ok.
 
-usage() -> 
+usage() ->
     rabbitmqctl_usage:usage().
 
 action(stop, Node, [], Inform) ->
