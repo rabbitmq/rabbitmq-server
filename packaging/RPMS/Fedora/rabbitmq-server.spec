@@ -11,7 +11,7 @@ Source2: rabbitmq-script-wrapper
 Source3: rabbitmq-server.logrotate
 Source4: rabbitmq-asroot-script-wrapper
 URL: http://www.rabbitmq.com/
-BuildRequires: erlang, python-simplejson
+BuildRequires: erlang, python-simplejson, xmlto, libxslt
 Requires: erlang, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
