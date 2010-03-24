@@ -42,6 +42,7 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
+-spec(usage/0 :: () -> no_return()).
 
 -endif.
 
@@ -85,7 +86,7 @@ parse_args([Command | Args]) ->
 stop() ->
     ok.
 
-usage() -> 
+usage() ->
     rabbit_multi_usage:usage().
 
 action(start_all, [NodeCount], RpcTimeout) ->

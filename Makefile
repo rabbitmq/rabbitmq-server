@@ -209,7 +209,7 @@ distclean: clean
 $(SOURCE_DIR)/%_usage.erl:
 	xsltproc --stringparam modulename "`basename $@ .erl`" \
 	  $(DOCS_DIR)/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | sed -e s/%QUOTE%/\\\"/g | \
-	  fmt -s > $@
+	  fold -s > $@
 
 # We rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.
@@ -240,8 +240,8 @@ install: all docs_all install_dirs
 	done
 	for section in 1 5; do \
 		mkdir -p $(MAN_DIR)/man$$section; \
-		for manpage in $(DOCS_DIR)/*.$$section.pod; do \
-			cp $(DOCS_DIR)/`basename $$manpage .pod`.gz $(MAN_DIR)/man$$section; \
+		for manpage in $(DOCS_DIR)/*.$$section.gz; do \
+			cp $$manpage $(MAN_DIR)/man$$section; \
 		done; \
 	done
 
@@ -251,4 +251,20 @@ install_dirs:
 
 $(foreach XML, $(USAGES_XML), $(eval $(call usage_dep, $(XML))))
 
+# Note that all targets which depend on clean must have clean in their
+# name.  Also any target that doesn't depend on clean should not have
+# clean in its name, unless you know that you don't need any of the
+# automatic dependency generation for that target (eg cleandb).
+
+# We want to load the dep file if *any* target *doesn't* contain
+# "clean" - i.e. if removing all clean-like targets leaves something
+
+ifeq "$(MAKECMDGOALS)" ""
+TESTABLEGOALS:=$(.DEFAULT_GOAL)
+else
+TESTABLEGOALS:=$(MAKECMDGOALS)
+endif
+
+ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 -include $(DEPS_FILE)
+endif
