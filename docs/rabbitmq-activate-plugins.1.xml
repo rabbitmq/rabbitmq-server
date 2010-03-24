@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.docbook.org/xml/4.5/docbookx.dtd">
+<refentry lang="en">
+    <refentryinfo>
+        <productname>RabbitMQ Server</productname>
+        <authorgroup>
+            <corpauthor>The RabbitMQ Team &lt;<ulink url="mailto:info@rabbitmq.com"><email>info@rabbitmq.com</email></ulink>&gt;</corpauthor>
+        </authorgroup>
+    </refentryinfo>
+
+    <refmeta>
+        <refentrytitle>rabbitmq-activate-plugins</refentrytitle>
+        <manvolnum>1</manvolnum>
+        <refmiscinfo class="manual">RabbitMQ Server</refmiscinfo>
+    </refmeta>
+
+    <refnamediv>
+        <refname>rabbitmq-activate-plugins</refname>
+        <refpurpose>command line tool for activating plugins in a RabbitMQ broker</refpurpose>
+    </refnamediv>
+
+    <refsynopsisdiv>
+        <cmdsynopsis>
+            <command>rabbitmq-activate-plugins</command>
+        </cmdsynopsis>
+    </refsynopsisdiv>
+    
+    <refsect1>
+        <title>Description</title>
+        <para>
+           RabbitMQ is an implementation of AMQP, the emerging standard for high
+performance enterprise messaging. The RabbitMQ server is a robust and
+scalable implementation of an AMQP broker.
+        </para>
+        <para>
+          rabbitmq-activate-plugins is a command line tool for activating
+plugins installed into the broker's plugins directory.
+        </para>
+        <para role="example-prefix">
+          For example:
+        </para>
+        <screen role="example">
+          rabbitmq-activate-plugins
+        </screen>
+        <para role="example">
+          This command activates all of the installed plugins in the current RabbitMQ install.
+        </para>
+    </refsect1>
+
+    <refsect1>
+        <title>See also</title>
+        <para>
+            <citerefentry><refentrytitle>rabbitmq.conf</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+            <citerefentry><refentrytitle>rabbitmq-multi</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+            <citerefentry><refentrytitle>rabbitmq-server</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+            <citerefentry><refentrytitle>rabbitmqctl</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+            <citerefentry><refentrytitle>rabbitmq-deactivate-plugins</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+        </para>
+    </refsect1>
+</refentry>

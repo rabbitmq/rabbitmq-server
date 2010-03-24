@@ -42,6 +42,7 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
+-spec(usage/0 :: () -> no_return()).
 
 -endif.
 
@@ -86,16 +87,7 @@ stop() ->
     ok.
 
 usage() ->
-    io:format("Usage: rabbitmq-multi <command>
-
-Available commands:
-
-  start_all <NodeCount> - start a local cluster of RabbitMQ nodes.
-  status                - print status of all running nodes
-  stop_all              - stops all local RabbitMQ nodes.
-  rotate_logs [Suffix]  - rotate logs for all local and running RabbitMQ nodes.
-"),
-    halt(3).
+    rabbit_multi_usage:usage().
 
 action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),
