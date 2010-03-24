@@ -10,14 +10,16 @@ DEPS_FILE=deps.mk
 SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
+DOCS_DIR=docs
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
-SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing.erl $(SOURCE_DIR)/rabbitmqctl_usage.erl $(SOURCE_DIR)/rabbitmqmulti_usage.erl
+SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing.erl $(USAGES_ERL)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://stage.rabbitmq.com/
-MANPAGES=$(patsubst %.xml, %.gz, $(wildcard docs/*.[0-9].xml))
-WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard docs/*.[0-9].xml) docs/rabbitmq-service.xml)
-USAGES=$(patsubst %.1.xml, %.usage.erl, $(wildcard docs/*.[0-9].xml))
+MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
+WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
+USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-multi.1.xml
+USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python
@@ -60,6 +62,14 @@ ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
 ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
+define usage_xml_to_erl
+  $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, $(SOURCE_DIR)/rabbit_%_usage.erl, $(subst -,_,$(1))))
+endef
+
+define usage_dep
+  $(call usage_xml_to_erl, $(1)): $(1) $(DOCS_DIR)/usage.xsl
+endef
+
 all: $(TARGETS)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
@@ -68,21 +78,14 @@ $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) $@ < $<
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl
+$(EBIN_DIR)/%.beam:
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
-#	ERLC_EMULATOR="erl -smp" erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_PATH) $@
 
 $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_PATH) $@
-
-$(SOURCE_DIR)/rabbitmqctl_usage.erl: docs/rabbitmqctl.usage.erl
-	cp docs/rabbitmqctl.usage.erl $@
-
-$(SOURCE_DIR)/rabbitmqmulti_usage.erl: docs/rabbitmq-multi.usage.erl
-	cp docs/rabbitmq-multi.usage.erl $@
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
@@ -107,8 +110,8 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
-	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl $(SOURCE_DIR)/rabbitmqctl_usage.erl codegen.pyc
-	rm -f docs/*.[0-9].gz docs/*.usage.erl docs/*.man.xml docs/*.erl
+	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
+	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
 	rm -f $(RABBIT_PLT)
 	rm -f $(DEPS_FILE)
 
@@ -184,7 +187,7 @@ srcdist: distclean
 	cp codegen.py Makefile generate_app generate_deps calculate-relative $(TARGET_SRC_DIR)
 
 	cp -r scripts $(TARGET_SRC_DIR)
-	cp -r docs $(TARGET_SRC_DIR)
+	cp -r $(DOCS_DIR) $(TARGET_SRC_DIR)
 	chmod 0755 $(TARGET_SRC_DIR)/scripts/*
 
 	(cd dist; tar -zcf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
@@ -197,25 +200,25 @@ distclean: clean
 	find . -regex '.*\(~\|#\|\.swp\|\.dump\)' -exec rm {} \;
 
 # xmlto can not read from standard input, so we mess with a tmp file.
-%.gz: %.xml docs/examples-to-end.xsl
-	xsltproc docs/examples-to-end.xsl $< > $<.tmp && \
-	xmlto man -o docs $<.tmp && \
-	gzip -f docs/`basename $< .xml`
+%.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
+	xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
+	xmlto man -o $(DOCS_DIR) $<.tmp && \
+	gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
 
-%.usage.erl: %.1.xml docs/usage.xsl
-	xsltproc --stringparam modulename "`basename $< .1.xml | tr -d -`_usage" \
-	  docs/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | sed -e s/%QUOTE%/\\\"/g | \
-	  fold -s > docs/`basename $< .1.xml`.usage.erl
+$(SOURCE_DIR)/%_usage.erl:
+	xsltproc --stringparam modulename "`basename $@ .erl`" \
+	  $(DOCS_DIR)/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | sed -e s/%QUOTE%/\\\"/g | \
+	  fold -s > $@
 
 # We rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.
-%.man.xml: %.xml docs/html-to-website-xml.xsl
+%.man.xml: %.xml $(DOCS_DIR)/html-to-website-xml.xsl
 	cp $< `basename $< .xml`.xml && \
 		xmlto xhtml-nochunks `basename $< .xml`.xml ; rm `basename $< .xml`.xml
 	cat `basename $< .xml`.html | \
-	    xsltproc --novalid docs/remove-namespaces.xsl - | \
-		xsltproc --stringparam original `basename $<` docs/html-to-website-xml.xsl - | \
+	    xsltproc --novalid $(DOCS_DIR)/remove-namespaces.xsl - | \
+		xsltproc --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
 		xmllint --format - > $@
 	rm `basename $< .xml`.html
 
@@ -237,7 +240,7 @@ install: all docs_all install_dirs
 	done
 	for section in 1 5; do \
 		mkdir -p $(MAN_DIR)/man$$section; \
-		for manpage in docs/*.$$section.gz; do \
+		for manpage in $(DOCS_DIR)/*.$$section.gz; do \
 			cp $$manpage $(MAN_DIR)/man$$section; \
 		done; \
 	done
@@ -245,6 +248,8 @@ install: all docs_all install_dirs
 install_dirs:
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(TARGET_DIR)/sbin
+
+$(foreach XML, $(USAGES_XML), $(eval $(call usage_dep, $(XML))))
 
 # Note that all targets which depend on clean must have clean in their
 # name.  Also any target that doesn't depend on clean should not have

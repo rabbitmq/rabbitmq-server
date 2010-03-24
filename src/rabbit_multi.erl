@@ -86,8 +86,8 @@ parse_args([Command | Args]) ->
 stop() ->
     ok.
 
-usage() -> 
-    rabbitmqmulti_usage:usage().
+usage() ->
+    rabbit_multi_usage:usage().
 
 action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),
