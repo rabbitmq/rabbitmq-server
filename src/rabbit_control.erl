@@ -131,7 +131,8 @@ stop() ->
     ok.
 
 usage() ->
-    rabbitmqctl_usage:usage().
+    io:format(rabbitmqctl_usage:usage()),
+    halt(1).
 
 action(stop, Node, [], Inform) ->
     Inform("Stopping and halting node ~p", [Node]),

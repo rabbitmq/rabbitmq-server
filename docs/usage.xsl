@@ -18,7 +18,7 @@
 <!-- Pull out cmdsynopsis to show the command usage line. -->%% Generated, do not edit!
 -module(<xsl:value-of select="$modulename" />).
 -export([usage/0]).
-usage() -> io:format(%QUOTE%Usage:
+usage() -> %QUOTE%Usage:
 <xsl:value-of select="refentry/refsynopsisdiv/cmdsynopsis/command"/> 
 <xsl:text> </xsl:text>
 <xsl:for-each select="refentry/refsynopsisdiv/cmdsynopsis/arg">
@@ -60,7 +60,7 @@ usage() -> io:format(%QUOTE%Usage:
 </xsl:for-each>
 
 <xsl:apply-templates select=".//*[title='Commands']/refsect2" mode="command-usage" />
-%QUOTE%), halt(1).
+%QUOTE%.
 </xsl:template>
 
 <!-- Option lists in command usage -->
