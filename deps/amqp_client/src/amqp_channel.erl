@@ -219,7 +219,9 @@ rpc_bottom_half(Reply, State = #c_state{rpc_requests = RequestQueue}) ->
         {empty, _} ->
             exit(empty_rpc_bottom_half);
         {{value, {From, _Method, _Content}}, NewRequestQueue} ->
-            gen_server:reply(From, Reply),
+            case From of none -> ok;
+                         _    -> gen_server:reply(From, Reply)
+            end,
             do_rpc(State#c_state{rpc_requests = NewRequestQueue})
     end.
 
@@ -404,17 +406,18 @@ init({ParentConnection, ChannelNumber, Driver, StartArgs}) ->
 %% Standard implementation of the call/{2,3} command
 %% @private
 handle_call({call, Method, AmqpMsg}, From, State) ->
-    case check_block(Method, AmqpMsg, State) of
-        ok         -> Content = build_content(AmqpMsg),
-                      case rabbit_framing:is_method_synchronous(Method) of
-                          true ->
-                              {noreply, rpc_top_half(Method, Content, From,
-                                                     State)};
-                          false ->
-                              do(Method, Content, State),
-                              {reply, ok, State}
-                      end;
-        BlockReply -> {reply, BlockReply, State}
+    case {Method, check_block(Method, AmqpMsg, State)} of
+        {#'basic.consume'{}, _} ->
+            {reply, {error, use_subscribe}, State};
+        {_, ok} ->
+            Content = build_content(AmqpMsg),
+            case rabbit_framing:is_method_synchronous(Method) of
+                true  -> {noreply, rpc_top_half(Method, Content, From, State)};
+                false -> do(Method, Content, State),
+                         {reply, ok, State}
+            end;
+        {_, BlockReply} ->
+            {reply, BlockReply, State}
     end;
 
 %% Standard implementation of the subscribe/3 command
@@ -445,12 +448,27 @@ handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer}
 %% Standard implementation of the cast/{2,3} command
 %% @private
 handle_cast({cast, Method, AmqpMsg} = Cast, State) ->
-    case check_block(Method, AmqpMsg, State) of
-        ok         -> do(Method, build_content(AmqpMsg), State);
-        BlockReply -> ?LOG_INFO("Channel (~p): discarding method in cast ~p."
-                                "Reason: ~p~n", [self(), Cast, BlockReply])
-    end,
-    {noreply, State};
+    case {Method, check_block(Method, AmqpMsg, State)} of
+        {#'basic.consume'{}, _} ->
+            ?LOG_WARN("Channel (~p): ignoring cast of ~p method. "
+                      "Use subscribe/3 instead!~n", [self(), Method]),
+            {noreply, State};
+        {_, ok} ->
+            Content = build_content(AmqpMsg),
+            case rabbit_framing:is_method_synchronous(Method) of
+                true  -> ?LOG_WARN("Channel (~p): casting synchronous method "
+                                   "~p.~n"
+                                   "The reply will be ignored!~n",
+                                   [self(), Method]),
+                         {noreply, rpc_top_half(Method, Content, none, State)};
+                false -> do(Method, Content, State),
+                         {noreply, State}
+            end;
+        {_, BlockReply} ->
+            ?LOG_WARN("Channel (~p): discarding method in cast ~p.~n"
+                      "Reason: ~p~n", [self(), Cast, BlockReply]),
+            {noreply, State}
+    end;
 
 %% Registers a handler to process return messages
 %% @private
