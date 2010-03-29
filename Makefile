@@ -202,7 +202,7 @@ distclean: clean
 # xmlto can not read from standard input, so we mess with a tmp file.
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
 	xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	xmlto man -o $(DOCS_DIR) $<.tmp && \
+	xmlto man -o $(DOCS_DIR) --stringparam man.indent.verbatims=0 $<.tmp && \
 	gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
 
