@@ -12,7 +12,7 @@
               encoding="UTF-8"
               indent="no"/>
 <xsl:strip-space elements="*"/> 
-<xsl:preserve-space elements="term" />
+<xsl:preserve-space elements="cmdsynopsis arg" />
 
 <xsl:template match="/">
 <!-- Pull out cmdsynopsis to show the command usage line. -->%% Generated, do not edit!
@@ -74,7 +74,7 @@ usage() -> io:format(%QUOTE%Usage:
 <!-- Don't show anything else in command usage -->
 <xsl:template match="text()" mode="command-usage"/>
 
-<xsl:template match="option">[<xsl:apply-templates/>]</xsl:template>
+<xsl:template match="arg[@choice='opt']">[<xsl:apply-templates/>]</xsl:template>
 <xsl:template match="replaceable">&lt;<xsl:value-of select="."/>&gt;</xsl:template>
 
 </xsl:stylesheet>
