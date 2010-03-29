@@ -86,8 +86,8 @@ parse_args([Command | Args]) ->
 stop() ->
     ok.
 
-usage() -> 
-    io:format(rabbitmqmulti_usage:usage()),
+usage() ->
+    io:format("~s", [rabbitmqmulti_usage:usage()]),
     halt(1).
 
 action(start_all, [NodeCount], RpcTimeout) ->

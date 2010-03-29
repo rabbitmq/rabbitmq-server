@@ -131,7 +131,7 @@ stop() ->
     ok.
 
 usage() ->
-    io:format(rabbitmqctl_usage:usage()),
+    io:format("~s", [rabbitmqctl_usage:usage()]),
     halt(1).
 
 action(stop, Node, [], Inform) ->
