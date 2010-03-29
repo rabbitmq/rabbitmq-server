@@ -22,9 +22,7 @@ usage() -> io:format(%QUOTE%Usage:
 <xsl:value-of select="refentry/refsynopsisdiv/cmdsynopsis/command"/> 
 <xsl:text> </xsl:text>
 <xsl:for-each select="refentry/refsynopsisdiv/cmdsynopsis/arg">
-  <xsl:if test="@choice='opt'">[</xsl:if>
   <xsl:apply-templates select="." />
-  <xsl:if test="@choice='opt'">]</xsl:if>
   <xsl:text> </xsl:text>
 </xsl:for-each>
 

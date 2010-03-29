@@ -65,7 +65,7 @@
     <title>Options</title>
     <variablelist>
       <varlistentry>
-        <term><option>-n</option> <replaceable>node</replaceable></term>
+        <term><cmdsynopsis><arg choice="opt">-n <replaceable>node</replaceable></arg></cmdsynopsis></term>
         <listitem>
           <para role="usage">
             Default node is "rabbit@server", where server is the local host.  On
@@ -79,7 +79,7 @@
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term><option>-q</option></term>
+        <term><cmdsynopsis><arg choice="opt">-q</arg></cmdsynopsis></term>
         <listitem>
           <para role="usage">
             Quiet output mode is selected with the "-q" flag. Informational
