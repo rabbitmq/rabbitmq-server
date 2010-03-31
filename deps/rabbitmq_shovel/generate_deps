@@ -23,10 +23,11 @@ main([IncludeDir, ErlDir, EbinDir, TargetFile]) ->
               ok;
           (Path, Dep, ok) ->
               Module = filename:basename(Path, ".erl"),
-              ok = file:write(Hdl, [EbinDir, "/", Module, ".beam:"]),
+              ok = file:write(Hdl, [EbinDir, "/", Module, ".beam: ",
+                                   Path]),
               ok = sets:fold(fun (E, ok) -> file:write(Hdl, [" ", E]) end,
                              ok, Dep),
-              file:write(Hdl, [" ", ErlDir, "/", Module, ".erl\n"])
+              file:write(Hdl, ["\n"])
       end, ok, Deps),
     ok = file:write(Hdl, [TargetFile, ": ", escript:script_name(), "\n"]),
     ok = file:sync(Hdl),
@@ -35,7 +36,8 @@ main([IncludeDir, ErlDir, EbinDir, TargetFile]) ->
 detect_deps(IncludeDir, EbinDir, Modules, Headers, Path) ->
     {ok, Forms} = epp:parse_file(Path, [IncludeDir], [{use_specs, true}]),
     lists:foldl(
-      fun ({attribute, _LineNumber, behaviour, Behaviour}, Deps) ->
+      fun ({attribute, _LineNumber, Attribute, Behaviour}, Deps)
+          when Attribute =:= behaviour orelse Attribute =:= behavior ->
               case sets:is_element(Behaviour, Modules) of
                   true  -> sets:add_element(
                              [EbinDir, "/", atom_to_list(Behaviour), ".beam"],
