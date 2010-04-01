@@ -34,7 +34,8 @@
 -export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
          write_delivered/2, write_acks/2, sync_seq_ids/2, flush_journal/1,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
-         find_lowest_seq_id_seg_and_next_seq_id/1, start_msg_store/1]).
+         find_lowest_seq_id_seg_and_next_seq_id/1,
+         start_persistent_msg_store/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -207,7 +208,7 @@
 -spec(segment_size/0 :: () -> non_neg_integer()).
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(start_msg_store/1 :: ([amqqueue()]) -> 'ok').
+-spec(start_persistent_msg_store/1 :: ([amqqueue()]) -> 'ok').
 
 -endif.
 
@@ -250,7 +251,8 @@ init(Name) ->
                              {Segment3, DCountAcc2}) ->
                                 {Segment4, DCountDelta} =
                                     maybe_add_to_journal(
-                                      rabbit_msg_store:contains(MsgId),
+                                      rabbit_msg_store:contains(
+                                        ?PERSISTENT_MSG_STORE, MsgId),
                                       CleanShutdown, Del, RelSeq, Segment3),
                                 {Segment4, DCountAcc2 + DCountDelta}
                         end, {Segment1 #segment { pubs = PubCount,
@@ -379,7 +381,7 @@ find_lowest_seq_id_seg_and_next_seq_id(State) ->
         end,
     {LowSeqIdSeg, NextSeqId, State}.
 
-start_msg_store(DurableQueues) ->
+start_persistent_msg_store(DurableQueues) ->
     DurableDict =
         dict:from_list([ {queue_name_to_dir_name(Queue #amqqueue.name),
                           Queue #amqqueue.name} || Queue <- DurableQueues ]),
@@ -404,10 +406,9 @@ start_msg_store(DurableQueues) ->
                           {DurableAcc, [QueueDir | TransientAcc]}
                   end
           end, {[], []}, Directories),
-    MsgStoreDir = filename:join(rabbit_mnesia:dir(), "msg_store"),
-    ok = rabbit_sup:start_child(rabbit_msg_store, [MsgStoreDir,
-                                               fun queue_index_walker/1,
-                                               DurableQueueNames]),
+    ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store,
+                                [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
+                                 fun queue_index_walker/1, DurableQueueNames]),
     lists:foreach(fun (DirName) ->
                           Dir = filename:join(queues_dir(), DirName),
                           ok = delete_queue_directory(Dir)

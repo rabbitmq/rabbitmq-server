@@ -49,8 +49,3 @@
 -define(FILE_SIZE_LIMIT,       (16*1024*1024)).
 
 -define(HANDLE_CACHE_BUFFER_SIZE, 1048576). %% 1MB
-
--define(FILE_SUMMARY_ETS_NAME,    rabbit_msg_store_file_summary).
--define(CACHE_ETS_NAME,           rabbit_msg_store_cache).
--define(FILE_HANDLES_ETS_NAME,    rabbit_msg_store_file_handles).
--define(CUR_FILE_CACHE_ETS_NAME,  rabbit_msg_store_cur_file).

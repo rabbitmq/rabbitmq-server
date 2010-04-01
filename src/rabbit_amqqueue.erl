@@ -65,8 +65,7 @@
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
--type(seq_id() :: non_neg_integer()).
--type(acktag() :: ('ack_not_on_disk' | {'ack_index_and_store', msg_id(), seq_id()})).
+-type(acktag() :: any()).
 
 -spec(start/0 :: () -> 'ok').
 -spec(declare/4 :: (queue_name(), boolean(), boolean(), amqp_table()) ->
@@ -129,8 +128,11 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
+                                [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
+                                 fun (ok) -> finished end, ok]),
     DurableQueues = find_durable_queues(),
-    ok = rabbit_queue_index:start_msg_store(DurableQueues),
+    ok = rabbit_queue_index:start_persistent_msg_store(DurableQueues),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,

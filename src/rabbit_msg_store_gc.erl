@@ -33,7 +33,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/3, gc/2, stop/0]).
+-export([start_link/4, gc/3, stop/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -41,40 +41,42 @@
 -record(gcstate,
         {dir,
          index_state,
-         index_module
+         index_module,
+         parent,
+         file_summary_ets
         }).
 
 -include("rabbit_msg_store.hrl").
 
--define(SERVER, ?MODULE).
+%%----------------------------------------------------------------------------
+
+start_link(Dir, IndexState, IndexModule, FileSummaryEts) ->
+    gen_server2:start_link(
+      ?MODULE, [self(), Dir, IndexState, IndexModule, FileSummaryEts],
+      [{timeout, infinity}]).
+
+gc(Server, Source, Destination) ->
+    gen_server2:cast(Server, {gc, Source, Destination}).
+
+stop(Server) ->
+    gen_server2:call(Server, stop).
 
 %%----------------------------------------------------------------------------
 
-start_link(Dir, IndexState, IndexModule) ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE,
-                           [Dir, IndexState, IndexModule],
-                           [{timeout, infinity}]).
-
-gc(Source, Destination) ->
-    gen_server2:cast(?SERVER, {gc, Source, Destination}).
-
-stop() ->
-    gen_server2:call(?SERVER, stop).
-
-%%----------------------------------------------------------------------------
-
-init([Dir, IndexState, IndexModule]) ->
+init([Parent, Dir, IndexState, IndexModule, FileSummaryEts]) ->
     {ok, #gcstate { dir = Dir, index_state = IndexState,
-                    index_module = IndexModule },
+                    index_module = IndexModule, parent = Parent,
+                    file_summary_ets = FileSummaryEts},
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
-handle_cast({gc, Source, Destination}, State) ->
-    Reclaimed = adjust_meta_and_combine(Source, Destination, State),
-    ok = rabbit_msg_store:gc_done(Reclaimed, Source, Destination),
+handle_cast({gc, Source, Destination}, State = #gcstate { parent = Parent }) ->
+    Reclaimed = adjust_meta_and_combine(Source, Destination,
+                                        State),
+    ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source, Destination),
     {noreply, State, hibernate}.
 
 handle_info({file_handle_cache, maximum_eldest_since_use, Age}, State) ->
@@ -92,18 +94,19 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-adjust_meta_and_combine(SourceFile, DestFile, State) ->
+adjust_meta_and_combine(SourceFile, DestFile, State =
+                            #gcstate { file_summary_ets = FileSummaryEts }) ->
 
     [SourceObj = #file_summary {
        readers = SourceReaders,
        valid_total_size = SourceValidData, left = DestFile,
        file_size = SourceFileSize, locked = true }] =
-        ets:lookup(?FILE_SUMMARY_ETS_NAME, SourceFile),
+        ets:lookup(FileSummaryEts, SourceFile),
     [DestObj = #file_summary {
        readers = DestReaders,
        valid_total_size = DestValidData, right = SourceFile,
        file_size = DestFileSize, locked = true }] =
-        ets:lookup(?FILE_SUMMARY_ETS_NAME, DestFile),
+        ets:lookup(FileSummaryEts, DestFile),
 
     case SourceReaders =:= 0 andalso DestReaders =:= 0 of
         true ->
@@ -112,7 +115,7 @@ adjust_meta_and_combine(SourceFile, DestFile, State) ->
             %% don't update dest.right, because it could be changing
             %% at the same time
             true = ets:update_element(
-                     ?FILE_SUMMARY_ETS_NAME, DestFile,
+                     FileSummaryEts, DestFile,
                      [{#file_summary.valid_total_size, TotalValidData},
                       {#file_summary.contiguous_top,   TotalValidData},
                       {#file_summary.file_size,        TotalValidData}]),

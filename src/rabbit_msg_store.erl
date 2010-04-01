@@ -33,15 +33,13 @@
 
 -behaviour(gen_server2).
 
--export([start_link/3, write/2, read/2, contains/1, remove/1, release/1,
-         sync/2, client_init/0, client_terminate/1]).
+-export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
+         sync/3, client_init/1, client_terminate/1]).
 
--export([sync/0, gc_done/3, set_maximum_since_use/1]). %% internal
+-export([sync/1, gc_done/4, set_maximum_since_use/2]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, handle_pre_hibernate/1]).
-
--define(SERVER, ?MODULE).
 
 -define(SYNC_INTERVAL,         5). %% milliseconds
 
@@ -62,44 +60,58 @@
           sum_valid_data,         %% sum of valid data in all files
           sum_file_size,          %% sum of file sizes
           pending_gc_completion,  %% things to do once GC completes
-          gc_active               %% is the GC currently working?
+          gc_active,              %% is the GC currently working?
+          gc_pid,                 %% pid of our GC
+          file_handles_ets,       %% tid of the shared file handles table
+          file_summary_ets,       %% tid of the file summary table
+          dedup_cache_ets,        %% tid of dedup cache table
+          cur_file_cache_ets      %% tid of current file cache table
         }).
 
 -record(client_msstate,
         { file_handle_cache,
           index_state,
           index_module,
-          dir
+          dir,
+          file_handles_ets,
+          file_summary_ets,
+          dedup_cache_ets,
+          cur_file_cache_ets
         }).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
+-type(server() :: pid() | atom()).
 -type(msg_id() :: binary()).
 -type(msg() :: any()).
 -type(file_path() :: any()).
 -type(file_num() :: non_neg_integer()).
--type(client_msstate() :: #client_msstate { file_handle_cache :: dict(),
-                                            index_state       :: any(),
-                                            index_module      :: atom(),
-                                            dir               :: file_path() }).
+-type(client_msstate() :: #client_msstate { file_handle_cache  :: dict(),
+                                            index_state        :: any(),
+                                            index_module       :: atom(),
+                                            dir                :: file_path(),
+                                            file_handles_ets   :: tid(),
+                                            file_summary_ets   :: tid(),
+                                            dedup_cache_ets    :: tid(),
+                                            cur_file_cache_ets :: tid() }).
 
--spec(start_link/3 ::
-      (file_path(),
+-spec(start_link/4 ::
+      (atom(), file_path(),
        (fun ((A) -> 'finished' | {msg_id(), non_neg_integer(), A})), A) ->
              {'ok', pid()} | 'ignore' | {'error', any()}).
--spec(write/2 :: (msg_id(), msg()) -> 'ok').
-%% -spec(read/1 :: (msg_id()) -> {'ok', msg()} | 'not_found').
--spec(read/2 :: (msg_id(), client_msstate()) ->
+-spec(write/4 :: (server(), msg_id(), msg(), client_msstate()) ->
+                      {'ok', client_msstate()}).
+-spec(read/3 :: (server(), msg_id(), client_msstate()) ->
                      {{'ok', msg()} | 'not_found', client_msstate()}).
--spec(contains/1 :: (msg_id()) -> boolean()).
--spec(remove/1 :: ([msg_id()]) -> 'ok').
--spec(release/1 :: ([msg_id()]) -> 'ok').
--spec(sync/2 :: ([msg_id()], fun (() -> any())) -> 'ok').
--spec(gc_done/3 :: (non_neg_integer(), file_num(), file_num()) -> 'ok').
--spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
--spec(client_init/0 :: () -> client_msstate()).
+-spec(contains/2 :: (server(), msg_id()) -> boolean()).
+-spec(remove/2 :: (server(), [msg_id()]) -> 'ok').
+-spec(release/2 :: (server(), [msg_id()]) -> 'ok').
+-spec(sync/3 :: (server(), [msg_id()], fun (() -> any())) -> 'ok').
+-spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) -> 'ok').
+-spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
+-spec(client_init/1 :: (server()) -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 
 -endif.
@@ -264,28 +276,32 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-start_link(Dir, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE,
-                           [Dir, MsgRefDeltaGen, MsgRefDeltaGenInit],
+start_link(Server, Dir, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
+    gen_server2:start_link({local, Server}, ?MODULE,
+                           [Server, Dir, MsgRefDeltaGen, MsgRefDeltaGenInit],
                            [{timeout, infinity}]).
 
-write(MsgId, Msg) ->
-    ok = add_to_cache(MsgId, Msg),
-    gen_server2:cast(?SERVER, {write, MsgId, Msg}).
+write(Server, MsgId, Msg, CState =
+          #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
+    ok = add_to_cache(CurFileCacheEts, MsgId, Msg),
+    {gen_server2:cast(Server, {write, MsgId, Msg}), CState}.
 
-read(MsgId, CState) ->
+read(Server, MsgId, CState =
+         #client_msstate { dedup_cache_ets = DedupCacheEts,
+                           cur_file_cache_ets = CurFileCacheEts }) ->
     %% 1. Check the dedup cache
-    case fetch_and_increment_cache(MsgId) of
+    case fetch_and_increment_cache(DedupCacheEts, MsgId) of
         not_found ->
             %% 2. Check the cur file cache
-            case ets:lookup(?CUR_FILE_CACHE_ETS_NAME, MsgId) of
+            case ets:lookup(CurFileCacheEts, MsgId) of
                 [] ->
                     Defer = fun() -> {gen_server2:pcall(
-                                        ?SERVER, 2, {read, MsgId}, infinity),
+                                        Server, 2, {read, MsgId}, infinity),
                                       CState} end,
                     case index_lookup(MsgId, CState) of
                         not_found   -> Defer();
-                        MsgLocation -> client_read1(MsgLocation, Defer, CState)
+                        MsgLocation -> client_read1(Server, MsgLocation, Defer,
+                                                    CState)
                     end;
                 [{MsgId, Msg, _CacheRefCount}] ->
                     %% Although we've found it, we don't know the
@@ -296,25 +312,29 @@ read(MsgId, CState) ->
             {{ok, Msg}, CState}
     end.
 
-contains(MsgId)     -> gen_server2:call(?SERVER, {contains, MsgId}, infinity).
-remove(MsgIds)      -> gen_server2:cast(?SERVER, {remove, MsgIds}).
-release(MsgIds)     -> gen_server2:cast(?SERVER, {release, MsgIds}).
-sync(MsgIds, K)     -> gen_server2:cast(?SERVER, {sync, MsgIds, K}).
-sync()              -> gen_server2:pcast(?SERVER, 8, sync). %% internal
+contains(Server, MsgId) -> gen_server2:call(Server, {contains, MsgId}, infinity).
+remove(Server, MsgIds)  -> gen_server2:cast(Server, {remove, MsgIds}).
+release(Server, MsgIds) -> gen_server2:cast(Server, {release, MsgIds}).
+sync(Server, MsgIds, K) -> gen_server2:cast(Server, {sync, MsgIds, K}).
+sync(Server)            -> gen_server2:pcast(Server, 8, sync). %% internal
 
-gc_done(Reclaimed, Source, Destination) ->
-    gen_server2:pcast(?SERVER, 8, {gc_done, Reclaimed, Source, Destination}).
+gc_done(Server, Reclaimed, Source, Destination) ->
+    gen_server2:pcast(Server, 8, {gc_done, Reclaimed, Source, Destination}).
 
-set_maximum_since_use(Age) ->
-    gen_server2:pcast(?SERVER, 8, {set_maximum_since_use, Age}).
+set_maximum_since_use(Server, Age) ->
+    gen_server2:pcast(Server, 8, {set_maximum_since_use, Age}).
 
-client_init() ->
-    {IState, IModule, Dir} =
-        gen_server2:call(?SERVER, new_client_state, infinity),
-    #client_msstate { file_handle_cache = dict:new(),
-                      index_state       = IState,
-                      index_module      = IModule,
-                      dir               = Dir }.
+client_init(Server) ->
+    {IState, IModule, Dir, FileHandlesEts, FileSummaryEts, DedupCacheEts,
+     CurFileCacheEts} = gen_server2:call(Server, new_client_state, infinity),
+    #client_msstate { file_handle_cache  = dict:new(),
+                      index_state        = IState,
+                      index_module       = IModule,
+                      dir                = Dir,
+                      file_handles_ets   = FileHandlesEts,
+                      file_summary_ets   = FileSummaryEts,
+                      dedup_cache_ets    = DedupCacheEts,
+                      cur_file_cache_ets = CurFileCacheEts }.
 
 client_terminate(CState) ->
     close_all_handles(CState),
@@ -324,53 +344,58 @@ client_terminate(CState) ->
 %% Client-side-only helpers
 %%----------------------------------------------------------------------------
 
-add_to_cache(MsgId, Msg) ->
-    case ets:insert_new(?CUR_FILE_CACHE_ETS_NAME, {MsgId, Msg, 1}) of
+add_to_cache(CurFileCacheEts, MsgId, Msg) ->
+    case ets:insert_new(CurFileCacheEts, {MsgId, Msg, 1}) of
         true ->
             ok;
         false ->
             try
-                ets:update_counter(?CUR_FILE_CACHE_ETS_NAME, MsgId, {3, +1}),
+                ets:update_counter(CurFileCacheEts, MsgId, {3, +1}),
                 ok
-            catch error:badarg -> add_to_cache(MsgId, Msg)
+            catch error:badarg -> add_to_cache(CurFileCacheEts, MsgId, Msg)
             end
     end.
 
-client_read1(MsgLocation = #msg_location { msg_id = MsgId, file = File }, Defer,
-             CState) ->
-    case ets:lookup(?FILE_SUMMARY_ETS_NAME, File) of
+client_read1(Server, #msg_location { msg_id = MsgId, file = File } =
+                 MsgLocation, Defer, CState =
+                 #client_msstate { file_summary_ets = FileSummaryEts }) ->
+    case ets:lookup(FileSummaryEts, File) of
         [] -> %% File has been GC'd and no longer exists. Go around again.
-            read(MsgId, CState);
+            read(Server, MsgId, CState);
         [#file_summary { locked = Locked, right = Right }] ->
-            client_read2(Locked, Right, MsgLocation, Defer, CState)
+            client_read2(Server, Locked, Right, MsgLocation, Defer, CState)
     end.
 
-client_read2(false, undefined, #msg_location {
-                      msg_id = MsgId, ref_count = RefCount }, Defer, CState) ->
-    case ets:lookup(?CUR_FILE_CACHE_ETS_NAME, MsgId) of
+client_read2(_Server, false, undefined,
+             #msg_location { msg_id = MsgId, ref_count = RefCount }, Defer,
+             CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
+                                        dedup_cache_ets = DedupCacheEts }) ->
+    case ets:lookup(CurFileCacheEts, MsgId) of
         [] ->
             Defer(); %% may have rolled over
         [{MsgId, Msg, _CacheRefCount}] ->
-            ok = maybe_insert_into_cache(RefCount, MsgId, Msg),
+            ok = maybe_insert_into_cache(DedupCacheEts, RefCount, MsgId, Msg),
             {{ok, Msg}, CState}
     end;
-client_read2(true, _Right, _MsgLocation, Defer, _CState) ->
+client_read2(_Server, true, _Right, _MsgLocation, Defer, _CState) ->
     %% Of course, in the mean time, the GC could have run and our msg
     %% is actually in a different file, unlocked. However, defering is
     %% the safest and simplest thing to do.
     Defer();
-client_read2(false, _Right, #msg_location {
-                      msg_id = MsgId, ref_count = RefCount, file = File },
-             Defer, CState) ->
+client_read2(Server, false, _Right,
+             #msg_location { msg_id = MsgId, ref_count = RefCount, file = File },
+             Defer, CState =
+                 #client_msstate { file_handles_ets = FileHandlesEts,
+                                   file_summary_ets = FileSummaryEts,
+                                   dedup_cache_ets  = DedupCacheEts }) ->
     %% It's entirely possible that everything we're doing from here on
     %% is for the wrong file, or a non-existent file, as a GC may have
     %% finished.
-    try ets:update_counter(?FILE_SUMMARY_ETS_NAME, File,
-                           {#file_summary.readers, +1})
+    try ets:update_counter(FileSummaryEts, File, {#file_summary.readers, +1})
     catch error:badarg -> %% the File has been GC'd and deleted. Go around.
-            read(MsgId, CState)
+            read(Server, MsgId, CState)
     end,
-    Release = fun() -> ets:update_counter(?FILE_SUMMARY_ETS_NAME, File,
+    Release = fun() -> ets:update_counter(FileSummaryEts, File,
                                           {#file_summary.readers, -1})
               end,
     %% If a GC hasn't already started, it won't start now. Need to
@@ -378,7 +403,7 @@ client_read2(false, _Right, #msg_location {
     %% between lookup and update_counter (thus GC started before our
     %% +1).
     [#file_summary { locked = Locked }] =
-        ets:lookup(?FILE_SUMMARY_ETS_NAME, File),
+        ets:lookup(FileSummaryEts, File),
     case Locked of
         true ->
             %% If we get a badarg here, then the GC has finished and
@@ -390,7 +415,7 @@ client_read2(false, _Right, #msg_location {
             %% readers, msg_store ets:deletes (and unlocks the dest)
             try Release(),
                 Defer()
-            catch error:badarg -> read(MsgId, CState)
+            catch error:badarg -> read(Server, MsgId, CState)
             end;
         false ->
             %% Ok, we're definitely safe to continue - a GC can't
@@ -410,23 +435,25 @@ client_read2(false, _Right, #msg_location {
                 MsgLocation = #msg_location { file = File } ->
                     %% Still the same file.
                     %% This is fine to fail (already exists)
-                    ets:insert_new(
-                      ?FILE_HANDLES_ETS_NAME, {{self(), File}, open}),
+                    ets:insert_new(FileHandlesEts, {{self(), File}, open}),
                     CState1 = close_all_indicated(CState),
-                    {Msg, CState2} = read_from_disk(MsgLocation, CState1),
-                    ok = maybe_insert_into_cache(RefCount, MsgId, Msg),
+                    {Msg, CState2} =
+                        read_from_disk(MsgLocation, CState1, DedupCacheEts),
+                    ok = maybe_insert_into_cache(DedupCacheEts, RefCount, MsgId,
+                                                 Msg),
                     Release(), %% this MUST NOT fail with badarg
                     {{ok, Msg}, CState2};
                 MsgLocation -> %% different file!
                     Release(), %% this MUST NOT fail with badarg
-                    client_read1(MsgLocation, Defer, CState)
+                    client_read1(Server, MsgLocation, Defer, CState)
             end
     end.
 
-close_all_indicated(CState) ->
-    Objs = ets:match_object(?FILE_HANDLES_ETS_NAME, {{self(), '_'}, close}),
+close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts } =
+                        CState) ->
+    Objs = ets:match_object(FileHandlesEts, {{self(), '_'}, close}),
     lists:foldl(fun ({Key = {_Self, File}, close}, CStateM) ->
-                        true = ets:delete(?FILE_HANDLES_ETS_NAME, Key),
+                        true = ets:delete(FileHandlesEts, Key),
                         close_handle(File, CStateM)
                 end, CState, Objs).
 
@@ -434,12 +461,13 @@ close_all_indicated(CState) ->
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
+init([Server, BaseDir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
     process_flag(trap_exit, true),
 
-    ok =
-        file_handle_cache:register_callback(?MODULE, set_maximum_since_use, []),
+    ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
+                                             [self()]),
 
+    Dir = filename:join(BaseDir, atom_to_list(Server)),
     ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
 
     {ok, IndexModule} = application:get_env(msg_store_index_module),
@@ -448,28 +476,32 @@ init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
     IndexState = IndexModule:init(Dir),
 
     InitFile = 0,
-    ?FILE_SUMMARY_ETS_NAME = ets:new(?FILE_SUMMARY_ETS_NAME,
-                                     [ordered_set, public, named_table,
-                                      {keypos, #file_summary.file}]),
-    ?CACHE_ETS_NAME = ets:new(?CACHE_ETS_NAME, [set, public, named_table]),
-    ?FILE_HANDLES_ETS_NAME = ets:new(?FILE_HANDLES_ETS_NAME,
-                                     [ordered_set, public, named_table]),
-    ?CUR_FILE_CACHE_ETS_NAME = ets:new(?CUR_FILE_CACHE_ETS_NAME,
-                                       [set, public, named_table]),
-    State =
-        #msstate { dir                    = Dir,
-                   index_module           = IndexModule,
-                   index_state            = IndexState,
-                   current_file           = InitFile,
-                   current_file_handle    = undefined,
-                   file_handle_cache      = dict:new(),
-                   on_sync                = [],
-                   sync_timer_ref         = undefined,
-                   sum_valid_data         = 0,
-                   sum_file_size          = 0,
-                   pending_gc_completion  = [],
-                   gc_active              = false
-                  },
+    FileSummaryEts = ets:new(rabbit_msg_store_file_summary,
+                             [ordered_set, public,
+                              {keypos, #file_summary.file}]),
+    DedupCacheEts = ets:new(rabbit_msg_store_dedup_cache, [set, public]),
+    FileHandlesEts = ets:new(rabbit_msg_store_shared_file_handles,
+                             [ordered_set, public]),
+    CurFileCacheEts = ets:new(rabbit_msg_store_cur_file, [set, public]),
+
+    State = #msstate { dir                    = Dir,
+                       index_module           = IndexModule,
+                       index_state            = IndexState,
+                       current_file           = InitFile,
+                       current_file_handle    = undefined,
+                       file_handle_cache      = dict:new(),
+                       on_sync                = [],
+                       sync_timer_ref         = undefined,
+                       sum_valid_data         = 0,
+                       sum_file_size          = 0,
+                       pending_gc_completion  = [],
+                       gc_active              = false,
+                       gc_pid                 = undefined,
+                       file_handles_ets       = FileHandlesEts,
+                       file_summary_ets       = FileSummaryEts,
+                       dedup_cache_ets        = DedupCacheEts,
+                       cur_file_cache_ets     = CurFileCacheEts
+                     },
 
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
     FileNames =
@@ -490,9 +522,11 @@ init([Dir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
     {ok, Offset} = file_handle_cache:position(FileHdl, Offset),
     ok = file_handle_cache:truncate(FileHdl),
 
-    {ok, _Pid} = rabbit_msg_store_gc:start_link(Dir, IndexState, IndexModule),
+    {ok, GCPid} = rabbit_msg_store_gc:start_link(Dir, IndexState, IndexModule,
+                                                 FileSummaryEts),
 
-    {ok, State1 #msstate { current_file_handle = FileHdl }, hibernate,
+    {ok, State1 #msstate { current_file_handle = FileHdl,
+                           gc_pid = GCPid }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({read, MsgId}, From, State) ->
@@ -504,16 +538,23 @@ handle_call({contains, MsgId}, From, State) ->
     noreply(State1);
 
 handle_call(new_client_state, _From,
-            State = #msstate { index_state = IndexState, dir = Dir,
-                               index_module = IndexModule }) ->
-    reply({IndexState, IndexModule, Dir}, State).
+            State = #msstate { index_state        = IndexState, dir = Dir,
+                               index_module       = IndexModule,
+                               file_handles_ets   = FileHandlesEts,
+                               file_summary_ets   = FileSummaryEts,
+                               dedup_cache_ets    = DedupCacheEts,
+                               cur_file_cache_ets = CurFileCacheEts }) ->
+    reply({IndexState, IndexModule, Dir, FileHandlesEts, FileSummaryEts,
+           DedupCacheEts, CurFileCacheEts}, State).
 
 handle_cast({write, MsgId, Msg},
             State = #msstate { current_file_handle = CurHdl,
                                current_file        = CurFile,
                                sum_valid_data      = SumValid,
-                               sum_file_size       = SumFileSize }) ->
-    true = 0 =< ets:update_counter(?CUR_FILE_CACHE_ETS_NAME, MsgId, {3, -1}),
+                               sum_file_size       = SumFileSize,
+                               file_summary_ets    = FileSummaryEts,
+                               cur_file_cache_ets  = CurFileCacheEts }) ->
+    true = 0 =< ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
     case index_lookup(MsgId, State) of
         not_found ->
             %% New message, lots to do
@@ -528,7 +569,7 @@ handle_cast({write, MsgId, Msg},
                              right = undefined,
                              locked = false,
                              file_size = FileSize }] =
-                ets:lookup(?FILE_SUMMARY_ETS_NAME, CurFile),
+                ets:lookup(FileSummaryEts, CurFile),
             ValidTotalSize1 = ValidTotalSize + TotalSize,
             ContiguousTop1 = if CurOffset =:= ContiguousTop ->
                                      %% can't be any holes in this file
@@ -536,7 +577,7 @@ handle_cast({write, MsgId, Msg},
                                 true -> ContiguousTop
                              end,
             true = ets:update_element(
-                     ?FILE_SUMMARY_ETS_NAME,
+                     FileSummaryEts,
                      CurFile,
                      [{#file_summary.valid_total_size, ValidTotalSize1},
                       {#file_summary.contiguous_top, ContiguousTop1},
@@ -562,8 +603,10 @@ handle_cast({remove, MsgIds}, State) ->
                State, MsgIds),
     noreply(maybe_compact(State1));
 
-handle_cast({release, MsgIds}, State) ->
-    lists:foreach(fun (MsgId) -> decrement_cache(MsgId) end, MsgIds),
+handle_cast({release, MsgIds}, State =
+                #msstate { dedup_cache_ets = DedupCacheEts }) ->
+    lists:foreach(
+      fun (MsgId) -> decrement_cache(DedupCacheEts, MsgId) end, MsgIds),
     noreply(State);
 
 handle_cast({sync, MsgIds, K},
@@ -582,32 +625,34 @@ handle_cast({sync, MsgIds, K},
     end;
 
 handle_cast(sync, State) ->
-    noreply(sync(State));
+    noreply(internal_sync(State));
 
 handle_cast({gc_done, Reclaimed, Source, Dest},
             State = #msstate { sum_file_size = SumFileSize,
-                               gc_active = {Source, Dest} }) ->
+                               gc_active = {Source, Dest},
+                               file_handles_ets = FileHandlesEts,
+                               file_summary_ets = FileSummaryEts }) ->
     %% GC done, so now ensure that any clients that have open fhs to
     %% those files close them before using them again. This has to be
     %% done here, and not when starting up the GC, because if done
     %% when starting up the GC, the client could find the close, and
     %% close and reopen the fh, whilst the GC is waiting for readers
     %% to disappear, before it's actually done the GC.
-    true = mark_handle_to_close(Source),
-    true = mark_handle_to_close(Dest),
+    true = mark_handle_to_close(FileHandlesEts, Source),
+    true = mark_handle_to_close(FileHandlesEts, Dest),
     %% we always move data left, so Source has gone and was on the
     %% right, so need to make dest = source.right.left, and also
     %% dest.right = source.right
     [#file_summary { left = Dest, right = SourceRight, locked = true,
                      readers = 0 }] =
-        ets:lookup(?FILE_SUMMARY_ETS_NAME, Source),
+        ets:lookup(FileSummaryEts, Source),
     %% this could fail if SourceRight == undefined
-    ets:update_element(?FILE_SUMMARY_ETS_NAME, SourceRight,
+    ets:update_element(FileSummaryEts, SourceRight,
                        {#file_summary.left, Dest}),
-    true = ets:update_element(?FILE_SUMMARY_ETS_NAME, Dest,
+    true = ets:update_element(FileSummaryEts, Dest,
                               [{#file_summary.locked, false},
                                {#file_summary.right, SourceRight}]),
-    true = ets:delete(?FILE_SUMMARY_ETS_NAME, Source),
+    true = ets:delete(FileSummaryEts, Source),
     noreply(run_pending(
               State #msstate { sum_file_size = SumFileSize - Reclaimed,
                                gc_active = false }));
@@ -617,28 +662,33 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     noreply(State).
 
 handle_info(timeout, State) ->
-    noreply(sync(State));
+    noreply(internal_sync(State));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
 
-terminate(_Reason, State = #msstate { index_state            = IndexState,
-                                      index_module           = IndexModule,
-                                      current_file_handle    = FileHdl }) ->
+terminate(_Reason, State = #msstate { index_state         = IndexState,
+                                      index_module        = IndexModule,
+                                      current_file_handle = FileHdl,
+                                      gc_pid              = GCPid,
+                                      file_handles_ets    = FileHandlesEts,
+                                      file_summary_ets    = FileSummaryEts,
+                                      dedup_cache_ets     = DedupCacheEts,
+                                      cur_file_cache_ets  = CurFileCacheEts }) ->
     %% stop the gc first, otherwise it could be working and we pull
     %% out the ets tables from under it.
-    ok = rabbit_msg_store_gc:stop(),
+    ok = rabbit_msg_store_gc:stop(GCPid),
     State1 = case FileHdl of
                  undefined -> State;
-                 _ -> State2 = sync(State),
+                 _ -> State2 = internal_sync(State),
                       file_handle_cache:close(FileHdl),
                       State2
              end,
     State3 = close_all_handles(State1),
-    ets:delete(?FILE_SUMMARY_ETS_NAME),
-    ets:delete(?CACHE_ETS_NAME),
-    ets:delete(?FILE_HANDLES_ETS_NAME),
-    ets:delete(?CUR_FILE_CACHE_ETS_NAME),
+    ets:delete(FileSummaryEts),
+    ets:delete(DedupCacheEts),
+    ets:delete(FileHandlesEts),
+    ets:delete(CurFileCacheEts),
     IndexModule:terminate(IndexState),
     State3 #msstate { index_state         = undefined,
                       current_file_handle = undefined }.
@@ -686,7 +736,7 @@ sort_file_names(FileNames) ->
     lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
                FileNames).
 
-sync(State = #msstate { current_file_handle = CurHdl,
+internal_sync(State = #msstate { current_file_handle = CurHdl,
                         on_sync = Syncs }) ->
     State1 = stop_sync_timer(State),
     case Syncs of
@@ -697,12 +747,13 @@ sync(State = #msstate { current_file_handle = CurHdl,
             State1 #msstate { on_sync = [] }
     end.
 
-read_message(MsgId, From, State) ->
+read_message(MsgId, From, State =
+                 #msstate { dedup_cache_ets = DedupCacheEts }) ->
     case index_lookup(MsgId, State) of
         not_found -> gen_server2:reply(From, not_found),
                      State;
         MsgLocation ->
-            case fetch_and_increment_cache(MsgId) of
+            case fetch_and_increment_cache(DedupCacheEts, MsgId) of
                 not_found ->
                     read_message1(From, MsgLocation, State);
                 Msg ->
@@ -714,33 +765,36 @@ read_message(MsgId, From, State) ->
 read_message1(From, #msg_location { msg_id = MsgId, ref_count = RefCount,
                                     file = File, offset = Offset } = MsgLoc,
               State = #msstate { current_file = CurFile,
-                                 current_file_handle = CurHdl }) ->
+                                 current_file_handle = CurHdl,
+                                 file_summary_ets = FileSummaryEts,
+                                 dedup_cache_ets = DedupCacheEts,
+                                 cur_file_cache_ets = CurFileCacheEts }) ->
     case File =:= CurFile of
         true ->
             {Msg, State1} =
                 %% can return [] if msg in file existed on startup
-                case ets:lookup(?CUR_FILE_CACHE_ETS_NAME, MsgId) of
+                case ets:lookup(CurFileCacheEts, MsgId) of
                     [] ->
                         ok = case {ok, Offset} >=
                                  file_handle_cache:current_raw_offset(CurHdl) of
                                  true  -> file_handle_cache:flush(CurHdl);
                                  false -> ok
                              end,
-                        read_from_disk(MsgLoc, State);
+                        read_from_disk(MsgLoc, State, DedupCacheEts);
                     [{MsgId, Msg1, _CacheRefCount}] ->
                         {Msg1, State}
                 end,
-            ok = maybe_insert_into_cache(RefCount, MsgId, Msg),
+            ok = maybe_insert_into_cache(DedupCacheEts, RefCount, MsgId, Msg),
             gen_server2:reply(From, {ok, Msg}),
             State1;
         false ->
             [#file_summary { locked = Locked }] =
-                ets:lookup(?FILE_SUMMARY_ETS_NAME, File),
+                ets:lookup(FileSummaryEts, File),
             case Locked of
                 true ->
                     add_to_pending_gc_completion({read, MsgId, From}, State);
                 false ->
-                    {Msg, State1} = read_from_disk(MsgLoc, State),
+                    {Msg, State1} = read_from_disk(MsgLoc, State, DedupCacheEts),
                     gen_server2:reply(From, {ok, Msg}),
                     State1
             end
@@ -748,7 +802,8 @@ read_message1(From, #msg_location { msg_id = MsgId, ref_count = RefCount,
 
 read_from_disk(#msg_location { msg_id = MsgId, ref_count = RefCount,
                                file = File, offset = Offset,
-                               total_size = TotalSize }, State) ->
+                               total_size = TotalSize }, State,
+               DedupCacheEts) ->
     {Hdl, State1} = get_read_handle(File, State),
     {ok, Offset} = file_handle_cache:position(Hdl, Offset),
     {ok, {MsgId, Msg}} =
@@ -764,12 +819,13 @@ read_from_disk(#msg_location { msg_id = MsgId, ref_count = RefCount,
                                          {proc_dict, get()}
                                         ]}})
         end,
-    ok = maybe_insert_into_cache(RefCount, MsgId, Msg),
+    ok = maybe_insert_into_cache(DedupCacheEts, RefCount, MsgId, Msg),
     {Msg, State1}.
 
-maybe_insert_into_cache(RefCount, MsgId, Msg) when RefCount > 1 ->
-    insert_into_cache(MsgId, Msg);
-maybe_insert_into_cache(_RefCount, _MsgId, _Msg) ->
+maybe_insert_into_cache(DedupCacheEts, RefCount, MsgId, Msg)
+  when RefCount > 1 ->
+    insert_into_cache(DedupCacheEts, MsgId, Msg);
+maybe_insert_into_cache(_DedupCacheEts, _RefCount, _MsgId, _Msg) ->
     ok.
 
 contains_message(MsgId, From, State = #msstate { gc_active = GCActive }) ->
@@ -788,7 +844,9 @@ contains_message(MsgId, From, State = #msstate { gc_active = GCActive }) ->
             end
     end.
 
-remove_message(MsgId, State = #msstate { sum_valid_data = SumValid }) ->
+remove_message(MsgId, State = #msstate { sum_valid_data = SumValid,
+                                         file_summary_ets = FileSummaryEts,
+                                         dedup_cache_ets = DedupCacheEts }) ->
     #msg_location { ref_count = RefCount, file = File,
                     offset = Offset, total_size = TotalSize } =
         index_lookup(MsgId, State),
@@ -797,11 +855,11 @@ remove_message(MsgId, State = #msstate { sum_valid_data = SumValid }) ->
             %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
             %% there may be further writes in the mailbox for the same
             %% msg.
-            ok = remove_cache_entry(MsgId),
+            ok = remove_cache_entry(DedupCacheEts, MsgId),
             [#file_summary { valid_total_size = ValidTotalSize,
                              contiguous_top = ContiguousTop,
                              locked = Locked }] =
-                ets:lookup(?FILE_SUMMARY_ETS_NAME, File),
+                ets:lookup(FileSummaryEts, File),
             case Locked of
                 true ->
                     add_to_pending_gc_completion({remove, MsgId}, State);
@@ -810,15 +868,14 @@ remove_message(MsgId, State = #msstate { sum_valid_data = SumValid }) ->
                     ContiguousTop1 = lists:min([ContiguousTop, Offset]),
                     ValidTotalSize1 = ValidTotalSize - TotalSize,
                     true = ets:update_element(
-                             ?FILE_SUMMARY_ETS_NAME,
-                             File,
+                             FileSummaryEts, File,
                              [{#file_summary.valid_total_size, ValidTotalSize1},
                               {#file_summary.contiguous_top, ContiguousTop1}]),
                     State1 = delete_file_if_empty(File, State),
                     State1 #msstate { sum_valid_data = SumValid - TotalSize }
             end;
         _ when 1 < RefCount ->
-            ok = decrement_cache(MsgId),
+            ok = decrement_cache(DedupCacheEts, MsgId),
             %% only update field, otherwise bad interaction with concurrent GC
             ok = index_update_fields(MsgId,
                                      {#msg_location.ref_count, RefCount - 1},
@@ -857,11 +914,12 @@ close_handle(Key, FHC) ->
         error -> FHC
     end.
 
-close_all_handles(CState = #client_msstate { file_handle_cache = FHC }) ->
+close_all_handles(CState = #client_msstate { file_handles_ets = FileHandlesEts,
+                                             file_handle_cache = FHC }) ->
     Self = self(),
     ok = dict:fold(fun (File, Hdl, ok) ->
                            true =
-                               ets:delete(?FILE_HANDLES_ETS_NAME, {Self, File}),
+                               ets:delete(FileHandlesEts, {Self, File}),
                            file_handle_cache:close(Hdl)
                    end, ok, FHC),
     CState #client_msstate { file_handle_cache = dict:new() };
@@ -897,27 +955,27 @@ get_read_handle(FileNum, FHC, Dir) ->
 %% message cache helper functions
 %%----------------------------------------------------------------------------
 
-remove_cache_entry(MsgId) ->
-    true = ets:delete(?CACHE_ETS_NAME, MsgId),
+remove_cache_entry(DedupCacheEts, MsgId) ->
+    true = ets:delete(DedupCacheEts, MsgId),
     ok.
 
-fetch_and_increment_cache(MsgId) ->
-    case ets:lookup(?CACHE_ETS_NAME, MsgId) of
+fetch_and_increment_cache(DedupCacheEts, MsgId) ->
+    case ets:lookup(DedupCacheEts, MsgId) of
         [] ->
             not_found;
         [{_MsgId, Msg, _RefCount}] ->
             try
-                ets:update_counter(?CACHE_ETS_NAME, MsgId, {3, 1})
+                ets:update_counter(DedupCacheEts, MsgId, {3, 1})
             catch error:badarg ->
                     %% someone has deleted us in the meantime, insert us
-                    ok = insert_into_cache(MsgId, Msg)
+                    ok = insert_into_cache(DedupCacheEts, MsgId, Msg)
             end,
             Msg
     end.
 
-decrement_cache(MsgId) ->
-    true = try case ets:update_counter(?CACHE_ETS_NAME, MsgId, {3, -1}) of
-                   N when N =< 0 -> true = ets:delete(?CACHE_ETS_NAME, MsgId);
+decrement_cache(DedupCacheEts, MsgId) ->
+    true = try case ets:update_counter(DedupCacheEts, MsgId, {3, -1}) of
+                   N when N =< 0 -> true = ets:delete(DedupCacheEts, MsgId);
                    _N            -> true
                end
            catch error:badarg ->
@@ -928,14 +986,14 @@ decrement_cache(MsgId) ->
            end,
     ok.
 
-insert_into_cache(MsgId, Msg) ->
-    case ets:insert_new(?CACHE_ETS_NAME, {MsgId, Msg, 1}) of
+insert_into_cache(DedupCacheEts, MsgId, Msg) ->
+    case ets:insert_new(DedupCacheEts, {MsgId, Msg, 1}) of
         true  -> ok;
         false -> try
-                     ets:update_counter(?CACHE_ETS_NAME, MsgId, {3, 1}),
+                     ets:update_counter(DedupCacheEts, MsgId, {3, 1}),
                      ok
                  catch error:badarg ->
-                         insert_into_cache(MsgId, Msg)
+                         insert_into_cache(DedupCacheEts, MsgId, Msg)
                  end
     end.
 
@@ -1125,16 +1183,17 @@ build_index(Files, State) ->
     {Offset, State1} = build_index(undefined, Files, State),
     {Offset, lists:foldl(fun delete_file_if_empty/2, State1, Files)}.
 
-build_index(Left, [], State) ->
+build_index(Left, [], State = #msstate { file_summary_ets = FileSummaryEts }) ->
     ok = index_delete_by_file(undefined, State),
-    Offset = case ets:lookup(?FILE_SUMMARY_ETS_NAME, Left) of
+    Offset = case ets:lookup(FileSummaryEts, Left) of
                  []                                       -> 0;
                  [#file_summary { file_size = FileSize }] -> FileSize
              end,
     {Offset, State #msstate { current_file = Left }};
 build_index(Left, [File|Files],
             State = #msstate { dir = Dir, sum_valid_data = SumValid,
-                               sum_file_size = SumFileSize }) ->
+                               sum_file_size = SumFileSize,
+                               file_summary_ets = FileSummaryEts }) ->
     {ok, Messages, FileSize} =
         rabbit_msg_store_misc:scan_file_for_valid_messages(
           Dir, rabbit_msg_store_misc:filenum_to_name(File)),
@@ -1168,7 +1227,7 @@ build_index(Left, [File|Files],
             [F|_] -> {F, FileSize}
         end,
     true =
-        ets:insert_new(?FILE_SUMMARY_ETS_NAME, #file_summary {
+        ets:insert_new(FileSummaryEts, #file_summary {
                           file = File, valid_total_size = ValidTotalSize,
                           contiguous_top = ContiguousTop, locked = false,
                           left = Left, right = Right, file_size = FileSize1,
@@ -1184,61 +1243,65 @@ build_index(Left, [File|Files],
 maybe_roll_to_new_file(Offset,
                        State = #msstate { dir                 = Dir,
                                           current_file_handle = CurHdl,
-                                          current_file        = CurFile })
+                                          current_file        = CurFile,
+                                          file_summary_ets    = FileSummaryEts,
+                                          cur_file_cache_ets  = CurFileCacheEts })
   when Offset >= ?FILE_SIZE_LIMIT ->
-    State1 = sync(State),
+    State1 = internal_sync(State),
     ok = file_handle_cache:close(CurHdl),
     NextFile = CurFile + 1,
     {ok, NextHdl} = rabbit_msg_store_misc:open_file(
                       Dir, rabbit_msg_store_misc:filenum_to_name(NextFile),
                       ?WRITE_MODE),
     true = ets:insert_new(
-             ?FILE_SUMMARY_ETS_NAME, #file_summary {
+             FileSummaryEts, #file_summary {
                 file = NextFile, valid_total_size = 0, contiguous_top = 0,
                 left = CurFile, right = undefined, file_size = 0,
                 locked = false, readers = 0 }),
-    true = ets:update_element(?FILE_SUMMARY_ETS_NAME, CurFile,
+    true = ets:update_element(FileSummaryEts, CurFile,
                               {#file_summary.right, NextFile}),
-    true = ets:match_delete(?CUR_FILE_CACHE_ETS_NAME, {'_', '_', 0}),
+    true = ets:match_delete(CurFileCacheEts, {'_', '_', 0}),
     State1 #msstate { current_file_handle = NextHdl,
                       current_file        = NextFile };
 maybe_roll_to_new_file(_, State) ->
     State.
 
-maybe_compact(State = #msstate { sum_valid_data = SumValid,
-                                 sum_file_size = SumFileSize,
-                                 gc_active = false })
+maybe_compact(State = #msstate { sum_valid_data   = SumValid,
+                                 sum_file_size    = SumFileSize,
+                                 gc_active        = false,
+                                 gc_pid           = GCPid,
+                                 file_summary_ets = FileSummaryEts })
   when (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
-    First = ets:first(?FILE_SUMMARY_ETS_NAME),
+    First = ets:first(FileSummaryEts),
     N = random_distributions:geometric(?GEOMETRIC_P),
-    case find_files_to_gc(N, First) of
+    case find_files_to_gc(FileSummaryEts, N, First) of
         undefined ->
             State;
         {Source, Dest} ->
             State1 = close_handle(Source, close_handle(Dest, State)),
-            true = ets:update_element(?FILE_SUMMARY_ETS_NAME, Source,
+            true = ets:update_element(FileSummaryEts, Source,
                                       {#file_summary.locked, true}),
-            true = ets:update_element(?FILE_SUMMARY_ETS_NAME, Dest,
+            true = ets:update_element(FileSummaryEts, Dest,
                                       {#file_summary.locked, true}),
-            ok = rabbit_msg_store_gc:gc(Source, Dest),
+            ok = rabbit_msg_store_gc:gc(GCPid, Source, Dest),
             State1 #msstate { gc_active = {Source, Dest} }
     end;
 maybe_compact(State) ->
     State.
 
-mark_handle_to_close(File) ->
-    [ ets:update_element(?FILE_HANDLES_ETS_NAME, Key, {2, close})
-      || {Key, open} <- ets:match_object(?FILE_HANDLES_ETS_NAME,
+mark_handle_to_close(FileHandlesEts, File) ->
+    [ ets:update_element(FileHandlesEts, Key, {2, close})
+      || {Key, open} <- ets:match_object(FileHandlesEts,
                                          {{'_', File}, open}) ],
     true.
 
-find_files_to_gc(_N, '$end_of_table') ->
+find_files_to_gc(_FileSummaryEts, _N, '$end_of_table') ->
     undefined;
-find_files_to_gc(N, First) ->
+find_files_to_gc(FileSummaryEts, N, First) ->
     [FirstObj = #file_summary { right = Right }] =
-        ets:lookup(?FILE_SUMMARY_ETS_NAME, First),
-    Pairs = find_files_to_gc(N, FirstObj,
-                             ets:lookup(?FILE_SUMMARY_ETS_NAME, Right), []),
+        ets:lookup(FileSummaryEts, First),
+    Pairs = find_files_to_gc(FileSummaryEts, N, FirstObj,
+                             ets:lookup(FileSummaryEts, Right), []),
     case Pairs of
         []     -> undefined;
         [Pair] -> Pair;
@@ -1246,9 +1309,9 @@ find_files_to_gc(N, First) ->
                   lists:nth(M, Pairs)
     end.
 
-find_files_to_gc(_N, #file_summary {}, [], Pairs) ->
+find_files_to_gc(_FileSummaryEts, _N, #file_summary {}, [], Pairs) ->
     lists:reverse(Pairs);
-find_files_to_gc(N,
+find_files_to_gc(FileSummaryEts, N,
                  #file_summary { right = Source, file = Dest,
                                  valid_total_size = DestValid },
                  [SourceObj = #file_summary { left = Dest, right = SourceRight,
@@ -1259,22 +1322,24 @@ find_files_to_gc(N,
     Pair = {Source, Dest},
     case N == 1 of
         true  -> [Pair];
-        false -> find_files_to_gc((N - 1), SourceObj,
-                                  ets:lookup(?FILE_SUMMARY_ETS_NAME, SourceRight),
+        false -> find_files_to_gc(FileSummaryEts, (N - 1), SourceObj,
+                                  ets:lookup(FileSummaryEts, SourceRight),
                                   [Pair | Pairs])
     end;
-find_files_to_gc(N, _Left,
+find_files_to_gc(FileSummaryEts, N, _Left,
                  [Right = #file_summary { right = RightRight }], Pairs) ->
     find_files_to_gc(
-      N, Right, ets:lookup(?FILE_SUMMARY_ETS_NAME, RightRight), Pairs).
+      FileSummaryEts, N, Right, ets:lookup(FileSummaryEts, RightRight), Pairs).
 
 delete_file_if_empty(File, State = #msstate { current_file = File }) ->
     State;
 delete_file_if_empty(File, State =
-                     #msstate { dir = Dir, sum_file_size = SumFileSize }) ->
+                         #msstate { dir = Dir, sum_file_size = SumFileSize,
+                                    file_handles_ets = FileHandlesEts,
+                                    file_summary_ets = FileSummaryEts }) ->
     [#file_summary { valid_total_size = ValidData, file_size = FileSize,
                      left = Left, right = Right, locked = false }]
-        = ets:lookup(?FILE_SUMMARY_ETS_NAME, File),
+        = ets:lookup(FileSummaryEts, File),
     case ValidData of
         %% we should NEVER find the current file in here hence right
         %% should always be a file, not undefined
@@ -1282,16 +1347,16 @@ delete_file_if_empty(File, State =
                  {undefined, _} when not is_atom(Right) ->
                      %% the eldest file is empty.
                      true = ets:update_element(
-                              ?FILE_SUMMARY_ETS_NAME, Right,
+                              FileSummaryEts, Right,
                               {#file_summary.left, undefined});
                  {_, _} when not is_atom(Right) ->
-                     true = ets:update_element(?FILE_SUMMARY_ETS_NAME, Right,
+                     true = ets:update_element(FileSummaryEts, Right,
                                                {#file_summary.left, Left}),
-                     true = ets:update_element(?FILE_SUMMARY_ETS_NAME, Left,
+                     true = ets:update_element(FileSummaryEts, Left,
                                                {#file_summary.right, Right})
              end,
-             true = mark_handle_to_close(File),
-             true = ets:delete(?FILE_SUMMARY_ETS_NAME, File),
+             true = mark_handle_to_close(FileHandlesEts, File),
+             true = ets:delete(FileSummaryEts, File),
              State1 = close_handle(File, State),
              ok = file:delete(rabbit_msg_store_misc:form_filename(
                                 Dir,

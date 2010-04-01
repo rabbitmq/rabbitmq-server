@@ -33,7 +33,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_child/1, start_child/2,
+-export([start_link/0, start_child/1, start_child/2, start_child/3,
          start_restartable_child/1, start_restartable_child/2]).
 
 -export([init/1]).
@@ -49,8 +49,11 @@ start_child(Mod) ->
     start_child(Mod, []).
 
 start_child(Mod, Args) ->
+    start_child(Mod, Mod, Args).
+
+start_child(ChildId, Mod, Args) ->
     {ok, _} = supervisor:start_child(?SERVER,
-                                     {Mod, {Mod, start_link, Args},
+                                     {ChildId, {Mod, start_link, Args},
                                       transient, ?MAX_WAIT, worker, [Mod]}),
     ok.
 

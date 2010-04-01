@@ -177,6 +177,9 @@
 
 -define(MAX_WAIT, 16#ffffffff).
 
+-define(PERSISTENT_MSG_STORE,     msg_store_persistent).
+-define(TRANSIENT_MSG_STORE,      msg_store_transient).
+
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).
 -define(LOGDEBUG(F,A), rabbit_log:debug(F,A)).
