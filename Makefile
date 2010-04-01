@@ -274,7 +274,7 @@ endif
 ifneq "$(strip $(TESTABLEGOALS))" "$(DEPS_FILE)"
 ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 ifeq "$(strip $(wildcard $(DEPS_FILE)))" ""
-_:=$(shell $(MAKE) $(DEPS_FILE))
+$(info $(shell $(MAKE) $(DEPS_FILE)))
 endif
 include $(DEPS_FILE)
 endif
