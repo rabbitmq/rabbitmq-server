@@ -8,7 +8,7 @@
 
 <xsl:output doctype-public="-//OASIS//DTD DocBook XML V4.5//EN" doctype-system="http://www.docbook.org/xml/4.5/docbookx.dtd" />
 
-<!-- Don't copy exmaples through in place -->
+<!-- Don't copy examples through in place -->
 <xsl:template match="*[@role='example-prefix']"/>
 <xsl:template match="*[@role='example']"/>
 
@@ -25,6 +25,7 @@
 </xsl:for-each>
   <refsect1>
     <title>Examples</title>
+<xsl:if test="//screen[@role='example']">
         <variablelist>
 <xsl:for-each select="//screen[@role='example']">
             <varlistentry>
@@ -35,6 +36,16 @@
             </varlistentry>
 </xsl:for-each>
         </variablelist>
+</xsl:if>
+<!--
+We need to handle multiline examples separately, since not using a
+variablelist leads to slightly less nice formatting (the explanation doesn't get
+indented)
+-->
+<xsl:for-each select="//screen[@role='example-multiline']">
+<screen><emphasis role="bold"><xsl:copy-of select="text()"/></emphasis></screen>
+<xsl:copy-of select="following-sibling::para[@role='example']"/>
+</xsl:for-each>
   </refsect1>
 </refentry>
 </xsl:template>

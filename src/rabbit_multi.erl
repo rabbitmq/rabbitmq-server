@@ -87,7 +87,8 @@ stop() ->
     ok.
 
 usage() ->
-    rabbit_multi_usage:usage().
+    io:format("~s", [rabbit_multi_usage:usage()]),
+    halt(1).
 
 action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),

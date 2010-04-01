@@ -131,7 +131,8 @@ stop() ->
     ok.
 
 usage() ->
-    rabbit_ctl_usage:usage().
+    io:format("~s", [rabbit_ctl_usage:usage()]),
+    halt(1).
 
 action(stop, Node, [], Inform) ->
     Inform("Stopping and halting node ~p", [Node]),

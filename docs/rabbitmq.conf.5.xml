@@ -9,7 +9,7 @@
     </refentryinfo>
 
     <refmeta>
-        <refentrytitle>/etc/rabbitmq/rabbitmq.conf</refentrytitle>
+        <refentrytitle>rabbitmq.conf</refentrytitle>
         <manvolnum>5</manvolnum>
         <refmiscinfo class="manual">RabbitMQ Server</refmiscinfo>
     </refmeta>
@@ -59,11 +59,11 @@ environment variable names, with the <envar>RABBITMQ_</envar> prefix removed:
 <filename>/etc/rabbitmq/rabbitmq.conf</filename> file, etc.
         </para>
         <para role="example-prefix">For example:</para>
-        <screen role="example">
-            # I am a complete /etc/rabbitmq/rabbitmq.conf file.
-            # Comment lines start with a hash character.
-            # This is a /bin/sh script file - use ordinary envt var syntax
-            NODENAME=hare
+        <screen role="example-multiline">
+# I am a complete /etc/rabbitmq/rabbitmq.conf file.
+# Comment lines start with a hash character.
+# This is a /bin/sh script file - use ordinary envt var syntax
+NODENAME=hare
         </screen>
         <para role="example">
             This is an example of a complete
