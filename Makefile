@@ -206,10 +206,16 @@ distclean: clean
 	gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
 
+# Use tmp files rather than a pipeline so that we get meaningful errors
+# Do not fold the cp into previous line, it's there to stop the file being
+# generated but empty if we fail
 $(SOURCE_DIR)/%_usage.erl:
 	xsltproc --stringparam modulename "`basename $@ .erl`" \
-	  $(DOCS_DIR)/usage.xsl $< | sed -e s/\\\"/\\\\\\\"/g | sed -e s/%QUOTE%/\\\"/g | \
-	  fold -s > $@
+		$(DOCS_DIR)/usage.xsl $< > $@.tmp && \
+		sed -e s/\\\"/\\\\\\\"/g -e s/%QUOTE%/\\\"/g $@.tmp > $@.tmp2 && \
+		fold -s $@.tmp2 > $@.tmp3 && \
+		cp $@.tmp3 $@ && \
+		rm $@.tmp $@.tmp2 $@.tmp3
 
 # We rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.
@@ -265,6 +271,11 @@ else
 TESTABLEGOALS:=$(MAKECMDGOALS)
 endif
 
+ifneq "$(strip $(TESTABLEGOALS))" "$(DEPS_FILE)"
 ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
--include $(DEPS_FILE)
+ifeq "$(strip $(wildcard $(DEPS_FILE)))" ""
+$(info $(shell $(MAKE) $(DEPS_FILE)))
+endif
+include $(DEPS_FILE)
+endif
 endif
