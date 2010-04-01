@@ -212,7 +212,7 @@ distclean: clean
 $(SOURCE_DIR)/%_usage.erl:
 	xsltproc --stringparam modulename "`basename $@ .erl`" \
 		$(DOCS_DIR)/usage.xsl $< > $@.tmp && \
-		sed -e s/\\\"/\\\\\\\"/g -e s/%QUOTE%/\\\"/g $@.tmp > $@.tmp2 && \
+		sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $@.tmp > $@.tmp2 && \
 		fold -s $@.tmp2 > $@.tmp3 && \
 		cp $@.tmp3 $@ && \
 		rm $@.tmp $@.tmp2 $@.tmp3
