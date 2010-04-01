@@ -46,6 +46,7 @@
 -spec(stop/0 :: () -> 'ok').
 -spec(action/4 :: (atom(), erlang_node(), [string()],
                    fun ((string(), [any()]) -> 'ok')) -> 'ok').
+-spec(usage/0 :: () -> no_return()).
 
 -endif.
 
@@ -130,86 +131,7 @@ stop() ->
     ok.
 
 usage() ->
-    io:format("Usage: rabbitmqctl [-q] [-n <node>] <command> [<arg> ...]
-
-Available commands:
-
-  stop      - stops the RabbitMQ application and halts the node
-  stop_app  - stops the RabbitMQ application, leaving the node running
-  start_app - starts the RabbitMQ application on an already-running node
-  reset     - resets node to default configuration, deleting all data
-  force_reset
-  cluster <ClusterNode> ...
-  status
-  rotate_logs [Suffix]
-  close_connection <ConnectionPid> <ExplanationString>
-
-  add_user        <UserName> <Password>
-  delete_user     <UserName>
-  change_password <UserName> <NewPassword>
-  list_users
-
-  add_vhost    <VHostPath>
-  delete_vhost <VHostPath>
-  list_vhosts
-
-  set_permissions   [-p <VHostPath>] <UserName> <Regexp> <Regexp> <Regexp>
-  clear_permissions [-p <VHostPath>] <UserName>
-  list_permissions  [-p <VHostPath>]
-  list_user_permissions <UserName>
-
-  list_queues    [-p <VHostPath>] [<QueueInfoItem> ...]
-  list_exchanges [-p <VHostPath>] [<ExchangeInfoItem> ...]
-  list_bindings  [-p <VHostPath>]
-  list_connections [<ConnectionInfoItem> ...]
-  list_channels [<ChannelInfoItem> ...]
-  list_consumers [-p <VHostPath>]
-
-Quiet output mode is selected with the \"-q\" flag. Informational
-messages are suppressed when quiet mode is in effect.
-
-<node> should be the name of the master node of the RabbitMQ
-cluster. It defaults to the node named \"rabbit\" on the local
-host. On a host named \"server.example.com\", the master node will
-usually be rabbit@server (unless RABBITMQ_NODENAME has been set to
-some non-default value at broker startup time). The output of hostname
--s is usually the correct suffix to use after the \"@\" sign.
-
-The list_queues, list_exchanges and list_bindings commands accept an
-optional virtual host parameter for which to display results. The
-default value is \"/\".
-
-<QueueInfoItem> must be a member of the list [name, durable,
-auto_delete, arguments, pid, owner_pid, exclusive_consumer_pid,
-exclusive_consumer_tag, messages_ready, messages_unacknowledged,
-messages_uncommitted, messages, acks_uncommitted, consumers,
-transactions, memory]. The default is to display name and (number of)
-messages.
-
-<ExchangeInfoItem> must be a member of the list [name, type, durable,
-auto_delete, arguments]. The default is to display name and type.
-
-The output format for \"list_bindings\" is a list of rows containing
-exchange name, queue name, routing key and arguments, in that order.
-
-<ConnectionInfoItem> must be a member of the list [pid, address, port,
-peer_address, peer_port, state, channels, user, vhost, timeout,
-frame_max, client_properties, recv_oct, recv_cnt, send_oct, send_cnt,
-send_pend].  The default is to display user, peer_address, peer_port
-and state.
-
-<ChannelInfoItem> must be a member of the list [pid, connection,
-number, user, vhost, transactional, consumer_count,
-messages_unacknowledged, acks_uncommitted, prefetch_count]. The
-default is to display pid, user, transactional, consumer_count,
-messages_unacknowledged.
-
-The output format for \"list_consumers\" is a list of rows containing,
-in order, the queue name, channel process id, consumer tag, and a
-boolean indicating whether acknowledgements are expected from the
-consumer.
-
-"),
+    io:format("~s", [rabbit_ctl_usage:usage()]),
     halt(1).
 
 action(stop, Node, [], Inform) ->

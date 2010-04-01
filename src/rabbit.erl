@@ -51,24 +51,35 @@
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
-                    {enables,     kernel_ready}]}).
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({worker_pool,
+                   [{description, "worker pool"},
+                    {mfa,         {rabbit_sup, start_child, [worker_pool_sup]}},
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({external_infrastructure,
+                   [{description, "external infrastructure ready"}]}).
 
 -rabbit_boot_step({rabbit_exchange_type_registry,
                    [{description, "exchange type registry"},
                     {mfa,         {rabbit_sup, start_child,
                                    [rabbit_exchange_type_registry]}},
-                    {enables,     kernel_ready}]}).
+                    {enables,     kernel_ready},
+                    {requires,    external_infrastructure}]}).
 
 -rabbit_boot_step({rabbit_log,
                    [{description, "logging server"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_log]}},
-                    {enables,     kernel_ready}]}).
+                    {enables,     kernel_ready},
+                    {requires,    external_infrastructure}]}).
 
 -rabbit_boot_step({rabbit_hooks,
                    [{description, "internal event notification system"},
                     {mfa,         {rabbit_hooks, start, []}},
-                    {enables,     kernel_ready}]}).
+                    {enables,     kernel_ready},
+                    {requires,    external_infrastructure}]}).
 
 -rabbit_boot_step({file_handle_cache,
                    [{description, "file handle cache server"},
@@ -77,7 +88,8 @@
                     {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({kernel_ready,
-                   [{description, "kernel ready"}]}).
+                   [{description, "kernel ready"},
+                    {requires,    external_infrastructure}]}).
 
 -rabbit_boot_step({rabbit_alarm,
                    [{description, "alarm handler"},

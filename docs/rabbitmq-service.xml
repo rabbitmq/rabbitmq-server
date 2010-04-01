@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.docbook.org/xml/4.5/docbookx.dtd">
+<refentry lang="en">
+    <refentryinfo>
+        <productname>RabbitMQ Server</productname>
+        <authorgroup>
+            <corpauthor>The RabbitMQ Team &lt;<ulink url="mailto:info@rabbitmq.com"><email>info@rabbitmq.com</email></ulink>&gt;</corpauthor>
+        </authorgroup>
+    </refentryinfo>
+
+    <refmeta>
+        <refentrytitle>rabbitmq-service.bat</refentrytitle>
+        <refmiscinfo class="manual">RabbitMQ Server</refmiscinfo>
+    </refmeta>
+
+    <refnamediv>
+        <refname>rabbitmq-service.bat</refname>
+        <refpurpose>manage RabbitMQ AMQP service</refpurpose>
+    </refnamediv>
+
+    <refsynopsisdiv>
+        <cmdsynopsis>
+          <command>rabbitmq-service.bat</command>
+          <arg choice="opt">command</arg>
+        </cmdsynopsis>
+    </refsynopsisdiv>
+    
+    <refsect1>
+        <title>Description</title>
+        <para>
+           RabbitMQ is an implementation of AMQP, the emerging standard for high
+performance enterprise messaging. The RabbitMQ server is a robust and
+scalable implementation of an AMQP broker.
+        </para>
+        <para>
+Running <command>rabbitmq-service</command> allows the RabbitMQ broker to be run as a
+service on NT/2000/2003/XP/Vista® environments. The RabbitMQ broker 
+service can be started and stopped using the Windows® services 
+applet. 
+        </para>
+        <para>
+By default the service will run in the authentication context of the 
+local system account. It is therefore necessary to synchronise Erlang
+cookies between the local system account (typically 
+<filename>C:\WINDOWS\.erlang.cookie</filename> and the account that will be used to
+run <command>rabbitmqctl</command>.
+        </para>
+    </refsect1>
+
+    <refsect1>
+      <title>Commands</title>
+      <variablelist>
+
+        <varlistentry>
+          <term>help</term>
+          <listitem>
+            <para>
+Display usage information.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>install</term>
+          <listitem>
+            <para>
+Install the service. The service will not be started.
+Subsequent invocations will update the service parameters if
+relevant environment variables were modified.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>remove</term>
+          <listitem>
+            <para>
+Remove the service. If the service is running then it will
+automatically be stopped before being removed. No files will be
+deleted as a consequence and <command>rabbitmq-server</command> will remain operable.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>start</term>
+          <listitem>
+            <para>
+Start the service. The service must have been correctly installed
+beforehand. 
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>stop</term>
+          <listitem>
+            <para>
+Stop the service. The service must be running for this command to 
+have any effect.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>disable</term>
+          <listitem>
+            <para>
+Disable the service. This is the equivalent of setting the startup
+type to <code>Disabled</code> using the service control panel.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>enable</term>
+          <listitem>
+            <para>
+Enable the service. This is the equivalent of setting the startup
+type to <code>Automatic</code> using the service control panel.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect1>
+
+    <refsect1>
+      <title>Environment</title>
+      <variablelist>
+
+        <varlistentry>
+          <term>RABBITMQ_SERVICENAME</term>
+          <listitem>
+            <para>
+Defaults to RabbitMQ.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>RABBITMQ_BASE</term>
+          <listitem>
+            <para>
+Defaults to the application data directory of the current user.
+This is the location of log and database directories.
+
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>RABBITMQ_NODENAME</term>
+          <listitem>
+            <para>
+Defaults to rabbit. This can be useful if you want to run more than
+one node per machine - <envar>RABBITMQ_NODENAME</envar> should be unique per
+erlang-node-and-machine combination. See the 
+<ulink url="http://www.rabbitmq.com/clustering.html#single-machine">clustering on a single
+machine guide</ulink> for details.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>RABBITMQ_NODE_IP_ADDRESS</term>
+          <listitem>
+            <para>
+Defaults to 0.0.0.0. This can be changed if you only want to bind to
+one network interface.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>RABBITMQ_NODE_PORT</term>
+          <listitem>
+            <para>
+Defaults to 5672. 
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>ERLANG_SERVICE_MANAGER_PATH</term>
+          <listitem>
+            <para>
+Defaults to <filename>C:\Program Files\erl5.5.5\erts-5.5.5\bin</filename>
+(or <filename>C:\Program Files (x86)\erl5.5.5\erts-5.5.5\bin</filename> for 64-bit
+environments). This is the installation location of the Erlang service
+manager.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>RABBITMQ_CLUSTER_CONFIG_FILE</term>
+          <listitem>
+            <para>
+If this file is
+present it is used by the server to auto-configure a RabbitMQ cluster.
+See the <ulink url="http://www.rabbitmq.com/clustering.html">clustering guide</ulink>
+for details.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>RABBITMQ_CONSOLE_LOG</term>
+          <listitem>
+            <para>
+Set this varable to <code>new</code> or <code>reuse</code> to have the console 
+output from the server redirected to a file named <code>SERVICENAME</code>.debug
+in the  application data directory of the user that installed the service.
+Under Vista this will be <filename>C:\Users\AppData\username\SERVICENAME</filename>.
+Under previous versions of Windows this will be 
+<filename>C:\Documents and Settings\username\Application Data\SERVICENAME</filename>.
+If <code>RABBITMQ_CONSOLE_LOG</code> is set to <code>new</code> then a new file will be
+created each time the service starts. If <code>RABBITMQ_CONSOLE_LOG</code> is
+set to <code>reuse</code> then the file will be overwritten each time the
+service starts.  The default behaviour when <code>RABBITMQ_CONSOLE_LOG</code> is
+not set or set to a value other than <code>new</code> or <code>reuse</code> is to discard
+the server output.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect1>
+</refentry>
