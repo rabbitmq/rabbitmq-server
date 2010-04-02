@@ -1001,6 +1001,7 @@ start_msg_store(MsgRefDeltaGen, MsgRefDeltaGenInit) ->
     start_transient_msg_store().
 
 start_transient_msg_store() ->
+    ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
                                 [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
                                  fun (ok) -> finished end, ok]).

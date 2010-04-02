@@ -105,19 +105,18 @@ info_keys() -> ?INFO_KEYS.
 
 %%----------------------------------------------------------------------------
 
-init(Q = #amqqueue { name = QName }) ->
+init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
     ok = file_handle_cache:register_callback(
            rabbit_amqqueue, set_maximum_since_use, [self()]),
     ok = rabbit_memory_monitor:register
            (self(), {rabbit_amqqueue, set_queue_duration, [self()]}),
-    VQS = rabbit_variable_queue:init(QName),
     {ok, #q{q = Q,
             owner = none,
             exclusive_consumer = none,
             has_had_consumers = false,
-            variable_queue_state = VQS,
+            variable_queue_state = undefined,
             next_msg_id = 1,
             active_consumers = queue:new(),
             blocked_consumers = queue:new(),
@@ -127,25 +126,37 @@ init(Q = #amqqueue { name = QName }) ->
 
 terminate(shutdown, #q{variable_queue_state = VQS}) ->
     ok = rabbit_memory_monitor:deregister(self()),
-    _VQS = rabbit_variable_queue:terminate(VQS);
+    case VQS of
+        undefined -> ok;
+        _         -> rabbit_variable_queue:terminate(VQS)
+    end;
 terminate({shutdown, _}, #q{variable_queue_state = VQS}) ->
     ok = rabbit_memory_monitor:deregister(self()),
-    _VQS = rabbit_variable_queue:terminate(VQS);
+    case VQS of
+        undefined -> ok;
+        _         -> rabbit_variable_queue:terminate(VQS)
+    end;
 terminate(_Reason, State = #q{variable_queue_state = VQS}) ->
     ok = rabbit_memory_monitor:deregister(self()),
     %% FIXME: How do we cancel active subscriptions?
     %% Ensure that any persisted tx messages are removed.
     %% TODO: wait for all in flight tx_commits to complete
-    VQS1 = rabbit_variable_queue:tx_rollback(
-             lists:concat([PM || #tx { pending_messages = PM } <-
-                                     all_tx_record()]), VQS),
-    %% Delete from disk first. If we crash at this point, when a
-    %% durable queue, we will be recreated at startup, possibly with
-    %% partial content. The alternative is much worse however - if we
-    %% called internal_delete first, we would then have a race between
-    %% the disk delete and a new queue with the same name being
-    %% created and published to.
-    _VQS = rabbit_variable_queue:delete_and_terminate(VQS1),
+    case VQS of
+        undefined ->
+            ok;
+        _ ->
+            VQS1 = rabbit_variable_queue:tx_rollback(
+                     lists:concat([PM || #tx { pending_messages = PM } <-
+                                             all_tx_record()]), VQS),
+            %% Delete from disk first. If we crash at this point, when
+            %% a durable queue, we will be recreated at startup,
+            %% possibly with partial content. The alternative is much
+            %% worse however - if we called internal_delete first, we
+            %% would then have a race between the disk delete and a
+            %% new queue with the same name being created and
+            %% published to.
+            rabbit_variable_queue:delete_and_terminate(VQS1)
+    end,
     ok = rabbit_amqqueue:internal_delete(qname(State)).
 
 code_change(_OldVsn, State, _Extra) ->
@@ -610,6 +621,9 @@ i(Item, _) ->
 
 %---------------------------------------------------------------------------
 
+handle_call(sync, _From, State) ->
+    reply(ok, State);
+
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
 
@@ -814,6 +828,11 @@ handle_call({claim_queue, ReaderPid}, _From,
         _ ->
             reply(locked, State)
     end.
+
+handle_cast(init_variable_queue, #q{variable_queue_state = undefined,
+                                    q = #amqqueue{name = QName}} = State) ->
+    noreply(
+      State #q { variable_queue_state = rabbit_variable_queue:init(QName) });
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.

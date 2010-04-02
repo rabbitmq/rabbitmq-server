@@ -37,6 +37,8 @@
          find_lowest_seq_id_seg_and_next_seq_id/1,
          start_persistent_msg_store/1]).
 
+-export([queue_index_walker_reader/3]). %% for internal use only
+
 -define(CLEAN_FILENAME, "clean.dot").
 
 %%----------------------------------------------------------------------------
@@ -419,30 +421,49 @@ start_persistent_msg_store(DurableQueues) ->
 %% Msg Store Startup Delta Function
 %%----------------------------------------------------------------------------
 
-queue_index_walker([]) ->
-    finished;
-queue_index_walker([QueueName|QueueNames]) ->
+queue_index_walker(DurableQueues) when is_list(DurableQueues) ->
+    queue_index_walker({DurableQueues, sets:new()});
+
+queue_index_walker({[], Kids}) ->
+    case sets:size(Kids) of
+        0 -> finished;
+        _ -> receive
+                 {found, MsgId, Count} ->
+                     {MsgId, Count, {[], Kids}};
+                 {finished, Child} ->
+                     queue_index_walker({[], sets:del_element(Child, Kids)})
+             end
+    end;
+queue_index_walker({[QueueName | QueueNames], Kids}) ->
+    Child = make_ref(),
+    ok = worker_pool:submit_async({?MODULE, queue_index_walker_reader,
+                                   [QueueName, self(), Child]}),
+    queue_index_walker({QueueNames, sets:add_element(Child, Kids)}).
+
+queue_index_walker_reader(QueueName, Parent, Guid) ->
     State = blank_state(QueueName),
     State1 = load_journal(State),
     SegNums = all_segment_nums(State1),
-    queue_index_walker({SegNums, State1, QueueNames});
+    queue_index_walker_reader(Parent, Guid, State1, SegNums).
 
-queue_index_walker({[], State, QueueNames}) ->
+queue_index_walker_reader(Parent, Guid, State, []) ->
     _State = terminate(false, State),
-    queue_index_walker(QueueNames);
-queue_index_walker({[Seg | SegNums], State, QueueNames}) ->
+    Parent ! {finished, Guid};
+queue_index_walker_reader(Parent, Guid, State, [Seg | SegNums]) ->
     SeqId = reconstruct_seq_id(Seg, 0),
     {Messages, State1} = read_segment_entries(SeqId, State),
-    queue_index_walker({Messages, State1, SegNums, QueueNames});
+    queue_index_walker_reader(Parent, Guid, SegNums, State1, Messages).
 
-queue_index_walker({[], State, SegNums, QueueNames}) ->
-    queue_index_walker({SegNums, State, QueueNames});
-queue_index_walker({[{MsgId, _SeqId, IsPersistent, _IsDelivered} | Msgs],
-                    State, SegNums, QueueNames}) ->
+queue_index_walker_reader(Parent, Guid, SegNums, State, []) ->
+    queue_index_walker_reader(Parent, Guid, State, SegNums);
+queue_index_walker_reader(
+  Parent, Guid, SegNums, State,
+  [{MsgId, _SeqId, IsPersistent, _IsDelivered} | Msgs]) ->
     case IsPersistent of
-        true  -> {MsgId, 1, {Msgs, State, SegNums, QueueNames}};
-        false -> queue_index_walker({Msgs, State, SegNums, QueueNames})
-    end.
+        true  -> Parent ! {found, MsgId, 1};
+        false -> ok
+    end,
+    queue_index_walker_reader(Parent, Guid, SegNums, State, Msgs).
 
 %%----------------------------------------------------------------------------
 %% Minors

@@ -34,7 +34,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
-         sync/3, client_init/1, client_terminate/1]).
+         sync/3, client_init/1, client_terminate/1, clean/2]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2]). %% internal
 
@@ -113,6 +113,7 @@
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(client_init/1 :: (server()) -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
+-spec(clean/2 :: (atom(), file_path()) -> 'ok').
 
 -endif.
 
@@ -339,6 +340,10 @@ client_init(Server) ->
 client_terminate(CState) ->
     close_all_handles(CState),
     ok.
+
+clean(Server, BaseDir) ->
+    Dir = filename:join(BaseDir, atom_to_list(Server)),
+    ok = rabbit_misc:recursive_delete(Dir).
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers

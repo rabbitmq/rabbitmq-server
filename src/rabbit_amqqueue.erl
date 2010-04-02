@@ -128,6 +128,7 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
                                 [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
                                  fun (ok) -> finished end, ok]),
@@ -152,26 +153,32 @@ find_durable_queues() ->
       end).
 
 recover_durable_queues(DurableQueues) ->
-    lists:foldl(
-      fun (RecoveredQ, Acc) ->
-              Q = start_queue_process(RecoveredQ),
-              %% We need to catch the case where a client connected to
-              %% another node has deleted the queue (and possibly
-              %% re-created it).
-              case rabbit_misc:execute_mnesia_transaction(
-                     fun () ->
-                             case mnesia:match_object(
-                                    rabbit_durable_queue, RecoveredQ, read) of
-                                 [_] -> ok = store_queue(Q),
-                                        true;
-                                 []  -> false
-                             end
-                     end) of
-                  true  -> [Q|Acc];
-                  false -> exit(Q#amqqueue.pid, shutdown),
-                           Acc
-              end
-      end, [], DurableQueues).
+    Qs = lists:foldl(
+           fun (RecoveredQ, Acc) ->
+                   Q = start_queue_process(RecoveredQ),
+                   %% We need to catch the case where a client
+                   %% connected to another node has deleted the queue
+                   %% (and possibly re-created it).
+                   case rabbit_misc:execute_mnesia_transaction(
+                          fun () ->
+                                  case mnesia:match_object(
+                                         rabbit_durable_queue, RecoveredQ,
+                                         read) of
+                                      [_] -> ok = store_queue(Q),
+                                             true;
+                                      []  -> false
+                                  end
+                          end) of
+                       true  ->
+                           ok = gen_server2:cast(Q#amqqueue.pid,
+                                                 init_variable_queue),
+                           [Q|Acc];
+                       false -> exit(Q#amqqueue.pid, shutdown),
+                                Acc
+                   end
+           end, [], DurableQueues),
+    [ok = gen_server2:call(Q#amqqueue.pid, sync, infinity) || Q <- Qs],
+    Qs.
 
 declare(QueueName, Durable, AutoDelete, Args) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
@@ -202,7 +209,8 @@ internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
            end) of
         not_found -> exit(Q#amqqueue.pid, shutdown),
                      rabbit_misc:not_found(QueueName);
-        Q         -> Q;
+        Q         -> ok = gen_server2:cast(Q#amqqueue.pid, init_variable_queue),
+                     Q;
         ExistingQ -> exit(Q#amqqueue.pid, shutdown),
                      ExistingQ
     end.

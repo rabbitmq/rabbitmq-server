@@ -59,6 +59,7 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
+-export([recursive_delete/1]).
 
 -import(mnesia).
 -import(lists).
@@ -133,6 +134,7 @@
 -spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
 -spec(pid_to_string/1 :: (pid()) -> string()).
 -spec(string_to_pid/1 :: (string()) -> pid()).
+-spec(recursive_delete/1 :: (string()) -> 'ok' | {'error', any()}).
 
 -endif.
 
@@ -600,4 +602,26 @@ version_compare(A,  B) ->
                         version_compare(ATl1, BTl1);
        ANum < BNum   -> lt;
        ANum > BNum   -> gt
+    end.
+
+recursive_delete(Path) ->
+    case filelib:is_dir(Path) of
+        false ->
+            case file:delete(Path) of
+                ok              -> ok;
+                %% Path doesn't exist anyway
+                {error, enoent} -> ok
+            end;
+        true ->
+            case file:list_dir(Path) of
+                {ok, FileNames} ->
+                    lists:foldl(
+                      fun (FileName, ok) ->
+                              recursive_delete(filename:join(Path, FileName));
+                          (_FileName, Error) ->
+                              Error
+                      end, ok, FileNames);
+                {error, Error} ->
+                    {error, {Path, Error}}
+            end
     end.
