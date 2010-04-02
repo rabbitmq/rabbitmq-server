@@ -170,8 +170,9 @@ recover_durable_queues(DurableQueues) ->
                                   end
                           end) of
                        true  ->
-                           ok = gen_server2:cast(Q#amqqueue.pid,
-                                                 init_variable_queue),
+                           ok = gen_server2:call(Q#amqqueue.pid,
+                                                 init_variable_queue,
+                                                 infinity),
                            [Q|Acc];
                        false -> exit(Q#amqqueue.pid, shutdown),
                                 Acc
@@ -200,6 +201,9 @@ internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
                                           true  -> add_default_binding(Q);
                                           false -> ok
                                       end,
+                                      ok = gen_server2:call(
+                                             Q#amqqueue.pid,
+                                             init_variable_queue, infinity),
                                       Q;
                                [_] -> not_found %% existing Q on stopped node
                            end;
@@ -209,8 +213,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
            end) of
         not_found -> exit(Q#amqqueue.pid, shutdown),
                      rabbit_misc:not_found(QueueName);
-        Q         -> ok = gen_server2:cast(Q#amqqueue.pid, init_variable_queue),
-                     Q;
+        Q         -> Q;
         ExistingQ -> exit(Q#amqqueue.pid, shutdown),
                      ExistingQ
     end.

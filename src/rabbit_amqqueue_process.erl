@@ -621,6 +621,16 @@ i(Item, _) ->
 
 %---------------------------------------------------------------------------
 
+handle_call(init_variable_queue, From, State =
+                #q{variable_queue_state = undefined,
+                   q = #amqqueue{name = QName}}) ->
+    gen_server2:reply(From, ok),
+    noreply(
+      State #q { variable_queue_state = rabbit_variable_queue:init(QName) });
+
+handle_call(init_variable_queue, _From, State) ->
+    reply(ok, State);
+
 handle_call(sync, _From, State) ->
     reply(ok, State);
 
@@ -828,11 +838,6 @@ handle_call({claim_queue, ReaderPid}, _From,
         _ ->
             reply(locked, State)
     end.
-
-handle_cast(init_variable_queue, #q{variable_queue_state = undefined,
-                                    q = #amqqueue{name = QName}} = State) ->
-    noreply(
-      State #q { variable_queue_state = rabbit_variable_queue:init(QName) });
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
