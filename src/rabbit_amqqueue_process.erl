@@ -623,10 +623,14 @@ i(Item, _) ->
 
 handle_call(init_variable_queue, From, State =
                 #q{variable_queue_state = undefined,
-                   q = #amqqueue{name = QName}}) ->
+                   q = #amqqueue{name = QName, durable = IsDurable}}) ->
     gen_server2:reply(From, ok),
-    noreply(
-      State #q { variable_queue_state = rabbit_variable_queue:init(QName) });
+    PersistentStore = case IsDurable of
+                          true  -> ?PERSISTENT_MSG_STORE;
+                          false -> ?TRANSIENT_MSG_STORE
+                      end,
+    noreply(State #q { variable_queue_state =
+                           rabbit_variable_queue:init(QName, PersistentStore) });
 
 handle_call(init_variable_queue, _From, State) ->
     reply(ok, State);

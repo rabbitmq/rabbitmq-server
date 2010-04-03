@@ -78,9 +78,7 @@ deliver(QPids, Delivery) ->
       dict:to_list(
         lists:foldl(
           fun (QPid, D) ->
-                  dict:update(node(QPid),
-                              fun (QPids1) -> [QPid | QPids1] end,
-                              [QPid], D)
+                  rabbit_misc:dict_cons(node(QPid), QPid, D)
           end,
           dict:new(), QPids)),
       Delivery).

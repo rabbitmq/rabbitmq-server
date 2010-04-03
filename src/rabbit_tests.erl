@@ -1363,7 +1363,7 @@ assert_prop(List, Prop, Value) ->
 fresh_variable_queue() ->
     stop_msg_store(),
     ok = empty_test_queue(),
-    VQ = rabbit_variable_queue:init(test_queue()),
+    VQ = rabbit_variable_queue:init(test_queue(), ?PERSISTENT_MSG_STORE),
     S0 = rabbit_variable_queue:status(VQ),
     assert_prop(S0, len, 0),
     assert_prop(S0, q1, 0),

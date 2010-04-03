@@ -59,7 +59,7 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1]).
+-export([recursive_delete/1, dict_cons/3]).
 
 -import(mnesia).
 -import(lists).
@@ -135,6 +135,7 @@
 -spec(pid_to_string/1 :: (pid()) -> string()).
 -spec(string_to_pid/1 :: (string()) -> pid()).
 -spec(recursive_delete/1 :: (string()) -> 'ok' | {'error', any()}).
+-spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 
 -endif.
 
@@ -625,3 +626,6 @@ recursive_delete(Path) ->
                     {error, {Path, Error}}
             end
     end.
+
+dict_cons(Key, Value, Dict) ->
+    dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).

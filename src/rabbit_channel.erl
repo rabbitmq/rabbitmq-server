@@ -970,10 +970,7 @@ fold_per_queue(F, Acc0, UAQ) ->
                   %% lists:reverse in handle_message({recover, true},
                   %% ...). However, it is significantly slower when
                   %% going beyond a few thousand elements.
-                  dict:update(QPid,
-                              fun (MsgIds) -> [MsgId | MsgIds] end,
-                              [MsgId],
-                              D)
+                  rabbit_misc:dict_cons(QPid, MsgId, D)
           end, dict:new(), UAQ),
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
