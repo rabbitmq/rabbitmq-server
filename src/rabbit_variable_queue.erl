@@ -403,12 +403,12 @@ fetch(State =
                                            SeqId, IndexState);
                                 true -> IndexState
                             end,
-                        case IsPersistent of
-                            true -> {IndexState2, true};
-                            false -> {rabbit_queue_index:write_acks(
-                                        [SeqId], IndexState2), false}
-                        end;
-                    false ->
+                        {case IsPersistent of
+                             true -> IndexState2;
+                             false -> rabbit_queue_index:write_acks(
+                                        [SeqId], IndexState2)
+                         end, IsPersistent};
+                    false -> %% If index isn't on disk, we can't be persistent
                         {IndexState, false}
                 end,
             MsgStore = find_msg_store(IsPersistent, PersistentStore),
