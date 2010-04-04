@@ -422,48 +422,45 @@ start_persistent_msg_store(DurableQueues) ->
 %%----------------------------------------------------------------------------
 
 queue_index_walker(DurableQueues) when is_list(DurableQueues) ->
-    queue_index_walker({DurableQueues, sets:new()});
+    {ok, Pid} = gatherer:start_link(),
+    queue_index_walker({DurableQueues, Pid});
 
-queue_index_walker({[], Kids}) ->
-    case sets:size(Kids) of
-        0 -> finished;
-        _ -> receive
-                 {found, MsgId, Count} ->
-                     {MsgId, Count, {[], Kids}};
-                 {finished, Child} ->
-                     queue_index_walker({[], sets:del_element(Child, Kids)})
-             end
+queue_index_walker({[], Gatherer}) ->
+    case gatherer:fetch(Gatherer) of
+        finished                -> finished;
+        {value, {MsgId, Count}} -> {MsgId, Count, {[], Gatherer}}
     end;
-queue_index_walker({[QueueName | QueueNames], Kids}) ->
+queue_index_walker({[QueueName | QueueNames], Gatherer}) ->
     Child = make_ref(),
+    ok = gatherer:wait_on(Gatherer, Child),
     ok = worker_pool:submit_async({?MODULE, queue_index_walker_reader,
-                                   [QueueName, self(), Child]}),
-    queue_index_walker({QueueNames, sets:add_element(Child, Kids)}).
+                                   [QueueName, Gatherer, Child]}),
+    queue_index_walker({QueueNames, Gatherer}).
 
-queue_index_walker_reader(QueueName, Parent, Guid) ->
+queue_index_walker_reader(QueueName, Gatherer, Guid) ->
     State = blank_state(QueueName),
     State1 = load_journal(State),
     SegNums = all_segment_nums(State1),
-    queue_index_walker_reader(Parent, Guid, State1, SegNums).
+    queue_index_walker_reader(Gatherer, Guid, State1, SegNums).
 
-queue_index_walker_reader(Parent, Guid, State, []) ->
+queue_index_walker_reader(Gatherer, Guid, State, []) ->
     _State = terminate(false, State),
-    Parent ! {finished, Guid};
-queue_index_walker_reader(Parent, Guid, State, [Seg | SegNums]) ->
+    ok = gatherer:finished(Gatherer, Guid);
+queue_index_walker_reader(Gatherer, Guid, State, [Seg | SegNums]) ->
     SeqId = reconstruct_seq_id(Seg, 0),
     {Messages, State1} = read_segment_entries(SeqId, State),
-    queue_index_walker_reader(Parent, Guid, SegNums, State1, Messages).
+    State2 = queue_index_walker_reader1(Gatherer, State1, Messages),
+    queue_index_walker_reader(Gatherer, Guid, State2, SegNums).
 
-queue_index_walker_reader(Parent, Guid, SegNums, State, []) ->
-    queue_index_walker_reader(Parent, Guid, State, SegNums);
-queue_index_walker_reader(
-  Parent, Guid, SegNums, State,
-  [{MsgId, _SeqId, IsPersistent, _IsDelivered} | Msgs]) ->
+queue_index_walker_reader1(_Gatherer, State, []) ->
+    State;
+queue_index_walker_reader1(
+  Gatherer, State, [{MsgId, _SeqId, IsPersistent, _IsDelivered} | Msgs]) ->
     case IsPersistent of
-        true  -> Parent ! {found, MsgId, 1};
+        true  -> gatherer:produce(Gatherer, {MsgId, 1});
         false -> ok
     end,
-    queue_index_walker_reader(Parent, Guid, SegNums, State, Msgs).
+    queue_index_walker_reader1(Gatherer, State, Msgs).
 
 %%----------------------------------------------------------------------------
 %% Minors

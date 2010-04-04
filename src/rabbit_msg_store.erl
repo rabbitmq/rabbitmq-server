@@ -36,7 +36,8 @@
 -export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
          sync/3, client_init/1, client_terminate/1, clean/2]).
 
--export([sync/1, gc_done/4, set_maximum_since_use/2]). %% internal
+-export([sync/1, gc_done/4, set_maximum_since_use/2,
+         build_index_worker/6]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, handle_pre_hibernate/1]).
@@ -467,8 +468,6 @@ close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts } =
 %%----------------------------------------------------------------------------
 
 init([Server, BaseDir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
-    process_flag(trap_exit, true),
-
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
 
@@ -526,6 +525,8 @@ init([Server, BaseDir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
                       [read | ?WRITE_MODE]),
     {ok, Offset} = file_handle_cache:position(FileHdl, Offset),
     ok = file_handle_cache:truncate(FileHdl),
+
+    process_flag(trap_exit, true),
 
     {ok, GCPid} = rabbit_msg_store_gc:start_link(Dir, IndexState, IndexModule,
                                                  FileSummaryEts),
@@ -1182,23 +1183,44 @@ find_contiguous_block_prefix([{MsgId, TotalSize, ExpectedOffset} | Tail],
 find_contiguous_block_prefix([_MsgAfterGap | _Tail], ExpectedOffset, MsgIds) ->
     {ExpectedOffset, MsgIds}.
 
-build_index([], State) ->
-    build_index(undefined, [State #msstate.current_file], State);
 build_index(Files, State) ->
-    {Offset, State1} = build_index(undefined, Files, State),
-    {Offset, lists:foldl(fun delete_file_if_empty/2, State1, Files)}.
+    {ok, Pid} = gatherer:start_link(),
+    case Files of
+        [] -> build_index(Pid, undefined, [State #msstate.current_file], State);
+        _  -> {Offset, State1} = build_index(Pid, undefined, Files, State),
+              {Offset, lists:foldl(fun delete_file_if_empty/2, State1, Files)}
+    end.
 
-build_index(Left, [], State = #msstate { file_summary_ets = FileSummaryEts }) ->
-    ok = index_delete_by_file(undefined, State),
-    Offset = case ets:lookup(FileSummaryEts, Left) of
-                 []                                       -> 0;
-                 [#file_summary { file_size = FileSize }] -> FileSize
-             end,
-    {Offset, State #msstate { current_file = Left }};
-build_index(Left, [File|Files],
-            State = #msstate { dir = Dir, sum_valid_data = SumValid,
-                               sum_file_size = SumFileSize,
-                               file_summary_ets = FileSummaryEts }) ->
+build_index(Gatherer, Left, [],
+            State = #msstate { file_summary_ets = FileSummaryEts,
+                               sum_valid_data = SumValid,
+                               sum_file_size = SumFileSize }) ->
+    case gatherer:fetch(Gatherer) of
+        finished ->
+            ok = index_delete_by_file(undefined, State),
+            Offset = case ets:lookup(FileSummaryEts, Left) of
+                         []                                       -> 0;
+                         [#file_summary { file_size = FileSize }] -> FileSize
+                     end,
+            {Offset, State #msstate { current_file = Left }};
+        {value, FileSummary =
+             #file_summary { valid_total_size = ValidTotalSize,
+                             file_size = FileSize }} ->
+            true = ets:insert_new(FileSummaryEts, FileSummary),
+            build_index(Gatherer, Left, [],
+                        State #msstate {
+                          sum_valid_data = SumValid + ValidTotalSize,
+                          sum_file_size = SumFileSize + FileSize })
+    end;
+build_index(Gatherer, Left, [File|Files], State) ->
+    Child = make_ref(),
+    ok = gatherer:wait_on(Gatherer, Child),
+    ok = worker_pool:submit_async({?MODULE, build_index_worker,
+                                   [Gatherer, Child, State, Left, File, Files]}),
+    build_index(Gatherer, File, Files, State).
+
+build_index_worker(
+  Gatherer, Guid, State = #msstate { dir = Dir }, Left, File, Files) ->
     {ok, Messages, FileSize} =
         rabbit_msg_store_misc:scan_file_for_valid_messages(
           Dir, rabbit_msg_store_misc:filenum_to_name(File)),
@@ -1231,15 +1253,12 @@ build_index(Left, [File|Files],
                                  end};
             [F|_] -> {F, FileSize}
         end,
-    true =
-        ets:insert_new(FileSummaryEts, #file_summary {
-                          file = File, valid_total_size = ValidTotalSize,
-                          contiguous_top = ContiguousTop, locked = false,
-                          left = Left, right = Right, file_size = FileSize1,
-                          readers = 0 }),
-    build_index(File, Files,
-                State #msstate { sum_valid_data = SumValid + ValidTotalSize,
-                                 sum_file_size = SumFileSize + FileSize1 }).
+    ok = gatherer:produce(Gatherer, #file_summary {
+                            file = File, valid_total_size = ValidTotalSize,
+                            contiguous_top = ContiguousTop, locked = false,
+                            left = Left, right = Right, file_size = FileSize1,
+                            readers = 0 }),
+    ok = gatherer:finished(Gatherer, Guid).
 
 %%----------------------------------------------------------------------------
 %% garbage collection / compaction / aggregation
