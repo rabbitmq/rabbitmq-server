@@ -34,7 +34,7 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{init,            1},
+    [{init,            2},
      {lookup,          2},
      {insert,          2},
      {update,          2},

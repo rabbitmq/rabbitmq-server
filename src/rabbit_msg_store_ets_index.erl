@@ -33,42 +33,54 @@
 
 -behaviour(rabbit_msg_store_index).
 
--export([init/1, lookup/2, insert/2, update/2, update_fields/3, delete/2,
+-export([init/2, lookup/2, insert/2, update/2, update_fields/3, delete/2,
          delete_by_file/2, terminate/1]).
 
 -define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
+-define(FILENAME, msg_store_index.ets).
 
 -include("rabbit_msg_store_index.hrl").
 
-init(_Dir) ->
-    ets:new(?MSG_LOC_NAME, [set, public, {keypos, #msg_location.msg_id}]).
+-record(state, { table, dir }).
 
-lookup(Key, MsgLocations) ->
-    case ets:lookup(MsgLocations, Key) of
+init(fresh, Dir) ->
+    file:delete(filename:join(Dir, ?FILENAME)),
+    Tid = ets:new(?MSG_LOC_NAME, [set, public, {keypos, #msg_location.msg_id}]),
+    {fresh, #state { table = Tid, dir = Dir }};
+init(recover, Dir) ->
+    case ets:file2tab(filename:join(Dir, ?FILENAME)) of
+        {ok, Tid}  -> {recovered, #state { table = Tid, dir = Dir }};
+        {error, _} -> init(fresh, Dir)
+    end.
+
+lookup(Key, State) ->
+    case ets:lookup(State #state.table, Key) of
         []      -> not_found;
         [Entry] -> Entry
     end.
 
-insert(Obj, MsgLocations) ->
-    true = ets:insert_new(MsgLocations, Obj),
+insert(Obj, State) ->
+    true = ets:insert_new(State #state.table, Obj),
     ok.
 
-update(Obj, MsgLocations) ->
-    true = ets:insert(MsgLocations, Obj),
+update(Obj, State) ->
+    true = ets:insert(State #state.table, Obj),
     ok.
 
-update_fields(Key, Updates, MsgLocations) ->
-    true = ets:update_element(MsgLocations, Key, Updates),
+update_fields(Key, Updates, State) ->
+    true = ets:update_element(State #state.table, Key, Updates),
     ok.
 
-delete(Key, MsgLocations) ->
-    true = ets:delete(MsgLocations, Key),
+delete(Key, State) ->
+    true = ets:delete(State #state.table, Key),
     ok.
 
-delete_by_file(File, MsgLocations) ->
+delete_by_file(File, State) ->
     MatchHead = #msg_location { file = File, _ = '_' },
-    ets:select_delete(MsgLocations, [{MatchHead, [], [true]}]),
+    ets:select_delete(State #state.table, [{MatchHead, [], [true]}]),
     ok.
 
-terminate(MsgLocations) ->
+terminate(#state { table = MsgLocations, dir = Dir }) ->
+    ok = ets:tab2file(MsgLocations, filename:join(Dir, ?FILENAME),
+                      [{extended_info, [object_count]}]),
     ets:delete(MsgLocations).

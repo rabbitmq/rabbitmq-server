@@ -477,7 +477,7 @@ init([Server, BaseDir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
     {ok, IndexModule} = application:get_env(msg_store_index_module),
     rabbit_log:info("Using ~p to provide index for message store~n",
                     [IndexModule]),
-    IndexState = IndexModule:init(Dir),
+    {fresh, IndexState} = IndexModule:init(fresh, Dir),
 
     InitFile = 0,
     FileSummaryEts = ets:new(rabbit_msg_store_file_summary,
