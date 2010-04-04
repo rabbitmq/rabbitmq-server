@@ -82,7 +82,7 @@ init([WId]) ->
 handle_call({submit, Fun}, From, WId) ->
     gen_server2:reply(From, run(Fun)),
     ok = worker_pool:idle(WId),
-    {noreply, WId};
+    {noreply, WId, hibernate};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
