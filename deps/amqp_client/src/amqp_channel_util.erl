@@ -30,11 +30,11 @@
 -export([open_channel/5]).
 -export([start_channel_infrastructure/3, terminate_channel_infrastructure/2]).
 -export([do/4]).
--export([new_channel_dict/0, is_channel_dict_empty/1, register_channel/3,
-         unregister_channel_number/2, unregister_channel_pid/2,
-         resolve_channel_number/2, resolve_channel_pid/2,
-         is_channel_number_registered/2, is_channel_pid_registered/2,
-         channel_number/3]).
+-export([new_channel_dict/0, is_channel_dict_empty/1, num_channels/1,
+         register_channel/3, unregister_channel_number/2,
+         unregister_channel_pid/2, resolve_channel_number/2,
+         resolve_channel_pid/2, is_channel_number_registered/2,
+         is_channel_pid_registered/2, channel_number/3]).
 -export([broadcast_to_channels/2, handle_exit/4]).
 
 %%---------------------------------------------------------------------------
@@ -124,6 +124,10 @@ new_channel_dict() ->
 %% dictionary
 is_channel_dict_empty(_Channels = {TreeNP, _}) ->
     gb_trees:is_empty(TreeNP).
+
+%% Returns the number of channels registered in the channels dictionary
+num_channels(_Channels = {TreeNP, _}) ->
+    gb_trees:size(TreeNP).
 
 %% Register a channel in a given channel dictionary
 register_channel(Number, Pid, _Channels = {TreeNP, DictPN}) ->

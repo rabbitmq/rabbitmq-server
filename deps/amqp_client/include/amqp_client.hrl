@@ -33,15 +33,16 @@
 
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
--record(amqp_params, {username     = <<"guest">>,
-                      password     = <<"guest">>,
-                      virtual_host = <<"/">>,
-                      host         = "localhost",
-                      port         = ?PROTOCOL_PORT,
-                      channel_max  = 0,
-                      frame_max    = 0,
-                      heartbeat    = 0,
-                      ssl_options  = none}).
+-record(amqp_params, {username          = <<"guest">>,
+                      password          = <<"guest">>,
+                      virtual_host      = <<"/">>,
+                      host              = "localhost",
+                      port              = ?PROTOCOL_PORT,
+                      channel_max       = 0,
+                      frame_max         = 0,
+                      heartbeat         = 0,
+                      ssl_options       = none,
+                      client_properties = []}).
 
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).
