@@ -230,26 +230,26 @@ open(Path, Mode, Options) ->
             File1 = #file { reader_count = RCount, has_writer = HasWriter } =
                 case get({Path1, fhc_file}) of
                     File = #file {} -> File;
-                    undefined       -> File = #file { reader_count = 0,
-                                                      has_writer = false },
-                                       put({Path1, fhc_file}, File),
-                                       File
+                    undefined       -> #file { reader_count = 0,
+                                               has_writer = false }
                 end,
             IsWriter = is_writer(Mode),
             case IsWriter andalso HasWriter of
                 true  -> {error, writer_exists};
-                false -> RCount1 = case is_reader(Mode) of
-                                       true  -> RCount + 1;
-                                       false -> RCount
-                                   end,
-                         HasWriter1 = HasWriter orelse IsWriter,
-                         put({Path1, fhc_file},
-                             File1 #file { reader_count = RCount1,
-                                           has_writer = HasWriter1}),
-                         Ref = make_ref(),
+                false -> Ref = make_ref(),
                          case open1(Path1, Mode, Options, Ref, bof, new) of
-                             {ok, _Handle} -> {ok, Ref};
-                             Error         -> Error
+                             {ok, _Handle} ->
+                                 RCount1 = case is_reader(Mode) of
+                                               true  -> RCount + 1;
+                                               false -> RCount
+                                           end,
+                                 HasWriter1 = HasWriter orelse IsWriter,
+                                 put({Path1, fhc_file},
+                                     File1 #file { reader_count = RCount1,
+                                                   has_writer = HasWriter1}),
+                                 {ok, Ref};
+                             Error ->
+                                 Error
                          end
             end
     end.
