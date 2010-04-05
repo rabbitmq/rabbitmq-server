@@ -31,7 +31,7 @@
 
 -module(rabbit_queue_index).
 
--export([init/1, terminate/1, terminate_and_erase/1, write_published/4,
+-export([init/1, terminate/2, terminate_and_erase/1, write_published/4,
          write_delivered/2, write_acks/2, sync_seq_ids/2, flush_journal/1,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1,
@@ -195,8 +195,9 @@
                               dirty_count     :: integer()
                             }).
 
--spec(init/1 :: (queue_name()) -> {non_neg_integer(), qistate()}).
--spec(terminate/1 :: (qistate()) -> qistate()).
+-spec(init/1 :: (queue_name()) ->
+                     {non_neg_integer(), binary(), binary(), qistate()}).
+-spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(terminate_and_erase/1 :: (qistate()) -> qistate()).
 -spec(write_published/4 :: (msg_id(), seq_id(), boolean(), qistate())
       -> qistate()).
@@ -221,6 +222,19 @@
 
 init(Name) ->
     State = blank_state(Name),
+    {PRef, TRef} = case read_shutdown_terms(State #qistate.dir) of
+                       {error, _} ->
+                           {rabbit_guid:guid(), rabbit_guid:guid()};
+                       {ok, Terms} ->
+                           case [persistent_ref, transient_ref] --
+                               proplists:get_keys(Terms) of
+                               [] ->
+                                   {proplists:get_value(persistent_ref, Terms),
+                                    proplists:get_value(transient_ref, Terms)};
+                               _ ->
+                                   {rabbit_guid:guid(), rabbit_guid:guid()}
+                           end
+                   end,
     %% 1. Load the journal completely. This will also load segments
     %%    which have entries in the journal and remove duplicates.
     %%    The counts will correctly reflect the combination of the
@@ -263,7 +277,8 @@ init(Name) ->
                   {segment_store(Segment2, Segments2),
                    CountAcc + PubCount1 - AckCount1, DCountAcc1}
           end, {Segments, 0, DCount}, AllSegs),
-    {Count, State2 #qistate { segments = Segments1, dirty_count = DCount1 }}.
+    {Count, PRef, TRef,
+     State2 #qistate { segments = Segments1, dirty_count = DCount1 }}.
 
 maybe_add_to_journal( true,  true, _Del, _RelSeq, Segment) ->
     {Segment, 0};
@@ -276,11 +291,11 @@ maybe_add_to_journal(false,     _,  del,  RelSeq, Segment) ->
 maybe_add_to_journal(false,     _, _Del,  RelSeq, Segment) ->
     {add_to_journal(RelSeq, ack, add_to_journal(RelSeq, del, Segment)), 2}.
 
-terminate(State) ->
-    terminate(true, State).
+terminate(Terms, State) ->
+    terminate(true, Terms, State).
 
 terminate_and_erase(State) ->
-    State1 = terminate(State),
+    State1 = terminate(false, [], State),
     ok = delete_queue_directory(State1 #qistate.dir),
     State1.
 
@@ -397,20 +412,33 @@ start_persistent_msg_store(DurableQueues) ->
                           []
                   end,
     DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
-    {DurableQueueNames, TransientDirs} =
+    {DurableQueueNames, TransientDirs, DurableRefs} =
         lists:foldl(
-          fun (QueueDir, {DurableAcc, TransientAcc}) ->
+          fun (QueueDir, {DurableAcc, TransientAcc, RefsAcc}) ->
                   case sets:is_element(QueueDir, DurableDirectories) of
                       true ->
+                          RefsAcc1 =
+                              case read_shutdown_terms(
+                                     filename:join(QueuesDir, QueueDir)) of
+                                  {error, _} ->
+                                      RefsAcc;
+                                  {ok, Terms} ->
+                                      case proplists:get_value(
+                                             persistent_ref, Terms) of
+                                          undefined -> RefsAcc;
+                                          Ref       -> [Ref | RefsAcc]
+                                      end
+                              end,
                           {[dict:fetch(QueueDir, DurableDict) | DurableAcc],
-                           TransientAcc};
+                           TransientAcc, RefsAcc1};
                       false ->
-                          {DurableAcc, [QueueDir | TransientAcc]}
+                          {DurableAcc, [QueueDir | TransientAcc], RefsAcc}
                   end
-          end, {[], []}, Directories),
-    ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store,
-                                [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 fun queue_index_walker/1, DurableQueueNames]),
+          end, {[], [], []}, Directories),
+    ok = rabbit_sup:start_child(
+           ?PERSISTENT_MSG_STORE, rabbit_msg_store,
+           [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(), DurableRefs,
+            fun queue_index_walker/1, DurableQueueNames]),
     lists:foreach(fun (DirName) ->
                           Dir = filename:join(queues_dir(), DirName),
                           ok = delete_queue_directory(Dir)
@@ -444,7 +472,7 @@ queue_index_walker_reader(QueueName, Gatherer, Guid) ->
     queue_index_walker_reader(Gatherer, Guid, State1, SegNums).
 
 queue_index_walker_reader(Gatherer, Guid, State, []) ->
-    _State = terminate(false, State),
+    _State = terminate(false, [], State),
     ok = gatherer:finished(Gatherer, Guid);
 queue_index_walker_reader(Gatherer, Guid, State, [Seg | SegNums]) ->
     SeqId = reconstruct_seq_id(Seg, 0),
@@ -518,11 +546,11 @@ detect_clean_shutdown(Dir) ->
         {error, enoent} -> false
     end.
 
-store_clean_shutdown(Dir) ->
-    {ok, Hdl} = file_handle_cache:open(filename:join(Dir, ?CLEAN_FILENAME),
-                                       [write, raw, binary],
-                                       [{write_buffer, unbuffered}]),
-    ok = file_handle_cache:close(Hdl).
+read_shutdown_terms(Dir) ->
+    rabbit_misc:read_term_file(filename:join(Dir, ?CLEAN_FILENAME)).
+
+store_clean_shutdown(Terms, Dir) ->
+    rabbit_misc:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
 
 queue_name_to_dir_name(Name = #resource { kind = queue }) ->
     Bin = term_to_binary(Name),
@@ -646,7 +674,9 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
          end,
     Hdl.
 
-terminate(StoreShutdown, State =
+terminate(_StoreShutdown, _Terms, State = #qistate { segments = undefined }) ->
+    State;
+terminate(StoreShutdown, Terms, State =
           #qistate { journal_handle = JournalHdl,
                      dir = Dir, segments = Segments }) ->
     ok = case JournalHdl of
@@ -660,10 +690,10 @@ terminate(StoreShutdown, State =
                    file_handle_cache:close(Hdl)
            end, ok, Segments),
     case StoreShutdown of
-        true  -> store_clean_shutdown(Dir);
+        true  -> store_clean_shutdown(Terms, Dir);
         false -> ok
     end,
-    State #qistate { journal_handle = undefined, segments = segments_new() }.
+    State #qistate { journal_handle = undefined, segments = undefined }.
 
 %%----------------------------------------------------------------------------
 %% Majors

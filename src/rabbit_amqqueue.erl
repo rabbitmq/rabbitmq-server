@@ -129,9 +129,10 @@
 
 start() ->
     ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
-    ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
-                                [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 fun (ok) -> finished end, ok]),
+    ok = rabbit_sup:start_child(
+           ?TRANSIENT_MSG_STORE, rabbit_msg_store,
+           [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(), undefined,
+            fun (ok) -> finished end, ok]),
     DurableQueues = find_durable_queues(),
     ok = rabbit_queue_index:start_persistent_msg_store(DurableQueues),
     {ok,_} = supervisor:start_child(

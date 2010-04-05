@@ -33,8 +33,9 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
-         sync/3, client_init/1, client_terminate/1, clean/2]).
+-export([start_link/5, write/4, read/3, contains/2, remove/2, release/2,
+         sync/3, client_init/2, client_terminate/1, delete_client/2, clean/2,
+         successfully_recovered_state/1]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2,
          build_index_worker/6]). %% internal
@@ -42,9 +43,10 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, handle_pre_hibernate/1]).
 
--define(SYNC_INTERVAL,         5). %% milliseconds
-
--define(GEOMETRIC_P, 0.3). %% parameter to geometric distribution rng
+-define(SYNC_INTERVAL,  5).   %% milliseconds
+-define(GEOMETRIC_P,    0.3). %% parameter to geometric distribution rng
+-define(CLEAN_FILENAME, "clean.dot").
+-define(FILE_SUMMARY_FILENAME, "file_summary.ets").
 
 %%----------------------------------------------------------------------------
 
@@ -66,7 +68,9 @@
           file_handles_ets,       %% tid of the shared file handles table
           file_summary_ets,       %% tid of the file summary table
           dedup_cache_ets,        %% tid of dedup cache table
-          cur_file_cache_ets      %% tid of current file cache table
+          cur_file_cache_ets,     %% tid of current file cache table
+          client_refs,            %% set of references of all registered clients
+          recovered_state         %% boolean: did we recover state?
         }).
 
 -record(client_msstate,
@@ -98,8 +102,8 @@
                                             dedup_cache_ets    :: tid(),
                                             cur_file_cache_ets :: tid() }).
 
--spec(start_link/4 ::
-      (atom(), file_path(),
+-spec(start_link/5 ::
+      (atom(), file_path(), [binary()] | 'undefined',
        (fun ((A) -> 'finished' | {msg_id(), non_neg_integer(), A})), A) ->
              {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(write/4 :: (server(), msg_id(), msg(), client_msstate()) ->
@@ -112,9 +116,11 @@
 -spec(sync/3 :: (server(), [msg_id()], fun (() -> any())) -> 'ok').
 -spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
--spec(client_init/1 :: (server()) -> client_msstate()).
+-spec(client_init/2 :: (server(), binary()) -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
+-spec(delete_client/2 :: (server(), binary()) -> 'ok').
 -spec(clean/2 :: (atom(), file_path()) -> 'ok').
+-spec(successfully_recovered_state/1 :: (server()) -> boolean()).
 
 -endif.
 
@@ -278,9 +284,9 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-start_link(Server, Dir, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
+start_link(Server, Dir, ClientRefs, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
     gen_server2:start_link({local, Server}, ?MODULE,
-                           [Server, Dir, MsgRefDeltaGen, MsgRefDeltaGenInit],
+                           [Server, Dir, ClientRefs, MsgRefDeltaGen, MsgRefDeltaGenInit],
                            [{timeout, infinity}]).
 
 write(Server, MsgId, Msg, CState =
@@ -326,9 +332,10 @@ gc_done(Server, Reclaimed, Source, Destination) ->
 set_maximum_since_use(Server, Age) ->
     gen_server2:pcast(Server, 8, {set_maximum_since_use, Age}).
 
-client_init(Server) ->
+client_init(Server, Ref) ->
     {IState, IModule, Dir, FileHandlesEts, FileSummaryEts, DedupCacheEts,
-     CurFileCacheEts} = gen_server2:call(Server, new_client_state, infinity),
+     CurFileCacheEts} = gen_server2:call(Server, {new_client_state, Ref},
+                                         infinity),
     #client_msstate { file_handle_cache  = dict:new(),
                       index_state        = IState,
                       index_module       = IModule,
@@ -341,6 +348,12 @@ client_init(Server) ->
 client_terminate(CState) ->
     close_all_handles(CState),
     ok.
+
+delete_client(Server, Ref) ->
+    ok = gen_server2:call(Server, {delete_client, Ref}, infinity).
+
+successfully_recovered_state(Server) ->
+    gen_server2:call(Server, successfully_recovered_state, infinity).
 
 clean(Server, BaseDir) ->
     Dir = filename:join(BaseDir, atom_to_list(Server)),
@@ -467,7 +480,7 @@ close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts } =
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([Server, BaseDir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
+init([Server, BaseDir, ClientRefs, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
 
@@ -477,12 +490,32 @@ init([Server, BaseDir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
     {ok, IndexModule} = application:get_env(msg_store_index_module),
     rabbit_log:info("Using ~p to provide index for message store~n",
                     [IndexModule]),
-    {fresh, IndexState} = IndexModule:init(fresh, Dir),
+
+    {Recovered, IndexState, ClientRefs1} =
+        case detect_clean_shutdown(Dir) of
+            {false, _Error} ->
+                {fresh, IndexState1} = IndexModule:init(fresh, Dir),
+                {false, IndexState1, sets:new()};
+            {true, Terms} ->
+                case undefined /= ClientRefs andalso lists:sort(ClientRefs) ==
+                    lists:sort(proplists:get_value(client_refs, Terms, []))
+                    andalso proplists:get_value(index_module, Terms) ==
+                    IndexModule of
+                    true ->
+                        case IndexModule:init(recover, Dir) of
+                            {fresh, IndexState1} ->
+                                {false, IndexState1, sets:new()};
+                            {recovered, IndexState1} ->
+                                {true, IndexState1, sets:from_list(ClientRefs)}
+                        end;
+                    false ->
+                        {fresh, IndexState1} = IndexModule:init(fresh, Dir),
+                        {false, IndexState1, sets:new()}
+                end
+        end,
 
     InitFile = 0,
-    FileSummaryEts = ets:new(rabbit_msg_store_file_summary,
-                             [ordered_set, public,
-                              {keypos, #file_summary.file}]),
+    {Recovered1, FileSummaryEts} = recover_file_summary(Recovered, Dir),
     DedupCacheEts = ets:new(rabbit_msg_store_dedup_cache, [set, public]),
     FileHandlesEts = ets:new(rabbit_msg_store_shared_file_handles,
                              [ordered_set, public]),
@@ -504,20 +537,23 @@ init([Server, BaseDir, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
                        file_handles_ets       = FileHandlesEts,
                        file_summary_ets       = FileSummaryEts,
                        dedup_cache_ets        = DedupCacheEts,
-                       cur_file_cache_ets     = CurFileCacheEts
+                       cur_file_cache_ets     = CurFileCacheEts,
+                       client_refs            = ClientRefs1,
+                       recovered_state        = Recovered
                      },
 
-    ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
+    ok = count_msg_refs(Recovered, MsgRefDeltaGen, MsgRefDeltaGenInit, State),
     FileNames =
         sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION, Dir)),
     TmpFileNames =
         sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION_TMP, Dir)),
     ok = recover_crashed_compactions(Dir, FileNames, TmpFileNames),
+
     %% There should be no more tmp files now, so go ahead and load the
     %% whole lot
     Files = [filename_to_num(FileName) || FileName <- FileNames],
     {Offset, State1 = #msstate { current_file = CurFile }} =
-        build_index(Files, State),
+        build_index(Recovered1, Files, State),
 
     %% read is only needed so that we can seek
     {ok, FileHdl} = rabbit_msg_store_misc:open_file(
@@ -543,15 +579,25 @@ handle_call({contains, MsgId}, From, State) ->
     State1 = contains_message(MsgId, From, State),
     noreply(State1);
 
-handle_call(new_client_state, _From,
+handle_call({new_client_state, CRef}, _From,
             State = #msstate { index_state        = IndexState, dir = Dir,
                                index_module       = IndexModule,
                                file_handles_ets   = FileHandlesEts,
                                file_summary_ets   = FileSummaryEts,
                                dedup_cache_ets    = DedupCacheEts,
-                               cur_file_cache_ets = CurFileCacheEts }) ->
+                               cur_file_cache_ets = CurFileCacheEts,
+                               client_refs        = ClientRefs }) ->
     reply({IndexState, IndexModule, Dir, FileHandlesEts, FileSummaryEts,
-           DedupCacheEts, CurFileCacheEts}, State).
+           DedupCacheEts, CurFileCacheEts},
+          State #msstate { client_refs = sets:add_element(CRef, ClientRefs) });
+
+handle_call(successfully_recovered_state, _From, State) ->
+    reply(State #msstate.recovered_state, State);
+
+handle_call({delete_client, CRef}, _From,
+            State = #msstate { client_refs = ClientRefs }) ->
+    reply(ok,
+          State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
 
 handle_cast({write, MsgId, Msg},
             State = #msstate { current_file_handle = CurHdl,
@@ -680,7 +726,9 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
                                       file_handles_ets    = FileHandlesEts,
                                       file_summary_ets    = FileSummaryEts,
                                       dedup_cache_ets     = DedupCacheEts,
-                                      cur_file_cache_ets  = CurFileCacheEts }) ->
+                                      cur_file_cache_ets  = CurFileCacheEts,
+                                      client_refs         = ClientRefs,
+                                      dir                 = Dir }) ->
     %% stop the gc first, otherwise it could be working and we pull
     %% out the ets tables from under it.
     ok = rabbit_msg_store_gc:stop(GCPid),
@@ -691,11 +739,13 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
                       State2
              end,
     State3 = close_all_handles(State1),
-    ets:delete(FileSummaryEts),
+    store_file_summary(FileSummaryEts, Dir),
     ets:delete(DedupCacheEts),
     ets:delete(FileHandlesEts),
     ets:delete(CurFileCacheEts),
     IndexModule:terminate(IndexState),
+    store_clean_shutdown([{client_refs, sets:to_list(ClientRefs)},
+                          {index_module, IndexModule}], Dir),
     State3 #msstate { index_state         = undefined,
                       current_file_handle = undefined }.
 
@@ -957,6 +1007,35 @@ get_read_handle(FileNum, FHC, Dir) ->
             {Hdl, dict:store(FileNum, Hdl, FHC) }
     end.
 
+detect_clean_shutdown(Dir) ->
+    Path = filename:join(Dir, ?CLEAN_FILENAME),
+    case rabbit_misc:read_term_file(Path) of
+        {ok, Terms}    -> case file:delete(Path) of
+                              ok             -> {true,  Terms};
+                              {error, Error} -> {false, Error}
+                          end;
+        {error, Error} -> {false, Error}
+    end.
+
+store_clean_shutdown(Terms, Dir) ->
+    rabbit_misc:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
+
+recover_file_summary(false, _Dir) ->
+    {false, ets:new(rabbit_msg_store_file_summary,
+                    [ordered_set, public, {keypos, #file_summary.file}])};
+recover_file_summary(true, Dir) ->
+    Path = filename:join(Dir, ?FILE_SUMMARY_FILENAME),
+    case ets:file2tab(Path) of
+        {ok, Tid}  -> file:delete(Path),
+                      {true, Tid};
+        {error, _} -> recover_file_summary(false, Dir)
+    end.
+
+store_file_summary(Tid, Dir) ->
+    ok = ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
+                      [{extended_info, [object_count]}]),
+    ets:delete(Tid).
+
 %%----------------------------------------------------------------------------
 %% message cache helper functions
 %%----------------------------------------------------------------------------
@@ -1033,6 +1112,11 @@ index_delete_by_file(File, #msstate { index_module = Index,
 %%----------------------------------------------------------------------------
 %% recovery
 %%----------------------------------------------------------------------------
+
+count_msg_refs(false, Gen, Seed, State) ->
+    count_msg_refs(Gen, Seed, State);
+count_msg_refs(true, _Gen, _Seed, _State) ->
+    ok.
 
 count_msg_refs(Gen, Seed, State) ->
     case Gen(Seed) of
@@ -1183,7 +1267,18 @@ find_contiguous_block_prefix([{MsgId, TotalSize, ExpectedOffset} | Tail],
 find_contiguous_block_prefix([_MsgAfterGap | _Tail], ExpectedOffset, MsgIds) ->
     {ExpectedOffset, MsgIds}.
 
-build_index(Files, State) ->
+build_index(true, _Files, State =
+                #msstate { file_summary_ets = FileSummaryEts }) ->
+    ets:foldl(
+      fun (#file_summary { valid_total_size = ValidTotalSize,
+                           file_size = FileSize, file = File },
+           {_Offset, State1 = #msstate { sum_valid_data = SumValid,
+                                         sum_file_size = SumFileSize }}) ->
+              {FileSize, State1 #msstate { sum_valid_data = SumValid + ValidTotalSize,
+                                           sum_file_size = SumFileSize + FileSize,
+                                           current_file = File }}
+      end, {0, State}, FileSummaryEts);
+build_index(false, Files, State) ->
     {ok, Pid} = gatherer:start_link(),
     case Files of
         [] -> build_index(Pid, undefined, [State #msstate.current_file], State);

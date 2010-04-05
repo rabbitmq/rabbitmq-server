@@ -211,7 +211,7 @@
                rate_timestamp        :: {integer(), integer(), integer()},
                len                   :: non_neg_integer(),
                on_sync               :: {[ack()], [msg_id()], [{pid(), any()}]},
-               msg_store_clients     :: {any(), any()},
+               msg_store_clients     :: {{any(), binary()}, {any(), binary()}},
                persistent_store      :: pid() | atom()
               }).
 
@@ -256,7 +256,7 @@
 %%----------------------------------------------------------------------------
 
 init(QueueName, PersistentStore) ->
-    {DeltaCount, IndexState} =
+    {DeltaCount, PRef, TRef, IndexState} =
         rabbit_queue_index:init(QueueName),
     {DeltaSeqId, NextSeqId, IndexState1} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(IndexState),
@@ -287,17 +287,20 @@ init(QueueName, PersistentStore) ->
                    rate_timestamp = Now,
                    len = DeltaCount,
                    on_sync = {[], [], []},
-                   msg_store_clients = {rabbit_msg_store:client_init(PersistentStore),
-                                        rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE)},
+                   msg_store_clients = {
+                     {rabbit_msg_store:client_init(PersistentStore, PRef), PRef},
+                     {rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef), TRef}},
                    persistent_store = PersistentStore
                  },
     maybe_deltas_to_betas(State).
 
-terminate(State = #vqstate { index_state = IndexState,
-                             msg_store_clients = {MSCStateP, MSCStateT} }) ->
+terminate(State = #vqstate {
+            index_state = IndexState,
+            msg_store_clients = {{MSCStateP, PRef}, {MSCStateT, TRef}} }) ->
     rabbit_msg_store:client_terminate(MSCStateP),
     rabbit_msg_store:client_terminate(MSCStateT),
-    State #vqstate { index_state = rabbit_queue_index:terminate(IndexState) }.
+    Terms = [{persistent_ref, PRef}, {transient_ref, TRef}],
+    State #vqstate { index_state = rabbit_queue_index:terminate(Terms, IndexState) }.
 
 publish(Msg, State) ->
     State1 = limit_ram_index(State),
@@ -466,9 +469,10 @@ purge(State = #vqstate { q4 = Q4, index_state = IndexState, len = Len,
 %% the only difference between purge and delete is that delete also
 %% needs to delete everything that's been delivered and not ack'd.
 delete_and_terminate(State) ->
-    {_PurgeCount, State1 = #vqstate { index_state = IndexState,
-                                      msg_store_clients = {MSCStateP, MSCStateT},
-                                      persistent_store = PersistentStore }} =
+    {_PurgeCount, State1 = #vqstate {
+                    index_state = IndexState,
+                    msg_store_clients = {{MSCStateP, PRef}, {MSCStateT, TRef}},
+                    persistent_store = PersistentStore }} =
         purge(State),
     IndexState1 =
         case rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(
@@ -482,6 +486,8 @@ delete_and_terminate(State) ->
                 IndexState3
     end,
     IndexState4 = rabbit_queue_index:terminate_and_erase(IndexState1),
+    rabbit_msg_store:delete_client(PersistentStore, PRef),
+    rabbit_msg_store:delete_client(?TRANSIENT_MSG_STORE, TRef),
     rabbit_msg_store:client_terminate(MSCStateP),
     rabbit_msg_store:client_terminate(MSCStateT),
     State1 #vqstate { index_state = IndexState4 }.
@@ -969,14 +975,14 @@ store_beta_entry(MsgStatus = #msg_status { msg_on_disk = true,
 find_msg_store(true, PersistentStore)   -> PersistentStore;
 find_msg_store(false, _PersistentStore) -> ?TRANSIENT_MSG_STORE.
 
-with_msg_store_state(PersistentStore, {MSCStateP, MSCStateT}, true,
+with_msg_store_state(PersistentStore, {{MSCStateP, PRef}, MSCStateT}, true,
                      Fun) ->
     {Result, MSCStateP1} = Fun(PersistentStore, MSCStateP),
-    {Result, {MSCStateP1, MSCStateT}};
-with_msg_store_state(_PersistentStore, {MSCStateP, MSCStateT}, false,
+    {Result, {{MSCStateP1, PRef}, MSCStateT}};
+with_msg_store_state(_PersistentStore, {MSCStateP, {MSCStateT, TRef}}, false,
                      Fun) ->
     {Result, MSCStateT1} = Fun(?TRANSIENT_MSG_STORE, MSCStateT),
-    {Result, {MSCStateP, MSCStateT1}}.
+    {Result, {MSCStateP, {MSCStateT1, TRef}}}.
 
 read_from_msg_store(PersistentStore, MSCState, IsPersistent, MsgId) ->
     with_msg_store_state(

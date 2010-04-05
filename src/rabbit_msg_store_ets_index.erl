@@ -37,7 +37,7 @@
          delete_by_file/2, terminate/1]).
 
 -define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
--define(FILENAME, msg_store_index.ets).
+-define(FILENAME, "msg_store_index.ets").
 
 -include("rabbit_msg_store_index.hrl").
 
@@ -48,8 +48,10 @@ init(fresh, Dir) ->
     Tid = ets:new(?MSG_LOC_NAME, [set, public, {keypos, #msg_location.msg_id}]),
     {fresh, #state { table = Tid, dir = Dir }};
 init(recover, Dir) ->
-    case ets:file2tab(filename:join(Dir, ?FILENAME)) of
-        {ok, Tid}  -> {recovered, #state { table = Tid, dir = Dir }};
+    Path = filename:join(Dir, ?FILENAME),
+    case ets:file2tab(Path) of
+        {ok, Tid}  -> file:delete(Path),
+                      {recovered, #state { table = Tid, dir = Dir }};
         {error, _} -> init(fresh, Dir)
     end.
 
