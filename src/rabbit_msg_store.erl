@@ -481,6 +481,8 @@ close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts } =
 %%----------------------------------------------------------------------------
 
 init([Server, BaseDir, ClientRefs, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
+    process_flag(trap_exit, true),
+
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
 
@@ -561,8 +563,6 @@ init([Server, BaseDir, ClientRefs, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
                       [read | ?WRITE_MODE]),
     {ok, Offset} = file_handle_cache:position(FileHdl, Offset),
     ok = file_handle_cache:truncate(FileHdl),
-
-    process_flag(trap_exit, true),
 
     {ok, GCPid} = rabbit_msg_store_gc:start_link(Dir, IndexState, IndexModule,
                                                  FileSummaryEts),
@@ -716,7 +716,8 @@ handle_cast({set_maximum_since_use, Age}, State) ->
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
 
-handle_info({'EXIT', _Pid, Reason}, State) ->
+handle_info({'EXIT', Pid, Reason}, State) ->
+    io:format("~p EXIT! ~p ~p ~p~n", [self(), Reason, Pid, State]),
     {stop, Reason, State}.
 
 terminate(_Reason, State = #msstate { index_state         = IndexState,
@@ -1292,6 +1293,10 @@ build_index(Gatherer, Left, [],
                                sum_file_size = SumFileSize }) ->
     case gatherer:fetch(Gatherer) of
         finished ->
+            unlink(Gatherer),
+            receive {'EXIT', Gatherer, _} -> ok
+            after 0 -> ok
+            end,
             ok = index_delete_by_file(undefined, State),
             Offset = case ets:lookup(FileSummaryEts, Left) of
                          []                                       -> 0;

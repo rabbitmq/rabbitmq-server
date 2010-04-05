@@ -155,7 +155,9 @@
           len,
           on_sync,
           msg_store_clients,
-          persistent_store
+          persistent_store,
+          persistent_count,
+          transient_threshold
         }).
 
 -include("rabbit.hrl").
@@ -212,7 +214,9 @@
                len                   :: non_neg_integer(),
                on_sync               :: {[ack()], [msg_id()], [{pid(), any()}]},
                msg_store_clients     :: {{any(), binary()}, {any(), binary()}},
-               persistent_store      :: pid() | atom()
+               persistent_store      :: pid() | atom(),
+               persistent_count      :: non_neg_integer(),
+               transient_threshold   :: non_neg_integer()
               }).
 
 -spec(init/2 :: (queue_name(), pid() | atom()) -> vqstate()).
@@ -256,14 +260,18 @@
 %%----------------------------------------------------------------------------
 
 init(QueueName, PersistentStore) ->
-    {DeltaCount, PRef, TRef, IndexState} =
-        rabbit_queue_index:init(QueueName),
+    MsgStoreRecovered =
+        rabbit_msg_store:successfully_recovered_state(PersistentStore),
+    {DeltaCount, PRef, TRef, Terms, IndexState} =
+        rabbit_queue_index:init(QueueName, MsgStoreRecovered),
     {DeltaSeqId, NextSeqId, IndexState1} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(IndexState),
-    Delta = case DeltaCount of
+
+    DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
+    Delta = case DeltaCount1 of
                 0 -> ?BLANK_DELTA;
                 _ -> #delta { start_seq_id = DeltaSeqId,
-                              count = DeltaCount,
+                              count = DeltaCount1,
                               end_seq_id = NextSeqId }
             end,
     Now = now(),
@@ -282,24 +290,28 @@ init(QueueName, PersistentStore) ->
                    in_counter = 0,
                    egress_rate = {Now, 0},
                    avg_egress_rate = 0,
-                   ingress_rate = {Now, DeltaCount},
+                   ingress_rate = {Now, DeltaCount1},
                    avg_ingress_rate = 0,
                    rate_timestamp = Now,
-                   len = DeltaCount,
+                   len = DeltaCount1,
                    on_sync = {[], [], []},
                    msg_store_clients = {
                      {rabbit_msg_store:client_init(PersistentStore, PRef), PRef},
                      {rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef), TRef}},
-                   persistent_store = PersistentStore
+                   persistent_store = PersistentStore,
+                   persistent_count = DeltaCount1,
+                   transient_threshold = NextSeqId
                  },
     maybe_deltas_to_betas(State).
 
 terminate(State = #vqstate {
+            persistent_count = PCount,
             index_state = IndexState,
             msg_store_clients = {{MSCStateP, PRef}, {MSCStateT, TRef}} }) ->
     rabbit_msg_store:client_terminate(MSCStateP),
     rabbit_msg_store:client_terminate(MSCStateT),
-    Terms = [{persistent_ref, PRef}, {transient_ref, TRef}],
+    Terms = [{persistent_ref, PRef}, {transient_ref, TRef},
+             {persistent_count, PCount}],
     State #vqstate { index_state = rabbit_queue_index:terminate(Terms, IndexState) }.
 
 publish(Msg, State) ->
@@ -313,7 +325,8 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
                                      out_counter = OutCount,
                                      in_counter = InCount,
                                      msg_store_clients = MSCState,
-                                     persistent_store = PersistentStore }) ->
+                                     persistent_store = PersistentStore,
+                                     persistent_count = PCount }) ->
     State1 = State #vqstate { out_counter = OutCount + 1,
                               in_counter = InCount + 1 },
     MsgStatus = #msg_status {
@@ -321,7 +334,11 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
       is_delivered = true, msg_on_disk = false, index_on_disk = false },
     {MsgStatus1, MSCState1} = maybe_write_msg_to_disk(PersistentStore, false,
                                                       MsgStatus, MSCState),
-    State2 = State1 #vqstate { msg_store_clients = MSCState1 },
+    State2 = State1 #vqstate { msg_store_clients = MSCState1,
+                               persistent_count = PCount + case IsPersistent of
+                                                               true  -> 1;
+                                                               false -> 0
+                                                           end },
     case MsgStatus1 #msg_status.msg_on_disk of
         true ->
             {#msg_status { index_on_disk = true }, IndexState1} =
@@ -422,7 +439,7 @@ fetch(State =
                     false -> ok = case MsgOnDisk of
                                       true ->
                                           rabbit_msg_store:remove(
-                                                MsgStore, [MsgId]);
+                                            MsgStore, [MsgId]);
                                       false -> ok
                                   end,
                              ack_not_on_disk
@@ -434,7 +451,9 @@ fetch(State =
                               index_state = IndexState1, len = Len1 }}
     end.
 
-ack(AckTags, State = #vqstate { index_state = IndexState }) ->
+ack(AckTags, State = #vqstate { index_state = IndexState,
+                                persistent_count = PCount,
+                                persistent_store = PersistentStore }) ->
     {MsgIdsByStore, SeqIds} =
         lists:foldl(
           fun (ack_not_on_disk, Acc) -> Acc;
@@ -448,7 +467,11 @@ ack(AckTags, State = #vqstate { index_state = IndexState }) ->
     ok = dict:fold(fun (MsgStore, MsgIds, ok) ->
                            rabbit_msg_store:remove(MsgStore, MsgIds)
                    end, ok, MsgIdsByStore),
-    State #vqstate { index_state = IndexState1 }.
+    PCount1 = PCount - case dict:find(PersistentStore, MsgIdsByStore) of
+                           error        -> 0;
+                           {ok, MsgIds} -> length(MsgIds)
+                       end,
+    State #vqstate { index_state = IndexState1, persistent_count = PCount1 }.
 
 len(#vqstate { len = Len }) ->
     Len.
@@ -464,7 +487,8 @@ purge(State = #vqstate { q4 = Q4, index_state = IndexState, len = Len,
     {Len, State1} =
         purge1(Q4Count, State #vqstate { index_state = IndexState1,
                                          q4 = queue:new() }),
-    {Len, State1 #vqstate { len = 0, ram_msg_count = 0, ram_index_count = 0 }}.
+    {Len, State1 #vqstate { len = 0, ram_msg_count = 0, ram_index_count = 0,
+                            persistent_count = 0 }}.
 
 %% the only difference between purge and delete is that delete also
 %% needs to delete everything that's been delivered and not ack'd.
@@ -472,7 +496,8 @@ delete_and_terminate(State) ->
     {_PurgeCount, State1 = #vqstate {
                     index_state = IndexState,
                     msg_store_clients = {{MSCStateP, PRef}, {MSCStateT, TRef}},
-                    persistent_store = PersistentStore }} =
+                    persistent_store = PersistentStore,
+                    transient_threshold = TransientThreshold }} =
         purge(State),
     IndexState1 =
         case rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(
@@ -481,8 +506,8 @@ delete_and_terminate(State) ->
                 IndexState2;
             {DeltaSeqId, NextSeqId, IndexState2} ->
                 {_DeleteCount, IndexState3} =
-                    delete1(PersistentStore, NextSeqId, 0, DeltaSeqId,
-                            IndexState2),
+                    delete1(PersistentStore, TransientThreshold, NextSeqId, 0,
+                            DeltaSeqId, IndexState2),
                 IndexState3
     end,
     IndexState4 = rabbit_queue_index:terminate_and_erase(IndexState1),
@@ -503,7 +528,9 @@ delete_and_terminate(State) ->
 %% are now at the tail of the queue.
 requeue(MsgsWithAckTags, State) ->
     {SeqIds, MsgIdsByStore,
-     State1 = #vqstate { index_state = IndexState }} =
+     State1 = #vqstate { index_state = IndexState,
+                         persistent_count = PCount,
+                         persistent_store = PersistentStore }} =
         lists:foldl(
           fun ({Msg = #basic_message { guid = MsgId }, AckTag},
                {SeqIdsAcc, Dict, StateN}) ->
@@ -519,14 +546,20 @@ requeue(MsgsWithAckTags, State) ->
                   {_SeqId, StateN1} = publish(Msg, true, MsgOnDisk, StateN),
                   {SeqIdsAcc1, Dict1, StateN1}
           end, {[], dict:new(), State}, MsgsWithAckTags),
-    IndexState1 = case SeqIds of
-                      [] -> IndexState;
-                      _  -> rabbit_queue_index:write_acks(SeqIds, IndexState)
-                  end,
+    IndexState1 =
+        case SeqIds of
+            [] -> IndexState;
+            _  -> rabbit_queue_index:write_acks(SeqIds, IndexState)
+        end,
     ok = dict:fold(fun (MsgStore, MsgIds, ok) ->
                            rabbit_msg_store:release(MsgStore, MsgIds)
                    end, ok, MsgIdsByStore),
-    State1 #vqstate { index_state = IndexState1 }.
+    PCount1 = PCount - case dict:find(PersistentStore, MsgIdsByStore) of
+                           error        -> 0;
+                           {ok, MsgIds} -> length(MsgIds)
+                       end,
+    State1 #vqstate { index_state = IndexState1,
+                      persistent_count = PCount1 }.
 
 tx_publish(Msg = #basic_message { is_persistent = true, guid = MsgId },
            State = #vqstate { msg_store_clients = MSCState,
@@ -633,7 +666,7 @@ persistent_msg_ids(Pubs) ->
     [MsgId || Obj = #basic_message { guid = MsgId } <- Pubs,
               Obj #basic_message.is_persistent].
 
-betas_from_segment_entries(List, SeqIdLimit) ->
+betas_from_segment_entries(List, SeqIdLimit, TransientThreshold) ->
     bpqueue:from_list([{true,
                         [#msg_status { msg           = undefined,
                                        msg_id        = MsgId,
@@ -644,7 +677,8 @@ betas_from_segment_entries(List, SeqIdLimit) ->
                                        index_on_disk = true
                                      }
                          || {MsgId, SeqId, IsPersistent, IsDelivered} <- List,
-                            SeqId < SeqIdLimit ]}]).
+                            SeqId < SeqIdLimit,
+                            (IsPersistent orelse SeqId >= TransientThreshold)]}]).
 
 read_index_segment(SeqId, IndexState) ->
     SeqId1 = SeqId + rabbit_queue_index:segment_size(),
@@ -703,23 +737,25 @@ should_force_index_to_disk(State =
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
-delete1(_PersistentStore, NextSeqId, Count, DeltaSeqId, IndexState)
-  when DeltaSeqId >= NextSeqId ->
+delete1(_PersistentStore, _TransientThreshold, NextSeqId, Count, DeltaSeqId,
+        IndexState) when DeltaSeqId >= NextSeqId ->
     {Count, IndexState};
-delete1(PersistentStore, NextSeqId, Count, DeltaSeqId, IndexState) ->
+delete1(PersistentStore, TransientThreshold, NextSeqId, Count, DeltaSeqId,
+        IndexState) ->
     Delta1SeqId = DeltaSeqId + rabbit_queue_index:segment_size(),
     case rabbit_queue_index:read_segment_entries(DeltaSeqId, IndexState) of
         {[], IndexState1} ->
-            delete1(PersistentStore, NextSeqId, Count, Delta1SeqId,
-                    IndexState1);
+            delete1(PersistentStore, TransientThreshold, NextSeqId, Count,
+                    Delta1SeqId, IndexState1);
         {List, IndexState1} ->
-            Q = betas_from_segment_entries(List, Delta1SeqId),
+            Q = betas_from_segment_entries(List, Delta1SeqId,
+                                           TransientThreshold),
             {QCount, IndexState2} =
                 remove_queue_entries(
                   PersistentStore, fun beta_fold_no_index_on_disk/3,
                   Q, IndexState1),
-            delete1(PersistentStore, NextSeqId, Count + QCount, Delta1SeqId,
-                    IndexState2)
+            delete1(PersistentStore, TransientThreshold, NextSeqId,
+                    Count + QCount, Delta1SeqId, IndexState2)
     end.
 
 purge1(Count, State = #vqstate { q3 = Q3, index_state = IndexState,
@@ -886,14 +922,20 @@ test_keep_msg_in_ram(SeqId, #vqstate { target_ram_msg_count = TargetRamMsgCount,
 
 publish(Msg = #basic_message { is_persistent = IsPersistent, guid = MsgId },
         IsDelivered, MsgOnDisk, State =
-        #vqstate { next_seq_id = SeqId, len = Len, in_counter = InCount }) ->
+        #vqstate { next_seq_id = SeqId, len = Len, in_counter = InCount,
+                   persistent_count = PCount }) ->
     MsgStatus = #msg_status {
       msg = Msg, msg_id = MsgId, seq_id = SeqId, is_persistent = IsPersistent,
       is_delivered = IsDelivered, msg_on_disk = MsgOnDisk,
       index_on_disk = false },
+    PCount1 = PCount + case IsPersistent of
+                           true  -> 1;
+                           false -> 0
+                       end,
     {SeqId, publish(test_keep_msg_in_ram(SeqId, State), MsgStatus,
                     State #vqstate { next_seq_id = SeqId + 1, len = Len + 1,
-                                     in_counter = InCount + 1 })}.
+                                     in_counter = InCount + 1,
+                                     persistent_count = PCount1 })}.
 
 publish(msg, MsgStatus, #vqstate {
                index_state = IndexState, ram_msg_count = RamMsgCount,
@@ -1097,7 +1139,8 @@ maybe_deltas_to_betas(
                      target_ram_msg_count = TargetRamMsgCount,
                      delta = #delta { start_seq_id = DeltaSeqId,
                                       count = DeltaCount,
-                                      end_seq_id = DeltaSeqIdEnd }}) ->
+                                      end_seq_id = DeltaSeqIdEnd },
+                     transient_threshold = TransientThreshold}) ->
     case (not bpqueue:is_empty(Q3)) andalso (0 == TargetRamMsgCount) of
         true ->
             State;
@@ -1110,7 +1153,7 @@ maybe_deltas_to_betas(
             State1 = State #vqstate { index_state = IndexState1 },
             %% length(List) may be < segment_size because of acks. But
             %% it can't be []
-            Q3a = betas_from_segment_entries(List, DeltaSeqIdEnd),
+            Q3a = betas_from_segment_entries(List, DeltaSeqIdEnd, TransientThreshold),
             Q3b = bpqueue:join(Q3, Q3a),
             case DeltaCount - bpqueue:len(Q3a) of
                 0 ->
@@ -1120,11 +1163,15 @@ maybe_deltas_to_betas(
                                       q2 = bpqueue:new(),
                                       q3 = bpqueue:join(Q3b, Q2) };
                 N when N > 0 ->
-                    State1 #vqstate {
-                      q3 = Q3b,
-                      delta = #delta { start_seq_id = Delta1SeqId,
-                                       count = N,
-                                       end_seq_id = DeltaSeqIdEnd } }
+                    State2 = State1 #vqstate {
+                               q3 = Q3b,
+                               delta = #delta { start_seq_id = Delta1SeqId,
+                                                count = N,
+                                                end_seq_id = DeltaSeqIdEnd } },
+                    case N == DeltaCount of
+                        true  -> maybe_deltas_to_betas(State2);
+                        false -> State2
+                    end
             end
     end.
 

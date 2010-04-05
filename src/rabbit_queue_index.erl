@@ -31,7 +31,7 @@
 
 -module(rabbit_queue_index).
 
--export([init/1, terminate/2, terminate_and_erase/1, write_published/4,
+-export([init/2, terminate/2, terminate_and_erase/1, write_published/4,
          write_delivered/2, write_acks/2, sync_seq_ids/2, flush_journal/1,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1,
@@ -190,13 +190,13 @@
 -type(seq_id() :: integer()).
 -type(seg_dict() :: {dict(), [segment()]}).
 -type(qistate() :: #qistate { dir             :: file_path(),
-                              segments        :: seg_dict(),
+                              segments        :: 'undefined' | seg_dict(),
                               journal_handle  :: hdl(),
                               dirty_count     :: integer()
                             }).
 
--spec(init/1 :: (queue_name()) ->
-                     {non_neg_integer(), binary(), binary(), qistate()}).
+-spec(init/2 :: (queue_name(), boolean()) ->
+                     {'undefined' | non_neg_integer(), binary(), binary(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(terminate_and_erase/1 :: (qistate()) -> qistate()).
 -spec(write_published/4 :: (msg_id(), seq_id(), boolean(), qistate())
@@ -220,21 +220,22 @@
 %% Public API
 %%----------------------------------------------------------------------------
 
-init(Name) ->
+init(Name, MsgStoreRecovered) ->
     State = blank_state(Name),
-    {PRef, TRef} = case read_shutdown_terms(State #qistate.dir) of
-                       {error, _} ->
-                           {rabbit_guid:guid(), rabbit_guid:guid()};
-                       {ok, Terms} ->
-                           case [persistent_ref, transient_ref] --
-                               proplists:get_keys(Terms) of
-                               [] ->
-                                   {proplists:get_value(persistent_ref, Terms),
-                                    proplists:get_value(transient_ref, Terms)};
-                               _ ->
-                                   {rabbit_guid:guid(), rabbit_guid:guid()}
-                           end
-                   end,
+    {PRef, TRef, Terms} =
+        case read_shutdown_terms(State #qistate.dir) of
+            {error, _} ->
+                {rabbit_guid:guid(), rabbit_guid:guid(), []};
+            {ok, Terms1} ->
+                case [persistent_ref, transient_ref] --
+                    proplists:get_keys(Terms1) of
+                    [] ->
+                        {proplists:get_value(persistent_ref, Terms1),
+                         proplists:get_value(transient_ref, Terms1), Terms1};
+                    _ ->
+                        {rabbit_guid:guid(), rabbit_guid:guid(), []}
+                end
+        end,
     %% 1. Load the journal completely. This will also load segments
     %%    which have entries in the journal and remove duplicates.
     %%    The counts will correctly reflect the combination of the
@@ -249,35 +250,40 @@ init(Name) ->
     %%    acks only go to the RAM journal as it doesn't matter if we
     %%    lose them. Also mark delivered if not clean shutdown. Also
     %%    find the number of unacked messages.
-    AllSegs = all_segment_nums(State2),
+    AllSegs = 
     CleanShutdown = detect_clean_shutdown(Dir),
     %% We know the journal is empty here, so we don't need to combine
     %% with the journal, and we don't need to worry about messages
     %% that have been acked.
     {Segments1, Count, DCount1} =
-        lists:foldl(
-          fun (Seg, {Segments2, CountAcc, DCountAcc}) ->
-                  Segment = segment_find_or_new(Seg, Dir, Segments2),
-                  {SegEntries, PubCount, AckCount, Segment1} =
-                      load_segment(false, Segment),
-                  {Segment2 = #segment { pubs = PubCount1, acks = AckCount1 },
-                   DCountAcc1} =
-                      array:sparse_foldl(
-                        fun (RelSeq, {{MsgId, _IsPersistent}, Del, no_ack},
-                             {Segment3, DCountAcc2}) ->
-                                {Segment4, DCountDelta} =
-                                    maybe_add_to_journal(
-                                      rabbit_msg_store:contains(
-                                        ?PERSISTENT_MSG_STORE, MsgId),
-                                      CleanShutdown, Del, RelSeq, Segment3),
-                                {Segment4, DCountAcc2 + DCountDelta}
-                        end, {Segment1 #segment { pubs = PubCount,
-                                                  acks = AckCount }, DCountAcc},
-                        SegEntries),
-                  {segment_store(Segment2, Segments2),
-                   CountAcc + PubCount1 - AckCount1, DCountAcc1}
-          end, {Segments, 0, DCount}, AllSegs),
-    {Count, PRef, TRef,
+        case CleanShutdown andalso MsgStoreRecovered of
+            false ->
+                lists:foldl(
+                  fun (Seg, {Segments2, CountAcc, DCountAcc}) ->
+                          Segment = segment_find_or_new(Seg, Dir, Segments2),
+                          {SegEntries, PubCount, AckCount, Segment1} =
+                              load_segment(false, Segment),
+                          {Segment2 = #segment { pubs = PubCount1, acks = AckCount1 },
+                           DCountAcc1} =
+                              array:sparse_foldl(
+                                fun (RelSeq, {{MsgId, _IsPersistent}, Del, no_ack},
+                                     {Segment3, DCountAcc2}) ->
+                                        {Segment4, DCountDelta} =
+                                            maybe_add_to_journal(
+                                              rabbit_msg_store:contains(
+                                                ?PERSISTENT_MSG_STORE, MsgId),
+                                              CleanShutdown, Del, RelSeq, Segment3),
+                                        {Segment4, DCountAcc2 + DCountDelta}
+                                end, {Segment1 #segment { pubs = PubCount,
+                                                          acks = AckCount }, DCountAcc},
+                                SegEntries),
+                          {segment_store(Segment2, Segments2),
+                           CountAcc + PubCount1 - AckCount1, DCountAcc1}
+                  end, {Segments, 0, DCount}, all_segment_nums(State2));
+            true ->
+                {Segments, undefined, DCount}
+        end,
+    {Count, PRef, TRef, Terms,
      State2 #qistate { segments = Segments1, dirty_count = DCount1 }}.
 
 maybe_add_to_journal( true,  true, _Del, _RelSeq, Segment) ->
