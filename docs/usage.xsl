@@ -12,19 +12,17 @@
               encoding="UTF-8"
               indent="no"/>
 <xsl:strip-space elements="*"/> 
-<xsl:preserve-space elements="term" />
+<xsl:preserve-space elements="cmdsynopsis arg" />
 
 <xsl:template match="/">
 <!-- Pull out cmdsynopsis to show the command usage line. -->%% Generated, do not edit!
 -module(<xsl:value-of select="$modulename" />).
 -export([usage/0]).
-usage() -> io:format(%QUOTE%Usage:
+usage() -> %QUOTE%Usage:
 <xsl:value-of select="refentry/refsynopsisdiv/cmdsynopsis/command"/> 
 <xsl:text> </xsl:text>
 <xsl:for-each select="refentry/refsynopsisdiv/cmdsynopsis/arg">
-  <xsl:if test="@choice='opt'">[</xsl:if>
   <xsl:apply-templates select="." />
-  <xsl:if test="@choice='opt'">]</xsl:if>
   <xsl:text> </xsl:text>
 </xsl:for-each>
 
@@ -60,7 +58,7 @@ usage() -> io:format(%QUOTE%Usage:
 </xsl:for-each>
 
 <xsl:apply-templates select=".//*[title='Commands']/refsect2" mode="command-usage" />
-%QUOTE%), halt(1).
+%QUOTE%.
 </xsl:template>
 
 <!-- Option lists in command usage -->
@@ -74,7 +72,7 @@ usage() -> io:format(%QUOTE%Usage:
 <!-- Don't show anything else in command usage -->
 <xsl:template match="text()" mode="command-usage"/>
 
-<xsl:template match="option">[<xsl:apply-templates/>]</xsl:template>
+<xsl:template match="arg[@choice='opt']">[<xsl:apply-templates/>]</xsl:template>
 <xsl:template match="replaceable">&lt;<xsl:value-of select="."/>&gt;</xsl:template>
 
 </xsl:stylesheet>

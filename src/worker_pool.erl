@@ -93,9 +93,11 @@ handle_call(next_free, From, State = #state { available = Avail,
                                               pending = Pending }) ->
     case queue:out(Avail) of
         {empty, _Avail} ->
-            {noreply, State #state { pending = queue:in(From, Pending) }};
+            {noreply, State #state { pending = queue:in(From, Pending) },
+             hibernate};
         {{value, WId}, Avail1} ->
-            {reply, get_worker_pid(WId), State #state { available = Avail1 }}
+            {reply, get_worker_pid(WId), State #state { available = Avail1 },
+             hibernate}
     end;
 
 handle_call(Msg, _From, State) ->
@@ -109,7 +111,7 @@ handle_cast({idle, WId}, State = #state { available = Avail,
                   {{value, From}, Pending1} ->
                       gen_server2:reply(From, get_worker_pid(WId)),
                       State #state { pending = Pending1 }
-              end};
+              end, hibernate};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
