@@ -716,8 +716,7 @@ handle_cast({set_maximum_since_use, Age}, State) ->
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
 
-handle_info({'EXIT', Pid, Reason}, State) ->
-    io:format("~p EXIT! ~p ~p ~p~n", [self(), Reason, Pid, State]),
+handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
 
 terminate(_Reason, State = #msstate { index_state         = IndexState,
