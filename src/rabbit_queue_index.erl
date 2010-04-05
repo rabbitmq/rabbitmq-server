@@ -250,7 +250,6 @@ init(Name, MsgStoreRecovered) ->
     %%    acks only go to the RAM journal as it doesn't matter if we
     %%    lose them. Also mark delivered if not clean shutdown. Also
     %%    find the number of unacked messages.
-    AllSegs = 
     CleanShutdown = detect_clean_shutdown(Dir),
     %% We know the journal is empty here, so we don't need to combine
     %% with the journal, and we don't need to worry about messages
