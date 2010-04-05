@@ -1151,8 +1151,9 @@ maybe_deltas_to_betas(
             {List, IndexState1, Delta1SeqId} =
                 read_index_segment(DeltaSeqId, IndexState),
             State1 = State #vqstate { index_state = IndexState1 },
-            %% length(List) may be < segment_size because of acks. But
-            %% it can't be []
+            %% length(List) may be < segment_size because of acks.  It
+            %% could be [] if we ignored every message in the segment
+            %% due to it being transient and below the threshold
             Q3a = betas_from_segment_entries(List, DeltaSeqIdEnd, TransientThreshold),
             Q3b = bpqueue:join(Q3, Q3a),
             case DeltaCount - bpqueue:len(Q3a) of
