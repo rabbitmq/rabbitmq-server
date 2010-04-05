@@ -18,6 +18,7 @@
          {ssl_listeners, []},
          {ssl_options, []},
          {vm_memory_high_watermark, 0.4},
+         {persister_max_wrap_entries, 500},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},
