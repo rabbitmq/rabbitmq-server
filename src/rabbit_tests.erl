@@ -1259,7 +1259,7 @@ test_queue_index() ->
     {0, 0, Qi1} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi0),
     {Qi2, SeqIdsMsgIdsA} = queue_index_publish(SeqIdsA, false, Qi1),
-    {0, SegSize, Qi3} =
+    {0, SegmentSize, Qi3} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi2),
     {ReadA, Qi4} = rabbit_queue_index:read_segment_entries(0, Qi3),
     ok = verify_read_with_published(false, false, ReadA,
@@ -1271,7 +1271,7 @@ test_queue_index() ->
     ok = start_transient_msg_store(),
     %% should get length back as 0, as all the msgs were transient
     {0, _PRef1, _TRef1, _Terms1, Qi6} = rabbit_queue_index:init(test_queue(), false),
-    {0, SegSize, Qi7} =
+    {0, 0, Qi7} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi6),
     {Qi8, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
     {0, TwoSegs, Qi9} =
