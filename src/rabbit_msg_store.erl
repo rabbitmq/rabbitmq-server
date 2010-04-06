@@ -1292,10 +1292,7 @@ build_index(Gatherer, Left, [],
                                sum_file_size = SumFileSize }) ->
     case gatherer:fetch(Gatherer) of
         finished ->
-            unlink(Gatherer),
-            receive {'EXIT', Gatherer, _} -> ok
-            after 0 -> ok
-            end,
+            ok = rabbit_misc:unlink_and_capture_exit(Gatherer),
             ok = index_delete_by_file(undefined, State),
             Offset = case ets:lookup(FileSummaryEts, Left) of
                          []                                       -> 0;

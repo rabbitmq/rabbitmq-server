@@ -460,10 +460,7 @@ queue_index_walker(DurableQueues) when is_list(DurableQueues) ->
 
 queue_index_walker({[], Gatherer}) ->
     case gatherer:fetch(Gatherer) of
-        finished                -> unlink(Gatherer),
-                                   receive {'EXIT', Gatherer, _} -> ok
-                                   after 0 -> ok
-                                   end,
+        finished                -> rabbit_misc:unlink_and_capture_exit(Gatherer),
                                    finished;
         {value, {MsgId, Count}} -> {MsgId, Count, {[], Gatherer}}
     end;
