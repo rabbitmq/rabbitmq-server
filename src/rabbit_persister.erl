@@ -49,8 +49,6 @@
 -define(LOG_BUNDLE_DELAY, 5).
 -define(COMPLETE_BUNDLE_DELAY, 2).
 
--define(HIBERNATE_AFTER, 10000).
-
 -define(PERSISTER_LOG_FORMAT_VERSION, {2, 4}).
 
 -record(pstate, {log_handle, entry_count, deadline,
@@ -305,7 +303,8 @@ compute_deadline(_TimerDelay, ExistingDeadline) ->
     ExistingDeadline.
 
 compute_timeout(infinity) ->
-    ?HIBERNATE_AFTER;
+    {ok, HibernateAfter} = application:get_env(persister_hibernate_after),
+    HibernateAfter;
 compute_timeout(Deadline) ->
     DeltaMilliSec = time_diff(Deadline, now()) * 1000.0,
     if

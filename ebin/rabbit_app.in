@@ -19,6 +19,7 @@
          {ssl_options, []},
          {vm_memory_high_watermark, 0.4},
          {persister_max_wrap_entries, 500},
+         {persister_hibernate_after, 10000},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},
