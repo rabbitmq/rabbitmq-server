@@ -777,7 +777,7 @@ next_state(State) ->
     {State, 0}.
 
 start_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
-    {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, sync, []),
+    {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, sync, [self()]),
     State #msstate { sync_timer_ref = TRef }.
 
 stop_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
