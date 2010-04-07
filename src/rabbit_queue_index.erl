@@ -267,7 +267,7 @@ init(Name, MsgStoreRecovered) ->
                               array:sparse_foldl(
                                 fun (RelSeq, {{MsgId, _IsPersistent}, Del, no_ack},
                                      Segment3) ->
-                                        {Segment4, _DCountDelta} =
+                                        Segment4 =
                                             maybe_add_to_journal(
                                               rabbit_msg_store:contains(
                                                 ?PERSISTENT_MSG_STORE, MsgId),
@@ -309,15 +309,15 @@ init(Name, MsgStoreRecovered) ->
     {Count, PRef, TRef, Terms, State3}.
 
 maybe_add_to_journal( true,  true, _Del, _RelSeq, Segment) ->
-    {Segment, 0};
+    Segment;
 maybe_add_to_journal( true, false,  del, _RelSeq, Segment) ->
-    {Segment, 0};
+    Segment;
 maybe_add_to_journal( true, false, _Del,  RelSeq, Segment) ->
-    {add_to_journal(RelSeq, del, Segment), 1};
+    add_to_journal(RelSeq, del, Segment);
 maybe_add_to_journal(false,     _,  del,  RelSeq, Segment) ->
-    {add_to_journal(RelSeq, ack, Segment), 1};
+    add_to_journal(RelSeq, ack, Segment);
 maybe_add_to_journal(false,     _, _Del,  RelSeq, Segment) ->
-    {add_to_journal(RelSeq, ack, add_to_journal(RelSeq, del, Segment)), 2}.
+    add_to_journal(RelSeq, ack, add_to_journal(RelSeq, del, Segment)).
 
 terminate(Terms, State) ->
     terminate(true, Terms, State).
