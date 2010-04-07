@@ -352,6 +352,8 @@ write_acks(SeqIds, State) ->
                                             add_to_journal(SeqId, ack, StateN)
                                     end, State1, SeqIds)).
 
+sync_seq_ids([], State) ->
+    State;
 sync_seq_ids(_SeqIds, State = #qistate { journal_handle = undefined }) ->
     State;
 sync_seq_ids(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->

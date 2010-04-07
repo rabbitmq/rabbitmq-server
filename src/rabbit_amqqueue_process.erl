@@ -894,12 +894,15 @@ handle_cast({notify_sent, ChPid}, State) ->
                                C#cr{unsent_message_count = Count - 1}
                        end));
 
-handle_cast({tx_commit_msg_store_callback, Pubs, AckTags, From},
+handle_cast({tx_commit_msg_store_callback, IsTransientPubs, Pubs, AckTags, From},
             State = #q{variable_queue_state = VQS}) ->
-    noreply(
-      State#q{variable_queue_state =
-              rabbit_variable_queue:tx_commit_from_msg_store(
-                Pubs, AckTags, From, VQS)});
+    {RunQueue, VQS1} = rabbit_variable_queue:tx_commit_from_msg_store(
+                         IsTransientPubs, Pubs, AckTags, From, VQS),
+    State1 = State#q{variable_queue_state = VQS1},
+    noreply(case RunQueue of
+                true  -> run_message_queue(State1);
+                false -> State1
+            end);
 
 handle_cast(tx_commit_vq_callback, State = #q{variable_queue_state = VQS}) ->
     noreply(

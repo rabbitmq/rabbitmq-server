@@ -35,7 +35,7 @@
          set_queue_ram_duration_target/2, remeasure_rates/1,
          ram_duration/1, fetch/1, ack/2, len/1, is_empty/1, purge/1,
          delete_and_terminate/1, requeue/2, tx_publish/2, tx_rollback/2,
-         tx_commit/4, tx_commit_from_msg_store/4, tx_commit_from_vq/1,
+         tx_commit/4, tx_commit_from_msg_store/5, tx_commit_from_vq/1,
          needs_sync/1, flush_journal/1, status/1]).
 
 %%----------------------------------------------------------------------------
@@ -241,9 +241,10 @@
 -spec(tx_publish/2 :: (basic_message(), vqstate()) -> vqstate()).
 -spec(tx_rollback/2 :: ([msg_id()], vqstate()) -> vqstate()).
 -spec(tx_commit/4 :: ([msg_id()], [ack()], {pid(), any()}, vqstate()) ->
-             {boolean(), vqstate()}).
--spec(tx_commit_from_msg_store/4 ::
-      ([msg_id()], [ack()], {pid(), any()}, vqstate()) -> vqstate()).
+                          {boolean(), vqstate()}).
+-spec(tx_commit_from_msg_store/5 ::
+        (boolean(), [msg_id()], [ack()], {pid(), any()}, vqstate()) ->
+                                         {boolean(), vqstate()}).
 -spec(tx_commit_from_vq/1 :: (vqstate()) -> vqstate()).
 -spec(needs_sync/1 :: (vqstate()) -> boolean()).
 -spec(flush_journal/1 :: (vqstate()) -> vqstate()).
@@ -454,6 +455,8 @@ fetch(State =
                               index_state = IndexState1, len = Len1 }}
     end.
 
+ack([], State) ->
+    State;
 ack(AckTags, State = #vqstate { index_state = IndexState,
                                 persistent_count = PCount,
                                 persistent_store = PersistentStore }) ->
@@ -583,45 +586,69 @@ tx_rollback(Pubs, State = #vqstate { persistent_store = PersistentStore }) ->
          end,
     State.
 
-tx_commit(Pubs, AckTags, From, State = #vqstate { persistent_store = PersistentStore }) ->
-    case persistent_msg_ids(Pubs) of
-        [] ->
-            {true, tx_commit_from_msg_store(Pubs, AckTags, From, State)};
-        PersistentMsgIds ->
+tx_commit(Pubs, AckTags, From, State =
+              #vqstate { persistent_store = PersistentStore }) ->
+    %% If we are a non-durable queue, or we have no persistent pubs,
+    %% we can skip the msg_store loop.
+    PersistentMsgIds = persistent_msg_ids(Pubs),
+    IsTransientPubs = [] == PersistentMsgIds,
+    case IsTransientPubs orelse
+        ?TRANSIENT_MSG_STORE == PersistentStore of
+        true ->
+            tx_commit_from_msg_store(
+              IsTransientPubs, Pubs, AckTags, From, State);
+        false ->
             Self = self(),
             ok = rabbit_msg_store:sync(
-                   PersistentStore, PersistentMsgIds,
+                   ?PERSISTENT_MSG_STORE, PersistentMsgIds,
                    fun () -> ok = rabbit_amqqueue:tx_commit_msg_store_callback(
-                                    Self, Pubs, AckTags, From)
+                                    Self, IsTransientPubs, Pubs, AckTags, From)
                    end),
             {false, State}
     end.
 
-tx_commit_from_msg_store(Pubs, AckTags, From,
-                         State = #vqstate { on_sync = {SAcks, SPubs, SFroms} }) ->
+tx_commit_from_msg_store(IsTransientPubs, Pubs, AckTags, From, State =
+                             #vqstate { on_sync = OnSync = {SAcks, SPubs, SFroms},
+                                        persistent_store = PersistentStore }) ->
+    %% If we are a non-durable queue, or (no persisent pubs, and no
+    %% persistent acks) then we can skip the queue_index loop.
     DiskAcks =
         lists:filter(fun (AckTag) -> AckTag /= ack_not_on_disk end, AckTags),
-    State #vqstate { on_sync = { [DiskAcks | SAcks],
-                                 [Pubs | SPubs],
-                                 [From | SFroms] }}.
+    case PersistentStore == ?TRANSIENT_MSG_STORE orelse
+        (IsTransientPubs andalso [] == DiskAcks) of
+        true  -> State1 = tx_commit_from_vq(State #vqstate {
+                                              on_sync = {[], [Pubs], [From]} }),
+                 {true, State1 #vqstate { on_sync = OnSync }};
+        false -> {false, State #vqstate { on_sync = { [DiskAcks | SAcks],
+                                                      [Pubs | SPubs],
+                                                      [From | SFroms] }}}
+    end.
 
 tx_commit_from_vq(State = #vqstate { on_sync = {_, _, []} }) ->
     State;
-tx_commit_from_vq(State = #vqstate { on_sync = {SAcks, SPubs, SFroms} }) ->
-    State1 = ack(lists:flatten(SAcks), State),
-    {PubSeqIds, State2 = #vqstate { index_state = IndexState }} =
+tx_commit_from_vq(State = #vqstate { on_sync = {SAcks, SPubs, SFroms},
+                                     persistent_store = PersistentStore }) ->
+    Acks = lists:flatten(SAcks),
+    State1 = ack(Acks, State),
+    AckSeqIds = lists:foldl(fun ({ack_index_and_store, _MsgId,
+                                  SeqId, ?PERSISTENT_MSG_STORE}, SeqIdsAcc) ->
+                                    [SeqId | SeqIdsAcc];
+                                (_, SeqIdsAcc) ->
+                                    SeqIdsAcc
+                            end, [], Acks),
+    IsPersistentStore = ?PERSISTENT_MSG_STORE == PersistentStore,
+    {SeqIds, State2 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun (Msg = #basic_message { is_persistent = IsPersistent },
                {SeqIdsAcc, StateN}) ->
                   {SeqId, StateN1} = publish(Msg, false, IsPersistent, StateN),
-                  SeqIdsAcc1 = case IsPersistent of
-                                   true -> [SeqId | SeqIdsAcc];
-                                   false -> SeqIdsAcc
-                               end,
-                  {SeqIdsAcc1, StateN1}
-          end, {[], State1}, lists:flatten(lists:reverse(SPubs))),
+                  {case IsPersistentStore andalso IsPersistent of
+                       true  -> [SeqId | SeqIdsAcc];
+                       false -> SeqIdsAcc
+                   end, StateN1}
+          end, {AckSeqIds, State1}, lists:flatten(lists:reverse(SPubs))),
     IndexState1 =
-        rabbit_queue_index:sync_seq_ids(PubSeqIds, IndexState),
+        rabbit_queue_index:sync_seq_ids(SeqIds, IndexState),
     [ gen_server2:reply(From, ok) || From <- lists:reverse(SFroms) ],
     State2 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }.
 
