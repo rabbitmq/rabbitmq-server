@@ -23,10 +23,11 @@ main([IncludeDir, ErlDir, EbinDir, TargetFile]) ->
               ok;
           (Path, Dep, ok) ->
               Module = filename:basename(Path, ".erl"),
-              ok = file:write(Hdl, [EbinDir, "/", Module, ".beam:"]),
+              ok = file:write(Hdl, [EbinDir, "/", Module, ".beam: ",
+                                   Path]),
               ok = sets:fold(fun (E, ok) -> file:write(Hdl, [" ", E]) end,
                              ok, Dep),
-              file:write(Hdl, [" ", ErlDir, "/", Module, ".erl\n"])
+              file:write(Hdl, ["\n"])
       end, ok, Deps),
     ok = file:write(Hdl, [TargetFile, ": ", escript:script_name(), "\n"]),
     ok = file:sync(Hdl),

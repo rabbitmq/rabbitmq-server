@@ -12,6 +12,7 @@ Source3: rabbitmq-server.logrotate
 Source4: rabbitmq-asroot-script-wrapper
 Source5: rabbitmq-server.ocf
 URL: http://www.rabbitmq.com/
+BuildArch: noarch
 BuildRequires: erlang, python-simplejson
 Requires: erlang, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
@@ -24,8 +25,9 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
-%define _rabbit_erllibdir %{_libdir}/rabbitmq/lib/rabbitmq_server-%{version}
-%define _rabbit_libdir %{_libdir}/rabbitmq
+# We want to install into /usr/lib, even on 64-bit platforms
+%define _rabbit_libdir %{_exec_prefix}/lib/rabbitmq
+%define _rabbit_erllibdir %{_rabbit_libdir}/lib/rabbitmq_server-%{version}
 %define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
 %define _rabbit_asroot_wrapper %{_builddir}/`basename %{S:4}`
 %define _rabbit_server_ocf %{_builddir}/`basename %{S:5}`
@@ -37,9 +39,7 @@ scalable implementation of an AMQP broker.
 
 %build
 cp %{S:2} %{_rabbit_wrapper}
-sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
 cp %{S:4} %{_rabbit_asroot_wrapper}
-sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_asroot_wrapper}
 cp %{S:5} %{_rabbit_server_ocf}
 make %{?_smp_mflags}
 

@@ -1,0 +1,1042 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.docbook.org/xml/4.5/docbookx.dtd">
+<!-- 
+ There is some extra magic in this document besides the usual DocBook semantics
+ to allow us to derive manpages, HTML and usage messages from the same source 
+ document.
+
+ Examples need to be moved to the end for man pages. To this end, <para>s and
+ <screen>s with role="example" will be moved, and with role="example-prefix" 
+ will be removed.
+
+ The usage messages are more involved. We have some magic in usage.xsl to pull
+ out the command synopsis, global option and subcommand synopses. We also pull
+ out <para>s with role="usage".
+
+ Finally we construct lists of possible values for subcommand options, if the 
+ subcommand's <varlistentry> has role="usage-has-option-list". The option which
+ takes the values should be marked with role="usage-option-list".
+-->
+
+<refentry lang="en">
+  <refentryinfo>
+    <productname>RabbitMQ Server</productname>
+    <authorgroup>
+      <corpauthor>The RabbitMQ Team &lt;<ulink url="mailto:info@rabbitmq.com"><email>info@rabbitmq.com</email></ulink>&gt;</corpauthor>
+    </authorgroup>
+  </refentryinfo>
+
+  <refmeta>
+    <refentrytitle>rabbitmqctl</refentrytitle>
+    <manvolnum>1</manvolnum>
+    <refmiscinfo class="manual">RabbitMQ Service</refmiscinfo>
+  </refmeta>
+
+  <refnamediv>
+    <refname>rabbitmqctl</refname>
+    <refpurpose>command line tool for managing a RabbitMQ broker</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <cmdsynopsis>
+      <command>rabbitmqctl</command>
+      <arg choice="opt">-n <replaceable>node</replaceable></arg>
+      <arg choice="opt">-q</arg>
+      <arg choice="req"><replaceable>command</replaceable></arg>
+      <arg choice="opt" rep="repeat"><replaceable>command options</replaceable></arg>
+    </cmdsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Description</title>
+    <para>
+      RabbitMQ is an implementation of AMQP, the emerging standard for high
+      performance enterprise messaging. The RabbitMQ server is a robust and
+      scalable implementation of an AMQP broker.
+    </para>
+    <para>
+      <command>rabbitmqctl</command> is a command line tool for managing a
+      RabbitMQ broker. It performs all actions by connecting to one of the
+      broker's nodes.
+    </para>
+  </refsect1>
+
+  <refsect1>
+    <title>Options</title>
+    <variablelist>
+      <varlistentry>
+        <term><cmdsynopsis><arg choice="opt">-n <replaceable>node</replaceable></arg></cmdsynopsis></term>
+        <listitem>
+          <para role="usage">
+            Default node is "rabbit@server", where server is the local host.  On
+            a host named "server.example.com", the node name of the RabbitMQ
+            Erlang node will usually be rabbit@server (unless RABBITMQ_NODENAME
+            has been set to some non-default value at broker startup time).  The
+            output of <command>hostname -s</command> is usually the correct suffix to use after the
+            "@" sign. See rabbitmq-server(1) for details of configuring the
+            RabbitMQ broker.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><cmdsynopsis><arg choice="opt">-q</arg></cmdsynopsis></term>
+        <listitem>
+          <para role="usage">
+            Quiet output mode is selected with the "-q" flag. Informational
+            messages are suppressed when quiet mode is in effect.
+          </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+    <para>
+      Flags must precede all other parameters to <command>rabbitmqctl</command>.
+    </para>
+  </refsect1>
+
+  <refsect1>
+    <title>Commands</title>
+
+    <refsect2>
+      <title>Application and Cluster Management</title>
+
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>stop</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Stops the Erlang node on which RabbitMQ is running. To
+              restart the node follow the instructions for <citetitle>Running
+              the Server</citetitle> in the <ulink url="http://www.rabbitmq.com/install.html">installation
+              guide</ulink>.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl stop</screen>
+            <para role="example">
+              This command instructs the RabbitMQ node to terminate.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry id="stop_app">
+          <term><cmdsynopsis><command>stop_app</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Stops the RabbitMQ application, leaving the Erlang node
+              running.
+            </para>
+            <para>
+              This command is typically run prior to performing other
+              management actions that require the RabbitMQ application
+              to be stopped, e.g. <link
+                    linkend="reset"><command>reset</command></link>.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl stop_app</screen>
+            <para role="example">
+              This command instructs the RabbitMQ node to stop the
+              RabbitMQ application.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>start_app</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Starts the RabbitMQ application.
+            </para>
+            <para>
+              This command is typically run after performing other
+              management actions that required the RabbitMQ application
+              to be stopped, e.g. <link
+                    linkend="reset"><command>reset</command></link>.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl start_app</screen>
+            <para role="example">
+              This command instructs the RabbitMQ node to start the
+              RabbitMQ application.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Displays various information about the RabbitMQ broker,
+              such as whether the RabbitMQ application on the current
+              node, its version number, what nodes are part of the
+              broker, which of these are running.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl status</screen>
+            <para role="example">
+              This command displays information about the RabbitMQ
+              broker.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry id="reset">
+          <term><cmdsynopsis><command>reset</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Return a RabbitMQ node to its virgin state.
+            </para>
+            <para>
+              Removes the node from any cluster it belongs to, removes
+              all data from the management database, such as configured
+              users and vhosts, and deletes all persistent
+              messages.
+            </para>
+            <para>
+              For <command>reset</command> and <command>force_reset</command> to
+              succeed the RabbitMQ application must have been stopped,
+              e.g. with <link linkend="stop_app"><command>stop_app</command></link>.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl reset</screen>
+            <para role="example">
+              This command resets the RabbitMQ node.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>force_reset</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Forcefully return a RabbitMQ node to its virgin state.
+            </para>
+            <para>
+              The <command>force_reset</command> command differs from
+              <command>reset</command> in that it resets the node
+              unconditionally, regardless of the current management
+              database state and cluster configuration. It should only
+              be used as a last resort if the database or cluster
+              configuration has been corrupted.
+            </para>
+            <para>
+              For <command>reset</command> and <command>force_reset</command> to
+              succeed the RabbitMQ application must have been stopped,
+              e.g. with <link linkend="stop_app"><command>stop_app</command></link>.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl force_reset</screen>
+            <para role="example">
+              This command resets the RabbitMQ node.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>rotate_logs</command> <arg choice="req"><replaceable>suffix</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Instruct the RabbitMQ node to rotate the log files.
+            </para>
+            <para>
+              The RabbitMQ broker will attempt to append the current contents
+              of the log file to the file with name composed of the original
+              name and the suffix.
+              It will create a new file if such a file does not already exist.
+              When no <option>suffix</option> is specified, the empty log file is
+              simply created at the original location; no rotation takes place.
+            </para>
+            <para>
+              When an error occurs while appending the contents of the old log
+              file, the operation behaves in the same way as if no <option>suffix</option> was
+              specified.
+            </para>
+            <para>
+              This command might be helpful when you are e.g. writing your
+              own logrotate script and you do not want to restart the RabbitMQ
+              node.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl rotate_logs .1</screen>
+            <para role="example">
+              This command instructs the RabbitMQ node to append the current content
+              of the log files to the files with names consisting of the original logs'
+              names and ".1" suffix, e.g. rabbit.log.1. Finally, the old log files are reopened.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Cluster management</title>
+
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>cluster</command> <arg choice="req"><replaceable>clusternode</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>clusternode</term>
+                <listitem><para>Subset of the nodes of the cluster to which this node should be connected.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instruct the node to become member of a cluster with the
+              specified nodes.
+            </para>
+            <para>
+              Cluster nodes can be of two types: disk or ram. Disk nodes
+              replicate data in ram and on disk, thus providing
+              redundancy in the event of node failure and recovery from
+              global events such as power failure across all nodes. Ram
+              nodes replicate data in ram only and are mainly used for
+              scalability. A cluster must always have at least one disk node.
+            </para>
+            <para>
+              If the current node is to become a disk node it needs to
+              appear in the cluster node list. Otherwise it becomes a
+              ram node. If the node list is empty or only contains the
+              current node then the node becomes a standalone,
+              i.e. non-clustered, (disk) node.
+            </para>
+            <para>
+              After executing the <command>cluster</command> command, whenever
+              the RabbitMQ application is started on the current node it
+              will attempt to connect to the specified nodes, thus
+              becoming an active node in the cluster comprising those
+              nodes (and possibly others).
+            </para>
+            <para>
+              The list of nodes does not have to contain all the
+              cluster's nodes; a subset is sufficient. Also, clustering
+              generally succeeds as long as at least one of the
+              specified nodes is active. Hence adjustments to the list
+              are only necessary if the cluster configuration is to be
+              altered radically.
+            </para>
+            <para>
+              For this command to succeed the RabbitMQ application must
+              have been stopped, e.g. with <link linkend="stop_app"><command>stop_app</command></link>. Furthermore,
+              turning a standalone node into a clustered node requires
+              the node be <link linkend="reset"><command>reset</command></link> first,
+              in order to avoid accidental destruction of data with the
+              <command>cluster</command> command.
+            </para>
+            <para>
+              For more details see the <ulink url="http://www.rabbitmq.com/clustering.html">clustering guide</ulink>.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl cluster rabbit@tanto hare@elena</screen>
+            <para role="example">
+              This command instructs the RabbitMQ node to join the
+              cluster with nodes <command>rabbit@tanto</command> and
+              <command>hare@elena</command>. If the node is one of these then
+              it becomes a disk node, otherwise a ram node.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Closing individual connections</title>
+
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>close_connection</command> <arg choice="req"><replaceable>connectionpid</replaceable></arg> <arg choice="req"><replaceable>explanation</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>connectionpid</term>
+                <listitem><para>Id of the Erlang process associated with the connection to close.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>explanation</term>
+                <listitem><para>Explanation string.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instruct the broker to close the connection associated
+              with the Erlang process id <option>connectionpid</option> (see also the
+              <link linkend="list_connections"><command>list_connections</command></link>
+              command), passing the <option>explanation</option> string to the
+              connected client as part of the AMQP connection shutdown
+              protocol.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl close_connection "&lt;rabbit@tanto.4262.0&gt;" "go away"</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to close the
+              connection associated with the Erlang process
+              id <command>&lt;rabbit@tanto.4262.0&gt;</command>, passing the
+              explanation <command>go away</command> to the connected client.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>User management</title>
+
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>add_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user to create.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>password</term>
+                <listitem><para>The password the created user will use to log in to the broker.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl add_user tonyg changeit</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to create a
+              user named <command>tonyg</command> with (initial) password
+              <command>changeit</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>delete_user</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user to delete.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl delete_user tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to delete the
+              user named <command>tonyg</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>change_password</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>newpassword</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user whose password is to be changed.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>newpassword</term>
+                <listitem><para>The new password for the user.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl change_password tonyg newpass</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to change the
+              password for the user named <command>tonyg</command> to
+              <command>newpass</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>list_users</command></cmdsynopsis></term>
+          <listitem>
+            <para>Lists users</para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_users</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to list all users.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Access control</title>
+
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>add_vhost</command> <arg choice="req"><replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>vhostpath</term>
+                <listitem><para>The name of the virtual host entry to create.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Creates a virtual host.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl add_vhost test</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to create a new
+              virtual host called <command>test</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>delete_vhost</command> <arg choice="req"><replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>vhostpath</term>
+                <listitem><para>The name of the virtual host entry to delete.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Deletes a virtual host.
+            </para>
+            <para>
+              Deleting a virtual host deletes all its exchanges,
+              queues, user mappings and associated permissions.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl delete_vhost test</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to delete the
+              virtual host called <command>test</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>list_vhosts</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Lists virtual hosts.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_vhosts</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to list all
+              virtual hosts.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>configure</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>vhostpath</term>
+                <listitem><para>The name of the virtual host to which to grant the user access, defaulting to <command>/</command>.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user to grant access to the specified virtual host.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>configure</term>
+                <listitem><para>A regular expression matching resource names for which the user is granted configure permissions.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>write</term>
+                <listitem><para>A regular expression matching resource names for which the user is granted write permissions.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>read</term>
+                <listitem><para>A regular expression matching resource names for which the user is granted read permissions.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Sets user permissions.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_permissions -p /myvhost tonyg "^tonyg-.*" ".*" ".*"</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to grant the
+              user named <command>tonyg</command> access to the virtual host
+              called <command>/myvhost</command>, with configure permissions
+              on all resources whose names starts with "tonyg-", and
+              write and read permissions on all resources.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>clear_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>vhostpath</term>
+                <listitem><para>The name of the virtual host to which to deny the user access, defaulting to <command>/</command>.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user to deny access to the specified virtual host.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Sets user permissions.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_permissions -p /myvhost tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to deny the
+              user named <command>tonyg</command> access to the virtual host
+              called <command>/myvhost</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>list_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>vhostpath</term>
+                <listitem><para>The name of the virtual host for which to list the users that have been granted access to it, and their permissions. Defaults to <command>/</command>.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Lists permissions in a virtual host.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_permissions -p /myvhost</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to list all the
+              users which have been granted access to the virtual host
+              called <command>/myvhost</command>, and the permissions they
+              have for operations on resources in that virtual host.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>list_user_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user for which to list the permissions.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Lists user permissions.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_user_permissions tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to list all the
+              virtual hosts to which the user named <command>tonyg</command>
+              has been granted access, and the permissions the user has
+              for operations on resources in these virtual hosts.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Server Status</title>
+      <para>
+        The server status queries interrogate the server and return a list of
+        results with tab-delimited columns. Some queries (<command>list_queues</command>,
+        <command>list_exchanges</command>, <command>list_bindings</command>, and
+        <command>list_consumers</command>) accept an
+        optional <command>vhost</command> parameter. This parameter, if present,  must be
+        specified immediately after the query.
+      </para>
+      <para role="usage">
+        The list_queues, list_exchanges and list_bindings commands accept an
+        optional virtual host parameter for which to display results. The
+        default value is "/".
+      </para>
+
+      <variablelist>
+        <varlistentry role="usage-has-option-list">
+          <term><cmdsynopsis><command>list_queues</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>queueinfoitem</replaceable> ...</arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Returns queue details. Queue details of the <command>/</command> virtual host
+              are returned if the "-p" flag is absent. The "-p" flag can be used to
+              override this default.
+            </para>
+            <para>
+              The <command>queueinfoitem</command> parameter is used to indicate which queue
+              information items to include in the results. The column order in the
+              results will match the order of the parameters. 
+              <command>queueinfoitem</command> can take any value from the list
+              that follows:
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>The name of the queue with non-ASCII characters URL-escaped.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>durable</term>
+                <listitem><para>Whether or not the queue survives server restarts.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>auto_delete</term>
+                <listitem><para>Whether the queue will be deleted automatically when no longer used.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>arguments</term>
+                <listitem><para>Queue arguments.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>pid</term>
+                <listitem><para>Id of the Erlang process associated with the queue.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>owner_pid</term>
+                <listitem><para>Id of the Erlang process representing the connection
+                  which is the exclusive owner of the queue. Empty if the
+                  queue is non-exclusive.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>exclusive_consumer_pid</term>
+                <listitem><para>Id of the Erlang process representing the channel of the
+                  exclusive consumer subscribed to this queue. Empty if
+                  there is no exclusive consumer.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>exclusive_consumer_tag</term>
+                <listitem><para>Consumer tag of the exclusive consumer subscribed to
+                  this queue. Empty if there is no exclusive consumer.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_ready</term>
+                <listitem><para>Number of messages ready to be delivered to clients.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_unacknowledged</term>
+                <listitem><para>Number of messages delivered to clients but not yet acknowledged.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_uncommitted</term>
+                <listitem><para>Number of messages published in as yet uncommitted transactions</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages</term>
+                <listitem><para>Sum of ready, unacknowledged and uncommitted messages
+                  (queue depth).</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>acks_uncommitted</term>
+                <listitem><para>Number of acknowledgements received in as yet uncommitted
+                  transactions.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>consumers</term>
+                <listitem><para>Number of consumers.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>transactions</term>
+                <listitem><para>Number of transactions.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>memory</term>
+                <listitem><para>Bytes of memory consumed by the Erlang process associated with the
+                  queue, including stack, heap and internal structures.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              If no <command>queueinfoitem</command>s are specified then queue name and depth are
+              displayed.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl list_queues -p /myvhost messages consumers</screen>
+            <para role="example">
+              This command displays the depth and number of consumers for each
+              queue of the virtual host named <command>/myvhost</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry role="usage-has-option-list">
+          <term><cmdsynopsis><command>list_exchanges</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>exchangeinfoitem</replaceable> ...</arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Returns exchange details. Exchange details of the <command>/</command> virtual host
+              are returned if the "-p" flag is absent. The "-p" flag can be used to
+              override this default.
+            </para>
+            <para>
+              The <command>exchangeinfoitem</command> parameter is used to indicate which
+              exchange information items to include in the results. The column order in the
+              results will match the order of the parameters. 
+              <command>exchangeinfoitem</command> can take any value from the list
+              that follows:
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>The name of the exchange with non-ASCII characters URL-escaped.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>type</term>
+                <listitem><para>The exchange type (one of [<command>direct</command>,
+                  <command>topic</command>, <command>headers</command>,
+                  <command>fanout</command>]).</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>durable</term>
+                <listitem><para>Whether or not the exchange survives server restarts.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>auto_delete</term>
+                <listitem><para>Whether the exchange will be deleted automatically when no longer used.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>arguments</term>
+                <listitem><para>Exchange arguments.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              If no <command>exchangeinfoitem</command>s are specified then 
+              exchange name and type are displayed.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl list_exchanges -p /myvhost name type</screen>
+            <para role="example">
+              This command displays the name and type for each
+              exchange of the virtual host named <command>/myvhost</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>list_bindings</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              By default the bindings for the <command>/</command> virtual
+              host are returned. The "-p" flag can be used to override
+              this default.  Each result row will contain an exchange
+              name, queue name, routing key and binding arguments, in
+              that order. Non-ASCII characters will be URL-encoded.
+            </para>
+            <para role="usage">
+              The output format for "list_bindings" is a list of rows containing
+              exchange name, queue name, routing key and arguments, in that order.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry id="list_connections" role="usage-has-option-list">
+          <term><cmdsynopsis><command>list_connections</command> <arg choice="opt" role="usage-option-list"><replaceable>connectioninfoitem</replaceable> ...</arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Returns TCP/IP connection statistics.
+            </para>
+            <para>
+              The <command>connectioninfoitem</command> parameter is used to indicate
+              which connection information items to include in the results. The
+              column order in the results will match the order of the parameters. 
+              <command>connectioninfoitem</command> can take any value from the list
+              that follows:
+            </para>
+
+            <variablelist>
+              <varlistentry>
+                <term>pid</term>
+                <listitem><para>Id of the Erlang process associated with the connection.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>address</term>
+                <listitem><para>Server IP address.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>port</term>
+                <listitem><para>Server port.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>peer_address</term>
+                <listitem><para>Peer address.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>peer_port</term>
+                <listitem><para>Peer port.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>state</term>
+                <listitem><para>Connection state (one of [<command>starting</command>, <command>tuning</command>,
+                  <command>opening</command>, <command>running</command>, <command>closing</command>, <command>closed</command>]).</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>channels</term>
+                <listitem><para>Number of channels using the connection.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>user</term>
+                <listitem><para>Username associated with the connection.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>vhost</term>
+                <listitem><para>Virtual host name with non-ASCII characters URL-escaped.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>timeout</term>
+                <listitem><para>Connection timeout.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>frame_max</term>
+                <listitem><para>Maximum frame size (bytes).</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>client_properties</term>
+                <listitem><para>Informational properties transmitted by the client
+                  during connection establishment.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>recv_oct</term>
+                <listitem><para>Octets received.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>recv_cnt</term>
+                <listitem><para>Packets received.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>send_oct</term>
+                <listitem><para>Octets send.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>send_cnt</term>
+                <listitem><para>Packets sent.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>send_pend</term>
+                <listitem><para>Send queue size.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              If no <command>connectioninfoitem</command>s are specified then  user, peer
+              address, peer port and connection state are displayed.
+            </para>
+
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl list_connections send_pend server_port</screen>
+            <para role="example">
+              This command displays the send queue size and server port for each
+              connection.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry role="usage-has-option-list">
+          <term><cmdsynopsis><command>list_channels</command> <arg choice="opt" role="usage-option-list"><replaceable>channelinfoitem</replaceable> ...</arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Returns information on all current channels, the logical
+              containers executing most AMQP commands. This includes
+              channels that are part of ordinary AMQP connections, and
+              channels created by various plug-ins and other extensions.
+            </para>
+            <para>
+              The <command>channelinfoitem</command> parameter is used to
+              indicate which channel information items to include in the
+              results. The column order in the results will match the
+              order of the parameters. 
+              <command>channelinfoitem</command> can take any value from the list
+              that follows:
+            </para>
+
+            <variablelist>
+              <varlistentry>
+                <term>pid</term>
+                <listitem><para>Id of the Erlang process associated with the connection.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>connection</term>
+                <listitem><para>Id of the Erlang process associated with the connection
+                  to which the channel belongs.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>number</term>
+                <listitem><para>The number of the channel, which uniquely identifies it within
+                  a connection.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>user</term>
+                <listitem><para>Username associated with the channel.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>vhost</term>
+                <listitem><para>Virtual host in which the channel operates.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>transactional</term>
+                <listitem><para>True if the channel is in transactional mode, false otherwise.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>consumer_count</term>
+                <listitem><para>Number of logical AMQP consumers retrieving messages via
+                  the channel.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_unacknowledged</term>
+                <listitem><para>Number of messages delivered via this channel but not
+                  yet acknowledged.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>acks_uncommitted</term>
+                <listitem><para>Number of acknowledgements received in an as yet
+                  uncommitted transaction.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>prefetch_count</term>
+                <listitem><para>QoS prefetch count limit in force, 0 if unlimited.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              If no <command>channelinfoitem</command>s are specified then pid,
+              user, transactional, consumer_count, and
+              messages_unacknowledged are assumed.
+            </para>
+
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl list_channels connection messages_unacknowledged</screen>
+            <para role="example">
+              This command displays the connection process and count
+              of unacknowledged messages for each channel.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>list_consumers</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              List consumers, i.e. subscriptions to a queue's message
+              stream. Each line printed shows, separated by tab
+              characters, the name of the queue subscribed to, the id of
+              the channel process via which the subscription was created
+              and is managed, the consumer tag which uniquely identifies
+              the subscription within a channel, and a boolean
+              indicating whether acknowledgements are expected for
+              messages delivered to this consumer.
+            </para>
+            <para role="usage">
+              The output format for "list_consumers" is a list of rows containing,
+              in order, the queue name, channel process id, consumer tag, and a
+              boolean indicating whether acknowledgements are expected from the
+              consumer.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+  </refsect1>
+
+</refentry>
