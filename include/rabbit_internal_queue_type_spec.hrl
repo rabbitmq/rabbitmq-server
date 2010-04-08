@@ -31,25 +31,25 @@
 
 -spec(init/2 :: (queue_name(), pid() | atom()) -> state()).
 -spec(terminate/1 :: (state()) -> state()).
+-spec(delete_and_terminate/1 :: (state()) -> state()).
+-spec(purge/1 :: (state()) -> {non_neg_integer(), state()}).
 -spec(publish/2 :: (basic_message(), state()) -> state()).
 -spec(publish_delivered/2 :: (basic_message(), state()) -> {ack(), state()}).
--spec(set_queue_duration_target/2 ::
-      (('undefined' | 'infinity' | number()), state()) -> state()).
--spec(remeasure_rates/1 :: (state()) -> state()).
--spec(queue_duration/1 :: (state()) -> number()).
 -spec(fetch/1 :: (state()) ->
              {('empty'|{basic_message(), boolean(), ack(), non_neg_integer()}),
               state()}).
 -spec(ack/2 :: ([ack()], state()) -> state()).
--spec(len/1 :: (state()) -> non_neg_integer()).
--spec(is_empty/1 :: (state()) -> boolean()).
--spec(purge/1 :: (state()) -> {non_neg_integer(), state()}).
--spec(delete_and_terminate/1 :: (state()) -> state()).
--spec(requeue/2 :: ([{basic_message(), ack()}], state()) -> state()).
 -spec(tx_publish/2 :: (basic_message(), state()) -> state()).
 -spec(tx_rollback/2 :: ([msg_id()], state()) -> state()).
 -spec(tx_commit/4 :: ([msg_id()], [ack()], {pid(), any()}, state()) ->
                           {boolean(), state()}).
+-spec(requeue/2 :: ([{basic_message(), ack()}], state()) -> state()).
+-spec(len/1 :: (state()) -> non_neg_integer()).
+-spec(is_empty/1 :: (state()) -> boolean()).
+-spec(set_queue_duration_target/2 ::
+      (('undefined' | 'infinity' | number()), state()) -> state()).
+-spec(remeasure_rates/1 :: (state()) -> state()).
+-spec(queue_duration/1 :: (state()) -> number()).
 -spec(needs_sync/1 :: (state()) -> ('undefined' | {atom(), [any()]})).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
