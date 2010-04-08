@@ -133,6 +133,8 @@
 
 %%----------------------------------------------------------------------------
 
+-behaviour(rabbit_internal_queue_type).
+
 -record(vqstate,
         { q1,
           q2,
@@ -162,7 +164,6 @@
         }).
 
 -include("rabbit.hrl").
--include("rabbit_queue.hrl").
 
 -record(msg_status,
         { msg,
@@ -172,6 +173,12 @@
           is_delivered,
           msg_on_disk,
           index_on_disk
+        }).
+
+-record(delta,
+        { start_seq_id,
+          count,
+          end_seq_id %% note the end_seq_id is always >, not >=
         }).
 
 %% When we discover, on publish, that we should write some indices to
@@ -187,12 +194,17 @@
 
 -ifdef(use_specs).
 
+-type(msg_id() :: binary()).
 -type(bpqueue() :: any()).
--type(msg_id()  :: binary()).
 -type(seq_id()  :: non_neg_integer()).
 -type(ack()     :: {'ack_index_and_store', msg_id(), seq_id(), atom() | pid()}
                  | 'ack_not_on_disk').
--type(vqstate() :: #vqstate {
+
+-type(delta() :: #delta { start_seq_id :: non_neg_integer(),
+                          count :: non_neg_integer (),
+                          end_seq_id :: non_neg_integer() }).
+
+-type(state() :: #vqstate {
                q1                    :: queue(),
                q2                    :: bpqueue(),
                delta                 :: delta(),
@@ -220,36 +232,12 @@
                transient_threshold   :: non_neg_integer()
               }).
 
--spec(init/2 :: (queue_name(), pid() | atom()) -> vqstate()).
--spec(terminate/1 :: (vqstate()) -> vqstate()).
--spec(publish/2 :: (basic_message(), vqstate()) ->
-             {seq_id(), vqstate()}).
--spec(publish_delivered/2 :: (basic_message(), vqstate()) ->
-             {ack(), vqstate()}).
--spec(set_queue_ram_duration_target/2 ::
-      (('undefined' | 'infinity' | number()), vqstate()) -> vqstate()).
--spec(remeasure_rates/1 :: (vqstate()) -> vqstate()).
--spec(ram_duration/1 :: (vqstate()) -> number()).
--spec(fetch/1 :: (vqstate()) ->
-             {('empty'|{basic_message(), boolean(), ack(), non_neg_integer()}),
-              vqstate()}).
--spec(ack/2 :: ([ack()], vqstate()) -> vqstate()).
--spec(len/1 :: (vqstate()) -> non_neg_integer()).
--spec(is_empty/1 :: (vqstate()) -> boolean()).
--spec(purge/1 :: (vqstate()) -> {non_neg_integer(), vqstate()}).
--spec(delete_and_terminate/1 :: (vqstate()) -> vqstate()).
--spec(requeue/2 :: ([{basic_message(), ack()}], vqstate()) -> vqstate()).
--spec(tx_publish/2 :: (basic_message(), vqstate()) -> vqstate()).
--spec(tx_rollback/2 :: ([msg_id()], vqstate()) -> vqstate()).
--spec(tx_commit/4 :: ([msg_id()], [ack()], {pid(), any()}, vqstate()) ->
-                          {boolean(), vqstate()}).
 -spec(tx_commit_post_msg_store/5 ::
-        (boolean(), [msg_id()], [ack()], {pid(), any()}, vqstate()) ->
-                                         {boolean(), vqstate()}).
--spec(tx_commit_index/1 :: (vqstate()) -> {boolean(), vqstate()}).
--spec(needs_sync/1 :: (vqstate()) -> ('undefined' | {atom(), [any()]})).
--spec(handle_pre_hibernate/1 :: (vqstate()) -> vqstate()).
--spec(status/1 :: (vqstate()) -> [{atom(), any()}]).
+        (boolean(), [msg_id()], [ack()], {pid(), any()}, state()) ->
+                                         {boolean(), state()}).
+-spec(tx_commit_index/1 :: (state()) -> {boolean(), state()}).
+
+-include("rabbit_internal_queue_type_spec.hrl").
 
 -endif.
 
@@ -321,7 +309,8 @@ terminate(State = #vqstate {
 
 publish(Msg, State) ->
     State1 = limit_ram_index(State),
-    publish(Msg, false, false, State1).
+    {_SeqId, State2} = publish(Msg, false, false, State1),
+    State2.
 
 publish_delivered(Msg = #basic_message { guid = MsgId,
                                          is_persistent = IsPersistent },
@@ -553,7 +542,8 @@ requeue(MsgsWithAckTags, State) ->
                                rabbit_misc:dict_cons(MsgStore, MsgId, Dict),
                                true}
                       end,
-                  {_SeqId, StateN1} = publish(Msg, true, MsgOnDisk, StateN),
+                  {_SeqId, StateN1} =
+                      publish(Msg, true, MsgOnDisk, StateN),
                   {SeqIdsAcc1, Dict1, StateN1}
           end, {[], dict:new(), State}, MsgsWithAckTags),
     IndexState1 =
@@ -648,7 +638,8 @@ tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFroms},
         lists:foldl(
           fun (Msg = #basic_message { is_persistent = IsPersistent },
                {SeqIdsAcc, StateN}) ->
-                  {SeqId, StateN1} = publish(Msg, false, IsPersistent, StateN),
+                  {SeqId, StateN1} =
+                      publish(Msg, false, IsPersistent, StateN),
                   {case IsPersistentStore andalso IsPersistent of
                        true  -> [SeqId | SeqIdsAcc];
                        false -> SeqIdsAcc

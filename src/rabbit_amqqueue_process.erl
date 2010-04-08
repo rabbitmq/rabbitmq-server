@@ -114,11 +114,14 @@ init(Q) ->
            rabbit_amqqueue, set_maximum_since_use, [self()]),
     ok = rabbit_memory_monitor:register
            (self(), {rabbit_amqqueue, set_queue_duration, [self()]}),
+    {ok, InternalQueueModule} =
+        application:get_env(queue_internal_queue_module),
+
     {ok, #q{q = Q,
             owner = none,
             exclusive_consumer = none,
             has_had_consumers = false,
-            internal_queue = rabbit_variable_queue,
+            internal_queue = InternalQueueModule,
             internal_queue_state = undefined,
             internal_queue_timeout_fun = undefined,
             next_msg_id = 1,
@@ -387,7 +390,7 @@ deliver_or_enqueue(Txn, ChPid, Message, State = #q{internal_queue = IQ}) ->
             {true, NewState};
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
-            {_SeqId, IQS} = IQ:publish(Message, State #q.internal_queue_state),
+            IQS = IQ:publish(Message, State #q.internal_queue_state),
             {false, NewState #q { internal_queue_state = IQS }}
     end.
 

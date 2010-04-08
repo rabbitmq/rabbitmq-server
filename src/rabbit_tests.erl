@@ -41,7 +41,6 @@
 -import(lists).
 
 -include("rabbit.hrl").
--include("rabbit_queue.hrl").
 -include_lib("kernel/include/file.hrl").
 
 test_content_prop_roundtrip(Datum, Binary) ->
@@ -1348,14 +1347,13 @@ test_queue_index() ->
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     lists:foldl(
-      fun (_N, {Acc, VQ1}) ->
-              {SeqId, VQ2} = rabbit_variable_queue:publish(
-                               rabbit_basic:message(
-                                 rabbit_misc:r(<<>>, exchange, <<>>),
-                                 <<>>, [], <<>>, rabbit_guid:guid(),
-                                 IsPersistent), VQ1),
-              {[SeqId | Acc], VQ2}
-      end, {[], VQ}, lists:seq(1, Count)).
+      fun (_N, VQN) ->
+              rabbit_variable_queue:publish(
+                rabbit_basic:message(
+                  rabbit_misc:r(<<>>, exchange, <<>>),
+                  <<>>, [], <<>>, rabbit_guid:guid(),
+                  IsPersistent), VQN)
+      end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
@@ -1377,9 +1375,7 @@ fresh_variable_queue() ->
     assert_prop(S0, len, 0),
     assert_prop(S0, q1, 0),
     assert_prop(S0, q2, 0),
-    assert_prop(S0, delta, #delta { start_seq_id = undefined,
-                                    count = 0,
-                                    end_seq_id = undefined }),
+    assert_prop(S0, delta, {delta, undefined, 0, undefined}),
     assert_prop(S0, q3, 0),
     assert_prop(S0, q4, 0),
     VQ.
@@ -1394,7 +1390,7 @@ test_variable_queue_dynamic_duration_change() ->
     VQ0 = fresh_variable_queue(),
     %% start by sending in a couple of segments worth
     Len1 = 2*SegmentSize,
-    {_SeqIds, VQ1} = variable_queue_publish(false, Len1, VQ0),
+    VQ1 = variable_queue_publish(false, Len1, VQ0),
     VQ2 = rabbit_variable_queue:remeasure_rates(VQ1),
     {ok, _TRef} = timer:send_after(1000, {duration, 60,
                                           fun (V) -> (V*0.75)-1 end}),
@@ -1406,7 +1402,7 @@ test_variable_queue_dynamic_duration_change() ->
     %% just publish and fetch some persistent msgs, this hits the the
     %% partial segment path in queue_index due to the period when
     %% duration was 0 and the entire queue was delta.
-    {_SeqIds1, VQ7} = variable_queue_publish(true, 20, VQ6),
+    VQ7 = variable_queue_publish(true, 20, VQ6),
     {VQ8, AckTags1} = variable_queue_fetch(20, true, false, 20, VQ7),
     VQ9 = rabbit_variable_queue:ack(AckTags1, VQ8),
     VQ10 = rabbit_variable_queue:handle_pre_hibernate(VQ9),
@@ -1417,7 +1413,7 @@ test_variable_queue_dynamic_duration_change() ->
     passed.
 
 test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
-    {_SeqIds, VQ1} = variable_queue_publish(false, 1, VQ0),
+    VQ1 = variable_queue_publish(false, 1, VQ0),
     {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(VQ1),
     VQ3 = rabbit_variable_queue:ack([AckTag], VQ2),
     receive
@@ -1444,27 +1440,24 @@ test_variable_queue_partial_segments_delta_thing() ->
     SegmentSize = rabbit_queue_index:segment_size(),
     HalfSegment = SegmentSize div 2,
     VQ0 = fresh_variable_queue(),
-    {_SeqIds, VQ1} =
-        variable_queue_publish(true, SegmentSize + HalfSegment, VQ0),
+    VQ1 = variable_queue_publish(true, SegmentSize + HalfSegment, VQ0),
     VQ2 = rabbit_variable_queue:remeasure_rates(VQ1),
     VQ3 = rabbit_variable_queue:set_queue_ram_duration_target(0, VQ2),
     %% one segment in q3 as betas, and half a segment in delta
     S3 = rabbit_variable_queue:status(VQ3),
     io:format("~p~n", [S3]),
-    assert_prop(S3, delta, #delta { start_seq_id = SegmentSize,
-                                    count = HalfSegment,
-                                    end_seq_id = SegmentSize + HalfSegment }),
+    assert_prop(S3, delta, {delta, SegmentSize, HalfSegment,
+                            SegmentSize + HalfSegment}),
     assert_prop(S3, q3, SegmentSize),
     assert_prop(S3, len, SegmentSize + HalfSegment),
     VQ4 = rabbit_variable_queue:set_queue_ram_duration_target(infinity, VQ3),
-    {[_SeqId], VQ5} = variable_queue_publish(true, 1, VQ4),
+    VQ5 = variable_queue_publish(true, 1, VQ4),
     %% should have 1 alpha, but it's in the same segment as the deltas
     S5 = rabbit_variable_queue:status(VQ5),
     io:format("~p~n", [S5]),
     assert_prop(S5, q1, 1),
-    assert_prop(S5, delta, #delta { start_seq_id = SegmentSize,
-                                    count = HalfSegment,
-                                    end_seq_id = SegmentSize + HalfSegment }),
+    assert_prop(S5, delta, {delta, SegmentSize, HalfSegment,
+                            SegmentSize + HalfSegment}),
     assert_prop(S5, q3, SegmentSize),
     assert_prop(S5, len, SegmentSize + HalfSegment + 1),
     {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
@@ -1472,9 +1465,7 @@ test_variable_queue_partial_segments_delta_thing() ->
     %% the half segment should now be in q3 as betas
     S6 = rabbit_variable_queue:status(VQ6),
     io:format("~p~n", [S6]),
-    assert_prop(S6, delta, #delta { start_seq_id = undefined,
-                                    count = 0,
-                                    end_seq_id = undefined }),
+    assert_prop(S6, delta, {delta, undefined, 0, undefined}),
     assert_prop(S6, q1, 1),
     assert_prop(S6, q3, HalfSegment),
     assert_prop(S6, len, HalfSegment + 1),
