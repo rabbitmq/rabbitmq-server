@@ -48,9 +48,6 @@
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking}).
 
--define(HIBERNATE_AFTER_MIN, 1000).
--define(DESIRED_HIBERNATE, 10000).
-
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 -define(INFO_KEYS,
@@ -69,8 +66,7 @@
 
 -ifdef(use_specs).
 
--type(msg_id() :: non_neg_integer()).
--type(msg() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
+-type(msg_to_deliver() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
 
 -spec(start_link/5 ::
       (channel_number(), pid(), pid(), username(), vhost()) -> pid()).
@@ -78,7 +74,7 @@
 -spec(do/3 :: (pid(), amqp_method(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
--spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
+-spec(deliver/4 :: (pid(), ctag(), boolean(), msg_to_deliver()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).

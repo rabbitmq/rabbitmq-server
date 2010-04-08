@@ -186,7 +186,6 @@
                                path            :: file_path(),
                                num             :: non_neg_integer()
                              })).
--type(msg_id() :: binary()).
 -type(seq_id() :: integer()).
 -type(seg_dict() :: {dict(), [segment()]}).
 -type(qistate() :: #qistate { dir             :: file_path(),

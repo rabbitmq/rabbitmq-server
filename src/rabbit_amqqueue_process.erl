@@ -36,8 +36,6 @@
 -behaviour(gen_server2).
 
 -define(UNSENT_MESSAGE_LIMIT,        100).
--define(HIBERNATE_AFTER_MIN,        1000).
--define(DESIRED_HIBERNATE,         10000).
 -define(SYNC_INTERVAL,                 5). %% milliseconds
 -define(RATES_REMEASURE_INTERVAL,  5000).
 

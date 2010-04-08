@@ -163,8 +163,6 @@
           transient_threshold
         }).
 
--include("rabbit.hrl").
-
 -record(msg_status,
         { msg,
           msg_id,
@@ -190,11 +188,12 @@
 %% more.
 -define(RAM_INDEX_BATCH_SIZE, 64).
 
+-include("rabbit.hrl").
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(msg_id() :: binary()).
 -type(bpqueue() :: any()).
 -type(seq_id()  :: non_neg_integer()).
 -type(ack()     :: {'ack_index_and_store', msg_id(), seq_id(), atom() | pid()}

@@ -29,11 +29,12 @@
 %%   Contributor(s): ______________________________________.
 %%
 
+-include("rabbit_msg_store.hrl").
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(msg_id() :: binary()).
 -type(dir() :: any()).
 -type(index_state() :: any()).
 -type(keyvalue() :: any()).
@@ -55,5 +56,3 @@
 -endif.
 
 %%----------------------------------------------------------------------------
-
--include("rabbit_msg_store.hrl").

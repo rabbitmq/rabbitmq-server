@@ -90,6 +90,7 @@
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: binary()).
+-type(msg_id() :: guid()).
 -type(txn() :: guid()).
 -type(pkey() :: guid()).
 -type(r(Kind) ::
@@ -168,6 +169,9 @@
       #amqp_error{name        :: atom(),
                   explanation :: string(),
                   method      :: atom()}).
+
+-type(msg() :: any()).
+
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -179,6 +183,9 @@
 
 -define(PERSISTENT_MSG_STORE,     msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,      msg_store_transient).
+
+-define(HIBERNATE_AFTER_MIN,        1000).
+-define(DESIRED_HIBERNATE,         10000).
 
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).

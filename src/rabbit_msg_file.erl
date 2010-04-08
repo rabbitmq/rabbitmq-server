@@ -46,11 +46,10 @@
 
 %%----------------------------------------------------------------------------
 
+-include("rabbit.hrl").
+
 -ifdef(use_specs).
 
--type(io_device() :: any()).
--type(msg_id() :: binary()).
--type(msg() :: any()).
 -type(position() :: non_neg_integer()).
 -type(msg_size() :: non_neg_integer()).
 
