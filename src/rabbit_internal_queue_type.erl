@@ -74,11 +74,11 @@ behaviour_info(callbacks) ->
 
      {is_empty, 1},
 
-     {set_queue_ram_duration_target, 2},
+     {set_queue_duration_target, 2},
 
      {remeasure_rates, 1},
 
-     {ram_duration, 1},
+     {queue_duration, 1},
 
      %% Can return 'undefined' or a function atom name plus list of
      %% arguments to be invoked in the internal queue module as soon

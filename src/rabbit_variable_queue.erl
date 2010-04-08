@@ -32,8 +32,8 @@
 -module(rabbit_variable_queue).
 
 -export([init/2, terminate/1, publish/2, publish_delivered/2,
-         set_queue_ram_duration_target/2, remeasure_rates/1,
-         ram_duration/1, fetch/1, ack/2, len/1, is_empty/1, purge/1,
+         set_queue_duration_target/2, remeasure_rates/1,
+         queue_duration/1, fetch/1, ack/2, len/1, is_empty/1, purge/1,
          delete_and_terminate/1, requeue/2, tx_publish/2, tx_rollback/2,
          tx_commit/4, needs_sync/1, handle_pre_hibernate/1, status/1]).
 
@@ -344,7 +344,7 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
             {ack_not_on_disk, State2}
     end.
 
-set_queue_ram_duration_target(
+set_queue_duration_target(
   DurationTarget, State = #vqstate { avg_egress_rate = AvgEgressRate,
                                      avg_ingress_rate = AvgIngressRate,
                                      target_ram_msg_count = TargetRamMsgCount
@@ -375,7 +375,7 @@ remeasure_rates(State = #vqstate { egress_rate = Egress,
     {AvgEgressRate, Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
     {AvgIngressRate, Ingress1} = update_rate(Now, Timestamp, InCount, Ingress),
 
-    set_queue_ram_duration_target(
+    set_queue_duration_target(
       DurationTarget,
       State #vqstate { egress_rate = Egress1,
                        avg_egress_rate = AvgEgressRate,
@@ -385,7 +385,7 @@ remeasure_rates(State = #vqstate { egress_rate = Egress,
                        ram_msg_count_prev = RamMsgCount,
                        out_counter = 0, in_counter = 0 }).
 
-ram_duration(#vqstate { avg_egress_rate = AvgEgressRate,
+queue_duration(#vqstate { avg_egress_rate = AvgEgressRate,
                         avg_ingress_rate = AvgIngressRate,
                         ram_msg_count = RamMsgCount,
                         ram_msg_count_prev = RamMsgCountPrev }) ->

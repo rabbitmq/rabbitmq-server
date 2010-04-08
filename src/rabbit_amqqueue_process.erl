@@ -932,17 +932,17 @@ handle_cast({flush, ChPid}, State) ->
 handle_cast(remeasure_rates, State = #q{internal_queue_state = IQS,
                                         internal_queue = IQ}) ->
     IQS1 = IQ:remeasure_rates(IQS),
-    RamDuration = IQ:ram_duration(IQS1),
+    RamDuration = IQ:queue_duration(IQS1),
     DesiredDuration =
         rabbit_memory_monitor:report_queue_duration(self(), RamDuration),
-    IQS2 = IQ:set_queue_ram_duration_target(DesiredDuration, IQS1),
+    IQS2 = IQ:set_queue_duration_target(DesiredDuration, IQS1),
     noreply(State#q{rate_timer_ref = just_measured,
                     internal_queue_state = IQS2});
 
 handle_cast({set_queue_duration, Duration},
             State = #q{internal_queue_state = IQS,
                        internal_queue = IQ}) ->
-    IQS1 = IQ:set_queue_ram_duration_target(Duration, IQS),
+    IQS1 = IQ:set_queue_duration_target(Duration, IQS),
     noreply(State#q{internal_queue_state = IQS1});
 
 handle_cast({set_maximum_since_use, Age}, State) ->
@@ -988,5 +988,5 @@ handle_pre_hibernate(State = #q{internal_queue_state = IQS,
     %% no activity for a while == 0 egress and ingress rates
     DesiredDuration =
         rabbit_memory_monitor:report_queue_duration(self(), infinity),
-    IQS2 = IQ:set_queue_ram_duration_target(DesiredDuration, IQS1),
+    IQS2 = IQ:set_queue_duration_target(DesiredDuration, IQS1),
     {hibernate, stop_rate_timer(State#q{internal_queue_state = IQS2})}.

@@ -33,10 +33,10 @@
 -spec(terminate/1 :: (state()) -> state()).
 -spec(publish/2 :: (basic_message(), state()) -> state()).
 -spec(publish_delivered/2 :: (basic_message(), state()) -> {ack(), state()}).
--spec(set_queue_ram_duration_target/2 ::
+-spec(set_queue_duration_target/2 ::
       (('undefined' | 'infinity' | number()), state()) -> state()).
 -spec(remeasure_rates/1 :: (state()) -> state()).
--spec(ram_duration/1 :: (state()) -> number()).
+-spec(queue_duration/1 :: (state()) -> number()).
 -spec(fetch/1 :: (state()) ->
              {('empty'|{basic_message(), boolean(), ack(), non_neg_integer()}),
               state()}).
