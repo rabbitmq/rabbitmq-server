@@ -41,8 +41,8 @@
 -export([consumers/1, consumers_all/1]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
--export([notify_sent/2, unblock/2, tx_commit_msg_store_callback/5,
-         tx_commit_vq_callback/1, flush_all/2]).
+-export([notify_sent/2, unblock/2, maybe_run_queue_via_internal_queue/3,
+         flush_all/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
@@ -65,7 +65,6 @@
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
--type(acktag() :: any()).
 
 -spec(start/0 :: () -> 'ok').
 -spec(declare/4 :: (queue_name(), boolean(), boolean(), amqp_table()) ->
@@ -111,9 +110,7 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
--spec(tx_commit_msg_store_callback/5 ::
-      (pid(), boolean(), [message()], [acktag()], {pid(), any()}) -> 'ok').
--spec(tx_commit_vq_callback/1 :: (pid()) -> 'ok').
+-spec(maybe_run_queue_via_internal_queue/3 :: (pid(), atom(), [any()]) -> 'ok').
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
@@ -172,7 +169,7 @@ recover_durable_queues(DurableQueues) ->
                           end) of
                        true  ->
                            ok = gen_server2:call(Q#amqqueue.pid,
-                                                 init_variable_queue,
+                                                 init_internal_queue,
                                                  infinity),
                            [Q|Acc];
                        false -> exit(Q#amqqueue.pid, shutdown),
@@ -204,7 +201,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
                                       end,
                                       ok = gen_server2:call(
                                              Q#amqqueue.pid,
-                                             init_variable_queue, infinity),
+                                             init_internal_queue, infinity),
                                       Q;
                                [_] -> not_found %% existing Q on stopped node
                            end;
@@ -362,12 +359,8 @@ notify_sent(QPid, ChPid) ->
 unblock(QPid, ChPid) ->
     gen_server2:pcast(QPid, 7, {unblock, ChPid}).
 
-tx_commit_msg_store_callback(QPid, IsTransientPubs, Pubs, AckTags, From) ->
-    gen_server2:pcast(QPid, 7, {tx_commit_msg_store_callback,
-                                IsTransientPubs, Pubs, AckTags, From}).
-
-tx_commit_vq_callback(QPid) ->
-    gen_server2:pcast(QPid, 7, tx_commit_vq_callback).
+maybe_run_queue_via_internal_queue(QPid, Fun, Args) ->
+    gen_server2:pcast(QPid, 7, {maybe_run_queue_via_internal_queue, Fun, Args}).
 
 flush_all(QPids, ChPid) ->
     safe_pmap_ok(

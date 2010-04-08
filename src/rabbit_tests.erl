@@ -1409,7 +1409,7 @@ test_variable_queue_dynamic_duration_change() ->
     {_SeqIds1, VQ7} = variable_queue_publish(true, 20, VQ6),
     {VQ8, AckTags1} = variable_queue_fetch(20, true, false, 20, VQ7),
     VQ9 = rabbit_variable_queue:ack(AckTags1, VQ8),
-    VQ10 = rabbit_variable_queue:flush_journal(VQ9),
+    VQ10 = rabbit_variable_queue:handle_pre_hibernate(VQ9),
     {empty, VQ11} = rabbit_variable_queue:fetch(VQ10),
 
     rabbit_variable_queue:terminate(VQ11),

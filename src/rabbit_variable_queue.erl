@@ -35,8 +35,9 @@
          set_queue_ram_duration_target/2, remeasure_rates/1,
          ram_duration/1, fetch/1, ack/2, len/1, is_empty/1, purge/1,
          delete_and_terminate/1, requeue/2, tx_publish/2, tx_rollback/2,
-         tx_commit/4, tx_commit_from_msg_store/5, tx_commit_from_vq/1,
-         needs_sync/1, flush_journal/1, status/1]).
+         tx_commit/4, needs_sync/1, handle_pre_hibernate/1, status/1]).
+
+-export([tx_commit_post_msg_store/5, tx_commit_index/1]). %% internal
 
 %%----------------------------------------------------------------------------
 %% Definitions:
@@ -242,12 +243,12 @@
 -spec(tx_rollback/2 :: ([msg_id()], vqstate()) -> vqstate()).
 -spec(tx_commit/4 :: ([msg_id()], [ack()], {pid(), any()}, vqstate()) ->
                           {boolean(), vqstate()}).
--spec(tx_commit_from_msg_store/5 ::
+-spec(tx_commit_post_msg_store/5 ::
         (boolean(), [msg_id()], [ack()], {pid(), any()}, vqstate()) ->
                                          {boolean(), vqstate()}).
--spec(tx_commit_from_vq/1 :: (vqstate()) -> {boolean(), vqstate()}).
--spec(needs_sync/1 :: (vqstate()) -> boolean()).
--spec(flush_journal/1 :: (vqstate()) -> vqstate()).
+-spec(tx_commit_index/1 :: (vqstate()) -> {boolean(), vqstate()}).
+-spec(needs_sync/1 :: (vqstate()) -> ('undefined' | {atom(), [any()]})).
+-spec(handle_pre_hibernate/1 :: (vqstate()) -> vqstate()).
 -spec(status/1 :: (vqstate()) -> [{atom(), any()}]).
 
 -endif.
@@ -505,23 +506,26 @@ delete_and_terminate(State) ->
                     persistent_store = PersistentStore,
                     transient_threshold = TransientThreshold }} =
         purge(State),
-    IndexState1 =
+    %% flushing here is good because it deletes all full segments,
+    %% leaving only partial segments around.
+    IndexState1 = rabbit_queue_index:flush_journal(IndexState),
+    IndexState2 =
         case rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(
-               IndexState) of
-            {N, N, IndexState2} ->
-                IndexState2;
-            {DeltaSeqId, NextSeqId, IndexState2} ->
-                {_DeleteCount, IndexState3} =
+               IndexState1) of
+            {N, N, IndexState3} ->
+                IndexState3;
+            {DeltaSeqId, NextSeqId, IndexState3} ->
+                {_DeleteCount, IndexState4} =
                     delete1(PersistentStore, TransientThreshold, NextSeqId, 0,
-                            DeltaSeqId, IndexState2),
-                IndexState3
+                            DeltaSeqId, IndexState3),
+                IndexState4
     end,
-    IndexState4 = rabbit_queue_index:terminate_and_erase(IndexState1),
+    IndexState5 = rabbit_queue_index:terminate_and_erase(IndexState2),
     rabbit_msg_store:delete_client(PersistentStore, PRef),
     rabbit_msg_store:delete_client(?TRANSIENT_MSG_STORE, TRef),
     rabbit_msg_store:client_terminate(MSCStateP),
     rabbit_msg_store:client_terminate(MSCStateT),
-    State1 #vqstate { index_state = IndexState4 }.
+    State1 #vqstate { index_state = IndexState5 }.
 
 %% [{Msg, AckTag}]
 %% We guarantee that after fetch, only persistent msgs are left on
@@ -595,19 +599,20 @@ tx_commit(Pubs, AckTags, From, State =
     case IsTransientPubs orelse
         ?TRANSIENT_MSG_STORE == PersistentStore of
         true ->
-            tx_commit_from_msg_store(
+            tx_commit_post_msg_store(
               IsTransientPubs, Pubs, AckTags, From, State);
         false ->
             Self = self(),
             ok = rabbit_msg_store:sync(
                    ?PERSISTENT_MSG_STORE, PersistentMsgIds,
-                   fun () -> ok = rabbit_amqqueue:tx_commit_msg_store_callback(
-                                    Self, IsTransientPubs, Pubs, AckTags, From)
+                   fun () -> ok = rabbit_amqqueue:maybe_run_queue_via_internal_queue(
+                                    Self, tx_commit_post_msg_store,
+                                    [IsTransientPubs, Pubs, AckTags, From])
                    end),
             {false, State}
     end.
 
-tx_commit_from_msg_store(IsTransientPubs, Pubs, AckTags, From, State =
+tx_commit_post_msg_store(IsTransientPubs, Pubs, AckTags, From, State =
                              #vqstate { on_sync = OnSync = {SAcks, SPubs, SFroms},
                                         persistent_store = PersistentStore }) ->
     %% If we are a non-durable queue, or (no persisent pubs, and no
@@ -617,17 +622,17 @@ tx_commit_from_msg_store(IsTransientPubs, Pubs, AckTags, From, State =
     case PersistentStore == ?TRANSIENT_MSG_STORE orelse
         (IsTransientPubs andalso [] == DiskAcks) of
         true  -> {Res, State1} =
-                     tx_commit_from_vq(State #vqstate {
-                                         on_sync = {[], [Pubs], [From]} }),
+                     tx_commit_index(State #vqstate {
+                                       on_sync = {[], [Pubs], [From]} }),
                  {Res, State1 #vqstate { on_sync = OnSync }};
         false -> {false, State #vqstate { on_sync = { [DiskAcks | SAcks],
                                                       [Pubs | SPubs],
                                                       [From | SFroms] }}}
     end.
 
-tx_commit_from_vq(State = #vqstate { on_sync = {_, _, []} }) ->
+tx_commit_index(State = #vqstate { on_sync = {_, _, []} }) ->
     {false, State};
-tx_commit_from_vq(State = #vqstate { on_sync = {SAcks, SPubs, SFroms},
+tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFroms},
                                      persistent_store = PersistentStore }) ->
     Acks = lists:flatten(SAcks),
     State1 = ack(Acks, State),
@@ -656,11 +661,11 @@ tx_commit_from_vq(State = #vqstate { on_sync = {SAcks, SPubs, SFroms},
      State2 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }}.
 
 needs_sync(#vqstate { on_sync = {_, _, []} }) ->
-    false;
+    undefined;
 needs_sync(_) ->
-    true.
+    {tx_commit_index, []}.
 
-flush_journal(State = #vqstate { index_state = IndexState }) ->
+handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state =
                      rabbit_queue_index:flush_journal(IndexState) }.
 
