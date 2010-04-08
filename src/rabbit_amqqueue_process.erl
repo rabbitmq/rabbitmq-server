@@ -905,10 +905,12 @@ handle_cast({tx_commit_msg_store_callback, IsTransientPubs, Pubs, AckTags, From}
             end);
 
 handle_cast(tx_commit_vq_callback, State = #q{variable_queue_state = VQS}) ->
-    noreply(
-      run_message_queue(
-        State#q{variable_queue_state =
-                rabbit_variable_queue:tx_commit_from_vq(VQS)}));
+    {RunQueue, VQS1} = rabbit_variable_queue:tx_commit_from_vq(VQS),
+    State1 = State#q{variable_queue_state = VQS1},
+    noreply(case RunQueue of
+                true  -> run_message_queue(State1);
+                false -> State1
+            end);
 
 handle_cast({limit, ChPid, LimiterPid}, State) ->
     noreply(
@@ -970,10 +972,12 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     end;
 
 handle_info(timeout, State = #q{variable_queue_state = VQS}) ->
-    noreply(
-      run_message_queue(
-        State#q{variable_queue_state =
-                rabbit_variable_queue:tx_commit_from_vq(VQS)}));
+    {RunQueue, VQS1} = rabbit_variable_queue:tx_commit_from_vq(VQS),
+    State1 = State#q{variable_queue_state = VQS1},
+    noreply(case RunQueue of
+                true  -> run_message_queue(State1);
+                false -> State1
+            end);
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
