@@ -48,9 +48,6 @@
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking}).
 
--define(HIBERNATE_AFTER_MIN, 1000).
--define(DESIRED_HIBERNATE, 10000).
-
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 -define(INFO_KEYS,

@@ -36,8 +36,6 @@
 -behaviour(gen_server2).
 
 -define(UNSENT_MESSAGE_LIMIT, 100).
--define(HIBERNATE_AFTER_MIN, 1000).
--define(DESIRED_HIBERNATE, 10000).
 
 -export([start_link/1, info_keys/0]).
 

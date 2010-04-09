@@ -175,6 +175,9 @@
 
 -define(MAX_WAIT, 16#ffffffff).
 
+-define(HIBERNATE_AFTER_MIN,        1000).
+-define(DESIRED_HIBERNATE,         10000).
+
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).
 -define(LOGDEBUG(F,A), rabbit_log:debug(F,A)).
