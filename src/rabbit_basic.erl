@@ -36,6 +36,7 @@
 -export([publish/1, message/4, properties/1, delivery/4]).
 -export([publish/4, publish/7]).
 -export([build_content/2, from_content/1]).
+-export([is_message_persistent/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -57,6 +58,8 @@
              publish_result()).
 -spec(build_content/2 :: (amqp_properties(), binary()) -> content()).
 -spec(from_content/1 :: (content()) -> {amqp_properties(), binary()}).
+-spec(is_message_persistent/1 :: (decoded_content()) ->
+                                      (boolean() | {'error', any()})).
 
 -endif.
 
@@ -93,11 +96,17 @@ from_content(Content) ->
 
 message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
     Properties = properties(RawProperties),
-    #basic_message{exchange_name  = ExchangeName,
-                   routing_key    = RoutingKeyBin,
-                   content        = build_content(Properties, BodyBin),
-                   guid           = rabbit_guid:guid(),
-                   is_persistent  = false}.
+    Content = build_content(Properties, BodyBin),
+    case is_message_persistent(Content) of
+        {error, Other} ->
+            {error, {invalid_delivery_mode, Other}};
+        Boolean when is_boolean(Boolean) ->
+            #basic_message{exchange_name  = ExchangeName,
+                           routing_key    = RoutingKeyBin,
+                           content        = Content,
+                           guid           = rabbit_guid:guid(),
+                           is_persistent  = Boolean}
+    end.
 
 properties(P = #'P_basic'{}) ->
     P;
@@ -131,3 +140,12 @@ publish(ExchangeName, RoutingKeyBin, Mandatory, Immediate, Txn, Properties,
     publish(delivery(Mandatory, Immediate, Txn,
                      message(ExchangeName, RoutingKeyBin,
                              properties(Properties), BodyBin))).
+
+is_message_persistent(#content{properties = #'P_basic'{
+                                 delivery_mode = Mode}}) ->
+    case Mode of
+        1         -> false;
+        2         -> true;
+        undefined -> false;
+        Other     -> {error, Other}
+    end.
