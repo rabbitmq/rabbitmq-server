@@ -49,7 +49,7 @@
 -spec(delivery/4 :: (boolean(), boolean(), maybe(txn()), message()) ->
              delivery()).
 -spec(message/4 :: (exchange_name(), routing_key(), properties_input(),
-                    binary()) -> message()).
+                    binary()) -> (message() | {'error', any()})).
 -spec(properties/1 :: (properties_input()) -> amqp_properties()).
 -spec(publish/4 :: (exchange_name(), routing_key(), properties_input(),
                     binary()) -> publish_result()).
@@ -58,8 +58,8 @@
              publish_result()).
 -spec(build_content/2 :: (amqp_properties(), binary()) -> content()).
 -spec(from_content/1 :: (content()) -> {amqp_properties(), binary()}).
--spec(is_message_persistent/1 :: (decoded_content()) ->
-                                      (boolean() | {'error', any()})).
+-spec(is_message_persistent/1 ::
+        (decoded_content()) -> (boolean() | {'invalid', non_neg_integer()})).
 
 -endif.
 
@@ -98,7 +98,7 @@ message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
     Properties = properties(RawProperties),
     Content = build_content(Properties, BodyBin),
     case is_message_persistent(Content) of
-        {error, Other} ->
+        {invalid, Other} ->
             {error, {invalid_delivery_mode, Other}};
         Boolean when is_boolean(Boolean) ->
             #basic_message{exchange_name  = ExchangeName,
@@ -147,5 +147,5 @@ is_message_persistent(#content{properties = #'P_basic'{
         1         -> false;
         2         -> true;
         undefined -> false;
-        Other     -> {error, Other}
+        Other     -> {invalid, Other}
     end.

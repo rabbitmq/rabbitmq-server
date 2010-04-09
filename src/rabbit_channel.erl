@@ -1013,10 +1013,11 @@ notify_limiter(LimiterPid, Acked) ->
 
 is_message_persistent(Content) ->
     case rabbit_basic:is_message_persistent(Content) of
-        {error, Other} ->
+        {invalid, Other} ->
             rabbit_log:warning("Unknown delivery mode ~p - "
                                "treating as 1, non-persistent~n",
-                               [Other]);
+                               [Other]),
+            false;
         Boolean when is_boolean(Boolean) ->
             Boolean
     end.
