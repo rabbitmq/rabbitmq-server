@@ -35,6 +35,13 @@
 
 behaviour_info(callbacks) ->
     [
+     %% Called on startup with a list of durable queues. The queues
+     %% aren't being started at this point, but this call allows the
+     %% backing queue to perform any checking necessary for the
+     %% consistency of those queues, or initialise any other shared
+     %% resources.
+     {start, 1},
+
      %% Called with queue name and a boolean to indicate whether or
      %% not the queue is durable.
      {init, 2},

@@ -125,7 +125,8 @@
 
 start() ->
     DurableQueues = find_durable_queues(),
-    ok = rabbit_queue_index:start_msg_stores(DurableQueues),
+    {ok, BQ} = application:get_env(backing_queue_module),
+    ok = BQ:start(DurableQueues),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,

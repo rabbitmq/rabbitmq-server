@@ -37,6 +37,8 @@
          delete_and_terminate/1, requeue/2, tx_publish/2, tx_rollback/2,
          tx_commit/4, needs_sync/1, handle_pre_hibernate/1, status/1]).
 
+-export([start/1]).
+
 -export([tx_commit_post_msg_store/5, tx_commit_index/1]). %% internal
 
 %%----------------------------------------------------------------------------
@@ -251,6 +253,9 @@
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
+
+start(DurableQueues) ->
+    rabbit_queue_index:start_msg_stores(DurableQueues).
 
 init(QueueName, IsDurable) ->
     PersistentStore = case IsDurable of
