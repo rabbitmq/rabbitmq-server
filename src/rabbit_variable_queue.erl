@@ -35,7 +35,7 @@
          set_ram_duration_target/2, update_ram_duration/1,
          ram_duration/1, fetch/1, ack/2, len/1, is_empty/1, purge/1,
          delete_and_terminate/1, requeue/2, tx_publish/2, tx_rollback/2,
-         tx_commit/4, needs_sync/1, handle_pre_hibernate/1, status/1]).
+         tx_commit/4, sync_callback/1, handle_pre_hibernate/1, status/1]).
 
 -export([start/1]).
 
@@ -605,8 +605,11 @@ tx_commit(Pubs, AckTags, From, State =
             ok = rabbit_msg_store:sync(
                    ?PERSISTENT_MSG_STORE, PersistentMsgIds,
                    fun () -> ok = rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                                    Self, tx_commit_post_msg_store,
-                                    [IsTransientPubs, Pubs, AckTags, From])
+                                    Self,
+                                    fun (StateN) -> tx_commit_post_msg_store(
+                                                      IsTransientPubs, Pubs,
+                                                      AckTags, From, StateN)
+                                    end)
                    end),
             {false, State}
     end.
@@ -660,10 +663,8 @@ tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFroms},
     {Pubs /= [],
      State2 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }}.
 
-needs_sync(#vqstate { on_sync = {_, _, []} }) ->
-    undefined;
-needs_sync(_) ->
-    {tx_commit_index, []}.
+sync_callback(#vqstate { on_sync = {_, _, []} }) -> undefined;
+sync_callback(_)                                 -> fun tx_commit_index/1.
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state =

@@ -116,7 +116,7 @@ behaviour_info(callbacks) ->
      %% arguments to be invoked in the internal queue module as soon
      %% as the queue process can manage (either on an empty mailbox,
      %% or when a timer fires).
-     {needs_sync, 1},
+     {sync_callback, 1},
 
      %% Called immediately before the queue hibernates
      {handle_pre_hibernate, 1},

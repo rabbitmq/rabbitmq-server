@@ -41,7 +41,7 @@
 -export([consumers/1, consumers_all/1]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
--export([notify_sent/2, unblock/2, maybe_run_queue_via_backing_queue/3,
+-export([notify_sent/2, unblock/2, maybe_run_queue_via_backing_queue/2,
          flush_all/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
@@ -109,7 +109,8 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
--spec(maybe_run_queue_via_backing_queue/3 :: (pid(), atom(), [any()]) -> 'ok').
+-spec(maybe_run_queue_via_backing_queue/2 ::
+        (pid(), (fun ((A) -> {boolean(), A}))) -> 'ok').
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
@@ -350,8 +351,8 @@ notify_sent(QPid, ChPid) ->
 unblock(QPid, ChPid) ->
     gen_server2:pcast(QPid, 7, {unblock, ChPid}).
 
-maybe_run_queue_via_backing_queue(QPid, Fun, Args) ->
-    gen_server2:pcast(QPid, 7, {maybe_run_queue_via_backing_queue, Fun, Args}).
+maybe_run_queue_via_backing_queue(QPid, Fun) ->
+    gen_server2:pcast(QPid, 7, {maybe_run_queue_via_backing_queue, Fun}).
 
 flush_all(QPids, ChPid) ->
     safe_pmap_ok(

@@ -211,7 +211,7 @@
 -spec(segment_size/0 :: () -> non_neg_integer()).
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(start_msg_stores/1 :: ([amqqueue()]) -> 'ok').
+-spec(start_msg_stores/1 :: ([queue_name()]) -> 'ok').
 
 -endif.
 

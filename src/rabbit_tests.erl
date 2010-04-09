@@ -1196,13 +1196,6 @@ queue_name(Name) ->
 test_queue() ->
     queue_name(test).
 
-test_amqqueue(Durable) ->
-    #amqqueue{name = test_queue(),
-              durable = Durable,
-              auto_delete = true,
-              arguments = [],
-              pid = none}.
-
 empty_test_queue() ->
     ok = rabbit_queue_index:start_msg_stores([]),
     {0, _PRef, _TRef, _Terms, Qi1} = rabbit_queue_index:init(test_queue(), false),
@@ -1266,7 +1259,7 @@ test_queue_index() ->
     %% call terminate twice to prove it's idempotent
     _Qi5 = rabbit_queue_index:terminate([], rabbit_queue_index:terminate([], Qi4)),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_msg_stores([test_amqqueue(true)]),
+    ok = rabbit_queue_index:start_msg_stores([test_queue()]),
     %% should get length back as 0, as all the msgs were transient
     {0, _PRef1, _TRef1, _Terms1, Qi6} = rabbit_queue_index:init(test_queue(), false),
     {0, 0, Qi7} =
@@ -1279,7 +1272,7 @@ test_queue_index() ->
                                     lists:reverse(SeqIdsMsgIdsB)),
     _Qi11 = rabbit_queue_index:terminate([], Qi10),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_msg_stores([test_amqqueue(true)]),
+    ok = rabbit_queue_index:start_msg_stores([test_queue()]),
     %% should get length back as 10000
     LenB = length(SeqIdsB),
     {LenB, _PRef2, _TRef2, _Terms2, Qi12} = rabbit_queue_index:init(test_queue(), false),
@@ -1296,7 +1289,7 @@ test_queue_index() ->
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi17),
     _Qi19 = rabbit_queue_index:terminate([], Qi18),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_msg_stores([test_amqqueue(true)]),
+    ok = rabbit_queue_index:start_msg_stores([test_queue()]),
     %% should get length back as 0 because all persistent msgs have been acked
     {0, _PRef3, _TRef3, _Terms3, Qi20} = rabbit_queue_index:init(test_queue(), false),
     _Qi21 = rabbit_queue_index:terminate_and_erase(Qi20),

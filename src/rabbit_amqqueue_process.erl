@@ -190,11 +190,12 @@ noreply(NewState) ->
 
 next_state(State = #q{backing_queue_state = BQS,
                       backing_queue = BQ}) ->
-    next_state1(ensure_rate_timer(State), BQ:needs_sync(BQS)).
+    next_state1(ensure_rate_timer(State), BQ:sync_callback(BQS)).
 
-next_state1(State = #q{sync_timer_ref = undefined}, Callback = {_Fun, _Args}) ->
-    {start_sync_timer(State, Callback), 0};
-next_state1(State, {_Fun, _Args}) ->
+next_state1(State = #q{sync_timer_ref = undefined}, Fun)
+  when Fun =/= undefined ->
+    {start_sync_timer(State, Fun), 0};
+next_state1(State, Fun) when Fun =/= undefined ->
     {State, 0};
 next_state1(State = #q{sync_timer_ref = undefined}, undefined) ->
     {State, hibernate};
@@ -218,12 +219,12 @@ stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
     State#q{rate_timer_ref = undefined}.
 
-start_sync_timer(State = #q{sync_timer_ref = undefined},
-                 Callback = {Fun, Args}) ->
+start_sync_timer(State = #q{sync_timer_ref = undefined}, Fun)
+  when Fun =/= undefined ->
     {ok, TRef} = timer:apply_after(
                    ?SYNC_INTERVAL, rabbit_amqqueue,
-                   maybe_run_queue_via_backing_queue, [self(), Fun, Args]),
-    State#q{sync_timer_ref = TRef, backing_queue_timeout_fun = Callback}.
+                   maybe_run_queue_via_backing_queue, [self(), Fun]),
+    State#q{sync_timer_ref = TRef, backing_queue_timeout_fun = Fun}.
 
 stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
@@ -524,10 +525,8 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
-maybe_run_queue_via_backing_queue(Fun, Args,
-                                   State = #q{backing_queue_state = BQS,
-                                              backing_queue = BQ}) ->
-    {RunQueue, BQS1} = apply(BQ, Fun, Args ++ [BQS]),
+maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
+    {RunQueue, BQS1} = Fun(BQS),
     State1 = State#q{backing_queue_state = BQS1},
     case RunQueue of
         true  -> run_message_queue(State1);
@@ -908,8 +907,8 @@ handle_cast({notify_sent, ChPid}, State) ->
                                C#cr{unsent_message_count = Count - 1}
                        end));
 
-handle_cast({maybe_run_queue_via_backing_queue, Fun, Args}, State) ->
-    noreply(maybe_run_queue_via_backing_queue(Fun, Args, State));
+handle_cast({maybe_run_queue_via_backing_queue, Fun}, State) ->
+    noreply(maybe_run_queue_via_backing_queue(Fun, State));
 
 handle_cast({limit, ChPid, LimiterPid}, State) ->
     noreply(
@@ -973,9 +972,9 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
 handle_info(timeout, State = #q{backing_queue_timeout_fun = undefined}) ->
     noreply(State);
 
-handle_info(timeout, State = #q{backing_queue_timeout_fun = {Fun, Args}}) ->
+handle_info(timeout, State = #q{backing_queue_timeout_fun = Fun}) ->
     noreply(maybe_run_queue_via_backing_queue(
-              Fun, Args, State#q{backing_queue_timeout_fun = undefined}));
+              Fun, State#q{backing_queue_timeout_fun = undefined}));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};

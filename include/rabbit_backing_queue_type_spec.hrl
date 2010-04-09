@@ -51,6 +51,6 @@
       (('undefined' | 'infinity' | number()), state()) -> state()).
 -spec(update_ram_duration/1 :: (state()) -> state()).
 -spec(ram_duration/1 :: (state()) -> number()).
--spec(needs_sync/1 :: (state()) -> ('undefined' | {atom(), [any()]})).
+-spec(sync_callback/1 :: (state()) -> ('undefined' | {atom(), [any()]})).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
