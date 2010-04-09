@@ -34,7 +34,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, delegate_async/2, delegate_sync/2, server/1]).
+-export([start_link/1, delegate_cast/2, delegate_call/2, server/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -46,30 +46,30 @@ start_link(Hash) ->
     gen_server2:start_link({local, server(Hash)},
                            ?MODULE, [], []).
 
-delegate_sync(Node, Thunk) when is_atom(Node) ->
+delegate_call(Node, Thunk) when is_atom(Node) ->
     gen_server2:call({server(), Node}, {thunk, Thunk}, infinity);
 
-delegate_sync(Pid, FPid) when is_pid(Pid) ->
+delegate_call(Pid, FPid) when is_pid(Pid) ->
     [[{Status, Res, _}]] = delegate_per_node([{node(Pid), [Pid]}],
-                                             f_pid_node(fun delegate_sync/2, FPid)),
+                                             f_pid_node(fun delegate_call/2, FPid)),
     {Status, Res};
 
-delegate_sync(Pids, FPid) when is_list(Pids) ->
+delegate_call(Pids, FPid) when is_list(Pids) ->
     lists:flatten(
         delegate_per_node(split_per_node(Pids),
-                          f_pid_node(fun delegate_sync/2, FPid))).
+                          f_pid_node(fun delegate_call/2, FPid))).
 
-delegate_async(Node, Thunk) when is_atom(Node) ->
+delegate_cast(Node, Thunk) when is_atom(Node) ->
     gen_server2:cast({server(), Node}, {thunk, Thunk});
 
-delegate_async(Pid, FPid) when is_pid(Pid) ->
+delegate_cast(Pid, FPid) when is_pid(Pid) ->
     delegate_per_node([{node(Pid), [Pid]}],
-                      f_pid_node(fun delegate_async/2, FPid)),
+                      f_pid_node(fun delegate_cast/2, FPid)),
     ok;
 
-delegate_async(Pids, FPid) when is_list(Pids) ->
+delegate_cast(Pids, FPid) when is_list(Pids) ->
     delegate_per_node(split_per_node(Pids),
-                      f_pid_node(fun delegate_async/2, FPid)),
+                      f_pid_node(fun delegate_cast/2, FPid)),
     ok.
 
 %%----------------------------------------------------------------------------
