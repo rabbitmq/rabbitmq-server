@@ -406,7 +406,10 @@ check_version(_Other) ->
 
 requeue_messages(Snapshot = #psnapshot{messages = Messages,
                                        queues = Queues}) ->
-    Work = ets:foldl(fun accumulate_requeues/2, dict:new(), Queues),
+    Work = ets:foldl(
+             fun ({{QName, PKey}, Delivered}, Acc) ->
+                     rabbit_misc:dict_cons(QName, {PKey, Delivered}, Acc)
+             end, dict:new(), Queues),
     %% unstable parallel map, because order doesn't matter
     L = lists:append(
           rabbit_misc:upmap(
@@ -424,13 +427,6 @@ requeue_messages(Snapshot = #psnapshot{messages = Messages,
     true = ets:insert(Queues, NewQueues),
     %% contains the mutated messages and queues tables
     Snapshot.
-
-accumulate_requeues({{QName, PKey}, Delivered}, Acc) ->
-    Requeue = {PKey, Delivered},
-    dict:update(QName,
-                fun (Requeues) -> [Requeue | Requeues] end,
-                [Requeue],
-                Acc).
 
 requeue(QName, Requeues, Messages) ->
     case rabbit_amqqueue:lookup(QName) of
@@ -474,12 +470,8 @@ internal_integrate_messages(Items, Snapshot) ->
 
 internal_integrate1({extend_transaction, Key, MessageList},
                     Snapshot = #psnapshot {transactions = Transactions}) ->
-    NewTransactions =
-        dict:update(Key,
-                    fun (MessageLists) -> [MessageList | MessageLists] end,
-                    [MessageList],
-                    Transactions),
-    Snapshot#psnapshot{transactions = NewTransactions};
+    Snapshot#psnapshot{transactions = rabbit_misc:dict_cons(Key, MessageList,
+                                                            Transactions)};
 internal_integrate1({rollback_transaction, Key},
                     Snapshot = #psnapshot{transactions = Transactions}) ->
     Snapshot#psnapshot{transactions = dict:erase(Key, Transactions)};
