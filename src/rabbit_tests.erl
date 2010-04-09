@@ -41,6 +41,7 @@
 -import(lists).
 
 -include("rabbit.hrl").
+-include("rabbit_framing.hrl").
 -include("rabbit_variable_queue.hrl").
 -include_lib("kernel/include/file.hrl").
 
@@ -1340,8 +1341,11 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
               rabbit_variable_queue:publish(
                 rabbit_basic:message(
                   rabbit_misc:r(<<>>, exchange, <<>>),
-                  <<>>, [], <<>>, rabbit_guid:guid(),
-                  IsPersistent), VQN)
+                  <<>>, #'P_basic'{delivery_mode =
+                                       case IsPersistent of
+                                           true  -> 2;
+                                           false -> 1
+                                       end}, <<>>), VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->

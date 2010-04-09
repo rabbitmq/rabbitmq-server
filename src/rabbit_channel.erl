@@ -1011,16 +1011,15 @@ notify_limiter(LimiterPid, Acked) ->
         Count -> rabbit_limiter:ack(LimiterPid, Count)
     end.
 
-is_message_persistent(#content{properties = #'P_basic'{
-                                 delivery_mode = Mode}}) ->
-    case Mode of
-        1         -> false;
-        2         -> true;
-        undefined -> false;
-        Other     -> rabbit_log:warning("Unknown delivery mode ~p - "
-                                        "treating as 1, non-persistent~n",
-                                        [Other]),
-                     false
+is_message_persistent(Content) ->
+    case rabbit_basic:is_message_persistent(Content) of
+        {invalid, Other} ->
+            rabbit_log:warning("Unknown delivery mode ~p - "
+                               "treating as 1, non-persistent~n",
+                               [Other]),
+            false;
+        IsPersistent when is_boolean(IsPersistent) ->
+            IsPersistent
     end.
 
 lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->

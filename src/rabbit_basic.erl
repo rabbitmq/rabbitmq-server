@@ -33,9 +33,10 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/1, message/4, message/5, message/6, delivery/4]).
+-export([publish/1, message/4, delivery/4]).
 -export([properties/1, publish/4, publish/7]).
 -export([build_content/2, from_content/1]).
+-export([is_message_persistent/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -48,11 +49,7 @@
 -spec(delivery/4 :: (boolean(), boolean(), maybe(txn()), message()) ->
              delivery()).
 -spec(message/4 :: (exchange_name(), routing_key(), properties_input(),
-                    binary()) -> message()).
--spec(message/5 :: (exchange_name(), routing_key(), properties_input(),
-                    binary(), guid()) -> message()).
--spec(message/6 :: (exchange_name(), routing_key(), properties_input(),
-                    binary(), guid(), boolean()) -> message()).
+                    binary()) -> (message() | {'error', any()})).
 -spec(properties/1 :: (properties_input()) -> amqp_properties()).
 -spec(publish/4 :: (exchange_name(), routing_key(), properties_input(),
                     binary()) -> publish_result()).
@@ -61,6 +58,8 @@
              publish_result()).
 -spec(build_content/2 :: (amqp_properties(), binary()) -> content()).
 -spec(from_content/1 :: (content()) -> {amqp_properties(), binary()}).
+-spec(is_message_persistent/1 ::
+        (decoded_content()) -> (boolean() | {'invalid', non_neg_integer()})).
 
 -endif.
 
@@ -96,18 +95,18 @@ from_content(Content) ->
     {Props, list_to_binary(lists:reverse(FragmentsRev))}.
 
 message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
-    message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, rabbit_guid:guid()).
-
-message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, MsgId) ->
-    message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, MsgId, false).
-
-message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin, MsgId, IsPersistent) ->
     Properties = properties(RawProperties),
-    #basic_message{exchange_name  = ExchangeName,
-                   routing_key    = RoutingKeyBin,
-                   content        = build_content(Properties, BodyBin),
-                   guid           = MsgId,
-                   is_persistent  = IsPersistent}.
+    Content = build_content(Properties, BodyBin),
+    case is_message_persistent(Content) of
+        {invalid, Other} ->
+            {error, {invalid_delivery_mode, Other}};
+        IsPersistent when is_boolean(IsPersistent) ->
+            #basic_message{exchange_name  = ExchangeName,
+                           routing_key    = RoutingKeyBin,
+                           content        = Content,
+                           guid           = rabbit_guid:guid(),
+                           is_persistent  = IsPersistent}
+    end.
 
 properties(P = #'P_basic'{}) ->
     P;
@@ -141,3 +140,12 @@ publish(ExchangeName, RoutingKeyBin, Mandatory, Immediate, Txn, Properties,
     publish(delivery(Mandatory, Immediate, Txn,
                      message(ExchangeName, RoutingKeyBin,
                              properties(Properties), BodyBin))).
+
+is_message_persistent(#content{properties = #'P_basic'{
+                                 delivery_mode = Mode}}) ->
+    case Mode of
+        1         -> false;
+        2         -> true;
+        undefined -> false;
+        Other     -> {invalid, Other}
+    end.
