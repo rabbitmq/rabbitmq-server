@@ -32,8 +32,8 @@
 -module(rabbit_variable_queue).
 
 -export([init/2, terminate/1, publish/2, publish_delivered/2,
-         set_queue_duration_target/2, remeasure_rates/1,
-         queue_duration/1, fetch/1, ack/2, len/1, is_empty/1, purge/1,
+         set_ram_duration_target/2, update_ram_duration/1,
+         ram_duration/1, fetch/1, ack/2, len/1, is_empty/1, purge/1,
          delete_and_terminate/1, requeue/2, tx_publish/2, tx_rollback/2,
          tx_commit/4, needs_sync/1, handle_pre_hibernate/1, status/1]).
 
@@ -133,7 +133,7 @@
 
 %%----------------------------------------------------------------------------
 
--behaviour(rabbit_internal_queue_type).
+-behaviour(rabbit_backing_queue_type).
 
 -record(vqstate,
         { q1,
@@ -189,6 +189,7 @@
 -define(RAM_INDEX_BATCH_SIZE, 64).
 
 -include("rabbit.hrl").
+-include("rabbit_variable_queue.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -236,7 +237,7 @@
                                          {boolean(), state()}).
 -spec(tx_commit_index/1 :: (state()) -> {boolean(), state()}).
 
--include("rabbit_internal_queue_type_spec.hrl").
+-include("rabbit_backing_queue_type_spec.hrl").
 
 -endif.
 
@@ -251,7 +252,11 @@
 %% Public API
 %%----------------------------------------------------------------------------
 
-init(QueueName, PersistentStore) ->
+init(QueueName, IsDurable) ->
+    PersistentStore = case IsDurable of
+                          true  -> ?PERSISTENT_MSG_STORE;
+                          false -> ?TRANSIENT_MSG_STORE
+                      end,
     MsgStoreRecovered =
         rabbit_msg_store:successfully_recovered_state(PersistentStore),
     {DeltaCount, PRef, TRef, Terms, IndexState} =
@@ -344,7 +349,7 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
             {ack_not_on_disk, State2}
     end.
 
-set_queue_duration_target(
+set_ram_duration_target(
   DurationTarget, State = #vqstate { avg_egress_rate = AvgEgressRate,
                                      avg_ingress_rate = AvgIngressRate,
                                      target_ram_msg_count = TargetRamMsgCount
@@ -364,18 +369,18 @@ set_queue_duration_target(
         false -> reduce_memory_use(State1)
     end.
 
-remeasure_rates(State = #vqstate { egress_rate = Egress,
-                                   ingress_rate = Ingress,
-                                   rate_timestamp = Timestamp,
-                                   in_counter = InCount,
-                                   out_counter = OutCount,
-                                   ram_msg_count = RamMsgCount,
-                                   duration_target = DurationTarget }) ->
+update_ram_duration(State = #vqstate { egress_rate = Egress,
+                                       ingress_rate = Ingress,
+                                       rate_timestamp = Timestamp,
+                                       in_counter = InCount,
+                                       out_counter = OutCount,
+                                       ram_msg_count = RamMsgCount,
+                                       duration_target = DurationTarget }) ->
     Now = now(),
     {AvgEgressRate, Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
     {AvgIngressRate, Ingress1} = update_rate(Now, Timestamp, InCount, Ingress),
 
-    set_queue_duration_target(
+    set_ram_duration_target(
       DurationTarget,
       State #vqstate { egress_rate = Egress1,
                        avg_egress_rate = AvgEgressRate,
@@ -385,7 +390,7 @@ remeasure_rates(State = #vqstate { egress_rate = Egress,
                        ram_msg_count_prev = RamMsgCount,
                        out_counter = 0, in_counter = 0 }).
 
-queue_duration(#vqstate { avg_egress_rate = AvgEgressRate,
+ram_duration(#vqstate { avg_egress_rate = AvgEgressRate,
                         avg_ingress_rate = AvgIngressRate,
                         ram_msg_count = RamMsgCount,
                         ram_msg_count_prev = RamMsgCountPrev }) ->
@@ -594,7 +599,7 @@ tx_commit(Pubs, AckTags, From, State =
             Self = self(),
             ok = rabbit_msg_store:sync(
                    ?PERSISTENT_MSG_STORE, PersistentMsgIds,
-                   fun () -> ok = rabbit_amqqueue:maybe_run_queue_via_internal_queue(
+                   fun () -> ok = rabbit_amqqueue:maybe_run_queue_via_backing_queue(
                                     Self, tx_commit_post_msg_store,
                                     [IsTransientPubs, Pubs, AckTags, From])
                    end),

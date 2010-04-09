@@ -32,8 +32,8 @@
 -module(rabbit_amqqueue).
 
 -export([start/0, declare/4, delete/3, purge/1]).
--export([internal_declare/2, internal_delete/1, remeasure_rates/1,
-         set_queue_duration/2, set_maximum_since_use/2]).
+-export([internal_declare/2, internal_delete/1, update_ram_duration/1,
+         set_ram_duration_target/2, set_maximum_since_use/2]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/2, redeliver/2, requeue/3, ack/4]).
@@ -41,7 +41,7 @@
 -export([consumers/1, consumers_all/1]).
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
--export([notify_sent/2, unblock/2, maybe_run_queue_via_internal_queue/3,
+-export([notify_sent/2, unblock/2, maybe_run_queue_via_backing_queue/3,
          flush_all/2]).
 -export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
@@ -109,12 +109,12 @@
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
--spec(maybe_run_queue_via_internal_queue/3 :: (pid(), atom(), [any()]) -> 'ok').
+-spec(maybe_run_queue_via_backing_queue/3 :: (pid(), atom(), [any()]) -> 'ok').
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
--spec(remeasure_rates/1 :: (pid()) -> 'ok').
--spec(set_queue_duration/2 :: (pid(), number()) -> 'ok').
+-spec(update_ram_duration/1 :: (pid()) -> 'ok').
+-spec(set_ram_duration_target/2 :: (pid(), number()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
@@ -124,13 +124,8 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
-    ok = rabbit_sup:start_child(
-           ?TRANSIENT_MSG_STORE, rabbit_msg_store,
-           [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(), undefined,
-            fun (ok) -> finished end, ok]),
     DurableQueues = find_durable_queues(),
-    ok = rabbit_queue_index:start_persistent_msg_store(DurableQueues),
+    ok = rabbit_queue_index:start_msg_stores(DurableQueues),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,
@@ -152,7 +147,7 @@ find_durable_queues() ->
 recover_durable_queues(DurableQueues) ->
     Qs = lists:foldl(
            fun (RecoveredQ, Acc) ->
-                   Q = start_queue_process(RecoveredQ),
+                   Q = start_queue_process(RecoveredQ, false),
                    %% We need to catch the case where a client
                    %% connected to another node has deleted the queue
                    %% (and possibly re-created it).
@@ -166,16 +161,14 @@ recover_durable_queues(DurableQueues) ->
                                       []  -> false
                                   end
                           end) of
-                       true  ->
-                           ok = gen_server2:call(Q#amqqueue.pid,
-                                                 init_internal_queue,
-                                                 infinity),
-                           [Q|Acc];
+                       true  -> [Q|Acc];
                        false -> exit(Q#amqqueue.pid, shutdown),
                                 Acc
                    end
            end, [], DurableQueues),
-    [ok = gen_server2:call(Q#amqqueue.pid, sync, infinity) || Q <- Qs],
+    %% Issue inits to *all* the queues so that they all init at the same time
+    [ok = gen_server2:cast(Q#amqqueue.pid, init_backing_queue) || Q <- Qs],
+    [ok = gen_server2:call(Q#amqqueue.pid, sync) || Q <- Qs],
     Qs.
 
 declare(QueueName, Durable, AutoDelete, Args) ->
@@ -183,7 +176,7 @@ declare(QueueName, Durable, AutoDelete, Args) ->
                                       durable = Durable,
                                       auto_delete = AutoDelete,
                                       arguments = Args,
-                                      pid = none}),
+                                      pid = none}, true),
     internal_declare(Q, true).
 
 internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
@@ -198,9 +191,6 @@ internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
                                           true  -> add_default_binding(Q);
                                           false -> ok
                                       end,
-                                      ok = gen_server2:call(
-                                             Q#amqqueue.pid,
-                                             init_internal_queue, infinity),
                                       Q;
                                [_] -> not_found %% existing Q on stopped node
                            end;
@@ -223,8 +213,9 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-start_queue_process(Q) ->
-    {ok, Pid} = supervisor2:start_child(rabbit_amqqueue_sup, [Q]),
+start_queue_process(Q, InitBackingQueue) ->
+    {ok, Pid} =
+        supervisor2:start_child(rabbit_amqqueue_sup, [Q, InitBackingQueue]),
     Q#amqqueue{pid = Pid}.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
@@ -358,8 +349,8 @@ notify_sent(QPid, ChPid) ->
 unblock(QPid, ChPid) ->
     gen_server2:pcast(QPid, 7, {unblock, ChPid}).
 
-maybe_run_queue_via_internal_queue(QPid, Fun, Args) ->
-    gen_server2:pcast(QPid, 7, {maybe_run_queue_via_internal_queue, Fun, Args}).
+maybe_run_queue_via_backing_queue(QPid, Fun, Args) ->
+    gen_server2:pcast(QPid, 7, {maybe_run_queue_via_backing_queue, Fun, Args}).
 
 flush_all(QPids, ChPid) ->
     safe_pmap_ok(
@@ -388,11 +379,11 @@ internal_delete(QueueName) ->
             ok
     end.
 
-remeasure_rates(QPid) ->
-    gen_server2:pcast(QPid, 8, remeasure_rates).
+update_ram_duration(QPid) ->
+    gen_server2:pcast(QPid, 8, update_ram_duration).
 
-set_queue_duration(QPid, Duration) ->
-    gen_server2:pcast(QPid, 8, {set_queue_duration, Duration}).
+set_ram_duration_target(QPid, Duration) ->
+    gen_server2:pcast(QPid, 8, {set_ram_duration_target, Duration}).
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:pcast(QPid, 8, {set_maximum_since_use, Age}).

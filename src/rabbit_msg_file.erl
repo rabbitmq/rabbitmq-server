@@ -46,7 +46,7 @@
 
 %%----------------------------------------------------------------------------
 
--include("rabbit.hrl").
+-include("rabbit_msg_store.hrl").
 
 -ifdef(use_specs).
 

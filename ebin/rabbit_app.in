@@ -19,7 +19,7 @@
          {ssl_options, []},
          {vm_memory_high_watermark, 0.4},
          {msg_store_index_module, rabbit_msg_store_ets_index},
-         {queue_internal_queue_module, rabbit_variable_queue},
+         {backing_queue_module, rabbit_variable_queue},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},

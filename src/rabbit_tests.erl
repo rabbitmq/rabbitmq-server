@@ -41,6 +41,7 @@
 -import(lists).
 
 -include("rabbit.hrl").
+-include("rabbit_variable_queue.hrl").
 -include_lib("kernel/include/file.hrl").
 
 test_content_prop_roundtrip(Datum, Binary) ->
@@ -1203,8 +1204,7 @@ test_amqqueue(Durable) ->
               pid = none}.
 
 empty_test_queue() ->
-    ok = start_transient_msg_store(),
-    ok = rabbit_queue_index:start_persistent_msg_store([]),
+    ok = rabbit_queue_index:start_msg_stores([]),
     {0, _PRef, _TRef, _Terms, Qi1} = rabbit_queue_index:init(test_queue(), false),
     _Qi2 = rabbit_queue_index:terminate_and_erase(Qi1),
     ok.
@@ -1266,8 +1266,7 @@ test_queue_index() ->
     %% call terminate twice to prove it's idempotent
     _Qi5 = rabbit_queue_index:terminate([], rabbit_queue_index:terminate([], Qi4)),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_persistent_msg_store([test_amqqueue(true)]),
-    ok = start_transient_msg_store(),
+    ok = rabbit_queue_index:start_msg_stores([test_amqqueue(true)]),
     %% should get length back as 0, as all the msgs were transient
     {0, _PRef1, _TRef1, _Terms1, Qi6} = rabbit_queue_index:init(test_queue(), false),
     {0, 0, Qi7} =
@@ -1280,8 +1279,7 @@ test_queue_index() ->
                                     lists:reverse(SeqIdsMsgIdsB)),
     _Qi11 = rabbit_queue_index:terminate([], Qi10),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_persistent_msg_store([test_amqqueue(true)]),
-    ok = start_transient_msg_store(),
+    ok = rabbit_queue_index:start_msg_stores([test_amqqueue(true)]),
     %% should get length back as 10000
     LenB = length(SeqIdsB),
     {LenB, _PRef2, _TRef2, _Terms2, Qi12} = rabbit_queue_index:init(test_queue(), false),
@@ -1298,8 +1296,7 @@ test_queue_index() ->
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi17),
     _Qi19 = rabbit_queue_index:terminate([], Qi18),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_persistent_msg_store([test_amqqueue(true)]),
-    ok = start_transient_msg_store(),
+    ok = rabbit_queue_index:start_msg_stores([test_amqqueue(true)]),
     %% should get length back as 0 because all persistent msgs have been acked
     {0, _PRef3, _TRef3, _Terms3, Qi20} = rabbit_queue_index:init(test_queue(), false),
     _Qi21 = rabbit_queue_index:terminate_and_erase(Qi20),
@@ -1340,8 +1337,7 @@ test_queue_index() ->
     Qi40 = queue_index_flush_journal(Qi39),
     _Qi41 = rabbit_queue_index:terminate_and_erase(Qi40),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_persistent_msg_store([]),
-    ok = start_transient_msg_store(),
+    ok = rabbit_queue_index:start_msg_stores([]),
     ok = stop_msg_store(),
     passed.
 
@@ -1370,7 +1366,7 @@ assert_prop(List, Prop, Value) ->
 fresh_variable_queue() ->
     stop_msg_store(),
     ok = empty_test_queue(),
-    VQ = rabbit_variable_queue:init(test_queue(), ?PERSISTENT_MSG_STORE),
+    VQ = rabbit_variable_queue:init(test_queue(), true),
     S0 = rabbit_variable_queue:status(VQ),
     assert_prop(S0, len, 0),
     assert_prop(S0, q1, 0),
@@ -1391,7 +1387,7 @@ test_variable_queue_dynamic_duration_change() ->
     %% start by sending in a couple of segments worth
     Len1 = 2*SegmentSize,
     VQ1 = variable_queue_publish(false, Len1, VQ0),
-    VQ2 = rabbit_variable_queue:remeasure_rates(VQ1),
+    VQ2 = rabbit_variable_queue:update_ram_duration(VQ1),
     {ok, _TRef} = timer:send_after(1000, {duration, 60,
                                           fun (V) -> (V*0.75)-1 end}),
     VQ3 = test_variable_queue_dynamic_duration_change_f(Len1, VQ2),
@@ -1427,9 +1423,9 @@ test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
                        _               -> Fun
                    end,
             {ok, _TRef} = timer:send_after(1000, {duration, N1, Fun1}),
-            VQ4 = rabbit_variable_queue:remeasure_rates(VQ3),
+            VQ4 = rabbit_variable_queue:update_ram_duration(VQ3),
             VQ5 = %% /37 otherwise the duration is just to high to stress things
-                rabbit_variable_queue:set_queue_duration_target(N/37, VQ4),
+                rabbit_variable_queue:set_ram_duration_target(N/37, VQ4),
             io:format("~p:~n~p~n~n", [N, rabbit_variable_queue:status(VQ5)]),
             test_variable_queue_dynamic_duration_change_f(Len, VQ5)
     after 0 ->
@@ -1441,8 +1437,8 @@ test_variable_queue_partial_segments_delta_thing() ->
     HalfSegment = SegmentSize div 2,
     VQ0 = fresh_variable_queue(),
     VQ1 = variable_queue_publish(true, SegmentSize + HalfSegment, VQ0),
-    VQ2 = rabbit_variable_queue:remeasure_rates(VQ1),
-    VQ3 = rabbit_variable_queue:set_queue_duration_target(0, VQ2),
+    VQ2 = rabbit_variable_queue:update_ram_duration(VQ1),
+    VQ3 = rabbit_variable_queue:set_ram_duration_target(0, VQ2),
     %% one segment in q3 as betas, and half a segment in delta
     S3 = rabbit_variable_queue:status(VQ3),
     io:format("~p~n", [S3]),
@@ -1450,7 +1446,7 @@ test_variable_queue_partial_segments_delta_thing() ->
                             SegmentSize + HalfSegment}),
     assert_prop(S3, q3, SegmentSize),
     assert_prop(S3, len, SegmentSize + HalfSegment),
-    VQ4 = rabbit_variable_queue:set_queue_duration_target(infinity, VQ3),
+    VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
     VQ5 = variable_queue_publish(true, 1, VQ4),
     %% should have 1 alpha, but it's in the same segment as the deltas
     S5 = rabbit_variable_queue:status(VQ5),

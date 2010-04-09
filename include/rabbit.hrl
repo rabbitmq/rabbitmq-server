@@ -84,9 +84,8 @@
 -type(info_key() :: atom()).
 -type(info() :: {info_key(), any()}).
 -type(regexp() :: binary()).
--type(file_path() :: any()).
+-type(file_path() :: string()).
 -type(io_device() :: any()).
--type(file_open_mode() :: any()).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: binary()).
@@ -170,8 +169,6 @@
                   explanation :: string(),
                   method      :: atom()}).
 
--type(msg() :: any()).
-
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -180,9 +177,6 @@
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
 
 -define(MAX_WAIT, 16#ffffffff).
-
--define(PERSISTENT_MSG_STORE,     msg_store_persistent).
--define(TRANSIENT_MSG_STORE,      msg_store_transient).
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).

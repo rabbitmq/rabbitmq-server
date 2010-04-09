@@ -37,9 +37,9 @@
 
 -define(UNSENT_MESSAGE_LIMIT,        100).
 -define(SYNC_INTERVAL,                 5). %% milliseconds
--define(RATES_REMEASURE_INTERVAL,  5000).
+-define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
--export([start_link/1, info_keys/0]).
+-export([start_link/2, info_keys/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1]).
@@ -53,9 +53,9 @@
             owner,
             exclusive_consumer,
             has_had_consumers,
-            internal_queue,
-            internal_queue_state,
-            internal_queue_timeout_fun,
+            backing_queue,
+            backing_queue_state,
+            backing_queue_timeout_fun,
             next_msg_id,
             active_consumers,
             blocked_consumers,
@@ -94,34 +94,34 @@
          consumers,
          transactions,
          memory,
-         internal_queue_status
+         backing_queue_status
         ]).
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
+start_link(Q, InitBackingQueue) ->
+    gen_server2:start_link(?MODULE, [Q, InitBackingQueue], []).
 
 info_keys() -> ?INFO_KEYS.
 
 %%----------------------------------------------------------------------------
 
-init(Q) ->
+init([Q, InitBQ]) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
     ok = file_handle_cache:register_callback(
            rabbit_amqqueue, set_maximum_since_use, [self()]),
     ok = rabbit_memory_monitor:register
-           (self(), {rabbit_amqqueue, set_queue_duration, [self()]}),
-    {ok, InternalQueueModule} =
-        application:get_env(queue_internal_queue_module),
+           (self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
+    {ok, BQ} = application:get_env(backing_queue_module),
 
     {ok, #q{q = Q,
             owner = none,
             exclusive_consumer = none,
             has_had_consumers = false,
-            internal_queue = InternalQueueModule,
-            internal_queue_state = undefined,
-            internal_queue_timeout_fun = undefined,
+            backing_queue = BQ,
+            backing_queue_state = maybe_init_backing_queue(InitBQ, BQ, Q),
+            backing_queue_timeout_fun = undefined,
             next_msg_id = 1,
             active_consumers = queue:new(),
             blocked_consumers = queue:new(),
@@ -129,33 +129,39 @@ init(Q) ->
             rate_timer_ref = undefined}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-terminate(shutdown, #q{internal_queue_state = IQS,
-                       internal_queue = IQ}) ->
+maybe_init_backing_queue(
+  true, BQ, #amqqueue{name = QName, durable = IsDurable}) ->
+    BQ:init(QName, IsDurable);
+maybe_init_backing_queue(false, _BQ, _Q) ->
+    undefined.
+
+terminate(shutdown, #q{backing_queue_state = BQS,
+                       backing_queue = BQ}) ->
     ok = rabbit_memory_monitor:deregister(self()),
-    case IQS of
+    case BQS of
         undefined -> ok;
-        _         -> IQ:terminate(IQS)
+        _         -> BQ:terminate(BQS)
     end;
-terminate({shutdown, _}, #q{internal_queue_state = IQS,
-                            internal_queue = IQ}) ->
+terminate({shutdown, _}, #q{backing_queue_state = BQS,
+                            backing_queue = BQ}) ->
     ok = rabbit_memory_monitor:deregister(self()),
-    case IQS of
+    case BQS of
         undefined -> ok;
-        _         -> IQ:terminate(IQS)
+        _         -> BQ:terminate(BQS)
     end;
-terminate(_Reason, State = #q{internal_queue_state = IQS,
-                              internal_queue = IQ}) ->
+terminate(_Reason, State = #q{backing_queue_state = BQS,
+                              backing_queue = BQ}) ->
     ok = rabbit_memory_monitor:deregister(self()),
     %% FIXME: How do we cancel active subscriptions?
     %% Ensure that any persisted tx messages are removed.
     %% TODO: wait for all in flight tx_commits to complete
-    case IQS of
+    case BQS of
         undefined ->
             ok;
         _ ->
-            IQS1 = IQ:tx_rollback(
+            BQS1 = BQ:tx_rollback(
                      lists:concat([PM || #tx { pending_messages = PM } <-
-                                             all_tx_record()]), IQS),
+                                             all_tx_record()]), BQS),
             %% Delete from disk first. If we crash at this point, when
             %% a durable queue, we will be recreated at startup,
             %% possibly with partial content. The alternative is much
@@ -163,7 +169,7 @@ terminate(_Reason, State = #q{internal_queue_state = IQS,
             %% would then have a race between the disk delete and a
             %% new queue with the same name being created and
             %% published to.
-            IQ:delete_and_terminate(IQS1)
+            BQ:delete_and_terminate(BQS1)
     end,
     ok = rabbit_amqqueue:internal_delete(qname(State)).
 
@@ -182,9 +188,9 @@ noreply(NewState) ->
     {NewState1, Timeout} = next_state(NewState),
     {noreply, NewState1, Timeout}.
 
-next_state(State = #q{internal_queue_state = IQS,
-                      internal_queue = IQ}) ->
-    next_state1(ensure_rate_timer(State), IQ:needs_sync(IQS)).
+next_state(State = #q{backing_queue_state = BQS,
+                      backing_queue = BQ}) ->
+    next_state1(ensure_rate_timer(State), BQ:needs_sync(BQS)).
 
 next_state1(State = #q{sync_timer_ref = undefined}, Callback = {_Fun, _Args}) ->
     {start_sync_timer(State, Callback), 0};
@@ -193,11 +199,11 @@ next_state1(State, {_Fun, _Args}) ->
 next_state1(State = #q{sync_timer_ref = undefined}, undefined) ->
     {State, hibernate};
 next_state1(State, undefined) ->
-    {stop_sync_timer(State#q{internal_queue_timeout_fun = undefined}), hibernate}.
+    {stop_sync_timer(State#q{backing_queue_timeout_fun = undefined}), hibernate}.
 
 ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
-    {ok, TRef} = timer:apply_after(?RATES_REMEASURE_INTERVAL, rabbit_amqqueue,
-                                   remeasure_rates, [self()]),
+    {ok, TRef} = timer:apply_after(?RAM_DURATION_UPDATE_INTERVAL, rabbit_amqqueue,
+                                   update_ram_duration, [self()]),
     State#q{rate_timer_ref = TRef};
 ensure_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};
@@ -216,16 +222,16 @@ start_sync_timer(State = #q{sync_timer_ref = undefined},
                  Callback = {Fun, Args}) ->
     {ok, TRef} = timer:apply_after(
                    ?SYNC_INTERVAL, rabbit_amqqueue,
-                   maybe_run_queue_via_internal_queue, [self(), Fun, Args]),
-    State#q{sync_timer_ref = TRef, internal_queue_timeout_fun = Callback}.
+                   maybe_run_queue_via_backing_queue, [self(), Fun, Args]),
+    State#q{sync_timer_ref = TRef, backing_queue_timeout_fun = Callback}.
 
 stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
-    State#q{sync_timer_ref = undefined, internal_queue_timeout_fun = undefined}.
+    State#q{sync_timer_ref = undefined, backing_queue_timeout_fun = undefined}.
 
-assert_invariant(#q{active_consumers = AC, internal_queue_state = IQS,
-                    internal_queue = IQ}) ->
-    true = (queue:is_empty(AC) orelse IQ:is_empty(IQS)).
+assert_invariant(#q{active_consumers = AC, backing_queue_state = BQS,
+                    backing_queue = BQ}) ->
+    true = (queue:is_empty(AC) orelse BQ:is_empty(BQS)).
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
@@ -340,73 +346,73 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
 deliver_from_queue_pred({IsEmpty, _AutoAcks}, _State) ->
     not IsEmpty.
 deliver_from_queue_deliver(AckRequired, {false, AutoAcks},
-                           State = #q{internal_queue_state = IQS,
-                                      internal_queue = IQ}) ->
-    {{Message, IsDelivered, AckTag, Remaining}, IQS1} = IQ:fetch(IQS),
+                           State = #q{backing_queue_state = BQS,
+                                      backing_queue = BQ}) ->
+    {{Message, IsDelivered, AckTag, Remaining}, BQS1} = BQ:fetch(BQS),
     AutoAcks1 = case AckRequired of
                     true -> AutoAcks;
                     false -> [AckTag | AutoAcks]
                 end,
     {{Message, IsDelivered, AckTag}, {0 == Remaining, AutoAcks1},
-     State #q { internal_queue_state = IQS1 }}.
+     State #q { backing_queue_state = BQS1 }}.
 
-run_message_queue(State = #q{internal_queue_state = IQS,
-                             internal_queue = IQ}) ->
+run_message_queue(State = #q{backing_queue_state = BQS,
+                             backing_queue = BQ}) ->
     Funs = { fun deliver_from_queue_pred/2,
              fun deliver_from_queue_deliver/3 },
-    IsEmpty = IQ:is_empty(IQS),
+    IsEmpty = BQ:is_empty(BQS),
     {{_IsEmpty1, AutoAcks}, State1} =
         deliver_msgs_to_consumers(Funs, {IsEmpty, []}, State),
-    IQS1 = IQ:ack(AutoAcks, State1 #q.internal_queue_state),
-    State1 #q { internal_queue_state = IQS1 }.
+    BQS1 = BQ:ack(AutoAcks, State1 #q.backing_queue_state),
+    State1 #q { backing_queue_state = BQS1 }.
 
-attempt_delivery(none, _ChPid, Message, State = #q{internal_queue = IQ}) ->
+attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1) ->
                 {AckTag, State2} =
                     case AckRequired of
                         true ->
-                            {AckTag1, IQS} =
-                                IQ:publish_delivered(
-                                  Message, State1 #q.internal_queue_state),
-                            {AckTag1, State1 #q { internal_queue_state = IQS }};
+                            {AckTag1, BQS} =
+                                BQ:publish_delivered(
+                                  Message, State1 #q.backing_queue_state),
+                            {AckTag1, State1 #q { backing_queue_state = BQS }};
                         false ->
                             {noack, State1}
                     end,
                 {{Message, false, AckTag}, true, State2}
         end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
-attempt_delivery(Txn, ChPid, Message, State = #q{internal_queue = IQ}) ->
-    IQS = IQ:tx_publish(Message, State #q.internal_queue_state),
+attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
+    BQS = BQ:tx_publish(Message, State #q.backing_queue_state),
     record_pending_message(Txn, ChPid, Message),
-    {true, State #q { internal_queue_state = IQS }}.
+    {true, State #q { backing_queue_state = BQS }}.
 
-deliver_or_enqueue(Txn, ChPid, Message, State = #q{internal_queue = IQ}) ->
+deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
     case attempt_delivery(Txn, ChPid, Message, State) of
         {true, NewState} ->
             {true, NewState};
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
-            IQS = IQ:publish(Message, State #q.internal_queue_state),
-            {false, NewState #q { internal_queue_state = IQS }}
+            BQS = BQ:publish(Message, State #q.backing_queue_state),
+            {false, NewState #q { backing_queue_state = BQS }}
     end.
 
 %% all these messages have already been delivered at least once and
 %% not ack'd, but need to be either redelivered or requeued
 deliver_or_requeue_n([], State) ->
     State;
-deliver_or_requeue_n(MsgsWithAcks, State = #q{internal_queue = IQ}) ->
+deliver_or_requeue_n(MsgsWithAcks, State = #q{backing_queue = BQ}) ->
     Funs = { fun deliver_or_requeue_msgs_pred/2,
              fun deliver_or_requeue_msgs_deliver/3 },
     {{_RemainingLengthMinusOne, AutoAcks, OutstandingMsgs}, NewState} =
         deliver_msgs_to_consumers(
           Funs, {length(MsgsWithAcks), [], MsgsWithAcks}, State),
-    IQS = IQ:ack(AutoAcks, NewState #q.internal_queue_state),
+    BQS = BQ:ack(AutoAcks, NewState #q.backing_queue_state),
     case OutstandingMsgs of
-        [] -> NewState #q { internal_queue_state = IQS };
-        _ -> IQS1 = IQ:requeue(OutstandingMsgs, IQS),
-             NewState #q { internal_queue_state = IQS1 }
+        [] -> NewState #q { backing_queue_state = BQS };
+        _ -> BQS1 = BQ:requeue(OutstandingMsgs, BQS),
+             NewState #q { backing_queue_state = BQS1 }
     end.
 
 deliver_or_requeue_msgs_pred({Len, _AcksAcc, _MsgsWithAcks}, _State) ->
@@ -518,11 +524,11 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
-maybe_run_queue_via_internal_queue(Fun, Args,
-                                   State = #q{internal_queue_state = IQS,
-                                              internal_queue = IQ}) ->
-    {RunQueue, IQS1} = apply(IQ, Fun, Args ++ [IQS]),
-    State1 = State#q{internal_queue_state = IQS1},
+maybe_run_queue_via_backing_queue(Fun, Args,
+                                   State = #q{backing_queue_state = BQS,
+                                              backing_queue = BQ}) ->
+    {RunQueue, BQS1} = apply(BQ, Fun, Args ++ [BQS]),
+    State1 = State#q{backing_queue_state = BQS1},
     case RunQueue of
         true  -> run_message_queue(State1);
         false -> State1
@@ -557,7 +563,7 @@ record_pending_acks(Txn, ChPid, MsgIds) ->
     store_tx(Txn, Tx#tx{pending_acks = [MsgIds | Pending],
                         ch_pid = ChPid}).
 
-commit_transaction(Txn, From, State = #q{internal_queue = IQ}) ->
+commit_transaction(Txn, From, State = #q{backing_queue = BQ}) ->
     #tx{ch_pid = ChPid, pending_messages = PendingMessages,
         pending_acks = PendingAcks} = lookup_tx(Txn),
     PendingMessagesOrdered = lists:reverse(PendingMessages),
@@ -572,16 +578,16 @@ commit_transaction(Txn, From, State = #q{internal_queue = IQ}) ->
                 store_ch_record(C#cr{unacked_messages = Remaining}),
                 [AckTag || {_Message, AckTag} <- MsgsWithAcks]
         end,
-    {RunQueue, IQS} = IQ:tx_commit(PendingMessagesOrdered, Acks, From,
-                                   State#q.internal_queue_state),
+    {RunQueue, BQS} = BQ:tx_commit(PendingMessagesOrdered, Acks, From,
+                                   State#q.backing_queue_state),
     erase_tx(Txn),
-    {RunQueue, State#q{internal_queue_state = IQS}}.
+    {RunQueue, State#q{backing_queue_state = BQS}}.
 
-rollback_transaction(Txn, State = #q{internal_queue = IQ}) ->
+rollback_transaction(Txn, State = #q{backing_queue = BQ}) ->
     #tx{pending_messages = PendingMessages} = lookup_tx(Txn),
-    IQS = IQ:tx_rollback(PendingMessages, State #q.internal_queue_state),
+    BQS = BQ:tx_rollback(PendingMessages, State #q.backing_queue_state),
     erase_tx(Txn),
-    State#q{internal_queue_state = IQS}.
+    State#q{backing_queue_state = BQS}.
 
 collect_messages(MsgIds, UAM) ->
     lists:mapfoldl(
@@ -608,8 +614,8 @@ i(exclusive_consumer_tag, #q{exclusive_consumer = none}) ->
     '';
 i(exclusive_consumer_tag, #q{exclusive_consumer = {_ChPid, ConsumerTag}}) ->
     ConsumerTag;
-i(messages_ready, #q{internal_queue_state = IQS, internal_queue = IQ}) ->
-    IQ:len(IQS);
+i(messages_ready, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
+    BQ:len(BQS);
 i(messages_unacknowledged, _) ->
     lists:sum([dict:size(UAM) ||
                   #cr{unacked_messages = UAM} <- all_ch_record()]);
@@ -630,25 +636,12 @@ i(transactions, _) ->
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
-i(internal_queue_status, #q{internal_queue_state = IQS, internal_queue = IQ}) ->
-    IQ:status(IQS);
+i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
+    BQ:status(BQS);
 i(Item, _) ->
     throw({bad_argument, Item}).
 
 %---------------------------------------------------------------------------
-
-handle_call(init_internal_queue, From, State =
-                #q{internal_queue_state = undefined, internal_queue = IQ,
-                   q = #amqqueue{name = QName, durable = IsDurable}}) ->
-    gen_server2:reply(From, ok),
-    PersistentStore = case IsDurable of
-                          true  -> ?PERSISTENT_MSG_STORE;
-                          false -> ?TRANSIENT_MSG_STORE
-                      end,
-    noreply(State#q{internal_queue_state = IQ:init(QName, PersistentStore)});
-
-handle_call(init_internal_queue, _From, State) ->
-    reply(ok, State);
 
 handle_call(sync, _From, State) ->
     reply(ok, State);
@@ -713,24 +706,24 @@ handle_call({notify_down, ChPid}, _From, State) ->
 
 handle_call({basic_get, ChPid, NoAck}, _From,
             State = #q{q = #amqqueue{name = QName}, next_msg_id = NextId,
-                       internal_queue_state = IQS, internal_queue = IQ}) ->
-    case IQ:fetch(IQS) of
-        {empty, IQS1} -> reply(empty, State #q { internal_queue_state = IQS1 });
-        {{Message, IsDelivered, AckTag, Remaining}, IQS1} ->
+                       backing_queue_state = BQS, backing_queue = BQ}) ->
+    case BQ:fetch(BQS) of
+        {empty, BQS1} -> reply(empty, State #q { backing_queue_state = BQS1 });
+        {{Message, IsDelivered, AckTag, Remaining}, BQS1} ->
             AckRequired = not(NoAck),
-            IQS2 =
+            BQS2 =
                 case AckRequired of
                     true ->
                         C = #cr{unacked_messages = UAM} = ch_record(ChPid),
                         NewUAM = dict:store(NextId, {Message, AckTag}, UAM),
                         store_ch_record(C#cr{unacked_messages = NewUAM}),
-                        IQS1;
+                        BQS1;
                     false ->
-                        IQ:ack([AckTag], IQS1)
+                        BQ:ack([AckTag], BQS1)
                 end,
             Msg = {QName, self(), NextId, IsDelivered, Message},
             reply({ok, Remaining, Msg},
-                  State #q { next_msg_id = NextId + 1, internal_queue_state = IQS2 })
+                  State #q { next_msg_id = NextId + 1, backing_queue_state = BQS2 })
     end;
 
 handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
@@ -810,14 +803,14 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
     end;
 
 handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
-                                    internal_queue_state = IQS,
-                                    internal_queue = IQ,
+                                    backing_queue_state = BQS,
+                                    backing_queue = BQ,
                                     active_consumers = ActiveConsumers}) ->
-    reply({ok, Name, IQ:len(IQS), queue:len(ActiveConsumers)}, State);
+    reply({ok, Name, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
-            State = #q{internal_queue_state = IQS, internal_queue = IQ}) ->
-    Length = IQ:len(IQS),
+            State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
+    Length = BQ:len(BQS),
     IsEmpty = Length == 0,
     IsUnused = is_unused(State),
     if
@@ -829,9 +822,9 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
             {stop, normal, {ok, Length}, State}
     end;
 
-handle_call(purge, _From, State = #q{internal_queue = IQ}) ->
-    {Count, IQS} = IQ:purge(State#q.internal_queue_state),
-    reply({ok, Count}, State#q{internal_queue_state = IQS});
+handle_call(purge, _From, State = #q{backing_queue = BQ}) ->
+    {Count, BQS} = BQ:purge(State#q.backing_queue_state),
+    reply({ok, Count}, State#q{backing_queue_state = BQS});
 
 handle_call({claim_queue, ReaderPid}, _From,
             State = #q{owner = Owner, exclusive_consumer = Holder}) ->
@@ -856,12 +849,21 @@ handle_call({claim_queue, ReaderPid}, _From,
             reply(locked, State)
     end.
 
+
+handle_cast(init_backing_queue, State = #q{backing_queue_state = undefined,
+                                           backing_queue = BQ, q = Q}) ->
+    noreply(State#q{backing_queue_state =
+                        maybe_init_backing_queue(true, BQ, Q)});
+
+handle_cast(init_backing_queue, State) ->
+    noreply(State);
+
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     {_Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
     noreply(NewState);
 
-handle_cast({ack, Txn, MsgIds, ChPid}, State = #q{internal_queue = IQ}) ->
+handle_cast({ack, Txn, MsgIds, ChPid}, State = #q{backing_queue = BQ}) ->
     case lookup_ch(ChPid) of
         not_found ->
             noreply(State);
@@ -869,10 +871,10 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State = #q{internal_queue = IQ}) ->
             case Txn of
                 none ->
                     {MsgWithAcks, Remaining} = collect_messages(MsgIds, UAM),
-                    IQS = IQ:ack([AckTag || {_Message, AckTag} <- MsgWithAcks],
-                                 State #q.internal_queue_state),
+                    BQS = BQ:ack([AckTag || {_Message, AckTag} <- MsgWithAcks],
+                                 State #q.backing_queue_state),
                     store_ch_record(C#cr{unacked_messages = Remaining}),
-                    noreply(State #q { internal_queue_state = IQS });
+                    noreply(State #q { backing_queue_state = BQS });
                 _  ->
                     record_pending_acks(Txn, ChPid, MsgIds),
                     noreply(State)
@@ -906,8 +908,8 @@ handle_cast({notify_sent, ChPid}, State) ->
                                C#cr{unsent_message_count = Count - 1}
                        end));
 
-handle_cast({maybe_run_queue_via_internal_queue, Fun, Args}, State) ->
-    noreply(maybe_run_queue_via_internal_queue(Fun, Args, State));
+handle_cast({maybe_run_queue_via_backing_queue, Fun, Args}, State) ->
+    noreply(maybe_run_queue_via_backing_queue(Fun, Args, State));
 
 handle_cast({limit, ChPid, LimiterPid}, State) ->
     noreply(
@@ -929,21 +931,21 @@ handle_cast({flush, ChPid}, State) ->
     ok = rabbit_channel:flushed(ChPid, self()),
     noreply(State);
 
-handle_cast(remeasure_rates, State = #q{internal_queue_state = IQS,
-                                        internal_queue = IQ}) ->
-    IQS1 = IQ:remeasure_rates(IQS),
-    RamDuration = IQ:queue_duration(IQS1),
+handle_cast(update_ram_duration, State = #q{backing_queue_state = BQS,
+                                            backing_queue = BQ}) ->
+    BQS1 = BQ:update_ram_duration(BQS),
+    RamDuration = BQ:ram_duration(BQS1),
     DesiredDuration =
-        rabbit_memory_monitor:report_queue_duration(self(), RamDuration),
-    IQS2 = IQ:set_queue_duration_target(DesiredDuration, IQS1),
+        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
+    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
     noreply(State#q{rate_timer_ref = just_measured,
-                    internal_queue_state = IQS2});
+                    backing_queue_state = BQS2});
 
-handle_cast({set_queue_duration, Duration},
-            State = #q{internal_queue_state = IQS,
-                       internal_queue = IQ}) ->
-    IQS1 = IQ:set_queue_duration_target(Duration, IQS),
-    noreply(State#q{internal_queue_state = IQS1});
+handle_cast({set_ram_duration_target, Duration},
+            State = #q{backing_queue_state = BQS,
+                       backing_queue = BQ}) ->
+    BQS1 = BQ:set_ram_duration_target(Duration, BQS),
+    noreply(State#q{backing_queue_state = BQS1});
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -968,12 +970,12 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
         {stop, NewState} -> {stop, normal, NewState}
     end;
 
-handle_info(timeout, State = #q{internal_queue_timeout_fun = undefined}) ->
+handle_info(timeout, State = #q{backing_queue_timeout_fun = undefined}) ->
     noreply(State);
 
-handle_info(timeout, State = #q{internal_queue_timeout_fun = {Fun, Args}}) ->
-    noreply(maybe_run_queue_via_internal_queue(
-              Fun, Args, State#q{internal_queue_timeout_fun = undefined}));
+handle_info(timeout, State = #q{backing_queue_timeout_fun = {Fun, Args}}) ->
+    noreply(maybe_run_queue_via_backing_queue(
+              Fun, Args, State#q{backing_queue_timeout_fun = undefined}));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -982,11 +984,11 @@ handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
 
-handle_pre_hibernate(State = #q{internal_queue_state = IQS,
-                                internal_queue = IQ}) ->
-    IQS1 = IQ:handle_pre_hibernate(IQS),
+handle_pre_hibernate(State = #q{backing_queue_state = BQS,
+                                backing_queue = BQ}) ->
+    BQS1 = BQ:handle_pre_hibernate(BQS),
     %% no activity for a while == 0 egress and ingress rates
     DesiredDuration =
-        rabbit_memory_monitor:report_queue_duration(self(), infinity),
-    IQS2 = IQ:set_queue_duration_target(DesiredDuration, IQS1),
-    {hibernate, stop_rate_timer(State#q{internal_queue_state = IQS2})}.
+        rabbit_memory_monitor:report_ram_duration(self(), infinity),
+    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
+    {hibernate, stop_rate_timer(State#q{backing_queue_state = BQS2})}.

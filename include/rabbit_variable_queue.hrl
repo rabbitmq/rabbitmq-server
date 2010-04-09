@@ -29,10 +29,5 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(random_distributions).
-
--export([geometric/1]).
-
-geometric(P) when 0.0 < P andalso P < 1.0 ->
-    U = 1.0 - random:uniform(),
-    rabbit_misc:ceil(math:log(U) / math:log(1.0 - P)).
+-define(PERSISTENT_MSG_STORE,     msg_store_persistent).
+-define(TRANSIENT_MSG_STORE,      msg_store_transient).

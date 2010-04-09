@@ -29,14 +29,14 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_internal_queue_type).
+-module(rabbit_backing_queue_type).
 
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
     [
-     %% Called with queue name and the persistent msg_store to
-     %% use. Transient store is in ?TRANSIENT_MSG_STORE
+     %% Called with queue name and a boolean to indicate whether or
+     %% not the queue is durable.
      {init, 2},
 
      %% Called on queue shutdown when queue isn't being deleted
@@ -58,27 +58,52 @@ behaviour_info(callbacks) ->
      %% (i.e. saves the round trip through the internal queue).
      {publish_delivered, 2},
 
+     %% Produce the next message
      {fetch, 1},
 
+     %% Acktags supplied are for messages which can now be forgotten
+     %% about
      {ack, 2},
 
+     %% A publish, but in the context of a transaction.
      {tx_publish, 2},
+
+     %% Undo anything which has been done by the tx_publish of the
+     %% indicated messages.
      {tx_rollback, 2},
+
+     %% Commit these publishes and acktags. The publishes you will
+     %% have previously seen in calls to tx_publish.
      {tx_commit, 4},
 
      %% Reinsert messages into the queue which have already been
      %% delivered and were (likely) pending acks.q
      {requeue, 2},
 
+     %% How long is my queue?
      {len, 1},
 
+     %% Is my queue empty?
      {is_empty, 1},
 
-     {set_queue_duration_target, 2},
+     %% For the next three functions, the assumption is that you're
+     %% monitoring something like the ingress and egress rates of the
+     %% queue. The RAM duration is thus the length of time represented
+     %% by the messages held in RAM given the current rates. If you
+     %% want to ignore all of this stuff, then do so, and return 0 in
+     %% ram_duration/1.
 
-     {remeasure_rates, 1},
+     %% The target is to have no more messages in RAM than indicated
+     %% by the duration and the current queue rates.
+     {set_ram_duration_target, 2},
 
-     {queue_duration, 1},
+     %% Recalculate the duration internally (likely to be just update
+     %% your internal rates).
+     {update_ram_duration, 1},
+
+     %% Report how many seconds the messages in RAM represent given
+     %% the current rates of the queue.
+     {ram_duration, 1},
 
      %% Can return 'undefined' or a function atom name plus list of
      %% arguments to be invoked in the internal queue module as soon
@@ -90,7 +115,7 @@ behaviour_info(callbacks) ->
      {handle_pre_hibernate, 1},
 
      %% Exists for debugging purposes, to be able to expose state via
-     %% rabbitmqctl list_queues internal_queue_status
+     %% rabbitmqctl list_queues backing_queue_status
      {status, 1}
     ];
 behaviour_info(_Other) ->

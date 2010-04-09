@@ -35,7 +35,7 @@
          write_delivered/2, write_acks/2, sync_seq_ids/2, flush_journal/1,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1,
-         start_persistent_msg_store/1]).
+         start_msg_stores/1]).
 
 -export([queue_index_walker_reader/3]). %% for internal use only
 
@@ -172,6 +172,7 @@
         }).
 
 -include("rabbit.hrl").
+-include("rabbit_variable_queue.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -210,7 +211,7 @@
 -spec(segment_size/0 :: () -> non_neg_integer()).
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(start_persistent_msg_store/1 :: ([amqqueue()]) -> 'ok').
+-spec(start_msg_stores/1 :: ([amqqueue()]) -> 'ok').
 
 -endif.
 
@@ -427,7 +428,12 @@ find_lowest_seq_id_seg_and_next_seq_id(State) ->
         end,
     {LowSeqIdSeg, NextSeqId, State}.
 
-start_persistent_msg_store(DurableQueues) ->
+start_msg_stores(DurableQueues) ->
+    ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
+    ok = rabbit_sup:start_child(
+           ?TRANSIENT_MSG_STORE, rabbit_msg_store,
+           [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(), undefined,
+            fun (ok) -> finished end, ok]),
     DurableDict =
         dict:from_list([ {queue_name_to_dir_name(Queue #amqqueue.name),
                           Queue #amqqueue.name} || Queue <- DurableQueues ]),

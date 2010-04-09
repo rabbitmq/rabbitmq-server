@@ -40,7 +40,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/0, update/0, register/2, deregister/1,
-         report_queue_duration/2, stop/0]).
+         report_ram_duration/2, stop/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -90,7 +90,7 @@
 -spec(update/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), {atom(),atom(),[any()]}) -> 'ok').
 -spec(deregister/1 :: (pid()) -> 'ok').
--spec(report_queue_duration/2 :: (pid(), float() | 'infinity') -> number()).
+-spec(report_ram_duration/2 :: (pid(), float() | 'infinity') -> number()).
 -spec(stop/0 :: () -> 'ok').
 
 -endif.
@@ -111,9 +111,9 @@ register(Pid, MFA = {_M, _F, _A}) ->
 deregister(Pid) ->
     gen_server2:cast(?SERVER, {deregister, Pid}).
 
-report_queue_duration(Pid, QueueDuration) ->
+report_ram_duration(Pid, QueueDuration) ->
     gen_server2:call(?SERVER,
-                     {report_queue_duration, Pid, QueueDuration}, infinity).
+                     {report_ram_duration, Pid, QueueDuration}, infinity).
 
 stop() ->
     gen_server2:cast(?SERVER, stop).
@@ -143,7 +143,7 @@ init([]) ->
                     memory_limit         = MemoryLimit,
                     desired_duration     = infinity })}.
 
-handle_call({report_queue_duration, Pid, QueueDuration}, From,
+handle_call({report_ram_duration, Pid, QueueDuration}, From,
             State = #state { queue_duration_sum = Sum,
                              queue_duration_count = Count,
                              queue_durations = Durations,

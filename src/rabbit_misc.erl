@@ -60,6 +60,7 @@
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
 -export([recursive_delete/1, dict_cons/3, unlink_and_capture_exit/1]).
+-export([geometric/1]).
 
 -import(mnesia).
 -import(lists).
@@ -129,14 +130,18 @@
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
--spec(ceil/1 :: (number()) -> number()).
+-spec(ceil/1 :: (number()) -> integer()).
 -spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue()) -> B).
 -spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
 -spec(pid_to_string/1 :: (pid()) -> string()).
 -spec(string_to_pid/1 :: (string()) -> pid()).
+-spec(version_compare/2 :: (string(), string()) -> 'lt' | 'eq' | 'gt').
+-spec(version_compare/3 :: (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) ->
+                                boolean()).
 -spec(recursive_delete/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
+-spec(geometric/1 :: (float()) -> non_neg_integer()).
 
 -endif.
 
@@ -636,3 +641,7 @@ unlink_and_capture_exit(Pid) ->
     receive {'EXIT', Pid, _} -> ok
     after 0 -> ok
     end.
+
+geometric(P) when 0.0 < P andalso P < 1.0 ->
+    U = 1.0 - random:uniform(),
+    ceil(math:log(U) / math:log(1.0 - P)).

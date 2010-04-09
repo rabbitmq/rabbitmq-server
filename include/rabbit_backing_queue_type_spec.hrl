@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--spec(init/2 :: (queue_name(), pid() | atom()) -> state()).
+-spec(init/2 :: (queue_name(), boolean()) -> state()).
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
 -spec(purge/1 :: (state()) -> {non_neg_integer(), state()}).
@@ -46,10 +46,10 @@
 -spec(requeue/2 :: ([{basic_message(), ack()}], state()) -> state()).
 -spec(len/1 :: (state()) -> non_neg_integer()).
 -spec(is_empty/1 :: (state()) -> boolean()).
--spec(set_queue_duration_target/2 ::
+-spec(set_ram_duration_target/2 ::
       (('undefined' | 'infinity' | number()), state()) -> state()).
--spec(remeasure_rates/1 :: (state()) -> state()).
--spec(queue_duration/1 :: (state()) -> number()).
+-spec(update_ram_duration/1 :: (state()) -> state()).
+-spec(ram_duration/1 :: (state()) -> number()).
 -spec(needs_sync/1 :: (state()) -> ('undefined' | {atom(), [any()]})).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
