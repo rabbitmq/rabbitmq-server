@@ -58,7 +58,6 @@
 
 -ifdef(use_specs).
 
--type(get_msg_result() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
 -type(qstats() :: {'ok', queue_name(), non_neg_integer(), non_neg_integer()}).
 -type(qlen() :: {'ok', non_neg_integer()}).
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
@@ -100,7 +99,7 @@
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
-             {'ok', non_neg_integer(), get_msg_result()} | 'empty').
+             {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/8 ::
       (amqqueue(), boolean(), pid(), pid(), pid() | 'undefined', ctag(),
        boolean(), any()) ->
