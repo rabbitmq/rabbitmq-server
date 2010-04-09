@@ -39,8 +39,6 @@
 
 -export([start/1]).
 
--export([tx_commit_post_msg_store/5, tx_commit_index/1]). %% internal
-
 %%----------------------------------------------------------------------------
 %% Definitions:
 
@@ -227,7 +225,7 @@
                avg_ingress_rate      :: float(),
                rate_timestamp        :: {integer(), integer(), integer()},
                len                   :: non_neg_integer(),
-               on_sync               :: {[ack()], [msg_id()], [{pid(), any()}]},
+               on_sync               :: {[[ack()]], [[msg_id()]], [{pid(), any()}]},
                msg_store_clients     :: {{any(), binary()}, {any(), binary()}},
                persistent_store      :: pid() | atom(),
                persistent_count      :: non_neg_integer(),

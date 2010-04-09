@@ -62,7 +62,7 @@ behaviour_info(callbacks) ->
 
      %% Called for messages which have already been passed straight
      %% out to a client. The queue will be empty for these calls
-     %% (i.e. saves the round trip through the internal queue).
+     %% (i.e. saves the round trip through the backing queue).
      {publish_delivered, 2},
 
      %% Produce the next message
@@ -112,10 +112,10 @@ behaviour_info(callbacks) ->
      %% the current rates of the queue.
      {ram_duration, 1},
 
-     %% Can return 'undefined' or a function atom name plus list of
-     %% arguments to be invoked in the internal queue module as soon
-     %% as the queue process can manage (either on an empty mailbox,
-     %% or when a timer fires).
+     %% Can return 'undefined' or a thunk which will receive the
+     %% state, and must return the state, as soon as the queue process
+     %% can manage (either on an empty mailbox, or when a timer
+     %% fires).
      {sync_callback, 1},
 
      %% Called immediately before the queue hibernates
