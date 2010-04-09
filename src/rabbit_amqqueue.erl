@@ -98,7 +98,7 @@
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
-             {'ok', non_neg_integer(), msg()} | 'empty').
+             {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/8 ::
       (amqqueue(), boolean(), pid(), pid(), pid() | 'undefined', ctag(),
        boolean(), any()) ->
