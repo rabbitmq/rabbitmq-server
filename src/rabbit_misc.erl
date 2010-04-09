@@ -134,6 +134,9 @@
 -spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
 -spec(pid_to_string/1 :: (pid()) -> string()).
 -spec(string_to_pid/1 :: (string()) -> pid()).
+-spec(version_compare/2 :: (string(), string()) -> 'lt' | 'eq' | 'gt').
+-spec(version_compare/3 :: (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) ->
+                                boolean()).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 
 -endif.
