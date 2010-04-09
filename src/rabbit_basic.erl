@@ -100,12 +100,12 @@ message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
     case is_message_persistent(Content) of
         {invalid, Other} ->
             {error, {invalid_delivery_mode, Other}};
-        Boolean when is_boolean(Boolean) ->
+        IsPersistent when is_boolean(IsPersistent) ->
             #basic_message{exchange_name  = ExchangeName,
                            routing_key    = RoutingKeyBin,
                            content        = Content,
                            guid           = rabbit_guid:guid(),
-                           is_persistent  = Boolean}
+                           is_persistent  = IsPersistent}
     end.
 
 properties(P = #'P_basic'{}) ->

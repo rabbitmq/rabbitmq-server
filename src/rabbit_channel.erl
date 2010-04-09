@@ -1018,8 +1018,8 @@ is_message_persistent(Content) ->
                                "treating as 1, non-persistent~n",
                                [Other]),
             false;
-        Boolean when is_boolean(Boolean) ->
-            Boolean
+        IsPersistent when is_boolean(IsPersistent) ->
+            IsPersistent
     end.
 
 lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
