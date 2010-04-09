@@ -29,6 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
+-spec(start/1 :: ([amqqueue()]) -> 'ok').
 -spec(init/2 :: (queue_name(), boolean()) -> state()).
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
