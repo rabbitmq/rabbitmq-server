@@ -33,8 +33,8 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/1, message/4, delivery/4]).
--export([properties/1, publish/4, publish/7]).
+-export([publish/1, message/4, properties/1, delivery/4]).
+-export([publish/4, publish/7]).
 -export([build_content/2, from_content/1]).
 -export([is_message_persistent/1]).
 
