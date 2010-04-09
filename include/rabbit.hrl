@@ -154,7 +154,7 @@
                 message   :: message()}).
 %% this really should be an abstract type
 -type(msg_id() :: non_neg_integer()).
--type(msg() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
+-type(qmsg() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
 -type(listener() ::
       #listener{node     :: erlang_node(),
                 protocol :: atom(),

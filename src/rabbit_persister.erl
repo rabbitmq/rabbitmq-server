@@ -70,11 +70,11 @@
 
 -ifdef(use_specs).
 
--type(qmsg() :: {amqqueue(), pkey()}).
+-type(pmsg() :: {amqqueue(), pkey()}).
 -type(work_item() ::
-      {publish, message(), qmsg()} |
-      {deliver, qmsg()} |
-      {ack, qmsg()}).
+      {publish, message(), pmsg()} |
+      {deliver, pmsg()} |
+      {ack, pmsg()}).
 
 -spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(transaction/1 :: ([work_item()]) -> 'ok').
