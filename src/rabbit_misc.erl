@@ -59,7 +59,7 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([dict_cons/3]).
+-export([dict_cons/3, unlink_and_capture_exit/1]).
 
 -import(mnesia).
 -import(lists).
@@ -138,6 +138,7 @@
 -spec(version_compare/3 :: (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) ->
                                 boolean()).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
+-spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -609,3 +610,9 @@ version_compare(A,  B) ->
 
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
+
+unlink_and_capture_exit(Pid) ->
+    unlink(Pid),
+    receive {'EXIT', Pid, _} -> ok
+    after 0 -> ok
+    end.
