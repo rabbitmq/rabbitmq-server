@@ -962,10 +962,10 @@ fold_per_queue(F, Acc0, UAQ) ->
     D = rabbit_misc:queue_fold(
           fun ({_DTag, _CTag,
                 {_QName, QPid, MsgId, _Redelivered, _Message}}, D) ->
-                  %% dict:append would be simpler and avoid the
-                  %% lists:reverse in handle_message({recover, true},
-                  %% ...). However, it is significantly slower when
-                  %% going beyond a few thousand elements.
+                  %% dict:append would avoid the lists:reverse in
+                  %% handle_message({recover, true}, ...). However, it
+                  %% is significantly slower when going beyond a few
+                  %% thousand elements.
                   rabbit_misc:dict_cons(QPid, MsgId, D)
           end, dict:new(), UAQ),
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,

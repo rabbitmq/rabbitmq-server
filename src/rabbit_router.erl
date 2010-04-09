@@ -76,11 +76,9 @@ deliver(QPids, Delivery) ->
     %% which then in turn delivers it to its queues.
     deliver_per_node(
       dict:to_list(
-        lists:foldl(
-          fun (QPid, D) ->
-                  rabbit_misc:dict_cons(node(QPid), QPid, D)
-          end,
-          dict:new(), QPids)),
+        lists:foldl(fun (QPid, D) ->
+                            rabbit_misc:dict_cons(node(QPid), QPid, D)
+                    end, dict:new(), QPids)),
       Delivery).
 
 deliver_per_node([{Node, QPids}], Delivery) when Node == node() ->
