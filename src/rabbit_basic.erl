@@ -96,7 +96,8 @@ message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
     #basic_message{exchange_name  = ExchangeName,
                    routing_key    = RoutingKeyBin,
                    content        = build_content(Properties, BodyBin),
-                   persistent_key = none}.
+                   guid           = rabbit_guid:guid(),
+                   is_persistent  = false}.
 
 properties(P = #'P_basic'{}) ->
     P;
