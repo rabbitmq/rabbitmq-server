@@ -54,7 +54,8 @@
 
 -spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(submit/1 :: (fun (() -> A) | {atom(), atom(), [any()]}) -> A).
--spec(submit_async/1 :: (fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
+-spec(submit_async/1 ::
+      (fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
 
 -endif.
 
