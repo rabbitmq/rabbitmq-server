@@ -374,7 +374,7 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
-persist_message(_Txn, _QName, #basic_message{persistent_key = none}) ->
+persist_message(_Txn, _QName, #basic_message{is_persistent = false}) ->
     ok;
 persist_message(Txn, QName, Message) ->
     M = Message#basic_message{
@@ -382,29 +382,28 @@ persist_message(Txn, QName, Message) ->
           content = rabbit_binary_parser:clear_decoded_content(
                       Message#basic_message.content)},
     persist_work(Txn, QName,
-                 [{publish, M, {QName, M#basic_message.persistent_key}}]).
+                 [{publish, M, {QName, M#basic_message.guid}}]).
 
 persist_delivery(_QName, _Message,
                  true) ->
     ok;
-persist_delivery(_QName, #basic_message{persistent_key = none},
+persist_delivery(_QName, #basic_message{is_persistent = false},
                  _IsDelivered) ->
     ok;
-persist_delivery(QName, #basic_message{persistent_key = PKey},
+persist_delivery(QName, #basic_message{guid = Guid},
                  _IsDelivered) ->
-    persist_work(none, QName, [{deliver, {QName, PKey}}]).
+    persist_work(none, QName, [{deliver, {QName, Guid}}]).
 
 persist_acks(Txn, QName, Messages) ->
     persist_work(Txn, QName,
-                 [{ack, {QName, PKey}} ||
-                     #basic_message{persistent_key = PKey} <- Messages,
-                     PKey =/= none]).
+                 [{ack, {QName, Guid}} || #basic_message{
+                    guid = Guid, is_persistent = true} <- Messages]).
 
-persist_auto_ack(_QName, #basic_message{persistent_key = none}) ->
+persist_auto_ack(_QName, #basic_message{is_persistent = false}) ->
     ok;
-persist_auto_ack(QName, #basic_message{persistent_key = PKey}) ->
+persist_auto_ack(QName, #basic_message{guid = Guid}) ->
     %% auto-acks are always non-transactional
-    rabbit_persister:dirty_work([{ack, {QName, PKey}}]).
+    rabbit_persister:dirty_work([{ack, {QName, Guid}}]).
 
 persist_work(_Txn,_QName, []) ->
     ok;

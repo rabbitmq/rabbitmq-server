@@ -62,7 +62,8 @@
 
 -record(listener, {node, protocol, host, port}).
 
--record(basic_message, {exchange_name, routing_key, content, persistent_key}).
+-record(basic_message, {exchange_name, routing_key, content, guid,
+                        is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
@@ -144,7 +145,8 @@
       #basic_message{exchange_name  :: exchange_name(),
                      routing_key    :: routing_key(),
                      content        :: content(),
-                     persistent_key :: maybe(pkey())}).
+                     guid           :: guid(),
+                     is_persistent  :: boolean()}).
 -type(message() :: basic_message()).
 -type(delivery() ::
       #delivery{mandatory :: boolean(),
