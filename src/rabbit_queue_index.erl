@@ -435,8 +435,8 @@ start_msg_stores(DurableQueues) ->
            [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(), undefined,
             fun (ok) -> finished end, ok]),
     DurableDict =
-        dict:from_list([ {queue_name_to_dir_name(Queue #amqqueue.name),
-                          Queue #amqqueue.name} || Queue <- DurableQueues ]),
+        dict:from_list([ {queue_name_to_dir_name(Queue), Queue} ||
+                           Queue <- DurableQueues ]),
     QueuesDir = queues_dir(),
     Directories = case file:list_dir(QueuesDir) of
                       {ok, Entries} ->

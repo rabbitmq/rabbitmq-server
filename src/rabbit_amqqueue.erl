@@ -126,7 +126,7 @@
 start() ->
     DurableQueues = find_durable_queues(),
     {ok, BQ} = application:get_env(backing_queue_module),
-    ok = BQ:start(DurableQueues),
+    ok = BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,
