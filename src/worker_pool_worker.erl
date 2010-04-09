@@ -33,7 +33,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, submit/2, run/1]).
+-export([start_link/1, submit/2, submit_async/2, run/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -44,6 +44,8 @@
 
 -spec(start_link/1 :: (any()) -> {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(submit/2 :: (pid(), fun (() -> A) | {atom(), atom(), [any()]}) -> A).
+-spec(submit_async/2 ::
+      (pid(), fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
 
 -endif.
 
@@ -60,6 +62,9 @@ start_link(WId) ->
 submit(Pid, Fun) ->
     gen_server2:call(Pid, {submit, Fun}, infinity).
 
+submit_async(Pid, Fun) ->
+    gen_server2:cast(Pid, {submit_async, Fun}).
+
 init([WId]) ->
     ok = worker_pool:idle(WId),
     put(worker_pool_worker, true),
@@ -73,6 +78,11 @@ handle_call({submit, Fun}, From, WId) ->
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
+
+handle_cast({submit_async, Fun}, WId) ->
+    run(Fun),
+    ok = worker_pool:idle(WId),
+    {noreply, WId, hibernate};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
