@@ -188,17 +188,19 @@ RABBITMQ_LOG_BASE=$OCF_RESKEY_log_base
 RABBITMQ_MNESIA_BASE=$OCF_RESKEY_mnesia_base
 RABBITMQ_SERVER_START_ARGS=$OCF_RESKEY_server_start_args
 [ ! -z $RABBITMQ_NODENAME ] && NODENAME_ARG="-n $RABBITMQ_NODENAME"
-
 [ ! -z $RABBITMQ_NODENAME ]            && export RABBITMQ_NODENAME
-[ ! -z $RABBITMQ_NODE_IP_ADDRESS ]     && export RABBITMQ_NODE_IP_ADDRESS
-[ ! -z $RABBITMQ_NODE_PORT ]           && export RABBITMQ_NODE_PORT
-[ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && export RABBITMQ_CLUSTER_CONFIG_FILE
-[ ! -z $RABBITMQ_CONFIG_FILE ]         && export RABBITMQ_CONFIG_FILE
-[ ! -z $RABBITMQ_LOG_BASE ]            && export RABBITMQ_LOG_BASE
-[ ! -z $RABBITMQ_MNESIA_BASE ]         && export RABBITMQ_MNESIA_BASE
-[ ! -z $RABBITMQ_SERVER_START_ARGS ]   && export RABBITMQ_SERVER_START_ARGS
 
-rabbit_validate() {
+export_vars() {
+    [ ! -z $RABBITMQ_NODE_IP_ADDRESS ]     && export RABBITMQ_NODE_IP_ADDRESS
+    [ ! -z $RABBITMQ_NODE_PORT ]           && export RABBITMQ_NODE_PORT
+    [ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && export RABBITMQ_CLUSTER_CONFIG_FILE
+    [ ! -z $RABBITMQ_CONFIG_FILE ]         && export RABBITMQ_CONFIG_FILE
+    [ ! -z $RABBITMQ_LOG_BASE ]            && export RABBITMQ_LOG_BASE
+    [ ! -z $RABBITMQ_MNESIA_BASE ]         && export RABBITMQ_MNESIA_BASE
+    [ ! -z $RABBITMQ_SERVER_START_ARGS ]   && export RABBITMQ_SERVER_START_ARGS
+}
+
+rabbit_validate_partial() {
     if [ ! -x $RABBITMQ_MULTI ]; then
 	ocf_log err "rabbitmq-server multi $RABBITMQ_MULTI does not exist or is not executable";
 	return $OCF_ERR_ARGS;
@@ -208,7 +210,9 @@ rabbit_validate() {
 	ocf_log err "rabbitmq-server ctl $RABBITMQ_CTL does not exist or is not executable";
 	return $OCF_ERR_ARGS;
     fi
+}
 
+rabbit_validate_full() {
     if [ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && [ ! -e $RABBITMQ_CLUSTER_CONFIG_FILE ]; then
 	ocf_log err "rabbitmq-server cluster_config_file $RABBITMQ_CLUSTER_CONFIG_FILE does not exist or is not a file";
 	return $OCF_ERR_ARGS;
@@ -228,6 +232,8 @@ rabbit_validate() {
 	ocf_log err "rabbitmq-server mnesia_base $RABBITMQ_MNESIA_BASE does not exist or is not a directory";
 	return $OCF_ERR_ARGS;
     fi
+
+    rabbit_validate_partial
 
     return $OCF_SUCCESS
 }
@@ -251,6 +257,15 @@ rabbit_status() {
 
 rabbit_start() {
     local rc
+
+    rabbit_validate_full
+    rc=$?
+    if [ "$rc" != $OCF_SUCCESS ]; then
+        return $rc
+    fi
+
+    export_vars
+
     $RABBITMQ_MULTI start_all 1 > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err &
     rc=$?
 
@@ -323,7 +338,7 @@ case $__OCF_ACTION in
 	;;
 esac
 
-rabbit_validate || exit
+rabbit_validate_partial || exit
 
 case $__OCF_ACTION in
     start)
