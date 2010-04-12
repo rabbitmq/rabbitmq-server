@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_backing_queue_type).
+-module(rabbit_backing_queue).
 
 -export([behaviour_info/1]).
 

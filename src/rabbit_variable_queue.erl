@@ -133,7 +133,7 @@
 
 %%----------------------------------------------------------------------------
 
--behaviour(rabbit_backing_queue_type).
+-behaviour(rabbit_backing_queue).
 
 -record(vqstate,
         { q1,
@@ -238,7 +238,7 @@
                                          {boolean(), state()}).
 -spec(tx_commit_index/1 :: (state()) -> {boolean(), state()}).
 
--include("rabbit_backing_queue_type_spec.hrl").
+-include("rabbit_backing_queue_spec.hrl").
 
 -endif.
 
