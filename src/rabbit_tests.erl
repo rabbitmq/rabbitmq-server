@@ -1019,7 +1019,7 @@ stop_msg_store() ->
         E -> {persistent, E}
     end.
 
-msg_id_bin(X) ->
+guid_bin(X) ->
     erlang:md5(term_to_binary(X)).
 
 msg_store_contains(Atom, MsgIds) ->
@@ -1037,7 +1037,7 @@ msg_store_sync(MsgIds) ->
         {sync, Ref} -> ok
     after
         10000 ->
-            io:format("Sync from msg_store missing for msg_ids ~p~n", [MsgIds]),
+            io:format("Sync from msg_store missing for guids ~p~n", [MsgIds]),
             throw(timeout)
     end.
 
@@ -1060,7 +1060,7 @@ test_msg_store() ->
     stop_msg_store(),
     ok = start_msg_store_empty(),
     Self = self(),
-    MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
+    MsgIds = [guid_bin(M) || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds),
@@ -1094,7 +1094,7 @@ test_msg_store() ->
                   {sync, MsgId} -> ok
               after
                   10000 ->
-                      io:format("Sync from msg_store missing (msg_id: ~p)~n",
+                      io:format("Sync from msg_store missing (guid: ~p)~n",
                                 [MsgId]),
                       throw(timeout)
               end
@@ -1147,10 +1147,10 @@ test_msg_store() ->
     ok = rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, MsgIds1stHalf),
     %% restart empty
     ok = stop_msg_store(),
-    ok = start_msg_store_empty(), %% now safe to reuse msg_ids
+    ok = start_msg_store_empty(), %% now safe to reuse guids
     %% push a lot of msgs in...
     BigCount = 100000,
-    MsgIdsBig = [msg_id_bin(X) || X <- lists:seq(1, BigCount)],
+    MsgIdsBig = [guid_bin(X) || X <- lists:seq(1, BigCount)],
     Payload = << 0:65536 >>,
     ok = rabbit_msg_store:client_terminate(
            lists:foldl(
@@ -1170,19 +1170,19 @@ test_msg_store() ->
     %% .., then 3s by 1...
     ok = lists:foldl(
            fun (MsgId, ok) ->
-                   rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, [msg_id_bin(MsgId)])
+                   rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, [guid_bin(MsgId)])
            end, ok, lists:seq(BigCount, 1, -3)),
     %% .., then remove 3s by 2, from the young end first. This hits
     %% GC (under 50% good data left, but no empty files. Must GC).
     ok = lists:foldl(
            fun (MsgId, ok) ->
-                   rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, [msg_id_bin(MsgId)])
+                   rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, [guid_bin(MsgId)])
            end, ok, lists:seq(BigCount-1, 1, -3)),
     %% .., then remove 3s by 3, from the young end first. This hits
     %% GC...
     ok = lists:foldl(
            fun (MsgId, ok) ->
-                   rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, [msg_id_bin(MsgId)])
+                   rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, [guid_bin(MsgId)])
            end, ok, lists:seq(BigCount-2, 1, -3)),
     %% ensure empty
     false = msg_store_contains(false, MsgIdsBig),
@@ -1212,12 +1212,12 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
     {A, B, MSCStateEnd} =
         lists:foldl(
           fun (SeqId, {QiN, SeqIdsMsgIdsAcc, MSCStateN}) ->
-                  MsgId = rabbit_guid:guid(),
-                  QiM = rabbit_queue_index:write_published(MsgId, SeqId, Persistent,
+                  Guid = rabbit_guid:guid(),
+                  QiM = rabbit_queue_index:write_published(Guid, SeqId, Persistent,
                                                            QiN),
-                  {ok, MSCStateM} = rabbit_msg_store:write(MsgStore, MsgId,
-                                                           MsgId, MSCStateN),
-                  {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc], MSCStateM}
+                  {ok, MSCStateM} = rabbit_msg_store:write(MsgStore, Guid,
+                                                           Guid, MSCStateN),
+                  {QiM, [{SeqId, Guid} | SeqIdsMsgIdsAcc], MSCStateM}
           end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref)}, SeqIds),
     ok = rabbit_msg_store:delete_client(MsgStore, Ref),
     ok = rabbit_msg_store:client_terminate(MSCStateEnd),

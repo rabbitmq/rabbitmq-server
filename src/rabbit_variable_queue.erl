@@ -165,7 +165,7 @@
 
 -record(msg_status,
         { msg,
-          msg_id,
+          guid,
           seq_id,
           is_persistent,
           is_delivered,
@@ -197,7 +197,7 @@
 
 -type(bpqueue() :: any()).
 -type(seq_id()  :: non_neg_integer()).
--type(ack()     :: {'ack_index_and_store', msg_id(), seq_id(), atom() | pid()}
+-type(ack()     :: {'ack_index_and_store', guid(), seq_id(), atom() | pid()}
                  | 'ack_not_on_disk').
 
 -type(delta() :: #delta { start_seq_id :: non_neg_integer(),
@@ -225,7 +225,7 @@
                avg_ingress_rate      :: float(),
                rate_timestamp        :: {integer(), integer(), integer()},
                len                   :: non_neg_integer(),
-               on_sync               :: {[[ack()]], [[msg_id()]], [{pid(), any()}]},
+               on_sync               :: {[[ack()]], [[guid()]], [{pid(), any()}]},
                msg_store_clients     :: {{any(), binary()}, {any(), binary()}},
                persistent_store      :: pid() | atom(),
                persistent_count      :: non_neg_integer(),
@@ -233,7 +233,7 @@
               }).
 
 -spec(tx_commit_post_msg_store/5 ::
-        (boolean(), [msg_id()], [ack()], {pid(), any()}, state()) ->
+        (boolean(), [guid()], [ack()], {pid(), any()}, state()) ->
                                          {boolean(), state()}).
 -spec(tx_commit_index/1 :: (state()) -> {boolean(), state()}).
 
@@ -331,7 +331,7 @@ publish_delivered(Msg = #basic_message { guid = MsgId,
     State1 = State #vqstate { out_counter = OutCount + 1,
                               in_counter = InCount + 1 },
     MsgStatus = #msg_status {
-      msg = Msg, msg_id = MsgId, seq_id = SeqId, is_persistent = IsPersistent,
+      msg = Msg, guid = MsgId, seq_id = SeqId, is_persistent = IsPersistent,
       is_delivered = true, msg_on_disk = false, index_on_disk = false },
     {MsgStatus1, MSCState1} = maybe_write_msg_to_disk(PersistentStore, false,
                                                       MsgStatus, MSCState),
@@ -411,7 +411,7 @@ fetch(State =
         {empty, _Q4} ->
             fetch_from_q3_or_delta(State);
         {{value, #msg_status {
-            msg = Msg, msg_id = MsgId, seq_id = SeqId,
+            msg = Msg, guid = MsgId, seq_id = SeqId,
             is_persistent = IsPersistent, is_delivered = IsDelivered,
             msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk }},
          Q4a} ->
@@ -572,7 +572,7 @@ tx_publish(Msg = #basic_message { is_persistent = true, guid = MsgId },
            State = #vqstate { msg_store_clients = MSCState,
                               persistent_store = PersistentStore }) ->
     MsgStatus = #msg_status {
-      msg = Msg, msg_id = MsgId, seq_id = undefined, is_persistent = true,
+      msg = Msg, guid = MsgId, seq_id = undefined, is_persistent = true,
       is_delivered = false, msg_on_disk = false, index_on_disk = false },
     {#msg_status { msg_on_disk = true }, MSCState1} =
         maybe_write_msg_to_disk(PersistentStore, false, MsgStatus, MSCState),
@@ -581,7 +581,7 @@ tx_publish(_Msg, State) ->
     State.
 
 tx_rollback(Pubs, State = #vqstate { persistent_store = PersistentStore }) ->
-    ok = case persistent_msg_ids(Pubs) of
+    ok = case persistent_guids(Pubs) of
              [] -> ok;
              PP -> rabbit_msg_store:remove(PersistentStore, PP)
          end,
@@ -591,7 +591,7 @@ tx_commit(Pubs, AckTags, From, State =
               #vqstate { persistent_store = PersistentStore }) ->
     %% If we are a non-durable queue, or we have no persistent pubs,
     %% we can skip the msg_store loop.
-    PersistentMsgIds = persistent_msg_ids(Pubs),
+    PersistentMsgIds = persistent_guids(Pubs),
     IsTransientPubs = [] == PersistentMsgIds,
     case IsTransientPubs orelse
         ?TRANSIENT_MSG_STORE == PersistentStore of
@@ -699,7 +699,7 @@ update_rate(Now, Then, Count, {OThen, OCount}) ->
     Avg = 1000000 * ((Count + OCount) / timer:now_diff(Now, OThen)),
     {Avg, {Then, Count}}.
 
-persistent_msg_ids(Pubs) ->
+persistent_guids(Pubs) ->
     [MsgId || Obj = #basic_message { guid = MsgId } <- Pubs,
               Obj #basic_message.is_persistent].
 
@@ -722,7 +722,7 @@ betas_from_segment_entries(List, SeqIdLimit, TransientThreshold, IndexState) ->
                           case SeqId < SeqIdLimit of
                               true ->
                                   {[#msg_status { msg           = undefined,
-                                                  msg_id        = MsgId,
+                                                  guid          = MsgId,
                                                   seq_id        = SeqId,
                                                   is_persistent = IsPersistent,
                                                   is_delivered  = IsDelivered,
@@ -852,7 +852,7 @@ remove_queue_entries(PersistentStore, Fold, Q, IndexState) ->
     {Count, IndexState2}.
 
 remove_queue_entries1(
-  #msg_status { msg_id = MsgId, seq_id = SeqId,
+  #msg_status { guid = MsgId, seq_id = SeqId,
                 is_delivered = IsDelivered, msg_on_disk = MsgOnDisk,
                 index_on_disk = IndexOnDisk, is_persistent = IsPersistent },
   {PersistentStore, CountN, MsgIdsByStore, SeqIdsAcc, IndexStateN}) ->
@@ -889,7 +889,7 @@ fetch_from_q3_or_delta(State = #vqstate {
             true = queue:is_empty(Q1), %% ASSERTION
             {empty, State};
         {{value, IndexOnDisk, MsgStatus = #msg_status {
-                                msg = undefined, msg_id = MsgId,
+                                msg = undefined, guid = MsgId,
                                 is_persistent = IsPersistent }}, Q3a} ->
             {{ok, Msg = #basic_message { is_persistent = IsPersistent,
                                          guid = MsgId }}, MSCState1} =
@@ -983,7 +983,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, guid = MsgId },
         #vqstate { next_seq_id = SeqId, len = Len, in_counter = InCount,
                    persistent_count = PCount }) ->
     MsgStatus = #msg_status {
-      msg = Msg, msg_id = MsgId, seq_id = SeqId, is_persistent = IsPersistent,
+      msg = Msg, guid = MsgId, seq_id = SeqId, is_persistent = IsPersistent,
       is_delivered = IsDelivered, msg_on_disk = MsgOnDisk,
       index_on_disk = false },
     PCount1 = PCount + case IsPersistent of
@@ -1096,7 +1096,7 @@ maybe_write_msg_to_disk(_PersistentStore, _Force, MsgStatus =
     {MsgStatus, MSCState};
 maybe_write_msg_to_disk(PersistentStore, Force,
                         MsgStatus = #msg_status {
-                          msg = Msg, msg_id = MsgId,
+                          msg = Msg, guid = MsgId,
                           is_persistent = IsPersistent }, MSCState)
   when Force orelse IsPersistent ->
     {ok, MSCState1} =
@@ -1115,7 +1115,7 @@ maybe_write_index_to_disk(_Force, MsgStatus =
     true = MsgStatus #msg_status.msg_on_disk, %% ASSERTION
     {MsgStatus, IndexState};
 maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
-                                   msg_id = MsgId, seq_id = SeqId,
+                                   guid = MsgId, seq_id = SeqId,
                                    is_persistent = IsPersistent,
                                    is_delivered = IsDelivered }, IndexState)
   when Force orelse IsPersistent ->

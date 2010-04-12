@@ -121,16 +121,16 @@
 
 -spec(start_link/5 ::
       (atom(), file_path(), [binary()] | 'undefined',
-       (fun ((A) -> 'finished' | {msg_id(), non_neg_integer(), A})), A) ->
+       (fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A) ->
              {'ok', pid()} | 'ignore' | {'error', any()}).
--spec(write/4 :: (server(), msg_id(), msg(), client_msstate()) ->
+-spec(write/4 :: (server(), guid(), msg(), client_msstate()) ->
                       {'ok', client_msstate()}).
--spec(read/3 :: (server(), msg_id(), client_msstate()) ->
+-spec(read/3 :: (server(), guid(), client_msstate()) ->
                      {{'ok', msg()} | 'not_found', client_msstate()}).
--spec(contains/2 :: (server(), msg_id()) -> boolean()).
--spec(remove/2 :: (server(), [msg_id()]) -> 'ok').
--spec(release/2 :: (server(), [msg_id()]) -> 'ok').
--spec(sync/3 :: (server(), [msg_id()], fun (() -> any())) -> 'ok').
+-spec(contains/2 :: (server(), guid()) -> boolean()).
+-spec(remove/2 :: (server(), [guid()]) -> 'ok').
+-spec(release/2 :: (server(), [guid()]) -> 'ok').
+-spec(sync/3 :: (server(), [guid()], fun (() -> any())) -> 'ok').
 -spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(client_init/2 :: (server(), binary()) -> client_msstate()).
@@ -153,7 +153,7 @@
 %% The components:
 %%
 %% MsgLocation: this is a mapping from MsgId to #msg_location{}:
-%%              {MsgId, RefCount, File, Offset, TotalSize}
+%%              {Guid, RefCount, File, Offset, TotalSize}
 %%              By default, it's in ets, but it's also pluggable.
 %% FileSummary: this is an ets table which contains:
 %%              {File, ValidTotalSize, ContiguousTop, Left, Right}
@@ -393,7 +393,7 @@ add_to_cache(CurFileCacheEts, MsgId, Msg) ->
             end
     end.
 
-client_read1(Server, #msg_location { msg_id = MsgId, file = File } =
+client_read1(Server, #msg_location { guid = MsgId, file = File } =
                  MsgLocation, Defer, CState =
                  #client_msstate { file_summary_ets = FileSummaryEts }) ->
     case ets:lookup(FileSummaryEts, File) of
@@ -404,7 +404,7 @@ client_read1(Server, #msg_location { msg_id = MsgId, file = File } =
     end.
 
 client_read2(_Server, false, undefined,
-             #msg_location { msg_id = MsgId, ref_count = RefCount }, Defer,
+             #msg_location { guid = MsgId, ref_count = RefCount }, Defer,
              CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
                                         dedup_cache_ets = DedupCacheEts }) ->
     case ets:lookup(CurFileCacheEts, MsgId) of
@@ -420,7 +420,7 @@ client_read2(_Server, true, _Right, _MsgLocation, Defer, _CState) ->
     %% the safest and simplest thing to do.
     Defer();
 client_read2(Server, false, _Right,
-             #msg_location { msg_id = MsgId, ref_count = RefCount, file = File },
+             #msg_location { guid = MsgId, ref_count = RefCount, file = File },
              Defer, CState =
                  #client_msstate { file_handles_ets = FileHandlesEts,
                                    file_summary_ets = FileSummaryEts,
@@ -631,7 +631,7 @@ handle_cast({write, MsgId, Msg},
             {ok, CurOffset} = file_handle_cache:current_virtual_offset(CurHdl),
             {ok, TotalSize} = rabbit_msg_file:append(CurHdl, MsgId, Msg),
             ok = index_insert(#msg_location {
-                                msg_id = MsgId, ref_count = 1, file = CurFile,
+                                guid = MsgId, ref_count = 1, file = CurFile,
                                 offset = CurOffset, total_size = TotalSize },
                               State),
             [#file_summary { valid_total_size = ValidTotalSize,
@@ -836,7 +836,7 @@ read_message(MsgId, From, State =
             end
     end.
 
-read_message1(From, #msg_location { msg_id = MsgId, ref_count = RefCount,
+read_message1(From, #msg_location { guid = MsgId, ref_count = RefCount,
                                     file = File, offset = Offset } = MsgLoc,
               State = #msstate { current_file = CurFile,
                                  current_file_handle = CurHdl,
@@ -874,7 +874,7 @@ read_message1(From, #msg_location { msg_id = MsgId, ref_count = RefCount,
             end
     end.
 
-read_from_disk(#msg_location { msg_id = MsgId, ref_count = RefCount,
+read_from_disk(#msg_location { guid = MsgId, ref_count = RefCount,
                                file = File, offset = Offset,
                                total_size = TotalSize }, State,
                DedupCacheEts) ->
@@ -888,7 +888,7 @@ read_from_disk(#msg_location { msg_id = MsgId, ref_count = RefCount,
                 throw({error, {misread, [{old_state, State},
                                          {file_num,  File},
                                          {offset,    Offset},
-                                         {msg_id,    MsgId},
+                                         {guid,      MsgId},
                                          {read,      Rest},
                                          {proc_dict, get()}
                                         ]}})
@@ -1176,7 +1176,7 @@ count_msg_refs(Gen, Seed, State) ->
         {MsgId, Delta, Next} ->
             ok = case index_lookup(MsgId, State) of
                      not_found ->
-                         index_insert(#msg_location { msg_id = MsgId,
+                         index_insert(#msg_location { guid = MsgId,
                                                       ref_count = Delta },
                                       State);
                      StoreEntry = #msg_location { ref_count = RefCount } ->
@@ -1202,9 +1202,9 @@ recover_crashed_compactions1(Dir, FileNames, TmpFileName) ->
     NonTmpRelatedFileName = filename:rootname(TmpFileName) ++ ?FILE_EXTENSION,
     true = lists:member(NonTmpRelatedFileName, FileNames),
     {ok, UncorruptedMessagesTmp, MsgIdsTmp} =
-        scan_file_for_valid_messages_msg_ids(Dir, TmpFileName),
+        scan_file_for_valid_messages_guids(Dir, TmpFileName),
     {ok, UncorruptedMessages, MsgIds} =
-        scan_file_for_valid_messages_msg_ids(Dir, NonTmpRelatedFileName),
+        scan_file_for_valid_messages_guids(Dir, NonTmpRelatedFileName),
     %% 1) It's possible that everything in the tmp file is also in the
     %%    main file such that the main file is (prefix ++
     %%    tmpfile). This means that compaction failed immediately
@@ -1282,7 +1282,7 @@ recover_crashed_compactions1(Dir, FileNames, TmpFileName) ->
             ok = file_handle_cache:delete(TmpHdl),
 
             {ok, _MainMessages, MsgIdsMain} =
-                scan_file_for_valid_messages_msg_ids(
+                scan_file_for_valid_messages_guids(
                   Dir, NonTmpRelatedFileName),
             %% check that everything in MsgIds1 is in MsgIdsMain
             true = is_sublist(MsgIds1, MsgIdsMain),
@@ -1297,7 +1297,7 @@ is_sublist(SmallerL, BiggerL) ->
 is_disjoint(SmallerL, BiggerL) ->
     lists:all(fun (Item) -> not lists:member(Item, BiggerL) end, SmallerL).
 
-scan_file_for_valid_messages_msg_ids(Dir, FileName) ->
+scan_file_for_valid_messages_guids(Dir, FileName) ->
     {ok, Messages, _FileSize} =
         scan_file_for_valid_messages(Dir, FileName),
     {ok, Messages, [MsgId || {MsgId, _TotalSize, _FileOffset} <- Messages]}.
@@ -1367,7 +1367,7 @@ build_index(Gatherer, Left, [File|Files], State) ->
     build_index(Gatherer, File, Files, State).
 
 build_index_worker(
-  Gatherer, Guid, State = #msstate { dir = Dir }, Left, File, Files) ->
+  Gatherer, Ref, State = #msstate { dir = Dir }, Left, File, Files) ->
     {ok, Messages, FileSize} =
         scan_file_for_valid_messages(
           Dir, filenum_to_name(File)),
@@ -1405,7 +1405,7 @@ build_index_worker(
                             contiguous_top = ContiguousTop, locked = false,
                             left = Left, right = Right, file_size = FileSize1,
                             readers = 0 }),
-    ok = gatherer:finished(Gatherer, Guid).
+    ok = gatherer:finished(Gatherer, Ref).
 
 %%----------------------------------------------------------------------------
 %% garbage collection / compaction / aggregation -- internal
@@ -1660,7 +1660,7 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
               Destination, {_FileSummaryEts, _Dir, Index, IndexState}) ->
     {FinalOffset, BlockStart1, BlockEnd1} =
         lists:foldl(
-          fun (#msg_location { msg_id = MsgId, offset = Offset,
+          fun (#msg_location { guid = MsgId, offset = Offset,
                                total_size = TotalSize },
                {CurOffset, BlockStart, BlockEnd}) ->
                   %% CurOffset is in the DestinationFile.

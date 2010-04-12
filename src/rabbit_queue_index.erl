@@ -143,10 +143,10 @@
 -define(PUBLISH_PREFIX, 1).
 -define(PUBLISH_PREFIX_BITS, 1).
 
--define(MSG_ID_BYTES, 16). %% md5sum is 128 bit or 16 bytes
--define(MSG_ID_BITS, (?MSG_ID_BYTES * 8)).
+-define(GUID_BYTES, 16). %% md5sum is 128 bit or 16 bytes
+-define(GUID_BITS, (?GUID_BYTES * 8)).
 %% 16 bytes for md5sum + 2 for seq, bits and prefix
--define(PUBLISH_RECORD_LENGTH_BYTES, ?MSG_ID_BYTES + 2).
+-define(PUBLISH_RECORD_LENGTH_BYTES, ?GUID_BYTES + 2).
 
 %% 1 publish, 1 deliver, 1 ack per msg
 -define(SEGMENT_TOTAL_SIZE, ?SEGMENT_ENTRY_COUNT *
@@ -199,14 +199,14 @@
                      {'undefined' | non_neg_integer(), binary(), binary(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(terminate_and_erase/1 :: (qistate()) -> qistate()).
--spec(write_published/4 :: (msg_id(), seq_id(), boolean(), qistate())
+-spec(write_published/4 :: (guid(), seq_id(), boolean(), qistate())
       -> qistate()).
 -spec(write_delivered/2 :: (seq_id(), qistate()) -> qistate()).
 -spec(write_acks/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync_seq_ids/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush_journal/1 :: (qistate()) -> qistate()).
 -spec(read_segment_entries/2 :: (seq_id(), qistate()) ->
-             {[{msg_id(), seq_id(), boolean(), boolean()}], qistate()}).
+             {[{guid(), seq_id(), boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(segment_size/0 :: () -> non_neg_integer()).
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
@@ -328,7 +328,7 @@ terminate_and_erase(State) ->
     State1.
 
 write_published(MsgId, SeqId, IsPersistent, State) when is_binary(MsgId) ->
-    ?MSG_ID_BYTES = size(MsgId),
+    ?GUID_BYTES = size(MsgId),
     {JournalHdl, State1} = get_journal_handle(State),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
@@ -501,20 +501,20 @@ queue_index_walker({[QueueName | QueueNames], Gatherer}) ->
                                    [QueueName, Gatherer, Child]}),
     queue_index_walker({QueueNames, Gatherer}).
 
-queue_index_walker_reader(QueueName, Gatherer, Guid) ->
+queue_index_walker_reader(QueueName, Gatherer, Ref) ->
     State = blank_state(QueueName),
     State1 = load_journal(State),
     SegNums = all_segment_nums(State1),
-    queue_index_walker_reader(Gatherer, Guid, State1, SegNums).
+    queue_index_walker_reader(Gatherer, Ref, State1, SegNums).
 
-queue_index_walker_reader(Gatherer, Guid, State, []) ->
+queue_index_walker_reader(Gatherer, Ref, State, []) ->
     _State = terminate(false, [], State),
-    ok = gatherer:finished(Gatherer, Guid);
-queue_index_walker_reader(Gatherer, Guid, State, [Seg | SegNums]) ->
+    ok = gatherer:finished(Gatherer, Ref);
+queue_index_walker_reader(Gatherer, Ref, State, [Seg | SegNums]) ->
     SeqId = reconstruct_seq_id(Seg, 0),
     {Messages, State1} = read_segment_entries(SeqId, State),
     State2 = queue_index_walker_reader1(Gatherer, State1, Messages),
-    queue_index_walker_reader(Gatherer, Guid, State2, SegNums).
+    queue_index_walker_reader(Gatherer, Ref, State2, SegNums).
 
 queue_index_walker_reader1(_Gatherer, State, []) ->
     State;
@@ -775,7 +775,7 @@ load_segment_entries(KeepAcks, Hdl, SegEntries, PubCount, AckCount) ->
                 IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
             %% because we specify /binary, and binaries are complete
             %% bytes, the size spec is in bytes, not bits.
-            {ok, MsgId} = file_handle_cache:read(Hdl, ?MSG_ID_BYTES),
+            {ok, MsgId} = file_handle_cache:read(Hdl, ?GUID_BYTES),
             SegEntries1 =
                 array:set(RelSeq,
                           {{MsgId, 1 == IsPersistentNum}, no_del, no_ack},
@@ -836,13 +836,13 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                 ?ACK_JPREFIX ->
                     load_journal_entries(add_to_journal(SeqId, ack, State));
                 _ ->
-                    case file_handle_cache:read(Hdl, ?MSG_ID_BYTES) of
-                        {ok, <<MsgIdNum:?MSG_ID_BITS>>} ->
+                    case file_handle_cache:read(Hdl, ?GUID_BYTES) of
+                        {ok, <<MsgIdNum:?GUID_BITS>>} ->
                             %% work around for binary data
                             %% fragmentation. See
                             %% rabbit_msg_file:read_next/2
-                            <<MsgId:?MSG_ID_BYTES/binary>> =
-                                <<MsgIdNum:?MSG_ID_BITS>>,
+                            <<MsgId:?GUID_BYTES/binary>> =
+                                <<MsgIdNum:?GUID_BITS>>,
                             Publish = {MsgId, case Prefix of
                                                   ?PUB_PERSIST_JPREFIX -> true;
                                                   ?PUB_TRANS_JPREFIX   -> false

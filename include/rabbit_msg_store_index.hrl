@@ -43,13 +43,13 @@
 
 -spec(init/2 :: (('fresh'|'recover'), dir()) ->
                      {'fresh'|'recovered', index_state()}).
--spec(lookup/2 :: (msg_id(), index_state()) -> ('not_found' | keyvalue())).
+-spec(lookup/2 :: (guid(), index_state()) -> ('not_found' | keyvalue())).
 -spec(insert/2 :: (keyvalue(), index_state()) -> 'ok').
 -spec(update/2 :: (keyvalue(), index_state()) -> 'ok').
--spec(update_fields/3 :: (msg_id(), ({fieldpos(), fieldvalue()} |
+-spec(update_fields/3 :: (guid(), ({fieldpos(), fieldvalue()} |
                                      [{fieldpos(), fieldvalue()}]),
                           index_state()) -> 'ok').
--spec(delete/2 :: (msg_id(), index_state()) -> 'ok').
+-spec(delete/2 :: (guid(), index_state()) -> 'ok').
 -spec(delete_by_file/2 :: (fieldvalue(), index_state()) -> 'ok').
 -spec(terminate/1 :: (index_state()) -> any()).
 

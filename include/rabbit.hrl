@@ -89,7 +89,7 @@
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: binary()).
--type(msg_id() :: guid()).
+-type(msg_id() :: non_neg_integer()).
 -type(txn() :: guid()).
 -type(pkey() :: guid()).
 -type(r(Kind) ::

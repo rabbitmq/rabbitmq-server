@@ -40,9 +40,9 @@
 -define(WRITE_OK_SIZE_BITS,      8).
 -define(WRITE_OK_MARKER,         255).
 -define(FILE_PACKING_ADJUSTMENT, (1 + ?INTEGER_SIZE_BYTES)).
--define(MSG_ID_SIZE_BYTES,       16).
--define(MSG_ID_SIZE_BITS,        (8 * ?MSG_ID_SIZE_BYTES)).
--define(SIZE_AND_MSG_ID_BYTES,   (?MSG_ID_SIZE_BYTES + ?INTEGER_SIZE_BYTES)).
+-define(GUID_SIZE_BYTES,         16).
+-define(GUID_SIZE_BITS,          (8 * ?GUID_SIZE_BYTES)).
+-define(SIZE_AND_GUID_BYTES,     (?GUID_SIZE_BYTES + ?INTEGER_SIZE_BYTES)).
 
 %%----------------------------------------------------------------------------
 
@@ -53,25 +53,25 @@
 -type(position() :: non_neg_integer()).
 -type(msg_size() :: non_neg_integer()).
 
--spec(append/3 :: (io_device(), msg_id(), msg()) ->
+-spec(append/3 :: (io_device(), guid(), msg()) ->
              ({'ok', msg_size()} | {'error', any()})).
 -spec(read/2 :: (io_device(), msg_size()) ->
-             ({'ok', {msg_id(), msg()}} | {'error', any()})).
+             ({'ok', {guid(), msg()}} | {'error', any()})).
 -spec(scan/1 :: (io_device()) ->
-             {'ok', [{msg_id(), msg_size(), position()}], position()}).
+             {'ok', [{guid(), msg_size(), position()}], position()}).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
 append(FileHdl, MsgId, MsgBody)
-  when is_binary(MsgId) andalso size(MsgId) =< ?MSG_ID_SIZE_BYTES ->
+  when is_binary(MsgId) andalso size(MsgId) =< ?GUID_SIZE_BYTES ->
     MsgBodyBin  = term_to_binary(MsgBody),
     MsgBodyBinSize = size(MsgBodyBin),
-    Size = MsgBodyBinSize + ?MSG_ID_SIZE_BYTES,
+    Size = MsgBodyBinSize + ?GUID_SIZE_BYTES,
     case file_handle_cache:append(FileHdl,
                                   <<Size:?INTEGER_SIZE_BITS,
-                                   MsgId:?MSG_ID_SIZE_BYTES/binary,
+                                   MsgId:?GUID_SIZE_BYTES/binary,
                                    MsgBodyBin:MsgBodyBinSize/binary,
                                    ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
         ok -> {ok, Size + ?FILE_PACKING_ADJUSTMENT};
@@ -80,10 +80,10 @@ append(FileHdl, MsgId, MsgBody)
 
 read(FileHdl, TotalSize) ->
     Size = TotalSize - ?FILE_PACKING_ADJUSTMENT,
-    BodyBinSize = Size - ?MSG_ID_SIZE_BYTES,
+    BodyBinSize = Size - ?GUID_SIZE_BYTES,
     case file_handle_cache:read(FileHdl, TotalSize) of
         {ok, <<Size:?INTEGER_SIZE_BITS,
-               MsgId:?MSG_ID_SIZE_BYTES/binary,
+               MsgId:?GUID_SIZE_BYTES/binary,
                MsgBodyBin:BodyBinSize/binary,
                ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>} ->
             {ok, {MsgId, binary_to_term(MsgBodyBin)}};
@@ -105,26 +105,26 @@ scan(FileHdl, Offset, Acc) ->
     end.
 
 read_next(FileHdl, Offset) ->
-    case file_handle_cache:read(FileHdl, ?SIZE_AND_MSG_ID_BYTES) of
+    case file_handle_cache:read(FileHdl, ?SIZE_AND_GUID_BYTES) of
         %% Here we take option 5 from
         %% http://www.erlang.org/cgi-bin/ezmlm-cgi?2:mss:1569 in which
         %% we read the MsgId as a number, and then convert it back to
         %% a binary in order to work around bugs in Erlang's GC.
-        {ok, <<Size:?INTEGER_SIZE_BITS, MsgIdNum:?MSG_ID_SIZE_BITS>>} ->
+        {ok, <<Size:?INTEGER_SIZE_BITS, MsgIdNum:?GUID_SIZE_BITS>>} ->
             case Size of
                 0 -> eof; %% Nothing we can do other than stop
                 _ ->
                     TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
                     ExpectedAbsPos = Offset + TotalSize - 1,
                     case file_handle_cache:position(
-                           FileHdl, {cur, Size - ?MSG_ID_SIZE_BYTES}) of
+                           FileHdl, {cur, Size - ?GUID_SIZE_BYTES}) of
                         {ok, ExpectedAbsPos} ->
                             NextOffset = ExpectedAbsPos + 1,
                             case file_handle_cache:read(FileHdl, 1) of
                                 {ok,
                                  <<?WRITE_OK_MARKER: ?WRITE_OK_SIZE_BITS>>} ->
-                                    <<MsgId:?MSG_ID_SIZE_BYTES/binary>> =
-                                        <<MsgIdNum:?MSG_ID_SIZE_BITS>>,
+                                    <<MsgId:?GUID_SIZE_BYTES/binary>> =
+                                        <<MsgIdNum:?GUID_SIZE_BITS>>,
                                     {ok, {MsgId, TotalSize, NextOffset}};
                                 {ok, _SomeOtherData} ->
                                     {corrupted, NextOffset};

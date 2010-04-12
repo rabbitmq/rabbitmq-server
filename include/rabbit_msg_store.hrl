@@ -38,4 +38,4 @@
 -endif.
 
 -record(msg_location,
-        {msg_id, ref_count, file, offset, total_size}).
+        {guid, ref_count, file, offset, total_size}).
