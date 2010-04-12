@@ -34,9 +34,9 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, delegate_cast/2, delegate_call/2,
-         delegate_gs2_call/3, delegate_gs2_pcall/4,
-         delegate_gs2_cast/2, delegate_gs2_pcast/3,
+-export([start_link/1, cast/2, call/2,
+         gs2_call/3, gs2_pcall/4,
+         gs2_cast/2, gs2_pcast/3,
          server/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -51,55 +51,54 @@ start_link(Hash) ->
     gen_server2:start_link({local, server(Hash)},
                            ?MODULE, [], []).
 
-delegate_gs2_call(Pid, Msg, Timeout) ->
+gs2_call(Pid, Msg, Timeout) ->
     {_Status, Res} =
-        delegate_call(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end),
+        call(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end),
     Res.
 
-delegate_gs2_pcall(Pid, Pri, Msg, Timeout) ->
+gs2_pcall(Pid, Pri, Msg, Timeout) ->
     {_Status, Res} =
-        delegate_call(Pid,
-                      fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end),
+        call(Pid, fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end),
     Res.
 
-delegate_gs2_cast(Pid, Msg) ->
-    delegate_cast(Pid, fun(P) -> gen_server2:cast(P, Msg) end).
+gs2_cast(Pid, Msg) ->
+    cast(Pid, fun(P) -> gen_server2:cast(P, Msg) end).
 
-delegate_gs2_pcast(Pid, Pri, Msg) ->
-    delegate_cast(Pid, fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
+gs2_pcast(Pid, Pri, Msg) ->
+    cast(Pid, fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
 
 
 % TODO reimplement the single-node optimisation
 
-delegate_call(Node, Thunk) when is_atom(Node) ->
+call(Node, Thunk) when is_atom(Node) ->
     gen_server2:call({server(), Node}, {thunk, Thunk}, infinity);
 
-delegate_call(Pid, FPid) when is_pid(Pid) ->
+call(Pid, FPid) when is_pid(Pid) ->
     [[{Status, Res, _}]] = delegate_per_node([{node(Pid), [Pid]}],
-                                             f_pid_node(fun delegate_call/2, FPid)),
+                                             f_pid_node(fun call/2, FPid)),
     {Status, Res};
 
-delegate_call(Pids, FPid) when is_list(Pids) ->
+call(Pids, FPid) when is_list(Pids) ->
     lists:flatten(
-        delegate_per_node(split_per_node(Pids),
-                          f_pid_node(fun delegate_call/2, FPid))).
+        delegate_per_node(split_delegate_per_node(Pids),
+                          f_pid_node(fun call/2, FPid))).
 
-delegate_cast(Node, Thunk) when is_atom(Node) ->
+cast(Node, Thunk) when is_atom(Node) ->
     gen_server2:cast({server(), Node}, {thunk, Thunk});
 
-delegate_cast(Pid, FPid) when is_pid(Pid) ->
+cast(Pid, FPid) when is_pid(Pid) ->
     delegate_per_node([{node(Pid), [Pid]}],
-                      f_pid_node(fun delegate_cast/2, FPid)),
+                      f_pid_node(fun cast/2, FPid)),
     ok;
 
-delegate_cast(Pids, FPid) when is_list(Pids) ->
-    delegate_per_node(split_per_node(Pids),
-                      f_pid_node(fun delegate_cast/2, FPid)),
+cast(Pids, FPid) when is_list(Pids) ->
+    delegate_per_node(split_delegate_per_node(Pids),
+                      f_pid_node(fun cast/2, FPid)),
     ok.
 
 %%----------------------------------------------------------------------------
 
-split_per_node(Pids) ->
+split_delegate_per_node(Pids) ->
     dict:to_list(
         lists:foldl(
           fun (Pid, D) ->

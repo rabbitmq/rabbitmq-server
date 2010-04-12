@@ -830,13 +830,13 @@ test_delegates_async() ->
         end
     end,
 
-    ok = delegate:delegate_cast(spawn(Receiver), Sender),
-    ok = delegate:delegate_cast(spawn(SecondaryNode, Receiver), Sender),
+    ok = delegate:cast(spawn(Receiver), Sender),
+    ok = delegate:cast(spawn(SecondaryNode, Receiver), Sender),
     await_response(2),
 
     LocalPids = [spawn(Receiver) || _ <- lists:seq(1,10)],
     RemotePids = [spawn(SecondaryNode, Receiver) || _ <- lists:seq(1,10)],
-    ok = delegate:delegate_cast(LocalPids ++ RemotePids, Sender),
+    ok = delegate:cast(LocalPids ++ RemotePids, Sender),
     await_response(20),
 
     passed.
@@ -855,8 +855,8 @@ await_response(Count) ->
 
 test_delegates_sync() ->
     SecondaryNode = rabbit_misc:makenode("hare"),
-    {ok, "foo"} = delegate:delegate_call(node(), fun() -> "foo" end),
-    {ok, "bar"} = delegate:delegate_call(SecondaryNode, fun() -> "bar" end),
+    {ok, "foo"} = delegate:call(node(), fun() -> "foo" end),
+    {ok, "bar"} = delegate:call(SecondaryNode, fun() -> "bar" end),
 
     Sender = fun(Pid) ->
         gen_server2:call(Pid, invoked)
@@ -882,22 +882,22 @@ test_delegates_sync() ->
         end
     end,
 
-    {ok, response} = delegate:delegate_call(spawn(Responder), Sender),
-    {ok, response} = delegate:delegate_call(spawn(SecondaryNode, Responder), Sender),
+    {ok, response} = delegate:call(spawn(Responder), Sender),
+    {ok, response} = delegate:call(spawn(SecondaryNode, Responder), Sender),
 
-    {error, _} = delegate:delegate_call(spawn(BadResponder), Sender),
-    {error, _} = delegate:delegate_call(spawn(SecondaryNode, BadResponder), Sender),
+    {error, _} = delegate:call(spawn(BadResponder), Sender),
+    {error, _} = delegate:call(spawn(SecondaryNode, BadResponder), Sender),
 
     LocalGoodPids = [spawn(Responder) || _ <- lists:seq(1,2)],
     RemoteGoodPids = [spawn(Responder) || _ <- lists:seq(1,2)],
     LocalBadPids = [spawn(SecondaryNode, BadResponder) || _ <- lists:seq(1,2)],
     RemoteBadPids = [spawn(SecondaryNode, BadResponder) || _ <- lists:seq(1,2)],
 
-    GoodRes = delegate:delegate_call(LocalGoodPids ++ RemoteGoodPids, Sender),
+    GoodRes = delegate:call(LocalGoodPids ++ RemoteGoodPids, Sender),
     [{ok, response, _}, {ok, response, _},
      {ok, response, _}, {ok, response, _}] = GoodRes,
 
-    BadRes = delegate:delegate_call(LocalBadPids ++ RemoteBadPids, Sender),
+    BadRes = delegate:call(LocalBadPids ++ RemoteBadPids, Sender),
     [{error, _, _}, {error, _, _},
      {error, _, _}, {error, _, _}] = BadRes,
 

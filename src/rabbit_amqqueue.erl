@@ -234,10 +234,10 @@ info_keys() -> rabbit_amqqueue_process:info_keys().
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
 info(#amqqueue{ pid = QPid }) ->
-    delegate:delegate_gs2_pcall(QPid, 9, info, infinity).
+    delegate:gs2_pcall(QPid, 9, info, infinity).
 
 info(#amqqueue{ pid = QPid }, Items) ->
-    case delegate:delegate_gs2_pcall(QPid, 9, {info, Items}, infinity) of
+    case delegate:gs2_pcall(QPid, 9, {info, Items}, infinity) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
@@ -247,7 +247,7 @@ info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
 consumers(#amqqueue{ pid = QPid }) ->
-    delegate:delegate_gs2_pcall(QPid, 9, consumers, infinity).
+    delegate:gs2_pcall(QPid, 9, consumers, infinity).
 
 consumers_all(VHostPath) ->
     lists:concat(
@@ -256,16 +256,16 @@ consumers_all(VHostPath) ->
                          {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]
           end)).
 
-stat(#amqqueue{pid = QPid}) -> delegate:delegate_gs2_call(QPid, stat, infinity).
+stat(#amqqueue{pid = QPid}) -> delegate:gs2_call(QPid, stat, infinity).
 
 stat_all() ->
     lists:map(fun stat/1, rabbit_misc:dirty_read_all(rabbit_queue)).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    delegate:delegate_gs2_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
+    delegate:gs2_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
 
 purge(#amqqueue{ pid = QPid }) ->
-    delegate:delegate_gs2_call(QPid, purge, infinity).
+    delegate:gs2_call(QPid, purge, infinity).
 
 deliver(QPid, #delivery{immediate = true,
                         txn = Txn, sender = ChPid, message = Message}) ->
@@ -280,13 +280,13 @@ deliver(QPid, #delivery{txn = Txn, sender = ChPid, message = Message}) ->
     true.
 
 redeliver(QPid, Messages) ->
-    delegate:delegate_gs2_cast(QPid, {redeliver, Messages}).
+    delegate:gs2_cast(QPid, {redeliver, Messages}).
 
 requeue(QPid, MsgIds, ChPid) ->
-    delegate:delegate_gs2_cast(QPid, {requeue, MsgIds, ChPid}).
+    delegate:gs2_cast(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
-    delegate:delegate_gs2_pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
+    delegate:gs2_pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
 
 commit_all(QPids, Txn) ->
     safe_delegate_call_ok(
@@ -295,7 +295,7 @@ commit_all(QPids, Txn) ->
       QPids).
 
 rollback_all(QPids, Txn) ->
-    delegate:delegate_cast(QPids,
+    delegate:cast(QPids,
         fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn}) end).
 
 notify_down_all(QPids, ChPid) ->
@@ -307,34 +307,34 @@ notify_down_all(QPids, ChPid) ->
       QPids).
 
 limit_all(QPids, ChPid, LimiterPid) ->
-    delegate:delegate_cast(QPids,
+    delegate:cast(QPids,
         fun (QPid) -> gen_server2:cast(QPid, {limit, ChPid, LimiterPid}) end).
 
 claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
-    delegate:delegate_gs2_call(QPid, {claim_queue, ReaderPid}, infinity).
+    delegate:gs2_call(QPid, {claim_queue, ReaderPid}, infinity).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
-    delegate:delegate_gs2_call(QPid, {basic_get, ChPid, NoAck}, infinity).
+    delegate:gs2_call(QPid, {basic_get, ChPid, NoAck}, infinity).
 
 basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid, LimiterPid,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
-    delegate:delegate_gs2_call(QPid, {basic_consume, NoAck, ReaderPid, ChPid,
+    delegate:gs2_call(QPid, {basic_consume, NoAck, ReaderPid, ChPid,
                             LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg},
                      infinity).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
-    ok = delegate:delegate_gs2_call(QPid,
+    ok = delegate:gs2_call(QPid,
                                     {basic_cancel, ChPid, ConsumerTag, OkMsg},
                                     infinity).
 
 notify_sent(QPid, ChPid) ->
-    delegate:delegate_gs2_pcast(QPid, 7, {notify_sent, ChPid}).
+    delegate:gs2_pcast(QPid, 7, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
-    delegate:delegate_gs2_pcast(QPid, 7, {unblock, ChPid}).
+    delegate:gs2_pcast(QPid, 7, {unblock, ChPid}).
 
 flush_all(QPids, ChPid) ->
-    delegate:delegate_cast(QPids,
+    delegate:cast(QPids,
         fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
 
 internal_delete(QueueName) ->
@@ -382,7 +382,7 @@ pseudo_queue(QueueName, Pid) ->
               pid = Pid}.
 
 safe_delegate_call_ok(H, F, Pids) ->
-    case [R || R = {error, _, _} <- delegate:delegate_call(
+    case [R || R = {error, _, _} <- delegate:call(
                                       Pids,
                                       fun (Pid) ->
                                               rabbit_misc:with_exit_handler(
