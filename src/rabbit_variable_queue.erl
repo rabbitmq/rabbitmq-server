@@ -33,7 +33,7 @@
 
 -export([init/2, terminate/1, publish/2, publish_delivered/2,
          set_ram_duration_target/2, update_ram_duration/1,
-         ram_duration/1, fetch/1, ack/2, len/1, is_empty/1, purge/1,
+         fetch/1, ack/2, len/1, is_empty/1, purge/1,
          delete_and_terminate/1, requeue/2, tx_publish/2, tx_rollback/2,
          tx_commit/4, sync_callback/1, handle_pre_hibernate/1, status/1]).
 
@@ -378,30 +378,28 @@ update_ram_duration(State = #vqstate { egress_rate = Egress,
                                        in_counter = InCount,
                                        out_counter = OutCount,
                                        ram_msg_count = RamMsgCount,
-                                       duration_target = DurationTarget }) ->
+                                       duration_target = DurationTarget,
+                                       ram_msg_count_prev = RamMsgCountPrev }) ->
     Now = now(),
     {AvgEgressRate, Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
     {AvgIngressRate, Ingress1} = update_rate(Now, Timestamp, InCount, Ingress),
 
-    set_ram_duration_target(
-      DurationTarget,
-      State #vqstate { egress_rate = Egress1,
-                       avg_egress_rate = AvgEgressRate,
-                       ingress_rate = Ingress1,
-                       avg_ingress_rate = AvgIngressRate,
-                       rate_timestamp = Now,
-                       ram_msg_count_prev = RamMsgCount,
-                       out_counter = 0, in_counter = 0 }).
+    Duration = %% msgs / (msgs/sec) == sec
+        case AvgEgressRate == 0 andalso AvgIngressRate == 0 of
+            true  -> infinity;
+            false -> (RamMsgCountPrev + RamMsgCount) /
+                         (2 * (AvgEgressRate + AvgIngressRate))
+        end,
 
-ram_duration(#vqstate { avg_egress_rate = AvgEgressRate,
-                        avg_ingress_rate = AvgIngressRate,
-                        ram_msg_count = RamMsgCount,
-                        ram_msg_count_prev = RamMsgCountPrev }) ->
-    %% msgs / (msgs/sec) == sec
-    case AvgEgressRate == 0 andalso AvgIngressRate == 0 of
-        true  -> infinity;
-        false -> (RamMsgCountPrev + RamMsgCount) / (2 * (AvgEgressRate + AvgIngressRate))
-    end.
+    {Duration, set_ram_duration_target(
+                 DurationTarget,
+                 State #vqstate { egress_rate = Egress1,
+                                  avg_egress_rate = AvgEgressRate,
+                                  ingress_rate = Ingress1,
+                                  avg_ingress_rate = AvgIngressRate,
+                                  rate_timestamp = Now,
+                                  ram_msg_count_prev = RamMsgCount,
+                                  out_counter = 0, in_counter = 0 })}.
 
 fetch(State =
       #vqstate { q4 = Q4, ram_msg_count = RamMsgCount, out_counter = OutCount,

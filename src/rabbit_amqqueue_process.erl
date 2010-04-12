@@ -932,8 +932,7 @@ handle_cast({flush, ChPid}, State) ->
 
 handle_cast(update_ram_duration, State = #q{backing_queue_state = BQS,
                                             backing_queue = BQ}) ->
-    BQS1 = BQ:update_ram_duration(BQS),
-    RamDuration = BQ:ram_duration(BQS1),
+    {BQS1, RamDuration} = BQ:update_ram_duration(BQS),
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),

@@ -1384,7 +1384,7 @@ test_variable_queue_dynamic_duration_change() ->
     %% start by sending in a couple of segments worth
     Len1 = 2*SegmentSize,
     VQ1 = variable_queue_publish(false, Len1, VQ0),
-    VQ2 = rabbit_variable_queue:update_ram_duration(VQ1),
+    {_Duration, VQ2} = rabbit_variable_queue:update_ram_duration(VQ1),
     {ok, _TRef} = timer:send_after(1000, {duration, 60,
                                           fun (V) -> (V*0.75)-1 end}),
     VQ3 = test_variable_queue_dynamic_duration_change_f(Len1, VQ2),
@@ -1420,7 +1420,7 @@ test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
                        _               -> Fun
                    end,
             {ok, _TRef} = timer:send_after(1000, {duration, N1, Fun1}),
-            VQ4 = rabbit_variable_queue:update_ram_duration(VQ3),
+            {_Duration, VQ4} = rabbit_variable_queue:update_ram_duration(VQ3),
             VQ5 = %% /37 otherwise the duration is just to high to stress things
                 rabbit_variable_queue:set_ram_duration_target(N/37, VQ4),
             io:format("~p:~n~p~n~n", [N, rabbit_variable_queue:status(VQ5)]),
@@ -1434,7 +1434,7 @@ test_variable_queue_partial_segments_delta_thing() ->
     HalfSegment = SegmentSize div 2,
     VQ0 = fresh_variable_queue(),
     VQ1 = variable_queue_publish(true, SegmentSize + HalfSegment, VQ0),
-    VQ2 = rabbit_variable_queue:update_ram_duration(VQ1),
+    {_Duration, VQ2} = rabbit_variable_queue:update_ram_duration(VQ1),
     VQ3 = rabbit_variable_queue:set_ram_duration_target(0, VQ2),
     %% one segment in q3 as betas, and half a segment in delta
     S3 = rabbit_variable_queue:status(VQ3),
