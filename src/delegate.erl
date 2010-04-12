@@ -34,10 +34,15 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, delegate_cast/2, delegate_call/2, server/1]).
+-export([start_link/1, delegate_cast/2, delegate_call/2,
+         delegate_gs2_call/3, delegate_gs2_pcall/4,
+         delegate_gs2_cast/2, delegate_gs2_pcast/3,
+         server/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
+
+%%----------------------------------------------------------------------------
 
 
 %%----------------------------------------------------------------------------
@@ -45,6 +50,24 @@
 start_link(Hash) ->
     gen_server2:start_link({local, server(Hash)},
                            ?MODULE, [], []).
+
+delegate_gs2_call(Pid, Msg, Timeout) ->
+    {Status, Res} =
+        delegate_call(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end),
+    Res.
+
+delegate_gs2_pcall(Pid, Pri, Msg, Timeout) ->
+    {Status, Res} =
+        delegate_call(Pid,
+                      fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end),
+    Res.
+
+delegate_gs2_cast(Pid, Msg) ->
+    delegate_cast(Pid, fun(P) -> gen_server2:cast(P, Msg) end).
+
+delegate_gs2_pcast(Pid, Pri, Msg) ->
+    delegate_cast(Pid, fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
+
 
 delegate_call(Node, Thunk) when is_atom(Node) ->
     gen_server2:call({server(), Node}, {thunk, Thunk}, infinity);
