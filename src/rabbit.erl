@@ -138,8 +138,8 @@
                     {mfa,         {rabbit_exchange, recover, []}},
                     {requires,    empty_db_check}]}).
 
--rabbit_boot_step({message_store_queue_sup_queue_recovery,
-                   [{description, "message store, queue supervisor and queue recovery"},
+-rabbit_boot_step({queue_sup_queue_recovery,
+                   [{description, "queue supervisor and queue recovery"},
                     {mfa,         {rabbit_amqqueue, start, []}},
                     {requires,    empty_db_check},
                     {enables,     routing_ready}]}).

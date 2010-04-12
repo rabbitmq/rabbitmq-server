@@ -162,9 +162,9 @@ recover_durable_queues(DurableQueues) ->
                                       []  -> false
                                   end
                           end) of
-                       true  -> [Q|Acc];
-                       false -> exit(Q#amqqueue.pid, shutdown),
-                                Acc
+                  true  -> [Q | Acc];
+                  false -> exit(Q#amqqueue.pid, shutdown),
+                           Acc
                    end
            end, [], DurableQueues),
     %% Issue inits to *all* the queues so that they all init at the same time
