@@ -32,9 +32,10 @@
 -module(bpqueue).
 
 %% Block-prefixed queue. This implements a queue of queues, but
-%% supporting the normal queue interface. Each block has a prefix and
-%% it is guaranteed that no two consecutive blocks have the same
-%% prefix. len/1 returns the flattened length of the queue and is O(1)
+%% supporting the normal queue interface. Each inner queue has a
+%% prefix, which does not need to be unique, and it is guaranteed that
+%% no two consecutive blocks have the same prefix. len/1 returns the
+%% flattened length of the queue and is O(1).
 
 -export([new/0, is_empty/1, len/1, in/3, in_r/3, out/1, out_r/1, join/2,
          foldl/3, foldr/3, from_list/1, to_list/1, map_fold_filter_l/4,
@@ -87,7 +88,7 @@ len({N, _Q}) ->
     N.
 
 in(Prefix, Value, {0, Q}) ->
-    {1, queue:in({Prefix, queue:in(Value, Q)}, Q)};
+    {1, queue:in({Prefix, queue:from_list([Value])}, Q)};
 in(Prefix, Value, BPQ) ->
     in1({fun queue:in/2, fun queue:out_r/1}, Prefix, Value, BPQ).
 
