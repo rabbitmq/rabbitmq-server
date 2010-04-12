@@ -619,10 +619,10 @@ recursive_delete1(Path) ->
     case filelib:is_dir(Path) of
         false ->
             case file:delete(Path) of
-                ok                    -> ok;
+                ok              -> ok;
                 %% Path doesn't exist anyway
-                {error, enoent}       -> ok;
-                {error, _Err} = Error -> Error
+                {error, enoent} -> ok;
+                {error, Err}    -> {error, {Path, Err}}
             end;
         true ->
             case file:list_dir(Path) of
@@ -634,11 +634,16 @@ recursive_delete1(Path) ->
                                (_FileName, Error) ->
                                    Error
                            end, ok, FileNames) of
-                        ok                    -> file:del_dir(Path);
-                        {error, _Err} = Error -> Error
+                        ok ->
+                            case file:del_dir(Path) of
+                                ok           -> ok;
+                                {error, Err} -> {error, {Path, Err}}
+                            end;
+                        {error, _Err} = Error ->
+                            Error
                     end;
-                {error, Error} ->
-                    {error, {Path, Error}}
+                {error, Err} ->
+                    {error, {Path, Err}}
             end
     end.
 
