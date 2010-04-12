@@ -98,8 +98,8 @@
 -spec(rs/1 :: (r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(report_cover/0 :: () -> 'ok').
--spec(enable_cover/1 :: (string()) -> ok_or_error()).
--spec(report_cover/1 :: (string()) -> 'ok').
+-spec(enable_cover/1 :: (file_path()) -> ok_or_error()).
+-spec(report_cover/1 :: (file_path()) -> 'ok').
 -spec(throw_on_error/2 ::
       (atom(), thunk({error, any()} | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
@@ -120,10 +120,10 @@
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
--spec(dirty_dump_log/1 :: (string()) -> ok_or_error()).
--spec(read_term_file/1 :: (string()) -> {'ok', [any()]} | {'error', any()}).
--spec(write_term_file/2 :: (string(), [any()]) -> ok_or_error()).
--spec(append_file/2 :: (string(), string()) -> ok_or_error()).
+-spec(dirty_dump_log/1 :: (file_path()) -> ok_or_error()).
+-spec(read_term_file/1 :: (file_path()) -> {'ok', [any()]} | {'error', any()}).
+-spec(write_term_file/2 :: (file_path(), [any()]) -> ok_or_error()).
+-spec(append_file/2 :: (file_path(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
