@@ -375,7 +375,7 @@ successfully_recovered_state(Server) ->
 
 clean(Server, BaseDir) ->
     Dir = filename:join(BaseDir, atom_to_list(Server)),
-    ok = rabbit_misc:recursive_delete(Dir).
+    ok = rabbit_misc:recursive_delete([Dir]).
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers

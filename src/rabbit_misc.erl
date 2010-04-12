@@ -137,7 +137,7 @@
 -spec(version_compare/2 :: (string(), string()) -> 'lt' | 'eq' | 'gt').
 -spec(version_compare/3 :: (string(), string(),
                             ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean()).
--spec(recursive_delete/1 :: (string()) -> 'ok' | {'error', any()}).
+-spec(recursive_delete/1 :: ([string()]) -> 'ok' | {'error', any()}).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 
@@ -609,23 +609,34 @@ version_compare(A,  B) ->
        ANum > BNum   -> gt
     end.
 
-recursive_delete(Path) ->
+recursive_delete(Files) ->
+    lists:foldl(
+      fun (Path,  ok                   ) -> recursive_delete1(Path);
+          (_Path, {error, _Err} = Error) -> Error
+      end, ok, Files).
+
+recursive_delete1(Path) ->
     case filelib:is_dir(Path) of
         false ->
             case file:delete(Path) of
-                ok              -> ok;
+                ok                    -> ok;
                 %% Path doesn't exist anyway
-                {error, enoent} -> ok
+                {error, enoent}       -> ok;
+                {error, _Err} = Error -> Error
             end;
         true ->
             case file:list_dir(Path) of
                 {ok, FileNames} ->
-                    lists:foldl(
-                      fun (FileName, ok) ->
-                              recursive_delete(filename:join(Path, FileName));
-                          (_FileName, Error) ->
-                              Error
-                      end, ok, FileNames);
+                    case lists:foldl(
+                           fun (FileName, ok) ->
+                                   recursive_delete1(
+                                     filename:join(Path, FileName));
+                               (_FileName, Error) ->
+                                   Error
+                           end, ok, FileNames) of
+                        ok                    -> file:del_dir(Path);
+                        {error, _Err} = Error -> Error
+                    end;
                 {error, Error} ->
                     {error, {Path, Error}}
             end
