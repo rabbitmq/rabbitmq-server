@@ -31,11 +31,11 @@
 
 -module(rabbit_queue_index).
 
--export([init/2, terminate/2, terminate_and_erase/1, write_published/4,
+-export([init/3, terminate/2, terminate_and_erase/1, write_published/4,
          write_delivered/2, write_acks/2, sync_seq_ids/2, flush_journal/1,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1,
-         start_msg_stores/1]).
+         prepare_msg_store_seed_funs/1]).
 
 -export([queue_index_walker_reader/3]). %% for internal use only
 
@@ -171,8 +171,7 @@
           num
         }).
 
--include("rabbit.hrl").
--include("rabbit_variable_queue.hrl").
+-include("rabbit_msg_store.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -195,7 +194,7 @@
                               dirty_count     :: integer()
                             }).
 
--spec(init/2 :: (queue_name(), boolean()) ->
+-spec(init/3 :: (queue_name(), boolean(), fun ((guid()) -> boolean())) ->
                      {'undefined' | non_neg_integer(), binary(), binary(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(terminate_and_erase/1 :: (qistate()) -> qistate()).
@@ -211,7 +210,10 @@
 -spec(segment_size/0 :: () -> non_neg_integer()).
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(start_msg_stores/1 :: ([queue_name()]) -> 'ok').
+-spec(prepare_msg_store_seed_funs/1 ::
+        ([queue_name()]) ->
+             {{[binary()] | 'undefined', startup_fun_state()},
+              {[binary()] | 'undefined', startup_fun_state()}}).
 
 -endif.
 
@@ -220,7 +222,7 @@
 %% Public API
 %%----------------------------------------------------------------------------
 
-init(Name, MsgStoreRecovered) ->
+init(Name, MsgStoreRecovered, ContainsCheckFun) ->
     State = blank_state(Name),
     {PRef, TRef, Terms} =
         case read_shutdown_terms(State #qistate.dir) of
@@ -269,8 +271,7 @@ init(Name, MsgStoreRecovered) ->
                                      Segment3) ->
                                         Segment4 =
                                             maybe_add_to_journal(
-                                              rabbit_msg_store:contains(
-                                                ?PERSISTENT_MSG_STORE, Guid),
+                                              ContainsCheckFun(Guid),
                                               CleanShutdown, Del, RelSeq, Segment3),
                                         Segment4
                                 end, Segment1 #segment { pubs = PubCount,
@@ -428,12 +429,7 @@ find_lowest_seq_id_seg_and_next_seq_id(State) ->
         end,
     {LowSeqIdSeg, NextSeqId, State}.
 
-start_msg_stores(DurableQueues) ->
-    ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
-    ok = rabbit_sup:start_child(
-           ?TRANSIENT_MSG_STORE, rabbit_msg_store,
-           [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(), undefined,
-            fun (ok) -> finished end, ok]),
+prepare_msg_store_seed_funs(DurableQueues) ->
     DurableDict =
         dict:from_list([ {queue_name_to_dir_name(Queue), Queue} ||
                            Queue <- DurableQueues ]),
@@ -470,15 +466,12 @@ start_msg_stores(DurableQueues) ->
                           {DurableAcc, [QueueDir | TransientAcc], RefsAcc}
                   end
           end, {[], [], []}, Directories),
-    ok = rabbit_sup:start_child(
-           ?PERSISTENT_MSG_STORE, rabbit_msg_store,
-           [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(), DurableRefs,
-            fun queue_index_walker/1, DurableQueueNames]),
     lists:foreach(fun (DirName) ->
                           Dir = filename:join(queues_dir(), DirName),
                           ok = delete_queue_directory(Dir)
                   end, TransientDirs),
-    ok.
+    {{undefined, {fun (ok) -> finished end, ok}},
+     {DurableRefs, {fun queue_index_walker/1, DurableQueueNames}}}.
 
 %%----------------------------------------------------------------------------
 %% Msg Store Startup Delta Function

@@ -33,7 +33,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/5, write/4, read/3, contains/2, remove/2, release/2,
+-export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
          sync/3, client_init/2, client_terminate/1, delete_client/2, clean/2,
          successfully_recovered_state/1]).
 
@@ -119,10 +119,9 @@
                                             dedup_cache_ets    :: tid(),
                                             cur_file_cache_ets :: tid() }).
 
--spec(start_link/5 ::
-      (atom(), file_path(), [binary()] | 'undefined',
-       (fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A) ->
-             {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(start_link/4 ::
+      (atom(), file_path(), [binary()] | 'undefined', startup_fun_state()) ->
+                           {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(write/4 :: (server(), guid(), msg(), client_msstate()) ->
                       {'ok', client_msstate()}).
 -spec(read/3 :: (server(), guid(), client_msstate()) ->
@@ -302,9 +301,9 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-start_link(Server, Dir, ClientRefs, MsgRefDeltaGen, MsgRefDeltaGenInit) ->
+start_link(Server, Dir, ClientRefs, StartupFunState) ->
     gen_server2:start_link({local, Server}, ?MODULE,
-                           [Server, Dir, ClientRefs, MsgRefDeltaGen, MsgRefDeltaGenInit],
+                           [Server, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
 write(Server, Guid, Msg, CState =
@@ -498,7 +497,7 @@ close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts } =
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([Server, BaseDir, ClientRefs, MsgRefDeltaGen, MsgRefDeltaGenInit]) ->
+init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     process_flag(trap_exit, true),
 
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,

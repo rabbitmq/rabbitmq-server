@@ -253,7 +253,15 @@
 %%----------------------------------------------------------------------------
 
 start(DurableQueues) ->
-    rabbit_queue_index:start_msg_stores(DurableQueues).
+    ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
+    {{TransRefs, TransStartFunState}, {PersistRefs, PersistStartFunState}}
+        = rabbit_queue_index:prepare_msg_store_seed_funs(DurableQueues),
+    ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
+                                [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
+                                 TransRefs, TransStartFunState]),
+    ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store,
+                                [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
+                                 PersistRefs, PersistStartFunState]).
 
 init(QueueName, IsDurable) ->
     PersistentStore = case IsDurable of
@@ -262,8 +270,12 @@ init(QueueName, IsDurable) ->
                       end,
     MsgStoreRecovered =
         rabbit_msg_store:successfully_recovered_state(PersistentStore),
+    ContainsCheckFun =
+        fun (Guid) ->
+                rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
+        end,
     {DeltaCount, PRef, TRef, Terms, IndexState} =
-        rabbit_queue_index:init(QueueName, MsgStoreRecovered),
+        rabbit_queue_index:init(QueueName, MsgStoreRecovered, ContainsCheckFun),
     {DeltaSeqId, NextSeqId, IndexState1} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(IndexState),
 

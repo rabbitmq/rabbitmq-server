@@ -34,6 +34,8 @@
 -ifdef(use_specs).
 
 -type(msg() :: any()).
+-type(startup_fun_state() ::
+        {(fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A}).
 
 -endif.
 

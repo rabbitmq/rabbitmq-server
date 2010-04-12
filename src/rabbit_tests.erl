@@ -999,7 +999,7 @@ start_msg_store(MsgRefDeltaGen, MsgRefDeltaGenInit) ->
     ok = rabbit_sup:start_child(
            ?PERSISTENT_MSG_STORE, rabbit_msg_store,
            [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(), undefined,
-            MsgRefDeltaGen, MsgRefDeltaGenInit]),
+            {MsgRefDeltaGen, MsgRefDeltaGenInit}]),
     start_transient_msg_store().
 
 start_transient_msg_store() ->
@@ -1007,7 +1007,7 @@ start_transient_msg_store() ->
     ok = rabbit_sup:start_child(
            ?TRANSIENT_MSG_STORE, rabbit_msg_store,
            [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(), undefined,
-            fun (ok) -> finished end, ok]).
+            {fun (ok) -> finished end, ok}]).
 
 stop_msg_store() ->
     case supervisor:terminate_child(rabbit_sup, ?PERSISTENT_MSG_STORE) of
@@ -1198,8 +1198,8 @@ test_queue() ->
     queue_name(test).
 
 empty_test_queue() ->
-    ok = rabbit_queue_index:start_msg_stores([]),
-    {0, _PRef, _TRef, _Terms, Qi1} = rabbit_queue_index:init(test_queue(), false),
+    ok = rabbit_variable_queue:start([]),
+    {0, _PRef, _TRef, _Terms, Qi1} = test_queue_init(),
     _Qi2 = rabbit_queue_index:terminate_and_erase(Qi1),
     ok.
 
@@ -1241,6 +1241,13 @@ verify_read_with_published(Delivered, Persistent,
 verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
     ko.
 
+test_queue_init() ->
+    rabbit_queue_index:init(
+      test_queue(), false,
+      fun (Guid) ->
+              rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
+      end).
+
 test_queue_index() ->
     SegmentSize = rabbit_queue_index:segment_size(),
     TwoSegs = SegmentSize + SegmentSize,
@@ -1248,7 +1255,7 @@ test_queue_index() ->
     ok = empty_test_queue(),
     SeqIdsA = lists:seq(0,9999),
     SeqIdsB = lists:seq(10000,19999),
-    {0, _PRef, _TRef, _Terms, Qi0} = rabbit_queue_index:init(test_queue(), false),
+    {0, _PRef, _TRef, _Terms, Qi0} = test_queue_init(),
     {0, 0, Qi1} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi0),
     {Qi2, SeqIdsGuidsA} = queue_index_publish(SeqIdsA, false, Qi1),
@@ -1260,9 +1267,9 @@ test_queue_index() ->
     %% call terminate twice to prove it's idempotent
     _Qi5 = rabbit_queue_index:terminate([], rabbit_queue_index:terminate([], Qi4)),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_msg_stores([test_queue()]),
+    ok = rabbit_variable_queue:start([test_queue()]),
     %% should get length back as 0, as all the msgs were transient
-    {0, _PRef1, _TRef1, _Terms1, Qi6} = rabbit_queue_index:init(test_queue(), false),
+    {0, _PRef1, _TRef1, _Terms1, Qi6} = test_queue_init(),
     {0, 0, Qi7} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi6),
     {Qi8, SeqIdsGuidsB} = queue_index_publish(SeqIdsB, true, Qi7),
@@ -1273,10 +1280,10 @@ test_queue_index() ->
                                     lists:reverse(SeqIdsGuidsB)),
     _Qi11 = rabbit_queue_index:terminate([], Qi10),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_msg_stores([test_queue()]),
+    ok = rabbit_variable_queue:start([test_queue()]),
     %% should get length back as 10000
     LenB = length(SeqIdsB),
-    {LenB, _PRef2, _TRef2, _Terms2, Qi12} = rabbit_queue_index:init(test_queue(), false),
+    {LenB, _PRef2, _TRef2, _Terms2, Qi12} = test_queue_init(),
     {0, TwoSegs, Qi13} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi12),
     Qi14 = queue_index_deliver(SeqIdsB, Qi13),
@@ -1290,9 +1297,9 @@ test_queue_index() ->
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi17),
     _Qi19 = rabbit_queue_index:terminate([], Qi18),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_msg_stores([test_queue()]),
+    ok = rabbit_variable_queue:start([test_queue()]),
     %% should get length back as 0 because all persistent msgs have been acked
-    {0, _PRef3, _TRef3, _Terms3, Qi20} = rabbit_queue_index:init(test_queue(), false),
+    {0, _PRef3, _TRef3, _Terms3, Qi20} = test_queue_init(),
     _Qi21 = rabbit_queue_index:terminate_and_erase(Qi20),
     ok = stop_msg_store(),
     ok = empty_test_queue(),
@@ -1301,7 +1308,7 @@ test_queue_index() ->
     %% First, partials:
     %% a) partial pub+del+ack, then move to new segment
     SeqIdsC = lists:seq(0,trunc(SegmentSize/2)),
-    {0, _PRef4, _TRef4, _Terms4, Qi22} = rabbit_queue_index:init(test_queue(), false),
+    {0, _PRef4, _TRef4, _Terms4, Qi22} = test_queue_init(),
     {Qi23, _SeqIdsGuidsC} = queue_index_publish(SeqIdsC, false, Qi22),
     Qi24 = queue_index_deliver(SeqIdsC, Qi23),
     Qi25 = rabbit_queue_index:write_acks(SeqIdsC, Qi24),
@@ -1312,7 +1319,7 @@ test_queue_index() ->
     ok = empty_test_queue(),
 
     %% b) partial pub+del, then move to new segment, then ack all in old segment
-    {0, _PRef5, _TRef5, _Terms5, Qi29} = rabbit_queue_index:init(test_queue(), false),
+    {0, _PRef5, _TRef5, _Terms5, Qi29} = test_queue_init(),
     {Qi30, _SeqIdsGuidsC2} = queue_index_publish(SeqIdsC, false, Qi29),
     Qi31 = queue_index_deliver(SeqIdsC, Qi30),
     {Qi32, _SeqIdsGuidsC3} = queue_index_publish([SegmentSize], false, Qi31),
@@ -1324,14 +1331,14 @@ test_queue_index() ->
 
     %% c) just fill up several segments of all pubs, then +dels, then +acks
     SeqIdsD = lists:seq(0,SegmentSize*4),
-    {0, _PRef6, _TRef6, _Terms6, Qi36} = rabbit_queue_index:init(test_queue(), false),
+    {0, _PRef6, _TRef6, _Terms6, Qi36} = test_queue_init(),
     {Qi37, _SeqIdsGuidsD} = queue_index_publish(SeqIdsD, false, Qi36),
     Qi38 = queue_index_deliver(SeqIdsD, Qi37),
     Qi39 = rabbit_queue_index:write_acks(SeqIdsD, Qi38),
     Qi40 = queue_index_flush_journal(Qi39),
     _Qi41 = rabbit_queue_index:terminate_and_erase(Qi40),
     ok = stop_msg_store(),
-    ok = rabbit_queue_index:start_msg_stores([]),
+    ok = rabbit_variable_queue:start([]),
     ok = stop_msg_store(),
     passed.
 
