@@ -1444,7 +1444,8 @@ maybe_compact(State = #msstate { sum_valid_data   = SumValid,
                                  file_summary_ets = FileSummaryEts })
   when (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
     First = ets:first(FileSummaryEts),
-    N = rabbit_misc:random_geometric(?GEOMETRIC_P),
+    N = rabbit_misc:ceil(math:log(1.0 - random:uniform()) /
+                         math:log(1.0 - ?GEOMETRIC_P)),
     case find_files_to_gc(FileSummaryEts, N, First) of
         undefined ->
             State;
