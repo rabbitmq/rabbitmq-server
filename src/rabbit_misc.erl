@@ -60,7 +60,7 @@
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
 -export([recursive_delete/1, dict_cons/3, unlink_and_capture_exit/1]).
--export([geometric/1]).
+-export([random_geometric/1]).
 
 -import(mnesia).
 -import(lists).
@@ -141,7 +141,7 @@
 -spec(recursive_delete/1 :: (string()) -> 'ok' | {'error', any()}).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
--spec(geometric/1 :: (float()) -> non_neg_integer()).
+-spec(random_geometric/1 :: (float()) -> non_neg_integer()).
 
 -endif.
 
@@ -642,6 +642,6 @@ unlink_and_capture_exit(Pid) ->
     after 0 -> ok
     end.
 
-geometric(P) when 0.0 < P andalso P < 1.0 ->
+random_geometric(P) when 0.0 < P andalso P < 1.0 ->
     U = 1.0 - random:uniform(),
     ceil(math:log(U) / math:log(1.0 - P)).
