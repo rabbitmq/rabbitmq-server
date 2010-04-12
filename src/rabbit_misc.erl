@@ -137,7 +137,7 @@
 -spec(version_compare/2 :: (string(), string()) -> 'lt' | 'eq' | 'gt').
 -spec(version_compare/3 :: (string(), string(),
                             ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean()).
--spec(recursive_delete/1 :: ([string()]) -> 'ok' | {'error', any()}).
+-spec(recursive_delete/1 :: ([string()]) -> 'ok' | {'error', {string(), any()}}).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 
