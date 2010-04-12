@@ -103,7 +103,7 @@
 %% and seeding the message store on start up.
 
 %% Note that in general, the representation of a message's state as
-%% the tuple: {('no_pub'|{MsgId, IsPersistent}), ('del'|'no_del'),
+%% the tuple: {('no_pub'|{Guid, IsPersistent}), ('del'|'no_del'),
 %% ('ack'|'no_ack')} is richer than strictly necessary for most
 %% operations. However, for startup, and to ensure the safe and
 %% correct combination of journal entries with entries read from the
@@ -265,12 +265,12 @@ init(Name, MsgStoreRecovered) ->
                           Segment2 =
                                #segment { pubs = PubCount1, acks = AckCount1 } =
                               array:sparse_foldl(
-                                fun (RelSeq, {{MsgId, _IsPersistent}, Del, no_ack},
+                                fun (RelSeq, {{Guid, _IsPersistent}, Del, no_ack},
                                      Segment3) ->
                                         Segment4 =
                                             maybe_add_to_journal(
                                               rabbit_msg_store:contains(
-                                                ?PERSISTENT_MSG_STORE, MsgId),
+                                                ?PERSISTENT_MSG_STORE, Guid),
                                               CleanShutdown, Del, RelSeq, Segment3),
                                         Segment4
                                 end, Segment1 #segment { pubs = PubCount,
@@ -327,15 +327,15 @@ terminate_and_erase(State) ->
     ok = delete_queue_directory(State1 #qistate.dir),
     State1.
 
-write_published(MsgId, SeqId, IsPersistent, State) when is_binary(MsgId) ->
-    ?GUID_BYTES = size(MsgId),
+write_published(Guid, SeqId, IsPersistent, State) when is_binary(Guid) ->
+    ?GUID_BYTES = size(Guid),
     {JournalHdl, State1} = get_journal_handle(State),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
                                true  -> ?PUB_PERSIST_JPREFIX;
                                false -> ?PUB_TRANS_JPREFIX
-                           end):?JPREFIX_BITS, SeqId:?SEQ_BITS>>, MsgId]),
-    maybe_flush_journal(add_to_journal(SeqId, {MsgId, IsPersistent}, State1)).
+                           end):?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Guid]),
+    maybe_flush_journal(add_to_journal(SeqId, {Guid, IsPersistent}, State1)).
 
 write_delivered(SeqId, State) ->
     {JournalHdl, State1} = get_journal_handle(State),
@@ -396,8 +396,8 @@ read_segment_entries(InitSeqId, State = #qistate { segments = Segments,
     {SegEntries, _PubCount, _AckCount, Segment1} = load_segment(false, Segment),
     #segment { journal_entries = JEntries } = Segment1,
     {array:sparse_foldr(
-       fun (RelSeq, {{MsgId, IsPersistent}, IsDelivered, no_ack}, Acc) ->
-               [ {MsgId, reconstruct_seq_id(Seg, RelSeq),
+       fun (RelSeq, {{Guid, IsPersistent}, IsDelivered, no_ack}, Acc) ->
+               [ {Guid, reconstruct_seq_id(Seg, RelSeq),
                   IsPersistent, IsDelivered == del} | Acc ]
        end, [], journal_plus_segment(JEntries, SegEntries)),
      State #qistate { segments = segment_store(Segment1, Segments) }}.
@@ -492,7 +492,7 @@ queue_index_walker({[], Gatherer}) ->
     case gatherer:fetch(Gatherer) of
         finished                -> rabbit_misc:unlink_and_capture_exit(Gatherer),
                                    finished;
-        {value, {MsgId, Count}} -> {MsgId, Count, {[], Gatherer}}
+        {value, {Guid, Count}} -> {Guid, Count, {[], Gatherer}}
     end;
 queue_index_walker({[QueueName | QueueNames], Gatherer}) ->
     Child = make_ref(),
@@ -519,9 +519,9 @@ queue_index_walker_reader(Gatherer, Ref, State, [Seg | SegNums]) ->
 queue_index_walker_reader1(_Gatherer, State, []) ->
     State;
 queue_index_walker_reader1(
-  Gatherer, State, [{MsgId, _SeqId, IsPersistent, _IsDelivered} | Msgs]) ->
+  Gatherer, State, [{Guid, _SeqId, IsPersistent, _IsDelivered} | Msgs]) ->
     case IsPersistent of
-        true  -> gatherer:produce(Gatherer, {MsgId, 1});
+        true  -> gatherer:produce(Gatherer, {Guid, 1});
         false -> ok
     end,
     queue_index_walker_reader1(Gatherer, State, Msgs).
@@ -684,17 +684,17 @@ get_journal_handle(State = #qistate { journal_handle = Hdl }) ->
 bool_to_int(true ) -> 1;
 bool_to_int(false) -> 0.
 
-write_entry_to_segment(_RelSeq, {{_MsgId, _IsPersistent}, del, ack}, Hdl) ->
+write_entry_to_segment(_RelSeq, {{_Guid, _IsPersistent}, del, ack}, Hdl) ->
     Hdl;
 write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
     ok = case Pub of
              no_pub ->
                  ok;
-             {MsgId, IsPersistent} ->
+             {Guid, IsPersistent} ->
                  file_handle_cache:append(
                    Hdl, [<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
                            (bool_to_int(IsPersistent)):1,
-                           RelSeq:?REL_SEQ_BITS>>, MsgId])
+                           RelSeq:?REL_SEQ_BITS>>, Guid])
          end,
     ok = case {Del, Ack} of
              {no_del, no_ack} ->
@@ -775,10 +775,10 @@ load_segment_entries(KeepAcks, Hdl, SegEntries, PubCount, AckCount) ->
                 IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
             %% because we specify /binary, and binaries are complete
             %% bytes, the size spec is in bytes, not bits.
-            {ok, MsgId} = file_handle_cache:read(Hdl, ?GUID_BYTES),
+            {ok, Guid} = file_handle_cache:read(Hdl, ?GUID_BYTES),
             SegEntries1 =
                 array:set(RelSeq,
-                          {{MsgId, 1 == IsPersistentNum}, no_del, no_ack},
+                          {{Guid, 1 == IsPersistentNum}, no_del, no_ack},
                           SegEntries),
             load_segment_entries(KeepAcks, Hdl, SegEntries1, PubCount + 1,
                                  AckCount);
@@ -837,13 +837,13 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                     load_journal_entries(add_to_journal(SeqId, ack, State));
                 _ ->
                     case file_handle_cache:read(Hdl, ?GUID_BYTES) of
-                        {ok, <<MsgIdNum:?GUID_BITS>>} ->
+                        {ok, <<GuidNum:?GUID_BITS>>} ->
                             %% work around for binary data
                             %% fragmentation. See
                             %% rabbit_msg_file:read_next/2
-                            <<MsgId:?GUID_BYTES/binary>> =
-                                <<MsgIdNum:?GUID_BITS>>,
-                            Publish = {MsgId, case Prefix of
+                            <<Guid:?GUID_BYTES/binary>> =
+                                <<GuidNum:?GUID_BITS>>,
+                            Publish = {Guid, case Prefix of
                                                   ?PUB_PERSIST_JPREFIX -> true;
                                                   ?PUB_TRANS_JPREFIX   -> false
                                               end},
@@ -873,7 +873,7 @@ add_to_journal(RelSeq, Action,
     case Action of
         del                     -> Segment1;
         ack                     -> Segment1 #segment { acks = AckCount + 1 };
-        {_MsgId, _IsPersistent} -> Segment1 #segment { pubs = PubCount + 1 }
+        {_Guid, _IsPersistent} -> Segment1 #segment { pubs = PubCount + 1 }
     end;
 
 %% This is a more relaxed version of deliver_or_ack_msg because we can
@@ -912,30 +912,30 @@ journal_plus_segment(JEntries, SegEntries) ->
 %% Here, the Out is the Seg Array which we may be adding to (for
 %% items only in the journal), modifying (bits in both), or erasing
 %% from (ack in journal, not segment).
-journal_plus_segment(Obj = {{_MsgId, _IsPersistent}, no_del, no_ack},
+journal_plus_segment(Obj = {{_Guid, _IsPersistent}, no_del, no_ack},
                      not_found,
                      RelSeq, Out) ->
     array:set(RelSeq, Obj, Out);
-journal_plus_segment(Obj = {{_MsgId, _IsPersistent}, del, no_ack},
+journal_plus_segment(Obj = {{_Guid, _IsPersistent}, del, no_ack},
                      not_found,
                      RelSeq, Out) ->
     array:set(RelSeq, Obj, Out);
-journal_plus_segment({{_MsgId, _IsPersistent}, del, ack},
+journal_plus_segment({{_Guid, _IsPersistent}, del, ack},
                      not_found,
                      RelSeq, Out) ->
     array:reset(RelSeq, Out);
 
 journal_plus_segment({no_pub, del, no_ack},
-                     {Pub = {_MsgId, _IsPersistent}, no_del, no_ack},
+                     {Pub = {_Guid, _IsPersistent}, no_del, no_ack},
                      RelSeq, Out) ->
     array:set(RelSeq, {Pub, del, no_ack}, Out);
 
 journal_plus_segment({no_pub, del, ack},
-                     {{_MsgId, _IsPersistent}, no_del, no_ack},
+                     {{_Guid, _IsPersistent}, no_del, no_ack},
                      RelSeq, Out) ->
     array:reset(RelSeq, Out);
 journal_plus_segment({no_pub, no_del, ack},
-                     {{_MsgId, _IsPersistent}, del, no_ack},
+                     {{_Guid, _IsPersistent}, del, no_ack},
                      RelSeq, Out) ->
     array:reset(RelSeq, Out).
 
@@ -958,77 +958,77 @@ journal_minus_segment(JEntries, SegEntries) ->
 %% publish or ack is in both the journal and the segment.
 
 %% Both the same. Must be at least the publish
-journal_minus_segment(Obj, Obj = {{_MsgId, _IsPersistent}, _Del, no_ack},
+journal_minus_segment(Obj, Obj = {{_Guid, _IsPersistent}, _Del, no_ack},
                       _RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {Out, PubsRemoved + 1, AcksRemoved};
-journal_minus_segment(Obj, Obj = {{_MsgId, _IsPersistent}, _Del, ack},
+journal_minus_segment(Obj, Obj = {{_Guid, _IsPersistent}, _Del, ack},
                       _RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {Out, PubsRemoved + 1, AcksRemoved + 1};
 
 %% Just publish in journal
-journal_minus_segment(Obj = {{_MsgId, _IsPersistent}, no_del, no_ack},
+journal_minus_segment(Obj = {{_Guid, _IsPersistent}, no_del, no_ack},
                       not_found,
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, Obj, Out), PubsRemoved, AcksRemoved};
 
 %% Just deliver in journal
 journal_minus_segment(Obj = {no_pub, del, no_ack},
-                      {{_MsgId, _IsPersistent}, no_del, no_ack},
+                      {{_Guid, _IsPersistent}, no_del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, Obj, Out), PubsRemoved, AcksRemoved};
 journal_minus_segment({no_pub, del, no_ack},
-                      {{_MsgId, _IsPersistent}, del, no_ack},
+                      {{_Guid, _IsPersistent}, del, no_ack},
                       _RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {Out, PubsRemoved, AcksRemoved};
 
 %% Just ack in journal
 journal_minus_segment(Obj = {no_pub, no_del, ack},
-                      {{_MsgId, _IsPersistent}, del, no_ack},
+                      {{_Guid, _IsPersistent}, del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, Obj, Out), PubsRemoved, AcksRemoved};
 journal_minus_segment({no_pub, no_del, ack},
-                      {{_MsgId, _IsPersistent}, del, ack},
+                      {{_Guid, _IsPersistent}, del, ack},
                       _RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {Out, PubsRemoved, AcksRemoved};
 
 %% Publish and deliver in journal
-journal_minus_segment(Obj = {{_MsgId, _IsPersistent}, del, no_ack},
+journal_minus_segment(Obj = {{_Guid, _IsPersistent}, del, no_ack},
                       not_found,
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, Obj, Out), PubsRemoved, AcksRemoved};
 journal_minus_segment({Pub, del, no_ack},
-                      {Pub = {_MsgId, _IsPersistent}, no_del, no_ack},
+                      {Pub = {_Guid, _IsPersistent}, no_del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, {no_pub, del, no_ack}, Out),
      PubsRemoved + 1, AcksRemoved};
 
 %% Deliver and ack in journal
 journal_minus_segment(Obj = {no_pub, del, ack},
-                      {{_MsgId, _IsPersistent}, no_del, no_ack},
+                      {{_Guid, _IsPersistent}, no_del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, Obj, Out), PubsRemoved, AcksRemoved};
 journal_minus_segment({no_pub, del, ack},
-                      {{_MsgId, _IsPersistent}, del, no_ack},
+                      {{_Guid, _IsPersistent}, del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, {no_pub, no_del, ack}, Out),
      PubsRemoved, AcksRemoved};
 journal_minus_segment({no_pub, del, ack},
-                      {{_MsgId, _IsPersistent}, del, ack},
+                      {{_Guid, _IsPersistent}, del, ack},
                       _RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {Out, PubsRemoved, AcksRemoved + 1};
 
 %% Publish, deliver and ack in journal
-journal_minus_segment({{_MsgId, _IsPersistent}, del, ack},
+journal_minus_segment({{_Guid, _IsPersistent}, del, ack},
                       not_found,
                       _RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {Out, PubsRemoved, AcksRemoved};
 journal_minus_segment({Pub, del, ack},
-                      {Pub = {_MsgId, _IsPersistent}, no_del, no_ack},
+                      {Pub = {_Guid, _IsPersistent}, no_del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, {no_pub, del, ack}, Out),
      PubsRemoved + 1, AcksRemoved};
 journal_minus_segment({Pub, del, ack},
-                      {Pub = {_MsgId, _IsPersistent}, del, no_ack},
+                      {Pub = {_Guid, _IsPersistent}, del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, {no_pub, no_del, ack}, Out),
      PubsRemoved + 1, AcksRemoved}.

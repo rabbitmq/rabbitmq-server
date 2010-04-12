@@ -64,14 +64,14 @@
 
 %%----------------------------------------------------------------------------
 
-append(FileHdl, MsgId, MsgBody)
-  when is_binary(MsgId) andalso size(MsgId) =< ?GUID_SIZE_BYTES ->
+append(FileHdl, Guid, MsgBody)
+  when is_binary(Guid) andalso size(Guid) =< ?GUID_SIZE_BYTES ->
     MsgBodyBin  = term_to_binary(MsgBody),
     MsgBodyBinSize = size(MsgBodyBin),
     Size = MsgBodyBinSize + ?GUID_SIZE_BYTES,
     case file_handle_cache:append(FileHdl,
                                   <<Size:?INTEGER_SIZE_BITS,
-                                   MsgId:?GUID_SIZE_BYTES/binary,
+                                   Guid:?GUID_SIZE_BYTES/binary,
                                    MsgBodyBin:MsgBodyBinSize/binary,
                                    ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
         ok -> {ok, Size + ?FILE_PACKING_ADJUSTMENT};
@@ -83,10 +83,10 @@ read(FileHdl, TotalSize) ->
     BodyBinSize = Size - ?GUID_SIZE_BYTES,
     case file_handle_cache:read(FileHdl, TotalSize) of
         {ok, <<Size:?INTEGER_SIZE_BITS,
-               MsgId:?GUID_SIZE_BYTES/binary,
+               Guid:?GUID_SIZE_BYTES/binary,
                MsgBodyBin:BodyBinSize/binary,
                ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>} ->
-            {ok, {MsgId, binary_to_term(MsgBodyBin)}};
+            {ok, {Guid, binary_to_term(MsgBodyBin)}};
         KO -> KO
     end.
 
@@ -97,8 +97,8 @@ scan(FileHdl, Offset, Acc) ->
         eof -> {ok, Acc, Offset};
         {corrupted, NextOffset} ->
             scan(FileHdl, NextOffset, Acc);
-        {ok, {MsgId, TotalSize, NextOffset}} ->
-            scan(FileHdl, NextOffset, [{MsgId, TotalSize, Offset} | Acc]);
+        {ok, {Guid, TotalSize, NextOffset}} ->
+            scan(FileHdl, NextOffset, [{Guid, TotalSize, Offset} | Acc]);
         _KO ->
             %% bad message, but we may still have recovered some valid messages
             {ok, Acc, Offset}
@@ -108,9 +108,9 @@ read_next(FileHdl, Offset) ->
     case file_handle_cache:read(FileHdl, ?SIZE_AND_GUID_BYTES) of
         %% Here we take option 5 from
         %% http://www.erlang.org/cgi-bin/ezmlm-cgi?2:mss:1569 in which
-        %% we read the MsgId as a number, and then convert it back to
+        %% we read the Guid as a number, and then convert it back to
         %% a binary in order to work around bugs in Erlang's GC.
-        {ok, <<Size:?INTEGER_SIZE_BITS, MsgIdNum:?GUID_SIZE_BITS>>} ->
+        {ok, <<Size:?INTEGER_SIZE_BITS, GuidNum:?GUID_SIZE_BITS>>} ->
             case Size of
                 0 -> eof; %% Nothing we can do other than stop
                 _ ->
@@ -123,9 +123,9 @@ read_next(FileHdl, Offset) ->
                             case file_handle_cache:read(FileHdl, 1) of
                                 {ok,
                                  <<?WRITE_OK_MARKER: ?WRITE_OK_SIZE_BITS>>} ->
-                                    <<MsgId:?GUID_SIZE_BYTES/binary>> =
-                                        <<MsgIdNum:?GUID_SIZE_BITS>>,
-                                    {ok, {MsgId, TotalSize, NextOffset}};
+                                    <<Guid:?GUID_SIZE_BYTES/binary>> =
+                                        <<GuidNum:?GUID_SIZE_BITS>>,
+                                    {ok, {Guid, TotalSize, NextOffset}};
                                 {ok, _SomeOtherData} ->
                                     {corrupted, NextOffset};
                                 KO -> KO
