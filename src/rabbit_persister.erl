@@ -70,7 +70,7 @@
 
 -ifdef(use_specs).
 
--type(pmsg() :: {amqqueue(), pkey()}).
+-type(pmsg() :: {queue_name(), pkey()}).
 -type(work_item() ::
       {publish, message(), pmsg()} |
       {deliver, pmsg()} |
