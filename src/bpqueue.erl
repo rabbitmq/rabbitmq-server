@@ -278,13 +278,13 @@ map_fold_filter2(Funs = {Out, In, InQ, _Join}, Fun, OrigPrefix, Prefix, Init,
                     {Init, InQ(OrigPrefix, InnerQ,
                                InQ(Prefix, InnerQNew, QNew)), false};
                 {Prefix1, Value1, Init1} ->
-                    {QNew1, InnerQNew1} =
+                    {Prefix2, QNew1, InnerQNew1} =
                         case Prefix1 =:= Prefix of
-                            true  -> {QNew, In(Value1, InnerQNew)};
-                            false -> {InQ(Prefix, InnerQNew, QNew),
+                            true  -> {Prefix, QNew, In(Value1, InnerQNew)};
+                            false -> {Prefix1, InQ(Prefix, InnerQNew, QNew),
                                       In(Value1, queue:new())}
                         end,
-                    map_fold_filter2(Funs, Fun, OrigPrefix, Prefix, Init1,
+                    map_fold_filter2(Funs, Fun, OrigPrefix, Prefix2, Init1,
                                      InnerQ1, QNew1, InnerQNew1)
             end
     end.
