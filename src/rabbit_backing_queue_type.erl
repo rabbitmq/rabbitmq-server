@@ -84,7 +84,7 @@ behaviour_info(callbacks) ->
      {tx_commit, 4},
 
      %% Reinsert messages into the queue which have already been
-     %% delivered and were (likely) pending acks.q
+     %% delivered and were pending acknowledgement.
      {requeue, 2},
 
      %% How long is my queue?
