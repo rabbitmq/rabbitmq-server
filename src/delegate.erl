@@ -52,12 +52,12 @@ start_link(Hash) ->
                            ?MODULE, [], []).
 
 delegate_gs2_call(Pid, Msg, Timeout) ->
-    {Status, Res} =
+    {_Status, Res} =
         delegate_call(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end),
     Res.
 
 delegate_gs2_pcall(Pid, Pri, Msg, Timeout) ->
-    {Status, Res} =
+    {_Status, Res} =
         delegate_call(Pid,
                       fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end),
     Res.
@@ -68,6 +68,8 @@ delegate_gs2_cast(Pid, Msg) ->
 delegate_gs2_pcast(Pid, Pri, Msg) ->
     delegate_cast(Pid, fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
 
+
+% TODO reimplement the single-node optimisation
 
 delegate_call(Node, Thunk) when is_atom(Node) ->
     gen_server2:call({server(), Node}, {thunk, Thunk}, infinity);
@@ -112,18 +114,9 @@ f_pid_node(DelegateFun, FPid) ->
         DelegateFun(Node, fun() -> FPid(Pid) end)
     end.
 
-% TODO this only gets called when we are ONLY talking to the local node - can
-% we improve this?
-delegate_per_node([{Node, Pids}], FPidNode) when Node == node() ->
-    % optimisation
-    [[add_pid(FPidNode(Pid, Node), Pid) || Pid <- Pids]];
-
 delegate_per_node(NodePids, FPidNode) ->
-    rabbit_misc:upmap(
-          fun ({Node, Pids}) ->
-              [add_pid(FPidNode(Pid, Node), Pid) || Pid <- Pids]
-          end,
-          NodePids).
+  [[add_pid(FPidNode(Pid, Node), Pid) || Pid <- Pids] ||
+    {Node, Pids} <- NodePids].
 
 add_pid({Status, Result}, Pid) -> {Status, Result, Pid};
 add_pid(Status, Pid) -> {Status, Pid}.
