@@ -49,8 +49,7 @@
 -spec(is_empty/1 :: (state()) -> boolean()).
 -spec(set_ram_duration_target/2 ::
       (('undefined' | 'infinity' | number()), state()) -> state()).
--spec(update_ram_duration/1 :: (state()) -> state()).
--spec(ram_duration/1 :: (state()) -> number()).
+-spec(ram_duration/1 :: (state()) -> {number(), state()}).
 -spec(sync_callback/1 :: (state()) ->
                               ('undefined' | (fun ((A) -> {boolean(), A})))).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
