@@ -32,7 +32,7 @@
 -module(rabbit_variable_queue).
 
 -export([init/2, terminate/1, publish/2, publish_delivered/2,
-         set_ram_duration_target/2, update_ram_duration/1,
+         set_ram_duration_target/2, ram_duration/1,
          fetch/1, ack/2, len/1, is_empty/1, purge/1,
          delete_and_terminate/1, requeue/2, tx_publish/2, tx_rollback/2,
          tx_commit/4, sync_callback/1, handle_pre_hibernate/1, status/1]).
@@ -372,14 +372,14 @@ set_ram_duration_target(
         false -> reduce_memory_use(State1)
     end.
 
-update_ram_duration(State = #vqstate { egress_rate = Egress,
-                                       ingress_rate = Ingress,
-                                       rate_timestamp = Timestamp,
-                                       in_counter = InCount,
-                                       out_counter = OutCount,
-                                       ram_msg_count = RamMsgCount,
-                                       duration_target = DurationTarget,
-                                       ram_msg_count_prev = RamMsgCountPrev }) ->
+ram_duration(State = #vqstate { egress_rate = Egress,
+                                ingress_rate = Ingress,
+                                rate_timestamp = Timestamp,
+                                in_counter = InCount,
+                                out_counter = OutCount,
+                                ram_msg_count = RamMsgCount,
+                                duration_target = DurationTarget,
+                                ram_msg_count_prev = RamMsgCountPrev }) ->
     Now = now(),
     {AvgEgressRate, Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
     {AvgIngressRate, Ingress1} = update_rate(Now, Timestamp, InCount, Ingress),

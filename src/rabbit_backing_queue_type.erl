@@ -104,10 +104,11 @@ behaviour_info(callbacks) ->
      %% by the duration and the current queue rates.
      {set_ram_duration_target, 2},
 
-     %% Recalculate the duration internally (likely to be just update
-     %% your internal rates), and report how many seconds the messages
-     %% in RAM represent given the current rates of the queue.
-     {update_ram_duration, 1},
+     %% Optionally recalculate the duration internally (likely to be
+     %% just update your internal rates), and report how many seconds
+     %% the messages in RAM represent given the current rates of the
+     %% queue.
+     {ram_duration, 1},
 
      %% Can return 'undefined' or a thunk which will receive the
      %% state, and must return the state, as soon as the queue process
