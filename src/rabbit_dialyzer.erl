@@ -38,9 +38,9 @@
 
 -ifdef(use_specs).
 
--spec(create_basic_plt/1 :: (string()) -> 'ok').
--spec(add_to_plt/2 :: (string(), string()) -> 'ok').
--spec(dialyze_files/2 :: (string(), string()) -> 'ok').
+-spec(create_basic_plt/1 :: (file_path()) -> 'ok').
+-spec(add_to_plt/2 :: (file_path(), string()) -> 'ok').
+-spec(dialyze_files/2 :: (file_path(), string()) -> 'ok').
 -spec(halt_with_code/1 :: (atom()) -> no_return()).
 
 -endif.

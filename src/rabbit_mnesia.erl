@@ -48,7 +48,7 @@
 -ifdef(use_specs).
 
 -spec(status/0 :: () -> [{'nodes' | 'running_nodes', [erlang_node()]}]).
--spec(dir/0 :: () -> string()).
+-spec(dir/0 :: () -> file_path()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
@@ -424,7 +424,7 @@ reset(Force) ->
                                   cannot_delete_schema)
     end,
     ok = delete_cluster_nodes_config(),
-    %% remove persistet messages and any other garbage we find
+    %% remove persisted messages and any other garbage we find
     ok = rabbit_misc:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok.
 
