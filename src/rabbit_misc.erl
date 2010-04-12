@@ -59,7 +59,7 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([dict_cons/3, unlink_and_capture_exit/1]).
+-export([recursive_delete/1, dict_cons/3, unlink_and_capture_exit/1]).
 
 -import(mnesia).
 -import(lists).
@@ -137,6 +137,8 @@
 -spec(version_compare/2 :: (string(), string()) -> 'lt' | 'eq' | 'gt').
 -spec(version_compare/3 :: (string(), string(),
                             ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean()).
+-spec(recursive_delete/1 :: ([file_path()]) ->
+             'ok' | {'error', {file_path(), any()}}).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 
@@ -606,6 +608,40 @@ version_compare(A,  B) ->
                         version_compare(ATl1, BTl1);
        ANum < BNum   -> lt;
        ANum > BNum   -> gt
+    end.
+
+recursive_delete(Files) ->
+    lists:foldl(fun (Path,  ok                   ) -> recursive_delete1(Path);
+                    (_Path, {error, _Err} = Error) -> Error
+                end, ok, Files).
+
+recursive_delete1(Path) ->
+    case filelib:is_dir(Path) of
+        false -> case file:delete(Path) of
+                     ok              -> ok;
+                     {error, enoent} -> ok; %% Path doesn't exist anyway
+                     {error, Err}    -> {error, {Path, Err}}
+                 end;
+        true  -> case file:list_dir(Path) of
+                     {ok, FileNames} ->
+                         case lists:foldl(
+                                fun (FileName, ok) ->
+                                        recursive_delete1(
+                                          filename:join(Path, FileName));
+                                    (_FileName, Error) ->
+                                        Error
+                                end, ok, FileNames) of
+                             ok ->
+                                 case file:del_dir(Path) of
+                                     ok           -> ok;
+                                     {error, Err} -> {error, {Path, Err}}
+                                 end;
+                             {error, _Err} = Error ->
+                                 Error
+                         end;
+                     {error, Err} ->
+                         {error, {Path, Err}}
+                 end
     end.
 
 dict_cons(Key, Value, Dict) ->

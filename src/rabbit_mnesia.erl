@@ -424,9 +424,8 @@ reset(Force) ->
                                   cannot_delete_schema)
     end,
     ok = delete_cluster_nodes_config(),
-    %% remove persistet messages and any other garbage we find
-    lists:foreach(fun file:delete/1,
-                  filelib:wildcard(dir() ++ "/*")),
+    %% remove persisted messages and any other garbage we find
+    ok = rabbit_misc:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok.
 
 leave_cluster([], _) -> ok;
