@@ -42,7 +42,7 @@
 -spec(ack/2 :: ([ack()], state()) -> state()).
 -spec(tx_publish/2 :: (basic_message(), state()) -> state()).
 -spec(tx_rollback/2 :: ([guid()], state()) -> state()).
--spec(tx_commit/4 :: ([guid()], [ack()], {pid(), any()}, state()) ->
+-spec(tx_commit/4 :: ([basic_message()], [ack()], {pid(), any()}, state()) ->
                           {boolean(), state()}).
 -spec(requeue/2 :: ([{basic_message(), ack()}], state()) -> state()).
 -spec(len/1 :: (state()) -> non_neg_integer()).
