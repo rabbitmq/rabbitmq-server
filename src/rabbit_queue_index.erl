@@ -325,7 +325,7 @@ terminate(Terms, State) ->
 
 terminate_and_erase(State) ->
     State1 = terminate(false, [], State),
-    ok = delete_queue_directory(State1 #qistate.dir),
+    ok = rabbit_misc:recursive_delete([State1 #qistate.dir]),
     State1.
 
 write_published(Guid, SeqId, IsPersistent, State) when is_binary(Guid) ->
@@ -468,7 +468,7 @@ prepare_msg_store_seed_funs(DurableQueues) ->
           end, {[], [], []}, Directories),
     lists:foreach(fun (DirName) ->
                           Dir = filename:join(queues_dir(), DirName),
-                          ok = delete_queue_directory(Dir)
+                          ok = rabbit_misc:recursive_delete([Dir])
                   end, TransientDirs),
     {{undefined, {fun (ok) -> finished end, ok}},
      {DurableRefs, {fun queue_index_walker/1, DurableQueueNames}}}.
@@ -589,13 +589,6 @@ queue_name_to_dir_name(Name = #resource { kind = queue }) ->
 
 queues_dir() ->
     filename:join(rabbit_mnesia:dir(), "queues").
-
-delete_queue_directory(Dir) ->
-    {ok, Entries} = file:list_dir(Dir),
-    ok = lists:foldl(fun (Entry, ok) ->
-                             file:delete(filename:join(Dir, Entry))
-                     end, ok, Entries),
-    ok = file:del_dir(Dir).
 
 get_segment_handle(Segment = #segment { handle = undefined, path = Path }) ->
     {ok, Hdl} = file_handle_cache:open(Path,
