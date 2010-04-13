@@ -36,7 +36,7 @@
          set_ram_duration_target/2, set_maximum_since_use/2]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
-         stat/1, stat_all/0, deliver/2, redeliver/2, requeue/3, ack/4]).
+         stat/1, stat_all/0, deliver/2, requeue/3, ack/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1]).
 -export([claim_queue/2]).
@@ -90,7 +90,6 @@
                                             {'error', 'not_empty'}).
 -spec(purge/1 :: (amqqueue()) -> qlen()).
 -spec(deliver/2 :: (pid(), delivery()) -> boolean()).
--spec(redeliver/2 :: (pid(), [{message(), boolean()}]) -> 'ok').
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
 -spec(commit_all/2 :: ([pid()], txn()) -> ok_or_errors()).
@@ -292,9 +291,6 @@ deliver(QPid, #delivery{mandatory = true,
 deliver(QPid, #delivery{txn = Txn, sender = ChPid, message = Message}) ->
     gen_server2:cast(QPid, {deliver, Txn, Message, ChPid}),
     true.
-
-redeliver(QPid, Messages) ->
-    gen_server2:cast(QPid, {redeliver, Messages}).
 
 requeue(QPid, MsgIds, ChPid) ->
     gen_server2:cast(QPid, {requeue, MsgIds, ChPid}).
