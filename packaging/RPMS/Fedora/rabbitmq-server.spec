@@ -11,6 +11,7 @@ Source2: rabbitmq-script-wrapper
 Source3: rabbitmq-server.logrotate
 Source4: rabbitmq-asroot-script-wrapper
 URL: http://www.rabbitmq.com/
+BuildArch: noarch
 BuildRequires: erlang, python-simplejson
 Requires: erlang, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
@@ -23,8 +24,9 @@ RabbitMQ is an implementation of AMQP, the emerging standard for high
 performance enterprise messaging. The RabbitMQ server is a robust and
 scalable implementation of an AMQP broker.
 
-%define _rabbit_erllibdir %{_libdir}/rabbitmq/lib/rabbitmq_server-%{version}
-%define _rabbit_libdir %{_libdir}/rabbitmq
+# We want to install into /usr/lib, even on 64-bit platforms
+%define _rabbit_libdir %{_exec_prefix}/lib/rabbitmq
+%define _rabbit_erllibdir %{_rabbit_libdir}/lib/rabbitmq_server-%{version}
 %define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
 %define _rabbit_asroot_wrapper %{_builddir}/`basename %{S:4}`
 
@@ -35,9 +37,7 @@ scalable implementation of an AMQP broker.
 
 %build
 cp %{S:2} %{_rabbit_wrapper}
-sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_wrapper}
 cp %{S:4} %{_rabbit_asroot_wrapper}
-sed -i 's|/usr/lib/|%{_libdir}/|' %{_rabbit_asroot_wrapper}
 make %{?_smp_mflags}
 
 %install
@@ -65,12 +65,12 @@ mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
 #Build the list of files
-rm -f %{_builddir}/filelist.%{name}.rpm
-echo '%defattr(-,root,root, -)' >> %{_builddir}/filelist.%{name}.rpm 
+rm -f %{_builddir}/%{name}.files
+echo '%defattr(-,root,root, -)' >> %{_builddir}/%{name}.files 
 (cd %{buildroot}; \
     find . -type f ! -regex '\.%{_sysconfdir}.*' \
         ! -regex '\.\(%{_rabbit_erllibdir}\|%{_rabbit_libdir}\).*' \
-        | sed -e 's/^\.//' >> %{_builddir}/filelist.%{name}.rpm)
+        | sed -e 's/^\.//' >> %{_builddir}/%{name}.files)
 
 %pre
 
@@ -103,7 +103,7 @@ if [ $1 = 0 ]; then
   # Leave rabbitmq user and group
 fi
 
-%files -f ../filelist.%{name}.rpm
+%files -f ../%{name}.files
 %defattr(-,root,root,-)
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq

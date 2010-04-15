@@ -39,11 +39,7 @@ prepare:
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare
-	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES) \
-		--target i386
-	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES) \
-		--define '_libdir /usr/lib64' --define '_arch x86_64' \
-		--define '_defaultdocdir /usr/share/doc' --target x86_64
+	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES)
 
 clean:	
 	rm -rf SOURCES SPECS RPMS SRPMS BUILD tmp

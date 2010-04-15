@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.docbook.org/xml/4.5/docbookx.dtd">
+<refentry lang="en">
+    <refentryinfo>
+        <productname>RabbitMQ Server</productname>
+        <authorgroup>
+            <corpauthor>The RabbitMQ Team &lt;<ulink url="mailto:info@rabbitmq.com"><email>info@rabbitmq.com</email></ulink>&gt;</corpauthor>
+        </authorgroup>
+    </refentryinfo>
+
+    <refmeta>
+        <refentrytitle>rabbitmq.conf</refentrytitle>
+        <manvolnum>5</manvolnum>
+        <refmiscinfo class="manual">RabbitMQ Server</refmiscinfo>
+    </refmeta>
+
+    <refnamediv>
+        <refname>rabbitmq.conf</refname>
+        <refpurpose>default settings for RabbitMQ AMQP server</refpurpose>
+    </refnamediv>
+   
+    <refsect1>
+        <title>Description</title>
+        <para>
+<filename>/etc/rabbitmq/rabbitmq.conf</filename> contains variable settings that override the
+defaults built in to the RabbitMQ startup scripts.
+        </para>
+        <para>
+The file is interpreted by the system shell, and so should consist of
+a sequence of shell environment variable definitions. Normal shell
+syntax is permitted (since the file is sourced using the shell "."
+operator), including line comments starting with "#".
+        </para>
+        <para>
+In order of preference, the startup scripts get their values from the
+environment, from <filename>/etc/rabbitmq/rabbitmq.conf</filename> and finally from the
+built-in default values. For example, for the <envar>RABBITMQ_NODENAME</envar>
+setting,
+        </para>
+        <para>
+          <envar>RABBITMQ_NODENAME</envar>
+        </para>
+        <para>
+from the environment is checked first. If it is absent or equal to the
+empty string, then
+        </para>
+        <para>
+          <envar>NODENAME</envar>
+        </para>
+        <para>
+from <filename>/etc/rabbitmq/rabbitmq.conf</filename> is checked. If it is also absent
+or set equal to the empty string then the default value from the
+startup script is used.
+        </para>
+        <para>
+The variable names in /etc/rabbitmq/rabbitmq.conf are always equal to the
+environment variable names, with the <envar>RABBITMQ_</envar> prefix removed:
+<envar>RABBITMQ_NODE_PORT</envar> from the environment becomes <envar>NODE_PORT</envar> in the
+<filename>/etc/rabbitmq/rabbitmq.conf</filename> file, etc.
+        </para>
+        <para role="example-prefix">For example:</para>
+        <screen role="example-multiline">
+# I am a complete /etc/rabbitmq/rabbitmq.conf file.
+# Comment lines start with a hash character.
+# This is a /bin/sh script file - use ordinary envt var syntax
+NODENAME=hare
+        </screen>
+        <para role="example">
+            This is an example of a complete
+            <filename>/etc/rabbitmq/rabbitmq.conf</filename> file that overrides the default Erlang
+            node name from "rabbit" to "hare".
+        </para>
+
+    </refsect1>
+
+    <refsect1>
+        <title>See also</title>
+        <para>
+            <citerefentry><refentrytitle>rabbitmq-multi</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+            <citerefentry><refentrytitle>rabbitmq-server</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+            <citerefentry><refentrytitle>rabbitmqctl</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+        </para>
+    </refsect1>
+</refentry>

@@ -33,9 +33,12 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_child/1, start_child/2]).
+-export([start_link/0, start_child/1, start_child/2, start_child/3,
+         start_restartable_child/1, start_restartable_child/2]).
 
 -export([init/1]).
+
+-include("rabbit.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -46,10 +49,25 @@ start_child(Mod) ->
     start_child(Mod, []).
 
 start_child(Mod, Args) ->
+    start_child(Mod, Mod, Args).
+
+start_child(ChildId, Mod, Args) ->
     {ok, _} = supervisor:start_child(?SERVER,
-                                     {Mod, {Mod, start_link, Args},
-                                      transient, 100, worker, [Mod]}),
+                                     {ChildId, {Mod, start_link, Args},
+                                      transient, ?MAX_WAIT, worker, [Mod]}),
+    ok.
+
+start_restartable_child(Mod) ->
+    start_restartable_child(Mod, []).
+
+start_restartable_child(Mod, Args) ->
+    Name = list_to_atom(atom_to_list(Mod) ++ "_sup"),
+    {ok, _} = supervisor:start_child(
+                ?SERVER,
+                {Name, {rabbit_restartable_sup, start_link,
+                        [Name, {Mod, start_link, Args}]},
+                 transient, infinity, supervisor, [rabbit_restartable_sup]}),
     ok.
 
 init([]) ->
-    {ok, {{one_for_one, 10, 10}, []}}.
+    {ok, {{one_for_all, 0, 1}, []}}.
