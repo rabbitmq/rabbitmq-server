@@ -87,11 +87,6 @@ run_cluster_dependent_tests(SecondaryNode) ->
     passed = test_delegates_async(SecondaryNode),
     passed = test_delegates_sync(SecondaryNode),
 
-    ok = control_action(stop_app, []),
-    ok = control_action(reset, []),
-    ok = control_action(cluster, []),
-    ok = control_action(start_app, []),
-
     passed.
 
 test_priority_queue() ->
