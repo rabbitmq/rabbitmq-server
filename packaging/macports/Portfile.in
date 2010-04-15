@@ -4,7 +4,6 @@
 PortSystem 1.0
 name		rabbitmq-server
 version		@VERSION@
-revision	0
 categories	net 
 maintainers	paperplanes.de:meyer rabbitmq.com:tonyg openmaintainer
 platforms	darwin
@@ -23,8 +22,7 @@ checksums \
     sha1 @sha1@ \
     rmd160 @rmd160@
 
-depends_build   port:erlang
-depends_run     port:erlang
+depends_lib     port:erlang
 
 platform darwin 7 {
     depends_build-append port:py25-simplejson
