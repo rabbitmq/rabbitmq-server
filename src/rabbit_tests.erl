@@ -650,8 +650,12 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
 
     %% NB: this will log an inconsistent_database error, which is harmless
+    %% Turning cover on / off is OK even if we're not in general using cover,
+    %% it just turns the engine on / off, doesn't actually log anything.
+    cover:stop([SecondaryNode]),
     true = disconnect_node(SecondaryNode),
     pong = net_adm:ping(SecondaryNode),
+    cover:start([SecondaryNode]),
 
     %% leaving a cluster as a ram node
     ok = control_action(reset, []),
