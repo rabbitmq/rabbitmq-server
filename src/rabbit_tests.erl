@@ -844,44 +844,76 @@ test_delegates_async(SecondaryNode) ->
     Self = self(),
     Sender = fun(Pid) -> Pid ! {invoked, Self} end,
 
-    ok = delegate:cast(spawn(fun async_responder/0), Sender),
-    ok = delegate:cast(spawn(SecondaryNode, fun async_responder/0), Sender),
-    async_await_response(2),
+    Responder = make_responder(fun({invoked, Pid}) -> Pid ! response end),
 
-    LocalPids = [spawn(fun async_responder/0) || _ <- lists:seq(1,10)],
-    RemotePids =
-        [spawn(SecondaryNode, fun async_responder/0) || _ <- lists:seq(1,10)],
+    ok = delegate:cast(spawn(Responder), Sender),
+    ok = delegate:cast(spawn(SecondaryNode, Responder), Sender),
+    await_response(2),
+
+    LocalPids = spawn_responders(node(), Responder, 10),
+    RemotePids = spawn_responders(SecondaryNode, Responder, 10),
     ok = delegate:cast(LocalPids ++ RemotePids, Sender),
-    async_await_response(20),
+    await_response(20),
 
     passed.
 
+make_responder(FMsg) ->
+    fun() ->
+        receive
+            Msg ->
+                FMsg(Msg)
+        after 100 ->
+            throw(timeout)
+        end
+    end.
+
+spawn_responders(Node, Responder, Count) ->
+    [spawn(Node, Responder) || _ <- lists:seq(1, Count)].
+
+await_response(0) ->
+    ok;
+
+await_response(Count) ->
+    receive
+        response -> ok,
+        await_response(Count - 1)
+    after 100 ->
+        io:format("Async reply not received~n"),
+        throw(timeout)
+    end.
+
 test_delegates_sync(SecondaryNode) ->
-    {ok, "foo"} = delegate:call(node(), fun sync_simple_result/0),
-    {ok, "foo"} = delegate:call(SecondaryNode, fun sync_simple_result/0),
+    {ok, "foo"} = delegate:call(node(), fun() -> "foo" end),
+    {ok, "bar"} = delegate:call(SecondaryNode, fun() -> "bar" end),
 
-    {ok, response} = delegate:call(spawn(fun sync_responder/0),
-                                   fun sync_sender/1),
-    {ok, response} = delegate:call(spawn(SecondaryNode, fun sync_responder/0),
-                                   fun sync_sender/1),
+    Sender = fun(Pid) ->
+        gen_server2:call(Pid, invoked)
+    end,
 
-    {error, _} = delegate:call(spawn(fun sync_bad_responder/0),
-                               fun sync_sender/1),
-    {error, _} = delegate:call(spawn(SecondaryNode, fun sync_bad_responder/0),
-                               fun sync_sender/1),
+    Responder = make_responder(fun({'$gen_call', From, invoked}) ->
+                                   gen_server2:reply(From, response)
+                               end),
 
-    LocalGoodPids = [spawn(fun sync_responder/0) || _ <- lists:seq(1,2)],
-    RemoteGoodPids = [spawn(fun sync_responder/0) || _ <- lists:seq(1,2)],
-    LocalBadPids =
-        [spawn(SecondaryNode, fun sync_bad_responder/0) || _ <- lists:seq(1,2)],
-    RemoteBadPids =
-        [spawn(SecondaryNode, fun sync_bad_responder/0) || _ <- lists:seq(1,2)],
+    BadResponder = make_responder(fun({'$gen_call', _From, invoked}) ->
+                                      throw(exception)
+                                  end),
 
-    GoodRes = delegate:call(LocalGoodPids ++ RemoteGoodPids, fun sync_sender/1),
+    {ok, response} = delegate:call(spawn(Responder), Sender),
+    {ok, response} = delegate:call(spawn(SecondaryNode, Responder), Sender),
+
+    {error, _} = delegate:call(spawn(BadResponder), Sender),
+    {error, _} = delegate:call(spawn(SecondaryNode, BadResponder), Sender),
+
+    LocalGoodPids = spawn_responders(node(), Responder, 2),
+    RemoteGoodPids = spawn_responders(SecondaryNode, Responder, 2),
+    LocalBadPids = spawn_responders(node(), BadResponder, 2),
+    RemoteBadPids = spawn_responders(SecondaryNode, BadResponder, 2),
+
+    GoodRes = delegate:call(LocalGoodPids ++ RemoteGoodPids, Sender),
     [{ok, response, _}, {ok, response, _},
      {ok, response, _}, {ok, response, _}] = GoodRes,
 
-    BadRes = delegate:call(LocalBadPids ++ RemoteBadPids, fun sync_sender/1),
+    BadRes = delegate:call(LocalBadPids ++ RemoteBadPids, Sender),
     [{error, _, _}, {error, _, _},
      {error, _, _}, {error, _, _}] = BadRes,
 
@@ -896,55 +928,6 @@ test_delegates_sync(SecondaryNode) ->
 
     passed.
 
-% Unfortunately we need these to be top level functions, not closures as
-% something about them being closures trips up execution under the coverage
-% analyser in clustered mode since the analyser only recompiles on one node and
-% there appears to be some binary-level incompatibility around closures.
-
-async_responder() ->
-    receive
-        {invoked, Pid} ->
-            Pid ! response,
-            ok
-    after 100 ->
-        io:format("Async message not sent~n"),
-        throw(timeout)
-    end.
-
-async_await_response(0) ->
-    ok;
-
-async_await_response(Count) ->
-    receive
-        response -> ok,
-        async_await_response(Count - 1)
-    after 100 ->
-        io:format("Async reply not received~n"),
-        throw(timeout)
-    end.
-
-sync_simple_result() -> "foo".
-
-sync_sender(Pid) ->
-    gen_server2:call(Pid, invoked).
-
-sync_responder() ->
-    receive
-        {'$gen_call', From, invoked} ->
-            gen_server2:reply(From, response)
-    after 100 ->
-        io:format("Sync hook not invoked~n"),
-        throw(timeout)
-    end.
-
-sync_bad_responder() ->
-    receive
-        {'$gen_call', _From, invoked} ->
-            throw(exception)
-    after 100 ->
-        io:format("Crashing sync hook not invoked~n"),
-        throw(timeout)
-    end.
 
 %---------------------------------------------------------------------
 
