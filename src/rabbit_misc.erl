@@ -43,6 +43,7 @@
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
+-export([enable_cover_node/1]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
@@ -209,6 +210,7 @@ rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
                                 [Kind, Name, VHostPath])).
 
+
 enable_cover() ->
     enable_cover(".").
 
@@ -219,6 +221,10 @@ enable_cover(Root) ->
         {error,Reason} -> {error,Reason};
         _ -> ok
     end.
+
+enable_cover_node(NodeS) ->
+    Node = makenode(NodeS),
+    {ok, _} = cover:start([Node]).
 
 report_cover() ->
     report_cover(".").
