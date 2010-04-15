@@ -332,19 +332,18 @@ truncate(Ref) ->
     with_flushed_handles(
       [Ref],
       fun ([Handle1 = #handle { hdl = Hdl, offset = Offset,
-                                trusted_offset = TrustedOffset }]) ->
+                                trusted_offset = TOffset }]) ->
               case file:truncate(Hdl) of
-                  ok    -> TrustedOffset1 = lists:min([Offset, TrustedOffset]),
-                           {ok, [Handle1 #handle {
-                                   at_eof = true,
-                                   trusted_offset = TrustedOffset1 }]};
+                  ok    -> TOffset1 = lists:min([Offset, TOffset]),
+                           {ok, [Handle1 #handle {at_eof = true,
+                                                  trusted_offset = TOffset1 }]};
                   Error -> {Error, [Handle1]}
               end
       end).
 
 last_sync_offset(Ref) ->
-    with_handles([Ref], fun ([#handle { trusted_offset = TrustedOffset }]) ->
-                                {ok, TrustedOffset}
+    with_handles([Ref], fun ([#handle { trusted_offset = TOffset }]) ->
+                                {ok, TOffset}
                         end).
 
 current_virtual_offset(Ref) ->
@@ -476,7 +475,7 @@ with_handles(Refs, Fun) ->
                    end, {ok, []}, Refs),
     case ResHandles of
         {ok, Handles} ->
-            case erlang:apply(Fun, [lists:reverse(Handles)]) of
+            case Fun(lists:reverse(Handles)) of
                 {Result, Handles1} when is_list(Handles1) ->
                     lists:zipwith(fun put_handle/2, Refs, Handles1),
                     Result;
@@ -499,7 +498,7 @@ with_flushed_handles(Refs, Fun) ->
                              {Error, [Handle | HandlesAcc]}
                      end, {ok, []}, Handles) of
                   {ok, Handles1} ->
-                      erlang:apply(Fun, [lists:reverse(Handles1)]);
+                      Fun(lists:reverse(Handles1));
                   {Error, Handles1} ->
                       {Error, lists:reverse(Handles1)}
               end
@@ -545,14 +544,14 @@ open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
                     N when is_integer(N) -> N
                 end,
             Now = now(),
-            Handle =
-                #handle { hdl = Hdl, offset = 0, trusted_offset = 0,
-                          write_buffer_size = 0, options = Options,
-                          write_buffer_size_limit = WriteBufferSize,
-                          write_buffer = [], at_eof = false, mode = Mode,
-                          is_write = is_writer(Mode), is_read = is_reader(Mode),
-                          path = Path, last_used_at = Now,
-                          is_dirty = false },
+            Handle = #handle { hdl = Hdl, offset = 0, trusted_offset = 0,
+                               write_buffer_size = 0, options = Options,
+                               write_buffer_size_limit = WriteBufferSize,
+                               write_buffer = [], at_eof = false, mode = Mode,
+                               is_write = is_writer(Mode),
+                               is_read = is_reader(Mode),
+                               path = Path, last_used_at = Now,
+                               is_dirty = false },
             {{ok, Offset1}, Handle1} = maybe_seek(Offset, Handle),
             Handle2 = Handle1 #handle { trusted_offset = Offset1 },
             put({Ref, fhc_handle}, Handle2),
@@ -844,5 +843,6 @@ ensure_mref(Pid, State = #fhc_state { client_mrefs = ClientMRefs }) ->
 ensure_mref(Pid, ClientMRefs) ->
     case dict:find(Pid, ClientMRefs) of
         {ok, _MRef} -> ClientMRefs;
-        error       -> dict:store(Pid, erlang:monitor(process, Pid), ClientMRefs)
+        error       -> dict:store(Pid, erlang:monitor(process, Pid),
+                                  ClientMRefs)
     end.
