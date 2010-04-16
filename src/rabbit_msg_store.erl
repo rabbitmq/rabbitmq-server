@@ -338,10 +338,12 @@ read(Server, Guid, CState =
     end.
 
 contains(Server, Guid) -> gen_server2:call(Server, {contains, Guid}, infinity).
+remove(_Server, [])    -> ok;
 remove(Server, Guids)  -> gen_server2:cast(Server, {remove, Guids}).
+release(_Server, [])   -> ok;
 release(Server, Guids) -> gen_server2:cast(Server, {release, Guids}).
 sync(Server, Guids, K) -> gen_server2:cast(Server, {sync, Guids, K}).
-sync(Server)            -> gen_server2:pcast(Server, 8, sync). %% internal
+sync(Server)           -> gen_server2:pcast(Server, 8, sync). %% internal
 
 gc_done(Server, Reclaimed, Source, Destination) ->
     gen_server2:pcast(Server, 8, {gc_done, Reclaimed, Source, Destination}).

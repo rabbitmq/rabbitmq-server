@@ -29,22 +29,25 @@
 %%   Contributor(s): ______________________________________.
 %%
 
+-type(fetch_result() ::
+                 %% Message,  IsDelivered,  AckTag,  Remaining_Len
+        ('empty'|{basic_message(), boolean(), ack(), non_neg_integer()})).
+
 -spec(start/1 :: ([queue_name()]) -> 'ok').
 -spec(init/2 :: (queue_name(), boolean()) -> state()).
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
 -spec(purge/1 :: (state()) -> {non_neg_integer(), state()}).
 -spec(publish/2 :: (basic_message(), state()) -> state()).
--spec(publish_delivered/2 :: (basic_message(), state()) -> {ack(), state()}).
--spec(fetch/1 :: (state()) ->
-             {('empty'|{basic_message(), boolean(), ack(), non_neg_integer()}),
-              state()}).
+-spec(publish_delivered/3 ::
+        (boolean(), basic_message(), state()) -> {ack(), state()}).
+-spec(fetch/2 :: (boolean(), state()) -> {fetch_result(), state()}).
 -spec(ack/2 :: ([ack()], state()) -> state()).
--spec(tx_publish/2 :: (basic_message(), state()) -> state()).
--spec(tx_rollback/2 :: ([guid()], state()) -> state()).
--spec(tx_commit/4 :: ([basic_message()], [ack()], {pid(), any()}, state()) ->
-                          {boolean(), state()}).
--spec(requeue/2 :: ([{basic_message(), ack()}], state()) -> state()).
+-spec(tx_publish/3 :: (txn(), basic_message(), state()) -> state()).
+-spec(tx_ack/3 :: (txn(), [ack()], state()) -> state()).
+-spec(tx_rollback/2 :: (txn(), state()) -> {[ack()], state()}).
+-spec(tx_commit/3 :: (txn(), {pid(), any()}, state()) -> {[ack()], state()}).
+-spec(requeue/2 :: ([ack()], state()) -> state()).
 -spec(len/1 :: (state()) -> non_neg_integer()).
 -spec(is_empty/1 :: (state()) -> boolean()).
 -spec(set_ram_duration_target/2 ::

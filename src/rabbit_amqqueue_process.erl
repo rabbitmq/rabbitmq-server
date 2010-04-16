@@ -56,7 +56,6 @@
             backing_queue,
             backing_queue_state,
             backing_queue_timeout_fun,
-            next_msg_id,
             active_consumers,
             blocked_consumers,
             sync_timer_ref,
@@ -64,8 +63,6 @@
            }).
 
 -record(consumer, {tag, ack_required}).
-
--record(tx, {ch_pid, pending_messages, pending_acks}).
 
 %% These are held in our process dictionary
 -record(cr, {consumer_count,
@@ -88,9 +85,7 @@
          exclusive_consumer_tag,
          messages_ready,
          messages_unacknowledged,
-         messages_uncommitted,
          messages,
-         acks_uncommitted,
          consumers,
          transactions,
          memory,
@@ -122,7 +117,6 @@ init([Q, InitBQ]) ->
             backing_queue = BQ,
             backing_queue_state = maybe_init_backing_queue(InitBQ, BQ, Q),
             backing_queue_timeout_fun = undefined,
-            next_msg_id = 1,
             active_consumers = queue:new(),
             blocked_consumers = queue:new(),
             sync_timer_ref = undefined,
@@ -135,48 +129,38 @@ maybe_init_backing_queue(
 maybe_init_backing_queue(false, _BQ, _Q) ->
     undefined.
 
-terminate(shutdown, #q{backing_queue_state = BQS,
-                       backing_queue = BQ}) ->
-    ok = rabbit_memory_monitor:deregister(self()),
-    case BQS of
-        undefined -> ok;
-        _         -> BQ:terminate(BQS)
-    end;
-terminate({shutdown, _}, #q{backing_queue_state = BQS,
-                            backing_queue = BQ}) ->
-    ok = rabbit_memory_monitor:deregister(self()),
-    case BQS of
-        undefined -> ok;
-        _         -> BQ:terminate(BQS)
-    end;
-terminate(_Reason, State = #q{backing_queue_state = BQS,
-                              backing_queue = BQ}) ->
+terminate(shutdown,      State) ->
+    terminate_shutdown(terminate, State);
+terminate({shutdown, _}, State) ->
+    terminate_shutdown(terminate, State);
+terminate(_Reason,       State) ->
     ok = rabbit_memory_monitor:deregister(self()),
     %% FIXME: How do we cancel active subscriptions?
     %% Ensure that any persisted tx messages are removed.
     %% TODO: wait for all in flight tx_commits to complete
-    case BQS of
-        undefined ->
-            ok;
-        _ ->
-            BQS1 = BQ:tx_rollback(
-                     lists:concat([PM || #tx { pending_messages = PM } <-
-                                             all_tx_record()]), BQS),
-            %% Delete from disk first. If we crash at this point, when
-            %% a durable queue, we will be recreated at startup,
-            %% possibly with partial content. The alternative is much
-            %% worse however - if we called internal_delete first, we
-            %% would then have a race between the disk delete and a
-            %% new queue with the same name being created and
-            %% published to.
-            BQ:delete_and_terminate(BQS1)
-    end,
-    ok = rabbit_amqqueue:internal_delete(qname(State)).
+    State1 = terminate_shutdown(delete_and_terminate, State),
+    ok = rabbit_amqqueue:internal_delete(qname(State1)).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
+
+terminate_shutdown(Fun, State =
+                       #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    ok = rabbit_memory_monitor:deregister(self()),
+    case BQS of
+        undefined -> State;
+        _         -> BQS1 = lists:foldl(
+                              fun (#cr{txn = none}, BQSN) ->
+                                      BQSN;
+                                  (#cr{txn = Txn}, BQSN) ->
+                                      {_AckTags, BQSN1} =
+                                          BQ:tx_rollback(Txn, BQSN),
+                                      BQSN1
+                              end, BQS, all_ch_record()),
+                     State#q{backing_queue_state = BQ:Fun(BQS1)}
+    end.
 
 reply(Reply, NewState) ->
     assert_invariant(NewState),
@@ -248,7 +232,7 @@ ch_record(ChPid) ->
             C = #cr{consumer_count = 0,
                     ch_pid = ChPid,
                     monitor_ref = MonitorRef,
-                    unacked_messages = dict:new(),
+                    unacked_messages = [],
                     is_limit_active = false,
                     txn = none,
                     unsent_message_count = 0},
@@ -282,8 +266,7 @@ record_current_channel_tx(ChPid, Txn) ->
 deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                           State = #q{q = #amqqueue{name = QName},
                                      active_consumers = ActiveConsumers,
-                                     blocked_consumers = BlockedConsumers,
-                                     next_msg_id = NextId}) ->
+                                     blocked_consumers = BlockedConsumers}) ->
     case queue:out(ActiveConsumers) of
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
                                             ack_required = AckRequired}}},
@@ -299,12 +282,11 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                         DeliverFun(AckRequired, FunAcc, State),
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
-                      {QName, self(), NextId, IsDelivered, Message}),
-                    NewUAM =
-                        case AckRequired of
-                            true  -> dict:store(NextId, {Message, AckTag}, UAM);
-                            false -> UAM
-                        end,
+                      {QName, self(), AckTag, IsDelivered, Message}),
+                    NewUAM = case AckRequired of
+                                 true  -> [AckTag|UAM];
+                                 false -> UAM
+                             end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 unacked_messages = NewUAM},
                     store_ch_record(NewC),
@@ -322,8 +304,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                         end,
                     State2 = State1#q{
                                active_consumers = NewActiveConsumers,
-                               blocked_consumers = NewBlockedConsumers,
-                               next_msg_id = NextId + 1},
+                               blocked_consumers = NewBlockedConsumers},
                     deliver_msgs_to_consumers(Funs, FunAcc1, State2);
                 %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
@@ -344,50 +325,39 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
             {FunAcc, State}
     end.
 
-deliver_from_queue_pred({IsEmpty, _AutoAcks}, _State) ->
+deliver_from_queue_pred(IsEmpty, _State) ->
     not IsEmpty.
-deliver_from_queue_deliver(AckRequired, {false, AutoAcks},
+
+deliver_from_queue_deliver(AckRequired, false,
                            State = #q{backing_queue_state = BQS,
                                       backing_queue = BQ}) ->
-    {{Message, IsDelivered, AckTag, Remaining}, BQS1} = BQ:fetch(BQS),
-    AutoAcks1 = case AckRequired of
-                    true -> AutoAcks;
-                    false -> [AckTag | AutoAcks]
-                end,
-    {{Message, IsDelivered, AckTag}, {0 == Remaining, AutoAcks1},
+    {{Message, IsDelivered, AckTag, Remaining}, BQS1} =
+        BQ:fetch(AckRequired, BQS),
+    {{Message, IsDelivered, AckTag}, 0 == Remaining,
      State #q { backing_queue_state = BQS1 }}.
 
 run_message_queue(State = #q{backing_queue_state = BQS,
                              backing_queue = BQ}) ->
-    Funs = { fun deliver_from_queue_pred/2,
-             fun deliver_from_queue_deliver/3 },
+    Funs = {fun deliver_from_queue_pred/2,
+            fun deliver_from_queue_deliver/3},
     IsEmpty = BQ:is_empty(BQS),
-    {{_IsEmpty1, AutoAcks}, State1} =
-        deliver_msgs_to_consumers(Funs, {IsEmpty, []}, State),
-    BQS1 = BQ:ack(AutoAcks, State1 #q.backing_queue_state),
-    State1 #q { backing_queue_state = BQS1 }.
+    {_IsEmpty1, State1} = deliver_msgs_to_consumers(Funs, IsEmpty, State),
+    State1.
 
 attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
-        fun (AckRequired, false, State1) ->
-                {AckTag, State2} =
-                    case AckRequired of
-                        true ->
-                            {AckTag1, BQS} =
-                                BQ:publish_delivered(
-                                  Message, State1 #q.backing_queue_state),
-                            {AckTag1, State1 #q { backing_queue_state = BQS }};
-                        false ->
-                            {noack, State1}
-                    end,
-                {{Message, false, AckTag}, true, State2}
+        fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
+                {AckTag, BQS1} =
+                    BQ:publish_delivered(AckRequired, Message, BQS),
+                {{Message, false, AckTag}, true,
+                 State1#q{backing_queue_state = BQS1}}
         end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
-attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
-    BQS = BQ:tx_publish(Message, State #q.backing_queue_state),
-    record_pending_message(Txn, ChPid, Message),
-    {true, State #q { backing_queue_state = BQS }}.
+attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue = BQ,
+                                                 backing_queue_state = BQS}) ->
+    record_current_channel_tx(ChPid, Txn),
+    {true, State#q{backing_queue_state = BQ:tx_publish(Txn, Message, BQS)}}.
 
 deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
     case attempt_delivery(Txn, ChPid, Message, State) of
@@ -396,49 +366,22 @@ deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
             BQS = BQ:publish(Message, State #q.backing_queue_state),
-            {false, NewState #q { backing_queue_state = BQS }}
+            {false, NewState#q{backing_queue_state = BQS}}
     end.
 
-%% all these messages have already been delivered at least once and
-%% not ack'd, but need to be either redelivered or requeued
-deliver_or_requeue_n([], State) ->
-    State;
-deliver_or_requeue_n(MsgsWithAcks, State = #q{backing_queue = BQ}) ->
-    Funs = { fun deliver_or_requeue_msgs_pred/2,
-             fun deliver_or_requeue_msgs_deliver/3 },
-    {{_RemainingLengthMinusOne, AutoAcks, OutstandingMsgs}, NewState} =
-        deliver_msgs_to_consumers(
-          Funs, {length(MsgsWithAcks), [], MsgsWithAcks}, State),
-    BQS = BQ:ack(AutoAcks, NewState #q.backing_queue_state),
-    case OutstandingMsgs of
-        [] -> NewState #q { backing_queue_state = BQS };
-        _ -> BQS1 = BQ:requeue(OutstandingMsgs, BQS),
-             NewState #q { backing_queue_state = BQS1 }
-    end.
-
-deliver_or_requeue_msgs_pred({Len, _AcksAcc, _MsgsWithAcks}, _State) ->
-    0 < Len.
-deliver_or_requeue_msgs_deliver(
-  false, {Len, AcksAcc, [{Message, AckTag} | MsgsWithAcks]}, State) ->
-    {{Message, true, noack}, {Len - 1, [AckTag | AcksAcc], MsgsWithAcks},
-     State};
-deliver_or_requeue_msgs_deliver(
-  true, {Len, AcksAcc, [{Message, AckTag} | MsgsWithAcks]}, State) ->
-    {{Message, true, AckTag}, {Len - 1, AcksAcc, MsgsWithAcks}, State}.
+requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
+    maybe_run_queue_via_backing_queue(
+      fun (BQS) -> BQ:requeue(AckTags, BQS) end, State).
 
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
 remove_consumer(ChPid, ConsumerTag, Queue) ->
-    %% TODO: replace this with queue:filter/2 once we move to R12
-    queue:from_list(lists:filter(
-                      fun ({CP, #consumer{tag = CT}}) ->
-                              (CP /= ChPid) or (CT /= ConsumerTag)
-                      end, queue:to_list(Queue))).
+    queue:filter(fun ({CP, #consumer{tag = CT}}) ->
+                         (CP /= ChPid) or (CT /= ConsumerTag)
+                 end, Queue).
 
 remove_consumers(ChPid, Queue) ->
-    %% TODO: replace this with queue:filter/2 once we move to R12
-    queue:from_list(lists:filter(fun ({CP, _}) -> CP /= ChPid end,
-                                 queue:to_list(Queue))).
+    queue:filter(fun ({CP, _}) -> CP /= ChPid end, Queue).
 
 move_consumers(ChPid, From, To) ->
     {Kept, Removed} = lists:partition(fun ({CP, _}) -> CP /= ChPid end,
@@ -489,12 +432,10 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
                 true  -> {stop, State1};
                 false -> State2 = case Txn of
                                       none -> State1;
-                                      _    -> rollback_transaction(Txn, State1)
+                                      _    -> rollback_transaction(Txn, ChPid,
+                                                                   State1)
                                   end,
-                         {ok, deliver_or_requeue_n(
-                                [MsgWithAck ||
-                                    {_MsgId, MsgWithAck} <- dict:to_list(UAM)],
-                                State2)}
+                         {ok, requeue_and_run(UAM, State2)}
             end
     end.
 
@@ -526,72 +467,34 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
 maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
-    {RunQueue, BQS1} = Fun(BQS),
-    State1 = State#q{backing_queue_state = BQS1},
-    case RunQueue of
-        true  -> run_message_queue(State1);
-        false -> State1
-    end.
+    run_message_queue(State#q{backing_queue_state = Fun(BQS)}).
 
-lookup_tx(Txn) ->
-    case get({txn, Txn}) of
-        undefined -> #tx{ch_pid = none,
-                         pending_messages = [],
-                         pending_acks = []};
-        V -> V
-    end.
+commit_transaction(Txn, From, ChPid, State = #q{backing_queue = BQ,
+                                                backing_queue_state = BQS}) ->
+    {AckTags, BQS1} = BQ:tx_commit(Txn, From, BQS),
+    case lookup_ch(ChPid) of
+        not_found ->
+            [];
+        C = #cr{unacked_messages = UAM} ->
+            Remaining = ordsets:to_list(ordsets:subtract(
+                                          ordsets:from_list(UAM),
+                                          ordsets:from_list(AckTags))),
+            store_ch_record(C#cr{unacked_messages = Remaining, txn = none})
+    end,
+    State#q{backing_queue_state = BQS1}.
 
-store_tx(Txn, Tx) ->
-    put({txn, Txn}, Tx).
+rollback_transaction(Txn, _ChPid, State = #q{backing_queue = BQ,
+                                             backing_queue_state = BQS}) ->
+    {_AckTags, BQS1} = BQ:tx_rollback(Txn, BQS),
+    %% Iff we removed acktags from the channel record on ack+txn then
+    %% we would add them back in here (would also require ChPid)
+    State#q{backing_queue_state = BQS1}.
 
-erase_tx(Txn) ->
-    erase({txn, Txn}).
-
-all_tx_record() ->
-    [T || {{txn, _}, T} <- get()].
-
-record_pending_message(Txn, ChPid, Message) ->
-    Tx = #tx{pending_messages = Pending} = lookup_tx(Txn),
-    record_current_channel_tx(ChPid, Txn),
-    store_tx(Txn, Tx#tx{pending_messages = [Message | Pending],
-                        ch_pid = ChPid}).
-
-record_pending_acks(Txn, ChPid, MsgIds) ->
-    Tx = #tx{pending_acks = Pending} = lookup_tx(Txn),
-    record_current_channel_tx(ChPid, Txn),
-    store_tx(Txn, Tx#tx{pending_acks = [MsgIds | Pending],
-                        ch_pid = ChPid}).
-
-commit_transaction(Txn, From, State = #q{backing_queue = BQ}) ->
-    #tx{ch_pid = ChPid, pending_messages = PendingMessages,
-        pending_acks = PendingAcks} = lookup_tx(Txn),
-    PendingMessagesOrdered = lists:reverse(PendingMessages),
-    PendingAcksOrdered = lists:append(PendingAcks),
-    Acks =
-        case lookup_ch(ChPid) of
-            not_found ->
-                [];
-            C = #cr{unacked_messages = UAM} ->
-                {MsgsWithAcks, Remaining} =
-                    collect_messages(PendingAcksOrdered, UAM),
-                store_ch_record(C#cr{unacked_messages = Remaining}),
-                [AckTag || {_Message, AckTag} <- MsgsWithAcks]
-        end,
-    {RunQueue, BQS} = BQ:tx_commit(PendingMessagesOrdered, Acks, From,
-                                   State#q.backing_queue_state),
-    erase_tx(Txn),
-    {RunQueue, State#q{backing_queue_state = BQS}}.
-
-rollback_transaction(Txn, State = #q{backing_queue = BQ}) ->
-    #tx{pending_messages = PendingMessages} = lookup_tx(Txn),
-    BQS = BQ:tx_rollback(PendingMessages, State #q.backing_queue_state),
-    erase_tx(Txn),
-    State#q{backing_queue_state = BQS}.
-
-collect_messages(MsgIds, UAM) ->
-    lists:mapfoldl(
-      fun (MsgId, D) -> {dict:fetch(MsgId, D), dict:erase(MsgId, D)} end,
-      UAM, MsgIds).
+collect_messages(AckTags, UAM) ->
+    AckTagsSet = ordsets:from_list(AckTags),
+    UAMSet = ordsets:from_list(UAM),
+    {ordsets:to_list(ordsets:intersection(AckTagsSet, UAMSet)),
+     ordsets:to_list(ordsets:subtract(UAMSet, AckTagsSet))}.
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
@@ -616,22 +519,15 @@ i(exclusive_consumer_tag, #q{exclusive_consumer = {_ChPid, ConsumerTag}}) ->
 i(messages_ready, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:len(BQS);
 i(messages_unacknowledged, _) ->
-    lists:sum([dict:size(UAM) ||
+    lists:sum([ordsets:size(UAM) ||
                   #cr{unacked_messages = UAM} <- all_ch_record()]);
-i(messages_uncommitted, _) ->
-    lists:sum([length(Pending) ||
-                  #tx{pending_messages = Pending} <- all_tx_record()]);
 i(messages, State) ->
     lists:sum([i(Item, State) || Item <- [messages_ready,
-                                          messages_unacknowledged,
-                                          messages_uncommitted]]);
-i(acks_uncommitted, _) ->
-    lists:sum([length(Pending) ||
-                  #tx{pending_acks = Pending} <- all_tx_record()]);
+                                          messages_unacknowledged]]);
 i(consumers, State) ->
     queue:len(State#q.active_consumers) + queue:len(State#q.blocked_consumers);
 i(transactions, _) ->
-    length(all_tx_record());
+    length([ok || #cr{txn = Txn} <- all_ch_record(), Txn =/= none]);
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
@@ -685,12 +581,9 @@ handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
     {Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
-handle_call({commit, Txn}, From, State) ->
-    {RunQueue, NewState} = commit_transaction(Txn, From, State),
-    noreply(case RunQueue of
-                true -> run_message_queue(NewState);
-                false -> NewState
-            end);
+handle_call({commit, Txn, ChPid}, From, State) ->
+    NewState = commit_transaction(Txn, From, ChPid, State),
+    noreply(run_message_queue(NewState));
 
 handle_call({notify_down, ChPid}, _From, State) ->
     %% we want to do this synchronously, so that auto_deleted queues
@@ -704,25 +597,19 @@ handle_call({notify_down, ChPid}, _From, State) ->
     end;
 
 handle_call({basic_get, ChPid, NoAck}, _From,
-            State = #q{q = #amqqueue{name = QName}, next_msg_id = NextId,
+            State = #q{q = #amqqueue{name = QName},
                        backing_queue_state = BQS, backing_queue = BQ}) ->
-    case BQ:fetch(BQS) of
-        {empty, BQS1} -> reply(empty, State #q { backing_queue_state = BQS1 });
+    AckRequired = not NoAck,
+    case BQ:fetch(AckRequired, BQS) of
+        {empty, BQS1} -> reply(empty, State#q{backing_queue_state = BQS1});
         {{Message, IsDelivered, AckTag, Remaining}, BQS1} ->
-            AckRequired = not(NoAck),
-            BQS2 =
-                case AckRequired of
-                    true ->
-                        C = #cr{unacked_messages = UAM} = ch_record(ChPid),
-                        NewUAM = dict:store(NextId, {Message, AckTag}, UAM),
-                        store_ch_record(C#cr{unacked_messages = NewUAM}),
-                        BQS1;
-                    false ->
-                        BQ:ack([AckTag], BQS1)
-                end,
-            Msg = {QName, self(), NextId, IsDelivered, Message},
-            reply({ok, Remaining, Msg},
-                  State #q { next_msg_id = NextId + 1, backing_queue_state = BQS2 })
+            case AckRequired of
+                true ->  C = #cr{unacked_messages = UAM} = ch_record(ChPid),
+                         store_ch_record(C#cr{unacked_messages = [AckTag|UAM]});
+                false -> ok
+            end,
+            reply({ok, Remaining, {QName, self(), AckTag, IsDelivered, Message}},
+                  State#q{backing_queue_state = BQS1})
     end;
 
 handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
@@ -740,7 +627,7 @@ handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
                 ok ->
                     C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
                     Consumer = #consumer{tag = ConsumerTag,
-                                         ack_required = not(NoAck)},
+                                         ack_required = not NoAck},
                     store_ch_record(C#cr{consumer_count = ConsumerCount +1,
                                          limiter_pid = LimiterPid}),
                     case ConsumerCount of
@@ -862,37 +749,36 @@ handle_cast({deliver, Txn, Message, ChPid}, State) ->
     {_Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
     noreply(NewState);
 
-handle_cast({ack, Txn, MsgIds, ChPid}, State = #q{backing_queue = BQ}) ->
+handle_cast({ack, Txn, AckTags, ChPid}, State = #q{backing_queue_state = BQS,
+                                                   backing_queue = BQ}) ->
     case lookup_ch(ChPid) of
         not_found ->
             noreply(State);
         C = #cr{unacked_messages = UAM} ->
-            case Txn of
-                none ->
-                    {MsgWithAcks, Remaining} = collect_messages(MsgIds, UAM),
-                    BQS = BQ:ack([AckTag || {_Message, AckTag} <- MsgWithAcks],
-                                 State #q.backing_queue_state),
-                    store_ch_record(C#cr{unacked_messages = Remaining}),
-                    noreply(State #q { backing_queue_state = BQS });
-                _  ->
-                    record_pending_acks(Txn, ChPid, MsgIds),
-                    noreply(State)
-            end
+            {AckTags1, Remaining} = collect_messages(AckTags, UAM),
+            {C1, BQS1} =
+                case Txn of
+                    none -> {C#cr{unacked_messages = Remaining},
+                             BQ:ack(AckTags1, BQS)};
+                    _    -> {C#cr{txn = Txn}, BQ:tx_ack(Txn, AckTags1, BQS)}
+                end,
+            store_ch_record(C1),
+            noreply(State #q { backing_queue_state = BQS1 })
     end;
 
-handle_cast({rollback, Txn}, State) ->
-    noreply(rollback_transaction(Txn, State));
+handle_cast({rollback, Txn, ChPid}, State) ->
+    noreply(rollback_transaction(Txn, ChPid, State));
 
-handle_cast({requeue, MsgIds, ChPid}, State) ->
+handle_cast({requeue, AckTags, ChPid}, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
                                [ChPid]),
             noreply(State);
         C = #cr{unacked_messages = UAM} ->
-            {MsgWithAcks, NewUAM} = collect_messages(MsgIds, UAM),
-            store_ch_record(C#cr{unacked_messages = NewUAM}),
-            noreply(deliver_or_requeue_n(MsgWithAcks, State))
+            {AckTags1, Remaining} = collect_messages(AckTags, UAM),
+            store_ch_record(C#cr{unacked_messages = Remaining}),
+            noreply(requeue_and_run(AckTags1, State))
     end;
 
 handle_cast({unblock, ChPid}, State) ->

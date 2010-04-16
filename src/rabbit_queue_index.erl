@@ -344,6 +344,8 @@ write_delivered(SeqId, State) ->
            JournalHdl, <<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>),
     maybe_flush_journal(add_to_journal(SeqId, del, State1)).
 
+write_acks([], State) ->
+    State;
 write_acks(SeqIds, State) ->
     {JournalHdl, State1} = get_journal_handle(State),
     ok = file_handle_cache:append(

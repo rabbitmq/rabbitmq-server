@@ -63,17 +63,20 @@ behaviour_info(callbacks) ->
      %% Called for messages which have already been passed straight
      %% out to a client. The queue will be empty for these calls
      %% (i.e. saves the round trip through the backing queue).
-     {publish_delivered, 2},
+     {publish_delivered, 3},
 
      %% Produce the next message
-     {fetch, 1},
+     {fetch, 2},
 
      %% Acktags supplied are for messages which can now be forgotten
      %% about
      {ack, 2},
 
      %% A publish, but in the context of a transaction.
-     {tx_publish, 2},
+     {tx_publish, 3},
+
+     %% Acks, but in the context of a transaction.
+     {tx_ack, 3},
 
      %% Undo anything which has been done by the tx_publish of the
      %% indicated messages.
@@ -81,7 +84,7 @@ behaviour_info(callbacks) ->
 
      %% Commit these publishes and acktags. The publishes you will
      %% have previously seen in calls to tx_publish.
-     {tx_commit, 4},
+     {tx_commit, 3},
 
      %% Reinsert messages into the queue which have already been
      %% delivered and were pending acknowledgement.

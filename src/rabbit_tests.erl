@@ -1362,7 +1362,7 @@ variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
                         Rem = Len - N,
                         {{#basic_message { is_persistent = IsPersistent },
                           IsDelivered, AckTagN, Rem}, VQM} =
-                            rabbit_variable_queue:fetch(VQN),
+                            rabbit_variable_queue:fetch(true, VQN),
                         {VQM, [AckTagN | AckTagsAcc]}
                 end, {VQ, []}, lists:seq(1, Count)).
 
@@ -1399,7 +1399,7 @@ test_variable_queue_dynamic_duration_change() ->
     VQ3 = test_variable_queue_dynamic_duration_change_f(Len1, VQ2),
     {VQ4, AckTags} = variable_queue_fetch(Len1, false, false, Len1, VQ3),
     VQ5 = rabbit_variable_queue:ack(AckTags, VQ4),
-    {empty, VQ6} = rabbit_variable_queue:fetch(VQ5),
+    {empty, VQ6} = rabbit_variable_queue:fetch(true, VQ5),
 
     %% just publish and fetch some persistent msgs, this hits the the
     %% partial segment path in queue_index due to the period when
@@ -1408,7 +1408,7 @@ test_variable_queue_dynamic_duration_change() ->
     {VQ8, AckTags1} = variable_queue_fetch(20, true, false, 20, VQ7),
     VQ9 = rabbit_variable_queue:ack(AckTags1, VQ8),
     VQ10 = rabbit_variable_queue:handle_pre_hibernate(VQ9),
-    {empty, VQ11} = rabbit_variable_queue:fetch(VQ10),
+    {empty, VQ11} = rabbit_variable_queue:fetch(true, VQ10),
 
     rabbit_variable_queue:terminate(VQ11),
 
@@ -1416,7 +1416,7 @@ test_variable_queue_dynamic_duration_change() ->
 
 test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
-    {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(VQ1),
+    {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
     VQ3 = rabbit_variable_queue:ack([AckTag], VQ2),
     receive
         {duration, _, stop} ->
@@ -1475,7 +1475,7 @@ test_variable_queue_partial_segments_delta_thing() ->
                                            HalfSegment + 1, VQ6),
     VQ8 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ7),
     %% should be empty now
-    {empty, VQ9} = rabbit_variable_queue:fetch(VQ8),
+    {empty, VQ9} = rabbit_variable_queue:fetch(true, VQ8),
     rabbit_variable_queue:terminate(VQ9),
 
     passed.
