@@ -5,8 +5,8 @@
 %%
 %% 2) there is a new strategy called
 %% simple_one_for_one_terminate. This is exactly the same as for
-%% simple_one_for_one, except that children *are* explicitly killed as
-%% per the shutdown component of the child_spec.
+%% simple_one_for_one, except that children *are* explicitly
+%% terminated as per the shutdown component of the child_spec.
 %%
 %% All modifications are (C) 2010 LShift Ltd.
 %%
