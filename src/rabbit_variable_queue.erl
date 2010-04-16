@@ -319,15 +319,17 @@ init(QueueName, IsDurable) ->
                  },
     maybe_deltas_to_betas(State).
 
-terminate(State = #vqstate {
-            persistent_count = PCount,
-            index_state = IndexState,
-            msg_store_clients = {{MSCStateP, PRef}, {MSCStateT, TRef}} }) ->
+terminate(State) ->
+    State1 = #vqstate {
+      persistent_count = PCount, index_state = IndexState,
+      msg_store_clients = {{MSCStateP, PRef}, {MSCStateT, TRef}} } =
+        tx_commit_index(State),
     rabbit_msg_store:client_terminate(MSCStateP),
     rabbit_msg_store:client_terminate(MSCStateT),
     Terms = [{persistent_ref, PRef}, {transient_ref, TRef},
              {persistent_count, PCount}],
-    State #vqstate { index_state = rabbit_queue_index:terminate(Terms, IndexState) }.
+    State1 #vqstate { index_state =
+                          rabbit_queue_index:terminate(Terms, IndexState) }.
 
 %% the only difference between purge and delete is that delete also
 %% needs to delete everything that's been delivered and not ack'd.
@@ -559,19 +561,10 @@ tx_commit(Txn, From, State = #vqstate { persistent_store = PersistentStore }) ->
              tx_commit_post_msg_store(
                IsTransientPubs, PubsOrdered, AckTags1, From, State);
          false ->
-             Self = self(),
-             ok =
-                 rabbit_msg_store:sync(
-                   ?PERSISTENT_MSG_STORE, PersistentGuids,
-                   fun () ->
-                           ok =
-                               rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                                 Self,
-                                 fun (StateN) -> tx_commit_post_msg_store(
-                                                   IsTransientPubs, PubsOrdered,
-                                                   AckTags1, From, StateN)
-                                 end)
-                   end),
+             ok = rabbit_msg_store:sync(
+                    ?PERSISTENT_MSG_STORE, PersistentGuids,
+                    msg_store_callback(PersistentGuids, IsTransientPubs,
+                                       PubsOrdered, AckTags1, From)),
              State
      end}.
 
@@ -832,13 +825,37 @@ should_force_index_to_disk(State =
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
+msg_store_callback(PersistentGuids, IsTransientPubs, Pubs, AckTags, From) ->
+    Self = self(),
+    fun() ->
+            spawn(
+              fun() ->
+                      ok = rabbit_misc:with_exit_handler(
+                             fun() -> rabbit_msg_store:remove(
+                                        ?PERSISTENT_MSG_STORE,
+                                        PersistentGuids)
+                             end,
+                             fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
+                                        Self, fun (StateN) ->
+                                                      tx_commit_post_msg_store(
+                                                        IsTransientPubs, Pubs,
+                                                        AckTags, From, StateN)
+                                              end)
+                             end)
+              end)
+    end.
+
 tx_commit_post_msg_store(IsTransientPubs, Pubs, AckTags, From, State =
                              #vqstate { on_sync = OnSync = {SAcks, SPubs, SFroms},
-                                        persistent_store = PersistentStore }) ->
+                                        persistent_store = PersistentStore,
+                                        pending_ack = PA }) ->
     %% If we are a non-durable queue, or (no persisent pubs, and no
     %% persistent acks) then we can skip the queue_index loop.
     case PersistentStore == ?TRANSIENT_MSG_STORE orelse
-        (IsTransientPubs andalso [] == AckTags) of  %%% AGH FIX ME
+        (IsTransientPubs andalso
+         lists:foldl(fun (AckTag,  true ) -> dict:is_key(AckTag, PA);
+                         (_AckTag, false) -> false
+                     end, true, AckTags)) of
         true  -> State1 = tx_commit_index(State #vqstate {
                                             on_sync = {[], [Pubs], [From]} }),
                  State1 #vqstate { on_sync = OnSync };

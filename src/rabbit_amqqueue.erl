@@ -346,7 +346,8 @@ unblock(QPid, ChPid) ->
     gen_server2:pcast(QPid, 7, {unblock, ChPid}).
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
-    gen_server2:pcast(QPid, 7, {maybe_run_queue_via_backing_queue, Fun}).
+    gen_server2:pcall(QPid, 7, {maybe_run_queue_via_backing_queue, Fun},
+                      infinity).
 
 flush_all(QPids, ChPid) ->
     safe_pmap_ok(

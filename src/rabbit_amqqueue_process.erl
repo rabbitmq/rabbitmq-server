@@ -136,8 +136,6 @@ terminate({shutdown, _}, State) ->
 terminate(_Reason,       State) ->
     ok = rabbit_memory_monitor:deregister(self()),
     %% FIXME: How do we cancel active subscriptions?
-    %% Ensure that any persisted tx messages are removed.
-    %% TODO: wait for all in flight tx_commits to complete
     State1 = terminate_shutdown(delete_and_terminate, State),
     ok = rabbit_amqqueue:internal_delete(qname(State1)).
 
@@ -733,7 +731,10 @@ handle_call({claim_queue, ReaderPid}, _From,
             reply(ok, State);
         _ ->
             reply(locked, State)
-    end.
+    end;
+
+handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
+    reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
 
 handle_cast(init_backing_queue, State = #q{backing_queue_state = undefined,
@@ -792,9 +793,6 @@ handle_cast({notify_sent, ChPid}, State) ->
                        fun (C = #cr{unsent_message_count = Count}) ->
                                C#cr{unsent_message_count = Count - 1}
                        end));
-
-handle_cast({maybe_run_queue_via_backing_queue, Fun}, State) ->
-    noreply(maybe_run_queue_via_backing_queue(Fun, State));
 
 handle_cast({limit, ChPid, LimiterPid}, State) ->
     noreply(
