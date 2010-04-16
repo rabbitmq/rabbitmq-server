@@ -91,6 +91,13 @@
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
+-rabbit_boot_step({rabbit_memory_monitor,
+                   [{description, "memory moniter"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_memory_monitor]}},
+                    {requires,    rabbit_alarm},
+                    {enables,     core_initialized}]}).
+
 -rabbit_boot_step({rabbit_router,
                    [{description, "cluster router"},
                     {mfa,         {rabbit_sup, start_restartable_child,
