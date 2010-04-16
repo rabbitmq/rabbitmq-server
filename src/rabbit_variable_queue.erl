@@ -725,7 +725,7 @@ remove_pending_ack(KeepPersistent,
                                         rabbit_misc:dict_cons(
                                           ?TRANSIENT_MSG_STORE, Guid, Dict)}
                           end;
-                      (_SeqId, #basic_message {}, Acc) ->
+                      (_SeqId, #msg_status {}, Acc) ->
                           Acc
                   end, {[], dict:new()}, PA),
     case KeepPersistent of
@@ -735,7 +735,7 @@ remove_pending_ack(KeepPersistent,
                   pending_ack =
                       dict:filter(
                         fun (_SeqId, {IsPersistent, _Guid}) -> IsPersistent;
-                            (_SeqId, #basic_message {})     -> false
+                            (_SeqId, #msg_status {})     -> false
                         end, PA) },
             case dict:find(?TRANSIENT_MSG_STORE, GuidsByStore) of
                 error       -> State1;
