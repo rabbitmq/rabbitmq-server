@@ -213,8 +213,7 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok.
 
 start_queue_process(Q, InitBackingQueue) ->
-    {ok, Pid} =
-        supervisor2:start_child(rabbit_amqqueue_sup, [Q, InitBackingQueue]),
+    {ok, Pid} = rabbit_amqqueue_sup:start_child([Q, InitBackingQueue]),
     Q#amqqueue{pid = Pid}.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
