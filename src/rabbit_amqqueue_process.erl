@@ -57,7 +57,7 @@
 
 -record(consumer, {tag, ack_required}).
 
--record(tx, {ch_pid, is_persistent, pending_messages, pending_acks}).
+-record(tx, {is_persistent, pending_messages, pending_acks}).
 
 %% These are held in our process dictionary
 -record(cr, {consumer_count,
@@ -431,8 +431,7 @@ do_if_persistent(F, Txn, QName) ->
 
 lookup_tx(Txn) ->
     case get({txn, Txn}) of
-        undefined -> #tx{ch_pid = none,
-                         is_persistent = false,
+        undefined -> #tx{is_persistent = false,
                          pending_messages = [],
                          pending_acks = []};
         V -> V
@@ -461,26 +460,19 @@ is_tx_persistent(Txn) ->
 record_pending_message(Txn, ChPid, Message) ->
     Tx = #tx{pending_messages = Pending} = lookup_tx(Txn),
     record_current_channel_tx(ChPid, Txn),
-    store_tx(Txn, Tx#tx{pending_messages = [{Message, false} | Pending],
-                        ch_pid = ChPid}).
+    store_tx(Txn, Tx#tx{pending_messages = [{Message, false} | Pending]}).
 
 record_pending_acks(Txn, ChPid, MsgIds) ->
     Tx = #tx{pending_acks = Pending} = lookup_tx(Txn),
     record_current_channel_tx(ChPid, Txn),
-    store_tx(Txn, Tx#tx{pending_acks = [MsgIds | Pending],
-                        ch_pid = ChPid}).
+    store_tx(Txn, Tx#tx{pending_acks = [MsgIds | Pending]}).
 
-process_pending(Txn, State) ->
-    #tx{ch_pid = ChPid,
-        pending_messages = PendingMessages,
-        pending_acks = PendingAcks} = lookup_tx(Txn),
-    case lookup_ch(ChPid) of
-        not_found -> ok;
-        C = #cr{unacked_messages = UAM} ->
-            {_Acked, Remaining} =
-                collect_messages(lists:append(PendingAcks), UAM),
-            store_ch_record(C#cr{unacked_messages = Remaining})
-    end,
+process_pending(Txn, ChPid, State) ->
+    #tx{pending_messages = PendingMessages, pending_acks = PendingAcks} =
+        lookup_tx(Txn),
+    C = #cr{unacked_messages = UAM} = lookup_ch(ChPid),
+    {_Acked, Remaining} = collect_messages(lists:append(PendingAcks), UAM),
+    store_ch_record(C#cr{unacked_messages = Remaining}),
     deliver_or_enqueue_n(lists:reverse(PendingMessages), State).
 
 collect_messages(MsgIds, UAM) ->
@@ -589,12 +581,13 @@ handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
     {Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
-handle_call({commit, Txn}, From, State) ->
+handle_call({commit, Txn, ChPid}, From, State) ->
     ok = commit_work(Txn, qname(State)),
     %% optimisation: we reply straight away so the sender can continue
     gen_server2:reply(From, ok),
-    NewState = process_pending(Txn, State),
+    NewState = process_pending(Txn, ChPid, State),
     erase_tx(Txn),
+    record_current_channel_tx(ChPid, none),
     noreply(NewState);
 
 handle_call({notify_down, ChPid}, _From, State) ->
@@ -776,9 +769,10 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
             noreply(State)
     end;
 
-handle_cast({rollback, Txn}, State) ->
+handle_cast({rollback, Txn, ChPid}, State) ->
     ok = rollback_work(Txn, qname(State)),
     erase_tx(Txn),
+    record_current_channel_tx(ChPid, none),
     noreply(State);
 
 handle_cast({redeliver, Messages}, State) ->

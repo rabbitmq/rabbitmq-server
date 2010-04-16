@@ -928,7 +928,7 @@ new_tx(State) ->
 internal_commit(State = #ch{transaction_id = TxnKey,
                             tx_participants = Participants}) ->
     case rabbit_amqqueue:commit_all(sets:to_list(Participants),
-                                    TxnKey) of
+                                    TxnKey, self()) of
         ok              -> ok = notify_limiter(State#ch.limiter_pid,
                                                State#ch.uncommitted_ack_q),
                            new_tx(State);
@@ -945,7 +945,7 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
                queue:len(UAQ),
                queue:len(UAMQ)]),
     case rabbit_amqqueue:rollback_all(sets:to_list(Participants),
-                                      TxnKey) of
+                                      TxnKey, self()) of
         ok              -> NewUAMQ = queue:join(UAQ, UAMQ),
                            new_tx(State#ch{unacked_message_q = NewUAMQ});
         {error, Errors} -> rabbit_misc:protocol_error(

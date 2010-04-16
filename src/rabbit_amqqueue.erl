@@ -41,7 +41,7 @@
 -export([claim_queue/2]).
 -export([basic_get/3, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
--export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
+-export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
 -import(mnesia).
@@ -91,8 +91,8 @@
 -spec(redeliver/2 :: (pid(), [{message(), boolean()}]) -> 'ok').
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
--spec(commit_all/2 :: ([pid()], txn()) -> ok_or_errors()).
--spec(rollback_all/2 :: ([pid()], txn()) -> ok_or_errors()).
+-spec(commit_all/3 :: ([pid()], txn(), pid()) -> ok_or_errors()).
+-spec(rollback_all/3 :: ([pid()], txn(), pid()) -> ok_or_errors()).
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
@@ -288,16 +288,16 @@ requeue(QPid, MsgIds, ChPid) ->
 ack(QPid, Txn, MsgIds, ChPid) ->
     gen_server2:pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
 
-commit_all(QPids, Txn) ->
+commit_all(QPids, Txn, ChPid) ->
     safe_pmap_ok(
       fun (QPid) -> exit({queue_disappeared, QPid}) end,
-      fun (QPid) -> gen_server2:call(QPid, {commit, Txn}, infinity) end,
+      fun (QPid) -> gen_server2:call(QPid, {commit, Txn, ChPid}, infinity) end,
       QPids).
 
-rollback_all(QPids, Txn) ->
+rollback_all(QPids, Txn, ChPid) ->
     safe_pmap_ok(
       fun (QPid) -> exit({queue_disappeared, QPid}) end,
-      fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn}) end,
+      fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end,
       QPids).
 
 notify_down_all(QPids, ChPid) ->
