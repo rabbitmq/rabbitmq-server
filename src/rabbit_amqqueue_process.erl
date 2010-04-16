@@ -481,11 +481,12 @@ commit_transaction(Txn, From, ChPid, State = #q{backing_queue = BQ,
     end,
     State#q{backing_queue_state = BQS1}.
 
-rollback_transaction(Txn, _ChPid, State = #q{backing_queue = BQ,
+rollback_transaction(Txn, ChPid, State = #q{backing_queue = BQ,
                                              backing_queue_state = BQS}) ->
     {_AckTags, BQS1} = BQ:tx_rollback(Txn, BQS),
     %% Iff we removed acktags from the channel record on ack+txn then
     %% we would add them back in here (would also require ChPid)
+    record_current_channel_tx(ChPid, none),
     State#q{backing_queue_state = BQS1}.
 
 collect_messages(AckTags, UAM) ->
