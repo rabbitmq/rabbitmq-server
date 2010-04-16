@@ -470,15 +470,12 @@ maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
 commit_transaction(Txn, From, ChPid, State = #q{backing_queue = BQ,
                                                 backing_queue_state = BQS}) ->
     {AckTags, BQS1} = BQ:tx_commit(Txn, From, BQS),
-    case lookup_ch(ChPid) of
-        not_found ->
-            [];
-        C = #cr{unacked_messages = UAM} ->
-            Remaining = ordsets:to_list(ordsets:subtract(
-                                          ordsets:from_list(UAM),
-                                          ordsets:from_list(AckTags))),
-            store_ch_record(C#cr{unacked_messages = Remaining, txn = none})
-    end,
+    %% ChPid must be known here because of the participant management
+    %% by the channel.
+    C = #cr{unacked_messages = UAM} = lookup_ch(ChPid),
+    Remaining = ordsets:to_list(ordsets:subtract(ordsets:from_list(UAM),
+                                                 ordsets:from_list(AckTags))),
+    store_ch_record(C#cr{unacked_messages = Remaining, txn = none}),
     State#q{backing_queue_state = BQS1}.
 
 rollback_transaction(Txn, ChPid, State = #q{backing_queue = BQ,
