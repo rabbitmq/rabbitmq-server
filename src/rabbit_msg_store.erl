@@ -1585,8 +1585,7 @@ combine_files(#file_summary { file = Source,
     {ok, SourceHdl} =
         open_file(Dir, SourceName, ?READ_AHEAD_MODE),
     {ok, DestinationHdl} =
-        open_file(Dir, DestinationName,
-                                        ?READ_AHEAD_MODE ++ ?WRITE_MODE),
+        open_file(Dir, DestinationName, ?READ_AHEAD_MODE ++ ?WRITE_MODE),
     ExpectedSize = SourceValid + DestinationValid,
     %% if DestinationValid =:= DestinationContiguousTop then we don't
     %% need a tmp file
