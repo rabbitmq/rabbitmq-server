@@ -69,12 +69,11 @@ gs2_pcast(Pid, Pri, Msg) ->
 
 
 call(Pid, FPid) when is_pid(Pid) ->
-    [[{Status, Res, _}]] = call_per_node([{node(Pid), [Pid]}], FPid),
+    [{Status, Res, _}] = call_per_node([{node(Pid), [Pid]}], FPid),
     {Status, Res};
 
 call(Pids, FPid) when is_list(Pids) ->
-    lists:flatten(
-        call_per_node(split_delegate_per_node(Pids), FPid)).
+    call_per_node(split_delegate_per_node(Pids), FPid).
 
 internal_call(Node, Thunk) when is_atom(Node) ->
     gen_server2:call({server(), Node}, {thunk, Thunk}, infinity).
@@ -114,11 +113,12 @@ cast_per_node(NodePids, FPid) ->
     delegate_per_node(NodePids, FPid, fun internal_cast/2).
 
 local_delegate(Pids, FPid) ->
-    [[safe_invoke(FPid, Pid) || Pid <- Pids]].
+    [safe_invoke(FPid, Pid) || Pid <- Pids].
 
 delegate_per_node(NodePids, FPid, DelegateFun) ->
-    [DelegateFun(Node, fun() -> [safe_invoke(FPid, Pid) || Pid <- Pids] end) ||
-        {Node, Pids} <- NodePids].
+    lists:flatten(
+        [DelegateFun(Node, fun() -> [safe_invoke(FPid, Pid) || Pid <- Pids] end)
+        || {Node, Pids} <- NodePids]).
 
 server() ->
     server(erlang:phash(self(), ?DELEGATE_PROCESSES)).
