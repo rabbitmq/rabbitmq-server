@@ -440,8 +440,7 @@ client_read2(Server, false, _Right,
     %% check again to see if we've been locked in the meantime,
     %% between lookup and update_counter (thus GC started before our
     %% +1).
-    [#file_summary { locked = Locked }] =
-        ets:lookup(FileSummaryEts, File),
+    [#file_summary { locked = Locked }] = ets:lookup(FileSummaryEts, File),
     case Locked of
         true ->
             %% If we get a badarg here, then the GC has finished and
@@ -1443,10 +1442,11 @@ maybe_compact(State = #msstate { sum_valid_data   = SumValid,
                                  gc_active        = false,
                                  gc_pid           = GCPid,
                                  file_summary_ets = FileSummaryEts })
-  when (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
+  when SumValid > ?FILE_SIZE_LIMIT andalso
+       (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
     First = ets:first(FileSummaryEts),
     N = rabbit_misc:ceil(math:log(1.0 - random:uniform()) /
-                         math:log(1.0 - ?GEOMETRIC_P)),
+                             math:log(1.0 - ?GEOMETRIC_P)),
     case find_files_to_gc(FileSummaryEts, N, First) of
         undefined ->
             State;
@@ -1660,7 +1660,7 @@ find_unremoved_messages_in_file(File,
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
               Destination, {_FileSummaryEts, _Dir, Index, IndexState}) ->
-    {FinalOffset, BlockStart1, BlockEnd1} =
+    case
         lists:foldl(
           fun (#msg_location { guid = Guid, offset = Offset,
                                total_size = TotalSize },
@@ -1692,17 +1692,23 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                               {Offset, Offset + TotalSize}
                       end,
                   {CurOffset + TotalSize, BlockStart2, BlockEnd2}
-          end, {InitOffset, undefined, undefined}, WorkList),
-    case WorkList of
-        [] ->
-            ok;
-        _ ->
-            %% do the last remaining block
-            BSize1 = BlockEnd1 - BlockStart1,
-            {ok, BlockStart1} =
-                file_handle_cache:position(SourceHdl, BlockStart1),
-            {ok, BSize1} =
-                file_handle_cache:copy(SourceHdl, DestinationHdl, BSize1),
-            ok = file_handle_cache:sync(DestinationHdl)
+          end, {InitOffset, undefined, undefined}, WorkList) of
+        {FinalOffset, BlockStart1, BlockEnd1} ->
+            case WorkList of
+                [] ->
+                    ok;
+                _ ->
+                    %% do the last remaining block
+                    BSize1 = BlockEnd1 - BlockStart1,
+                    {ok, BlockStart1} =
+                        file_handle_cache:position(SourceHdl, BlockStart1),
+                    {ok, BSize1} =
+                        file_handle_cache:copy(SourceHdl, DestinationHdl, BSize1),
+                    ok = file_handle_cache:sync(DestinationHdl)
+            end;
+        {FinalOffsetZ, _BlockStart1, _BlockEnd1} ->
+            throw({gc_error, [{expected, FinalOffset},
+                              {got, FinalOffsetZ},
+                              {destination, Destination}]})
     end,
     ok.
