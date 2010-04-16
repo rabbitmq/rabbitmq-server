@@ -883,9 +883,6 @@ await_response(Count) ->
     end.
 
 test_delegates_sync(SecondaryNode) ->
-    {ok, "foo"} = delegate:call(node(), fun() -> "foo" end),
-    {ok, "bar"} = delegate:call(SecondaryNode, fun() -> "bar" end),
-
     Sender = fun(Pid) ->
         gen_server2:call(Pid, invoked)
     end,
