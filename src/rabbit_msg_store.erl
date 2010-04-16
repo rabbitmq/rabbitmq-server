@@ -919,8 +919,8 @@ contains_message(Guid, From, State = #msstate { gc_active = GCActive }) ->
     end.
 
 remove_message(Guid, State = #msstate { sum_valid_data = SumValid,
-                                         file_summary_ets = FileSummaryEts,
-                                         dedup_cache_ets = DedupCacheEts }) ->
+                                        file_summary_ets = FileSummaryEts,
+                                        dedup_cache_ets = DedupCacheEts }) ->
     #msg_location { ref_count = RefCount, file = File,
                     offset = Offset, total_size = TotalSize } =
         index_lookup(Guid, State),
@@ -1646,8 +1646,7 @@ find_unremoved_messages_in_file(File,
                                 {_FileSummaryEts, Dir, Index, IndexState}) ->
     %% Msgs here will be end-of-file at start-of-list
     {ok, Messages, _FileSize} =
-        scan_file_for_valid_messages(
-          Dir, filenum_to_name(File)),
+        scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     %% foldl will reverse so will end up with msgs in ascending offset order
     lists:foldl(
       fun ({Guid, _TotalSize, _Offset}, Acc) ->
