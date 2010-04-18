@@ -35,6 +35,8 @@
 
 %%----------------------------------------------------------------------------
 
+-include("rabbit_msg_store.hrl").
+
 -define(INTEGER_SIZE_BYTES,      8).
 -define(INTEGER_SIZE_BITS,       (8 * ?INTEGER_SIZE_BYTES)).
 -define(WRITE_OK_SIZE_BITS,      8).
@@ -43,11 +45,9 @@
 -define(GUID_SIZE_BYTES,         16).
 -define(GUID_SIZE_BITS,          (8 * ?GUID_SIZE_BYTES)).
 -define(SIZE_AND_GUID_BYTES,     (?GUID_SIZE_BYTES + ?INTEGER_SIZE_BYTES)).
--define(FOUR_MEGA_BYTES,         4194304).
+-define(SCAN_BLOCK_SIZE,         ?FILE_SIZE_LIMIT div 4).
 
 %%----------------------------------------------------------------------------
-
--include("rabbit_msg_store.hrl").
 
 -ifdef(use_specs).
 
@@ -98,7 +98,7 @@ scan(FileHdl, FileSize) when FileSize >= 0 ->
 scan(_FileHdl, FileSize, _Data, FileSize, Acc, ScanOffset) ->
     {ok, Acc, ScanOffset};
 scan(FileHdl, FileSize, Data, ReadOffset, Acc, ScanOffset) ->
-    Read = lists:min([?FOUR_MEGA_BYTES, (FileSize - ReadOffset)]),
+    Read = lists:min([?SCAN_BLOCK_SIZE, (FileSize - ReadOffset)]),
     case file_handle_cache:read(FileHdl, Read) of
         {ok, Data1} ->
             {Acc1, ScanOffset1, Data2} =

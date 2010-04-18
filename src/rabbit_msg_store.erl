@@ -60,8 +60,6 @@
 -define(FILE_EXTENSION,        ".rdq").
 -define(FILE_EXTENSION_TMP,    ".rdt").
 
--define(FILE_SIZE_LIMIT,       (16*1024*1024)).
-
 -define(HANDLE_CACHE_BUFFER_SIZE, 1048576). %% 1MB
 
 %%----------------------------------------------------------------------------
