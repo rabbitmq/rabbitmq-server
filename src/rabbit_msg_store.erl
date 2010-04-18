@@ -1630,16 +1630,14 @@ combine_files(#file_summary { file = Source,
                 file_handle_cache:copy(TmpHdl, DestinationHdl, TmpSize),
             %% position in DestinationHdl should now be DestinationValid
             ok = file_handle_cache:sync(DestinationHdl),
-            ok = file_handle_cache:close(TmpHdl),
-            ok = file:delete(form_filename(Dir, Tmp))
+            ok = file_handle_cache:delete(TmpHdl)
     end,
     {SourceWorkList, SourceValid} = find_unremoved_messages_in_file(Source, State),
     ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
                        SourceHdl, DestinationHdl, Destination, State),
     %% tidy up
-    ok = file_handle_cache:close(SourceHdl),
     ok = file_handle_cache:close(DestinationHdl),
-    ok = file:delete(form_filename(Dir, SourceName)),
+    ok = file_handle_cache:delete(SourceHdl),
     ok.
 
 find_unremoved_messages_in_file(File,
