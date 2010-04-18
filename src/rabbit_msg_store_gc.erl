@@ -59,7 +59,7 @@ gc(Server, Source, Destination) ->
     gen_server2:cast(Server, {gc, Source, Destination}).
 
 stop(Server) ->
-    gen_server2:call(Server, stop).
+    gen_server2:call(Server, stop, infinity).
 
 %%----------------------------------------------------------------------------
 
