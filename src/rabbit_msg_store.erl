@@ -1478,8 +1478,9 @@ find_files_to_gc(FileSummaryEts, N, First) ->
     case Pairs of
         []     -> undefined;
         [Pair] -> Pair;
-        _      -> M = 1 + (N rem length(Pairs)),
-                  lists:nth(M, Pairs)
+        _      -> Len = length(Pairs),   %% The list is the wrong way
+                  M = Len - (N rem Len), %% around, so subtract our N
+                  lists:nth(M, Pairs)    %% from its length
     end.
 
 find_files_to_gc(_FileSummaryEts, _N, #file_summary {}, [], Pairs) ->
