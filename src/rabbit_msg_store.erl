@@ -1077,7 +1077,8 @@ filenum_to_name(File) -> integer_to_list(File) ++ ?FILE_EXTENSION.
 scan_file_for_valid_messages(Dir, FileName) ->
     case open_file(Dir, FileName, ?READ_MODE) of
         {ok, Hdl} ->
-            Valid = rabbit_msg_file:scan(Hdl),
+            Size = filelib:file_size(form_filename(Dir, FileName)),
+            Valid = rabbit_msg_file:scan(Hdl, Size),
             %% if something really bad's happened, the close could fail,
             %% but ignore
             file_handle_cache:close(Hdl),
@@ -1442,7 +1443,7 @@ maybe_compact(State = #msstate { sum_valid_data   = SumValid,
                                  gc_active        = false,
                                  gc_pid           = GCPid,
                                  file_summary_ets = FileSummaryEts })
-  when SumValid > ?FILE_SIZE_LIMIT andalso
+  when SumFileSize > 3 * ?FILE_SIZE_LIMIT andalso
        (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
     First = ets:first(FileSummaryEts),
     N = rabbit_misc:ceil(math:log(1.0 - random:uniform()) /
@@ -1543,7 +1544,6 @@ delete_file_if_empty(File, State =
 %%----------------------------------------------------------------------------
 
 gc(SourceFile, DestFile, State = {FileSummaryEts, _Dir, _Index, _IndexState}) ->
-
     [SourceObj = #file_summary {
        readers = SourceReaders,
        valid_total_size = SourceValidData, left = DestFile,
@@ -1597,6 +1597,8 @@ combine_files(#file_summary { file = Source,
             ok = truncate_and_extend_file(
                    DestinationHdl, DestinationValid, ExpectedSize);
        true ->
+            {DestinationWorkList, DestinationValid} =
+                find_unremoved_messages_in_file(Destination, State),
             Worklist =
                 lists:dropwhile(
                   fun (#msg_location { offset = Offset })
@@ -1610,8 +1612,7 @@ combine_files(#file_summary { file = Source,
                           %% that the list should be naturally sorted
                           %% as we require, however, we need to
                           %% enforce it anyway
-                  end,
-                  find_unremoved_messages_in_file(Destination, State)),
+                  end, DestinationWorkList),
             Tmp = filename:rootname(DestinationName) ++ ?FILE_EXTENSION_TMP,
             {ok, TmpHdl} = open_file(
                              Dir, Tmp, ?READ_AHEAD_MODE ++ ?WRITE_MODE),
@@ -1633,7 +1634,7 @@ combine_files(#file_summary { file = Source,
             ok = file_handle_cache:close(TmpHdl),
             ok = file:delete(form_filename(Dir, Tmp))
     end,
-    SourceWorkList = find_unremoved_messages_in_file(Source, State),
+    {SourceWorkList, SourceValid} = find_unremoved_messages_in_file(Source, State),
     ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
                        SourceHdl, DestinationHdl, Destination, State),
     %% tidy up
@@ -1649,12 +1650,14 @@ find_unremoved_messages_in_file(File,
         scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     %% foldl will reverse so will end up with msgs in ascending offset order
     lists:foldl(
-      fun ({Guid, _TotalSize, _Offset}, Acc) ->
+      fun ({Guid, TotalSize, _Offset}, Acc = {List, Size}) ->
               case Index:lookup(Guid, IndexState) of
-                  Entry = #msg_location { file = File } -> [ Entry | Acc ];
-                  _                                     -> Acc
+                  Entry = #msg_location { file = File } ->
+                      {[ Entry | List ], TotalSize + Size};
+                  _ ->
+                      Acc
               end
-      end, [], Messages).
+      end, {[], 0}, Messages).
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
               Destination, {_FileSummaryEts, _Dir, Index, IndexState}) ->
