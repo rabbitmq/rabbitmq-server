@@ -1370,8 +1370,7 @@ build_index(Gatherer, Left, [File|Files], State) ->
 build_index_worker(
   Gatherer, Ref, State = #msstate { dir = Dir }, Left, File, Files) ->
     {ok, Messages, FileSize} =
-        scan_file_for_valid_messages(
-          Dir, filenum_to_name(File)),
+        scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     {ValidMessages, ValidTotalSize} =
         lists:foldl(
           fun (Obj = {Guid, TotalSize, Offset}, {VMAcc, VTSAcc}) ->

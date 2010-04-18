@@ -167,7 +167,7 @@ recover_durable_queues(DurableQueues) ->
            end, [], DurableQueues),
     %% Issue inits to *all* the queues so that they all init at the same time
     [ok = gen_server2:cast(Q#amqqueue.pid, init_backing_queue) || Q <- Qs],
-    [ok = gen_server2:call(Q#amqqueue.pid, sync) || Q <- Qs],
+    [ok = gen_server2:call(Q#amqqueue.pid, sync, infinity) || Q <- Qs],
     Qs.
 
 declare(QueueName, Durable, AutoDelete, Args) ->
