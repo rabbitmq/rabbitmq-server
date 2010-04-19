@@ -831,15 +831,25 @@ ensure_binary_properties(Msg = #basic_message { content = Content }) ->
 %% the first arg is the older delta
 combine_deltas(?BLANK_DELTA_PATTERN(X), ?BLANK_DELTA_PATTERN(Y)) ->
     ?BLANK_DELTA;
-combine_deltas(?BLANK_DELTA_PATTERN(X), #delta {       } = B) -> B;
-combine_deltas(#delta {       } = A, ?BLANK_DELTA_PATTERN(Y)) -> A;
-combine_deltas(#delta { start_seq_id = SeqIdLow,  count = CountLow},
-               #delta { start_seq_id = SeqIdHigh, count = CountHigh,
-                        end_seq_id = SeqIdEnd }) ->
-    true = SeqIdLow =< SeqIdHigh, %% ASSERTION
+combine_deltas(?BLANK_DELTA_PATTERN(X),
+               #delta { start_seq_id = Start, count = Count,
+                        end_seq_id = End } = B) ->
+    true = Start + Count =< End, %% ASSERTION
+    B;
+combine_deltas(#delta { start_seq_id = Start, count = Count,
+                        end_seq_id = End } = A, ?BLANK_DELTA_PATTERN(Y)) ->
+    true = Start + Count =< End, %% ASSERTION
+    A;
+combine_deltas(#delta { start_seq_id = StartLow,  count = CountLow,
+                        end_seq_id = EndLow },
+               #delta { start_seq_id = StartHigh, count = CountHigh,
+                        end_seq_id = EndHigh }) ->
     Count = CountLow + CountHigh,
-    true = Count =< SeqIdEnd - SeqIdLow, %% ASSERTION
-    #delta { start_seq_id = SeqIdLow, count = Count, end_seq_id = SeqIdEnd }.
+    true = (StartLow =< StartHigh) %% ASSERTIONS
+        andalso ((StartLow + CountLow) =< EndLow)
+        andalso ((StartHigh + CountHigh) =< EndHigh)
+        andalso ((StartLow + Count) =< EndHigh),
+    #delta { start_seq_id = StartLow, count = Count, end_seq_id = EndHigh }.
 
 beta_fold_no_index_on_disk(Fun, Init, Q) ->
     bpqueue:foldr(fun (_Prefix, Value, Acc) ->
@@ -1520,7 +1530,7 @@ push_betas_to_deltas(Generator, Limit, Q, Count, RamIndexCount, IndexState) ->
         {empty, Qa} ->
             {Count, Qa, RamIndexCount, IndexState};
         {{value, _IndexOnDisk, #msg_status { seq_id = SeqId }}, _Qa}
-        when Limit /= undefined andalso SeqId < Limit ->
+        when Limit =/= undefined andalso SeqId < Limit ->
             {Count, Q, RamIndexCount, IndexState};
         {{value, IndexOnDisk, MsgStatus}, Qa} ->
             {RamIndexCount1, IndexState1} =
