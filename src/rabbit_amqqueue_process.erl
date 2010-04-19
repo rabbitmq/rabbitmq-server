@@ -433,7 +433,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
                                       _    -> rollback_transaction(Txn, ChPid,
                                                                    State1)
                                   end,
-                         {ok, requeue_and_run(ChAckTags, State2)}
+                         {ok, requeue_and_run(sets:to_list(ChAckTags), State2)}
             end
     end.
 
