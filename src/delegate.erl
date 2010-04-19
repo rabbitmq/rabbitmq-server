@@ -93,14 +93,14 @@ internal_cast(Node, Thunk) when is_atom(Node) ->
 %%----------------------------------------------------------------------------
 
 split_delegate_per_node(Pids) ->
-    dict:to_list(
+    orddict:to_list(
         lists:foldl(
           fun (Pid, D) ->
-                  dict:update(node(Pid),
+                  orddict:update(node(Pid),
                               fun (Pids1) -> [Pid | Pids1] end,
                               [Pid], D)
           end,
-          dict:new(), Pids)).
+          orddict:new(), Pids)).
 
 call_per_node([{Node, Pids}], FPid) when Node == node() ->
     local_delegate(Pids, FPid);
