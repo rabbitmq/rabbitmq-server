@@ -75,6 +75,7 @@ stop(Pid) ->
 init([Connection, Q, Fun]) ->
     Channel = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+    amqp_channel:call(Channel, #'tx.select'{}),
     amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
     {ok, #rpc_s_state{channel = Channel, handler = Fun} }.
 
@@ -91,7 +92,7 @@ handle_info(#'basic.cancel_ok'{}, State) ->
     {stop, normal, State};
 
 %% @private
-handle_info({#'basic.deliver'{},
+handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
              #amqp_msg{props = Props, payload = Payload}},
             State = #rpc_s_state{handler = Fun, channel = Channel}) ->
     #'P_basic'{correlation_id = CorrelationId,
@@ -103,6 +104,8 @@ handle_info({#'basic.deliver'{},
                                mandatory = true},
     amqp_channel:call(Channel, Publish, #amqp_msg{props = Properties,
                                                   payload = Response}),
+    amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
+    amqp_channel:call(Channel, #'tx.commit'{}),
     {noreply, State}.
 
 %% @private
