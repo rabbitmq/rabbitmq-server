@@ -423,7 +423,7 @@ requeue_messages(Snapshot = #psnapshot{messages = Messages,
             fun ({QName, Requeues}) ->
                     requeue(QName, Requeues, Messages)
             end, dict:to_list(Work))),
-    NewMessages = [{K, M} || {{_Q, K}, M, _D} <- L],
+    NewMessages = [{K, M} || {{_S, _Q, K}, M, _D} <- L],
     NewQueues  = [{{Q, K}, D, S} || {{S, Q, K}, _M, D} <- L],
     ets:delete_all_objects(Messages),
     ets:delete_all_objects(Queues),
