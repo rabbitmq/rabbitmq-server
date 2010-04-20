@@ -423,8 +423,8 @@ requeue_messages(Snapshot = #psnapshot{messages = Messages,
             fun ({QName, Requeues}) ->
                     requeue(QName, Requeues, Messages)
             end, dict:to_list(Work))),
-    NewMessages = [{K, M} || {{_S, _Q, K}, M, _D} <- L],
-    NewQueues  = [{{Q, K}, D, S} || {{S, Q, K}, _M, D} <- L],
+    NewMessages = [{K, M} || {_S, _Q, K, M, _D} <- L],
+    NewQueues  = [{{Q, K}, D, S} || {S, Q, K, _M, D} <- L],
     ets:delete_all_objects(Messages),
     ets:delete_all_objects(Queues),
     true = ets:insert(Messages, NewMessages),
@@ -436,7 +436,7 @@ requeue(QName, Requeues, Messages) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, #amqqueue{pid = QPid}} ->
             RequeueMessages =
-                [{{SeqId, QName, PKey}, Message, Delivered} ||
+                [{SeqId, QName, PKey, Message, Delivered} ||
                     {SeqId, PKey, Delivered} <- Requeues,
                     {_, Message} <- ets:lookup(Messages, PKey)],
             rabbit_amqqueue:redeliver(
@@ -447,7 +447,7 @@ requeue(QName, Requeues, Messages) ->
               %% per-channel basis, and channels are bound to specific
               %% processes, sorting the list does provide the correct
               %% ordering properties.
-              [{Message, Delivered} || {_, Message, Delivered} <-
+              [{Message, Delivered} || {_, _, _, Message, Delivered} <-
                                            lists:sort(RequeueMessages)]),
             RequeueMessages;
         {error, not_found} ->
