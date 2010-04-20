@@ -180,7 +180,7 @@
           end_seq_id %% note the end_seq_id is always >, not >=
         }).
 
--record(tx, {pending_messages, pending_acks}).
+-record(tx, { pending_messages, pending_acks }).
 
 %% When we discover, on publish, that we should write some indices to
 %% disk for some betas, the RAM_INDEX_BATCH_SIZE sets the number of
@@ -228,7 +228,7 @@
                avg_ingress_rate      :: float(),
                rate_timestamp        :: {integer(), integer(), integer()},
                len                   :: non_neg_integer(),
-               on_sync               :: {[[ack()]], [[guid()]], [{pid(), any()}]},
+               on_sync               :: {[[ack()]], [[guid()]], [fun (() -> any())]},
                msg_store_clients     :: 'undefined' | {{any(), binary()}, {any(), binary()}},
                persistent_store      :: pid() | atom(),
                persistent_count      :: non_neg_integer(),
@@ -552,7 +552,7 @@ tx_rollback(Txn, State = #vqstate { persistent_store = PersistentStore }) ->
     ok = rabbit_msg_store:remove(PersistentStore, persistent_guids(Pubs)),
     {lists:flatten(AckTags), State}.
 
-tx_commit(Txn, From, State = #vqstate { persistent_store = PersistentStore }) ->
+tx_commit(Txn, Fun, State = #vqstate { persistent_store = PersistentStore }) ->
     %% If we are a non-durable queue, or we have no persistent pubs,
     %% we can skip the msg_store loop.
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
@@ -566,12 +566,12 @@ tx_commit(Txn, From, State = #vqstate { persistent_store = PersistentStore }) ->
          ?TRANSIENT_MSG_STORE == PersistentStore of
          true ->
              tx_commit_post_msg_store(
-               IsTransientPubs, PubsOrdered, AckTags1, From, State);
+               IsTransientPubs, PubsOrdered, AckTags1, Fun, State);
          false ->
              ok = rabbit_msg_store:sync(
                     ?PERSISTENT_MSG_STORE, PersistentGuids,
                     msg_store_callback(PersistentGuids, IsTransientPubs,
-                                       PubsOrdered, AckTags1, From)),
+                                       PubsOrdered, AckTags1, Fun)),
              State
      end}.
 
@@ -881,7 +881,7 @@ should_force_index_to_disk(State =
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
-msg_store_callback(PersistentGuids, IsTransientPubs, Pubs, AckTags, From) ->
+msg_store_callback(PersistentGuids, IsTransientPubs, Pubs, AckTags, Fun) ->
     Self = self(),
     fun() ->
             spawn(
@@ -895,14 +895,14 @@ msg_store_callback(PersistentGuids, IsTransientPubs, Pubs, AckTags, From) ->
                                         Self, fun (StateN) ->
                                                       tx_commit_post_msg_store(
                                                         IsTransientPubs, Pubs,
-                                                        AckTags, From, StateN)
+                                                        AckTags, Fun, StateN)
                                               end)
                              end)
               end)
     end.
 
-tx_commit_post_msg_store(IsTransientPubs, Pubs, AckTags, From, State =
-                             #vqstate { on_sync = OnSync = {SAcks, SPubs, SFroms},
+tx_commit_post_msg_store(IsTransientPubs, Pubs, AckTags, Fun, State =
+                             #vqstate { on_sync = OnSync = {SAcks, SPubs, SFuns},
                                         persistent_store = PersistentStore,
                                         pending_ack = PA }) ->
     %% If we are a non-durable queue, or (no persisent pubs, and no
@@ -918,16 +918,16 @@ tx_commit_post_msg_store(IsTransientPubs, Pubs, AckTags, From, State =
                (_AckTag, false) -> false
            end, true, AckTags)) of
         true  -> State1 = tx_commit_index(State #vqstate {
-                                            on_sync = {[], [Pubs], [From]} }),
+                                            on_sync = {[], [Pubs], [Fun]} }),
                  State1 #vqstate { on_sync = OnSync };
         false -> State #vqstate { on_sync = { [AckTags | SAcks],
                                               [Pubs | SPubs],
-                                              [From | SFroms] }}
+                                              [Fun | SFuns] }}
     end.
 
 tx_commit_index(State = #vqstate { on_sync = {_, _, []} }) ->
     State;
-tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFroms},
+tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFuns},
                                    persistent_store = PersistentStore }) ->
     Acks = lists:flatten(SAcks),
     State1 = ack(Acks, State),
@@ -946,7 +946,7 @@ tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFroms},
           end, {Acks, State1}, Pubs),
     IndexState1 =
         rabbit_queue_index:sync_seq_ids(SeqIds, IndexState),
-    [ gen_server2:reply(From, ok) || From <- lists:reverse(SFroms) ],
+    [ Fun() || Fun <- lists:reverse(SFuns) ],
     State2 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }.
 
 delete1(_PersistentStore, _TransientThreshold, NextSeqId, Count, DeltaSeqId,

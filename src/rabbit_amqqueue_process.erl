@@ -469,7 +469,8 @@ maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
 
 commit_transaction(Txn, From, ChPid, State = #q{backing_queue = BQ,
                                                 backing_queue_state = BQS}) ->
-    {AckTags, BQS1} = BQ:tx_commit(Txn, From, BQS),
+    {AckTags, BQS1} =
+        BQ:tx_commit(Txn, fun () -> gen_server2:reply(From, ok) end, BQS),
     %% ChPid must be known here because of the participant management
     %% by the channel.
     C = #cr{acktags = ChAckTags} = lookup_ch(ChPid),

@@ -83,7 +83,10 @@ behaviour_info(callbacks) ->
      {tx_rollback, 2},
 
      %% Commit these publishes and acktags. The publishes you will
-     %% have previously seen in calls to tx_publish.
+     %% have previously seen in calls to tx_publish, and the acks in
+     %% calls to tx_ack. The Fun passed in must be called once the
+     %% messages have really been commited. This CPS permits the
+     %% possibility of commit coalescing.
      {tx_commit, 3},
 
      %% Reinsert messages into the queue which have already been

@@ -46,7 +46,7 @@
 -spec(tx_publish/3 :: (txn(), basic_message(), state()) -> state()).
 -spec(tx_ack/3 :: (txn(), [ack()], state()) -> state()).
 -spec(tx_rollback/2 :: (txn(), state()) -> {[ack()], state()}).
--spec(tx_commit/3 :: (txn(), {pid(), any()}, state()) -> {[ack()], state()}).
+-spec(tx_commit/3 :: (txn(), fun (() -> any()), state()) -> {[ack()], state()}).
 -spec(requeue/2 :: ([ack()], state()) -> state()).
 -spec(len/1 :: (state()) -> non_neg_integer()).
 -spec(is_empty/1 :: (state()) -> boolean()).
