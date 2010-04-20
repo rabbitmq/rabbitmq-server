@@ -34,7 +34,6 @@
 
 -behaviour(gen_server).
 
--export([test/0]).
 -export([start/2, stop/1]).
 -export([call/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3,
@@ -46,33 +45,6 @@
                       routing_key,
                       continuations = dict:new(),
                       correlation_id = 0}).
-
-test() ->
-    Connection = new_connection(),
-    Q = uuid(),
-    Fun = fun(X) -> X end,
-    RPCHandler = fun(X) -> term_to_binary(Fun(binary_to_term(X))) end,
-    Server = amqp_rpc_server:start(Connection, Q, RPCHandler),
-    Client = amqp_rpc_client:start(Connection, Q),
-    Input = 1,
-    _Reply1 = amqp_rpc_client:call(Client, term_to_binary(Input)),
-    _Reply2 = amqp_rpc_client:call(Client, term_to_binary(Input)),
-    _Reply3 = amqp_rpc_client:call(Client, term_to_binary(Input)),
-    _Reply4 = amqp_rpc_client:call(Client, term_to_binary(Input)),
-    ReplyQueue = gen_server:call(Client, get_reply_queue, infinity),
-    io:format("Reply queue is ~p~n", [ReplyQueue]),
-    amqp_rpc_client:stop(Client),
-    amqp_rpc_server:stop(Server),
-    amqp_connection:close(Connection).
-%    Connection1 = new_connection(),
-    
-
-uuid() ->
-    {A, B, C} = now(),
-    <<A:32, B:32, C:32>>.
-
-new_connection() ->
-    amqp_connection:start_network().
 
 %%--------------------------------------------------------------------------
 %% API
@@ -168,9 +140,6 @@ terminate(_Reason, #rpc_c_state{channel = Channel}) ->
 %% @private
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
-
-handle_call(get_reply_queue, _From, State = #rpc_c_state{reply_queue = Q}) ->
-    {reply, Q, State};
 
 %% @private
 handle_call({call, Payload}, From, State) ->
