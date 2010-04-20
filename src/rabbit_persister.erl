@@ -236,8 +236,7 @@ complete(From, Item, State = #pstate{deadline = ExistingDeadline,
 %% "tied" is met.
 log_work(CreateWorkUnit, MessageList,
          State = #pstate{
-           snapshot = Snapshot = #psnapshot{
-                        messages = Messages}}) ->
+           snapshot = Snapshot = #psnapshot{messages = Messages}}) ->
     Unit = CreateWorkUnit(
              rabbit_misc:map_in_order(
                fun(M = {publish, Message, QK = {_QName, PKey}}) ->
