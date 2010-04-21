@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.docbook.org/xml/4.5/docbookx.dtd">
+<refentry lang="en">
+    <refentryinfo>
+        <productname>RabbitMQ Server</productname>
+        <authorgroup>
+            <corpauthor>The RabbitMQ Team &lt;<ulink url="mailto:info@rabbitmq.com"><email>info@rabbitmq.com</email></ulink>&gt;</corpauthor>
+        </authorgroup>
+    </refentryinfo>
+
+    <refmeta>
+        <refentrytitle>rabbitmq-multi</refentrytitle>
+        <manvolnum>1</manvolnum>
+        <refmiscinfo class="manual">RabbitMQ Server</refmiscinfo>
+    </refmeta>
+
+    <refnamediv>
+        <refname>rabbitmq-multi</refname>
+        <refpurpose>start/stop local cluster RabbitMQ nodes</refpurpose>
+    </refnamediv>
+
+    <refsynopsisdiv>
+        <cmdsynopsis>
+          <command>rabbitmq-multi</command>
+          <arg choice="req"><replaceable>command</replaceable></arg>
+          <arg choice="opt" rep="repeat"><replaceable>command options</replaceable></arg>
+        </cmdsynopsis>
+    </refsynopsisdiv>
+    
+    <refsect1>
+        <title>Description</title>
+        <para>
+           RabbitMQ is an implementation of AMQP, the emerging standard for high
+performance enterprise messaging. The RabbitMQ server is a robust and
+scalable implementation of an AMQP broker.
+        </para>
+        <para>
+rabbitmq-multi scripts allows for easy set-up of a cluster on a single
+machine.
+        </para>
+    </refsect1>
+
+    <refsect1>
+      <title>Commands</title>
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>start_all</command> <arg choice="req"><replaceable>count</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+Start count nodes with unique names, listening on all IP addresses and
+on sequential ports starting from 5672.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmq-multi start_all 3</screen>
+            <para role="example">
+              Starts 3 local RabbitMQ nodes with unique, sequential port numbers.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+Print the status of all running RabbitMQ nodes.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>stop_all</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+Stop all local RabbitMQ nodes,
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>rotate_logs</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+Rotate log files for all local and running RabbitMQ nodes.
+            </para>
+          </listitem>
+        </varlistentry>
+
+      </variablelist>
+    </refsect1>
+
+
+    <refsect1>
+        <title>See also</title>
+        <para>
+            <citerefentry><refentrytitle>rabbitmq.conf</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+            <citerefentry><refentrytitle>rabbitmq-server</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+            <citerefentry><refentrytitle>rabbitmqctl</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+        </para>
+    </refsect1>
+</refentry>

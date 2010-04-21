@@ -53,7 +53,7 @@
 
 -define(MAX_WRAP_ENTRIES, 500).
 
--define(PERSISTER_LOG_FORMAT_VERSION, {2, 4}).
+-define(PERSISTER_LOG_FORMAT_VERSION, {2, 5}).
 
 -record(pstate, {log_handle, entry_count, deadline,
                  pending_logs, pending_replies,
@@ -64,24 +64,24 @@
 %% the other maps a key to one or more queues.
 %% The aim is to reduce the overload of storing a message multiple times
 %% when it appears in several queues.
--record(psnapshot, {serial, transactions, messages, queues}).
+-record(psnapshot, {serial, transactions, messages, queues, next_seq_id}).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(qmsg() :: {amqqueue(), pkey()}).
+-type(pmsg() :: {queue_name(), pkey()}).
 -type(work_item() ::
-      {publish, message(), qmsg()} |
-      {deliver, qmsg()} |
-      {ack, qmsg()}).
+      {publish, message(), pmsg()} |
+      {deliver, pmsg()} |
+      {ack, pmsg()}).
 
 -spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(transaction/1 :: ([work_item()]) -> 'ok').
--spec(extend_transaction/2 :: (txn(), [work_item()]) -> 'ok').
+-spec(extend_transaction/2 :: ({txn(), queue_name()}, [work_item()]) -> 'ok').
 -spec(dirty_work/1 :: ([work_item()]) -> 'ok').
--spec(commit_transaction/1 :: (txn()) -> 'ok').
--spec(rollback_transaction/1 :: (txn()) -> 'ok').
+-spec(commit_transaction/1 :: ({txn(), queue_name()}) -> 'ok').
+-spec(rollback_transaction/1 :: ({txn(), queue_name()}) -> 'ok').
 -spec(force_snapshot/0 :: () -> 'ok').
 -spec(serial/0 :: () -> non_neg_integer()).
 
@@ -128,7 +128,8 @@ init(_Args) ->
     Snapshot = #psnapshot{serial       = 0,
                           transactions = dict:new(),
                           messages     = ets:new(messages, []),
-                          queues       = ets:new(queues, [])},
+                          queues       = ets:new(queues, []),
+                          next_seq_id  = 0},
     LogHandle =
         case disk_log:open([{name, rabbit_persister},
                             {head, current_snapshot(Snapshot)},
@@ -153,12 +154,12 @@ init(_Args) ->
             rabbit_log:error("Failed to load persister log: ~p~n", [Reason]),
             ok = take_snapshot_and_save_old(LogHandle, NewSnapshot)
     end,
-    State = #pstate{log_handle = LogHandle,
-                    entry_count = 0,
-                    deadline = infinity,
-                    pending_logs = [],
+    State = #pstate{log_handle      = LogHandle,
+                    entry_count     = 0,
+                    deadline        = infinity,
+                    pending_logs    = [],
                     pending_replies = [],
-                    snapshot = NewSnapshot},
+                    snapshot        = NewSnapshot},
     {ok, State}.
 
 handle_call({transaction, Key, MessageList}, From, State) ->
@@ -236,8 +237,7 @@ complete(From, Item, State = #pstate{deadline = ExistingDeadline,
 %% "tied" is met.
 log_work(CreateWorkUnit, MessageList,
          State = #pstate{
-           snapshot = Snapshot = #psnapshot{
-                        messages = Messages}}) ->
+           snapshot = Snapshot = #psnapshot{messages = Messages}}) ->
     Unit = CreateWorkUnit(
              rabbit_misc:map_in_order(
                fun(M = {publish, Message, QK = {_QName, PKey}}) ->
@@ -343,20 +343,22 @@ flush(ForceSnapshot, State = #pstate{pending_logs = PendingLogs,
                   pending_logs = [],
                   pending_replies = []}.
 
-current_snapshot(_Snapshot = #psnapshot{serial = Serial,
-                                        transactions= Ts,
-                                        messages = Messages,
-                                        queues = Queues}) ->
+current_snapshot(_Snapshot = #psnapshot{serial       = Serial,
+                                        transactions = Ts,
+                                        messages     = Messages,
+                                        queues       = Queues,
+                                        next_seq_id  = NextSeqId}) ->
     %% Avoid infinite growth of the table by removing messages not
     %% bound to a queue anymore
     prune_table(Messages, ets:foldl(
-                            fun ({{_QName, PKey}, _Delivered}, S) ->
+                            fun ({{_QName, PKey}, _Delivered, _SeqId}, S) ->
                                     sets:add_element(PKey, S)
                             end, sets:new(), Queues)),
     InnerSnapshot = {{serial, Serial},
                      {txns, Ts},
                      {messages, ets:tab2list(Messages)},
-                     {queues, ets:tab2list(Queues)}},
+                     {queues, ets:tab2list(Queues)},
+                     {next_seq_id, NextSeqId}},
     ?LOGDEBUG("Inner snapshot: ~p~n", [InnerSnapshot]),
     {persist_snapshot, {vsn, ?PERSISTER_LOG_FORMAT_VERSION},
      term_to_binary(InnerSnapshot)}.
@@ -380,14 +382,15 @@ internal_load_snapshot(LogHandle,
     {K, [Loaded_Snapshot | Items]} = disk_log:chunk(LogHandle, start),
     case check_version(Loaded_Snapshot) of
         {ok, StateBin} ->
-            {{serial, Serial}, {txns, Ts}, {messages, Ms}, {queues, Qs}} =
-                binary_to_term(StateBin),
+            {{serial, Serial}, {txns, Ts}, {messages, Ms}, {queues, Qs},
+             {next_seq_id, NextSeqId}} = binary_to_term(StateBin),
             true = ets:insert(Messages, Ms),
             true = ets:insert(Queues, Qs),
             Snapshot1 = replay(Items, LogHandle, K,
                                Snapshot#psnapshot{
                                  serial = Serial,
-                                 transactions = Ts}),
+                                 transactions = Ts,
+                                 next_seq_id = NextSeqId}),
             Snapshot2 = requeue_messages(Snapshot1),
             %% uncompleted transactions are discarded - this is TRTTD
             %% since we only get into this code on node restart, so
@@ -406,7 +409,10 @@ check_version(_Other) ->
 
 requeue_messages(Snapshot = #psnapshot{messages = Messages,
                                        queues = Queues}) ->
-    Work = ets:foldl(fun accumulate_requeues/2, dict:new(), Queues),
+    Work = ets:foldl(
+             fun ({{QName, PKey}, Delivered, SeqId}, Acc) ->
+                     rabbit_misc:dict_cons(QName, {SeqId, PKey, Delivered}, Acc)
+             end, dict:new(), Queues),
     %% unstable parallel map, because order doesn't matter
     L = lists:append(
           rabbit_misc:upmap(
@@ -416,8 +422,8 @@ requeue_messages(Snapshot = #psnapshot{messages = Messages,
             fun ({QName, Requeues}) ->
                     requeue(QName, Requeues, Messages)
             end, dict:to_list(Work))),
-    NewMessages = [{K, M} || {{_Q, K}, M, _D} <- L],
-    NewQueues  = [{QK, D} || {QK, _M, D} <- L],
+    NewMessages = [{K, M} || {_S, _Q, K, M, _D} <- L],
+    NewQueues  = [{{Q, K}, D, S} || {S, Q, K, _M, D} <- L],
     ets:delete_all_objects(Messages),
     ets:delete_all_objects(Queues),
     true = ets:insert(Messages, NewMessages),
@@ -425,19 +431,12 @@ requeue_messages(Snapshot = #psnapshot{messages = Messages,
     %% contains the mutated messages and queues tables
     Snapshot.
 
-accumulate_requeues({{QName, PKey}, Delivered}, Acc) ->
-    Requeue = {PKey, Delivered},
-    dict:update(QName,
-                fun (Requeues) -> [Requeue | Requeues] end,
-                [Requeue],
-                Acc).
-
 requeue(QName, Requeues, Messages) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, #amqqueue{pid = QPid}} ->
             RequeueMessages =
-                [{{QName, PKey}, Message, Delivered} ||
-                    {PKey, Delivered} <- Requeues,
+                [{SeqId, QName, PKey, Message, Delivered} ||
+                    {SeqId, PKey, Delivered} <- Requeues,
                     {_, Message} <- ets:lookup(Messages, PKey)],
             rabbit_amqqueue:redeliver(
               QPid,
@@ -447,7 +446,7 @@ requeue(QName, Requeues, Messages) ->
               %% per-channel basis, and channels are bound to specific
               %% processes, sorting the list does provide the correct
               %% ordering properties.
-              [{Message, Delivered} || {_, Message, Delivered} <-
+              [{Message, Delivered} || {_, _, _, Message, Delivered} <-
                                            lists:sort(RequeueMessages)]),
             RequeueMessages;
         {error, not_found} ->
@@ -474,50 +473,55 @@ internal_integrate_messages(Items, Snapshot) ->
 
 internal_integrate1({extend_transaction, Key, MessageList},
                     Snapshot = #psnapshot {transactions = Transactions}) ->
-    NewTransactions =
-        dict:update(Key,
-                    fun (MessageLists) -> [MessageList | MessageLists] end,
-                    [MessageList],
-                    Transactions),
-    Snapshot#psnapshot{transactions = NewTransactions};
+    Snapshot#psnapshot{transactions = rabbit_misc:dict_cons(Key, MessageList,
+                                                            Transactions)};
 internal_integrate1({rollback_transaction, Key},
                     Snapshot = #psnapshot{transactions = Transactions}) ->
     Snapshot#psnapshot{transactions = dict:erase(Key, Transactions)};
 internal_integrate1({commit_transaction, Key},
                     Snapshot = #psnapshot{transactions = Transactions,
-                                          messages = Messages,
-                                          queues = Queues}) ->
+                                          messages     = Messages,
+                                          queues       = Queues,
+                                          next_seq_id  = SeqId}) ->
     case dict:find(Key, Transactions) of
         {ok, MessageLists} ->
             ?LOGDEBUG("persist committing txn ~p~n", [Key]),
-            lists:foreach(fun (ML) -> perform_work(ML, Messages, Queues) end,
-                          lists:reverse(MessageLists)),
-            Snapshot#psnapshot{transactions = dict:erase(Key, Transactions)};
+            NextSeqId =
+                lists:foldr(
+                  fun (ML, SeqIdN) ->
+                          perform_work(ML, Messages, Queues, SeqIdN) end,
+                  SeqId, MessageLists),
+            Snapshot#psnapshot{transactions = dict:erase(Key, Transactions),
+                               next_seq_id = NextSeqId};
         error ->
             Snapshot
     end;
 internal_integrate1({dirty_work, MessageList},
-                    Snapshot = #psnapshot {messages = Messages,
-                                           queues = Queues}) ->
-    perform_work(MessageList, Messages, Queues),
-    Snapshot.
+                    Snapshot = #psnapshot{messages    = Messages,
+                                          queues      = Queues,
+                                          next_seq_id = SeqId}) ->
+    Snapshot#psnapshot{next_seq_id = perform_work(MessageList, Messages,
+                                                  Queues, SeqId)}.
 
-perform_work(MessageList, Messages, Queues) ->
-    lists:foreach(
-      fun (Item) -> perform_work_item(Item, Messages, Queues) end,
-      MessageList).
+perform_work(MessageList, Messages, Queues, SeqId) ->
+    lists:foldl(fun (Item, NextSeqId) ->
+                        perform_work_item(Item, Messages, Queues, NextSeqId)
+                end, SeqId, MessageList).
 
-perform_work_item({publish, Message, QK = {_QName, PKey}}, Messages, Queues) ->
-    ets:insert(Messages, {PKey, Message}),
-    ets:insert(Queues, {QK, false});
+perform_work_item({publish, Message, QK = {_QName, PKey}},
+                  Messages, Queues, NextSeqId) ->
+    true = ets:insert(Messages, {PKey, Message}),
+    true = ets:insert(Queues, {QK, false, NextSeqId}),
+    NextSeqId + 1;
 
-perform_work_item({tied, QK}, _Messages, Queues) ->
-    ets:insert(Queues, {QK, false});
+perform_work_item({tied, QK}, _Messages, Queues, NextSeqId) ->
+    true = ets:insert(Queues, {QK, false, NextSeqId}),
+    NextSeqId + 1;
 
-perform_work_item({deliver, QK}, _Messages, Queues) ->
-    %% from R12B-2 onward we could use ets:update_element/3 here
-    ets:delete(Queues, QK),
-    ets:insert(Queues, {QK, true});
+perform_work_item({deliver, QK}, _Messages, Queues, NextSeqId) ->
+    true = ets:update_element(Queues, QK, {2, true}),
+    NextSeqId;
 
-perform_work_item({ack, QK}, _Messages, Queues) ->
-    ets:delete(Queues, QK).
+perform_work_item({ack, QK}, _Messages, Queues, NextSeqId) ->
+    true = ets:delete(Queues, QK),
+    NextSeqId.

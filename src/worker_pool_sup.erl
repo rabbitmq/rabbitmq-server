@@ -29,45 +29,41 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_sup).
+-module(worker_pool_sup).
 
 -behaviour(supervisor).
 
--export([start_link/0, start_child/1, start_child/2, start_child/3,
-         start_restartable_child/1, start_restartable_child/2]).
+-export([start_link/0, start_link/1]).
 
 -export([init/1]).
 
--include("rabbit.hrl").
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(start_link/1 ::
+        (non_neg_integer()) -> {'ok', pid()} | 'ignore' | {'error', any()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
 
 -define(SERVER, ?MODULE).
 
+%%----------------------------------------------------------------------------
+
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    start_link(erlang:system_info(schedulers)).
 
-start_child(Mod) ->
-    start_child(Mod, []).
+start_link(WCount) ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, [WCount]).
 
-start_child(Mod, Args) ->
-    start_child(Mod, Mod, Args).
+%%----------------------------------------------------------------------------
 
-start_child(ChildId, Mod, Args) ->
-    {ok, _} = supervisor:start_child(?SERVER,
-                                     {ChildId, {Mod, start_link, Args},
-                                      transient, ?MAX_WAIT, worker, [Mod]}),
-    ok.
-
-start_restartable_child(Mod) ->
-    start_restartable_child(Mod, []).
-
-start_restartable_child(Mod, Args) ->
-    Name = list_to_atom(atom_to_list(Mod) ++ "_sup"),
-    {ok, _} = supervisor:start_child(
-                ?SERVER,
-                {Name, {rabbit_restartable_sup, start_link,
-                        [Name, {Mod, start_link, Args}]},
-                 transient, infinity, supervisor, [rabbit_restartable_sup]}),
-    ok.
-
-init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+init([WCount]) ->
+    {ok, {{one_for_one, 10, 10},
+          [{worker_pool, {worker_pool, start_link, []}, transient,
+            16#ffffffff, worker, [worker_pool]} |
+           [{N, {worker_pool_worker, start_link, [N]}, transient, 16#ffffffff,
+             worker, [worker_pool_worker]} || N <- lists:seq(1, WCount)]]}}.

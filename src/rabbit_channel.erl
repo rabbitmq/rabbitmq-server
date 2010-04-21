@@ -48,9 +48,6 @@
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking}).
 
--define(HIBERNATE_AFTER_MIN, 1000).
--define(DESIRED_HIBERNATE, 10000).
-
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 -define(INFO_KEYS,
@@ -75,7 +72,7 @@
 -spec(do/3 :: (pid(), amqp_method(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
--spec(deliver/4 :: (pid(), ctag(), boolean(), msg()) -> 'ok').
+-spec(deliver/4 :: (pid(), ctag(), boolean(), qmsg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
@@ -386,14 +383,12 @@ handle_method(#'basic.publish'{exchange = ExchangeNameBin,
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
-    PersistentKey = case is_message_persistent(DecodedContent) of
-                        true  -> rabbit_guid:guid();
-                        false -> none
-                    end,
+    IsPersistent = is_message_persistent(DecodedContent),
     Message = #basic_message{exchange_name  = ExchangeName,
                              routing_key    = RoutingKey,
                              content        = DecodedContent,
-                             persistent_key = PersistentKey},
+                             guid           = rabbit_guid:guid(),
+                             is_persistent  = IsPersistent},
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,
@@ -933,7 +928,7 @@ new_tx(State) ->
 internal_commit(State = #ch{transaction_id = TxnKey,
                             tx_participants = Participants}) ->
     case rabbit_amqqueue:commit_all(sets:to_list(Participants),
-                                    TxnKey) of
+                                    TxnKey, self()) of
         ok              -> ok = notify_limiter(State#ch.limiter_pid,
                                                State#ch.uncommitted_ack_q),
                            new_tx(State);
@@ -950,7 +945,7 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
                queue:len(UAQ),
                queue:len(UAMQ)]),
     case rabbit_amqqueue:rollback_all(sets:to_list(Participants),
-                                      TxnKey) of
+                                      TxnKey, self()) of
         ok              -> NewUAMQ = queue:join(UAQ, UAMQ),
                            new_tx(State#ch{unacked_message_q = NewUAMQ});
         {error, Errors} -> rabbit_misc:protocol_error(
@@ -966,14 +961,11 @@ fold_per_queue(F, Acc0, UAQ) ->
     D = rabbit_misc:queue_fold(
           fun ({_DTag, _CTag,
                 {_QName, QPid, MsgId, _Redelivered, _Message}}, D) ->
-                  %% dict:append would be simpler and avoid the
-                  %% lists:reverse in handle_message({recover, true},
-                  %% ...). However, it is significantly slower when
-                  %% going beyond a few thousand elements.
-                  dict:update(QPid,
-                              fun (MsgIds) -> [MsgId | MsgIds] end,
-                              [MsgId],
-                              D)
+                  %% dict:append would avoid the lists:reverse in
+                  %% handle_message({recover, true}, ...). However, it
+                  %% is significantly slower when going beyond a few
+                  %% thousand elements.
+                  rabbit_misc:dict_cons(QPid, MsgId, D)
           end, dict:new(), UAQ),
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
@@ -1019,16 +1011,15 @@ notify_limiter(LimiterPid, Acked) ->
         Count -> rabbit_limiter:ack(LimiterPid, Count)
     end.
 
-is_message_persistent(#content{properties = #'P_basic'{
-                                 delivery_mode = Mode}}) ->
-    case Mode of
-        1         -> false;
-        2         -> true;
-        undefined -> false;
-        Other     -> rabbit_log:warning("Unknown delivery mode ~p - "
-                                        "treating as 1, non-persistent~n",
-                                        [Other]),
-                     false
+is_message_persistent(Content) ->
+    case rabbit_basic:is_message_persistent(Content) of
+        {invalid, Other} ->
+            rabbit_log:warning("Unknown delivery mode ~p - "
+                               "treating as 1, non-persistent~n",
+                               [Other]),
+            false;
+        IsPersistent when is_boolean(IsPersistent) ->
+            IsPersistent
     end.
 
 lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->

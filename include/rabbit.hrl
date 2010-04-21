@@ -62,7 +62,8 @@
 
 -record(listener, {node, protocol, host, port}).
 
--record(basic_message, {exchange_name, routing_key, content, persistent_key}).
+-record(basic_message, {exchange_name, routing_key, content, guid,
+                        is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
@@ -83,6 +84,7 @@
 -type(info_key() :: atom()).
 -type(info() :: {info_key(), any()}).
 -type(regexp() :: binary()).
+-type(file_path() :: string()).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: any()).
@@ -144,7 +146,8 @@
       #basic_message{exchange_name  :: exchange_name(),
                      routing_key    :: routing_key(),
                      content        :: content(),
-                     persistent_key :: maybe(pkey())}).
+                     guid           :: guid(),
+                     is_persistent  :: boolean()}).
 -type(message() :: basic_message()).
 -type(delivery() ::
       #delivery{mandatory :: boolean(),
@@ -154,7 +157,7 @@
                 message   :: message()}).
 %% this really should be an abstract type
 -type(msg_id() :: non_neg_integer()).
--type(msg() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
+-type(qmsg() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
 -type(listener() ::
       #listener{node     :: erlang_node(),
                 protocol :: atom(),
@@ -166,6 +169,7 @@
       #amqp_error{name        :: atom(),
                   explanation :: string(),
                   method      :: atom()}).
+
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -174,6 +178,9 @@
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
 
 -define(MAX_WAIT, 16#ffffffff).
+
+-define(HIBERNATE_AFTER_MIN,        1000).
+-define(DESIRED_HIBERNATE,         10000).
 
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).

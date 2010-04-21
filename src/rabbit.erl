@@ -51,40 +51,45 @@
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
-                    {enables,     kernel_ready}]}).
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({worker_pool,
+                   [{description, "worker pool"},
+                    {mfa,         {rabbit_sup, start_child, [worker_pool_sup]}},
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({external_infrastructure,
+                   [{description, "external infrastructure ready"}]}).
 
 -rabbit_boot_step({rabbit_exchange_type_registry,
                    [{description, "exchange type registry"},
                     {mfa,         {rabbit_sup, start_child,
                                    [rabbit_exchange_type_registry]}},
-                    {enables,     kernel_ready}]}).
+                    {enables,     kernel_ready},
+                    {requires,    external_infrastructure}]}).
 
 -rabbit_boot_step({rabbit_log,
                    [{description, "logging server"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_log]}},
-                    {enables,     kernel_ready}]}).
+                    {enables,     kernel_ready},
+                    {requires,    external_infrastructure}]}).
 
 -rabbit_boot_step({rabbit_hooks,
                    [{description, "internal event notification system"},
                     {mfa,         {rabbit_hooks, start, []}},
-                    {enables,     kernel_ready}]}).
+                    {enables,     kernel_ready},
+                    {requires,    external_infrastructure}]}).
 
 -rabbit_boot_step({kernel_ready,
-                   [{description, "kernel ready"}]}).
+                   [{description, "kernel ready"},
+                    {requires,    external_infrastructure}]}).
 
 -rabbit_boot_step({rabbit_alarm,
                    [{description, "alarm handler"},
                     {mfa,         {rabbit_alarm, start, []}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
-
--rabbit_boot_step({rabbit_amqqueue_sup,
-                   [{description, "queue supervisor"},
-                    {mfa,         {rabbit_amqqueue, start, []}},
-                    {requires,    kernel_ready},
-                    {enables,     core_initialized}]}).
-
 
 -rabbit_boot_step({delegate_sup,
                    [{description, "cluster delegate"},
@@ -98,7 +103,6 @@
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_node_monitor]}},
                     {requires,    kernel_ready},
-                    {requires,    rabbit_amqqueue_sup},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({core_initialized,
@@ -114,14 +118,15 @@
                     {mfa,         {rabbit_exchange, recover, []}},
                     {requires,    empty_db_check}]}).
 
--rabbit_boot_step({queue_recovery,
-                   [{description, "queue recovery"},
-                    {mfa,         {rabbit_amqqueue, recover, []}},
-                    {requires,    exchange_recovery}]}).
+-rabbit_boot_step({queue_sup_queue_recovery,
+                   [{description, "queue supervisor and queue recovery"},
+                    {mfa,         {rabbit_amqqueue, start, []}},
+                    {requires,    empty_db_check}]}).
 
 -rabbit_boot_step({persister,
-                   [{mfa,         {rabbit_sup, start_child, [rabbit_persister]}},
-                    {requires,    queue_recovery}]}).
+                   [{mfa,         {rabbit_sup, start_child,
+                                   [rabbit_persister]}},
+                    {requires,    queue_sup_queue_recovery}]}).
 
 -rabbit_boot_step({guid_generator,
                    [{description, "guid generator"},
