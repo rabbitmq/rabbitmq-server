@@ -232,7 +232,8 @@
                msg_store_clients     :: 'undefined' | {{any(), binary()}, {any(), binary()}},
                persistent_store      :: pid() | atom(),
                persistent_count      :: non_neg_integer(),
-               transient_threshold   :: non_neg_integer()
+               transient_threshold   :: non_neg_integer(),
+               pending_ack           :: dict()
               }).
 
 -spec(tx_commit_post_msg_store/5 ::
