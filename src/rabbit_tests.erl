@@ -54,9 +54,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
-    passed = test_msg_store(),
-    passed = test_queue_index(),
-    passed = test_variable_queue(),
+    passed = test_backing_queue(),
     passed = test_priority_queue(),
     passed = test_bpqueue(),
     passed = test_pg_local(),
@@ -993,6 +991,16 @@ bad_handle_hook(_, _, _) ->
     bad:bad().
 extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
     handle_hook(Hookname, Handler, {Args, Extra1, Extra2}).
+
+test_backing_queue() ->
+    case application:get_env(backing_queue_module) of
+        {ok, rabbit_variable_queue} ->
+            passed = test_msg_store(),
+            passed = test_queue_index(),
+            passed = test_variable_queue();
+        _ ->
+            passed
+    end.
 
 start_msg_store_empty() ->
     start_msg_store(fun (ok) -> finished end, ok).
