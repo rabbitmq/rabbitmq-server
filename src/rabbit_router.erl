@@ -110,9 +110,9 @@ lookup_qpids(Queues) ->
 
 %%--------------------------------------------------------------------
 
-fold_deliveries({ok,    true,  Pid}, {_, Handled}) -> {true, [Pid | Handled]};
-fold_deliveries({ok,    false, _},   {_, Handled}) -> {true, Handled};
-fold_deliveries({error, _,     _},   {Routed, Handled}) -> {Routed, Handled}.
+fold_deliveries({ok,    true,  Pid},{_,      Handled}) -> {true, [Pid|Handled]};
+fold_deliveries({ok,    false, _  },{_,      Handled}) -> {true, Handled};
+fold_deliveries({error, _    , _  },{Routed, Handled}) -> {Routed, Handled}.
 
 %% check_delivery(Mandatory, Immediate, {WasRouted, QPids})
 check_delivery(true, _   , {false, []}) -> {unroutable, []};

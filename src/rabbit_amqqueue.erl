@@ -324,9 +324,8 @@ basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid, LimiterPid,
                      infinity).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
-    ok = delegate:gs2_call(QPid,
-                                    {basic_cancel, ChPid, ConsumerTag, OkMsg},
-                                    infinity).
+    ok = delegate:gs2_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg},
+                           infinity).
 
 notify_sent(QPid, ChPid) ->
     delegate:gs2_pcast(QPid, 7, {notify_sent, ChPid}).
