@@ -93,7 +93,7 @@
 
 -rabbit_boot_step({delegate_sup,
                    [{description, "cluster delegate"},
-                    {mfa,         {rabbit_sup, start_restartable_child,
+                    {mfa,         {rabbit_sup, start_child,
                                    [delegate_sup]}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
