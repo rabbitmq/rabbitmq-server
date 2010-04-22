@@ -44,6 +44,25 @@
 
 %%----------------------------------------------------------------------------
 
+-ifdef(use_specs).
+
+-type(serverref() :: atom() | {atom(), atom()} | {'global', term()} | pid()).
+
+-spec(start_link/1 :: (non_neg_integer()) -> {'ok', pid()}).
+-spec(cast/2 :: (pid() | [pid()], fun((pid()) -> any())) -> 'ok').
+-spec(call/2 :: (pid() | [pid()], fun((pid()) -> A)) -> A).
+
+-spec(gs2_call/3 ::
+      (serverref(), any(), non_neg_integer() | 'infinity') -> any()).
+-spec(gs2_pcall/4 ::
+      (serverref(), number(), any(), non_neg_integer() | 'infinity') -> any()).
+-spec(gs2_cast/2 :: (serverref(), any()) -> 'ok').
+-spec(gs2_pcast/3 :: (serverref(), number(), any()) -> 'ok').
+
+-spec(server/1 :: (node() | non_neg_integer()) -> atom()).
+-spec(process_count/0 :: () -> non_neg_integer()).
+
+-endif.
 
 %%----------------------------------------------------------------------------
 
