@@ -137,9 +137,14 @@ safe_invoke(FPid, Pid) ->
 process_count(Node) ->
     case get({process_count, Node}) of
         undefined ->
-            Count = rpc:call(Node, delegate, process_count, []),
-            put({process_count, Node}, Count),
-            Count;
+            case rpc:call(Node, delegate, process_count, []) of
+                {badrpc, _} ->
+                    1; % Have to return something, if we're just casting then
+                       % we don't want to blow up
+                Count ->
+                    put({process_count, Node}, Count),
+                    Count
+            end;
         Count -> Count
     end.
 
