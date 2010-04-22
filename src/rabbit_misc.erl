@@ -43,6 +43,7 @@
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
+-export([start_cover/1]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
@@ -97,6 +98,7 @@
              undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> ok_or_error()).
+-spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
 -spec(enable_cover/1 :: (file_path()) -> ok_or_error()).
 -spec(report_cover/1 :: (file_path()) -> 'ok').
@@ -227,6 +229,10 @@ enable_cover(Root) ->
         {error,Reason} -> {error,Reason};
         _ -> ok
     end.
+
+start_cover(NodesS) ->
+    {ok, _} = cover:start([makenode(N) || N <- NodesS]),
+    ok.
 
 report_cover() ->
     report_cover(".").
