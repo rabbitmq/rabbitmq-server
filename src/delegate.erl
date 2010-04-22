@@ -121,10 +121,10 @@ delegate_per_node(NodePids, FPid, DelegateFun) ->
         || {Node, Pids} <- NodePids]).
 
 server() ->
-    server(erlang:phash(self(), ?DELEGATE_PROCESSES)).
+    server(erlang:phash2(self(), ?DELEGATE_PROCESSES)).
 
 server(Hash) ->
-    list_to_atom(string:concat("delegate_process_", integer_to_list(Hash))).
+    list_to_atom("delegate_process_" ++ integer_to_list(Hash)).
 
 safe_invoke(FPid, Pid) ->
     case catch FPid(Pid) of
