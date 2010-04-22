@@ -98,6 +98,7 @@
              undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> ok_or_error()).
+-spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
 -spec(enable_cover/1 :: (file_path()) -> ok_or_error()).
 -spec(report_cover/1 :: (file_path()) -> 'ok').
@@ -229,7 +230,9 @@ enable_cover(Root) ->
         _ -> ok
     end.
 
-start_cover(NodesS) -> {ok, _} = cover:start([makenode(N) || N <- NodesS]).
+start_cover(NodesS) ->
+    {ok, _} = cover:start([makenode(N) || N <- NodesS]),
+    ok.
 
 report_cover() ->
     report_cover(".").
