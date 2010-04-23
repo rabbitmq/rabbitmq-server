@@ -95,33 +95,36 @@ maybe_encode_properties(_ContentProperties, ContentPropertiesBin)
 maybe_encode_properties(ContentProperties, none) ->
     rabbit_framing:encode_properties(ContentProperties).
 
-build_content_frames(FragmentsRev, FrameMax, ChannelInt) ->
-    BodyPayloadMax = if
-                         FrameMax == 0 ->
-                             none;
-                         true ->
+build_content_frames(FragsRev, FrameMax, ChannelInt) ->
+    BodyPayloadMax = if FrameMax == 0 ->
+                             iolist_size(FragsRev);
+                        true ->
                              FrameMax - ?EMPTY_CONTENT_BODY_FRAME_SIZE
                      end,
-    build_content_frames(0, [], FragmentsRev, BodyPayloadMax, ChannelInt).
+    build_content_frames(0, [], BodyPayloadMax, [],
+                         lists:reverse(FragsRev), BodyPayloadMax, ChannelInt).
 
-build_content_frames(SizeAcc, FragmentAcc, [], _BodyPayloadMax, _ChannelInt) ->
-    {SizeAcc, FragmentAcc};
-build_content_frames(SizeAcc, FragmentAcc, [Fragment | FragmentsRev],
-                     BodyPayloadMax, ChannelInt)
-  when is_number(BodyPayloadMax) and (size(Fragment) > BodyPayloadMax) ->
-    <<Head:BodyPayloadMax/binary, Tail/binary>> = Fragment,
-    build_content_frames(SizeAcc, FragmentAcc, [Tail, Head | FragmentsRev],
-                         BodyPayloadMax, ChannelInt);
-build_content_frames(SizeAcc, FragmentAcc, [<<>> | FragmentsRev],
-                     BodyPayloadMax, ChannelInt) ->
-    build_content_frames(SizeAcc, FragmentAcc, FragmentsRev, BodyPayloadMax, ChannelInt);
-build_content_frames(SizeAcc, FragmentAcc, [Fragment | FragmentsRev],
-                     BodyPayloadMax, ChannelInt) ->
-    build_content_frames(SizeAcc + size(Fragment),
-                         [create_frame(3, ChannelInt, Fragment) | FragmentAcc],
-                         FragmentsRev,
-                         BodyPayloadMax,
-                         ChannelInt).
+build_content_frames(SizeAcc, FramesAcc, _FragSizeRem, [],
+                     [], _BodyPayloadMax, _ChannelInt) ->
+    {SizeAcc, lists:reverse(FramesAcc)};
+build_content_frames(SizeAcc, FramesAcc, FragSizeRem, FragAcc,
+                     Frags, BodyPayloadMax, ChannelInt)
+  when FragSizeRem == 0 orelse Frags == [] ->
+    Frame = create_frame(3, ChannelInt, lists:reverse(FragAcc)),
+    FrameSize = BodyPayloadMax - FragSizeRem,
+    build_content_frames(SizeAcc + FrameSize, [Frame | FramesAcc],
+                         BodyPayloadMax, [], Frags, BodyPayloadMax, ChannelInt);
+build_content_frames(SizeAcc, FramesAcc, FragSizeRem, FragAcc,
+                     [Frag | Frags], BodyPayloadMax, ChannelInt) ->
+    Size = size(Frag),
+    {NewFragSizeRem, NewFragAcc, NewFrags} =
+        case Size =< FragSizeRem of
+            true  -> {FragSizeRem - Size, [Frag | FragAcc], Frags};
+            false -> <<Head:FragSizeRem/binary, Tail/binary>> = Frag,
+                     {0, [Head | FragAcc], [Tail | Frags]}
+        end,
+    build_content_frames(SizeAcc, FramesAcc, NewFragSizeRem, NewFragAcc,
+                         NewFrags, BodyPayloadMax, ChannelInt).
 
 build_heartbeat_frame() ->
     create_frame(?FRAME_HEARTBEAT, 0, <<>>).
