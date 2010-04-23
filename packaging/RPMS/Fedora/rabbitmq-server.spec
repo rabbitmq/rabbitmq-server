@@ -13,7 +13,7 @@ Source4: rabbitmq-asroot-script-wrapper
 Source5: rabbitmq-server.ocf
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
-BuildRequires: erlang, python-simplejson
+BuildRequires: erlang, python-simplejson, xmlto, libxslt
 Requires: erlang, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
