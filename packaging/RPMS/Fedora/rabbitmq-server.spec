@@ -10,6 +10,7 @@ Source1: rabbitmq-server.init
 Source2: rabbitmq-script-wrapper
 Source3: rabbitmq-server.logrotate
 Source4: rabbitmq-asroot-script-wrapper
+Source5: rabbitmq-server.ocf
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
 BuildRequires: erlang, python-simplejson
@@ -29,6 +30,7 @@ scalable implementation of an AMQP broker.
 %define _rabbit_erllibdir %{_rabbit_libdir}/lib/rabbitmq_server-%{version}
 %define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
 %define _rabbit_asroot_wrapper %{_builddir}/`basename %{S:4}`
+%define _rabbit_server_ocf %{_builddir}/`basename %{S:5}`
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
 
@@ -38,6 +40,7 @@ scalable implementation of an AMQP broker.
 %build
 cp %{S:2} %{_rabbit_wrapper}
 cp %{S:4} %{_rabbit_asroot_wrapper}
+cp %{S:5} %{_rabbit_server_ocf}
 make %{?_smp_mflags}
 
 %install
@@ -57,6 +60,7 @@ install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-multi
 install -p -D -m 0755 %{_rabbit_asroot_wrapper} %{buildroot}%{_sbindir}/rabbitmq-activate-plugins
 install -p -D -m 0755 %{_rabbit_asroot_wrapper} %{buildroot}%{_sbindir}/rabbitmq-deactivate-plugins
+install -p -D -m 0755 %{_rabbit_server_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
