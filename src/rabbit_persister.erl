@@ -40,7 +40,7 @@
 
 -export([transaction/1, extend_transaction/2, dirty_work/1,
          commit_transaction/1, rollback_transaction/1,
-         force_snapshot/0, serial/0, fetch_content/1]).
+         force_snapshot/0, fetch_content/1]).
 
 -include("rabbit.hrl").
 
@@ -53,7 +53,7 @@
 
 -define(MAX_WRAP_ENTRIES, 500).
 
--define(PERSISTER_LOG_FORMAT_VERSION, {2, 5}).
+-define(PERSISTER_LOG_FORMAT_VERSION, {2, 6}).
 
 -record(pstate, {log_handle, entry_count, deadline,
                  pending_logs, pending_replies,
@@ -64,7 +64,7 @@
 %% the other maps a key to one or more queues.
 %% The aim is to reduce the overload of storing a message multiple times
 %% when it appears in several queues.
--record(psnapshot, {serial, transactions, messages, queues, next_seq_id}).
+-record(psnapshot, {transactions, messages, queues, next_seq_id}).
 
 %%----------------------------------------------------------------------------
 
@@ -84,7 +84,6 @@
 -spec(commit_transaction/1 :: ({txn(), queue_name()}) -> 'ok').
 -spec(rollback_transaction/1 :: ({txn(), queue_name()}) -> 'ok').
 -spec(force_snapshot/0 :: () -> 'ok').
--spec(serial/0 :: () -> non_neg_integer()).
 -spec(fetch_content/1 :: (queue_name()) -> [{message(), boolean()}]).
 
 -endif.
@@ -118,9 +117,6 @@ rollback_transaction(TxnKey) ->
 force_snapshot() ->
     gen_server:call(?SERVER, force_snapshot, infinity).
 
-serial() ->
-    gen_server:call(?SERVER, serial, infinity).
-
 fetch_content(QName) ->
     gen_server:call(?SERVER, {fetch_content, QName}, infinity).
 
@@ -130,8 +126,7 @@ init([DurableQueues]) ->
     process_flag(trap_exit, true),
     FileName = base_filename(),
     ok = filelib:ensure_dir(FileName),
-    Snapshot = #psnapshot{serial       = 0,
-                          transactions = dict:new(),
+    Snapshot = #psnapshot{transactions = dict:new(),
                           messages     = ets:new(messages, []),
                           queues       = ets:new(queues, []),
                           next_seq_id  = 0},
@@ -149,10 +144,8 @@ init([DurableQueues]) ->
                            [Recovered, Bad]),
                 LH
         end,
-    {Res, RecoveredContent, LoadedSnapshot} =
+    {Res, RecoveredContent, NewSnapshot} =
         internal_load_snapshot(LogHandle, DurableQueues, Snapshot),
-    NewSnapshot = LoadedSnapshot#psnapshot{
-                    serial = LoadedSnapshot#psnapshot.serial + 1},
     case Res of
         ok ->
             ok = take_snapshot(LogHandle, NewSnapshot);
@@ -176,9 +169,6 @@ handle_call({commit_transaction, TxnKey}, From, State) ->
     do_noreply(internal_commit(From, TxnKey, State));
 handle_call(force_snapshot, _From, State) ->
     do_reply(ok, flush(true, State));
-handle_call(serial, _From,
-            State = #pstate{snapshot = #psnapshot{serial = Serial}}) ->
-    do_reply(Serial, State);
 handle_call({fetch_content, QName}, _From, State =
                 #pstate{recovered_content = RC}) ->
     List = case dict:find(QName, RC) of
@@ -357,8 +347,7 @@ flush(ForceSnapshot, State = #pstate{pending_logs = PendingLogs,
                   pending_logs = [],
                   pending_replies = []}.
 
-current_snapshot(_Snapshot = #psnapshot{serial       = Serial,
-                                        transactions = Ts,
+current_snapshot(_Snapshot = #psnapshot{transactions = Ts,
                                         messages     = Messages,
                                         queues       = Queues,
                                         next_seq_id  = NextSeqId}) ->
@@ -368,8 +357,7 @@ current_snapshot(_Snapshot = #psnapshot{serial       = Serial,
                             fun ({{_QName, PKey}, _Delivered, _SeqId}, S) ->
                                     sets:add_element(PKey, S)
                             end, sets:new(), Queues)),
-    InnerSnapshot = {{serial, Serial},
-                     {txns, Ts},
+    InnerSnapshot = {{txns, Ts},
                      {messages, ets:tab2list(Messages)},
                      {queues, ets:tab2list(Queues)},
                      {next_seq_id, NextSeqId}},
@@ -397,13 +385,12 @@ internal_load_snapshot(LogHandle,
     {K, [Loaded_Snapshot | Items]} = disk_log:chunk(LogHandle, start),
     case check_version(Loaded_Snapshot) of
         {ok, StateBin} ->
-            {{serial, Serial}, {txns, Ts}, {messages, Ms}, {queues, Qs},
+            {{txns, Ts}, {messages, Ms}, {queues, Qs},
              {next_seq_id, NextSeqId}} = binary_to_term(StateBin),
             true = ets:insert(Messages, Ms),
             true = ets:insert(Queues, Qs),
             Snapshot1 = replay(Items, LogHandle, K,
                                Snapshot#psnapshot{
-                                 serial = Serial,
                                  transactions = Ts,
                                  next_seq_id = NextSeqId}),
             {RecoveredContent, Snapshot2} =
