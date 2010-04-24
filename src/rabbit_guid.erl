@@ -78,7 +78,7 @@ update_disk_serial() ->
     end,
     Serial.
 
-%% generate a guid that is monotonically increasing per process.
+%% generate a GUID.
 %%
 %% The id is only unique within a single cluster and as long as the
 %% serial store hasn't been deleted.
@@ -92,20 +92,18 @@ guid() ->
     %% A persisted serial number, in combination with self/0 (which
     %% includes the node name) uniquely identifies a process in space
     %% and time. We combine that with a process-local counter to give
-    %% us a GUID that is monotonically increasing per process.
+    %% us a GUID.
     G = case get(guid) of
             undefined -> {{gen_server:call(?SERVER, serial, infinity), self()},
                           0};
             {S, I}   -> {S, I+1}
         end,
     put(guid, G),
-    G.
+    erlang:md5(term_to_binary(G)).
 
-%% generate a readable string representation of a guid. Note that any
-%% monotonicity of the guid is not preserved in the encoding.
+%% generate a readable string representation of a GUID.
 string_guid(Prefix) ->
-    Prefix ++ "-" ++ base64:encode_to_string(
-                       erlang:md5(term_to_binary(guid()))).
+    Prefix ++ "-" ++ base64:encode_to_string(guid()).
 
 binstring_guid(Prefix) ->
     list_to_binary(string_guid(Prefix)).
