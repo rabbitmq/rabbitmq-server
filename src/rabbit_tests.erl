@@ -1002,7 +1002,7 @@ test_backing_queue() ->
             passed = test_msg_store(),
             passed = test_queue_index(),
             passed = test_variable_queue();
-        Other ->
+        _ ->
             passed
     end.
 
