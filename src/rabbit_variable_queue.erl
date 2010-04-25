@@ -1377,9 +1377,9 @@ maybe_deltas_to_betas(
                     maybe_deltas_to_betas(
                       State #vqstate {
                         delta = Delta #delta { start_seq_id = Delta1SeqId }});
-                _ ->
+                Q3aLen ->
                     Q3b = bpqueue:join(Q3, Q3a),
-                    case DeltaCount - bpqueue:len(Q3a) of
+                    case DeltaCount - Q3aLen of
                         0 ->
                             %% delta is now empty, but it wasn't
                             %% before, so can now join q2 onto q3

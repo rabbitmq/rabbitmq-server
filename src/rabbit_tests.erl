@@ -997,12 +997,12 @@ extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
     handle_hook(Hookname, Handler, {Args, Extra1, Extra2}).
 
 test_backing_queue() ->
-    case application:get_env(backing_queue_module) of
+    case application:get_env(rabbit, backing_queue_module) of
         {ok, rabbit_variable_queue} ->
             passed = test_msg_store(),
             passed = test_queue_index(),
             passed = test_variable_queue();
-        _ ->
+        Other ->
             passed
     end.
 
