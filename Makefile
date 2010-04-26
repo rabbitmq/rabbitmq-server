@@ -162,14 +162,13 @@ stop-node:
 
 # code coverage will be created for subdirectory "ebin" of COVER_DIR
 COVER_DIR=.
-SECONDARY_NODENAME=hare
 
 start-cover: all
 	echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL)
 	echo "rabbit_misc:enable_cover([\"$(COVER_DIR)\"])." | $(ERL_CALL)
 
-start-secondary-cover:
-	echo "rabbit_misc:enable_cover_node(\"$(SECONDARY_NODENAME)\")." | $(ERL_CALL)
+start-secondary-cover: all
+	echo "rabbit_misc:start_cover([\"hare\"])." | $(ERL_CALL)
 
 stop-cover: all
 	echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL)
