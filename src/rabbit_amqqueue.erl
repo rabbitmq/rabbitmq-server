@@ -144,30 +144,12 @@ find_durable_queues() ->
       end).
 
 recover_durable_queues(DurableQueues) ->
-    Qs = lists:foldl(
-           fun (RecoveredQ, Acc) ->
-                   Q = start_queue_process(RecoveredQ, false),
-                   %% We need to catch the case where a client
-                   %% connected to another node has deleted the queue
-                   %% (and possibly re-created it).
-                   case rabbit_misc:execute_mnesia_transaction(
-                          fun () ->
-                                  case mnesia:match_object(
-                                         rabbit_durable_queue, RecoveredQ,
-                                         read) of
-                                      [_] -> ok = store_queue(Q),
-                                             true;
-                                      []  -> false
-                                  end
-                          end) of
-                       true  -> [Q | Acc];
-                       false -> exit(Q#amqqueue.pid, shutdown),
-                                Acc
-                   end
-           end, [], DurableQueues),
+    Qs = [start_queue_process(Q, false) || Q <- DurableQueues],
     %% Issue inits to *all* the queues so that they all init at the same time
     [ok = gen_server2:cast(Q#amqqueue.pid, init_backing_queue) || Q <- Qs],
     [ok = gen_server2:call(Q#amqqueue.pid, sync, infinity) || Q <- Qs],
+    rabbit_misc:execute_mnesia_transaction(
+      fun () -> [ok = store_queue(Q) || Q <- Qs] end),
     Qs.
 
 declare(QueueName, Durable, AutoDelete, Args) ->
