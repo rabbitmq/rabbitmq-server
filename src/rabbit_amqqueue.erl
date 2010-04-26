@@ -144,7 +144,7 @@ find_durable_queues() ->
       end).
 
 recover_durable_queues(DurableQueues) ->
-    Qs = [start_queue_process(Q, false) || Q <- DurableQueues],
+    Qs = [start_queue_process(Q) || Q <- DurableQueues],
     %% Issue inits to *all* the queues so that they all init at the same time
     [ok = gen_server2:cast(Q#amqqueue.pid, init_backing_queue) || Q <- Qs],
     [ok = gen_server2:call(Q#amqqueue.pid, sync, infinity) || Q <- Qs],
@@ -157,7 +157,9 @@ declare(QueueName, Durable, AutoDelete, Args) ->
                                       durable = Durable,
                                       auto_delete = AutoDelete,
                                       arguments = Args,
-                                      pid = none}, true),
+                                      pid = none}),
+    ok = gen_server2:cast(Q#amqqueue.pid, init_backing_queue),
+    ok = gen_server2:call(Q#amqqueue.pid, sync, infinity),
     internal_declare(Q, true).
 
 internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
@@ -194,8 +196,8 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-start_queue_process(Q, InitBackingQueue) ->
-    {ok, Pid} = rabbit_amqqueue_sup:start_child([Q, InitBackingQueue]),
+start_queue_process(Q) ->
+    {ok, Pid} = rabbit_amqqueue_sup:start_child([Q]),
     Q#amqqueue{pid = Pid}.
 
 add_default_binding(#amqqueue{name = QueueName}) ->

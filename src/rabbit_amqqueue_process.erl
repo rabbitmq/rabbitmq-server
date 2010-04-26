@@ -39,7 +39,7 @@
 -define(SYNC_INTERVAL,                 5). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
--export([start_link/2, info_keys/0]).
+-export([start_link/1, info_keys/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1]).
@@ -94,14 +94,14 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q, InitBackingQueue) ->
-    gen_server2:start_link(?MODULE, [Q, InitBackingQueue], []).
+start_link(Q) ->
+    gen_server2:start_link(?MODULE, [Q], []).
 
 info_keys() -> ?INFO_KEYS.
 
 %%----------------------------------------------------------------------------
 
-init([Q, InitBQ]) ->
+init([Q]) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
     ok = file_handle_cache:register_callback(
@@ -115,19 +115,13 @@ init([Q, InitBQ]) ->
             exclusive_consumer = none,
             has_had_consumers = false,
             backing_queue = BQ,
-            backing_queue_state = maybe_init_backing_queue(InitBQ, BQ, Q),
+            backing_queue_state = undefined,
             backing_queue_timeout_fun = undefined,
             active_consumers = queue:new(),
             blocked_consumers = queue:new(),
             sync_timer_ref = undefined,
             rate_timer_ref = undefined}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
-
-maybe_init_backing_queue(
-  true, BQ, #amqqueue{name = QName, durable = IsDurable}) ->
-    BQ:init(QName, IsDurable);
-maybe_init_backing_queue(false, _BQ, _Q) ->
-    undefined.
 
 terminate(shutdown,      State) ->
     terminate_shutdown(terminate, State);
@@ -731,11 +725,10 @@ handle_call({claim_queue, ReaderPid}, _From,
 handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
     reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
-
-handle_cast(init_backing_queue, State = #q{backing_queue_state = undefined,
-                                           backing_queue = BQ, q = Q}) ->
-    noreply(State#q{backing_queue_state =
-                        maybe_init_backing_queue(true, BQ, Q)});
+handle_cast(init_backing_queue,
+            State = #q{q = #amqqueue{name = QName, durable = IsDurable},
+                       backing_queue_state = undefined, backing_queue = BQ}) ->
+    noreply(State#q{backing_queue_state = BQ:init(QName, IsDurable)});
 
 handle_cast(init_backing_queue, State) ->
     noreply(State);
