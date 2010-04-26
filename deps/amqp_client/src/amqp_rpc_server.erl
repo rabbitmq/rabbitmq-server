@@ -103,7 +103,7 @@ handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
                                mandatory = true},
     amqp_channel:call(Channel, Publish, #amqp_msg{props = Properties,
                                                   payload = Response}),
-    amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
+    amqp_channel:call(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
     {noreply, State}.
 
 %% @private
