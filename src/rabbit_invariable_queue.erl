@@ -62,11 +62,10 @@ start(DurableQueues) ->
     ok = rabbit_sup:start_child(rabbit_persister, [DurableQueues]).
 
 init(QName, IsDurable) ->
-    List = case IsDurable of
-               true  -> rabbit_persister:fetch_content(QName);
-               false -> []
-           end,
-    Q = queue:from_list(List),
+    Q = queue:from_list(case IsDurable of
+                            true  -> rabbit_persister:queue_content(QName);
+                            false -> []
+                        end),
     #iv_state { queue = Q, qname = QName, len = queue:len(Q),
                 pending_ack = dict:new() }.
 
