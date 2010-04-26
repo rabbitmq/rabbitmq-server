@@ -121,13 +121,14 @@ init([Q]) ->
             rate_timer_ref = undefined}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-terminate(shutdown,      State) ->
-    terminate_shutdown(terminate, State);
-terminate({shutdown, _}, State) ->
-    terminate_shutdown(terminate, State);
-terminate(_Reason,       State) ->
+terminate(shutdown,      State = #q{backing_queue = BQ}) ->
+    terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);
+terminate({shutdown, _}, State = #q{backing_queue = BQ}) ->
+    terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);
+terminate(_Reason,       State = #q{backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
-    State1 = terminate_shutdown(delete_and_terminate, State),
+    State1 = terminate_shutdown(fun (BQS) -> BQ:delete_and_terminate(BQS) end,
+                                State),
     ok = rabbit_amqqueue:internal_delete(qname(State1)).
 
 code_change(_OldVsn, State, _Extra) ->
@@ -148,7 +149,7 @@ terminate_shutdown(Fun, State = #q{backing_queue = BQ,
                                           BQ:tx_rollback(Txn, BQSN),
                                       BQSN1
                               end, BQS, all_ch_record()),
-                     State#q{backing_queue_state = BQ:Fun(BQS1)}
+                     State#q{backing_queue_state = Fun(BQS1)}
     end.
 
 reply(Reply, NewState) ->
