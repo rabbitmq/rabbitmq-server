@@ -36,8 +36,6 @@
 -behaviour(gen_server2).
 
 -define(UNSENT_MESSAGE_LIMIT, 100).
--define(HIBERNATE_AFTER_MIN, 1000).
--define(DESIRED_HIBERNATE, 10000).
 
 -export([start_link/1, info_keys/0]).
 
@@ -58,7 +56,7 @@
 
 -record(consumer, {tag, ack_required}).
 
--record(tx, {ch_pid, is_persistent, pending_messages, pending_acks}).
+-record(tx, {is_persistent, pending_messages, pending_acks}).
 
 %% These are held in our process dictionary
 -record(cr, {consumer_count,
@@ -374,7 +372,7 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
-persist_message(_Txn, _QName, #basic_message{persistent_key = none}) ->
+persist_message(_Txn, _QName, #basic_message{is_persistent = false}) ->
     ok;
 persist_message(Txn, QName, Message) ->
     M = Message#basic_message{
@@ -382,29 +380,28 @@ persist_message(Txn, QName, Message) ->
           content = rabbit_binary_parser:clear_decoded_content(
                       Message#basic_message.content)},
     persist_work(Txn, QName,
-                 [{publish, M, {QName, M#basic_message.persistent_key}}]).
+                 [{publish, M, {QName, M#basic_message.guid}}]).
 
 persist_delivery(_QName, _Message,
                  true) ->
     ok;
-persist_delivery(_QName, #basic_message{persistent_key = none},
+persist_delivery(_QName, #basic_message{is_persistent = false},
                  _IsDelivered) ->
     ok;
-persist_delivery(QName, #basic_message{persistent_key = PKey},
+persist_delivery(QName, #basic_message{guid = Guid},
                  _IsDelivered) ->
-    persist_work(none, QName, [{deliver, {QName, PKey}}]).
+    persist_work(none, QName, [{deliver, {QName, Guid}}]).
 
 persist_acks(Txn, QName, Messages) ->
     persist_work(Txn, QName,
-                 [{ack, {QName, PKey}} ||
-                     #basic_message{persistent_key = PKey} <- Messages,
-                     PKey =/= none]).
+                 [{ack, {QName, Guid}} || #basic_message{
+                    guid = Guid, is_persistent = true} <- Messages]).
 
-persist_auto_ack(_QName, #basic_message{persistent_key = none}) ->
+persist_auto_ack(_QName, #basic_message{is_persistent = false}) ->
     ok;
-persist_auto_ack(QName, #basic_message{persistent_key = PKey}) ->
+persist_auto_ack(QName, #basic_message{guid = Guid}) ->
     %% auto-acks are always non-transactional
-    rabbit_persister:dirty_work([{ack, {QName, PKey}}]).
+    rabbit_persister:dirty_work([{ack, {QName, Guid}}]).
 
 persist_work(_Txn,_QName, []) ->
     ok;
@@ -432,8 +429,7 @@ do_if_persistent(F, Txn, QName) ->
 
 lookup_tx(Txn) ->
     case get({txn, Txn}) of
-        undefined -> #tx{ch_pid = none,
-                         is_persistent = false,
+        undefined -> #tx{is_persistent = false,
                          pending_messages = [],
                          pending_acks = []};
         V -> V
@@ -462,26 +458,19 @@ is_tx_persistent(Txn) ->
 record_pending_message(Txn, ChPid, Message) ->
     Tx = #tx{pending_messages = Pending} = lookup_tx(Txn),
     record_current_channel_tx(ChPid, Txn),
-    store_tx(Txn, Tx#tx{pending_messages = [{Message, false} | Pending],
-                        ch_pid = ChPid}).
+    store_tx(Txn, Tx#tx{pending_messages = [{Message, false} | Pending]}).
 
 record_pending_acks(Txn, ChPid, MsgIds) ->
     Tx = #tx{pending_acks = Pending} = lookup_tx(Txn),
     record_current_channel_tx(ChPid, Txn),
-    store_tx(Txn, Tx#tx{pending_acks = [MsgIds | Pending],
-                        ch_pid = ChPid}).
+    store_tx(Txn, Tx#tx{pending_acks = [MsgIds | Pending]}).
 
-process_pending(Txn, State) ->
-    #tx{ch_pid = ChPid,
-        pending_messages = PendingMessages,
-        pending_acks = PendingAcks} = lookup_tx(Txn),
-    case lookup_ch(ChPid) of
-        not_found -> ok;
-        C = #cr{unacked_messages = UAM} ->
-            {_Acked, Remaining} =
-                collect_messages(lists:append(PendingAcks), UAM),
-            store_ch_record(C#cr{unacked_messages = Remaining})
-    end,
+process_pending(Txn, ChPid, State) ->
+    #tx{pending_messages = PendingMessages, pending_acks = PendingAcks} =
+        lookup_tx(Txn),
+    C = #cr{unacked_messages = UAM} = lookup_ch(ChPid),
+    {_Acked, Remaining} = collect_messages(lists:append(PendingAcks), UAM),
+    store_ch_record(C#cr{unacked_messages = Remaining}),
     deliver_or_enqueue_n(lists:reverse(PendingMessages), State).
 
 collect_messages(MsgIds, UAM) ->
@@ -590,12 +579,13 @@ handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
     {Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
-handle_call({commit, Txn}, From, State) ->
+handle_call({commit, Txn, ChPid}, From, State) ->
     ok = commit_work(Txn, qname(State)),
     %% optimisation: we reply straight away so the sender can continue
     gen_server2:reply(From, ok),
-    NewState = process_pending(Txn, State),
+    NewState = process_pending(Txn, ChPid, State),
     erase_tx(Txn),
+    record_current_channel_tx(ChPid, none),
     noreply(NewState);
 
 handle_call({notify_down, ChPid}, _From, State) ->
@@ -762,9 +752,10 @@ handle_cast({ack, Txn, MsgIds, ChPid}, State) ->
             noreply(State)
     end;
 
-handle_cast({rollback, Txn}, State) ->
+handle_cast({rollback, Txn, ChPid}, State) ->
     ok = rollback_work(Txn, qname(State)),
     erase_tx(Txn),
+    record_current_channel_tx(ChPid, none),
     noreply(State);
 
 handle_cast({redeliver, Messages}, State) ->

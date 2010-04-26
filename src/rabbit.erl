@@ -91,12 +91,6 @@
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
--rabbit_boot_step({rabbit_amqqueue_sup,
-                   [{description, "queue supervisor"},
-                    {mfa,         {rabbit_amqqueue, start, []}},
-                    {requires,    kernel_ready},
-                    {enables,     core_initialized}]}).
-
 -rabbit_boot_step({rabbit_router,
                    [{description, "cluster router"},
                     {mfa,         {rabbit_sup, start_restartable_child,
@@ -109,7 +103,6 @@
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_node_monitor]}},
                     {requires,    kernel_ready},
-                    {requires,    rabbit_amqqueue_sup},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({core_initialized,
@@ -125,14 +118,15 @@
                     {mfa,         {rabbit_exchange, recover, []}},
                     {requires,    empty_db_check}]}).
 
--rabbit_boot_step({queue_recovery,
-                   [{description, "queue recovery"},
-                    {mfa,         {rabbit_amqqueue, recover, []}},
-                    {requires,    exchange_recovery}]}).
+-rabbit_boot_step({queue_sup_queue_recovery,
+                   [{description, "queue supervisor and queue recovery"},
+                    {mfa,         {rabbit_amqqueue, start, []}},
+                    {requires,    empty_db_check}]}).
 
 -rabbit_boot_step({persister,
-                   [{mfa,         {rabbit_sup, start_child, [rabbit_persister]}},
-                    {requires,    queue_recovery}]}).
+                   [{mfa,         {rabbit_sup, start_child,
+                                   [rabbit_persister]}},
+                    {requires,    queue_sup_queue_recovery}]}).
 
 -rabbit_boot_step({guid_generator,
                    [{description, "guid generator"},

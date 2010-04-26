@@ -5,6 +5,7 @@ RABBITMQ_NODENAME ?= rabbit
 RABBITMQ_SERVER_START_ARGS ?=
 RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
+RABBITMQ_CONFIG_FILE ?= $(CURDIR)/rabbitmq
 
 DEPS_FILE=deps.mk
 SOURCE_DIR=src
@@ -130,6 +131,7 @@ run: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_ALLOW_INPUT=true \
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+		RABBITMQ_CONFIG_FILE="$(RABBITMQ_CONFIG_FILE)" \
 		./scripts/rabbitmq-server
 
 run-node: all
@@ -137,6 +139,7 @@ run-node: all
 		RABBITMQ_NODE_ONLY=true \
 		RABBITMQ_ALLOW_INPUT=true \
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+		RABBITMQ_CONFIG_FILE="$(RABBITMQ_CONFIG_FILE)" \
 		./scripts/rabbitmq-server
 
 run-tests: all
@@ -146,6 +149,7 @@ start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached" \
+		RABBITMQ_CONFIG_FILE="$(RABBITMQ_CONFIG_FILE)" \
 		./scripts/rabbitmq-server ; sleep 1
 
 start-rabbit-on-node: all
@@ -211,11 +215,11 @@ distclean: clean
 # generated but empty if we fail
 $(SOURCE_DIR)/%_usage.erl:
 	xsltproc --stringparam modulename "`basename $@ .erl`" \
-		$(DOCS_DIR)/usage.xsl $< > $@.tmp && \
-		sed -e s/\\\"/\\\\\\\"/g -e s/%QUOTE%/\\\"/g $@.tmp > $@.tmp2 && \
-		fold -s $@.tmp2 > $@.tmp3 && \
-		cp $@.tmp3 $@ && \
-		rm $@.tmp $@.tmp2 $@.tmp3
+		$(DOCS_DIR)/usage.xsl $< > $@.tmp
+	sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $@.tmp > $@.tmp2
+	fold -s $@.tmp2 > $@.tmp3
+	mv $@.tmp3 $@
+	rm $@.tmp $@.tmp2
 
 # We rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.

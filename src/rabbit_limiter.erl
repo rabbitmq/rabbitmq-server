@@ -249,10 +249,7 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
     State#lim{queues = NewQueues}.
 
 unlink_on_stopped(LimiterPid, stopped) ->
-    true = unlink(LimiterPid),
-    ok = receive {'EXIT', LimiterPid, _Reason} -> ok
-         after 0 -> ok
-         end,
+    ok = rabbit_misc:unlink_and_capture_exit(LimiterPid),
     stopped;
 unlink_on_stopped(_LimiterPid, Result) ->
     Result.

@@ -31,7 +31,7 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, recover/0, declare/5, delete/3, purge/1]).
+-export([start/0, declare/5, delete/3, purge/1]).
 -export([internal_declare/2, internal_delete/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
@@ -40,7 +40,7 @@
 -export([consumers/1, consumers_all/1]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
--export([commit_all/2, rollback_all/2, notify_down_all/2, limit_all/3]).
+-export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
 -import(mnesia).
@@ -62,7 +62,6 @@
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -spec(start/0 :: () -> 'ok').
--spec(recover/0 :: () -> 'ok').
 -spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(), maybe(pid())) ->
              amqqueue()).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
@@ -91,12 +90,12 @@
 -spec(redeliver/2 :: (pid(), [{message(), boolean()}]) -> 'ok').
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
--spec(commit_all/2 :: ([pid()], txn()) -> ok_or_errors()).
--spec(rollback_all/2 :: ([pid()], txn()) -> ok_or_errors()).
+-spec(commit_all/3 :: ([pid()], txn(), pid()) -> ok_or_errors()).
+-spec(rollback_all/3 :: ([pid()], txn(), pid()) -> ok_or_errors()).
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
-             {'ok', non_neg_integer(), msg()} | 'empty').
+             {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
       (amqqueue(), boolean(), pid(), pid() | 'undefined', ctag(),
        boolean(), any()) ->
@@ -116,26 +115,34 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    DurableQueues = find_durable_queues(),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
+    _RealDurableQueues = recover_durable_queues(DurableQueues),
     ok.
 
-recover() ->
-    ok = recover_durable_queues(),
-    ok.
+find_durable_queues() ->
+    Node = node(),
+    %% TODO: use dirty ops instead
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
+                                    <- mnesia:table(rabbit_durable_queue),
+                                node(Pid) == Node]))
+      end).
 
 shared_or_live_owner(none) ->
      true;
 shared_or_live_owner(Owner) when is_pid(Owner) ->
     rpc:call(node(Owner), erlang, is_process_alive, [Owner]).
 
-recover_durable_queues() ->
-    Node = node(),
-    lists:foreach(
-      fun (RecoveredQ = #amqqueue{ exclusive_owner = Owner }) ->
+recover_durable_queues(DurableQueues) ->
+    lists:foldl(
+      fun (RecoveredQ = #amqqueue{ exclusive_owner = Owner },
+           Acc) ->
               %% We need to catch the case where a client connected to
               %% another node has deleted the queue (and possibly
               %% re-created it).
@@ -151,29 +158,23 @@ recover_durable_queues() ->
                   end,
               case shared_or_live_owner(Owner) of
                   true ->
-                      Q = start_queue_process(RecoveredQ), 
+                      Q = start_queue_process(RecoveredQ),
                       case DoIfSameQueue(fun () -> store_queue(Q) end) of
-                          {true, ok}  -> ok;
-                          false       -> exit(Q#amqqueue.pid, shutdown)
+                          {true, ok}  -> [Q | Acc];
+                          false       -> exit(Q#amqqueue.pid, shutdown),
+                                         Acc
                       end;
                   false ->
                       case DoIfSameQueue(
-                             fun () -> 
+                             fun () ->
                                      internal_delete2(RecoveredQ#amqqueue.name)
                              end) of
                           {true, Hook} -> Hook();
                           false        -> ok
-                      end
+                      end,
+                      Acc
               end
-      end,
-      %% TODO: use dirty ops instead
-      rabbit_misc:execute_mnesia_transaction(
-        fun () ->
-                qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
-                                        <- mnesia:table(rabbit_durable_queue),
-                                  node(Pid) == Node]))
-        end)),
-    ok.
+      end, [], DurableQueues).
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
@@ -219,7 +220,7 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok.
 
 start_queue_process(Q) ->
-    {ok, Pid} = supervisor:start_child(rabbit_amqqueue_sup, [Q]),
+    {ok, Pid} = rabbit_amqqueue_sup:start_child([Q]),
     Q#amqqueue{pid = Pid}.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
@@ -305,16 +306,16 @@ requeue(QPid, MsgIds, ChPid) ->
 ack(QPid, Txn, MsgIds, ChPid) ->
     gen_server2:pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
 
-commit_all(QPids, Txn) ->
+commit_all(QPids, Txn, ChPid) ->
     safe_pmap_ok(
       fun (QPid) -> exit({queue_disappeared, QPid}) end,
-      fun (QPid) -> gen_server2:call(QPid, {commit, Txn}, infinity) end,
+      fun (QPid) -> gen_server2:call(QPid, {commit, Txn, ChPid}, infinity) end,
       QPids).
 
-rollback_all(QPids, Txn) ->
+rollback_all(QPids, Txn, ChPid) ->
     safe_pmap_ok(
       fun (QPid) -> exit({queue_disappeared, QPid}) end,
-      fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn}) end,
+      fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end,
       QPids).
 
 notify_down_all(QPids, ChPid) ->
