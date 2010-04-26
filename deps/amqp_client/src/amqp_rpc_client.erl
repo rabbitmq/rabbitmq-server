@@ -165,7 +165,7 @@ handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
             State = #rpc_c_state{continuations = Conts, channel = Channel}) ->
     From = dict:fetch(Id, Conts),
     gen_server:reply(From, Payload),
-    amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
+    amqp_channel:call(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
     {noreply, State#rpc_c_state{continuations = dict:erase(Id, Conts) }}.
 
 %% @private
