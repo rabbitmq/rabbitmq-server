@@ -128,7 +128,6 @@ terminate(shutdown,      State) ->
 terminate({shutdown, _}, State) ->
     terminate_shutdown(terminate, State);
 terminate(_Reason,       State) ->
-    ok = rabbit_memory_monitor:deregister(self()),
     %% FIXME: How do we cancel active subscriptions?
     State1 = terminate_shutdown(delete_and_terminate, State),
     ok = rabbit_amqqueue:internal_delete(qname(State1)).
