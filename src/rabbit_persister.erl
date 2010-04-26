@@ -49,10 +49,6 @@
 -define(LOG_BUNDLE_DELAY, 5).
 -define(COMPLETE_BUNDLE_DELAY, 2).
 
--define(HIBERNATE_AFTER, 10000).
-
--define(MAX_WRAP_ENTRIES, 500).
-
 -define(PERSISTER_LOG_FORMAT_VERSION, {2, 6}).
 
 -record(pstate, {log_handle, entry_count, deadline,
@@ -272,12 +268,15 @@ take_snapshot_and_save_old(LogHandle, Snapshot) ->
 
 maybe_take_snapshot(Force, State = #pstate{entry_count = EntryCount,
                                            log_handle = LH,
-                                           snapshot = Snapshot})
-  when Force orelse EntryCount >= ?MAX_WRAP_ENTRIES ->
-    ok = take_snapshot(LH, Snapshot),
-    State#pstate{entry_count = 0};
-maybe_take_snapshot(_Force, State) ->
-    State.
+                                           snapshot = Snapshot}) ->
+    {ok, MaxWrapEntries} = application:get_env(persister_max_wrap_entries),
+    if
+        Force orelse EntryCount >= MaxWrapEntries ->
+            ok = take_snapshot(LH, Snapshot),
+            State#pstate{entry_count = 0};
+        true ->
+            State
+    end.
 
 later_ms(DeltaMilliSec) ->
     {MegaSec, Sec, MicroSec} = now(),
@@ -294,7 +293,8 @@ compute_deadline(_TimerDelay, ExistingDeadline) ->
     ExistingDeadline.
 
 compute_timeout(infinity) ->
-    ?HIBERNATE_AFTER;
+    {ok, HibernateAfter} = application:get_env(persister_hibernate_after),
+    HibernateAfter;
 compute_timeout(Deadline) ->
     DeltaMilliSec = time_diff(Deadline, now()) * 1000.0,
     if
