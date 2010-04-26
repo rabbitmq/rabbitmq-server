@@ -98,7 +98,7 @@
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({rabbit_memory_monitor,
-                   [{description, "memory moniter"},
+                   [{description, "memory monitor"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_memory_monitor]}},
                     {requires,    rabbit_alarm},
