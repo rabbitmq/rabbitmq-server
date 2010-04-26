@@ -607,9 +607,9 @@ process_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue,
             Debug, Msg) ->
     case Msg of
 	{system, From, Req} ->
-	    sys:handle_system_msg
-              (Req, From, Parent, ?MODULE, Debug,
-               [Name, State, Mod, Time, TimeoutState, Queue]);
+	    sys:handle_system_msg(
+              Req, From, Parent, ?MODULE, Debug,
+              [Name, State, Mod, Time, TimeoutState, Queue]);
         %% gen_server puts Hib on the end as the 7th arg, but that
         %% version of the function seems not to be documented so
         %% leaving out for now.
