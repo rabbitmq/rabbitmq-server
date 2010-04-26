@@ -23,7 +23,7 @@ checksums \
     sha1 @sha1@ \
     rmd160 @rmd160@
 
-depends_build   port:erlang
+depends_build   port:erlang port:xmlto port:libxslt
 depends_run     port:erlang
 
 platform darwin 7 {
