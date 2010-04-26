@@ -106,8 +106,6 @@ init([Q]) ->
     process_flag(trap_exit, true),
     ok = file_handle_cache:register_callback(
            rabbit_amqqueue, set_maximum_since_use, [self()]),
-    ok = rabbit_memory_monitor:register
-           (self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
     {ok, BQ} = application:get_env(backing_queue_module),
 
     {ok, #q{q = Q,
@@ -139,10 +137,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate_shutdown(Fun, State = #q{backing_queue = BQ,
                                    backing_queue_state = BQS}) ->
-    ok = rabbit_memory_monitor:deregister(self()),
     case BQS of
         undefined -> State;
-        _         -> BQS1 = lists:foldl(
+        _         -> ok = rabbit_memory_monitor:deregister(self()),
+                     BQS1 = lists:foldl(
                               fun (#cr{txn = none}, BQSN) ->
                                       BQSN;
                                   (#cr{txn = Txn}, BQSN) ->
@@ -726,6 +724,8 @@ handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
 handle_cast(init_backing_queue,
             State = #q{q = #amqqueue{name = QName, durable = IsDurable},
                        backing_queue = BQ, backing_queue_state = undefined}) ->
+    ok = rabbit_memory_monitor:register(
+           self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
     noreply(State#q{backing_queue_state = BQ:init(QName, IsDurable)});
 
 handle_cast(init_backing_queue, State) ->
@@ -850,6 +850,8 @@ handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
 
+handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->
+    {hibernate, State};
 handle_pre_hibernate(State = #q{backing_queue = BQ,
                                 backing_queue_state = BQS}) ->
     BQS1 = BQ:handle_pre_hibernate(BQS),
