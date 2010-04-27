@@ -85,7 +85,6 @@
 -type(info() :: {info_key(), any()}).
 -type(regexp() :: binary()).
 -type(file_path() :: string()).
--type(io_device() :: any()).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(guid() :: binary()).

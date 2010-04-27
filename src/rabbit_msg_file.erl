@@ -51,6 +51,7 @@
 
 -ifdef(use_specs).
 
+-type(io_device() :: any()).
 -type(position() :: non_neg_integer()).
 -type(msg_size() :: non_neg_integer()).
 -type(file_size() :: non_neg_integer()).
