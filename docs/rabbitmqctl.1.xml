@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.docbook.org/xml/4.5/docbookx.dtd">
-<!-- 
+<!--
  There is some extra magic in this document besides the usual DocBook semantics
- to allow us to derive manpages, HTML and usage messages from the same source 
+ to allow us to derive manpages, HTML and usage messages from the same source
  document.
 
  Examples need to be moved to the end for man pages. To this end, <para>s and
- <screen>s with role="example" will be moved, and with role="example-prefix" 
+ <screen>s with role="example" will be moved, and with role="example-prefix"
  will be removed.
 
  The usage messages are more involved. We have some magic in usage.xsl to pull
  out the command synopsis, global option and subcommand synopses. We also pull
  out <para>s with role="usage".
 
- Finally we construct lists of possible values for subcommand options, if the 
+ Finally we construct lists of possible values for subcommand options, if the
  subcommand's <varlistentry> has role="usage-has-option-list". The option which
  takes the values should be marked with role="usage-option-list".
 -->
@@ -664,7 +664,7 @@
             <para>
               The <command>queueinfoitem</command> parameter is used to indicate which queue
               information items to include in the results. The column order in the
-              results will match the order of the parameters. 
+              results will match the order of the parameters.
               <command>queueinfoitem</command> can take any value from the list
               that follows:
             </para>
@@ -759,7 +759,7 @@
             <para>
               The <command>exchangeinfoitem</command> parameter is used to indicate which
               exchange information items to include in the results. The column order in the
-              results will match the order of the parameters. 
+              results will match the order of the parameters.
               <command>exchangeinfoitem</command> can take any value from the list
               that follows:
             </para>
@@ -788,7 +788,7 @@
               </varlistentry>
             </variablelist>
             <para>
-              If no <command>exchangeinfoitem</command>s are specified then 
+              If no <command>exchangeinfoitem</command>s are specified then
               exchange name and type are displayed.
             </para>
             <para role="example-prefix">
@@ -830,7 +830,7 @@
             <para>
               The <command>connectioninfoitem</command> parameter is used to indicate
               which connection information items to include in the results. The
-              column order in the results will match the order of the parameters. 
+              column order in the results will match the order of the parameters.
               <command>connectioninfoitem</command> can take any value from the list
               that follows:
             </para>
