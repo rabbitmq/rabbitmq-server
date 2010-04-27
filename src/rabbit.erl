@@ -47,7 +47,8 @@
                    [{description, "codec correctness check"},
                     {mfa,         {rabbit_binary_generator,
                                    check_empty_content_body_frame_size,
-                                   []}}]}).
+                                   []}},
+                    {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
@@ -65,21 +66,21 @@
                    [{description, "exchange type registry"},
                     {mfa,         {rabbit_sup, start_child,
                                    [rabbit_exchange_type_registry]}},
-                    {enables,     kernel_ready},
-                    {requires,    external_infrastructure}]}).
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_log,
                    [{description, "logging server"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_log]}},
-                    {enables,     kernel_ready},
-                    {requires,    external_infrastructure}]}).
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_hooks,
                    [{description, "internal event notification system"},
                     {mfa,         {rabbit_hooks, start, []}},
-                    {enables,     kernel_ready},
-                    {requires,    external_infrastructure}]}).
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({kernel_ready,
                    [{description, "kernel ready"},
@@ -113,17 +114,20 @@
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({core_initialized,
-                   [{description, "core initialized"}]}).
+                   [{description, "core initialized"},
+                    {requires,    kernel_ready}]}).
 
 -rabbit_boot_step({empty_db_check,
                    [{description, "empty DB check"},
                     {mfa,         {?MODULE, maybe_insert_default_data, []}},
-                    {requires,    core_initialized}]}).
+                    {requires,    core_initialized},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({exchange_recovery,
                    [{description, "exchange recovery"},
                     {mfa,         {rabbit_exchange, recover, []}},
-                    {requires,    empty_db_check}]}).
+                    {requires,    empty_db_check},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({queue_sup_queue_recovery,
                    [{description, "queue supervisor and queue recovery"},
@@ -132,12 +136,14 @@
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({routing_ready,
-                   [{description, "message delivery logic ready"}]}).
+                   [{description, "message delivery logic ready"},
+                    {requires,    core_initialized}]}).
 
 -rabbit_boot_step({log_relay,
                    [{description, "error log relay"},
                     {mfa,         {rabbit_error_logger, boot, []}},
-                    {requires,    routing_ready}]}).
+                    {requires,    routing_ready},
+                    {enables,     networking}]}).
 
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
