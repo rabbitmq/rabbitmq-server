@@ -24,7 +24,7 @@
             <command>rabbitmq-deactivate-plugins</command>
         </cmdsynopsis>
     </refsynopsisdiv>
-    
+
     <refsect1>
         <title>Description</title>
         <para>
