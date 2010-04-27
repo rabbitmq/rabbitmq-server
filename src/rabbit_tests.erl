@@ -859,11 +859,8 @@ test_delegates_async(SecondaryNode) ->
 
 make_responder(FMsg) ->
     fun() ->
-        receive
-            Msg ->
-                FMsg(Msg)
-        after 100 ->
-            throw(timeout)
+        receive Msg -> FMsg(Msg)
+        after 100 -> throw(timeout)
         end
     end.
 
@@ -883,9 +880,7 @@ await_response(Count) ->
     end.
 
 test_delegates_sync(SecondaryNode) ->
-    Sender = fun(Pid) ->
-        gen_server2:call(Pid, invoked)
-    end,
+    Sender = fun(Pid) -> gen_server2:call(Pid, invoked) end,
 
     Responder = make_responder(fun({'$gen_call', From, invoked}) ->
                                    gen_server2:reply(From, response)

@@ -94,10 +94,6 @@ call(Pid, FPid) when is_pid(Pid) ->
 call(Pids, FPid) when is_list(Pids) ->
     call_per_node(split_delegate_per_node(Pids), FPid).
 
-internal_call(Node, Thunk) when is_atom(Node) ->
-    gen_server2:call({server(Node), Node}, {thunk, Thunk}, infinity).
-
-
 cast(Pid, FPid) when is_pid(Pid) ->
     cast_per_node([{node(Pid), [Pid]}], FPid),
     ok;
@@ -106,20 +102,23 @@ cast(Pids, FPid) when is_list(Pids) ->
     cast_per_node(split_delegate_per_node(Pids),  FPid),
     ok.
 
+%%----------------------------------------------------------------------------
+
+internal_call(Node, Thunk) when is_atom(Node) ->
+    gen_server2:call({server(Node), Node}, {thunk, Thunk}, infinity).
+
 internal_cast(Node, Thunk) when is_atom(Node) ->
     gen_server2:cast({server(Node), Node}, {thunk, Thunk}).
 
-%%----------------------------------------------------------------------------
-
 split_delegate_per_node(Pids) ->
     orddict:to_list(
-        lists:foldl(
-          fun (Pid, D) ->
-                  orddict:update(node(Pid),
-                              fun (Pids1) -> [Pid | Pids1] end,
-                              [Pid], D)
-          end,
-          orddict:new(), Pids)).
+      lists:foldl(
+        fun (Pid, D) ->
+                orddict:update(node(Pid),
+                               fun (Pids1) -> [Pid | Pids1] end,
+                               [Pid], D)
+        end,
+        orddict:new(), Pids)).
 
 call_per_node([{Node, Pids}], FPid) when Node == node() ->
     local_delegate(Pids, FPid);
