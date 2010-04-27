@@ -92,7 +92,7 @@
 start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
 info_keys() -> ?INFO_KEYS.
-    
+
 %%----------------------------------------------------------------------------
 
 init(Q) ->
@@ -102,11 +102,13 @@ init(Q) ->
             exclusive_consumer = none,
             has_had_consumers = false,
             next_msg_id = 1,
-            message_buffer = queue:new(),
+            message_buffer = undefined,
             active_consumers = queue:new(),
             blocked_consumers = queue:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
+terminate(_Reason, #q{message_buffer = undefined}) ->
+    ok;
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
     QName = qname(State),
@@ -541,6 +543,9 @@ i(Item, _) ->
 
 %---------------------------------------------------------------------------
 
+handle_call(sync, _From, State) ->
+    reply(ok, State);
+
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
 
@@ -748,6 +753,15 @@ handle_call({claim_queue, ReaderPid}, _From,
             reply(locked, State)
     end.
 
+handle_cast({init, Recover}, State = #q{message_buffer = undefined}) ->
+    Messages = case Recover of
+                   true  -> rabbit_persister:queue_content(qname(State));
+                   false -> []
+               end,
+    noreply(State#q{message_buffer = queue:from_list(Messages)});
+handle_cast(init, State) ->
+    noreply(State);
+
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     {_Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
@@ -774,9 +788,6 @@ handle_cast({rollback, Txn, ChPid}, State) ->
     erase_tx(Txn),
     record_current_channel_tx(ChPid, none),
     noreply(State);
-
-handle_cast({redeliver, Messages}, State) ->
-    noreply(deliver_or_enqueue_n(Messages, State));
 
 handle_cast({requeue, MsgIds, ChPid}, State) ->
     case lookup_ch(ChPid) of
