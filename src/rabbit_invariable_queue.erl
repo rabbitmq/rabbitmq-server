@@ -154,8 +154,8 @@ tx_commit(Txn, Fun, State = #iv_state { qname = QName, pending_ack = PA,
     Fun(),
     AckTags1 = lists:flatten(AckTags),
     PA1 = remove_acks(AckTags1, PA),
-    {Q1, Len1} = lists:foldr(fun (Msg, {QN, LenN}) ->
-                                     {queue:in({Msg, false}, QN), LenN + 1}
+    {Q1, Len1} = lists:foldl(fun (Msg, {QN, LenN}) ->
+                                     {queue:in_r({Msg, false}, QN), LenN + 1}
                              end, {Q, Len}, PubsRev),
     {AckTags1, State #iv_state { pending_ack = PA1, queue = Q1, len = Len1 }}.
 
@@ -170,12 +170,12 @@ requeue(AckTags, State = #iv_state { pending_ack = PA, queue = Q,
     %% messages should appear, thus the persister is permitted to sort
     %% based on seq_id, even though it'll likely give a different
     %% order to the last known state of our queue, prior to shutdown.
-    {Q1, PA1, Len1} =
-        lists:foldl(
-          fun (Guid, {QN, PAN, LenN}) ->
-                  {ok, Msg = #basic_message {}} = dict:find(Guid, PAN),
-                  {queue:in({Msg, true}, QN), dict:erase(Guid, PAN), LenN + 1}
-          end, {Q, PA, Len}, AckTags),
+    {Q1, Len1} = lists:foldl(
+                   fun (Guid, {QN, LenN}) ->
+                           {ok, Msg = #basic_message {}} = dict:find(Guid, PA),
+                           {queue:in({Msg, true}, QN), LenN + 1}
+                   end, {Q, Len}, AckTags),
+    PA1 = remove_acks(AckTags, PA),
     State #iv_state { pending_ack = PA1, queue = Q1, len = Len1 }.
 
 len(#iv_state { len = Len }) ->
