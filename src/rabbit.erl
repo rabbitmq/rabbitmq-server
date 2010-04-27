@@ -128,12 +128,8 @@
 -rabbit_boot_step({queue_sup_queue_recovery,
                    [{description, "queue supervisor and queue recovery"},
                     {mfa,         {rabbit_amqqueue, start, []}},
-                    {requires,    empty_db_check}]}).
-
--rabbit_boot_step({persister,
-                   [{mfa,         {rabbit_sup, start_child,
-                                   [rabbit_persister]}},
-                    {requires,    queue_sup_queue_recovery}]}).
+                    {requires,    empty_db_check},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"}]}).

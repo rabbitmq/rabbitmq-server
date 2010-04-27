@@ -35,7 +35,7 @@
 -export([internal_declare/2, internal_delete/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
-         stat/1, stat_all/0, deliver/2, redeliver/2, requeue/3, ack/4]).
+         stat/1, stat_all/0, deliver/2, requeue/3, ack/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1]).
 -export([claim_queue/2]).
@@ -88,7 +88,6 @@
                                             {'error', 'not_empty'}).
 -spec(purge/1 :: (amqqueue()) -> qlen()).
 -spec(deliver/2 :: (pid(), delivery()) -> boolean()).
--spec(redeliver/2 :: (pid(), [{message(), boolean()}]) -> 'ok').
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
 -spec(commit_all/3 :: ([pid()], txn(), pid()) -> ok_or_errors()).
@@ -118,6 +117,9 @@
 
 start() ->
     DurableQueues = find_durable_queues(),
+    ok = rabbit_sup:start_child(
+           rabbit_persister,
+           [[QName || #amqqueue{name = QName} <- DurableQueues]]),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,
@@ -137,27 +139,13 @@ find_durable_queues() ->
       end).
 
 recover_durable_queues(DurableQueues) ->
-    lists:foldl(
-      fun (RecoveredQ, Acc) ->
-              Q = start_queue_process(RecoveredQ),
-              %% We need to catch the case where a client connected to
-              %% another node has deleted the queue (and possibly
-              %% re-created it).
-              case rabbit_misc:execute_mnesia_transaction(
-                     fun () ->
-                             case mnesia:match_object(
-                                    rabbit_durable_queue, RecoveredQ,
-                                    read) of
-                                 [_] -> ok = store_queue(Q),
-                                        true;
-                                 []  -> false
-                             end
-                     end) of
-                  true  -> [Q | Acc];
-                  false -> exit(Q#amqqueue.pid, shutdown),
-                           Acc
-              end
-      end, [], DurableQueues).
+    Qs = [start_queue_process(Q) || Q <- DurableQueues],
+    %% Issue inits to *all* the queues so that they all init at the same time
+    [ok = gen_server2:cast(Q#amqqueue.pid, {init, true}) || Q <- Qs],
+    [ok = gen_server2:call(Q#amqqueue.pid, sync, infinity) || Q <- Qs],
+    rabbit_misc:execute_mnesia_transaction(
+      fun () -> [ok = store_queue(Q) || Q <- Qs] end),
+    Qs.
 
 declare(QueueName, Durable, AutoDelete, Args) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
@@ -165,6 +153,8 @@ declare(QueueName, Durable, AutoDelete, Args) ->
                                       auto_delete = AutoDelete,
                                       arguments = Args,
                                       pid = none}),
+    ok = gen_server2:cast(Q#amqqueue.pid, {init, false}),
+    ok = gen_server2:call(Q#amqqueue.pid, sync, infinity),
     internal_declare(Q, true).
 
 internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
@@ -278,9 +268,6 @@ deliver(QPid, #delivery{mandatory = true,
 deliver(QPid, #delivery{txn = Txn, sender = ChPid, message = Message}) ->
     gen_server2:cast(QPid, {deliver, Txn, Message, ChPid}),
     true.
-
-redeliver(QPid, Messages) ->
-    gen_server2:cast(QPid, {redeliver, Messages}).
 
 requeue(QPid, MsgIds, ChPid) ->
     gen_server2:cast(QPid, {requeue, MsgIds, ChPid}).
