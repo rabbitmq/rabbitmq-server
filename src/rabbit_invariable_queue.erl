@@ -154,8 +154,8 @@ tx_commit(Txn, Fun, State = #iv_state { qname = QName, pending_ack = PA,
     Fun(),
     AckTags1 = lists:flatten(AckTags),
     PA1 = remove_acks(AckTags1, PA),
-    {Q1, Len1} = lists:foldl(fun (Msg, {QN, LenN}) ->
-                                     {queue:in_r({Msg, false}, QN), LenN + 1}
+    {Q1, Len1} = lists:foldr(fun (Msg, {QN, LenN}) ->
+                                     {queue:in({Msg, false}, QN), LenN + 1}
                              end, {Q, Len}, PubsRev),
     {AckTags1, State #iv_state { pending_ack = PA1, queue = Q1, len = Len1 }}.
 
