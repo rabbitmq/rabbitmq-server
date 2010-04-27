@@ -759,7 +759,7 @@ handle_cast({init, Recover}, State = #q{message_buffer = undefined}) ->
                    false -> []
                end,
     noreply(State#q{message_buffer = queue:from_list(Messages)});
-handle_cast(init, State) ->
+handle_cast({init, _Recover}, State) ->
     noreply(State);
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
