@@ -55,7 +55,7 @@ indented)
 
   <term>
     <cmdsynopsis>
-      <command>list_connections</command> 
+      <command>list_connections</command>
       <arg choice="opt">
       <replaceable>connectioninfoitem</replaceable>
        ...
@@ -66,7 +66,7 @@ indented)
  However, while DocBook renders this sensibly for HTML, for some reason it
  doen't show anything inside <cmdsynopsis> at all for man pages. I think what
  we're doing is semantically correct so this is a bug in DocBook. The following
- rules essentially do what DocBook does when <cmdsynopsis> is not inside a 
+ rules essentially do what DocBook does when <cmdsynopsis> is not inside a
  <term>.
 -->
 
