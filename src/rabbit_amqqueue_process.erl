@@ -729,9 +729,6 @@ handle_cast({init, Recover},
            self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
     noreply(State#q{backing_queue_state = BQ:init(QName, IsDurable, Recover)});
 
-handle_cast({init, _Recover}, State) ->
-    noreply(State);
-
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     {_Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
