@@ -34,7 +34,7 @@
         ('empty'|{basic_message(), boolean(), ack(), non_neg_integer()})).
 
 -spec(start/1 :: ([queue_name()]) -> 'ok').
--spec(init/2 :: (queue_name(), boolean()) -> state()).
+-spec(init/3 :: (queue_name(), boolean(), boolean()) -> state()).
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
 -spec(purge/1 :: (state()) -> {non_neg_integer(), state()}).

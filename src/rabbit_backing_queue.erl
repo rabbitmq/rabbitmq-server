@@ -42,9 +42,10 @@ behaviour_info(callbacks) ->
      %% shared resources.
      {start, 1},
 
-     %% Called with queue name and a boolean to indicate whether or
-     %% not the queue is durable.
-     {init, 2},
+     %% Called with queue name, a boolean to indicate whether or
+     %% not the queue is durable, and a boolean to indicate whether
+     %% the queue contents should be attempted to be recovered.
+     {init, 3},
 
      %% Called on queue shutdown when queue isn't being deleted
      {terminate, 1},

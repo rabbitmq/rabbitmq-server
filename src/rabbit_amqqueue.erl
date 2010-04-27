@@ -146,7 +146,7 @@ find_durable_queues() ->
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
     %% Issue inits to *all* the queues so that they all init at the same time
-    [ok = gen_server2:cast(Q#amqqueue.pid, init_backing_queue) || Q <- Qs],
+    [ok = gen_server2:cast(Q#amqqueue.pid, {init, true}) || Q <- Qs],
     [ok = gen_server2:call(Q#amqqueue.pid, sync, infinity) || Q <- Qs],
     rabbit_misc:execute_mnesia_transaction(
       fun () -> [ok = store_queue(Q) || Q <- Qs] end),
@@ -158,7 +158,7 @@ declare(QueueName, Durable, AutoDelete, Args) ->
                                       auto_delete = AutoDelete,
                                       arguments = Args,
                                       pid = none}),
-    ok = gen_server2:cast(Q#amqqueue.pid, init_backing_queue),
+    ok = gen_server2:cast(Q#amqqueue.pid, {init, false}),
     ok = gen_server2:call(Q#amqqueue.pid, sync, infinity),
     internal_declare(Q, true).
 

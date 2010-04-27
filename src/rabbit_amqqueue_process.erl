@@ -722,14 +722,14 @@ handle_call({claim_queue, ReaderPid}, _From,
 handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
     reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
-handle_cast(init_backing_queue,
+handle_cast({init, Recover},
             State = #q{q = #amqqueue{name = QName, durable = IsDurable},
                        backing_queue = BQ, backing_queue_state = undefined}) ->
     ok = rabbit_memory_monitor:register(
            self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
-    noreply(State#q{backing_queue_state = BQ:init(QName, IsDurable)});
+    noreply(State#q{backing_queue_state = BQ:init(QName, IsDurable, Recover)});
 
-handle_cast(init_backing_queue, State) ->
+handle_cast({init, _Recover}, State) ->
     noreply(State);
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->

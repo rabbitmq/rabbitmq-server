@@ -31,7 +31,7 @@
 
 -module(rabbit_invariable_queue).
 
--export([init/2, terminate/1, delete_and_terminate/1, purge/1, publish/2,
+-export([init/3, terminate/1, delete_and_terminate/1, purge/1, publish/2,
          publish_delivered/3, fetch/2, ack/2, tx_publish/3, tx_ack/3,
          tx_rollback/2, tx_commit/3, requeue/2, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1, sync_callback/1,
@@ -61,8 +61,8 @@
 start(DurableQueues) ->
     ok = rabbit_sup:start_child(rabbit_persister, [DurableQueues]).
 
-init(QName, IsDurable) ->
-    Q = queue:from_list(case IsDurable of
+init(QName, IsDurable, Recover) ->
+    Q = queue:from_list(case IsDurable andalso Recover of
                             true  -> rabbit_persister:queue_content(QName);
                             false -> []
                         end),

@@ -31,7 +31,7 @@
 
 -module(rabbit_variable_queue).
 
--export([init/2, terminate/1, publish/2, publish_delivered/3,
+-export([init/3, terminate/1, publish/2, publish_delivered/3,
          set_ram_duration_target/2, ram_duration/1, fetch/2, ack/2, len/1,
          is_empty/1, purge/1, delete_and_terminate/1, requeue/2, tx_publish/3,
          tx_ack/3, tx_rollback/2, tx_commit/3, sync_callback/1,
@@ -266,7 +266,7 @@ start(DurableQueues) ->
                                 [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
                                  PersistRefs, PersistStartFunState]).
 
-init(QueueName, IsDurable) ->
+init(QueueName, IsDurable, _Recover) ->
     PersistentStore = case IsDurable of
                           true  -> ?PERSISTENT_MSG_STORE;
                           false -> ?TRANSIENT_MSG_STORE
