@@ -255,12 +255,11 @@ persist_delivery(QName, #basic_message { guid = Guid }, _IsDelivered) ->
 
 persist_acks(Txn, QName, AckTags, PA) ->
     persist_work(Txn, QName,
-                 [{ack, {QName, Guid}} ||
-                     Guid <- AckTags,
-                     case dict:find(Guid, PA) of
-                         {ok, #basic_message { is_persistent = true }} -> true;
-                         _ -> false
-                     end]).
+                 [{ack, {QName, Guid}} || Guid <- AckTags,
+                                          begin
+                                              {ok, Msg} = dict:find(Guid, PA),
+                                              Msg #basic_message.is_persistent
+                                          end]).
 
 persist_work(_Txn,_QName, []) ->
     ok;
