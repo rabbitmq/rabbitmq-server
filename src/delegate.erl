@@ -142,6 +142,9 @@ server(Hash) ->
     list_to_atom("delegate_process_" ++ integer_to_list(Hash)).
 
 safe_invoke(FPid, Pid) ->
+    % We need the catch here for the local case. In the remote case there will
+    % already have been a catch in handle_ca{ll,st} below, but that's OK, catch
+    % is idempotent.
     case catch FPid(Pid) of
         {'EXIT', Reason} ->
             {error, {'EXIT', Reason}, Pid};
@@ -158,7 +161,7 @@ init([]) ->
     {ok, no_state}.
 
 handle_call({thunk, Thunk}, _From, State) ->
-   {reply, Thunk(), State}.
+   {reply, catch Thunk(), State}.
 
 handle_cast({thunk, Thunk}, State) ->
     catch Thunk(),
