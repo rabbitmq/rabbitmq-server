@@ -715,26 +715,13 @@
                 <listitem><para>Number of messages delivered to clients but not yet acknowledged.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>messages_uncommitted</term>
-                <listitem><para>Number of messages published in as yet uncommitted transactions</para></listitem>
-              </varlistentry>
-              <varlistentry>
                 <term>messages</term>
-                <listitem><para>Sum of ready, unacknowledged and uncommitted messages
+                <listitem><para>Sum of ready and unacknowledged messages
                   (queue depth).</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>acks_uncommitted</term>
-                <listitem><para>Number of acknowledgements received in as yet uncommitted
-                  transactions.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>consumers</term>
                 <listitem><para>Number of consumers.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>transactions</term>
-                <listitem><para>Number of transactions.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>memory</term>

@@ -80,11 +80,8 @@
          exclusive_consumer_tag,
          messages_ready,
          messages_unacknowledged,
-         messages_uncommitted,
          messages,
-         acks_uncommitted,
          consumers,
-         transactions,
          memory]).
 
 %%----------------------------------------------------------------------------
@@ -445,9 +442,6 @@ store_tx(Txn, Tx) ->
 erase_tx(Txn) ->
     erase({txn, Txn}).
 
-all_tx_record() ->
-    [T || {{txn, _}, T} <- get()].
-
 all_tx() ->
     [Txn || {{txn, Txn}, _} <- get()].
 
@@ -521,20 +515,11 @@ i(messages_ready, #q{message_buffer = MessageBuffer}) ->
 i(messages_unacknowledged, _) ->
     lists:sum([dict:size(UAM) ||
                   #cr{unacked_messages = UAM} <- all_ch_record()]);
-i(messages_uncommitted, _) ->
-    lists:sum([length(Pending) ||
-                  #tx{pending_messages = Pending} <- all_tx_record()]);
 i(messages, State) ->
     lists:sum([i(Item, State) || Item <- [messages_ready,
-                                          messages_unacknowledged,
-                                          messages_uncommitted]]);
-i(acks_uncommitted, _) ->
-    lists:sum([length(Pending) ||
-                  #tx{pending_acks = Pending} <- all_tx_record()]);
+                                          messages_unacknowledged]]);
 i(consumers, State) ->
     queue:len(State#q.active_consumers) + queue:len(State#q.blocked_consumers);
-i(transactions, _) ->
-    length(all_tx_record());
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
