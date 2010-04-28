@@ -860,7 +860,7 @@ test_delegates_async(SecondaryNode) ->
 make_responder(FMsg) ->
     fun() ->
         receive Msg -> FMsg(Msg)
-        after 100 -> throw(timeout)
+        after 1000 -> throw(timeout)
         end
     end.
 
@@ -874,16 +874,16 @@ await_response(Count) ->
     receive
         response -> ok,
         await_response(Count - 1)
-    after 100 ->
+    after 1000 ->
         io:format("Async reply not received~n"),
         throw(timeout)
     end.
 
 test_delegates_sync(SecondaryNode) ->
-    Sender = fun(Pid) -> gen_server2:call(Pid, invoked) end,
+    Sender = fun(Pid) -> gen_server:call(Pid, invoked) end,
 
     Responder = make_responder(fun({'$gen_call', From, invoked}) ->
-                                   gen_server2:reply(From, response)
+                                   gen_server:reply(From, response)
                                end),
 
     BadResponder = make_responder(fun({'$gen_call', _From, invoked}) ->
@@ -902,12 +902,10 @@ test_delegates_sync(SecondaryNode) ->
     RemoteBadPids = spawn_responders(SecondaryNode, BadResponder, 2),
 
     GoodRes = delegate:call(LocalGoodPids ++ RemoteGoodPids, Sender),
-    [{ok, response, _}, {ok, response, _},
-     {ok, response, _}, {ok, response, _}] = GoodRes,
-
     BadRes = delegate:call(LocalBadPids ++ RemoteBadPids, Sender),
-    [{error, _, _}, {error, _, _},
-     {error, _, _}, {error, _, _}] = BadRes,
+
+    true = lists:all(fun ({ok, response, _}) -> true end, GoodRes),
+    true = lists:all(fun ({error, _, _}) -> true end, BadRes),
 
     GoodResPids = [Pid || {_, _, Pid} <- GoodRes],
     BadResPids = [Pid || {_, _, Pid} <- BadRes],
