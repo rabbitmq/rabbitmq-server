@@ -87,7 +87,6 @@
          messages_unacknowledged,
          messages,
          consumers,
-         transactions,
          memory,
          backing_queue_status
         ]).
@@ -508,8 +507,6 @@ i(messages, State) ->
                                           messages_unacknowledged]]);
 i(consumers, State) ->
     queue:len(State#q.active_consumers) + queue:len(State#q.blocked_consumers);
-i(transactions, _) ->
-    length([ok || #cr{txn = Txn} <- all_ch_record(), Txn =/= none]);
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
