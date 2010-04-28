@@ -139,7 +139,20 @@ delegate_per_node(NodePids, FPid, DelegateFun) ->
         || {Node, Pids} <- NodePids]).
 
 server(Node) when is_atom(Node) ->
-    server(erlang:phash2(self(), process_count(Node)));
+    case get({delegate_server_name, Node}) of
+        undefined ->
+            case rpc:call(Node, delegate, process_count, []) of
+                {badrpc, _} ->
+                    delegate_process_1; % Have to return something, if we're
+                                        % just casting then we don't want to
+                                        % blow up
+                Count ->
+                    Name = server(erlang:phash2(self(), Count)),
+                    put({delegate_server_name, Node}, Name),
+                    Name
+            end;
+        Name -> Name
+    end;
 
 server(Hash) ->
     list_to_atom("delegate_process_" ++ integer_to_list(Hash)).
@@ -150,20 +163,6 @@ safe_invoke(FPid, Pid) ->
             {error, {'EXIT', Reason}, Pid};
         Result ->
             {ok, Result, Pid}
-    end.
-
-process_count(Node) ->
-    case get({process_count, Node}) of
-        undefined ->
-            case rpc:call(Node, delegate, process_count, []) of
-                {badrpc, _} ->
-                    1; % Have to return something, if we're just casting then
-                       % we don't want to blow up
-                Count ->
-                    put({process_count, Node}, Count),
-                    Count
-            end;
-        Count -> Count
     end.
 
 process_count() ->
