@@ -56,7 +56,7 @@ start_link() ->
 
 init(_Args) ->
     {ok, {{one_for_one, 10, 10},
-        [{delegate:server(Hash), {delegate, start_link, [Hash]},
+        [{Hash, {delegate, start_link, [Hash]},
           transient, 16#ffffffff, worker, [delegate]} ||
                 Hash <- lists:seq(0, delegate:process_count() - 1)]}}.
 

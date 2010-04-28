@@ -34,8 +34,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, invoke_async/2, invoke/2,
-         server/1, process_count/0]).
+-export([start_link/1, invoke_async/2, invoke/2, process_count/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
