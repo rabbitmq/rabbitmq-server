@@ -382,7 +382,7 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments) ->
                    if Q#amqqueue.durable and not(X#exchange.durable) ->
                            {error, durability_settings_incompatible};
                       true ->
-                           case mnesia:read(rabbit_route, B) of
+                           case mnesia:read({rabbit_route, B}) of
                                [] ->
                                    sync_binding(B, Q#amqqueue.durable,
                                                 fun mnesia:write/3),
