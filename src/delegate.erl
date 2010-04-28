@@ -112,18 +112,18 @@ local_delegate(Pids, FPid) ->
 
 delegate_per_node(NodePids, FPid, DelegateFun) ->
     Self = self(),
-    [spawn(fun() ->
-        Self ! {result, DelegateFun(Node,
+    [spawn(
+       fun() -> Self ! {result,
+                        DelegateFun(Node,
                                     fun() -> local_delegate(Pids, FPid) end)}
-    end) || {Node, Pids} <- NodePids],
+       end) || {Node, Pids} <- NodePids],
     gather_results([], length(NodePids)).
 
 gather_results(ResultsAcc, 0) ->
     ResultsAcc;
-
 gather_results(ResultsAcc, ToGo) ->
-    receive {result, Result} ->
-        gather_results([Result | ResultsAcc], ToGo - 1)
+    receive
+        {result, Result} -> gather_results([Result | ResultsAcc], ToGo - 1)
     end.
 
 server(Node) when is_atom(Node) ->
