@@ -93,14 +93,13 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) ->
-    gen_server2:start_link(?MODULE, [Q], []).
+start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
 info_keys() -> ?INFO_KEYS.
 
 %%----------------------------------------------------------------------------
 
-init([Q]) ->
+init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
     ok = file_handle_cache:register_callback(
