@@ -91,6 +91,13 @@
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
+-rabbit_boot_step({guid_generator,
+                   [{description, "guid generator"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_guid]}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
 -rabbit_boot_step({rabbit_router,
                    [{description, "cluster router"},
                     {mfa,         {rabbit_sup, start_restartable_child,
@@ -127,13 +134,6 @@
                    [{mfa,         {rabbit_sup, start_child,
                                    [rabbit_persister]}},
                     {requires,    queue_sup_queue_recovery}]}).
-
--rabbit_boot_step({guid_generator,
-                   [{description, "guid generator"},
-                    {mfa,         {rabbit_sup, start_restartable_child,
-                                   [rabbit_guid]}},
-                    {requires,    persister},
-                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"}]}).
