@@ -35,8 +35,6 @@
 -behaviour(gen_server2).
 
 -export([start_link/1, invoke_async/2, invoke/2,
-         gs2_call/3, gs2_pcall/4,
-         gs2_cast/2, gs2_pcast/3,
          server/1, process_count/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -52,13 +50,6 @@
 -spec(invoke_async/2 :: (pid() | [pid()], fun((pid()) -> any())) -> 'ok').
 -spec(invoke/2 :: (pid() | [pid()], fun((pid()) -> A)) -> A).
 
--spec(gs2_call/3 ::
-      (serverref(), any(), non_neg_integer() | 'infinity') -> any()).
--spec(gs2_pcall/4 ::
-      (serverref(), number(), any(), non_neg_integer() | 'infinity') -> any()).
--spec(gs2_cast/2 :: (serverref(), any()) -> 'ok').
--spec(gs2_pcast/3 :: (serverref(), number(), any()) -> 'ok').
-
 -spec(server/1 :: (node() | non_neg_integer()) -> atom()).
 -spec(process_count/0 :: () -> non_neg_integer()).
 
@@ -69,23 +60,6 @@
 start_link(Hash) ->
     gen_server2:start_link({local, server(Hash)},
                            ?MODULE, [], []).
-
-gs2_call(Pid, Msg, Timeout) ->
-    {_Status, Res} =
-        invoke(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end),
-    Res.
-
-gs2_pcall(Pid, Pri, Msg, Timeout) ->
-    {_Status, Res} =
-        invoke(Pid, fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end),
-    Res.
-
-gs2_cast(Pid, Msg) ->
-    invoke_async(Pid, fun(P) -> gen_server2:cast(P, Msg) end).
-
-gs2_pcast(Pid, Pri, Msg) ->
-    invoke_async(Pid, fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
-
 
 invoke(Pid, FPid) when is_pid(Pid) ->
     [{Status, Res, _}] = invoke_per_node([{node(Pid), [Pid]}], FPid),
