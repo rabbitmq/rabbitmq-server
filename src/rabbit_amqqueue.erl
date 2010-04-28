@@ -283,7 +283,7 @@ commit_all(QPids, Txn, ChPid) ->
       QPids).
 
 rollback_all(QPids, Txn, ChPid) ->
-    delegate:cast(QPids,
+    delegate:invoke_async(QPids,
         fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end).
 
 notify_down_all(QPids, ChPid) ->
@@ -295,7 +295,7 @@ notify_down_all(QPids, ChPid) ->
       QPids).
 
 limit_all(QPids, ChPid, LimiterPid) ->
-    delegate:cast(QPids,
+    delegate:invoke_async(QPids,
         fun (QPid) -> gen_server2:cast(QPid, {limit, ChPid, LimiterPid}) end).
 
 claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
@@ -321,7 +321,7 @@ unblock(QPid, ChPid) ->
     delegate:gs2_pcast(QPid, 7, {unblock, ChPid}).
 
 flush_all(QPids, ChPid) ->
-    delegate:cast(QPids,
+    delegate:invoke_async(QPids,
         fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
 
 internal_delete(QueueName) ->
@@ -369,7 +369,7 @@ pseudo_queue(QueueName, Pid) ->
               pid = Pid}.
 
 safe_delegate_call_ok(H, F, Pids) ->
-    case [R || R = {error, _, _} <- delegate:call(
+    case [R || R = {error, _, _} <- delegate:invoke(
                                       Pids,
                                       fun (Pid) ->
                                               rabbit_misc:with_exit_handler(

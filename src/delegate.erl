@@ -34,7 +34,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, cast/2, call/2,
+-export([start_link/1, invoke_async/2, invoke/2,
          gs2_call/3, gs2_pcall/4,
          gs2_cast/2, gs2_pcast/3,
          server/1, process_count/0]).
@@ -49,8 +49,8 @@
 -type(serverref() :: atom() | {atom(), atom()} | {'global', term()} | pid()).
 
 -spec(start_link/1 :: (non_neg_integer()) -> {'ok', pid()}).
--spec(cast/2 :: (pid() | [pid()], fun((pid()) -> any())) -> 'ok').
--spec(call/2 :: (pid() | [pid()], fun((pid()) -> A)) -> A).
+-spec(invoke_async/2 :: (pid() | [pid()], fun((pid()) -> any())) -> 'ok').
+-spec(invoke/2 :: (pid() | [pid()], fun((pid()) -> A)) -> A).
 
 -spec(gs2_call/3 ::
       (serverref(), any(), non_neg_integer() | 'infinity') -> any()).
@@ -72,34 +72,34 @@ start_link(Hash) ->
 
 gs2_call(Pid, Msg, Timeout) ->
     {_Status, Res} =
-        call(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end),
+        invoke(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end),
     Res.
 
 gs2_pcall(Pid, Pri, Msg, Timeout) ->
     {_Status, Res} =
-        call(Pid, fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end),
+        invoke(Pid, fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end),
     Res.
 
 gs2_cast(Pid, Msg) ->
-    cast(Pid, fun(P) -> gen_server2:cast(P, Msg) end).
+    invoke_async(Pid, fun(P) -> gen_server2:cast(P, Msg) end).
 
 gs2_pcast(Pid, Pri, Msg) ->
-    cast(Pid, fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
+    invoke_async(Pid, fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
 
 
-call(Pid, FPid) when is_pid(Pid) ->
-    [{Status, Res, _}] = call_per_node([{node(Pid), [Pid]}], FPid),
+invoke(Pid, FPid) when is_pid(Pid) ->
+    [{Status, Res, _}] = invoke_per_node([{node(Pid), [Pid]}], FPid),
     {Status, Res};
 
-call(Pids, FPid) when is_list(Pids) ->
-    call_per_node(split_delegate_per_node(Pids), FPid).
+invoke(Pids, FPid) when is_list(Pids) ->
+    invoke_per_node(split_delegate_per_node(Pids), FPid).
 
-cast(Pid, FPid) when is_pid(Pid) ->
-    cast_per_node([{node(Pid), [Pid]}], FPid),
+invoke_async(Pid, FPid) when is_pid(Pid) ->
+    invoke_async_per_node([{node(Pid), [Pid]}], FPid),
     ok;
 
-cast(Pids, FPid) when is_list(Pids) ->
-    cast_per_node(split_delegate_per_node(Pids),  FPid),
+invoke_async(Pids, FPid) when is_list(Pids) ->
+    invoke_async_per_node(split_delegate_per_node(Pids),  FPid),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -120,14 +120,14 @@ split_delegate_per_node(Pids) ->
         end,
         orddict:new(), Pids)).
 
-call_per_node([{Node, Pids}], FPid) when Node == node() ->
+invoke_per_node([{Node, Pids}], FPid) when Node == node() ->
     local_delegate(Pids, FPid);
-call_per_node(NodePids, FPid) ->
+invoke_per_node(NodePids, FPid) ->
     delegate_per_node(NodePids, FPid, fun internal_call/2).
 
-cast_per_node([{Node, Pids}], FPid) when Node == node() ->
+invoke_async_per_node([{Node, Pids}], FPid) when Node == node() ->
     local_delegate(Pids, FPid);
-cast_per_node(NodePids, FPid) ->
+invoke_async_per_node(NodePids, FPid) ->
     delegate_per_node(NodePids, FPid, fun internal_cast/2).
 
 local_delegate(Pids, FPid) ->

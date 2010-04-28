@@ -56,12 +56,12 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
     %% therefore safe to use a fire-and-forget cast here and return
     %% the QPids - the semantics is preserved. This scales much better
     %% than the non-immediate case below.
-    delegate:cast(QPids,
+    delegate:invoke_async(QPids,
                   fun(Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     {routed, QPids};
 
 deliver(QPids, Delivery) ->
-    Res = delegate:call(QPids,
+    Res = delegate:invoke(QPids,
                         fun(Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     {Routed, Handled} = lists:foldl(fun fold_deliveries/2, {false, []}, Res),
     check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,

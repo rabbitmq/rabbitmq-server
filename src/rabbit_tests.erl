@@ -846,13 +846,13 @@ test_delegates_async(SecondaryNode) ->
 
     Responder = make_responder(fun({invoked, Pid}) -> Pid ! response end),
 
-    ok = delegate:cast(spawn(Responder), Sender),
-    ok = delegate:cast(spawn(SecondaryNode, Responder), Sender),
+    ok = delegate:invoke_async(spawn(Responder), Sender),
+    ok = delegate:invoke_async(spawn(SecondaryNode, Responder), Sender),
     await_response(2),
 
     LocalPids = spawn_responders(node(), Responder, 10),
     RemotePids = spawn_responders(SecondaryNode, Responder, 10),
-    ok = delegate:cast(LocalPids ++ RemotePids, Sender),
+    ok = delegate:invoke_async(LocalPids ++ RemotePids, Sender),
     await_response(20),
 
     passed.
@@ -890,19 +890,19 @@ test_delegates_sync(SecondaryNode) ->
                                       throw(exception)
                                   end),
 
-    {ok, response} = delegate:call(spawn(Responder), Sender),
-    {ok, response} = delegate:call(spawn(SecondaryNode, Responder), Sender),
+    {ok, response} = delegate:invoke(spawn(Responder), Sender),
+    {ok, response} = delegate:invoke(spawn(SecondaryNode, Responder), Sender),
 
-    {error, _} = delegate:call(spawn(BadResponder), Sender),
-    {error, _} = delegate:call(spawn(SecondaryNode, BadResponder), Sender),
+    {error, _} = delegate:invoke(spawn(BadResponder), Sender),
+    {error, _} = delegate:invoke(spawn(SecondaryNode, BadResponder), Sender),
 
     LocalGoodPids = spawn_responders(node(), Responder, 2),
     RemoteGoodPids = spawn_responders(SecondaryNode, Responder, 2),
     LocalBadPids = spawn_responders(node(), BadResponder, 2),
     RemoteBadPids = spawn_responders(SecondaryNode, BadResponder, 2),
 
-    GoodRes = delegate:call(LocalGoodPids ++ RemoteGoodPids, Sender),
-    BadRes = delegate:call(LocalBadPids ++ RemoteBadPids, Sender),
+    GoodRes = delegate:invoke(LocalGoodPids ++ RemoteGoodPids, Sender),
+    BadRes = delegate:invoke(LocalBadPids ++ RemoteBadPids, Sender),
 
     true = lists:all(fun ({ok, response, _}) -> true end, GoodRes),
     true = lists:all(fun ({error, _, _}) -> true end, BadRes),
