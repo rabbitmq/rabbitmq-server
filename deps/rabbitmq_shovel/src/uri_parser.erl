@@ -73,7 +73,7 @@ parse_uri_rest(PathQueryFrag, _Bool) ->
 
 parse_authority(Authority) ->
     {UserInfo, HostPort} = split_uri(Authority, "@", {"", Authority}),
-    UserInfoSplit = case inets_regexp:split(UserInfo, ":") of
+    UserInfoSplit = case regexp:split(UserInfo, ":") of
                         {ok, [""]} -> [];
                         {ok, UIS } -> UIS
                     end,
@@ -94,7 +94,7 @@ parse_host_port(HostPort) ->
                     end].
 
 split_query(Query) ->
-    case inets_regexp:split(Query, "&") of
+    case regexp:split(Query, "&") of
         {ok, [""]}    -> [];
         {ok, QParams} -> [split_uri(Param, "=", Param) || Param <- QParams]
     end.
@@ -103,7 +103,7 @@ split_uri(UriPart, SplitChar, NoMatchResult) ->
     split_uri(UriPart, SplitChar, NoMatchResult, 1, 1).
 
 split_uri(UriPart, SplitChar, NoMatchResult, SkipLeft, SkipRight) ->
-    case inets_regexp:first_match(UriPart, SplitChar) of
+    case regexp:first_match(UriPart, SplitChar) of
 	{match, Match, _} ->
 	    {string:substr(UriPart, 1, Match - SkipLeft),
 	     string:substr(UriPart, Match + SkipRight, length(UriPart))};
