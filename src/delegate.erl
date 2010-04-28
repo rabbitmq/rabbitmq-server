@@ -98,6 +98,11 @@ invoke_per_node(NodePids, FPid) ->
     lists:append(delegate_per_node(NodePids, FPid, fun internal_call/2)).
 
 invoke_async_per_node([{Node, Pids}], FPid) when Node == node() ->
+    % This is not actually async! However, in practice FPid will always be
+    % something that does a gen_server:cast or similar, so I don't think
+    % it's a problem unless someone misuses this function. Making this
+    % *actually* async would be painful as we can't spawn at this point or we
+    % break effect ordering.
     local_delegate(Pids, FPid);
 invoke_async_per_node(NodePids, FPid) ->
     delegate_per_node(NodePids, FPid, fun internal_cast/2),
