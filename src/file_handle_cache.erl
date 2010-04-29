@@ -449,7 +449,7 @@ is_writer(Mode) -> lists:member(write, Mode).
 
 append_to_write(Mode) ->
     case lists:member(append, Mode) of
-        true  -> [write | lists:subtract(Mode, [append, write])];
+        true  -> [write | Mode -- [append, write]];
         false -> Mode
     end.
 
@@ -505,6 +505,11 @@ get_or_reopen(Ref) ->
             {ok, Handle}
     end.
 
+put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
+    Now = now(),
+    age_tree_update(Then, Now, Ref),
+    put({Ref, fhc_handle}, Handle #handle { last_used_at = Now }).
+
 with_age_tree(Fun) ->
     put(fhc_age_tree, Fun(case get(fhc_age_tree) of
                               undefined -> gb_trees:empty();
@@ -552,11 +557,6 @@ age_tree_change() ->
               Tree
       end).
 
-put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
-    Now = now(),
-    age_tree_update(Then, Now, Ref),
-    put({Ref, fhc_handle}, Handle #handle { last_used_at = Now }).
-
 open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
     Mode1 = case NewOrReopen of
                 new    -> Mode;
@@ -599,21 +599,18 @@ close1(Ref, Handle, SoftOrHard) ->
         {ok, #handle { hdl = Hdl, offset = Offset, is_dirty = IsDirty,
                        path = Path, is_read = IsReader, is_write = IsWriter,
                        last_used_at = Then } = Handle1 } ->
-            Handle2 =
-                case Hdl of
-                    closed ->
-                        Handle1;
-                    _ ->
-                        ok = case IsDirty of
-                                 true  -> file:sync(Hdl);
-                                 false -> ok
-                             end,
-                        ok = file:close(Hdl),
-                        age_tree_delete(Then),
-                        Handle1 #handle { hdl = closed,
-                                          trusted_offset = Offset,
-                                          is_dirty = false }
-                end,
+            Handle2 = case Hdl of
+                          closed -> Handle1;
+                          _      -> ok = case IsDirty of
+                                             true  -> file:sync(Hdl);
+                                             false -> ok
+                                         end,
+                                    ok = file:close(Hdl),
+                                    age_tree_delete(Then),
+                                    Handle1 #handle { hdl = closed,
+                                                      trusted_offset = Offset,
+                                                      is_dirty = false }
+                      end,
             case SoftOrHard of
                 hard -> #file { reader_count = RCount,
                                 has_writer = HasWriter } = File =
@@ -852,10 +849,9 @@ ulimit() ->
     end.
 
 ensure_mref(Pid, State = #fhc_state { client_mrefs = ClientMRefs }) ->
-    State #fhc_state { client_mrefs = ensure_mref(Pid, ClientMRefs) };
-ensure_mref(Pid, ClientMRefs) ->
     case dict:find(Pid, ClientMRefs) of
-        {ok, _MRef} -> ClientMRefs;
-        error       -> dict:store(Pid, erlang:monitor(process, Pid),
-                                  ClientMRefs)
+        {ok, _MRef} -> State;
+        error       -> MRef = erlang:monitor(process, Pid),
+                       State #fhc_state {
+                         client_mrefs = dict:store(Pid, MRef, ClientMRefs) }
     end.
