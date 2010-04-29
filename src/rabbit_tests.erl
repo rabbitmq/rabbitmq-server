@@ -846,13 +846,13 @@ test_delegates_async(SecondaryNode) ->
 
     Responder = make_responder(fun({invoked, Pid}) -> Pid ! response end),
 
-    ok = delegate:invoke_no_return(spawn(Responder), Sender),
-    ok = delegate:invoke_no_return(spawn(SecondaryNode, Responder), Sender),
+    ok = delegate:invoke_no_result(spawn(Responder), Sender),
+    ok = delegate:invoke_no_result(spawn(SecondaryNode, Responder), Sender),
     await_response(2),
 
     LocalPids = spawn_responders(node(), Responder, 10),
     RemotePids = spawn_responders(SecondaryNode, Responder, 10),
-    ok = delegate:invoke_no_return(LocalPids ++ RemotePids, Sender),
+    ok = delegate:invoke_no_result(LocalPids ++ RemotePids, Sender),
     await_response(20),
 
     passed.
