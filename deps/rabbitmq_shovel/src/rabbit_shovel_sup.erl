@@ -251,8 +251,8 @@ build_ssl_broker(ParsedUri) ->
     SSLOptions =
         run_state_monad(
           [fun (L) -> KeyString = atom_to_list(Key),
-                      case lists:keyfind(KeyString, 1, Query) of
-                          {_, Value} ->
+                      case lists:keysearch(KeyString, 1, Query) of
+                          {value, {_, Value}} ->
                               try [{Key, Fun(Value)} | L]
                               catch throw:{error, Reason} ->
                                       fail({invalid_ssl_parameter,

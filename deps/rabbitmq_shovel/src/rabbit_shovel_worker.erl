@@ -49,7 +49,10 @@ handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 handle_cast(init, State = #state{config = Config}) ->
-    random:seed(now()),
+    %% TODO when we move to minimum R13B01:
+    %% random:seed(now()),
+    {A, B, C} = now(),
+    random:seed(A, B, C),
     #shovel{sources = Sources, destinations = Destinations} = Config,
     {InboundConn, InboundChan, InboundParams} =
         make_conn_and_chan(Sources#endpoint.amqp_params),
