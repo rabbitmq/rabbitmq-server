@@ -42,12 +42,10 @@ behaviour_info(callbacks) ->
      %% shared resources.
      {start, 1},
 
-     %% Called with queue name, a boolean to indicate whether or
-     %% not the queue is durable, and a boolean to indicate whether
-     %% the queue contents should be attempted to be recovered.
+     %% Initialise the backing queue and its state.
      {init, 3},
 
-     %% Called on queue shutdown when queue isn't being deleted
+     %% Called on queue shutdown when queue isn't being deleted.
      {terminate, 1},
 
      %% Called when the queue is terminating and needs to delete all
@@ -58,7 +56,7 @@ behaviour_info(callbacks) ->
      %% been fetched and are pending acks.
      {purge, 1},
 
-     %% Publish a message
+     %% Publish a message.
      {publish, 2},
 
      %% Called for messages which have already been passed straight
@@ -66,11 +64,11 @@ behaviour_info(callbacks) ->
      %% (i.e. saves the round trip through the backing queue).
      {publish_delivered, 3},
 
-     %% Produce the next message
+     %% Produce the next message.
      {fetch, 2},
 
      %% Acktags supplied are for messages which can now be forgotten
-     %% about
+     %% about.
      {ack, 2},
 
      %% A publish, but in the context of a transaction.
@@ -118,12 +116,12 @@ behaviour_info(callbacks) ->
      {ram_duration, 1},
 
      %% Can return 'undefined' or a thunk which will receive the
-     %% state, and must return the state, as soon as the queue process
-     %% can manage (either on an empty mailbox, or when a timer
-     %% fires).
+     %% state, and must return the state, which will be invoked as
+     %% soon as the queue process can manage (either on an empty
+     %% mailbox, or when a timer fires).
      {sync_callback, 1},
 
-     %% Called immediately before the queue hibernates
+     %% Called immediately before the queue hibernates.
      {handle_pre_hibernate, 1},
 
      %% Exists for debugging purposes, to be able to expose state via

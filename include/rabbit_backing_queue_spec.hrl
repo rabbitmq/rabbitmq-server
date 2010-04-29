@@ -32,16 +32,20 @@
 -type(fetch_result() ::
                  %% Message,  IsDelivered,  AckTag,  Remaining_Len
         ('empty'|{basic_message(), boolean(), ack(), non_neg_integer()})).
+-type(is_durable() :: boolean()).
+-type(attempt_recovery() :: boolean()).
+-type(purged_msg_count() :: non_neg_integer()).
+-type(ack_required() :: boolean()).
 
 -spec(start/1 :: ([queue_name()]) -> 'ok').
--spec(init/3 :: (queue_name(), boolean(), boolean()) -> state()).
+-spec(init/3 :: (queue_name(), is_durable(), attempt_recovery()) -> state()).
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
--spec(purge/1 :: (state()) -> {non_neg_integer(), state()}).
+-spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 -spec(publish/2 :: (basic_message(), state()) -> state()).
 -spec(publish_delivered/3 ::
-        (boolean(), basic_message(), state()) -> {ack(), state()}).
--spec(fetch/2 :: (boolean(), state()) -> {fetch_result(), state()}).
+        (ack_required(), basic_message(), state()) -> {ack(), state()}).
+-spec(fetch/2 :: (ack_required(), state()) -> {fetch_result(), state()}).
 -spec(ack/2 :: ([ack()], state()) -> state()).
 -spec(tx_publish/3 :: (txn(), basic_message(), state()) -> state()).
 -spec(tx_ack/3 :: (txn(), [ack()], state()) -> state()).
