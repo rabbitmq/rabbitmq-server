@@ -255,7 +255,11 @@ open(Path, Mode, Options) ->
 close(Ref) ->
     case erase({Ref, fhc_handle}) of
         undefined -> ok;
-        Handle    -> close1(Ref, Handle, hard)
+        Handle    -> case hard_close(Handle) of
+                         ok               -> ok;
+                         {Error, Handle1} -> put_handle(Ref, Handle1),
+                                             Error
+                     end
     end.
 
 read(Ref, Count) ->
@@ -381,10 +385,11 @@ delete(Ref) ->
         undefined ->
             ok;
         Handle = #handle { path = Path } ->
-            case close1(Ref, Handle #handle { is_dirty = false,
-                                              write_buffer = [] }, hard) of
-                ok    -> file:delete(Path);
-                Error -> Error
+            case hard_close(Handle #handle { is_dirty = false,
+                                             write_buffer = [] }) of
+                ok               -> file:delete(Path);
+                {Error, Handle1} -> put_handle(Ref, Handle1),
+                                    Error
             end
     end.
 
@@ -417,12 +422,11 @@ set_maximum_since_use(MaximumAge) ->
                  Handle = #handle { hdl = Hdl, last_used_at = Then }}, Rep) ->
                    Age = timer:now_diff(Now, Then),
                    case Hdl /= closed andalso Age >= MaximumAge of
-                       true  -> case close1(Ref, Handle, soft) of
-                                    {ok, Handle1} ->
-                                        put({Ref, fhc_handle}, Handle1),
-                                        false;
-                                    _ ->
-                                        Rep
+                       true  -> {Res, Handle1} = soft_close(Handle),
+                                put_handle(Ref, Handle1),
+                                case Res of
+                                    ok -> false;
+                                    _  -> Rep
                                 end;
                        false -> Rep
                    end;
@@ -594,44 +598,44 @@ open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
             {error, Reason}
     end.
 
-close1(Ref, Handle, SoftOrHard) ->
+soft_close(Handle = #handle { hdl = closed }) ->
+    {ok, Handle};
+soft_close(Handle) ->
     case write_buffer(Handle) of
         {ok, #handle { hdl = Hdl, offset = Offset, is_dirty = IsDirty,
-                       path = Path, is_read = IsReader, is_write = IsWriter,
                        last_used_at = Then } = Handle1 } ->
-            Handle2 = case Hdl of
-                          closed -> Handle1;
-                          _      -> ok = case IsDirty of
-                                             true  -> file:sync(Hdl);
-                                             false -> ok
-                                         end,
-                                    ok = file:close(Hdl),
-                                    age_tree_delete(Then),
-                                    Handle1 #handle { hdl = closed,
-                                                      trusted_offset = Offset,
-                                                      is_dirty = false }
+            ok = case IsDirty of
+                     true  -> file:sync(Hdl);
+                     false -> ok
+                 end,
+            ok = file:close(Hdl),
+            age_tree_delete(Then),
+            {ok, Handle1 #handle { hdl = closed, trusted_offset = Offset,
+                                   is_dirty = false }};
+        {_Error, _Handle} = Result ->
+            Result
+    end.
+
+hard_close(Handle) ->
+    case soft_close(Handle) of
+        {ok, #handle { path = Path,
+                       is_read = IsReader, is_write = IsWriter }} ->
+            #file { reader_count = RCount, has_writer = HasWriter } = File =
+                get({Path, fhc_file}),
+            RCount1 = case IsReader of
+                          true  -> RCount - 1;
+                          false -> RCount
                       end,
-            case SoftOrHard of
-                hard -> #file { reader_count = RCount,
-                                has_writer = HasWriter } = File =
-                            get({Path, fhc_file}),
-                        RCount1 = case IsReader of
-                                      true  -> RCount - 1;
-                                      false -> RCount
-                                  end,
-                        HasWriter1 = HasWriter andalso not IsWriter,
-                        case RCount1 =:= 0 andalso not HasWriter1 of
-                            true  -> erase({Path, fhc_file});
-                            false -> put({Path, fhc_file},
-                                         File #file { reader_count = RCount1,
-                                                      has_writer = HasWriter1 })
-                        end,
-                        ok;
-                soft -> {ok, Handle2}
-            end;
-        {Error, Handle1} ->
-            put_handle(Ref, Handle1),
-            Error
+            HasWriter1 = HasWriter andalso not IsWriter,
+            case RCount1 =:= 0 andalso not HasWriter1 of
+                true  -> erase({Path, fhc_file});
+                false -> put({Path, fhc_file},
+                             File #file { reader_count = RCount1,
+                                          has_writer = HasWriter1 })
+            end,
+            ok;
+        {_Error, _Handle} = Result ->
+            Result
     end.
 
 maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, offset = Offset,
