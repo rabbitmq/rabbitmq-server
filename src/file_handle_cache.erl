@@ -37,7 +37,8 @@
 %% module.
 %%
 %% Some constraints
-%% 1) This supports 1 writer, multiple readers per file. Nothing else.
+%% 1) This supports one writer, multiple readers per file. Nothing
+%% else.
 %% 2) Do not open the same file from different processes. Bad things
 %% may happen.
 %% 3) Writes are all appends. You cannot write to the middle of a
@@ -47,7 +48,7 @@
 %% between that buffer and the write buffer.
 %%
 %% Some benefits
-%% 1) You don't have to remember to call sync before close
+%% 1) You do not have to remember to call sync before close
 %% 2) Buffering is much more flexible than with plain file module, and
 %% you can control when the buffer gets flushed out. This means that
 %% you can rely on reads-after-writes working, without having to call
@@ -59,12 +60,11 @@
 %% 5) You can find out what the offset was when you last sync'd.
 %%
 %% There is also a server component which serves to limit the number
-%% of open file handles in a "soft" way. By "soft", I mean that the
-%% server will never prevent a client from opening a handle, but may
-%% immediately tell it to close the handle. Thus you can set the limit
-%% to zero and it will still all work correctly, it's just that
-%% effectively no caching will take place. The operation of limiting
-%% is as follows:
+%% of open file handles in a "soft" way - the server will never
+%% prevent a client from opening a handle, but may immediately tell it
+%% to close the handle. Thus you can set the limit to zero and it will
+%% still all work correctly, it is just that effectively no caching
+%% will take place. The operation of limiting is as follows:
 %%
 %% On open and close, the client sends messages to the server
 %% informing it of opens and closes. This allows the server to keep
@@ -85,15 +85,15 @@
 %% the last reported least recently used file handle of all the
 %% clients. It then tells all the clients to close any handles not
 %% used for longer than this average. The client should receive this
-%% message and pass it into set_maximum_since_use/1. However, it's
+%% message and pass it into set_maximum_since_use/1. However, it is
 %% highly possible this age will be greater than the ages of all the
 %% handles the client knows of because the client has used its file
 %% handles in the mean time. Thus at this point the client reports to
 %% the server the current timestamp at which its least recently used
 %% file handle was last used. The server will check two seconds later
-%% that either it's back under the limit, in which case all is well
+%% that either it is back under the limit, in which case all is well
 %% again, or if not, it will calculate a new average age. Its data
-%% will be much more recent now, and so it's very likely that when
+%% will be much more recent now, and so it is very likely that when
 %% this is communicated to the clients, the clients will close file
 %% handles.
 %%
@@ -101,13 +101,13 @@
 %% from the client to the server on open, close, and when in the
 %% process of trying to reduce file handle usage. There is no
 %% communication from the client to the server on normal file handle
-%% operations. This scheme forms a feed-back loop - the server doesn't
-%% care which file handles are closed, just that some are, and it
+%% operations. This scheme forms a feed-back loop - the server does
+%% not care which file handles are closed, just that some are, and it
 %% checks this repeatedly when over the limit. Given the guarantees of
 %% now(), even if there is just one file handle open, a limit of 1,
 %% and one client, it is certain that when the client calculates the
-%% age of the handle, it'll be greater than when the server calculated
-%% it, hence it should be closed.
+%% age of the handle, it will be greater than when the server
+%% calculated it, hence it should be closed.
 %%
 %% Handles which are closed as a result of the server are put into a
 %% "soft-closed" state in which the handle is closed (data flushed out
