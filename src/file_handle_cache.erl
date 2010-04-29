@@ -582,7 +582,7 @@ close1(Ref, Handle, SoftOrHard) ->
             Handle2 =
                 case Hdl of
                     closed ->
-                        ok;
+                        Handle1;
                     _ ->
                         ok = case IsDirty of
                                  true  -> file:sync(Hdl);
@@ -605,7 +605,8 @@ close1(Ref, Handle, SoftOrHard) ->
                                     ?SERVER, {close, self(), Oldest}),
                                   Tree1
                           end),
-                        Handle1 #handle { trusted_offset = Offset,
+                        Handle1 #handle { hdl = closed,
+                                          trusted_offset = Offset,
                                           is_dirty = false }
                 end,
             case SoftOrHard of
@@ -624,7 +625,7 @@ close1(Ref, Handle, SoftOrHard) ->
                                                       has_writer = HasWriter1 })
                         end,
                         ok;
-                soft -> {ok, Handle2 #handle { hdl = closed }}
+                soft -> {ok, Handle2}
             end;
         {Error, Handle1} ->
             put_handle(Ref, Handle1),
