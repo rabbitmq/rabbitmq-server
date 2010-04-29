@@ -183,28 +183,29 @@
 -type(ref() :: any()).
 -type(error() :: {'error', any()}).
 -type(ok_or_error() :: ('ok' | error())).
--type(position() :: ('bof' | 'eof' | {'bof',integer()} | {'eof',integer()}
-                     | {'cur',integer()} | integer())).
+-type(val_or_error(T) :: ({'ok', T} | error())).
+-type(position() :: ('bof' | 'eof' | {('bof' |'eof' | 'cur'), integer()} |
+                     integer())).
+-type(offset() :: non_neg_integer()).
 
 -spec(register_callback/3 :: (atom(), atom(), [any()]) -> 'ok').
 -spec(open/3 ::
       (string(), [any()],
-       [{'write_buffer', (non_neg_integer()|'infinity'|'unbuffered')}]) ->
-             ({'ok', ref()} | error())).
--spec(close/1 :: (ref()) -> ('ok' | error())).
--spec(read/2 :: (ref(), integer()) ->
-             ({'ok', ([char()]|binary())} | eof | error())).
+       [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')}]) ->
+             val_or_error(ref())).
+-spec(close/1 :: (ref()) -> ok_or_error()).
+-spec(read/2 :: (ref(), non_neg_integer()) ->
+             val_or_error([char()] | binary()) | 'eof').
 -spec(append/2 :: (ref(), iodata()) -> ok_or_error()).
 -spec(sync/1 :: (ref()) ->  ok_or_error()).
--spec(position/2 :: (ref(), position()) ->
-             ({'ok', non_neg_integer()} | error())).
+-spec(position/2 :: (ref(), position()) -> val_or_error(offset())).
 -spec(truncate/1 :: (ref()) -> ok_or_error()).
--spec(last_sync_offset/1 :: (ref()) -> ({'ok', integer()} | error())).
--spec(current_virtual_offset/1 :: (ref()) -> ({'ok', integer()} | error())).
--spec(current_raw_offset/1 :: (ref()) -> ({'ok', integer()} | error())).
+-spec(last_sync_offset/1       :: (ref()) -> val_or_error(offset())).
+-spec(current_virtual_offset/1 :: (ref()) -> val_or_error(offset())).
+-spec(current_raw_offset/1     :: (ref()) -> val_or_error(offset())).
 -spec(flush/1 :: (ref()) -> ok_or_error()).
 -spec(copy/3 :: (ref(), ref(), non_neg_integer()) ->
-             ({'ok', integer()} | error())).
+             val_or_error(non_neg_integer())).
 -spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(delete/1 :: (ref()) -> ok_or_error()).
 -spec(clear/1 :: (ref()) -> ok_or_error()).
