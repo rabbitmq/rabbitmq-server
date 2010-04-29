@@ -245,7 +245,7 @@ open(Path, Mode, Options) ->
                          HasWriter1 = HasWriter orelse IsWriter,
                          put({Path1, fhc_file},
                              File1 #file { reader_count = RCount1,
-                                           has_writer = HasWriter1}),
+                                           has_writer = HasWriter1 }),
                          {ok, Ref};
                      Error ->
                          Error
