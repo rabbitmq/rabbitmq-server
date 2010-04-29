@@ -375,6 +375,7 @@ print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
     ProductLen = string:len(Product),
+    ErtsVer = "Erlang " ++ erlang:system_info(version),
     io:format("~n"
               "+---+   +---+~n"
               "|   |   |   |~n"
@@ -383,12 +384,13 @@ print_banner() ->
               "|   +---+   +-------+~n"
               "|                   |~n"
               "| ~s  +---+   |~n"
-              "|           |   |   |~n"
-              "| ~s  +---+   |~n"
-              "|                   |~n"
+              "| ~s  |   |   |~n"
+              "|           +---+   |~n"
+              "| ~s |~n"
               "+-------------------+~n"
               "AMQP ~p-~p~n~s~n~s~n~n",
               [Product, string:right([$v|Version], ProductLen),
+               string:right(ErtsVer, 17),
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     Settings = [{"node",           node()},
