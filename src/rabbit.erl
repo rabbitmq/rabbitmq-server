@@ -228,14 +228,18 @@ rotate_logs(BinarySuffix) ->
 %%--------------------------------------------------------------------
 
 start(normal, []) ->
-    {ok, SupPid} = rabbit_sup:start_link(),
+    case erts_version_check() of
+        ok ->
+            {ok, SupPid} = rabbit_sup:start_link(),
 
-    print_banner(),
-    [ok = run_boot_step(Step) || Step <- boot_steps()],
-    io:format("~nbroker running~n"),
+            print_banner(),
+            [ok = run_boot_step(Step) || Step <- boot_steps()],
+            io:format("~nbroker running~n"),
 
-    {ok, SupPid}.
-
+            {ok, SupPid};
+        Error ->
+            Error
+    end.
 
 stop(_State) ->
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
@@ -247,6 +251,14 @@ stop(_State) ->
     ok.
 
 %%---------------------------------------------------------------------------
+
+erts_version_check() ->
+    FoundVer = erlang:system_info(version),
+    case rabbit_misc:version_compare(?ERTS_MINIMUM, FoundVer, lte) of
+        true  -> ok;
+        false -> {error, {erlang_version_too_old,
+                          {found, FoundVer}, {required, ?ERTS_MINIMUM}}}
+    end.
 
 boot_error(Format, Args) ->
     io:format("BOOT ERROR: " ++ Format, Args),
