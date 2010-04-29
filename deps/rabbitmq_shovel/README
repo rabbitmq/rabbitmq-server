@@ -46,6 +46,8 @@ cd ../rabbitmq-server
 ./scripts/rabbitmq-activate-plugins
 make cleandb run
 
+Note that at this point, RabbitMQ will fail to start up, complaining
+about the lack of any shovel configurations.
 
 Configuration
 -------------
