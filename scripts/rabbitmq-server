@@ -31,7 +31,7 @@
 ##
 
 NODENAME=rabbit
-SERVER_ERL_ARGS="+K true +A30 \
+SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
 -kernel inet_default_listen_options [{nodelay,true}] \
 -kernel inet_default_connect_options [{nodelay,true}]"
 CLUSTER_CONFIG_FILE=/etc/rabbitmq/rabbitmq_cluster.config
