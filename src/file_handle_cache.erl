@@ -157,11 +157,11 @@
           write_buffer_size_limit,
           write_buffer,
           at_eof,
-          is_write,
-          is_read,
+          path,
           mode,
           options,
-          path,
+          is_write,
+          is_read,
           last_used_at
         }).
 
@@ -332,8 +332,8 @@ truncate(Ref) ->
                                 trusted_offset = TOffset }]) ->
               case file:truncate(Hdl) of
                   ok    -> TOffset1 = lists:min([Offset, TOffset]),
-                           {ok, [Handle1 #handle {at_eof = true,
-                                                  trusted_offset = TOffset1 }]};
+                           {ok, [Handle1 #handle { trusted_offset = TOffset1,
+                                                   at_eof = true }]};
                   Error -> {Error, [Handle1]}
               end
       end).
@@ -361,7 +361,7 @@ flush(Ref) ->
 copy(Src, Dest, Count) ->
     with_flushed_handles(
       [Src, Dest],
-      fun ([SHandle = #handle { is_read = true, hdl = SHdl, offset = SOffset },
+      fun ([SHandle = #handle { is_read  = true, hdl = SHdl, offset = SOffset },
             DHandle = #handle { is_write = true, hdl = DHdl, offset = DOffset }]
           ) ->
               case file:copy(SHdl, DHdl, Count) of
@@ -401,8 +401,8 @@ clear(Ref) ->
                   {{ok, 0}, Handle2 = #handle { hdl = Hdl }} ->
                       case file:truncate(Hdl) of
                           ok    -> {ok, [Handle2 #handle {
-                                           at_eof = true,
-                                           trusted_offset = 0 }]};
+                                           trusted_offset = 0,
+                                           at_eof = true }]};
                           Error -> {Error, [Handle2]}
                       end;
                   Error ->
@@ -509,8 +509,8 @@ get_or_reopen(Ref) ->
     case get({Ref, fhc_handle}) of
         undefined ->
             {error, not_open, Ref};
-        #handle { hdl = closed, mode = Mode, options = Options,
-                  offset = Offset, path = Path } ->
+        #handle { hdl = closed, offset = Offset,
+                  path = Path, mode = Mode, options = Options } ->
             open1(Path, Mode, Options, Ref, Offset, reopen);
         Handle ->
             {ok, Handle}
@@ -545,14 +545,20 @@ open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
                     N when is_integer(N) -> N
                 end,
             Now = now(),
-            Handle = #handle { hdl = Hdl, offset = 0, trusted_offset = 0,
-                               write_buffer_size = 0, options = Options,
+            Handle = #handle { hdl                     = Hdl,
+                               offset                  = 0,
+                               trusted_offset          = 0,
+                               is_dirty                = false,
+                               write_buffer_size       = 0,
                                write_buffer_size_limit = WriteBufferSize,
-                               write_buffer = [], at_eof = false, mode = Mode,
-                               is_write = is_writer(Mode),
-                               is_read = is_reader(Mode),
-                               path = Path, last_used_at = Now,
-                               is_dirty = false },
+                               write_buffer            = [],
+                               at_eof                  = false,
+                               path                    = Path,
+                               mode                    = Mode,
+                               options                 = Options,
+                               is_write                = is_writer(Mode),
+                               is_read                 = is_reader(Mode),
+                               last_used_at            = Now },
             {{ok, Offset1}, Handle1} = maybe_seek(Offset, Handle),
             Handle2 = Handle1 #handle { trusted_offset = Offset1 },
             put({Ref, fhc_handle}, Handle2),
@@ -570,9 +576,9 @@ open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
 
 close1(Ref, Handle, SoftOrHard) ->
     case write_buffer(Handle) of
-        {ok, #handle { hdl = Hdl, path = Path, is_dirty = IsDirty,
-                       is_read = IsReader, is_write = IsWriter,
-                       last_used_at = Then, offset = Offset } = Handle1 } ->
+        {ok, #handle { hdl = Hdl, offset = Offset, is_dirty = IsDirty,
+                       path = Path, is_read = IsReader, is_write = IsWriter,
+                       last_used_at = Then } = Handle1 } ->
             Handle2 =
                 case Hdl of
                     closed ->
@@ -625,15 +631,15 @@ close1(Ref, Handle, SoftOrHard) ->
             Error
     end.
 
-maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, at_eof = AtEoF,
-                                         offset = Offset }) ->
+maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, offset = Offset,
+                                         at_eof = AtEoF }) ->
     {AtEoF1, NeedsSeek} = needs_seek(AtEoF, Offset, NewOffset),
     case (case NeedsSeek of
               true  -> file:position(Hdl, NewOffset);
               false -> {ok, Offset}
           end) of
         {ok, Offset1} = Result ->
-            {Result, Handle #handle { at_eof = AtEoF1, offset = Offset1 }};
+            {Result, Handle #handle { offset = Offset1, at_eof = AtEoF1 }};
         {error, _} = Error ->
             {Error, Handle}
     end.
@@ -669,8 +675,8 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
     case file:write(Hdl, lists:reverse(WriteBuffer)) of
         ok ->
             Offset1 = Offset + DataSize,
-            {ok, Handle #handle { offset = Offset1, write_buffer = [],
-                                  write_buffer_size = 0, is_dirty = true }};
+            {ok, Handle #handle { offset = Offset1, is_dirty = true,
+                                  write_buffer = [], write_buffer_size = 0 }};
         {error, _} = Error ->
             {Error, Handle}
     end.
