@@ -429,18 +429,7 @@ set_maximum_since_use(MaximumAge) ->
                (_KeyValuePair, Rep) ->
                    Rep
            end, true, get()) of
-        true  -> with_age_tree(
-                   fun (Tree) ->
-                           case gb_trees:is_empty(Tree) of
-                               true  -> Tree;
-                               false -> {Oldest, _Ref} =
-                                            gb_trees:smallest(Tree),
-                                        gen_server:cast(
-                                          ?SERVER, {update, self(), Oldest})
-                           end,
-                           Tree
-                   end),
-                 ok;
+        true  -> age_tree_change(), ok;
         false -> ok
     end.
 
@@ -516,19 +505,56 @@ get_or_reopen(Ref) ->
             {ok, Handle}
     end.
 
-get_or_create_age_tree() ->
-    case get(fhc_age_tree) of
-        undefined -> gb_trees:empty();
-        AgeTree   -> AgeTree
-    end.
-
 with_age_tree(Fun) ->
-    put(fhc_age_tree, Fun(get_or_create_age_tree())).
+    put(fhc_age_tree, Fun(case get(fhc_age_tree) of
+                              undefined -> gb_trees:empty();
+                              AgeTree   -> AgeTree
+                          end)).
+
+age_tree_insert(Now, Ref) ->
+    with_age_tree(
+      fun (Tree) ->
+              Tree1 = gb_trees:insert(Now, Ref, Tree),
+              {Oldest, _Ref} = gb_trees:smallest(Tree1),
+              gen_server:cast(?SERVER, {open, self(), Oldest}),
+              Tree1
+      end).
+
+age_tree_update(Then, Now, Ref) ->
+    with_age_tree(
+      fun (Tree) ->
+              gb_trees:insert(Now, Ref, gb_trees:delete(Then, Tree))
+      end).
+
+age_tree_delete(Then) ->
+    with_age_tree(
+      fun (Tree) ->
+              Tree1 = gb_trees:delete(Then, Tree),
+              Oldest = case gb_trees:is_empty(Tree1) of
+                           true ->
+                               undefined;
+                           false ->
+                               {Oldest1, _Ref} = gb_trees:smallest(Tree1),
+                               Oldest1
+                       end,
+              gen_server:cast(?SERVER, {close, self(), Oldest}),
+              Tree1
+      end).
+
+age_tree_change() ->
+    with_age_tree(
+      fun (Tree) ->
+              case gb_trees:is_empty(Tree) of
+                  true  -> Tree;
+                  false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
+                           gen_server:cast(?SERVER, {update, self(), Oldest})
+              end,
+              Tree
+      end).
 
 put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
     Now = now(),
-    with_age_tree(
-      fun (Tree) -> gb_trees:insert(Now, Ref, gb_trees:delete(Then, Tree)) end),
+    age_tree_update(Then, Now, Ref),
     put({Ref, fhc_handle}, Handle #handle { last_used_at = Now }).
 
 open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
@@ -562,13 +588,7 @@ open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
             {{ok, Offset1}, Handle1} = maybe_seek(Offset, Handle),
             Handle2 = Handle1 #handle { trusted_offset = Offset1 },
             put({Ref, fhc_handle}, Handle2),
-            with_age_tree(fun (Tree) ->
-                                  Tree1 = gb_trees:insert(Now, Ref, Tree),
-                                  {Oldest, _Ref} = gb_trees:smallest(Tree1),
-                                  gen_server:cast(?SERVER,
-                                                  {open, self(), Oldest}),
-                                  Tree1
-                          end),
+            age_tree_insert(Now, Ref),
             {ok, Handle2};
         {error, Reason} ->
             {error, Reason}
@@ -589,22 +609,7 @@ close1(Ref, Handle, SoftOrHard) ->
                                  false -> ok
                              end,
                         ok = file:close(Hdl),
-                        with_age_tree(
-                          fun (Tree) ->
-                                  Tree1 = gb_trees:delete(Then, Tree),
-                                  Oldest =
-                                      case gb_trees:is_empty(Tree1) of
-                                          true ->
-                                              undefined;
-                                          false ->
-                                              {Oldest1, _Ref} =
-                                                  gb_trees:smallest(Tree1),
-                                              Oldest1
-                                      end,
-                                  gen_server:cast(
-                                    ?SERVER, {close, self(), Oldest}),
-                                  Tree1
-                          end),
+                        age_tree_delete(Then),
                         Handle1 #handle { hdl = closed,
                                           trusted_offset = Offset,
                                           is_dirty = false }
