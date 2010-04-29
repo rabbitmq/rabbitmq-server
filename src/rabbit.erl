@@ -375,7 +375,6 @@ print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
     ProductLen = string:len(Product),
-    ErtsVer = "Erlang " ++ erlang:system_info(version),
     io:format("~n"
               "+---+   +---+~n"
               "|   |   |   |~n"
@@ -384,13 +383,12 @@ print_banner() ->
               "|   +---+   +-------+~n"
               "|                   |~n"
               "| ~s  +---+   |~n"
-              "| ~s  |   |   |~n"
-              "|           +---+   |~n"
-              "| ~s |~n"
+              "|           |   |   |~n"
+              "| ~s  +---+   |~n"
+              "|                   |~n"
               "+-------------------+~n"
               "AMQP ~p-~p~n~s~n~s~n~n",
               [Product, string:right([$v|Version], ProductLen),
-               string:right(ErtsVer, 17),
                ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     Settings = [{"node",           node()},
@@ -399,8 +397,9 @@ print_banner() ->
                 {"cookie hash",    rabbit_misc:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
-                {"database dir",   rabbit_mnesia:dir()}],
-    DescrLen = lists:max([length(K) || {K, _V} <- Settings]),
+                {"database dir",   rabbit_mnesia:dir()},
+                {"erlang version", erlang:system_info(version)}],
+    DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
     lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
     io:nl().
