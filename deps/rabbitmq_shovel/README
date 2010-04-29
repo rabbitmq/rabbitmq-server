@@ -49,6 +49,7 @@ make cleandb run
 Note that at this point, RabbitMQ will fail to start up, complaining
 about the lack of any shovel configurations.
 
+
 Configuration
 -------------
 
@@ -124,6 +125,7 @@ optional and have defaults as follows:
 {publish_properties,  []}
 {publish_fields,      []}
 {reconnect_delay,     5}
+
 
 Sources and Destinations
 ------------------------
