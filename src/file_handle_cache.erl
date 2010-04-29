@@ -184,8 +184,8 @@
 -type(error() :: {'error', any()}).
 -type(ok_or_error() :: ('ok' | error())).
 -type(val_or_error(T) :: ({'ok', T} | error())).
--type(position() :: ('bof' | 'eof' | {('bof' |'eof' | 'cur'), integer()} |
-                     integer())).
+-type(position() :: ('bof' | 'eof' | non_neg_integer() |
+                     {('bof' |'eof'), non_neg_integer()} | {'cur', integer()})).
 -type(offset() :: non_neg_integer()).
 
 -spec(register_callback/3 :: (atom(), atom(), [any()]) -> 'ok').
