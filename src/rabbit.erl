@@ -397,8 +397,9 @@ print_banner() ->
                 {"cookie hash",    rabbit_misc:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
-                {"database dir",   rabbit_mnesia:dir()}],
-    DescrLen = lists:max([length(K) || {K, _V} <- Settings]),
+                {"database dir",   rabbit_mnesia:dir()},
+                {"erlang version", erlang:system_info(version)}],
+    DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
     lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
     io:nl().
