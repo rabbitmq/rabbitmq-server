@@ -224,36 +224,32 @@ register_callback(M, F, A)
     gen_server:call(?SERVER, {register_callback, self(), {M, F, A}}, infinity).
 
 open(Path, Mode, Options) ->
-    case is_appender(Mode) of
-        true  ->
-            {error, append_not_supported};
-        false ->
-            Path1 = filename:absname(Path),
-            File1 = #file { reader_count = RCount, has_writer = HasWriter } =
-                case get({Path1, fhc_file}) of
-                    File = #file {} -> File;
-                    undefined       -> #file { reader_count = 0,
-                                               has_writer = false }
-                end,
-            IsWriter = is_writer(Mode),
-            case IsWriter andalso HasWriter of
-                true  -> {error, writer_exists};
-                false -> Ref = make_ref(),
-                         case open1(Path1, Mode, Options, Ref, bof, new) of
-                             {ok, _Handle} ->
-                                 RCount1 = case is_reader(Mode) of
-                                               true  -> RCount + 1;
-                                               false -> RCount
-                                           end,
-                                 HasWriter1 = HasWriter orelse IsWriter,
-                                 put({Path1, fhc_file},
-                                     File1 #file { reader_count = RCount1,
-                                                   has_writer = HasWriter1}),
-                                 {ok, Ref};
-                             Error ->
-                                 Error
-                         end
-            end
+    Path1 = filename:absname(Path),
+    File1 = #file { reader_count = RCount, has_writer = HasWriter } =
+        case get({Path1, fhc_file}) of
+            File = #file {} -> File;
+            undefined       -> #file { reader_count = 0,
+                                       has_writer = false }
+        end,
+    Mode1 = append_to_write(Mode),
+    IsWriter = is_writer(Mode1),
+    case IsWriter andalso HasWriter of
+        true  -> {error, writer_exists};
+        false -> Ref = make_ref(),
+                 case open1(Path1, Mode1, Options, Ref, bof, new) of
+                     {ok, _Handle} ->
+                         RCount1 = case is_reader(Mode1) of
+                                       true  -> RCount + 1;
+                                       false -> RCount
+                                   end,
+                         HasWriter1 = HasWriter orelse IsWriter,
+                         put({Path1, fhc_file},
+                             File1 #file { reader_count = RCount1,
+                                           has_writer = HasWriter1}),
+                         {ok, Ref};
+                     Error ->
+                         Error
+                 end
     end.
 
 close(Ref) ->
@@ -462,7 +458,11 @@ is_reader(Mode) -> lists:member(read, Mode).
 
 is_writer(Mode) -> lists:member(write, Mode).
 
-is_appender(Mode) -> lists:member(append, Mode).
+append_to_write(Mode) ->
+    case lists:member(append, Mode) of
+        true  -> [write | lists:subtract(Mode, [append, write])];
+        false -> Mode
+    end.
 
 with_handles(Refs, Fun) ->
     ResHandles = lists:foldl(
