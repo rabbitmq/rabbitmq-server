@@ -34,7 +34,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, invoke_async/2, invoke/2, process_count/0]).
+-export([start_link/1, invoke_no_return/2, invoke/2, process_count/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -44,7 +44,7 @@
 -ifdef(use_specs).
 
 -spec(start_link/1 :: (non_neg_integer()) -> {'ok', pid()}).
--spec(invoke_async/2 :: (pid() | [pid()], fun((pid()) -> any())) -> 'ok').
+-spec(invoke_no_return/2 :: (pid() | [pid()], fun((pid()) -> any())) -> 'ok').
 -spec(invoke/2 :: (pid() | [pid()], fun((pid()) -> A)) -> A).
 
 -spec(process_count/0 :: () -> non_neg_integer()).
@@ -64,12 +64,12 @@ invoke(Pid, FPid) when is_pid(Pid) ->
 invoke(Pids, FPid) when is_list(Pids) ->
     invoke_per_node(split_delegate_per_node(Pids), FPid).
 
-invoke_async(Pid, FPid) when is_pid(Pid) ->
-    invoke_async_per_node([{node(Pid), [Pid]}], FPid),
+invoke_no_return(Pid, FPid) when is_pid(Pid) ->
+    invoke_no_return_per_node([{node(Pid), [Pid]}], FPid),
     ok;
 
-invoke_async(Pids, FPid) when is_list(Pids) ->
-    invoke_async_per_node(split_delegate_per_node(Pids),  FPid),
+invoke_no_return(Pids, FPid) when is_list(Pids) ->
+    invoke_no_return_per_node(split_delegate_per_node(Pids),  FPid),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -95,14 +95,14 @@ invoke_per_node([{Node, Pids}], FPid) when Node == node() ->
 invoke_per_node(NodePids, FPid) ->
     lists:append(delegate_per_node(NodePids, FPid, fun internal_call/2)).
 
-invoke_async_per_node([{Node, Pids}], FPid) when Node == node() ->
+invoke_no_return_per_node([{Node, Pids}], FPid) when Node == node() ->
     % This is not actually async! However, in practice FPid will always be
     % something that does a gen_server:cast or similar, so I don't think
     % it's a problem unless someone misuses this function. Making this
     % *actually* async would be painful as we can't spawn at this point or we
     % break effect ordering.
     local_delegate(Pids, FPid);
-invoke_async_per_node(NodePids, FPid) ->
+invoke_no_return_per_node(NodePids, FPid) ->
     delegate_per_node(NodePids, FPid, fun internal_cast/2),
     ok.
 

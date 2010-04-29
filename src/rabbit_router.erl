@@ -56,7 +56,7 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
     %% therefore safe to use a fire-and-forget cast here and return
     %% the QPids - the semantics is preserved. This scales much better
     %% than the non-immediate case below.
-    delegate:invoke_async(
+    delegate:invoke_no_return(
       QPids, fun(Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     {routed, QPids};
 
