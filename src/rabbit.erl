@@ -99,10 +99,10 @@
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
--rabbit_boot_step({delegate_sup,
-                   [{description, "cluster delegate"},
-                    {mfa,         {rabbit_sup, start_child,
-                                   [delegate_sup]}},
+-rabbit_boot_step({rabbit_router,
+                   [{description, "cluster router"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_router]}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 

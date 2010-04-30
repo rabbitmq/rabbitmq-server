@@ -46,8 +46,6 @@
 -spec(submit/2 :: (pid(), fun (() -> A) | {atom(), atom(), [any()]}) -> A).
 -spec(submit_async/2 ::
       (pid(), fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
--spec(run/1 :: (fun (() -> A)) -> A;
-               ({atom(), atom(), [any()]}) -> any()).
 
 -endif.
 
@@ -66,15 +64,6 @@ submit(Pid, Fun) ->
 
 submit_async(Pid, Fun) ->
     gen_server2:cast(Pid, {submit_async, Fun}).
-
-%%----------------------------------------------------------------------------
-
-run({M, F, A}) ->
-    apply(M, F, A);
-run(Fun) ->
-    Fun().
-
-%%----------------------------------------------------------------------------
 
 init([WId]) ->
     ok = worker_pool:idle(WId),
@@ -106,3 +95,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, State) ->
     State.
+
+%%----------------------------------------------------------------------------
+
+run({M, F, A}) ->
+    apply(M, F, A);
+run(Fun) ->
+    Fun().

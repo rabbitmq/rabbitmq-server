@@ -167,9 +167,6 @@ start-cover: all
 	echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL)
 	echo "rabbit_misc:enable_cover([\"$(COVER_DIR)\"])." | $(ERL_CALL)
 
-start-secondary-cover: all
-	echo "rabbit_misc:start_cover([\"hare\"])." | $(ERL_CALL)
-
 stop-cover: all
 	echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL)
 	cat cover/summary.txt

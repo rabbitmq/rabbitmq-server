@@ -91,7 +91,7 @@
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
 -spec(commit_all/3 :: ([pid()], txn(), pid()) -> ok_or_errors()).
--spec(rollback_all/3 :: ([pid()], txn(), pid()) -> 'ok').
+-spec(rollback_all/3 :: ([pid()], txn(), pid()) -> ok_or_errors()).
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
@@ -225,10 +225,10 @@ info_keys() -> rabbit_amqqueue_process:info_keys().
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
 info(#amqqueue{ pid = QPid }) ->
-    delegate_pcall(QPid, 9, info, infinity).
+    gen_server2:pcall(QPid, 9, info, infinity).
 
 info(#amqqueue{ pid = QPid }, Items) ->
-    case delegate_pcall(QPid, 9, {info, Items}, infinity) of
+    case gen_server2:pcall(QPid, 9, {info, Items}, infinity) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
@@ -238,7 +238,7 @@ info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
 consumers(#amqqueue{ pid = QPid }) ->
-    delegate_pcall(QPid, 9, consumers, infinity).
+    gen_server2:pcall(QPid, 9, consumers, infinity).
 
 consumers_all(VHostPath) ->
     lists:concat(
@@ -247,16 +247,15 @@ consumers_all(VHostPath) ->
                          {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]
           end)).
 
-stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
+stat(#amqqueue{pid = QPid}) -> gen_server2:call(QPid, stat, infinity).
 
 stat_all() ->
     lists:map(fun stat/1, rabbit_misc:dirty_read_all(rabbit_queue)).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
+    gen_server2:call(QPid, {delete, IfUnused, IfEmpty}, infinity).
 
-purge(#amqqueue{ pid = QPid }) ->
-    delegate_call(QPid, purge, infinity).
+purge(#amqqueue{ pid = QPid }) -> gen_server2:call(QPid, purge, infinity).
 
 deliver(QPid, #delivery{immediate = true,
                         txn = Txn, sender = ChPid, message = Message}) ->
@@ -271,23 +270,25 @@ deliver(QPid, #delivery{txn = Txn, sender = ChPid, message = Message}) ->
     true.
 
 requeue(QPid, MsgIds, ChPid) ->
-    delegate_cast(QPid, {requeue, MsgIds, ChPid}).
+    gen_server2:cast(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
-    delegate_pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
+    gen_server2:pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
 
 commit_all(QPids, Txn, ChPid) ->
-    safe_delegate_call_ok(
+    safe_pmap_ok(
       fun (QPid) -> exit({queue_disappeared, QPid}) end,
       fun (QPid) -> gen_server2:call(QPid, {commit, Txn, ChPid}, infinity) end,
       QPids).
 
 rollback_all(QPids, Txn, ChPid) ->
-    delegate:invoke_no_result(QPids,
-        fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end).
+    safe_pmap_ok(
+      fun (QPid) -> exit({queue_disappeared, QPid}) end,
+      fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end,
+      QPids).
 
 notify_down_all(QPids, ChPid) ->
-    safe_delegate_call_ok(
+    safe_pmap_ok(
       %% we don't care if the queue process has terminated in the
       %% meantime
       fun (_)    -> ok end,
@@ -295,34 +296,38 @@ notify_down_all(QPids, ChPid) ->
       QPids).
 
 limit_all(QPids, ChPid, LimiterPid) ->
-    delegate:invoke_no_result(QPids,
-        fun (QPid) -> gen_server2:cast(QPid, {limit, ChPid, LimiterPid}) end).
+    safe_pmap_ok(
+      fun (_) -> ok end,
+      fun (QPid) -> gen_server2:cast(QPid, {limit, ChPid, LimiterPid}) end,
+      QPids).
 
 claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
-    delegate_call(QPid, {claim_queue, ReaderPid}, infinity).
+    gen_server2:call(QPid, {claim_queue, ReaderPid}, infinity).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
-    delegate_call(QPid, {basic_get, ChPid, NoAck}, infinity).
+    gen_server2:call(QPid, {basic_get, ChPid, NoAck}, infinity).
 
 basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid, LimiterPid,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
-    delegate_call(QPid, {basic_consume, NoAck, ReaderPid, ChPid,
+    gen_server2:call(QPid, {basic_consume, NoAck, ReaderPid, ChPid,
                             LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg},
                      infinity).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
-    ok = delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg},
-                           infinity).
+    ok = gen_server2:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg},
+                          infinity).
 
 notify_sent(QPid, ChPid) ->
-    delegate_pcast(QPid, 7, {notify_sent, ChPid}).
+    gen_server2:pcast(QPid, 7, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
-    delegate_pcast(QPid, 7, {unblock, ChPid}).
+    gen_server2:pcast(QPid, 7, {unblock, ChPid}).
 
 flush_all(QPids, ChPid) ->
-    delegate:invoke_no_result(QPids,
-        fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
+    safe_pmap_ok(
+      fun (_) -> ok end,
+      fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end,
+      QPids).
 
 internal_delete(QueueName) ->
     case
@@ -368,32 +373,17 @@ pseudo_queue(QueueName, Pid) ->
               arguments = [],
               pid = Pid}.
 
-safe_delegate_call_ok(H, F, Pids) ->
-    case [R || R = {error, _, _} <- delegate:invoke(
-                                      Pids,
-                                      fun (Pid) ->
-                                              rabbit_misc:with_exit_handler(
-                                                fun () -> H(Pid) end,
-                                                fun () -> F(Pid) end)
-                                      end)] of
+safe_pmap_ok(H, F, L) ->
+    case [R || R <- rabbit_misc:upmap(
+                      fun (V) ->
+                              try
+                                  rabbit_misc:with_exit_handler(
+                                    fun () -> H(V) end,
+                                    fun () -> F(V) end)
+                              catch Class:Reason -> {Class, Reason}
+                              end
+                      end, L),
+               R =/= ok] of
         []     -> ok;
         Errors -> {error, Errors}
     end.
-
-delegate_call(Pid, Msg, Timeout) ->
-    {_Status, Res} =
-        delegate:invoke(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end),
-    Res.
-
-delegate_pcall(Pid, Pri, Msg, Timeout) ->
-    {_Status, Res} =
-        delegate:invoke(Pid,
-                        fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end),
-    Res.
-
-delegate_cast(Pid, Msg) ->
-    delegate:invoke_no_result(Pid, fun(P) -> gen_server2:cast(P, Msg) end).
-
-delegate_pcast(Pid, Pri, Msg) ->
-    delegate:invoke_no_result(Pid, fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
-
