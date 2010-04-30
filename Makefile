@@ -68,9 +68,7 @@ endef
 
 .PHONY:all dialyze create-plt clean cleandb run run-node run-tests start-background-node start-rabbit-on-node stop-rabbit-on-node force-snapshot stop-node start-cover stop-cover srcdist distclean docs_all install
 
-all: $(EBIN_DIR)/rabbit.app
-
-$(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in generate_app $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCES) make.beam
+all: $(EBIN_DIR)/rabbit_app.in generate_app $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCES) make.beam
 	$(ERL_EBIN) -make
 	escript generate_app $(EBIN_DIR) $@ < $<
 
