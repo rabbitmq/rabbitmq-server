@@ -529,13 +529,13 @@ age_tree_insert(Now, Ref) ->
 age_tree_update(Then, Now, Ref) ->
     with_age_tree(
       fun (Tree) ->
-              gb_trees:insert(Now, Ref, gb_trees:delete(Then, Tree))
+              gb_trees:insert(Now, Ref, gb_trees:delete_any(Then, Tree))
       end).
 
 age_tree_delete(Then) ->
     with_age_tree(
       fun (Tree) ->
-              Tree1 = gb_trees:delete(Then, Tree),
+              Tree1 = gb_trees:delete_any(Then, Tree),
               Oldest = case gb_trees:is_empty(Tree1) of
                            true ->
                                undefined;
