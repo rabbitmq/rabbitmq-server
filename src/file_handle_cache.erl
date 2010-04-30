@@ -126,14 +126,14 @@
 
 -behaviour(gen_server).
 
+-export([register_callback/3]).
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
          flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
+-export([release_on_death/1, obtain/0]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
-
--export([release_on_death/1, obtain/0, register_callback/3]).
 
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 100).
