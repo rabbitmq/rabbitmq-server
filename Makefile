@@ -43,9 +43,6 @@ ifndef USE_SPECS
 USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.1" ]; then echo "true"; else echo "false"; fi)
 endif
 
-#other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
-
 VERSION=0.0.0
 TARBALL_NAME=rabbitmq-server-$(VERSION)
 TARGET_SRC_DIR=dist/$(TARBALL_NAME)
@@ -69,7 +66,8 @@ endef
 .PHONY:all dialyze create-plt clean cleandb run run-node run-tests start-background-node start-rabbit-on-node stop-rabbit-on-node force-snapshot stop-node start-cover stop-cover srcdist distclean docs_all install
 
 all: $(EBIN_DIR)/rabbit_app.in generate_app $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCES) make.beam
-	$(ERL_EBIN) -make
+	ERL_COMPILER_OPTIONS='$(shell [ $(USE_SPECS) = "true" ] && echo "[{d,use_specs}]")' \
+		$(ERL_EBIN) -make
 	escript generate_app $(EBIN_DIR) $@ < $<
 
 ## Patched OTP make.erl, checks behaviours as well as includes
