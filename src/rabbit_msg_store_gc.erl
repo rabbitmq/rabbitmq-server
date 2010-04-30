@@ -35,6 +35,8 @@
 
 -export([start_link/4, gc/3, stop/1]).
 
+-export([set_maximum_since_use/2]).
+
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -61,9 +63,14 @@ gc(Server, Source, Destination) ->
 stop(Server) ->
     gen_server2:call(Server, stop, infinity).
 
+set_maximum_since_use(Pid, Age) ->
+    gen_server2:pcast(Pid, 8, {set_maximum_since_use, Age}).
+
 %%----------------------------------------------------------------------------
 
 init([Parent, Dir, IndexState, IndexModule, FileSummaryEts]) ->
+    ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
+                                             [self()]),
     {ok, #gcstate { dir = Dir, index_state = IndexState,
                     index_module = IndexModule, parent = Parent,
                     file_summary_ets = FileSummaryEts},
@@ -80,11 +87,11 @@ handle_cast({gc, Source, Destination}, State =
     Reclaimed = rabbit_msg_store:gc(Source, Destination,
                                     {FileSummaryEts, Dir, Index, IndexState}),
     ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source, Destination),
-    {noreply, State, hibernate}.
-
-handle_info({file_handle_cache, maximum_eldest_since_use, Age}, State) ->
-    ok = file_handle_cache:set_maximum_since_use(Age),
     {noreply, State, hibernate};
+
+handle_cast({set_maximum_since_use, Age}, State) ->
+    ok = file_handle_cache:set_maximum_since_use(Age),
+    {noreply, State, hibernate}.
 
 handle_info(Info, State) ->
     {stop, {unhandled_info, Info}, State}.
