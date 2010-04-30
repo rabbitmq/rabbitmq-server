@@ -61,19 +61,19 @@
 start_link(Hash) ->
     gen_server2:start_link({local, server(Hash)}, ?MODULE, [], []).
 
-invoke(Pid, FPid) when is_pid(Pid) ->
-    [{Status, Res, _}] = invoke_per_node([{node(Pid), [Pid]}], FPid),
+invoke(Pid, Fun) when is_pid(Pid) ->
+    [{Status, Res, _}] = invoke_per_node([{node(Pid), [Pid]}], Fun),
     {Status, Res};
 
-invoke(Pids, FPid) when is_list(Pids) ->
-    invoke_per_node(split_delegate_per_node(Pids), FPid).
+invoke(Pids, Fun) when is_list(Pids) ->
+    invoke_per_node(split_delegate_per_node(Pids), Fun).
 
-invoke_no_result(Pid, FPid) when is_pid(Pid) ->
-    invoke_no_result_per_node([{node(Pid), [Pid]}], FPid),
+invoke_no_result(Pid, Fun) when is_pid(Pid) ->
+    invoke_no_result_per_node([{node(Pid), [Pid]}], Fun),
     ok;
 
-invoke_no_result(Pids, FPid) when is_list(Pids) ->
-    invoke_no_result_per_node(split_delegate_per_node(Pids),  FPid),
+invoke_no_result(Pids, Fun) when is_list(Pids) ->
+    invoke_no_result_per_node(split_delegate_per_node(Pids),  Fun),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -94,28 +94,28 @@ split_delegate_per_node(Pids) ->
         end,
         orddict:new(), Pids)).
 
-invoke_per_node([{Node, Pids}], FPid) when Node == node() ->
-    local_delegate(Pids, FPid);
-invoke_per_node(NodePids, FPid) ->
-    lists:append(delegate_per_node(NodePids, FPid, fun internal_call/2)).
+invoke_per_node([{Node, Pids}], Fun) when Node == node() ->
+    local_delegate(Pids, Fun);
+invoke_per_node(NodePids, Fun) ->
+    lists:append(delegate_per_node(NodePids, Fun, fun internal_call/2)).
 
-invoke_no_result_per_node([{Node, Pids}], FPid) when Node == node() ->
-    %% This is not actually async! However, in practice FPid will
+invoke_no_result_per_node([{Node, Pids}], Fun) when Node == node() ->
+    %% This is not actually async! However, in practice Fun will
     %% always be something that does a gen_server:cast or similar, so
     %% I don't think it's a problem unless someone misuses this
     %% function. Making this *actually* async would be painful as we
     %% can't spawn at this point or we break effect ordering.
-    local_delegate(Pids, FPid);
-invoke_no_result_per_node(NodePids, FPid) ->
-    delegate_per_node(NodePids, FPid, fun internal_cast/2),
+    local_delegate(Pids, Fun);
+invoke_no_result_per_node(NodePids, Fun) ->
+    delegate_per_node(NodePids, Fun, fun internal_cast/2),
     ok.
 
-local_delegate(Pids, FPid) ->
-    [safe_invoke(FPid, Pid) || Pid <- Pids].
+local_delegate(Pids, Fun) ->
+    [safe_invoke(Fun, Pid) || Pid <- Pids].
 
-delegate_per_node(NodePids, FPid, DelegateFun) ->
+delegate_per_node(NodePids, Fun, DelegateFun) ->
     Self = self(),
-    %% Note that this is unsafe if the FPid requires reentrancy to the
+    %% Note that this is unsafe if the Fun requires reentrancy to the
     %% local_server. I.e. if self() == local_server(Node) then we'll
     %% block forever.
     [gen_server2:cast(
@@ -123,7 +123,7 @@ delegate_per_node(NodePids, FPid, DelegateFun) ->
        {thunk, fun() -> Self !
                             {result,
                              DelegateFun(
-                               Node, fun() -> local_delegate(Pids, FPid) end)}
+                               Node, fun() -> local_delegate(Pids, Fun) end)}
                end}) || {Node, Pids} <- NodePids],
     [receive {result, Result} -> Result end || _ <- NodePids].
 
@@ -155,11 +155,11 @@ remote_server(Node) ->
 server(Hash) ->
     list_to_atom("delegate_process_" ++ integer_to_list(Hash)).
 
-safe_invoke(FPid, Pid) ->
+safe_invoke(Fun, Pid) ->
     %% We need the catch here for the local case. In the remote case
     %% there will already have been a catch in handle_ca{ll,st} below,
     %% but that's OK, catch is idempotent.
-    case catch FPid(Pid) of
+    case catch Fun(Pid) of
         {'EXIT', Reason} -> {error, {'EXIT', Reason}, Pid};
         Result           -> {ok, Result, Pid}
     end.
