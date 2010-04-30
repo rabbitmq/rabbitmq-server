@@ -120,10 +120,10 @@ delegate_per_node(NodePids, Fun, DelegateFun) ->
     %% block forever.
     [gen_server2:cast(
        local_server(Node),
-       {thunk, fun() -> Self !
-                            {result,
-                             DelegateFun(
-                               Node, fun() -> local_delegate(Pids, Fun) end)}
+       {thunk, fun() ->
+                       Self ! {result,
+                               DelegateFun(
+                                 Node, fun() -> local_delegate(Pids, Fun) end)}
                end}) || {Node, Pids} <- NodePids],
     [receive {result, Result} -> Result end || _ <- NodePids].
 
