@@ -170,7 +170,8 @@
           limit,
           count,
           obtains,
-          callbacks_mrefs,
+          callbacks,
+          client_mrefs,
           timer_ref
         }).
 
@@ -420,10 +421,11 @@ set_maximum_since_use(MaximumAge) ->
                    Age = timer:now_diff(Now, Then),
                    case Hdl /= closed andalso Age >= MaximumAge of
                        true  -> {Res, Handle1} = soft_close(Handle),
-                                put_handle(Ref, Handle1),
                                 case Res of
-                                    ok -> false;
-                                    _  -> Rep
+                                    ok -> put({Ref, fhc_handle}, Handle1),
+                                          false;
+                                    _  -> put_handle(Ref, Handle1),
+                                          Rep
                                 end;
                        false -> Rep
                    end;
@@ -699,8 +701,8 @@ init([]) ->
             end,
     error_logger:info_msg("Limiting to approx ~p file handles~n", [Limit]),
     {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0,
-                      obtains = [], callbacks_mrefs = dict:new(),
-                      timer_ref = undefined }}.
+                      obtains = [], callbacks = dict:new(),
+                      client_mrefs = dict:new(), timer_ref = undefined }}.
 
 handle_call(obtain, From, State = #fhc_state { count = Count }) ->
     State1 = #fhc_state { count = Count1, limit = Limit, obtains = Obtains } =
@@ -711,14 +713,11 @@ handle_call(obtain, From, State = #fhc_state { count = Count }) ->
         false -> {reply, ok, State1}
     end.
 
-handle_cast({register_callback, Pid, MFA}, State) ->
-    State1 = #fhc_state { callbacks_mrefs = CallsMRefs } =
-        ensure_mref(Pid, State),
-    {noreply,
-     State1 #fhc_state { callbacks_mrefs =
-                             dict:update(
-                               Pid, fun ({undefined, MRef}) -> {MFA, MRef} end,
-                               CallsMRefs) }};
+handle_cast({register_callback, Pid, MFA},
+            State = #fhc_state { callbacks = Callbacks }) ->
+    {noreply, ensure_mref(
+                Pid, State #fhc_state {
+                       callbacks = dict:store(Pid, MFA, Callbacks) })};
 
 handle_cast({open, Pid, EldestUnusedSince}, State =
             #fhc_state { elders = Elders, count = Count }) ->
@@ -751,17 +750,16 @@ handle_cast({release_on_death, Pid}, State) ->
     _MRef = erlang:monitor(process, Pid),
     {noreply, State}.
 
-handle_info({'DOWN', MRef, process, Pid, _Reason},
-            State = #fhc_state { count = Count, callbacks_mrefs = CallsMRefs,
-                                 elders = Elders }) ->
+handle_info({'DOWN', MRef, process, Pid, _Reason}, State =
+                #fhc_state { count = Count, callbacks = Callbacks,
+                             client_mrefs = ClientMRefs, elders = Elders }) ->
     {noreply, process_obtains(
-                case dict:find(Pid, CallsMRefs) of
-                    {ok, {_Callback, MRef}} ->
-                        State #fhc_state {
-                          elders          = dict:erase(Pid, Elders),
-                          callbacks_mrefs = dict:erase(Pid, CallsMRefs) };
-                    _ ->
-                        State #fhc_state { count = Count - 1 }
+                case dict:find(Pid, ClientMRefs) of
+                    {ok, MRef} -> State #fhc_state {
+                                    elders       = dict:erase(Pid, Elders),
+                                    client_mrefs = dict:erase(Pid, ClientMRefs),
+                                    callbacks    = dict:erase(Pid, Callbacks) };
+                    _          -> State #fhc_state { count = Count - 1 }
                 end)}.
 
 terminate(_Reason, State) ->
@@ -788,9 +786,8 @@ process_obtains(State = #fhc_state { limit = Limit, count = Count,
     [gen_server:reply(From, ok) || From <- ObtainableRev],
     State #fhc_state { count = Count + ObtainableLen, obtains = ObtainsNew }.
 
-maybe_reduce(State = #fhc_state {
-               limit = Limit, count = Count, elders = Elders,
-               callbacks_mrefs = CallsMRefs, timer_ref = TRef })
+maybe_reduce(State = #fhc_state { limit = Limit, count = Count, elders = Elders,
+                                  callbacks = Callbacks, timer_ref = TRef })
   when Limit /= infinity andalso Count >= Limit ->
     Now = now(),
     {Pids, Sum, ClientCount} =
@@ -805,11 +802,9 @@ maybe_reduce(State = #fhc_state {
         _  -> AverageAge = Sum / ClientCount,
               lists:foreach(
                 fun (Pid) ->
-                        case dict:fetch(Pid, CallsMRefs) of
-                            {undefined, _MRef} ->
-                                ok;
-                            {{M, F, A}, _MRef} ->
-                                apply(M, F, A ++ [AverageAge])
+                        case dict:find(Pid, Callbacks) of
+                            error           -> ok;
+                            {ok, {M, F, A}} -> apply(M, F, A ++ [AverageAge])
                         end
                 end, Pids)
     end,
@@ -856,15 +851,10 @@ ulimit() ->
             ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
     end.
 
-ensure_mref(Pid, State = #fhc_state { callbacks_mrefs = CallsMRefs }) ->
-    case dict:find(Pid, CallsMRefs) of
-        {ok, {_Callback, MRef}} when MRef =/= undefined ->
-            State;
-        _ ->
-            MRef = erlang:monitor(process, Pid),
-            State #fhc_state {
-              callbacks_mrefs = dict:update(
-                                  Pid, fun ({Callback, undefined}) ->
-                                               {Callback, MRef}
-                                       end, {undefined, MRef}, CallsMRefs) }
+ensure_mref(Pid, State = #fhc_state { client_mrefs = ClientMRefs }) ->
+    case dict:find(Pid, ClientMRefs) of
+        {ok, _MRef} -> State;
+        error       -> MRef = erlang:monitor(process, Pid),
+                       State #fhc_state {
+                         client_mrefs = dict:store(Pid, MRef, ClientMRefs) }
     end.
