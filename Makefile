@@ -10,8 +10,7 @@ EBIN_DIR=ebin
 INCLUDE_DIR=include
 DOCS_DIR=docs
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing.erl $(USAGES_ERL)
-BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
-TARGETS=$(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS) $(EBIN_DIR)/rabbit.app
+OBJECTS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
@@ -67,19 +66,17 @@ define usage_dep
   $(call usage_xml_to_erl, $(1)): $(1) $(DOCS_DIR)/usage.xsl
 endef
 
-all: $(TARGETS)
+.PHONY:all dialyze create-plt clean cleandb run run-node run-tests start-background-node start-rabbit-on-node stop-rabbit-on-node force-snapshot stop-node start-cover stop-cover srcdist distclean docs_all install
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl make.beam
+all: $(EBIN_DIR)/rabbit.app
+
+$(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in generate_app $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCES) make.beam
 	$(ERL_EBIN) -make
-
-.NOTPARALLEL:
+	escript generate_app $(EBIN_DIR) $@ < $<
 
 ## Patched OTP make.erl, checks behaviours as well as includes
 make.beam: make.erl
 	erlc $<
-
-$(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
-	escript generate_app $(EBIN_DIR) $@ < $<
 
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_PATH) $@
@@ -87,19 +84,19 @@ $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.p
 $(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_PATH) $@
 
-dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
+dialyze: all $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
-		"rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(BEAM_TARGETS)\"))."
+		"rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(OBJECTS)\"))."
 
 # rabbit.plt is used by rabbitmq-erlang-client's dialyze make target
 create-plt: $(RABBIT_PLT)
 
-$(RABBIT_PLT): $(BEAM_TARGETS) $(BASIC_PLT)
+$(RABBIT_PLT): all $(BASIC_PLT)
 	cp $(BASIC_PLT) $@
 	$(ERL_EBIN) -eval \
-	    "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:add_to_plt(\"$@\", \"$(BEAM_TARGETS)\"))."
+	    "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:add_to_plt(\"$@\", \"$(OBJECTS)\"))."
 
-$(BASIC_PLT): $(BEAM_TARGETS)
+$(BASIC_PLT): all
 	if [ -f $@ ]; then \
 	    touch $@; \
 	else \
