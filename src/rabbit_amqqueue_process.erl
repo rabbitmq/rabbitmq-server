@@ -276,16 +276,12 @@ deliver_or_enqueue_n(Messages, State = #q{message_buffer = MessageBuffer}) ->
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
 remove_consumer(ChPid, ConsumerTag, Queue) ->
-    %% TODO: replace this with queue:filter/2 once we move to R12
-    queue:from_list(lists:filter(
-                      fun ({CP, #consumer{tag = CT}}) ->
-                              (CP /= ChPid) or (CT /= ConsumerTag)
-                      end, queue:to_list(Queue))).
+    queue:filter(fun ({CP, #consumer{tag = CT}}) ->
+                         (CP /= ChPid) or (CT /= ConsumerTag)
+                 end, Queue).
 
 remove_consumers(ChPid, Queue) ->
-    %% TODO: replace this with queue:filter/2 once we move to R12
-    queue:from_list(lists:filter(fun ({CP, _}) -> CP /= ChPid end,
-                                 queue:to_list(Queue))).
+    queue:filter(fun ({CP, _}) -> CP /= ChPid end, Queue).
 
 move_consumers(ChPid, From, To) ->
     {Kept, Removed} = lists:partition(fun ({CP, _}) -> CP /= ChPid end,
