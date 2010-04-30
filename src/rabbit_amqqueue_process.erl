@@ -102,8 +102,6 @@ info_keys() -> ?INFO_KEYS.
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
-    ok = file_handle_cache:register_callback(
-           rabbit_amqqueue, set_maximum_since_use, [self()]),
     {ok, BQ} = application:get_env(backing_queue_module),
 
     {ok, #q{q = Q,
@@ -721,6 +719,8 @@ handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
 handle_cast({init, Recover},
             State = #q{q = #amqqueue{name = QName, durable = IsDurable},
                        backing_queue = BQ, backing_queue_state = undefined}) ->
+    ok = file_handle_cache:register_callback(
+           rabbit_amqqueue, set_maximum_since_use, [self()]),
     ok = rabbit_memory_monitor:register(
            self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
     noreply(State#q{backing_queue_state = BQ:init(QName, IsDurable, Recover)});
