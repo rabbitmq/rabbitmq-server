@@ -68,7 +68,7 @@ endef
 all: $(EBIN_DIR)/rabbit_app.in generate_app $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCES) make.beam
 	ERL_COMPILER_OPTIONS='$(shell [ $(USE_SPECS) = "true" ] && echo "[{d,use_specs}]")' \
 		$(ERL_EBIN) -make
-	escript generate_app $(EBIN_DIR) $@ < $<
+	escript generate_app $(EBIN_DIR) $(EBIN_DIR)/rabbit.app < $(EBIN_DIR)/rabbit_app.in
 
 ## Patched OTP make.erl, checks behaviours as well as includes
 make.beam: make.erl
