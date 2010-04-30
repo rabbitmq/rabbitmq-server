@@ -178,7 +178,7 @@ srcdist: distclean
 	sed -i.save 's/%%VSN%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in && rm -f $(TARGET_SRC_DIR)/ebin/rabbit_app.in.save
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
-	cp codegen.py Makefile Emakefile generate_app calculate-relative $(TARGET_SRC_DIR)
+	cp codegen.py Makefile Emakefile generate_app make.erl calculate-relative $(TARGET_SRC_DIR)
 
 	cp -r scripts $(TARGET_SRC_DIR)
 	cp -r $(DOCS_DIR) $(TARGET_SRC_DIR)
