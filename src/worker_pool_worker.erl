@@ -49,6 +49,8 @@
 -spec(submit_async/2 ::
       (pid(), fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
 
+-spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------
