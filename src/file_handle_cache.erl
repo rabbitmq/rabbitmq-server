@@ -811,8 +811,8 @@ maybe_reduce(State = #fhc_state {
                         end
                 end, Pids)
     end,
-    {ok, _TRef} = timer:apply_after(?FILE_HANDLES_CHECK_INTERVAL, gen_server,
-                                    cast, [?SERVER, check_counts]),
+    {ok, _TRef} = timer:apply_after(?FILE_HANDLES_CHECK_INTERVAL,
+                                    gen_server, cast, [?SERVER, check_counts]),
     State;
 maybe_reduce(State) ->
     State.
