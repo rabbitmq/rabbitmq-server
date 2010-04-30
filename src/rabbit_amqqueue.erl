@@ -283,8 +283,8 @@ commit_all(QPids, Txn, ChPid) ->
       QPids).
 
 rollback_all(QPids, Txn, ChPid) ->
-    delegate:invoke_no_result(QPids,
-        fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end).
+    delegate:invoke_no_result(
+      QPids, fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end).
 
 notify_down_all(QPids, ChPid) ->
     safe_delegate_call_ok(
@@ -295,8 +295,10 @@ notify_down_all(QPids, ChPid) ->
       QPids).
 
 limit_all(QPids, ChPid, LimiterPid) ->
-    delegate:invoke_no_result(QPids,
-        fun (QPid) -> gen_server2:cast(QPid, {limit, ChPid, LimiterPid}) end).
+    delegate:invoke_no_result(
+      QPids, fun (QPid) ->
+                     gen_server2:cast(QPid, {limit, ChPid, LimiterPid})
+             end).
 
 claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
     delegate_call(QPid, {claim_queue, ReaderPid}, infinity).
@@ -312,7 +314,7 @@ basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid, LimiterPid,
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     ok = delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg},
-                           infinity).
+                       infinity).
 
 notify_sent(QPid, ChPid) ->
     delegate_pcast(QPid, 7, {notify_sent, ChPid}).
@@ -321,8 +323,8 @@ unblock(QPid, ChPid) ->
     delegate_pcast(QPid, 7, {unblock, ChPid}).
 
 flush_all(QPids, ChPid) ->
-    delegate:invoke_no_result(QPids,
-        fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
+    delegate:invoke_no_result(
+      QPids, fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
 
 internal_delete(QueueName) ->
     case
