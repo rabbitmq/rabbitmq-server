@@ -341,16 +341,7 @@ delete_transient_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write).
 
 contains(Table, MatchHead) ->
-    try
-        continue(mnesia:select(Table, [{MatchHead, [], ['$_']}], 1, read))
-    catch exit:{aborted, {badarg, _}} ->
-            %% work around OTP-7025, which was fixed in R12B-1, by
-            %% falling back on a less efficient method
-            case mnesia:match_object(Table, MatchHead, read) of
-                []    -> false;
-                [_|_] -> true
-            end
-    end.
+    continue(mnesia:select(Table, [{MatchHead, [], ['$_']}], 1, read)).
 
 continue('$end_of_table')    -> false;
 continue({[_|_], _})         -> true;
