@@ -4,7 +4,7 @@
 %% 1) behaviours are checked similarly to included files when deciding
 %%    whether to recompile a source file or not
 
-%% All modifications are Copyright (C) 2010 LShift Ltd.
+%% All modifications are Copyright (C) 2010 Rabbit Technologies Ltd.
 
 %%
 %% %CopyrightBegin%
