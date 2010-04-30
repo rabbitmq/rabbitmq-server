@@ -398,19 +398,16 @@ clear(Ref) ->
       [Ref],
       fun ([#handle { at_eof = true, write_buffer_size = 0, offset = 0 }]) ->
               ok;
-          ([Handle = #handle { write_buffer_size = Size, offset = Offset }]) ->
-              Handle1 = Handle #handle { write_buffer = [],
-                                         write_buffer_size = 0,
-                                         offset = Offset - Size },
-              case maybe_seek(bof, Handle1) of
-                  {{ok, 0}, Handle2 = #handle { hdl = Hdl }} ->
+          ([Handle]) ->
+              case maybe_seek(bof, Handle #handle { write_buffer = [],
+                                                    write_buffer_size = 0 }) of
+                  {{ok, 0}, Handle1 = #handle { hdl = Hdl }} ->
                       case file:truncate(Hdl) of
-                          ok    -> {ok, [Handle2 #handle {
-                                           trusted_offset = 0,
-                                           at_eof = true }]};
-                          Error -> {Error, [Handle2]}
+                          ok    -> {ok, [Handle1 #handle {trusted_offset = 0,
+                                                          at_eof = true }]};
+                          Error -> {Error, [Handle1]}
                       end;
-                  Error ->
+                  {{error, _} = Error, Handle1} ->
                       {Error, [Handle1]}
               end
       end).
