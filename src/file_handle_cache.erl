@@ -170,7 +170,8 @@
           limit,
           count,
           obtains,
-          callbacks_mrefs
+          callbacks_mrefs,
+          reduce_timer_set
         }).
 
 %%----------------------------------------------------------------------------
@@ -698,7 +699,8 @@ init([]) ->
             end,
     error_logger:info_msg("Limiting to approx ~p file handles~n", [Limit]),
     {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0,
-                      obtains = [], callbacks_mrefs = dict:new() }}.
+                      obtains = [], callbacks_mrefs = dict:new(),
+                      reduce_timer_set = false }}.
 
 handle_call(obtain, From, State = #fhc_state { count = Count }) ->
     State1 = #fhc_state { count = Count1, limit = Limit, obtains = Obtains } =
@@ -743,7 +745,7 @@ handle_cast({close, Pid, EldestUnusedSince}, State =
                                                     count = Count - 1 }))};
 
 handle_cast(check_counts, State) ->
-    {noreply, maybe_reduce(State)};
+    {noreply, maybe_reduce(State #fhc_state { reduce_timer_set = false })};
 
 handle_cast({release_on_death, Pid}, State) ->
     _MRef = erlang:monitor(process, Pid),
@@ -788,7 +790,7 @@ process_obtains(State = #fhc_state { limit = Limit, count = Count,
 
 maybe_reduce(State = #fhc_state {
                limit = Limit, count = Count, elders = Elders,
-               callbacks_mrefs = CallsMRefs })
+               callbacks_mrefs = CallsMRefs, reduce_timer_set = TimerSet })
   when Limit /= infinity andalso Count >= Limit ->
     Now = now(),
     {Pids, Sum, ClientCount} =
@@ -811,9 +813,13 @@ maybe_reduce(State = #fhc_state {
                         end
                 end, Pids)
     end,
-    {ok, _TRef} = timer:apply_after(?FILE_HANDLES_CHECK_INTERVAL,
-                                    gen_server, cast, [?SERVER, check_counts]),
-    State;
+    case TimerSet of
+        true  -> State;
+        false -> {ok, _TRef} = timer:apply_after(
+                                 ?FILE_HANDLES_CHECK_INTERVAL,
+                                 gen_server, cast, [?SERVER, check_counts]),
+                 State #fhc_state { reduce_timer_set = true }
+    end;
 maybe_reduce(State) ->
     State.
 
