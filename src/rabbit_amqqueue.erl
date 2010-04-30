@@ -32,7 +32,8 @@
 -module(rabbit_amqqueue).
 
 -export([start/0, declare/4, delete/3, purge/1]).
--export([internal_declare/2, internal_delete/1]).
+-export([internal_declare/2, internal_delete/1,
+         set_maximum_since_use/2]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/2, requeue/3, ack/4]).
@@ -108,6 +109,7 @@
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
+-spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
 
@@ -349,6 +351,9 @@ internal_delete(QueueName) ->
             PostHook(),
             ok
     end.
+
+set_maximum_since_use(QPid, Age) ->
+    gen_server2:pcast(QPid, 8, {set_maximum_since_use, Age}).
 
 on_node_down(Node) ->
     [Hook() ||

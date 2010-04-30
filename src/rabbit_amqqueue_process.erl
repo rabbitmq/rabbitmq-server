@@ -739,6 +739,8 @@ handle_call({claim_queue, ReaderPid}, _From,
     end.
 
 handle_cast({init, Recover}, State = #q{message_buffer = undefined}) ->
+    ok = file_handle_cache:register_callback(
+           rabbit_amqqueue, set_maximum_since_use, [self()]),
     Messages = case Recover of
                    true  -> rabbit_persister:queue_content(qname(State));
                    false -> []
@@ -815,6 +817,10 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
 
 handle_cast({flush, ChPid}, State) ->
     ok = rabbit_channel:flushed(ChPid, self()),
+    noreply(State);
+
+handle_cast({set_maximum_since_use, Age}, State) ->
+    ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State).
 
 handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
