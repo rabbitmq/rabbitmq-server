@@ -54,6 +54,12 @@
                    [{mfa,         {rabbit_mnesia, init, []}},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({file_handle_cache,
+                   [{description, "file handle cache server"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [file_handle_cache]}},
+                    {enables,     worker_pool}]}).
+
 -rabbit_boot_step({worker_pool,
                    [{description, "worker pool"},
                     {mfa,         {rabbit_sup, start_child, [worker_pool_sup]}},

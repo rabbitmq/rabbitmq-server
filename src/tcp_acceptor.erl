@@ -76,7 +76,7 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
                               [inet_parse:ntoa(Address), Port,
                                inet_parse:ntoa(PeerAddress), PeerPort]),
         %% handle
-        apply(M, F, A ++ [Sock])
+        file_handle_cache:release_on_death(apply(M, F, A ++ [Sock]))
     catch {inet_error, Reason} ->
             gen_tcp:close(Sock),
             error_logger:error_msg("unable to accept TCP connection: ~p~n",
@@ -104,6 +104,7 @@ code_change(_OldVsn, State, _Extra) ->
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 accept(State = #state{sock=LSock}) ->
+    ok = file_handle_cache:obtain(),
     case prim_inet:async_accept(LSock, -1) of
         {ok, Ref} -> {noreply, State#state{ref=Ref}};
         Error     -> {stop, {cannot_accept, Error}, State}
