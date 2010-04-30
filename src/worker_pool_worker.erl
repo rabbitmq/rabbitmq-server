@@ -48,7 +48,8 @@
 -spec(submit/2 :: (pid(), fun (() -> A) | {atom(), atom(), [any()]}) -> A).
 -spec(submit_async/2 ::
       (pid(), fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
-
+-spec(run/1 :: (fun (() -> A)) -> A;
+               ({atom(), atom(), [any()]}) -> any()).
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 
 -endif.
@@ -71,6 +72,11 @@ submit_async(Pid, Fun) ->
 
 set_maximum_since_use(Pid, Age) ->
     gen_server2:pcast(Pid, 8, {set_maximum_since_use, Age}).
+
+run({M, F, A}) ->
+    apply(M, F, A);
+run(Fun) ->
+    Fun().
 
 %%----------------------------------------------------------------------------
 
@@ -110,10 +116,3 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, State) ->
     State.
-
-%%----------------------------------------------------------------------------
-
-run({M, F, A}) ->
-    apply(M, F, A);
-run(Fun) ->
-    Fun().
