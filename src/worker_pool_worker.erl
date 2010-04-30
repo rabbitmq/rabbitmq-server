@@ -67,8 +67,6 @@ submit(Pid, Fun) ->
 submit_async(Pid, Fun) ->
     gen_server2:cast(Pid, {submit_async, Fun}).
 
-%%----------------------------------------------------------------------------
-
 run({M, F, A}) ->
     apply(M, F, A);
 run(Fun) ->
