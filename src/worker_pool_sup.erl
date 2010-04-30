@@ -29,4 +29,41 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--define(DELEGATE_PROCESSES, 10).
+-module(worker_pool_sup).
+
+-behaviour(supervisor).
+
+-export([start_link/0, start_link/1]).
+
+-export([init/1]).
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(start_link/1 ::
+        (non_neg_integer()) -> {'ok', pid()} | 'ignore' | {'error', any()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
+-define(SERVER, ?MODULE).
+
+%%----------------------------------------------------------------------------
+
+start_link() ->
+    start_link(erlang:system_info(schedulers)).
+
+start_link(WCount) ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, [WCount]).
+
+%%----------------------------------------------------------------------------
+
+init([WCount]) ->
+    {ok, {{one_for_one, 10, 10},
+          [{worker_pool, {worker_pool, start_link, []}, transient,
+            16#ffffffff, worker, [worker_pool]} |
+           [{N, {worker_pool_worker, start_link, [N]}, transient, 16#ffffffff,
+             worker, [worker_pool_worker]} || N <- lists:seq(1, WCount)]]}}.
