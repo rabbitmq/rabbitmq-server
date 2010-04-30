@@ -1,4 +1,3 @@
-
 TMPDIR ?= /tmp
 
 RABBITMQ_NODENAME ?= rabbit
@@ -6,15 +5,13 @@ RABBITMQ_SERVER_START_ARGS ?=
 RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
 
-DEPS_FILE=deps.mk
 SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
 DOCS_DIR=docs
-INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing.erl $(USAGES_ERL)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
-TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
+TARGETS=$(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS) $(EBIN_DIR)/rabbit.app
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
@@ -72,14 +69,17 @@ endef
 
 all: $(TARGETS)
 
-$(DEPS_FILE): $(SOURCES) $(INCLUDES)
-	escript generate_deps $(INCLUDE_DIR) $(SOURCE_DIR) \$$\(EBIN_DIR\) $@
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl make.beam
+	$(ERL_EBIN) -make
+
+.NOTPARALLEL:
+
+## Patched OTP make.erl, checks behaviours as well as includes
+make.beam: make.erl
+	erlc $<
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) $@ < $<
-
-$(EBIN_DIR)/%.beam:
-	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
 	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_PATH) $@
@@ -108,12 +108,12 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 	fi
 
 clean:
+	rm -f make.beam
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
 	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
 	rm -f $(RABBIT_PLT)
-	rm -f $(DEPS_FILE)
 
 cleandb:
 	rm -rf $(RABBITMQ_MNESIA_DIR)/*
@@ -185,7 +185,7 @@ srcdist: distclean
 	sed -i.save 's/%%VSN%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in && rm -f $(TARGET_SRC_DIR)/ebin/rabbit_app.in.save
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
-	cp codegen.py Makefile generate_app generate_deps calculate-relative $(TARGET_SRC_DIR)
+	cp codegen.py Makefile Emakefile generate_app calculate-relative $(TARGET_SRC_DIR)
 
 	cp -r scripts $(TARGET_SRC_DIR)
 	cp -r $(DOCS_DIR) $(TARGET_SRC_DIR)
@@ -257,26 +257,3 @@ install_dirs:
 	mkdir -p $(TARGET_DIR)/sbin
 
 $(foreach XML, $(USAGES_XML), $(eval $(call usage_dep, $(XML))))
-
-# Note that all targets which depend on clean must have clean in their
-# name.  Also any target that doesn't depend on clean should not have
-# clean in its name, unless you know that you don't need any of the
-# automatic dependency generation for that target (eg cleandb).
-
-# We want to load the dep file if *any* target *doesn't* contain
-# "clean" - i.e. if removing all clean-like targets leaves something
-
-ifeq "$(MAKECMDGOALS)" ""
-TESTABLEGOALS:=$(.DEFAULT_GOAL)
-else
-TESTABLEGOALS:=$(MAKECMDGOALS)
-endif
-
-ifneq "$(strip $(TESTABLEGOALS))" "$(DEPS_FILE)"
-ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
-ifeq "$(strip $(wildcard $(DEPS_FILE)))" ""
-$(info $(shell $(MAKE) $(DEPS_FILE)))
-endif
-include $(DEPS_FILE)
-endif
-endif
