@@ -442,7 +442,9 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
 
 name({local,Name}) -> Name;
 name({global,Name}) -> Name;
-name(Pid) when is_pid(Pid) -> Pid.
+%% name(Pid) when is_pid(Pid) -> Pid;
+%% when R12 goes away, drop the line beneath and uncomment the line above
+name(Name) -> Name.
 
 unregister_name({local,Name}) ->
     _ = (catch unregister(Name));
