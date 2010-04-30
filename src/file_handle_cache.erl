@@ -210,6 +210,8 @@
 -spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(delete/1 :: (ref()) -> ok_or_error()).
 -spec(clear/1 :: (ref()) -> ok_or_error()).
+-spec(release_on_death/1 :: (pid()) -> 'ok').
+-spec(obtain/0 :: () -> 'ok').
 
 -endif.
 
