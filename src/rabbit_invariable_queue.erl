@@ -178,30 +178,21 @@ requeue(AckTags, State = #iv_state { pending_ack = PA, queue = Q,
     PA1 = remove_acks(AckTags, PA),
     State #iv_state { pending_ack = PA1, queue = Q1, len = Len1 }.
 
-len(#iv_state { len = Len }) ->
-    Len.
+len(#iv_state { len = Len }) -> Len.
 
-is_empty(State) ->
-    0 == len(State).
+is_empty(State) -> 0 == len(State).
 
-set_ram_duration_target(_DurationTarget, State) ->
-    %% HA!
-    State.
+set_ram_duration_target(_DurationTarget, State) -> State.
 
-ram_duration(State) ->
-    {0, State}.
+ram_duration(State) -> {0, State}.
 
-needs_sync(_State) ->
-    false.
+needs_sync(_State) -> false.
 
-sync(State) ->
-    State.
+sync(State) -> State.
 
-handle_pre_hibernate(State) ->
-    State.
+handle_pre_hibernate(State) -> State.
 
-status(_State) ->
-    [].
+status(_State) -> [].
 
 %%----------------------------------------------------------------------------
 

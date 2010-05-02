@@ -175,8 +175,10 @@ set_sync_timer(State, _Fun) ->
     {State, 0}.
 
 ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
-    {ok, TRef} = timer:apply_after(?RAM_DURATION_UPDATE_INTERVAL, rabbit_amqqueue,
-                                   update_ram_duration, [self()]),
+    {ok, TRef} = timer:apply_after(
+                   ?RAM_DURATION_UPDATE_INTERVAL,
+                   rabbit_amqqueue, update_ram_duration,
+                   [self()]),
     State#q{rate_timer_ref = TRef};
 ensure_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};

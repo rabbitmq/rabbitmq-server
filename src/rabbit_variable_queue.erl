@@ -236,10 +236,6 @@
                pending_ack           :: dict()
               }).
 
--spec(tx_commit_post_msg_store/5 ::
-        (boolean(), [guid()], [ack()], {pid(), any()}, state()) -> state()).
--spec(tx_commit_index/1 :: (state()) -> state()).
-
 -include("rabbit_backing_queue_spec.hrl").
 
 -endif.
