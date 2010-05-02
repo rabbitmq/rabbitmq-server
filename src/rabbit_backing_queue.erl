@@ -113,11 +113,12 @@ behaviour_info(callbacks) ->
      %% queue.
      {ram_duration, 1},
 
-     %% Can return 'undefined' or a thunk which will receive the
-     %% state, and must return the state, which will be invoked as
-     %% soon as the queue process can manage (either on an empty
-     %% mailbox, or when a timer fires).
-     {sync_callback, 1},
+     %% Should 'sync' be called as soon as the queue process can
+     %% manage (either on an empty mailbox, or when a timer fires)?
+     {needs_sync, 1},
+
+     %% Called (eventually) after needs_sync returns 'true'.
+     {sync, 1},
 
      %% Called immediately before the queue hibernates.
      {handle_pre_hibernate, 1},

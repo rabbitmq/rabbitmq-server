@@ -34,7 +34,7 @@
 -export([init/3, terminate/1, publish/2, publish_delivered/3,
          set_ram_duration_target/2, ram_duration/1, fetch/2, ack/2, len/1,
          is_empty/1, purge/1, delete_and_terminate/1, requeue/2, tx_publish/3,
-         tx_ack/3, tx_rollback/2, tx_commit/3, sync_callback/1,
+         tx_ack/3, tx_rollback/2, tx_commit/3, needs_sync/1, sync/1,
          handle_pre_hibernate/1, status/1]).
 
 -export([start/1]).
@@ -685,8 +685,10 @@ ram_duration(State = #vqstate { egress_rate = Egress,
                                   ram_msg_count_prev = RamMsgCount,
                                   out_counter = 0, in_counter = 0 })}.
 
-sync_callback(#vqstate { on_sync = {_, _, []} }) -> undefined;
-sync_callback(_)                                 -> fun tx_commit_index/1.
+needs_sync(#vqstate { on_sync = {_, _, []} }) -> false;
+needs_sync(_)                                 -> true.
+
+sync(State) -> tx_commit_index(State).
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state =

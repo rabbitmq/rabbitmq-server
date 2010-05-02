@@ -55,7 +55,6 @@
             has_had_consumers,
             backing_queue,
             backing_queue_state,
-            backing_queue_timeout_fun,
             active_consumers,
             blocked_consumers,
             sync_timer_ref,
@@ -110,7 +109,6 @@ init(Q) ->
             has_had_consumers = false,
             backing_queue = BQ,
             backing_queue_state = undefined,
-            backing_queue_timeout_fun = undefined,
             active_consumers = queue:new(),
             blocked_consumers = queue:new(),
             sync_timer_ref = undefined,
@@ -159,19 +157,20 @@ noreply(NewState) ->
     {noreply, NewState1, Timeout}.
 
 next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
-    set_sync_timer(ensure_rate_timer(State), BQ:sync_callback(BQS)).
+    set_sync_timer(ensure_rate_timer(State), BQ:needs_sync(BQS)).
 
-set_sync_timer(State = #q{sync_timer_ref = undefined}, undefined) ->
+set_sync_timer(State = #q{sync_timer_ref = undefined}, false) ->
     {State, hibernate};
-set_sync_timer(State = #q{sync_timer_ref = undefined}, Fun) ->
+set_sync_timer(State = #q{sync_timer_ref = undefined,
+                          backing_queue = BQ}, true) ->
     {ok, TRef} = timer:apply_after(
-                   ?SYNC_INTERVAL, rabbit_amqqueue,
-                   maybe_run_queue_via_backing_queue, [self(), Fun]),
-    {State#q{sync_timer_ref = TRef, backing_queue_timeout_fun = Fun}, 0};
-set_sync_timer(State = #q{sync_timer_ref = TRef}, undefined) ->
+                   ?SYNC_INTERVAL,
+                   rabbit_amqqueue, maybe_run_queue_via_backing_queue,
+                   [self(), fun (BQS) -> BQ:sync(BQS) end]),
+    {State#q{sync_timer_ref = TRef}, 0};
+set_sync_timer(State = #q{sync_timer_ref = TRef}, false) ->
     {ok, cancel} = timer:cancel(TRef),
-    {State#q{sync_timer_ref = undefined, backing_queue_timeout_fun = undefined},
-     hibernate};
+    {State#q{sync_timer_ref = undefined}, hibernate};
 set_sync_timer(State, _Fun) ->
     {State, 0}.
 
@@ -823,12 +822,9 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
         {stop, NewState} -> {stop, normal, NewState}
     end;
 
-handle_info(timeout, State = #q{backing_queue_timeout_fun = undefined}) ->
-    noreply(State);
-
-handle_info(timeout, State = #q{backing_queue_timeout_fun = Fun}) ->
+handle_info(timeout, State = #q{backing_queue = BQ}) ->
     noreply(maybe_run_queue_via_backing_queue(
-              Fun, State#q{backing_queue_timeout_fun = undefined}));
+              fun (BQS) -> BQ:sync(BQS) end, State));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
