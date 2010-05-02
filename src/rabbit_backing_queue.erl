@@ -77,14 +77,12 @@ behaviour_info(callbacks) ->
      %% Acks, but in the context of a transaction.
      {tx_ack, 3},
 
-     %% Undo anything which has been done by the tx_publish of the
-     %% indicated messages.
+     %% Undo anything which has been done in the context of the
+     %% specified transaction.
      {tx_rollback, 2},
 
-     %% Commit these publishes and acktags. The publishes you will
-     %% have previously seen in calls to tx_publish, and the acks in
-     %% calls to tx_ack. The Fun passed in must be called once the
-     %% messages have really been commited. This CPS permits the
+     %% Commit a transaction. The Fun passed in must be called once
+     %% the messages have really been commited. This CPS permits the
      %% possibility of commit coalescing.
      {tx_commit, 3},
 
