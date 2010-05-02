@@ -130,8 +130,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-terminate_shutdown(Fun, State = #q{backing_queue = BQ,
-                                   backing_queue_state = BQS}) ->
+terminate_shutdown(Fun, State) ->
+    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+        stop_sync_timer(stop_rate_timer(State)),
     case BQS of
         undefined -> State;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
@@ -143,7 +144,7 @@ terminate_shutdown(Fun, State = #q{backing_queue = BQ,
                                           BQ:tx_rollback(Txn, BQSN),
                                       BQSN1
                               end, BQS, all_ch_record()),
-                     State#q{backing_queue_state = Fun(BQS1)}
+                     State1#q{backing_queue_state = Fun(BQS1)}
     end.
 
 reply(Reply, NewState) ->
@@ -156,23 +157,28 @@ noreply(NewState) ->
     {NewState1, Timeout} = next_state(NewState),
     {noreply, NewState1, Timeout}.
 
-next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
-    set_sync_timer(ensure_rate_timer(State), BQ:needs_sync(BQS)).
+next_state(State) ->
+    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+        ensure_rate_timer(State),
+    case BQ:needs_sync(BQS)of
+        true  -> {ensure_sync_timer(State1), 0};
+        false -> {stop_sync_timer(State1), hibernate}
+    end.
 
-set_sync_timer(State = #q{sync_timer_ref = undefined}, false) ->
-    {State, hibernate};
-set_sync_timer(State = #q{sync_timer_ref = undefined,
-                          backing_queue = BQ}, true) ->
+ensure_sync_timer(State = #q{sync_timer_ref = undefined, backing_queue = BQ}) ->
     {ok, TRef} = timer:apply_after(
                    ?SYNC_INTERVAL,
                    rabbit_amqqueue, maybe_run_queue_via_backing_queue,
                    [self(), fun (BQS) -> BQ:sync(BQS) end]),
-    {State#q{sync_timer_ref = TRef}, 0};
-set_sync_timer(State = #q{sync_timer_ref = TRef}, false) ->
+    State#q{sync_timer_ref = TRef};
+ensure_sync_timer(State) ->
+    State.
+
+stop_sync_timer(State = #q{sync_timer_ref = undefined}) ->
+    State;
+stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
-    {State#q{sync_timer_ref = undefined}, hibernate};
-set_sync_timer(State, _Fun) ->
-    {State, 0}.
+    State#q{sync_timer_ref = undefined}.
 
 ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(
