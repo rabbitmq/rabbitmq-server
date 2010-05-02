@@ -269,7 +269,8 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                       ChPid, ConsumerTag, AckRequired,
                       {QName, self(), AckTag, IsDelivered, Message}),
                     ChAckTags1 = case AckRequired of
-                                     true  -> sets:add_element(AckTag, ChAckTags);
+                                     true  -> sets:add_element(
+                                                AckTag, ChAckTags);
                                      false -> ChAckTags
                                  end,
                     NewC = C#cr{unsent_message_count = Count + 1,
@@ -585,8 +586,8 @@ handle_call({basic_get, ChPid, NoAck}, _From,
                            C#cr{acktags = sets:add_element(AckTag, ChAckTags)});
                 false -> ok
             end,
-            reply({ok, Remaining, {QName, self(), AckTag, IsDelivered, Message}},
-                  State#q{backing_queue_state = BQS1})
+            Msg = {QName, self(), AckTag, IsDelivered, Message},
+            reply({ok, Remaining, Msg}, State#q{backing_queue_state = BQS1})
     end;
 
 handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
@@ -673,8 +674,7 @@ handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
-    Length = BQ:len(BQS),
-    IsEmpty = Length == 0,
+    IsEmpty = BQ:is_empty(BQS),
     IsUnused = is_unused(State),
     if
         IfEmpty and not(IsEmpty) ->
@@ -682,7 +682,7 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
         IfUnused and not(IsUnused) ->
             reply({error, in_use}, State);
         true ->
-            {stop, normal, {ok, Length}, State}
+            {stop, normal, {ok, BQ:len(BQS)}, State}
     end;
 
 handle_call(purge, _From, State = #q{backing_queue = BQ,
