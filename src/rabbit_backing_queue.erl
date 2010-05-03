@@ -117,7 +117,9 @@ behaviour_info(callbacks) ->
      %% manage (either on an empty mailbox, or when a timer fires)?
      {needs_sync, 1},
 
-     %% Called (eventually) after needs_sync returns 'true'.
+     %% Called (eventually) after needs_sync returns 'true'. Note this
+     %% may be called more than once for each 'true' returned from
+     %% needs_sync.
      {sync, 1},
 
      %% Called immediately before the queue hibernates.
