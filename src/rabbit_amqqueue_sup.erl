@@ -31,21 +31,23 @@
 
 -module(rabbit_amqqueue_sup).
 
--behaviour(supervisor).
+-behaviour(supervisor2).
 
 -export([start_link/0, start_child/1]).
 
 -export([init/1]).
 
+-include("rabbit.hrl").
+
 -define(SERVER, ?MODULE).
 
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
 
 start_child(Args) ->
-    supervisor:start_child(?SERVER, Args).
+    supervisor2:start_child(?SERVER, Args).
 
 init([]) ->
-    {ok, {{simple_one_for_one, 10, 10},
+    {ok, {{simple_one_for_one_terminate, 10, 10},
           [{rabbit_amqqueue, {rabbit_amqqueue_process, start_link, []},
-            temporary, brutal_kill, worker, [rabbit_amqqueue_process]}]}}.
+            temporary, ?MAX_WAIT, worker, [rabbit_amqqueue_process]}]}}.

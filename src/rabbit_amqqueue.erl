@@ -32,7 +32,10 @@
 -module(rabbit_amqqueue).
 
 -export([start/0, declare/4, delete/3, purge/1]).
--export([internal_declare/2, internal_delete/1]).
+-export([internal_declare/2, internal_delete/1,
+         maybe_run_queue_via_backing_queue/2,
+         update_ram_duration/1, set_ram_duration_target/2,
+         set_maximum_since_use/2]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2,
          stat/1, stat_all/0, deliver/2, requeue/3, ack/4]).
@@ -108,6 +111,10 @@
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
+-spec(maybe_run_queue_via_backing_queue/2 :: (pid(), (fun ((A) -> A))) -> 'ok').
+-spec(update_ram_duration/1 :: (pid()) -> 'ok').
+-spec(set_ram_duration_target/2 :: (pid(), number()) -> 'ok').
+-spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
 
@@ -117,9 +124,8 @@
 
 start() ->
     DurableQueues = find_durable_queues(),
-    ok = rabbit_sup:start_child(
-           rabbit_persister,
-           [[QName || #amqqueue{name = QName} <- DurableQueues]]),
+    {ok, BQ} = application:get_env(backing_queue_module),
+    ok = BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,
@@ -349,6 +355,19 @@ internal_delete(QueueName) ->
             PostHook(),
             ok
     end.
+
+maybe_run_queue_via_backing_queue(QPid, Fun) ->
+    gen_server2:pcall(QPid, 7, {maybe_run_queue_via_backing_queue, Fun},
+                      infinity).
+
+update_ram_duration(QPid) ->
+    gen_server2:pcast(QPid, 8, update_ram_duration).
+
+set_ram_duration_target(QPid, Duration) ->
+    gen_server2:pcast(QPid, 8, {set_ram_duration_target, Duration}).
+
+set_maximum_since_use(QPid, Age) ->
+    gen_server2:pcast(QPid, 8, {set_maximum_since_use, Age}).
 
 on_node_down(Node) ->
     [Hook() ||
