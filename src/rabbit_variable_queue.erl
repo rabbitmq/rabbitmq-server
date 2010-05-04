@@ -208,33 +208,37 @@
                           end_seq_id :: non_neg_integer() }).
 
 -type(state() :: #vqstate {
-               q1                    :: queue(),
-               q2                    :: bpqueue(),
-               delta                 :: delta(),
-               q3                    :: bpqueue(),
-               q4                    :: queue(),
-               duration_target       :: non_neg_integer(),
-               target_ram_msg_count  :: non_neg_integer(),
-               ram_msg_count         :: non_neg_integer(),
-               ram_msg_count_prev    :: non_neg_integer(),
-               ram_index_count       :: non_neg_integer(),
-               index_state           :: any(),
-               next_seq_id           :: seq_id(),
-               out_counter           :: non_neg_integer(),
-               in_counter            :: non_neg_integer(),
-               egress_rate           :: {{integer(), integer(), integer()}, non_neg_integer()},
-               avg_egress_rate       :: float(),
-               ingress_rate          :: {{integer(), integer(), integer()}, non_neg_integer()},
-               avg_ingress_rate      :: float(),
-               rate_timestamp        :: {integer(), integer(), integer()},
-               len                   :: non_neg_integer(),
-               on_sync               :: {[[ack()]], [[guid()]], [fun (() -> any())]},
-               msg_store_clients     :: 'undefined' | {{any(), binary()}, {any(), binary()}},
-               persistent_store      :: pid() | atom(),
-               persistent_count      :: non_neg_integer(),
-               transient_threshold   :: non_neg_integer(),
-               pending_ack           :: dict()
-              }).
+             q1                   :: queue(),
+             q2                   :: bpqueue(),
+             delta                :: delta(),
+             q3                   :: bpqueue(),
+             q4                   :: queue(),
+             duration_target      :: non_neg_integer(),
+             target_ram_msg_count :: non_neg_integer(),
+             ram_msg_count        :: non_neg_integer(),
+             ram_msg_count_prev   :: non_neg_integer(),
+             ram_index_count      :: non_neg_integer(),
+             index_state          :: any(),
+             next_seq_id          :: seq_id(),
+             out_counter          :: non_neg_integer(),
+             in_counter           :: non_neg_integer(),
+             egress_rate          :: {{integer(), integer(), integer()},
+                                      non_neg_integer()},
+             avg_egress_rate      :: float(),
+             ingress_rate         :: {{integer(), integer(), integer()},
+                                      non_neg_integer()},
+             avg_ingress_rate     :: float(),
+             rate_timestamp       :: {integer(), integer(), integer()},
+             len                  :: non_neg_integer(),
+             on_sync              :: {[[ack()]], [[guid()]],
+                                      [fun (() -> any())]},
+             msg_store_clients    :: 'undefined' | {{any(), binary()},
+                                                    {any(), binary()}},
+             persistent_store     :: pid() | atom(),
+             persistent_count     :: non_neg_integer(),
+             transient_threshold  :: non_neg_integer(),
+             pending_ack          :: dict()
+            }).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -286,34 +290,37 @@ init(QueueName, IsDurable, _Recover) ->
                                   end_seq_id = NextSeqId }
             end,
     Now = now(),
-    State =
-        #vqstate { q1 = queue:new(), q2 = bpqueue:new(),
-                   delta = Delta,
-                   q3 = bpqueue:new(), q4 = queue:new(),
-                   duration_target = undefined,
-                   target_ram_msg_count = undefined,
-                   ram_msg_count = 0,
-                   ram_msg_count_prev = 0,
-                   ram_index_count = 0,
-                   index_state = IndexState1,
-                   next_seq_id = NextSeqId,
-                   out_counter = 0,
-                   in_counter = 0,
-                   egress_rate = {Now, 0},
-                   avg_egress_rate = 0,
-                   ingress_rate = {Now, DeltaCount1},
-                   avg_ingress_rate = 0,
-                   rate_timestamp = Now,
-                   len = DeltaCount1,
-                   on_sync = {[], [], []},
-                   msg_store_clients = {
-                     {rabbit_msg_store:client_init(PersistentStore, PRef), PRef},
-                     {rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef), TRef}},
-                   persistent_store = PersistentStore,
-                   persistent_count = DeltaCount1,
-                   transient_threshold = NextSeqId,
-                   pending_ack = dict:new()
-                 },
+    PersistentClient = rabbit_msg_store:client_init(PersistentStore, PRef),
+    TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
+    State = #vqstate {
+      q1                   = queue:new(),
+      q2                   = bpqueue:new(),
+      delta                = Delta,
+      q3                   = bpqueue:new(),
+      q4                   = queue:new(),
+      duration_target      = undefined,
+      target_ram_msg_count = undefined,
+      ram_msg_count        = 0,
+      ram_msg_count_prev   = 0,
+      ram_index_count      = 0,
+      index_state          = IndexState1,
+      next_seq_id          = NextSeqId,
+      out_counter          = 0,
+      in_counter           = 0,
+      egress_rate          = {Now, 0},
+      avg_egress_rate      = 0,
+      ingress_rate         = {Now, DeltaCount1},
+      avg_ingress_rate     = 0,
+      rate_timestamp       = Now,
+      len                  = DeltaCount1,
+      on_sync              = {[], [], []},
+      msg_store_clients    = {{PersistentClient, PRef},
+                              {TransientClient, TRef}},
+      persistent_store     = PersistentStore,
+      persistent_count     = DeltaCount1,
+      transient_threshold  = NextSeqId,
+      pending_ack          = dict:new()
+     },
     maybe_deltas_to_betas(State).
 
 terminate(State) ->
@@ -594,7 +601,8 @@ requeue(AckTags, State = #vqstate { persistent_store = PersistentStore }) ->
                                          msg_on_disk = false,
                                          is_persistent = false,
                                          msg = Msg }} ->
-                          {_SeqId, StateN2} = publish(Msg, true, false, StateN1),
+                          {_SeqId, StateN2} =
+                              publish(Msg, true, false, StateN1),
                           {SeqIdsAcc, Dict, StateN2};
                       {ok, {IsPersistent, Guid}} ->
                           {{ok, Msg = #basic_message{}}, MSCStateN1} =
@@ -889,28 +897,25 @@ should_force_index_to_disk(State =
 
 msg_store_callback(PersistentGuids, IsTransientPubs, Pubs, AckTags, Fun) ->
     Self = self(),
-    fun() ->
-            spawn(
-              fun() ->
-                      ok = rabbit_misc:with_exit_handler(
-                             fun() -> rabbit_msg_store:remove(
-                                        ?PERSISTENT_MSG_STORE,
-                                        PersistentGuids)
-                             end,
-                             fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                                        Self, fun (StateN) ->
-                                                      tx_commit_post_msg_store(
-                                                        IsTransientPubs, Pubs,
-                                                        AckTags, Fun, StateN)
-                                              end)
-                             end)
-              end)
+    Fun = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
+                     Self, fun (StateN) -> tx_commit_post_msg_store(
+                                             IsTransientPubs, Pubs,
+                                             AckTags, Fun, StateN)
+                           end)
+          end,
+    fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
+                                     fun () -> rabbit_msg_store:remove(
+                                                 ?PERSISTENT_MSG_STORE,
+                                                 PersistentGuids)
+                                     end,
+                                     Fun)
+                    end)
     end.
 
 tx_commit_post_msg_store(IsTransientPubs, Pubs, AckTags, Fun, State =
-                             #vqstate { on_sync = OnSync = {SAcks, SPubs, SFuns},
-                                        persistent_store = PersistentStore,
-                                        pending_ack = PA }) ->
+                         #vqstate { on_sync = OnSync = {SAcks, SPubs, SFuns},
+                                    persistent_store = PersistentStore,
+                                    pending_ack = PA }) ->
     %% If we are a non-durable queue, or (no persisent pubs, and no
     %% persistent acks) then we can skip the queue_index loop.
     case PersistentStore == ?TRANSIENT_MSG_STORE orelse
@@ -1038,7 +1043,8 @@ remove_queue_entries1(
     {PersistentStore, CountN + 1, GuidsByStore1, SeqIdsAcc1, IndexStateN1}.
 
 fetch_from_q3_or_delta(State = #vqstate {
-                         q1 = Q1, q2 = Q2, delta = #delta { count = DeltaCount },
+                         q1 = Q1, q2 = Q2,
+                         delta = #delta { count = DeltaCount },
                          q3 = Q3, q4 = Q4, ram_msg_count = RamMsgCount,
                          ram_index_count = RamIndexCount,
                          msg_store_clients = MSCState,
@@ -1419,9 +1425,10 @@ maybe_push_q4_to_betas(State = #vqstate { q4 = Q4 }) ->
                                 q4 = Q4a }
       end, Q4, State).
 
-maybe_push_alphas_to_betas(_Generator, _Consumer, _Q, State =
-                           #vqstate { ram_msg_count = RamMsgCount,
-                                      target_ram_msg_count = TargetRamMsgCount })
+maybe_push_alphas_to_betas(
+  _Generator, _Consumer, _Q,
+  State = #vqstate { ram_msg_count = RamMsgCount,
+                     target_ram_msg_count = TargetRamMsgCount })
   when TargetRamMsgCount == undefined orelse TargetRamMsgCount >= RamMsgCount ->
     State;
 maybe_push_alphas_to_betas(

@@ -195,7 +195,8 @@
                             }).
 
 -spec(init/3 :: (queue_name(), boolean(), fun ((guid()) -> boolean())) ->
-                     {'undefined' | non_neg_integer(), binary(), binary(), [any()], qistate()}).
+             {'undefined' |
+              non_neg_integer(), binary(), binary(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(terminate_and_erase/1 :: (qistate()) -> qistate()).
 -spec(write_published/4 :: (guid(), seq_id(), boolean(), qistate())
@@ -265,15 +266,14 @@ init(Name, MsgStoreRecovered, ContainsCheckFun) ->
                           {SegEntries, PubCount, AckCount, Segment1} =
                               load_segment(false, Segment),
                           Segment2 =
-                               #segment { pubs = PubCount1, acks = AckCount1 } =
+                              #segment { pubs = PubCount1, acks = AckCount1 } =
                               array:sparse_foldl(
-                                fun (RelSeq, {{Guid, _IsPersistent}, Del, no_ack},
+                                fun (RelSeq, {{Guid, _IsPersistent}, Del,
+                                              no_ack},
                                      Segment3) ->
-                                        Segment4 =
-                                            maybe_add_to_journal(
-                                              ContainsCheckFun(Guid),
-                                              CleanShutdown, Del, RelSeq, Segment3),
-                                        Segment4
+                                        maybe_add_to_journal(
+                                          ContainsCheckFun(Guid),
+                                          CleanShutdown, Del, RelSeq, Segment3)
                                 end, Segment1 #segment { pubs = PubCount,
                                                          acks = AckCount },
                                 SegEntries),
@@ -485,9 +485,11 @@ queue_index_walker(DurableQueues) when is_list(DurableQueues) ->
 
 queue_index_walker({[], Gatherer}) ->
     case gatherer:fetch(Gatherer) of
-        finished                -> rabbit_misc:unlink_and_capture_exit(Gatherer),
-                                   finished;
-        {value, {Guid, Count}} -> {Guid, Count, {[], Gatherer}}
+        finished ->
+            rabbit_misc:unlink_and_capture_exit(Gatherer),
+            finished;
+        {value, {Guid, Count}} ->
+            {Guid, Count, {[], Gatherer}}
     end;
 queue_index_walker({[QueueName | QueueNames], Gatherer}) ->
     Child = make_ref(),

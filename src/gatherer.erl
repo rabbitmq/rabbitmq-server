@@ -98,9 +98,9 @@ handle_call({finished, Token}, _From,
         false -> {reply, ok, State1, hibernate}
     end;
 
-handle_call(fetch, From, State =
-                #gstate { blocking = Blocking, results = Results,
-                          waiting_on = Tokens }) ->
+handle_call(fetch, From,
+            State = #gstate { waiting_on = Tokens, results = Results,
+                              blocking = Blocking }) ->
     case queue:out(Results) of
         {empty, _Results} ->
             case sets:size(Tokens) of
@@ -117,8 +117,8 @@ handle_call(fetch, From, State =
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast({produce, Result}, State = #gstate { blocking = Blocking,
-                                                 results = Results }) ->
+handle_cast({produce, Result},
+            State = #gstate { blocking = Blocking, results = Results }) ->
     {noreply, case queue:out(Blocking) of
                   {empty, _Blocking} ->
                       State #gstate { results = queue:in(Result, Results) };
@@ -137,6 +137,6 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 terminate(_Reason, State = #gstate { blocking = Blocking } ) ->
-    [gen_server2:reply(Blocked, finished)
-     || Blocked <- queue:to_list(Blocking) ],
+    [gen_server2:reply(Blocked, finished) ||
+        Blocked <- queue:to_list(Blocking)],
     State.

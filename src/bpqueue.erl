@@ -111,7 +111,8 @@ in_q(Prefix, Queue, BPQ = {0, Q}) ->
         N -> {N, queue:in({Prefix, Queue}, Q)}
     end;
 in_q(Prefix, Queue, BPQ) ->
-    in_q1({fun queue:in/2, fun queue:out_r/1, fun queue:join/2},
+    in_q1({fun queue:in/2, fun queue:out_r/1,
+           fun queue:join/2},
           Prefix, Queue, BPQ).
 
 in_q_r(Prefix, Queue, BPQ = {0, _Q}) ->
@@ -232,7 +233,8 @@ to_list1({Prefix, InnerQ}) ->
 map_fold_filter_l(_PFilter, _Fun, Init, BPQ = {0, _Q}) ->
     {BPQ, Init};
 map_fold_filter_l(PFilter, Fun, Init, {N, Q}) ->
-    map_fold_filter1({fun queue:out/1, fun queue:in/2, fun in_q/3, fun join/2},
+    map_fold_filter1({fun queue:out/1, fun queue:in/2,
+                      fun in_q/3, fun join/2},
                      N, PFilter, Fun, Init, Q, new()).
 
 map_fold_filter_r(_PFilter, _Fun, Init, BPQ = {0, _Q}) ->

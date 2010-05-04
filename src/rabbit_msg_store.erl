@@ -128,7 +128,8 @@
 -spec(remove/2 :: (server(), [guid()]) -> 'ok').
 -spec(release/2 :: (server(), [guid()]) -> 'ok').
 -spec(sync/3 :: (server(), [guid()], fun (() -> any())) -> 'ok').
--spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) -> 'ok').
+-spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) ->
+             'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(client_init/2 :: (server(), binary()) -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
@@ -866,7 +867,8 @@ read_message1(From, #msg_location { guid = Guid, ref_count = RefCount,
                 true ->
                     add_to_pending_gc_completion({read, Guid, From}, State);
                 false ->
-                    {Msg, State1} = read_from_disk(MsgLoc, State, DedupCacheEts),
+                    {Msg, State1} = read_from_disk(MsgLoc, State,
+                                                   DedupCacheEts),
                     gen_server2:reply(From, {ok, Msg}),
                     State1
             end
@@ -1136,7 +1138,8 @@ insert_into_cache(DedupCacheEts, Guid, Msg) ->
 %% index
 %%----------------------------------------------------------------------------
 
-index_lookup(Key, #client_msstate { index_module = Index, index_state = State }) ->
+index_lookup(Key, #client_msstate { index_module = Index,
+                                    index_state = State }) ->
     Index:lookup(Key, State);
 
 index_lookup(Key, #msstate { index_module = Index, index_state = State }) ->
@@ -1148,8 +1151,8 @@ index_insert(Obj, #msstate { index_module = Index, index_state = State }) ->
 index_update(Obj, #msstate { index_module = Index, index_state = State }) ->
     Index:update(Obj, State).
 
-index_update_fields(Key, Updates,
-                    #msstate { index_module = Index, index_state = State }) ->
+index_update_fields(Key, Updates, #msstate { index_module = Index,
+                                             index_state = State }) ->
     Index:update_fields(Key, Updates, State).
 
 index_delete(Key, #msstate { index_module = Index, index_state = State }) ->
@@ -1324,9 +1327,10 @@ build_index(true, _Files, State =
                            file_size = FileSize, file = File },
            {_Offset, State1 = #msstate { sum_valid_data = SumValid,
                                          sum_file_size = SumFileSize }}) ->
-              {FileSize, State1 #msstate { sum_valid_data = SumValid + ValidTotalSize,
-                                           sum_file_size = SumFileSize + FileSize,
-                                           current_file = File }}
+              {FileSize, State1 #msstate {
+                           sum_valid_data = SumValid + ValidTotalSize,
+                           sum_file_size = SumFileSize + FileSize,
+                           current_file = File }}
       end, {0, State}, FileSummaryEts);
 build_index(false, Files, State) ->
     {ok, Pid} = gatherer:start_link(),
@@ -1361,8 +1365,9 @@ build_index(Gatherer, Left, [],
 build_index(Gatherer, Left, [File|Files], State) ->
     Child = make_ref(),
     ok = gatherer:wait_on(Gatherer, Child),
-    ok = worker_pool:submit_async({?MODULE, build_index_worker,
-                                   [Gatherer, Child, State, Left, File, Files]}),
+    ok = worker_pool:submit_async(
+           {?MODULE, build_index_worker,
+            [Gatherer, Child, State, Left, File, Files]}),
     build_index(Gatherer, File, Files, State).
 
 build_index_worker(
@@ -1409,12 +1414,13 @@ build_index_worker(
 %% garbage collection / compaction / aggregation -- internal
 %%----------------------------------------------------------------------------
 
-maybe_roll_to_new_file(Offset,
-                       State = #msstate { dir                 = Dir,
-                                          current_file_handle = CurHdl,
-                                          current_file        = CurFile,
-                                          file_summary_ets    = FileSummaryEts,
-                                          cur_file_cache_ets  = CurFileCacheEts })
+maybe_roll_to_new_file(
+  Offset,
+  State = #msstate { dir                 = Dir,
+                     current_file_handle = CurHdl,
+                     current_file        = CurFile,
+                     file_summary_ets    = FileSummaryEts,
+                     cur_file_cache_ets  = CurFileCacheEts })
   when Offset >= ?FILE_SIZE_LIMIT ->
     State1 = internal_sync(State),
     ok = file_handle_cache:close(CurHdl),
@@ -1631,7 +1637,8 @@ combine_files(#file_summary { file = Source,
             ok = file_handle_cache:sync(DestinationHdl),
             ok = file_handle_cache:delete(TmpHdl)
     end,
-    {SourceWorkList, SourceValid} = find_unremoved_messages_in_file(Source, State),
+    {SourceWorkList, SourceValid} =
+        find_unremoved_messages_in_file(Source, State),
     ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
                        SourceHdl, DestinationHdl, Destination, State),
     %% tidy up
@@ -1700,7 +1707,8 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                     {ok, BlockStart1} =
                         file_handle_cache:position(SourceHdl, BlockStart1),
                     {ok, BSize1} =
-                        file_handle_cache:copy(SourceHdl, DestinationHdl, BSize1),
+                        file_handle_cache:copy(SourceHdl, DestinationHdl,
+                                               BSize1),
                     ok = file_handle_cache:sync(DestinationHdl)
             end;
         {FinalOffsetZ, _BlockStart1, _BlockEnd1} ->
