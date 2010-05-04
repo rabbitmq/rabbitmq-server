@@ -432,9 +432,8 @@ find_lowest_seq_id_seg_and_next_seq_id(State) ->
     {LowSeqIdSeg, NextSeqId, State}.
 
 prepare_msg_store_seed_funs(DurableQueues) ->
-    DurableDict =
-        dict:from_list([ {queue_name_to_dir_name(Queue), Queue} ||
-                           Queue <- DurableQueues ]),
+    DurableDict = dict:from_list([ {queue_name_to_dir_name(Queue), Queue} ||
+                                     Queue <- DurableQueues ]),
     QueuesDir = queues_dir(),
     Directories = case file:list_dir(QueuesDir) of
                       {ok, Entries} ->
