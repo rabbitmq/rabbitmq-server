@@ -576,17 +576,16 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
         build_index(Recovered1, Files, State),
 
     %% read is only needed so that we can seek
-    {ok, FileHdl} = open_file(
-                      Dir, filenum_to_name(CurFile),
-                      [read | ?WRITE_MODE]),
-    {ok, Offset} = file_handle_cache:position(FileHdl, Offset),
-    ok = file_handle_cache:truncate(FileHdl),
+    {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
+                             [read | ?WRITE_MODE]),
+    {ok, Offset} = file_handle_cache:position(CurHdl, Offset),
+    ok = file_handle_cache:truncate(CurHdl),
 
     {ok, GCPid} = rabbit_msg_store_gc:start_link(Dir, IndexState, IndexModule,
                                                  FileSummaryEts),
 
-    {ok, State1 #msstate { current_file_handle = FileHdl,
-                           gc_pid = GCPid }, hibernate,
+    {ok, State1 #msstate { current_file_handle = CurHdl, gc_pid = GCPid },
+     hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({read, Guid}, From, State) ->
@@ -739,7 +738,7 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 terminate(_Reason, State = #msstate { index_state         = IndexState,
                                       index_module        = IndexModule,
-                                      current_file_handle = FileHdl,
+                                      current_file_handle = CurHdl,
                                       gc_pid              = GCPid,
                                       file_handles_ets    = FileHandlesEts,
                                       file_summary_ets    = FileSummaryEts,
@@ -750,10 +749,10 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
     %% stop the gc first, otherwise it could be working and we pull
     %% out the ets tables from under it.
     ok = rabbit_msg_store_gc:stop(GCPid),
-    State1 = case FileHdl of
+    State1 = case CurHdl of
                  undefined -> State;
                  _ -> State2 = internal_sync(State),
-                      file_handle_cache:close(FileHdl),
+                      file_handle_cache:close(CurHdl),
                       State2
              end,
     State3 = close_all_handles(State1),
@@ -1010,7 +1009,7 @@ close_all_handles(State = #msstate { file_handle_cache = FHC }) ->
     State #msstate { file_handle_cache = dict:new() }.
 
 get_read_handle(FileNum, CState = #client_msstate { file_handle_cache = FHC,
-                                                   dir = Dir }) ->
+                                                    dir = Dir }) ->
     {Hdl, FHC2} = get_read_handle(FileNum, FHC, Dir),
     {Hdl, CState #client_msstate { file_handle_cache = FHC2 }};
 
@@ -1021,13 +1020,10 @@ get_read_handle(FileNum, State = #msstate { file_handle_cache = FHC,
 
 get_read_handle(FileNum, FHC, Dir) ->
     case dict:find(FileNum, FHC) of
-        {ok, Hdl} ->
-            {Hdl, FHC};
-        error ->
-            {ok, Hdl} = open_file(
-                          Dir, filenum_to_name(FileNum),
-                          ?READ_MODE),
-            {Hdl, dict:store(FileNum, Hdl, FHC) }
+        {ok, Hdl} -> {Hdl, FHC};
+        error     -> {ok, Hdl} = open_file(Dir, filenum_to_name(FileNum),
+                                           ?READ_MODE),
+                     {Hdl, dict:store(FileNum, Hdl, FHC)}
     end.
 
 detect_clean_shutdown(Dir) ->
@@ -1066,10 +1062,10 @@ preallocate(Hdl, FileSizeLimit, FinalPos) ->
     {ok, FinalPos} = file_handle_cache:position(Hdl, FinalPos),
     ok.
 
-truncate_and_extend_file(FileHdl, Lowpoint, Highpoint) ->
-    {ok, Lowpoint} = file_handle_cache:position(FileHdl, Lowpoint),
-    ok = file_handle_cache:truncate(FileHdl),
-    ok = preallocate(FileHdl, Highpoint, Lowpoint).
+truncate_and_extend_file(Hdl, Lowpoint, Highpoint) ->
+    {ok, Lowpoint} = file_handle_cache:position(Hdl, Lowpoint),
+    ok = file_handle_cache:truncate(Hdl),
+    ok = preallocate(Hdl, Highpoint, Lowpoint).
 
 form_filename(Dir, Name) -> filename:join(Dir, Name).
 
