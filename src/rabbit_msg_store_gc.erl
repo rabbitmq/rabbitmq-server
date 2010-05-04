@@ -80,10 +80,12 @@ init([Parent, Dir, IndexState, IndexModule, FileSummaryEts]) ->
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
-handle_cast({gc, Source, Destination}, State =
-                #gcstate { parent = Parent, dir = Dir, index_module = Index,
-                           index_state = IndexState,
-                           file_summary_ets = FileSummaryEts }) ->
+handle_cast({gc, Source, Destination},
+            State = #gcstate { dir              = Dir,
+                               index_state      = IndexState,
+                               index_module     = Index,
+                               parent           = Parent,
+                               file_summary_ets = FileSummaryEts }) ->
     Reclaimed = rabbit_msg_store:gc(Source, Destination,
                                     {FileSummaryEts, Dir, Index, IndexState}),
     ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source, Destination),

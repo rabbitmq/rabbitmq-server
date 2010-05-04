@@ -162,7 +162,7 @@
           persistent_count,
           transient_threshold,
           pending_ack
-        }).
+         }).
 
 -record(msg_status,
         { seq_id,
@@ -172,13 +172,13 @@
           is_delivered,
           msg_on_disk,
           index_on_disk
-        }).
+         }).
 
 -record(delta,
         { start_seq_id,
           count,
           end_seq_id %% note the end_seq_id is always >, not >=
-        }).
+         }).
 
 -record(tx, { pending_messages, pending_acks }).
 
@@ -332,8 +332,8 @@ terminate(State) ->
     rabbit_msg_store:client_terminate(MSCStateT),
     Terms = [{persistent_ref, PRef}, {transient_ref, TRef},
              {persistent_count, PCount}],
-    State1 #vqstate { index_state =
-                          rabbit_queue_index:terminate(Terms, IndexState),
+    State1 #vqstate { index_state = rabbit_queue_index:terminate(
+                                      Terms, IndexState),
                       msg_store_clients = undefined }.
 
 %% the only difference between purge and delete is that delete also
@@ -359,7 +359,7 @@ delete_and_terminate(State) ->
                     delete1(PersistentStore, TransientThreshold, NextSeqId, 0,
                             DeltaSeqId, IndexState3),
                 IndexState4
-    end,
+        end,
     IndexState5 = rabbit_queue_index:terminate_and_erase(IndexState2),
     rabbit_msg_store:delete_client(PersistentStore, PRef),
     rabbit_msg_store:delete_client(?TRANSIENT_MSG_STORE, TRef),
@@ -432,9 +432,9 @@ fetch(AckRequired, State =
                 {loaded, State1}          -> fetch(AckRequired, State1)
             end;
         {{value, MsgStatus = #msg_status {
-            msg = Msg, guid = Guid, seq_id = SeqId,
-            is_persistent = IsPersistent, is_delivered = IsDelivered,
-            msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk }},
+                   msg = Msg, guid = Guid, seq_id = SeqId,
+                   is_persistent = IsPersistent, is_delivered = IsDelivered,
+                   msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk }},
          Q4a} ->
 
             AckTag = case AckRequired of
@@ -592,8 +592,8 @@ requeue(AckTags, State = #vqstate { persistent_store = PersistentStore }) ->
                          persistent_count = PCount }} =
         lists:foldl(
           fun (SeqId, {SeqIdsAcc, Dict, StateN =
-                           #vqstate { msg_store_clients = MSCStateN,
-                                      pending_ack = PAN}}) ->
+                       #vqstate { msg_store_clients = MSCStateN,
+                                  pending_ack = PAN }}) ->
                   PAN1 = dict:erase(SeqId, PAN),
                   StateN1 = StateN #vqstate { pending_ack = PAN1 },
                   case dict:find(SeqId, PAN) of
@@ -618,9 +618,9 @@ requeue(AckTags, State = #vqstate { persistent_store = PersistentStore }) ->
                                   false ->
                                       {SeqIdsAcc, ?TRANSIENT_MSG_STORE}
                               end,
-                           {SeqIdsAcc1,
-                            rabbit_misc:dict_cons(MsgStore, Guid, Dict),
-                            StateN3}
+                          {SeqIdsAcc1,
+                           rabbit_misc:dict_cons(MsgStore, Guid, Dict),
+                           StateN3}
                   end
           end, {[], dict:new(), State}, AckTags),
     IndexState1 = rabbit_queue_index:write_acks(SeqIds, IndexState),
@@ -644,7 +644,7 @@ set_ram_duration_target(
   DurationTarget, State = #vqstate { avg_egress_rate = AvgEgressRate,
                                      avg_ingress_rate = AvgIngressRate,
                                      target_ram_msg_count = TargetRamMsgCount
-                                   }) ->
+                                    }) ->
     Rate = AvgEgressRate + AvgIngressRate,
     TargetRamMsgCount1 =
         case DurationTarget of
@@ -819,7 +819,7 @@ betas_from_segment_entries(List, SeqIdLimit, TransientThreshold, IndexState) ->
                                                   is_delivered  = IsDelivered,
                                                   msg_on_disk   = true,
                                                   index_on_disk = true
-                                                } | FilteredAcc],
+                                                 } | FilteredAcc],
                                    IndexStateAcc};
                               false ->
                                   {FilteredAcc, IndexStateAcc}
@@ -898,10 +898,10 @@ should_force_index_to_disk(State =
 msg_store_callback(PersistentGuids, IsTransientPubs, Pubs, AckTags, Fun) ->
     Self = self(),
     Fun = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                     Self, fun (StateN) -> tx_commit_post_msg_store(
-                                             IsTransientPubs, Pubs,
-                                             AckTags, Fun, StateN)
-                           end)
+                      Self, fun (StateN) -> tx_commit_post_msg_store(
+                                              IsTransientPubs, Pubs,
+                                              AckTags, Fun, StateN)
+                            end)
           end,
     fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
                                      fun () -> rabbit_msg_store:remove(
@@ -1195,9 +1195,9 @@ publish(index, MsgStatus, #vqstate {
     store_beta_entry(MsgStatus2, State1);
 
 publish(neither, MsgStatus = #msg_status { seq_id = SeqId }, State =
-            #vqstate { index_state = IndexState, q1 = Q1, q2 = Q2,
-                       delta = Delta, msg_store_clients = MSCState,
-                       persistent_store = PersistentStore }) ->
+        #vqstate { index_state = IndexState, q1 = Q1, q2 = Q2,
+                   delta = Delta, msg_store_clients = MSCState,
+                   persistent_store = PersistentStore }) ->
     {MsgStatus1 = #msg_status { msg_on_disk = true }, MSCState1} =
         maybe_write_msg_to_disk(PersistentStore, true, MsgStatus, MSCState),
     {#msg_status { index_on_disk = true }, IndexState1} =

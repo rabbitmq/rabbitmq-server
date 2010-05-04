@@ -86,9 +86,9 @@ read(FileHdl, TotalSize) ->
     BodyBinSize = Size - ?GUID_SIZE_BYTES,
     case file_handle_cache:read(FileHdl, TotalSize) of
         {ok, <<Size:?INTEGER_SIZE_BITS,
-               Guid:?GUID_SIZE_BYTES/binary,
-               MsgBodyBin:BodyBinSize/binary,
-               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>} ->
+              Guid:?GUID_SIZE_BYTES/binary,
+              MsgBodyBin:BodyBinSize/binary,
+              ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>} ->
             {ok, {Guid, binary_to_term(MsgBodyBin)}};
         KO -> KO
     end.

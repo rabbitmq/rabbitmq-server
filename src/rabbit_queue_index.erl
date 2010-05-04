@@ -160,7 +160,7 @@
           segments,
           journal_handle,
           dirty_count
-        }).
+         }).
 
 -record(segment,
         { pubs,
@@ -169,7 +169,7 @@
           journal_entries,
           path,
           num
-        }).
+         }).
 
 -include("rabbit_msg_store.hrl").
 
@@ -185,14 +185,14 @@
                                journal_entries :: array(),
                                path            :: file_path(),
                                num             :: non_neg_integer()
-                             })).
+                              })).
 -type(seq_id() :: integer()).
 -type(seg_dict() :: {dict(), [segment()]}).
 -type(qistate() :: #qistate { dir             :: file_path(),
                               segments        :: 'undefined' | seg_dict(),
                               journal_handle  :: hdl(),
                               dirty_count     :: integer()
-                            }).
+                             }).
 
 -spec(init/3 :: (queue_name(), boolean(), fun ((guid()) -> boolean())) ->
              {'undefined' |
@@ -212,7 +212,7 @@
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
 -spec(prepare_msg_store_seed_funs/1 ::
-        ([queue_name()]) ->
+      ([queue_name()]) ->
              {{[binary()] | 'undefined', startup_fun_state()},
               {[binary()] | 'undefined', startup_fun_state()}}).
 
@@ -553,7 +553,7 @@ blank_state(QueueName) ->
                segments       = segments_new(),
                journal_handle = undefined,
                dirty_count    = 0
-             }.
+              }.
 
 array_new() ->
     array:new([{default, undefined}, fixed, {size, ?SEGMENT_ENTRY_COUNT}]).
@@ -617,7 +617,7 @@ segment_new(Seg, Dir) ->
                journal_entries = array_new(),
                path = seg_num_to_path(Dir, Seg),
                num = Seg
-             }.
+              }.
 
 segment_find_or_new(Seg, Dir, Segments) ->
     case segment_find(Seg, Segments) of
@@ -683,15 +683,15 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
              {Guid, IsPersistent} ->
                  file_handle_cache:append(
                    Hdl, [<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
-                           (bool_to_int(IsPersistent)):1,
-                           RelSeq:?REL_SEQ_BITS>>, Guid])
+                          (bool_to_int(IsPersistent)):1,
+                          RelSeq:?REL_SEQ_BITS>>, Guid])
          end,
     ok = case {Del, Ack} of
              {no_del, no_ack} ->
                  ok;
              _ ->
                  Binary = <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-                            RelSeq:?REL_SEQ_BITS>>,
+                           RelSeq:?REL_SEQ_BITS>>,
                  file_handle_cache:append(
                    Hdl, case {Del, Ack} of
                             {del, ack} -> [Binary, Binary];
@@ -710,14 +710,14 @@ terminate(StoreShutdown, Terms, State =
              _         -> file_handle_cache:close(JournalHdl)
          end,
     SegTerms = segment_fold(
-           fun (Seg, #segment { handle = Hdl, pubs = PubCount,
-                                acks = AckCount }, SegTermsAcc) ->
-                   ok = case Hdl of
-                            undefined -> ok;
-                            _         -> file_handle_cache:close(Hdl)
-                        end,
-                   [{Seg, {PubCount, AckCount}} | SegTermsAcc]
-           end, [], Segments),
+                 fun (Seg, #segment { handle = Hdl, pubs = PubCount,
+                                      acks = AckCount }, SegTermsAcc) ->
+                         ok = case Hdl of
+                                  undefined -> ok;
+                                  _         -> file_handle_cache:close(Hdl)
+                              end,
+                         [{Seg, {PubCount, AckCount}} | SegTermsAcc]
+                 end, [], Segments),
     case StoreShutdown of
         true  -> store_clean_shutdown([{segments, SegTerms} | Terms], Dir);
         false -> ok
@@ -756,13 +756,13 @@ load_segment(KeepAcks,
 load_segment_entries(KeepAcks, Hdl, SegEntries, PubCount, AckCount) ->
     case file_handle_cache:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES) of
         {ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-                RelSeq:?REL_SEQ_BITS>>} ->
+              RelSeq:?REL_SEQ_BITS>>} ->
             {AckCount1, SegEntries1} =
                 deliver_or_ack_msg(KeepAcks, RelSeq, AckCount, SegEntries),
             load_segment_entries(KeepAcks, Hdl, SegEntries1, PubCount,
                                  AckCount1);
         {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
-                IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
+              IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
             %% because we specify /binary, and binaries are complete
             %% bytes, the size spec is in bytes, not bits.
             {ok, Guid} = file_handle_cache:read(Hdl, ?GUID_BYTES),
@@ -834,9 +834,9 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                             <<Guid:?GUID_BYTES/binary>> =
                                 <<GuidNum:?GUID_BITS>>,
                             Publish = {Guid, case Prefix of
-                                                  ?PUB_PERSIST_JPREFIX -> true;
-                                                  ?PUB_TRANS_JPREFIX   -> false
-                                              end},
+                                                 ?PUB_PERSIST_JPREFIX -> true;
+                                                 ?PUB_TRANS_JPREFIX   -> false
+                                             end},
                             load_journal_entries(
                               add_to_journal(SeqId, Publish, State));
                         _ErrOrEoF -> %% err, we've lost at least a publish

@@ -48,8 +48,8 @@
 -type(bpqueue() :: {non_neg_integer(), queue()}).
 -type(prefix() :: any()).
 -type(value() :: any()).
--type(result() :: {'empty', bpqueue()} |
-                  {{'value', prefix(), value()}, bpqueue()}).
+-type(result() :: ({'empty', bpqueue()} |
+                   {{'value', prefix(), value()}, bpqueue()})).
 
 -spec(new/0 :: () -> bpqueue()).
 -spec(is_empty/1 :: (bpqueue()) -> boolean()).
@@ -63,14 +63,18 @@
 -spec(foldr/3 :: (fun ((prefix(), value(), B) -> B), B, bpqueue()) -> B).
 -spec(from_list/1 :: ([{prefix(), [value()]}]) -> bpqueue()).
 -spec(to_list/1 :: (bpqueue()) -> [{prefix(), [value()]}]).
--spec(map_fold_filter_l/4 ::
-        (fun ((prefix()) -> boolean()),
-             fun ((value(), B) -> ({prefix(), value(), B} | 'stop')), B,
-                 bpqueue()) -> {bpqueue(), B}).
--spec(map_fold_filter_r/4 ::
-        (fun ((prefix()) -> boolean()),
-             fun ((value(), B) -> ({prefix(), value(), B} | 'stop')), B,
-                 bpqueue()) -> {bpqueue(), B}).
+-spec(map_fold_filter_l/4 :: ((fun ((prefix()) -> boolean())),
+                              (fun ((value(), B) ->
+                                           ({prefix(), value(), B} | 'stop'))),
+                              B,
+                              bpqueue()) ->
+             {bpqueue(), B}).
+-spec(map_fold_filter_r/4 :: ((fun ((prefix()) -> boolean())),
+                              (fun ((value(), B) ->
+                                           ({prefix(), value(), B} | 'stop'))),
+                              B,
+                              bpqueue()) ->
+             {bpqueue(), B}).
 
 -endif.
 

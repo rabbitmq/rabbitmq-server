@@ -69,8 +69,7 @@
           index_module,           %% the module for index ops
           index_state,            %% where are messages?
           current_file,           %% current file name as number
-          current_file_handle,    %% current file handle
-                                  %% since the last fsync?
+          current_file_handle,    %% current file handle since the last fsync?
           file_handle_cache,      %% file handle cache
           on_sync,                %% pending sync requests
           sync_timer_ref,         %% TRef for our interval timer
@@ -85,7 +84,7 @@
           cur_file_cache_ets,     %% tid of current file cache table
           client_refs,            %% set of references of all registered clients
           recovered_state         %% boolean: did we recover state?
-        }).
+         }).
 
 -record(client_msstate,
         { file_handle_cache,
@@ -96,7 +95,7 @@
           file_summary_ets,
           dedup_cache_ets,
           cur_file_cache_ets
-        }).
+         }).
 
 -record(file_summary,
         {file, valid_total_size, contiguous_top, left, right, file_size,
@@ -119,11 +118,11 @@
 
 -spec(start_link/4 ::
       (atom(), file_path(), [binary()] | 'undefined', startup_fun_state()) ->
-                           {'ok', pid()} | 'ignore' | {'error', any()}).
+             {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(write/4 :: (server(), guid(), msg(), client_msstate()) ->
-                      {'ok', client_msstate()}).
+             {'ok', client_msstate()}).
 -spec(read/3 :: (server(), guid(), client_msstate()) ->
-                     {{'ok', msg()} | 'not_found', client_msstate()}).
+             {{'ok', msg()} | 'not_found', client_msstate()}).
 -spec(contains/2 :: (server(), guid()) -> boolean()).
 -spec(remove/2 :: (server(), [guid()]) -> 'ok').
 -spec(release/2 :: (server(), [guid()]) -> 'ok').
@@ -305,14 +304,14 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
                            [Server, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
-write(Server, Guid, Msg, CState =
-          #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
+write(Server, Guid, Msg,
+      CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
     ok = add_to_cache(CurFileCacheEts, Guid, Msg),
     {gen_server2:cast(Server, {write, Guid, Msg}), CState}.
 
-read(Server, Guid, CState =
-         #client_msstate { dedup_cache_ets = DedupCacheEts,
-                           cur_file_cache_ets = CurFileCacheEts }) ->
+read(Server, Guid,
+     CState = #client_msstate { dedup_cache_ets = DedupCacheEts,
+                                cur_file_cache_ets = CurFileCacheEts }) ->
     %% 1. Check the dedup cache
     case fetch_and_increment_cache(DedupCacheEts, Guid) of
         not_found ->
@@ -393,9 +392,10 @@ add_to_cache(CurFileCacheEts, Guid, Msg) ->
             end
     end.
 
-client_read1(Server, #msg_location { guid = Guid, file = File } =
-                 MsgLocation, Defer, CState =
-                 #client_msstate { file_summary_ets = FileSummaryEts }) ->
+client_read1(Server,
+             #msg_location { guid = Guid, file = File } = MsgLocation,
+             Defer,
+             CState = #client_msstate { file_summary_ets = FileSummaryEts }) ->
     case ets:lookup(FileSummaryEts, File) of
         [] -> %% File has been GC'd and no longer exists. Go around again.
             read(Server, Guid, CState);
@@ -404,7 +404,8 @@ client_read1(Server, #msg_location { guid = Guid, file = File } =
     end.
 
 client_read2(_Server, false, undefined,
-             #msg_location { guid = Guid, ref_count = RefCount }, Defer,
+             #msg_location { guid = Guid, ref_count = RefCount },
+             Defer,
              CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
                                         dedup_cache_ets = DedupCacheEts }) ->
     case ets:lookup(CurFileCacheEts, Guid) of
@@ -421,10 +422,10 @@ client_read2(_Server, true, _Right, _MsgLocation, Defer, _CState) ->
     Defer();
 client_read2(Server, false, _Right,
              #msg_location { guid = Guid, ref_count = RefCount, file = File },
-             Defer, CState =
-                 #client_msstate { file_handles_ets = FileHandlesEts,
-                                   file_summary_ets = FileSummaryEts,
-                                   dedup_cache_ets  = DedupCacheEts }) ->
+             Defer,
+             CState = #client_msstate { file_handles_ets = FileHandlesEts,
+                                        file_summary_ets = FileSummaryEts,
+                                        dedup_cache_ets  = DedupCacheEts }) ->
     %% It's entirely possible that everything we're doing from here on
     %% is for the wrong file, or a non-existent file, as a GC may have
     %% finished.
@@ -486,7 +487,7 @@ client_read2(Server, false, _Right,
     end.
 
 close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts } =
-                        CState) ->
+                    CState) ->
     Objs = ets:match_object(FileHandlesEts, {{self(), '_'}, close}),
     lists:foldl(fun ({Key = {_Self, File}, close}, CStateM) ->
                         true = ets:delete(FileHandlesEts, Key),
@@ -559,7 +560,7 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
                        cur_file_cache_ets     = CurFileCacheEts,
                        client_refs            = ClientRefs1,
                        recovered_state        = Recovered
-                     },
+                      },
 
     ok = count_msg_refs(Recovered, MsgRefDeltaGen, MsgRefDeltaGenInit, State),
     FileNames =
