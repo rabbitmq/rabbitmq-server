@@ -897,18 +897,17 @@ should_force_index_to_disk(State =
 
 msg_store_callback(PersistentGuids, IsTransientPubs, Pubs, AckTags, Fun) ->
     Self = self(),
-    Fun = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                      Self, fun (StateN) -> tx_commit_post_msg_store(
-                                              IsTransientPubs, Pubs,
-                                              AckTags, Fun, StateN)
-                            end)
-          end,
+    F = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
+                    Self, fun (StateN) -> tx_commit_post_msg_store(
+                                            IsTransientPubs, Pubs,
+                                            AckTags, Fun, StateN)
+                          end)
+        end,
     fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
                                      fun () -> rabbit_msg_store:remove(
                                                  ?PERSISTENT_MSG_STORE,
                                                  PersistentGuids)
-                                     end,
-                                     Fun)
+                                     end, F)
                     end)
     end.
 
