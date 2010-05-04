@@ -137,20 +137,7 @@ match_bindings(Name, Match) ->
                                 mnesia:table(rabbit_route),
                             ExchangeName == Name,
                             Match(Binding)]),
-    lookup_qpids(
-      try
-          mnesia:async_dirty(fun qlc:e/1, [Query])
-      catch exit:{aborted, {badarg, _}} ->
-              %% work around OTP-7025, which was fixed in R12B-1, by
-              %% falling back on a less efficient method
-              [QName || #route{binding = Binding = #binding{
-                                           queue_name = QName}} <-
-                            mnesia:dirty_match_object(
-                              rabbit_route,
-                              #route{binding = #binding{exchange_name = Name,
-                                                        _ = '_'}}),
-                        Match(Binding)]
-      end).
+    lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query])).
 
 match_routing_key(Name, RoutingKey) ->
     MatchHead = #route{binding = #binding{exchange_name = Name,
