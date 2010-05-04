@@ -34,8 +34,7 @@
 -export([init/3, terminate/2, terminate_and_erase/1, write_published/4,
          write_delivered/2, write_acks/2, sync_seq_ids/2, flush_journal/1,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
-         find_lowest_seq_id_seg_and_next_seq_id/1,
-         prepare_msg_store_seed_funs/1]).
+         find_lowest_seq_id_seg_and_next_seq_id/1, recover/1]).
 
 -export([queue_index_walker_reader/3]). %% for internal use only
 
@@ -171,7 +170,7 @@
           num
          }).
 
--include("rabbit_msg_store.hrl").
+-include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -193,6 +192,8 @@
                               journal_handle  :: hdl(),
                               dirty_count     :: integer()
                              }).
+-type(startup_fun_state() ::
+        {(fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A}).
 
 -spec(init/3 :: (queue_name(), boolean(), fun ((guid()) -> boolean())) ->
              {'undefined' |
@@ -211,10 +212,7 @@
 -spec(segment_size/0 :: () -> non_neg_integer()).
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(prepare_msg_store_seed_funs/1 ::
-      ([queue_name()]) ->
-             {{[binary()] | 'undefined', startup_fun_state()},
-              {[binary()] | 'undefined', startup_fun_state()}}).
+-spec(recover/1 :: ([queue_name()]) -> {[binary()], startup_fun_state()}).
 
 -endif.
 
@@ -431,7 +429,7 @@ find_lowest_seq_id_seg_and_next_seq_id(State) ->
         end,
     {LowSeqIdSeg, NextSeqId, State}.
 
-prepare_msg_store_seed_funs(DurableQueues) ->
+recover(DurableQueues) ->
     DurableDict = dict:from_list([ {queue_name_to_dir_name(Queue), Queue} ||
                                      Queue <- DurableQueues ]),
     QueuesDir = queues_dir(),
@@ -471,8 +469,7 @@ prepare_msg_store_seed_funs(DurableQueues) ->
                           Dir = filename:join(queues_dir(), DirName),
                           ok = rabbit_misc:recursive_delete([Dir])
                   end, TransientDirs),
-    {{undefined, {fun (ok) -> finished end, ok}},
-     {DurableRefs, {fun queue_index_walker/1, DurableQueueNames}}}.
+    {DurableRefs, {fun queue_index_walker/1, DurableQueueNames}}.
 
 %%----------------------------------------------------------------------------
 %% Msg Store Startup Delta Function

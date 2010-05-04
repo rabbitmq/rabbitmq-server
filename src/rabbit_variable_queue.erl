@@ -257,14 +257,13 @@
 
 start(DurableQueues) ->
     ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
-    {{TransRefs, TransStartFunState}, {PersistRefs, PersistStartFunState}}
-        = rabbit_queue_index:prepare_msg_store_seed_funs(DurableQueues),
+    {Refs, StartFunState} = rabbit_queue_index:recover(DurableQueues),
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
                                 [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 TransRefs, TransStartFunState]),
+                                 undefined,  {fun (ok) -> finished end, ok}]),
     ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store,
                                 [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 PersistRefs, PersistStartFunState]).
+                                 Refs, StartFunState]).
 
 init(QueueName, IsDurable, _Recover) ->
     PersistentStore = case IsDurable of
