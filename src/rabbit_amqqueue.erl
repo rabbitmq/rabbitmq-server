@@ -378,8 +378,8 @@ safe_delegate_call_ok(H, F, Pids) ->
                                          fun () -> F(Pid) end)
                                end),
     case Bad of
-        []     -> ok;
-        Errors -> {error, Errors}
+        [] -> ok;
+        _  -> {error, Bad}
     end.
 
 delegate_call(Pid, Msg, Timeout) ->

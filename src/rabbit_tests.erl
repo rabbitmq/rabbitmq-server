@@ -908,9 +908,7 @@ test_delegates_sync(SecondaryNode) ->
     RemoteBadPids = spawn_responders(SecondaryNode, Responder, 2),
 
     {GoodRes, []} = delegate:invoke(LocalGoodPids ++ RemoteGoodPids, Sender),
-
     true = lists:all(fun ({_, response}) -> true end, GoodRes),
-
     GoodResPids = [Pid || {Pid, _} <- GoodRes],
 
     Good = ordsets:from_list(LocalGoodPids ++ RemoteGoodPids),
@@ -924,7 +922,6 @@ test_delegates_sync(SecondaryNode) ->
     Bad = ordsets:from_list(BadResPids),
 
     passed.
-
 
 %---------------------------------------------------------------------
 

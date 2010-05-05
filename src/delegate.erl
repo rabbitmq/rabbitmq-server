@@ -108,7 +108,7 @@ split_delegate_per_node(Pids) ->
         orddict:new(), Pids)).
 
 invoke_per_node([{Node, Pids}], Fun) when Node == node() ->
-    local_delegate(Pids, Fun);
+    safe_invoke(Pids, Fun);
 invoke_per_node(NodePids, Fun) ->
     lists:append(delegate_per_node(NodePids, Fun, fun internal_call/2)).
 
@@ -118,13 +118,10 @@ invoke_no_result_per_node([{Node, Pids}], Fun) when Node == node() ->
     %% I don't think it's a problem unless someone misuses this
     %% function. Making this *actually* async would be painful as we
     %% can't spawn at this point or we break effect ordering.
-    local_delegate(Pids, Fun);
+    safe_invoke(Pids, Fun);
 invoke_no_result_per_node(NodePids, Fun) ->
     delegate_per_node(NodePids, Fun, fun internal_cast/2),
     ok.
-
-local_delegate(Pids, Fun) ->
-    [safe_invoke(Fun, Pid) || Pid <- Pids].
 
 delegate_per_node(NodePids, Fun, DelegateFun) ->
     Self = self(),
@@ -136,7 +133,7 @@ delegate_per_node(NodePids, Fun, DelegateFun) ->
        {thunk, fun() ->
                        Self ! {result,
                                DelegateFun(
-                                 Node, fun() -> local_delegate(Pids, Fun) end)}
+                                 Node, fun() -> safe_invoke(Pids, Fun) end)}
                end}) || {Node, Pids} <- NodePids],
     [receive {result, Result} -> Result end || _ <- NodePids].
 
@@ -168,7 +165,9 @@ remote_server(Node) ->
 server(Hash) ->
     list_to_atom("delegate_process_" ++ integer_to_list(Hash)).
 
-safe_invoke(Fun, Pid) ->
+safe_invoke(Pids, Fun) when is_list(Pids) ->
+    [safe_invoke(Pid, Fun) || Pid <- Pids];
+safe_invoke(Pid, Fun) when is_pid(Pid) ->
     try
         {ok, Fun(Pid), Pid}
     catch
