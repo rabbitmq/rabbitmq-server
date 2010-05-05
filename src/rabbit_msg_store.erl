@@ -445,29 +445,25 @@ client_read3(Server,
     Release = fun() -> ets:update_counter(FileSummaryEts, File,
                                           {#file_summary.readers, -1})
               end,
-    ReleaseDefer =
-        fun () ->
-                %% If we get a badarg here, then the GC has finished
-                %% and deleted our file. Try going around
-                %% again. Otherwise, just defer.
-
-                %% badarg scenario: we lookup, msg_store locks, gc
-                %% starts, gc ends, we +1 readers, msg_store
-                %% ets:deletes (and unlocks the dest)
-                try Release(),
-                    Defer()
-                catch error:badarg -> read(Server, Guid, CState)
-                end
-        end,
     %% If a GC hasn't already started, it won't start now. Need to
     %% check again to see if we've been locked in the meantime,
     %% between lookup and update_counter (thus GC started before our
     %% +1. In fact, it could have finished by now too).
     case ets:lookup(FileSummaryEts, File) of
-        [] -> %% GC has deleted our file
-            ReleaseDefer();
+        [] -> %% GC has deleted our file, just go round again.
+            read(Server, Guid, CState);
         [{#file_summary { locked = true }}] ->
-            ReleaseDefer();
+            %% If we get a badarg here, then the GC has finished and
+            %% deleted our file. Try going around again. Otherwise,
+            %% just defer.
+
+            %% badarg scenario: we lookup, msg_store locks, gc starts,
+            %% gc ends, we +1 readers, msg_store ets:deletes (and
+            %% unlocks the dest)
+            try Release(),
+                Defer()
+            catch error:badarg -> read(Server, Guid, CState)
+            end;
         _ ->
             %% Ok, we're definitely safe to continue - a GC can't
             %% start up now, and isn't running, so nothing will tell
