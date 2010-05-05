@@ -521,10 +521,11 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
                 {fresh, IndexState1} = IndexModule:init(fresh, Dir),
                 {false, IndexState1, sets:new()};
             {true, Terms} ->
-                case undefined /= ClientRefs andalso lists:sort(ClientRefs) ==
-                    lists:sort(proplists:get_value(client_refs, Terms, []))
-                    andalso proplists:get_value(index_module, Terms) ==
-                    IndexModule of
+                RecClientRefs  = proplists:get_value(client_refs, Terms, []),
+                RecIndexModule = proplists:get_value(index_module, Terms),
+                case (undefined /= ClientRefs andalso
+                      lists:sort(ClientRefs) == lists:sort(RecClientRefs)
+                      andalso IndexModule == RecIndexModule) of
                     true ->
                         case IndexModule:init(recover, Dir) of
                             {fresh, IndexState1} ->
@@ -656,11 +657,12 @@ handle_cast({write, Guid, Msg},
                       {#file_summary.contiguous_top, ContiguousTop1},
                       {#file_summary.file_size, FileSize + TotalSize}]),
             NextOffset = CurOffset + TotalSize,
-            noreply(maybe_compact(maybe_roll_to_new_file(
-                                    NextOffset, State #msstate
-                                    { sum_valid_data = SumValid + TotalSize,
-                                      sum_file_size = SumFileSize + TotalSize }
-                                   )));
+            noreply(
+              maybe_compact(
+                maybe_roll_to_new_file(
+                  NextOffset, State #msstate {
+                                sum_valid_data = SumValid + TotalSize,
+                                sum_file_size = SumFileSize + TotalSize })));
         #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
@@ -755,9 +757,9 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
     ok = rabbit_msg_store_gc:stop(GCPid),
     State1 = case CurHdl of
                  undefined -> State;
-                 _ -> State2 = internal_sync(State),
-                      file_handle_cache:close(CurHdl),
-                      State2
+                 _         -> State2 = internal_sync(State),
+                              file_handle_cache:close(CurHdl),
+                              State2
              end,
     State3 = close_all_handles(State1),
     store_file_summary(FileSummaryEts, Dir),
@@ -990,26 +992,23 @@ close_handle(Key, State = #msstate { file_handle_cache = FHC }) ->
 
 close_handle(Key, FHC) ->
     case dict:find(Key, FHC) of
-        {ok, Hdl} ->
-            ok = file_handle_cache:close(Hdl),
-            dict:erase(Key, FHC);
-        error -> FHC
+        {ok, Hdl} -> ok = file_handle_cache:close(Hdl),
+                     dict:erase(Key, FHC);
+        error     -> FHC
     end.
 
 close_all_handles(CState = #client_msstate { file_handles_ets = FileHandlesEts,
                                              file_handle_cache = FHC }) ->
     Self = self(),
     ok = dict:fold(fun (File, Hdl, ok) ->
-                           true =
-                               ets:delete(FileHandlesEts, {Self, File}),
+                           true = ets:delete(FileHandlesEts, {Self, File}),
                            file_handle_cache:close(Hdl)
                    end, ok, FHC),
     CState #client_msstate { file_handle_cache = dict:new() };
 
 close_all_handles(State = #msstate { file_handle_cache = FHC }) ->
-    ok = dict:fold(fun (_Key, Hdl, ok) ->
-                           file_handle_cache:close(Hdl)
-                   end, ok, FHC),
+    ok = dict:fold(fun (_Key, Hdl, ok) -> file_handle_cache:close(Hdl) end,
+                   ok, FHC),
     State #msstate { file_handle_cache = dict:new() }.
 
 get_read_handle(FileNum, CState = #client_msstate { file_handle_cache = FHC,
@@ -1547,20 +1546,18 @@ gc(SourceFile, DestFile, State = {FileSummaryEts, _Dir, _Index, _IndexState}) ->
         ets:lookup(FileSummaryEts, DestFile),
 
     case SourceReaders =:= 0 andalso DestReaders =:= 0 of
-        true ->
-            TotalValidData = DestValidData + SourceValidData,
-            ok = combine_files(SourceObj, DestObj, State),
-            %% don't update dest.right, because it could be changing
-            %% at the same time
-            true = ets:update_element(
-                     FileSummaryEts, DestFile,
-                     [{#file_summary.valid_total_size, TotalValidData},
-                      {#file_summary.contiguous_top,   TotalValidData},
-                      {#file_summary.file_size,        TotalValidData}]),
-            SourceFileSize + DestFileSize - TotalValidData;
-        false ->
-            timer:sleep(100),
-            gc(SourceFile, DestFile, State)
+        true  -> TotalValidData = DestValidData + SourceValidData,
+                 ok = combine_files(SourceObj, DestObj, State),
+                 %% don't update dest.right, because it could be
+                 %% changing at the same time
+                 true = ets:update_element(
+                          FileSummaryEts, DestFile,
+                          [{#file_summary.valid_total_size, TotalValidData},
+                           {#file_summary.contiguous_top,   TotalValidData},
+                           {#file_summary.file_size,        TotalValidData}]),
+                 SourceFileSize + DestFileSize - TotalValidData;
+        false -> timer:sleep(100),
+                 gc(SourceFile, DestFile, State)
     end.
 
 combine_files(#file_summary { file = Source,
@@ -1639,15 +1636,14 @@ find_unremoved_messages_in_file(File,
     {ok, Messages, _FileSize} =
         scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     %% foldl will reverse so will end up with msgs in ascending offset order
-    lists:foldl(
-      fun ({Guid, TotalSize, _Offset}, Acc = {List, Size}) ->
-              case Index:lookup(Guid, IndexState) of
-                  Entry = #msg_location { file = File } ->
-                      {[ Entry | List ], TotalSize + Size};
-                  _ ->
-                      Acc
-              end
-      end, {[], 0}, Messages).
+    lists:foldl(fun ({Guid, TotalSize, _Offset}, Acc = {List, Size}) ->
+                        case Index:lookup(Guid, IndexState) of
+                            Entry = #msg_location { file = File } ->
+                                {[ Entry | List ], TotalSize + Size};
+                            _ ->
+                                Acc
+                        end
+                end, {[], 0}, Messages).
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
               Destination, {_FileSummaryEts, _Dir, Index, IndexState}) ->
@@ -1686,17 +1682,15 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
           end, {InitOffset, undefined, undefined}, WorkList) of
         {FinalOffset, BlockStart1, BlockEnd1} ->
             case WorkList of
-                [] ->
-                    ok;
-                _ ->
-                    %% do the last remaining block
-                    BSize1 = BlockEnd1 - BlockStart1,
-                    {ok, BlockStart1} =
-                        file_handle_cache:position(SourceHdl, BlockStart1),
-                    {ok, BSize1} =
-                        file_handle_cache:copy(SourceHdl, DestinationHdl,
-                                               BSize1),
-                    ok = file_handle_cache:sync(DestinationHdl)
+                [] -> ok;
+                %% do the last remaining block
+                _  -> BSize1 = BlockEnd1 - BlockStart1,
+                      {ok, BlockStart1} =
+                          file_handle_cache:position(SourceHdl, BlockStart1),
+                      {ok, BSize1} =
+                          file_handle_cache:copy(SourceHdl, DestinationHdl,
+                                                 BSize1),
+                      ok = file_handle_cache:sync(DestinationHdl)
             end;
         {FinalOffsetZ, _BlockStart1, _BlockEnd1} ->
             throw({gc_error, [{expected, FinalOffset},
