@@ -306,7 +306,7 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
 
 write(Server, Guid, Msg,
       CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
-    ok = add_to_cache(CurFileCacheEts, Guid, Msg),
+    ok = update_msg_cache(CurFileCacheEts, Guid, Msg),
     {gen_server2:cast(Server, {write, Guid, Msg}), CState}.
 
 read(Server, Guid,
@@ -380,16 +380,21 @@ clean(Server, BaseDir) ->
 %% Client-side-only helpers
 %%----------------------------------------------------------------------------
 
-add_to_cache(CurFileCacheEts, Guid, Msg) ->
-    case ets:insert_new(CurFileCacheEts, {Guid, Msg, 1}) of
-        true ->
-            ok;
-        false ->
-            try
-                ets:update_counter(CurFileCacheEts, Guid, {3, +1}),
-                ok
-            catch error:badarg -> add_to_cache(CurFileCacheEts, Guid, Msg)
-            end
+safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
+    try
+        SuccessFun(ets:update_counter(Tab, Key, UpdateOp))
+    catch error:badarg -> FailThunk()
+    end.
+
+safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
+    safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
+
+update_msg_cache(CacheEts, Guid, Msg) ->
+    case ets:insert_new(CacheEts, {Guid, Msg, 1}) of
+        true  -> ok;
+        false -> safe_ets_update_counter_ok(
+                   CacheEts, Guid, {3, +1},
+                   fun () -> update_msg_cache(CacheEts, Guid, Msg) end)
     end.
 
 client_read1(Server,
@@ -429,10 +434,9 @@ client_read2(Server, false, _Right,
     %% It's entirely possible that everything we're doing from here on
     %% is for the wrong file, or a non-existent file, as a GC may have
     %% finished.
-    try ets:update_counter(FileSummaryEts, File, {#file_summary.readers, +1})
-    catch error:badarg -> %% the File has been GC'd and deleted. Go around.
-            read(Server, Guid, CState)
-    end,
+    safe_ets_update_counter_ok(
+      FileSummaryEts, File, {#file_summary.readers, +1},
+      fun () -> read(Server, Guid, CState) end),
     Release = fun() -> ets:update_counter(FileSummaryEts, File,
                                           {#file_summary.readers, -1})
               end,
@@ -898,7 +902,7 @@ read_from_disk(#msg_location { guid = Guid, ref_count = RefCount,
 
 maybe_insert_into_cache(DedupCacheEts, RefCount, Guid, Msg)
   when RefCount > 1 ->
-    insert_into_cache(DedupCacheEts, Guid, Msg);
+    update_msg_cache(DedupCacheEts, Guid, Msg);
 maybe_insert_into_cache(_DedupCacheEts, _RefCount, _Guid, _Msg) ->
     ok.
 
@@ -1098,38 +1102,24 @@ fetch_and_increment_cache(DedupCacheEts, Guid) ->
         [] ->
             not_found;
         [{_Guid, Msg, _RefCount}] ->
-            try
-                ets:update_counter(DedupCacheEts, Guid, {3, 1})
-            catch error:badarg ->
-                    %% someone has deleted us in the meantime, insert us
-                    ok = insert_into_cache(DedupCacheEts, Guid, Msg)
-            end,
+            safe_ets_update_counter_ok(
+              DedupCacheEts, Guid, {3, +1},
+              %% someone has deleted us in the meantime, insert us
+              fun () -> ok = update_msg_cache(DedupCacheEts, Guid, Msg) end),
             Msg
     end.
 
 decrement_cache(DedupCacheEts, Guid) ->
-    true = try case ets:update_counter(DedupCacheEts, Guid, {3, -1}) of
-                   N when N =< 0 -> true = ets:delete(DedupCacheEts, Guid);
-                   _N            -> true
-               end
-           catch error:badarg ->
-                   %% Guid is not in there because although it's been
-                   %% delivered, it's never actually been read (think:
-                   %% persistent message held in RAM)
-                   true
-           end,
+    true = safe_ets_update_counter(
+             DedupCacheEts, Guid, {3, -1},
+             fun (N) when N =< 0 -> true = ets:delete(DedupCacheEts, Guid);
+                 (_N)            -> true
+             end,
+             %% Guid is not in there because although it's been
+             %% delivered, it's never actually been read (think:
+             %% persistent message held in RAM)
+             fun () -> true end),
     ok.
-
-insert_into_cache(DedupCacheEts, Guid, Msg) ->
-    case ets:insert_new(DedupCacheEts, {Guid, Msg, 1}) of
-        true  -> ok;
-        false -> try
-                     ets:update_counter(DedupCacheEts, Guid, {3, 1}),
-                     ok
-                 catch error:badarg ->
-                         insert_into_cache(DedupCacheEts, Guid, Msg)
-                 end
-    end.
 
 %%----------------------------------------------------------------------------
 %% index
