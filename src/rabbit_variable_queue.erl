@@ -257,7 +257,12 @@
 
 start(DurableQueues) ->
     ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
-    {Refs, StartFunState} = rabbit_queue_index:recover(DurableQueues),
+    {AllTerms, StartFunState} = rabbit_queue_index:recover(DurableQueues),
+    Refs = [Ref || Terms <- AllTerms,
+                   begin
+                       Ref = proplists:get_value(persistent_ref, Terms),
+                       Ref =/= undefined
+                   end],
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
                                 [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
                                  undefined,  {fun (ok) -> finished end, ok}]),
@@ -276,12 +281,19 @@ init(QueueName, IsDurable, _Recover) ->
         fun (Guid) ->
                 rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
         end,
-    {DeltaCount, PRef, TRef, Terms, IndexState} =
+    {DeltaCount, Terms, IndexState} =
         rabbit_queue_index:init(QueueName, MsgStoreRecovered, ContainsCheckFun),
     {DeltaSeqId, NextSeqId, IndexState1} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(IndexState),
 
-    DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
+    {PRef, TRef, Terms1} =
+        case [persistent_ref, transient_ref] -- proplists:get_keys(Terms) of
+            [] -> {proplists:get_value(persistent_ref, Terms),
+                   proplists:get_value(transient_ref, Terms),
+                   Terms};
+            _  -> {rabbit_guid:guid(), rabbit_guid:guid(), []}
+        end,
+    DeltaCount1 = proplists:get_value(persistent_count, Terms1, DeltaCount),
     Delta = case DeltaCount1 == 0 andalso DeltaCount /= undefined of
                 true  -> ?BLANK_DELTA;
                 false -> #delta { start_seq_id = DeltaSeqId,
@@ -329,7 +341,8 @@ terminate(State) ->
         remove_pending_ack(true, tx_commit_index(State)),
     rabbit_msg_store:client_terminate(MSCStateP),
     rabbit_msg_store:client_terminate(MSCStateT),
-    Terms = [{persistent_ref, PRef}, {transient_ref, TRef},
+    Terms = [{persistent_ref, PRef},
+             {transient_ref, TRef},
              {persistent_count, PCount}],
     State1 #vqstate { index_state = rabbit_queue_index:terminate(
                                       Terms, IndexState),

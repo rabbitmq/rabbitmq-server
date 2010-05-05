@@ -196,8 +196,7 @@
         {(fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A}).
 
 -spec(init/3 :: (queue_name(), boolean(), fun ((guid()) -> boolean())) ->
-             {'undefined' |
-              non_neg_integer(), binary(), binary(), [any()], qistate()}).
+             {'undefined' | non_neg_integer(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(terminate_and_erase/1 :: (qistate()) -> qistate()).
 -spec(write_published/4 :: (guid(), seq_id(), boolean(), qistate())
@@ -212,7 +211,7 @@
 -spec(segment_size/0 :: () -> non_neg_integer()).
 -spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(recover/1 :: ([queue_name()]) -> {[binary()], startup_fun_state()}).
+-spec(recover/1 :: ([queue_name()]) -> {[[any()]], startup_fun_state()}).
 
 -endif.
 
@@ -223,20 +222,10 @@
 
 init(Name, MsgStoreRecovered, ContainsCheckFun) ->
     State = blank_state(Name),
-    {PRef, TRef, Terms} =
-        case read_shutdown_terms(State #qistate.dir) of
-            {error, _} ->
-                {rabbit_guid:guid(), rabbit_guid:guid(), []};
-            {ok, Terms1} ->
-                case [persistent_ref, transient_ref] --
-                    proplists:get_keys(Terms1) of
-                    [] ->
-                        {proplists:get_value(persistent_ref, Terms1),
-                         proplists:get_value(transient_ref, Terms1), Terms1};
-                    _ ->
-                        {rabbit_guid:guid(), rabbit_guid:guid(), []}
-                end
-        end,
+    Terms = case read_shutdown_terms(State #qistate.dir) of
+                {error, _}   -> [];
+                {ok, Terms1} -> Terms1
+            end,
     %% 1. Load the journal completely. This will also load segments
     %%    which have entries in the journal and remove duplicates.
     %%    The counts will correctly reflect the combination of the
@@ -305,7 +294,7 @@ init(Name, MsgStoreRecovered, ContainsCheckFun) ->
     %% artificially set the dirty_count non zero and call flush again
     State3 = flush_journal(State2 #qistate { segments = Segments1,
                                              dirty_count = 1 }),
-    {Count, PRef, TRef, Terms, State3}.
+    {Count, Terms, State3}.
 
 maybe_add_to_journal( true,  true, _Del, _RelSeq, Segment) ->
     Segment;
@@ -442,34 +431,28 @@ recover(DurableQueues) ->
                           []
                   end,
     DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
-    {DurableQueueNames, TransientDirs, DurableRefs} =
+    {DurableQueueNames, TransientDirs, DurableTerms} =
         lists:foldl(
-          fun (QueueDir, {DurableAcc, TransientAcc, RefsAcc}) ->
+          fun (QueueDir, {DurableAcc, TransientAcc, TermsAcc}) ->
                   case sets:is_element(QueueDir, DurableDirectories) of
                       true ->
-                          RefsAcc1 =
+                          TermsAcc1 =
                               case read_shutdown_terms(
                                      filename:join(QueuesDir, QueueDir)) of
-                                  {error, _} ->
-                                      RefsAcc;
-                                  {ok, Terms} ->
-                                      case proplists:get_value(
-                                             persistent_ref, Terms) of
-                                          undefined -> RefsAcc;
-                                          Ref       -> [Ref | RefsAcc]
-                                      end
+                                  {error, _}  -> TermsAcc;
+                                  {ok, Terms} -> [Terms | TermsAcc]
                               end,
                           {[dict:fetch(QueueDir, DurableDict) | DurableAcc],
-                           TransientAcc, RefsAcc1};
+                           TransientAcc, TermsAcc1};
                       false ->
-                          {DurableAcc, [QueueDir | TransientAcc], RefsAcc}
+                          {DurableAcc, [QueueDir | TransientAcc], TermsAcc}
                   end
           end, {[], [], []}, Directories),
     lists:foreach(fun (DirName) ->
                           Dir = filename:join(queues_dir(), DirName),
                           ok = rabbit_misc:recursive_delete([Dir])
                   end, TransientDirs),
-    {DurableRefs, {fun queue_index_walker/1, DurableQueueNames}}.
+    {DurableTerms, {fun queue_index_walker/1, DurableQueueNames}}.
 
 %%----------------------------------------------------------------------------
 %% Msg Store Startup Delta Function
