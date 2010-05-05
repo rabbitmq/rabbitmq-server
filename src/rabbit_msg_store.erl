@@ -436,9 +436,7 @@ client_read2(Server, false, _Right,
       fun (_) -> client_read3(Server, MsgLocation, Defer, CState) end,
       fun () -> read(Server, Guid, CState) end).
 
-client_read3(Server,
-             #msg_location { guid = Guid, ref_count = RefCount, file = File },
-             Defer,
+client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
              CState = #client_msstate { file_handles_ets = FileHandlesEts,
                                         file_summary_ets = FileSummaryEts,
                                         dedup_cache_ets  = DedupCacheEts }) ->
@@ -483,8 +481,6 @@ client_read3(Server,
                     CState1 = close_all_indicated(CState),
                     {Msg, CState2} =
                         read_from_disk(MsgLocation, CState1, DedupCacheEts),
-                    ok = maybe_insert_into_cache(DedupCacheEts, RefCount, Guid,
-                                                 Msg),
                     Release(), %% this MUST NOT fail with badarg
                     {{ok, Msg}, CState2};
                 MsgLocation -> %% different file!
@@ -864,9 +860,10 @@ read_message1(From, #msg_location { guid = Guid, ref_count = RefCount,
                              end,
                         read_from_disk(MsgLoc, State, DedupCacheEts);
                     [{Guid, Msg1, _CacheRefCount}] ->
+                        ok = maybe_insert_into_cache(DedupCacheEts, RefCount,
+                                                     Guid, Msg1),
                         {Msg1, State}
                 end,
-            ok = maybe_insert_into_cache(DedupCacheEts, RefCount, Guid, Msg),
             gen_server2:reply(From, {ok, Msg}),
             State1;
         false ->
