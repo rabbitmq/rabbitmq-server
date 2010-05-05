@@ -414,7 +414,7 @@ client_read2(_Server, false, undefined, _MsgLocation, Defer, _CState) ->
     %% current_file. We can only arrive here if we are trying to read
     %% a message which we have not written, which is very odd, so just
     %% defer.
-
+    %%
     %% OR, on startup, the cur_file_cache is not populated with the
     %% contents of the current file, thus reads from the current file
     %% will end up here and will need to be deferred.
