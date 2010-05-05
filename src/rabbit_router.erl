@@ -33,100 +33,40 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--behaviour(gen_server2).
-
--export([start_link/0,
-         deliver/2,
+-export([deliver/2,
          match_bindings/2,
          match_routing_key/2]).
-
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
-
--define(SERVER, ?MODULE).
-
-%% cross-node routing optimisation is disabled because of bug 19758.
--define(BUG19758, true).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(deliver/2 :: ([pid()], delivery()) -> {routing_result(), [pid()]}).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
-
--ifdef(BUG19758).
-
-deliver(QPids, Delivery) ->
-    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
-                   run_bindings(QPids, Delivery)).
-
--else.
-
-deliver(QPids, Delivery) ->
-    %% we reduce inter-node traffic by grouping the qpids by node and
-    %% only delivering one copy of the message to each node involved,
-    %% which then in turn delivers it to its queues.
-    deliver_per_node(
-      dict:to_list(
-        lists:foldl(fun (QPid, D) ->
-                            rabbit_misc:dict_cons(node(QPid), QPid, D)
-                    end, dict:new(), QPids)),
-      Delivery).
-
-deliver_per_node([{Node, QPids}], Delivery) when Node == node() ->
-    %% optimisation
-    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
-                   run_bindings(QPids, Delivery));
-deliver_per_node(NodeQPids, Delivery = #delivery{mandatory = false,
-                                                 immediate = false}) ->
+deliver(QPids, Delivery = #delivery{mandatory = false,
+                                    immediate = false}) ->
     %% optimisation: when Mandatory = false and Immediate = false,
-    %% rabbit_amqqueue:deliver in run_bindings below will deliver the
-    %% message to the queue process asynchronously, and return true,
-    %% which means all the QPids will always be returned. It is
-    %% therefore safe to use a fire-and-forget cast here and return
-    %% the QPids - the semantics is preserved. This scales much better
-    %% than the non-immediate case below.
-    {routed,
-     lists:flatmap(
-       fun ({Node, QPids}) ->
-               gen_server2:cast({?SERVER, Node}, {deliver, QPids, Delivery}),
-               QPids
-       end,
-       NodeQPids)};
-deliver_per_node(NodeQPids, Delivery) ->
-    R = rabbit_misc:upmap(
-          fun ({Node, QPids}) ->
-                  try gen_server2:call({?SERVER, Node},
-                                       {deliver, QPids, Delivery},
-                                       infinity)
-                  catch
-                      _Class:_Reason ->
-                          %% TODO: figure out what to log (and do!) here
-                          {false, []}
-                  end
-          end,
-          NodeQPids),
-    {Routed, Handled} =
-        lists:foldl(fun ({Routed, Handled}, {RoutedAcc, HandledAcc}) ->
-                            {Routed or RoutedAcc,
-                             %% we do the concatenation below, which
-                             %% should be faster
-                             [Handled | HandledAcc]}
-                    end,
-                    {false, []},
-                    R),
-    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
-                   {Routed, lists:append(Handled)}).
+    %% rabbit_amqqueue:deliver will deliver the message to the queue
+    %% process asynchronously, and return true, which means all the
+    %% QPids will always be returned. It is therefore safe to use a
+    %% fire-and-forget cast here and return the QPids - the semantics
+    %% is preserved. This scales much better than the non-immediate
+    %% case below.
+    delegate:invoke_no_result(
+      QPids, fun(Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
+    {routed, QPids};
 
--endif.
+deliver(QPids, Delivery) ->
+    {Success, _} =
+        delegate:invoke(QPids,
+                        fun(Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
+    {Routed, Handled} = lists:foldl(fun fold_deliveries/2, {false, []}, Success),
+    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
+                   {Routed, Handled}).
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same exchange
@@ -157,44 +97,8 @@ lookup_qpids(Queues) ->
 
 %%--------------------------------------------------------------------
 
-init([]) ->
-    {ok, no_state}.
-
-handle_call({deliver, QPids, Delivery}, From, State) ->
-    spawn(
-      fun () ->
-              R = run_bindings(QPids, Delivery),
-              gen_server2:reply(From, R)
-      end),
-    {noreply, State}.
-
-handle_cast({deliver, QPids, Delivery}, State) ->
-    %% in order to preserve message ordering we must not spawn here
-    run_bindings(QPids, Delivery),
-    {noreply, State}.
-
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-%%--------------------------------------------------------------------
-
-run_bindings(QPids, Delivery) ->
-    lists:foldl(
-      fun (QPid, {Routed, Handled}) ->
-              case catch rabbit_amqqueue:deliver(QPid, Delivery) of
-                  true              -> {true, [QPid | Handled]};
-                  false             -> {true, Handled};
-                  {'EXIT', _Reason} -> {Routed, Handled}
-              end
-      end,
-      {false, []},
-      QPids).
+fold_deliveries({Pid, true},{_, Handled}) -> {true, [Pid|Handled]};
+fold_deliveries({_,  false},{_, Handled}) -> {true, Handled}.
 
 %% check_delivery(Mandatory, Immediate, {WasRouted, QPids})
 check_delivery(true, _   , {false, []}) -> {unroutable, []};
