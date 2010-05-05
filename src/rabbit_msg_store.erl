@@ -480,7 +480,7 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
                     %% This is fine to fail (already exists)
                     ets:insert_new(FileHandlesEts, {{self(), File}, open}),
                     CState1 = close_all_indicated(CState),
-                    {Msg, CState2} =
+                    {Msg, CState2} = %% This will never be the current file
                         read_from_disk(MsgLocation, CState1, DedupCacheEts),
                     Release(), %% this MUST NOT fail with badarg
                     {{ok, Msg}, CState2};
@@ -540,7 +540,7 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
         end,
 
     InitFile = 0,
-    {RecoveredFileSummary, FileSummaryEts} =
+    {IndexRecovered, FileSummaryEts} =
         recover_file_summary(AllCleanShutdown, Dir),
     DedupCacheEts = ets:new(rabbit_msg_store_dedup_cache, [set, public]),
     FileHandlesEts = ets:new(rabbit_msg_store_shared_file_handles,
@@ -579,7 +579,7 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     %% whole lot
     Files = [filename_to_num(FileName) || FileName <- FileNames],
     {Offset, State1 = #msstate { current_file = CurFile }} =
-        build_index(RecoveredFileSummary, Files, State),
+        build_index(IndexRecovered, Files, State),
 
     %% read is only needed so that we can seek
     {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
