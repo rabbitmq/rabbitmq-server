@@ -443,10 +443,11 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
     Release = fun() -> ets:update_counter(FileSummaryEts, File,
                                           {#file_summary.readers, -1})
               end,
-    %% If a GC hasn't already started, it won't start now. Need to
-    %% check again to see if we've been locked in the meantime,
-    %% between lookup and update_counter (thus GC started before our
-    %% +1. In fact, it could have finished by now too).
+    %% If a GC involving the file hasn't already started, it won't
+    %% start now. Need to check again to see if we've been locked in
+    %% the meantime, between lookup and update_counter (thus GC
+    %% started before our +1. In fact, it could have finished by now
+    %% too).
     case ets:lookup(FileSummaryEts, File) of
         [] -> %% GC has deleted our file, just go round again.
             read(Server, Guid, CState);
@@ -455,18 +456,18 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
             %% deleted our file. Try going around again. Otherwise,
             %% just defer.
             %%
-            %% badarg scenario: we lookup, msg_store locks, gc starts,
-            %% gc ends, we +1 readers, msg_store ets:deletes (and
+            %% badarg scenario: we lookup, msg_store locks, GC starts,
+            %% GC ends, we +1 readers, msg_store ets:deletes (and
             %% unlocks the dest)
             try Release(),
                 Defer()
             catch error:badarg -> read(Server, Guid, CState)
             end;
         _ ->
-            %% Ok, we're definitely safe to continue - a GC can't
-            %% start up now, and isn't running, so nothing will tell
-            %% us from now on to close the handle if it's already
-            %% open.
+            %% Ok, we're definitely safe to continue - a GC involving
+            %% the file cannot start up now, and isn't running, so
+            %% nothing will tell us from now on to close the handle if
+            %% it's already open.
             %%
             %% Finally, we need to recheck that the msg is still at
             %% the same place - it's possible an entire GC ran between
