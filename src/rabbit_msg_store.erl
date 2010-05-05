@@ -83,7 +83,7 @@
           dedup_cache_ets,        %% tid of dedup cache table
           cur_file_cache_ets,     %% tid of current file cache table
           client_refs,            %% set of references of all registered clients
-          recovered_state         %% boolean: did we recover state?
+          successfully_recovered  %% boolean: did we recover state?
          }).
 
 -record(client_msstate,
@@ -515,7 +515,7 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     rabbit_log:info("Using ~p to provide index for message store~n",
                     [IndexModule]),
 
-    {Recovered, IndexState, ClientRefs1} =
+    {AllCleanShutdown, IndexState, ClientRefs1} =
         case detect_clean_shutdown(Dir) of
             {false, _Error} ->
                 {fresh, IndexState1} = IndexModule:init(fresh, Dir),
@@ -540,7 +540,8 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
         end,
 
     InitFile = 0,
-    {Recovered1, FileSummaryEts} = recover_file_summary(Recovered, Dir),
+    {RecoveredFileSummary, FileSummaryEts} =
+        recover_file_summary(AllCleanShutdown, Dir),
     DedupCacheEts = ets:new(rabbit_msg_store_dedup_cache, [set, public]),
     FileHandlesEts = ets:new(rabbit_msg_store_shared_file_handles,
                              [ordered_set, public]),
@@ -564,10 +565,10 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
                        dedup_cache_ets        = DedupCacheEts,
                        cur_file_cache_ets     = CurFileCacheEts,
                        client_refs            = ClientRefs1,
-                       recovered_state        = Recovered
+                       successfully_recovered = AllCleanShutdown
                       },
 
-    ok = count_msg_refs(Recovered, MsgRefDeltaGen, MsgRefDeltaGenInit, State),
+    ok = count_msg_refs(AllCleanShutdown, MsgRefDeltaGen, MsgRefDeltaGenInit, State),
     FileNames =
         sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION, Dir)),
     TmpFileNames =
@@ -578,7 +579,7 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     %% whole lot
     Files = [filename_to_num(FileName) || FileName <- FileNames],
     {Offset, State1 = #msstate { current_file = CurFile }} =
-        build_index(Recovered1, Files, State),
+        build_index(RecoveredFileSummary, Files, State),
 
     %% read is only needed so that we can seek
     {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
@@ -614,7 +615,7 @@ handle_call({new_client_state, CRef}, _From,
           State #msstate { client_refs = sets:add_element(CRef, ClientRefs) });
 
 handle_call(successfully_recovered_state, _From, State) ->
-    reply(State #msstate.recovered_state, State);
+    reply(State #msstate.successfully_recovered, State);
 
 handle_call({delete_client, CRef}, _From,
             State = #msstate { client_refs = ClientRefs }) ->
@@ -709,10 +710,11 @@ handle_cast({gc_done, Reclaimed, Source, Dest},
                                file_summary_ets = FileSummaryEts }) ->
     %% GC done, so now ensure that any clients that have open fhs to
     %% those files close them before using them again. This has to be
-    %% done here, and not when starting up the GC, because if done
-    %% when starting up the GC, the client could find the close, and
-    %% close and reopen the fh, whilst the GC is waiting for readers
-    %% to disappear, before it's actually done the GC.
+    %% done here (given it's done in the msg_store, and not the gc),
+    %% and not when starting up the GC, because if done when starting
+    %% up the GC, the client could find the close, and close and
+    %% reopen the fh, whilst the GC is waiting for readers to
+    %% disappear, before it's actually done the GC.
     true = mark_handle_to_close(FileHandlesEts, Source),
     true = mark_handle_to_close(FileHandlesEts, Dest),
     %% we always move data left, so Source has gone and was on the
