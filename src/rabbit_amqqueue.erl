@@ -371,31 +371,27 @@ pseudo_queue(QueueName, Pid) ->
               pid = Pid}.
 
 safe_delegate_call_ok(H, F, Pids) ->
-    case [R || R = {error, _, _} <- delegate:invoke(
-                                      Pids,
-                                      fun (Pid) ->
-                                              rabbit_misc:with_exit_handler(
-                                                fun () -> H(Pid) end,
-                                                fun () -> F(Pid) end)
-                                      end)] of
+    {_, Bad} = delegate:invoke(Pids,
+                               fun (Pid) ->
+                                        rabbit_misc:with_exit_handler(
+                                         fun () -> H(Pid) end,
+                                         fun () -> F(Pid) end)
+                               end),
+    case Bad of
         []     -> ok;
         Errors -> {error, Errors}
     end.
 
 delegate_call(Pid, Msg, Timeout) ->
-    {_Status, Res} =
-        delegate:invoke(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end),
-    Res.
+    delegate:invoke(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end).
 
 delegate_pcall(Pid, Pri, Msg, Timeout) ->
-    {_Status, Res} =
-        delegate:invoke(Pid,
-                        fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end),
-    Res.
+    delegate:invoke(Pid, fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end).
 
 delegate_cast(Pid, Msg) ->
     delegate:invoke_no_result(Pid, fun(P) -> gen_server2:cast(P, Msg) end).
 
 delegate_pcast(Pid, Pri, Msg) ->
-    delegate:invoke_no_result(Pid, fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
+    delegate:invoke_no_result(Pid,
+                              fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
 

@@ -879,39 +879,46 @@ await_response(Count) ->
         throw(timeout)
     end.
 
+must_exit(Fun) ->
+    try
+        Fun(),
+        throw(exit_not_thrown)
+    catch
+        exit:_ -> ok
+    end.
+
 test_delegates_sync(SecondaryNode) ->
     Sender = fun(Pid) -> gen_server:call(Pid, invoked) end,
+    BadSender = fun(_Pid) -> exit(exception) end,
 
     Responder = make_responder(fun({'$gen_call', From, invoked}) ->
                                    gen_server:reply(From, response)
                                end),
 
-    BadResponder = make_responder(fun({'$gen_call', _From, invoked}) ->
-                                      throw(exception)
-                                  end),
+    response = delegate:invoke(spawn(Responder), Sender),
+    response = delegate:invoke(spawn(SecondaryNode, Responder), Sender),
 
-    {ok, response} = delegate:invoke(spawn(Responder), Sender),
-    {ok, response} = delegate:invoke(spawn(SecondaryNode, Responder), Sender),
-
-    {error, _} = delegate:invoke(spawn(BadResponder), Sender),
-    {error, _} = delegate:invoke(spawn(SecondaryNode, BadResponder), Sender),
+    must_exit(fun() -> delegate:invoke(spawn(Responder), BadSender) end),
+    must_exit(fun() ->
+        delegate:invoke(spawn(SecondaryNode, Responder), BadSender) end),
 
     LocalGoodPids = spawn_responders(node(), Responder, 2),
     RemoteGoodPids = spawn_responders(SecondaryNode, Responder, 2),
-    LocalBadPids = spawn_responders(node(), BadResponder, 2),
-    RemoteBadPids = spawn_responders(SecondaryNode, BadResponder, 2),
+    LocalBadPids = spawn_responders(node(), Responder, 2),
+    RemoteBadPids = spawn_responders(SecondaryNode, Responder, 2),
 
-    GoodRes = delegate:invoke(LocalGoodPids ++ RemoteGoodPids, Sender),
-    BadRes = delegate:invoke(LocalBadPids ++ RemoteBadPids, Sender),
+    {GoodRes, []} = delegate:invoke(LocalGoodPids ++ RemoteGoodPids, Sender),
 
-    true = lists:all(fun ({ok, response, _}) -> true end, GoodRes),
-    true = lists:all(fun ({error, _, _}) -> true end, BadRes),
+    true = lists:all(fun ({_, response}) -> true end, GoodRes),
 
-    GoodResPids = [Pid || {_, _, Pid} <- GoodRes],
-    BadResPids = [Pid || {_, _, Pid} <- BadRes],
+    GoodResPids = [Pid || {Pid, _} <- GoodRes],
 
     Good = ordsets:from_list(LocalGoodPids ++ RemoteGoodPids),
     Good = ordsets:from_list(GoodResPids),
+
+    {[], BadRes} = delegate:invoke(LocalBadPids ++ RemoteBadPids, BadSender),
+    true = lists:all(fun ({_, {exit, exception, _}}) -> true end, BadRes),
+    BadResPids = [Pid || {Pid, _} <- BadRes],
 
     Bad = ordsets:from_list(LocalBadPids ++ RemoteBadPids),
     Bad = ordsets:from_list(BadResPids),

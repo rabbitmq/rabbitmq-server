@@ -62,11 +62,24 @@ start_link(Hash) ->
     gen_server2:start_link({local, server(Hash)}, ?MODULE, [], []).
 
 invoke(Pid, Fun) when is_pid(Pid) ->
-    [{Status, Res, _}] = invoke_per_node([{node(Pid), [Pid]}], Fun),
-    {Status, Res};
+    [Res] = invoke_per_node([{node(Pid), [Pid]}], Fun),
+    case Res of
+        {ok, Result, _} ->
+            Result;
+        {error, {Class, Reason, StackTrace}, _} ->
+            erlang:raise(Class, Reason, StackTrace)
+    end;
 
 invoke(Pids, Fun) when is_list(Pids) ->
-    invoke_per_node(split_delegate_per_node(Pids), Fun).
+    lists:foldl(
+        fun({Status, Result, Pid}, {Good, Bad}) ->
+            case Status of
+                ok    -> {[{Pid, Result}|Good], Bad};
+                error -> {Good, [{Pid, Result}|Bad]}
+            end
+        end,
+        {[], []},
+        invoke_per_node(split_delegate_per_node(Pids), Fun)).
 
 invoke_no_result(Pid, Fun) when is_pid(Pid) ->
     invoke_no_result_per_node([{node(Pid), [Pid]}], Fun),
@@ -156,12 +169,11 @@ server(Hash) ->
     list_to_atom("delegate_process_" ++ integer_to_list(Hash)).
 
 safe_invoke(Fun, Pid) ->
-    %% We need the catch here for the local case. In the remote case
-    %% there will already have been a catch in handle_ca{ll,st} below,
-    %% but that's OK, catch is idempotent.
-    case catch Fun(Pid) of
-        {'EXIT', Reason} -> {error, {'EXIT', Reason}, Pid};
-        Result           -> {ok, Result, Pid}
+    try
+        {ok, Fun(Pid), Pid}
+    catch
+        Class:Reason ->
+            {error, {Class, Reason, erlang:get_stacktrace()}, Pid}
     end.
 
 process_count() ->
@@ -173,11 +185,13 @@ init([]) ->
     {ok, no_state, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
+%% We don't need a catch here; we always go via safe_invoke. A catch here would
+%% be the wrong thing anyway since the Thunk can throw multiple errors.
 handle_call({thunk, Thunk}, _From, State) ->
-    {reply, catch Thunk(), State, hibernate}.
+    {reply, Thunk(), State, hibernate}.
 
 handle_cast({thunk, Thunk}, State) ->
-    catch Thunk(),
+    Thunk(),
     {noreply, State, hibernate}.
 
 handle_info(_Info, State) ->

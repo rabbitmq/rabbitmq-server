@@ -61,9 +61,9 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
     {routed, QPids};
 
 deliver(QPids, Delivery) ->
-    Res = delegate:invoke(
+    {Success, _} = delegate:invoke(
             QPids, fun(Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
-    {Routed, Handled} = lists:foldl(fun fold_deliveries/2, {false, []}, Res),
+    {Routed, Handled} = lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
                    {Routed, Handled}).
 
@@ -109,9 +109,8 @@ lookup_qpids(Queues) ->
 
 %%--------------------------------------------------------------------
 
-fold_deliveries({ok,    true,  Pid},{_,      Handled}) -> {true, [Pid|Handled]};
-fold_deliveries({ok,    false, _  },{_,      Handled}) -> {true, Handled};
-fold_deliveries({error, _    , _  },{Routed, Handled}) -> {Routed, Handled}.
+fold_deliveries({Pid, true},{_, Handled}) -> {true, [Pid|Handled]};
+fold_deliveries({_,  false},{_, Handled}) -> {true, Handled}.
 
 %% check_delivery(Mandatory, Immediate, {WasRouted, QPids})
 check_delivery(true, _   , {false, []}) -> {unroutable, []};
