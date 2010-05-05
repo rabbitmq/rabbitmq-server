@@ -456,7 +456,7 @@ client_read3(Server,
             %% If we get a badarg here, then the GC has finished and
             %% deleted our file. Try going around again. Otherwise,
             %% just defer.
-
+            %%
             %% badarg scenario: we lookup, msg_store locks, gc starts,
             %% gc ends, we +1 readers, msg_store ets:deletes (and
             %% unlocks the dest)
@@ -469,13 +469,12 @@ client_read3(Server,
             %% start up now, and isn't running, so nothing will tell
             %% us from now on to close the handle if it's already
             %% open.
-
+            %%
             %% Finally, we need to recheck that the msg is still at
             %% the same place - it's possible an entire GC ran between
             %% us doing the lookup and the +1 on the readers. (Same as
             %% badarg scenario above, but we don't have a missing file
             %% - we just have the /wrong/ file).
-
             case index_lookup(Guid, CState) of
                 MsgLocation = #msg_location { file = File } ->
                     %% Still the same file.
