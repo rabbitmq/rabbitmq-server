@@ -433,10 +433,10 @@ client_read2(Server, false, _Right,
     %% finished.
     safe_ets_update_counter(
       FileSummaryEts, File, {#file_summary.readers, +1},
-      fun (_) -> client_read3(Server, Guid, MsgLocation, Defer, CState) end,
+      fun (_) -> client_read3(Server, MsgLocation, Defer, CState) end,
       fun () -> read(Server, Guid, CState) end).
 
-client_read3(Server, Guid,
+client_read3(Server,
              #msg_location { guid = Guid, ref_count = RefCount, file = File },
              Defer,
              CState = #client_msstate { file_handles_ets = FileHandlesEts,
