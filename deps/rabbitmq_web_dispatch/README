@@ -12,7 +12,7 @@ Environment Variables
 rabbitmq-mochiweb uses the standard OTP environment variables mechanism. It understands
 these variables:
 
-* port -       The port to listen on;
+* port -       The port to listen on (by default 55672);
 
 Installation
 ------------
