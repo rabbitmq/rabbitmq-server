@@ -540,7 +540,7 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
         end,
 
     InitFile = 0,
-    {IndexRecovered, FileSummaryEts} =
+    {FileSummaryRecovered, FileSummaryEts} =
         recover_file_summary(AllCleanShutdown, Dir),
     DedupCacheEts = ets:new(rabbit_msg_store_dedup_cache, [set, public]),
     FileHandlesEts = ets:new(rabbit_msg_store_shared_file_handles,
@@ -568,7 +568,8 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
                        successfully_recovered = AllCleanShutdown
                       },
 
-    ok = count_msg_refs(AllCleanShutdown, MsgRefDeltaGen, MsgRefDeltaGenInit, State),
+    ok = count_msg_refs(AllCleanShutdown, MsgRefDeltaGen, MsgRefDeltaGenInit,
+                        State),
     FileNames =
         sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION, Dir)),
     TmpFileNames =
@@ -579,7 +580,7 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     %% whole lot
     Files = [filename_to_num(FileName) || FileName <- FileNames],
     {Offset, State1 = #msstate { current_file = CurFile }} =
-        build_index(IndexRecovered, Files, State),
+        build_index(FileSummaryRecovered, Files, State),
 
     %% read is only needed so that we can seek
     {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
@@ -856,8 +857,9 @@ read_message1(From, #msg_location { guid = Guid, ref_count = RefCount,
                 %% can return [] if msg in file existed on startup
                 case ets:lookup(CurFileCacheEts, Guid) of
                     [] ->
-                        ok = case {ok, Offset} >=
-                                 file_handle_cache:current_raw_offset(CurHdl) of
+                        {ok, RawOffSet} =
+                            file_handle_cache:current_raw_offset(CurHdl),
+                        ok = case Offset >= RawOffSet of
                                  true  -> file_handle_cache:flush(CurHdl);
                                  false -> ok
                              end,
