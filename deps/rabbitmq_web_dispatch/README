@@ -1,54 +1,30 @@
-mod_http
+rabbitmq-mochiweb
 --------
 
-mod_http is thin veneer around mochiweb that provides dispatching to the JSON
-RPC handler module as well as managing static docroots.
-
-Testing mod_http
-----------------
-
-There is a an OTP called mod_http_test which depends on mod_http and
-rfc4627_jsonrpc. To build and run the test, use the test target in this
-project's Makefile:
-
-$ make test
-
-And then go to http://localhost:8000/ in a browser.
+rabbitmq-mochiweb is a thin veneer around mochiweb that provides the ability
+for multiple RabbitMQ plugins to co-exist under a single web-app root. Applications
+can register static docroots along with dynamic handlers to be executed based on
+various incoming request properties.
 
 Environment Variables
 ---------------------
 
-mod_http uses the standard OTP environment variables mechanism. It understands
+rabbitmq-mochiweb uses the standard OTP environment variables mechanism. It understands
 these variables:
 
-* docroot -    The path to the root of the htdocs tree;
-* port -       The port to listen on;
-* production - Whether mod_http should be run in prod or dev mode;
+* port -       The port to listen on (by default 55672);
 
-Development Mode In Rabbit
---------------------------
-
-During development, you don't want to have to deploy the web application to a
-running instance of mod_http inside of Rabbit.
-
-Instead, you would like to be able to point the mod_http at your own docroot.
-
-To do this, you need to tell mod_http to run in development mode and set the
-docroot environment value to point to where you are developing from.
-
-One easy way to do this when booting Rabbit is to create a small config
-file(*) with the following content:
-
-[{mod_http, [{production, false}, {docroot, "/path/to/your/stuff"}]}].
-
-Save it as mod_http.config for example, and then you can add this a start
-argument to the server:
-
-$ make run RABBITMQ_SERVER_START_ARGS="-config mod_http.config"
-
-If, successful, mod_http will be using the docroot you specified.
-
+Installation
 ------------
-*) The reason why I suggest this is because I was having trouble passing a
-string via make and the shell to erl as an argument - there's probably any
-easier way to do this if you think about it.
+
+After you've successfully run make on the plugin, the plugin can be installed by copying
+both mochiweb.ez and rabbitmq-mochiweb.ez to your Rabbit installation's plugins directory,
+then executing rabbitmq-activate-plugins.
+
+Configuration
+-------------
+
+As indicated in the Environment Variables section, the rabbitmq-mochiweb plugin supports
+OTP application configuration values. These values can be set as either Erlang startup
+parameters or via the rabbitmq.config file, with a block such as:
+  {rabbit_mochiweb, [{port, 8080}]}
