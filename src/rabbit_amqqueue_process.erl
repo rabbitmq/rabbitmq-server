@@ -79,11 +79,8 @@
          exclusive_consumer_tag,
          messages_ready,
          messages_unacknowledged,
-         messages_uncommitted,
          messages,
-         acks_uncommitted,
          consumers,
-         transactions,
          memory]).
 
 %%----------------------------------------------------------------------------
@@ -91,24 +88,22 @@
 start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
 info_keys() -> ?INFO_KEYS.
-    
+
 %%----------------------------------------------------------------------------
 
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    case Q#amqqueue.exclusive_owner of
-        none      -> ok;
-        ReaderPid -> erlang:monitor(process, ReaderPid)
-    end,
     {ok, #q{q = Q,
             exclusive_consumer = none,
             has_had_consumers = false,
             next_msg_id = 1,
-            message_buffer = queue:new(),
+            message_buffer = undefined,
             active_consumers = queue:new(),
             blocked_consumers = queue:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
+terminate(_Reason, #q{message_buffer = undefined}) ->
+    ok;
 terminate(_Reason, State) ->
     %% FIXME: How do we cancel active subscriptions?
     QName = qname(State),
@@ -441,9 +436,6 @@ store_tx(Txn, Tx) ->
 erase_tx(Txn) ->
     erase({txn, Txn}).
 
-all_tx_record() ->
-    [T || {{txn, _}, T} <- get()].
-
 all_tx() ->
     [Txn || {{txn, Txn}, _} <- get()].
 
@@ -517,20 +509,11 @@ i(messages_ready, #q{message_buffer = MessageBuffer}) ->
 i(messages_unacknowledged, _) ->
     lists:sum([dict:size(UAM) ||
                   #cr{unacked_messages = UAM} <- all_ch_record()]);
-i(messages_uncommitted, _) ->
-    lists:sum([length(Pending) ||
-                  #tx{pending_messages = Pending} <- all_tx_record()]);
 i(messages, State) ->
     lists:sum([i(Item, State) || Item <- [messages_ready,
-                                          messages_unacknowledged,
-                                          messages_uncommitted]]);
-i(acks_uncommitted, _) ->
-    lists:sum([length(Pending) ||
-                  #tx{pending_acks = Pending} <- all_tx_record()]);
+                                          messages_unacknowledged]]);
 i(consumers, State) ->
     queue:len(State#q.active_consumers) + queue:len(State#q.blocked_consumers);
-i(transactions, _) ->
-    length(all_tx_record());
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
@@ -538,6 +521,14 @@ i(Item, _) ->
     throw({bad_argument, Item}).
 
 %---------------------------------------------------------------------------
+
+handle_call(sync, _From, State = #q{q = Q}) ->
+    case Q#amqqueue.exclusive_owner of
+        none      -> ok;
+        ReaderPid -> erlang:monitor(process, ReaderPid)
+    end,
+
+    reply(ok, State);
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
@@ -730,6 +721,12 @@ handle_call({requeue, MsgIds, ChPid}, _From, State) ->
                         [{Message, true} || Message <- Messages], State))
     end.
 
+handle_cast({init, Recover}, State = #q{message_buffer = undefined}) ->
+    Messages = case Recover of
+                   true  -> rabbit_persister:queue_content(qname(State));
+                   false -> []
+               end,
+    noreply(State#q{message_buffer = queue:from_list(Messages)});
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
@@ -758,8 +755,18 @@ handle_cast({rollback, Txn, ChPid}, State) ->
     record_current_channel_tx(ChPid, none),
     noreply(State);
 
-handle_cast({redeliver, Messages}, State) ->
-    noreply(deliver_or_enqueue_n(Messages, State));
+handle_cast({requeue, MsgIds, ChPid}, State) ->
+    case lookup_ch(ChPid) of
+        not_found ->
+            rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
+                               [ChPid]),
+            noreply(State);
+        C = #cr{unacked_messages = UAM} ->
+            {Messages, NewUAM} = collect_messages(MsgIds, UAM),
+            store_ch_record(C#cr{unacked_messages = NewUAM}),
+            noreply(deliver_or_enqueue_n(
+                      [{Message, true} || Message <- Messages], State))
+    end;
 
 handle_cast({unblock, ChPid}, State) ->
     noreply(
