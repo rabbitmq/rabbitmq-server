@@ -54,6 +54,12 @@
                    [{mfa,         {rabbit_mnesia, init, []}},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({file_handle_cache,
+                   [{description, "file handle cache server"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [file_handle_cache]}},
+                    {enables,     worker_pool}]}).
+
 -rabbit_boot_step({worker_pool,
                    [{description, "worker pool"},
                     {mfa,         {rabbit_sup, start_child, [worker_pool_sup]}},
@@ -90,6 +96,13 @@
                    [{description, "alarm handler"},
                     {mfa,         {rabbit_alarm, start, []}},
                     {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
+-rabbit_boot_step({rabbit_memory_monitor,
+                   [{description, "memory monitor"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_memory_monitor]}},
+                    {requires,    rabbit_alarm},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({guid_generator,

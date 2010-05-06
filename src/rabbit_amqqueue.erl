@@ -136,11 +136,6 @@ find_durable_queues() ->
                                 node(Pid) == Node]))
       end).
 
-%shared_or_live_owner(none) ->
-%     true;
-%shared_or_live_owner(Owner) when is_pid(Owner) ->
-%    rpc:call(node(Owner), erlang, is_process_alive, [Owner]).
-
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
     %% Issue inits to *all* the queues so that they all init at the same time
