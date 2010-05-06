@@ -36,8 +36,6 @@
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1, recover/1]).
 
--export([queue_index_walker_reader/3]). %% for internal use only
-
 -define(CLEAN_FILENAME, "clean.dot").
 
 %%----------------------------------------------------------------------------
@@ -452,55 +450,44 @@ recover(DurableQueues) ->
                           Dir = filename:join(queues_dir(), DirName),
                           ok = rabbit_misc:recursive_delete([Dir])
                   end, TransientDirs),
-    {DurableTerms, {fun queue_index_walker/1, DurableQueueNames}}.
+    {DurableTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
 
 %%----------------------------------------------------------------------------
 %% Msg Store Startup Delta Function
 %%----------------------------------------------------------------------------
 
-queue_index_walker(DurableQueues) when is_list(DurableQueues) ->
-    {ok, Pid} = gatherer:start_link(),
-    queue_index_walker({DurableQueues, Pid});
+queue_index_walker({start, DurableQueues}) when is_list(DurableQueues) ->
+    {ok, Gatherer} = gatherer:start_link(),
+    [begin
+         ok = gatherer:fork(Gatherer),
+         ok = worker_pool:submit_async(
+                fun () -> queue_index_walker_reader(QueueName, Gatherer)
+                end)
+     end || QueueName <- DurableQueues],
+    queue_index_walker({next, Gatherer});
 
-queue_index_walker({[], Gatherer}) ->
-    case gatherer:fetch(Gatherer) of
-        finished ->
-            rabbit_misc:unlink_and_capture_exit(Gatherer),
+queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
+    case gatherer:out(Gatherer) of
+        empty ->
+            ok = rabbit_misc:unlink_and_capture_exit(Gatherer),
+            ok = gatherer:stop(Gatherer),
             finished;
         {value, {Guid, Count}} ->
-            {Guid, Count, {[], Gatherer}}
-    end;
-queue_index_walker({[QueueName | QueueNames], Gatherer}) ->
-    Child = make_ref(),
-    ok = gatherer:wait_on(Gatherer, Child),
-    ok = worker_pool:submit_async({?MODULE, queue_index_walker_reader,
-                                   [QueueName, Gatherer, Child]}),
-    queue_index_walker({QueueNames, Gatherer}).
+            {Guid, Count, {next, Gatherer}}
+    end.
 
-queue_index_walker_reader(QueueName, Gatherer, Ref) ->
-    State = blank_state(QueueName),
-    State1 = load_journal(State),
-    SegNums = all_segment_nums(State1),
-    queue_index_walker_reader(Gatherer, Ref, State1, SegNums).
-
-queue_index_walker_reader(Gatherer, Ref, State, []) ->
-    _State = terminate(false, [], State),
-    ok = gatherer:finished(Gatherer, Ref);
-queue_index_walker_reader(Gatherer, Ref, State, [Seg | SegNums]) ->
-    SeqId = reconstruct_seq_id(Seg, 0),
-    {Messages, State1} = read_segment_entries(SeqId, State),
-    State2 = queue_index_walker_reader1(Gatherer, State1, Messages),
-    queue_index_walker_reader(Gatherer, Ref, State2, SegNums).
-
-queue_index_walker_reader1(_Gatherer, State, []) ->
-    State;
-queue_index_walker_reader1(
-  Gatherer, State, [{Guid, _SeqId, IsPersistent, _IsDelivered} | Msgs]) ->
-    case IsPersistent of
-        true  -> gatherer:produce(Gatherer, {Guid, 1});
-        false -> ok
-    end,
-    queue_index_walker_reader1(Gatherer, State, Msgs).
+queue_index_walker_reader(QueueName, Gatherer) ->
+    State = load_journal(blank_state(QueueName)),
+    State1 = lists:foldl(
+               fun (Seg, State2) ->
+                       SeqId = reconstruct_seq_id(Seg, 0),
+                       {Messages, State3} = read_segment_entries(SeqId, State2),
+                       [ok = gatherer:in(Gatherer, {Guid, 1}) ||
+                           {Guid, _SeqId, true, _IsDelivered} <- Messages],
+                       State3
+               end, State, all_segment_nums(State)),
+    _State = terminate(false, [], State1),
+    ok = gatherer:finish(Gatherer).
 
 %%----------------------------------------------------------------------------
 %% Minors

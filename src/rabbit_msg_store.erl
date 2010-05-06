@@ -37,8 +37,7 @@
          sync/3, client_init/2, client_terminate/1, delete_client/2, clean/2,
          successfully_recovered_state/1]).
 
--export([sync/1, gc_done/4, set_maximum_since_use/2,
-         build_index_worker/6, gc/3]). %% internal
+-export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, handle_pre_hibernate/1]).
@@ -1310,8 +1309,8 @@ find_contiguous_block_prefix([{Guid, TotalSize, ExpectedOffset} | Tail],
 find_contiguous_block_prefix([_MsgAfterGap | _Tail], ExpectedOffset, Guids) ->
     {ExpectedOffset, Guids}.
 
-build_index(true, _Files, State =
-                #msstate { file_summary_ets = FileSummaryEts }) ->
+build_index(true, _Files, State = #msstate {
+                            file_summary_ets = FileSummaryEts }) ->
     ets:foldl(
       fun (#file_summary { valid_total_size = ValidTotalSize,
                            file_size        = FileSize,
@@ -1335,9 +1334,10 @@ build_index(Gatherer, Left, [],
             State = #msstate { file_summary_ets = FileSummaryEts,
                                sum_valid_data   = SumValid,
                                sum_file_size    = SumFileSize }) ->
-    case gatherer:fetch(Gatherer) of
-        finished ->
+    case gatherer:out(Gatherer) of
+        empty ->
             ok = rabbit_misc:unlink_and_capture_exit(Gatherer),
+            ok = gatherer:stop(Gatherer),
             ok = index_delete_by_file(undefined, State),
             Offset = case ets:lookup(FileSummaryEts, Left) of
                          []                                       -> 0;
@@ -1354,15 +1354,15 @@ build_index(Gatherer, Left, [],
                           sum_file_size  = SumFileSize + FileSize })
     end;
 build_index(Gatherer, Left, [File|Files], State) ->
-    Child = make_ref(),
-    ok = gatherer:wait_on(Gatherer, Child),
+    ok = gatherer:fork(Gatherer),
     ok = worker_pool:submit_async(
-           {?MODULE, build_index_worker,
-            [Gatherer, Child, State, Left, File, Files]}),
+           fun () -> build_index_worker(Gatherer, State,
+                                        Left, File, Files)
+           end),
     build_index(Gatherer, File, Files, State).
 
-build_index_worker(
-  Gatherer, Ref, State = #msstate { dir = Dir }, Left, File, Files) ->
+build_index_worker(Gatherer, State = #msstate { dir = Dir },
+                   Left, File, Files) ->
     {ok, Messages, FileSize} =
         scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     {ValidMessages, ValidTotalSize} =
@@ -1394,16 +1394,16 @@ build_index_worker(
                                  end};
             [F|_] -> {F, FileSize}
         end,
-    ok = gatherer:produce(Gatherer, #file_summary {
-                            file             = File,
-                            valid_total_size = ValidTotalSize,
-                            contiguous_top   = ContiguousTop,
-                            left             = Left,
-                            right            = Right,
-                            file_size        = FileSize1,
-                            locked           = false,
-                            readers          = 0 }),
-    ok = gatherer:finished(Gatherer, Ref).
+    ok = gatherer:in(Gatherer, #file_summary {
+                       file             = File,
+                       valid_total_size = ValidTotalSize,
+                       contiguous_top   = ContiguousTop,
+                       left             = Left,
+                       right            = Right,
+                       file_size        = FileSize1,
+                       locked           = false,
+                       readers          = 0 }),
+    ok = gatherer:finish(Gatherer).
 
 %%----------------------------------------------------------------------------
 %% garbage collection / compaction / aggregation -- internal
