@@ -104,8 +104,8 @@ handle_call(out, From, State = #gstate { forks   = Forks,
                       State #gstate { blocked = queue:in(From, Blocked) },
                       hibernate}
             end;
-        {{value, Value}, NewValues} ->
-            {reply, Value, State #gstate { values = NewValues }, hibernate}
+        {{value, _Value} = V, NewValues} ->
+            {reply, V, State #gstate { values = NewValues }, hibernate}
     end;
 
 handle_call(Msg, _From, State) ->
