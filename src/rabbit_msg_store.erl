@@ -1522,7 +1522,7 @@ delete_file_if_empty(File, State = #msstate {
                      right            = Right,
                      file_size        = FileSize,
                      locked           = false }] =
-        ts:lookup(FileSummaryEts, File),
+        ets:lookup(FileSummaryEts, File),
     case ValidData of
         %% we should NEVER find the current file in here hence right
         %% should always be a file, not undefined
