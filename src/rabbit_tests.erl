@@ -68,7 +68,32 @@ all_tests() ->
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
-    passed = test_hooks(),
+    passed = maybe_run_cluster_dependent_tests(),
+    passed.
+
+
+maybe_run_cluster_dependent_tests() ->
+    SecondaryNode = rabbit_misc:makenode("hare"),
+
+    case net_adm:ping(SecondaryNode) of
+        pong -> passed = run_cluster_dependent_tests(SecondaryNode);
+        pang -> io:format("Skipping cluster dependent tests with node ~p~n",
+                          [SecondaryNode])
+    end,
+    passed.
+
+run_cluster_dependent_tests(SecondaryNode) ->
+    SecondaryNodeS = atom_to_list(SecondaryNode),
+
+    ok = control_action(stop_app, []),
+    ok = control_action(reset, []),
+    ok = control_action(cluster, [SecondaryNodeS]),
+    ok = control_action(start_app, []),
+
+    io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
+    passed = test_delegates_async(SecondaryNode),
+    passed = test_delegates_sync(SecondaryNode),
+
     passed.
 
 test_priority_queue() ->
@@ -903,6 +928,88 @@ test_hooks() ->
        io:format("Remote hook not invoked"),
        throw(timeout)
     end,
+    passed.
+
+test_delegates_async(SecondaryNode) ->
+    Self = self(),
+    Sender = fun(Pid) -> Pid ! {invoked, Self} end,
+
+    Responder = make_responder(fun({invoked, Pid}) -> Pid ! response end),
+
+    ok = delegate:invoke_no_result(spawn(Responder), Sender),
+    ok = delegate:invoke_no_result(spawn(SecondaryNode, Responder), Sender),
+    await_response(2),
+
+    LocalPids = spawn_responders(node(), Responder, 10),
+    RemotePids = spawn_responders(SecondaryNode, Responder, 10),
+    ok = delegate:invoke_no_result(LocalPids ++ RemotePids, Sender),
+    await_response(20),
+
+    passed.
+
+make_responder(FMsg) ->
+    fun() ->
+        receive Msg -> FMsg(Msg)
+        after 1000 -> throw(timeout)
+        end
+    end.
+
+spawn_responders(Node, Responder, Count) ->
+    [spawn(Node, Responder) || _ <- lists:seq(1, Count)].
+
+await_response(0) ->
+    ok;
+await_response(Count) ->
+    receive
+        response -> ok,
+        await_response(Count - 1)
+    after 1000 ->
+        io:format("Async reply not received~n"),
+        throw(timeout)
+    end.
+
+must_exit(Fun) ->
+    try
+        Fun(),
+        throw(exit_not_thrown)
+    catch
+        exit:_ -> ok
+    end.
+
+test_delegates_sync(SecondaryNode) ->
+    Sender = fun(Pid) -> gen_server:call(Pid, invoked) end,
+    BadSender = fun(_Pid) -> exit(exception) end,
+
+    Responder = make_responder(fun({'$gen_call', From, invoked}) ->
+                                   gen_server:reply(From, response)
+                               end),
+
+    response = delegate:invoke(spawn(Responder), Sender),
+    response = delegate:invoke(spawn(SecondaryNode, Responder), Sender),
+
+    must_exit(fun() -> delegate:invoke(spawn(Responder), BadSender) end),
+    must_exit(fun() ->
+        delegate:invoke(spawn(SecondaryNode, Responder), BadSender) end),
+
+    LocalGoodPids = spawn_responders(node(), Responder, 2),
+    RemoteGoodPids = spawn_responders(SecondaryNode, Responder, 2),
+    LocalBadPids = spawn_responders(node(), Responder, 2),
+    RemoteBadPids = spawn_responders(SecondaryNode, Responder, 2),
+
+    {GoodRes, []} = delegate:invoke(LocalGoodPids ++ RemoteGoodPids, Sender),
+    true = lists:all(fun ({_, response}) -> true end, GoodRes),
+    GoodResPids = [Pid || {Pid, _} <- GoodRes],
+
+    Good = ordsets:from_list(LocalGoodPids ++ RemoteGoodPids),
+    Good = ordsets:from_list(GoodResPids),
+
+    {[], BadRes} = delegate:invoke(LocalBadPids ++ RemoteBadPids, BadSender),
+    true = lists:all(fun ({_, {exit, exception, _}}) -> true end, BadRes),
+    BadResPids = [Pid || {Pid, _} <- BadRes],
+
+    Bad = ordsets:from_list(LocalBadPids ++ RemoteBadPids),
+    Bad = ordsets:from_list(BadResPids),
+
     passed.
 
 %---------------------------------------------------------------------
