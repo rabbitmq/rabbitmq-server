@@ -519,8 +519,27 @@ i(Item, _) ->
 
 %---------------------------------------------------------------------------
 
-handle_call(sync, _From, State) ->
-    reply(ok, State);
+handle_call({init, Recover}, From,
+            State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
+                       backing_queue = BQ, backing_queue_state = undefined}) ->
+    %% TODO: If we're exclusively owned && our owner isn't alive &&
+    %% Recover then we should BQ:init and then {stop, normal,
+    %% not_found, State}, relying on terminate to delete the queue.
+    case rabbit_amqqueue:internal_declare(Q, Recover) of
+        not_found ->
+            {stop, normal, not_found, State};
+        Q ->
+            gen_server2:reply(From, Q),
+            ok = file_handle_cache:register_callback(
+                   rabbit_amqqueue, set_maximum_since_use, [self()]),
+            ok = rabbit_memory_monitor:register(
+                   self(),
+                   {rabbit_amqqueue, set_ram_duration_target, [self()]}),
+            noreply(State#q{backing_queue_state =
+                                BQ:init(QName, IsDurable, Recover)});
+        Q1 ->
+            {stop, normal, Q1, State}
+    end;
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
@@ -718,28 +737,7 @@ handle_call({claim_queue, ReaderPid}, _From,
     end;
 
 handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
-    reply(ok, maybe_run_queue_via_backing_queue(Fun, State));
-
-handle_call({init, Recover}, From,
-            State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
-                       backing_queue = BQ, backing_queue_state = undefined}) ->
-    %% TODO: If we're exclusively owned && our owner isn't alive &&
-    %% Recover then we should BQ:init and then {stop, normal,
-    %% not_found, State}, relying on terminate to delete the queue.
-    case rabbit_amqqueue:internal_declare(Q, Recover) of
-        not_found ->
-            {stop, normal, not_found, State};
-        Q ->
-            gen_server2:reply(From, Q),
-            ok = file_handle_cache:register_callback(
-                   rabbit_amqqueue, set_maximum_since_use, [self()]),
-            ok = rabbit_memory_monitor:register(
-                   self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
-            noreply(State#q{backing_queue_state =
-                                BQ:init(QName, IsDurable, Recover)});
-        Q1 ->
-            {stop, normal, Q1, State}
-    end.
+    reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
