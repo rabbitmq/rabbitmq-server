@@ -699,9 +699,9 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
             end,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
-    Finish = 
+    Finish =
         fun(Q) ->
-                case Q of 
+                case Q of
                     %% "equivalent" rule. NB: we don't pay attention to
                     %% anything in the arguments table, so for the sake of the
                     %% "equivalent" rule, all tables of arguments are
@@ -719,7 +719,7 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                         rabbit_misc:protocol_error(resource_locked,
                                                    "cannot obtain exclusive access to locked ~s",
                                                    [rabbit_misc:rs(QueueName)]);
-                    #amqqueue{name = QueueName} ->                 
+                    #amqqueue{name = QueueName} ->
                         rabbit_misc:protocol_error(channel_error,
                                                    "parameters for ~s not equivalent",
                                                    [rabbit_misc:rs(QueueName)])
@@ -974,13 +974,10 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
               [self(),
                queue:len(UAQ),
                queue:len(UAMQ)]),
-    case rabbit_amqqueue:rollback_all(sets:to_list(Participants),
-                                      TxnKey, self()) of
-        ok              -> NewUAMQ = queue:join(UAQ, UAMQ),
-                           new_tx(State#ch{unacked_message_q = NewUAMQ});
-        {error, Errors} -> rabbit_misc:protocol_error(
-                             internal_error, "rollback failed: ~w", [Errors])
-    end.
+    ok = rabbit_amqqueue:rollback_all(sets:to_list(Participants),
+                                      TxnKey, self()),
+    NewUAMQ = queue:join(UAQ, UAMQ),
+    new_tx(State#ch{unacked_message_q = NewUAMQ}).
 
 rollback_and_notify(State = #ch{transaction_id = none}) ->
     notify_queues(State);
