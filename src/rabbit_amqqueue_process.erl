@@ -137,10 +137,10 @@ code_change(_OldVsn, State, _Extra) ->
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         stop_sync_timer(stop_rate_timer(State)),
-    ok = rabbit_memory_monitor:deregister(self()),
     case BQS of
         undefined -> State;
-        _         -> BQS1 = lists:foldl(
+        _         -> ok = rabbit_memory_monitor:deregister(self()),
+                     BQS1 = lists:foldl(
                               fun (#cr{txn = none}, BQSN) ->
                                       BQSN;
                                   (#cr{txn = Txn}, BQSN) ->
@@ -723,10 +723,6 @@ handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
 handle_call({init, Recover}, From,
             State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
                        backing_queue = BQ, backing_queue_state = undefined}) ->
-    ok = file_handle_cache:register_callback(
-           rabbit_amqqueue, set_maximum_since_use, [self()]),
-    ok = rabbit_memory_monitor:register(
-           self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
     %% TODO: If we're exclusively owned && our owner isn't alive &&
     %% Recover then we should BQ:init and then {stop, normal,
     %% not_found, State}, relying on terminate to delete the queue.
@@ -735,6 +731,10 @@ handle_call({init, Recover}, From,
             {stop, normal, not_found, State};
         Q ->
             gen_server2:reply(From, Q),
+            ok = file_handle_cache:register_callback(
+                   rabbit_amqqueue, set_maximum_since_use, [self()]),
+            ok = rabbit_memory_monitor:register(
+                   self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
             noreply(State#q{backing_queue_state =
                                 BQ:init(QName, IsDurable, Recover)});
         Q1 ->
