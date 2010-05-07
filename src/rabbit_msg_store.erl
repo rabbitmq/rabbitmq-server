@@ -532,9 +532,9 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
 
     {FileSummaryRecovered, FileSummaryEts} =
         recover_file_summary(AllCleanShutdown, Dir),
-    DedupCacheEts = ets:new(rabbit_msg_store_dedup_cache, [set, public]),
-    FileHandlesEts = ets:new(rabbit_msg_store_shared_file_handles,
-                             [ordered_set, public]),
+    DedupCacheEts   = ets:new(rabbit_msg_store_dedup_cache, [set, public]),
+    FileHandlesEts  = ets:new(rabbit_msg_store_shared_file_handles,
+                              [ordered_set, public]),
     CurFileCacheEts = ets:new(rabbit_msg_store_cur_file, [set, public]),
 
     State = #msstate { dir                    = Dir,
@@ -757,9 +757,8 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
              end,
     State3 = close_all_handles(State1),
     store_file_summary(FileSummaryEts, Dir),
-    ets:delete(DedupCacheEts),
-    ets:delete(FileHandlesEts),
-    ets:delete(CurFileCacheEts),
+    [ets:delete(T) ||
+        T <- [FileSummaryEts, DedupCacheEts, FileHandlesEts, CurFileCacheEts]],
     IndexModule:terminate(IndexState),
     store_clean_shutdown([{client_refs, sets:to_list(ClientRefs)},
                           {index_module, IndexModule}], Dir),
@@ -1059,8 +1058,7 @@ recover_file_summary(true, Dir) ->
 
 store_file_summary(Tid, Dir) ->
     ok = ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
-                      [{extended_info, [object_count]}]),
-    ets:delete(Tid).
+                      [{extended_info, [object_count]}]).
 
 preallocate(Hdl, FileSizeLimit, FinalPos) ->
     {ok, FileSizeLimit} = file_handle_cache:position(Hdl, FileSizeLimit),
