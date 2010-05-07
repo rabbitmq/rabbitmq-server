@@ -387,9 +387,6 @@ delegate_call(Pid, Msg, Timeout) ->
 delegate_pcall(Pid, Pri, Msg, Timeout) ->
     delegate:invoke(Pid, fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end).
 
-delegate_cast(Pid, Msg) ->
-    delegate:invoke_no_result(Pid, fun(P) -> gen_server2:cast(P, Msg) end).
-
 delegate_pcast(Pid, Pri, Msg) ->
     delegate:invoke_no_result(Pid,
                               fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
