@@ -40,7 +40,7 @@
 -export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, handle_pre_hibernate/1]).
+         terminate/2, code_change/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -581,7 +581,8 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     {ok, GCPid} = rabbit_msg_store_gc:start_link(Dir, IndexState, IndexModule,
                                                  FileSummaryEts),
 
-    {ok, State1 #msstate { current_file_handle = CurHdl, gc_pid = GCPid },
+    {ok, maybe_compact(
+           State1 #msstate { current_file_handle = CurHdl, gc_pid = GCPid }),
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -650,11 +651,10 @@ handle_cast({write, Guid, Msg},
                       {#file_summary.file_size, FileSize + TotalSize}]),
             NextOffset = CurOffset + TotalSize,
             noreply(
-              maybe_compact(
-                maybe_roll_to_new_file(
-                  NextOffset, State #msstate {
-                                sum_valid_data = SumValid + TotalSize,
-                                sum_file_size  = SumFileSize + TotalSize })));
+              maybe_roll_to_new_file(
+                NextOffset, State #msstate {
+                              sum_valid_data = SumValid + TotalSize,
+                              sum_file_size  = SumFileSize + TotalSize }));
         #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
@@ -722,9 +722,10 @@ handle_cast({gc_done, Reclaimed, Source, Dest},
                               [{#file_summary.locked, false},
                                {#file_summary.right, SourceRight}]),
     true = ets:delete(FileSummaryEts, Source),
-    noreply(run_pending(
-              State #msstate { sum_file_size = SumFileSize - Reclaimed,
-                               gc_active     = false }));
+    noreply(
+      maybe_compact(run_pending(
+                      State #msstate { sum_file_size = SumFileSize - Reclaimed,
+                                       gc_active     = false })));
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -767,9 +768,6 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-handle_pre_hibernate(State) ->
-    {hibernate, maybe_compact(State)}.
 
 %%----------------------------------------------------------------------------
 %% general helper functions
@@ -1432,8 +1430,8 @@ maybe_roll_to_new_file(
     true = ets:update_element(FileSummaryEts, CurFile,
                               {#file_summary.right, NextFile}),
     true = ets:match_delete(CurFileCacheEts, {'_', '_', 0}),
-    State1 #msstate { current_file_handle = NextHdl,
-                      current_file        = NextFile };
+    maybe_compact(State1 #msstate { current_file_handle = NextHdl,
+                                    current_file        = NextFile });
 maybe_roll_to_new_file(_, State) ->
     State.
 
