@@ -466,7 +466,7 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
             %% badarg scenario above, but we don't have a missing file
             %% - we just have the /wrong/ file).
             case index_lookup(Guid, CState) of
-                MsgLocation = #msg_location { file = File } ->
+                #msg_location { file = File } = MsgLocation ->
                     %% Still the same file.
                     %% This is fine to fail (already exists)
                     ets:insert_new(FileHandlesEts, {{self(), File}, open}),
@@ -1168,7 +1168,7 @@ count_msg_refs(Gen, Seed, State) ->
                          index_insert(#msg_location { guid = Guid,
                                                       ref_count = Delta },
                                       State);
-                     StoreEntry = #msg_location { ref_count = RefCount } ->
+                     #msg_location { ref_count = RefCount } = StoreEntry ->
                          NewRefCount = RefCount + Delta,
                          case NewRefCount of
                              0 -> index_delete(Guid, State);
@@ -1342,9 +1342,8 @@ build_index(Gatherer, Left, [],
                          [#file_summary { file_size = FileSize }] -> FileSize
                      end,
             {Offset, State #msstate { current_file = Left }};
-        {value, FileSummary =
-             #file_summary { valid_total_size = ValidTotalSize,
-                             file_size = FileSize }} ->
+        {value, #file_summary { valid_total_size = ValidTotalSize,
+                                file_size = FileSize } = FileSummary} ->
             true = ets:insert_new(FileSummaryEts, FileSummary),
             build_index(Gatherer, Left, [],
                         State #msstate {
@@ -1495,7 +1494,7 @@ find_files_to_gc(FileSummaryEts, N,
                                               valid_total_size = SourceValid,
                                               file             = Source }],
                  Pairs) when DestValid + SourceValid =< ?FILE_SIZE_LIMIT andalso
-                             not is_atom(SourceRight) ->
+                             SourceRight =/= undefined ->
     Pair = {Source, Dest},
     case N == 1 of
         true  -> [Pair];
@@ -1525,12 +1524,12 @@ delete_file_if_empty(File, State = #msstate {
         %% we should NEVER find the current file in here hence right
         %% should always be a file, not undefined
         0 -> case {Left, Right} of
-                 {undefined, _} when not is_atom(Right) ->
+                 {undefined, _} when Right =/= undefined ->
                      %% the eldest file is empty.
                      true = ets:update_element(
                               FileSummaryEts, Right,
                               {#file_summary.left, undefined});
-                 {_, _} when not is_atom(Right) ->
+                 {_, _} when Right =/= undefined ->
                      true = ets:update_element(FileSummaryEts, Right,
                                                {#file_summary.left, Left}),
                      true = ets:update_element(FileSummaryEts, Left,
@@ -1657,7 +1656,7 @@ find_unremoved_messages_in_file(File,
     %% foldl will reverse so will end up with msgs in ascending offset order
     lists:foldl(fun ({Guid, TotalSize, _Offset}, Acc = {List, Size}) ->
                         case Index:lookup(Guid, IndexState) of
-                            Entry = #msg_location { file = File } ->
+                            #msg_location { file = File } = Entry ->
                                 {[ Entry | List ], TotalSize + Size};
                             _ ->
                                 Acc
