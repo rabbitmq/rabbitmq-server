@@ -102,7 +102,7 @@ init(Q) ->
     process_flag(trap_exit, true),
     {ok, BQ} = application:get_env(backing_queue_module),
 
-    {ok, #q{q = Q,
+    {ok, #q{q = Q#amqqueue{pid = self()},
             exclusive_consumer = none,
             has_had_consumers = false,
             backing_queue = BQ,
@@ -119,9 +119,13 @@ terminate({shutdown, _}, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);
 terminate(_Reason,       State = #q{backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
-    State1 = terminate_shutdown(fun (BQS) -> BQ:delete_and_terminate(BQS) end,
-                                State),
-    ok = rabbit_amqqueue:internal_delete(qname(State1)).
+    terminate_shutdown(fun (BQS) ->
+                               BQS1 = BQ:delete_and_terminate(BQS),
+                               %% don't care if the internal delete
+                               %% doesn't return 'ok'.
+                               rabbit_amqqueue:internal_delete(qname(State)),
+                               BQS1
+                       end, State).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -509,8 +513,32 @@ i(Item, _) ->
 
 %---------------------------------------------------------------------------
 
-handle_call(sync, _From, State) ->
-    reply(ok, State);
+handle_call({init, Recover}, From,
+            State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable,
+                                         exclusive_owner = ExclusiveOwner},
+                       backing_queue = BQ, backing_queue_state = undefined}) ->
+    case ExclusiveOwner of
+        none      -> ok;
+        ReaderPid -> erlang:monitor(process, ReaderPid)
+    end,     
+    %% TODO: If we're exclusively owned && our owner isn't alive &&
+    %% Recover then we should BQ:init and then {stop, normal,
+    %% not_found, State}, relying on terminate to delete the queue.
+    case rabbit_amqqueue:internal_declare(Q, Recover) of
+        not_found ->
+            {stop, normal, not_found, State};
+        Q ->
+            gen_server2:reply(From, Q),
+            ok = file_handle_cache:register_callback(
+                   rabbit_amqqueue, set_maximum_since_use, [self()]),
+            ok = rabbit_memory_monitor:register(
+                   self(),
+                   {rabbit_amqqueue, set_ram_duration_target, [self()]}),
+            noreply(State#q{backing_queue_state =
+                                BQ:init(QName, IsDurable, Recover)});
+        Q1 ->
+            {stop, normal, Q1, State}
+    end;
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
@@ -693,19 +721,6 @@ handle_call({requeue, AckTags, ChPid}, _From, State) ->
 handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
     reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
-handle_cast({init, Recover},
-            State = #q{q = #amqqueue{name = QName, durable = IsDurable,
-                                     exclusive_owner = ExclusiveOwner},
-                       backing_queue = BQ, backing_queue_state = undefined}) ->
-    case ExclusiveOwner of
-        none      -> ok;
-        ReaderPid -> erlang:monitor(process, ReaderPid)
-    end,
-    ok = file_handle_cache:register_callback(
-           rabbit_amqqueue, set_maximum_since_use, [self()]),
-    ok = rabbit_memory_monitor:register(
-           self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
-    noreply(State#q{backing_queue_state = BQ:init(QName, IsDurable, Recover)});
 
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.

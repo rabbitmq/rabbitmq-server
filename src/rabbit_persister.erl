@@ -184,9 +184,7 @@ handle_cast(_Msg, State) ->
 
 handle_info(timeout, State = #pstate{deadline = infinity}) ->
     State1 = flush(true, State),
-    %% TODO: Once we drop support for R11B-5, we can change this to
-    %% {noreply, State1, hibernate};
-    proc_lib:hibernate(gen_server2, enter_loop, [?MODULE, [], State1]);
+    {noreply, State1, hibernate};
 handle_info(timeout, State) ->
     do_noreply(flush(State));
 handle_info(_Info, State) ->

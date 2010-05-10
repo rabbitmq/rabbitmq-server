@@ -93,7 +93,7 @@
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
 -spec(commit_all/3 :: ([pid()], txn(), pid()) -> ok_or_errors()).
--spec(rollback_all/3 :: ([pid()], txn(), pid()) -> ok_or_errors()).
+-spec(rollback_all/3 :: ([pid()], txn(), pid()) -> 'ok').
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
@@ -107,7 +107,7 @@
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
--spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue()).
+-spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue() | 'not_found').
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(maybe_run_queue_via_backing_queue/2 :: (pid(), (fun ((A) -> A))) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
@@ -142,19 +142,9 @@ find_durable_queues() ->
                                 node(Pid) == Node]))
       end).
 
-shared_or_live_owner(none) ->
-     true;
-shared_or_live_owner(Owner) when is_pid(Owner) ->
-    rpc:call(node(Owner), erlang, is_process_alive, [Owner]).
-
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
-    %% Issue inits to *all* the queues so that they all init at the same time
-    [ok = gen_server2:cast(Q#amqqueue.pid, {init, true}) || Q <- Qs],
-    [ok = gen_server2:call(Q#amqqueue.pid, sync, infinity) || Q <- Qs],
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> [ok = store_queue(Q) || Q <- Qs] end),
-    Qs.
+    [Q || Q <- Qs, gen_server2:call(Q#amqqueue.pid, {init, true}) == Q].
 
 %% This changed too radically to merge. We'll fix this later; see bug 22695
 %% recover_durable_queues(DurableQueues) ->
@@ -194,6 +184,11 @@ recover_durable_queues(DurableQueues) ->
 %%               end
 %%       end, [], DurableQueues).
 
+%% shared_or_live_owner(none) ->
+%%      true;
+%% shared_or_live_owner(Owner) when is_pid(Owner) ->
+%%     rpc:call(node(Owner), erlang, is_process_alive, [Owner]).
+    
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
@@ -201,35 +196,33 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                       arguments = Args,
                                       exclusive_owner = Owner,
                                       pid = none}),
-    ok = gen_server2:cast(Q#amqqueue.pid, {init, false}),
-    ok = gen_server2:call(Q#amqqueue.pid, sync, infinity),
-    internal_declare(Q, true).
-
-internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
-    case rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   case mnesia:wread({rabbit_queue, QueueName}) of
-                       [] ->
-                           case mnesia:read(
-                                  {rabbit_durable_queue, QueueName}) of
-                               []  -> ok = store_queue(Q),
-                                      case WantDefaultBinding of
-                                          true  -> add_default_binding(Q);
-                                          false -> ok
-                                      end,
-                                      Q;
-                               [_] -> not_found %% existing Q on stopped node
-                           end;
-                       [ExistingQ] ->
-                           ExistingQ
-                   end
-           end) of
-        not_found -> exit(Q#amqqueue.pid, shutdown),
-                     rabbit_misc:not_found(QueueName);
-        Q         -> Q;
-        ExistingQ -> exit(Q#amqqueue.pid, shutdown),
-                     ExistingQ
+    case gen_server2:call(Q#amqqueue.pid, {init, false}) of
+        not_found -> rabbit_misc:not_found(QueueName);
+        Q1        -> Q1
     end.
+
+internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case Recover of
+                  true ->
+                      ok = store_queue(Q),
+                      Q;
+                  false ->
+                      case mnesia:wread({rabbit_queue, QueueName}) of
+                          [] ->
+                              case mnesia:read({rabbit_durable_queue,
+                                                QueueName}) of
+                                  []  -> ok = store_queue(Q),
+                                         ok = add_default_binding(Q),
+                                         Q;
+                                  [_] -> not_found %% Q exists on stopped node
+                              end;
+                          [ExistingQ] ->
+                              ExistingQ
+                      end
+              end
+      end).
 
 store_queue(Q = #amqqueue{durable = true}) ->
     ok = mnesia:write(rabbit_durable_queue, Q, write),
@@ -273,10 +266,10 @@ info_keys() -> rabbit_amqqueue_process:info_keys().
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
 info(#amqqueue{ pid = QPid }) ->
-    gen_server2:pcall(QPid, 9, info, infinity).
+    delegate_pcall(QPid, 9, info, infinity).
 
 info(#amqqueue{ pid = QPid }, Items) ->
-    case gen_server2:pcall(QPid, 9, {info, Items}, infinity) of
+    case delegate_pcall(QPid, 9, {info, Items}, infinity) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
@@ -286,7 +279,7 @@ info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
 consumers(#amqqueue{ pid = QPid }) ->
-    gen_server2:pcall(QPid, 9, consumers, infinity).
+    delegate_pcall(QPid, 9, consumers, infinity).
 
 consumers_all(VHostPath) ->
     lists:concat(
@@ -295,15 +288,15 @@ consumers_all(VHostPath) ->
                          {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]
           end)).
 
-stat(#amqqueue{pid = QPid}) -> gen_server2:call(QPid, stat, infinity).
+stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 
 stat_all() ->
     lists:map(fun stat/1, rabbit_misc:dirty_read_all(rabbit_queue)).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    gen_server2:call(QPid, {delete, IfUnused, IfEmpty}, infinity).
+    delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
 
-purge(#amqqueue{ pid = QPid }) -> gen_server2:call(QPid, purge, infinity).
+purge(#amqqueue{ pid = QPid }) -> delegate_call(QPid, purge, infinity).
 
 deliver(QPid, #delivery{immediate = true,
                         txn = Txn, sender = ChPid, message = Message}) ->
@@ -318,25 +311,23 @@ deliver(QPid, #delivery{txn = Txn, sender = ChPid, message = Message}) ->
     true.
 
 requeue(QPid, MsgIds, ChPid) ->
-    gen_server2:call(QPid, {requeue, MsgIds, ChPid}).
+    delegate_call(QPid, {requeue, MsgIds, ChPid}, infinity).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
-    gen_server2:pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
+    delegate_pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
 
 commit_all(QPids, Txn, ChPid) ->
-    safe_pmap_ok(
+    safe_delegate_call_ok(
       fun (QPid) -> exit({queue_disappeared, QPid}) end,
       fun (QPid) -> gen_server2:call(QPid, {commit, Txn, ChPid}, infinity) end,
       QPids).
 
 rollback_all(QPids, Txn, ChPid) ->
-    safe_pmap_ok(
-      fun (QPid) -> exit({queue_disappeared, QPid}) end,
-      fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end,
-      QPids).
+    delegate:invoke_no_result(
+      QPids, fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end).
 
 notify_down_all(QPids, ChPid) ->
-    safe_pmap_ok(
+    safe_delegate_call_ok(
       %% we don't care if the queue process has terminated in the
       %% meantime
       fun (_)    -> ok end,
@@ -344,35 +335,33 @@ notify_down_all(QPids, ChPid) ->
       QPids).
 
 limit_all(QPids, ChPid, LimiterPid) ->
-    safe_pmap_ok(
-      fun (_) -> ok end,
-      fun (QPid) -> gen_server2:cast(QPid, {limit, ChPid, LimiterPid}) end,
-      QPids).
+    delegate:invoke_no_result(
+      QPids, fun (QPid) ->
+                     gen_server2:cast(QPid, {limit, ChPid, LimiterPid})
+             end).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
-    gen_server2:call(QPid, {basic_get, ChPid, NoAck}, infinity).
+    delegate_call(QPid, {basic_get, ChPid, NoAck}, infinity).
 
 basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, LimiterPid,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
-    gen_server2:call(QPid, {basic_consume, NoAck, ChPid,
-                            LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg},
-                     infinity).
+    delegate_call(QPid, {basic_consume, NoAck, ChPid,
+                         LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg},
+                  infinity).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
-    ok = gen_server2:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg},
-                          infinity).
+    ok = delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg},
+                       infinity).
 
 notify_sent(QPid, ChPid) ->
-    gen_server2:pcast(QPid, 7, {notify_sent, ChPid}).
+    delegate_pcast(QPid, 7, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
-    gen_server2:pcast(QPid, 7, {unblock, ChPid}).
+    delegate_pcast(QPid, 7, {unblock, ChPid}).
 
 flush_all(QPids, ChPid) ->
-    safe_pmap_ok(
-      fun (_) -> ok end,
-      fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end,
-      QPids).
+    delegate:invoke_no_result(
+      QPids, fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
 
 internal_delete2(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
@@ -435,17 +424,25 @@ pseudo_queue(QueueName, Pid) ->
               arguments = [],
               pid = Pid}.
 
-safe_pmap_ok(H, F, L) ->
-    case [R || R <- rabbit_misc:upmap(
-                      fun (V) ->
-                              try
-                                  rabbit_misc:with_exit_handler(
-                                    fun () -> H(V) end,
-                                    fun () -> F(V) end)
-                              catch Class:Reason -> {Class, Reason}
-                              end
-                      end, L),
-               R =/= ok] of
-        []     -> ok;
-        Errors -> {error, Errors}
+safe_delegate_call_ok(H, F, Pids) ->
+    {_, Bad} = delegate:invoke(Pids,
+                               fun (Pid) ->
+                                       rabbit_misc:with_exit_handler(
+                                         fun () -> H(Pid) end,
+                                         fun () -> F(Pid) end)
+                               end),
+    case Bad of
+        [] -> ok;
+        _  -> {error, Bad}
     end.
+
+delegate_call(Pid, Msg, Timeout) ->
+    delegate:invoke(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end).
+
+delegate_pcall(Pid, Pri, Msg, Timeout) ->
+    delegate:invoke(Pid, fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end).
+
+delegate_pcast(Pid, Pri, Msg) ->
+    delegate:invoke_no_result(Pid,
+                              fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
+

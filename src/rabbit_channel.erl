@@ -974,13 +974,10 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
               [self(),
                queue:len(UAQ),
                queue:len(UAMQ)]),
-    case rabbit_amqqueue:rollback_all(sets:to_list(Participants),
-                                      TxnKey, self()) of
-        ok              -> NewUAMQ = queue:join(UAQ, UAMQ),
-                           new_tx(State#ch{unacked_message_q = NewUAMQ});
-        {error, Errors} -> rabbit_misc:protocol_error(
-                             internal_error, "rollback failed: ~w", [Errors])
-    end.
+    ok = rabbit_amqqueue:rollback_all(sets:to_list(Participants),
+                                      TxnKey, self()),
+    NewUAMQ = queue:join(UAQ, UAMQ),
+    new_tx(State#ch{unacked_message_q = NewUAMQ}).
 
 rollback_and_notify(State = #ch{transaction_id = none}) ->
     notify_queues(State);
