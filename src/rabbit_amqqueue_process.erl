@@ -799,6 +799,10 @@ handle_cast({set_maximum_since_use, Age}, State) ->
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q= #amqqueue{ exclusive_owner = DownPid}}) ->
     %% Exclusively owned queues must disappear with their owner.
+    %% In the case of clean shutdown we delete the queue synchronously in the
+    %% reader - although not required by the spec this seems to match what
+    %% people expect (see bug 21824). However we need this monitor-and-async-
+    %% delete in case the connection goes away unexpectedly.
     {stop, normal, State};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     case handle_ch_down(DownPid, State) of

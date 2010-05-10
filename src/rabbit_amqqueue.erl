@@ -188,7 +188,7 @@ recover_durable_queues(DurableQueues) ->
 %%      true;
 %% shared_or_live_owner(Owner) when is_pid(Owner) ->
 %%     rpc:call(node(Owner), erlang, is_process_alive, [Owner]).
-    
+
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
@@ -198,7 +198,16 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                       pid = none}),
     case gen_server2:call(Q#amqqueue.pid, {init, false}) of
         not_found -> rabbit_misc:not_found(QueueName);
-        Q1        -> Q1
+        Q1 ->
+            %% We need to notify the reader within the channel process so that we can
+            %% be sure there are no outstanding exclusive queues being declared as the
+            %% connection shuts down.
+            case Owner of
+                none -> Q1;
+                _    ->
+                    Owner ! {notify_exclusive_queue, Q#amqqueue.pid},
+                    Q1
+            end
     end.
 
 internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->
@@ -293,8 +302,17 @@ stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 stat_all() ->
     lists:map(fun stat/1, rabbit_misc:dirty_read_all(rabbit_queue)).
 
-delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
+delete(#amqqueue{ pid = QPid, exclusive_owner = Owner }, IfUnused, IfEmpty) ->
+    Res = delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity),
+    %% We need to notify the reader within the channel process so that we can
+    %% be sure there are no outstanding exclusive queues being deleted as the
+    %% connection shuts down.
+    case Owner of
+        none -> Res;
+        _    ->
+            Owner ! {delete_exclusive_queue, QPid},
+            Res
+    end.
 
 purge(#amqqueue{ pid = QPid }) -> delegate_call(QPid, purge, infinity).
 
