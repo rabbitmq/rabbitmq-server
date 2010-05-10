@@ -58,7 +58,8 @@
 
 %---------------------------------------------------------------------------
 
--record(v1, {sock, connection, callback, recv_ref, connection_state}).
+-record(v1, {sock, connection, callback, recv_ref, connection_state,
+             exclusive_queues}).
 
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
@@ -247,7 +248,8 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                       client_properties = none},
                                     callback = uninitialized_callback,
                                     recv_ref = none,
-                                    connection_state = pre_init},
+                                    connection_state = pre_init,
+                                    exclusive_queues = sets:new()},
                                 handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -316,6 +318,10 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             end;
         timeout ->
             throw({timeout, State#v1.connection_state});
+        {notify_exclusive_queue, QPid} ->
+            mainloop(Parent, Deb, add_exclusive_queue(QPid, State));
+        {delete_exclusive_queue, QPid} ->
+            mainloop(Parent, Deb, delete_exclusive_queue(QPid, State));
         {'$gen_call', From, {shutdown, Explanation}} ->
             {ForceTermination, NewState} = terminate(Explanation, State),
             gen_server:reply(From, ok),
@@ -428,11 +434,18 @@ wait_for_channel_termination(N, TimerRef) ->
             exit(channel_termination_timeout)
     end.
 
-maybe_close(State = #v1{connection_state = closing}) ->
+maybe_close(State = #v1{connection_state = closing,
+                        exclusive_queues = ExclusiveQueues}) ->
     case all_channels() of
-        [] -> ok = send_on_channel0(
-                     State#v1.sock, #'connection.close_ok'{}),
-              close_connection(State);
+        [] ->
+            %% Spec says "Exclusive queues may only be accessed by the current
+            %% connection, and are deleted when that connection closes."
+            %% This does not strictly imply synchrony, but in practice it seems
+            %% to be what people assume.
+            [gen_server2:call(QPid, {delete, false, false}, infinity)
+                || QPid <- sets:to_list(ExclusiveQueues)],
+            ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}),
+            close_connection(State);
         _  -> State
     end;
 maybe_close(State) ->
@@ -696,6 +709,16 @@ i(client_properties, #v1{connection = #connection{
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
+
+%%--------------------------------------------------------------------------
+
+add_exclusive_queue(QPid, State) ->
+    Queues = State#v1.exclusive_queues,
+    State#v1{exclusive_queues = sets:add_element(QPid, Queues)}.
+
+delete_exclusive_queue(QPid, State) ->
+    Queues = State#v1.exclusive_queues,
+    State#v1{exclusive_queues = sets:del_element(QPid, Queues)}.
 
 %%--------------------------------------------------------------------------
 

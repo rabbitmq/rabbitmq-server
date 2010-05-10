@@ -154,7 +154,16 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                       pid = none}),
     ok = gen_server2:cast(Q#amqqueue.pid, {init, false}),
     ok = gen_server2:call(Q#amqqueue.pid, sync, infinity),
-    internal_declare(Q, true).
+    Q2 = internal_declare(Q, true),
+    %% We need to notify the reader within the channel process so that we can
+    %% be sure there are no outstanding exclusive queues being declared as the
+    %% connection shuts down.
+    case Owner of
+        none -> Q2;
+        _    ->
+            Owner ! {notify_exclusive_queue, Q#amqqueue.pid},
+            Q2
+    end.
 
 internal_declare(Q = #amqqueue{name = QueueName}, WantDefaultBinding) ->
     case rabbit_misc:execute_mnesia_transaction(
@@ -251,8 +260,17 @@ stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 stat_all() ->
     lists:map(fun stat/1, rabbit_misc:dirty_read_all(rabbit_queue)).
 
-delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
+delete(#amqqueue{ pid = QPid, exclusive_owner = Owner }, IfUnused, IfEmpty) ->
+    Res = delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity),
+    %% We need to notify the reader within the channel process so that we can
+    %% be sure there are no outstanding exclusive queues being deleted as the
+    %% connection shuts down.
+    case Owner of
+        none -> Res;
+        _    ->
+            Owner ! {delete_exclusive_queue, QPid},
+            Res
+    end.
 
 purge(#amqqueue{ pid = QPid }) -> delegate_call(QPid, purge, infinity).
 
