@@ -18,6 +18,7 @@
          {ssl_listeners, []},
          {ssl_options, []},
          {vm_memory_high_watermark, 0.4},
+         {backing_queue_module, rabbit_invariable_queue},
          {persister_max_wrap_entries, 500},
          {persister_hibernate_after, 10000},
          {default_user, <<"guest">>},
