@@ -26,8 +26,8 @@
       <xsl:choose>
       <xsl:when test="document($original)/refentry/refmeta/manvolnum">
       <p>
-        This is the manual page for 
-        <code><xsl:value-of select="document($original)/refentry/refnamediv/refname"/>(<xsl:value-of select="document($original)/refentry/refmeta/manvolnum"/>)</code>. 
+        This is the manual page for
+        <code><xsl:value-of select="document($original)/refentry/refnamediv/refname"/>(<xsl:value-of select="document($original)/refentry/refmeta/manvolnum"/>)</code>.
       </p>
       <p>
         <a href="manpages.html">See a list of all manual pages</a>.
@@ -35,13 +35,13 @@
       </xsl:when>
       <xsl:otherwise>
       <p>
-        This is the documentation for 
-        <code><xsl:value-of select="document($original)/refentry/refnamediv/refname"/></code>. 
+        This is the documentation for
+        <code><xsl:value-of select="document($original)/refentry/refnamediv/refname"/></code>.
       </p>
       </xsl:otherwise>
       </xsl:choose>
       <p>
-         For more general documentation, please see the 
+         For more general documentation, please see the
         <a href="admin-guide.html">administrator's guide</a>.
       </p>
 

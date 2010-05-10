@@ -24,7 +24,7 @@
           <arg choice="opt">command</arg>
         </cmdsynopsis>
     </refsynopsisdiv>
-    
+
     <refsect1>
         <title>Description</title>
         <para>
@@ -34,14 +34,14 @@ scalable implementation of an AMQP broker.
         </para>
         <para>
 Running <command>rabbitmq-service</command> allows the RabbitMQ broker to be run as a
-service on NT/2000/2003/XP/Vista® environments. The RabbitMQ broker 
-service can be started and stopped using the Windows® services 
-applet. 
+service on NT/2000/2003/XP/Vista® environments. The RabbitMQ broker
+service can be started and stopped using the Windows® services
+applet.
         </para>
         <para>
-By default the service will run in the authentication context of the 
+By default the service will run in the authentication context of the
 local system account. It is therefore necessary to synchronise Erlang
-cookies between the local system account (typically 
+cookies between the local system account (typically
 <filename>C:\WINDOWS\.erlang.cookie</filename> and the account that will be used to
 run <command>rabbitmqctl</command>.
         </para>
@@ -87,7 +87,7 @@ deleted as a consequence and <command>rabbitmq-server</command> will remain oper
           <listitem>
             <para>
 Start the service. The service must have been correctly installed
-beforehand. 
+beforehand.
             </para>
           </listitem>
         </varlistentry>
@@ -96,7 +96,7 @@ beforehand.
           <term>stop</term>
           <listitem>
             <para>
-Stop the service. The service must be running for this command to 
+Stop the service. The service must be running for this command to
 have any effect.
             </para>
           </listitem>
@@ -154,7 +154,7 @@ This is the location of log and database directories.
             <para>
 Defaults to rabbit. This can be useful if you want to run more than
 one node per machine - <envar>RABBITMQ_NODENAME</envar> should be unique per
-erlang-node-and-machine combination. See the 
+erlang-node-and-machine combination. See the
 <ulink url="http://www.rabbitmq.com/clustering.html#single-machine">clustering on a single
 machine guide</ulink> for details.
             </para>
@@ -175,7 +175,7 @@ one network interface.
           <term>RABBITMQ_NODE_PORT</term>
           <listitem>
             <para>
-Defaults to 5672. 
+Defaults to 5672.
             </para>
           </listitem>
         </varlistentry>
@@ -208,11 +208,11 @@ for details.
           <term>RABBITMQ_CONSOLE_LOG</term>
           <listitem>
             <para>
-Set this varable to <code>new</code> or <code>reuse</code> to have the console 
+Set this varable to <code>new</code> or <code>reuse</code> to have the console
 output from the server redirected to a file named <code>SERVICENAME</code>.debug
 in the  application data directory of the user that installed the service.
 Under Vista this will be <filename>C:\Users\AppData\username\SERVICENAME</filename>.
-Under previous versions of Windows this will be 
+Under previous versions of Windows this will be
 <filename>C:\Documents and Settings\username\Application Data\SERVICENAME</filename>.
 If <code>RABBITMQ_CONSOLE_LOG</code> is set to <code>new</code> then a new file will be
 created each time the service starts. If <code>RABBITMQ_CONSOLE_LOG</code> is

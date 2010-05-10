@@ -25,7 +25,7 @@
           <arg choice="opt">-detached</arg>
         </cmdsynopsis>
     </refsynopsisdiv>
-    
+
     <refsect1>
         <title>Description</title>
         <para>
@@ -72,7 +72,7 @@ be placed in this directory.
             <para>
 Defaults to rabbit. This can be useful if you want to run more than
 one node per machine - <envar>RABBITMQ_NODENAME</envar> should be unique per
-erlang-node-and-machine combination. See the 
+erlang-node-and-machine combination. See the
 <ulink url="http://www.rabbitmq.com/clustering.html#single-machine">clustering on a single
 machine guide</ulink> for details.
             </para>
@@ -93,7 +93,7 @@ one network interface.
           <term>RABBITMQ_NODE_PORT</term>
           <listitem>
             <para>
-Defaults to 5672. 
+Defaults to 5672.
             </para>
           </listitem>
         </varlistentry>

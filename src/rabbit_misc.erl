@@ -598,23 +598,27 @@ version_compare(A, B, gte) ->
 version_compare(A, B, Result) ->
     Result =:= version_compare(A, B).
 
-version_compare([], []) ->
+version_compare(A, A) ->
     eq;
-version_compare([], _ ) ->
+version_compare([], [$0 | B]) ->
+    version_compare([], dropdot(B));
+version_compare([], _) ->
     lt; %% 2.3 < 2.3.1
-version_compare(_ , []) ->
+version_compare([$0 | A], []) ->
+    version_compare(dropdot(A), []);
+version_compare(_, []) ->
     gt; %% 2.3.1 > 2.3
 version_compare(A,  B) ->
     {AStr, ATl} = lists:splitwith(fun (X) -> X =/= $. end, A),
     {BStr, BTl} = lists:splitwith(fun (X) -> X =/= $. end, B),
     ANum = list_to_integer(AStr),
     BNum = list_to_integer(BStr),
-    if ANum =:= BNum -> ATl1 = lists:dropwhile(fun (X) -> X =:= $. end, ATl),
-                        BTl1 = lists:dropwhile(fun (X) -> X =:= $. end, BTl),
-                        version_compare(ATl1, BTl1);
+    if ANum =:= BNum -> version_compare(dropdot(ATl), dropdot(BTl));
        ANum < BNum   -> lt;
        ANum > BNum   -> gt
     end.
+
+dropdot(A) -> lists:dropwhile(fun (X) -> X =:= $. end, A).
 
 recursive_delete(Files) ->
     lists:foldl(fun (Path,  ok                   ) -> recursive_delete1(Path);

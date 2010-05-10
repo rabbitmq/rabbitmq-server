@@ -47,7 +47,8 @@
                    [{description, "codec correctness check"},
                     {mfa,         {rabbit_binary_generator,
                                    check_empty_content_body_frame_size,
-                                   []}}]}).
+                                   []}},
+                    {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
@@ -65,21 +66,21 @@
                    [{description, "exchange type registry"},
                     {mfa,         {rabbit_sup, start_child,
                                    [rabbit_exchange_type_registry]}},
-                    {enables,     kernel_ready},
-                    {requires,    external_infrastructure}]}).
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_log,
                    [{description, "logging server"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_log]}},
-                    {enables,     kernel_ready},
-                    {requires,    external_infrastructure}]}).
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_hooks,
                    [{description, "internal event notification system"},
                     {mfa,         {rabbit_hooks, start, []}},
-                    {enables,     kernel_ready},
-                    {requires,    external_infrastructure}]}).
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({kernel_ready,
                    [{description, "kernel ready"},
@@ -113,35 +114,36 @@
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({core_initialized,
-                   [{description, "core initialized"}]}).
+                   [{description, "core initialized"},
+                    {requires,    kernel_ready}]}).
 
 -rabbit_boot_step({empty_db_check,
                    [{description, "empty DB check"},
                     {mfa,         {?MODULE, maybe_insert_default_data, []}},
-                    {requires,    core_initialized}]}).
+                    {requires,    core_initialized},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({exchange_recovery,
                    [{description, "exchange recovery"},
                     {mfa,         {rabbit_exchange, recover, []}},
-                    {requires,    empty_db_check}]}).
+                    {requires,    empty_db_check},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({queue_sup_queue_recovery,
                    [{description, "queue supervisor and queue recovery"},
                     {mfa,         {rabbit_amqqueue, start, []}},
-                    {requires,    empty_db_check}]}).
-
--rabbit_boot_step({persister,
-                   [{mfa,         {rabbit_sup, start_child,
-                                   [rabbit_persister]}},
-                    {requires,    queue_sup_queue_recovery}]}).
+                    {requires,    empty_db_check},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({routing_ready,
-                   [{description, "message delivery logic ready"}]}).
+                   [{description, "message delivery logic ready"},
+                    {requires,    core_initialized}]}).
 
 -rabbit_boot_step({log_relay,
                    [{description, "error log relay"},
                     {mfa,         {rabbit_error_logger, boot, []}},
-                    {requires,    routing_ready}]}).
+                    {requires,    routing_ready},
+                    {enables,     networking}]}).
 
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
@@ -226,14 +228,18 @@ rotate_logs(BinarySuffix) ->
 %%--------------------------------------------------------------------
 
 start(normal, []) ->
-    {ok, SupPid} = rabbit_sup:start_link(),
+    case erts_version_check() of
+        ok ->
+            {ok, SupPid} = rabbit_sup:start_link(),
 
-    print_banner(),
-    [ok = run_boot_step(Step) || Step <- boot_steps()],
-    io:format("~nbroker running~n"),
+            print_banner(),
+            [ok = run_boot_step(Step) || Step <- boot_steps()],
+            io:format("~nbroker running~n"),
 
-    {ok, SupPid}.
-
+            {ok, SupPid};
+        Error ->
+            Error
+    end.
 
 stop(_State) ->
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
@@ -245,6 +251,14 @@ stop(_State) ->
     ok.
 
 %%---------------------------------------------------------------------------
+
+erts_version_check() ->
+    FoundVer = erlang:system_info(version),
+    case rabbit_misc:version_compare(?ERTS_MINIMUM, FoundVer, lte) of
+        true  -> ok;
+        false -> {error, {erlang_version_too_old,
+                          {found, FoundVer}, {required, ?ERTS_MINIMUM}}}
+    end.
 
 boot_error(Format, Args) ->
     io:format("BOOT ERROR: " ++ Format, Args),
@@ -396,8 +410,9 @@ print_banner() ->
                 {"cookie hash",    rabbit_misc:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
-                {"database dir",   rabbit_mnesia:dir()}],
-    DescrLen = lists:max([length(K) || {K, _V} <- Settings]),
+                {"database dir",   rabbit_mnesia:dir()},
+                {"erlang version", erlang:system_info(version)}],
+    DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
     lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
     io:nl().
