@@ -1438,8 +1438,8 @@ maybe_compact(State = #msstate { sum_valid_data   = SumValid,
                                  gc_active        = false,
                                  gc_pid           = GCPid,
                                  file_summary_ets = FileSummaryEts })
-  when SumFileSize >= 3 * ?FILE_SIZE_LIMIT andalso
-       (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
+  when (SumFileSize > 2 * ?FILE_SIZE_LIMIT andalso
+        (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION) ->
     case ets:first(FileSummaryEts) of
         '$end_of_table' ->
             State;
