@@ -246,9 +246,11 @@ rabbit_status() {
     rc=$?
     case "$rc" in
 	0)
+	    ocf_log debug "RabbitMQ server is running normally"
 	    return $OCF_SUCCESS
 	    ;;
 	2)
+	    ocf_log debug "RabbitMQ server is not running"
 	    return $OCF_NOT_RUNNING
 	    ;;
 	*)
