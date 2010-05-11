@@ -114,7 +114,7 @@ The IP address for rabbitmq-server to listen on
 The IP Port for rabbitmq-server to listen on
 </longdesc>
 <shortdesc lang="en">IP Port</shortdesc>
-<content type="string" default="" />
+<content type="integer" default="" />
 </parameter>
 
 <parameter name="cluster_config_file" unique="0" required="0">
