@@ -259,12 +259,6 @@ rabbit_status() {
 rabbit_start() {
     local rc
 
-    rabbit_validate_full
-    rc=$?
-    if [ "$rc" != $OCF_SUCCESS ]; then
-        return $rc
-    fi
-
     export_vars
 
     $RABBITMQ_MULTI start_all 1 > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err &
@@ -339,7 +333,11 @@ case $__OCF_ACTION in
 	;;
 esac
 
-rabbit_validate_partial || exit
+if ocf_is_probe; then
+    rabbit_validate_partial || exit
+else
+    rabbit_validate_full || exit
+fi
 
 case $__OCF_ACTION in
     start)
