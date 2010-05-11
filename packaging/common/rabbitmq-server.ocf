@@ -163,7 +163,7 @@ Additional arguments provided to the server on startup
 <action name="start"        timeout="600" />
 <action name="stop"         timeout="120" />
 <action name="status"       timeout="20" interval="10" />
-<action name="monitor"      timeout="20" interval="10" depth="0" start-delay="0" />
+<action name="monitor"      timeout="20" interval="10" />
 <action name="validate-all" timeout="30" />
 <action name="meta-data"    timeout="5" />
 </actions>
