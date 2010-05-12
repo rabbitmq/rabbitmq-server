@@ -145,49 +145,6 @@ find_durable_queues() ->
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
     [Q || Q <- Qs, gen_server2:call(Q#amqqueue.pid, {init, true}) == Q].
-
-%% This changed too radically to merge. We'll fix this later; see bug 22695
-%% recover_durable_queues(DurableQueues) ->
-%%     lists:foldl(
-%%       fun (RecoveredQ = #amqqueue{ exclusive_owner = Owner },
-%%            Acc) ->
-%%               %% We need to catch the case where a client connected to
-%%               %% another node has deleted the queue (and possibly
-%%               %% re-created it).
-%%               DoIfSameQueue =
-%%                   fun (Action) ->
-%%                           rabbit_misc:execute_mnesia_transaction(
-%%                             fun () -> case mnesia:match_object(
-%%                                              rabbit_durable_queue, RecoveredQ, read) of
-%%                                           [_] -> {true, Action()};
-%%                                           []  -> false
-%%                                       end
-%%                             end)
-%%                   end,
-%%               case shared_or_live_owner(Owner) of
-%%                   true ->
-%%                       Q = start_queue_process(RecoveredQ),
-%%                       case DoIfSameQueue(fun () -> store_queue(Q) end) of
-%%                           {true, ok}  -> [Q | Acc];
-%%                           false       -> exit(Q#amqqueue.pid, shutdown),
-%%                                          Acc
-%%                       end;
-%%                   false ->
-%%                       case DoIfSameQueue(
-%%                              fun () ->
-%%                                      internal_delete2(RecoveredQ#amqqueue.name)
-%%                              end) of
-%%                           {true, Hook} -> Hook();
-%%                           false        -> ok
-%%                       end,
-%%                       Acc
-%%               end
-%%       end, [], DurableQueues).
-
-%% shared_or_live_owner(none) ->
-%%      true;
-%% shared_or_live_owner(Owner) when is_pid(Owner) ->
-%%     rpc:call(node(Owner), erlang, is_process_alive, [Owner]).
     
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
