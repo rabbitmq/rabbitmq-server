@@ -138,7 +138,6 @@ info_all(Items) ->
 init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
-    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
     ok = pg_local:join(rabbit_channels, self()),
     {ok, #ch{state                   = starting,
              channel                 = Channel,
@@ -353,6 +352,7 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
+    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
     {reply, #'channel.open_ok'{}, State#ch{state = running}};
 
 handle_method(#'channel.open'{}, _, _State) ->
