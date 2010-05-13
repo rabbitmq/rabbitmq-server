@@ -378,15 +378,6 @@ clean(Server, BaseDir) ->
 %% Client-side-only helpers
 %%----------------------------------------------------------------------------
 
-safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
-    try
-        SuccessFun(ets:update_counter(Tab, Key, UpdateOp))
-    catch error:badarg -> FailThunk()
-    end.
-
-safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
-    safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
-
 client_read1(Server,
              #msg_location { guid = Guid, file = File } = MsgLocation,
              Defer,
@@ -907,6 +898,15 @@ update_msg_cache(CacheEts, Guid, Msg) ->
                    fun () -> update_msg_cache(CacheEts, Guid, Msg) end)
     end.
 
+safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
+    try
+        SuccessFun(ets:update_counter(Tab, Key, UpdateOp))
+    catch error:badarg -> FailThunk()
+    end.
+
+safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
+    safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
+
 contains_message(Guid, From, State = #msstate { gc_active = GCActive }) ->
     case index_lookup(Guid, State) of
         not_found ->
@@ -1042,6 +1042,12 @@ store_clean_shutdown(Terms, Dir) ->
     rabbit_misc:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
 
 recover_file_summary(false, _Dir) ->
+    %% TODO: the only reason for this to be an *ordered*_set is so
+    %% that maybe_compact can start a traversal from the eldest
+    %% file. It's awkward to have both that odering and the left/right
+    %% pointers in the entries - replacing the former with some
+    %% additional bit of state would be easy, but ditching the latter
+    %% would be neater.
     {false, ets:new(rabbit_msg_store_file_summary,
                     [ordered_set, public, {keypos, #file_summary.file}])};
 recover_file_summary(true, Dir) ->
@@ -1440,6 +1446,8 @@ maybe_compact(State = #msstate { sum_valid_data   = SumValid,
                                  file_summary_ets = FileSummaryEts })
   when (SumFileSize > 2 * ?FILE_SIZE_LIMIT andalso
         (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION) ->
+    %% TODO: the algorithm here is sub-optimal - it may result in a
+    %% complete traversal of FileSummaryEts.
     case ets:first(FileSummaryEts) of
         '$end_of_table' ->
             State;
