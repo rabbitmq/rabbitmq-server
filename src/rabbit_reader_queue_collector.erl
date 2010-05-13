@@ -31,21 +31,23 @@
 
 -module(rabbit_reader_queue_collector).
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
--export([start_link/0, notify_exclusive_queue/2, delete_all/1]).
+-export([start_link/0, register_exclusive_queue/2, delete_all/1, shutdown/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -record(state, {exclusive_queues}).
 
+-include("rabbit.hrl").
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> {'ok', pid()}).
--spec(notify_exclusive_queue/2 :: (pid(), pid()) -> {'ok'}).
+-spec(register_exclusive_queue/2 :: (pid(), pid()) -> {'ok'}).
 -spec(delete_all/1 :: (pid()) -> {'ok'}).
 
 -endif.
@@ -53,41 +55,51 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server2:start_link(?MODULE, [], []).
+    gen_server:start_link(?MODULE, [], []).
 
-notify_exclusive_queue(CollectorPid, QPid) ->
-    gen_server2:call(CollectorPid, {notify_exclusive_queue, QPid}, infinity).
+register_exclusive_queue(CollectorPid, Q) ->
+    gen_server:call(CollectorPid, {register_exclusive_queue, Q}, infinity).
 
 delete_all(CollectorPid) ->
-    gen_server2:call(CollectorPid, delete_all, infinity).
+    gen_server:call(CollectorPid, delete_all, infinity).
+
+shutdown(CollectorPid) ->
+    gen_server:call(CollectorPid, shutdown, infinity).
 
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #state{exclusive_queues = sets:new()}}.
+    {ok, #state{exclusive_queues = dict:new()}}.
 
 %%--------------------------------------------------------------------------
 
-handle_call({notify_exclusive_queue, QPid}, _From,
+handle_call({register_exclusive_queue, Q}, _From,
             State = #state{exclusive_queues = Queues}) ->
-    erlang:monitor(process, QPid),
-    {reply, ok, State#state{exclusive_queues = sets:add_element(QPid, Queues)}};
+    MonitorRef = erlang:monitor(process, Q#amqqueue.pid),
+    {reply, ok,
+     State#state{exclusive_queues = dict:append(MonitorRef, Q, Queues)}};
 
 handle_call(delete_all, _From,
             State = #state{exclusive_queues = ExclusiveQueues}) ->
     [rabbit_misc:with_exit_handler(
         fun() -> ok end,
-        fun() -> gen_server2:call(QPid, {delete, false, false}, infinity) end)
-        || QPid <- sets:to_list(ExclusiveQueues)],
-    {reply, ok, State}.
+        fun() ->
+                erlang:demonitor(MonitorRef),
+                rabbit_amqqueue:delete(Q, false, false)
+        end)
+        || {MonitorRef, [Q]} <- dict:to_list(ExclusiveQueues)],
+    {reply, ok, State};
+
+handle_call(shutdown, _From, State) ->
+    {stop, normal, ok, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
+handle_info({'DOWN', MonitorRef, process, _DownPid, _Reason},
             State = #state{exclusive_queues = ExclusiveQueues}) ->
     {noreply, State#state{exclusive_queues =
-                          sets:del_element(DownPid, ExclusiveQueues)}}.
+                          dict:erase(MonitorRef, ExclusiveQueues)}}.
 
 terminate(_Reason, _State) ->
     ok.

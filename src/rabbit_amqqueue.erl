@@ -31,7 +31,7 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, declare/6, delete/3, purge/1]).
+-export([start/0, declare/5, delete/3, purge/1]).
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
          update_ram_duration/1, set_ram_duration_target/2,
@@ -65,8 +65,7 @@
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -spec(start/0 :: () -> 'ok').
--spec(declare/6 ::
-      (queue_name(), boolean(), boolean(), amqp_table(), pid(), maybe(pid())) ->
+-spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(), maybe(pid())) ->
              amqqueue()).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
@@ -190,7 +189,7 @@ recover_durable_queues(DurableQueues) ->
 %% shared_or_live_owner(Owner) when is_pid(Owner) ->
 %%     rpc:call(node(Owner), erlang, is_process_alive, [Owner]).
 
-declare(QueueName, Durable, AutoDelete, Args, Owner, CollectorPid) ->
+declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
@@ -199,18 +198,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, CollectorPid) ->
                                       pid = none}),
     case gen_server2:call(Q#amqqueue.pid, {init, false}) of
         not_found -> rabbit_misc:not_found(QueueName);
-        Q1 ->
-            %% We need to notify the reader within the channel process so that
-            %% we can be sure there are no outstanding exclusive queues being
-            %% declared as the connection shuts down.
-            case Owner of
-                none ->
-                    Q1;
-                _ ->
-                    rabbit_reader_queue_collector:notify_exclusive_queue(
-                      CollectorPid, Q#amqqueue.pid),
-                    Q1
-            end
+        Q1        -> Q1
     end.
 
 internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->

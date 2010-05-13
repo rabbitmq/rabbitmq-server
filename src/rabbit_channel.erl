@@ -714,7 +714,18 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                                         auto_delete = AutoDelete %% i.e,. as supplied
                                        } ->
                         check_configure_permitted(QueueName, State),
-                        Matched;
+                        %% We need to notify the reader within the channel
+                        %% process so that we can be sure there are no
+                        %% outstanding exclusive queues being declared as the
+                        %% connection shuts down.
+                        case Owner of
+                            none ->
+                                Matched;
+                            _ ->
+                                rabbit_reader_queue_collector:reqgister_exclusive_queue(
+                                  CollectorPid, Matched),
+                                Matched
+                        end;
                     %% exclusivity trumps non-equivalence arbitrarily
                     #amqqueue{name = QueueName, exclusive_owner = ExclusiveOwner}
                     when ExclusiveOwner =/= Owner ->
@@ -738,8 +749,7 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                     end,
                 QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
                 check_configure_permitted(QueueName, State),
-                Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
-                                               Args, Owner, CollectorPid));
+                Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete, Args, Owner));
             Found -> Found
         end,
     return_queue_declare_ok(State, NoWait, Q);

@@ -791,7 +791,7 @@ test_server_status() ->
     Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>, none),
     [Q, Q2] = [#amqqueue{} = rabbit_amqqueue:declare(
                                rabbit_misc:r(<<"/">>, queue, Name),
-                               false, false, [], none, none) ||
+                               false, false, [], none) ||
                   Name <- [<<"foo">>, <<"bar">>]],
 
     ok = rabbit_amqqueue:basic_consume(Q, true, Ch, undefined,

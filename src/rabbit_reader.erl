@@ -268,7 +268,9 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %% output to be sent, which results in unnecessary delays.
         %%
         %% gen_tcp:close(ClientSock),
-        teardown_profiling(ProfilingValue)
+        teardown_profiling(ProfilingValue),
+        rabbit_reader_queue_collector:shutdown(Collector),
+        rabbit_misc:unlink_and_capture_exit(Collector)
     end,
     done.
 
