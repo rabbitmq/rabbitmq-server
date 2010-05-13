@@ -34,13 +34,14 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{init,            2},
-     {lookup,          2},
-     {insert,          2},
-     {update,          2},
-     {update_fields,   3},
-     {delete,          2},
-     {delete_by_file,  2},
-     {terminate,       1}];
+    [{new,            1},
+     {recover,        1},
+     {lookup,         2},
+     {insert,         2},
+     {update,         2},
+     {update_fields,  3},
+     {delete,         2},
+     {delete_by_file, 2},
+     {terminate,      1}];
 behaviour_info(_Other) ->
     undefined.

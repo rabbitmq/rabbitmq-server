@@ -33,7 +33,8 @@
 
 -behaviour(rabbit_msg_store_index).
 
--export([init/2, lookup/2, insert/2, update/2, update_fields/3, delete/2,
+-export([new/1, recover/1,
+         lookup/2, insert/2, update/2, update_fields/3, delete/2,
          delete_by_file/2, terminate/1]).
 
 -define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
@@ -43,16 +44,17 @@
 
 -record(state, { table, dir }).
 
-init(fresh, Dir) ->
+new(Dir) ->
     file:delete(filename:join(Dir, ?FILENAME)),
     Tid = ets:new(?MSG_LOC_NAME, [set, public, {keypos, #msg_location.guid}]),
-    {fresh, #state { table = Tid, dir = Dir }};
-init(recover, Dir) ->
+    #state { table = Tid, dir = Dir }.
+
+recover(Dir) ->
     Path = filename:join(Dir, ?FILENAME),
     case ets:file2tab(Path) of
         {ok, Tid}  -> file:delete(Path),
-                      {recovered, #state { table = Tid, dir = Dir }};
-        {error, _} -> init(fresh, Dir)
+                      {ok, #state { table = Tid, dir = Dir }};
+        Error      -> Error
     end.
 
 lookup(Key, State) ->

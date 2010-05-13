@@ -41,8 +41,8 @@
 -type(fieldpos() :: non_neg_integer()).
 -type(fieldvalue() :: any()).
 
--spec(init/2 :: (('fresh'|'recover'), dir()) ->
-                     {'fresh'|'recovered', index_state()}).
+-spec(new/1 :: (dir()) -> index_state()).
+-spec(recover/1 :: (dir()) -> {'ok', index_state()} | {'error', any()}).
 -spec(lookup/2 :: (guid(), index_state()) -> ('not_found' | keyvalue())).
 -spec(insert/2 :: (keyvalue(), index_state()) -> 'ok').
 -spec(update/2 :: (keyvalue(), index_state()) -> 'ok').

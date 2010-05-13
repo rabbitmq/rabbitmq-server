@@ -496,11 +496,11 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     rabbit_log:info("Using ~p to provide index for message store~n",
                     [IndexModule]),
 
+    Fresh = fun () -> {false, IndexModule:new(Dir), sets:new()} end,
     {AllCleanShutdown, IndexState, ClientRefs1} =
         case detect_clean_shutdown(Dir) of
             {false, _Error} ->
-                {fresh, IndexState1} = IndexModule:init(fresh, Dir),
-                {false, IndexState1, sets:new()};
+                Fresh();
             {true, Terms} ->
                 RecClientRefs  = proplists:get_value(client_refs, Terms, []),
                 RecIndexModule = proplists:get_value(index_module, Terms),
@@ -508,15 +508,14 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
                       lists:sort(ClientRefs) == lists:sort(RecClientRefs)
                       andalso IndexModule == RecIndexModule) of
                     true ->
-                        case IndexModule:init(recover, Dir) of
-                            {fresh, IndexState1} ->
-                                {false, IndexState1, sets:new()};
-                            {recovered, IndexState1} ->
-                                {true, IndexState1, sets:from_list(ClientRefs)}
+                        case IndexModule:recover(Dir) of
+                            {ok, IndexState1} ->
+                                {true, IndexState1, sets:from_list(ClientRefs)};
+                            _Error ->
+                                Fresh()
                         end;
                     false ->
-                        {fresh, IndexState1} = IndexModule:init(fresh, Dir),
-                        {false, IndexState1, sets:new()}
+                        Fresh()
                 end
         end,
 
