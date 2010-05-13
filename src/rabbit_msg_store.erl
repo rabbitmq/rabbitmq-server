@@ -348,9 +348,9 @@ set_maximum_since_use(Server, Age) ->
     gen_server2:pcast(Server, 8, {set_maximum_since_use, Age}).
 
 client_init(Server, Ref) ->
-    {IState, IModule, Dir, FileHandlesEts, FileSummaryEts, DedupCacheEts,
-     CurFileCacheEts} = gen_server2:call(Server, {new_client_state, Ref},
-                                         infinity),
+    {IState, IModule, Dir,
+     FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
+        gen_server2:call(Server, {new_client_state, Ref}, infinity),
     #client_msstate { file_handle_cache  = dict:new(),
                       index_state        = IState,
                       index_module       = IModule,
@@ -584,15 +584,16 @@ handle_call({contains, Guid}, From, State) ->
     noreply(State1);
 
 handle_call({new_client_state, CRef}, _From,
-            State = #msstate { index_state        = IndexState, dir = Dir,
+            State = #msstate { dir                = Dir,
+                               index_state        = IndexState,
                                index_module       = IndexModule,
                                file_handles_ets   = FileHandlesEts,
                                file_summary_ets   = FileSummaryEts,
                                dedup_cache_ets    = DedupCacheEts,
                                cur_file_cache_ets = CurFileCacheEts,
                                client_refs        = ClientRefs }) ->
-    reply({IndexState, IndexModule, Dir, FileHandlesEts, FileSummaryEts,
-           DedupCacheEts, CurFileCacheEts},
+    reply({IndexState, IndexModule, Dir,
+           FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts},
           State #msstate { client_refs = sets:add_element(CRef, ClientRefs) });
 
 handle_call(successfully_recovered_state, _From, State) ->
@@ -627,17 +628,15 @@ handle_cast({write, Guid, Msg},
                              file_size        = FileSize }] =
                 ets:lookup(FileSummaryEts, CurFile),
             ValidTotalSize1 = ValidTotalSize + TotalSize,
-            ContiguousTop1 = if CurOffset =:= ContiguousTop ->
-                                     %% can't be any holes in this file
-                                     ValidTotalSize1;
-                                true -> ContiguousTop
+            ContiguousTop1 = case CurOffset =:= ContiguousTop of
+                                 true  -> ValidTotalSize1;
+                                 false -> ContiguousTop
                              end,
             true = ets:update_element(
-                     FileSummaryEts,
-                     CurFile,
+                     FileSummaryEts, CurFile,
                      [{#file_summary.valid_total_size, ValidTotalSize1},
-                      {#file_summary.contiguous_top, ContiguousTop1},
-                      {#file_summary.file_size, FileSize + TotalSize}]),
+                      {#file_summary.contiguous_top,   ContiguousTop1},
+                      {#file_summary.file_size,        FileSize + TotalSize}]),
             NextOffset = CurOffset + TotalSize,
             noreply(
               maybe_roll_to_new_file(
@@ -708,7 +707,7 @@ handle_cast({gc_done, Reclaimed, Src, Dst},
     ets:update_element(FileSummaryEts, SrcRight, {#file_summary.left, Dst}),
     true = ets:update_element(FileSummaryEts, Dst,
                               [{#file_summary.locked, false},
-                               {#file_summary.right, SrcRight}]),
+                               {#file_summary.right,  SrcRight}]),
     true = ets:delete(FileSummaryEts, Src),
     noreply(
       maybe_compact(run_pending(
