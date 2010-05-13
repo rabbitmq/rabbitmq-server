@@ -1335,8 +1335,8 @@ build_index(Gatherer, Left, [],
                                sum_file_size    = SumFileSize }) ->
     case gatherer:out(Gatherer) of
         empty ->
-            ok = rabbit_misc:unlink_and_capture_exit(Gatherer),
             ok = gatherer:stop(Gatherer),
+            ok = rabbit_misc:unlink_and_capture_exit(Gatherer),
             ok = index_delete_by_file(undefined, State),
             Offset = case ets:lookup(FileSummaryEts, Left) of
                          []                                       -> 0;
