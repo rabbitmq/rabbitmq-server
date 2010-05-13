@@ -31,11 +31,16 @@
 
 -module(bpqueue).
 
-%% Block-prefixed queue. This implements a queue of queues, but
-%% supporting the normal queue interface. Each inner queue has a
-%% prefix, which does not need to be unique, and it is guaranteed that
-%% no two consecutive blocks have the same prefix. len/1 returns the
-%% flattened length of the queue and is O(1).
+%% Block-prefixed queue. From the perspective of the queue interface
+%% the datastructure acts like a regular queue where each value is
+%% paired with the prefix.
+%%
+%% This is implemented as a queue of queues, which is more space and
+%% time efficient, whilst supporting the normal queue interface. Each
+%% inner queue has a prefix, which does not need to be unique, and it
+%% is guaranteed that no two consecutive blocks have the same
+%% prefix. len/1 returns the flattened length of the queue and is
+%% O(1).
 
 -export([new/0, is_empty/1, len/1, in/3, in_r/3, out/1, out_r/1, join/2,
          foldl/3, foldr/3, from_list/1, to_list/1, map_fold_filter_l/4,
@@ -233,7 +238,8 @@ to_list1({Prefix, InnerQ}) ->
 %% you're not interested in. Such blocks appear in the resulting bpq
 %% without modification. The Fun is then used both to map the value,
 %% which also allows you to change the prefix (and thus block) of the
-%% value, and also to modify the Init/Acc (just like a fold).
+%% value, and also to modify the Init/Acc (just like a fold).  If the
+%% Fun returns 'stop' then it is not applied to any further items.
 map_fold_filter_l(_PFilter, _Fun, Init, BPQ = {0, _Q}) ->
     {BPQ, Init};
 map_fold_filter_l(PFilter, Fun, Init, {N, Q}) ->

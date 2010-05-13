@@ -262,6 +262,9 @@ test_bpqueue() ->
 
     [] = bpqueue:to_list(Q),
 
+    [{bar,3},{foo,2},{foo,1}] =
+        bpqueue:foldr(fun(P,V,I) -> [{P,V}|I] end, [], Q2),
+
     F1 = fun (Qn) ->
                  bpqueue:map_fold_filter_l(
                    fun (foo) -> true;
@@ -291,6 +294,71 @@ test_bpqueue() ->
     [] = bpqueue:to_list(Q11),
     {Q12, 0} = F2(Q),
     [] = bpqueue:to_list(Q12),
+
+    FF1 = fun (Prefixes) ->
+                  fun (P) -> lists:member(P, Prefixes) end
+          end,
+    FF2 = fun (Prefix, Stoppers) ->
+                  fun (Val, Num) ->
+                          case lists:member(Val, Stoppers) of
+                              true -> stop;
+                              false -> {Prefix, -Val, 1 + Num}
+                          end
+                  end
+          end,
+    Queue_to_list = fun ({LHS, RHS}) -> {bpqueue:to_list(LHS), RHS} end,
+
+    BPQL = [{foo,[1,2,2]}, {bar,[3,4,5]}, {foo,[5,6,7]}],
+    BPQ = bpqueue:from_list(BPQL),
+
+    %% no effect
+    {BPQL, 0} = Queue_to_list(bpqueue:map_fold_filter_l(
+                                FF1([none]), FF2(none, []), 0, BPQ)),
+    {BPQL, 0} = Queue_to_list(bpqueue:map_fold_filter_l(
+                                FF1([foo,bar]), FF2(none, [1]), 0, BPQ)),
+    {BPQL, 0} = Queue_to_list(bpqueue:map_fold_filter_l(
+                                FF1([bar]), FF2(none, [3]), 0, BPQ)),
+    {BPQL, 0} = Queue_to_list(bpqueue:map_fold_filter_r(
+                                FF1([bar]), FF2(foo, [5]), 0, BPQ)),
+    {[], 0} = Queue_to_list(bpqueue:map_fold_filter_l(
+                              fun(_P)-> throw(explosion) end,
+                              fun(_V, _N) -> throw(explosion) end, 0, Q)),
+
+    %% process 1 item
+    {[{foo,[-1,2,2]}, {bar,[3,4,5]}, {foo,[5,6,7]}], 1} =
+        Queue_to_list(bpqueue:map_fold_filter_l(
+                        FF1([foo, bar]), FF2(foo, [2]), 0, BPQ)),
+    {[{foo,[1,2,2]}, {bar,[-3,4,5]}, {foo,[5,6,7]}], 1} =
+        Queue_to_list(bpqueue:map_fold_filter_l(
+                        FF1([bar]), FF2(bar, [4]), 0, BPQ)),
+    {[{foo,[1,2,2]}, {bar,[3,4,5]}, {foo,[5,6,-7]}], 1} =
+        Queue_to_list(bpqueue:map_fold_filter_r(
+                        FF1([foo, bar]), FF2(foo, [6]), 0, BPQ)),
+    {[{foo,[1,2,2]}, {bar,[3,4]}, {baz,[-5]}, {foo,[5,6,7]}], 1} =
+        Queue_to_list(bpqueue:map_fold_filter_r(
+                        FF1([bar]), FF2(baz, [4]), 0, BPQ)),
+
+    %% change prefix
+    {[{bar,[-1,-2,-2,-3,-4,-5,-5,-6,-7]}], 9} =
+        Queue_to_list(bpqueue:map_fold_filter_l(
+                        FF1([foo, bar]), FF2(bar, []), 0, BPQ)),
+    {[{bar,[-1,-2,-2,3,4,5]}, {foo,[5,6,7]}], 3} =
+        Queue_to_list(bpqueue:map_fold_filter_l(
+                        FF1([foo]), FF2(bar, [5]), 0, BPQ)),
+    {[{bar,[-1,-2,-2,3,4,5,-5,-6]}, {foo,[7]}], 5} =
+        Queue_to_list(bpqueue:map_fold_filter_l(
+                        FF1([foo]), FF2(bar, [7]), 0, BPQ)),
+    {[{foo,[1,2,2,-3,-4]}, {bar,[5]}, {foo,[5,6,7]}], 2} =
+        Queue_to_list(bpqueue:map_fold_filter_l(
+                        FF1([bar]), FF2(foo, [5]), 0, BPQ)),
+
+    %% edge cases
+    {[{foo,[-1,-2,-2]}, {bar,[3,4,5]}, {foo,[5,6,7]}], 3} =
+        Queue_to_list(bpqueue:map_fold_filter_l(
+                        FF1([foo]), FF2(foo, [5]), 0, BPQ)),
+    {[{foo,[1,2,2]}, {bar,[3,4,5]}, {foo,[-5,-6,-7]}], 3} =
+        Queue_to_list(bpqueue:map_fold_filter_r(
+                        FF1([foo]), FF2(foo, [2]), 0, BPQ)),
 
     passed.
 
