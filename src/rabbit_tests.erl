@@ -351,6 +351,12 @@ test_bpqueue() ->
     {[{foo,[1,2,2,-3,-4]}, {bar,[5]}, {foo,[5,6,7]}], 2} =
         Queue_to_list(bpqueue:map_fold_filter_l(
                         FF1([bar]), FF2(foo, [5]), 0, BPQ)),
+    {[{bar,[-1,-2,-2,3,4,5,-5,-6,-7]}], 6} =
+        Queue_to_list(bpqueue:map_fold_filter_l(
+                        FF1([foo]), FF2(bar, []), 0, BPQ)),
+    {[{foo,[1,2,2,-3,-4,-5,5,6,7]}], 3} =
+        Queue_to_list(bpqueue:map_fold_filter_l(
+                        FF1([bar]), FF2(foo, []), 0, BPQ)),
 
     %% edge cases
     {[{foo,[-1,-2,-2]}, {bar,[3,4,5]}, {foo,[5,6,7]}], 3} =
