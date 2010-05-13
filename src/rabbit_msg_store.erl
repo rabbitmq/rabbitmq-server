@@ -504,9 +504,9 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
             {true, Terms} ->
                 RecClientRefs  = proplists:get_value(client_refs, Terms, []),
                 RecIndexModule = proplists:get_value(index_module, Terms),
-                case (undefined /= ClientRefs andalso
-                      lists:sort(ClientRefs) == lists:sort(RecClientRefs)
-                      andalso IndexModule == RecIndexModule) of
+                case (ClientRefs =/= undefined andalso
+                      lists:sort(ClientRefs) =/= lists:sort(RecClientRefs)
+                      andalso IndexModule =/= RecIndexModule) of
                     true ->
                         case IndexModule:recover(Dir) of
                             {ok, IndexState1} ->
@@ -703,7 +703,7 @@ handle_cast({gc_done, Reclaimed, Src, Dst},
                      right   = SrcRight,
                      locked  = true,
                      readers = 0 }] = ets:lookup(FileSummaryEts, Src),
-    %% this could fail if SrcRight == undefined
+    %% this could fail if SrcRight =:= undefined
     ets:update_element(FileSummaryEts, SrcRight, {#file_summary.left, Dst}),
     true = ets:update_element(FileSummaryEts, Dst,
                               [{#file_summary.locked, false},
@@ -912,7 +912,7 @@ contains_message(Guid, From, State = #msstate { gc_active = GCActive }) ->
             State;
         #msg_location { file = File } ->
             case GCActive of
-                {A, B} when File == A orelse File == B ->
+                {A, B} when File =:= A orelse File =:= B ->
                     add_to_pending_gc_completion(
                       {contains, Guid, From}, State);
                 _ ->
@@ -1235,7 +1235,7 @@ recover_crashed_compactions1(Dir, FileNames, TmpFileName) ->
             EldestTmpGuid = lists:last(GuidsTmp),
             {Guids1, UncorruptedMessages1}
                 = case lists:splitwith(
-                         fun (Guid) -> Guid /= EldestTmpGuid end, Guids) of
+                         fun (Guid) -> Guid =/= EldestTmpGuid end, Guids) of
                       {_Guids, []} -> %% no msgs from tmp in main
                           {Guids, UncorruptedMessages};
                       {Dropped, [EldestTmpGuid | Rest]} ->
@@ -1597,8 +1597,8 @@ combine_files(#file_summary { file             = Source,
             Worklist =
                 lists:dropwhile(
                   fun (#msg_location { offset = Offset })
-                      when Offset /= DestinationContiguousTop ->
-                          %% it cannot be that Offset ==
+                      when Offset =/= DestinationContiguousTop ->
+                          %% it cannot be that Offset =:=
                           %% DestinationContiguousTop because if it
                           %% was then DestinationContiguousTop would
                           %% have been extended by TotalSize
