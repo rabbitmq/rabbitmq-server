@@ -35,7 +35,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/5, do/2, do/3, shutdown/1]).
+-export([start_link/6, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 
@@ -46,7 +46,7 @@
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
-             consumer_mapping, blocking}).
+             consumer_mapping, blocking, queue_collector_pid}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -66,8 +66,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/5 ::
-      (channel_number(), pid(), pid(), username(), vhost()) -> pid()).
+-spec(start_link/6 ::
+      (channel_number(), pid(), pid(), username(), vhost(), pid()) -> pid()).
 -spec(do/2 :: (pid(), amqp_method()) -> 'ok').
 -spec(do/3 :: (pid(), amqp_method(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
@@ -86,10 +86,10 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Channel, ReaderPid, WriterPid, Username, VHost) ->
+start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid) ->
     {ok, Pid} = gen_server2:start_link(
                   ?MODULE, [Channel, ReaderPid, WriterPid,
-                            Username, VHost], []),
+                            Username, VHost, CollectorPid], []),
     Pid.
 
 do(Pid, Method) ->
@@ -135,7 +135,7 @@ info_all(Items) ->
 
 %%---------------------------------------------------------------------------
 
-init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
+init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
     rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
@@ -154,7 +154,8 @@ init([Channel, ReaderPid, WriterPid, Username, VHost]) ->
              virtual_host            = VHost,
              most_recently_declared_queue = <<>>,
              consumer_mapping        = dict:new(),
-             blocking                = dict:new()},
+             blocking                = dict:new(),
+             queue_collector_pid     = CollectorPid},
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -692,16 +693,17 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                                nowait = NoWait,
                                arguments = Args},
               _, State = #ch { virtual_host = VHostPath,
-                               reader_pid = ReaderPid }) ->
+                               reader_pid = ReaderPid,
+                               queue_collector_pid = CollectorPid}) ->
     Owner = case ExclusiveDeclare of
                 true  -> ReaderPid;
                 false -> none
             end,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
-    Finish = 
+    Finish =
         fun(Q) ->
-                case Q of 
+                case Q of
                     %% "equivalent" rule. NB: we don't pay attention to
                     %% anything in the arguments table, so for the sake of the
                     %% "equivalent" rule, all tables of arguments are
@@ -719,7 +721,7 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                         rabbit_misc:protocol_error(resource_locked,
                                                    "cannot obtain exclusive access to locked ~s",
                                                    [rabbit_misc:rs(QueueName)]);
-                    #amqqueue{name = QueueName} ->                 
+                    #amqqueue{name = QueueName} ->
                         rabbit_misc:protocol_error(channel_error,
                                                    "parameters for ~s not equivalent",
                                                    [rabbit_misc:rs(QueueName)])
@@ -736,7 +738,8 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                     end,
                 QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
                 check_configure_permitted(QueueName, State),
-                Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete, Args, Owner));
+                Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
+                                               Args, Owner, CollectorPid));
             Found -> Found
         end,
     return_queue_declare_ok(State, NoWait, Q);

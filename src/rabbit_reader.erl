@@ -59,7 +59,7 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {sock, connection, callback, recv_ref, connection_state,
-             exclusive_queues}).
+             queue_collector}).
 
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
@@ -237,6 +237,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
+    {ok, Collector} = rabbit_reader_queue_collector:start_link(),
     try
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
@@ -249,7 +250,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                     callback = uninitialized_callback,
                                     recv_ref = none,
                                     connection_state = pre_init,
-                                    exclusive_queues = sets:new()},
+                                    queue_collector = Collector},
                                 handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -318,10 +319,6 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             end;
         timeout ->
             throw({timeout, State#v1.connection_state});
-        {notify_exclusive_queue, QPid} ->
-            mainloop(Parent, Deb, add_exclusive_queue(QPid, State));
-        {delete_exclusive_queue, QPid} ->
-            mainloop(Parent, Deb, delete_exclusive_queue(QPid, State));
         {'$gen_call', From, {shutdown, Explanation}} ->
             {ForceTermination, NewState} = terminate(Explanation, State),
             gen_server:reply(From, ok),
@@ -435,15 +432,14 @@ wait_for_channel_termination(N, TimerRef) ->
     end.
 
 maybe_close(State = #v1{connection_state = closing,
-                        exclusive_queues = ExclusiveQueues}) ->
+                        queue_collector = Collector}) ->
     case all_channels() of
         [] ->
             %% Spec says "Exclusive queues may only be accessed by the current
             %% connection, and are deleted when that connection closes."
             %% This does not strictly imply synchrony, but in practice it seems
             %% to be what people assume.
-            [gen_server2:call(QPid, {delete, false, false}, infinity)
-                || QPid <- sets:to_list(ExclusiveQueues)],
+            rabbit_reader_queue_collector:delete_all(Collector),
             ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}),
             close_connection(State);
         _  -> State
@@ -712,25 +708,16 @@ i(Item, #v1{}) ->
 
 %%--------------------------------------------------------------------------
 
-add_exclusive_queue(QPid, State) ->
-    Queues = State#v1.exclusive_queues,
-    State#v1{exclusive_queues = sets:add_element(QPid, Queues)}.
-
-delete_exclusive_queue(QPid, State) ->
-    Queues = State#v1.exclusive_queues,
-    State#v1{exclusive_queues = sets:del_element(QPid, Queues)}.
-
-%%--------------------------------------------------------------------------
-
-send_to_new_channel(Channel, AnalyzedFrame, State) ->
+send_to_new_channel(Channel, AnalyzedFrame,
+                    State = #v1{queue_collector = Collector}) ->
     #v1{sock = Sock, connection = #connection{
                        frame_max = FrameMax,
                        user = #user{username = Username},
                        vhost = VHost}} = State,
     WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
     ChPid = rabbit_framing_channel:start_link(
-              fun rabbit_channel:start_link/5,
-              [Channel, self(), WriterPid, Username, VHost]),
+              fun rabbit_channel:start_link/6,
+              [Channel, self(), WriterPid, Username, VHost, Collector]),
     put({channel, Channel}, {chpid, ChPid}),
     put({chpid, ChPid}, {channel, Channel}),
     ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame).
