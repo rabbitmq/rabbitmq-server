@@ -259,11 +259,13 @@ test_bpqueue() ->
 
     ok = bpqueue:foldl(fun (Prefix, Value, ok) -> {error, Prefix, Value} end,
                        ok, Q),
+    ok = bpqueue:foldr(fun (Prefix, Value, ok) -> {error, Prefix, Value} end,
+                       ok, Q),
 
     [] = bpqueue:to_list(Q),
 
-    [{bar,3},{foo,2},{foo,1}] =
-        bpqueue:foldr(fun(P,V,I) -> [{P,V}|I] end, [], Q2),
+    [{bar,3}, {foo,2}, {foo,1}] =
+        bpqueue:foldr(fun (P, V, I) -> [{P,V} | I] end, [], Q2),
 
     F1 = fun (Qn) ->
                  bpqueue:map_fold_filter_l(
