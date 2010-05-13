@@ -323,6 +323,9 @@ test_bpqueue() ->
     {[], 0} = Queue_to_list(bpqueue:map_fold_filter_l(
                               fun(_P)-> throw(explosion) end,
                               fun(_V, _N) -> throw(explosion) end, 0, Q)),
+    {[], 0} = Queue_to_list(bpqueue:map_fold_filter_r(
+                              fun(_P)-> throw(explosion) end,
+                              fun(_V, _N) -> throw(explosion) end, 0, Q)),
 
     %% process 1 item
     {[{foo,[-1,2,2]}, {bar,[3,4,5]}, {foo,[5,6,7]}], 1} =

@@ -225,10 +225,7 @@ from_list(List) ->
 to_list({0, _Q}) ->
     [];
 to_list({_N, Q}) ->
-    lists:map(fun to_list1/1, queue:to_list(Q)).
-
-to_list1({Prefix, InnerQ}) ->
-    {Prefix, queue:to_list(InnerQ)}.
+    [{Prefix, queue:to_list(InnerQ)} || {Prefix, InnerQ} <- queue:to_list(Q)].
 
 %% map_fold_filter_[lr](FilterFun, Fun, Init, BPQ) -> {BPQ, Init}
 %% where FilterFun(Prefix) -> boolean()
