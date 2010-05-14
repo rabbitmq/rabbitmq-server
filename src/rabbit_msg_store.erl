@@ -493,34 +493,14 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
 
     {ok, IndexModule} = application:get_env(msg_store_index_module),
-    rabbit_log:info("Using ~p to provide index for message store~n",
-                    [IndexModule]),
+    rabbit_log:info("~w: using ~p to provide index~n", [Server, IndexModule]),
 
-    Fresh = fun () -> {false, IndexModule:new(Dir), sets:new()} end,
     {AllCleanShutdown, IndexState, ClientRefs1} =
-        case detect_clean_shutdown(Dir) of
-            {false, _Error} ->
-                Fresh();
-            {true, Terms} ->
-                RecClientRefs  = proplists:get_value(client_refs, Terms, []),
-                RecIndexModule = proplists:get_value(index_module, Terms),
-                case (ClientRefs =/= undefined andalso
-                      lists:sort(ClientRefs) =:= lists:sort(RecClientRefs)
-                      andalso IndexModule =:= RecIndexModule) of
-                    true ->
-                        case IndexModule:recover(Dir) of
-                            {ok, IndexState1} ->
-                                {true, IndexState1, sets:from_list(ClientRefs)};
-                            _Error ->
-                                Fresh()
-                        end;
-                    false ->
-                        Fresh()
-                end
-        end,
+        recover_index_and_client_refs(IndexModule, ClientRefs, Dir, Server),
 
     {FileSummaryRecovered, FileSummaryEts} =
-        recover_file_summary(AllCleanShutdown, Dir),
+        recover_file_summary(AllCleanShutdown, Dir, Server),
+
     DedupCacheEts   = ets:new(rabbit_msg_store_dedup_cache, [set, public]),
     FileHandlesEts  = ets:new(rabbit_msg_store_shared_file_handles,
                               [ordered_set, public]),
@@ -748,7 +728,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
     [ets:delete(T) ||
         T <- [FileSummaryEts, DedupCacheEts, FileHandlesEts, CurFileCacheEts]],
     IndexModule:terminate(IndexState),
-    store_clean_shutdown([{client_refs, sets:to_list(ClientRefs)},
+    store_recovery_terms([{client_refs, sets:to_list(ClientRefs)},
                           {index_module, IndexModule}], Dir),
     State3 #msstate { index_state         = undefined,
                       current_file_handle = undefined }.
@@ -1026,40 +1006,6 @@ get_read_handle(FileNum, FHC, Dir) ->
                      {Hdl, dict:store(FileNum, Hdl, FHC)}
     end.
 
-detect_clean_shutdown(Dir) ->
-    Path = filename:join(Dir, ?CLEAN_FILENAME),
-    case rabbit_misc:read_term_file(Path) of
-        {ok, Terms}    -> case file:delete(Path) of
-                              ok             -> {true,  Terms};
-                              {error, Error} -> {false, Error}
-                          end;
-        {error, Error} -> {false, Error}
-    end.
-
-store_clean_shutdown(Terms, Dir) ->
-    rabbit_misc:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
-
-recover_file_summary(false, _Dir) ->
-    %% TODO: the only reason for this to be an *ordered*_set is so
-    %% that maybe_compact can start a traversal from the eldest
-    %% file. It's awkward to have both that odering and the left/right
-    %% pointers in the entries - replacing the former with some
-    %% additional bit of state would be easy, but ditching the latter
-    %% would be neater.
-    {false, ets:new(rabbit_msg_store_file_summary,
-                    [ordered_set, public, {keypos, #file_summary.file}])};
-recover_file_summary(true, Dir) ->
-    Path = filename:join(Dir, ?FILE_SUMMARY_FILENAME),
-    case ets:file2tab(Path) of
-        {ok, Tid}  -> file:delete(Path),
-                      {true, Tid};
-        {error, _} -> recover_file_summary(false, Dir)
-    end.
-
-store_file_summary(Tid, Dir) ->
-    ok = ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
-                      [{extended_info, [object_count]}]).
-
 preallocate(Hdl, FileSizeLimit, FinalPos) ->
     {ok, FileSizeLimit} = file_handle_cache:position(Hdl, FileSizeLimit),
     ok = file_handle_cache:truncate(Hdl),
@@ -1150,8 +1096,72 @@ index_delete_by_file(File, #msstate { index_module = Index,
     Index:delete_by_file(File, State).
 
 %%----------------------------------------------------------------------------
-%% recovery
+%% shutdown and recovery
 %%----------------------------------------------------------------------------
+
+recover_index_and_client_refs(IndexModule, ClientRefs, Dir, Server) ->
+    Fresh = fun (ErrorMsg, ErrorArgs) ->
+                    rabbit_log:warning("~w: " ++ ErrorMsg ++
+                                       "~nrebuilding indices from scratch~n",
+                                       [Server | ErrorArgs]),
+                    {false, IndexModule:new(Dir), sets:new()}
+            end,
+    case read_recovery_terms(Dir) of
+        {false, Error} ->
+            Fresh("failed to read recovery terms: ~p", [Error]);
+        {true, Terms} ->
+            RecClientRefs  = proplists:get_value(client_refs, Terms, []),
+            RecIndexModule = proplists:get_value(index_module, Terms),
+            case (ClientRefs =/= undefined andalso
+                  lists:sort(ClientRefs) =:= lists:sort(RecClientRefs)
+                  andalso IndexModule =:= RecIndexModule) of
+                true  -> case IndexModule:recover(Dir) of
+                             {ok, IndexState1} ->
+                                 ClientRefs1 = sets:from_list(ClientRefs),
+                                 {true, IndexState1, ClientRefs1};
+                             {error, Error} ->
+                                 Fresh("failed to recover index: ~p", [Error])
+                         end;
+                false  -> Fresh("recovery terms differ from present", [])
+            end
+    end.
+
+store_recovery_terms(Terms, Dir) ->
+    rabbit_misc:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
+
+read_recovery_terms(Dir) ->
+    Path = filename:join(Dir, ?CLEAN_FILENAME),
+    case rabbit_misc:read_term_file(Path) of
+        {ok, Terms}    -> case file:delete(Path) of
+                              ok             -> {true,  Terms};
+                              {error, Error} -> {false, Error}
+                          end;
+        {error, Error} -> {false, Error}
+    end.
+
+store_file_summary(Tid, Dir) ->
+    ok = ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
+                      [{extended_info, [object_count]}]).
+
+recover_file_summary(false, _Dir, _Server) ->
+    %% TODO: the only reason for this to be an *ordered*_set is so
+    %% that maybe_compact can start a traversal from the eldest
+    %% file. It's awkward to have both that odering and the left/right
+    %% pointers in the entries - replacing the former with some
+    %% additional bit of state would be easy, but ditching the latter
+    %% would be neater.
+    {false, ets:new(rabbit_msg_store_file_summary,
+                    [ordered_set, public, {keypos, #file_summary.file}])};
+recover_file_summary(true, Dir, Server) ->
+    Path = filename:join(Dir, ?FILE_SUMMARY_FILENAME),
+    case ets:file2tab(Path) of
+        {ok, Tid}      -> file:delete(Path),
+                          {true, Tid};
+        {error, Error} -> rabbit_log:warning(
+                            "~w: failed to recover file summary: ~p~n"
+                            "rebuilding~n", [Server, Error]),
+                          recover_file_summary(false, Dir, Server)
+    end.
 
 count_msg_refs(false, Gen, Seed, State) ->
     count_msg_refs(Gen, Seed, State);
