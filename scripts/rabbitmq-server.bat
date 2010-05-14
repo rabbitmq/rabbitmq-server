@@ -110,15 +110,27 @@ set CLUSTER_CONFIG=-rabbit cluster_config \""!RABBITMQ_CLUSTER_CONFIG_FILE:\=/!"
 if "!RABBITMQ_MNESIA_DIR!"=="" (
     set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-mnesia
 )
+
+set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
+set RABBITMQ_PLUGINS_EXPAND_DIR=!TDP0!..\priv\plugins
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
-if exist "!RABBITMQ_EBIN_ROOT!\rabbit.boot" (
-    echo Using Custom Boot File "!RABBITMQ_EBIN_ROOT!\rabbit.boot"
-    set RABBITMQ_BOOT_FILE=!RABBITMQ_EBIN_ROOT!\rabbit
-    set RABBITMQ_EBIN_PATH=
-) else (
-    set RABBITMQ_BOOT_FILE=start_sasl
-    set RABBITMQ_EBIN_PATH=-pa "!RABBITMQ_EBIN_ROOT!"
+
+"!ERLANG_HOME!\bin\erl.exe" ^
+-pa "!RABBITMQ_EBIN_ROOT!" ^
+-noinput -hidden ^
+-s rabbit_plugin_activator ^
+-rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
+-rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
+-rabbit rabbit_ebin  \""!RABBITMQ_EBIN_ROOT:\=/!"\" ^
+-extra !STAR!
+
+if not exist "!RABBITMQ_EBIN_ROOT!\rabbit.boot" (
+    echo Custom Boot File "!RABBITMQ_EBIN_ROOT!\rabbit.boot" is missing.
+    exit /B 1
 )
+set RABBITMQ_BOOT_FILE=!RABBITMQ_EBIN_ROOT!\rabbit
+set RABBITMQ_EBIN_PATH=
+
 if "!RABBITMQ_CONFIG_FILE!"=="" (
     set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
 )
