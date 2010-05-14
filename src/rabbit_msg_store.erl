@@ -113,6 +113,8 @@
                                             file_summary_ets   :: tid(),
                                             dedup_cache_ets    :: tid(),
                                             cur_file_cache_ets :: tid() }).
+-type(startup_fun_state() ::
+        {(fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A}).
 
 -spec(start_link/4 ::
       (atom(), file_path(), [binary()] | 'undefined', startup_fun_state()) ->
