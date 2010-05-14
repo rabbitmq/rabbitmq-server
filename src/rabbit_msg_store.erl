@@ -846,13 +846,13 @@ read_from_disk(#msg_location { guid = Guid, ref_count = RefCount,
             {ok, {Guid, _}} = Obj ->
                 Obj;
             Rest ->
-                throw({error, {misread, [{old_state, State},
-                                         {file_num,  File},
-                                         {offset,    Offset},
-                                         {guid,      Guid},
-                                         {read,      Rest},
-                                         {proc_dict, get()}
-                                        ]}})
+                {error, {misread, [{old_state, State},
+                                   {file_num,  File},
+                                   {offset,    Offset},
+                                   {guid,      Guid},
+                                   {read,      Rest},
+                                   {proc_dict, get()}
+                                  ]}}
         end,
     ok = maybe_insert_into_cache(DedupCacheEts, RefCount, Guid, Msg),
     {Msg, State1}.
@@ -1026,8 +1026,7 @@ scan_file_for_valid_messages(Dir, FileName) ->
             file_handle_cache:close(Hdl),
             Valid;
         {error, enoent} -> {ok, [], 0};
-        {error, Reason} -> throw({error,
-                                  {unable_to_scan_file, FileName, Reason}})
+        {error, Reason} -> {error, {unable_to_scan_file, FileName, Reason}}
     end.
 
 %%----------------------------------------------------------------------------
@@ -1705,8 +1704,7 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                       ok = file_handle_cache:sync(DestinationHdl)
             end;
         {FinalOffsetZ, _BlockStart1, _BlockEnd1} ->
-            throw({gc_error, [{expected, FinalOffset},
-                              {got, FinalOffsetZ},
-                              {destination, Destination}]})
-    end,
-    ok.
+            {gc_error, [{expected, FinalOffset},
+                        {got, FinalOffsetZ},
+                        {destination, Destination}]}
+    end.
