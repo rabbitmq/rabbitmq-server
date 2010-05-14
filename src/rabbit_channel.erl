@@ -719,13 +719,11 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                         %% outstanding exclusive queues being declared as the
                         %% connection shuts down.
                         case Owner of
-                            none ->
-                                Matched;
-                            _ ->
-                                rabbit_reader_queue_collector:reqgister_exclusive_queue(
-                                  CollectorPid, Matched),
-                                Matched
-                        end;
+                            none -> ok;
+                            _    -> rabbit_reader_queue_collector:register_exclusive_queue(
+                                        CollectorPid, Matched)
+                        end,
+                        Matched;
                     %% exclusivity trumps non-equivalence arbitrarily
                     #amqqueue{name = QueueName, exclusive_owner = ExclusiveOwner}
                     when ExclusiveOwner =/= Owner ->
