@@ -767,12 +767,6 @@ stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
     {ok, cancel} = timer:cancel(TRef),
     State #msstate { sync_timer_ref = undefined }.
 
-filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
-
-sort_file_names(FileNames) ->
-    lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
-               FileNames).
-
 internal_sync(State = #msstate { current_file_handle = CurHdl,
                                  on_sync = Syncs }) ->
     State1 = stop_sync_timer(State),
@@ -857,29 +851,6 @@ read_from_disk(#msg_location { guid = Guid, ref_count = RefCount,
     ok = maybe_insert_into_cache(DedupCacheEts, RefCount, Guid, Msg),
     {Msg, State1}.
 
-maybe_insert_into_cache(DedupCacheEts, RefCount, Guid, Msg)
-  when RefCount > 1 ->
-    update_msg_cache(DedupCacheEts, Guid, Msg);
-maybe_insert_into_cache(_DedupCacheEts, _RefCount, _Guid, _Msg) ->
-    ok.
-
-update_msg_cache(CacheEts, Guid, Msg) ->
-    case ets:insert_new(CacheEts, {Guid, Msg, 1}) of
-        true  -> ok;
-        false -> safe_ets_update_counter_ok(
-                   CacheEts, Guid, {3, +1},
-                   fun () -> update_msg_cache(CacheEts, Guid, Msg) end)
-    end.
-
-safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
-    try
-        SuccessFun(ets:update_counter(Tab, Key, UpdateOp))
-    catch error:badarg -> FailThunk()
-    end.
-
-safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
-    safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
-
 contains_message(Guid, From, State = #msstate { gc_active = GCActive }) ->
     case index_lookup(Guid, State) of
         not_found ->
@@ -952,6 +923,19 @@ run_pending({contains, Guid, From}, State) ->
 run_pending({remove, Guid}, State) ->
     remove_message(Guid, State).
 
+safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
+    try
+        SuccessFun(ets:update_counter(Tab, Key, UpdateOp))
+    catch error:badarg -> FailThunk()
+    end.
+
+safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
+    safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
+
+%%----------------------------------------------------------------------------
+%% file helper functions
+%%----------------------------------------------------------------------------
+
 open_file(Dir, FileName, Mode) ->
     file_handle_cache:open(form_filename(Dir, FileName), ?BINARY_MODE ++ Mode,
                            [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE}]).
@@ -1016,22 +1000,29 @@ form_filename(Dir, Name) -> filename:join(Dir, Name).
 
 filenum_to_name(File) -> integer_to_list(File) ++ ?FILE_EXTENSION.
 
-scan_file_for_valid_messages(Dir, FileName) ->
-    case open_file(Dir, FileName, ?READ_MODE) of
-        {ok, Hdl} ->
-            Size = filelib:file_size(form_filename(Dir, FileName)),
-            Valid = rabbit_msg_file:scan(Hdl, Size),
-            %% if something really bad's happened, the close could fail,
-            %% but ignore
-            file_handle_cache:close(Hdl),
-            Valid;
-        {error, enoent} -> {ok, [], 0};
-        {error, Reason} -> {error, {unable_to_scan_file, FileName, Reason}}
-    end.
+filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
+
+sort_file_names(FileNames) ->
+    lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
+               FileNames).
 
 %%----------------------------------------------------------------------------
 %% message cache helper functions
 %%----------------------------------------------------------------------------
+
+maybe_insert_into_cache(DedupCacheEts, RefCount, Guid, Msg)
+  when RefCount > 1 ->
+    update_msg_cache(DedupCacheEts, Guid, Msg);
+maybe_insert_into_cache(_DedupCacheEts, _RefCount, _Guid, _Msg) ->
+    ok.
+
+update_msg_cache(CacheEts, Guid, Msg) ->
+    case ets:insert_new(CacheEts, {Guid, Msg, 1}) of
+        true  -> ok;
+        false -> safe_ets_update_counter_ok(
+                   CacheEts, Guid, {3, +1},
+                   fun () -> update_msg_cache(CacheEts, Guid, Msg) end)
+    end.
 
 remove_cache_entry(DedupCacheEts, Guid) ->
     true = ets:delete(DedupCacheEts, Guid),
@@ -1289,6 +1280,19 @@ is_sublist(SmallerL, BiggerL) ->
 
 is_disjoint(SmallerL, BiggerL) ->
     lists:all(fun (Item) -> not lists:member(Item, BiggerL) end, SmallerL).
+
+scan_file_for_valid_messages(Dir, FileName) ->
+    case open_file(Dir, FileName, ?READ_MODE) of
+        {ok, Hdl} ->
+            Size = filelib:file_size(form_filename(Dir, FileName)),
+            Valid = rabbit_msg_file:scan(Hdl, Size),
+            %% if something really bad's happened, the close could fail,
+            %% but ignore
+            file_handle_cache:close(Hdl),
+            Valid;
+        {error, enoent} -> {ok, [], 0};
+        {error, Reason} -> {error, {unable_to_scan_file, FileName, Reason}}
+    end.
 
 scan_file_for_valid_messages_guids(Dir, FileName) ->
     {ok, Messages, _FileSize} =
