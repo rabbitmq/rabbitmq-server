@@ -505,8 +505,8 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
                 RecClientRefs  = proplists:get_value(client_refs, Terms, []),
                 RecIndexModule = proplists:get_value(index_module, Terms),
                 case (ClientRefs =/= undefined andalso
-                      lists:sort(ClientRefs) =/= lists:sort(RecClientRefs)
-                      andalso IndexModule =/= RecIndexModule) of
+                      lists:sort(ClientRefs) =:= lists:sort(RecClientRefs)
+                      andalso IndexModule =:= RecIndexModule) of
                     true ->
                         case IndexModule:recover(Dir) of
                             {ok, IndexState1} ->
