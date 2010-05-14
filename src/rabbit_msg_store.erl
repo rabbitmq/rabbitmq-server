@@ -778,24 +778,22 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
     State1 = stop_sync_timer(State),
     case Syncs of
         [] -> State1;
-        _ ->
-            ok = file_handle_cache:sync(CurHdl),
-            lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
-            State1 #msstate { on_sync = [] }
+        _  -> ok = file_handle_cache:sync(CurHdl),
+              lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
+              State1 #msstate { on_sync = [] }
     end.
 
 read_message(Guid, From,
              State = #msstate { dedup_cache_ets = DedupCacheEts }) ->
     case index_lookup(Guid, State) of
-        not_found -> gen_server2:reply(From, not_found),
-                     State;
+        not_found ->
+            gen_server2:reply(From, not_found),
+            State;
         MsgLocation ->
             case fetch_and_increment_cache(DedupCacheEts, Guid) of
-                not_found ->
-                    read_message1(From, MsgLocation, State);
-                Msg ->
-                    gen_server2:reply(From, {ok, Msg}),
-                    State
+                not_found -> read_message1(From, MsgLocation, State);
+                Msg       -> gen_server2:reply(From, {ok, Msg}),
+                             State
             end
     end.
 
@@ -807,43 +805,40 @@ read_message1(From, #msg_location { guid = Guid, ref_count = RefCount,
                                  dedup_cache_ets     = DedupCacheEts,
                                  cur_file_cache_ets  = CurFileCacheEts }) ->
     case File =:= CurFile of
-        true ->
-            {Msg, State1} =
-                %% can return [] if msg in file existed on startup
-                case ets:lookup(CurFileCacheEts, Guid) of
-                    [] ->
-                        {ok, RawOffSet} =
-                            file_handle_cache:current_raw_offset(CurHdl),
-                        ok = case Offset >= RawOffSet of
-                                 true  -> file_handle_cache:flush(CurHdl);
-                                 false -> ok
-                             end,
-                        read_from_disk(MsgLoc, State, DedupCacheEts);
-                    [{Guid, Msg1, _CacheRefCount}] ->
-                        ok = maybe_insert_into_cache(DedupCacheEts, RefCount,
-                                                     Guid, Msg1),
-                        {Msg1, State}
-                end,
-            gen_server2:reply(From, {ok, Msg}),
-            State1;
-        false ->
-            [#file_summary { locked = Locked }] =
-                ets:lookup(FileSummaryEts, File),
-            case Locked of
-                true ->
-                    add_to_pending_gc_completion({read, Guid, From}, State);
-                false ->
-                    {Msg, State1} = read_from_disk(MsgLoc, State,
-                                                   DedupCacheEts),
-                    gen_server2:reply(From, {ok, Msg}),
-                    State1
-            end
+        true  -> {Msg, State1} =
+                     %% can return [] if msg in file existed on startup
+                     case ets:lookup(CurFileCacheEts, Guid) of
+                         [] ->
+                             {ok, RawOffSet} =
+                                 file_handle_cache:current_raw_offset(CurHdl),
+                             ok = case Offset >= RawOffSet of
+                                      true  -> file_handle_cache:flush(CurHdl);
+                                      false -> ok
+                                  end,
+                             read_from_disk(MsgLoc, State, DedupCacheEts);
+                         [{Guid, Msg1, _CacheRefCount}] ->
+                             ok = maybe_insert_into_cache(
+                                    DedupCacheEts, RefCount, Guid, Msg1),
+                             {Msg1, State}
+                     end,
+                 gen_server2:reply(From, {ok, Msg}),
+                 State1;
+        false -> [#file_summary { locked = Locked }] =
+                     ets:lookup(FileSummaryEts, File),
+                 case Locked of
+                     true  -> add_to_pending_gc_completion({read, Guid, From},
+                                                           State);
+                     false -> {Msg, State1} =
+                                  read_from_disk(MsgLoc, State, DedupCacheEts),
+                              gen_server2:reply(From, {ok, Msg}),
+                              State1
+                 end
     end.
 
 read_from_disk(#msg_location { guid = Guid, ref_count = RefCount,
                                file = File, offset = Offset,
-                               total_size = TotalSize }, State,
-               DedupCacheEts) ->
+                               total_size = TotalSize },
+               State, DedupCacheEts) ->
     {Hdl, State1} = get_read_handle(File, State),
     {ok, Offset} = file_handle_cache:position(Hdl, Offset),
     {ok, {Guid, Msg}} =
