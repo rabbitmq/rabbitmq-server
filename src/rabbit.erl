@@ -299,6 +299,18 @@ run_boot_step({StepName, Attributes}) ->
             ok
     end.
 
+module_attributes(Module) ->
+    case catch Module:module_info(attributes) of
+        {'EXIT', {undef, [{Module, module_info, _} | _]}} ->
+            io:format("WARNING: module ~p not found, so not scanned for boot steps.~n",
+                      [Module]),
+            [];
+        {'EXIT', Reason} ->
+            exit(Reason);
+        V ->
+            V
+    end.
+
 boot_steps() ->
     AllApps = [App || {App, _, _} <- application:loaded_applications()],
     Modules = lists:usort(
@@ -310,7 +322,7 @@ boot_steps() ->
         lists:flatmap(fun (Module) ->
                               [{StepName, Attributes}
                                || {rabbit_boot_step, [{StepName, Attributes}]}
-                                      <- Module:module_info(attributes)]
+                                      <- module_attributes(Module)]
                       end, Modules),
     sort_boot_steps(UnsortedSteps).
 
