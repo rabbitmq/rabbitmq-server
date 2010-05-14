@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -48,15 +48,15 @@
 -ifdef(use_specs).
 
 -spec(status/0 :: () -> [{'nodes' | 'running_nodes', [erlang_node()]}]).
--spec(dir/0 :: () -> string()).
+-spec(dir/0 :: () -> file_path()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
 -spec(cluster/1 :: ([erlang_node()]) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
--spec(is_clustered/0 :: () -> boolean()). 
--spec(empty_ram_only_tables/0 :: () -> 'ok'). 
+-spec(is_clustered/0 :: () -> boolean()).
+-spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 
 -endif.
@@ -173,7 +173,7 @@ replicated_table_names() ->
     ].
 
 dir() -> mnesia:system_info(directory).
-    
+
 ensure_mnesia_dir() ->
     MnesiaDir = dir() ++ "/",
     case filelib:ensure_dir(MnesiaDir) of
@@ -389,7 +389,7 @@ wait_for_replicated_tables() -> wait_for_tables(replicated_table_names()).
 
 wait_for_tables() -> wait_for_tables(table_names()).
 
-wait_for_tables(TableNames) -> 
+wait_for_tables(TableNames) ->
     case check_schema_integrity() of
         ok ->
             case mnesia:wait_for_tables(TableNames, 30000) of
@@ -424,9 +424,8 @@ reset(Force) ->
                                   cannot_delete_schema)
     end,
     ok = delete_cluster_nodes_config(),
-    %% remove persistet messages and any other garbage we find
-    lists:foreach(fun file:delete/1,
-                  filelib:wildcard(dir() ++ "/*")),
+    %% remove persisted messages and any other garbage we find
+    ok = rabbit_misc:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok.
 
 leave_cluster([], _) -> ok;

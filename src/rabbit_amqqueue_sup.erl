@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -31,18 +31,23 @@
 
 -module(rabbit_amqqueue_sup).
 
--behaviour(supervisor).
+-behaviour(supervisor2).
 
--export([start_link/0]).
+-export([start_link/0, start_child/1]).
 
 -export([init/1]).
+
+-include("rabbit.hrl").
 
 -define(SERVER, ?MODULE).
 
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
+
+start_child(Args) ->
+    supervisor2:start_child(?SERVER, Args).
 
 init([]) ->
-    {ok, {{simple_one_for_one, 10, 10},
+    {ok, {{simple_one_for_one_terminate, 10, 10},
           [{rabbit_amqqueue, {rabbit_amqqueue_process, start_link, []},
-            temporary, brutal_kill, worker, [rabbit_amqqueue_process]}]}}.
+            temporary, ?MAX_WAIT, worker, [rabbit_amqqueue_process]}]}}.

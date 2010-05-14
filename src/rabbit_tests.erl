@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -30,6 +30,8 @@
 %%
 
 -module(rabbit_tests).
+
+-compile([export_all]).
 
 -export([all_tests/0, test_parsing/0]).
 
@@ -49,6 +51,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     passed = test_priority_queue(),
+    passed = test_pg_local(),
     passed = test_unfold(),
     passed = test_parsing(),
     passed = test_topic_matching(),
@@ -58,7 +61,32 @@ all_tests() ->
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
-    passed = test_hooks(),
+    passed = maybe_run_cluster_dependent_tests(),
+    passed.
+
+
+maybe_run_cluster_dependent_tests() ->
+    SecondaryNode = rabbit_misc:makenode("hare"),
+
+    case net_adm:ping(SecondaryNode) of
+        pong -> passed = run_cluster_dependent_tests(SecondaryNode);
+        pang -> io:format("Skipping cluster dependent tests with node ~p~n",
+                          [SecondaryNode])
+    end,
+    passed.
+
+run_cluster_dependent_tests(SecondaryNode) ->
+    SecondaryNodeS = atom_to_list(SecondaryNode),
+
+    ok = control_action(stop_app, []),
+    ok = control_action(reset, []),
+    ok = control_action(cluster, [SecondaryNodeS]),
+    ok = control_action(start_app, []),
+
+    io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
+    passed = test_delegates_async(SecondaryNode),
+    passed = test_delegates_sync(SecondaryNode),
+
     passed.
 
 test_priority_queue() ->
@@ -105,7 +133,7 @@ test_priority_queue() ->
     {true, false, 2, [{1, bar}, {0, foo}], [bar, foo]} =
         test_priority_queue(Q6),
 
-    %% merge 1-element priority Q with 1-element no-priority Q 
+    %% merge 1-element priority Q with 1-element no-priority Q
     Q7 = priority_queue:join(priority_queue:in(foo, 1, Q),
                              priority_queue:in(bar, Q)),
     {true, false, 2, [{1, foo}, {0, bar}], [foo, bar]} =
@@ -182,6 +210,31 @@ test_simple_n_element_queue(N) ->
     ToListRes = [{0, X} || X <- Items],
     {true, false, N, ToListRes, Items} = test_priority_queue(Q),
     passed.
+
+test_pg_local() ->
+    [P, Q] = [spawn(fun () -> receive X -> X end end) || _ <- [x, x]],
+    check_pg_local(ok, [], []),
+    check_pg_local(pg_local:join(a, P), [P], []),
+    check_pg_local(pg_local:join(b, P), [P], [P]),
+    check_pg_local(pg_local:join(a, P), [P, P], [P]),
+    check_pg_local(pg_local:join(a, Q), [P, P, Q], [P]),
+    check_pg_local(pg_local:join(b, Q), [P, P, Q], [P, Q]),
+    check_pg_local(pg_local:join(b, Q), [P, P, Q], [P, Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [P, Q], [P, Q, Q]),
+    check_pg_local(pg_local:leave(b, P), [P, Q], [Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [Q], [Q, Q]),
+    check_pg_local(pg_local:leave(a, P), [Q], [Q, Q]),
+    [begin X ! done,
+           Ref = erlang:monitor(process, X),
+           receive {'DOWN', Ref, process, X, _Info} -> ok end
+     end  || X <- [P, Q]],
+    check_pg_local(ok, [], []),
+    passed.
+
+check_pg_local(ok, APids, BPids) ->
+    ok = pg_local:sync(),
+    [true, true] = [lists:sort(Pids) == lists:sort(pg_local:get_members(Key)) ||
+                       {Key, Pids} <- [{a, APids}, {b, BPids}]].
 
 test_unfold() ->
     {[], test} = rabbit_misc:unfold(fun (_V) -> false end, test),
@@ -290,7 +343,7 @@ test_field_values() ->
        4,"long",      "l", 1234567890:64,                       % + 14 = 145
        5,"short",     "s", 655:16,                              % +  9 = 154
        4,"bool",      "t", 1,                                   % +  7 = 161
-       6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188 
+       6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188
        4,"void",      "V",                                      % +  6 = 194
        5,"array",     "A", 23:32,                               % + 11 = 205
                            "I", 54321:32,                       % +  5 = 210
@@ -302,7 +355,8 @@ test_topic_match(P, R) ->
     test_topic_match(P, R, true).
 
 test_topic_match(P, R, Expected) ->
-    case rabbit_exchange:topic_matches(list_to_binary(P), list_to_binary(R)) of
+    case rabbit_exchange_type_topic:topic_matches(list_to_binary(P),
+                                                  list_to_binary(R)) of
         Expected ->
             passed;
         _ ->
@@ -423,7 +477,7 @@ test_log_management_during_startup() ->
                            {sasl_report_tty_h, []}]),
     ok = control_action(start_app, []),
 
-    %% start application with tty logging and 
+    %% start application with tty logging and
     %% proper handlers not installed
     ok = control_action(stop_app, []),
     ok = error_logger:tty(false),
@@ -455,7 +509,7 @@ test_log_management_during_startup() ->
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
-                        log_rotation_no_write_permission_dir_test}); 
+                        log_rotation_no_write_permission_dir_test});
             {error, {cannot_log_to_file, _, _}} -> ok
          end,
 
@@ -476,7 +530,7 @@ test_log_management_during_startup() ->
     ok = file:del_dir(TmpDir),
 
     %% start application with standard error_logger_file_h
-    %% handler not installed 
+    %% handler not installed
     ok = application:set_env(kernel, error_logger, {file, MainLog}),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
@@ -584,7 +638,7 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
-    
+
     %% convert a disk node into a ram node
     ok = control_action(cluster, ["invalid1@invalid",
                                   "invalid2@invalid"]),
@@ -596,8 +650,12 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
 
     %% NB: this will log an inconsistent_database error, which is harmless
+    %% Turning cover on / off is OK even if we're not in general using cover,
+    %% it just turns the engine on / off, doesn't actually log anything.
+    cover:stop([SecondaryNode]),
     true = disconnect_node(SecondaryNode),
     pong = net_adm:ping(SecondaryNode),
+    cover:start([SecondaryNode]),
 
     %% leaving a cluster as a ram node
     ok = control_action(reset, []),
@@ -689,45 +747,50 @@ test_user_management() ->
 
 test_server_status() ->
 
-    %% create a queue so we have something to list
-    Q = #amqqueue{} = rabbit_amqqueue:declare(
-                        rabbit_misc:r(<<"/">>, queue, <<"foo">>),
-                        false, false, []),
+    %% create a few things so there is some useful information to list
+    Writer = spawn(fun () -> receive shutdown -> ok end end),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
+    [Q, Q2] = [#amqqueue{} = rabbit_amqqueue:declare(
+                               rabbit_misc:r(<<"/">>, queue, Name),
+                               false, false, []) ||
+                  Name <- [<<"foo">>, <<"bar">>]],
+
+    ok = rabbit_amqqueue:claim_queue(Q, self()),
+    ok = rabbit_amqqueue:basic_consume(Q, true, self(), Ch, undefined,
+                                       <<"ctag">>, true, undefined),
 
     %% list queues
-    ok = info_action(
-           list_queues,
-           [name, durable, auto_delete, arguments, pid,
-            messages_ready, messages_unacknowledged, messages_uncommitted,
-            messages, acks_uncommitted, consumers, transactions, memory],
-           true),
+    ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
 
     %% list exchanges
-    ok = info_action(
-           list_exchanges,
-           [name, type, durable, auto_delete, arguments],
-           true),
+    ok = info_action(list_exchanges, rabbit_exchange:info_keys(), true),
 
     %% list bindings
     ok = control_action(list_bindings, []),
-
-    %% cleanup
-    {ok, _} = rabbit_amqqueue:delete(Q, false, false),
 
     %% list connections
     [#listener{host = H, port = P} | _] =
         [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
               N =:= node()],
 
-    {ok, C} = gen_tcp:connect(H, P, []),
+    {ok, _C} = gen_tcp:connect(H, P, []),
     timer:sleep(100),
-    ok = info_action(
-           list_connections,
-           [pid, address, port, peer_address, peer_port, state,
-            channels, user, vhost, timeout, frame_max,
-            recv_oct, recv_cnt, send_oct, send_cnt, send_pend],
-           false),
-    ok = gen_tcp:close(C),
+    ok = info_action(list_connections,
+                     rabbit_networking:connection_info_keys(), false),
+    %% close_connection
+    [ConnPid] = rabbit_networking:connections(),
+    ok = control_action(close_connection, [rabbit_misc:pid_to_string(ConnPid),
+                                           "go away"]),
+
+    %% list channels
+    ok = info_action(list_channels, rabbit_channel:info_keys(), false),
+
+    %% list consumers
+    ok = control_action(list_consumers, []),
+
+    %% cleanup
+    [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
+    ok = rabbit_channel:shutdown(Ch),
 
     passed.
 
@@ -760,11 +823,11 @@ test_hooks() ->
     {[arg1, arg2], 1, 3} = get(arg_hook_test_fired),
 
     %% Invoking Pids
-    Remote = fun() -> 
-        receive 
-            {rabbitmq_hook,[remote_test,test,[],Target]} -> 
+    Remote = fun() ->
+        receive
+            {rabbitmq_hook,[remote_test,test,[],Target]} ->
                 Target ! invoked
-        end 
+        end
     end,
     P = spawn(Remote),
     rabbit_hooks:subscribe(remote_test, test, {rabbit_hooks, notify_remote, [P, [self()]]}),
@@ -775,6 +838,88 @@ test_hooks() ->
        io:format("Remote hook not invoked"),
        throw(timeout)
     end,
+    passed.
+
+test_delegates_async(SecondaryNode) ->
+    Self = self(),
+    Sender = fun(Pid) -> Pid ! {invoked, Self} end,
+
+    Responder = make_responder(fun({invoked, Pid}) -> Pid ! response end),
+
+    ok = delegate:invoke_no_result(spawn(Responder), Sender),
+    ok = delegate:invoke_no_result(spawn(SecondaryNode, Responder), Sender),
+    await_response(2),
+
+    LocalPids = spawn_responders(node(), Responder, 10),
+    RemotePids = spawn_responders(SecondaryNode, Responder, 10),
+    ok = delegate:invoke_no_result(LocalPids ++ RemotePids, Sender),
+    await_response(20),
+
+    passed.
+
+make_responder(FMsg) ->
+    fun() ->
+        receive Msg -> FMsg(Msg)
+        after 1000 -> throw(timeout)
+        end
+    end.
+
+spawn_responders(Node, Responder, Count) ->
+    [spawn(Node, Responder) || _ <- lists:seq(1, Count)].
+
+await_response(0) ->
+    ok;
+await_response(Count) ->
+    receive
+        response -> ok,
+        await_response(Count - 1)
+    after 1000 ->
+        io:format("Async reply not received~n"),
+        throw(timeout)
+    end.
+
+must_exit(Fun) ->
+    try
+        Fun(),
+        throw(exit_not_thrown)
+    catch
+        exit:_ -> ok
+    end.
+
+test_delegates_sync(SecondaryNode) ->
+    Sender = fun(Pid) -> gen_server:call(Pid, invoked) end,
+    BadSender = fun(_Pid) -> exit(exception) end,
+
+    Responder = make_responder(fun({'$gen_call', From, invoked}) ->
+                                   gen_server:reply(From, response)
+                               end),
+
+    response = delegate:invoke(spawn(Responder), Sender),
+    response = delegate:invoke(spawn(SecondaryNode, Responder), Sender),
+
+    must_exit(fun() -> delegate:invoke(spawn(Responder), BadSender) end),
+    must_exit(fun() ->
+        delegate:invoke(spawn(SecondaryNode, Responder), BadSender) end),
+
+    LocalGoodPids = spawn_responders(node(), Responder, 2),
+    RemoteGoodPids = spawn_responders(SecondaryNode, Responder, 2),
+    LocalBadPids = spawn_responders(node(), Responder, 2),
+    RemoteBadPids = spawn_responders(SecondaryNode, Responder, 2),
+
+    {GoodRes, []} = delegate:invoke(LocalGoodPids ++ RemoteGoodPids, Sender),
+    true = lists:all(fun ({_, response}) -> true end, GoodRes),
+    GoodResPids = [Pid || {Pid, _} <- GoodRes],
+
+    Good = ordsets:from_list(LocalGoodPids ++ RemoteGoodPids),
+    Good = ordsets:from_list(GoodResPids),
+
+    {[], BadRes} = delegate:invoke(LocalBadPids ++ RemoteBadPids, BadSender),
+    true = lists:all(fun ({_, {exit, exception, _}}) -> true end, BadRes),
+    BadResPids = [Pid || {Pid, _} <- BadRes],
+
+    Bad = ordsets:from_list(LocalBadPids ++ RemoteBadPids),
+    Bad = ordsets:from_list(BadResPids),
+
     passed.
 
 %---------------------------------------------------------------------
@@ -790,7 +935,7 @@ control_action(Command, Node, Args) ->
         ok ->
             io:format("done.~n"),
             ok;
-        Other -> 
+        Other ->
             io:format("failed.~n"),
             Other
     end.

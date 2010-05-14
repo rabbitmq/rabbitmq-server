@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -38,9 +38,9 @@
 
 -ifdef(use_specs).
 
--spec(create_basic_plt/1 :: (string()) -> 'ok').
--spec(add_to_plt/2 :: (string(), string()) -> 'ok').
--spec(dialyze_files/2 :: (string(), string()) -> 'ok').
+-spec(create_basic_plt/1 :: (file_path()) -> 'ok').
+-spec(add_to_plt/2 :: (file_path(), string()) -> 'ok').
+-spec(dialyze_files/2 :: (file_path(), string()) -> 'ok').
 -spec(halt_with_code/1 :: (atom()) -> no_return()).
 
 -endif.

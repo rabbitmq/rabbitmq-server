@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -31,11 +31,13 @@
 
 -module(rabbit_networking).
 
--export([boot/0, start/0, start_tcp_listener/2, start_ssl_listener/3, 
-        stop_tcp_listener/2, on_node_down/1, active_listeners/0, 
-        node_listeners/1, connections/0, connection_info/1, 
-        connection_info/2, connection_info_all/0, 
-        connection_info_all/1]).
+-export([boot/0, start/0, start_tcp_listener/2, start_ssl_listener/3,
+         stop_tcp_listener/2, on_node_down/1, active_listeners/0,
+         node_listeners/1, connections/0, connection_info_keys/0,
+         connection_info/1, connection_info/2,
+         connection_info_all/0, connection_info_all/1,
+         close_connection/2]).
+
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/3]).
 
@@ -46,11 +48,12 @@
 -include_lib("kernel/include/inet.hrl").
 
 -define(RABBIT_TCP_OPTS, [
-        binary, 
-        {packet, raw}, % no packaging 
-        {reuseaddr, true}, % allow rebind without waiting 
-        %% {nodelay, true}, % TCP_NODELAY - disable Nagle's alg.  
-        %% {delay_send, true}, 
+        binary,
+        {packet, raw}, % no packaging
+        {reuseaddr, true}, % allow rebind without waiting
+        {backlog, 128}, % use the maximum listen(2) backlog value
+        %% {nodelay, true}, % TCP_NODELAY - disable Nagle's alg.
+        %% {delay_send, true},
         {exit_on_close, false}
     ]).
 
@@ -70,10 +73,12 @@
 -spec(active_listeners/0 :: () -> [listener()]).
 -spec(node_listeners/1 :: (erlang_node()) -> [listener()]).
 -spec(connections/0 :: () -> [connection()]).
+-spec(connection_info_keys/0 :: () -> [info_key()]).
 -spec(connection_info/1 :: (connection()) -> [info()]).
 -spec(connection_info/2 :: (connection(), [info_key()]) -> [info()]).
 -spec(connection_info_all/0 :: () -> [[info()]]).
 -spec(connection_info_all/1 :: ([info_key()]) -> [[info()]]).
+-spec(close_connection/2 :: (pid(), string()) -> 'ok').
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(check_tcp_listener_address/3 :: (atom(), host(), ip_port()) ->
              {ip_address(), atom()}).
@@ -113,15 +118,25 @@ start() ->
                 transient, infinity, supervisor, [tcp_client_sup]}),
     ok.
 
+getaddr(Host) ->
+    %% inet_parse:address takes care of ip string, like "0.0.0.0"
+    %% inet:getaddr returns immediately for ip tuple {0,0,0,0},
+    %%  and runs 'inet_gethost' port process for dns lookups.
+    %% On Windows inet:getaddr runs dns resolver for ip string, which may fail.
+    case inet_parse:address(Host) of
+        {ok, IPAddress1} -> IPAddress1;
+        {error, _} ->
+            case inet:getaddr(Host, inet) of
+                {ok, IPAddress2} -> IPAddress2;
+                {error, Reason} ->
+                    error_logger:error_msg("invalid host ~p - ~p~n",
+                                           [Host, Reason]),
+                    throw({error, {invalid_host, Host, Reason}})
+            end
+    end.
+
 check_tcp_listener_address(NamePrefix, Host, Port) ->
-    IPAddress =
-        case inet:getaddr(Host, inet) of
-            {ok, IPAddress1} -> IPAddress1;
-            {error, Reason} ->
-                error_logger:error_msg("invalid host ~p - ~p~n",
-                                       [Host, Reason]),
-                throw({error, {invalid_host, Host, Reason}})
-        end,
+    IPAddress = getaddr(Host),
     if is_integer(Port) andalso (Port >= 0) andalso (Port =< 65535) -> ok;
        true -> error_logger:error_msg("invalid port ~p - not 0..65535~n",
                                       [Port]),
@@ -153,7 +168,7 @@ start_listener(Host, Port, Label, OnConnect) ->
     ok.
 
 stop_tcp_listener(Host, Port) ->
-    {ok, IPAddress} = inet:getaddr(Host, inet),
+    IPAddress = getaddr(Host),
     Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
     ok = supervisor:terminate_child(rabbit_sup, Name),
     ok = supervisor:delete_child(rabbit_sup, Name),
@@ -206,7 +221,7 @@ start_ssl_client(SslOpts, Sock) ->
                       {error, {ssl_upgrade_error, Reason}};
                   {'EXIT', Reason} ->
                       {error, {ssl_upgrade_failure, Reason}}
-              
+
               end
       end).
 
@@ -214,11 +229,20 @@ connections() ->
     [Pid || {_, Pid, _, _} <- supervisor:which_children(
                                 rabbit_tcp_client_sup)].
 
+connection_info_keys() -> rabbit_reader:info_keys().
+
 connection_info(Pid) -> rabbit_reader:info(Pid).
 connection_info(Pid, Items) -> rabbit_reader:info(Pid, Items).
 
 connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
+
+close_connection(Pid, Explanation) ->
+    case lists:any(fun ({_, ChildPid, _, _}) -> ChildPid =:= Pid end,
+                   supervisor:which_children(rabbit_tcp_client_sup)) of
+        true  -> rabbit_reader:shutdown(Pid, Explanation);
+        false -> throw({error, {not_a_connection_pid, Pid}})
+    end.
 
 %%--------------------------------------------------------------------
 

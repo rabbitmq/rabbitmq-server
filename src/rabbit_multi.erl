@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -42,6 +42,7 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
+-spec(usage/0 :: () -> no_return()).
 
 -endif.
 
@@ -51,7 +52,7 @@ start() ->
     RpcTimeout =
         case init:get_argument(maxwait) of
             {ok,[[N1]]} -> 1000 * list_to_integer(N1);
-            _ -> 30000
+            _           -> ?MAX_WAIT
         end,
     case init:get_plain_arguments() of
         [] ->
@@ -86,16 +87,8 @@ stop() ->
     ok.
 
 usage() ->
-    io:format("Usage: rabbitmq-multi <command>
-
-Available commands:
-
-  start_all <NodeCount> - start a local cluster of RabbitMQ nodes.
-  status                - print status of all running nodes
-  stop_all              - stops all local RabbitMQ nodes.
-  rotate_logs [Suffix]  - rotate logs for all local and running RabbitMQ nodes.
-"),
-    halt(3).
+    io:format("~s", [rabbit_multi_usage:usage()]),
+    halt(1).
 
 action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),
@@ -187,7 +180,7 @@ start_node(Node, RpcTimeout) ->
     io:format("Starting node ~s...~n", [Node]),
     case rpc:call(Node, os, getpid, []) of
         {badrpc, _} ->
-            Port = run_cmd(script_filename()),
+            Port = run_rabbitmq_server(),
             Started = wait_for_rabbit_to_start(Node, RpcTimeout, Port),
             Pid = case rpc:call(Node, os, getpid, []) of
                       {badrpc, _} -> throw(cannot_get_pid);
@@ -217,8 +210,21 @@ wait_for_rabbit_to_start(Node, RpcTimeout, Port) ->
                  end
     end.
 
-run_cmd(FullPath) ->
-    erlang:open_port({spawn, FullPath}, [nouse_stdio]).
+run_rabbitmq_server() ->
+    with_os([{unix, fun run_rabbitmq_server_unix/0},
+             {win32, fun run_rabbitmq_server_win32/0}]).
+
+run_rabbitmq_server_unix() ->
+    CmdLine = getenv("RABBITMQ_SCRIPT_HOME") ++ "/rabbitmq-server -noinput",
+    erlang:open_port({spawn, CmdLine}, [nouse_stdio]).
+
+run_rabbitmq_server_win32() ->
+    Cmd = filename:nativename(os:find_executable("cmd")),
+    CmdLine = "\"" ++ getenv("RABBITMQ_SCRIPT_HOME")
+                                         ++ "\\rabbitmq-server.bat\" -noinput",
+    erlang:open_port({spawn_executable, Cmd},
+                     [{arg0, Cmd}, {args, ["/q", "/s", "/c", CmdLine]},
+                      nouse_stdio, hide]).
 
 is_rabbit_running(Node, RpcTimeout) ->
     case rpc:call(Node, rabbit, status, [], RpcTimeout) of
@@ -235,13 +241,6 @@ with_os(Handlers) ->
         undefined -> throw({unsupported_os, OsFamily});
         Handler   -> Handler()
     end.
-
-script_filename() ->
-    ScriptHome = getenv("RABBITMQ_SCRIPT_HOME"),
-    ScriptName = with_os(
-                   [{unix , fun () -> "rabbitmq-server" end},
-                    {win32, fun () -> "rabbitmq-server.bat" end}]),
-    ScriptHome ++ "/" ++ ScriptName ++ " -noinput".
 
 pids_file() -> getenv("RABBITMQ_PIDS_FILE").
 

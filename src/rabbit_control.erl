@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -46,6 +46,7 @@
 -spec(stop/0 :: () -> 'ok').
 -spec(action/4 :: (atom(), erlang_node(), [string()],
                    fun ((string(), [any()]) -> 'ok')) -> 'ok').
+-spec(usage/0 :: () -> no_return()).
 
 -endif.
 
@@ -54,7 +55,7 @@
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     FullCommand = init:get_plain_arguments(),
-    #params{quiet = Quiet, node = Node, command = Command, args = Args} = 
+    #params{quiet = Quiet, node = Node, command = Command, args = Args} =
         parse_args(FullCommand, #params{quiet = false,
                                         node = rabbit_misc:makenode(NodeStr)}),
     Inform = case Quiet of
@@ -79,6 +80,9 @@ start() ->
                        " ", [atom_to_list(Command) | Args]))]),
             usage();
         {error, Reason} ->
+            error("~p", [Reason]),
+            halt(2);
+        {badrpc, {'EXIT', Reason}} ->
             error("~p", [Reason]),
             halt(2);
         {badrpc, Reason} ->
@@ -127,68 +131,7 @@ stop() ->
     ok.
 
 usage() ->
-    io:format("Usage: rabbitmqctl [-q] [-n <node>] <command> [<arg> ...]
-
-Available commands:
-
-  stop      - stops the RabbitMQ application and halts the node
-  stop_app  - stops the RabbitMQ application, leaving the node running
-  start_app - starts the RabbitMQ application on an already-running node
-  reset     - resets node to default configuration, deleting all data
-  force_reset
-  cluster <ClusterNode> ...
-  status
-  rotate_logs [Suffix]
-
-  add_user        <UserName> <Password>
-  delete_user     <UserName>
-  change_password <UserName> <NewPassword>
-  list_users
-
-  add_vhost    <VHostPath>
-  delete_vhost <VHostPath>
-  list_vhosts
-
-  set_permissions   [-p <VHostPath>] <UserName> <Regexp> <Regexp> <Regexp>
-  clear_permissions [-p <VHostPath>] <UserName>
-  list_permissions  [-p <VHostPath>]
-  list_user_permissions <UserName>
-
-  list_queues    [-p <VHostPath>] [<QueueInfoItem> ...]
-  list_exchanges [-p <VHostPath>] [<ExchangeInfoItem> ...]
-  list_bindings  [-p <VHostPath>] 
-  list_connections [<ConnectionInfoItem> ...]
-
-Quiet output mode is selected with the \"-q\" flag. Informational messages
-are suppressed when quiet mode is in effect.
-
-<node> should be the name of the master node of the RabbitMQ
-cluster. It defaults to the node named \"rabbit\" on the local
-host. On a host named \"server.example.com\", the master node will
-usually be rabbit@server (unless RABBITMQ_NODENAME has been set to
-some non-default value at broker startup time). The output of hostname
--s is usually the correct suffix to use after the \"@\" sign.
-
-The list_queues, list_exchanges and list_bindings commands accept an optional
-virtual host parameter for which to display results. The default value is \"/\".
-
-<QueueInfoItem> must be a member of the list [name, durable, auto_delete, 
-arguments, pid, messages_ready, messages_unacknowledged, messages_uncommitted, 
-messages, acks_uncommitted, consumers, transactions, memory]. The default is 
- to display name and (number of) messages.
-
-<ExchangeInfoItem> must be a member of the list [name, type, durable, 
-auto_delete, arguments]. The default is to display name and type.
-
-The output format for \"list_bindings\" is a list of rows containing 
-exchange name, queue name, routing key and arguments, in that order.
-
-<ConnectionInfoItem> must be a member of the list [pid, address, port, 
-peer_address, peer_port, state, channels, user, vhost, timeout, frame_max,
-client_properties, recv_oct, recv_cnt, send_oct, send_cnt, send_pend].
-The default is to display user, peer_address, peer_port and state.
-
-"),
+    io:format("~s", [rabbit_ctl_usage:usage()]),
     halt(1).
 
 action(stop, Node, [], Inform) ->
@@ -231,6 +174,11 @@ action(rotate_logs, Node, [], Inform) ->
 action(rotate_logs, Node, Args = [Suffix], Inform) ->
     Inform("Rotating logs to files with suffix ~p", [Suffix]),
     call(Node, {rabbit, rotate_logs, Args});
+
+action(close_connection, Node, [PidStr, Explanation], Inform) ->
+    Inform("Closing connection ~s", [PidStr]),
+    rpc_call(Node, rabbit_networking, close_connection,
+             [rabbit_misc:string_to_pid(PidStr), Explanation]);
 
 action(add_user, Node, Args = [Username, _Password], Inform) ->
     Inform("Creating user ~p", [Username]),
@@ -287,9 +235,8 @@ action(list_bindings, Node, Args, Inform) ->
     InfoKeys = [exchange_name, queue_name, routing_key, args],
     display_info_list(
       [lists:zip(InfoKeys, tuple_to_list(X)) ||
-          X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])], 
-      InfoKeys),
-    ok;
+          X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])],
+      InfoKeys);
 
 action(list_connections, Node, Args, Inform) ->
     Inform("Listing connections", []),
@@ -297,6 +244,22 @@ action(list_connections, Node, Args, Inform) ->
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
+
+action(list_channels, Node, Args, Inform) ->
+    Inform("Listing channels", []),
+    ArgAtoms = default_if_empty(Args, [pid, user, transactional, consumer_count,
+                                       messages_unacknowledged]),
+    display_info_list(rpc_call(Node, rabbit_channel, info_all, [ArgAtoms]),
+                      ArgAtoms);
+
+action(list_consumers, Node, Args, Inform) ->
+    Inform("Listing consumers", []),
+    {VHostArg, _} = parse_vhost_flag_bin(Args),
+    InfoKeys = [queue_name, channel_pid, consumer_tag, ack_required],
+    display_info_list(
+      [lists:zip(InfoKeys, tuple_to_list(X)) ||
+          X <- rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg])],
+      InfoKeys);
 
 action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
@@ -317,9 +280,9 @@ action(list_permissions, Node, VHost, [], Inform) ->
                              [VHost]})).
 
 parse_vhost_flag(Args) when is_list(Args) ->
-    case Args of 
+    case Args of
         ["-p", VHost | RemainingArgs] ->
-            {VHost, RemainingArgs};  
+            {VHost, RemainingArgs};
         RemainingArgs ->
             {"/", RemainingArgs}
     end.
@@ -329,9 +292,9 @@ parse_vhost_flag_bin(Args) ->
     {list_to_binary(VHost), RemainingArgs}.
 
 default_if_empty(List, Default) when is_list(List) ->
-    if List == [] -> 
-        Default; 
-       true -> 
+    if List == [] ->
+        Default;
+       true ->
         [list_to_atom(X) || X <- List]
     end.
 
@@ -355,8 +318,8 @@ format_info_item(Key, Items) ->
                    is_tuple(Value) ->
             inet_parse:ntoa(Value);
         Value when is_pid(Value) ->
-            pid_to_string(Value);
-        Value when is_binary(Value) -> 
+            rabbit_misc:pid_to_string(Value);
+        Value when is_binary(Value) ->
             escape(Value);
         Value when is_atom(Value) ->
             escape(atom_to_list(Value));
@@ -413,10 +376,3 @@ prettify_typed_amqp_value(Type, Value) ->
         array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
         _       -> Value
     end.
-
-%% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and 8.7)
-pid_to_string(Pid) ->
-    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,_Cre:8>>
-        = term_to_binary(Pid),
-    Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
-    lists:flatten(io_lib:format("<~w.~B.~B>", [Node, Id, Ser])).

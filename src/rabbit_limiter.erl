@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -31,12 +31,13 @@
 
 -module(rabbit_limiter).
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
--export([start_link/1, shutdown/1]).
+-export([start_link/2, shutdown/1]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
+-export([get_limit/1, block/1, unblock/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -44,13 +45,16 @@
 
 -type(maybe_pid() :: pid() | 'undefined').
 
--spec(start_link/1 :: (pid()) -> pid()).
+-spec(start_link/2 :: (pid(), non_neg_integer()) -> pid()).
 -spec(shutdown/1 :: (maybe_pid()) -> 'ok').
--spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
+-spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok' | 'stopped').
 -spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
 -spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
 -spec(unregister/2 :: (maybe_pid(), pid()) -> 'ok').
+-spec(get_limit/1 :: (maybe_pid()) -> non_neg_integer()).
+-spec(block/1 :: (maybe_pid()) -> 'ok').
+-spec(unblock/1 :: (maybe_pid()) -> 'ok' | 'stopped').
 
 -endif.
 
@@ -58,6 +62,7 @@
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
+              blocked = false,
               queues = dict:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
 %% 'Notify' is a boolean that indicates whether a queue should be
@@ -68,20 +73,21 @@
 %% API
 %%----------------------------------------------------------------------------
 
-start_link(ChPid) ->
-    {ok, Pid} = gen_server:start_link(?MODULE, [ChPid], []),
+start_link(ChPid, UnackedMsgCount) ->
+    {ok, Pid} = gen_server2:start_link(?MODULE, [ChPid, UnackedMsgCount], []),
     Pid.
 
 shutdown(undefined) ->
     ok;
 shutdown(LimiterPid) ->
-    unlink(LimiterPid),
+    true = unlink(LimiterPid),
     gen_server2:cast(LimiterPid, shutdown).
 
 limit(undefined, 0) ->
     ok;
 limit(LimiterPid, PrefetchCount) ->
-    gen_server2:cast(LimiterPid, {limit, PrefetchCount}).
+    unlink_on_stopped(LimiterPid,
+                      gen_server2:call(LimiterPid, {limit, PrefetchCount})).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
@@ -104,33 +110,70 @@ register(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {register, QPid}).
 unregister(undefined, _QPid) -> ok;
 unregister(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {unregister, QPid}).
 
+get_limit(undefined) ->
+    0;
+get_limit(Pid) ->
+    rabbit_misc:with_exit_handler(
+      fun () -> 0 end,
+      fun () -> gen_server2:pcall(Pid, 9, get_limit, infinity) end).
+
+block(undefined) ->
+    ok;
+block(LimiterPid) ->
+    gen_server2:call(LimiterPid, block, infinity).
+
+unblock(undefined) ->
+    ok;
+unblock(LimiterPid) ->
+    unlink_on_stopped(LimiterPid,
+                      gen_server2:call(LimiterPid, unblock, infinity)).
+
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([ChPid]) ->
-    {ok, #lim{ch_pid = ChPid} }.
+init([ChPid, UnackedMsgCount]) ->
+    {ok, #lim{ch_pid = ChPid, volume = UnackedMsgCount}}.
 
+handle_call({can_send, _QPid, _AckRequired}, _From,
+            State = #lim{blocked = true}) ->
+    {reply, false, State};
 handle_call({can_send, QPid, AckRequired}, _From,
             State = #lim{volume = Volume}) ->
     case limit_reached(State) of
         true  -> {reply, false, limit_queue(QPid, State)};
-        false -> {reply, true, State#lim{volume = if AckRequired -> Volume + 1;
-                                                     true        -> Volume
-                                                  end}}
+        false -> {reply, true,  State#lim{volume = if AckRequired -> Volume + 1;
+                                                      true        -> Volume
+                                                   end}}
+    end;
+
+handle_call(get_limit, _From, State = #lim{prefetch_count = PrefetchCount}) ->
+    {reply, PrefetchCount, State};
+
+handle_call({limit, PrefetchCount}, _From, State) ->
+    case maybe_notify(State, State#lim{prefetch_count = PrefetchCount}) of
+        {cont, State1} -> {reply, ok, State1};
+        {stop, State1} -> {stop, normal, stopped, State1}
+    end;
+
+handle_call(block, _From, State) ->
+    {reply, ok, State#lim{blocked = true}};
+
+handle_call(unblock, _From, State) ->
+    case maybe_notify(State, State#lim{blocked = false}) of
+        {cont, State1} -> {reply, ok, State1};
+        {stop, State1} -> {stop, normal, stopped, State1}
     end.
 
 handle_cast(shutdown, State) ->
     {stop, normal, State};
 
-handle_cast({limit, PrefetchCount}, State) ->
-    {noreply, maybe_notify(State, State#lim{prefetch_count = PrefetchCount})};
-
 handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
                    true        -> Volume - Count
                 end,
-    {noreply, maybe_notify(State, State#lim{volume = NewVolume})};
+    {cont, State1} = maybe_notify(State, State#lim{volume = NewVolume}),
+    {noreply, State1};
 
 handle_cast({register, QPid}, State) ->
     {noreply, remember_queue(QPid, State)};
@@ -152,13 +195,20 @@ code_change(_, State, _) ->
 %%----------------------------------------------------------------------------
 
 maybe_notify(OldState, NewState) ->
-    case limit_reached(OldState) andalso not(limit_reached(NewState)) of
-        true  -> notify_queues(NewState);
-        false -> NewState
+    case (limit_reached(OldState) orelse is_blocked(OldState)) andalso
+        not (limit_reached(NewState) orelse is_blocked(NewState)) of
+        true  -> NewState1 = notify_queues(NewState),
+                 {case NewState1#lim.prefetch_count of
+                      0 -> stop;
+                      _ -> cont
+                  end, NewState1};
+        false -> {cont, NewState}
     end.
 
 limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
     Limit =/= 0 andalso Volume >= Limit.
+
+is_blocked(#lim{blocked = Blocked}) -> Blocked.
 
 remember_queue(QPid, State = #lim{queues = Queues}) ->
     case dict:is_key(QPid, Queues) of
@@ -197,3 +247,9 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
             ok
     end,
     State#lim{queues = NewQueues}.
+
+unlink_on_stopped(LimiterPid, stopped) ->
+    ok = rabbit_misc:unlink_and_capture_exit(LimiterPid),
+    stopped;
+unlink_on_stopped(_LimiterPid, Result) ->
+    Result.

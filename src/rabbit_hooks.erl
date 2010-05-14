@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -61,8 +61,8 @@ unsubscribe(Hook, HandlerName) ->
 trigger(Hook, Args) ->
     Hooks = ets:lookup(?TableName, Hook),
     [case catch apply(M, F, [Hook, Name, Args | A]) of
-        {'EXIT', Reason} -> 
-            rabbit_log:warning("Failed to execute handler ~p for hook ~p: ~p", 
+        {'EXIT', Reason} ->
+            rabbit_log:warning("Failed to execute handler ~p for hook ~p: ~p",
                                [Name, Hook, Reason]);
         _ -> ok
      end || {_, Name, {M, F, A}} <- Hooks],

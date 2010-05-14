@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -59,7 +59,7 @@
       (pid(), pid(), pid(), amqp_method(), content()) -> 'ok').
 -spec(internal_send_command/3 ::
       (socket(), channel_number(), amqp_method()) -> 'ok').
--spec(internal_send_command/5 :: 
+-spec(internal_send_command/5 ::
       (socket(), channel_number(), amqp_method(),
        content(), non_neg_integer()) -> 'ok').
 

@@ -19,11 +19,11 @@
 ##   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 ##   Technologies LLC, and Rabbit Technologies Ltd.
 ##
-##   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+##   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 ##   Ltd. Portions created by Cohesive Financial Technologies LLC are
-##   Copyright (C) 2007-2009 Cohesive Financial Technologies
+##   Copyright (C) 2007-2010 Cohesive Financial Technologies
 ##   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-##   (C) 2007-2009 Rabbit Technologies Ltd.
+##   (C) 2007-2010 Rabbit Technologies Ltd.
 ##
 ##   All Rights Reserved.
 ##
@@ -45,7 +45,7 @@ cd /var/lib/rabbitmq
 SCRIPT=`basename $0`
 
 if [ `id -u` = 0 ] ; then
-    su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
+    @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
 elif [ `id -u` = `id -u rabbitmq` ] ; then
     /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
 else

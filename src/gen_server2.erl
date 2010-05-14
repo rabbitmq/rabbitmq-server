@@ -36,7 +36,7 @@
 %% InitialTimeout supplied from init). After this timeout has
 %% occurred, hibernation will occur as normal. Upon awaking, a new
 %% current timeout value will be calculated.
-%% 
+%%
 %% The purpose is that the gen_server2 takes care of adjusting the
 %% current timeout value such that the process will increase the
 %% timeout value repeatedly if it is unable to sleep for the
@@ -57,7 +57,7 @@
 %% being used. Instead it'll wait for the current timeout as described
 %% above.
 
-%% All modifications are (C) 2009 LShift Ltd.
+%% All modifications are (C) 2009-2010 LShift Ltd.
 
 %% ``The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -443,7 +443,7 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
 name({local,Name}) -> Name;
 name({global,Name}) -> Name;
 %% name(Pid) when is_pid(Pid) -> Pid;
-%% when R11 goes away, drop the line beneath and uncomment the line above
+%% when R12 goes away, drop the line beneath and uncomment the line above
 name(Name) -> Name.
 
 unregister_name({local,Name}) ->
@@ -607,9 +607,9 @@ process_msg(Parent, Name, State, Mod, Time, TimeoutState, Queue,
             Debug, Msg) ->
     case Msg of
 	{system, From, Req} ->
-	    sys:handle_system_msg
-              (Req, From, Parent, ?MODULE, Debug,
-               [Name, State, Mod, Time, TimeoutState, Queue]);
+	    sys:handle_system_msg(
+              Req, From, Parent, ?MODULE, Debug,
+              [Name, State, Mod, Time, TimeoutState, Queue]);
         %% gen_server puts Hib on the end as the 7th arg, but that
         %% version of the function seems not to be documented so
         %% leaving out for now.

@@ -1,0 +1,54 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+-mode(compile).
+
+main([IncludeDir, ErlDir, EbinDir, TargetFile]) ->
+    ErlDirContents = filelib:wildcard("*.erl", ErlDir),
+    ErlFiles = [filename:join(ErlDir, FileName) || FileName <- ErlDirContents],
+    Modules = sets:from_list(
+                [list_to_atom(filename:basename(FileName, ".erl")) ||
+                    FileName <- ErlDirContents]),
+    Headers = sets:from_list(
+                [filename:join(IncludeDir, FileName) ||
+                    FileName <- filelib:wildcard("*.hrl", IncludeDir)]),
+    Deps = lists:foldl(
+             fun (Path, Deps1) ->
+                     dict:store(Path, detect_deps(IncludeDir, EbinDir,
+                                                  Modules, Headers, Path),
+                                Deps1)
+             end, dict:new(), ErlFiles),
+    {ok, Hdl} = file:open(TargetFile, [write, delayed_write]),
+    dict:fold(
+      fun (_Path, [], ok) ->
+              ok;
+          (Path, Dep, ok) ->
+              Module = filename:basename(Path, ".erl"),
+              ok = file:write(Hdl, [EbinDir, "/", Module, ".beam: ",
+                                   Path]),
+              ok = sets:fold(fun (E, ok) -> file:write(Hdl, [" ", E]) end,
+                             ok, Dep),
+              file:write(Hdl, ["\n"])
+      end, ok, Deps),
+    ok = file:write(Hdl, [TargetFile, ": ", escript:script_name(), "\n"]),
+    ok = file:sync(Hdl),
+    ok = file:close(Hdl).
+
+detect_deps(IncludeDir, EbinDir, Modules, Headers, Path) ->
+    {ok, Forms} = epp:parse_file(Path, [IncludeDir], [{use_specs, true}]),
+    lists:foldl(
+      fun ({attribute, _LineNumber, Attribute, Behaviour}, Deps)
+          when Attribute =:= behaviour orelse Attribute =:= behavior ->
+              case sets:is_element(Behaviour, Modules) of
+                  true  -> sets:add_element(
+                             [EbinDir, "/", atom_to_list(Behaviour), ".beam"],
+                             Deps);
+                  false -> Deps
+              end;
+          ({attribute, _LineNumber, file, {FileName, _LineNumber1}}, Deps) ->
+              case sets:is_element(FileName, Headers) of
+                  true  -> sets:add_element(FileName, Deps);
+                  false -> Deps
+              end;
+          (_Form, Deps) ->
+              Deps
+      end, sets:new(), Forms).

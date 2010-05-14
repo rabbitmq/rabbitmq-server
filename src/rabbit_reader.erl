@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -33,11 +33,13 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/0, info/1, info/2]).
+-export([start_link/0, info_keys/0, info/1, info/2, shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
 -export([init/1, mainloop/3]).
+
+-export([server_properties/0]).
 
 -export([analyze_frame/2]).
 
@@ -129,8 +131,11 @@
 
 -ifdef(use_specs).
 
+-spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (pid()) -> [info()]).
 -spec(info/2 :: (pid(), [info_key()]) -> [info()]).
+-spec(shutdown/2 :: (pid(), string()) -> 'ok').
+-spec(server_properties/0 :: () -> amqp_table()).
 
 -endif.
 
@@ -138,6 +143,9 @@
 
 start_link() ->
     {ok, proc_lib:spawn_link(?MODULE, init, [self()])}.
+
+shutdown(Pid, Explanation) ->
+    gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
 init(Parent) ->
     Deb = sys:debug_options([]),
@@ -154,6 +162,8 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
+
+info_keys() -> ?INFO_KEYS.
 
 info(Pid) ->
     gen_server:call(Pid, info, infinity).
@@ -191,9 +201,19 @@ teardown_profiling(Value) ->
             fprof:analyse([{dest, []}, {cols, 100}])
     end.
 
+server_properties() ->
+    {ok, Product} = application:get_key(rabbit, id),
+    {ok, Version} = application:get_key(rabbit, vsn),
+    [{list_to_binary(K), longstr, list_to_binary(V)} ||
+        {K, V} <- [{"product",     Product},
+                   {"version",     Version},
+                   {"platform",    "Erlang/OTP"},
+                   {"copyright",   ?COPYRIGHT_MESSAGE},
+                   {"information", ?INFORMATION_MESSAGE}]].
+
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
-socket_op(Sock, Fun) ->   
+socket_op(Sock, Fun) ->
     case Fun(Sock) of
         {ok, Res}       -> Res;
         {error, Reason} -> rabbit_log:error("error on TCP connection ~p:~p~n",
@@ -213,7 +233,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
-    try 
+    try
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
                                     connection = #connection{
@@ -264,14 +284,9 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
         {inet_async, Sock, Ref, {error, Reason}} ->
             throw({inet_error, Reason});
         {'EXIT', Parent, Reason} ->
-            if State#v1.connection_state =:= running ->
-                    send_exception(State, 0,
-                        rabbit_misc:amqp_error(connection_forced,
-                            "broker forced connection closure with reason '~w'",
-                            [Reason], none));
-               true -> ok
-            end,
-            %% this is what we are expected to do according to 
+            terminate(io_lib:format("broker forced connection closure "
+                                    "with reason '~w'", [Reason]), State),
+            %% this is what we are expected to do according to
             %% http://www.erlang.org/doc/man/sys.html
             %%
             %% If we wanted to be *really* nice we should wait for a
@@ -298,6 +313,13 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             end;
         timeout ->
             throw({timeout, State#v1.connection_state});
+        {'$gen_call', From, {shutdown, Explanation}} ->
+            {ForceTermination, NewState} = terminate(Explanation, State),
+            gen_server:reply(From, ok),
+            case ForceTermination of
+                force  -> ok;
+                normal -> mainloop(Parent, Deb, NewState)
+            end;
         {'$gen_call', From, info} ->
             gen_server:reply(From, infos(?INFO_KEYS, State)),
             mainloop(Parent, Deb, State);
@@ -319,6 +341,13 @@ switch_callback(OldState, NewCallback, Length) ->
                               OldState#v1.sock, Length, infinity) end),
     OldState#v1{callback = NewCallback,
                 recv_ref = Ref}.
+
+terminate(Explanation, State = #v1{connection_state = running}) ->
+    {normal, send_exception(State, 0,
+                            rabbit_misc:amqp_error(
+                              connection_forced, Explanation, [], none))};
+terminate(_Explanation, State) ->
+    {force, State}.
 
 close_connection(State = #v1{connection = #connection{
                                timeout_sec = TimeoutSec}}) ->
@@ -494,21 +523,12 @@ handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
     case check_version({ProtocolMajor, ProtocolMinor},
                        {?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR}) of
         true ->
-            {ok, Product} = application:get_key(id),
-            {ok, Version} = application:get_key(vsn),
             ok = send_on_channel0(
                    Sock,
                    #'connection.start'{
                      version_major = ?PROTOCOL_VERSION_MAJOR,
                      version_minor = ?PROTOCOL_VERSION_MINOR,
-                     server_properties =
-                     [{list_to_binary(K), longstr, list_to_binary(V)} ||
-                         {K, V} <-
-                             [{"product",     Product},
-                              {"version",     Version},
-                              {"platform",    "Erlang/OTP"},
-                              {"copyright",   ?COPYRIGHT_MESSAGE},
-                              {"information", ?INFORMATION_MESSAGE}]],
+                     server_properties = server_properties(),
                      mechanisms = <<"PLAIN AMQPLAIN">>,
                      locales = <<"en_US">> }),
             {State#v1{connection = Connection#connection{
@@ -671,7 +691,7 @@ i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
 i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
-                                   SockStat =:= recv_cnt; 
+                                   SockStat =:= recv_cnt;
                                    SockStat =:= send_oct;
                                    SockStat =:= send_cnt;
                                    SockStat =:= send_pend ->

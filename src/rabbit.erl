@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -47,90 +47,121 @@
                    [{description, "codec correctness check"},
                     {mfa,         {rabbit_binary_generator,
                                    check_empty_content_body_frame_size,
-                                   []}}]}).
+                                   []}},
+                    {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
-                    {pre,         kernel_ready}]}).
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({file_handle_cache,
+                   [{description, "file handle cache server"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [file_handle_cache]}},
+                    {enables,     worker_pool}]}).
+
+-rabbit_boot_step({worker_pool,
+                   [{description, "worker pool"},
+                    {mfa,         {rabbit_sup, start_child, [worker_pool_sup]}},
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({external_infrastructure,
+                   [{description, "external infrastructure ready"}]}).
+
+-rabbit_boot_step({rabbit_exchange_type_registry,
+                   [{description, "exchange type registry"},
+                    {mfa,         {rabbit_sup, start_child,
+                                   [rabbit_exchange_type_registry]}},
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_log,
                    [{description, "logging server"},
-                    {mfa,         {rabbit_sup, start_child, [rabbit_log]}},
-                    {pre,         kernel_ready}]}).
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_log]}},
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_hooks,
                    [{description, "internal event notification system"},
                     {mfa,         {rabbit_hooks, start, []}},
-                    {pre,         kernel_ready}]}).
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({kernel_ready,
-                   [{description, "kernel ready"}]}).
+                   [{description, "kernel ready"},
+                    {requires,    external_infrastructure}]}).
 
 -rabbit_boot_step({rabbit_alarm,
                    [{description, "alarm handler"},
                     {mfa,         {rabbit_alarm, start, []}},
-                    {post,        kernel_ready},
-                    {pre,         core_initialized}]}).
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
 
--rabbit_boot_step({rabbit_amqqueue_sup,
-                   [{description, "queue supervisor"},
-                    {mfa,         {rabbit_amqqueue, start, []}},
-                    {post,        kernel_ready},
-                    {pre,         core_initialized}]}).
+-rabbit_boot_step({rabbit_memory_monitor,
+                   [{description, "memory monitor"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_memory_monitor]}},
+                    {requires,    rabbit_alarm},
+                    {enables,     core_initialized}]}).
 
--rabbit_boot_step({rabbit_router,
-                   [{description, "cluster router"},
-                    {mfa,         {rabbit_sup, start_child, [rabbit_router]}},
-                    {post,        kernel_ready},
-                    {pre,         core_initialized}]}).
+-rabbit_boot_step({guid_generator,
+                   [{description, "guid generator"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_guid]}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
+-rabbit_boot_step({delegate_sup,
+                   [{description, "cluster delegate"},
+                    {mfa,         {rabbit_sup, start_child,
+                                   [delegate_sup]}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
 
 -rabbit_boot_step({rabbit_node_monitor,
                    [{description, "node monitor"},
-                    {mfa,         {rabbit_sup, start_child, [rabbit_node_monitor]}},
-                    {post,        kernel_ready},
-                    {post,        rabbit_amqqueue_sup},
-                    {pre,         core_initialized}]}).
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_node_monitor]}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
 
 -rabbit_boot_step({core_initialized,
-                   [{description, "core initialized"}]}).
+                   [{description, "core initialized"},
+                    {requires,    kernel_ready}]}).
 
 -rabbit_boot_step({empty_db_check,
                    [{description, "empty DB check"},
                     {mfa,         {?MODULE, maybe_insert_default_data, []}},
-                    {post,        core_initialized}]}).
+                    {requires,    core_initialized},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({exchange_recovery,
                    [{description, "exchange recovery"},
                     {mfa,         {rabbit_exchange, recover, []}},
-                    {post,        empty_db_check}]}).
+                    {requires,    empty_db_check},
+                    {enables,     routing_ready}]}).
 
--rabbit_boot_step({queue_recovery,
-                   [{description, "queue recovery"},
-                    {mfa,         {rabbit_amqqueue, recover, []}},
-                    {post,        exchange_recovery}]}).
-
--rabbit_boot_step({persister,
-                   [{mfa,         {rabbit_sup, start_child, [rabbit_persister]}},
-                    {post,        queue_recovery}]}).
-
--rabbit_boot_step({guid_generator,
-                   [{description, "guid generator"},
-                    {mfa,         {rabbit_sup, start_child, [rabbit_guid]}},
-                    {post,        persister},
-                    {pre,         routing_ready}]}).
+-rabbit_boot_step({queue_sup_queue_recovery,
+                   [{description, "queue supervisor and queue recovery"},
+                    {mfa,         {rabbit_amqqueue, start, []}},
+                    {requires,    empty_db_check},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({routing_ready,
-                   [{description, "message delivery logic ready"}]}).
+                   [{description, "message delivery logic ready"},
+                    {requires,    core_initialized}]}).
 
 -rabbit_boot_step({log_relay,
                    [{description, "error log relay"},
                     {mfa,         {rabbit_error_logger, boot, []}},
-                    {post,        routing_ready}]}).
+                    {requires,    routing_ready},
+                    {enables,     networking}]}).
 
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
-                    {post,        log_relay},
-                    {pre,         networking_listening}]}).
+                    {requires,    log_relay},
+                    {enables,     networking_listening}]}).
 
 -rabbit_boot_step({networking_listening,
                    [{description, "network listeners available"}]}).
@@ -187,15 +218,12 @@ stop() ->
     ok = rabbit_misc:stop_applications(?APPS).
 
 stop_and_halt() ->
-    spawn(fun () ->
-                  SleepTime = 1000,
-                  rabbit_log:info("Stop-and-halt request received; "
-                                  "halting in ~p milliseconds~n",
-                                  [SleepTime]),
-                  timer:sleep(SleepTime),
-                  init:stop()
-          end),
-    case catch stop() of _ -> ok end.
+    try
+        stop()
+    after
+        init:stop()
+    end,
+    ok.
 
 status() ->
     [{running_applications, application:which_applications()}] ++
@@ -213,14 +241,18 @@ rotate_logs(BinarySuffix) ->
 %%--------------------------------------------------------------------
 
 start(normal, []) ->
-    {ok, SupPid} = rabbit_sup:start_link(),
+    case erts_version_check() of
+        ok ->
+            {ok, SupPid} = rabbit_sup:start_link(),
 
-    print_banner(),
-    [ok = run_boot_step(Step) || Step <- boot_steps()],
-    io:format("~nbroker running~n"),
+            print_banner(),
+            [ok = run_boot_step(Step) || Step <- boot_steps()],
+            io:format("~nbroker running~n"),
 
-    {ok, SupPid}.
-
+            {ok, SupPid};
+        Error ->
+            Error
+    end.
 
 stop(_State) ->
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
@@ -232,6 +264,14 @@ stop(_State) ->
     ok.
 
 %%---------------------------------------------------------------------------
+
+erts_version_check() ->
+    FoundVer = erlang:system_info(version),
+    case rabbit_misc:version_compare(?ERTS_MINIMUM, FoundVer, lte) of
+        true  -> ok;
+        false -> {error, {erlang_version_too_old,
+                          {found, FoundVer}, {required, ?ERTS_MINIMUM}}}
+    end.
 
 boot_error(Format, Args) ->
     io:format("BOOT ERROR: " ++ Format, Args),
@@ -248,7 +288,7 @@ run_boot_step({StepName, Attributes}) ->
         [] ->
             io:format("-- ~s~n", [Description]);
         MFAs ->
-            io:format("starting ~-40s ...", [Description]),
+            io:format("starting ~-60s ...", [Description]),
             [case catch apply(M,F,A) of
                  {'EXIT', Reason} ->
                      boot_error("FAILED~nReason: ~p~n", [Reason]);
@@ -286,9 +326,9 @@ sort_boot_steps(UnsortedSteps) ->
     %% Add edges, detecting cycles and missing vertices.
     lists:foreach(fun ({StepName, Attributes}) ->
                           [add_boot_step_dep(G, StepName, PrecedingStepName)
-                           || {post, PrecedingStepName} <- Attributes],
+                           || {requires, PrecedingStepName} <- Attributes],
                           [add_boot_step_dep(G, SucceedingStepName, StepName)
-                           || {pre, SucceedingStepName} <- Attributes]
+                           || {enables, SucceedingStepName} <- Attributes]
                   end, UnsortedSteps),
 
     %% Use topological sort to find a consistent ordering (if there is
@@ -382,8 +422,9 @@ print_banner() ->
                 {"cookie hash",    rabbit_misc:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
-                {"database dir",   rabbit_mnesia:dir()}],
-    DescrLen = lists:max([length(K) || {K, _V} <- Settings]),
+                {"database dir",   rabbit_mnesia:dir()},
+                {"erlang version", erlang:system_info(version)}],
+    DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
     lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
     io:nl().

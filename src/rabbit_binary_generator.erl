@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -46,6 +46,7 @@
          build_heartbeat_frame/0]).
 -export([generate_table/1, encode_properties/2]).
 -export([check_empty_content_body_frame_size/0]).
+-export([ensure_content_encoded/1, clear_encoded_content/1]).
 -export([map_exception/2]).
 
 -import(lists).
@@ -61,9 +62,11 @@
 -spec(build_simple_content_frames/3 ::
       (channel_number(), content(), non_neg_integer()) -> [frame()]).
 -spec(build_heartbeat_frame/0 :: () -> frame()).
--spec(generate_table/1 :: (amqp_table()) -> binary()). 
+-spec(generate_table/1 :: (amqp_table()) -> binary()).
 -spec(encode_properties/2 :: ([amqp_property_type()], [any()]) -> binary()).
 -spec(check_empty_content_body_frame_size/0 :: () -> 'ok').
+-spec(ensure_content_encoded/1 :: (content()) -> encoded_content()).
+-spec(clear_encoded_content/1 :: (content()) -> unencoded_content()).
 -spec(map_exception/2 :: (non_neg_integer(), amqp_error()) ->
         {bool(), non_neg_integer(), amqp_method()}).
 
@@ -95,33 +98,36 @@ maybe_encode_properties(_ContentProperties, ContentPropertiesBin)
 maybe_encode_properties(ContentProperties, none) ->
     rabbit_framing:encode_properties(ContentProperties).
 
-build_content_frames(FragmentsRev, FrameMax, ChannelInt) ->
-    BodyPayloadMax = if
-                         FrameMax == 0 ->
-                             none;
-                         true ->
+build_content_frames(FragsRev, FrameMax, ChannelInt) ->
+    BodyPayloadMax = if FrameMax == 0 ->
+                             iolist_size(FragsRev);
+                        true ->
                              FrameMax - ?EMPTY_CONTENT_BODY_FRAME_SIZE
                      end,
-    build_content_frames(0, [], FragmentsRev, BodyPayloadMax, ChannelInt).
+    build_content_frames(0, [], BodyPayloadMax, [],
+                         lists:reverse(FragsRev), BodyPayloadMax, ChannelInt).
 
-build_content_frames(SizeAcc, FragmentAcc, [], _BodyPayloadMax, _ChannelInt) ->
-    {SizeAcc, FragmentAcc};
-build_content_frames(SizeAcc, FragmentAcc, [Fragment | FragmentsRev],
-                     BodyPayloadMax, ChannelInt)
-  when is_number(BodyPayloadMax) and (size(Fragment) > BodyPayloadMax) ->
-    <<Head:BodyPayloadMax/binary, Tail/binary>> = Fragment,
-    build_content_frames(SizeAcc, FragmentAcc, [Tail, Head | FragmentsRev],
-                         BodyPayloadMax, ChannelInt);
-build_content_frames(SizeAcc, FragmentAcc, [<<>> | FragmentsRev],
-                     BodyPayloadMax, ChannelInt) ->
-    build_content_frames(SizeAcc, FragmentAcc, FragmentsRev, BodyPayloadMax, ChannelInt);
-build_content_frames(SizeAcc, FragmentAcc, [Fragment | FragmentsRev],
-                     BodyPayloadMax, ChannelInt) ->
-    build_content_frames(SizeAcc + size(Fragment),
-                         [create_frame(3, ChannelInt, Fragment) | FragmentAcc],
-                         FragmentsRev,
-                         BodyPayloadMax,
-                         ChannelInt).
+build_content_frames(SizeAcc, FramesAcc, _FragSizeRem, [],
+                     [], _BodyPayloadMax, _ChannelInt) ->
+    {SizeAcc, lists:reverse(FramesAcc)};
+build_content_frames(SizeAcc, FramesAcc, FragSizeRem, FragAcc,
+                     Frags, BodyPayloadMax, ChannelInt)
+  when FragSizeRem == 0 orelse Frags == [] ->
+    Frame = create_frame(3, ChannelInt, lists:reverse(FragAcc)),
+    FrameSize = BodyPayloadMax - FragSizeRem,
+    build_content_frames(SizeAcc + FrameSize, [Frame | FramesAcc],
+                         BodyPayloadMax, [], Frags, BodyPayloadMax, ChannelInt);
+build_content_frames(SizeAcc, FramesAcc, FragSizeRem, FragAcc,
+                     [Frag | Frags], BodyPayloadMax, ChannelInt) ->
+    Size = size(Frag),
+    {NewFragSizeRem, NewFragAcc, NewFrags} =
+        case Size =< FragSizeRem of
+            true  -> {FragSizeRem - Size, [Frag | FragAcc], Frags};
+            false -> <<Head:FragSizeRem/binary, Tail/binary>> = Frag,
+                     {0, [Head | FragAcc], [Tail | Frags]}
+        end,
+    build_content_frames(SizeAcc, FramesAcc, NewFragSizeRem, NewFragAcc,
+                         NewFrags, BodyPayloadMax, ChannelInt).
 
 build_heartbeat_frame() ->
     create_frame(?FRAME_HEARTBEAT, 0, <<>>).
@@ -196,12 +202,16 @@ generate_array(Array) when is_list(Array) ->
                      fun ({Type, Value}) -> field_value_to_binary(Type, Value) end,
                      Array)).
 
-short_string_to_binary(String) when is_binary(String) and (size(String) < 256) ->
-    [<<(size(String)):8>>, String];
+short_string_to_binary(String) when is_binary(String) ->
+    Len = size(String),
+    if Len < 256 -> [<<(size(String)):8>>, String];
+       true      -> exit(content_properties_shortstr_overflow)
+    end;
 short_string_to_binary(String) ->
     StringLength = length(String),
-    true = (StringLength < 256), % assertion
-    [<<StringLength:8>>, String].
+    if StringLength < 256 -> [<<StringLength:8>>, String];
+       true               -> exit(content_properties_shortstr_overflow)
+    end.
 
 long_string_to_binary(String) when is_binary(String) ->
     [<<(size(String)):32>>, String];
@@ -239,7 +249,10 @@ encode_properties(Bit, [T | TypeList], [Value | ValueList], FirstShortAcc, Flags
     end.
 
 encode_property(shortstr, String) ->
-    Len = size(String), <<Len:8/unsigned, String:Len/binary>>;
+    Len = size(String),
+    if Len < 256 -> <<Len:8/unsigned, String:Len/binary>>;
+       true      -> exit(content_properties_shortstr_overflow)
+    end;
 encode_property(longstr, String) ->
     Len = size(String), <<Len:32/unsigned, String:Len/binary>>;
 encode_property(octet, Int) ->
@@ -265,6 +278,22 @@ check_empty_content_body_frame_size() ->
             exit({incorrect_empty_content_body_frame_size,
                   ComputedSize, ?EMPTY_CONTENT_BODY_FRAME_SIZE})
     end.
+
+ensure_content_encoded(Content = #content{properties_bin = PropsBin})
+  when PropsBin =/= 'none' ->
+    Content;
+ensure_content_encoded(Content = #content{properties = Props}) ->
+    Content #content{properties_bin = rabbit_framing:encode_properties(Props)}.
+
+clear_encoded_content(Content = #content{properties_bin = none}) ->
+    Content;
+clear_encoded_content(Content = #content{properties = none}) ->
+    %% Only clear when we can rebuild the properties_bin later in
+    %% accordance to the content record definition comment - maximum
+    %% one of properties and properties_bin can be 'none'
+    Content;
+clear_encoded_content(Content = #content{}) ->
+    Content#content{properties_bin = none}.
 
 %% NB: this function is also used by the Erlang client
 map_exception(Channel, Reason) ->
