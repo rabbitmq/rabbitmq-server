@@ -71,9 +71,11 @@ set_maximum_since_use(Pid, Age) ->
 init([Parent, Dir, IndexState, IndexModule, FileSummaryEts]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
-    {ok, #gcstate { dir = Dir, index_state = IndexState,
-                    index_module = IndexModule, parent = Parent,
-                    file_summary_ets = FileSummaryEts},
+    {ok, #gcstate { dir              = Dir,
+                    index_state      = IndexState,
+                    index_module     = IndexModule,
+                    parent           = Parent,
+                    file_summary_ets = FileSummaryEts },
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
