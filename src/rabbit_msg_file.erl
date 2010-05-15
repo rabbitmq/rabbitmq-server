@@ -44,7 +44,6 @@
 -define(FILE_PACKING_ADJUSTMENT, (1 + ?INTEGER_SIZE_BYTES)).
 -define(GUID_SIZE_BYTES,         16).
 -define(GUID_SIZE_BITS,          (8 * ?GUID_SIZE_BYTES)).
--define(SIZE_AND_GUID_BYTES,     (?GUID_SIZE_BYTES + ?INTEGER_SIZE_BYTES)).
 -define(SCAN_BLOCK_SIZE,         ?FILE_SIZE_LIMIT div 4).
 
 %%----------------------------------------------------------------------------
