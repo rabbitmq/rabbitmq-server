@@ -878,24 +878,18 @@ journal_plus_segment(JEntries, SegEntries) ->
 %% Here, the Out is the Seg Array which we may be adding to (for
 %% items only in the journal), modifying (bits in both), or erasing
 %% from (ack in journal, not segment).
-journal_plus_segment1({?PUB, no_del, no_ack} = Obj,
-                      not_found) ->
+journal_plus_segment1({?PUB, no_del, no_ack} = Obj, not_found) ->
     Obj;
-journal_plus_segment1({?PUB, del, no_ack} = Obj,
-                      not_found) ->
+journal_plus_segment1({?PUB, del, no_ack} = Obj,    not_found) ->
     Obj;
-journal_plus_segment1({?PUB, del, ack},
-                      not_found) ->
+journal_plus_segment1({?PUB, del, ack},             not_found) ->
     undefined;
 
-journal_plus_segment1({no_pub, del, no_ack},
-                      {?PUB = Pub, no_del, no_ack}) ->
+journal_plus_segment1({no_pub, del, no_ack}, {?PUB = Pub, no_del, no_ack}) ->
     {Pub, del, no_ack};
-journal_plus_segment1({no_pub, del, ack},
-                      {?PUB, no_del, no_ack}) ->
+journal_plus_segment1({no_pub, del, ack},    {?PUB, no_del, no_ack}) ->
     undefined;
-journal_plus_segment1({no_pub, no_del, ack},
-                      {?PUB, del, no_ack}) ->
+journal_plus_segment1({no_pub, no_del, ack}, {?PUB, del, no_ack}) ->
     undefined.
 
 %% Remove from the journal entries for a segment, items that are
@@ -923,60 +917,45 @@ journal_minus_segment(JEntries, SegEntries) ->
 %% publish or ack is in both the journal and the segment.
 
 %% Both the same. Must be at least the publish
-journal_minus_segment1({?PUB, _Del, no_ack} = Obj,
-                       Obj) ->
+journal_minus_segment1({?PUB, _Del, no_ack} = Obj,   Obj) ->
     {undefined, 1, 0};
-journal_minus_segment1({?PUB, _Del, ack} = Obj,
-                       Obj) ->
+journal_minus_segment1({?PUB, _Del, ack} = Obj,      Obj) ->
     {undefined, 1, 1};
 
 %% Just publish in journal
-journal_minus_segment1({?PUB, no_del, no_ack} = Obj,
-                       not_found) ->
+journal_minus_segment1({?PUB, no_del, no_ack} = Obj, not_found) ->
     {Obj, 0, 0};
 
 %% Just deliver in journal
-journal_minus_segment1({no_pub, del, no_ack} = Obj,
-                       {?PUB, no_del, no_ack}) ->
+journal_minus_segment1({no_pub, del, no_ack} = Obj,  {?PUB, no_del, no_ack}) ->
     {Obj, 0, 0};
-journal_minus_segment1({no_pub, del, no_ack},
-                       {?PUB, del, no_ack}) ->
+journal_minus_segment1({no_pub, del, no_ack},        {?PUB, del, no_ack}) ->
     {undefined, 0, 0};
 
 %% Just ack in journal
-journal_minus_segment1({no_pub, no_del, ack} = Obj,
-                       {?PUB, del, no_ack}) ->
+journal_minus_segment1({no_pub, no_del, ack} = Obj,  {?PUB, del, no_ack}) ->
     {Obj, 0, 0};
-journal_minus_segment1({no_pub, no_del, ack},
-                       {?PUB, del, ack}) ->
+journal_minus_segment1({no_pub, no_del, ack},        {?PUB, del, ack}) ->
     {undefined, 0, 0};
 
 %% Publish and deliver in journal
-journal_minus_segment1({?PUB, del, no_ack} = Obj,
-                       not_found) ->
+journal_minus_segment1({?PUB, del, no_ack} = Obj,    not_found) ->
     {Obj, 0, 0};
-journal_minus_segment1({?PUB = Pub, del, no_ack},
-                       {Pub, no_del, no_ack}) ->
+journal_minus_segment1({?PUB = Pub, del, no_ack},    {Pub, no_del, no_ack}) ->
     {{no_pub, del, no_ack}, 1, 0};
 
 %% Deliver and ack in journal
-journal_minus_segment1({no_pub, del, ack} = Obj,
-                       {?PUB, no_del, no_ack}) ->
+journal_minus_segment1({no_pub, del, ack} = Obj,     {?PUB, no_del, no_ack}) ->
     {Obj, 0, 0};
-journal_minus_segment1({no_pub, del, ack},
-                       {?PUB, del, no_ack}) ->
+journal_minus_segment1({no_pub, del, ack},           {?PUB, del, no_ack}) ->
     {{no_pub, no_del, ack}, 0, 0};
-journal_minus_segment1({no_pub, del, ack},
-                       {?PUB, del, ack}) ->
+journal_minus_segment1({no_pub, del, ack},           {?PUB, del, ack}) ->
     {undefined, 0, 1};
 
 %% Publish, deliver and ack in journal
-journal_minus_segment1({?PUB, del, ack},
-                       not_found) ->
+journal_minus_segment1({?PUB, del, ack},             not_found) ->
     {undefined, 0, 0};
-journal_minus_segment1({?PUB = Pub, del, ack},
-                       {Pub, no_del, no_ack}) ->
+journal_minus_segment1({?PUB = Pub, del, ack},       {Pub, no_del, no_ack}) ->
     {{no_pub, del, ack}, 1, 0};
-journal_minus_segment1({?PUB = Pub, del, ack},
-                       {Pub, del, no_ack}) ->
+journal_minus_segment1({?PUB = Pub, del, ack},       {Pub, del, no_ack}) ->
     {{no_pub, no_del, ack}, 1, 0}.
