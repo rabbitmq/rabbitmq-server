@@ -948,7 +948,7 @@ journal_minus_segment1({no_pub, del, no_ack},        {?PUB, del, no_ack}) ->
 journal_minus_segment1({no_pub, no_del, ack} = Obj,  {?PUB, del, no_ack}) ->
     {Obj, 0, 0};
 journal_minus_segment1({no_pub, no_del, ack},        {?PUB, del, ack}) ->
-    {undefined, 0, 0};
+    {undefined, 0, 1};
 
 %% Deliver and ack in journal
 journal_minus_segment1({no_pub, del, ack} = Obj,     {?PUB, no_del, no_ack}) ->
