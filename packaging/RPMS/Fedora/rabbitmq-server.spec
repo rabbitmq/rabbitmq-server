@@ -108,8 +108,10 @@ if [ $1 = 0 ]; then
 fi
 
 # Clean out plugin activation state, both on uninstall and upgrade
-rm -rf %{_maindir}/priv
-rm -f %{_maindir}/ebin/rabbit.rel %{_maindir}/ebin/rabbit.script %{_maindir}/ebin/rabbit.boot
+rm -rf %{_rabbit_erllibdir}/priv
+for ext in rel script boot ; do
+    rm -f %{_rabbit_erllibdir}/ebin/rabbit.$ext
+done
 
 %files -f ../%{name}.files
 %defattr(-,root,root,-)
