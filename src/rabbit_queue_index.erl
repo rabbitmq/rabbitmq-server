@@ -924,6 +924,20 @@ journal_minus_segment1({?PUB, _Del, ack} = Obj,      Obj) ->
 journal_minus_segment1({?PUB, no_del, no_ack} = Obj, undefined) ->
     {Obj, 0, 0};
 
+%% Publish and deliver in journal
+journal_minus_segment1({?PUB, del, no_ack} = Obj,    undefined) ->
+    {Obj, 0, 0};
+journal_minus_segment1({?PUB = Pub, del, no_ack},    {Pub, no_del, no_ack}) ->
+    {{no_pub, del, no_ack}, 1, 0};
+
+%% Publish, deliver and ack in journal
+journal_minus_segment1({?PUB, del, ack},             undefined) ->
+    {undefined, 0, 0};
+journal_minus_segment1({?PUB = Pub, del, ack},       {Pub, no_del, no_ack}) ->
+    {{no_pub, del, ack}, 1, 0};
+journal_minus_segment1({?PUB = Pub, del, ack},       {Pub, del, no_ack}) ->
+    {{no_pub, no_del, ack}, 1, 0};
+
 %% Just deliver in journal
 journal_minus_segment1({no_pub, del, no_ack} = Obj,  {?PUB, no_del, no_ack}) ->
     {Obj, 0, 0};
@@ -936,24 +950,10 @@ journal_minus_segment1({no_pub, no_del, ack} = Obj,  {?PUB, del, no_ack}) ->
 journal_minus_segment1({no_pub, no_del, ack},        {?PUB, del, ack}) ->
     {undefined, 0, 0};
 
-%% Publish and deliver in journal
-journal_minus_segment1({?PUB, del, no_ack} = Obj,    undefined) ->
-    {Obj, 0, 0};
-journal_minus_segment1({?PUB = Pub, del, no_ack},    {Pub, no_del, no_ack}) ->
-    {{no_pub, del, no_ack}, 1, 0};
-
 %% Deliver and ack in journal
 journal_minus_segment1({no_pub, del, ack} = Obj,     {?PUB, no_del, no_ack}) ->
     {Obj, 0, 0};
 journal_minus_segment1({no_pub, del, ack},           {?PUB, del, no_ack}) ->
     {{no_pub, no_del, ack}, 0, 0};
 journal_minus_segment1({no_pub, del, ack},           {?PUB, del, ack}) ->
-    {undefined, 0, 1};
-
-%% Publish, deliver and ack in journal
-journal_minus_segment1({?PUB, del, ack},             undefined) ->
-    {undefined, 0, 0};
-journal_minus_segment1({?PUB = Pub, del, ack},       {Pub, no_del, no_ack}) ->
-    {{no_pub, del, ack}, 1, 0};
-journal_minus_segment1({?PUB = Pub, del, ack},       {Pub, del, no_ack}) ->
-    {{no_pub, no_del, ack}, 1, 0}.
+    {undefined, 0, 1}.
