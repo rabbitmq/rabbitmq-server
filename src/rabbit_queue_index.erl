@@ -871,11 +871,11 @@ journal_plus_segment(JEntries, SegEntries) ->
 %% Here, the Out is the Seg Array which we may be adding to (for
 %% items only in the journal), modifying (bits in both), or erasing
 %% from (ack in journal, not segment).
-journal_plus_segment(Obj = {{_Guid, _IsPersistent}, no_del, no_ack},
+journal_plus_segment({{_Guid, _IsPersistent}, no_del, no_ack} = Obj,
                      not_found,
                      RelSeq, Out) ->
     array:set(RelSeq, Obj, Out);
-journal_plus_segment(Obj = {{_Guid, _IsPersistent}, del, no_ack},
+journal_plus_segment({{_Guid, _IsPersistent}, del, no_ack} = Obj,
                      not_found,
                      RelSeq, Out) ->
     array:set(RelSeq, Obj, Out);
@@ -885,7 +885,7 @@ journal_plus_segment({{_Guid, _IsPersistent}, del, ack},
     array:reset(RelSeq, Out);
 
 journal_plus_segment({no_pub, del, no_ack},
-                     {Pub = {_Guid, _IsPersistent}, no_del, no_ack},
+                     {{_Guid, _IsPersistent} = Pub, no_del, no_ack},
                      RelSeq, Out) ->
     array:set(RelSeq, {Pub, del, no_ack}, Out);
 
@@ -917,21 +917,23 @@ journal_minus_segment(JEntries, SegEntries) ->
 %% publish or ack is in both the journal and the segment.
 
 %% Both the same. Must be at least the publish
-journal_minus_segment(Obj, Obj = {{_Guid, _IsPersistent}, _Del, no_ack},
+journal_minus_segment({{_Guid, _IsPersistent}, _Del, no_ack} = Obj,
+                      Obj,
                       _RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {Out, PubsRemoved + 1, AcksRemoved};
-journal_minus_segment(Obj, Obj = {{_Guid, _IsPersistent}, _Del, ack},
+journal_minus_segment({{_Guid, _IsPersistent}, _Del, ack} = Obj,
+                      Obj,
                       _RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {Out, PubsRemoved + 1, AcksRemoved + 1};
 
 %% Just publish in journal
-journal_minus_segment(Obj = {{_Guid, _IsPersistent}, no_del, no_ack},
+journal_minus_segment({{_Guid, _IsPersistent}, no_del, no_ack} = Obj,
                       not_found,
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, Obj, Out), PubsRemoved, AcksRemoved};
 
 %% Just deliver in journal
-journal_minus_segment(Obj = {no_pub, del, no_ack},
+journal_minus_segment({no_pub, del, no_ack} = Obj,
                       {{_Guid, _IsPersistent}, no_del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, Obj, Out), PubsRemoved, AcksRemoved};
@@ -941,7 +943,7 @@ journal_minus_segment({no_pub, del, no_ack},
     {Out, PubsRemoved, AcksRemoved};
 
 %% Just ack in journal
-journal_minus_segment(Obj = {no_pub, no_del, ack},
+journal_minus_segment({no_pub, no_del, ack} = Obj,
                       {{_Guid, _IsPersistent}, del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, Obj, Out), PubsRemoved, AcksRemoved};
@@ -951,18 +953,18 @@ journal_minus_segment({no_pub, no_del, ack},
     {Out, PubsRemoved, AcksRemoved};
 
 %% Publish and deliver in journal
-journal_minus_segment(Obj = {{_Guid, _IsPersistent}, del, no_ack},
+journal_minus_segment({{_Guid, _IsPersistent}, del, no_ack} = Obj,
                       not_found,
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, Obj, Out), PubsRemoved, AcksRemoved};
-journal_minus_segment({Pub, del, no_ack},
-                      {Pub = {_Guid, _IsPersistent}, no_del, no_ack},
+journal_minus_segment({{_Guid, _IsPersistent} = Pub, del, no_ack},
+                      {Pub, no_del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, {no_pub, del, no_ack}, Out),
      PubsRemoved + 1, AcksRemoved};
 
 %% Deliver and ack in journal
-journal_minus_segment(Obj = {no_pub, del, ack},
+journal_minus_segment({no_pub, del, ack} = Obj,
                       {{_Guid, _IsPersistent}, no_del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, Obj, Out), PubsRemoved, AcksRemoved};
@@ -981,13 +983,13 @@ journal_minus_segment({{_Guid, _IsPersistent}, del, ack},
                       not_found,
                       _RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {Out, PubsRemoved, AcksRemoved};
-journal_minus_segment({Pub, del, ack},
-                      {Pub = {_Guid, _IsPersistent}, no_del, no_ack},
+journal_minus_segment({{_Guid, _IsPersistent} = Pub, del, ack},
+                      {Pub, no_del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, {no_pub, del, ack}, Out),
      PubsRemoved + 1, AcksRemoved};
-journal_minus_segment({Pub, del, ack},
-                      {Pub = {_Guid, _IsPersistent}, del, no_ack},
+journal_minus_segment({{_Guid, _IsPersistent} = Pub, del, ack},
+                      {Pub, del, no_ack},
                       RelSeq, Out, PubsRemoved, AcksRemoved) ->
     {array:set(RelSeq, {no_pub, no_del, ack}, Out),
      PubsRemoved + 1, AcksRemoved}.
