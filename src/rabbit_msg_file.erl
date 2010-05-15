@@ -101,17 +101,18 @@ scan(FileHdl, FileSize, Data, ReadOffset, Acc, ScanOffset) ->
     Read = lists:min([?SCAN_BLOCK_SIZE, (FileSize - ReadOffset)]),
     case file_handle_cache:read(FileHdl, Read) of
         {ok, Data1} ->
-            {Acc1, ScanOffset1, Data2} =
+            {Data2, Acc1, ScanOffset1} =
                 scan(<<Data/binary, Data1/binary>>, Acc, ScanOffset),
-            scan(FileHdl, FileSize, Data2, ReadOffset + iolist_size(Data1),
-                 Acc1, ScanOffset1);
-        _KO        -> {ok, Acc, ScanOffset}
+            ReadOffset1 = ReadOffset + size(Data1),
+            scan(FileHdl, FileSize, Data2, ReadOffset1, Acc1, ScanOffset1);
+        _KO ->
+            {ok, Acc, ScanOffset}
     end.
 
 scan(<<>>, Acc, Offset) ->
-    {Acc, Offset, <<>>};
+    {<<>>, Acc, Offset};
 scan(<<0:?INTEGER_SIZE_BITS, _Rest/binary>>, Acc, Offset) ->
-    {Acc, Offset, <<>>}; %% Nothing to do other than stop.
+    {<<>>, Acc, Offset}; %% Nothing to do other than stop.
 scan(<<Size:?INTEGER_SIZE_BITS, GuidAndMsg:Size/binary,
        WriteMarker:?WRITE_OK_SIZE_BITS, Rest/binary>>, Acc, Offset) ->
     TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
@@ -130,4 +131,4 @@ scan(<<Size:?INTEGER_SIZE_BITS, GuidAndMsg:Size/binary,
             scan(Rest, Acc, Offset + TotalSize)
     end;
 scan(Data, Acc, Offset) ->
-    {Acc, Offset, Data}.
+    {Data, Acc, Offset}.
