@@ -1596,7 +1596,7 @@ combine_files(#file_summary { file             = Source,
     case DestinationContiguousTop =:= DestinationValid of
         true ->
             ok = truncate_and_extend_file(
-                   DestinationHdl, DestinationValid, ExpectedSize);
+                   DestinationHdl, DestinationContiguousTop, ExpectedSize);
         false ->
             {DestinationWorkList, DestinationValid} =
                 find_unremoved_messages_in_file(Destination, State),
