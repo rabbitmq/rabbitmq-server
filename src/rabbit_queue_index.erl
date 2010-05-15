@@ -875,9 +875,10 @@ journal_plus_segment(JEntries, SegEntries) ->
               end
       end, SegEntries, JEntries).
 
-%% Here, the Out is the Seg Array which we may be adding to (for
-%% items only in the journal), modifying (bits in both), or erasing
-%% from (ack in journal, not segment).
+%% Here, the result is the item which we may be adding to (for items
+%% only in the journal), modifying in (bits in both), or, when
+%% returning 'undefined', erasing from (ack in journal, not segment)
+%% the segment array.
 journal_plus_segment1({?PUB, no_del, no_ack} = Obj, not_found) ->
     Obj;
 journal_plus_segment1({?PUB, del, no_ack} = Obj,    not_found) ->
@@ -912,8 +913,11 @@ journal_minus_segment(JEntries, SegEntries) ->
                AcksRemoved + AcksRemovedDelta}
       end, {array_new(), 0, 0}, JEntries).
 
-%% Here, the Out is a fresh journal that we're filling with valid
-%% entries. PubsRemoved and AcksRemoved only get increased when a
+%% Here, the result is a triple with the first element containing the
+%% item we are adding to or modifying in the (initially fresh) journal
+%% array. If the item is 'undefined' we leave the journal array
+%% alone. The other two elements of the triple are the deltas for
+%% PubsRemoved and AcksRemoved - these only get increased when a
 %% publish or ack is in both the journal and the segment.
 
 %% Both the same. Must be at least the publish
