@@ -913,7 +913,7 @@ journal_minus_segment(JEntries, SegEntries) ->
       end, {array_new(), 0, 0}, JEntries).
 
 %% Here, the Out is a fresh journal that we're filling with valid
-%% entries. PubsRemoved and AcksRemoved only get increased when the a
+%% entries. PubsRemoved and AcksRemoved only get increased when a
 %% publish or ack is in both the journal and the segment.
 
 %% Both the same. Must be at least the publish
