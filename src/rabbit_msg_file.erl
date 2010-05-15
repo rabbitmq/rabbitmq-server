@@ -67,7 +67,7 @@
 %%----------------------------------------------------------------------------
 
 append(FileHdl, Guid, MsgBody)
-  when is_binary(Guid) andalso size(Guid) =< ?GUID_SIZE_BYTES ->
+  when is_binary(Guid) andalso size(Guid) =:= ?GUID_SIZE_BYTES ->
     MsgBodyBin  = term_to_binary(MsgBody),
     MsgBodyBinSize = size(MsgBodyBin),
     Size = MsgBodyBinSize + ?GUID_SIZE_BYTES,
