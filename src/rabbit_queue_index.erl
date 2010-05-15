@@ -865,10 +865,7 @@ bool_to_int(false) -> 0.
 journal_plus_segment(JEntries, SegEntries) ->
     array:sparse_foldl(
       fun (RelSeq, JObj, SegEntriesOut) ->
-              SegEntry = case array:get(RelSeq, SegEntriesOut) of
-                             undefined        -> not_found;
-                             SObj = {_, _, _} -> SObj
-                         end,
+              SegEntry = array:get(RelSeq, SegEntriesOut),
               case journal_plus_segment1(JObj, SegEntry) of
                   undefined -> array:reset(RelSeq, SegEntriesOut);
                   Obj       -> array:set(RelSeq, Obj, SegEntriesOut)
@@ -879,11 +876,11 @@ journal_plus_segment(JEntries, SegEntries) ->
 %% only in the journal), modifying in (bits in both), or, when
 %% returning 'undefined', erasing from (ack in journal, not segment)
 %% the segment array.
-journal_plus_segment1({?PUB, no_del, no_ack} = Obj, not_found) ->
+journal_plus_segment1({?PUB, no_del, no_ack} = Obj, undefined) ->
     Obj;
-journal_plus_segment1({?PUB, del, no_ack} = Obj,    not_found) ->
+journal_plus_segment1({?PUB, del, no_ack} = Obj,    undefined) ->
     Obj;
-journal_plus_segment1({?PUB, del, ack},             not_found) ->
+journal_plus_segment1({?PUB, del, ack},             undefined) ->
     undefined;
 
 journal_plus_segment1({no_pub, del, no_ack}, {?PUB = Pub, no_del, no_ack}) ->
@@ -899,10 +896,7 @@ journal_plus_segment1({no_pub, no_del, ack}, {?PUB, del, no_ack}) ->
 journal_minus_segment(JEntries, SegEntries) ->
     array:sparse_foldl(
       fun (RelSeq, JObj, {JEntriesOut, PubsRemoved, AcksRemoved}) ->
-              SegEntry = case array:get(RelSeq, SegEntries) of
-                             undefined        -> not_found;
-                             SObj = {_, _, _} -> SObj
-                         end,
+              SegEntry = array:get(RelSeq, SegEntries),
               {Obj, PubsRemovedDelta, AcksRemovedDelta} =
                   journal_minus_segment1(JObj, SegEntry),
               {case Obj of
@@ -927,7 +921,7 @@ journal_minus_segment1({?PUB, _Del, ack} = Obj,      Obj) ->
     {undefined, 1, 1};
 
 %% Just publish in journal
-journal_minus_segment1({?PUB, no_del, no_ack} = Obj, not_found) ->
+journal_minus_segment1({?PUB, no_del, no_ack} = Obj, undefined) ->
     {Obj, 0, 0};
 
 %% Just deliver in journal
@@ -943,7 +937,7 @@ journal_minus_segment1({no_pub, no_del, ack},        {?PUB, del, ack}) ->
     {undefined, 0, 0};
 
 %% Publish and deliver in journal
-journal_minus_segment1({?PUB, del, no_ack} = Obj,    not_found) ->
+journal_minus_segment1({?PUB, del, no_ack} = Obj,    undefined) ->
     {Obj, 0, 0};
 journal_minus_segment1({?PUB = Pub, del, no_ack},    {Pub, no_del, no_ack}) ->
     {{no_pub, del, no_ack}, 1, 0};
@@ -957,7 +951,7 @@ journal_minus_segment1({no_pub, del, ack},           {?PUB, del, ack}) ->
     {undefined, 0, 1};
 
 %% Publish, deliver and ack in journal
-journal_minus_segment1({?PUB, del, ack},             not_found) ->
+journal_minus_segment1({?PUB, del, ack},             undefined) ->
     {undefined, 0, 0};
 journal_minus_segment1({?PUB = Pub, del, ack},       {Pub, no_del, no_ack}) ->
     {{no_pub, del, ack}, 1, 0};
