@@ -865,38 +865,34 @@ journal_plus_segment(JEntries, SegEntries) ->
                              undefined        -> not_found;
                              SObj = {_, _, _} -> SObj
                          end,
-              journal_plus_segment(JObj, SegEntry, RelSeq, SegEntriesOut)
+              case journal_plus_segment1(JObj, SegEntry) of
+                  undefined -> array:reset(RelSeq, SegEntriesOut);
+                  Obj       -> array:set(RelSeq, Obj, SegEntriesOut)
+              end
       end, SegEntries, JEntries).
 
 %% Here, the Out is the Seg Array which we may be adding to (for
 %% items only in the journal), modifying (bits in both), or erasing
 %% from (ack in journal, not segment).
-journal_plus_segment({{_Guid, _IsPersistent}, no_del, no_ack} = Obj,
-                     not_found,
-                     RelSeq, Out) ->
-    array:set(RelSeq, Obj, Out);
-journal_plus_segment({{_Guid, _IsPersistent}, del, no_ack} = Obj,
-                     not_found,
-                     RelSeq, Out) ->
-    array:set(RelSeq, Obj, Out);
-journal_plus_segment({{_Guid, _IsPersistent}, del, ack},
-                     not_found,
-                     RelSeq, Out) ->
-    array:reset(RelSeq, Out);
+journal_plus_segment1({{_Guid, _IsPersistent}, no_del, no_ack} = Obj,
+                      not_found) ->
+    Obj;
+journal_plus_segment1({{_Guid, _IsPersistent}, del, no_ack} = Obj,
+                      not_found) ->
+    Obj;
+journal_plus_segment1({{_Guid, _IsPersistent}, del, ack},
+                      not_found) ->
+    undefined;
 
-journal_plus_segment({no_pub, del, no_ack},
-                     {{_Guid, _IsPersistent} = Pub, no_del, no_ack},
-                     RelSeq, Out) ->
-    array:set(RelSeq, {Pub, del, no_ack}, Out);
-
-journal_plus_segment({no_pub, del, ack},
-                     {{_Guid, _IsPersistent}, no_del, no_ack},
-                     RelSeq, Out) ->
-    array:reset(RelSeq, Out);
-journal_plus_segment({no_pub, no_del, ack},
-                     {{_Guid, _IsPersistent}, del, no_ack},
-                     RelSeq, Out) ->
-    array:reset(RelSeq, Out).
+journal_plus_segment1({no_pub, del, no_ack},
+                      {{_Guid, _IsPersistent} = Pub, no_del, no_ack}) ->
+    {Pub, del, no_ack};
+journal_plus_segment1({no_pub, del, ack},
+                      {{_Guid, _IsPersistent}, no_del, no_ack}) ->
+    undefined;
+journal_plus_segment1({no_pub, no_del, ack},
+                      {{_Guid, _IsPersistent}, del, no_ack}) ->
+    undefined.
 
 %% Remove from the journal entries for a segment, items that are
 %% duplicates of entries found in the segment itself. Used on start up
