@@ -156,21 +156,9 @@
 
 %%----------------------------------------------------------------------------
 
--record(qistate,
-        { dir,
-          segments,
-          journal_handle,
-          dirty_count
-         }).
+-record(qistate, { dir, segments, journal_handle, dirty_count }).
 
--record(segment,
-        { pubs,
-          acks,
-          handle,
-          journal_entries,
-          path,
-          num
-         }).
+-record(segment, { pubs, acks, handle, journal_entries, path, num }).
 
 -include("rabbit.hrl").
 
@@ -346,7 +334,8 @@ flush_journal(State = #qistate { dirty_count = 0 }) ->
 flush_journal(State = #qistate { segments = Segments }) ->
     Segments1 =
         segment_fold(
-          fun (_Seg, #segment { journal_entries = JEntries, pubs = PubCount,
+          fun (_Seg, #segment { journal_entries = JEntries,
+                                pubs = PubCount,
                                 acks = AckCount } = Segment, SegmentsN) ->
                   case PubCount > 0 andalso PubCount == AckCount of
                       true  -> ok = delete_segment(Segment),
@@ -480,7 +469,8 @@ terminate(StoreShutdown, Terms, State =
              _         -> file_handle_cache:close(JournalHdl)
          end,
     SegTerms = segment_fold(
-                 fun (Seg, #segment { handle = Hdl, pubs = PubCount,
+                 fun (Seg, #segment { handle = Hdl,
+                                      pubs = PubCount,
                                       acks = AckCount }, SegTermsAcc) ->
                          ok = case Hdl of
                                   undefined -> ok;
@@ -566,7 +556,8 @@ add_to_journal(SeqId, Action, State = #qistate { dirty_count = DCount,
 
 add_to_journal(RelSeq, Action,
                Segment = #segment { journal_entries = JEntries,
-                                    pubs = PubCount, acks = AckCount }) ->
+                                    pubs = PubCount,
+                                    acks = AckCount }) ->
     Segment1 = Segment #segment {
                  journal_entries = add_to_journal(RelSeq, Action, JEntries) },
     case Action of
