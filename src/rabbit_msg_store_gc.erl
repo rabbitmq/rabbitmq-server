@@ -121,10 +121,8 @@ attempt_gc(State = #gcstate { dir              = Dir,
                               scheduled        = {Source, Destination} }) ->
     case rabbit_msg_store:gc(Source, Destination,
                              {FileSummaryEts, Dir, Index, IndexState}) of
-        concurrent_readers ->
-            State;
-        Reclaimed ->
-            ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source,
-                                          Destination),
-            State #gcstate { scheduled = undefined }
+        concurrent_readers -> State;
+        Reclaimed          -> ok = rabbit_msg_store:gc_done(
+                                     Parent, Reclaimed, Source, Destination),
+                              State #gcstate { scheduled = undefined }
     end.
