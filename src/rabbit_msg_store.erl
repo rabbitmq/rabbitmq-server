@@ -149,11 +149,12 @@
 
 %% The components:
 %%
-%% MsgLocation: this is a mapping from Guid to #msg_location{}:
-%%              {Guid, RefCount, File, Offset, TotalSize}
-%%              By default, it's in ets, but it's also pluggable.
-%% FileSummary: this is an ets table which contains:
-%%              {File, ValidTotalSize, ContiguousTop, Left, Right}
+%% Index: this is a mapping from Guid to #msg_location{}:
+%%        {Guid, RefCount, File, Offset, TotalSize}
+%%        By default, it's in ets, but it's also pluggable.
+%% FileSummary: this is an ets table which maps File to #file_summary():
+%%        {File, ValidTotalSize, ContiguousTop, Left, Right,
+%%         FileSize, Locked, Readers}
 %%
 %% The basic idea is that messages are appended to the current file up
 %% until that file becomes too big (> file_size_limit). At that point,
@@ -163,9 +164,9 @@
 %% eldest file.
 %%
 %% We need to keep track of which messages are in which files (this is
-%% the MsgLocation mapping); how much useful data is in each file and
-%% which files are on the left and right of each other. This is the
-%% purpose of the FileSummary table.
+%% the Index); how much useful data is in each file and which files
+%% are on the left and right of each other. This is the purpose of the
+%% FileSummary table.
 %%
 %% As messages are removed from files, holes appear in these
 %% files. The field ValidTotalSize contains the total amount of useful
@@ -190,14 +191,14 @@
 %% file, then read back in to form a contiguous chunk of good data at
 %% the start of the left file. Thus the left file is garbage collected
 %% and compacted. Then the good data from the right file is copied
-%% onto the end of the left file. MsgLocation and FileSummary tables
-%% are updated.
+%% onto the end of the left file. Index and FileSummary tables are
+%% updated.
 %%
-%% On startup, we scan the files we discover, dealing with the
-%% possibilites of a crash have occured during a compaction (this
-%% consists of tidyup - the compaction is deliberately designed such
-%% that data is duplicated on disk rather than risking it being lost),
-%% and rebuild the FileSummary ets table and MsgLocation mapping.
+%% On non-clean startup, we scan the files we discover, dealing with
+%% the possibilites of a crash having occured during a compaction
+%% (this consists of tidyup - the compaction is deliberately designed
+%% such that data is duplicated on disk rather than risking it being
+%% lost), and rebuild the FileSummary ets table and Index.
 %%
 %% So, with this design, messages move to the left. Eventually, they
 %% should end up in a contiguous block on the left and are then never
@@ -255,14 +256,14 @@
 %% alternating full files and files with only one tiny message in
 %% them).
 %%
-%% Messages are reference-counted. When a message with the same id is
-%% written several times we only store it once, and only remove it
-%% from the store when it has been removed the same number of
-%% times.
+%% Messages are reference-counted. When a message with the same guid
+%% is written several times we only store it once, and only remove it
+%% from the store when it has been removed the same number of times.
 %%
 %% The reference counts do not persist. Therefore the initialisation
 %% function must be provided with a generator that produces ref count
-%% deltas for all recovered messages.
+%% deltas for all recovered messages. This is only used on startup
+%% when the shutdown was non-clean.
 %%
 %% Read messages with a reference count greater than one are entered
 %% into a message cache. The purpose of the cache is not especially
@@ -284,12 +285,12 @@
 %% not overtake removes.
 %%
 %% The current file to which messages are being written has a
-%% write-back cache. This is written to immediately by the client and
-%% can be read from by the client too. This means that there are only
-%% ever writes made to the current file, thus eliminating delays due
-%% to flushing write buffers in order to be able to safely read from
-%% the current file. The one exception to this is that on start up,
-%% the cache is not populated with msgs found in the current file, and
+%% write-back cache. This is written to immediately by clients and can
+%% be read from by clients too. This means that there are only ever
+%% writes made to the current file, thus eliminating delays due to
+%% flushing write buffers in order to be able to safely read from the
+%% current file. The one exception to this is that on start up, the
+%% cache is not populated with msgs found in the current file, and
 %% thus in this case only, reads may have to come from the file
 %% itself. The effect of this is that even if the msg_store process is
 %% heavily overloaded, clients can still write and read messages with
@@ -1609,10 +1610,6 @@ combine_files(#file_summary { file             = Source,
                           %% was then DestinationContiguousTop would
                           %% have been extended by TotalSize
                           Offset < DestinationContiguousTop
-                          %% Given expected access patterns, I suspect
-                          %% that the list should be naturally sorted
-                          %% as we require, however, we need to
-                          %% enforce it anyway
                   end, DestinationWorkList),
             Tmp = filename:rootname(DestinationName) ++ ?FILE_EXTENSION_TMP,
             {ok, TmpHdl} = open_file(Dir, Tmp, ?READ_AHEAD_MODE ++ ?WRITE_MODE),
