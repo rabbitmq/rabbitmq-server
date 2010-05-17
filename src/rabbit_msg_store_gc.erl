@@ -33,7 +33,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, gc/3, stop/1]).
+-export([start_link/4, gc/3, no_readers/2, stop/1]).
 
 -export([set_maximum_since_use/2]).
 
@@ -45,7 +45,8 @@
          index_state,
          index_module,
          parent,
-         file_summary_ets
+         file_summary_ets,
+         scheduled
         }).
 
 -include("rabbit.hrl").
@@ -59,6 +60,9 @@ start_link(Dir, IndexState, IndexModule, FileSummaryEts) ->
 
 gc(Server, Source, Destination) ->
     gen_server2:cast(Server, {gc, Source, Destination}).
+
+no_readers(Server, File) ->
+    gen_server2:cast(Server, {no_readers, File}).
 
 stop(Server) ->
     gen_server2:call(Server, stop, infinity).
@@ -75,7 +79,8 @@ init([Parent, Dir, IndexState, IndexModule, FileSummaryEts]) ->
                     index_state      = IndexState,
                     index_module     = IndexModule,
                     parent           = Parent,
-                    file_summary_ets = FileSummaryEts },
+                    file_summary_ets = FileSummaryEts,
+                    scheduled        = undefined },
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -83,14 +88,16 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
 handle_cast({gc, Source, Destination},
-            State = #gcstate { dir              = Dir,
-                               index_state      = IndexState,
-                               index_module     = Index,
-                               parent           = Parent,
-                               file_summary_ets = FileSummaryEts }) ->
-    Reclaimed = rabbit_msg_store:gc(Source, Destination,
-                                    {FileSummaryEts, Dir, Index, IndexState}),
-    ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source, Destination),
+            State = #gcstate { scheduled = undefined }) ->
+    {noreply, attempt_gc(State #gcstate { scheduled = {Source, Destination} }),
+     hibernate};
+
+handle_cast({no_readers, File},
+            State = #gcstate { scheduled = {Source, Destination} })
+  when File =:= Source orelse File =:= Destination ->
+    {noreply, attempt_gc(State), hibernate};
+
+handle_cast({no_readers, _File}, State) ->
     {noreply, State, hibernate};
 
 handle_cast({set_maximum_since_use, Age}, State) ->
@@ -105,3 +112,19 @@ terminate(_Reason, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+attempt_gc(State = #gcstate { dir              = Dir,
+                              index_state      = IndexState,
+                              index_module     = Index,
+                              parent           = Parent,
+                              file_summary_ets = FileSummaryEts,
+                              scheduled        = {Source, Destination} }) ->
+    case rabbit_msg_store:gc(Source, Destination,
+                             {FileSummaryEts, Dir, Index, IndexState}) of
+        concurrent_readers ->
+            State;
+        Reclaimed ->
+            ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source,
+                                          Destination),
+            State #gcstate { scheduled = undefined }
+    end.

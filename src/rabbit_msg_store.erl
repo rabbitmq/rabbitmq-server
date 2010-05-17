@@ -89,6 +89,7 @@
           index_state,
           index_module,
           dir,
+          gc_pid,
           file_handles_ets,
           file_summary_ets,
           dedup_cache_ets,
@@ -109,6 +110,7 @@
                                             index_state        :: any(),
                                             index_module       :: atom(),
                                             dir                :: file_path(),
+                                            gc_pid             :: pid(),
                                             file_handles_ets   :: tid(),
                                             file_summary_ets   :: tid(),
                                             dedup_cache_ets    :: tid(),
@@ -137,7 +139,8 @@
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
 
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
-               {tid(), file_path(), atom(), any()}) -> non_neg_integer()).
+               {tid(), file_path(), atom(), any()}) ->
+                   'concurrent_readers' | non_neg_integer()).
 
 -endif.
 
@@ -351,13 +354,14 @@ set_maximum_since_use(Server, Age) ->
     gen_server2:pcast(Server, 8, {set_maximum_since_use, Age}).
 
 client_init(Server, Ref) ->
-    {IState, IModule, Dir,
+    {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
         gen_server2:call(Server, {new_client_state, Ref}, infinity),
     #client_msstate { file_handle_cache  = dict:new(),
                       index_state        = IState,
                       index_module       = IModule,
                       dir                = Dir,
+                      gc_pid             = GCPid,
                       file_handles_ets   = FileHandlesEts,
                       file_summary_ets   = FileSummaryEts,
                       dedup_cache_ets    = DedupCacheEts,
@@ -423,10 +427,20 @@ client_read2(Server, false, _Right,
 client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
              CState = #client_msstate { file_handles_ets = FileHandlesEts,
                                         file_summary_ets = FileSummaryEts,
-                                        dedup_cache_ets  = DedupCacheEts }) ->
-    Release = fun() -> ets:update_counter(FileSummaryEts, File,
-                                          {#file_summary.readers, -1})
-              end,
+                                        dedup_cache_ets  = DedupCacheEts,
+                                        gc_pid           = GCPid }) ->
+    Release =
+        fun() -> ok = case ets:update_counter(FileSummaryEts, File,
+                                              {#file_summary.readers, -1}) of
+                          0 -> case ets:lookup(FileSummaryEts, File) of
+                                   [#file_summary { locked = true }] ->
+                                       rabbit_msg_store_gc:no_readers(
+                                         GCPid, File);
+                                   _ -> ok
+                               end;
+                          _ -> ok
+                      end
+        end,
     %% If a GC involving the file hasn't already started, it won't
     %% start now. Need to check again to see if we've been locked in
     %% the meantime, between lookup and update_counter (thus GC
@@ -435,7 +449,7 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
     case ets:lookup(FileSummaryEts, File) of
         [] -> %% GC has deleted our file, just go round again.
             read(Server, Guid, CState);
-        [{#file_summary { locked = true }}] ->
+        [#file_summary { locked = true }] ->
             %% If we get a badarg here, then the GC has finished and
             %% deleted our file. Try going around again. Otherwise,
             %% just defer.
@@ -447,7 +461,7 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
                 Defer()
             catch error:badarg -> read(Server, Guid, CState)
             end;
-        _ ->
+        [#file_summary { locked = false }] ->
             %% Ok, we're definitely safe to continue - a GC involving
             %% the file cannot start up now, and isn't running, so
             %% nothing will tell us from now on to close the handle if
@@ -569,8 +583,9 @@ handle_call({new_client_state, CRef}, _From,
                                file_summary_ets   = FileSummaryEts,
                                dedup_cache_ets    = DedupCacheEts,
                                cur_file_cache_ets = CurFileCacheEts,
-                               client_refs        = ClientRefs }) ->
-    reply({IndexState, IndexModule, Dir,
+                               client_refs        = ClientRefs,
+                               gc_pid             = GCPid }) ->
+    reply({IndexState, IndexModule, Dir, GCPid,
            FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts},
           State #msstate { client_refs = sets:add_element(CRef, ClientRefs) });
 
@@ -1569,8 +1584,7 @@ gc(SrcFile, DstFile, State = {FileSummaryEts, _Dir, _Index, _IndexState}) ->
                            {#file_summary.contiguous_top,   TotalValidData},
                            {#file_summary.file_size,        TotalValidData}]),
                  SrcFileSize + DstFileSize - TotalValidData;
-        false -> timer:sleep(100),
-                 gc(SrcFile, DstFile, State)
+        false -> concurrent_readers
     end.
 
 combine_files(#file_summary { file             = Source,
