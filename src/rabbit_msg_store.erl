@@ -155,7 +155,7 @@
 %% Index: this is a mapping from Guid to #msg_location{}:
 %%        {Guid, RefCount, File, Offset, TotalSize}
 %%        By default, it's in ets, but it's also pluggable.
-%% FileSummary: this is an ets table which maps File to #file_summary():
+%% FileSummary: this is an ets table which maps File to #file_summary{}:
 %%        {File, ValidTotalSize, ContiguousTop, Left, Right,
 %%         FileSize, Locked, Readers}
 %%
@@ -169,7 +169,7 @@
 %% We need to keep track of which messages are in which files (this is
 %% the Index); how much useful data is in each file and which files
 %% are on the left and right of each other. This is the purpose of the
-%% FileSummary table.
+%% FileSummary ets table.
 %%
 %% As messages are removed from files, holes appear in these
 %% files. The field ValidTotalSize contains the total amount of useful
