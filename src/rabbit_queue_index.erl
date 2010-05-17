@@ -222,7 +222,8 @@ init(Name, MsgStoreRecovered, ContainsCheckFun) ->
     %%    segment and the journal.
     State1 = load_journal(State),
     %% 2. Flush the journal. This makes life easier for everyone, as
-    %%    it means there won't be any publishes in the journal alone.
+    %%    it means there won't be any publishes in the journal
+    %%    alone. The dirty recovery code below relies on this.
     State2 = #qistate { dir = Dir, segments = Segments } =
         flush_journal(State1),
     %% 3. Load each segment in turn and filter out messages that are
@@ -249,7 +250,7 @@ init(Name, MsgStoreRecovered, ContainsCheckFun) ->
                   end, {Segments, 0}, all_segment_nums(State2));
             true ->
                 %% At this stage, we will only know about files that
-                %% were loaded during flushing. They *will* have
+                %% were loaded during journal loading, They *will* have
                 %% correct ack and pub counts, but for all remaining
                 %% segments, if they're not in the Segments store then
                 %% we need to add them and populate with saved data.
@@ -269,9 +270,15 @@ init(Name, MsgStoreRecovered, ContainsCheckFun) ->
                                    SegmentsN
                            end
                    end, Segments, all_segment_nums(State2)),
+                 %% the counts above include transient messages, which
+                 %% would be the wrong thing to return
                  undefined}
         end,
-    %% artificially set the dirty_count non zero and call flush again
+    %% flush again so we eagerly remove any segments that have become
+    %% empty due to either ContainsCheckFun returning false in the
+    %% non-clean recovery case or PubCount==AckCount in the clean
+    %% recovery case. Since the latter doesn't go through the journal
+    %% logic we we artificially set the dirty_count non zero.
     State3 = flush_journal(State2 #qistate { segments = Segments1,
                                              dirty_count = 1 }),
     {Count, Terms, State3}.
