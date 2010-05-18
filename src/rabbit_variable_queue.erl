@@ -1200,11 +1200,7 @@ publish(neither, MsgStatus = #msg_status { seq_id = SeqId }, State =
     {#msg_status { index_on_disk = true }, IndexState1} =
         maybe_write_index_to_disk(true, MsgStatus1, IndexState),
     true = queue:is_empty(Q1) andalso bpqueue:is_empty(Q2), %% ASSERTION
-    %% delta may be empty, seq_id > next_segment_boundary from q3
-    %% head, so we need to find where the segment boundary is before
-    %% or equal to seq_id
-    DeltaSeqId = rabbit_queue_index:current_segment_boundary(SeqId),
-    Delta1 = #delta { start_seq_id = DeltaSeqId, count = 1,
+    Delta1 = #delta { start_seq_id = SeqId, count = 1,
                       end_seq_id = SeqId + 1 },
     State #vqstate { index_state = IndexState1,
                      delta = combine_deltas(Delta, Delta1),

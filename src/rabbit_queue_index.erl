@@ -33,8 +33,7 @@
 
 -export([init/3, terminate/2, terminate_and_erase/1, publish/4,
          deliver/2, ack/2, sync/2, flush/1, read/3,
-         current_segment_boundary/1, next_segment_boundary/1, bounds/1,
-         recover/1]).
+         next_segment_boundary/1, bounds/1, recover/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -196,7 +195,6 @@
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
              {[{guid(), seq_id(), boolean(), boolean()}],
               seq_id() | 'undefined', qistate()}).
--spec(current_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
@@ -364,10 +362,6 @@ read(Start, End, State = #qistate { segments = Segments,
        end, [], journal_plus_segment(JEntries, SegEntries)),
      Again,
      State #qistate { segments = segment_store(Segment1, Segments) }}.
-
-current_segment_boundary(SeqId) ->
-    {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
-    reconstruct_seq_id(Seg, 0).
 
 next_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
