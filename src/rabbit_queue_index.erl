@@ -33,7 +33,8 @@
 
 -export([init/3, terminate/2, terminate_and_erase/1, publish/4,
          deliver/2, ack/2, sync/2, flush/1, read_segment_entries/2,
-         next_segment_boundary/1, segment_size/0, bounds/1, recover/1]).
+         next_segment_boundary/1, current_segment_boundary/1, bounds/1,
+         recover/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -196,7 +197,7 @@
 -spec(read_segment_entries/2 :: (seq_id(), qistate()) ->
              {[{guid(), seq_id(), boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
--spec(segment_size/0 :: () -> non_neg_integer()).
+-spec(current_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
 -spec(recover/1 :: ([queue_name()]) -> {[[any()]], startup_fun_state()}).
@@ -343,8 +344,9 @@ next_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
     reconstruct_seq_id(Seg + 1, 0).
 
-segment_size() ->
-    ?SEGMENT_ENTRY_COUNT.
+current_segment_boundary(SeqId) ->
+    {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
+    reconstruct_seq_id(Seg, 0).
 
 bounds(State) ->
     SegNums = all_segment_nums(State),

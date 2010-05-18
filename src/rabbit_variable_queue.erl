@@ -829,7 +829,7 @@ betas_from_segment_entries(List, SeqIdLimit, TransientThreshold, IndexState) ->
     {bpqueue:from_list([{true, Filtered}]), IndexState1}.
 
 read_index_segment(SeqId, IndexState) ->
-    SeqId1 = SeqId + rabbit_queue_index:segment_size(),
+    SeqId1 = rabbit_queue_index:next_segment_boundary(SeqId),
     case rabbit_queue_index:read_segment_entries(SeqId, IndexState) of
         {[], IndexState1} -> read_index_segment(SeqId1, IndexState1);
         {List, IndexState1} -> {List, IndexState1, SeqId1}
@@ -963,7 +963,7 @@ delete1(_PersistentStore, _TransientThreshold, NextSeqId, Count, DeltaSeqId,
     {Count, IndexState};
 delete1(PersistentStore, TransientThreshold, NextSeqId, Count, DeltaSeqId,
         IndexState) ->
-    Delta1SeqId = DeltaSeqId + rabbit_queue_index:segment_size(),
+    Delta1SeqId = rabbit_queue_index:next_segment_boundary(DeltaSeqId),
     case rabbit_queue_index:read_segment_entries(DeltaSeqId, IndexState) of
         {[], IndexState1} ->
             delete1(PersistentStore, TransientThreshold, NextSeqId, Count,
@@ -1203,8 +1203,7 @@ publish(neither, MsgStatus = #msg_status { seq_id = SeqId }, State =
     %% delta may be empty, seq_id > next_segment_boundary from q3
     %% head, so we need to find where the segment boundary is before
     %% or equal to seq_id
-    DeltaSeqId = rabbit_queue_index:next_segment_boundary(SeqId) -
-        rabbit_queue_index:segment_size(),
+    DeltaSeqId = rabbit_queue_index:current_segment_boundary(SeqId),
     Delta1 = #delta { start_seq_id = DeltaSeqId, count = 1,
                       end_seq_id = SeqId + 1 },
     State #vqstate { index_state = IndexState1,
@@ -1491,15 +1490,6 @@ push_betas_to_deltas(State = #vqstate { q2 = Q2, delta = Delta, q3 = Q3,
                 true -> %% already only holding LTE one segment indices in q3
                     State1;
                 false ->
-                    %% ASSERTION
-                    %% This says that if Delta1SeqId /= undefined then
-                    %% the gap from Limit to Delta1SeqId is an integer
-                    %% multiple of segment_size
-                    0 = case Delta1SeqId of
-                            undefined -> 0;
-                            _ -> (Delta1SeqId - Limit) rem
-                                     rabbit_queue_index:segment_size()
-                        end,
                     %% SeqIdMax is low in the sense that it must be
                     %% lower than the seq_id in delta1, in fact either
                     %% delta1 has undefined as its seq_id or there

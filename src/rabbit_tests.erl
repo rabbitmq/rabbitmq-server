@@ -1448,7 +1448,7 @@ test_queue_init() ->
       end).
 
 test_queue_index() ->
-    SegmentSize = rabbit_queue_index:segment_size(),
+    SegmentSize = rabbit_queue_index:next_segment_boundary(0),
     TwoSegs = SegmentSize + SegmentSize,
     stop_msg_store(),
     ok = empty_test_queue(),
@@ -1579,7 +1579,7 @@ test_variable_queue() ->
     passed.
 
 test_variable_queue_dynamic_duration_change() ->
-    SegmentSize = rabbit_queue_index:segment_size(),
+    SegmentSize = rabbit_queue_index:next_segment_boundary(0),
     VQ0 = fresh_variable_queue(),
     %% start by sending in a couple of segments worth
     Len1 = 2*SegmentSize,
@@ -1630,7 +1630,7 @@ test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
     end.
 
 test_variable_queue_partial_segments_delta_thing() ->
-    SegmentSize = rabbit_queue_index:segment_size(),
+    SegmentSize = rabbit_queue_index:next_segment_boundary(0),
     HalfSegment = SegmentSize div 2,
     VQ0 = fresh_variable_queue(),
     VQ1 = variable_queue_publish(true, SegmentSize + HalfSegment, VQ0),
