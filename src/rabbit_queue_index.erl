@@ -31,8 +31,8 @@
 
 -module(rabbit_queue_index).
 
--export([init/3, terminate/2, terminate_and_erase/1, write_published/4,
-         write_delivered/2, write_acks/2, sync_seq_ids/2, flush_journal/1,
+-export([init/3, terminate/2, terminate_and_erase/1, publish/4,
+         deliver/2, ack/2, sync/2, flush/1,
          read_segment_entries/2, next_segment_boundary/1, segment_size/0,
          find_lowest_seq_id_seg_and_next_seq_id/1, recover/1]).
 
@@ -189,12 +189,11 @@
              {'undefined' | non_neg_integer(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(terminate_and_erase/1 :: (qistate()) -> qistate()).
--spec(write_published/4 :: (guid(), seq_id(), boolean(), qistate())
-      -> qistate()).
--spec(write_delivered/2 :: (seq_id(), qistate()) -> qistate()).
--spec(write_acks/2 :: ([seq_id()], qistate()) -> qistate()).
--spec(sync_seq_ids/2 :: ([seq_id()], qistate()) -> qistate()).
--spec(flush_journal/1 :: (qistate()) -> qistate()).
+-spec(publish/4 :: (guid(), seq_id(), boolean(), qistate()) -> qistate()).
+-spec(deliver/2 :: (seq_id(), qistate()) -> qistate()).
+-spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
+-spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
+-spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read_segment_entries/2 :: (seq_id(), qistate()) ->
              {[{guid(), seq_id(), boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
@@ -291,7 +290,7 @@ terminate_and_erase(State) ->
     ok = rabbit_misc:recursive_delete([State1 #qistate.dir]),
     State1.
 
-write_published(Guid, SeqId, IsPersistent, State) when is_binary(Guid) ->
+publish(Guid, SeqId, IsPersistent, State) when is_binary(Guid) ->
     ?GUID_BYTES = size(Guid),
     {JournalHdl, State1} = get_journal_handle(State),
     ok = file_handle_cache:append(
@@ -301,15 +300,15 @@ write_published(Guid, SeqId, IsPersistent, State) when is_binary(Guid) ->
                            end):?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Guid]),
     maybe_flush_journal(add_to_journal(SeqId, {Guid, IsPersistent}, State1)).
 
-write_delivered(SeqId, State) ->
+deliver(SeqId, State) ->
     {JournalHdl, State1} = get_journal_handle(State),
     ok = file_handle_cache:append(
            JournalHdl, <<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>),
     maybe_flush_journal(add_to_journal(SeqId, del, State1)).
 
-write_acks([], State) ->
+ack([], State) ->
     State;
-write_acks(SeqIds, State) ->
+ack(SeqIds, State) ->
     {JournalHdl, State1} = get_journal_handle(State),
     ok = file_handle_cache:append(
            JournalHdl, [<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>> ||
@@ -318,43 +317,15 @@ write_acks(SeqIds, State) ->
                                             add_to_journal(SeqId, ack, StateN)
                                     end, State1, SeqIds)).
 
-sync_seq_ids([], State) ->
+sync([], State) ->
     State;
-sync_seq_ids(_SeqIds, State = #qistate { journal_handle = undefined }) ->
+sync(_SeqIds, State = #qistate { journal_handle = undefined }) ->
     State;
-sync_seq_ids(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
+sync(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
     ok = file_handle_cache:sync(JournalHdl),
     State.
 
-flush_journal(State = #qistate { dirty_count = 0 }) ->
-    State;
-flush_journal(State = #qistate { segments = Segments }) ->
-    Segments1 =
-        segment_fold(
-          fun (_Seg, #segment { journal_entries = JEntries,
-                                pubs = PubCount,
-                                acks = AckCount } = Segment, SegmentsN) ->
-                  case PubCount > 0 andalso PubCount == AckCount of
-                      true  -> ok = delete_segment(Segment),
-                               SegmentsN;
-                      false -> segment_store(
-                                 append_journal_to_segment(Segment, JEntries),
-                                 SegmentsN)
-                  end
-          end, segments_new(), Segments),
-    {JournalHdl, State1} =
-        get_journal_handle(State #qistate { segments = Segments1 }),
-    ok = file_handle_cache:clear(JournalHdl),
-    State1 #qistate { dirty_count = 0 }.
-
-append_journal_to_segment(Segment, JEntries) ->
-    case array:sparse_size(JEntries) of
-        0 -> Segment;
-        _ -> {Hdl, Segment1} = get_segment_handle(Segment),
-             array:sparse_foldl(fun write_entry_to_segment/3, Hdl, JEntries),
-             ok = file_handle_cache:sync(Hdl),
-             Segment1 #segment { journal_entries = array_new() }
-    end.
+flush(State) -> flush_journal(State).
 
 read_segment_entries(InitSeqId, State = #qistate { segments = Segments,
                                                    dir = Dir }) ->
@@ -598,6 +569,36 @@ maybe_flush_journal(State = #qistate { dirty_count = DCount })
     flush_journal(State);
 maybe_flush_journal(State) ->
     State.
+
+flush_journal(State = #qistate { dirty_count = 0 }) ->
+    State;
+flush_journal(State = #qistate { segments = Segments }) ->
+    Segments1 =
+        segment_fold(
+          fun (_Seg, #segment { journal_entries = JEntries,
+                                pubs = PubCount,
+                                acks = AckCount } = Segment, SegmentsN) ->
+                  case PubCount > 0 andalso PubCount == AckCount of
+                      true  -> ok = delete_segment(Segment),
+                               SegmentsN;
+                      false -> segment_store(
+                                 append_journal_to_segment(Segment, JEntries),
+                                 SegmentsN)
+                  end
+          end, segments_new(), Segments),
+    {JournalHdl, State1} =
+        get_journal_handle(State #qistate { segments = Segments1 }),
+    ok = file_handle_cache:clear(JournalHdl),
+    State1 #qistate { dirty_count = 0 }.
+
+append_journal_to_segment(Segment, JEntries) ->
+    case array:sparse_size(JEntries) of
+        0 -> Segment;
+        _ -> {Hdl, Segment1} = get_segment_handle(Segment),
+             array:sparse_foldl(fun write_entry_to_segment/3, Hdl, JEntries),
+             ok = file_handle_cache:sync(Hdl),
+             Segment1 #segment { journal_entries = array_new() }
+    end.
 
 get_journal_handle(State = #qistate { journal_handle = undefined,
                                       dir = Dir }) ->

@@ -1414,8 +1414,8 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
         lists:foldl(
           fun (SeqId, {QiN, SeqIdsGuidsAcc, MSCStateN}) ->
                   Guid = rabbit_guid:guid(),
-                  QiM = rabbit_queue_index:write_published(Guid, SeqId, Persistent,
-                                                           QiN),
+                  QiM = rabbit_queue_index:publish(
+                          Guid, SeqId, Persistent, QiN),
                   {ok, MSCStateM} = rabbit_msg_store:write(MsgStore, Guid,
                                                            Guid, MSCStateN),
                   {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc], MSCStateM}
@@ -1425,13 +1425,11 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
     {A, B}.
 
 queue_index_deliver(SeqIds, Qi) ->
-    lists:foldl(
-      fun (SeqId, QiN) ->
-              rabbit_queue_index:write_delivered(SeqId, QiN)
-      end, Qi, SeqIds).
+    lists:foldl(fun (SeqId, QiN) -> rabbit_queue_index:deliver(SeqId, QiN) end,
+                Qi, SeqIds).
 
-queue_index_flush_journal(Qi) ->
-    rabbit_queue_index:flush_journal(Qi).
+queue_index_flush(Qi) ->
+    rabbit_queue_index:flush(Qi).
 
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
@@ -1491,8 +1489,8 @@ test_queue_index() ->
     {ReadC, Qi15} = rabbit_queue_index:read_segment_entries(0, Qi14),
     ok = verify_read_with_published(true, true, ReadC,
                                     lists:reverse(SeqIdsGuidsB)),
-    Qi16 = rabbit_queue_index:write_acks(SeqIdsB, Qi15),
-    Qi17 = queue_index_flush_journal(Qi16),
+    Qi16 = rabbit_queue_index:ack(SeqIdsB, Qi15),
+    Qi17 = queue_index_flush(Qi16),
     %% Everything will have gone now because #pubs == #acks
     {0, 0, Qi18} =
         rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi17),
@@ -1512,8 +1510,8 @@ test_queue_index() ->
     {0, _Terms4, Qi22} = test_queue_init(),
     {Qi23, _SeqIdsGuidsC} = queue_index_publish(SeqIdsC, false, Qi22),
     Qi24 = queue_index_deliver(SeqIdsC, Qi23),
-    Qi25 = rabbit_queue_index:write_acks(SeqIdsC, Qi24),
-    Qi26 = queue_index_flush_journal(Qi25),
+    Qi25 = rabbit_queue_index:ack(SeqIdsC, Qi24),
+    Qi26 = queue_index_flush(Qi25),
     {Qi27, _SeqIdsGuidsC1} = queue_index_publish([SegmentSize], false, Qi26),
     _Qi28 = rabbit_queue_index:terminate_and_erase(Qi27),
     ok = stop_msg_store(),
@@ -1524,8 +1522,8 @@ test_queue_index() ->
     {Qi30, _SeqIdsGuidsC2} = queue_index_publish(SeqIdsC, false, Qi29),
     Qi31 = queue_index_deliver(SeqIdsC, Qi30),
     {Qi32, _SeqIdsGuidsC3} = queue_index_publish([SegmentSize], false, Qi31),
-    Qi33 = rabbit_queue_index:write_acks(SeqIdsC, Qi32),
-    Qi34 = queue_index_flush_journal(Qi33),
+    Qi33 = rabbit_queue_index:ack(SeqIdsC, Qi32),
+    Qi34 = queue_index_flush(Qi33),
     _Qi35 = rabbit_queue_index:terminate_and_erase(Qi34),
     ok = stop_msg_store(),
     ok = empty_test_queue(),
@@ -1535,8 +1533,8 @@ test_queue_index() ->
     {0, _Terms6, Qi36} = test_queue_init(),
     {Qi37, _SeqIdsGuidsD} = queue_index_publish(SeqIdsD, false, Qi36),
     Qi38 = queue_index_deliver(SeqIdsD, Qi37),
-    Qi39 = rabbit_queue_index:write_acks(SeqIdsD, Qi38),
-    Qi40 = queue_index_flush_journal(Qi39),
+    Qi39 = rabbit_queue_index:ack(SeqIdsD, Qi38),
+    Qi40 = queue_index_flush(Qi39),
     _Qi41 = rabbit_queue_index:terminate_and_erase(Qi40),
     ok = stop_msg_store(),
     ok = rabbit_variable_queue:start([]),
