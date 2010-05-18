@@ -175,9 +175,9 @@
          }).
 
 -record(delta,
-        { start_seq_id,
+        { start_seq_id, %% start_seq_id is inclusive
           count,
-          end_seq_id %% note the end_seq_id is always >, not >=
+          end_seq_id    %% end_seq_id is exclusive
          }).
 
 -record(tx, { pending_messages, pending_acks }).
@@ -797,7 +797,7 @@ persistent_guids(Pubs) ->
     [Guid || Obj = #basic_message { guid = Guid } <- Pubs,
              Obj #basic_message.is_persistent].
 
-betas_from_segment_entries(List, SeqIdLimit, TransientThreshold, IndexState) ->
+betas_from_segment_entries(List, TransientThreshold, IndexState) ->
     {Filtered, IndexState1} =
         lists:foldr(
           fun ({Guid, SeqId, IsPersistent, IsDelivered},
@@ -811,28 +811,27 @@ betas_from_segment_entries(List, SeqIdLimit, TransientThreshold, IndexState) ->
                                    end,
                                {FilteredAcc, rabbit_queue_index:ack(
                                                [SeqId], IndexStateAcc1)};
-                      false -> case SeqId < SeqIdLimit of
-                                   true  -> {[#msg_status {
-                                                 msg           = undefined,
-                                                 guid          = Guid,
-                                                 seq_id        = SeqId,
-                                                 is_persistent = IsPersistent,
-                                                 is_delivered  = IsDelivered,
-                                                 msg_on_disk   = true,
-                                                 index_on_disk = true
-                                               } | FilteredAcc],
-                                             IndexStateAcc};
-                                   false -> {FilteredAcc, IndexStateAcc}
-                               end
+                      false -> {[#msg_status { msg           = undefined,
+                                               guid          = Guid,
+                                               seq_id        = SeqId,
+                                               is_persistent = IsPersistent,
+                                               is_delivered  = IsDelivered,
+                                               msg_on_disk   = true,
+                                               index_on_disk = true
+                                             } | FilteredAcc],
+                                IndexStateAcc}
                   end
           end, {[], IndexState}, List),
     {bpqueue:from_list([{true, Filtered}]), IndexState1}.
 
-read_index_segment(SeqId, IndexState) ->
-    SeqId1 = rabbit_queue_index:next_segment_boundary(SeqId),
-    case rabbit_queue_index:read_segment_entries(SeqId, IndexState) of
-        {[], IndexState1} -> read_index_segment(SeqId1, IndexState1);
-        {List, IndexState1} -> {List, IndexState1, SeqId1}
+read_one_index_segment(StartSeqId, EndSeqId, IndexState)
+  when StartSeqId =< EndSeqId ->
+    case rabbit_queue_index:read(StartSeqId, EndSeqId, IndexState) of
+        {List, Again, IndexState1} when List /= [] orelse Again =:= undefined ->
+            {List, IndexState1,
+             rabbit_queue_index:next_segment_boundary(StartSeqId)};
+        {[], StartSeqId1, IndexState1} ->
+            read_one_index_segment(StartSeqId1, EndSeqId, IndexState1)
     end.
 
 ensure_binary_properties(Msg = #basic_message { content = Content }) ->
@@ -959,26 +958,27 @@ tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFuns},
     State2 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }.
 
 delete1(_PersistentStore, _TransientThreshold, NextSeqId, Count, DeltaSeqId,
-        IndexState) when DeltaSeqId >= NextSeqId ->
+        IndexState) when DeltaSeqId =:= undefined
+                         orelse DeltaSeqId >= NextSeqId ->
     {Count, IndexState};
 delete1(PersistentStore, TransientThreshold, NextSeqId, Count, DeltaSeqId,
         IndexState) ->
-    Delta1SeqId = rabbit_queue_index:next_segment_boundary(DeltaSeqId),
-    case rabbit_queue_index:read_segment_entries(DeltaSeqId, IndexState) of
-        {[], IndexState1} ->
-            delete1(PersistentStore, TransientThreshold, NextSeqId, Count,
-                    Delta1SeqId, IndexState1);
-        {List, IndexState1} ->
-            {Q, IndexState2} =
-                betas_from_segment_entries(
-                  List, Delta1SeqId, TransientThreshold, IndexState1),
-            {QCount, IndexState3} =
-                remove_queue_entries(
-                  PersistentStore, fun beta_fold_no_index_on_disk/3,
-                  Q, IndexState2),
-            delete1(PersistentStore, TransientThreshold, NextSeqId,
-                    Count + QCount, Delta1SeqId, IndexState3)
-    end.
+    {List, Again, IndexState1} =
+        rabbit_queue_index:read(DeltaSeqId, NextSeqId, IndexState),
+    {IndexState2, Count1} =
+        case List of
+            [] -> {IndexState1, Count};
+            _  -> {Q, IndexState3} =
+                      betas_from_segment_entries(
+                        List, TransientThreshold, IndexState1),
+                  {Count2, IndexState4} =
+                      remove_queue_entries(
+                        PersistentStore, fun beta_fold_no_index_on_disk/3,
+                        Q, IndexState3),
+                  {IndexState4, Count2 + Count}
+        end,
+    delete1(PersistentStore, TransientThreshold, NextSeqId, Count1, Again,
+            IndexState2).
 
 purge1(Count, State = #vqstate { q3 = Q3, index_state = IndexState,
                                  persistent_store = PersistentStore }) ->
@@ -1370,13 +1370,12 @@ maybe_deltas_to_betas(
             %% segment, or TargetRamMsgCount > 0, meaning we should
             %% really be holding all the betas in memory.
             {List, IndexState1, Delta1SeqId} =
-                read_index_segment(DeltaSeqId, IndexState),
+                read_one_index_segment(DeltaSeqId, DeltaSeqIdEnd, IndexState),
             %% length(List) may be < segment_size because of acks.  It
             %% could be [] if we ignored every message in the segment
             %% due to it being transient and below the threshold
-            {Q3a, IndexState2} =
-                betas_from_segment_entries(
-                  List, DeltaSeqIdEnd, TransientThreshold, IndexState1),
+            {Q3a, IndexState2} = betas_from_segment_entries(
+                                   List, TransientThreshold, IndexState1),
             State1 = State #vqstate { index_state = IndexState2 },
             case bpqueue:len(Q3a) of
                 0 ->

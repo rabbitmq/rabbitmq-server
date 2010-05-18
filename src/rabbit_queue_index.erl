@@ -32,8 +32,8 @@
 -module(rabbit_queue_index).
 
 -export([init/3, terminate/2, terminate_and_erase/1, publish/4,
-         deliver/2, ack/2, sync/2, flush/1, read_segment_entries/2,
-         next_segment_boundary/1, current_segment_boundary/1, bounds/1,
+         deliver/2, ack/2, sync/2, flush/1, read/3,
+         current_segment_boundary/1, next_segment_boundary/1, bounds/1,
          recover/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
@@ -83,15 +83,15 @@
 %% journal is still held in this mapping). Actions are stored directly
 %% in this state. Thus at the point of flushing the journal, firstly
 %% no reading from disk is necessary, but secondly if the known number
-%% of acks and publishes in a segment qare equal, given the known
-%% state of the segment file combined with the journal, no writing
-%% needs to be done to the segment file either (in fact it is deleted
-%% if it exists at all). This is safe given that the set of acks is a
-%% subset of the set of publishes. When it's necessary to sync
-%% messages because of transactions, it's only necessary to fsync on
-%% the journal: when entries are distributed from the journal to
-%% segment files, those segments appended to are fsync'd prior to the
-%% journal being truncated.
+%% of acks and publishes in a segment are equal, given the known state
+%% of the segment file combined with the journal, no writing needs to
+%% be done to the segment file either (in fact it is deleted if it
+%% exists at all). This is safe given that the set of acks is a subset
+%% of the set of publishes. When it's necessary to sync messages
+%% because of transactions, it's only necessary to fsync on the
+%% journal: when entries are distributed from the journal to segment
+%% files, those segments appended to are fsync'd prior to the journal
+%% being truncated.
 %%
 %% This module is also responsible for scanning the queue index files
 %% and seeding the message store on start up.
@@ -191,10 +191,11 @@
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush/1 :: (qistate()) -> qistate()).
--spec(read_segment_entries/2 :: (seq_id(), qistate()) ->
-             {[{guid(), seq_id(), boolean(), boolean()}], qistate()}).
--spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
+-spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
+             {[{guid(), seq_id(), boolean(), boolean()}],
+              seq_id() | 'undefined', qistate()}).
 -spec(current_segment_boundary/1 :: (seq_id()) -> seq_id()).
+-spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
 -spec(recover/1 :: ([queue_name()]) -> {[[any()]], startup_fun_state()}).
@@ -332,33 +333,50 @@ sync(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
 
 flush(State) -> flush_journal(State).
 
-read_segment_entries(InitSeqId, State = #qistate { segments = Segments,
-                                                   dir = Dir }) ->
-    {Seg, 0} = seq_id_to_seg_and_rel_seq_id(InitSeqId),
-    Segment = segment_find_or_new(Seg, Dir, Segments),
-    {SegEntries, _PubCount, _AckCount, Segment1} = load_segment(false, Segment),
+read(StartEnd, StartEnd, State) ->
+    {[], undefined, State};
+read(Start, End, State = #qistate { segments = Segments,
+                                    dir = Dir }) when Start =< End ->
+    %% Start is inclusive, End is exclusive.
+    {StartSeg, StartRelSeq} = seq_id_to_seg_and_rel_seq_id(Start),
+    {EndSeg, EndRelSeq} = seq_id_to_seg_and_rel_seq_id(End),
+    Start1 = reconstruct_seq_id(StartSeg + 1, 0),
+    Again = case End =< Start1 of
+                true  -> undefined;
+                false -> Start1
+            end,
+    MaxRelSeq = case StartSeg =:= EndSeg of
+                    true  -> EndRelSeq;
+                    false -> ?SEGMENT_ENTRY_COUNT
+                end,
+    Segment = segment_find_or_new(StartSeg, Dir, Segments),
+    {SegEntries, _PubCount, _AckCount, Segment1} =
+        load_segment(false, StartRelSeq, MaxRelSeq, Segment),
     #segment { journal_entries = JEntries } = Segment1,
     {array:sparse_foldr(
        fun (RelSeq, {{Guid, IsPersistent}, IsDelivered, no_ack}, Acc) ->
-               [ {Guid, reconstruct_seq_id(Seg, RelSeq),
+               [ {Guid, reconstruct_seq_id(StartSeg, RelSeq),
                   IsPersistent, IsDelivered == del} | Acc ]
-       end, [], journal_plus_segment(JEntries, SegEntries)),
+       end, [],
+       journal_plus_segment(JEntries, SegEntries, StartRelSeq, MaxRelSeq)),
+     Again,
      State #qistate { segments = segment_store(Segment1, Segments) }}.
-
-next_segment_boundary(SeqId) ->
-    {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
-    reconstruct_seq_id(Seg + 1, 0).
 
 current_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
     reconstruct_seq_id(Seg, 0).
 
+next_segment_boundary(SeqId) ->
+    {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
+    reconstruct_seq_id(Seg + 1, 0).
+
 bounds(State) ->
     SegNums = all_segment_nums(State),
-    %% We don't want the lowest seq_id, merely the seq_id of the start
-    %% of the lowest segment. That seq_id may not actually exist, but
-    %% that's fine. The important thing is that the segment exists and
-    %% the seq_id reported is on a segment boundary.
+    %% Don't bother trying to figure out the lowest seq_id, merely the
+    %% seq_id of the start of the lowest segment. That seq_id may not
+    %% actually exist, but that's fine. The important thing is that
+    %% the segment exists and the seq_id reported is on a segment
+    %% boundary.
 
     %% We also don't really care about the max seq_id. Just start the
     %% next segment: it makes life much easier.
@@ -460,7 +478,7 @@ terminate(StoreShutdown, Terms, State =
 
 recover_segment(ContainsCheckFun, CleanShutdown, Segment) ->
     {SegEntries, PubCount, AckCount, Segment1} =
-        load_segment(false, Segment),
+        load_segment(false, 0, ?SEGMENT_ENTRY_COUNT, Segment),
     array:sparse_foldl(
       fun (RelSeq, {{Guid, _IsPersistent}, Del, no_ack}, Segment3) ->
               recover_message(ContainsCheckFun(Guid), CleanShutdown,
@@ -518,7 +536,8 @@ queue_index_walker_reader(QueueName, Gatherer) ->
     State1 = lists:foldl(
                fun (Seg, State2) ->
                        SeqId = reconstruct_seq_id(Seg, 0),
-                       {Messages, State3} = read_segment_entries(SeqId, State2),
+                       {Messages, undefined, State3} =
+                           read(SeqId, next_segment_boundary(SeqId), State2),
                        [ok = gatherer:in(Gatherer, {Guid, 1}) ||
                            {Guid, _SeqId, true, _IsDelivered} <- Messages],
                        State3
@@ -633,7 +652,7 @@ load_journal(State) ->
                   %% them if duplicates are in the journal. The counts
                   %% here are purely from the segment itself.
                   {SegEntries, PubCountInSeg, AckCountInSeg, Segment1} =
-                      load_segment(true, Segment),
+                      load_segment(true, 0, ?SEGMENT_ENTRY_COUNT, Segment),
                   %% Removed counts here are the number of pubs and
                   %% acks that are duplicates - i.e. found in both the
                   %% segment and journal.
@@ -806,8 +825,9 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
 %% number of unacked msgs is PubCount - AckCount. If KeepAcks is
 %% false, then array:sparse_size(SegEntries) == PubCount -
 %% AckCount. If KeepAcks is true, then array:sparse_size(SegEntries)
-%% == PubCount.
-load_segment(KeepAcks, Segment = #segment { path = Path, handle = SegHdl }) ->
+%% == PubCount. StartRelSeq is inclusive, EndRelSeq is exclusive.
+load_segment(KeepAcks, StartRelSeq, EndRelSeq,
+             Segment = #segment { path = Path, handle = SegHdl }) ->
     SegmentExists = case SegHdl of
                         undefined -> filelib:is_file(Path);
                         _         -> true
@@ -817,20 +837,24 @@ load_segment(KeepAcks, Segment = #segment { path = Path, handle = SegHdl }) ->
         true  -> {Hdl, Segment1} = get_segment_handle(Segment),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
                  {SegEntries, PubCount, AckCount} =
-                     load_segment_entries(KeepAcks, Hdl, array_new(), 0, 0),
+                     load_segment_entries(KeepAcks, StartRelSeq, EndRelSeq, Hdl,
+                                          array_new(), 0, 0),
                  {SegEntries, PubCount, AckCount, Segment1}
     end.
 
-load_segment_entries(KeepAcks, Hdl, SegEntries, PubCount, AckCount) ->
+load_segment_entries(KeepAcks, StartRel, EndRel, Hdl, SegEntries, PubCount,
+                     AckCount) ->
     case file_handle_cache:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES) of
         {ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-              RelSeq:?REL_SEQ_BITS>>} ->
+              RelSeq:?REL_SEQ_BITS>>}
+          when StartRel =< RelSeq andalso RelSeq < EndRel ->
             {AckCount1, SegEntries1} =
                 deliver_or_ack_msg(KeepAcks, RelSeq, AckCount, SegEntries),
-            load_segment_entries(KeepAcks, Hdl, SegEntries1, PubCount,
-                                 AckCount1);
+            load_segment_entries(KeepAcks, StartRel, EndRel, Hdl, SegEntries1,
+                                 PubCount, AckCount1);
         {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
-              IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
+              IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>}
+          when StartRel =< RelSeq andalso RelSeq < EndRel ->
             %% because we specify /binary, and binaries are complete
             %% bytes, the size spec is in bytes, not bits.
             {ok, Guid} = file_handle_cache:read(Hdl, ?GUID_BYTES),
@@ -838,8 +862,11 @@ load_segment_entries(KeepAcks, Hdl, SegEntries, PubCount, AckCount) ->
                 array:set(RelSeq,
                           {{Guid, 1 == IsPersistentNum}, no_del, no_ack},
                           SegEntries),
-            load_segment_entries(KeepAcks, Hdl, SegEntries1, PubCount + 1,
-                                 AckCount);
+            load_segment_entries(KeepAcks, StartRel, EndRel, Hdl, SegEntries1,
+                                 PubCount + 1, AckCount);
+        {ok, _SomeBinary} ->
+            load_segment_entries(KeepAcks, StartRel, EndRel, Hdl, SegEntries,
+                                 PubCount, AckCount);
         _ErrOrEoF ->
             {SegEntries, PubCount, AckCount}
     end.
@@ -867,15 +894,18 @@ bool_to_int(false) -> 0.
 %% Combine what we have just read from a segment file with what we're
 %% holding for that segment in memory. There must be no
 %% duplicates. Used when providing segment entries to the variable
-%% queue.
-journal_plus_segment(JEntries, SegEntries) ->
+%% queue. RelStart is inclusive, RelEnd is exclusive.
+journal_plus_segment(JEntries, SegEntries, RelStart, RelEnd) ->
     array:sparse_foldl(
-      fun (RelSeq, JObj, SegEntriesOut) ->
+      fun (RelSeq, JObj, SegEntriesOut)
+            when RelStart =< RelSeq andalso RelSeq < RelEnd ->
               SegEntry = array:get(RelSeq, SegEntriesOut),
               case journal_plus_segment1(JObj, SegEntry) of
                   undefined -> array:reset(RelSeq, SegEntriesOut);
                   Obj       -> array:set(RelSeq, Obj, SegEntriesOut)
-              end
+              end;
+          (_RelSeq, _JObj, SegEntriesOut) ->
+              SegEntriesOut
       end, SegEntries, JEntries).
 
 %% Here, the result is the item which we may be adding to (for items
