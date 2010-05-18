@@ -107,6 +107,12 @@ if [ $1 = 0 ]; then
   # Leave rabbitmq user and group
 fi
 
+# Clean out plugin activation state, both on uninstall and upgrade
+rm -rf %{_rabbit_erllibdir}/priv
+for ext in rel script boot ; do
+    rm -f %{_rabbit_erllibdir}/ebin/rabbit.$ext
+done
+
 %files -f ../%{name}.files
 %defattr(-,root,root,-)
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
