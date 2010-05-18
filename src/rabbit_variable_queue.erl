@@ -58,11 +58,11 @@
 %% Note that for persistent messages, the message and its position
 %% within the queue are always held on disk, *in addition* to being in
 %% one of the above classifications.
-
+%%
 %% Also note that within this code, the term gamma never
 %% appears. Instead, gammas are defined by betas who have had their
 %% queue position recorded on disk.
-
+%%
 %% In general, messages move q1 -> q2 -> delta -> q3 -> q4, though
 %% many of these steps are frequently skipped. q1 and q4 only hold
 %% alphas, q2 and q3 hold both betas and gammas (as queues of queues,
@@ -70,18 +70,18 @@
 %% they're betas or gammas). When a message arrives, its
 %% classification is determined. It is then added to the rightmost
 %% appropriate queue.
-
+%%
 %% If a new message is determined to be a beta or gamma, q1 is
 %% empty. If a new message is determined to be a delta, q1 and q2 are
 %% empty (and actually q4 too).
-
+%%
 %% When removing messages from a queue, if q4 is empty then q3 is read
 %% directly. If q3 becomes empty then the next segment's worth of
 %% messages from delta are read into q3, reducing the size of
 %% delta. If the queue is non empty, either q4 or q3 contain
 %% entries. It is never permitted for delta to hold all the messages
 %% in the queue.
-
+%%
 %% The duration indicated to us by the memory_monitor is used to
 %% calculate, given our current ingress and egress rates, how many
 %% messages we should hold in RAM. When we need to push alphas to
@@ -90,13 +90,13 @@
 %% as the messages closer to the tail of the queue stay in the queue
 %% for longer, thus do not need to be replaced as quickly by sending
 %% other messages to disk.
-
+%%
 %% Whilst messages are pushed to disk and forgotten from RAM as soon
 %% as requested by a new setting of the queue RAM duration, the
 %% inverse is not true: we only load messages back into RAM as
 %% demanded as the queue is read from. Thus only publishes to the
 %% queue will take up available spare capacity.
-
+%%
 %% If a queue is full of transient messages, then the transition from
 %% betas to deltas will be potentially very expensive as millions of
 %% entries must be written to disk by the queue_index module. This can
@@ -107,7 +107,7 @@
 %% point at which betas and gammas must be converted to deltas, there
 %% should be very few betas remaining, thus the transition is fast (no
 %% work needs to be done for the gamma -> delta transition).
-
+%%
 %% The conversion of betas to gammas is done on publish, in batches of
 %% exactly ?RAM_INDEX_BATCH_SIZE. This value should not be too small,
 %% otherwise the frequent operations on the queues of q2 and q3 will
@@ -123,14 +123,45 @@
 %% transition doesn't matter, and in the former case the queue's
 %% shrinking length makes it unlikely (though not impossible) that the
 %% duration will become 0.
-
+%%
 %% In the queue we only keep track of messages that are pending
 %% delivery. This is fine for queue purging, but can be expensive for
 %% queue deletion: for queue deletion we must scan all the way through
 %% all remaining segments in the queue index (we start by doing a
 %% purge) and delete messages from the msg_store that we find in the
 %% queue index.
-
+%%
+%% Notes on Clean Shutdown
+%% (This documents behaviour in variable_queue, queue_index and
+%% msg_store.)
+%%
+%% In order to try to achieve as fast a start-up as possible, if a
+%% clean shutdown occurs, we try to save out state to disk to reduce
+%% work on startup. In the msg_store this takes the form of the
+%% index_module's state, plus the file_summary ets table, and client
+%% refs. In the VQ, this takes the form of the count of persistent
+%% messages in the queue and references into the msg_stores. The
+%% queue_index adds to these terms the details of its segments and
+%% stores the terms in the queue directory.
+%%
+%% The references to the msg_stores are there so that the msg_store
+%% knows to only trust its saved state if all of the queues it was
+%% previously talking to come up cleanly. Likewise, the queues
+%% themselves (esp queue_index) skips work in init if all the queues
+%% and msg_store were shutdown cleanly. This gives both good speed
+%% improvements and also robustness so that if anything possibly went
+%% wrong in shutdown (or there was subsequent manual tampering), all
+%% messages and queues that can be recovered are recovered, safely.
+%%
+%% To delete transient messages lazily, the variable_queue, on
+%% startup, stores the next_seq_id reported by the queue_index as the
+%% transient_threshold. From that point on, whenever it's reading a
+%% message off disk via the queue_index, if the seq_id is below this
+%% threshold and the message is transient then it drops the
+%% message. This avoids the expensive operation of scanning the entire
+%% queue on startup in order to delete transient messages that were
+%% only pushed to disk to save memory.
+%%
 %%----------------------------------------------------------------------------
 
 -behaviour(rabbit_backing_queue).

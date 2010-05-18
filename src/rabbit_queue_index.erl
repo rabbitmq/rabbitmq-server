@@ -104,7 +104,10 @@
 %% correct combination of journal entries with entries read from the
 %% segment on disk, this richer representation vastly simplifies and
 %% clarifies the code.
-
+%%
+%% For notes on Clean Shutdown and startup, see documentation in
+%% variable_queue.
+%%
 %%----------------------------------------------------------------------------
 
 %% ---- Journal details ----

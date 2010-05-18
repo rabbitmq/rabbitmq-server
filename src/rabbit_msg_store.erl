@@ -298,6 +298,9 @@
 %% itself. The effect of this is that even if the msg_store process is
 %% heavily overloaded, clients can still write and read messages with
 %% very low latency and not block at all.
+%%
+%% For notes on Clean Shutdown and startup, see documentation in
+%% variable_queue.
 
 %%----------------------------------------------------------------------------
 %% public API
