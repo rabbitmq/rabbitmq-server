@@ -882,9 +882,7 @@ bool_to_int(false) -> 0.
 %%----------------------------------------------------------------------------
 
 %% Combine what we have just read from a segment file with what we're
-%% holding for that segment in memory. There must be no
-%% duplicates. Used when providing segment entries to the variable
-%% queue.
+%% holding for that segment in memory. There must be no duplicates.
 journal_plus_segment(JEntries, SegEntries) ->
     array:sparse_foldl(
       fun (RelSeq, JObj, {SegEntriesOut, PubsAdded, AcksAdded}) ->
@@ -899,10 +897,13 @@ journal_plus_segment(JEntries, SegEntries) ->
                AcksAdded + AcksAddedDelta}
       end, {SegEntries, 0, 0}, JEntries).
 
-%% Here, the result is the item which we may be adding to (for items
-%% only in the journal), modifying in (bits in both), or, when
-%% returning 'undefined', erasing from (ack in journal, not segment)
-%% the segment array.
+%% Here, the result is a triple with the first element containing the
+%% item which we may be adding to (for items only in the journal),
+%% modifying in (bits in both), or, when returning 'undefined',
+%% erasing from (ack in journal, not segment) the segment array. The
+%% other two elements of the triple are the deltas for PubsAdded and
+%% AcksAdded - these get increased when a publish or ack is found in
+%% the journal.
 journal_plus_segment1({?PUB, no_del, no_ack} = Obj, undefined) ->
     {Obj, 1, 0};
 journal_plus_segment1({?PUB, del, no_ack} = Obj,    undefined) ->
