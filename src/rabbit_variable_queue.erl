@@ -365,10 +365,7 @@ delete_and_terminate(State) ->
             {N, N, IndexState3} ->
                 IndexState3;
             {DeltaSeqId, NextSeqId, IndexState3} ->
-                {_DeleteCount, IndexState4} =
-                    delete1(PersistentStore, TransientThreshold, NextSeqId, 0,
-                            DeltaSeqId, IndexState3),
-                IndexState4
+                delete1(PersistentStore, TransientThreshold, NextSeqId, DeltaSeqId, IndexState3)
         end,
     IndexState5 = rabbit_queue_index:terminate_and_erase(IndexState2),
     rabbit_msg_store:delete_client(PersistentStore, PRef),
@@ -957,27 +954,26 @@ tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFuns},
     [ Fun() || Fun <- lists:reverse(SFuns) ],
     State2 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }.
 
-delete1(_PersistentStore, _TransientThreshold, NextSeqId, Count, DeltaSeqId,
+delete1(_PersistentStore, _TransientThreshold, NextSeqId, DeltaSeqId,
         IndexState) when DeltaSeqId =:= undefined
                          orelse DeltaSeqId >= NextSeqId ->
-    {Count, IndexState};
-delete1(PersistentStore, TransientThreshold, NextSeqId, Count, DeltaSeqId,
+    IndexState;
+delete1(PersistentStore, TransientThreshold, NextSeqId, DeltaSeqId,
         IndexState) ->
     {List, Again, IndexState1} =
         rabbit_queue_index:read(DeltaSeqId, NextSeqId, IndexState),
-    {IndexState2, Count1} =
+    IndexState2 =
         case List of
-            [] -> {IndexState1, Count};
-            _  -> {Q, IndexState3} =
-                      betas_from_segment_entries(
-                        List, TransientThreshold, IndexState1),
-                  {Count2, IndexState4} =
+            [] -> IndexState1;
+            _  -> {Q, IndexState3} = betas_from_segment_entries(
+                                       List, TransientThreshold, IndexState1),
+                  {_Count, IndexState4} =
                       remove_queue_entries(
                         PersistentStore, fun beta_fold_no_index_on_disk/3,
                         Q, IndexState3),
-                  {IndexState4, Count2 + Count}
+                  IndexState4
         end,
-    delete1(PersistentStore, TransientThreshold, NextSeqId, Count1, Again,
+    delete1(PersistentStore, TransientThreshold, NextSeqId, Again,
             IndexState2).
 
 purge1(Count, State = #vqstate { q3 = Q3, index_state = IndexState,
