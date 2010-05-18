@@ -398,9 +398,9 @@ recover(DurableQueues) ->
                       {error, enoent} -> []
                   end,
     DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
-    {DurableQueueNames, TransientDirs, DurableTerms} =
+    {DurableQueueNames, DurableTerms} =
         lists:foldl(
-          fun (QueueDir, {DurableAcc, TransientAcc, TermsAcc}) ->
+          fun (QueueDir, {DurableAcc, TermsAcc}) ->
                   case sets:is_element(QueueDir, DurableDirectories) of
                       true ->
                           TermsAcc1 =
@@ -410,15 +410,13 @@ recover(DurableQueues) ->
                                   {ok, Terms} -> [Terms | TermsAcc]
                               end,
                           {[dict:fetch(QueueDir, DurableDict) | DurableAcc],
-                           TransientAcc, TermsAcc1};
+                           TermsAcc1};
                       false ->
-                          {DurableAcc, [QueueDir | TransientAcc], TermsAcc}
+                          Dir = filename:join(queues_dir(), QueueDir),
+                          ok = rabbit_misc:recursive_delete([Dir]),
+                          {DurableAcc, TermsAcc}
                   end
-          end, {[], [], []}, Directories),
-    lists:foreach(fun (DirName) ->
-                          Dir = filename:join(queues_dir(), DirName),
-                          ok = rabbit_misc:recursive_delete([Dir])
-                  end, TransientDirs),
+          end, {[], []}, Directories),
     {DurableTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
 
 %%----------------------------------------------------------------------------
