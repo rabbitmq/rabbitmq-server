@@ -1455,11 +1455,9 @@ test_queue_index() ->
     SeqIdsA = lists:seq(0,9999),
     SeqIdsB = lists:seq(10000,19999),
     {0, _Terms, Qi0} = test_queue_init(),
-    {0, 0, Qi1} =
-        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi0),
+    {0, 0, Qi1} = rabbit_queue_index:bounds(Qi0),
     {Qi2, SeqIdsGuidsA} = queue_index_publish(SeqIdsA, false, Qi1),
-    {0, SegmentSize, Qi3} =
-        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi2),
+    {0, SegmentSize, Qi3} = rabbit_queue_index:bounds(Qi2),
     {ReadA, Qi4} = rabbit_queue_index:read_segment_entries(0, Qi3),
     ok = verify_read_with_published(false, false, ReadA,
                                     lists:reverse(SeqIdsGuidsA)),
@@ -1469,11 +1467,9 @@ test_queue_index() ->
     ok = rabbit_variable_queue:start([test_queue()]),
     %% should get length back as 0, as all the msgs were transient
     {0, _Terms1, Qi6} = test_queue_init(),
-    {0, 0, Qi7} =
-        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi6),
+    {0, 0, Qi7} = rabbit_queue_index:bounds(Qi6),
     {Qi8, SeqIdsGuidsB} = queue_index_publish(SeqIdsB, true, Qi7),
-    {0, TwoSegs, Qi9} =
-        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi8),
+    {0, TwoSegs, Qi9} = rabbit_queue_index:bounds(Qi8),
     {ReadB, Qi10} = rabbit_queue_index:read_segment_entries(0, Qi9),
     ok = verify_read_with_published(false, true, ReadB,
                                     lists:reverse(SeqIdsGuidsB)),
@@ -1483,8 +1479,7 @@ test_queue_index() ->
     %% should get length back as 10000
     LenB = length(SeqIdsB),
     {LenB, _Terms2, Qi12} = test_queue_init(),
-    {0, TwoSegs, Qi13} =
-        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi12),
+    {0, TwoSegs, Qi13} = rabbit_queue_index:bounds(Qi12),
     Qi14 = queue_index_deliver(SeqIdsB, Qi13),
     {ReadC, Qi15} = rabbit_queue_index:read_segment_entries(0, Qi14),
     ok = verify_read_with_published(true, true, ReadC,
@@ -1492,8 +1487,7 @@ test_queue_index() ->
     Qi16 = rabbit_queue_index:ack(SeqIdsB, Qi15),
     Qi17 = queue_index_flush(Qi16),
     %% Everything will have gone now because #pubs == #acks
-    {0, 0, Qi18} =
-        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(Qi17),
+    {0, 0, Qi18} = rabbit_queue_index:bounds(Qi17),
     _Qi19 = rabbit_queue_index:terminate([], Qi18),
     ok = stop_msg_store(),
     ok = rabbit_variable_queue:start([test_queue()]),

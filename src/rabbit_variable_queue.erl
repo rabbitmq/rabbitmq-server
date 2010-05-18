@@ -283,8 +283,7 @@ init(QueueName, IsDurable, _Recover) ->
         end,
     {DeltaCount, Terms, IndexState} =
         rabbit_queue_index:init(QueueName, MsgStoreRecovered, ContainsCheckFun),
-    {DeltaSeqId, NextSeqId, IndexState1} =
-        rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(IndexState),
+    {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
     {PRef, TRef, Terms1} =
         case [persistent_ref, transient_ref] -- proplists:get_keys(Terms) of
@@ -296,7 +295,7 @@ init(QueueName, IsDurable, _Recover) ->
     DeltaCount1 = proplists:get_value(persistent_count, Terms1, DeltaCount),
     Delta = case DeltaCount1 == 0 andalso DeltaCount /= undefined of
                 true  -> ?BLANK_DELTA;
-                false -> #delta { start_seq_id = DeltaSeqId,
+                false -> #delta { start_seq_id = LowSeqId,
                                   count = DeltaCount1,
                                   end_seq_id = NextSeqId }
             end,
@@ -362,8 +361,7 @@ delete_and_terminate(State) ->
     %% leaving only partial segments around.
     IndexState1 = rabbit_queue_index:flush(IndexState),
     IndexState2 =
-        case rabbit_queue_index:find_lowest_seq_id_seg_and_next_seq_id(
-               IndexState1) of
+        case rabbit_queue_index:bounds(IndexState1) of
             {N, N, IndexState3} ->
                 IndexState3;
             {DeltaSeqId, NextSeqId, IndexState3} ->

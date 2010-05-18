@@ -32,9 +32,8 @@
 -module(rabbit_queue_index).
 
 -export([init/3, terminate/2, terminate_and_erase/1, publish/4,
-         deliver/2, ack/2, sync/2, flush/1,
-         read_segment_entries/2, next_segment_boundary/1, segment_size/0,
-         find_lowest_seq_id_seg_and_next_seq_id/1, recover/1]).
+         deliver/2, ack/2, sync/2, flush/1, read_segment_entries/2,
+         next_segment_boundary/1, segment_size/0, bounds/1, recover/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -198,7 +197,7 @@
              {[{guid(), seq_id(), boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(segment_size/0 :: () -> non_neg_integer()).
--spec(find_lowest_seq_id_seg_and_next_seq_id/1 :: (qistate()) ->
+-spec(bounds/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
 -spec(recover/1 :: ([queue_name()]) -> {[[any()]], startup_fun_state()}).
 
@@ -347,7 +346,7 @@ next_segment_boundary(SeqId) ->
 segment_size() ->
     ?SEGMENT_ENTRY_COUNT.
 
-find_lowest_seq_id_seg_and_next_seq_id(State) ->
+bounds(State) ->
     SegNums = all_segment_nums(State),
     %% We don't want the lowest seq_id, merely the seq_id of the start
     %% of the lowest segment. That seq_id may not actually exist, but
@@ -358,13 +357,13 @@ find_lowest_seq_id_seg_and_next_seq_id(State) ->
     %% next segment: it makes life much easier.
 
     %% SegNums is sorted, ascending.
-    {LowSeqIdSeg, NextSeqId} =
+    {LowSeqId, NextSeqId} =
         case SegNums of
             []         -> {0, 0};
             [MinSeg|_] -> {reconstruct_seq_id(MinSeg, 0),
                            reconstruct_seq_id(1 + lists:last(SegNums), 0)}
         end,
-    {LowSeqIdSeg, NextSeqId, State}.
+    {LowSeqId, NextSeqId, State}.
 
 recover(DurableQueues) ->
     DurableDict = dict:from_list([ {queue_name_to_dir_name(Queue), Queue} ||
