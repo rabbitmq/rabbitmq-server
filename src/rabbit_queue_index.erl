@@ -42,22 +42,22 @@
 
 %% The queue index is responsible for recording the order of messages
 %% within a queue on disk.
-
+%%
 %% Because of the fact that the queue can decide at any point to send
 %% a queue entry to disk, you can not rely on publishes appearing in
 %% order. The only thing you can rely on is a message being published,
 %% then delivered, then ack'd.
-
+%%
 %% In order to be able to clean up ack'd messages, we write to segment
 %% files. These files have a fixed maximum size: ?SEGMENT_ENTRY_COUNT
 %% publishes, delivers and acknowledgements. They are numbered, and so
 %% it is known that the 0th segment contains messages 0 ->
-%% ?SEGMENT_ENTRY_COUNT, the 1st segment contains messages
-%% ?SEGMENT_ENTRY_COUNT +1 -> 2*?SEGMENT_ENTRY_COUNT and so on. As
+%% ?SEGMENT_ENTRY_COUNT - 1, the 1st segment contains messages
+%% ?SEGMENT_ENTRY_COUNT -> 2*?SEGMENT_ENTRY_COUNT - 1 and so on. As
 %% such, in the segment files, we only refer to message sequence ids
 %% by the LSBs as SeqId rem ?SEGMENT_ENTRY_COUNT. This gives them a
 %% fixed size.
-
+%%
 %% However, transient messages which are not sent to disk at any point
 %% will cause gaps to appear in segment files. Therefore, we delete a
 %% segment file whenever the number of publishes == number of acks
@@ -66,7 +66,7 @@
 %% also implies == number of delivers). In practise, this does not
 %% cause disk churn in the pathological case because of the journal
 %% and caching (see below).
-
+%%
 %% Because of the fact that publishes, delivers and acks can occur all
 %% over, we wish to avoid lots of seeking. Therefore we have a fixed
 %% sized journal to which all actions are appended. When the number of
@@ -75,30 +75,27 @@
 %% journal is truncated to zero size. Note that entries in the journal
 %% must carry the full sequence id, thus the format of entries in the
 %% journal is different to that in the segments.
-
+%%
 %% The journal is also kept fully in memory, pre-segmented: the state
-%% contains a dict from segment numbers to state-per-segment. Actions
-%% are stored directly in this state. Thus at the point of flushing
-%% the journal, firstly no reading from disk is necessary, but
-%% secondly if the known number of acks and publishes are equal, given
-%% the known state of the segment file, combined with the journal, no
-%% writing needs to be done to the segment file either (in fact it is
-%% deleted if it exists at all). This is safe given that the set of
-%% acks is a subset of the set of publishes. When it's necessary to
-%% sync messages because of transactions, it's only necessary to fsync
-%% on the journal: when entries are distributed from the journal to
+%% contains a mapping from segment numbers to state-per-segment (this
+%% state is held for all segments which have been "seen": thus a
+%% segment which has been read but has no pending entries in the
+%% journal is still held in this mapping). Actions are stored directly
+%% in this state. Thus at the point of flushing the journal, firstly
+%% no reading from disk is necessary, but secondly if the known number
+%% of acks and publishes in a segment qare equal, given the known
+%% state of the segment file combined with the journal, no writing
+%% needs to be done to the segment file either (in fact it is deleted
+%% if it exists at all). This is safe given that the set of acks is a
+%% subset of the set of publishes. When it's necessary to sync
+%% messages because of transactions, it's only necessary to fsync on
+%% the journal: when entries are distributed from the journal to
 %% segment files, those segments appended to are fsync'd prior to the
 %% journal being truncated.
-
-%% It is very common to need to access two particular segments very
-%% frequently: one for publishes, and one for deliveries and acks. As
-%% such, and the poor performance of the erlang dict module, we cache
-%% the per-segment-state for the two most recently used segments in
-%% the state, this provides a substantial performance improvement.
-
+%%
 %% This module is also responsible for scanning the queue index files
 %% and seeding the message store on start up.
-
+%%
 %% Note that in general, the representation of a message's state as
 %% the tuple: {('no_pub'|{Guid, IsPersistent}), ('del'|'no_del'),
 %% ('ack'|'no_ack')} is richer than strictly necessary for most
@@ -322,6 +319,14 @@ sync([], State) ->
 sync(_SeqIds, State = #qistate { journal_handle = undefined }) ->
     State;
 sync(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
+    %% The SeqIds here contains the SeqId of every publish and ack in
+    %% the transaction. Ideally we should go through these seqids and
+    %% only sync the journal if the pubs or acks appear in the
+    %% journal. However, this would be complex to do, and given that
+    %% the variable queue publishes and acks to the qi, and then
+    %% syncs, all in one operation, there is no possibility of the
+    %% seqids not being in the journal, provided the transaction isn't
+    %% emptied (handled above anyway).
     ok = file_handle_cache:sync(JournalHdl),
     State.
 
