@@ -571,22 +571,22 @@ add_to_journal(RelSeq, Action,
 
 %% This is a more relaxed version of deliver_or_ack_msg because we can
 %% have dels or acks in the journal without the corresponding
-%% pub. Also, always want to keep acks. Things must occur in the right
-%% order though.
-add_to_journal(RelSeq, Action, SegJArray) ->
-    case array:get(RelSeq, SegJArray) of
-        undefined ->
-            array:set(RelSeq,
-                      case Action of
-                          {_Msg, _IsPersistent} -> {Action, no_del, no_ack};
-                          del                   -> {no_pub,    del, no_ack};
-                          ack                   -> {no_pub, no_del,    ack}
-                      end, SegJArray);
-        ({Pub, no_del, no_ack}) when Action == del ->
-            array:set(RelSeq, {Pub, del, no_ack}, SegJArray);
-        ({Pub,    Del, no_ack}) when Action == ack ->
-            array:set(RelSeq, {Pub, Del,    ack}, SegJArray)
-    end.
+%% pub. Also, always want to keep ack'd entries. Things must occur in
+%% the right order though.
+add_to_journal(RelSeq, Action, JEntries) ->
+    Val = case array:get(RelSeq, JEntries) of
+              undefined ->
+                  case Action of
+                      ?PUB -> {Action, no_del, no_ack};
+                      del  -> {no_pub,    del, no_ack};
+                      ack  -> {no_pub, no_del,    ack}
+                  end;
+              ({Pub, no_del, no_ack}) when Action == del ->
+                  {Pub, del, no_ack};
+              ({Pub,    Del, no_ack}) when Action == ack ->
+                  {Pub, Del,    ack}
+          end,
+    array:set(RelSeq, Val, JEntries).
 
 maybe_flush_journal(State = #qistate { dirty_count = DCount })
   when DCount > ?MAX_JOURNAL_ENTRY_COUNT ->
