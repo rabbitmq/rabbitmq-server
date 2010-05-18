@@ -80,18 +80,20 @@
 %% contains a mapping from segment numbers to state-per-segment (this
 %% state is held for all segments which have been "seen": thus a
 %% segment which has been read but has no pending entries in the
-%% journal is still held in this mapping). Actions are stored directly
-%% in this state. Thus at the point of flushing the journal, firstly
-%% no reading from disk is necessary, but secondly if the known number
-%% of acks and publishes in a segment are equal, given the known state
-%% of the segment file combined with the journal, no writing needs to
-%% be done to the segment file either (in fact it is deleted if it
-%% exists at all). This is safe given that the set of acks is a subset
-%% of the set of publishes. When it's necessary to sync messages
-%% because of transactions, it's only necessary to fsync on the
-%% journal: when entries are distributed from the journal to segment
-%% files, those segments appended to are fsync'd prior to the journal
-%% being truncated.
+%% journal is still held in this mapping. Also note that a dict is
+%% used for this mapping, not an array because with an array, you will
+%% always have entries from 0). Actions are stored directly in this
+%% state. Thus at the point of flushing the journal, firstly no
+%% reading from disk is necessary, but secondly if the known number of
+%% acks and publishes in a segment are equal, given the known state of
+%% the segment file combined with the journal, no writing needs to be
+%% done to the segment file either (in fact it is deleted if it exists
+%% at all). This is safe given that the set of acks is a subset of the
+%% set of publishes. When it's necessary to sync messages because of
+%% transactions, it's only necessary to fsync on the journal: when
+%% entries are distributed from the journal to segment files, those
+%% segments appended to are fsync'd prior to the journal being
+%% truncated.
 %%
 %% This module is also responsible for scanning the queue index files
 %% and seeding the message store on start up.
@@ -734,13 +736,6 @@ get_segment_handle(Segment = #segment { handle = undefined, path = Path }) ->
 get_segment_handle(Segment = #segment { handle = Hdl }) ->
     {Hdl, Segment}.
 
-segment_find(Seg, {_Segments, [Segment = #segment { num = Seg } |_]}) ->
-    {ok, Segment}; %% 1 or (2, matches head)
-segment_find(Seg, {_Segments, [_, Segment = #segment { num = Seg }]}) ->
-    {ok, Segment}; %% 2, matches tail
-segment_find(Seg, {Segments, _}) -> %% no match
-    dict:find(Seg, Segments).
-
 segment_new(Seg, Dir) ->
     #segment { pubs = 0,
                acks = 0,
@@ -755,6 +750,13 @@ segment_find_or_new(Seg, Dir, Segments) ->
         error -> segment_new(Seg, Dir);
         {ok, Segment} -> Segment
     end.
+
+segment_find(Seg, {_Segments, [Segment = #segment { num = Seg } |_]}) ->
+    {ok, Segment}; %% 1 or (2, matches head)
+segment_find(Seg, {_Segments, [_, Segment = #segment { num = Seg }]}) ->
+    {ok, Segment}; %% 2, matches tail
+segment_find(Seg, {Segments, _}) -> %% no match
+    dict:find(Seg, Segments).
 
 segment_store(Segment = #segment { num = Seg }, %% 1 or (2, matches head)
               {Segments, [#segment { num = Seg } | Tail]}) ->
