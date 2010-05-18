@@ -339,7 +339,7 @@ read(Start, End, State = #qistate { segments = Segments,
                                     dir = Dir }) when Start =< End ->
     %% Start is inclusive, End is exclusive.
     {StartSeg, StartRelSeq} = seq_id_to_seg_and_rel_seq_id(Start),
-    {EndSeg, EndRelSeq} = seq_id_to_seg_and_rel_seq_id(End),
+    {EndSeg, EndRelSeq}     = seq_id_to_seg_and_rel_seq_id(End),
     Start1 = reconstruct_seq_id(StartSeg + 1, 0),
     Again = case End =< Start1 of
                 true  -> undefined;
@@ -350,8 +350,7 @@ read(Start, End, State = #qistate { segments = Segments,
                     false -> ?SEGMENT_ENTRY_COUNT
                 end,
     Segment = segment_find_or_new(StartSeg, Dir, Segments),
-    {SegEntries, _PubCount, _AckCount, Segment1} =
-        load_segment(false, Segment),
+    {SegEntries, _PubCount, _AckCount, Segment1} = load_segment(false, Segment),
     #segment { journal_entries = JEntries } = Segment1,
     {array:sparse_foldr(
        fun (RelSeq, {{Guid, IsPersistent}, IsDelivered, no_ack}, Acc)
@@ -397,12 +396,11 @@ recover(DurableQueues) ->
                                      Queue <- DurableQueues ]),
     QueuesDir = queues_dir(),
     Directories = case file:list_dir(QueuesDir) of
-                      {ok, Entries} ->
-                          [ Entry || Entry <- Entries,
-                                     filelib:is_dir(
-                                       filename:join(QueuesDir, Entry)) ];
-                      {error, enoent} ->
-                          []
+                      {ok, Entries}   -> [ Entry || Entry <- Entries,
+                                                    filelib:is_dir(
+                                                      filename:join(
+                                                        QueuesDir, Entry)) ];
+                      {error, enoent} -> []
                   end,
     DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
     {DurableQueueNames, TransientDirs, DurableTerms} =
@@ -479,8 +477,7 @@ terminate(StoreShutdown, Terms, State =
     State #qistate { journal_handle = undefined, segments = undefined }.
 
 recover_segment(ContainsCheckFun, CleanShutdown, Segment) ->
-    {SegEntries, PubCount, AckCount, Segment1} =
-        load_segment(false, Segment),
+    {SegEntries, PubCount, AckCount, Segment1} = load_segment(false, Segment),
     array:sparse_foldl(
       fun (RelSeq, {{Guid, _IsPersistent}, Del, no_ack}, Segment3) ->
               recover_message(ContainsCheckFun(Guid), CleanShutdown,
