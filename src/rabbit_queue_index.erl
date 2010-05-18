@@ -601,7 +601,7 @@ flush_journal(State = #qistate { segments = Segments }) ->
           fun (_Seg, #segment { journal_entries = JEntries,
                                 pubs = PubCount,
                                 acks = AckCount } = Segment, SegmentsN) ->
-                  case PubCount > 0 andalso PubCount == AckCount of
+                  case PubCount =:= AckCount of
                       true  -> ok = delete_segment(Segment),
                                SegmentsN;
                       false -> segment_store(
