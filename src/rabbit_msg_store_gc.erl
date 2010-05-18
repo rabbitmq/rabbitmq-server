@@ -53,6 +53,19 @@
 
 %%----------------------------------------------------------------------------
 
+-ifdef(use_specs).
+
+-spec(start_link/4 :: (file_path(), any(), atom(), tid()) ->
+                           {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(gc/3 :: (pid(), non_neg_integer(), non_neg_integer()) -> 'ok').
+-spec(no_readers/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(stop/1 :: (pid()) -> 'ok').
+-spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(Dir, IndexState, IndexModule, FileSummaryEts) ->
     gen_server2:start_link(
       ?MODULE, [self(), Dir, IndexState, IndexModule, FileSummaryEts],
