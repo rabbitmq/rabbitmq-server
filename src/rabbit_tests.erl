@@ -1525,6 +1525,27 @@ test_queue_index() ->
     Qi40 = queue_index_flush(Qi39),
     _Qi41 = rabbit_queue_index:terminate_and_erase(Qi40),
     ok = stop_msg_store(),
+    ok = empty_test_queue(),
+
+    %% d) get messages in all states to a segment, then flush, then do
+    %% the same again, don't flush and read. This will hit all
+    %% possibilities in combining the segment with the journal.
+    {0, _Terms7, Qi42} = test_queue_init(),
+    {Qi43, [Seven,Five,Four|_]} = queue_index_publish([0,1,2,4,5,7], false, Qi42),
+    Qi44 = queue_index_deliver([0,1,4], Qi43),
+    Qi45 = rabbit_queue_index:ack([0], Qi44),
+    Qi46 = queue_index_flush(Qi45),
+    {Qi47, [Eight,Six|_]} = queue_index_publish([3,6,8], false, Qi46),
+    Qi48 = queue_index_deliver([2,3,5,6], Qi47),
+    Qi49 = rabbit_queue_index:ack([1,2,3], Qi48),
+    {[], undefined, Qi50} = rabbit_queue_index:read(0, 4, Qi49),
+    {ReadD, undefined, Qi51} = rabbit_queue_index:read(4, 7, Qi50),
+    ok = verify_read_with_published(true, false, ReadD, [Four, Five, Six]),
+    {ReadE, undefined, Qi52} = rabbit_queue_index:read(7, 9, Qi51),
+    ok = verify_read_with_published(false, false, ReadE, [Seven, Eight]),
+    _Qi53 = rabbit_queue_index:terminate_and_erase(Qi52),
+
+    ok = stop_msg_store(),
     ok = rabbit_variable_queue:start([]),
     ok = stop_msg_store(),
     passed.
