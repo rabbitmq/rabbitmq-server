@@ -353,7 +353,7 @@ read(Start, End, State = #qistate { segments = Segments,
     {SegEntries, _PubCount, _AckCount, Segment1} = load_segment(false, Segment),
     #segment { journal_entries = JEntries } = Segment1,
     {SegEntries1, _PubCountDelta, _AckCountDelta} =
-        journal_plus_segment(JEntries, SegEntries),
+        segment_plus_journal(SegEntries, JEntries),
     {array:sparse_foldr(
        fun (RelSeq, {{Guid, IsPersistent}, IsDelivered, no_ack}, Acc)
            when StartRelSeq =< RelSeq andalso RelSeq < MaxRelSeq ->
@@ -476,7 +476,7 @@ recover_segment(ContainsCheckFun, CleanShutdown, Segment) ->
     {SegEntries, PubCount, AckCount, Segment1} = load_segment(false, Segment),
     #segment { journal_entries = JEntries } = Segment1,
     {SegEntries1, PubCountDelta, AckCountDelta} =
-        journal_plus_segment(JEntries, SegEntries),
+        segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldl(
       fun (RelSeq, {{Guid, _IsPersistent}, Del, no_ack}, Segment2) ->
               recover_message(ContainsCheckFun(Guid), CleanShutdown,
@@ -884,12 +884,12 @@ bool_to_int(false) -> 0.
 
 %% Combine what we have just read from a segment file with what we're
 %% holding for that segment in memory. There must be no duplicates.
-journal_plus_segment(JEntries, SegEntries) ->
+segment_plus_journal(SegEntries, JEntries) ->
     array:sparse_foldl(
       fun (RelSeq, JObj, {SegEntriesOut, PubsAdded, AcksAdded}) ->
               SegEntry = array:get(RelSeq, SegEntriesOut),
               {Obj, PubsAddedDelta, AcksAddedDelta} =
-                  journal_plus_segment1(JObj, SegEntry),
+                  segment_plus_journal1(SegEntry, JObj),
               {case Obj of
                    undefined -> array:reset(RelSeq, SegEntriesOut);
                    Obj       -> array:set(RelSeq, Obj, SegEntriesOut)
@@ -905,18 +905,18 @@ journal_plus_segment(JEntries, SegEntries) ->
 %% other two elements of the triple are the deltas for PubsAdded and
 %% AcksAdded - these get increased when a publish or ack is found in
 %% the journal.
-journal_plus_segment1({?PUB, no_del, no_ack} = Obj, undefined) ->
+segment_plus_journal1(undefined, {?PUB, no_del, no_ack} = Obj) ->
     {Obj, 1, 0};
-journal_plus_segment1({?PUB, del, no_ack} = Obj,    undefined) ->
+segment_plus_journal1(undefined, {?PUB, del, no_ack} = Obj) ->
     {Obj, 1, 0};
-journal_plus_segment1({?PUB, del, ack},             undefined) ->
+segment_plus_journal1(undefined, {?PUB, del, ack}) ->
     {undefined, 1, 1};
 
-journal_plus_segment1({no_pub, del, no_ack}, {?PUB = Pub, no_del, no_ack}) ->
+segment_plus_journal1({?PUB = Pub, no_del, no_ack}, {no_pub, del, no_ack}) ->
     {{Pub, del, no_ack}, 0, 0};
-journal_plus_segment1({no_pub, del, ack},    {?PUB, no_del, no_ack}) ->
+segment_plus_journal1({?PUB, no_del, no_ack},       {no_pub, del, ack}) ->
     {undefined, 0, 1};
-journal_plus_segment1({no_pub, no_del, ack}, {?PUB, del, no_ack}) ->
+segment_plus_journal1({?PUB, del, no_ack},          {no_pub, no_del, ack}) ->
     {undefined, 0, 1}.
 
 %% Remove from the journal entries for a segment, items that are
