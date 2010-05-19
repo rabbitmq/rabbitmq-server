@@ -892,7 +892,7 @@ segment_plus_journal(SegEntries, JEntries) ->
                   segment_plus_journal1(SegEntry, JObj),
               {case Obj of
                    undefined -> array:reset(RelSeq, SegEntriesOut);
-                   Obj       -> array:set(RelSeq, Obj, SegEntriesOut)
+                   _         -> array:set(RelSeq, Obj, SegEntriesOut)
                end,
                PubsAdded + PubsAddedDelta,
                AcksAdded + AcksAddedDelta}
