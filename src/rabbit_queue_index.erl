@@ -241,8 +241,8 @@ init(Name, MsgStoreRecovered, ContainsCheckFun) ->
                   end, {Segments, 0}, all_segment_nums(State1));
             true ->
                 %% At this stage, we will only know about files that
-                %% were loaded during journal loading, They *will* have
-                %% correct ack and pub counts, but for all remaining
+                %% were loaded during journal loading, They *will*
+                %% have correct unacked counts, but for all remaining
                 %% segments, if they're not in the Segments store then
                 %% we need to add them and populate with saved data.
                 SegmentDictTerms =
@@ -642,15 +642,12 @@ load_journal(State) ->
                   %% counts here are purely from the segment itself.
                   {SegEntries, UnackedCountInSeg, Segment1} =
                       load_segment(true, Segment),
-                  %% Removed counts here are the number of pubs and
-                  %% acks that are duplicates - i.e. found in both the
-                  %% segment and journal.
                   {JEntries1, UnackedCountDuplicates} =
                       journal_minus_segment(JEntries, SegEntries),
                   Segment1 #segment { journal_entries = JEntries1,
-                                      unacked = UnackedCountInJournal +
-                                          UnackedCountInSeg -
-                                          UnackedCountDuplicates }
+                                      unacked = (UnackedCountInJournal +
+                                                 UnackedCountInSeg -
+                                                 UnackedCountDuplicates) }
           end, Segments),
     State2 #qistate { segments = Segments1 }.
 
@@ -724,12 +721,11 @@ get_segment_handle(Segment = #segment { handle = Hdl }) ->
     {Hdl, Segment}.
 
 segment_new(Seg, Dir) ->
-    #segment { unacked = 0,
-               handle = undefined,
+    #segment { unacked         = 0,
+               handle          = undefined,
                journal_entries = array_new(),
-               path = seg_num_to_path(Dir, Seg),
-               num = Seg
-              }.
+               path            = seg_num_to_path(Dir, Seg),
+               num             = Seg }.
 
 segment_find_or_new(Seg, Dir, Segments) ->
     case segment_find(Seg, Segments) of
