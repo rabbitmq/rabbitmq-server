@@ -1544,6 +1544,27 @@ test_queue_index() ->
     {ReadE, undefined, Qi52} = rabbit_queue_index:read(7, 9, Qi51),
     ok = verify_read_with_published(false, false, ReadE, [Seven, Eight]),
     _Qi53 = rabbit_queue_index:terminate_and_erase(Qi52),
+    ok = stop_msg_store(),
+    ok = empty_test_queue(),
+
+    %% e) as for (d), but use terminate instead of read, which will
+    %% exercise journal_minus_segment, not segment_plus_journal.
+    {0, _Terms8, Qi54} = test_queue_init(),
+    {Qi55, _SeqIdsGuidsE} = queue_index_publish([0,1,2,4,5,7], true, Qi54),
+    Qi56 = queue_index_deliver([0,1,4], Qi55),
+    Qi57 = rabbit_queue_index:ack([0], Qi56),
+    _Qi58 = rabbit_queue_index:terminate([], Qi57),
+    ok = stop_msg_store(),
+    ok = rabbit_variable_queue:start([test_queue()]),
+    {5, _Terms9, Qi59} = test_queue_init(),
+    {Qi60, _SeqIdsGuidsF} = queue_index_publish([3,6,8], true, Qi59),
+    Qi61 = queue_index_deliver([2,3,5,6], Qi60),
+    Qi62 = rabbit_queue_index:ack([1,2,3], Qi61),
+    _Qi63 = rabbit_queue_index:terminate([], Qi62),
+    ok = stop_msg_store(),
+    ok = rabbit_variable_queue:start([test_queue()]),
+    {5, _Terms10, Qi64} = test_queue_init(),
+    _Qi65 = rabbit_queue_index:terminate_and_erase(Qi64),
 
     ok = stop_msg_store(),
     ok = rabbit_variable_queue:start([]),
