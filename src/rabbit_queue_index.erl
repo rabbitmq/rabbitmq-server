@@ -413,7 +413,7 @@ init_clean(RecoveredCounts, State) ->
 
 init_dirty(CleanShutdown, ContainsCheckFun, State) ->
     %% Recover the journal completely. This will also load segments
-    %% which have entries in the journal and remove duplicates.  The
+    %% which have entries in the journal and remove duplicates. The
     %% counts will correctly reflect the combination of the segment
     %% and the journal.
     State1 = #qistate { dir = Dir, segments = Segments } =
