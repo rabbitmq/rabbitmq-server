@@ -404,7 +404,7 @@ init_clean(RecoveredCounts, State) ->
         lists:foldl(
           fun ({Seg, UnackedCount}, SegmentsN) ->
                   Segment = segment_find_or_new(Seg, Dir, SegmentsN),
-                  segment_store(Segment #segment {unacked = UnackedCount },
+                  segment_store(Segment #segment { unacked = UnackedCount },
                                 SegmentsN)
           end, Segments, RecoveredCounts),
     %% the counts above include transient messages, which would be the
