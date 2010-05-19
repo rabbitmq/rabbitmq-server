@@ -569,10 +569,6 @@ add_to_journal(RelSeq, Action,
         ?PUB -> Segment1 #segment { pubs = PubCount + 1 }
     end;
 
-%% This is a more relaxed version of deliver_or_ack_msg because we can
-%% have dels or acks in the journal without the corresponding
-%% pub. Also, always want to keep ack'd entries. Things must occur in
-%% the right order though.
 add_to_journal(RelSeq, Action, JEntries) ->
     Val = case array:get(RelSeq, JEntries) of
               undefined ->
@@ -821,10 +817,7 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
 %%
 %% Does not do any combining with the journal at all. The PubCount
 %% that comes back is the number of publishes in the segment. The
-%% number of unacked msgs is PubCount - AckCount. If KeepAcked is
-%% false, then array:sparse_size(SegEntries) == PubCount -
-%% AckCount. If KeepAcked is true, then array:sparse_size(SegEntries)
-%% == PubCount.
+%% number of unacked msgs is PubCount - AckCount.
 load_segment(KeepAcked, Segment = #segment { path = Path, handle = SegHdl }) ->
     SegmentExists = case SegHdl of
                         undefined -> filelib:is_file(Path);
@@ -846,30 +839,25 @@ load_segment_entries(KeepAcked, Hdl, SegEntries, PubCount, AckCount) ->
             %% because we specify /binary, and binaries are complete
             %% bytes, the size spec is in bytes, not bits.
             {ok, Guid} = file_handle_cache:read(Hdl, ?GUID_BYTES),
-            SegEntries1 =
-                array:set(RelSeq,
-                          {{Guid, 1 == IsPersistentNum}, no_del, no_ack},
-                          SegEntries),
-            load_segment_entries(KeepAcked, Hdl, SegEntries1, PubCount + 1,
-                                 AckCount);
+            Obj = {{Guid, 1 == IsPersistentNum}, no_del, no_ack},
+            SegEntries1 = array:set(RelSeq, Obj, SegEntries),
+            load_segment_entries(KeepAcked, Hdl, SegEntries1,
+                                 PubCount + 1, AckCount);
         {ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
               RelSeq:?REL_SEQ_BITS>>} ->
-            {AckCount1, SegEntries1} =
-                deliver_or_ack_msg(KeepAcked, RelSeq, AckCount, SegEntries),
-            load_segment_entries(KeepAcked, Hdl, SegEntries1, PubCount,
-                                 AckCount1);
+            {AckCountDelta, SegEntries1} =
+                case array:get(RelSeq, SegEntries) of
+                    {Pub, no_del, no_ack} ->
+                        {0, array:set(RelSeq, {Pub, del, no_ack}, SegEntries)};
+                    {Pub, del, no_ack} when KeepAcked ->
+                        {1, array:set(RelSeq, {Pub, del, ack}, SegEntries)};
+                    {_Pub, del, no_ack} ->
+                        {1, array:reset(RelSeq, SegEntries)}
+                end,
+            load_segment_entries(KeepAcked, Hdl, SegEntries1,
+                                 PubCount, AckCount + AckCountDelta);
         _ErrOrEoF ->
             {SegEntries, PubCount, AckCount}
-    end.
-
-deliver_or_ack_msg(KeepAcked, RelSeq, AckCount, SegEntries) ->
-    case array:get(RelSeq, SegEntries) of
-        {Pub, no_del, no_ack} ->
-            {AckCount, array:set(RelSeq, {Pub, del, no_ack}, SegEntries)};
-        {Pub, del, no_ack} when KeepAcked ->
-            {AckCount + 1, array:set(RelSeq, {Pub, del, ack}, SegEntries)};
-        {_Pub, del, no_ack} ->
-            {AckCount + 1, array:reset(RelSeq, SegEntries)}
     end.
 
 array_new() ->
