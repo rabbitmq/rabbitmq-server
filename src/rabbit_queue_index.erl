@@ -314,17 +314,19 @@ next_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
     reconstruct_seq_id(Seg + 1, 0).
 
-bounds(State) ->
-    SegNums = all_segment_nums(State),
+bounds(State = #qistate { segments = Segments }) ->
+    %% This is not particularly efficient, but only gets invoked on
+    %% queue initialisation and termination.
+    SegNums = lists:sort(segment_fetch_keys(Segments)),
     %% Don't bother trying to figure out the lowest seq_id, merely the
     %% seq_id of the start of the lowest segment. That seq_id may not
     %% actually exist, but that's fine. The important thing is that
     %% the segment exists and the seq_id reported is on a segment
     %% boundary.
-
+    %%
     %% We also don't really care about the max seq_id. Just start the
     %% next segment: it makes life much easier.
-
+    %%
     %% SegNums is sorted, ascending.
     {LowSeqId, NextSeqId} =
         case SegNums of
