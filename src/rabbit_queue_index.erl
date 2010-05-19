@@ -590,23 +590,18 @@ flush_journal(State = #qistate { dirty_count = 0 }) ->
 flush_journal(State = #qistate { segments = Segments }) ->
     Segments1 =
         segment_fold(
-          fun (_Seg, #segment { journal_entries = JEntries,
-                                unacked = UnackedCount } = Segment,
-               SegmentsN) ->
-                  case UnackedCount of
-                      0 -> ok = delete_segment(Segment),
-                           SegmentsN;
-                      _ -> segment_store(
-                             append_journal_to_segment(Segment, JEntries),
-                             SegmentsN)
-                  end
+          fun (_Seg, #segment { unacked = 0 } = Segment, SegmentsN) ->
+                  ok = delete_segment(Segment),
+                  SegmentsN;
+              (_Seg, #segment {} = Segment, SegmentsN) ->
+                  segment_store(append_journal_to_segment(Segment), SegmentsN)
           end, segments_new(), Segments),
     {JournalHdl, State1} =
         get_journal_handle(State #qistate { segments = Segments1 }),
     ok = file_handle_cache:clear(JournalHdl),
     State1 #qistate { dirty_count = 0 }.
 
-append_journal_to_segment(Segment, JEntries) ->
+append_journal_to_segment(#segment { journal_entries = JEntries } = Segment) ->
     case array:sparse_size(JEntries) of
         0 -> Segment;
         _ -> {Hdl, Segment1} = get_segment_handle(Segment),
