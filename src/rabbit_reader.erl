@@ -52,6 +52,7 @@
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
+-define(SLEEP_BEFORE_SILENT_CLOSE, 3000).
 
 %---------------------------------------------------------------------------
 
@@ -575,7 +576,11 @@ handle_method0(MethodName, FieldsBin, State) ->
                              end,
             case State#v1.connection_state of
                 running -> send_exception(State, 0, CompleteReason);
-                Other   -> throw({channel0_error, Other, CompleteReason})
+                %% We don't trust the client at this point - force them to wait
+                %% for a bit so they can't DOS us with repeated failed logins
+                %% etc.
+                Other   -> timer:sleep(?SLEEP_BEFORE_SILENT_CLOSE),
+                           throw({channel0_error, Other, CompleteReason})
             end
     end.
 
