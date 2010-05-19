@@ -929,12 +929,13 @@ journal_minus_segment(JEntries, SegEntries) ->
               {Obj, PubsRemovedDelta, AcksRemovedDelta} =
                   journal_minus_segment1(JObj, SegEntry),
               {case Obj of
-                   undefined -> JEntriesOut;
+                   keep      -> JEntriesOut;
+                   undefined -> array:reset(RelSeq, JEntriesOut);
                    _         -> array:set(RelSeq, Obj, JEntriesOut)
                end,
                PubsRemoved + PubsRemovedDelta,
                AcksRemoved + AcksRemovedDelta}
-      end, {array_new(), 0, 0}, JEntries).
+      end, {JEntries, 0, 0}, JEntries).
 
 %% Here, the result is a triple with the first element containing the
 %% item we are adding to or modifying in the (initially fresh) journal
@@ -944,45 +945,45 @@ journal_minus_segment(JEntries, SegEntries) ->
 %% publish or ack is in both the journal and the segment.
 
 %% Both the same. Must be at least the publish
-journal_minus_segment1({?PUB, _Del, no_ack} = Obj,   Obj) ->
+journal_minus_segment1({?PUB, _Del, no_ack} = Obj, Obj) ->
     {undefined, 1, 0};
-journal_minus_segment1({?PUB, _Del, ack} = Obj,      Obj) ->
+journal_minus_segment1({?PUB, _Del, ack} = Obj,    Obj) ->
     {undefined, 1, 1};
 
 %% Just publish in journal
-journal_minus_segment1({?PUB, no_del, no_ack} = Obj, undefined) ->
-    {Obj, 0, 0};
+journal_minus_segment1({?PUB, no_del, no_ack},     undefined) ->
+    {keep, 0, 0};
 
 %% Publish and deliver in journal
-journal_minus_segment1({?PUB, del, no_ack} = Obj,    undefined) ->
-    {Obj, 0, 0};
-journal_minus_segment1({?PUB = Pub, del, no_ack},    {Pub, no_del, no_ack}) ->
+journal_minus_segment1({?PUB, del, no_ack},        undefined) ->
+    {keep, 0, 0};
+journal_minus_segment1({?PUB = Pub, del, no_ack},  {Pub, no_del, no_ack}) ->
     {{no_pub, del, no_ack}, 1, 0};
 
 %% Publish, deliver and ack in journal
-journal_minus_segment1({?PUB, del, ack},             undefined) ->
+journal_minus_segment1({?PUB, del, ack},           undefined) ->
     {undefined, 0, 0};
-journal_minus_segment1({?PUB = Pub, del, ack},       {Pub, no_del, no_ack}) ->
+journal_minus_segment1({?PUB = Pub, del, ack},     {Pub, no_del, no_ack}) ->
     {{no_pub, del, ack}, 1, 0};
-journal_minus_segment1({?PUB = Pub, del, ack},       {Pub, del, no_ack}) ->
+journal_minus_segment1({?PUB = Pub, del, ack},     {Pub, del, no_ack}) ->
     {{no_pub, no_del, ack}, 1, 0};
 
 %% Just deliver in journal
-journal_minus_segment1({no_pub, del, no_ack} = Obj,  {?PUB, no_del, no_ack}) ->
-    {Obj, 0, 0};
-journal_minus_segment1({no_pub, del, no_ack},        {?PUB, del, no_ack}) ->
+journal_minus_segment1({no_pub, del, no_ack},      {?PUB, no_del, no_ack}) ->
+    {keep, 0, 0};
+journal_minus_segment1({no_pub, del, no_ack},      {?PUB, del, no_ack}) ->
     {undefined, 0, 0};
 
 %% Just ack in journal
-journal_minus_segment1({no_pub, no_del, ack} = Obj,  {?PUB, del, no_ack}) ->
-    {Obj, 0, 0};
-journal_minus_segment1({no_pub, no_del, ack},        {?PUB, del, ack}) ->
+journal_minus_segment1({no_pub, no_del, ack},      {?PUB, del, no_ack}) ->
+    {keep, 0, 0};
+journal_minus_segment1({no_pub, no_del, ack},      {?PUB, del, ack}) ->
     {undefined, 0, 1};
 
 %% Deliver and ack in journal
-journal_minus_segment1({no_pub, del, ack} = Obj,     {?PUB, no_del, no_ack}) ->
-    {Obj, 0, 0};
-journal_minus_segment1({no_pub, del, ack},           {?PUB, del, no_ack}) ->
+journal_minus_segment1({no_pub, del, ack},         {?PUB, no_del, no_ack}) ->
+    {keep, 0, 0};
+journal_minus_segment1({no_pub, del, ack},         {?PUB, del, no_ack}) ->
     {{no_pub, no_del, ack}, 0, 0};
-journal_minus_segment1({no_pub, del, ack},           {?PUB, del, ack}) ->
+journal_minus_segment1({no_pub, del, ack},         {?PUB, del, ack}) ->
     {undefined, 0, 1}.
