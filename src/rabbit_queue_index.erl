@@ -962,7 +962,7 @@ journal_minus_segment1({?PUB = Pub, del, no_ack},  {Pub, no_del, no_ack}) ->
 
 %% Publish, deliver and ack in journal
 journal_minus_segment1({?PUB, del, ack},           undefined) ->
-    {undefined, 0, 0};
+    {keep, 0, 0};
 journal_minus_segment1({?PUB = Pub, del, ack},     {Pub, no_del, no_ack}) ->
     {{no_pub, del, ack}, 1, 0};
 journal_minus_segment1({?PUB = Pub, del, ack},     {Pub, del, no_ack}) ->
