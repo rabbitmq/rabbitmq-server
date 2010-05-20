@@ -142,8 +142,6 @@ find_durable_queues() ->
                                 node(Pid) == Node]))
       end).
 
-%% TODO this has not been merged from 268c69708cb655beae46b8f025602c1ecd205488
-%% but will be fixed when we merge bug22695
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
     [Q || Q <- Qs, gen_server2:call(Q#amqqueue.pid, {init, true}) == Q].
