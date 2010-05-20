@@ -142,6 +142,8 @@ find_durable_queues() ->
                                 node(Pid) == Node]))
       end).
 
+%% TODO this has not been merged from 268c69708cb655beae46b8f025602c1ecd205488
+%% but will be fixed when we merge bug22695
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
     [Q || Q <- Qs, gen_server2:call(Q#amqqueue.pid, {init, true}) == Q].
@@ -320,19 +322,21 @@ flush_all(QPids, ChPid) ->
     delegate:invoke_no_result(
       QPids, fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
 
+internal_delete2(QueueName) ->
+    ok = mnesia:delete({rabbit_queue, QueueName}),
+    ok = mnesia:delete({rabbit_durable_queue, QueueName}),
+    %% we want to execute some things, as
+    %% decided by rabbit_exchange, after the
+    %% transaction.
+    rabbit_exchange:delete_queue_bindings(QueueName).
+
 internal_delete(QueueName) ->
     case
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_queue, QueueName}) of
                       []  -> {error, not_found};
-                      [_] ->
-                          ok = mnesia:delete({rabbit_queue, QueueName}),
-                          ok = mnesia:delete({rabbit_durable_queue, QueueName}),
-                          %% we want to execute some things, as
-                          %% decided by rabbit_exchange, after the
-                          %% transaction.
-                          rabbit_exchange:delete_queue_bindings(QueueName)
+                      [_] -> internal_delete2(QueueName)
                   end
           end) of
         Err = {error, _} -> Err;
