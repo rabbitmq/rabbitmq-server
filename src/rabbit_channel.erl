@@ -497,7 +497,7 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                    fun (Q) ->
                            rabbit_amqqueue:basic_consume(
                              exclusive_access_or_locked(ReaderPid, Q),
-                             NoAck, ReaderPid, self(), LimiterPid,
+                             NoAck, self(), LimiterPid,
                              ActualConsumerTag, ExclusiveConsume,
                              ok_msg(NoWait, #'basic.consume_ok'{
                                       consumer_tag = ActualConsumerTag}))
@@ -691,9 +691,9 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
             end,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
-    Finish = 
+    Finish =
         fun(Q) ->
-                case Q of 
+                case Q of
                     %% "equivalent" rule. NB: we don't pay attention to
                     %% anything in the arguments table, so for the sake of the
                     %% "equivalent" rule, all tables of arguments are
@@ -711,7 +711,7 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                         rabbit_misc:protocol_error(resource_locked,
                                                    "cannot obtain exclusive access to locked ~s",
                                                    [rabbit_misc:rs(QueueName)]);
-                    #amqqueue{name = QueueName} ->                 
+                    #amqqueue{name = QueueName} ->
                         rabbit_misc:protocol_error(channel_error,
                                                    "parameters for ~s not equivalent",
                                                    [rabbit_misc:rs(QueueName)])

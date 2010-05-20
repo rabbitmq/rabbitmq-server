@@ -612,7 +612,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             reply({ok, Remaining, Msg}, State#q{backing_queue_state = BQS1})
     end;
 
-handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
+handle_call({basic_consume, NoAck, ChPid, LimiterPid,
              ConsumerTag, ExclusiveConsume, OkMsg},
             _From, State = #q{exclusive_consumer = ExistingHolder}) ->
     case check_exclusive_access(ExistingHolder, ExclusiveConsume,

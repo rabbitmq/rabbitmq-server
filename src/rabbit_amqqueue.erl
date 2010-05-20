@@ -41,7 +41,7 @@
          stat/1, stat_all/0, deliver/2, requeue/3, ack/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1]).
--export([basic_get/3, basic_consume/8, basic_cancel/4]).
+-export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
 -export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
@@ -98,8 +98,8 @@
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
              {'ok', non_neg_integer(), qmsg()} | 'empty').
--spec(basic_consume/8 ::
-      (amqqueue(), boolean(), pid(), pid(), pid() | 'undefined', ctag(),
+-spec(basic_consume/7 ::
+      (amqqueue(), boolean(), pid(), pid() | 'undefined', ctag(),
        boolean(), any()) ->
              'ok' | {'error', 'queue_owned_by_another_connection' |
                      'exclusive_consume_unavailable'}).
@@ -302,9 +302,9 @@ limit_all(QPids, ChPid, LimiterPid) ->
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
     delegate_call(QPid, {basic_get, ChPid, NoAck}, infinity).
 
-basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid, LimiterPid,
+basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, LimiterPid,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
-    delegate_call(QPid, {basic_consume, NoAck, ReaderPid, ChPid,
+    delegate_call(QPid, {basic_consume, NoAck, ChPid,
                          LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg},
                   infinity).
 
