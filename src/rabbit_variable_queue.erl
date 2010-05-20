@@ -398,7 +398,7 @@ delete_and_terminate(State) ->
             {DeltaSeqId, NextSeqId, IndexState3} ->
                 delete1(PersistentStore, TransientThreshold, NextSeqId, DeltaSeqId, IndexState3)
         end,
-    IndexState5 = rabbit_queue_index:terminate_and_erase(IndexState2),
+    IndexState5 = rabbit_queue_index:delete_and_terminate(IndexState2),
     rabbit_msg_store:delete_client(PersistentStore, PRef),
     rabbit_msg_store:delete_client(?TRANSIENT_MSG_STORE, TRef),
     rabbit_msg_store:client_terminate(MSCStateP),

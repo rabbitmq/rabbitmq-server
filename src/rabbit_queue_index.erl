@@ -31,7 +31,7 @@
 
 -module(rabbit_queue_index).
 
--export([init/3, terminate/2, terminate_and_erase/1, publish/4,
+-export([init/3, terminate/2, delete_and_terminate/1, publish/4,
          deliver/2, ack/2, sync/2, flush/1, read/3,
          next_segment_boundary/1, bounds/1, recover/1]).
 
@@ -188,7 +188,7 @@
 -spec(init/3 :: (queue_name(), boolean(), fun ((guid()) -> boolean())) ->
              {'undefined' | non_neg_integer(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
--spec(terminate_and_erase/1 :: (qistate()) -> qistate()).
+-spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
 -spec(publish/4 :: (guid(), seq_id(), boolean(), qistate()) -> qistate()).
 -spec(deliver/2 :: (seq_id(), qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
@@ -227,7 +227,7 @@ init(Name, MsgStoreRecovered, ContainsCheckFun) ->
 terminate(Terms, State) ->
     terminate(true, Terms, State).
 
-terminate_and_erase(State) ->
+delete_and_terminate(State) ->
     State1 = terminate(false, [], State),
     ok = rabbit_misc:recursive_delete([State1 #qistate.dir]),
     State1.
