@@ -50,7 +50,6 @@
 
 % Queue's state
 -record(q, {q,
-            owner,
             exclusive_consumer,
             has_had_consumers,
             backing_queue,
@@ -104,7 +103,6 @@ init(Q) ->
     {ok, BQ} = application:get_env(backing_queue_module),
 
     {ok, #q{q = Q#amqqueue{pid = self()},
-            owner = none,
             exclusive_consumer = none,
             has_had_consumers = false,
             backing_queue = BQ,
@@ -433,9 +431,9 @@ cancel_holder(ChPid, ConsumerTag, {ChPid, ConsumerTag}) ->
 cancel_holder(_ChPid, _ConsumerTag, Holder) ->
     Holder.
 
-check_queue_owner(none,           _)         -> ok;
-check_queue_owner({ReaderPid, _}, ReaderPid) -> ok;
-check_queue_owner({_,         _}, _)         -> mismatch.
+check_queue_owner(none,           _)    -> ok;
+check_queue_owner(ReaderPid, ReaderPid) -> ok;
+check_queue_owner(_, _)                 -> mismatch.
 
 check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume, _State) ->
     in_use;
@@ -488,9 +486,9 @@ i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
 i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
 i(pid, _) ->
     self();
-i(owner_pid, #q{owner = none}) ->
+i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
     '';
-i(owner_pid, #q{owner = {ReaderPid, _MonitorRef}}) ->
+i(owner_pid, #q{q = #amqqueue{exclusive_owner = ReaderPid}}) ->
     ReaderPid;
 i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
     '';
@@ -520,8 +518,13 @@ i(Item, _) ->
 %---------------------------------------------------------------------------
 
 handle_call({init, Recover}, From,
-            State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
+            State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable,
+                                         exclusive_owner = ExclusiveOwner},
                        backing_queue = BQ, backing_queue_state = undefined}) ->
+    case ExclusiveOwner of
+        none      -> ok;
+        ReaderPid -> erlang:monitor(process, ReaderPid)
+    end,
     %% TODO: If we're exclusively owned && our owner isn't alive &&
     %% Recover then we should BQ:init and then {stop, normal,
     %% not_found, State}, relying on terminate to delete the queue.
@@ -615,7 +618,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
 
 handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
              ConsumerTag, ExclusiveConsume, OkMsg},
-            _From, State = #q{owner = Owner,
+            _From, State = #q{q = #amqqueue{exclusive_owner = Owner},
                               exclusive_consumer = ExistingHolder}) ->
     case check_queue_owner(Owner, ReaderPid) of
         mismatch ->
@@ -713,29 +716,6 @@ handle_call(purge, _From, State = #q{backing_queue = BQ,
     {Count, BQS1} = BQ:purge(BQS),
     reply({ok, Count}, State#q{backing_queue_state = BQS1});
 
-handle_call({claim_queue, ReaderPid}, _From,
-            State = #q{owner = Owner, exclusive_consumer = Holder}) ->
-    case Owner of
-        none ->
-            case check_exclusive_access(Holder, true, State) of
-                in_use ->
-                    %% FIXME: Is this really the right answer? What if
-                    %% an active consumer's reader is actually the
-                    %% claiming pid? Should that be allowed? In order
-                    %% to check, we'd need to hold not just the ch
-                    %% pid for each consumer, but also its reader
-                    %% pid...
-                    reply(locked, State);
-                ok ->
-                    MonitorRef = erlang:monitor(process, ReaderPid),
-                    reply(ok, State#q{owner = {ReaderPid, MonitorRef}})
-            end;
-        {ReaderPid, _MonitorRef} ->
-            reply(ok, State);
-        _ ->
-            reply(locked, State)
-    end;
-
 handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
     reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
@@ -825,19 +805,10 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State).
 
-handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
-            State = #q{owner = {DownPid, MonitorRef}}) ->
-    %% We know here that there are no consumers on this queue that are
-    %% owned by other pids than the one that just went down, so since
-    %% exclusive in some sense implies autodelete, we delete the queue
-    %% here. The other way of implementing the "exclusive implies
-    %% autodelete" feature is to actually set autodelete when an
-    %% exclusive declaration is seen, but this has the problem that
-    %% the python tests rely on the queue not going away after a
-    %% basic.cancel when the queue was declared exclusive and
-    %% nonautodelete.
-    NewState = State#q{owner = none},
-    {stop, normal, NewState};
+handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
+            State = #q{q= #amqqueue{ exclusive_owner = DownPid}}) ->
+    %% Exclusively owned queues must disappear with their owner.
+    {stop, normal, State};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     case handle_ch_down(DownPid, State) of
         {ok, NewState}   -> noreply(NewState);
