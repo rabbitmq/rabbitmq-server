@@ -225,11 +225,13 @@ init(Name, MsgStoreRecovered, ContainsCheckFun) ->
     {Count, Terms, State1}.
 
 terminate(Terms, State) ->
-    terminate(true, Terms, State).
+    {SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
+    store_clean_shutdown([{segments, SegmentCounts} | Terms], Dir),
+    State1.
 
 delete_and_terminate(State) ->
-    State1 = terminate(false, [], State),
-    ok = rabbit_misc:recursive_delete([State1 #qistate.dir]),
+    {_SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
+    ok = rabbit_misc:recursive_delete([Dir]),
     State1.
 
 publish(Guid, SeqId, IsPersistent, State) when is_binary(Guid) ->
@@ -436,29 +438,24 @@ init_dirty(CleanShutdown, ContainsCheckFun, State) ->
     State2 = flush_journal(State1 #qistate { segments = Segments1 }),
     {Count, State2}.
 
-terminate(_StoreShutdown, _Terms, State = #qistate { segments = undefined }) ->
-    State;
-terminate(StoreShutdown, Terms, State =
-          #qistate { journal_handle = JournalHdl,
-                     dir = Dir, segments = Segments }) ->
+terminate(State = #qistate { journal_handle = JournalHdl,
+                             segments = Segments }) ->
     ok = case JournalHdl of
              undefined -> ok;
              _         -> file_handle_cache:close(JournalHdl)
          end,
-    SegTerms = segment_fold(
-                 fun (Seg, #segment { handle = Hdl,
-                                      unacked = UnackedCount }, SegTermsAcc) ->
-                         ok = case Hdl of
-                                  undefined -> ok;
-                                  _         -> file_handle_cache:close(Hdl)
-                              end,
-                         [{Seg, UnackedCount} | SegTermsAcc]
-                 end, [], Segments),
-    case StoreShutdown of
-        true  -> store_clean_shutdown([{segments, SegTerms} | Terms], Dir);
-        false -> ok
-    end,
-    State #qistate { journal_handle = undefined, segments = undefined }.
+    SegmentCounts =
+        segment_fold(
+          fun (Seg, #segment { handle = Hdl, unacked = UnackedCount },
+               SegmentCountsAcc) ->
+                  ok = case Hdl of
+                           undefined -> ok;
+                           _         -> file_handle_cache:close(Hdl)
+                       end,
+                  [{Seg, UnackedCount} | SegmentCountsAcc]
+          end, [], Segments),
+    {SegmentCounts, State #qistate { journal_handle = undefined,
+                                     segments = undefined }}.
 
 recover_segment(ContainsCheckFun, CleanShutdown, Segment) ->
     {SegEntries, UnackedCount, Segment1} = load_segment(false, Segment),
@@ -528,7 +525,7 @@ queue_index_walker_reader(QueueName, Gatherer) ->
                            {Guid, _SeqId, true, _IsDelivered} <- Messages],
                        State3
                end, State, all_segment_nums(State)),
-    _State = terminate(false, [], State1),
+    {_SegmentCounts, _State} = terminate(State1),
     ok = gatherer:finish(Gatherer).
 
 %%----------------------------------------------------------------------------

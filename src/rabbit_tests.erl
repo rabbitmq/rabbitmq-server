@@ -1455,8 +1455,7 @@ test_queue_index() ->
     {ReadA, undefined, Qi4} = rabbit_queue_index:read(0, SegmentSize, Qi3),
     ok = verify_read_with_published(false, false, ReadA,
                                     lists:reverse(SeqIdsGuidsA)),
-    %% call terminate twice to prove it's idempotent
-    _Qi5 = rabbit_queue_index:terminate([], rabbit_queue_index:terminate([], Qi4)),
+    _Qi5 = rabbit_queue_index:terminate([], Qi4),
     ok = stop_msg_store(),
     ok = rabbit_variable_queue:start([test_queue()]),
     %% should get length back as 0, as all the msgs were transient
