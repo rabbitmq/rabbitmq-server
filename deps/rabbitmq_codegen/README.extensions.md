@@ -23,7 +23,7 @@ Written in the style of a
 
     ConstantDefinition = {
         "name": string(),
-        "value": anything(),
+        "value": number(),
         "class": optional(_or("soft-error", "hard-error"))
     };
 
@@ -37,7 +37,8 @@ Written in the style of a
         "name": string(),
         "id": number(),
         "arguments": array_of(FieldDefinition),
-        "synchronous": optional(boolean())
+        "synchronous": optional(boolean()),
+        "content": optional(boolean())
     };
 
     ClassDefinition = {
@@ -59,6 +60,31 @@ Written in the style of a
 
 Within a `FieldDefinition`, the keyword `domain` can be used instead
 of `type`, but `type` is preferred and `domain` is deprecated.
+
+Type names can either be a defined `domain` name or a built-in name
+from the following list:
+
+ - octet
+ - shortstr
+ - longstr
+ - short
+ - long
+ - longlong
+ - bit
+ - table
+ - timestamp
+
+Method and class IDs must be integers between 0 and 65535,
+inclusive. Note that there is no specific subset of the space reserved
+for experimental or site-local extensions, so be careful not to
+conflict with IDs used by the AMQP core specification.
+
+If the `synchronous` field of a `MethodDefinition` is missing, it is
+assumed to be `false`; the same applies to the `content` field.
+
+A `ConstantDefinition` with a `class` attribute is considered to be an
+error-code definition; otherwise, it is considered to be a
+straightforward numeric constant.
 
 ## Extensions
 
