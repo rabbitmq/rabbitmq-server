@@ -64,7 +64,7 @@ class AmqpSpecFileMergeConflict(Exception): pass
 def default_spec_value_merger(key, old, new):
     if old is None or old == new:
         return new
-    raise AmqpSpecFileMergeConflict((key, old, new))
+    raise AmqpSpecFileMergeConflict(key, old, new)
 
 def extension_info_merger(key, old, new):
     return old + [new]
@@ -89,13 +89,23 @@ def methods_merger(classname, old, new):
     o = dict((v["name"], v) for v in old)
     for v in new:
         if o.has_key(v["name"]):
-            raise AmqpSpecFileMergeConflict(("class", classname), old, new)
+            raise AmqpSpecFileMergeConflict(("class-methods", classname), old, new)
         o[v["name"]] = v
     return list(o.values())
 
+def properties_merger(classname, old, new):
+    oldnames = set(v["name"] for v in old)
+    newnames = set(v["name"] for v in new)
+    clashes = oldnames.intersection(newnames)
+    if clashes:
+        raise AmqpSpecFileMergeConflict(("class-properties", classname), old, new)
+    return old + new
+
 def class_merger(old, new):
     old["methods"] = methods_merger(old["name"], old["methods"], new["methods"])
-    old["properties"] = old.get("properties", []) + new.get("properties", [])
+    old["properties"] = properties_merger(old["name"],
+                                          old.get("properties", []),
+                                          new.get("properties", []))
     return old
 
 def classes_merger(key, old, new):
