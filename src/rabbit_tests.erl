@@ -1395,7 +1395,7 @@ test_queue() ->
 empty_test_queue() ->
     ok = rabbit_variable_queue:start([]),
     {0, _Terms, Qi1} = test_queue_init(),
-    _Qi2 = rabbit_queue_index:terminate_and_erase(Qi1),
+    _Qi2 = rabbit_queue_index:delete_and_terminate(Qi1),
     ok.
 
 queue_index_publish(SeqIds, Persistent, Qi) ->
@@ -1455,8 +1455,7 @@ test_queue_index() ->
     {ReadA, undefined, Qi4} = rabbit_queue_index:read(0, SegmentSize, Qi3),
     ok = verify_read_with_published(false, false, ReadA,
                                     lists:reverse(SeqIdsGuidsA)),
-    %% call terminate twice to prove it's idempotent
-    _Qi5 = rabbit_queue_index:terminate([], rabbit_queue_index:terminate([], Qi4)),
+    _Qi5 = rabbit_queue_index:terminate([], Qi4),
     ok = stop_msg_store(),
     ok = rabbit_variable_queue:start([test_queue()]),
     %% should get length back as 0, as all the msgs were transient
@@ -1487,7 +1486,7 @@ test_queue_index() ->
     ok = rabbit_variable_queue:start([test_queue()]),
     %% should get length back as 0 because all persistent msgs have been acked
     {0, _Terms3, Qi20} = test_queue_init(),
-    _Qi21 = rabbit_queue_index:terminate_and_erase(Qi20),
+    _Qi21 = rabbit_queue_index:delete_and_terminate(Qi20),
     ok = stop_msg_store(),
     ok = empty_test_queue(),
 
@@ -1501,7 +1500,7 @@ test_queue_index() ->
     Qi25 = rabbit_queue_index:ack(SeqIdsC, Qi24),
     Qi26 = queue_index_flush(Qi25),
     {Qi27, _SeqIdsGuidsC1} = queue_index_publish([SegmentSize], false, Qi26),
-    _Qi28 = rabbit_queue_index:terminate_and_erase(Qi27),
+    _Qi28 = rabbit_queue_index:delete_and_terminate(Qi27),
     ok = stop_msg_store(),
     ok = empty_test_queue(),
 
@@ -1512,7 +1511,7 @@ test_queue_index() ->
     {Qi32, _SeqIdsGuidsC3} = queue_index_publish([SegmentSize], false, Qi31),
     Qi33 = rabbit_queue_index:ack(SeqIdsC, Qi32),
     Qi34 = queue_index_flush(Qi33),
-    _Qi35 = rabbit_queue_index:terminate_and_erase(Qi34),
+    _Qi35 = rabbit_queue_index:delete_and_terminate(Qi34),
     ok = stop_msg_store(),
     ok = empty_test_queue(),
 
@@ -1523,7 +1522,7 @@ test_queue_index() ->
     Qi38 = queue_index_deliver(SeqIdsD, Qi37),
     Qi39 = rabbit_queue_index:ack(SeqIdsD, Qi38),
     Qi40 = queue_index_flush(Qi39),
-    _Qi41 = rabbit_queue_index:terminate_and_erase(Qi40),
+    _Qi41 = rabbit_queue_index:delete_and_terminate(Qi40),
     ok = stop_msg_store(),
     ok = empty_test_queue(),
 
@@ -1543,7 +1542,7 @@ test_queue_index() ->
     ok = verify_read_with_published(true, false, ReadD, [Four, Five, Six]),
     {ReadE, undefined, Qi52} = rabbit_queue_index:read(7, 9, Qi51),
     ok = verify_read_with_published(false, false, ReadE, [Seven, Eight]),
-    _Qi53 = rabbit_queue_index:terminate_and_erase(Qi52),
+    _Qi53 = rabbit_queue_index:delete_and_terminate(Qi52),
     ok = stop_msg_store(),
     ok = empty_test_queue(),
 
@@ -1564,7 +1563,7 @@ test_queue_index() ->
     ok = stop_msg_store(),
     ok = rabbit_variable_queue:start([test_queue()]),
     {5, _Terms10, Qi64} = test_queue_init(),
-    _Qi65 = rabbit_queue_index:terminate_and_erase(Qi64),
+    _Qi65 = rabbit_queue_index:delete_and_terminate(Qi64),
 
     ok = stop_msg_store(),
     ok = rabbit_variable_queue:start([]),
