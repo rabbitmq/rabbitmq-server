@@ -41,6 +41,7 @@
 -import(lists).
 
 -include("rabbit.hrl").
+-include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
 
 test_content_prop_roundtrip(Datum, Binary) ->
@@ -58,6 +59,7 @@ all_tests() ->
     passed = test_log_management(),
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
+    passed = test_memory_pressure(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
@@ -855,6 +857,67 @@ test_delegates_async(SecondaryNode) ->
     ok = delegate:invoke_no_result(LocalPids ++ RemotePids, Sender),
     await_response(20),
 
+    passed.
+
+test_memory_pressure_receiver(Pid) ->
+    receive
+        shutdown ->
+            ok;
+        {send_command, #'channel.flow'{} = Method} ->
+            Pid ! Method,
+            test_memory_pressure_receiver(Pid);
+        sync ->
+            Pid ! sync,
+            test_memory_pressure_receiver(Pid)
+    end.
+
+test_memory_pressure_receive_flow(Active) ->
+    receive #'channel.flow'{active = Active} -> ok
+    after 1000 -> throw(failed_to_receive_channel_flow)
+    end,
+    receive #'channel.flow'{} ->
+            throw(pipelining_sync_commands_detected)
+    after 0 ->
+            ok
+    end.
+
+test_memory_pressure() ->
+    Me = self(),
+    Writer = spawn(fun () -> test_memory_pressure_receiver(Me) end),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
+    ok = rabbit_channel:do(Ch, #'channel.open'{}),
+    ok = rabbit_channel:conserve_memory(Ch, false),
+    ok = rabbit_channel:conserve_memory(Ch, false),
+    ok = rabbit_channel:conserve_memory(Ch, true),
+    ok = rabbit_channel:conserve_memory(Ch, false),
+    ok = rabbit_channel:conserve_memory(Ch, true),
+    ok = rabbit_channel:conserve_memory(Ch, true),
+    ok = rabbit_channel:conserve_memory(Ch, false),
+    MRef = erlang:monitor(process, Ch),
+    receive {'DOWN', MRef, process, Ch, Info} ->
+            throw({channel_died_early, Info})
+    after 0 ->
+            ok
+    end,
+
+    Writer ! sync,
+    receive sync -> ok after 1000 -> throw(timeout) end,
+
+    %% we should have just 1 active=false waiting for us
+    ok = test_memory_pressure_receive_flow(false),
+
+    %% if we reply with flow_ok, we should immediately get an
+    %% active=true back
+    ok = rabbit_channel:do(Ch, #'channel.flow_ok'{active = false}),
+    ok = test_memory_pressure_receive_flow(true),
+
+    %% if we publish at this point, the channel should die
+    ok = rabbit_channel:do(Ch, #'basic.publish'{}, #content{}),
+    receive {'DOWN', MRef, process, Ch, normal} ->
+            ok
+    after 1000 ->
+            throw(channel_failed_to_exit)
+    end,
     passed.
 
 make_responder(FMsg) ->
