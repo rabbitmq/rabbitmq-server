@@ -706,9 +706,7 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                     %% "equivalent" rule, all tables of arguments are
                     %% semantically equivalant.
                     Matched = #amqqueue{name = QueueName,
-                                        durable = Durable, %% i.e., as supplied
-                                        exclusive_owner = Owner,
-                                        auto_delete = AutoDelete %% i.e,. as supplied
+                                        exclusive_owner = Owner
                                        } ->
                         check_configure_permitted(QueueName, State),
                         Matched;
