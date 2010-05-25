@@ -881,6 +881,10 @@ test_memory_pressure_receive_flow(Active) ->
             ok
     end.
 
+test_memory_pressure_sync(WPid) ->
+    WPid ! sync,
+    receive sync -> ok after 1000 -> throw(timeout) end.
+
 test_memory_pressure() ->
     Me = self(),
     Writer = spawn(fun () -> test_memory_pressure_receiver(Me) end),
@@ -900,15 +904,14 @@ test_memory_pressure() ->
             ok
     end,
 
-    Writer ! sync,
-    receive sync -> ok after 1000 -> throw(timeout) end,
-
+    ok = test_memory_pressure_sync(Writer),
     %% we should have just 1 active=false waiting for us
     ok = test_memory_pressure_receive_flow(false),
 
     %% if we reply with flow_ok, we should immediately get an
     %% active=true back
     ok = rabbit_channel:do(Ch, #'channel.flow_ok'{active = false}),
+    ok = test_memory_pressure_sync(Writer),
     ok = test_memory_pressure_receive_flow(true),
 
     %% if we publish at this point, the channel should die

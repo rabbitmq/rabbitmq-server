@@ -865,12 +865,7 @@ handle_method(#'channel.flow_ok'{active = Active}, _,
 handle_method(#'channel.flow_ok'{active = Active}, _,
               State = #ch{active = {invert, Active, {_Ref, TRef}}}) ->
     {ok, cancel} = timer:cancel(TRef),
-    ok = rabbit_writer:send_command(
-           State#ch.writer_pid, #'channel.flow'{active = not Active}),
-    Ref = make_ref(),
-    {ok, TRef1} = timer:apply_after(?FLOW_OK_TIMEOUT, ?MODULE, flow_timeout,
-                                    [self(), Ref]),
-    {noreply, State#ch{active = {pending, not Active, {Ref, TRef1}}}};
+    {noreply, issue_flow(not Active, State)};
 
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
@@ -886,14 +881,17 @@ flow_control(Active, State = #ch{active = {invert, Active, Refs}}) ->
 flow_control(Active, State = #ch{active = NotActive})
   when NotActive =:= not Active ->
     ok = clear_permission_cache(),
+    noreply(issue_flow(Active, State));
+flow_control(_Active, State) ->
+    noreply(State).
+
+issue_flow(Active, State) ->
     ok = rabbit_writer:send_command(
            State#ch.writer_pid, #'channel.flow'{active = Active}),
     Ref = make_ref(),
     {ok, TRef} = timer:apply_after(?FLOW_OK_TIMEOUT, ?MODULE, flow_timeout,
-                                    [self(), Ref]),
-    noreply(State#ch{active = {pending, Active, {Ref, TRef}}});
-flow_control(_Active, State) ->
-    noreply(State).
+                                   [self(), Ref]),
+    State#ch{active = {pending, Active, {Ref, TRef}}}.
 
 binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                ReturnMethod, NoWait, State = #ch{virtual_host = VHostPath}) ->
