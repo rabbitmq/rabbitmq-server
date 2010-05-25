@@ -142,8 +142,10 @@ start_network_link(Params) ->
     start_network_internal(Params, true).
 
 start_network_internal(#amqp_params{} = AmqpParams, ProcLink) ->
-    {ok, Pid} = start_internal(AmqpParams, amqp_network_connection, ProcLink),
-    Pid.
+    case start_internal(AmqpParams, amqp_network_connection, ProcLink) of
+        {ok, Pid} -> Pid;
+        Bad       -> throw({error, {auth_failure_likely, Bad}})
+    end.
 
 start_internal(Params, Module, _Link = true) when is_atom(Module) ->
     gen_server:start_link(Module, Params, []);
