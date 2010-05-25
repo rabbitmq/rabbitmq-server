@@ -537,18 +537,24 @@ pid_to_string(Pid) when is_pid(Pid) ->
 
 %% inverse of above
 string_to_pid(Str) ->
+    Err = {error, {invalid_pid_syntax, Str}},
     %% The \ before the trailing $ is only there to keep emacs
     %% font-lock from getting confused.
     case re:run(Str, "^<(.*)\\.([0-9]+)\\.([0-9]+)>\$",
                 [{capture,all_but_first,list}]) of
         {match, [NodeStr, IdStr, SerStr]} ->
-            %% turn the triple into a pid - see pid_to_string
-            <<131,NodeEnc/binary>> = term_to_binary(list_to_atom(NodeStr)),
+            %% the NodeStr atom might be quoted, so we have to parse
+            %% it rather than doing a simple list_to_atom
+            NodeAtom = case erl_scan:string(NodeStr) of
+                           {ok, [{atom, _, X}], _} -> X;
+                           {error, _, _} -> throw(Err)
+                       end,
+            <<131,NodeEnc/binary>> = term_to_binary(NodeAtom),
             Id = list_to_integer(IdStr),
             Ser = list_to_integer(SerStr),
             binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,0:8>>);
         nomatch ->
-            throw({error, {invalid_pid_syntax, Str}})
+            throw(Err)
     end. 
 
 version_compare(A, B, lte) ->
