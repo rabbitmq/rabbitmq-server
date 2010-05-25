@@ -369,7 +369,10 @@ terminate(State) ->
       persistent_count = PCount, index_state = IndexState,
       msg_store_clients = {{MSCStateP, PRef}, {MSCStateT, TRef}} } =
         remove_pending_ack(true, tx_commit_index(State)),
-    rabbit_msg_store:client_terminate(MSCStateP),
+    case MSCStateP of
+        undefined -> ok;
+        _         -> rabbit_msg_store:client_terminate(MSCStateP)
+    end,
     rabbit_msg_store:client_terminate(MSCStateT),
     Terms = [{persistent_ref, PRef},
              {transient_ref, TRef},
