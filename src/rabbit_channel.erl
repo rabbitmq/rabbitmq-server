@@ -303,9 +303,9 @@ with_exclusive_access_or_die(QName, ReaderPid, F) ->
       QName,
       fun(Q) ->
               case Q of
-                  #amqqueue{ exclusive_owner = none} ->
+                  #amqqueue{exclusive_owner = none} ->
                       F(Q);
-                  #amqqueue{ exclusive_owner = ReaderPid } ->
+                  #amqqueue{exclusive_owner = ReaderPid} ->
                       F(Q);
                   _ ->
                       rabbit_misc:protocol_error(
@@ -683,15 +683,15 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
             return_ok(State, NoWait,  #'exchange.delete_ok'{})
     end;
 
-handle_method(#'queue.declare'{queue = QueueNameBin,
-                               passive = false,
-                               durable = Durable,
-                               exclusive = ExclusiveDeclare,
+handle_method(#'queue.declare'{queue       = QueueNameBin,
+                               passive     = false,
+                               durable     = Durable,
+                               exclusive   = ExclusiveDeclare,
                                auto_delete = AutoDelete,
-                               nowait = NoWait,
-                               arguments = Args},
-              _, State = #ch { virtual_host = VHostPath,
-                               reader_pid = ReaderPid }) ->
+                               nowait      = NoWait,
+                               arguments   = Args},
+              _, State = #ch{virtual_host = VHostPath,
+                             reader_pid   = ReaderPid}) ->
     Owner = case ExclusiveDeclare of
                 true  -> ReaderPid;
                 false -> none
@@ -712,15 +712,16 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                         Matched;
                     %% exclusivity trumps non-equivalence arbitrarily
                     #amqqueue{name = QueueName, exclusive_owner = ExclusiveOwner}
-                    when ExclusiveOwner =/= Owner ->
-                        rabbit_misc:protocol_error(resource_locked,
-                                                   "cannot obtain exclusive access to locked ~s",
-                                                   [rabbit_misc:rs(QueueName)]);
+                      when ExclusiveOwner =/= Owner ->
+                        rabbit_misc:protocol_error(
+                          resource_locked,
+                          "cannot obtain exclusive access to locked ~s",
+                          [rabbit_misc:rs(QueueName)]);
                     #amqqueue{name = QueueName} ->
-                        rabbit_misc:protocol_error(channel_error,
-                                                   "parameters for ~s not equivalent",
-                                                   [rabbit_misc:rs(QueueName)])
-                    end
+                        rabbit_misc:protocol_error(
+                          channel_error, "parameters for ~s not equivalent",
+                          [rabbit_misc:rs(QueueName)])
+                end
         end,
     Q = case rabbit_amqqueue:with(
                rabbit_misc:r(VHostPath, queue, QueueNameBin),
@@ -733,8 +734,10 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                     end,
                 QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
                 check_configure_permitted(QueueName, State),
-                Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete, Args, Owner));
-            Found -> Found
+                Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
+                                               Args, Owner));
+            Found ->
+                Found
         end,
     return_queue_declare_ok(State, NoWait, Q);
 

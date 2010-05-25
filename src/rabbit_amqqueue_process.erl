@@ -484,8 +484,8 @@ i(pid, _) ->
     self();
 i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
     '';
-i(owner_pid, #q{q = #amqqueue{exclusive_owner = ReaderPid}}) ->
-    ReaderPid;
+i(owner_pid, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
+    ExclusiveOwner;
 i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
     '';
 i(exclusive_consumer_pid, #q{exclusive_consumer = {ChPid, _ConsumerTag}}) ->
@@ -533,7 +533,7 @@ handle_call({init, Recover}, From,
                         noreply(
                           State#q{backing_queue_state =
                                       BQ:init(QName, IsDurable, Recover)});
-                   Q1 ->
+                    Q1 ->
                         {stop, normal, Q1, State}
                 end
         end,
@@ -642,18 +642,16 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
         ok ->
             C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
             Consumer = #consumer{tag = ConsumerTag,
-                                 ack_required = not(NoAck)},
+                                 ack_required = not NoAck},
             store_ch_record(C#cr{consumer_count = ConsumerCount +1,
                                  limiter_pid = LimiterPid}),
-            if ConsumerCount == 0 ->
-                    ok = rabbit_limiter:register(LimiterPid, self());
-               true ->
-                    ok
-            end,
-            ExclusiveConsumer =
-                if ExclusiveConsume -> {ChPid, ConsumerTag};
-                   true             -> ExistingHolder
-                end,
+            ok = case ConsumerCount of
+                     0    -> rabbit_limiter:register(LimiterPid, self());
+                     true -> ok
+                 end,
+            ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
+                                   true             -> ExistingHolder
+                                end,
             State1 = State#q{has_had_consumers = true,
                              exclusive_consumer = ExclusiveConsumer},
             ok = maybe_send_reply(ChPid, OkMsg),
@@ -817,7 +815,7 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     noreply(State).
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
-            State = #q{q= #amqqueue{ exclusive_owner = DownPid}}) ->
+            State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
     %% Exclusively owned queues must disappear with their owner.
     {stop, normal, State};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
