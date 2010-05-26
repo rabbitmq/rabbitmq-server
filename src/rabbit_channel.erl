@@ -715,16 +715,10 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                         check_configure_permitted(QueueName, State),
                         Matched;
                     %% exclusivity trumps non-equivalence arbitrarily
-                    #amqqueue{name = QueueName,
-                              exclusive_owner = ExclusiveOwner}
-                      when ExclusiveOwner =/= Owner ->
+                    #amqqueue{name = QueueName} ->
                         rabbit_misc:protocol_error(
                           resource_locked,
                           "cannot obtain exclusive access to locked ~s",
-                          [rabbit_misc:rs(QueueName)]);
-                    #amqqueue{name = QueueName} ->
-                        rabbit_misc:protocol_error(
-                          channel_error, "parameters for ~s not equivalent",
                           [rabbit_misc:rs(QueueName)])
                 end
         end,

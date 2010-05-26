@@ -646,8 +646,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
             store_ch_record(C#cr{consumer_count = ConsumerCount +1,
                                  limiter_pid = LimiterPid}),
             ok = case ConsumerCount of
-                     0    -> rabbit_limiter:register(LimiterPid, self());
-                     _    -> ok
+                     0 -> rabbit_limiter:register(LimiterPid, self());
+                     _ -> ok
                  end,
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
                                    true             -> ExistingHolder
