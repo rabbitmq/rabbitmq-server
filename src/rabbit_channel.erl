@@ -711,7 +711,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                         check_configure_permitted(QueueName, State),
                         Matched;
                     %% exclusivity trumps non-equivalence arbitrarily
-                    #amqqueue{name = QueueName, exclusive_owner = ExclusiveOwner}
+                    #amqqueue{name = QueueName,
+                              exclusive_owner = ExclusiveOwner}
                       when ExclusiveOwner =/= Owner ->
                         rabbit_misc:protocol_error(
                           resource_locked,
