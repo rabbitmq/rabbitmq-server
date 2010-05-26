@@ -737,8 +737,9 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 check_configure_permitted(QueueName, State),
                 Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
                                                Args, Owner));
-            Found ->
-                Found
+            Other = #amqqueue{name = QueueName} ->
+                check_configure_permitted(QueueName, State),
+                Other
         end,
     return_queue_declare_ok(State, NoWait, Q);
 
