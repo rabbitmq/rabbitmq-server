@@ -101,8 +101,7 @@
 -spec(basic_consume/7 ::
       (amqqueue(), boolean(), pid(), pid() | 'undefined', ctag(),
        boolean(), any()) ->
-             'ok' | {'error', 'queue_owned_by_another_connection' |
-                     'exclusive_consume_unavailable'}).
+             'ok' | {'error', 'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
