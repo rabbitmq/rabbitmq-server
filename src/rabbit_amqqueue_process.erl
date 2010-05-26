@@ -647,7 +647,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
                                  limiter_pid = LimiterPid}),
             ok = case ConsumerCount of
                      0    -> rabbit_limiter:register(LimiterPid, self());
-                     true -> ok
+                     _    -> ok
                  end,
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
                                    true             -> ExistingHolder
