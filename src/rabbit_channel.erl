@@ -183,9 +183,24 @@ handle_call(_Request, _From, State) ->
     noreply(State).
 
 handle_cast({method, Method, Content}, State) ->
-    handle_exiting_function(
-      fun (State1) -> handle_method(Method, Content, State1) end, Method,
-      State);
+    try handle_method(Method, Content, State) of
+        {reply, Reply, NewState} ->
+            ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
+            noreply(NewState);
+        {noreply, NewState} ->
+            noreply(NewState);
+        stop ->
+            {stop, normal, State#ch{state = terminating}}
+    catch
+        exit:Reason = #amqp_error{} ->
+            MethodName = rabbit_misc:method_record_type(Method),
+            {stop, normal, terminating(Reason#amqp_error{method = MethodName},
+                                       State)};
+        exit:normal ->
+            {stop, normal, State};
+        _:Reason ->
+            {stop, {Reason, erlang:get_stacktrace()}, State}
+    end;
 
 handle_cast({flushed, QPid}, State) ->
     {noreply, queue_blocked(QPid, State)};
@@ -207,18 +222,15 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
 handle_cast({conserve_memory, Conserve}, State) ->
     flow_control(not Conserve, State);
 
-handle_cast({flow_timeout, Ref}, State) ->
-    handle_exiting_function(
-      fun (#ch{flow = #flow{client  = ClientFlow,
-                           pending = {Ref1, _TRef}}})
-          when Ref =:= Ref1 ->
-              rabbit_misc:protocol_error(
-                precondition_failed,
-                "timeout waiting for channel.flow_ok{active=~w}",
-                [not ClientFlow]);
-          (State1) ->
-              {noreply, State1}
-      end, none, State).
+handle_cast({flow_timeout, Ref},
+            State = #ch{flow = #flow{client = Flow, pending = {Ref, _TRef}}}) ->
+    {stop, normal, terminating(
+                     rabbit_misc:amqp_error(
+                       precondition_failed,
+                       "timeout waiting for channel.flow_ok{active=~w}",
+                       [not Flow], none), State)};
+handle_cast({flow_timeout, _Ref}, State) ->
+    {noreply, State}.
 
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #ch{writer_pid = WriterPid}) ->
@@ -258,6 +270,11 @@ return_ok(State, false, Msg)  -> {reply, Msg, State}.
 
 ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
+
+terminating(Reason, State = #ch{channel = Channel, reader_pid = Reader}) ->
+    ok = rollback_and_notify(State),
+    Reader ! {channel_exit, Channel, Reason},
+    State#ch{state = terminating}.
 
 return_queue_declare_ok(State, NoWait, Q) ->
     NewState = State#ch{most_recently_declared_queue =
@@ -355,31 +372,6 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                                _ -> ok
                            end,
                       State#ch{blocking = Blocking1}
-    end.
-
-handle_exiting_function(Fun, Method, State) ->
-    try Fun(State) of
-        {reply, Reply, NewState} ->
-            ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
-            noreply(NewState);
-        {noreply, NewState} ->
-            noreply(NewState);
-        stop ->
-            {stop, normal, State#ch{state = terminating}}
-    catch
-        exit:Reason = #amqp_error{} ->
-            ok = rollback_and_notify(State),
-            MethodName = case Method of
-                             none -> none;
-                             _    -> rabbit_misc:method_record_type(Method)
-                         end,
-            State#ch.reader_pid ! {channel_exit, State#ch.channel,
-                                   Reason#amqp_error{method = MethodName}},
-            {stop, normal, State#ch{state = terminating}};
-        exit:normal ->
-            {stop, normal, State};
-        _:Reason ->
-            {stop, {Reason, erlang:get_stacktrace()}, State}
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
