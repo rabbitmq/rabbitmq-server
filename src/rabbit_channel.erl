@@ -855,8 +855,8 @@ handle_method(#'channel.flow'{active = false}, _,
     end;
 
 handle_method(#'channel.flow_ok'{active = Active}, _,
-              State = #ch{flow = F = #flow{server = Active, client = Flow,
-                                           pending = {_Ref, TRef}}})
+              State = #ch{flow = #flow{server = Active, client = Flow,
+                                       pending = {_Ref, TRef}} = F})
   when Flow =:= not Active ->
     {ok, cancel} = timer:cancel(TRef),
     {noreply, State#ch{flow = F#flow{client = Active, pending = none}}};
