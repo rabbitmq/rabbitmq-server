@@ -423,8 +423,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             %% definition, when we move to >=0-9
             ok = basic_return(Message, WriterPid, 312, <<"unroutable">>);
         not_delivered ->
-            %% FIXME: 313 should be replaced by the
-            %% ?NO_CONSUMERS definition, when we move to >=0-9
+            %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
+            %% definition, when we move to >=0-9
             ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>)
     end,
     {noreply, case TxnKey of
