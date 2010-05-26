@@ -299,17 +299,24 @@ check_read_permitted(Resource, #ch{ username = Username}) ->
     check_resource_access(Username, Resource, read).
 
 with_exclusive_access_or_die(QName, ReaderPid, F) ->
-    Q = rabbit_amqqueue:with_or_die(QName, fun(Q1) -> Q1 end),
-    case Q of
-        #amqqueue{exclusive_owner = none} ->
-            F(Q);
-        #amqqueue{exclusive_owner = ReaderPid} ->
-            F(Q);
-        _ ->
+    F2 = fun(Q) ->
+                 case Q of
+                     #amqqueue{exclusive_owner = none} ->
+                         F(Q);
+                     #amqqueue{exclusive_owner = ReaderPid} ->
+                         F(Q);
+                     E ->
+                         {error, E}
+                 end
+         end,
+    case rabbit_amqqueue:with_or_die(QName, F2) of
+        {error, _} ->
             rabbit_misc:protocol_error(
               resource_locked,
               "cannot obtain exclusive access to locked ~s",
-              [rabbit_misc:rs(Q#amqqueue.name)])
+              [rabbit_misc:rs(QName)]);
+        Q ->
+            Q
     end.
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
