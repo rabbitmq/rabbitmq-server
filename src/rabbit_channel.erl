@@ -305,18 +305,18 @@ with_exclusive_access_or_die(QName, ReaderPid, F) ->
                          F(Q);
                      #amqqueue{exclusive_owner = ReaderPid} ->
                          F(Q);
-                     E ->
-                         {error, E}
+                     _ ->
+                         {error, wrong_exclusive_owner}
                  end
          end,
     case rabbit_amqqueue:with_or_die(QName, F2) of
-        {error, _} ->
+        {error, wrong_exclusive_owner} ->
             rabbit_misc:protocol_error(
               resource_locked,
               "cannot obtain exclusive access to locked ~s",
               [rabbit_misc:rs(QName)]);
-        Q ->
-            Q
+        Else ->
+            Else
     end.
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
