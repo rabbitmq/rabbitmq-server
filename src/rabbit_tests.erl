@@ -748,7 +748,8 @@ test_user_management() ->
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>, none),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
+                                   self()),
     [Q, Q2] = [#amqqueue{} = rabbit_amqqueue:declare(
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none) ||
