@@ -319,7 +319,7 @@ flush_all(QPids, ChPid) ->
     delegate:invoke_no_result(
       QPids, fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
 
-internal_delete2(QueueName) ->
+internal_delete1(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
     ok = mnesia:delete({rabbit_durable_queue, QueueName}),
     %% we want to execute some things, as
@@ -333,7 +333,7 @@ internal_delete(QueueName) ->
           fun () ->
                   case mnesia:wread({rabbit_queue, QueueName}) of
                       []  -> {error, not_found};
-                      [_] -> internal_delete2(QueueName)
+                      [_] -> internal_delete1(QueueName)
                   end
           end) of
         Err = {error, _} -> Err;
