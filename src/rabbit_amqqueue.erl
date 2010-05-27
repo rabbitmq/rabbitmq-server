@@ -65,8 +65,8 @@
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -spec(start/0 :: () -> 'ok').
--spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(), maybe(pid())) ->
-             amqqueue()).
+-spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(),
+                    maybe(pid())) -> amqqueue()).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
@@ -101,8 +101,7 @@
 -spec(basic_consume/7 ::
       (amqqueue(), boolean(), pid(), pid() | 'undefined', ctag(),
        boolean(), any()) ->
-             'ok' | {'error', 'queue_owned_by_another_connection' |
-                     'exclusive_consume_unavailable'}).
+             'ok' | {'error', 'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
@@ -320,7 +319,7 @@ flush_all(QPids, ChPid) ->
     delegate:invoke_no_result(
       QPids, fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
 
-internal_delete2(QueueName) ->
+internal_delete1(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
     ok = mnesia:delete({rabbit_durable_queue, QueueName}),
     %% we want to execute some things, as
@@ -334,7 +333,7 @@ internal_delete(QueueName) ->
           fun () ->
                   case mnesia:wread({rabbit_queue, QueueName}) of
                       []  -> {error, not_found};
-                      [_] -> internal_delete2(QueueName)
+                      [_] -> internal_delete1(QueueName)
                   end
           end) of
         Err = {error, _} -> Err;
