@@ -161,7 +161,7 @@
 
 -record(qistate, { dir, segments, journal_handle, dirty_count }).
 
--record(segment, { unacked, journal_entries, path, num }).
+-record(segment, { num, path, journal_entries, unacked }).
 
 -include("rabbit.hrl").
 
@@ -171,10 +171,10 @@
 
 -type(hdl() :: ('undefined' | any())).
 -type(segment() :: ('undefined' |
-                    #segment { unacked         :: non_neg_integer(),
-                               journal_entries :: array(),
+                    #segment { num             :: non_neg_integer(),
                                path            :: file_path(),
-                               num             :: non_neg_integer()
+                               journal_entries :: array(),
+                               unacked         :: non_neg_integer()
                               })).
 -type(seq_id() :: integer()).
 -type(seg_dict() :: {dict(), [segment()]}).
@@ -694,10 +694,10 @@ all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
 segment_find_or_new(Seg, Dir, Segments) ->
     case segment_find(Seg, Segments) of
         {ok, Segment} -> Segment;
-        error         -> #segment { unacked         = 0,
-                                    journal_entries = array_new(),
+        error         -> #segment { num             = Seg,
                                     path            = seg_num_to_path(Dir, Seg),
-                                    num             = Seg }
+                                    journal_entries = array_new(),
+                                    unacked         = 0 }
     end.
 
 segment_find(Seg, {_Segments, [Segment = #segment { num = Seg } |_]}) ->
@@ -736,7 +736,7 @@ segment_map(Fun, {Segments, CachedSegments}) ->
                CachedSegments)}.
 
 segment_fetch_keys({Segments, CachedSegments}) ->
-    lists:map(fun (Segment) -> Segment#segment.num end, CachedSegments) ++
+    lists:map(fun (#segment { num = Num }) -> Num end, CachedSegments) ++
         dict:fetch_keys(Segments).
 
 segments_new() ->
