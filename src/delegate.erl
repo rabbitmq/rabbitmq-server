@@ -99,13 +99,14 @@ internal_cast(Node, Thunk) when is_atom(Node) ->
     gen_server2:cast({remote_server(Node), Node}, {thunk, Thunk}).
 
 split_delegate_per_node(Pids) ->
+    LocalNode = node(),
     {Local, Remote} =
         lists:foldl(
           fun (Pid, {L, D}) ->
                   Node = node(Pid),
-                  case node() of
-                      Node -> {[Pid|L], D};
-                      _    -> {L, orddict:append(node(Pid), Pid, D)}
+                  case Node of
+                      LocalNode -> {[Pid|L], D};
+                      _         -> {L, orddict:append(Node, Pid, D)}
                   end
           end,
           {[], orddict:new()}, Pids),
