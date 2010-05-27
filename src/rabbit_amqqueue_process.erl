@@ -132,6 +132,23 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+declare(Recover, From,
+        State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
+                   backing_queue = BQ, backing_queue_state = undefined}) ->
+    case rabbit_amqqueue:internal_declare(Q, Recover) of
+        not_found -> {stop, normal, not_found, State};
+        Q         -> gen_server2:reply(From, Q),
+                     ok = file_handle_cache:register_callback(
+                            rabbit_amqqueue, set_maximum_since_use,
+                            [self()]),
+                     ok = rabbit_memory_monitor:register(
+                            self(), {rabbit_amqqueue,
+                                     set_ram_duration_target, [self()]}),
+                     BQS = BQ:init(QName, IsDurable, Recover),
+                     noreply(State#q{backing_queue_state = BQS});
+        Q1        -> {stop, normal, Q1, State}
+    end.
+
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         stop_sync_timer(stop_rate_timer(State)),
@@ -514,50 +531,24 @@ i(Item, _) ->
 %---------------------------------------------------------------------------
 
 handle_call({init, Recover}, From,
-            State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable,
-                                         exclusive_owner = ExclusiveOwner},
-                       backing_queue = BQ, backing_queue_state = undefined}) ->
-    Declare =
-        fun() ->
-                case rabbit_amqqueue:internal_declare(Q, Recover) of
-                    not_found ->
-                        {stop, normal, not_found, State};
-                    Q ->
-                        gen_server2:reply(From, Q),
-                        ok = file_handle_cache:register_callback(
-                               rabbit_amqqueue, set_maximum_since_use,
-                               [self()]),
-                        ok = rabbit_memory_monitor:register(
-                               self(), {rabbit_amqqueue,
-                                        set_ram_duration_target, [self()]}),
-                        noreply(
-                          State#q{backing_queue_state =
-                                      BQ:init(QName, IsDurable, Recover)});
-                    Q1 ->
-                        {stop, normal, Q1, State}
-                end
-        end,
+            State = #q{q = #amqqueue{exclusive_owner = none}}) ->
+    declare(Recover, From, State);
 
-    case ExclusiveOwner of
-        none ->
-            Declare();
-        Owner ->
-            case rpc:call(node(Owner), erlang, is_process_alive, [Owner]) of
-                true ->
-                    erlang:monitor(process, Owner),
-                    Declare();
-                _ ->
-                    case Recover of
-                        true -> ok;
-                        _    -> rabbit_log:warning(
-                                  "Queue ~p exclusive owner went away~n",
-                                  [QName])
-                    end,
-                    %% Rely on terminate to delete the queue.
-                    {stop, normal, not_found,
-                     State#q{backing_queue_state =
-                                 BQ:init(QName, IsDurable, Recover)}}
-            end
+handle_call({init, Recover}, From,
+            State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
+    case rpc:call(node(Owner), erlang, is_process_alive, [Owner]) of
+        true -> erlang:monitor(process, Owner),
+                declare(Recover, From, State);
+        _    -> #q{q = #amqqueue{name = QName, durable = IsDurable},
+                   backing_queue = BQ, backing_queue_state = undefined} = State,
+                case Recover of
+                    true -> ok;
+                    _    -> rabbit_log:warning(
+                              "Queue ~p exclusive owner went away~n", [QName])
+                end,
+                BQS = BQ:init(QName, IsDurable, Recover),
+                %% Rely on terminate to delete the queue.
+                {stop, normal, not_found, State#q{backing_queue_state = BQS}}
     end;
 
 handle_call(info, _From, State) ->

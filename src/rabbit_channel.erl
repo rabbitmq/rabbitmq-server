@@ -301,22 +301,18 @@ check_read_permitted(Resource, #ch{ username = Username}) ->
 
 with_exclusive_access_or_die(QName, ReaderPid, F) ->
     case rabbit_amqqueue:with_or_die(
-           QName, fun(Q) -> case Q of
-                                #amqqueue{exclusive_owner = none} ->
-                                    F(Q);
-                                #amqqueue{exclusive_owner = ReaderPid} ->
-                                    F(Q);
-                                _ ->
-                                    {error, wrong_exclusive_owner}
-                            end
+           QName, fun (Q = #amqqueue{exclusive_owner = Owner})
+                      when Owner =:= none orelse Owner =:= ReaderPid ->
+                          F(Q);
+                      (_) ->
+                          {error, wrong_exclusive_owner}
                   end) of
         {error, wrong_exclusive_owner} ->
             rabbit_misc:protocol_error(
-              resource_locked,
-              "cannot obtain exclusive access to locked ~s",
+              resource_locked, "cannot obtain exclusive access to locked ~s",
               [rabbit_misc:rs(QName)]);
-        Else ->
-            Else
+        Other ->
+            Other
     end.
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
@@ -704,31 +700,28 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
     Finish =
-        fun(Q = #amqqueue{name = QueueName}) ->
-                case Q of
-                    %% "equivalent" rule. NB: we don't pay attention to
-                    %% anything in the arguments table, so for the sake of the
-                    %% "equivalent" rule, all tables of arguments are
-                    %% semantically equivalant.
-                    #amqqueue{exclusive_owner = Owner} ->
-                        check_configure_permitted(QueueName, State),
-                        %% We need to notify the reader within the channel
-                        %% process so that we can be sure there are no
-                        %% outstanding exclusive queues being declared as the
-                        %% connection shuts down.
-                        case Owner of
-                            none -> ok;
-                            _    -> ok = rabbit_reader_queue_collector:register_exclusive_queue(
-                                           CollectorPid, Q)
-                        end,
-                        Q;
-                    %% exclusivity trumps non-equivalence arbitrarily
-                    #amqqueue{} ->
-                        rabbit_misc:protocol_error(
-                          resource_locked,
-                          "cannot obtain exclusive access to locked ~s",
-                          [rabbit_misc:rs(QueueName)])
-                end
+        fun(#amqqueue{name = QueueName, exclusive_owner = Owner1} = Q)
+           when Owner =:= Owner1 ->
+                %% "equivalent" rule. NB: we don't pay attention to
+                %% anything in the arguments table, so for the sake of
+                %% the "equivalent" rule, all tables of arguments are
+                %% semantically equivalant.
+                check_configure_permitted(QueueName, State),
+                %% We need to notify the reader within the channel
+                %% process so that we can be sure there are no
+                %% outstanding exclusive queues being declared as the
+                %% connection shuts down.
+                case Owner of
+                    none -> ok;
+                    _    -> ok = rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
+                end,
+                Q;
+           (#amqqueue{name = QueueName}) ->
+                %% exclusivity trumps non-equivalence arbitrarily
+                rabbit_misc:protocol_error(
+                  resource_locked,
+                  "cannot obtain exclusive access to locked ~s",
+                  [rabbit_misc:rs(QueueName)])
         end,
     Q = case rabbit_amqqueue:with(
                rabbit_misc:r(VHostPath, queue, QueueNameBin),
@@ -775,8 +768,7 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
               precondition_failed, "~s not empty", [rabbit_misc:rs(QueueName)]);
         {ok, PurgedMessageCount} ->
             return_ok(State, NoWait,
-                      #'queue.delete_ok'{
-                               message_count = PurgedMessageCount})
+                      #'queue.delete_ok'{message_count = PurgedMessageCount})
     end;
 
 handle_method(#'queue.bind'{queue = QueueNameBin,
