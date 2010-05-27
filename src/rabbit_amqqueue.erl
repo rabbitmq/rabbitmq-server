@@ -31,7 +31,7 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, declare/4, delete/3, purge/1]).
+-export([start/0, declare/5, delete/3, purge/1]).
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
          update_ram_duration/1, set_ram_duration_target/2,
@@ -41,8 +41,7 @@
          stat/1, stat_all/0, deliver/2, requeue/3, ack/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1]).
--export([claim_queue/2]).
--export([basic_get/3, basic_consume/8, basic_cancel/4]).
+-export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
 -export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
@@ -66,8 +65,8 @@
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -spec(start/0 :: () -> 'ok').
--spec(declare/4 :: (queue_name(), boolean(), boolean(), amqp_table()) ->
-             amqqueue()).
+-spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(),
+                    maybe(pid())) -> amqqueue()).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
@@ -97,14 +96,12 @@
 -spec(rollback_all/3 :: ([pid()], txn(), pid()) -> 'ok').
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
--spec(claim_queue/2 :: (amqqueue(), pid()) -> 'ok' | 'locked').
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
              {'ok', non_neg_integer(), qmsg()} | 'empty').
--spec(basic_consume/8 ::
-      (amqqueue(), boolean(), pid(), pid(), pid() | 'undefined', ctag(),
+-spec(basic_consume/7 ::
+      (amqqueue(), boolean(), pid(), pid() | 'undefined', ctag(),
        boolean(), any()) ->
-             'ok' | {'error', 'queue_owned_by_another_connection' |
-                     'exclusive_consume_unavailable'}).
+             'ok' | {'error', 'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
@@ -148,11 +145,12 @@ recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
     [Q || Q <- Qs, gen_server2:call(Q#amqqueue.pid, {init, true}) == Q].
 
-declare(QueueName, Durable, AutoDelete, Args) ->
+declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
                                       arguments = Args,
+                                      exclusive_owner = Owner,
                                       pid = none}),
     case gen_server2:call(Q#amqqueue.pid, {init, false}) of
         not_found -> rabbit_misc:not_found(QueueName);
@@ -298,15 +296,12 @@ limit_all(QPids, ChPid, LimiterPid) ->
                      gen_server2:cast(QPid, {limit, ChPid, LimiterPid})
              end).
 
-claim_queue(#amqqueue{pid = QPid}, ReaderPid) ->
-    delegate_call(QPid, {claim_queue, ReaderPid}, infinity).
-
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
     delegate_call(QPid, {basic_get, ChPid, NoAck}, infinity).
 
-basic_consume(#amqqueue{pid = QPid}, NoAck, ReaderPid, ChPid, LimiterPid,
+basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, LimiterPid,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
-    delegate_call(QPid, {basic_consume, NoAck, ReaderPid, ChPid,
+    delegate_call(QPid, {basic_consume, NoAck, ChPid,
                          LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg},
                   infinity).
 
@@ -324,19 +319,21 @@ flush_all(QPids, ChPid) ->
     delegate:invoke_no_result(
       QPids, fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
 
+internal_delete1(QueueName) ->
+    ok = mnesia:delete({rabbit_queue, QueueName}),
+    ok = mnesia:delete({rabbit_durable_queue, QueueName}),
+    %% we want to execute some things, as
+    %% decided by rabbit_exchange, after the
+    %% transaction.
+    rabbit_exchange:delete_queue_bindings(QueueName).
+
 internal_delete(QueueName) ->
     case
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_queue, QueueName}) of
                       []  -> {error, not_found};
-                      [_] ->
-                          ok = mnesia:delete({rabbit_queue, QueueName}),
-                          ok = mnesia:delete({rabbit_durable_queue, QueueName}),
-                          %% we want to execute some things, as
-                          %% decided by rabbit_exchange, after the
-                          %% transaction.
-                          rabbit_exchange:delete_queue_bindings(QueueName)
+                      [_] -> internal_delete1(QueueName)
                   end
           end) of
         Err = {error, _} -> Err;

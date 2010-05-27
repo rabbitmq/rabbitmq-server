@@ -51,7 +51,8 @@
 
 -record(exchange, {name, type, durable, auto_delete, arguments}).
 
--record(amqqueue, {name, durable, auto_delete, arguments, pid}).
+-record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
+                   arguments, pid}).
 
 %% mnesia doesn't like unary records, so we add a dummy 'value' field
 -record(route, {binding, value = const}).
@@ -104,11 +105,12 @@
                   write     :: regexp(),
                   read      :: regexp()}).
 -type(amqqueue() ::
-      #amqqueue{name          :: queue_name(),
-                durable       :: boolean(),
-                auto_delete   :: boolean(),
-                arguments     :: amqp_table(),
-                pid           :: maybe(pid())}).
+      #amqqueue{name            :: queue_name(),
+                durable         :: boolean(),
+                auto_delete     :: boolean(),
+                exclusive_owner :: maybe(pid()),
+                arguments       :: amqp_table(),
+                pid             :: maybe(pid())}).
 -type(exchange() ::
       #exchange{name        :: exchange_name(),
                 type        :: exchange_type(),

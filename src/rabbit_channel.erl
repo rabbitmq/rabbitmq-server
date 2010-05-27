@@ -298,6 +298,26 @@ check_write_permitted(Resource, #ch{ username = Username}) ->
 check_read_permitted(Resource, #ch{ username = Username}) ->
     check_resource_access(Username, Resource, read).
 
+with_exclusive_access_or_die(QName, ReaderPid, F) ->
+    case rabbit_amqqueue:with_or_die(
+           QName, fun(Q) -> case Q of
+                                #amqqueue{exclusive_owner = none} ->
+                                    F(Q);
+                                #amqqueue{exclusive_owner = ReaderPid} ->
+                                    F(Q);
+                                _ ->
+                                    {error, wrong_exclusive_owner}
+                            end
+                  end) of
+        {error, wrong_exclusive_owner} ->
+            rabbit_misc:protocol_error(
+              resource_locked,
+              "cannot obtain exclusive access to locked ~s",
+              [rabbit_misc:rs(QName)]);
+        Else ->
+            Else
+    end.
+
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
       not_allowed, "no previously declared queue", []);
@@ -483,11 +503,11 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
             %% In order to ensure that the consume_ok gets sent before
             %% any messages are sent to the consumer, we get the queue
             %% process to send the consume_ok on our behalf.
-            case rabbit_amqqueue:with_or_die(
-                   QueueName,
+            case with_exclusive_access_or_die(
+                   QueueName, ReaderPid,
                    fun (Q) ->
                            rabbit_amqqueue:basic_consume(
-                             Q, NoAck, ReaderPid, self(), LimiterPid,
+                             Q, NoAck, self(), LimiterPid,
                              ActualConsumerTag, ExclusiveConsume,
                              ok_msg(NoWait, #'basic.consume_ok'{
                                       consumer_tag = ActualConsumerTag}))
@@ -497,14 +517,6 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                                        dict:store(ActualConsumerTag,
                                                   QueueName,
                                                   ConsumerMapping)}};
-                {error, queue_owned_by_another_connection} ->
-                    %% The spec is silent on which exception to use
-                    %% here. This seems reasonable?
-                    %% FIXME: check this
-
-                    rabbit_misc:protocol_error(
-                      resource_locked, "~s owned by another connection",
-                      [rabbit_misc:rs(QueueName)]);
                 {error, exclusive_consume_unavailable} ->
                     rabbit_misc:protocol_error(
                       access_refused, "~s in exclusive use",
@@ -674,34 +686,38 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
             return_ok(State, NoWait,  #'exchange.delete_ok'{})
     end;
 
-handle_method(#'queue.declare'{queue = QueueNameBin,
-                               passive = false,
-                               durable = Durable,
-                               exclusive = ExclusiveDeclare,
+handle_method(#'queue.declare'{queue       = QueueNameBin,
+                               passive     = false,
+                               durable     = Durable,
+                               exclusive   = ExclusiveDeclare,
                                auto_delete = AutoDelete,
-                               nowait = NoWait,
-                               arguments = Args},
-              _, State = #ch { virtual_host = VHostPath,
-                               reader_pid = ReaderPid }) ->
-    %% FIXME: atomic create&claim
+                               nowait      = NoWait,
+                               arguments   = Args},
+              _, State = #ch{virtual_host = VHostPath,
+                             reader_pid   = ReaderPid}) ->
+    Owner = case ExclusiveDeclare of
+                true  -> ReaderPid;
+                false -> none
+            end,
+    %% We use this in both branches, because queue_declare may yet return an
+    %% existing queue.
     Finish =
-        fun (Q) ->
-                if ExclusiveDeclare ->
-                        case rabbit_amqqueue:claim_queue(Q, ReaderPid) of
-                            locked ->
-                                %% AMQP 0-8 doesn't say which
-                                %% exception to use, so we mimic QPid
-                                %% here.
-                                rabbit_misc:protocol_error(
-                                  resource_locked,
-                                  "cannot obtain exclusive access to locked ~s",
-                                  [rabbit_misc:rs(Q#amqqueue.name)]);
-                            ok -> ok
-                        end;
-                   true ->
-                        ok
-                end,
-                Q
+        fun(Q = #amqqueue{name = QueueName}) ->
+                case Q of
+                    %% "equivalent" rule. NB: we don't pay attention to
+                    %% anything in the arguments table, so for the sake of the
+                    %% "equivalent" rule, all tables of arguments are
+                    %% semantically equivalant.
+                    #amqqueue{exclusive_owner = Owner} ->
+                        check_configure_permitted(QueueName, State),
+                        Q;
+                    %% exclusivity trumps non-equivalence arbitrarily
+                    #amqqueue{} ->
+                        rabbit_misc:protocol_error(
+                          resource_locked,
+                          "cannot obtain exclusive access to locked ~s",
+                          [rabbit_misc:rs(QueueName)])
+                end
         end,
     Q = case rabbit_amqqueue:with(
                rabbit_misc:r(VHostPath, queue, QueueNameBin),
@@ -713,34 +729,32 @@ handle_method(#'queue.declare'{queue = QueueNameBin,
                         Other -> check_name('queue', Other)
                     end,
                 QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
-                check_configure_permitted(QueueName, State),
-                Finish(rabbit_amqqueue:declare(QueueName,
-                                               Durable, AutoDelete, Args));
-            Other = #amqqueue{name = QueueName} ->
-                check_configure_permitted(QueueName, State),
+                Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
+                                               Args, Owner));
+            #amqqueue{} = Other ->
                 Other
         end,
     return_queue_declare_ok(State, NoWait, Q);
 
-handle_method(#'queue.declare'{queue = QueueNameBin,
+handle_method(#'queue.declare'{queue   = QueueNameBin,
                                passive = true,
-                               nowait = NoWait},
-              _, State = #ch{ virtual_host = VHostPath }) ->
+                               nowait  = NoWait},
+              _, State = #ch{virtual_host = VHostPath,
+                             reader_pid   = ReaderPid}) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
     check_configure_permitted(QueueName, State),
-    Q = rabbit_amqqueue:with_or_die(QueueName, fun (Q) -> Q end),
+    Q = with_exclusive_access_or_die(QueueName, ReaderPid, fun(Q) -> Q end),
     return_queue_declare_ok(State, NoWait, Q);
 
 handle_method(#'queue.delete'{queue = QueueNameBin,
                               if_unused = IfUnused,
                               if_empty = IfEmpty,
-                              nowait = NoWait
-                             },
-              _, State) ->
+                              nowait = NoWait},
+              _, State = #ch{reader_pid = ReaderPid}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_configure_permitted(QueueName, State),
-    case rabbit_amqqueue:with_or_die(
-           QueueName,
+    case with_exclusive_access_or_die(
+           QueueName, ReaderPid,
            fun (Q) -> rabbit_amqqueue:delete(Q, IfUnused, IfEmpty) end) of
         {error, in_use} ->
             rabbit_misc:protocol_error(
@@ -773,11 +787,11 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
 
 handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},
-              _, State) ->
+              _, State = #ch{reader_pid = ReaderPid}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
-    {ok, PurgedMessageCount} = rabbit_amqqueue:with_or_die(
-                                 QueueName,
+    {ok, PurgedMessageCount} = with_exclusive_access_or_die(
+                                 QueueName, ReaderPid,
                                  fun (Q) -> rabbit_amqqueue:purge(Q) end),
     return_ok(State, NoWait,
               #'queue.purge_ok'{message_count = PurgedMessageCount});
