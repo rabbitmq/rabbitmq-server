@@ -74,9 +74,9 @@ start_channel_infrastructure(network, ChannelNumber, {Sock, MainReader}) ->
     end,
     {FramingPid, WriterPid};
 start_channel_infrastructure(
-        direct, ChannelNumber, #amqp_params{username = User,
-                                            virtual_host = VHost}) ->
-    Peer = rabbit_channel:start_link(ChannelNumber, self(), self(), User, VHost),
+        direct, ChannelNumber, {User, VHost, Collector}) ->
+    Peer = rabbit_channel:start_link(ChannelNumber, self(), self(), User, VHost,
+                                     Collector),
     {Peer, Peer}.
 
 terminate_channel_infrastructure(network, {FramingPid, WriterPid}) ->
