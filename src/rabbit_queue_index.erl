@@ -595,7 +595,7 @@ append_journal_to_segment(#segment { journal_entries = JEntries,
         _ -> {ok, Hdl} = file_handle_cache:open(Path, [write | ?READ_MODE],
                                                 [{write_buffer, infinity}]),
              array:sparse_foldl(fun write_entry_to_segment/3, Hdl, JEntries),
-             file_handle_cache:close(Hdl),
+             ok = file_handle_cache:close(Hdl),
              Segment #segment { journal_entries = array_new() }
     end.
 
@@ -779,7 +779,7 @@ load_segment(KeepAcked, #segment { path = Path }) ->
         true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
                  Res = load_segment_entries(KeepAcked, Hdl, array_new(), 0),
-                 file_handle_cache:close(Hdl),
+                 ok = file_handle_cache:close(Hdl),
                  Res
     end.
 
