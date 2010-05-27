@@ -700,8 +700,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
     Finish =
-        fun(#amqqueue{name = QueueName, exclusive_owner = Owner1} = Q)
-           when Owner =:= Owner1 ->
+        fun (#amqqueue{name = QueueName, exclusive_owner = Owner1} = Q)
+            when Owner =:= Owner1 ->
                 %% "equivalent" rule. NB: we don't pay attention to
                 %% anything in the arguments table, so for the sake of
                 %% the "equivalent" rule, all tables of arguments are
@@ -716,7 +716,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     _    -> ok = rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
                 end,
                 Q;
-           (#amqqueue{name = QueueName}) ->
+            (#amqqueue{name = QueueName}) ->
                 %% exclusivity trumps non-equivalence arbitrarily
                 rabbit_misc:protocol_error(
                   resource_locked,
@@ -747,7 +747,7 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
                              reader_pid   = ReaderPid}) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
     check_configure_permitted(QueueName, State),
-    Q = with_exclusive_access_or_die(QueueName, ReaderPid, fun(Q) -> Q end),
+    Q = with_exclusive_access_or_die(QueueName, ReaderPid, fun (Q) -> Q end),
     return_queue_declare_ok(State, NoWait, Q);
 
 handle_method(#'queue.delete'{queue = QueueNameBin,
