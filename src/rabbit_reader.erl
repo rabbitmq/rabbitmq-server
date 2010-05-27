@@ -52,7 +52,7 @@
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
--define(SLEEP_BEFORE_SILENT_CLOSE, 3000).
+-define(SILENT_CLOSE_DELAY, 3).
 
 %---------------------------------------------------------------------------
 
@@ -579,7 +579,7 @@ handle_method0(MethodName, FieldsBin, State) ->
                 %% We don't trust the client at this point - force
                 %% them to wait for a bit so they can't DOS us with
                 %% repeated failed logins etc.
-                Other   -> timer:sleep(?SLEEP_BEFORE_SILENT_CLOSE),
+                Other   -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
                            throw({channel0_error, Other, CompleteReason})
             end
     end.
