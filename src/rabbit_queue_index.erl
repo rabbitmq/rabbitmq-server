@@ -670,10 +670,6 @@ seq_id_to_seg_and_rel_seq_id(SeqId) ->
 reconstruct_seq_id(Seg, RelSeq) ->
     (Seg * ?SEGMENT_ENTRY_COUNT) + RelSeq.
 
-seg_num_to_path(Dir, Seg) ->
-    SegName = integer_to_list(Seg),
-    filename:join(Dir, SegName ++ ?SEGMENT_EXTENSION).
-
 all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
     lists:sort(
       sets:to_list(
@@ -689,8 +685,10 @@ all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
 segment_find_or_new(Seg, Dir, Segments) ->
     case segment_find(Seg, Segments) of
         {ok, Segment} -> Segment;
-        error         -> #segment { num             = Seg,
-                                    path            = seg_num_to_path(Dir, Seg),
+        error         -> SegName = integer_to_list(Seg)  ++ ?SEGMENT_EXTENSION,
+                         Path = filename:join(Dir, SegName),
+                         #segment { num             = Seg,
+                                    path            = Path,
                                     journal_entries = array_new(),
                                     unacked         = 0 }
     end.
