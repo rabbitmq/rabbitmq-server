@@ -771,7 +771,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             routing_key = RoutingKey,
                             nowait = NoWait,
                             arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_exchange:add_binding/4, ExchangeNameBin,
+    binding_action(fun rabbit_exchange:add_binding/5, ExchangeNameBin,
                    QueueNameBin, RoutingKey, Arguments, #'queue.bind_ok'{},
                    NoWait, State);
 
@@ -779,7 +779,7 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
                               exchange = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_exchange:delete_binding/4, ExchangeNameBin,
+    binding_action(fun rabbit_exchange:delete_binding/5, ExchangeNameBin,
                    QueueNameBin, RoutingKey, Arguments, #'queue.unbind_ok'{},
                    false, State);
 
@@ -853,7 +853,9 @@ handle_method(_MethodRecord, _Content, _State) ->
 %%----------------------------------------------------------------------------
 
 binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
-               ReturnMethod, NoWait, State = #ch{virtual_host = VHostPath}) ->
+               ReturnMethod, NoWait,
+               State = #ch{virtual_host = VHostPath,
+                           reader_pid   = ReaderPid}) ->
     %% FIXME: connection exception (!) on failure??
     %% (see rule named "failure" in spec-XML)
     %% FIXME: don't allow binding to internal exchanges -
@@ -864,7 +866,13 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
-    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments) of
+    CheckExclusive = 
+        fun(_X, Q) -> 
+                with_exclusive_access_or_die(Q#amqqueue.name,
+                                             ReaderPid, fun(_Q1)-> ok end) 
+        end,
+    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
+             CheckExclusive) of
         {error, exchange_not_found} ->
             rabbit_misc:not_found(ExchangeName);
         {error, queue_not_found} ->
