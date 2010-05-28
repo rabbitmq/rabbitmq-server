@@ -297,21 +297,17 @@ read(Start, End, State = #qistate { segments = Segments,
                     true  -> EndRelSeq;
                     false -> ?SEGMENT_ENTRY_COUNT
                 end,
-    Segment = #segment { journal_entries = JEntries } =
-        segment_find_or_new(StartSeg, Dir, Segments),
-    {SegEntries, _UnackedCount} = load_segment(false, Segment),
-    {SegEntries1, _UnackedCountDelta} =
-        segment_plus_journal(SegEntries, JEntries),
-    {array:sparse_foldr(
-       fun (RelSeq, {{Guid, IsPersistent}, IsDelivered, no_ack}, Acc)
-           when StartRelSeq =< RelSeq andalso RelSeq < MaxRelSeq ->
-               [ {Guid, reconstruct_seq_id(StartSeg, RelSeq),
-                  IsPersistent, IsDelivered == del} | Acc ];
-           (_RelSeq, _Value, Acc) ->
-               Acc
-       end, [], SegEntries1),
-     Again,
-     State #qistate { segments = segment_store(Segment, Segments) }}.
+    Segment = segment_find_or_new(StartSeg, Dir, Segments),
+    Messages = segment_entries_foldr(
+                 fun (RelSeq, {{Guid, IsPersistent}, IsDelivered, no_ack}, Acc)
+                     when StartRelSeq =< RelSeq andalso RelSeq < MaxRelSeq ->
+                         [ {Guid, reconstruct_seq_id(StartSeg, RelSeq),
+                            IsPersistent, IsDelivered == del} | Acc ];
+                     (_RelSeq, _Value, Acc) ->
+                         Acc
+                 end, [], Segment),
+    Segments1 = segment_store(Segment, Segments),
+    {Messages, Again, State #qistate { segments = Segments1 }}.
 
 next_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
@@ -513,17 +509,16 @@ queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
     end.
 
 queue_index_walker_reader(QueueName, Gatherer) ->
-    State = recover_journal(blank_state(QueueName)),
-    State1 = lists:foldl(
-               fun (Seg, State2) ->
-                       SeqId = reconstruct_seq_id(Seg, 0),
-                       {Messages, undefined, State3} =
-                           read(SeqId, next_segment_boundary(SeqId), State2),
-                       [ok = gatherer:in(Gatherer, {Guid, 1}) ||
-                           {Guid, _SeqId, true, _IsDelivered} <- Messages],
-                       State3
-               end, State, all_segment_nums(State)),
-    {_SegmentCounts, _State} = terminate(State1),
+    State = #qistate { segments = Segments, dir = Dir } =
+        recover_journal(blank_state(QueueName)),
+    [ok = segment_entries_foldr(
+            fun (_RelSeq, {{Guid, true}, _IsDelivered, no_ack}, ok) ->
+                    gatherer:in(Gatherer, {Guid, 1});
+                (_RelSeq, _Value, Acc) ->
+                    Acc
+            end, ok, segment_find_or_new(Seg, Dir, Segments)) ||
+        Seg <- all_segment_nums(State)],
+    {_SegmentCounts, _State} = terminate(State),
     ok = gatherer:finish(Gatherer).
 
 %%----------------------------------------------------------------------------
@@ -767,6 +762,12 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
                         end)
          end,
     Hdl.
+
+segment_entries_foldr(Fun, Init,
+                      Segment = #segment { journal_entries = JEntries }) ->
+    {SegEntries, _UnackedCount} = load_segment(false, Segment),
+    {SegEntries1, _UnackedCountD} = segment_plus_journal(SegEntries, JEntries),
+    array:sparse_foldr(Fun, Init, SegEntries1).
 
 %% Loading segments
 %%
