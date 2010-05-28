@@ -236,7 +236,7 @@ log_work(CreateWorkUnit, MessageList,
            snapshot = Snapshot = #psnapshot{messages = Messages}}) ->
     Unit = CreateWorkUnit(
              rabbit_misc:map_in_order(
-               fun(M = {publish, Message, QK = {_QName, PKey}}) ->
+               fun (M = {publish, Message, QK = {_QName, PKey}}) ->
                        case ets:lookup(Messages, PKey) of
                            [_] -> {tied, QK};
                            []  -> ets:insert(Messages, {PKey, Message}),

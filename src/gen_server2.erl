@@ -639,7 +639,7 @@ do_multi_call(Nodes, Name, Req, Timeout) ->
     Caller = self(),
     Receiver =
 	spawn(
-	  fun() ->
+	  fun () ->
 		  %% Middleman process. Should be unsensitive to regular
 		  %% exit signals. The sychronization is needed in case
 		  %% the receiver would exit before the caller started

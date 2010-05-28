@@ -242,12 +242,12 @@ report_cover([Root]) when is_atom(Root) ->
 report_cover(Root) ->
     Dir = filename:join(Root, "cover"),
     ok = filelib:ensure_dir(filename:join(Dir,"junk")),
-    lists:foreach(fun(F) -> file:delete(F) end,
+    lists:foreach(fun (F) -> file:delete(F) end,
                   filelib:wildcard(filename:join(Dir, "*.html"))),
     {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
     {CT, NCT} =
         lists:foldl(
-          fun(M,{CovTot, NotCovTot}) ->
+          fun (M,{CovTot, NotCovTot}) ->
                   {ok, {M, {Cov, NotCov}}} = cover:analyze(M, module),
                   ok = report_coverage_percentage(SummaryFile,
                                                   Cov, NotCov, M),
@@ -367,7 +367,7 @@ upmap(F, L) ->
     Parent = self(),
     Ref = make_ref(),
     [receive {Ref, Result} -> Result end
-     || _ <- [spawn(fun() -> Parent ! {Ref, F(X)} end) || X <- L]].
+     || _ <- [spawn(fun () -> Parent ! {Ref, F(X)} end) || X <- L]].
 
 map_in_order(F, L) ->
     lists:reverse(

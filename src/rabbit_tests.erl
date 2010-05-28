@@ -822,7 +822,7 @@ test_hooks() ->
     {[arg1, arg2], 1, 3} = get(arg_hook_test_fired),
 
     %% Invoking Pids
-    Remote = fun() ->
+    Remote = fun () ->
         receive
             {rabbitmq_hook,[remote_test,test,[],Target]} ->
                 Target ! invoked
@@ -841,9 +841,9 @@ test_hooks() ->
 
 test_delegates_async(SecondaryNode) ->
     Self = self(),
-    Sender = fun(Pid) -> Pid ! {invoked, Self} end,
+    Sender = fun (Pid) -> Pid ! {invoked, Self} end,
 
-    Responder = make_responder(fun({invoked, Pid}) -> Pid ! response end),
+    Responder = make_responder(fun ({invoked, Pid}) -> Pid ! response end),
 
     ok = delegate:invoke_no_result(spawn(Responder), Sender),
     ok = delegate:invoke_no_result(spawn(SecondaryNode, Responder), Sender),
@@ -858,7 +858,7 @@ test_delegates_async(SecondaryNode) ->
 
 make_responder(FMsg) -> make_responder(FMsg, timeout).
 make_responder(FMsg, Throw) ->
-    fun() ->
+    fun () ->
         receive Msg -> FMsg(Msg)
         after 1000 -> throw(Throw)
         end
@@ -887,22 +887,22 @@ must_exit(Fun) ->
     end.
 
 test_delegates_sync(SecondaryNode) ->
-    Sender = fun(Pid) -> gen_server:call(Pid, invoked) end,
-    BadSender = fun(_Pid) -> exit(exception) end,
+    Sender = fun (Pid) -> gen_server:call(Pid, invoked) end,
+    BadSender = fun (_Pid) -> exit(exception) end,
 
-    Responder = make_responder(fun({'$gen_call', From, invoked}) ->
+    Responder = make_responder(fun ({'$gen_call', From, invoked}) ->
                                    gen_server:reply(From, response)
                                end),
 
-    BadResponder = make_responder(fun({'$gen_call', From, invoked}) ->
+    BadResponder = make_responder(fun ({'$gen_call', From, invoked}) ->
                                           gen_server:reply(From, response)
                                   end, bad_responder_died),
 
     response = delegate:invoke(spawn(Responder), Sender),
     response = delegate:invoke(spawn(SecondaryNode, Responder), Sender),
 
-    must_exit(fun() -> delegate:invoke(spawn(BadResponder), BadSender) end),
-    must_exit(fun() ->
+    must_exit(fun () -> delegate:invoke(spawn(BadResponder), BadSender) end),
+    must_exit(fun () ->
         delegate:invoke(spawn(SecondaryNode, BadResponder), BadSender) end),
 
     LocalGoodPids = spawn_responders(node(), Responder, 2),
