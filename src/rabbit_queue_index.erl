@@ -677,7 +677,7 @@ all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
           fun (SegName, Set) ->
                   sets:add_element(
                     list_to_integer(
-                      lists:takewhile(fun(C) -> $0 =< C andalso C =< $9 end,
+                      lists:takewhile(fun (C) -> $0 =< C andalso C =< $9 end,
                                       SegName)), Set)
           end, sets:from_list(segment_fetch_keys(Segments)),
           filelib:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)))).
