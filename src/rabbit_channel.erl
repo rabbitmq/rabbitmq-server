@@ -702,10 +702,6 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
     Finish =
         fun (#amqqueue{name = QueueName, exclusive_owner = Owner1} = Q)
             when Owner =:= Owner1 ->
-                %% "equivalent" rule. NB: we don't pay attention to
-                %% anything in the arguments table, so for the sake of
-                %% the "equivalent" rule, all tables of arguments are
-                %% semantically equivalant.
                 check_configure_permitted(QueueName, State),
                 %% We need to notify the reader within the channel
                 %% process so that we can be sure there are no
@@ -717,7 +713,6 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 end,
                 Q;
             (#amqqueue{name = QueueName}) ->
-                %% exclusivity trumps non-equivalence arbitrarily
                 rabbit_misc:protocol_error(
                   resource_locked,
                   "cannot obtain exclusive access to locked ~s",
