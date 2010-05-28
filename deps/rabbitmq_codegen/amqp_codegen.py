@@ -58,10 +58,86 @@ def insert_base_types(d):
     for t in ['octet', 'shortstr', 'longstr', 'short', 'long',
               'longlong', 'bit', 'table', 'timestamp']:
         d[t] = t
+
+class AmqpSpecFileMergeConflict(Exception): pass
+
+def default_spec_value_merger(key, old, new):
+    if old is None or old == new:
+        return new
+    raise AmqpSpecFileMergeConflict(key, old, new)
+
+def extension_info_merger(key, old, new):
+    return old + [new]
+
+def domains_merger(key, old, new):
+    o = dict((k, v) for [k, v] in old)
+    for [k, v] in new:
+        if o.has_key(k):
+            raise AmqpSpecFileMergeConflict(key, old, new)
+        o[k] = v
+    return [[k, v] for (k, v) in o.iteritems()]
+
+def constants_merger(key, old, new):
+    o = dict((v["name"], v) for v in old)
+    for v in new:
+        if o.has_key(v["name"]):
+            raise AmqpSpecFileMergeConflict(key, old, new)
+        o[v["name"]] = v
+    return list(o.values())
+
+def methods_merger(classname, old, new):
+    o = dict((v["name"], v) for v in old)
+    for v in new:
+        if o.has_key(v["name"]):
+            raise AmqpSpecFileMergeConflict(("class-methods", classname), old, new)
+        o[v["name"]] = v
+    return list(o.values())
+
+def properties_merger(classname, old, new):
+    oldnames = set(v["name"] for v in old)
+    newnames = set(v["name"] for v in new)
+    clashes = oldnames.intersection(newnames)
+    if clashes:
+        raise AmqpSpecFileMergeConflict(("class-properties", classname), old, new)
+    return old + new
+
+def class_merger(old, new):
+    old["methods"] = methods_merger(old["name"], old["methods"], new["methods"])
+    old["properties"] = properties_merger(old["name"],
+                                          old.get("properties", []),
+                                          new.get("properties", []))
+    return old
+
+def classes_merger(key, old, new):
+    o = dict((v["name"], v) for v in old)
+    for v in new:
+        if o.has_key(v["name"]):
+            o[v["name"]] = class_merger(o[v["name"]], v)
+        else:
+            o[v["name"]] = v
+    return list(o.values())
+
+mergers = {
+    "extension": (extension_info_merger, []),
+    "domains": (domains_merger, []),
+    "constants": (constants_merger, []),
+    "classes": (classes_merger, []),
+}
+
+def merge_load_specs(filenames):
+    handles = [file(filename) for filename in filenames]
+    docs = [json.load(handle) for handle in handles]
+    spec = {}
+    for doc in docs:
+        for (key, value) in doc.iteritems():
+            (merger, default_value) = mergers.get(key, (default_spec_value_merger, None))
+            spec[key] = merger(key, spec.get(key, default_value), value)
+    for handle in handles: handle.close()
+    return spec
         
 class AmqpSpec:
-    def __init__(self, filename):
-        self.spec = json.load(file(filename))
+    def __init__(self, filenames):
+        self.spec = merge_load_specs(filenames)
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
@@ -176,13 +252,13 @@ def do_main(header_fn,body_fn):
         print >> sys.stderr , " %s header|body path_to_amqp_spec.json path_to_output_file" % (sys.argv[0])
         print >> sys.stderr , ""
         
-    def execute(fn, amqp_spec, out_file):
+    def execute(fn, amqp_specs, out_file):
         stdout = sys.stdout
         f = open(out_file, 'w')
         try:
             try:
                 sys.stdout = f
-                fn(amqp_spec)
+                fn(amqp_specs)
             except:
                 remove(out_file)
                 raise
@@ -190,14 +266,14 @@ def do_main(header_fn,body_fn):
             sys.stdout = stdout
             f.close()
 
-    if not len(sys.argv) == 4:
+    if len(sys.argv) < 4:
         usage()
         sys.exit(1)
     else:
         if sys.argv[1] == "header":
-            execute(header_fn, sys.argv[2], sys.argv[3])
+            execute(header_fn, sys.argv[2:-1], sys.argv[-1])
         elif sys.argv[1] == "body":
-            execute(body_fn, sys.argv[2], sys.argv[3])
+            execute(body_fn, sys.argv[2:-1], sys.argv[-1])
         else:
             usage()
             sys.exit(1)
