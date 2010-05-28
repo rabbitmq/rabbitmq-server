@@ -909,17 +909,16 @@ test_user_management() ->
     passed.
 
 test_server_status() ->
-
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
+                                   self()),
     [Q, Q2] = [#amqqueue{} = rabbit_amqqueue:declare(
                                rabbit_misc:r(<<"/">>, queue, Name),
-                               false, false, []) ||
+                               false, false, [], none) ||
                   Name <- [<<"foo">>, <<"bar">>]],
 
-    ok = rabbit_amqqueue:claim_queue(Q, self()),
-    ok = rabbit_amqqueue:basic_consume(Q, true, self(), Ch, undefined,
+    ok = rabbit_amqqueue:basic_consume(Q, true, Ch, undefined,
                                        <<"ctag">>, true, undefined),
 
     %% list queues
@@ -1020,10 +1019,11 @@ test_delegates_async(SecondaryNode) ->
 
     passed.
 
-make_responder(FMsg) ->
+make_responder(FMsg) -> make_responder(FMsg, timeout).
+make_responder(FMsg, Throw) ->
     fun() ->
         receive Msg -> FMsg(Msg)
-        after 1000 -> throw(timeout)
+        after 1000 -> throw(Throw)
         end
     end.
 
@@ -1057,17 +1057,21 @@ test_delegates_sync(SecondaryNode) ->
                                    gen_server:reply(From, response)
                                end),
 
+    BadResponder = make_responder(fun({'$gen_call', From, invoked}) ->
+                                          gen_server:reply(From, response)
+                                  end, bad_responder_died),
+
     response = delegate:invoke(spawn(Responder), Sender),
     response = delegate:invoke(spawn(SecondaryNode, Responder), Sender),
 
-    must_exit(fun() -> delegate:invoke(spawn(Responder), BadSender) end),
+    must_exit(fun() -> delegate:invoke(spawn(BadResponder), BadSender) end),
     must_exit(fun() ->
-        delegate:invoke(spawn(SecondaryNode, Responder), BadSender) end),
+        delegate:invoke(spawn(SecondaryNode, BadResponder), BadSender) end),
 
     LocalGoodPids = spawn_responders(node(), Responder, 2),
     RemoteGoodPids = spawn_responders(SecondaryNode, Responder, 2),
-    LocalBadPids = spawn_responders(node(), Responder, 2),
-    RemoteBadPids = spawn_responders(SecondaryNode, Responder, 2),
+    LocalBadPids = spawn_responders(node(), BadResponder, 2),
+    RemoteBadPids = spawn_responders(SecondaryNode, BadResponder, 2),
 
     {GoodRes, []} = delegate:invoke(LocalGoodPids ++ RemoteGoodPids, Sender),
     true = lists:all(fun ({_, response}) -> true end, GoodRes),
