@@ -869,9 +869,9 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
     CheckExclusive = 
-        fun(_X, Q) -> 
+        fun (_X, Q) ->
                 with_exclusive_access_or_die(Q#amqqueue.name,
-                                             ReaderPid, fun(_Q1)-> ok end) 
+                                             ReaderPid, fun (_Q1)-> ok end)
         end,
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
              CheckExclusive) of
