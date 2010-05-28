@@ -118,10 +118,11 @@ build_content_frames(SizeAcc, FramesAcc, FragSizeRem, FragAcc,
                      [Frag | Frags], BodyPayloadMax, ChannelInt) ->
     Size = size(Frag),
     {NewFragSizeRem, NewFragAcc, NewFrags} =
-        case Size =< FragSizeRem of
-            true  -> {FragSizeRem - Size, [Frag | FragAcc], Frags};
-            false -> <<Head:FragSizeRem/binary, Tail/binary>> = Frag,
-                     {0, [Head | FragAcc], [Tail | Frags]}
+        if Size == 0           -> {FragSizeRem, FragAcc, Frags};
+           Size =< FragSizeRem -> {FragSizeRem - Size, [Frag | FragAcc], Frags};
+           true                -> <<Head:FragSizeRem/binary, Tail/binary>> =
+                                      Frag,
+                                  {0, [Head | FragAcc], [Tail | Frags]}
         end,
     build_content_frames(SizeAcc, FramesAcc, NewFragSizeRem, NewFragAcc,
                          NewFrags, BodyPayloadMax, ChannelInt).

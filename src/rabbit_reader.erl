@@ -52,13 +52,15 @@
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
+-define(SILENT_CLOSE_DELAY, 3).
 %% set to zero once QPid fix their negotiation
 -define(FRAME_MAX, 131072).
 -define(CHANNEL_MAX, 0).
 
 %---------------------------------------------------------------------------
 
--record(v1, {sock, connection, callback, recv_ref, connection_state}).
+-record(v1, {sock, connection, callback, recv_ref, connection_state,
+             queue_collector}).
 
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
@@ -236,6 +238,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
+    {ok, Collector} = rabbit_reader_queue_collector:start_link(),
     try
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
@@ -247,7 +250,8 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                       client_properties = none},
                                     callback = uninitialized_callback,
                                     recv_ref = none,
-                                    connection_state = pre_init},
+                                    connection_state = pre_init,
+                                    queue_collector = Collector},
                                 handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -265,7 +269,9 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %% output to be sent, which results in unnecessary delays.
         %%
         %% gen_tcp:close(ClientSock),
-        teardown_profiling(ProfilingValue)
+        teardown_profiling(ProfilingValue),
+        rabbit_reader_queue_collector:shutdown(Collector),
+        rabbit_misc:unlink_and_capture_exit(Collector)
     end,
     done.
 
@@ -428,11 +434,17 @@ wait_for_channel_termination(N, TimerRef) ->
             exit(channel_termination_timeout)
     end.
 
-maybe_close(State = #v1{connection_state = closing}) ->
+maybe_close(State = #v1{connection_state = closing,
+                        queue_collector = Collector}) ->
     case all_channels() of
-        [] -> ok = send_on_channel0(
-                     State#v1.sock, #'connection.close_ok'{}),
-              close_connection(State);
+        [] ->
+            %% Spec says "Exclusive queues may only be accessed by the current
+            %% connection, and are deleted when that connection closes."
+            %% This does not strictly imply synchrony, but in practice it seems
+            %% to be what people assume.
+            rabbit_reader_queue_collector:delete_all(Collector),
+            ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}),
+            close_connection(State);
         _  -> State
     end;
 maybe_close(State) ->
@@ -576,7 +588,11 @@ handle_method0(MethodName, FieldsBin, State) ->
                              end,
             case State#v1.connection_state of
                 running -> send_exception(State, 0, CompleteReason);
-                Other   -> throw({channel0_error, Other, CompleteReason})
+                %% We don't trust the client at this point - force
+                %% them to wait for a bit so they can't DOS us with
+                %% repeated failed logins etc.
+                Other   -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
+                           throw({channel0_error, Other, CompleteReason})
             end
     end.
 
@@ -699,15 +715,16 @@ i(Item, #v1{}) ->
 
 %%--------------------------------------------------------------------------
 
-send_to_new_channel(Channel, AnalyzedFrame, State) ->
+send_to_new_channel(Channel, AnalyzedFrame,
+                    State = #v1{queue_collector = Collector}) ->
     #v1{sock = Sock, connection = #connection{
                        frame_max = FrameMax,
                        user = #user{username = Username},
                        vhost = VHost}} = State,
     WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
     ChPid = rabbit_framing_channel:start_link(
-              fun rabbit_channel:start_link/5,
-              [Channel, self(), WriterPid, Username, VHost]),
+              fun rabbit_channel:start_link/6,
+              [Channel, self(), WriterPid, Username, VHost, Collector]),
     put({channel, Channel}, {chpid, ChPid}),
     put({chpid, ChPid}, {channel, Channel}),
     ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame).

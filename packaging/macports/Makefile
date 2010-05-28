@@ -39,7 +39,7 @@ macports: dirs $(DEST)/Portfile
 	    $(DEST)/files/rabbitmq-script-wrapper
 	cp patch-org.macports.rabbitmq-server.plist.diff $(DEST)/files
 	if [ -n "$(MACPORTS_USERHOST)" ] ; then \
-	  tar cf - -C $(MACPORTS_DIR) . | ssh $(SSH_OPTS) lshift@macrabbit ' \
+	  tar cf - -C $(MACPORTS_DIR) . | ssh $(SSH_OPTS) $(MACPORTS_USERHOST) ' \
 	    d="/tmp/mkportindex.$$$$" ; \
 	    mkdir $$d \
 	      && cd $$d \

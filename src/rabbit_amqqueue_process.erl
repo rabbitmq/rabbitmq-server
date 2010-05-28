@@ -132,6 +132,23 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+declare(Recover, From,
+        State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
+                   backing_queue = BQ, backing_queue_state = undefined}) ->
+    case rabbit_amqqueue:internal_declare(Q, Recover) of
+        not_found -> {stop, normal, not_found, State};
+        Q         -> gen_server2:reply(From, Q),
+                     ok = file_handle_cache:register_callback(
+                            rabbit_amqqueue, set_maximum_since_use,
+                            [self()]),
+                     ok = rabbit_memory_monitor:register(
+                            self(), {rabbit_amqqueue,
+                                     set_ram_duration_target, [self()]}),
+                     BQS = BQ:init(QName, IsDurable, Recover),
+                     noreply(State#q{backing_queue_state = BQS});
+        Q1        -> {stop, normal, Q1, State}
+    end.
+
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         stop_sync_timer(stop_rate_timer(State)),
@@ -484,8 +501,8 @@ i(pid, _) ->
     self();
 i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
     '';
-i(owner_pid, #q{q = #amqqueue{exclusive_owner = ReaderPid}}) ->
-    ReaderPid;
+i(owner_pid, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
+    ExclusiveOwner;
 i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
     '';
 i(exclusive_consumer_pid, #q{exclusive_consumer = {ChPid, _ConsumerTag}}) ->
@@ -514,50 +531,24 @@ i(Item, _) ->
 %---------------------------------------------------------------------------
 
 handle_call({init, Recover}, From,
-            State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable,
-                                         exclusive_owner = ExclusiveOwner},
-                       backing_queue = BQ, backing_queue_state = undefined}) ->
-    Declare =
-        fun() ->
-                case rabbit_amqqueue:internal_declare(Q, Recover) of
-                    not_found ->
-                        {stop, normal, not_found, State};
-                    Q ->
-                        gen_server2:reply(From, Q),
-                        ok = file_handle_cache:register_callback(
-                               rabbit_amqqueue, set_maximum_since_use,
-                               [self()]),
-                        ok = rabbit_memory_monitor:register(
-                               self(), {rabbit_amqqueue,
-                                        set_ram_duration_target, [self()]}),
-                        noreply(
-                          State#q{backing_queue_state =
-                                      BQ:init(QName, IsDurable, Recover)});
-                    Q1 ->
-                        {stop, normal, Q1, State}
-                end
-        end,
+            State = #q{q = #amqqueue{exclusive_owner = none}}) ->
+    declare(Recover, From, State);
 
-    case ExclusiveOwner of
-        none ->
-            Declare();
-        Owner ->
-            case rpc:call(node(Owner), erlang, is_process_alive, [Owner]) of
-                true ->
-                    erlang:monitor(process, Owner),
-                    Declare();
-                _ ->
-                    case Recover of
-                        true -> ok;
-                        _    -> rabbit_log:warning(
-                                  "Queue ~p exclusive owner went away~n",
-                                  [QName])
-                    end,
-                    %% Rely on terminate to delete the queue.
-                    {stop, normal, not_found,
-                     State#q{backing_queue_state =
-                                 BQ:init(QName, IsDurable, Recover)}}
-            end
+handle_call({init, Recover}, From,
+            State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
+    case rpc:call(node(Owner), erlang, is_process_alive, [Owner]) of
+        true -> erlang:monitor(process, Owner),
+                declare(Recover, From, State);
+        _    -> #q{q = #amqqueue{name = QName, durable = IsDurable},
+                   backing_queue = BQ, backing_queue_state = undefined} = State,
+                case Recover of
+                    true -> ok;
+                    _    -> rabbit_log:warning(
+                              "Queue ~p exclusive owner went away~n", [QName])
+                end,
+                BQS = BQ:init(QName, IsDurable, Recover),
+                %% Rely on terminate to delete the queue.
+                {stop, normal, not_found, State#q{backing_queue_state = BQS}}
     end;
 
 handle_call(info, _From, State) ->
@@ -642,16 +633,15 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
         ok ->
             C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
             Consumer = #consumer{tag = ConsumerTag,
-                                         ack_required = not NoAck},
+                                 ack_required = not NoAck},
             store_ch_record(C#cr{consumer_count = ConsumerCount +1,
                                  limiter_pid = LimiterPid}),
-            case ConsumerCount of
-                0 -> rabbit_limiter:register(LimiterPid, self());
-                _ -> ok
-            end,
-            ExclusiveConsumer = case ExclusiveConsume of
-                                    true  -> {ChPid, ConsumerTag};
-                                    false -> ExistingHolder
+            ok = case ConsumerCount of
+                     0 -> rabbit_limiter:register(LimiterPid, self());
+                     _ -> ok
+                 end,
+            ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
+                                   true             -> ExistingHolder
                                 end,
             State1 = State#q{has_had_consumers = true,
                              exclusive_consumer = ExclusiveConsumer},
@@ -741,7 +731,6 @@ handle_call({requeue, AckTags, ChPid}, _From, State) ->
 handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
     reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
-
 handle_cast({deliver, Txn, Message, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     {_Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
@@ -817,8 +806,13 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     noreply(State).
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
-            State = #q{q= #amqqueue{ exclusive_owner = DownPid}}) ->
-    %% Exclusively owned queues must disappear with their owner.
+            State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
+    %% Exclusively owned queues must disappear with their owner.  In
+    %% the case of clean shutdown we delete the queue synchronously in
+    %% the reader - although not required by the spec this seems to
+    %% match what people expect (see bug 21824). However we need this
+    %% monitor-and-async- delete in case the connection goes away
+    %% unexpectedly.
     {stop, normal, State};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     case handle_ch_down(DownPid, State) of

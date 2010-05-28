@@ -65,8 +65,8 @@
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -spec(start/0 :: () -> 'ok').
--spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(), maybe(pid())) ->
-             amqqueue()).
+-spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(),
+                    maybe(pid())) -> amqqueue()).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
@@ -101,8 +101,7 @@
 -spec(basic_consume/7 ::
       (amqqueue(), boolean(), pid(), pid() | 'undefined', ctag(),
        boolean(), any()) ->
-             'ok' | {'error', 'queue_owned_by_another_connection' |
-                     'exclusive_consume_unavailable'}).
+             'ok' | {'error', 'exclusive_consume_unavailable'}).
 -spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
@@ -145,7 +144,7 @@ find_durable_queues() ->
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
     [Q || Q <- Qs, gen_server2:call(Q#amqqueue.pid, {init, true}) == Q].
-    
+
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
@@ -320,10 +319,12 @@ flush_all(QPids, ChPid) ->
     delegate:invoke_no_result(
       QPids, fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
 
-internal_delete2(QueueName) ->
+internal_delete1(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
     ok = mnesia:delete({rabbit_durable_queue, QueueName}),
-    %% this is last because it returns a post-transaction callback
+    %% we want to execute some things, as
+    %% decided by rabbit_exchange, after the
+    %% transaction.
     rabbit_exchange:delete_queue_bindings(QueueName).
 
 internal_delete(QueueName) ->
@@ -332,14 +333,10 @@ internal_delete(QueueName) ->
           fun () ->
                   case mnesia:wread({rabbit_queue, QueueName}) of
                       []  -> {error, not_found};
-                      [_] -> internal_delete2(QueueName)
+                      [_] -> internal_delete1(QueueName)
                   end
           end) of
-        Err = {error, _} ->
-            Err;
-        %% we want to execute some things, as
-        %% decided by rabbit_exchange, after the
-        %% transaction.
+        Err = {error, _} -> Err;
         PostHook ->
             PostHook(),
             ok

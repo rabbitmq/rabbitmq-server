@@ -108,6 +108,7 @@ start() ->
                                             WApp == stdlib;
                                             WApp == kernel;
                                             WApp == sasl;
+                                            WApp == crypto;
                                             WApp == os_mon -> false;
                                      _ -> true
                                  end]),

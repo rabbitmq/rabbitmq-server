@@ -56,7 +56,7 @@ TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
 SIBLING_CODEGEN_DIR=../rabbitmq-codegen/
 AMQP_CODEGEN_DIR=$(shell [ -d $(SIBLING_CODEGEN_DIR) ] && echo $(SIBLING_CODEGEN_DIR) || echo codegen)
-AMQP_SPEC_JSON_PATH=$(AMQP_CODEGEN_DIR)/amqp-0.9.1.json
+AMQP_SPEC_JSON_FILES=$(AMQP_CODEGEN_DIR)/amqp-0.9.1.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
@@ -81,11 +81,11 @@ $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 $(EBIN_DIR)/%.beam:
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 
-$(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
-	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_PATH) $@
+$(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES)
+	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_FILES) $@
 
-$(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
-	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_PATH) $@
+$(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES)
+	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_FILES) $@
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
