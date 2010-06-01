@@ -38,39 +38,24 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([conserve_memory/2]).
-
--record(state, {callback, sock, ref, conserving, needs_accept}).
+-record(state, {callback, sock, ref}).
 
 %%--------------------------------------------------------------------
 
 start_link(Callback, LSock) ->
     gen_server:start_link(?MODULE, {Callback, LSock}, []).
 
-conserve_memory(Pid, Conserve) ->
-    gen_server:cast(Pid, {conserve_memory, Conserve}).
-
 %%--------------------------------------------------------------------
 
 init({Callback, LSock}) ->
     gen_server:cast(self(), accept),
-    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
-    {ok, #state{callback=Callback, sock=LSock, conserving = false,
-                needs_accept = false}}.
+    {ok, #state{callback=Callback, sock=LSock}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast(accept, State) ->
     accept(State);
-
-handle_cast({conserve_memory, Conserve}, State) ->
-    State1 = case State#state.needs_accept andalso not Conserve of
-                 true  -> gen_server:cast(self(), accept),
-                          State#state{needs_accept = false};
-                 false -> State
-             end,
-    {noreply, State1#state{conserving = Conserve}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -125,8 +110,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
-accept(State = #state{conserving = true}) ->
-    {noreply, State#state{needs_accept = true}};
 accept(State = #state{sock=LSock}) ->
     ok = file_handle_cache:obtain(),
     case prim_inet:async_accept(LSock, -1) of

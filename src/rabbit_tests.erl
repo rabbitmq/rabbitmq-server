@@ -957,6 +957,31 @@ test_memory_pressure() ->
             throw(channel_failed_to_exit)
     end,
 
+    alarm_handler:set_alarm({vm_memory_high_watermark, []}),
+    Me = self(),
+    Writer4 = spawn(fun () -> test_memory_pressure_receiver(Me) end),
+    Ch4 = rabbit_channel:start_link(1, self(), Writer4, <<"user">>, <<"/">>,
+                                    self()),
+    ok = rabbit_channel:do(Ch4, #'channel.open'{}),
+    MRef4 = erlang:monitor(process, Ch4),
+    Writer4 ! sync,
+    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
+    receive #'channel.open_ok'{} -> throw(unexpected_channel_open_ok)
+    after 0 -> ok
+    end,
+    alarm_handler:clear_alarm(vm_memory_high_watermark),
+    Writer4 ! sync,
+    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
+    receive #'channel.open_ok'{} -> ok
+    after 1000 -> throw(failed_to_receive_channel_open_ok)
+    end,
+    rabbit_channel:shutdown(Ch4),
+    receive {'DOWN', MRef4, process, Ch4, normal} ->
+            ok
+    after 1000 ->
+            throw(channel_failed_to_exit)
+    end,
+
     passed.
 
 test_delegates_async(SecondaryNode) ->

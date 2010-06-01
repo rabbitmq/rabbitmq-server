@@ -220,8 +220,17 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
     ok = internal_deliver(WriterPid, true, ConsumerTag, DeliveryTag, Msg),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast({conserve_memory, Conserve}, State) ->
+handle_cast({conserve_memory, Conserve}, State = #ch{state = starting}) ->
+    case Conserve of
+        true  -> noreply(State);
+        false -> ok = rabbit_writer:send_command(State#ch.writer_pid,
+                                                 #'channel.open_ok'{}),
+                 noreply(State#ch{state = running})
+    end;
+handle_cast({conserve_memory, Conserve}, State = #ch{state = running}) ->
     flow_control(not Conserve, State);
+handle_cast({conserve_memory, _Conserve}, State) ->
+    noreply(State);
 
 handle_cast({flow_timeout, Ref},
             State = #ch{flow = #flow{client = Flow, pending = {Ref, _TRef}}}) ->
@@ -392,8 +401,10 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
-    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
-    {reply, #'channel.open_ok'{}, State#ch{state = running}};
+    case rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}) of
+        true  -> {noreply, State};
+        false -> {reply, #'channel.open_ok'{}, State#ch{state = running}}
+    end;
 
 handle_method(#'channel.open'{}, _, _State) ->
     rabbit_misc:protocol_error(
@@ -412,7 +423,7 @@ handle_method(#'access.request'{},_, State) ->
 
 handle_method(#'basic.publish'{}, _, #ch{flow = #flow{client = false}}) ->
     rabbit_misc:protocol_error(
-      precondition_failed,
+      command_invalid,
       "basic.publish received after channel.flow_ok{active=false}", []);
 handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                routing_key = RoutingKey,

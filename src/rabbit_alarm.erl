@@ -47,7 +47,7 @@
 -type(mfa_tuple() :: {atom(), atom(), list()}).
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(register/2 :: (pid(), mfa_tuple()) -> 'ok').
+-spec(register/2 :: (pid(), mfa_tuple()) -> boolean()).
 
 -endif.
 
@@ -67,9 +67,9 @@ stop() ->
     ok = alarm_handler:delete_alarm_handler(?MODULE).
 
 register(Pid, HighMemMFA) ->
-    ok = gen_event:call(alarm_handler, ?MODULE,
-                        {register, Pid, HighMemMFA},
-                        infinity).
+    gen_event:call(alarm_handler, ?MODULE,
+                   {register, Pid, HighMemMFA},
+                   infinity).
 
 %%----------------------------------------------------------------------------
 
@@ -84,7 +84,8 @@ handle_call({register, Pid, {M, F, A} = HighMemMFA},
              false -> ok
          end,
     NewAlertees = dict:store(Pid, HighMemMFA, Alertess),
-    {ok, ok, State#alarms{alertees = NewAlertees}};
+    {ok, State#alarms.vm_memory_high_watermark,
+     State#alarms{alertees = NewAlertees}};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
