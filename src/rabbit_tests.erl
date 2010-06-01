@@ -748,17 +748,16 @@ test_user_management() ->
     passed.
 
 test_server_status() ->
-
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
+                                   self()),
     [Q, Q2] = [#amqqueue{} = rabbit_amqqueue:declare(
                                rabbit_misc:r(<<"/">>, queue, Name),
-                               false, false, []) ||
+                               false, false, [], none) ||
                   Name <- [<<"foo">>, <<"bar">>]],
 
-    ok = rabbit_amqqueue:claim_queue(Q, self()),
-    ok = rabbit_amqqueue:basic_consume(Q, true, self(), Ch, undefined,
+    ok = rabbit_amqqueue:basic_consume(Q, true, Ch, undefined,
                                        <<"ctag">>, true, undefined),
 
     %% list queues
@@ -825,7 +824,7 @@ test_hooks() ->
     {[arg1, arg2], 1, 3} = get(arg_hook_test_fired),
 
     %% Invoking Pids
-    Remote = fun() ->
+    Remote = fun () ->
         receive
             {rabbitmq_hook,[remote_test,test,[],Target]} ->
                 Target ! invoked
@@ -840,23 +839,6 @@ test_hooks() ->
        io:format("Remote hook not invoked"),
        throw(timeout)
     end,
-    passed.
-
-test_delegates_async(SecondaryNode) ->
-    Self = self(),
-    Sender = fun(Pid) -> Pid ! {invoked, Self} end,
-
-    Responder = make_responder(fun({invoked, Pid}) -> Pid ! response end),
-
-    ok = delegate:invoke_no_result(spawn(Responder), Sender),
-    ok = delegate:invoke_no_result(spawn(SecondaryNode, Responder), Sender),
-    await_response(2),
-
-    LocalPids = spawn_responders(node(), Responder, 10),
-    RemotePids = spawn_responders(SecondaryNode, Responder, 10),
-    ok = delegate:invoke_no_result(LocalPids ++ RemotePids, Sender),
-    await_response(20),
-
     passed.
 
 test_memory_pressure_receiver(Pid) ->
@@ -897,7 +879,8 @@ test_memory_pressure_sync(Ch, Writer) ->
 test_memory_pressure_spawn() ->
     Me = self(),
     Writer = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
+                                   self()),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     MRef = erlang:monitor(process, Ch),
     receive #'channel.open_ok'{} -> ok
@@ -930,7 +913,12 @@ test_memory_pressure() ->
     ok = test_memory_pressure_receive_flow(true),
 
     %% if we publish at this point, the channel should die
-    ok = rabbit_channel:do(Ch0, #'basic.publish'{}, #content{}),
+    Content = #content{class_id = element(1, rabbit_framing:method_id(
+                                               'basic.publish')),
+                       properties = none,
+                       properties_bin = <<>>,
+                       payload_fragments_rev = []},
+    ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
     receive {'DOWN', MRef0, process, Ch0, normal} ->
             ok
     after 1000 ->
@@ -971,10 +959,28 @@ test_memory_pressure() ->
 
     passed.
 
-make_responder(FMsg) ->
-    fun() ->
+test_delegates_async(SecondaryNode) ->
+    Self = self(),
+    Sender = fun (Pid) -> Pid ! {invoked, Self} end,
+
+    Responder = make_responder(fun ({invoked, Pid}) -> Pid ! response end),
+
+    ok = delegate:invoke_no_result(spawn(Responder), Sender),
+    ok = delegate:invoke_no_result(spawn(SecondaryNode, Responder), Sender),
+    await_response(2),
+
+    LocalPids = spawn_responders(node(), Responder, 10),
+    RemotePids = spawn_responders(SecondaryNode, Responder, 10),
+    ok = delegate:invoke_no_result(LocalPids ++ RemotePids, Sender),
+    await_response(20),
+
+    passed.
+
+make_responder(FMsg) -> make_responder(FMsg, timeout).
+make_responder(FMsg, Throw) ->
+    fun () ->
         receive Msg -> FMsg(Msg)
-        after 1000 -> throw(timeout)
+        after 1000 -> throw(Throw)
         end
     end.
 
@@ -1001,24 +1007,28 @@ must_exit(Fun) ->
     end.
 
 test_delegates_sync(SecondaryNode) ->
-    Sender = fun(Pid) -> gen_server:call(Pid, invoked) end,
-    BadSender = fun(_Pid) -> exit(exception) end,
+    Sender = fun (Pid) -> gen_server:call(Pid, invoked) end,
+    BadSender = fun (_Pid) -> exit(exception) end,
 
-    Responder = make_responder(fun({'$gen_call', From, invoked}) ->
+    Responder = make_responder(fun ({'$gen_call', From, invoked}) ->
                                    gen_server:reply(From, response)
                                end),
+
+    BadResponder = make_responder(fun ({'$gen_call', From, invoked}) ->
+                                          gen_server:reply(From, response)
+                                  end, bad_responder_died),
 
     response = delegate:invoke(spawn(Responder), Sender),
     response = delegate:invoke(spawn(SecondaryNode, Responder), Sender),
 
-    must_exit(fun() -> delegate:invoke(spawn(Responder), BadSender) end),
-    must_exit(fun() ->
-        delegate:invoke(spawn(SecondaryNode, Responder), BadSender) end),
+    must_exit(fun () -> delegate:invoke(spawn(BadResponder), BadSender) end),
+    must_exit(fun () ->
+        delegate:invoke(spawn(SecondaryNode, BadResponder), BadSender) end),
 
     LocalGoodPids = spawn_responders(node(), Responder, 2),
     RemoteGoodPids = spawn_responders(SecondaryNode, Responder, 2),
-    LocalBadPids = spawn_responders(node(), Responder, 2),
-    RemoteBadPids = spawn_responders(SecondaryNode, Responder, 2),
+    LocalBadPids = spawn_responders(node(), BadResponder, 2),
+    RemoteBadPids = spawn_responders(SecondaryNode, BadResponder, 2),
 
     {GoodRes, []} = delegate:invoke(LocalGoodPids ++ RemoteGoodPids, Sender),
     true = lists:all(fun ({_, response}) -> true end, GoodRes),

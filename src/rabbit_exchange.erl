@@ -80,8 +80,9 @@
              bind_res() | {'error', 'binding_not_found'}).
 -spec(list_bindings/1 :: (vhost()) ->
              [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
--spec(delete_queue_bindings/1 :: (queue_name()) -> fun(() -> none())).
--spec(delete_transient_queue_bindings/1 :: (queue_name()) -> fun(() -> none())).
+-spec(delete_queue_bindings/1 :: (queue_name()) -> fun (() -> none())).
+-spec(delete_transient_queue_bindings/1 :: (queue_name()) -> 
+             fun (() -> none())).
 -spec(delete/2 :: (exchange_name(), boolean()) ->
              'ok' | not_found() | {'error', 'in_use'}).
 -spec(list_queue_bindings/1 :: (queue_name()) ->
@@ -97,12 +98,12 @@
 
 recover() ->
     Exs = rabbit_misc:table_fold(
-            fun(Exchange, Acc) ->
+            fun (Exchange, Acc) ->
                     ok = mnesia:write(rabbit_exchange, Exchange, write),
                     [Exchange | Acc]
             end, [], rabbit_durable_exchange),
     Bs = rabbit_misc:table_fold(
-           fun(Route = #route{binding = B}, Acc) ->
+           fun (Route = #route{binding = B}, Acc) ->
                    {_, ReverseRoute} = route_with_reverse(Route),
                    ok = mnesia:write(rabbit_route,
                                      Route, write),
@@ -349,7 +350,7 @@ continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
 call_with_exchange(Exchange, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun() -> case mnesia:read({rabbit_exchange, Exchange}) of
+      fun () -> case mnesia:read({rabbit_exchange, Exchange}) of
                    []  -> {error, not_found};
                    [X] -> Fun(X)
                end
@@ -357,7 +358,7 @@ call_with_exchange(Exchange, Fun) ->
 
 call_with_exchange_and_queue(Exchange, Queue, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun() -> case {mnesia:read({rabbit_exchange, Exchange}),
+      fun () -> case {mnesia:read({rabbit_exchange, Exchange}),
                      mnesia:read({rabbit_queue, Queue})} of
                    {[X], [Q]} -> Fun(X, Q);
                    {[ ], [_]} -> {error, exchange_not_found};
