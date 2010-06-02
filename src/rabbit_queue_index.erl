@@ -316,7 +316,7 @@ next_segment_boundary(SeqId) ->
 bounds(State = #qistate { segments = Segments }) ->
     %% This is not particularly efficient, but only gets invoked on
     %% queue initialisation and termination.
-    SegNums = lists:sort(segment_fetch_keys(Segments)),
+    SegNums = lists:sort(segment_nums(Segments)),
     %% Don't bother trying to figure out the lowest seq_id, merely the
     %% seq_id of the start of the lowest segment. That seq_id may not
     %% actually exist, but that's fine. The important thing is that
@@ -679,7 +679,7 @@ all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
                     list_to_integer(
                       lists:takewhile(fun (C) -> $0 =< C andalso C =< $9 end,
                                       SegName)), Set)
-          end, sets:from_list(segment_fetch_keys(Segments)),
+          end, sets:from_list(segment_nums(Segments)),
           filelib:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)))).
 
 segment_find_or_new(Seg, Dir, Segments) ->
@@ -726,7 +726,7 @@ segment_map(Fun, {Segments, CachedSegments}) ->
      lists:map(fun (Segment = #segment { num = Num }) -> Fun(Num, Segment) end,
                CachedSegments)}.
 
-segment_fetch_keys({Segments, CachedSegments}) ->
+segment_nums({Segments, CachedSegments}) ->
     lists:map(fun (#segment { num = Num }) -> Num end, CachedSegments) ++
         dict:fetch_keys(Segments).
 
