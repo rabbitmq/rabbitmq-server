@@ -445,8 +445,8 @@ terminate(State = #qistate { journal_handle = JournalHdl,
          end,
     SegmentCounts =
         segment_fold(
-          fun (Seg, #segment { unacked = UnackedCount }, SegmentCountsAcc) ->
-                  [{Seg, UnackedCount} | SegmentCountsAcc]
+          fun (#segment { num = Seg, unacked = UnackedCount }, Acc) ->
+                  [{Seg, UnackedCount} | Acc]
           end, [], Segments),
     {SegmentCounts, State #qistate { journal_handle = undefined,
                                      segments = undefined }}.
@@ -569,13 +569,13 @@ maybe_flush_journal(State) ->
 flush_journal(State = #qistate { segments = Segments }) ->
     Segments1 =
         segment_fold(
-          fun (_Seg, #segment { unacked = 0, path = Path }, SegmentsN) ->
+          fun (#segment { unacked = 0, path = Path }, SegmentsN) ->
                   case filelib:is_file(Path) of
                       true  -> ok = file:delete(Path);
                       false -> ok
                   end,
                   SegmentsN;
-              (_Seg, #segment {} = Segment, SegmentsN) ->
+              (#segment {} = Segment, SegmentsN) ->
                   segment_store(append_journal_to_segment(Segment), SegmentsN)
           end, segments_new(), Segments),
     {JournalHdl, State1} =
@@ -616,8 +616,8 @@ recover_journal(State) ->
     State1 = #qistate { segments = Segments } = load_journal(State),
     Segments1 =
         segment_map(
-          fun (_Seg, Segment = #segment { journal_entries = JEntries,
-                                          unacked = UnackedCountInJournal }) ->
+          fun (Segment = #segment { journal_entries = JEntries,
+                                    unacked = UnackedCountInJournal }) ->
                   %% We want to keep ack'd entries in so that we can
                   %% remove them if duplicates are in the journal. The
                   %% counts here are purely from the segment itself.
@@ -716,15 +716,12 @@ segment_store(Segment = #segment { num = Seg },
      [Segment, SegmentA]}.
 
 segment_fold(Fun, Acc, {Segments, CachedSegments}) ->
-    Acc1 = lists:foldl(fun (Segment = #segment { num = Num }, AccN) ->
-                               Fun(Num, Segment, AccN)
-                       end, Acc, CachedSegments),
-    dict:fold(Fun, Acc1, Segments).
+    dict:fold(fun (_Seg, Segment, Acc1) -> Fun(Segment, Acc) end,
+              lists:foldl(Fun, Acc, CachedSegments), Segments).
 
 segment_map(Fun, {Segments, CachedSegments}) ->
-    {dict:map(Fun, Segments),
-     lists:map(fun (Segment = #segment { num = Num }) -> Fun(Num, Segment) end,
-               CachedSegments)}.
+    {dict:map(fun (_Seg, Segment) -> Fun(Segment) end, Segments),
+     lists:map(Fun, CachedSegments)}.
 
 segment_nums({Segments, CachedSegments}) ->
     lists:map(fun (#segment { num = Num }) -> Num end, CachedSegments) ++
