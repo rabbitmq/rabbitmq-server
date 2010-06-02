@@ -46,9 +46,6 @@
 %% TODO: make this more precise
 -type(amqp_properties() :: tuple()).
 %% TODO: make this more precise
--type(amqp_method() :: tuple()).
-%% TODO: make this more precise
--type(amqp_method_name() :: atom()).
 -type(channel_number() :: non_neg_integer()).
 -type(resource_name() :: binary()).
 -type(routing_key() :: binary()).

@@ -370,6 +370,43 @@ def genHrl(spec):
             return result
         return ', '.join([fillField(f) for f in fields])
 
+    def multiLineFormat(things, prologue, separator, lineSeparator, epilogue, thingsPerLine = 4):
+        r = [prologue]
+        i = 0
+        for t in things:
+            if i != 0:
+                if i % thingsPerLine == 0:
+                    r += [lineSeparator]
+                else:
+                    r += [separator]
+            r += [t]
+            i += 1
+        r += [epilogue]
+        return "".join(r)
+
+    def prettyType(typeName, subTypes, typesPerLine = 4):
+        sTs = multiLineFormat(subTypes,
+                              "( ", " | ", "\n\t| ", " )",
+                              thingsPerLine = typesPerLine)
+        return "-type(%s ::\n\t%s)." % (typeName, sTs)
+
+    def prettySpec(fName, fArgs, fValue, fModule = "rabbit_framing", multiLine = False, itemsPerLine = 4):
+        """If multiLine is True, EACH argument and the value must me a list.
+Note to self: Defining a separate type would be better than using multiLine.
+"""
+        if multiLine:
+            args = ",\n".join([multiLineFormat(arg,
+                                               "\t( ", " | ", "\n\t| ", " )",
+                                               thingsPerLine = itemsPerLine)
+                               for arg in fArgs])
+            vals = multiLineFormat(fValue,
+                                   "( ", " | ", "\n\t   | ", " )",
+                                   thingsPerLine = itemsPerLine)
+            return "-spec(%s:%s ::\n%s\n\t-> %s)." % (fModule, fName, args, vals)
+        else:
+            args = ", ".join(fArgs)
+            return "-spec(%s:%s :: (%s) -> %s)." % (fModule, fName, args, fValue)
+
     methods = spec.allMethods()
 
     printFileHeader()
@@ -387,6 +424,41 @@ def genHrl(spec):
     print "%% Class property records."
     for c in spec.allClasses():
         print "-record('P_%s', {%s})." % (erlangize(c.name), fieldNameList(c.fields))
+
+    print "%% Various types"
+    print prettyType("amqp_method_name()",
+                     [m.erlangName() for m in methods])
+    print prettyType("amqp_method()",
+                     ["{%s, %s}" % (m.klass.index, m.index) for m in methods],
+                     6)
+    print prettyType("amqp_method_record()",
+                     ["#%s{}" % (m.erlangName()) for m in methods])
+    fieldNames = set()
+    for m in methods:
+        fieldNames.update(m.arguments)
+    fieldNames = [erlangize(f.name) for f in fieldNames]
+    print prettyType("amqp_method_field_name()",
+                     fieldNames)
+
+    print "%% Method signatures"
+    print prettySpec("lookup_method_name/1",
+                     ["amqp_method()"],
+                     "amqp_method_name()")
+    print prettySpec("method_id/1",
+                     ["amqp_method_name()"],
+                     "amqp_method()")
+    print prettySpec("method_has_content/1",
+                     ["amqp_method_name()"],
+                     "boolean()")
+    print prettySpec("is_method_synchronous/1",
+                     ["amqp_method_record()"],
+                     "boolean()")
+    print prettySpec("method_record/1",
+                     ["amqp_method_name()"],
+                     "amqp_method_record()")
+    print prettySpec("method_fieldnames/1",
+                     ["amqp_method_name()"],
+                     "[amqp_method_field_name()]")
 
 def generateErl(specPath):
     genErl(AmqpSpec(specPath))
