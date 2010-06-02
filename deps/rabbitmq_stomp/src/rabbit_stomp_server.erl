@@ -42,7 +42,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("rabbit_stomp_frame.hrl").
 
--record(state, {socket, session_id, channel, parse_state}).
+-record(state, {socket, session_id, channel, collector, parse_state}).
 
 start(Listeners) ->
     {ok, Pid} = supervisor:start_child(
@@ -104,6 +104,7 @@ init(_Parent) ->
             try
                 ?MODULE:mainloop(#state{socket = Sock,
                                         channel = none,
+                                        collector = none,
                                         parse_state = ParseState})
             after
                 error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
@@ -157,9 +158,13 @@ simple_method_sync_rpc(Method, State0) ->
             {ok, Reply, State}
     end.
 
-handle_exit(_Who, normal, _State) ->
+handle_exit(_Who, normal, _State = #state{collector = CollectorPid}) ->
     %% Normal exits (it'll be the channel we're linked to in our roles
     %% as reader and writer) are fine
+    case CollectorPid of
+        none -> ok;
+        _ -> ok = rabbit_reader_queue_collector:delete_all(CollectorPid)
+    end,
     done;
 handle_exit(_Who, AmqpError = #amqp_error{}, State) ->
     explain_amqp_death(AmqpError, State),
@@ -374,12 +379,15 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
                                               list_to_binary(Passcode)),
     ok = rabbit_access_control:check_vhost_access(U,
                                                   list_to_binary(VirtualHost)),
+    {ok, CollectorPid} = rabbit_reader_queue_collector:start_link(),
     ChPid = 
         rabbit_channel:start_link(?MODULE, self(), self(),
-                                  U#user.username, list_to_binary(VirtualHost)),
+                                  U#user.username, list_to_binary(VirtualHost),
+                                  CollectorPid),
     {ok, #'channel.open_ok'{}, State1} =
         simple_method_sync_rpc(#'channel.open'{out_of_band = <<"">>},
-                               State#state{channel = ChPid}),
+                               State#state{channel = ChPid,
+                                           collector = CollectorPid}),
     SessionId = rabbit_guid:string_guid("session"),
     {ok, send_frame("CONNECTED",
                     [{"session", SessionId}],
