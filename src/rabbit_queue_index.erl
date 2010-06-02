@@ -705,7 +705,7 @@ segment_store(Segment = #segment { num = Seg }, %% 1 or (2, matches head)
     {Segments, [Segment | Tail]};
 segment_store(Segment = #segment { num = Seg }, %% 2, matches tail
               {Segments, [SegmentA, #segment { num = Seg }]}) ->
-    {Segments, [SegmentA, Segment]};
+    {Segments, [Segment, SegmentA]};
 segment_store(Segment = #segment { num = Seg }, {Segments, []}) ->
     {dict:erase(Seg, Segments), [Segment]};
 segment_store(Segment = #segment { num = Seg }, {Segments, [SegmentA]}) ->
