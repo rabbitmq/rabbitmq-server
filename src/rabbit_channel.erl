@@ -220,13 +220,11 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
     ok = internal_deliver(WriterPid, true, ConsumerTag, DeliveryTag, Msg),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast({conserve_memory, Conserve}, State = #ch{state = starting}) ->
-    case Conserve of
-        true  -> noreply(State);
-        false -> ok = rabbit_writer:send_command(State#ch.writer_pid,
-                                                 #'channel.open_ok'{}),
-                 noreply(State#ch{state = running})
-    end;
+handle_cast({conserve_memory, true}, State = #ch{state = starting}) ->
+    noreply(State);
+handle_cast({conserve_memory, false}, State = #ch{state = starting}) ->
+    ok = rabbit_writer:send_command(State#ch.writer_pid, #'channel.open_ok'{}),
+    noreply(State#ch{state = running});
 handle_cast({conserve_memory, Conserve}, State = #ch{state = running}) ->
     flow_control(not Conserve, State);
 handle_cast({conserve_memory, _Conserve}, State) ->
