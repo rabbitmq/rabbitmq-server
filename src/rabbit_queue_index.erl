@@ -715,8 +715,6 @@ segment_store(Segment = #segment { num = Seg },
     {dict:store(SegmentB#segment.num, SegmentB, dict:erase(Seg, Segments)),
      [Segment, SegmentA]}.
 
-segment_fold(Fun, Acc, {Segments, []}) ->
-    dict:fold(Fun, Acc, Segments);
 segment_fold(Fun, Acc, {Segments, CachedSegments}) ->
     Acc1 = lists:foldl(fun (Segment = #segment { num = Num }, AccN) ->
                                Fun(Num, Segment, AccN)
