@@ -769,9 +769,7 @@ segment_entries_foldr(Fun, Init,
 
 %% Loading segments
 %%
-%% Does not do any combining with the journal at all. The PubCount
-%% that comes back is the number of publishes in the segment. The
-%% number of unacked msgs is PubCount - AckCount.
+%% Does not do any combining with the journal at all.
 load_segment(KeepAcked, #segment { path = Path }) ->
     case filelib:is_file(Path) of
         false -> {array_new(), 0};
