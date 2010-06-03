@@ -245,10 +245,10 @@ class AmqpField(AmqpEntity):
     def __repr__(self):
         return 'AmqpField("' + self.name + '")'
 
-def do_main(header_fn,body_fn):
+def do_main(header_fn, spec_fn, body_fn):
     def usage():
         print >> sys.stderr , "Usage:"
-        print >> sys.stderr , " %s header|body path_to_amqp_spec.json path_to_output_file" % (sys.argv[0])
+        print >> sys.stderr , " %s header|spec|body path_to_amqp_spec.json path_to_output_file" % (sys.argv[0])
         print >> sys.stderr , ""
         
     def execute(fn, amqp_specs, out_file):
@@ -273,6 +273,8 @@ def do_main(header_fn,body_fn):
             execute(header_fn, sys.argv[2:-1], sys.argv[-1])
         elif sys.argv[1] == "body":
             execute(body_fn, sys.argv[2:-1], sys.argv[-1])
+        elif sys.argv[1] == "spec":
+            execute(spec_fn, sys.argv[2:-1], sys.argv[-1])
         else:
             usage()
             sys.exit(1)
