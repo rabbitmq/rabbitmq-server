@@ -385,10 +385,10 @@ terminate(State) ->
 %% needs to delete everything that's been delivered and not ack'd.
 delete_and_terminate(State) ->
     {_PurgeCount, State1} = purge(State),
-    State2 = #vqstate {
-      index_state = IndexState,
-      msg_store_clients = {{MSCStateP, PRef}, {MSCStateT, TRef}},
-      transient_threshold = TransientThreshold } =
+    State2 = #vqstate { index_state = IndexState,
+                        msg_store_clients = {{MSCStateP, PRef},
+                                             {MSCStateT, TRef}},
+                        transient_threshold = TransientThreshold } =
         remove_pending_ack(false, State1),
     %% flushing here is good because it deletes all full segments,
     %% leaving only partial segments around.
@@ -403,7 +403,8 @@ delete_and_terminate(State) ->
     IndexState5 = rabbit_queue_index:delete_and_terminate(IndexState2),
     case MSCStateP of
         undefined -> ok;
-        _         -> rabbit_msg_store:delete_client(?PERSISTENT_MSG_STORE, PRef),
+        _         -> rabbit_msg_store:delete_client(
+                       ?PERSISTENT_MSG_STORE, PRef),
                      rabbit_msg_store:client_terminate(MSCStateP)
     end,
     rabbit_msg_store:delete_client(?TRANSIENT_MSG_STORE, TRef),
@@ -415,8 +416,8 @@ purge(State = #vqstate { q4 = Q4, index_state = IndexState, len = Len }) ->
     {Q4Count, IndexState1} =
         remove_queue_entries(fun rabbit_misc:queue_fold/3, Q4, IndexState),
     {Len, State1} =
-        purge1(Q4Count, State #vqstate { index_state = IndexState1,
-                                         q4 = queue:new() }),
+        purge1(Q4Count, State #vqstate { q4 = queue:new(),
+                                         index_state = IndexState1 }),
     {Len, State1 #vqstate { len = 0, ram_msg_count = 0, ram_index_count = 0,
                             persistent_count = 0 }}.
 
@@ -429,7 +430,8 @@ publish_delivered(false, _Msg, State = #vqstate { len = 0 }) ->
     {blank_ack, State};
 publish_delivered(true, Msg = #basic_message { guid = Guid,
                                                is_persistent = IsPersistent },
-                  State = #vqstate { len = 0, index_state = IndexState,
+                  State = #vqstate { len = 0,
+                                     index_state = IndexState,
                                      next_seq_id = SeqId,
                                      out_counter = OutCount,
                                      in_counter = InCount,
@@ -1017,8 +1019,7 @@ purge1(Count, State = #vqstate { q3 = Q3, index_state = IndexState }) ->
 
 remove_queue_entries(Fold, Q, IndexState) ->
     {Count, GuidsByStore, SeqIds, IndexState1} =
-        Fold(fun remove_queue_entries1/2,
-             {0, dict:new(), [], IndexState}, Q),
+        Fold(fun remove_queue_entries1/2, {0, dict:new(), [], IndexState}, Q),
     ok = dict:fold(fun (MsgStore, Guids, ok) ->
                            rabbit_msg_store:remove(MsgStore, Guids)
                    end, ok, GuidsByStore),
