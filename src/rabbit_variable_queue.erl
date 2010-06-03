@@ -443,11 +443,9 @@ publish_delivered(true, Msg = #basic_message { guid = Guid,
       is_delivered = true, msg_on_disk = false, index_on_disk = false },
     {MsgStatus1, MSCState1} =
         maybe_write_msg_to_disk(false, MsgStatus, MSCState),
+    PCount1 = maybe_inc(PCount, IsPersistent1),
     State1 = State #vqstate { msg_store_clients = MSCState1,
-                              persistent_count = PCount + case IsPersistent1 of
-                                                              true  -> 1;
-                                                              false -> 0
-                                                          end,
+                              persistent_count = PCount1,
                               next_seq_id = SeqId + 1,
                               out_counter = OutCount + 1,
                               in_counter = InCount + 1 },
@@ -530,10 +528,7 @@ fetch(AckRequired, State =
                       false -> PA
                   end,
 
-            PCount1 = case IsPersistent andalso not AckRequired of
-                          true  -> PCount - 1;
-                          false -> PCount
-                      end,
+            PCount1 = maybe_dec(PCount, IsPersistent andalso not AckRequired),
             Len1 = Len - 1,
             {{Msg, IsDelivered, AckTag, Len1},
              State #vqstate { q4 = Q4a, out_counter = OutCount + 1,
@@ -760,6 +755,12 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
 %%----------------------------------------------------------------------------
 %% Minor helpers
 %%----------------------------------------------------------------------------
+
+maybe_inc(N, true ) -> N + 1;
+maybe_inc(N, false) -> N.
+
+maybe_dec(N, true ) -> N - 1;
+maybe_dec(N, false) -> N.
 
 remove_pending_ack(KeepPersistent,
                    State = #vqstate { pending_ack = PA,
@@ -1080,10 +1081,7 @@ fetch_from_q3_or_delta(State = #vqstate {
                                          guid = Guid }}, MSCState1} =
                 read_from_msg_store(MSCState, IsPersistent, Guid),
             Q4a = queue:in(MsgStatus #msg_status { msg = Msg }, Q4),
-            RamIndexCount1 = case IndexOnDisk of
-                                 true  -> RamIndexCount;
-                                 false -> RamIndexCount - 1
-                             end,
+            RamIndexCount1 = maybe_dec(RamIndexCount, not IndexOnDisk),
             true = RamIndexCount1 >= 0, %% ASSERTION
             State1 = State #vqstate { q3 = Q3a, q4 = Q4a,
                                       ram_msg_count = RamMsgCount + 1,
@@ -1171,10 +1169,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
       is_persistent = IsDurable andalso IsPersistent,
       is_delivered = IsDelivered, msg_on_disk = MsgOnDisk,
       index_on_disk = false },
-    PCount1 = PCount + case IsPersistent of
-                           true  -> 1;
-                           false -> 0
-                       end,
+    PCount1 = maybe_inc(PCount, IsPersistent),
     {SeqId, publish(test_keep_msg_in_ram(SeqId, State), MsgStatus,
                     State #vqstate { next_seq_id = SeqId + 1, len = Len + 1,
                                      in_counter = InCount + 1,
@@ -1200,10 +1195,8 @@ publish(index, MsgStatus, #vqstate {
     ForceIndex = should_force_index_to_disk(State),
     {MsgStatus2, IndexState1} =
         maybe_write_index_to_disk(ForceIndex, MsgStatus1, IndexState),
-    RamIndexCount1 = case MsgStatus2 #msg_status.index_on_disk of
-                         true  -> RamIndexCount;
-                         false -> RamIndexCount + 1
-                     end,
+    IndexOnDisk = MsgStatus2 #msg_status.index_on_disk,
+    RamIndexCount1 = maybe_inc(RamIndexCount, not IndexOnDisk),
     State1 = State #vqstate { index_state = IndexState1,
                               ram_index_count = RamIndexCount1,
                               msg_store_clients = MSCState1 },
@@ -1449,10 +1442,8 @@ maybe_push_alphas_to_betas(
             ForceIndex = should_force_index_to_disk(State),
             {MsgStatus2, IndexState1} =
                 maybe_write_index_to_disk(ForceIndex, MsgStatus1, IndexState),
-            RamIndexCount1 = case MsgStatus2 #msg_status.index_on_disk of
-                                 true  -> RamIndexCount;
-                                 false -> RamIndexCount + 1
-                             end,
+            IndexOnDisk = MsgStatus2 #msg_status.index_on_disk,
+            RamIndexCount1 = maybe_inc(RamIndexCount, not IndexOnDisk),
             State1 = State #vqstate { ram_msg_count = RamMsgCount - 1,
                                       ram_index_count = RamIndexCount1,
                                       index_state = IndexState1,
