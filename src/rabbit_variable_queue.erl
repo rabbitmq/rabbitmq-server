@@ -221,8 +221,8 @@
 %% write more - we can always come back on the next publish to do
 %% more.
 -define(RAM_INDEX_BATCH_SIZE, 64).
--define(PERSISTENT_MSG_STORE,     msg_store_persistent).
--define(TRANSIENT_MSG_STORE,      msg_store_transient).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
 -include("rabbit.hrl").
 
