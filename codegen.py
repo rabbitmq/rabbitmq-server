@@ -314,6 +314,21 @@ def genErl(spec):
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
 bitvalue(undefined) -> 0.
+
+%% Method signatures
+-spec(lookup_method_name/1 :: (amqp_method()) -> amqp_method_name()).
+-spec(method_id/1 :: (amqp_method_name()) -> amqp_method()).
+-spec(method_has_content/1 :: (amqp_method_name()) -> boolean()).
+-spec(is_method_synchronous/1 :: (amqp_method_record()) -> boolean()).
+-spec(method_record/1 :: (amqp_method_name()) -> amqp_method_record()).
+-spec(method_fieldnames/1 :: (amqp_method_name()) -> [amqp_method_field_name()]).
+-spec(decode_method_fields/2 :: (amqp_method_name(), binary()) -> amqp_method_record()).
+-spec(decode_properties/2 :: (non_neg_integer(), binary()) -> amqp_property_record()).
+-spec(encode_method_fields/1 :: (amqp_method_record()) -> binary()).
+-spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
+-spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
+-spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
+
 """
     for m in methods: genLookupMethodName(m)
     print "lookup_method_name({_ClassId, _MethodId} = Id) -> exit({unknown_method_id, Id})."
@@ -390,10 +405,6 @@ def genHrl(spec):
                               thingsPerLine = typesPerLine)
         return "-type(%s ::\n\t%s)." % (typeName, sTs)
 
-    def prettySpec(fName, fArgs, fValue, fModule = "rabbit_framing"):
-        args = ", ".join(fArgs)
-        return "-spec(%s:%s :: (%s) -> %s)." % (fModule, fName, args, fValue)
-
     methods = spec.allMethods()
 
     printFileHeader()
@@ -432,49 +443,68 @@ def genHrl(spec):
                      ["'%s'" % erlangConstantName(c).lower() for (c, v, cls) in spec.constants])
     print prettyType("amqp_exception_code()",
                      ["%i" % v for (c, v, cls) in spec.constants])
-    classIds = set()
-    for m in methods:
-        classIds.add(m.klass.index)
-    #print prettyType("amqp_class_id()",
-    #                 ["%i" % ci for ci in classIds])
+    # classIds = set()
+    # for m in methods:
+    #     classIds.add(m.klass.index)
+    # print prettyType("amqp_class_id()",
+    #                  ["%i" % ci for ci in classIds])
 
-    print "%% Method signatures"
-    print prettySpec("lookup_method_name/1",
-                     ["amqp_method()"],
-                     "amqp_method_name()")
-    print prettySpec("method_id/1",
-                     ["amqp_method_name()"],
-                     "amqp_method()")
-    print prettySpec("method_has_content/1",
-                     ["amqp_method_name()"],
-                     "boolean()")
-    print prettySpec("is_method_synchronous/1",
-                     ["amqp_method_record()"],
-                     "boolean()")
-    print prettySpec("method_record/1",
-                     ["amqp_method_name()"],
-                     "amqp_method_record()")
-    print prettySpec("method_fieldnames/1",
-                     ["amqp_method_name()"],
-                     "[amqp_method_field_name()]")
-    print prettySpec("decode_method_fields/2",
-                     ["amqp_method_name()", "binary()"],
-                     "amqp_method_record()")
-    print prettySpec("decode_properties/2",
-                     ["non_neg_integer()", "binary()"],
-                     "amqp_property_record()")
-    print prettySpec("encode_method_fields/1",
-                     ["amqp_method_record()"],
-                     "binary()")
-    print prettySpec("encode_properties/1",
-                     ["amqp_method_record()"],
-                     "binary()")
-    print prettySpec("lookup_amqp_exception/1",
-                     ["amqp_exception()"],
-                     "{boolean(), amqp_exception_code(), binary()}")
-    print prettySpec("amqp_exception/1",
-                     ["amqp_exception_code()"],
-                     "amqp_exception()")
+def genSpec(spec):
+    def multiLineFormat(things, prologue, separator, lineSeparator, epilogue, thingsPerLine = 4):
+        r = [prologue]
+        i = 0
+        for t in things:
+            if i != 0:
+                if i % thingsPerLine == 0:
+                    r += [lineSeparator]
+                else:
+                    r += [separator]
+            r += [t]
+            i += 1
+        r += [epilogue]
+        return "".join(r)
+
+    def prettyType(typeName, subTypes, typesPerLine = 4):
+        sTs = multiLineFormat(subTypes,
+                              "( ", " | ", "\n\t| ", " )",
+                              thingsPerLine = typesPerLine)
+        return "-type(%s ::\n\t%s)." % (typeName, sTs)
+
+    methods = spec.allMethods()
+
+    printFileHeader()
+    print """% Hard-coded types
+-type(amqp_field_type() ::
+      'longstr' | 'signedint' | 'decimal' | 'timestamp' |
+      'table' | 'byte' | 'double' | 'float' | 'long' |
+      'short' | 'bool' | 'binary' | 'void').
+-type(amqp_property_type() ::
+      'shortstr' | 'longstr' | 'octet' | 'shortint' | 'longint' |
+      'longlongint' | 'timestamp' | 'bit' | 'table').
+%% we could make this more precise but ultimately are limited by
+%% dialyzer's lack of support for recursive types
+-type(amqp_table() :: [{binary(), amqp_field_type(), any()}]).
+%% TODO: make this more precise
+%% TODO: Are these tuples of the form {P_basic_property, any()} ?
+-type(amqp_properties() :: tuple()).
+%% TODO: make this more precise I can't find any restriction on this.
+%% Should I just check if it's 16bit ?
+-type(channel_number() :: non_neg_integer()).
+-type(resource_name() :: binary()).
+-type(routing_key() :: binary()).
+-type(username() :: binary()).
+-type(password() :: binary()).
+-type(vhost() :: binary()).
+-type(ctag() :: binary()).
+-type(exchange_type() :: atom()).
+-type(binding_key() :: binary()).
+"""
+    print "% Auto-generated types"
+    classIds = set()
+    for m in spec.allMethods():
+        classIds.add(m.klass.index)
+    print prettyType("amqp_class_id()",
+                     ["%i" % ci for ci in classIds])
 
 def generateErl(specPath):
     genErl(AmqpSpec(specPath))
@@ -482,6 +512,9 @@ def generateErl(specPath):
 def generateHrl(specPath):
     genHrl(AmqpSpec(specPath))
 
+def generateSpec(specPath):
+    genSpec(AmqpSpec(specPath))
+
 if __name__ == "__main__":
-    do_main(generateHrl, generateErl)
+    do_main(generateHrl, generateSpec, generateErl)
 
