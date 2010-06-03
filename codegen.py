@@ -516,5 +516,7 @@ def generateSpec(specPath):
     genSpec(AmqpSpec(specPath))
 
 if __name__ == "__main__":
-    do_main(generateHrl, generateSpec, generateErl)
+    do_main_dict({"header": generateHrl,
+                  "spec": generateSpec,
+                  "body": generateErl})
 
