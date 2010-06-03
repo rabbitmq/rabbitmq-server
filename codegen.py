@@ -390,22 +390,9 @@ def genHrl(spec):
                               thingsPerLine = typesPerLine)
         return "-type(%s ::\n\t%s)." % (typeName, sTs)
 
-    def prettySpec(fName, fArgs, fValue, fModule = "rabbit_framing", multiLine = False, itemsPerLine = 4):
-        """If multiLine is True, EACH argument and the value must me a list.
-Note to self: Defining a separate type would be better than using multiLine.
-"""
-        if multiLine:
-            args = ",\n".join([multiLineFormat(arg,
-                                               "\t( ", " | ", "\n\t| ", " )",
-                                               thingsPerLine = itemsPerLine)
-                               for arg in fArgs])
-            vals = multiLineFormat(fValue,
-                                   "( ", " | ", "\n\t   | ", " )",
-                                   thingsPerLine = itemsPerLine)
-            return "-spec(%s:%s ::\n%s\n\t-> %s)." % (fModule, fName, args, vals)
-        else:
-            args = ", ".join(fArgs)
-            return "-spec(%s:%s :: (%s) -> %s)." % (fModule, fName, args, fValue)
+    def prettySpec(fName, fArgs, fValue, fModule = "rabbit_framing"):
+        args = ", ".join(fArgs)
+        return "-spec(%s:%s :: (%s) -> %s)." % (fModule, fName, args, fValue)
 
     methods = spec.allMethods()
 
@@ -439,6 +426,17 @@ Note to self: Defining a separate type would be better than using multiLine.
     fieldNames = [erlangize(f.name) for f in fieldNames]
     print prettyType("amqp_method_field_name()",
                      fieldNames)
+    print prettyType("amqp_property_record()",
+                     ["#'P_%s'{}" % erlangize(c.name) for c in spec.allClasses()])
+    print prettyType("amqp_exception()",
+                     ["'%s'" % erlangConstantName(c).lower() for (c, v, cls) in spec.constants])
+    print prettyType("amqp_exception_code()",
+                     ["%i" % v for (c, v, cls) in spec.constants])
+    classIds = set()
+    for m in methods:
+        classIds.add(m.klass.index)
+    #print prettyType("amqp_class_id()",
+    #                 ["%i" % ci for ci in classIds])
 
     print "%% Method signatures"
     print prettySpec("lookup_method_name/1",
@@ -459,6 +457,24 @@ Note to self: Defining a separate type would be better than using multiLine.
     print prettySpec("method_fieldnames/1",
                      ["amqp_method_name()"],
                      "[amqp_method_field_name()]")
+    print prettySpec("decode_method_fields/2",
+                     ["amqp_method_name()", "binary()"],
+                     "amqp_method_record()")
+    print prettySpec("decode_properties/2",
+                     ["non_neg_integer()", "binary()"],
+                     "amqp_property_record()")
+    print prettySpec("encode_method_fields/1",
+                     ["amqp_method_record()"],
+                     "binary()")
+    print prettySpec("encode_properties/1",
+                     ["amqp_method_record()"],
+                     "binary()")
+    print prettySpec("lookup_amqp_exception/1",
+                     ["amqp_exception()"],
+                     "{boolean(), amqp_exception_code(), binary()}")
+    print prettySpec("amqp_exception/1",
+                     ["amqp_exception_code()"],
+                     "amqp_exception()")
 
 def generateErl(specPath):
     genErl(AmqpSpec(specPath))
