@@ -77,17 +77,24 @@ handle_call({register_exclusive_queue, Q}, _From,
             State = #state{exclusive_queues = Queues}) ->
     MonitorRef = erlang:monitor(process, Q#amqqueue.pid),
     {reply, ok,
-     State#state{exclusive_queues = dict:append(MonitorRef, Q, Queues)}};
+     State#state{exclusive_queues = dict:store(MonitorRef, Q, Queues)}};
 
 handle_call(delete_all, _From,
             State = #state{exclusive_queues = ExclusiveQueues}) ->
     [rabbit_misc:with_exit_handler(
+<<<<<<< local
         fun() -> ok end,
         fun() ->
                 erlang:demonitor(MonitorRef),
                 rabbit_amqqueue:delete(Q, false, false)
         end)
         || {MonitorRef, [Q]} <- dict:to_list(ExclusiveQueues)],
+       fun() -> ok end,
+       fun() ->
+               erlang:demonitor(MonitorRef),
+               rabbit_amqqueue:delete(Q, false, false)
+       end)
+     || {MonitorRef, Q} <- dict:to_list(ExclusiveQueues)],
     {reply, ok, State};
 
 handle_call(shutdown, _From, State) ->
@@ -99,12 +106,10 @@ handle_cast(_Msg, State) ->
 handle_info({'DOWN', MonitorRef, process, _DownPid, _Reason},
             State = #state{exclusive_queues = ExclusiveQueues}) ->
     {noreply, State#state{exclusive_queues =
-                          dict:erase(MonitorRef, ExclusiveQueues)}}.
+                              dict:erase(MonitorRef, ExclusiveQueues)}}.
 
 terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-%%--------------------------------------------------------------------
