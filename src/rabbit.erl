@@ -193,8 +193,8 @@
 -spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
-              {nodes, [{erlang_node(), atom()}]} |
-              {running_nodes, [{erlang_node(), atom()}]}]).
+              {nodes, [{erlang_node(), [atom()]}]} |
+              {running_nodes, [atom()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -endif.

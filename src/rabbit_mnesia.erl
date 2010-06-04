@@ -47,7 +47,7 @@
 
 -ifdef(use_specs).
 
--spec(status/0 :: () -> [{'nodes' | 'running_nodes', [{erlang_node(), atom()}]}]).
+-spec(status/0 :: () -> [{'nodes' | 'running_nodes', [{erlang_node(), [atom()]}]} | atom()]).
 -spec(dir/0 :: () -> file_path()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
@@ -66,19 +66,10 @@
 status() ->
     [DiscOnly, Disc, Ram] = [mnesia:table_info(schema, CopyType)
                              || CopyType <- [disc_only_copies, disc_copies, ram_copies]],
-    RunningNodes = mnesia:system_info(running_db_nodes),
-    OnlyRunningNodes = fun(Ns) ->
-                               lists:filter(fun(N) -> lists:member(N, RunningNodes) end, Ns)
-                       end,
-    TripleTag = fun(DOs, Ds, Rs) ->
-                        [{Name, disc_only} || Name <- DOs] ++
-                        [{Name, disc} || Name <- Ds] ++
-                        [{Name, ram} || Name <- Rs]
-                end,
-    [RunningDiscOnly, RunningDisc, RunningRam] = lists:map(OnlyRunningNodes,
-                                                           [DiscOnly, Disc, Ram]),
-    [{nodes, TripleTag(DiscOnly, Disc, Ram)},
-     {running_nodes, TripleTag(RunningDiscOnly, RunningDisc, RunningRam)}].
+    [{nodes, [{disc_only, DiscOnly},
+              {disc, Disc},
+              {ram, Ram}]},
+     {running_nodes, mnesia:system_info(running_db_nodes)}].
 
 init() ->
     ok = ensure_mnesia_running(),
