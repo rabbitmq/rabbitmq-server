@@ -47,7 +47,10 @@
 
 -ifdef(use_specs).
 
--spec(status/0 :: () -> [{'nodes' | 'running_nodes', [{erlang_node(), [atom()]}]} | atom()]).
+-type(node_type() :: disc_only | disc | ram).
+
+-spec(status/0 :: () -> [{'nodes', [{node_type(), [erlang_node()]}]} |
+                         {'running_nodes', [erlang_node()]}]).
 -spec(dir/0 :: () -> file_path()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
