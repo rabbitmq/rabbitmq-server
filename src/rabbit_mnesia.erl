@@ -47,7 +47,10 @@
 
 -ifdef(use_specs).
 
--spec(status/0 :: () -> [{'nodes' | 'running_nodes', [erlang_node()]}]).
+-type(node_type() :: disc_only | disc | ram).
+
+-spec(status/0 :: () -> [{'nodes', [{node_type(), [erlang_node()]}]} |
+                         {'running_nodes', [erlang_node()]}]).
 -spec(dir/0 :: () -> file_path()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
@@ -64,7 +67,11 @@
 %%----------------------------------------------------------------------------
 
 status() ->
-    [{nodes, mnesia:system_info(db_nodes)},
+    [DiscOnly, Disc, Ram] = [mnesia:table_info(schema, CopyType)
+                             || CopyType <- [disc_only_copies, disc_copies, ram_copies]],
+    [{nodes, [{disc_only, DiscOnly},
+              {disc, Disc},
+              {ram, Ram}]},
      {running_nodes, mnesia:system_info(running_db_nodes)}].
 
 init() ->
