@@ -67,11 +67,14 @@
 %%----------------------------------------------------------------------------
 
 status() ->
-    [DiscOnly, Disc, Ram] = [mnesia:table_info(schema, CopyType)
-                             || CopyType <- [disc_only_copies, disc_copies, ram_copies]],
-    [{nodes, [{disc_only, DiscOnly},
-              {disc, Disc},
-              {ram, Ram}]},
+    [{nodes, [{Key, Nodes} ||
+                 {Key, CopyType} <- [{disc_only, disc_only_copies},
+                                     {disc,      disc_copies},
+                                     {ram,       ram_copies}],
+                 begin
+                     Nodes = mnesia:table_info(schema, CopyType),
+                     Nodes =/= []
+                 end]},
      {running_nodes, mnesia:system_info(running_db_nodes)}].
 
 init() ->
