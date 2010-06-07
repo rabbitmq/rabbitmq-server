@@ -345,6 +345,18 @@ with_exclusive_access_or_die(QName, ReaderPid, F) ->
             Other
     end.
 
+check_exclusive_access(Q = #amqqueue{exclusive_owner = Owner,
+                                     name = QName},
+                       ReaderPid) ->
+    case Owner of
+        none      -> ok;
+        ReaderPid -> ok;
+        _         -> rabbit_misc:protocol_error(
+                       resource_locked,
+                       "cannot obtain exclusive access to locked ~s",
+                       [rabbit_misc:rs(QName)])
+    end.
+
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
       not_allowed, "no previously declared queue", []);
@@ -935,8 +947,8 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     check_read_permitted(ExchangeName, State),
     CheckExclusive = 
         fun (_X, Q) ->
-                with_exclusive_access_or_die(Q#amqqueue.name,
-                                             ReaderPid, fun (_Q1)-> ok end)
+                check_exclusive_access(Q, ReaderPid),
+                fun (_Q1)-> ok end
         end,
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
              CheckExclusive) of
