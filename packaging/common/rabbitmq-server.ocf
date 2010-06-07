@@ -162,6 +162,7 @@ Additional arguments provided to the server on startup
 <actions>
 <action name="start"        timeout="600" />
 <action name="stop"         timeout="120" />
+<action name="status"       timeout="20" interval="10" />
 <action name="monitor"      timeout="20" interval="10" depth="0" start-delay="0" />
 <action name="validate-all" timeout="30" />
 <action name="meta-data"    timeout="5" />
@@ -172,7 +173,7 @@ END
 
 rabbit_usage() {
 	cat <<END
-usage: $0 {start|stop|monitor|validate-all|meta-data}
+usage: $0 {start|stop|status|monitor|validate-all|meta-data}
 
 Expects to have a fully populated OCF RA-compliant environment set.
 END
@@ -356,7 +357,7 @@ case $__OCF_ACTION in
     stop)
 	rabbit_stop
         ;;
-    monitor)
+    status|monitor)
 	rabbit_monitor
         ;;
     validate-all)
