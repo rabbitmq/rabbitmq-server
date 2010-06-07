@@ -329,17 +329,18 @@ check_write_permitted(Resource, #ch{ username = Username}) ->
 check_read_permitted(Resource, #ch{ username = Username}) ->
     check_resource_access(Username, Resource, read).
 
-check_exclusive_access(#amqqueue{exclusive_owner = Owner}, ReaderPid)
-  when Owner =:= none orelse Owner =:= ReaderPid ->
+check_exclusive_access(#amqqueue{exclusive_owner = Owner}, Owner, _MatchType) ->
     ok;
-check_exclusive_access(#amqqueue{name = QName}, _ReaderPid) ->
+check_exclusive_access(#amqqueue{exclusive_owner = none}, _ReaderPid, lax) ->
+    ok;
+check_exclusive_access(#amqqueue{name = QName}, _ReaderPid, _MatchType) ->
     rabbit_misc:protocol_error(
       resource_locked,
       "cannot obtain exclusive access to locked ~s", [rabbit_misc:rs(QName)]).
 
 with_exclusive_access_or_die(QName, ReaderPid, F) ->
     rabbit_amqqueue:with_or_die(
-      QName, fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
+      QName, fun (Q) -> check_exclusive_access(Q, ReaderPid, lax), F(Q) end).
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
@@ -733,7 +734,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
     Finish = fun (#amqqueue{name = QueueName} = Q) ->
-                     check_exclusive_access(Q, Owner),
+                     check_exclusive_access(Q, Owner, strict),
                      check_configure_permitted(QueueName, State),
                      case Owner of
                          none -> ok;
@@ -919,7 +920,7 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
-             fun (_X, Q) -> check_exclusive_access(Q, ReaderPid) end) of
+             fun (_X, Q) -> check_exclusive_access(Q, ReaderPid, lax) end) of
         {error, exchange_not_found} ->
             rabbit_misc:not_found(ExchangeName);
         {error, queue_not_found} ->
