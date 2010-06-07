@@ -918,11 +918,8 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
-    CheckExclusive = fun (_X, Q) ->
-                             check_exclusive_access(Q, ReaderPid)
-                     end,
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
-             CheckExclusive) of
+             fun (_X, Q) -> check_exclusive_access(Q, ReaderPid) end) of
         {error, exchange_not_found} ->
             rabbit_misc:not_found(ExchangeName);
         {error, queue_not_found} ->
