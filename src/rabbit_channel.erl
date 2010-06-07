@@ -329,21 +329,18 @@ check_write_permitted(Resource, #ch{ username = Username}) ->
 check_read_permitted(Resource, #ch{ username = Username}) ->
     check_resource_access(Username, Resource, read).
 
+check_exclusive_access(#amqqueue{exclusive_owner = Owner}, Owner, _MatchType) ->
+    ok;
+check_exclusive_access(#amqqueue{exclusive_owner = none}, _ReaderPid, lax) ->
+    ok;
+check_exclusive_access(#amqqueue{name = QName}, _ReaderPid, _MatchType) ->
+    rabbit_misc:protocol_error(
+      resource_locked,
+      "cannot obtain exclusive access to locked ~s", [rabbit_misc:rs(QName)]).
+
 with_exclusive_access_or_die(QName, ReaderPid, F) ->
-    case rabbit_amqqueue:with_or_die(
-           QName, fun (Q = #amqqueue{exclusive_owner = Owner})
-                      when Owner =:= none orelse Owner =:= ReaderPid ->
-                          F(Q);
-                      (_) ->
-                          {error, wrong_exclusive_owner}
-                  end) of
-        {error, wrong_exclusive_owner} ->
-            rabbit_misc:protocol_error(
-              resource_locked, "cannot obtain exclusive access to locked ~s",
-              [rabbit_misc:rs(QName)]);
-        Other ->
-            Other
-    end.
+    rabbit_amqqueue:with_or_die(
+      QName, fun (Q) -> check_exclusive_access(Q, ReaderPid, lax), F(Q) end).
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
@@ -489,11 +486,12 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
 handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
               _, State = #ch{ writer_pid = WriterPid,
+                              reader_pid = ReaderPid,
                               next_tag = DeliveryTag }) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
-    case rabbit_amqqueue:with_or_die(
-           QueueName,
+    case with_exclusive_access_or_die(
+           QueueName, ReaderPid,
            fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
         {ok, MessageCount,
          Msg = {_QName, _QPid, _MsgId, Redelivered,
@@ -735,25 +733,15 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             end,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
-    Finish =
-        fun (#amqqueue{name = QueueName, exclusive_owner = Owner1} = Q)
-            when Owner =:= Owner1 ->
-                check_configure_permitted(QueueName, State),
-                %% We need to notify the reader within the channel
-                %% process so that we can be sure there are no
-                %% outstanding exclusive queues being declared as the
-                %% connection shuts down.
-                case Owner of
-                    none -> ok;
-                    _    -> ok = rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
-                end,
-                Q;
-            (#amqqueue{name = QueueName}) ->
-                rabbit_misc:protocol_error(
-                  resource_locked,
-                  "cannot obtain exclusive access to locked ~s",
-                  [rabbit_misc:rs(QueueName)])
-        end,
+    Finish = fun (#amqqueue{name = QueueName} = Q) ->
+                     check_exclusive_access(Q, Owner, strict),
+                     check_configure_permitted(QueueName, State),
+                     case Owner of
+                         none -> ok;
+                         _    -> ok = rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
+                     end,
+                     Q
+             end,
     Q = case rabbit_amqqueue:with(
                rabbit_misc:r(VHostPath, queue, QueueNameBin),
                Finish) of
@@ -807,7 +795,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             routing_key = RoutingKey,
                             nowait = NoWait,
                             arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_exchange:add_binding/4, ExchangeNameBin,
+    binding_action(fun rabbit_exchange:add_binding/5, ExchangeNameBin,
                    QueueNameBin, RoutingKey, Arguments, #'queue.bind_ok'{},
                    NoWait, State);
 
@@ -815,7 +803,7 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
                               exchange = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_exchange:delete_binding/4, ExchangeNameBin,
+    binding_action(fun rabbit_exchange:delete_binding/5, ExchangeNameBin,
                    QueueNameBin, RoutingKey, Arguments, #'queue.unbind_ok'{},
                    false, State);
 
@@ -918,7 +906,9 @@ issue_flow(Active, State) ->
                           pending = {Ref, TRef}}}.
 
 binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
-               ReturnMethod, NoWait, State = #ch{virtual_host = VHostPath}) ->
+               ReturnMethod, NoWait,
+               State = #ch{virtual_host = VHostPath,
+                           reader_pid   = ReaderPid}) ->
     %% FIXME: connection exception (!) on failure??
     %% (see rule named "failure" in spec-XML)
     %% FIXME: don't allow binding to internal exchanges -
@@ -929,7 +919,8 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
-    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments) of
+    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
+             fun (_X, Q) -> check_exclusive_access(Q, ReaderPid, lax) end) of
         {error, exchange_not_found} ->
             rabbit_misc:not_found(ExchangeName);
         {error, queue_not_found} ->
