@@ -82,8 +82,8 @@ handle_call({register_exclusive_queue, Q}, _From,
 handle_call(delete_all, _From,
             State = #state{exclusive_queues = ExclusiveQueues}) ->
     [rabbit_misc:with_exit_handler(
-       fun() -> ok end,
-       fun() ->
+       fun () -> ok end,
+       fun () ->
                erlang:demonitor(MonitorRef),
                rabbit_amqqueue:delete(Q, false, false)
        end)

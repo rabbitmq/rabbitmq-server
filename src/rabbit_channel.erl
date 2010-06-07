@@ -39,6 +39,8 @@
 -export([send_command/2, deliver/4, conserve_memory/2, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 
+-export([flow_timeout/2]).
+
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2, handle_pre_hibernate/1]).
 
@@ -46,9 +48,12 @@
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
-             consumer_mapping, blocking, queue_collector_pid}).
+             consumer_mapping, blocking, queue_collector_pid, flow}).
+
+-record(flow, {server, client, pending}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
+-define(FLOW_OK_TIMEOUT, 10000). %% 10 seconds
 
 -define(INFO_KEYS,
         [pid,
@@ -66,6 +71,8 @@
 
 -ifdef(use_specs).
 
+-type(ref() :: any()).
+
 -spec(start_link/6 ::
       (channel_number(), pid(), pid(), username(), vhost(), pid()) -> pid()).
 -spec(do/2 :: (pid(), amqp_method()) -> 'ok').
@@ -75,6 +82,7 @@
 -spec(deliver/4 :: (pid(), ctag(), boolean(), qmsg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
+-spec(flow_timeout/2 :: (pid(), ref()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (pid()) -> [info()]).
@@ -112,6 +120,9 @@ conserve_memory(Pid, Conserve) ->
 
 flushed(Pid, QPid) ->
     gen_server2:cast(Pid, {flushed, QPid}).
+
+flow_timeout(Pid, Ref) ->
+    gen_server2:pcast(Pid, 7, {flow_timeout, Ref}).
 
 list() ->
     pg_local:get_members(rabbit_channels).
@@ -154,7 +165,9 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
              most_recently_declared_queue = <<>>,
              consumer_mapping        = dict:new(),
              blocking                = dict:new(),
-             queue_collector_pid     = CollectorPid},
+             queue_collector_pid     = CollectorPid,
+             flow                    = #flow{server = true, client = true,
+                                             pending = none}},
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -181,11 +194,9 @@ handle_cast({method, Method, Content}, State) ->
             {stop, normal, State#ch{state = terminating}}
     catch
         exit:Reason = #amqp_error{} ->
-            ok = rollback_and_notify(State),
             MethodName = rabbit_misc:method_record_type(Method),
-            State#ch.reader_pid ! {channel_exit, State#ch.channel,
-                                   Reason#amqp_error{method = MethodName}},
-            {stop, normal, State#ch{state = terminating}};
+            {stop, normal, terminating(Reason#amqp_error{method = MethodName},
+                                       State)};
         exit:normal ->
             {stop, normal, State};
         _:Reason ->
@@ -209,11 +220,25 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
     ok = internal_deliver(WriterPid, true, ConsumerTag, DeliveryTag, Msg),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast({conserve_memory, Conserve}, State) ->
-    ok = clear_permission_cache(),
-    ok = rabbit_writer:send_command(
-           State#ch.writer_pid, #'channel.flow'{active = not(Conserve)}),
-    noreply(State).
+handle_cast({conserve_memory, true}, State = #ch{state = starting}) ->
+    noreply(State);
+handle_cast({conserve_memory, false}, State = #ch{state = starting}) ->
+    ok = rabbit_writer:send_command(State#ch.writer_pid, #'channel.open_ok'{}),
+    noreply(State#ch{state = running});
+handle_cast({conserve_memory, Conserve}, State = #ch{state = running}) ->
+    flow_control(not Conserve, State);
+handle_cast({conserve_memory, _Conserve}, State) ->
+    noreply(State);
+
+handle_cast({flow_timeout, Ref},
+            State = #ch{flow = #flow{client = Flow, pending = {Ref, _TRef}}}) ->
+    {stop, normal, terminating(
+                     rabbit_misc:amqp_error(
+                       precondition_failed,
+                       "timeout waiting for channel.flow_ok{active=~w}",
+                       [not Flow], none), State)};
+handle_cast({flow_timeout, _Ref}, State) ->
+    {noreply, State}.
 
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #ch{writer_pid = WriterPid}) ->
@@ -253,6 +278,11 @@ return_ok(State, false, Msg)  -> {reply, Msg, State}.
 
 ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
+
+terminating(Reason, State = #ch{channel = Channel, reader_pid = Reader}) ->
+    ok = rollback_and_notify(State),
+    Reader ! {channel_exit, Channel, Reason},
+    State#ch{state = terminating}.
 
 return_queue_declare_ok(State, NoWait, Q) ->
     NewState = State#ch{most_recently_declared_queue =
@@ -369,8 +399,10 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
-    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
-    {reply, #'channel.open_ok'{}, State#ch{state = running}};
+    case rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}) of
+        true  -> {noreply, State};
+        false -> {reply, #'channel.open_ok'{}, State#ch{state = running}}
+    end;
 
 handle_method(#'channel.open'{}, _, _State) ->
     rabbit_misc:protocol_error(
@@ -387,13 +419,17 @@ handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
 handle_method(#'access.request'{},_, State) ->
     {reply, #'access.request_ok'{ticket = 1}, State};
 
-handle_method(#'basic.publish'{exchange = ExchangeNameBin,
+handle_method(#'basic.publish'{}, _, #ch{flow = #flow{client = false}}) ->
+    rabbit_misc:protocol_error(
+      command_invalid,
+      "basic.publish received after channel.flow_ok{active=false}", []);
+handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                routing_key = RoutingKey,
-                               mandatory = Mandatory,
-                               immediate = Immediate},
-              Content, State = #ch{ virtual_host = VHostPath,
-                                    transaction_id = TxnKey,
-                                    writer_pid = WriterPid}) ->
+                               mandatory   = Mandatory,
+                               immediate   = Immediate},
+              Content, State = #ch{virtual_host   = VHostPath,
+                                   transaction_id = TxnKey,
+                                   writer_pid     = WriterPid}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -824,7 +860,6 @@ handle_method(#'channel.flow'{active = true}, _,
                   end,
     {reply, #'channel.flow_ok'{active = true},
      State#ch{limiter_pid = LimiterPid1}};
-
 handle_method(#'channel.flow'{active = false}, _,
               State = #ch{limiter_pid = LimiterPid,
                           consumer_mapping = Consumers}) ->
@@ -842,17 +877,47 @@ handle_method(#'channel.flow'{active = false}, _,
                                  blocking = dict:from_list(Queues)}}
     end;
 
-handle_method(#'channel.flow_ok'{active = _}, _, State) ->
-    %% TODO: We may want to correlate this to channel.flow messages we
-    %% have sent, and complain if we get an unsolicited
-    %% channel.flow_ok, or the client refuses our flow request.
-    {noreply, State};
+handle_method(#'channel.flow_ok'{active = Active}, _,
+              State = #ch{flow = #flow{server = Active, client = Flow,
+                                       pending = {_Ref, TRef}} = F})
+  when Flow =:= not Active ->
+    {ok, cancel} = timer:cancel(TRef),
+    {noreply, State#ch{flow = F#flow{client = Active, pending = none}}};
+handle_method(#'channel.flow_ok'{active = Active}, _,
+              State = #ch{flow = #flow{server = Flow, client = Flow,
+                                       pending = {_Ref, TRef}}})
+  when Flow =:= not Active ->
+    {ok, cancel} = timer:cancel(TRef),
+    {noreply, issue_flow(Flow, State)};
+handle_method(#'channel.flow_ok'{}, _, #ch{flow = #flow{pending = none}}) ->
+    rabbit_misc:protocol_error(
+      command_invalid, "unsolicited channel.flow_ok", []);
+handle_method(#'channel.flow_ok'{active = Active}, _, _State) ->
+    rabbit_misc:protocol_error(
+      command_invalid,
+      "received channel.flow_ok{active=~w} has incorrect polarity", [Active]);
 
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
       command_invalid, "unimplemented method", []).
 
 %%----------------------------------------------------------------------------
+
+flow_control(Active, State = #ch{flow = #flow{server = Flow, pending = none}})
+  when Flow =:= not Active ->
+    ok = clear_permission_cache(),
+    noreply(issue_flow(Active, State));
+flow_control(Active, State = #ch{flow = F}) ->
+    noreply(State#ch{flow = F#flow{server = Active}}).
+
+issue_flow(Active, State) ->
+    ok = rabbit_writer:send_command(
+           State#ch.writer_pid, #'channel.flow'{active = Active}),
+    Ref = make_ref(),
+    {ok, TRef} = timer:apply_after(?FLOW_OK_TIMEOUT, ?MODULE, flow_timeout,
+                                   [self(), Ref]),
+    State#ch{flow = #flow{server = Active, client = not Active,
+                          pending = {Ref, TRef}}}.
 
 binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                ReturnMethod, NoWait,

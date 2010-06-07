@@ -59,8 +59,8 @@ start() ->
         parse_args(FullCommand, #params{quiet = false,
                                         node = rabbit_misc:makenode(NodeStr)}),
     Inform = case Quiet of
-                 true  -> fun(_Format, _Args1) -> ok end;
-                 false -> fun(Format, Args1) ->
+                 true  -> fun (_Format, _Args1) -> ok end;
+                 false -> fun (Format, Args1) ->
                                   io:format(Format ++ " ...~n", Args1)
                          end
              end,
