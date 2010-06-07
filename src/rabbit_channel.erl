@@ -329,33 +329,17 @@ check_write_permitted(Resource, #ch{ username = Username}) ->
 check_read_permitted(Resource, #ch{ username = Username}) ->
     check_resource_access(Username, Resource, read).
 
-with_exclusive_access_or_die(QName, ReaderPid, F) ->
-    case rabbit_amqqueue:with_or_die(
-           QName, fun (Q = #amqqueue{exclusive_owner = Owner})
-                      when Owner =:= none orelse Owner =:= ReaderPid ->
-                          F(Q);
-                      (_) ->
-                          {error, wrong_exclusive_owner}
-                  end) of
-        {error, wrong_exclusive_owner} ->
-            rabbit_misc:protocol_error(
-              resource_locked, "cannot obtain exclusive access to locked ~s",
-              [rabbit_misc:rs(QName)]);
-        Other ->
-            Other
-    end.
+check_exclusive_access(#amqqueue{exclusive_owner = Owner}, ReaderPid)
+  when Owner =:= none orelse Owner =:= ReaderPid ->
+    ok;
+check_exclusive_access(#amqqueue{name = QName}, _ReaderPid) ->
+    rabbit_misc:protocol_error(
+      resource_locked,
+      "cannot obtain exclusive access to locked ~s", [rabbit_misc:rs(QName)]).
 
-check_exclusive_access(Q = #amqqueue{exclusive_owner = Owner,
-                                     name = QName},
-                       ReaderPid) ->
-    case Owner of
-        none      -> ok;
-        ReaderPid -> ok;
-        _         -> rabbit_misc:protocol_error(
-                       resource_locked,
-                       "cannot obtain exclusive access to locked ~s",
-                       [rabbit_misc:rs(QName)])
-    end.
+with_exclusive_access_or_die(QName, ReaderPid, F) ->
+    rabbit_amqqueue:with_or_die(
+      QName, fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
@@ -506,8 +490,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case with_exclusive_access_or_die(
-           QueueName,
-           ReaderPid,
+           QueueName, ReaderPid,
            fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
         {ok, MessageCount,
          Msg = {_QName, _QPid, _MsgId, Redelivered,
@@ -749,25 +732,15 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             end,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
-    Finish =
-        fun (#amqqueue{name = QueueName, exclusive_owner = Owner1} = Q)
-            when Owner =:= Owner1 ->
-                check_configure_permitted(QueueName, State),
-                %% We need to notify the reader within the channel
-                %% process so that we can be sure there are no
-                %% outstanding exclusive queues being declared as the
-                %% connection shuts down.
-                case Owner of
-                    none -> ok;
-                    _    -> ok = rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
-                end,
-                Q;
-            (#amqqueue{name = QueueName}) ->
-                rabbit_misc:protocol_error(
-                  resource_locked,
-                  "cannot obtain exclusive access to locked ~s",
-                  [rabbit_misc:rs(QueueName)])
-        end,
+    Finish = fun (#amqqueue{name = QueueName} = Q) ->
+                     check_exclusive_access(Q, Owner),
+                     check_configure_permitted(QueueName, State),
+                     case Owner of
+                         none -> ok;
+                         _    -> ok = rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
+                     end,
+                     Q
+             end,
     Q = case rabbit_amqqueue:with(
                rabbit_misc:r(VHostPath, queue, QueueNameBin),
                Finish) of
@@ -945,11 +918,9 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
-    CheckExclusive = 
-        fun (_X, Q) ->
-                check_exclusive_access(Q, ReaderPid),
-                fun (_Q1)-> ok end
-        end,
+    CheckExclusive = fun (_X, Q) ->
+                             check_exclusive_access(Q, ReaderPid)
+                     end,
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
              CheckExclusive) of
         {error, exchange_not_found} ->
