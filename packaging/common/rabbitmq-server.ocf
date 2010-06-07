@@ -259,10 +259,9 @@ rabbit_status() {
 rabbit_start() {
     local rc
 
-    rabbit_validate_full
-    rc=$?
-    if [ "$rc" != $OCF_SUCCESS ]; then
-        return $rc
+    if rabbit_status; then
+        ocf_log info "Resource already running."
+        return $OCF_SUCCESS
     fi
 
     export_vars
@@ -296,6 +295,12 @@ rabbit_start() {
 
 rabbit_stop() {
     local rc
+
+    if ! rabbit_status; then
+        ocf_log info "Resource not running."
+        return $OCF_SUCCESS
+    fi
+
     $RABBITMQ_MULTI stop_all &
     rc=$?
 
