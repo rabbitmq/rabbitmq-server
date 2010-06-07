@@ -204,34 +204,34 @@ export_vars() {
 rabbit_validate_partial() {
     if [ ! -x $RABBITMQ_MULTI ]; then
 	ocf_log err "rabbitmq-server multi $RABBITMQ_MULTI does not exist or is not executable";
-	exit $OCF_ERR_ARGS;
+	exit $OCF_ERR_INSTALLED;
     fi
 
     if [ ! -x $RABBITMQ_CTL ]; then
 	ocf_log err "rabbitmq-server ctl $RABBITMQ_CTL does not exist or is not executable";
-	exit $OCF_ERR_ARGS;
+	exit $OCF_ERR_INSTALLED;
     fi
 }
 
 rabbit_validate_full() {
     if [ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && [ ! -e $RABBITMQ_CLUSTER_CONFIG_FILE ]; then
 	ocf_log err "rabbitmq-server cluster_config_file $RABBITMQ_CLUSTER_CONFIG_FILE does not exist or is not a file";
-	exit $OCF_ERR_ARGS;
+	exit $OCF_ERR_INSTALLED;
     fi
 
     if [ ! -z $RABBITMQ_CONFIG_FILE ] && [ ! -e $RABBITMQ_CONFIG_FILE ]; then
 	ocf_log err "rabbitmq-server config_file $RABBITMQ_CONFIG_FILE does not exist or is not a file";
-	exit $OCF_ERR_ARGS;
+	exit $OCF_ERR_INSTALLED;
     fi
 
     if [ ! -z $RABBITMQ_LOG_BASE ] && [ ! -d $RABBITMQ_LOG_BASE ]; then
 	ocf_log err "rabbitmq-server log_base $RABBITMQ_LOG_BASE does not exist or is not a directory";
-	exit $OCF_ERR_ARGS;
+	exit $OCF_ERR_INSTALLED;
     fi
 
     if [ ! -z $RABBITMQ_MNESIA_BASE ] && [ ! -d $RABBITMQ_MNESIA_BASE ]; then
 	ocf_log err "rabbitmq-server mnesia_base $RABBITMQ_MNESIA_BASE does not exist or is not a directory";
-	exit $OCF_ERR_ARGS;
+	exit $OCF_ERR_INSTALLED;
     fi
 
     rabbit_validate_partial
