@@ -204,34 +204,34 @@ export_vars() {
 rabbit_validate_partial() {
     if [ ! -x $RABBITMQ_MULTI ]; then
 	ocf_log err "rabbitmq-server multi $RABBITMQ_MULTI does not exist or is not executable";
-	return $OCF_ERR_ARGS;
+	exit $OCF_ERR_ARGS;
     fi
 
     if [ ! -x $RABBITMQ_CTL ]; then
 	ocf_log err "rabbitmq-server ctl $RABBITMQ_CTL does not exist or is not executable";
-	return $OCF_ERR_ARGS;
+	exit $OCF_ERR_ARGS;
     fi
 }
 
 rabbit_validate_full() {
     if [ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && [ ! -e $RABBITMQ_CLUSTER_CONFIG_FILE ]; then
 	ocf_log err "rabbitmq-server cluster_config_file $RABBITMQ_CLUSTER_CONFIG_FILE does not exist or is not a file";
-	return $OCF_ERR_ARGS;
+	exit $OCF_ERR_ARGS;
     fi
 
     if [ ! -z $RABBITMQ_CONFIG_FILE ] && [ ! -e $RABBITMQ_CONFIG_FILE ]; then
 	ocf_log err "rabbitmq-server config_file $RABBITMQ_CONFIG_FILE does not exist or is not a file";
-	return $OCF_ERR_ARGS;
+	exit $OCF_ERR_ARGS;
     fi
 
     if [ ! -z $RABBITMQ_LOG_BASE ] && [ ! -d $RABBITMQ_LOG_BASE ]; then
 	ocf_log err "rabbitmq-server log_base $RABBITMQ_LOG_BASE does not exist or is not a directory";
-	return $OCF_ERR_ARGS;
+	exit $OCF_ERR_ARGS;
     fi
 
     if [ ! -z $RABBITMQ_MNESIA_BASE ] && [ ! -d $RABBITMQ_MNESIA_BASE ]; then
 	ocf_log err "rabbitmq-server mnesia_base $RABBITMQ_MNESIA_BASE does not exist or is not a directory";
-	return $OCF_ERR_ARGS;
+	exit $OCF_ERR_ARGS;
     fi
 
     rabbit_validate_partial
@@ -252,7 +252,7 @@ rabbit_status() {
 	    ;;
 	*)
 	    ocf_log err "Unexpected return from rabbitmqctl $NODENAME_ARG status: $rc"
-	    return $OCF_ERR_GENERIC
+	    exit $OCF_ERR_GENERIC
     esac
 }
 
@@ -282,10 +282,9 @@ rabbit_start() {
 	rc=$?
 	if [ "$rc" = $OCF_SUCCESS ]; then
 	    start_wait=0
-
 	elif [ "$rc" != $OCF_NOT_RUNNING ]; then
 	    ocf_log info "rabbitmq-server start failed: $rc"
-	    return $OCF_ERR_GENERIC
+	    exit $OCF_ERR_GENERIC
 	fi
         sleep 2
     done
@@ -320,7 +319,7 @@ rabbit_stop() {
             break
 	elif [ "$rc" != $OCF_SUCCESS ]; then
 	    ocf_log info "rabbitmq-server stop failed: $rc"
-	    return $OCF_ERR_GENERIC
+	    exit $OCF_ERR_GENERIC
 	fi
         sleep 2
     done
@@ -345,9 +344,9 @@ case $__OCF_ACTION in
 esac
 
 if ocf_is_probe; then
-    rabbit_validate_partial || exit
+    rabbit_validate_partial
 else
-    rabbit_validate_full || exit
+    rabbit_validate_full
 fi
 
 case $__OCF_ACTION in
