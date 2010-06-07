@@ -259,6 +259,12 @@ rabbit_status() {
 rabbit_start() {
     local rc
 
+    rabbit_validate_full
+    rc=$?
+    if [ "$rc" != $OCF_SUCCESS ]; then
+        return $rc
+    fi
+
     export_vars
 
     $RABBITMQ_MULTI start_all 1 > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err &
