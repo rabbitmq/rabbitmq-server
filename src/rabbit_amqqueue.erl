@@ -195,7 +195,8 @@ start_queue_process(Q) ->
 add_default_binding(#amqqueue{name = QueueName}) ->
     Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
     RoutingKey = QueueName#resource.name,
-    rabbit_exchange:add_binding(Exchange, QueueName, RoutingKey, [], fun (_X, _Q) -> ok end),
+    rabbit_exchange:add_binding(Exchange, QueueName, RoutingKey, [],
+                                fun (_X, _Q) -> ok end),
     ok.
 
 lookup(Name) ->
@@ -391,12 +392,13 @@ safe_delegate_call_ok(H, F, Pids) ->
     end.
 
 delegate_call(Pid, Msg, Timeout) ->
-    delegate:invoke(Pid, fun(P) -> gen_server2:call(P, Msg, Timeout) end).
+    delegate:invoke(Pid, fun (P) -> gen_server2:call(P, Msg, Timeout) end).
 
 delegate_pcall(Pid, Pri, Msg, Timeout) ->
-    delegate:invoke(Pid, fun(P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end).
+    delegate:invoke(Pid, 
+                    fun (P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end).
 
 delegate_pcast(Pid, Pri, Msg) ->
     delegate:invoke_no_result(Pid,
-                              fun(P) -> gen_server2:pcast(P, Pri, Msg) end).
+                              fun (P) -> gen_server2:pcast(P, Pri, Msg) end).
 

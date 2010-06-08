@@ -41,6 +41,7 @@
 -import(lists).
 
 -include("rabbit.hrl").
+-include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
 
 test_content_prop_roundtrip(Datum, Binary) ->
@@ -59,6 +60,7 @@ all_tests() ->
     passed = test_log_management(),
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
+    passed = test_memory_pressure(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
@@ -861,7 +863,7 @@ test_hooks() ->
     {[arg1, arg2], 1, 3} = get(arg_hook_test_fired),
 
     %% Invoking Pids
-    Remote = fun() ->
+    Remote = fun () ->
         receive
             {rabbitmq_hook,[remote_test,test,[],Target]} ->
                 Target ! invoked
@@ -878,11 +880,137 @@ test_hooks() ->
     end,
     passed.
 
+test_memory_pressure_receiver(Pid) ->
+    receive
+        shutdown ->
+            ok;
+        {send_command, Method} ->
+            ok = case Method of
+                     #'channel.flow'{}    -> ok;
+                     #'basic.qos_ok'{}    -> ok;
+                     #'channel.open_ok'{} -> ok
+                 end,
+            Pid ! Method,
+            test_memory_pressure_receiver(Pid);
+        sync ->
+            Pid ! sync,
+            test_memory_pressure_receiver(Pid)
+    end.
+
+test_memory_pressure_receive_flow(Active) ->
+    receive #'channel.flow'{active = Active} -> ok
+    after 1000 -> throw(failed_to_receive_channel_flow)
+    end,
+    receive #'channel.flow'{} ->
+            throw(pipelining_sync_commands_detected)
+    after 0 ->
+            ok
+    end.
+
+test_memory_pressure_sync(Ch, Writer) ->
+    ok = rabbit_channel:do(Ch, #'basic.qos'{}),
+    Writer ! sync,
+    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
+    receive #'basic.qos_ok'{} -> ok
+    after 1000 -> throw(failed_to_receive_basic_qos_ok)
+    end.
+
+test_memory_pressure_spawn() ->
+    Me = self(),
+    Writer = spawn(fun () -> test_memory_pressure_receiver(Me) end),
+    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
+                                   self()),
+    ok = rabbit_channel:do(Ch, #'channel.open'{}),
+    MRef = erlang:monitor(process, Ch),
+    receive #'channel.open_ok'{} -> ok
+    after 1000 -> throw(failed_to_receive_channel_open_ok)
+    end,
+    {Writer, Ch, MRef}.
+
+expect_normal_channel_termination(MRef, Ch) ->
+    receive {'DOWN', MRef, process, Ch, normal} -> ok
+    after 1000 -> throw(channel_failed_to_exit)
+    end.
+
+test_memory_pressure() ->
+    {Writer0, Ch0, MRef0} = test_memory_pressure_spawn(),
+    [ok = rabbit_channel:conserve_memory(Ch0, Conserve) ||
+        Conserve <- [false, false, true, false, true, true, false]],
+    ok = test_memory_pressure_sync(Ch0, Writer0),
+    receive {'DOWN', MRef0, process, Ch0, Info0} ->
+            throw({channel_died_early, Info0})
+    after 0 -> ok
+    end,
+
+    %% we should have just 1 active=false waiting for us
+    ok = test_memory_pressure_receive_flow(false),
+
+    %% if we reply with flow_ok, we should immediately get an
+    %% active=true back
+    ok = rabbit_channel:do(Ch0, #'channel.flow_ok'{active = false}),
+    ok = test_memory_pressure_receive_flow(true),
+
+    %% if we publish at this point, the channel should die
+    Content = #content{class_id = element(1, rabbit_framing:method_id(
+                                               'basic.publish')),
+                       properties = none,
+                       properties_bin = <<>>,
+                       payload_fragments_rev = []},
+    ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
+    expect_normal_channel_termination(MRef0, Ch0),
+
+    {Writer1, Ch1, MRef1} = test_memory_pressure_spawn(),
+    ok = rabbit_channel:conserve_memory(Ch1, true),
+    ok = test_memory_pressure_receive_flow(false),
+    ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
+    ok = test_memory_pressure_sync(Ch1, Writer1),
+    ok = rabbit_channel:conserve_memory(Ch1, false),
+    ok = test_memory_pressure_receive_flow(true),
+    %% send back the wrong flow_ok. Channel should die.
+    ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
+    expect_normal_channel_termination(MRef1, Ch1),
+
+    {_Writer2, Ch2, MRef2} = test_memory_pressure_spawn(),
+    %% just out of the blue, send a flow_ok. Life should end.
+    ok = rabbit_channel:do(Ch2, #'channel.flow_ok'{active = true}),
+    expect_normal_channel_termination(MRef2, Ch2),
+
+    {_Writer3, Ch3, MRef3} = test_memory_pressure_spawn(),
+    ok = rabbit_channel:conserve_memory(Ch3, true),
+    receive {'DOWN', MRef3, process, Ch3, _} ->
+            ok
+    after 12000 ->
+            throw(channel_failed_to_exit)
+    end,
+
+    alarm_handler:set_alarm({vm_memory_high_watermark, []}),
+    Me = self(),
+    Writer4 = spawn(fun () -> test_memory_pressure_receiver(Me) end),
+    Ch4 = rabbit_channel:start_link(1, self(), Writer4, <<"user">>, <<"/">>,
+                                    self()),
+    ok = rabbit_channel:do(Ch4, #'channel.open'{}),
+    MRef4 = erlang:monitor(process, Ch4),
+    Writer4 ! sync,
+    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
+    receive #'channel.open_ok'{} -> throw(unexpected_channel_open_ok)
+    after 0 -> ok
+    end,
+    alarm_handler:clear_alarm(vm_memory_high_watermark),
+    Writer4 ! sync,
+    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
+    receive #'channel.open_ok'{} -> ok
+    after 1000 -> throw(failed_to_receive_channel_open_ok)
+    end,
+    rabbit_channel:shutdown(Ch4),
+    expect_normal_channel_termination(MRef4, Ch4),
+
+    passed.
+
 test_delegates_async(SecondaryNode) ->
     Self = self(),
-    Sender = fun(Pid) -> Pid ! {invoked, Self} end,
+    Sender = fun (Pid) -> Pid ! {invoked, Self} end,
 
-    Responder = make_responder(fun({invoked, Pid}) -> Pid ! response end),
+    Responder = make_responder(fun ({invoked, Pid}) -> Pid ! response end),
 
     ok = delegate:invoke_no_result(spawn(Responder), Sender),
     ok = delegate:invoke_no_result(spawn(SecondaryNode, Responder), Sender),
@@ -897,7 +1025,7 @@ test_delegates_async(SecondaryNode) ->
 
 make_responder(FMsg) -> make_responder(FMsg, timeout).
 make_responder(FMsg, Throw) ->
-    fun() ->
+    fun () ->
         receive Msg -> FMsg(Msg)
         after 1000 -> throw(Throw)
         end
@@ -926,22 +1054,22 @@ must_exit(Fun) ->
     end.
 
 test_delegates_sync(SecondaryNode) ->
-    Sender = fun(Pid) -> gen_server:call(Pid, invoked) end,
-    BadSender = fun(_Pid) -> exit(exception) end,
+    Sender = fun (Pid) -> gen_server:call(Pid, invoked) end,
+    BadSender = fun (_Pid) -> exit(exception) end,
 
-    Responder = make_responder(fun({'$gen_call', From, invoked}) ->
+    Responder = make_responder(fun ({'$gen_call', From, invoked}) ->
                                    gen_server:reply(From, response)
                                end),
 
-    BadResponder = make_responder(fun({'$gen_call', From, invoked}) ->
+    BadResponder = make_responder(fun ({'$gen_call', From, invoked}) ->
                                           gen_server:reply(From, response)
                                   end, bad_responder_died),
 
     response = delegate:invoke(spawn(Responder), Sender),
     response = delegate:invoke(spawn(SecondaryNode, Responder), Sender),
 
-    must_exit(fun() -> delegate:invoke(spawn(BadResponder), BadSender) end),
-    must_exit(fun() ->
+    must_exit(fun () -> delegate:invoke(spawn(BadResponder), BadSender) end),
+    must_exit(fun () ->
         delegate:invoke(spawn(SecondaryNode, BadResponder), BadSender) end),
 
     LocalGoodPids = spawn_responders(node(), Responder, 2),
