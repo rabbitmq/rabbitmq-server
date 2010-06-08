@@ -89,8 +89,8 @@ handle_call(delete_all, _From,
                 rabbit_amqqueue:delete(Q, false, false)
         end)
         || {MonitorRef, [Q]} <- dict:to_list(ExclusiveQueues)],
-       fun() -> ok end,
-       fun() ->
+       fun () -> ok end,
+       fun () ->
                erlang:demonitor(MonitorRef),
                rabbit_amqqueue:delete(Q, false, false)
        end)

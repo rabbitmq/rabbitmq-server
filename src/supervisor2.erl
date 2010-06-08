@@ -301,13 +301,13 @@ handle_call({terminate_child, Name}, _From, State) ->
 
 handle_call(which_children, _From, State) when ?is_simple(State) ->
     [#child{child_type = CT, modules = Mods}] = State#state.children,
-    Reply = lists:map(fun({Pid, _}) -> {undefined, Pid, CT, Mods} end,
+    Reply = lists:map(fun ({Pid, _}) -> {undefined, Pid, CT, Mods} end,
 		      ?DICT:to_list(State#state.dynamics)),
     {reply, Reply, State};
 
 handle_call(which_children, _From, State) ->
     Resp =
-	lists:map(fun(#child{pid = Pid, name = Name,
+	lists:map(fun (#child{pid = Pid, name = Name,
 			     child_type = ChildType, modules = Mods}) ->
 		    {Name, Pid, ChildType, Mods}
 		  end,
@@ -415,7 +415,7 @@ update_childspec1([], Children, KeepOld) ->
     lists:reverse(Children ++ KeepOld).  
 
 update_chsp(OldCh, Children) ->
-    case lists:map(fun(Ch) when OldCh#child.name =:= Ch#child.name ->
+    case lists:map(fun (Ch) when OldCh#child.name =:= Ch#child.name ->
 			   Ch#child{pid = OldCh#child.pid};
 		      (Ch) ->
 			   Ch
@@ -828,7 +828,7 @@ validShutdown(Shutdown, _)             -> throw({invalid_shutdown, Shutdown}).
 
 validMods(dynamic) -> true;
 validMods(Mods) when is_list(Mods) ->
-    lists:foreach(fun(Mod) ->
+    lists:foreach(fun (Mod) ->
 		    if
 			is_atom(Mod) -> ok;
 			true -> throw({invalid_module, Mod})
