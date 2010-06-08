@@ -934,10 +934,6 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
               not_found, "no binding ~s between ~s and ~s",
               [RoutingKey, rabbit_misc:rs(ExchangeName),
                rabbit_misc:rs(QueueName)]);
-        {error, durability_settings_incompatible} ->
-            rabbit_misc:protocol_error(
-              not_allowed, "durability settings of ~s incompatible with ~s",
-              [rabbit_misc:rs(QueueName), rabbit_misc:rs(ExchangeName)]);
         ok -> return_ok(State, NoWait, ReturnMethod)
     end.
 
