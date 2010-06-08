@@ -185,6 +185,7 @@
 
 -type(log_location() :: 'tty' | 'undefined' | string()).
 -type(file_suffix() :: binary()).
+-type(node_type() :: disc_only | disc | ram).
 
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
@@ -193,7 +194,7 @@
 -spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
-              {nodes, [erlang_node()]} |
+              {nodes, [{node_type(), [erlang_node()]}]} |
               {running_nodes, [erlang_node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
