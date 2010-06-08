@@ -76,7 +76,7 @@
 -spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
 -spec(add_binding/5 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table(), inner_fun()) ->
-             bind_res() | {'error', 'durability_settings_incompatible'}).
+             bind_res()).
 -spec(delete_binding/5 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table(), inner_fun()) ->
              bind_res() | {'error', 'binding_not_found'}).
@@ -375,19 +375,17 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
            fun (X, Q, B) ->
                    %% this argument is used to check queue exclusivity;
                    %% in general, we want to fail on that in preference to
-                   %% failing on e.g., the durability being different.
+                   %% anything else
                    InnerFun(X, Q),
-                   if Q#amqqueue.durable and not(X#exchange.durable) ->
-                           {error, durability_settings_incompatible};
-                      true ->
-                           case mnesia:read({rabbit_route, B}) of
-                               [] ->
-                                   sync_binding(B, Q#amqqueue.durable,
-                                                fun mnesia:write/3),
-                                   {new, X, B};
-                               [_R] ->
-                                   {existing, X, B}
-                           end
+                   case mnesia:read({rabbit_route, B}) of
+                       [] ->
+                           sync_binding(B,
+                                        X#exchange.durable andalso
+                                        Q#amqqueue.durable,
+                                        fun mnesia:write/3),
+                           {new, X, B};
+                       [_R] ->
+                           {existing, X, B}
                    end
            end) of
         {new, Exchange = #exchange{ type = Type }, Binding} ->
