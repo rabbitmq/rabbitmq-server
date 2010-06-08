@@ -40,7 +40,7 @@ BASIC_PLT=basic.plt
 RABBIT_PLT=rabbit.plt
 
 ifndef USE_SPECS
-# our type specs rely on features / bug fixes in dialyzer that are
+# our type specs rely on features and bug fixes in dialyzer that are
 # only available in R13B01 upwards (R13B01 is eshell 5.7.2)
 #
 # NB: the test assumes that version number will only contain single digits
