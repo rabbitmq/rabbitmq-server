@@ -425,6 +425,7 @@ def genHrl(spec):
         print "-record('P_%s', {%s})." % (erlangize(c.name), fieldNameList(c.fields))
 
     print "%% Various types"
+    print "-ifdef(use_specs)."
     print prettyType("amqp_method_name()",
                      [m.erlangName() for m in methods])
     print prettyType("amqp_method()",
@@ -444,17 +445,15 @@ def genHrl(spec):
                      ["'%s'" % erlangConstantName(c).lower() for (c, v, cls) in spec.constants])
     print prettyType("amqp_exception_code()",
                      ["%i" % v for (c, v, cls) in spec.constants])
-    # classIds = set()
-    # for m in methods:
-    #     classIds.add(m.klass.index)
-    # print prettyType("amqp_class_id()",
-    #                  ["%i" % ci for ci in classIds])
+    print "-endif. % use_specs"
 
 def genSpec(spec):
     methods = spec.allMethods()
 
     printFileHeader()
     print """% Hard-coded types
+-ifdef(use_specs).
+
 -type(amqp_field_type() ::
       'longstr' | 'signedint' | 'decimal' | 'timestamp' |
       'table' | 'byte' | 'double' | 'float' | 'long' |
@@ -486,6 +485,8 @@ def genSpec(spec):
         classIds.add(m.klass.index)
     print prettyType("amqp_class_id()",
                      ["%i" % ci for ci in classIds])
+
+    print "-endif. % use_specs"
 
 def generateErl(specPath):
     genErl(AmqpSpec(specPath))
