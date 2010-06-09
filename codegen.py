@@ -465,10 +465,8 @@ def genSpec(spec):
 %% dialyzer's lack of support for recursive types
 -type(amqp_table() :: [{binary(), amqp_field_type(), any()}]).
 %% TODO: make this more precise
-%% TODO: Are these tuples of the form {P_basic_property, any()} ?
 -type(amqp_properties() :: tuple()).
-%% TODO: make this more precise I can't find any restriction on this.
-%% Should I just check if it's 16bit ?
+
 -type(channel_number() :: non_neg_integer()).
 -type(resource_name() :: binary()).
 -type(routing_key() :: binary()).
