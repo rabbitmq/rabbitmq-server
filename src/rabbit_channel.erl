@@ -687,18 +687,17 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                         AutoDelete,
                                         Args)
         end,
-    ok = rabbit_exchange:assert_type(X, CheckedType),
+    ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable,
+                                            AutoDelete, Args),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
-                                  type = TypeNameBin,
                                   passive = true,
                                   nowait = NoWait},
               _, State = #ch{ virtual_host = VHostPath }) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_configure_permitted(ExchangeName, State),
-    X = rabbit_exchange:lookup_or_die(ExchangeName),
-    ok = rabbit_exchange:assert_type(X, rabbit_exchange:check_type(TypeNameBin)),
+    _ = rabbit_exchange:lookup_or_die(ExchangeName),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
 handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
@@ -733,14 +732,27 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             end,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
-    Finish = fun (#amqqueue{name = QueueName} = Q) ->
+    Finish = fun (#amqqueue{name = QueueName,
+                            durable = Durable1,
+                            auto_delete = AutoDelete1} = Q)
+                   when Durable =:= Durable1, AutoDelete =:= AutoDelete1 ->
                      check_exclusive_access(Q, Owner, strict),
                      check_configure_permitted(QueueName, State),
+                     %% We need to notify the reader within the channel
+                     %% process so that we can be sure there are no
+                     %% outstanding exclusive queues being declared as the
+                     %% connection shuts down.
                      case Owner of
                          none -> ok;
                          _    -> ok = rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
                      end,
-                     Q
+                     Q;
+                 %% non-equivalence trumps exclusivity arbitrarily
+                 (#amqqueue{name = QueueName}) ->
+                     rabbit_misc:protocol_error(
+                       channel_error,
+                       "parameters for ~s not equivalent",
+                       [rabbit_misc:rs(QueueName)])
              end,
     Q = case rabbit_amqqueue:with(
                rabbit_misc:r(VHostPath, queue, QueueNameBin),

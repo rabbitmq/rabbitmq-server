@@ -39,7 +39,8 @@
 -export([add_binding/5, delete_binding/5, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
--export([check_type/1, assert_type/2]).
+-export([assert_equivalence/5]).
+-export([check_type/1]).
 
 %% EXTENDED API
 -export([list_exchange_bindings/1]).
@@ -64,7 +65,8 @@
 -spec(declare/5 :: (exchange_name(), exchange_type(), boolean(), boolean(),
                     amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
--spec(assert_type/2 :: (exchange(), atom()) -> 'ok').
+-spec(assert_equivalence/5 :: (exchange(), atom(), boolean(), boolean(),
+                               amqp_table()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
 -spec(list/1 :: (vhost()) -> [exchange()]).
@@ -185,6 +187,20 @@ check_type(TypeBin) ->
             T
     end.
 
+assert_equivalence(X = #exchange{ durable = ActualDurable,
+                                  auto_delete = ActualAutoDelete},
+                   RequiredType, RequiredDurable, RequiredAutoDelete,
+                   RequiredArgs)
+  when ActualDurable =:= RequiredDurable andalso
+       ActualAutoDelete =:= RequiredAutoDelete ->
+    ok = assert_type(X, RequiredType),
+    ok = assert_args_equivalence(X, RequiredArgs);
+assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _AutoDelete,
+                   _Args) ->
+    rabbit_misc:protocol_error(
+      not_allowed, "cannot redeclare ~s with different durable value",
+      [rabbit_misc:rs(Name)]).
+
 assert_type(#exchange{ type = ActualType }, RequiredType)
   when ActualType == RequiredType ->
     ok;
@@ -192,6 +208,24 @@ assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
     rabbit_misc:protocol_error(
       not_allowed, "cannot redeclare ~s of type '~s' with type '~s'",
       [rabbit_misc:rs(Name), ActualType, RequiredType]).
+
+alternate_exchange_value(Args) ->
+    lists:keysearch(<<"alternate-exchange">>, 1, Args).
+
+assert_args_equivalence(#exchange{ name = Name,
+                                   arguments = Args },
+                        RequiredArgs) ->
+    %% The spec says "Arguments are compared for semantic
+    %% equivalence".  The only arg we care about is
+    %% "alternate-exchange".
+    Ae1 = alternate_exchange_value(RequiredArgs),
+    Ae2 = alternate_exchange_value(Args),
+    if Ae1==Ae2 -> ok;
+       true  -> rabbit_misc:protocol_error(
+                  not_allowed,
+                  "cannot redeclare ~s with inequivalent args",
+                  [rabbit_misc:rs(Name)])
+    end.
 
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_exchange, Name}).
