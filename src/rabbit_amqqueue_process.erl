@@ -717,6 +717,7 @@ handle_call(purge, _From, State = #q{backing_queue = BQ,
     reply({ok, Count}, State#q{backing_queue_state = BQS1});
 
 handle_call({requeue, AckTags, ChPid}, From, State) ->
+    gen_server2:reply(From, ok),
     case lookup_ch(ChPid) of
         not_found ->
             rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
@@ -725,7 +726,6 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
         C = #cr{acktags = ChAckTags} ->
             ChAckTags1 = subtract_acks(ChAckTags, AckTags),
             store_ch_record(C#cr{acktags = ChAckTags1}),
-            gen_server2:reply(From, ok),
             noreply(requeue_and_run(AckTags, State))
     end;
 
