@@ -59,7 +59,7 @@ make_child_specs(Configurations) ->
       end, [], Configurations).
 
 parse_configuration(undefined) ->
-    {error, no_shovels_configured};
+    {ok, dict:new()};
 parse_configuration({ok, Env}) ->
     {ok, Defaults} = application:get_env(defaults),
     parse_configuration(Defaults, Env, dict:new()).
