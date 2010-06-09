@@ -40,6 +40,7 @@
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
 -export([assert_equivalence/5]).
+-export([assert_args_equivalence/2]).
 -export([check_type/1]).
 
 %% EXTENDED API
@@ -67,6 +68,7 @@
 -spec(check_type/1 :: (binary()) -> atom()).
 -spec(assert_equivalence/5 :: (exchange(), atom(), boolean(), boolean(),
                                amqp_table()) -> 'ok').
+-spec(assert_args_equivalence/2 :: (exchange(), amqp_table()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
 -spec(list/1 :: (vhost()) -> [exchange()]).
@@ -188,13 +190,14 @@ check_type(TypeBin) ->
     end.
 
 assert_equivalence(X = #exchange{ durable = ActualDurable,
-                                  auto_delete = ActualAutoDelete},
+                                  auto_delete = ActualAutoDelete,
+                                  type = ActualType},
                    RequiredType, RequiredDurable, RequiredAutoDelete,
                    RequiredArgs)
   when ActualDurable =:= RequiredDurable andalso
        ActualAutoDelete =:= RequiredAutoDelete ->
     ok = assert_type(X, RequiredType),
-    ok = assert_args_equivalence(X, RequiredArgs);
+    ok = (type_to_module(ActualType)):assert_args_equivalence(X, RequiredArgs);
 assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _AutoDelete,
                    _Args) ->
     rabbit_misc:protocol_error(
