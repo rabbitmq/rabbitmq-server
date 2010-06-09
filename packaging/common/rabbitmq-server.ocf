@@ -289,7 +289,7 @@ rabbit_start() {
 	    ocf_log info "rabbitmq-server start failed: $rc"
 	    exit $OCF_ERR_GENERIC
 	fi
-        sleep 2
+        sleep 1
     done
 
     return $OCF_SUCCESS
@@ -324,7 +324,7 @@ rabbit_stop() {
 	    ocf_log info "rabbitmq-server stop failed: $rc"
 	    exit $OCF_ERR_GENERIC
 	fi
-        sleep 2
+        sleep 1
     done
 
     return $OCF_SUCCESS
