@@ -50,17 +50,17 @@
 
 -spec(start/3 :: (socket(), channel_number(), non_neg_integer()) -> pid()).
 -spec(start_link/3 :: (socket(), channel_number(), non_neg_integer()) -> pid()).
--spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
--spec(send_command/3 :: (pid(), amqp_method(), content()) -> 'ok').
+-spec(send_command/2 :: (pid(), amqp_method_record()) -> 'ok').
+-spec(send_command/3 :: (pid(), amqp_method_record(), content()) -> 'ok').
 -spec(send_command_and_signal_back/3 :: (pid(), amqp_method(), pid()) -> 'ok').
 -spec(send_command_and_signal_back/4 ::
       (pid(), amqp_method(), content(), pid()) -> 'ok').
 -spec(send_command_and_notify/5 ::
-      (pid(), pid(), pid(), amqp_method(), content()) -> 'ok').
+      (pid(), pid(), pid(), amqp_method_record(), content()) -> 'ok').
 -spec(internal_send_command/3 ::
-      (socket(), channel_number(), amqp_method()) -> 'ok').
+      (socket(), channel_number(), amqp_method_record()) -> 'ok').
 -spec(internal_send_command/5 ::
-      (socket(), channel_number(), amqp_method(),
+      (socket(), channel_number(), amqp_method_record(),
        content(), non_neg_integer()) -> 'ok').
 
 -endif.
