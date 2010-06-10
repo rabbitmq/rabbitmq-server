@@ -30,12 +30,12 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-NODENAME=rabbit
+[ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -s`
+NODENAME=rabbit@${HOSTNAME%%.*}
 
 . `dirname $0`/rabbitmq-env
 
-[ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -s`
-[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}@${HOSTNAME%%.*}
+[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
 exec erl \
