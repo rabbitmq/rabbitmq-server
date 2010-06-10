@@ -35,16 +35,16 @@
 ##
 
 ## OCF instance parameters
-##	OCF_RESKEY_multi
-##	OCF_RESKEY_ctl
-##	OCF_RESKEY_nodename
-##	OCF_RESKEY_ip
-##	OCF_RESKEY_port
-##	OCF_RESKEY_cluster_config_file
-##	OCF_RESKEY_config_file
-##	OCF_RESKEY_log_base
-##	OCF_RESKEY_mnesia_base
-##	OCF_RESKEY_server_start_args
+##   OCF_RESKEY_multi
+##   OCF_RESKEY_ctl
+##   OCF_RESKEY_nodename
+##   OCF_RESKEY_ip
+##   OCF_RESKEY_port
+##   OCF_RESKEY_cluster_config_file
+##   OCF_RESKEY_config_file
+##   OCF_RESKEY_log_base
+##   OCF_RESKEY_mnesia_base
+##   OCF_RESKEY_server_start_args
 
 #######################################################################
 # Initialization:
@@ -64,7 +64,7 @@ OCF_RESKEY_log_base_default="/var/log/rabbitmq"
 : ${OCF_RESKEY_log_base=${OCF_RESKEY_log_base_default}}
 
 meta_data() {
-	cat <<END
+    cat <<END
 <?xml version="1.0"?>
 <!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
 <resource-agent name="rabbitmq-server">
@@ -172,7 +172,7 @@ END
 }
 
 rabbit_usage() {
-	cat <<END
+    cat <<END
 usage: $0 {start|stop|status|monitor|validate-all|meta-data}
 
 Expects to have a fully populated OCF RA-compliant environment set.
@@ -204,35 +204,35 @@ export_vars() {
 
 rabbit_validate_partial() {
     if [ ! -x $RABBITMQ_MULTI ]; then
-	ocf_log err "rabbitmq-server multi $RABBITMQ_MULTI does not exist or is not executable";
-	exit $OCF_ERR_INSTALLED;
+        ocf_log err "rabbitmq-server multi $RABBITMQ_MULTI does not exist or is not executable";
+        exit $OCF_ERR_INSTALLED;
     fi
 
     if [ ! -x $RABBITMQ_CTL ]; then
-	ocf_log err "rabbitmq-server ctl $RABBITMQ_CTL does not exist or is not executable";
-	exit $OCF_ERR_INSTALLED;
+        ocf_log err "rabbitmq-server ctl $RABBITMQ_CTL does not exist or is not executable";
+        exit $OCF_ERR_INSTALLED;
     fi
 }
 
 rabbit_validate_full() {
     if [ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && [ ! -e $RABBITMQ_CLUSTER_CONFIG_FILE ]; then
-	ocf_log err "rabbitmq-server cluster_config_file $RABBITMQ_CLUSTER_CONFIG_FILE does not exist or is not a file";
-	exit $OCF_ERR_INSTALLED;
+        ocf_log err "rabbitmq-server cluster_config_file $RABBITMQ_CLUSTER_CONFIG_FILE does not exist or is not a file";
+        exit $OCF_ERR_INSTALLED;
     fi
 
     if [ ! -z $RABBITMQ_CONFIG_FILE ] && [ ! -e $RABBITMQ_CONFIG_FILE ]; then
-	ocf_log err "rabbitmq-server config_file $RABBITMQ_CONFIG_FILE does not exist or is not a file";
-	exit $OCF_ERR_INSTALLED;
+        ocf_log err "rabbitmq-server config_file $RABBITMQ_CONFIG_FILE does not exist or is not a file";
+        exit $OCF_ERR_INSTALLED;
     fi
 
     if [ ! -z $RABBITMQ_LOG_BASE ] && [ ! -d $RABBITMQ_LOG_BASE ]; then
-	ocf_log err "rabbitmq-server log_base $RABBITMQ_LOG_BASE does not exist or is not a directory";
-	exit $OCF_ERR_INSTALLED;
+        ocf_log err "rabbitmq-server log_base $RABBITMQ_LOG_BASE does not exist or is not a directory";
+        exit $OCF_ERR_INSTALLED;
     fi
 
     if [ ! -z $RABBITMQ_MNESIA_BASE ] && [ ! -d $RABBITMQ_MNESIA_BASE ]; then
-	ocf_log err "rabbitmq-server mnesia_base $RABBITMQ_MNESIA_BASE does not exist or is not a directory";
-	exit $OCF_ERR_INSTALLED;
+        ocf_log err "rabbitmq-server mnesia_base $RABBITMQ_MNESIA_BASE does not exist or is not a directory";
+        exit $OCF_ERR_INSTALLED;
     fi
 
     rabbit_validate_partial
@@ -245,17 +245,17 @@ rabbit_status() {
     $RABBITMQ_CTL $NODENAME_ARG status > /dev/null 2> /dev/null
     rc=$?
     case "$rc" in
-	0)
-	    ocf_log debug "RabbitMQ server is running normally"
-	    return $OCF_SUCCESS
-	    ;;
-	2)
-	    ocf_log debug "RabbitMQ server is not running"
-	    return $OCF_NOT_RUNNING
-	    ;;
-	*)
-	    ocf_log err "Unexpected return from rabbitmqctl $NODENAME_ARG status: $rc"
-	    exit $OCF_ERR_GENERIC
+        0)
+            ocf_log debug "RabbitMQ server is running normally"
+            return $OCF_SUCCESS
+            ;;
+        2)
+            ocf_log debug "RabbitMQ server is not running"
+            return $OCF_NOT_RUNNING
+            ;;
+        *)
+            ocf_log err "Unexpected return from rabbitmqctl $NODENAME_ARG status: $rc"
+            exit $OCF_ERR_GENERIC
     esac
 }
 
@@ -273,22 +273,22 @@ rabbit_start() {
     rc=$?
 
     if [ "$rc" != 0 ]; then
-	ocf_log err "rabbitmq-server start command failed: $RABBITMQ_MULTI start_all 1, $rc"
-  	return $rc
+        ocf_log err "rabbitmq-server start command failed: $RABBITMQ_MULTI start_all 1, $rc"
+        return $rc
     fi
 
     # Spin waiting for the server to come up.
     # Let the CRM/LRM time us out if required
     start_wait=1
     while [ $start_wait = 1 ]; do
-	rabbit_status
-	rc=$?
-	if [ "$rc" = $OCF_SUCCESS ]; then
-	    start_wait=0
-	elif [ "$rc" != $OCF_NOT_RUNNING ]; then
-	    ocf_log info "rabbitmq-server start failed: $rc"
-	    exit $OCF_ERR_GENERIC
-	fi
+        rabbit_status
+        rc=$?
+        if [ "$rc" = $OCF_SUCCESS ]; then
+            start_wait=0
+        elif [ "$rc" != $OCF_NOT_RUNNING ]; then
+            ocf_log info "rabbitmq-server start failed: $rc"
+            exit $OCF_ERR_GENERIC
+        fi
         sleep 1
     done
 
@@ -307,23 +307,23 @@ rabbit_stop() {
     rc=$?
 
     if [ "$rc" != 0 ]; then
-	ocf_log err "rabbitmq-server stop command failed: $RABBITMQ_MULTI stop_all, $rc"
-  	return $rc
+        ocf_log err "rabbitmq-server stop command failed: $RABBITMQ_MULTI stop_all, $rc"
+        return $rc
     fi
 
     # Spin waiting for the server to shut down.
     # Let the CRM/LRM time us out if required
     stop_wait=1
     while [ $stop_wait = 1 ]; do
-	rabbit_status
-	rc=$?
-	if [ "$rc" = $OCF_NOT_RUNNING ]; then
-	    stop_wait=0
+        rabbit_status
+        rc=$?
+        if [ "$rc" = $OCF_NOT_RUNNING ]; then
+            stop_wait=0
             break
-	elif [ "$rc" != $OCF_SUCCESS ]; then
-	    ocf_log info "rabbitmq-server stop failed: $rc"
-	    exit $OCF_ERR_GENERIC
-	fi
+        elif [ "$rc" != $OCF_SUCCESS ]; then
+            ocf_log info "rabbitmq-server stop failed: $rc"
+            exit $OCF_ERR_GENERIC
+        fi
         sleep 1
     done
 
@@ -337,13 +337,13 @@ rabbit_monitor() {
 
 case $__OCF_ACTION in
     meta-data)
-	meta_data
-	exit $OCF_SUCCESS
-	;;
+        meta_data
+        exit $OCF_SUCCESS
+        ;;
     usage|help)
-	rabbit_usage
-	exit $OCF_SUCCESS
-	;;
+        rabbit_usage
+        exit $OCF_SUCCESS
+        ;;
 esac
 
 if ocf_is_probe; then
@@ -354,21 +354,21 @@ fi
 
 case $__OCF_ACTION in
     start)
-	rabbit_start
+        rabbit_start
         ;;
     stop)
-	rabbit_stop
+        rabbit_stop
         ;;
     status|monitor)
-	rabbit_monitor
+        rabbit_monitor
         ;;
     validate-all)
         exit $OCF_SUCCESS
-	;;
+        ;;
     *)
-	rabbit_usage
-	exit $OCF_ERR_UNIMPLEMENTED
-	;;
+        rabbit_usage
+        exit $OCF_ERR_UNIMPLEMENTED
+        ;;
 esac
 
 exit $?
