@@ -47,7 +47,7 @@
 
 -ifdef(use_specs).
 
--type(node_type() :: disc_only | disc | ram).
+-type(node_type() :: disc_only | disc | ram | unknown).
 
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [erlang_node()]}]} |
                          {'running_nodes', [erlang_node()]}]).
@@ -67,14 +67,21 @@
 %%----------------------------------------------------------------------------
 
 status() ->
-    [{nodes, [{Key, Nodes} ||
-                 {Key, CopyType} <- [{disc_only, disc_only_copies},
-                                     {disc,      disc_copies},
-                                     {ram,       ram_copies}],
-                 begin
-                     Nodes = mnesia:table_info(schema, CopyType),
-                     Nodes =/= []
-                 end]},
+    [{nodes, try [{Key, Nodes} ||
+                     {Key, CopyType} <- [{disc_only, disc_only_copies},
+                                         {disc,      disc_copies},
+                                         {ram,       ram_copies}],
+                     begin
+                         Nodes = mnesia:table_info(schema, CopyType),
+                         Nodes =/= []
+                     end]
+             catch
+                 exit:{aborted, _Reason} ->
+                     case mnesia:system_info(db_nodes) of
+                         [] -> [];
+                         Nodes -> [{unknown, Nodes}]
+                     end
+             end},
      {running_nodes, mnesia:system_info(running_db_nodes)}].
 
 init() ->

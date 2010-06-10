@@ -185,7 +185,7 @@
 
 -type(log_location() :: 'tty' | 'undefined' | string()).
 -type(file_suffix() :: binary()).
--type(node_type() :: disc_only | disc | ram).
+-type(node_type() :: disc_only | disc | ram | unknown).
 
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
