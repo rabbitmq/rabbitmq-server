@@ -214,10 +214,10 @@ assert_args_equivalence(#exchange{ name = Name,
     Ae1 = alternate_exchange_value(RequiredArgs),
     Ae2 = alternate_exchange_value(Args),
     if Ae1==Ae2 -> ok;
-       true  -> rabbit_misc:protocol_error(
-                  not_allowed,
-                  "cannot redeclare ~s with inequivalent args",
-                  [rabbit_misc:rs(Name)])
+       true     -> rabbit_misc:protocol_error(
+                     not_allowed,
+                     "cannot redeclare ~s with inequivalent args",
+                     [rabbit_misc:rs(Name)])
     end.
 
 lookup(Name) ->
