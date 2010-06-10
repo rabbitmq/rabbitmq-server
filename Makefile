@@ -70,6 +70,12 @@ define usage_dep
   $(call usage_xml_to_erl, $(1)): $(1) $(DOCS_DIR)/usage.xsl
 endef
 
+ifneq "$(SBIN_DIR)" ""
+ifneq "$(TARGET_DIR)" ""
+SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
+endif
+endif
+
 all: $(TARGETS)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
@@ -234,13 +240,7 @@ $(SOURCE_DIR)/%_usage.erl:
 
 docs_all: $(MANPAGES) $(WEB_MANPAGES)
 
-install: SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
 install: all docs_all install_dirs
-	@[ -n "$(TARGET_DIR)" ] || (echo "Please set TARGET_DIR."; false)
-	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
-	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
-
-	mkdir -p $(TARGET_DIR)
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
@@ -256,8 +256,14 @@ install: all docs_all install_dirs
 	done
 
 install_dirs:
-	mkdir -p $(SBIN_DIR)
+	@ OK=true && \
+	  { [ -n "$(TARGET_DIR)" ] || { echo "Please set TARGET_DIR."; OK=false; }; } && \
+	  { [ -n "$(SBIN_DIR)" ] || { echo "Please set SBIN_DIR."; OK=false; }; } && \
+	  { [ -n "$(MAN_DIR)" ] || { echo "Please set MAN_DIR."; OK=false; }; } && $$OK
+
 	mkdir -p $(TARGET_DIR)/sbin
+	mkdir -p $(SBIN_DIR)
+	mkdir -p $(MAN_DIR)
 
 $(foreach XML, $(USAGES_XML), $(eval $(call usage_dep, $(XML))))
 
