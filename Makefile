@@ -256,9 +256,10 @@ install: all docs_all install_dirs
 	done
 
 install_dirs:
-	@[ -n "$(TARGET_DIR)" ] || (echo "Please set TARGET_DIR."; false)
-	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
-	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
+	@ OK=true && \
+	  { [ -n "$(TARGET_DIR)" ] || { echo "Please set TARGET_DIR."; OK=false; }; } && \
+	  { [ -n "$(SBIN_DIR)" ] || { echo "Please set SBIN_DIR."; OK=false; }; } && \
+	  { [ -n "$(MAN_DIR)" ] || { echo "Please set MAN_DIR."; OK=false; }; } && $$OK
 
 	mkdir -p $(TARGET_DIR)/sbin
 	mkdir -p $(SBIN_DIR)
