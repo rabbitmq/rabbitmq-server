@@ -722,7 +722,7 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
         not_found ->
             rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
                                [ChPid]),
-            reply(ok, State);
+            noreply(State);
         C = #cr{acktags = ChAckTags} ->
             ChAckTags1 = subtract_acks(ChAckTags, AckTags),
             store_ch_record(C#cr{acktags = ChAckTags1}),
