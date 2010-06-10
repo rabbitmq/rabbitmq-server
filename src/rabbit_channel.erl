@@ -826,14 +826,14 @@ handle_method(#'tx.select'{}, _, State) ->
 
 handle_method(#'tx.commit'{}, _, #ch{transaction_id = none}) ->
     rabbit_misc:protocol_error(
-      not_allowed, "channel is not transactional", []);
+      precondition_failed, "channel is not transactional", []);
 
 handle_method(#'tx.commit'{}, _, State) ->
     {reply, #'tx.commit_ok'{}, internal_commit(State)};
 
 handle_method(#'tx.rollback'{}, _, #ch{transaction_id = none}) ->
     rabbit_misc:protocol_error(
-      not_allowed, "channel is not transactional", []);
+      precondition_failed, "channel is not transactional", []);
 
 handle_method(#'tx.rollback'{}, _, State) ->
     {reply, #'tx.rollback_ok'{}, internal_rollback(State)};
