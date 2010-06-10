@@ -38,5 +38,5 @@
 -spec(delete/2 :: (exchange(), list(binding())) -> 'ok').
 -spec(add_binding/2 :: (exchange(), binding()) -> 'ok').
 -spec(remove_bindings/2 :: (exchange(), list(binding())) -> 'ok').
-
+-spec(assert_args_equivalence/2 :: (exchange(), amqp_table()) -> 'ok').
 -endif.
