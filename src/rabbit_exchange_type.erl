@@ -54,7 +54,11 @@ behaviour_info(callbacks) ->
      {add_binding, 2},
 
      %% called after bindings have been deleted.
-     {remove_bindings, 2}
+     {remove_bindings, 2},
+
+     %% called when comparing exchanges for equivalence - should return ok or
+     %% exit with #amqp_error{}
+     {assert_args_equivalence, 2}
 
     ];
 behaviour_info(_Other) ->
