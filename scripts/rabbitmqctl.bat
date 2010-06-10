@@ -38,8 +38,12 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
+if "!COMPUTERNAME!"=="" (
+    set COMPUTERNAME=localhost
+)
+
 if "!RABBITMQ_NODENAME!"=="" (
-    set RABBITMQ_NODENAME=rabbit
+    set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
 )
 
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
