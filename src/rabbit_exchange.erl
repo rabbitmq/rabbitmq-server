@@ -189,28 +189,18 @@ check_type(TypeBin) ->
             T
     end.
 
-assert_equivalence(X = #exchange{ durable = ActualDurable,
-                                  auto_delete = ActualAutoDelete,
-                                  type = ActualType},
-                   RequiredType, RequiredDurable, RequiredAutoDelete,
-                   RequiredArgs)
-  when ActualDurable =:= RequiredDurable andalso
-       ActualAutoDelete =:= RequiredAutoDelete ->
-    ok = assert_type(X, RequiredType),
-    ok = (type_to_module(ActualType)):assert_args_equivalence(X, RequiredArgs);
+assert_equivalence(X = #exchange{ durable = Durable,
+                                  auto_delete = AutoDelete,
+                                  type = Type},
+                   Type, Durable, AutoDelete,
+                   RequiredArgs) ->
+    ok = (type_to_module(Type)):assert_args_equivalence(X, RequiredArgs);
 assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _AutoDelete,
                    _Args) ->
     rabbit_misc:protocol_error(
-      not_allowed, "cannot redeclare ~s with different durable value",
+      not_allowed,
+      "cannot redeclare ~s with different type, durable or autodelete value",
       [rabbit_misc:rs(Name)]).
-
-assert_type(#exchange{ type = ActualType }, RequiredType)
-  when ActualType == RequiredType ->
-    ok;
-assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
-    rabbit_misc:protocol_error(
-      not_allowed, "cannot redeclare ~s of type '~s' with type '~s'",
-      [rabbit_misc:rs(Name), ActualType, RequiredType]).
 
 alternate_exchange_value(Args) ->
     lists:keysearch(<<"alternate-exchange">>, 1, Args).
