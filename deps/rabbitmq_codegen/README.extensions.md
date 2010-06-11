@@ -142,22 +142,22 @@ invoked.
 
 ## Invoking the spec compiler
 
-Your code generation code should invoke `amqp_codegen.do_main` with
-two functions as arguments: one for generating "header-file" text, and
-one for generating "implementation-file" text. The `do_main` function
+Your code generation code should invoke `amqp_codegen.do_main_dict`
+with a dictionary of functions as the sole argument.  Each will be
+used for generationg a separate file.  The `do_main_dict` function
 will parse the command-line arguments supplied when python was
 invoked.
 
 The command-line will be parsed as:
 
-    python your_codegen.py <headerorbody> <mainspec> [<extspec> ...] <outfile>
+    python your_codegen.py <action> <mainspec> [<extspec> ...] <outfile>
 
-where `<headerorbody>` is either the word `header` or the word `body`,
-to select which generation function is called by `do_main`. The
-`<mainspec>` and `<extspec>` arguments are file names of specification
-documents containing expressions in the syntax given above. The
-*final* argument on the command line, `<outfile>`, is the name of the
-source-code file to generate.
+where `<action>` is a key into the dictionary supplied to
+`do_main_dict` and is used to select which generation function is
+called. The `<mainspec>` and `<extspec>` arguments are file names of
+specification documents containing expressions in the syntax given
+above. The *final* argument on the command line, `<outfile>`, is the
+name of the source-code file to generate.
 
 Here's a tiny example of the layout of a code generation module that
 uses `amqp_codegen`:
@@ -173,9 +173,10 @@ uses `amqp_codegen`:
         ...
 
     if __name__ == "__main__":
-        amqp_codegen.do_main(generateHeader, generateImpl)
+        amqp_codegen.do_main_dict({"header": generateHeader,
+                                   "body": generateImpl})
 
-The reasons for this split, such as they are, are that
+The reasons for allowing more than one action, are that
 
  - many languages have separate "header"-type files (C and Erlang, to
    name two)
