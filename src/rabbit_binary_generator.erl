@@ -57,7 +57,7 @@
 -type(frame() :: [binary()]).
 
 -spec(build_simple_method_frame/2 ::
-      (channel_number(), amqp_method()) -> frame()).
+      (channel_number(), amqp_method_record()) -> frame()).
 -spec(build_simple_content_frames/3 ::
       (channel_number(), content(), non_neg_integer()) -> [frame()]).
 -spec(build_heartbeat_frame/0 :: () -> frame()).
