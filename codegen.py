@@ -337,6 +337,7 @@ bitvalue(false) -> 0;
 bitvalue(undefined) -> 0.
 
 %% Method signatures
+-ifdef(use_specs).
 -spec(lookup_method_name/1 :: (amqp_method()) -> amqp_method_name()).
 -spec(method_id/1 :: (amqp_method_name()) -> amqp_method()).
 -spec(method_has_content/1 :: (amqp_method_name()) -> boolean()).
@@ -349,7 +350,7 @@ bitvalue(undefined) -> 0.
 -spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
 -spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
 -spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
-
+-endif. % use_specs
 """
     for m in methods: genLookupMethodName(m)
     print "lookup_method_name({_ClassId, _MethodId} = Id) -> exit({unknown_method_id, Id})."
@@ -416,7 +417,6 @@ def genHrl(spec):
     for (c,v,cls) in spec.constants:
         print "-define(%s, %s)." % (erlangConstantName(c), v)
 
-    print "-ifdef(use_specs)"
     print "%% Method field records."
     for m in methods:
         print "-record(%s, {%s})." % (m.erlangName(), fieldNameListDefaults(m.arguments))
@@ -425,6 +425,7 @@ def genHrl(spec):
     for c in spec.allClasses():
         print "-record('P_%s', {%s})." % (erlangize(c.name), fieldNameList(c.fields))
 
+    print "-ifdef(use_specs)."
     print "%% Various types"
     print prettyType("amqp_method_name()",
                      [m.erlangName() for m in methods])
@@ -452,8 +453,6 @@ def genSpec(spec):
 
     printFileHeader()
     print """% Hard-coded types
--ifdef(use_specs).
-
 -type(amqp_field_type() ::
       'longstr' | 'signedint' | 'decimal' | 'timestamp' |
       'table' | 'byte' | 'double' | 'float' | 'long' |
@@ -483,8 +482,6 @@ def genSpec(spec):
         classIds.add(m.klass.index)
     print prettyType("amqp_class_id()",
                      ["%i" % ci for ci in classIds])
-
-    print "-endif. % use_specs"
 
 def generateErl(specPath):
     genErl(AmqpSpec(specPath))
