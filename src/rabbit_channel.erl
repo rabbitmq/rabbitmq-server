@@ -463,13 +463,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
               _, State = #ch{transaction_id = TxnKey,
-                             next_tag = NextDeliveryTag,
                              unacked_message_q = UAMQ}) ->
-    if DeliveryTag >= NextDeliveryTag ->
-            rabbit_misc:protocol_error(
-              command_invalid, "unknown delivery tag ~w", [DeliveryTag]);
-       true -> ok
-    end,
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     Participants = ack(TxnKey, Acked),
     {noreply, case TxnKey of
@@ -980,7 +974,8 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
                                  QTail, DeliveryTag, Multiple)
             end;
         {empty, _} ->
-            {ToAcc, PrefixAcc}
+            rabbit_misc:protocol_error(
+              not_found, "unknown delivery tag ~w", [DeliveryTag])
     end.
 
 add_tx_participants(MoreP, State = #ch{tx_participants = Participants}) ->
