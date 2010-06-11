@@ -344,7 +344,7 @@ with_exclusive_access_or_die(QName, ReaderPid, F) ->
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
-      not_allowed, "no previously declared queue", []);
+      not_found, "no previously declared queue", []);
 expand_queue_name_shortcut(<<>>, #ch{ virtual_host = VHostPath,
                                       most_recently_declared_queue = MRDQ }) ->
     rabbit_misc:r(VHostPath, queue, MRDQ);
@@ -354,7 +354,7 @@ expand_queue_name_shortcut(QueueNameBin, #ch{ virtual_host = VHostPath }) ->
 expand_routing_key_shortcut(<<>>, <<>>,
                             #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
-      not_allowed, "no previously declared queue", []);
+      not_found, "no previously declared queue", []);
 expand_routing_key_shortcut(<<>>, <<>>,
                             #ch{ most_recently_declared_queue = MRDQ }) ->
     MRDQ;
