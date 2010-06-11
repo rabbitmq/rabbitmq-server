@@ -268,7 +268,7 @@ deliver(QPid, #delivery{txn = Txn, sender = ChPid, message = Message}) ->
     true.
 
 requeue(QPid, MsgIds, ChPid) ->
-    delegate_cast(QPid, {requeue, MsgIds, ChPid}).
+    delegate_call(QPid, {requeue, MsgIds, ChPid}, infinity).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
     delegate_pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
@@ -397,9 +397,6 @@ delegate_call(Pid, Msg, Timeout) ->
 delegate_pcall(Pid, Pri, Msg, Timeout) ->
     delegate:invoke(Pid, 
                     fun (P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end).
-
-delegate_cast(Pid, Msg) ->
-    delegate:invoke_no_result(Pid, fun (P) -> gen_server2:cast(P, Msg) end).
 
 delegate_pcast(Pid, Pri, Msg) ->
     delegate:invoke_no_result(Pid,
