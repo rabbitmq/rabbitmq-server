@@ -416,6 +416,7 @@ def genHrl(spec):
     for (c,v,cls) in spec.constants:
         print "-define(%s, %s)." % (erlangConstantName(c), v)
 
+    print "-ifdef(use_specs)"
     print "%% Method field records."
     for m in methods:
         print "-record(%s, {%s})." % (m.erlangName(), fieldNameListDefaults(m.arguments))
@@ -425,7 +426,6 @@ def genHrl(spec):
         print "-record('P_%s', {%s})." % (erlangize(c.name), fieldNameList(c.fields))
 
     print "%% Various types"
-    print "-ifdef(use_specs)."
     print prettyType("amqp_method_name()",
                      [m.erlangName() for m in methods])
     print prettyType("amqp_method()",
