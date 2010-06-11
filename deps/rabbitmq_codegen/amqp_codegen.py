@@ -245,12 +245,15 @@ class AmqpField(AmqpEntity):
     def __repr__(self):
         return 'AmqpField("' + self.name + '")'
 
-def do_main(header_fn,body_fn):
+def do_main(header_fn, body_fn):
+    do_main_dict({"header": header_fn, "body": body_fn})
+
+def do_main_dict(funcDict):
     def usage():
         print >> sys.stderr , "Usage:"
-        print >> sys.stderr , " %s header|body path_to_amqp_spec.json path_to_output_file" % (sys.argv[0])
-        print >> sys.stderr , ""
-        
+        print >> sys.stderr , "  %s <function> <path_to_amqp_spec.json> <path_to_output_file>" % (sys.argv[0])
+        print >> sys.stderr , " where <function> is one of %s" % ", ".join([k for k in funcDict.keys()])
+
     def execute(fn, amqp_specs, out_file):
         stdout = sys.stdout
         f = open(out_file, 'w')
@@ -269,10 +272,8 @@ def do_main(header_fn,body_fn):
         usage()
         sys.exit(1)
     else:
-        if sys.argv[1] == "header":
-            execute(header_fn, sys.argv[2:-1], sys.argv[-1])
-        elif sys.argv[1] == "body":
-            execute(body_fn, sys.argv[2:-1], sys.argv[-1])
+        if funcDict.has_key(sys.argv[1]):
+            execute(funcDict[sys.argv[1]], sys.argv[2:-1], sys.argv[-1])
         else:
             usage()
             sys.exit(1)
