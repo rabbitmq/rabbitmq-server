@@ -346,7 +346,7 @@ table_has_copy_type(TabDef, DiscType) ->
 
 create_local_table_copies(Type) ->
     lists:foreach(
-      fun({Tab, TabDef}) ->
+      fun ({Tab, TabDef}) ->
               HasDiscCopies     = table_has_copy_type(TabDef, disc_copies),
               HasDiscOnlyCopies = table_has_copy_type(TabDef, disc_only_copies),
               LocalTab          = proplists:get_bool(local_content, TabDef),

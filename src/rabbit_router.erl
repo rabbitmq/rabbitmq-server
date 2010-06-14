@@ -57,14 +57,17 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
     %% is preserved. This scales much better than the non-immediate
     %% case below.
     delegate:invoke_no_result(
-      QPids, fun(Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
+      QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     {routed, QPids};
 
 deliver(QPids, Delivery) ->
     {Success, _} =
         delegate:invoke(QPids,
-                        fun(Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
-    {Routed, Handled} = lists:foldl(fun fold_deliveries/2, {false, []}, Success),
+                        fun (Pid) -> 
+                                rabbit_amqqueue:deliver(Pid, Delivery) 
+                        end),
+    {Routed, Handled} =
+        lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
                    {Routed, Handled}).
 
@@ -88,7 +91,7 @@ match_routing_key(Name, RoutingKey) ->
 
 lookup_qpids(Queues) ->
     sets:fold(
-      fun(Key, Acc) ->
+      fun (Key, Acc) ->
               case mnesia:dirty_read({rabbit_queue, Key}) of
                   [#amqqueue{pid = QPid}] -> [QPid | Acc];
                   []                      -> Acc

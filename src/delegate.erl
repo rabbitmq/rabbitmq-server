@@ -45,8 +45,8 @@
 -ifdef(use_specs).
 
 -spec(start_link/1 :: (non_neg_integer()) -> {'ok', pid()}).
--spec(invoke_no_result/2 :: (pid() | [pid()], fun((pid()) -> any())) -> 'ok').
--spec(invoke/2 :: (pid() | [pid()], fun((pid()) -> A)) -> A).
+-spec(invoke_no_result/2 :: (pid() | [pid()], fun ((pid()) -> any())) -> 'ok').
+-spec(invoke/2 :: (pid() | [pid()], fun ((pid()) -> A)) -> A).
 
 -spec(process_count/0 :: () -> non_neg_integer()).
 
@@ -73,7 +73,7 @@ invoke(Pid, Fun) when is_pid(Pid) ->
 
 invoke(Pids, Fun) when is_list(Pids) ->
     lists:foldl(
-        fun({Status, Result, Pid}, {Good, Bad}) ->
+        fun ({Status, Result, Pid}, {Good, Bad}) ->
             case Status of
                 ok    -> {[{Pid, Result}|Good], Bad};
                 error -> {Good, [{Pid, Result}|Bad]}
@@ -136,10 +136,10 @@ delegate_per_remote_node(NodePids, Fun, DelegateFun) ->
     %% block forever.
     [gen_server2:cast(
        local_server(Node),
-       {thunk, fun() ->
+       {thunk, fun () ->
                        Self ! {result,
                                DelegateFun(
-                                 Node, fun() -> safe_invoke(Pids, Fun) end)}
+                                 Node, fun () -> safe_invoke(Pids, Fun) end)}
                end}) || {Node, Pids} <- NodePids],
     [receive {result, Result} -> Result end || _ <- NodePids].
 

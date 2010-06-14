@@ -716,6 +716,19 @@ handle_call(purge, _From, State = #q{backing_queue = BQ,
     {Count, BQS1} = BQ:purge(BQS),
     reply({ok, Count}, State#q{backing_queue_state = BQS1});
 
+handle_call({requeue, AckTags, ChPid}, From, State) ->
+    gen_server2:reply(From, ok),
+    case lookup_ch(ChPid) of
+        not_found ->
+            rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
+                               [ChPid]),
+            noreply(State);
+        C = #cr{acktags = ChAckTags} ->
+            ChAckTags1 = subtract_acks(ChAckTags, AckTags),
+            store_ch_record(C#cr{acktags = ChAckTags1}),
+            noreply(requeue_and_run(AckTags, State))
+    end;
+
 handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
     reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
@@ -742,18 +755,6 @@ handle_cast({ack, Txn, AckTags, ChPid},
 
 handle_cast({rollback, Txn, ChPid}, State) ->
     noreply(rollback_transaction(Txn, ChPid, State));
-
-handle_cast({requeue, AckTags, ChPid}, State) ->
-    case lookup_ch(ChPid) of
-        not_found ->
-            rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
-                               [ChPid]),
-            noreply(State);
-        C = #cr{acktags = ChAckTags} ->
-            ChAckTags1 = subtract_acks(ChAckTags, AckTags),
-            store_ch_record(C#cr{acktags = ChAckTags1}),
-            noreply(requeue_and_run(AckTags, State))
-    end;
 
 handle_cast({unblock, ChPid}, State) ->
     noreply(
