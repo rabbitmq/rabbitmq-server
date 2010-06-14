@@ -925,23 +925,21 @@ tx_commit_index(State = #vqstate { on_sync = {_, _, []} }) ->
 tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFuns},
                                    durable = IsDurable }) ->
     Acks = lists:flatten(SAcks),
-    State1 = ack(Acks, State),
     Pubs = lists:flatten(lists:reverse(SPubs)),
-    {SeqIds, State2 = #vqstate { index_state = IndexState }} =
+    {SeqIds, State1 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun (Msg = #basic_message { is_persistent = IsPersistent },
-               {SeqIdsAcc, StateN}) ->
-                  {SeqId, StateN1} =
-                      publish(Msg, false, IsDurable andalso IsPersistent,
-                              StateN),
-                  {case IsDurable andalso IsPersistent of
+               {SeqIdsAcc, State2}) ->
+                  IsPersistent1 = IsDurable andalso IsPersistent,
+                  {SeqId, State3} = publish(Msg, false, IsPersistent1, State2),
+                  {case IsPersistent1 of
                        true  -> [SeqId | SeqIdsAcc];
                        false -> SeqIdsAcc
-                   end, StateN1}
-          end, {Acks, State1}, Pubs),
+                   end, State3}
+          end, {Acks, ack(Acks, State)}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
     [ Fun() || Fun <- lists:reverse(SFuns) ],
-    State2 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }.
+    State1 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }.
 
 delete1(_TransientThreshold, NextSeqId, DeltaSeqId, IndexState)
   when DeltaSeqId =:= undefined orelse DeltaSeqId >= NextSeqId ->
