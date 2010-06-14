@@ -851,7 +851,7 @@ ack(Fun, AckTags, State) ->
     {{SeqIds, GuidsByStore}, State1 = #vqstate { index_state      = IndexState,
                                                  persistent_count = PCount }} =
         lists:foldl(
-          fun (SeqId, {Acc, State2 = #vqstate {pending_ack = PA }}) ->
+          fun (SeqId, {Acc, State2 = #vqstate { pending_ack = PA }}) ->
                   {ok, AckEntry} = dict:find(SeqId, PA),
                   {case AckEntry of
                        #msg_status { index_on_disk = false, %% ASSERTIONS
