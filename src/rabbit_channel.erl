@@ -525,9 +525,9 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                     Other -> Other
                 end,
 
-            %% In order to ensure that the consume_ok gets sent before
-            %% any messages are sent to the consumer, we get the queue
-            %% process to send the consume_ok on our behalf.
+            %% We get the queue process to send the consume_ok on our
+            %% behalf. This is for symmetry with basic.cancel - see
+            %% the comment in that method for why.
             case with_exclusive_access_or_die(
                    QueueName, ReaderPid,
                    fun (Q) ->
