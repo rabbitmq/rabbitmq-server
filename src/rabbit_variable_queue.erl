@@ -1075,42 +1075,32 @@ reduce_memory_use(State = #vqstate {
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
 
-test_keep_msg_in_ram(SeqId, #vqstate { target_ram_msg_count = TargetRamMsgCount,
-                                       ram_msg_count        = RamMsgCount,
-                                       q1                   = Q1,
-                                       q3                   = Q3 }) ->
-    case TargetRamMsgCount of
-        undefined ->
-            msg;
-        0 ->
-            case bpqueue:out(Q3) of
-                {empty, _Q3} ->
-                    %% if TargetRamMsgCount == 0, we know we have no
-                    %% alphas. If q3 is empty then delta must be empty
-                    %% too, so create a beta, which should end up in
-                    %% q3
-                    index;
-                {{value, _IndexOnDisk, #msg_status { seq_id = OldSeqId }},
-                 _Q3a} ->
-                    %% Don't look at the current delta as it may be
-                    %% empty. If the SeqId is still within the current
-                    %% segment, it'll be a beta, else it'll go into
-                    %% delta
-                    case SeqId >= rabbit_queue_index:next_segment_boundary(
-                                    OldSeqId) of
-                        true  -> neither;
-                        false -> index
-                    end
-            end;
-        _ when TargetRamMsgCount > RamMsgCount ->
-            msg;
-        _ ->
-            case queue:is_empty(Q1) of
-                true  -> index;
-                %% Can push out elders (in q1) to disk. This may also
-                %% result in the msg itself going to disk and q2/q3.
-                false -> msg
+msg_storage_type(_SeqId, #vqstate { target_ram_msg_count = TargetRamMsgCount,
+                                    ram_msg_count        = RamMsgCount })
+  when TargetRamMsgCount == undefined orelse TargetRamMsgCount > RamMsgCount ->
+    msg;
+msg_storage_type( SeqId, #vqstate { target_ram_msg_count = 0, q3 = Q3 }) ->
+    case bpqueue:out(Q3) of
+        {empty, _Q3} ->
+            %% if TargetRamMsgCount == 0, we know we have no
+            %% alphas. If q3 is empty then delta must be empty too, so
+            %% create a beta, which should end up in q3
+            index;
+        {{value, _IndexOnDisk, #msg_status { seq_id = OldSeqId }}, _Q3a} ->
+            %% Don't look at the current delta as it may be empty. If
+            %% the SeqId is still within the current segment, it'll be
+            %% a beta, else it'll go into delta
+            case SeqId >= rabbit_queue_index:next_segment_boundary(OldSeqId) of
+                true  -> neither;
+                false -> index
             end
+    end;
+msg_storage_type(_SeqId, #vqstate { q1 = Q1 }) ->
+    case queue:is_empty(Q1) of
+        true  -> index;
+        %% Can push out elders (in q1) to disk. This may also result
+        %% in the msg itself going to disk and q2/q3.
+        false -> msg
     end.
 
 publish(Msg = #basic_message { is_persistent = IsPersistent },
@@ -1124,7 +1114,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent },
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg))
         #msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk },
     PCount1 = PCount + one_if(IsPersistent1),
-    {SeqId, publish(test_keep_msg_in_ram(SeqId, State), MsgStatus,
+    {SeqId, publish(msg_storage_type(SeqId, State), MsgStatus,
                     State #vqstate { next_seq_id      = SeqId   + 1,
                                      len              = Len     + 1,
                                      in_counter       = InCount + 1,
