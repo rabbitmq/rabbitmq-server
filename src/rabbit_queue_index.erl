@@ -716,7 +716,7 @@ segment_store(Segment = #segment { num = Seg },
      [Segment, SegmentA]}.
 
 segment_fold(Fun, Acc, {Segments, CachedSegments}) ->
-    dict:fold(fun (_Seg, Segment, Acc1) -> Fun(Segment, Acc) end,
+    dict:fold(fun (_Seg, Segment, Acc1) -> Fun(Segment, Acc1) end,
               lists:foldl(Fun, Acc, CachedSegments), Segments).
 
 segment_map(Fun, {Segments, CachedSegments}) ->
