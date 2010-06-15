@@ -569,14 +569,13 @@ requeue(AckTags, State) ->
     ack(fun (#msg_status { msg = Msg }, State1) ->
                 {_SeqId, State2} = publish(Msg, true, false, State1),
                 State2;
-            ({IsPersistent, Guid}, State1 = #vqstate {
-                                     msg_store_clients = MSCState }) ->
+            ({IsPersistent, Guid}, State1) ->
+                #vqstate { msg_store_clients = MSCState } = State1,
                 {{ok, Msg = #basic_message{}}, MSCState1} =
                     read_from_msg_store(MSCState, IsPersistent, Guid),
-                {_SeqId, State2} = publish(Msg, true, true,
-                                           State1 #vqstate {
-                                             msg_store_clients = MSCState1 }),
-                State2
+                State2 = State1 #vqstate { msg_store_clients = MSCState1 },
+                {_SeqId, State3} = publish(Msg, true, true, State2),
+                State3
         end, AckTags, State).
 
 len(#vqstate { len = Len }) ->
