@@ -40,7 +40,8 @@
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
 -export([assert_equivalence/4]).
--export([check_type/1, assert_type/2]).
+-export([assert_args_equivalence/2]).
+-export([check_type/1]).
 
 %% EXTENDED API
 -export([list_exchange_bindings/1]).
@@ -65,6 +66,7 @@
 -spec(declare/4 :: (exchange_name(), exchange_type(), boolean(), amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
 -spec(assert_equivalence/4 :: (exchange(), atom(), boolean(), amqp_table()) -> 'ok').
+-spec(assert_args_equivalence/2 :: (exchange(), amqp_table()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
 -spec(list/1 :: (vhost()) -> [exchange()]).
@@ -76,7 +78,7 @@
 -spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
 -spec(add_binding/5 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table(), inner_fun()) ->
-             bind_res() | {'error', 'durability_settings_incompatible'}).
+             bind_res()).
 -spec(delete_binding/5 ::
       (exchange_name(), queue_name(), routing_key(), amqp_table(), inner_fun()) ->
              bind_res() | {'error', 'binding_not_found'}).
@@ -184,28 +186,22 @@ check_type(TypeBin) ->
             T
     end.
 
-assert_equivalence(X = #exchange{ durable = ActualDurable },
-                   RequiredType, RequiredDurable, RequiredArgs)
-  when ActualDurable == RequiredDurable ->
-    ok = assert_type(X, RequiredType),
-    ok = assert_args_equivalence(X, RequiredArgs);
-assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _Args) ->
+assert_equivalence(X = #exchange{ durable = Durable,
+                                  type = Type},
+                   Type, Durable,
+                   RequiredArgs) ->
+    ok = (type_to_module(Type)):assert_args_equivalence(X, RequiredArgs);
+assert_equivalence(#exchange{ name = Name }, _Type, _Durable,
+                   _Args) ->
     rabbit_misc:protocol_error(
-      not_allowed, "cannot redeclare ~s with different durable value",
+      precondition_failed,
+      "cannot redeclare ~s with different type, durable or autodelete value",
       [rabbit_misc:rs(Name)]).
-
-assert_type(#exchange{ type = ActualType }, RequiredType)
-  when ActualType == RequiredType ->
-    ok;
-assert_type(#exchange{ name = Name, type = ActualType }, RequiredType) ->
-    rabbit_misc:protocol_error(
-      not_allowed, "cannot redeclare ~s of type '~s' with type '~s'",
-      [rabbit_misc:rs(Name), ActualType, RequiredType]).
 
 alternate_exchange_value(Args) ->
     lists:keysearch(<<"alternate-exchange">>, 1, Args).
 
-assert_args_equivalence(#exchange{ name = Name, 
+assert_args_equivalence(#exchange{ name = Name,
                                    arguments = Args },
                         RequiredArgs) ->
     %% The spec says "Arguments are compared for semantic
@@ -213,9 +209,9 @@ assert_args_equivalence(#exchange{ name = Name,
     %% "alternate-exchange".
     Ae1 = alternate_exchange_value(RequiredArgs),
     Ae2 = alternate_exchange_value(Args),
-    if Ae1==Ae2 -> ok; 
-          true  -> rabbit_misc:protocol_error(
-                     not_allowed,
+    if Ae1==Ae2 -> ok;
+       true     -> rabbit_misc:protocol_error(
+                     precondition_failed,
                      "cannot redeclare ~s with inequivalent args",
                      [rabbit_misc:rs(Name)])
     end.
@@ -400,19 +396,17 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
            fun (X, Q, B) ->
                    %% this argument is used to check queue exclusivity;
                    %% in general, we want to fail on that in preference to
-                   %% failing on e.g., the durability being different.
+                   %% anything else
                    InnerFun(X, Q),
-                   if Q#amqqueue.durable and not(X#exchange.durable) ->
-                           {error, durability_settings_incompatible};
-                      true ->
-                           case mnesia:read({rabbit_route, B}) of
-                               [] ->
-                                   sync_binding(B, Q#amqqueue.durable,
-                                                fun mnesia:write/3),
-                                   {new, X, B};
-                               [_R] ->
-                                   {existing, X, B}
-                           end
+                   case mnesia:read({rabbit_route, B}) of
+                       [] ->
+                           sync_binding(B,
+                                        X#exchange.durable andalso
+                                        Q#amqqueue.durable,
+                                        fun mnesia:write/3),
+                           {new, X, B};
+                       [_R] ->
+                           {existing, X, B}
                    end
            end) of
         {new, Exchange = #exchange{ type = Type }, Binding} ->

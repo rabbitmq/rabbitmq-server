@@ -48,8 +48,12 @@ if "!RABBITMQ_BASE!"=="" (
     set RABBITMQ_BASE=!APPDATA!\!RABBITMQ_SERVICENAME!
 )
 
+if "!COMPUTERNAME!"=="" (
+    set COMPUTERNAME=localhost
+)
+
 if "!RABBITMQ_NODENAME!"=="" (
-    set RABBITMQ_NODENAME=rabbit
+    set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
 )
 
 if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (

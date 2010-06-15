@@ -75,8 +75,8 @@
 
 -spec(start_link/6 ::
       (channel_number(), pid(), pid(), username(), vhost(), pid()) -> pid()).
--spec(do/2 :: (pid(), amqp_method()) -> 'ok').
--spec(do/3 :: (pid(), amqp_method(), maybe(content())) -> 'ok').
+-spec(do/2 :: (pid(), amqp_method_record()) -> 'ok').
+-spec(do/3 :: (pid(), amqp_method_record(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
 -spec(deliver/4 :: (pid(), ctag(), boolean(), qmsg()) -> 'ok').
@@ -344,7 +344,7 @@ with_exclusive_access_or_die(QName, ReaderPid, F) ->
 
 expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
-      not_allowed, "no previously declared queue", []);
+      not_found, "no previously declared queue", []);
 expand_queue_name_shortcut(<<>>, #ch{ virtual_host = VHostPath,
                                       most_recently_declared_queue = MRDQ }) ->
     rabbit_misc:r(VHostPath, queue, MRDQ);
@@ -354,7 +354,7 @@ expand_queue_name_shortcut(QueueNameBin, #ch{ virtual_host = VHostPath }) ->
 expand_routing_key_shortcut(<<>>, <<>>,
                             #ch{ most_recently_declared_queue = <<>> }) ->
     rabbit_misc:protocol_error(
-      not_allowed, "no previously declared queue", []);
+      not_found, "no previously declared queue", []);
 expand_routing_key_shortcut(<<>>, <<>>,
                             #ch{ most_recently_declared_queue = MRDQ }) ->
     MRDQ;
@@ -460,13 +460,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
               _, State = #ch{transaction_id = TxnKey,
-                             next_tag = NextDeliveryTag,
                              unacked_message_q = UAMQ}) ->
-    if DeliveryTag >= NextDeliveryTag ->
-            rabbit_misc:protocol_error(
-              command_invalid, "unknown delivery tag ~w", [DeliveryTag]);
-       true -> ok
-    end,
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     Participants = ack(TxnKey, Acked),
     {noreply, case TxnKey of
@@ -528,9 +522,9 @@ handle_method(#'basic.consume'{queue = QueueNameBin,
                     Other -> Other
                 end,
 
-            %% In order to ensure that the consume_ok gets sent before
-            %% any messages are sent to the consumer, we get the queue
-            %% process to send the consume_ok on our behalf.
+            %% We get the queue process to send the consume_ok on our
+            %% behalf. This is for symmetry with basic.cancel - see
+            %% the comment in that method for why.
             case with_exclusive_access_or_die(
                    QueueName, ReaderPid,
                    fun (Q) ->
@@ -843,14 +837,14 @@ handle_method(#'tx.select'{}, _, State) ->
 
 handle_method(#'tx.commit'{}, _, #ch{transaction_id = none}) ->
     rabbit_misc:protocol_error(
-      not_allowed, "channel is not transactional", []);
+      precondition_failed, "channel is not transactional", []);
 
 handle_method(#'tx.commit'{}, _, State) ->
     {reply, #'tx.commit_ok'{}, internal_commit(State)};
 
 handle_method(#'tx.rollback'{}, _, #ch{transaction_id = none}) ->
     rabbit_misc:protocol_error(
-      not_allowed, "channel is not transactional", []);
+      precondition_failed, "channel is not transactional", []);
 
 handle_method(#'tx.rollback'{}, _, State) ->
     {reply, #'tx.rollback_ok'{}, internal_rollback(State)};
@@ -951,10 +945,6 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
               not_found, "no binding ~s between ~s and ~s",
               [RoutingKey, rabbit_misc:rs(ExchangeName),
                rabbit_misc:rs(QueueName)]);
-        {error, durability_settings_incompatible} ->
-            rabbit_misc:protocol_error(
-              not_allowed, "durability settings of ~s incompatible with ~s",
-              [rabbit_misc:rs(QueueName), rabbit_misc:rs(ExchangeName)]);
         ok -> return_ok(State, NoWait, ReturnMethod)
     end.
 
@@ -989,7 +979,8 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
                                  QTail, DeliveryTag, Multiple)
             end;
         {empty, _} ->
-            {ToAcc, PrefixAcc}
+            rabbit_misc:protocol_error(
+              not_found, "unknown delivery tag ~w", [DeliveryTag])
     end.
 
 add_tx_participants(MoreP, State = #ch{tx_participants = Participants}) ->
