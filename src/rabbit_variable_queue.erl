@@ -466,7 +466,7 @@ fetch(AckRequired, State = #vqstate { q4               = Q4,
                                       pending_ack      = PA }) ->
     case queue:out(Q4) of
         {empty, _Q4} ->
-            case fetch_from_q3_or_delta(State) of
+            case fetch_from_q3_to_q4(State) of
                 {empty, _State1} = Result -> Result;
                 {loaded, State1}          -> fetch(AckRequired, State1)
             end;
@@ -1002,15 +1002,15 @@ remove_queue_entries1(
                     SeqId, IndexState),
     {Count + 1, GuidsByStore1, SeqIdsAcc1, IndexState1}.
 
-fetch_from_q3_or_delta(State = #vqstate {
-                         q1                = Q1,
-                         q2                = Q2,
-                         delta             = #delta { count = DeltaCount },
-                         q3                = Q3,
-                         q4                = Q4,
-                         ram_msg_count     = RamMsgCount,
-                         ram_index_count   = RamIndexCount,
-                         msg_store_clients = MSCState }) ->
+fetch_from_q3_to_q4(State = #vqstate {
+                      q1                = Q1,
+                      q2                = Q2,
+                      delta             = #delta { count = DeltaCount },
+                      q3                = Q3,
+                      q4                = Q4,
+                      ram_msg_count     = RamMsgCount,
+                      ram_index_count   = RamIndexCount,
+                      msg_store_clients = MSCState }) ->
     case bpqueue:out(Q3) of
         {empty, _Q3} ->
             0 = DeltaCount, %% ASSERTION
