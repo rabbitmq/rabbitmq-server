@@ -578,11 +578,9 @@ requeue(AckTags, State) ->
                 State3
         end, AckTags, State).
 
-len(#vqstate { len = Len }) ->
-    Len.
+len(#vqstate { len = Len }) -> Len.
 
-is_empty(State) ->
-    0 == len(State).
+is_empty(State) -> 0 == len(State).
 
 set_ram_duration_target(DurationTarget,
                         State = #vqstate {
@@ -727,27 +725,23 @@ remove_pending_ack(KeepPersistent,
                                   index_state = IndexState1 }
     end.
 
-lookup_tx(Txn) ->
-    case get({txn, Txn}) of
-        undefined -> #tx { pending_messages = [],
-                           pending_acks     = [] };
-        V         -> V
-    end.
+lookup_tx(Txn) -> case get({txn, Txn}) of
+                      undefined -> #tx { pending_messages = [],
+                                         pending_acks     = [] };
+                      V         -> V
+                  end.
 
-store_tx(Txn, Tx) ->
-    put({txn, Txn}, Tx).
+store_tx(Txn, Tx) -> put({txn, Txn}, Tx).
 
-erase_tx(Txn) ->
-    erase({txn, Txn}).
+erase_tx(Txn) -> erase({txn, Txn}).
 
 update_rate(Now, Then, Count, {OThen, OCount}) ->
     %% form the avg over the current period and the previous
     Avg = 1000000 * ((Count + OCount) / timer:now_diff(Now, OThen)),
     {Avg, {Then, Count}}.
 
-persistent_guids(Pubs) ->
-    [Guid || Obj = #basic_message { guid = Guid } <- Pubs,
-             Obj #basic_message.is_persistent].
+persistent_guids(Pubs) -> [Guid || Obj = #basic_message { guid = Guid } <- Pubs,
+                                   Obj #basic_message.is_persistent].
 
 betas_from_segment_entries(List, TransientThreshold, IndexState) ->
     {Filtered, IndexState1} =
@@ -1232,10 +1226,8 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
 %%----------------------------------------------------------------------------
 
 limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount }) ->
-    case permitted_ram_index_count(State) of
-        undefined ->
-            State;
-        Permitted when RamIndexCount > Permitted ->
+    Permitted = permitted_ram_index_count(State),
+    if Permitted =/= undefined andalso RamIndexCount > Permitted ->
             Reduction = lists:min([RamIndexCount - Permitted,
                                    ?RAM_INDEX_BATCH_SIZE]),
             case Reduction < ?RAM_INDEX_BATCH_SIZE of
@@ -1246,7 +1238,7 @@ limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount }) ->
                              limit_q3_ram_index(Reduction1, State1),
                          State2
             end;
-        _ ->
+       true ->
             State
     end.
 
