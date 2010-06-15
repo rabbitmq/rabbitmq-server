@@ -1313,7 +1313,8 @@ test_backing_queue() ->
         {ok, rabbit_variable_queue} ->
             passed = test_msg_store(),
             passed = test_queue_index(),
-            passed = test_variable_queue();
+            passed = test_variable_queue(),
+            passed = test_queue_recover();
         _ ->
             passed
     end.
@@ -1518,10 +1519,10 @@ test_msg_store() ->
     passed.
 
 queue_name(Name) ->
-    rabbit_misc:r(<<"/">>, queue, term_to_binary(Name)).
+    rabbit_misc:r(<<"/">>, queue, Name).
 
 test_queue() ->
-    queue_name(test).
+    queue_name(<<"test">>).
 
 empty_test_queue() ->
     ok = rabbit_variable_queue:start([]),
@@ -1767,7 +1768,7 @@ test_variable_queue_dynamic_duration_change() ->
     VQ10 = rabbit_variable_queue:handle_pre_hibernate(VQ9),
     {empty, VQ11} = rabbit_variable_queue:fetch(true, VQ10),
 
-    rabbit_variable_queue:terminate(VQ11),
+    rabbit_variable_queue:delete_and_terminate(VQ11),
 
     passed.
 
@@ -1833,6 +1834,34 @@ test_variable_queue_partial_segments_delta_thing() ->
     VQ8 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ7),
     %% should be empty now
     {empty, VQ9} = rabbit_variable_queue:fetch(true, VQ8),
-    rabbit_variable_queue:terminate(VQ9),
+    rabbit_variable_queue:delete_and_terminate(VQ9),
 
+    passed.
+
+test_queue_recover() ->
+    Count = 2*rabbit_queue_index:next_segment_boundary(0),
+    #amqqueue { pid = QPid, name = QName } = Q =
+        rabbit_amqqueue:declare(test_queue(), true, false, [], none),
+    Msg = fun() -> rabbit_basic:message(
+                     rabbit_misc:r(<<>>, exchange, <<>>),
+                     <<>>, #'P_basic'{delivery_mode = 2}, <<>>) end,
+    Delivery = #delivery{mandatory = false,
+                         immediate = false,
+                         txn = none,
+                         sender = self(),
+                         message = Msg()},
+    [true = rabbit_amqqueue:deliver(QPid, Delivery) || _ <- lists:seq(1, Count)],
+    rabbit_amqqueue:stat(Q),
+    exit(QPid, shutdown),
+    MRef = erlang:monitor(process, QPid),
+    receive {'DOWN', MRef, process, QPid, _Info} -> ok
+    after 10000 -> exit(timeout_waiting_for_queue_death)
+    end,
+    ok = stop_msg_store(),
+    ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
+    ok = supervisor:delete_child(rabbit_sup, rabbit_amqqueue_sup),
+    ok = rabbit_amqqueue:start(),
+    {ok, Count} = rabbit_amqqueue:with_or_die(
+                    QName,
+                    fun (Q1) -> rabbit_amqqueue:delete(Q1, false, false) end),
     passed.
