@@ -1020,8 +1020,7 @@ fetch_from_q3_to_q4(State = #vqstate {
         {{value, IndexOnDisk, MsgStatus = #msg_status {
                                 msg = undefined, guid = Guid,
                                 is_persistent = IsPersistent }}, Q3a} ->
-            {{ok, Msg = #basic_message { is_persistent = IsPersistent,
-                                         guid = Guid }}, MSCState1} =
+            {{ok, Msg = #basic_message {}}, MSCState1} =
                 read_from_msg_store(MSCState, IsPersistent, Guid),
             Q4a = queue:in(MsgStatus #msg_status { msg = Msg }, Q4),
             RamIndexCount1 = RamIndexCount - one_if(not IndexOnDisk),
