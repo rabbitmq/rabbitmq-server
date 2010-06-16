@@ -371,7 +371,7 @@ close_connection(State = #v1{connection = #connection{
     State#v1{connection_state = closed}.
 
 close_channel(Channel, State) ->
-    put({channel, Channel}, {closing, get({channel, Channel})}),
+    put({channel, Channel}, closing),
     State.
 
 handle_channel_exit(Channel, Reason, State) ->
@@ -483,7 +483,7 @@ handle_frame(Type, Channel, Payload, State) ->
                     end,
                     ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame),
                     State;
-                {closing, {chpid, ChPid}} ->
+                closing ->
                     %% According to the spec, after sending a
                     %% channel.close we must ignore all frames except
                     %% channel.close and channel.close_ok.  In the
@@ -493,8 +493,11 @@ handle_frame(Type, Channel, Payload, State) ->
                         {method, 'channel.close_ok', _} ->
                             erase({channel, Channel});
                         {method, 'channel.close', _} ->
-                            erase({channel, Channel}),
-                            ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame);
+                            %% We're already closing this channel, so
+                            %% there's no cleanup to do (notify
+                            %% queues, etc.)
+                            ok = rabbit_writer:send_command(State#v1.sock,
+                                                            #'channel.close_ok'{});
                         _ -> ok
                     end,
                     State;
