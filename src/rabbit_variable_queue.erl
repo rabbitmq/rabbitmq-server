@@ -780,8 +780,8 @@ update_rate(Now, Then, Count, {OThen, OCount}) ->
     Avg = 1000000 * ((Count + OCount) / timer:now_diff(Now, OThen)),
     {Avg, {Then, Count}}.
 
-persistent_guids(Pubs) -> [Guid || Obj = #basic_message { guid = Guid } <- Pubs,
-                                   Obj #basic_message.is_persistent].
+persistent_guids(Pubs) ->
+    [Guid || #basic_message { guid = Guid, is_persistent = true } <- Pubs].
 
 betas_from_segment_entries(List, TransientThreshold, IndexState) ->
     {Filtered, IndexState1} =
