@@ -47,7 +47,8 @@
 
 -ifdef(use_specs).
 
--spec(status/0 :: () -> [{'nodes' | 'running_nodes', [erlang_node()]}]).
+-spec(status/0 :: () -> [{'nodes', [{node_type(), [erlang_node()]}]} |
+                         {'running_nodes', [erlang_node()]}]).
 -spec(dir/0 :: () -> file_path()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
@@ -64,7 +65,20 @@
 %%----------------------------------------------------------------------------
 
 status() ->
-    [{nodes, mnesia:system_info(db_nodes)},
+    [{nodes, case mnesia:system_info(is_running) of
+                 yes -> [{Key, Nodes} ||
+                            {Key, CopyType} <- [{disc_only, disc_only_copies},
+                                                {disc,      disc_copies},
+                                                {ram,       ram_copies}],
+                            begin
+                                Nodes = mnesia:table_info(schema, CopyType),
+                                Nodes =/= []
+                            end];
+                 no -> case mnesia:system_info(db_nodes) of
+                           [] -> [];
+                           Nodes -> [{unknown, Nodes}]
+                       end
+             end},
      {running_nodes, mnesia:system_info(running_db_nodes)}].
 
 init() ->
