@@ -423,9 +423,14 @@ delete_and_terminate(State) ->
 purge(State = #vqstate { q4 = Q4, index_state = IndexState, len = Len }) ->
     IndexState1 = remove_queue_entries(fun rabbit_misc:queue_fold/3, Q4,
                                        IndexState),
-    State1 = purge1(State #vqstate { q4          = queue:new(),
-                                     index_state = IndexState1 }),
-    {Len, a(State1 #vqstate { len              = 0,
+    State1 = #vqstate { q1 = Q1, index_state = IndexState2 } =
+        purge_betas_and_deltas(State #vqstate { q4          = queue:new(),
+                                                index_state = IndexState1 }),
+    IndexState3 = remove_queue_entries(fun rabbit_misc:queue_fold/3, Q1,
+                                       IndexState2),
+    {Len, a(State1 #vqstate { q1               = queue:new(),
+                              index_state      = IndexState3,
+                              len              = 0,
                               ram_msg_count    = 0,
                               ram_index_count  = 0,
                               persistent_count = 0 })}.
@@ -980,19 +985,17 @@ delete1(TransientThreshold, NextSeqId, DeltaSeqId, IndexState) ->
         end,
     delete1(TransientThreshold, NextSeqId, Again, IndexState2).
 
-purge1(State = #vqstate { q1 = Q1, q3 = Q3, index_state = IndexState }) ->
+purge_betas_and_deltas(State = #vqstate { q3          = Q3,
+                                          index_state = IndexState }) ->
     case bpqueue:is_empty(Q3) of
-        true  -> IndexState1 =
-                     remove_queue_entries(fun rabbit_misc:queue_fold/3, Q1,
-                                          IndexState),
-                 State #vqstate { q1          = queue:new(),
-                                  index_state = IndexState1 };
-        false -> IndexState1 =
-                     remove_queue_entries(fun beta_fold_no_index_on_disk/3, Q3,
-                                          IndexState),
-                 purge1(maybe_deltas_to_betas(
-                          State #vqstate { q3          = bpqueue:new(),
-                                           index_state = IndexState1 }))
+        true  -> State;
+        false -> IndexState1 = remove_queue_entries(
+                                 fun beta_fold_no_index_on_disk/3, Q3,
+                                 IndexState),
+                 purge_betas_and_deltas(
+                   maybe_deltas_to_betas(
+                     State #vqstate { q3          = bpqueue:new(),
+                                      index_state = IndexState1 }))
     end.
 
 remove_queue_entries(Fold, Q, IndexState) ->
