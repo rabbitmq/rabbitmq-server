@@ -1299,10 +1299,10 @@ maybe_deltas_to_betas(State = #vqstate {
                         index_state          = IndexState,
                         target_ram_msg_count = TargetRamMsgCount,
                         transient_threshold  = TransientThreshold }) ->
-    case (not bpqueue:is_empty(Q3)) andalso (0 == TargetRamMsgCount) of
-        true ->
-            State;
+    case bpqueue:is_empty(Q3) orelse (TargetRamMsgCount /= 0) of
         false ->
+            State;
+        true ->
             #delta { start_seq_id = DeltaSeqId,
                      count        = DeltaCount,
                      end_seq_id   = DeltaSeqIdEnd } = Delta,
