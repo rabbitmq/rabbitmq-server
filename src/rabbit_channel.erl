@@ -663,7 +663,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
                                   durable = Durable,
-                                  deprecated_auto_delete = false, %% 0-9-1: true not supported
+                                  deprecated_auto_delete = AutoDelete, % 0-9-1: deprecated but we still support it
                                   deprecated_internal = false, %% 0-9-1: true not supported
                                   nowait = NoWait,
                                   arguments = Args},
@@ -685,9 +685,11 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                 rabbit_exchange:declare(ExchangeName,
                                         CheckedType,
                                         Durable,
+                                        AutoDelete,
                                         Args)
         end,
-    ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable, Args),
+    ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable,
+                                            AutoDelete, Args),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
@@ -731,9 +733,9 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             end,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
-    Finish = fun (#amqqueue{name = QueueName, 
-                            durable = Durable1, 
-                            auto_delete = AutoDelete1} = Q) 
+    Finish = fun (#amqqueue{name = QueueName,
+                            durable = Durable1,
+                            auto_delete = AutoDelete1} = Q)
                    when Durable =:= Durable1, AutoDelete =:= AutoDelete1 ->
                      check_exclusive_access(Q, Owner, strict),
                      check_configure_permitted(QueueName, State),
@@ -752,7 +754,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                        channel_error,
                        "parameters for ~s not equivalent",
                        [rabbit_misc:rs(QueueName)])
-                 end,
+             end,
     Q = case rabbit_amqqueue:with(
                rabbit_misc:r(VHostPath, queue, QueueNameBin),
                Finish) of
