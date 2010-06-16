@@ -1303,25 +1303,21 @@ maybe_deltas_to_betas(State = #vqstate {
         true ->
             State;
         false ->
-            %% either q3 is empty, in which case we load at least one
-            %% segment, or TargetRamMsgCount > 0, meaning we should
-            %% really be holding all the betas in memory.
             #delta { start_seq_id = DeltaSeqId,
                      count        = DeltaCount,
                      end_seq_id   = DeltaSeqIdEnd } = Delta,
-            {List, IndexState1, Delta1SeqId} =
+            {List, IndexState1, DeltaSeqId1} =
                 read_one_index_segment(DeltaSeqId, DeltaSeqIdEnd, IndexState),
-            %% length(List) may be < segment_size because of acks.  It
-            %% could be [] if we ignored every message in the segment
-            %% due to it being transient and below the threshold
             {Q3a, IndexState2} = betas_from_segment_entries(
                                    List, TransientThreshold, IndexState1),
             State1 = State #vqstate { index_state = IndexState2 },
             case bpqueue:len(Q3a) of
                 0 ->
+                    %% we ignored every message in the segment due to
+                    %% it being transient and below the threshold
                     maybe_deltas_to_betas(
                       State #vqstate {
-                        delta = Delta #delta { start_seq_id = Delta1SeqId }});
+                        delta = Delta #delta { start_seq_id = DeltaSeqId1 }});
                 Q3aLen ->
                     Q3b = bpqueue:join(Q3, Q3a),
                     case DeltaCount - Q3aLen of
@@ -1332,7 +1328,7 @@ maybe_deltas_to_betas(State = #vqstate {
                                               delta = ?BLANK_DELTA,
                                               q3    = bpqueue:join(Q3b, Q2) };
                         N when N > 0 ->
-                            Delta1 = #delta { start_seq_id = Delta1SeqId,
+                            Delta1 = #delta { start_seq_id = DeltaSeqId1,
                                               count        = N,
                                               end_seq_id   = DeltaSeqIdEnd },
                             State1 #vqstate { delta = Delta1,
