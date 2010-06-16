@@ -848,7 +848,7 @@ combine_deltas(#delta { start_seq_id = StartLow,
         andalso ((StartLow + Count) =< EndHigh),
     #delta { start_seq_id = StartLow, count = Count, end_seq_id = EndHigh }.
 
-beta_fold_no_index_on_disk(Fun, Init, Q) ->
+beta_fold(Fun, Init, Q) ->
     bpqueue:foldr(fun (_Prefix, Value, Acc) -> Fun(Value, Acc) end, Init, Q).
 
 permitted_ram_index_count(#vqstate { len = 0 }) ->
@@ -980,8 +980,7 @@ delete1(TransientThreshold, NextSeqId, DeltaSeqId, IndexState) ->
             [] -> IndexState1;
             _  -> {Q, IndexState3} = betas_from_segment_entries(
                                        List, TransientThreshold, IndexState1),
-                  remove_queue_entries(fun beta_fold_no_index_on_disk/3, Q,
-                                       IndexState3)
+                  remove_queue_entries(fun beta_fold/3, Q, IndexState3)
         end,
     delete1(TransientThreshold, NextSeqId, Again, IndexState2).
 
@@ -989,9 +988,8 @@ purge_betas_and_deltas(State = #vqstate { q3          = Q3,
                                           index_state = IndexState }) ->
     case bpqueue:is_empty(Q3) of
         true  -> State;
-        false -> IndexState1 = remove_queue_entries(
-                                 fun beta_fold_no_index_on_disk/3, Q3,
-                                 IndexState),
+        false -> IndexState1 = remove_queue_entries(fun beta_fold/3, Q3,
+                                                    IndexState),
                  purge_betas_and_deltas(
                    maybe_deltas_to_betas(
                      State #vqstate { q3          = bpqueue:new(),
