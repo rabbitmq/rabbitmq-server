@@ -299,6 +299,11 @@ shutdown_with_reason(Reason, State) ->
 handle_method(Method, Content, #c_state{closing = Closing} = State) ->
     case {Method, Content} of
         %% Handle 'channel.close': send 'channel.close_ok' and stop channel
+        {#'channel.close'{}, none}
+          when Closing =:= just_channel ->
+            %% We're already closing, so just send back the ok.
+            do(#'channel.close_ok'{}, none, State),
+            {noreply, State};
         {#'channel.close'{reply_code = ReplyCode,
                           reply_text = ReplyText}, none} ->
             do(#'channel.close_ok'{}, none, State),
