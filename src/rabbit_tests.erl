@@ -1833,6 +1833,7 @@ test_variable_queue_partial_segments_delta_thing() ->
 
 test_queue_recover() ->
     Count = 2*rabbit_queue_index:next_segment_boundary(0),
+    TxID = rabbit_guid:guid(),
     #amqqueue { pid = QPid, name = QName } = Q =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
     Msg = fun() -> rabbit_basic:message(
@@ -1840,12 +1841,12 @@ test_queue_recover() ->
                      <<>>, #'P_basic'{delivery_mode = 2}, <<>>) end,
     Delivery = #delivery{mandatory = false,
                          immediate = false,
-                         txn = none,
+                         txn = TxID,
                          sender = self(),
                          message = Msg()},
     [true = rabbit_amqqueue:deliver(QPid, Delivery) || _ <- lists:seq(1, Count)],
-    rabbit_amqqueue:stat(Q),
-    exit(QPid, shutdown),
+    rabbit_amqqueue:commit_all([QPid], TxID, self()),
+    exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
     receive {'DOWN', MRef, process, QPid, _Info} -> ok
     after 10000 -> exit(timeout_waiting_for_queue_death)
