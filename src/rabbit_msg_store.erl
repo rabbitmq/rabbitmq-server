@@ -107,7 +107,6 @@
 
 -type(server() :: pid() | atom()).
 -type(file_num() :: non_neg_integer()).
--type(file_size() :: non_neg_integer()).
 -type(client_msstate() :: #client_msstate { file_handle_cache  :: dict(),
                                             index_state        :: any(),
                                             index_module       :: atom(),
@@ -141,7 +140,7 @@
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
 
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
-               {tid(), file_path(), atom(), any(), file_size()}) ->
+               {tid(), file_path(), atom(), any()}) ->
                    'concurrent_readers' | non_neg_integer()).
 
 -endif.
@@ -553,8 +552,7 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
         sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION, Dir)),
     TmpFileNames =
         sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION_TMP, Dir)),
-    ok = recover_crashed_compactions(Dir, FileNames, TmpFileNames,
-                                     FileSizeLimit),
+    ok = recover_crashed_compactions(Dir, FileNames, TmpFileNames),
 
     %% There should be no more tmp files now, so go ahead and load the
     %% whole lot
@@ -569,7 +567,7 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     ok = file_handle_cache:truncate(CurHdl),
 
     {ok, GCPid} = rabbit_msg_store_gc:start_link(Dir, IndexState, IndexModule,
-                                                 FileSummaryEts, FileSizeLimit),
+                                                 FileSummaryEts),
 
     {ok, maybe_compact(
            State1 #msstate { current_file_handle = CurHdl, gc_pid = GCPid }),
@@ -1213,24 +1211,22 @@ count_msg_refs(Gen, Seed, State) ->
             count_msg_refs(Gen, Next, State)
     end.
 
-recover_crashed_compactions(Dir, FileNames, TmpFileNames, FileSizeLimit) ->
+recover_crashed_compactions(Dir, FileNames, TmpFileNames) ->
     lists:foreach(
       fun (TmpFileName) ->
               NonTmpRelatedFileName =
                   filename:rootname(TmpFileName) ++ ?FILE_EXTENSION,
               true = lists:member(NonTmpRelatedFileName, FileNames),
               ok = recover_crashed_compaction(
-                     Dir, TmpFileName, NonTmpRelatedFileName, FileSizeLimit)
+                     Dir, TmpFileName, NonTmpRelatedFileName)
       end, TmpFileNames),
     ok.
 
-recover_crashed_compaction(Dir, TmpFileName, NonTmpRelatedFileName,
-                           FileSizeLimit) ->
+recover_crashed_compaction(Dir, TmpFileName, NonTmpRelatedFileName) ->
     {ok, UncorruptedMessagesTmp, GuidsTmp} =
-        scan_file_for_valid_messages_and_guids(Dir, TmpFileName, FileSizeLimit),
+        scan_file_for_valid_messages_and_guids(Dir, TmpFileName),
     {ok, UncorruptedMessages, Guids} =
-        scan_file_for_valid_messages_and_guids(Dir, NonTmpRelatedFileName,
-                                               FileSizeLimit),
+        scan_file_for_valid_messages_and_guids(Dir, NonTmpRelatedFileName),
     %% 1) It's possible that everything in the tmp file is also in the
     %%    main file such that the main file is (prefix ++
     %%    tmpfile). This means that compaction failed immediately
@@ -1307,7 +1303,7 @@ recover_crashed_compaction(Dir, TmpFileName, NonTmpRelatedFileName,
 
             {ok, _MainMessages, GuidsMain} =
                 scan_file_for_valid_messages_and_guids(
-                  Dir, NonTmpRelatedFileName, FileSizeLimit),
+                  Dir, NonTmpRelatedFileName),
             %% check that everything in Guids1 is in GuidsMain
             true = is_sublist(Guids1, GuidsMain),
             %% check that everything in GuidsTmp is in GuidsMain
@@ -1321,12 +1317,11 @@ is_sublist(SmallerL, BiggerL) ->
 is_disjoint(SmallerL, BiggerL) ->
     lists:all(fun (Item) -> not lists:member(Item, BiggerL) end, SmallerL).
 
-scan_file_for_valid_messages(Dir, FileName, FileSizeLimit) ->
+scan_file_for_valid_messages(Dir, FileName) ->
     case open_file(Dir, FileName, ?READ_MODE) of
         {ok, Hdl}       -> Valid = rabbit_msg_file:scan(
                                      Hdl, filelib:file_size(
-                                            form_filename(Dir, FileName)),
-                                     FileSizeLimit),
+                                            form_filename(Dir, FileName))),
                            %% if something really bad has happened,
                            %% the close could fail, but ignore
                            file_handle_cache:close(Hdl),
@@ -1335,9 +1330,9 @@ scan_file_for_valid_messages(Dir, FileName, FileSizeLimit) ->
         {error, Reason} -> {error, {unable_to_scan_file, FileName, Reason}}
     end.
 
-scan_file_for_valid_messages_and_guids(Dir, FileName, FileSizeLimit) ->
+scan_file_for_valid_messages_and_guids(Dir, FileName) ->
     {ok, Messages, _FileSize} =
-        scan_file_for_valid_messages(Dir, FileName, FileSizeLimit),
+        scan_file_for_valid_messages(Dir, FileName),
     {ok, Messages, [Guid || {Guid, _TotalSize, _FileOffset} <- Messages]}.
 
 %% Takes the list in *ascending* order (i.e. eldest message
@@ -1405,11 +1400,10 @@ build_index(Gatherer, Left, [File|Files], State) ->
            end),
     build_index(Gatherer, File, Files, State).
 
-build_index_worker(Gatherer, State = #msstate { file_size_limit = FileSizeLimit,
-                                                dir = Dir },
+build_index_worker(Gatherer, State = #msstate { dir = Dir },
                    Left, File, Files) ->
     {ok, Messages, FileSize} =
-        scan_file_for_valid_messages(Dir, filenum_to_name(File), FileSizeLimit),
+        scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     {ValidMessages, ValidTotalSize} =
         lists:foldl(
           fun (Obj = {Guid, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
@@ -1579,8 +1573,7 @@ delete_file_if_empty(File, State = #msstate {
 %% garbage collection / compaction / aggregation -- external
 %%----------------------------------------------------------------------------
 
-gc(SrcFile, DstFile, State = {FileSummaryEts, _Dir, _Index, _IndexState,
-                              _FileSizeLimit}) ->
+gc(SrcFile, DstFile, State = {FileSummaryEts, _Dir, _Index, _IndexState}) ->
     [SrcObj = #file_summary {
        readers          = SrcReaders,
        left             = DstFile,
@@ -1612,8 +1605,7 @@ combine_files(#file_summary { file             = Source,
                               valid_total_size = DestinationValid,
                               contiguous_top   = DestinationContiguousTop,
                               right            = Source },
-              State = {_FileSummaryEts, Dir, _Index, _IndexState,
-                       _FileSizeLimit}) ->
+              State = {_FileSummaryEts, Dir, _Index, _IndexState}) ->
     SourceName      = filenum_to_name(Source),
     DestinationName = filenum_to_name(Destination),
     {ok, SourceHdl}      = open_file(Dir, SourceName,
@@ -1672,11 +1664,11 @@ combine_files(#file_summary { file             = Source,
     ok = file_handle_cache:delete(SourceHdl),
     ExpectedSize.
 
-find_unremoved_messages_in_file(
-  File, {_FileSummaryEts, Dir, Index, IndexState, FileSizeLimit}) ->
+find_unremoved_messages_in_file(File,
+                                {_FileSummaryEts, Dir, Index, IndexState}) ->
     %% Messages here will be end-of-file at start-of-list
     {ok, Messages, _FileSize} =
-        scan_file_for_valid_messages(Dir, filenum_to_name(File), FileSizeLimit),
+        scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     %% foldl will reverse so will end up with msgs in ascending offset order
     lists:foldl(fun ({Guid, TotalSize, _Offset}, Acc = {List, Size}) ->
                         case Index:lookup(Guid, IndexState) of
@@ -1689,7 +1681,7 @@ find_unremoved_messages_in_file(
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
               Destination,
-              {_FileSummaryEts, _Dir, Index, IndexState, _FileSizeLimit}) ->
+              {_FileSummaryEts, _Dir, Index, IndexState}) ->
     Copy = fun ({BlockStart, BlockEnd}) ->
                    BSize = BlockEnd - BlockStart,
                    {ok, BlockStart} =
