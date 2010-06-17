@@ -1475,10 +1475,12 @@ test_msg_store() ->
     %% restart empty
     ok = stop_msg_store(),
     ok = start_msg_store_empty(), %% now safe to reuse guids
-    %% push a lot of msgs in...
-    BigCount = 100000,
+    %% push a lot of msgs in... at least 100 files worth
+    {ok, FileSize} = application:get_env(rabbit, msg_store_file_size_limit),
+    PayloadSizeBits = 65536,
+    BigCount = trunc(100 * FileSize / (PayloadSizeBits div 8)),
     GuidsBig = [guid_bin(X) || X <- lists:seq(1, BigCount)],
-    Payload = << 0:65536 >>,
+    Payload = << 0:PayloadSizeBits >>,
     ok = rabbit_msg_store:client_terminate(
            lists:foldl(
              fun (Guid, MSCStateN) ->
@@ -1569,10 +1571,11 @@ test_queue_init() ->
 test_queue_index() ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
     TwoSegs = SegmentSize + SegmentSize,
+    MostOfASegment = trunc(SegmentSize*0.75),
     stop_msg_store(),
     ok = empty_test_queue(),
-    SeqIdsA = lists:seq(0,9999),
-    SeqIdsB = lists:seq(10000,19999),
+    SeqIdsA = lists:seq(0,MostOfASegment-1),
+    SeqIdsB = lists:seq(MostOfASegment, 2*MostOfASegment),
     {0, _Terms, Qi0} = test_queue_init(),
     {0, 0, Qi1} = rabbit_queue_index:bounds(Qi0),
     {Qi2, SeqIdsGuidsA} = queue_index_publish(SeqIdsA, false, Qi1),
@@ -1594,7 +1597,7 @@ test_queue_index() ->
     _Qi11 = rabbit_queue_index:terminate([], Qi10),
     ok = stop_msg_store(),
     ok = rabbit_variable_queue:start([test_queue()]),
-    %% should get length back as 10000
+    %% should get length back as MostOfASegment
     LenB = length(SeqIdsB),
     {LenB, _Terms2, Qi12} = test_queue_init(),
     {0, TwoSegs, Qi13} = rabbit_queue_index:bounds(Qi12),
@@ -1834,7 +1837,7 @@ test_variable_queue_partial_segments_delta_thing() ->
 test_queue_recover() ->
     Count = 2*rabbit_queue_index:next_segment_boundary(0),
     TxID = rabbit_guid:guid(),
-    #amqqueue { pid = QPid, name = QName } = Q =
+    #amqqueue { pid = QPid, name = QName } =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
     Msg = fun() -> rabbit_basic:message(
                      rabbit_misc:r(<<>>, exchange, <<>>),

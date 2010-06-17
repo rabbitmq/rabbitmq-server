@@ -31,8 +31,6 @@
 
 -include("rabbit.hrl").
 
--define(FILE_SIZE_LIMIT,       (16*1024*1024)).
-
 -ifdef(use_specs).
 
 -type(msg() :: any()).

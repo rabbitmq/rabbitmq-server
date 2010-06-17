@@ -31,7 +31,7 @@
 
 -module(rabbit_msg_file).
 
--export([append/3, read/2, scan/2]).
+-export([append/3, read/2, scan/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -44,7 +44,7 @@
 -define(FILE_PACKING_ADJUSTMENT, (1 + ?INTEGER_SIZE_BYTES)).
 -define(GUID_SIZE_BYTES,         16).
 -define(GUID_SIZE_BITS,          (8 * ?GUID_SIZE_BYTES)).
--define(SCAN_BLOCK_SIZE,         ?FILE_SIZE_LIMIT div 4).
+-define(SCAN_BLOCK_SIZE(LIM),    (LIM div 4)).
 
 %%----------------------------------------------------------------------------
 
@@ -59,7 +59,7 @@
              ({'ok', msg_size()} | {'error', any()})).
 -spec(read/2 :: (io_device(), msg_size()) ->
              ({'ok', {guid(), msg()}} | {'error', any()})).
--spec(scan/2 :: (io_device(), file_size()) ->
+-spec(scan/3 :: (io_device(), file_size(), file_size()) ->
              {'ok', [{guid(), msg_size(), position()}], position()}).
 
 -endif.
@@ -92,28 +92,29 @@ read(FileHdl, TotalSize) ->
         KO -> KO
     end.
 
-scan(FileHdl, FileSize) when FileSize >= 0 ->
-    scan(FileHdl, FileSize, <<>>, 0, [], 0).
+scan(FileHdl, FileSize, FileSizeLim) when FileSize >= 0 ->
+    scan(FileHdl, FileSize, FileSizeLim, <<>>, 0, [], 0).
 
-scan(_FileHdl, FileSize, _Data, FileSize, Acc, ScanOffset) ->
+scan(_FileHdl, FileSize, _FileSizeLim, _Data, FileSize, Acc, ScanOffset) ->
     {ok, Acc, ScanOffset};
-scan(FileHdl, FileSize, Data, ReadOffset, Acc, ScanOffset) ->
-    Read = lists:min([?SCAN_BLOCK_SIZE, (FileSize - ReadOffset)]),
+scan(FileHdl, FileSize, FileSizeLim, Data, ReadOffset, Acc, ScanOffset) ->
+    Read = lists:min([?SCAN_BLOCK_SIZE(FileSizeLim), (FileSize - ReadOffset)]),
     case file_handle_cache:read(FileHdl, Read) of
         {ok, Data1} ->
             {Data2, Acc1, ScanOffset1} =
-                scan(<<Data/binary, Data1/binary>>, Acc, ScanOffset),
+                scan1(<<Data/binary, Data1/binary>>, Acc, ScanOffset),
             ReadOffset1 = ReadOffset + size(Data1),
-            scan(FileHdl, FileSize, Data2, ReadOffset1, Acc1, ScanOffset1);
+            scan(FileHdl, FileSize, FileSizeLim, Data2, ReadOffset1, Acc1,
+                 ScanOffset1);
         _KO ->
             {ok, Acc, ScanOffset}
     end.
 
-scan(<<>>, Acc, Offset) ->
+scan1(<<>>, Acc, Offset) ->
     {<<>>, Acc, Offset};
-scan(<<0:?INTEGER_SIZE_BITS, _Rest/binary>>, Acc, Offset) ->
+scan1(<<0:?INTEGER_SIZE_BITS, _Rest/binary>>, Acc, Offset) ->
     {<<>>, Acc, Offset}; %% Nothing to do other than stop.
-scan(<<Size:?INTEGER_SIZE_BITS, GuidAndMsg:Size/binary,
+scan1(<<Size:?INTEGER_SIZE_BITS, GuidAndMsg:Size/binary,
        WriteMarker:?WRITE_OK_SIZE_BITS, Rest/binary>>, Acc, Offset) ->
     TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
     case WriteMarker of
@@ -126,9 +127,9 @@ scan(<<Size:?INTEGER_SIZE_BITS, GuidAndMsg:Size/binary,
             <<GuidNum:?GUID_SIZE_BITS, _Msg/binary>> =
                 <<GuidAndMsg:Size/binary>>,
             <<Guid:?GUID_SIZE_BYTES/binary>> = <<GuidNum:?GUID_SIZE_BITS>>,
-            scan(Rest, [{Guid, TotalSize, Offset} | Acc], Offset + TotalSize);
+            scan1(Rest, [{Guid, TotalSize, Offset} | Acc], Offset + TotalSize);
         _ ->
-            scan(Rest, Acc, Offset + TotalSize)
+            scan1(Rest, Acc, Offset + TotalSize)
     end;
-scan(Data, Acc, Offset) ->
+scan1(Data, Acc, Offset) ->
     {Data, Acc, Offset}.

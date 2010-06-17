@@ -33,7 +33,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, gc/3, no_readers/2, stop/1]).
+-export([start_link/5, gc/3, no_readers/2, stop/1]).
 
 -export([set_maximum_since_use/2]).
 
@@ -46,6 +46,7 @@
          index_module,
          parent,
          file_summary_ets,
+         file_size_limit,
          scheduled
         }).
 
@@ -55,7 +56,9 @@
 
 -ifdef(use_specs).
 
--spec(start_link/4 :: (file_path(), any(), atom(), tid()) ->
+-type(file_size() :: non_neg_integer()).
+
+-spec(start_link/5 :: (file_path(), any(), atom(), tid(), file_size()) ->
                            {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(gc/3 :: (pid(), non_neg_integer(), non_neg_integer()) -> 'ok').
 -spec(no_readers/2 :: (pid(), non_neg_integer()) -> 'ok').
@@ -66,9 +69,10 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Dir, IndexState, IndexModule, FileSummaryEts) ->
+start_link(Dir, IndexState, IndexModule, FileSummaryEts, FileSizeLimit) ->
     gen_server2:start_link(
-      ?MODULE, [self(), Dir, IndexState, IndexModule, FileSummaryEts],
+      ?MODULE,
+      [self(), Dir, IndexState, IndexModule, FileSummaryEts, FileSizeLimit],
       [{timeout, infinity}]).
 
 gc(Server, Source, Destination) ->
@@ -85,7 +89,7 @@ set_maximum_since_use(Pid, Age) ->
 
 %%----------------------------------------------------------------------------
 
-init([Parent, Dir, IndexState, IndexModule, FileSummaryEts]) ->
+init([Parent, Dir, IndexState, IndexModule, FileSummaryEts, FileSizeLimit]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
     {ok, #gcstate { dir              = Dir,
@@ -93,6 +97,7 @@ init([Parent, Dir, IndexState, IndexModule, FileSummaryEts]) ->
                     index_module     = IndexModule,
                     parent           = Parent,
                     file_summary_ets = FileSummaryEts,
+                    file_size_limit  = FileSizeLimit,
                     scheduled        = undefined },
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -131,9 +136,11 @@ attempt_gc(State = #gcstate { dir              = Dir,
                               index_module     = Index,
                               parent           = Parent,
                               file_summary_ets = FileSummaryEts,
+                              file_size_limit  = FileSizeLimit,
                               scheduled        = {Source, Destination} }) ->
     case rabbit_msg_store:gc(Source, Destination,
-                             {FileSummaryEts, Dir, Index, IndexState}) of
+                             {FileSummaryEts, Dir, Index, IndexState,
+                              FileSizeLimit}) of
         concurrent_readers -> State;
         Reclaimed          -> ok = rabbit_msg_store:gc_done(
                                      Parent, Reclaimed, Source, Destination),
