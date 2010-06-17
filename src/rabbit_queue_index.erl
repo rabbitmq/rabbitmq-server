@@ -69,10 +69,10 @@
 %% Because of the fact that publishes, delivers and acks can occur all
 %% over, we wish to avoid lots of seeking. Therefore we have a fixed
 %% sized journal to which all actions are appended. When the number of
-%% entries in this journal reaches ?MAX_JOURNAL_ENTRY_COUNT, the
-%% journal entries are scattered out to their relevant files, and the
-%% journal is truncated to zero size. Note that entries in the journal
-%% must carry the full sequence id, thus the format of entries in the
+%% entries in this journal reaches max_journal_entries, the journal
+%% entries are scattered out to their relevant files, and the journal
+%% is truncated to zero size. Note that entries in the journal must
+%% carry the full sequence id, thus the format of entries in the
 %% journal is different to that in the segments.
 %%
 %% The journal is also kept fully in memory, pre-segmented: the state
@@ -112,7 +112,6 @@
 
 %% ---- Journal details ----
 
--define(MAX_JOURNAL_ENTRY_COUNT, 262144).
 -define(JOURNAL_FILENAME, "journal.jif").
 
 -define(PUB_PERSIST_JPREFIX, 2#00).
@@ -159,7 +158,8 @@
 
 %%----------------------------------------------------------------------------
 
--record(qistate, { dir, segments, journal_handle, dirty_count }).
+-record(qistate, { dir, segments, journal_handle, dirty_count,
+                   max_journal_entries }).
 
 -record(segment, { num, path, journal_entries, unacked }).
 
@@ -178,11 +178,12 @@
                               })).
 -type(seq_id() :: integer()).
 -type(seg_dict() :: {dict(), [segment()]}).
--type(qistate() :: #qistate { dir             :: file_path(),
-                              segments        :: 'undefined' | seg_dict(),
-                              journal_handle  :: hdl(),
-                              dirty_count     :: integer()
-                             }).
+-type(qistate() :: #qistate {  dir                 :: file_path(),
+                               segments            :: 'undefined' | seg_dict(),
+                               journal_handle      :: hdl(),
+                               dirty_count         :: integer(),
+                               max_journal_entries :: non_neg_integer()
+                               }).
 -type(startup_fun_state() ::
         {(fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A}).
 
@@ -548,8 +549,9 @@ add_to_journal(RelSeq, Action, JEntries) ->
           end,
     array:set(RelSeq, Val, JEntries).
 
-maybe_flush_journal(State = #qistate { dirty_count = DCount })
-  when DCount > ?MAX_JOURNAL_ENTRY_COUNT ->
+maybe_flush_journal(State = #qistate { dirty_count = DCount,
+                                       max_journal_entries = MaxJournal })
+  when DCount > MaxJournal ->
     flush_journal(State);
 maybe_flush_journal(State) ->
     State.
