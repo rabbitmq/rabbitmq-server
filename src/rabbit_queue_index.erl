@@ -245,10 +245,10 @@ publish(Guid, SeqId, IsPersistent, State) when is_binary(Guid) ->
     maybe_flush_journal(add_to_journal(SeqId, {Guid, IsPersistent}, State1)).
 
 deliver(SeqIds, State) ->
-    deliver_or_ack(del, ?DEL_JPREFIX, SeqIds, State).
+    deliver_or_ack(del, SeqIds, State).
 
 ack(SeqIds, State) ->
-    deliver_or_ack(ack, ?ACK_JPREFIX, SeqIds, State).
+    deliver_or_ack(ack, SeqIds, State).
 
 sync([], State) ->
     State;
@@ -648,9 +648,10 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
         _ErrOrEoF -> State
     end.
 
-deliver_or_ack(_Kind, _JPrefix, [], State) ->
+deliver_or_ack(_Kind, [], State) ->
     State;
-deliver_or_ack(Kind, JPrefix, SeqIds, State) ->
+deliver_or_ack(Kind, SeqIds, State) ->
+    JPrefix = case Kind of ack -> ?ACK_JPREFIX; del -> ?DEL_JPREFIX end,
     {JournalHdl, State1} = get_journal_handle(State),
     ok = file_handle_cache:append(
            JournalHdl,
