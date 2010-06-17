@@ -807,16 +807,6 @@ betas_from_segment_entries(List, TransientThreshold, IndexState) ->
           end, {[], IndexState}, List),
     {bpqueue:from_list([{true, Filtered}]), IndexState1}.
 
-read_one_index_segment(StartSeqId, EndSeqId, IndexState)
-  when StartSeqId =< EndSeqId ->
-    case rabbit_queue_index:read(StartSeqId, EndSeqId, IndexState) of
-        {List, Again, IndexState1} when List /= [] orelse Again =:= undefined ->
-            {List, IndexState1,
-             rabbit_queue_index:next_segment_boundary(StartSeqId)};
-        {[], StartSeqId1, IndexState1} ->
-            read_one_index_segment(StartSeqId1, EndSeqId, IndexState1)
-    end.
-
 ensure_binary_properties(Msg = #basic_message { content = Content }) ->
     Msg #basic_message {
       content = rabbit_binary_parser:clear_decoded_content(
@@ -970,10 +960,10 @@ tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFuns},
     State1 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }.
 
 delete1(_TransientThreshold, NextSeqId, DeltaSeqId, IndexState)
-  when DeltaSeqId =:= undefined orelse DeltaSeqId >= NextSeqId ->
+  when DeltaSeqId >= NextSeqId ->
     IndexState;
 delete1(TransientThreshold, NextSeqId, DeltaSeqId, IndexState) ->
-    {List, Again, IndexState1} =
+    {List, Next, IndexState1} =
         rabbit_queue_index:read(DeltaSeqId, NextSeqId, IndexState),
     IndexState2 =
         case List of
@@ -982,7 +972,7 @@ delete1(TransientThreshold, NextSeqId, DeltaSeqId, IndexState) ->
                                        List, TransientThreshold, IndexState1),
                   remove_queue_entries(fun beta_fold/3, Q, IndexState3)
         end,
-    delete1(TransientThreshold, NextSeqId, Again, IndexState2).
+    delete1(TransientThreshold, NextSeqId, Next, IndexState2).
 
 purge_betas_and_deltas(State = #vqstate { q3          = Q3,
                                           index_state = IndexState }) ->
@@ -1304,8 +1294,8 @@ maybe_deltas_to_betas(State = #vqstate {
             #delta { start_seq_id = DeltaSeqId,
                      count        = DeltaCount,
                      end_seq_id   = DeltaSeqIdEnd } = Delta,
-            {List, IndexState1, DeltaSeqId1} =
-                read_one_index_segment(DeltaSeqId, DeltaSeqIdEnd, IndexState),
+            {List, DeltaSeqId1, IndexState1} =
+                rabbit_queue_index:read(DeltaSeqId, DeltaSeqIdEnd, IndexState),
             {Q3a, IndexState2} = betas_from_segment_entries(
                                    List, TransientThreshold, IndexState1),
             State1 = State #vqstate { index_state = IndexState2 },

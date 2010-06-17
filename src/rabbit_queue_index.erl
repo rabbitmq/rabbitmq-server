@@ -196,8 +196,7 @@
 -spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
-             {[{guid(), seq_id(), boolean(), boolean()}],
-              seq_id() | 'undefined', qistate()}).
+             {[{guid(), seq_id(), boolean(), boolean()}], seq_id(), qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
@@ -282,17 +281,17 @@ flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
 
 read(StartEnd, StartEnd, State) ->
-    {[], undefined, State};
+    {[], StartEnd, State};
 read(Start, End, State = #qistate { segments = Segments,
                                     dir = Dir }) when Start =< End ->
     %% Start is inclusive, End is exclusive.
     {StartSeg, StartRelSeq} = seq_id_to_seg_and_rel_seq_id(Start),
     {EndSeg, EndRelSeq}     = seq_id_to_seg_and_rel_seq_id(End),
     Start1 = reconstruct_seq_id(StartSeg + 1, 0),
-    Again = case End =< Start1 of
-                true  -> undefined;
-                false -> Start1
-            end,
+    Next = case End =< Start1 of
+               true  -> End;
+               false -> Start1
+           end,
     MaxRelSeq = case StartSeg =:= EndSeg of
                     true  -> EndRelSeq;
                     false -> ?SEGMENT_ENTRY_COUNT
@@ -307,7 +306,7 @@ read(Start, End, State = #qistate { segments = Segments,
                          Acc
                  end, [], Segment),
     Segments1 = segment_store(Segment, Segments),
-    {Messages, Again, State #qistate { segments = Segments1 }}.
+    {Messages, Next, State #qistate { segments = Segments1 }}.
 
 next_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
