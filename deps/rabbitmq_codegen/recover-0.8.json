@@ -1,0 +1,20 @@
+{
+    "extension": {
+	"name": "synchronous-basic-recover-in-0.8",
+	"version": "1.0",
+	"copyright": "Copyright (C) 2010 Rabbit Technologies Ltd."
+    },
+    "classes": [
+	{"name": "basic",
+	 "id": 60,
+	 "methods": [
+            {"id": 110,
+			 "arguments": [{"type": "bit", "name": "requeue", "default-value": false}],
+			 "name": "recover",
+			 "synchronous" : true},
+			{"id": 111,
+			 "arguments": [],
+			 "name": "recover-ok"}
+    ]
+    }]
+}
