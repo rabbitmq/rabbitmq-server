@@ -1550,13 +1550,6 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
     ok = rabbit_msg_store:client_terminate(MSCStateEnd),
     {A, B}.
 
-queue_index_deliver(SeqIds, Qi) ->
-    lists:foldl(fun (SeqId, QiN) -> rabbit_queue_index:deliver(SeqId, QiN) end,
-                Qi, SeqIds).
-
-queue_index_flush(Qi) ->
-    rabbit_queue_index:flush(Qi).
-
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
 verify_read_with_published(Delivered, Persistent,
@@ -1605,12 +1598,12 @@ test_queue_index() ->
     LenB = length(SeqIdsB),
     {LenB, _Terms2, Qi12} = test_queue_init(),
     {0, TwoSegs, Qi13} = rabbit_queue_index:bounds(Qi12),
-    Qi14 = queue_index_deliver(SeqIdsB, Qi13),
+    Qi14 = rabbit_queue_index:deliver(SeqIdsB, Qi13),
     {ReadC, SegmentSize, Qi15} = rabbit_queue_index:read(0, SegmentSize, Qi14),
     ok = verify_read_with_published(true, true, ReadC,
                                     lists:reverse(SeqIdsGuidsB)),
     Qi16 = rabbit_queue_index:ack(SeqIdsB, Qi15),
-    Qi17 = queue_index_flush(Qi16),
+    Qi17 = rabbit_queue_index:flush(Qi16),
     %% Everything will have gone now because #pubs == #acks
     {0, 0, Qi18} = rabbit_queue_index:bounds(Qi17),
     _Qi19 = rabbit_queue_index:terminate([], Qi18),
@@ -1628,9 +1621,9 @@ test_queue_index() ->
     SeqIdsC = lists:seq(0,trunc(SegmentSize/2)),
     {0, _Terms4, Qi22} = test_queue_init(),
     {Qi23, _SeqIdsGuidsC} = queue_index_publish(SeqIdsC, false, Qi22),
-    Qi24 = queue_index_deliver(SeqIdsC, Qi23),
+    Qi24 = rabbit_queue_index:deliver(SeqIdsC, Qi23),
     Qi25 = rabbit_queue_index:ack(SeqIdsC, Qi24),
-    Qi26 = queue_index_flush(Qi25),
+    Qi26 = rabbit_queue_index:flush(Qi25),
     {Qi27, _SeqIdsGuidsC1} = queue_index_publish([SegmentSize], false, Qi26),
     _Qi28 = rabbit_queue_index:delete_and_terminate(Qi27),
     ok = stop_msg_store(),
@@ -1639,10 +1632,10 @@ test_queue_index() ->
     %% b) partial pub+del, then move to new segment, then ack all in old segment
     {0, _Terms5, Qi29} = test_queue_init(),
     {Qi30, _SeqIdsGuidsC2} = queue_index_publish(SeqIdsC, false, Qi29),
-    Qi31 = queue_index_deliver(SeqIdsC, Qi30),
+    Qi31 = rabbit_queue_index:deliver(SeqIdsC, Qi30),
     {Qi32, _SeqIdsGuidsC3} = queue_index_publish([SegmentSize], false, Qi31),
     Qi33 = rabbit_queue_index:ack(SeqIdsC, Qi32),
-    Qi34 = queue_index_flush(Qi33),
+    Qi34 = rabbit_queue_index:flush(Qi33),
     _Qi35 = rabbit_queue_index:delete_and_terminate(Qi34),
     ok = stop_msg_store(),
     ok = empty_test_queue(),
@@ -1651,9 +1644,9 @@ test_queue_index() ->
     SeqIdsD = lists:seq(0,SegmentSize*4),
     {0, _Terms6, Qi36} = test_queue_init(),
     {Qi37, _SeqIdsGuidsD} = queue_index_publish(SeqIdsD, false, Qi36),
-    Qi38 = queue_index_deliver(SeqIdsD, Qi37),
+    Qi38 = rabbit_queue_index:deliver(SeqIdsD, Qi37),
     Qi39 = rabbit_queue_index:ack(SeqIdsD, Qi38),
-    Qi40 = queue_index_flush(Qi39),
+    Qi40 = rabbit_queue_index:flush(Qi39),
     _Qi41 = rabbit_queue_index:delete_and_terminate(Qi40),
     ok = stop_msg_store(),
     ok = empty_test_queue(),
@@ -1663,11 +1656,11 @@ test_queue_index() ->
     %% possibilities in combining the segment with the journal.
     {0, _Terms7, Qi42} = test_queue_init(),
     {Qi43, [Seven,Five,Four|_]} = queue_index_publish([0,1,2,4,5,7], false, Qi42),
-    Qi44 = queue_index_deliver([0,1,4], Qi43),
+    Qi44 = rabbit_queue_index:deliver([0,1,4], Qi43),
     Qi45 = rabbit_queue_index:ack([0], Qi44),
-    Qi46 = queue_index_flush(Qi45),
+    Qi46 = rabbit_queue_index:flush(Qi45),
     {Qi47, [Eight,Six|_]} = queue_index_publish([3,6,8], false, Qi46),
-    Qi48 = queue_index_deliver([2,3,5,6], Qi47),
+    Qi48 = rabbit_queue_index:deliver([2,3,5,6], Qi47),
     Qi49 = rabbit_queue_index:ack([1,2,3], Qi48),
     {[], 4, Qi50} = rabbit_queue_index:read(0, 4, Qi49),
     {ReadD, 7, Qi51} = rabbit_queue_index:read(4, 7, Qi50),
@@ -1682,14 +1675,14 @@ test_queue_index() ->
     %% exercise journal_minus_segment, not segment_plus_journal.
     {0, _Terms8, Qi54} = test_queue_init(),
     {Qi55, _SeqIdsGuidsE} = queue_index_publish([0,1,2,4,5,7], true, Qi54),
-    Qi56 = queue_index_deliver([0,1,4], Qi55),
+    Qi56 = rabbit_queue_index:deliver([0,1,4], Qi55),
     Qi57 = rabbit_queue_index:ack([0], Qi56),
     _Qi58 = rabbit_queue_index:terminate([], Qi57),
     ok = stop_msg_store(),
     ok = rabbit_variable_queue:start([test_queue()]),
     {5, _Terms9, Qi59} = test_queue_init(),
     {Qi60, _SeqIdsGuidsF} = queue_index_publish([3,6,8], true, Qi59),
-    Qi61 = queue_index_deliver([2,3,5,6], Qi60),
+    Qi61 = rabbit_queue_index:deliver([2,3,5,6], Qi60),
     Qi62 = rabbit_queue_index:ack([1,2,3], Qi61),
     _Qi63 = rabbit_queue_index:terminate([], Qi62),
     ok = stop_msg_store(),

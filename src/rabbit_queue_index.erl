@@ -191,7 +191,7 @@
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
 -spec(publish/4 :: (guid(), seq_id(), boolean(), qistate()) -> qistate()).
--spec(deliver/2 :: (seq_id(), qistate()) -> qistate()).
+-spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush/1 :: (qistate()) -> qistate()).
@@ -244,22 +244,11 @@ publish(Guid, SeqId, IsPersistent, State) when is_binary(Guid) ->
                            end):?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Guid]),
     maybe_flush_journal(add_to_journal(SeqId, {Guid, IsPersistent}, State1)).
 
-deliver(SeqId, State) ->
-    {JournalHdl, State1} = get_journal_handle(State),
-    ok = file_handle_cache:append(
-           JournalHdl, <<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>),
-    maybe_flush_journal(add_to_journal(SeqId, del, State1)).
+deliver(SeqIds, State) ->
+    deliver_or_ack(del, ?DEL_JPREFIX, SeqIds, State).
 
-ack([], State) ->
-    State;
 ack(SeqIds, State) ->
-    {JournalHdl, State1} = get_journal_handle(State),
-    ok = file_handle_cache:append(
-           JournalHdl, [<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>> ||
-                           SeqId <- SeqIds]),
-    maybe_flush_journal(lists:foldl(fun (SeqId, StateN) ->
-                                            add_to_journal(SeqId, ack, StateN)
-                                    end, State1, SeqIds)).
+    deliver_or_ack(ack, ?ACK_JPREFIX, SeqIds, State).
 
 sync([], State) ->
     State;
@@ -658,6 +647,17 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
             end;
         _ErrOrEoF -> State
     end.
+
+deliver_or_ack(_Kind, _JPrefix, [], State) ->
+    State;
+deliver_or_ack(Kind, JPrefix, SeqIds, State) ->
+    {JournalHdl, State1} = get_journal_handle(State),
+    ok = file_handle_cache:append(
+           JournalHdl,
+           [<<JPrefix:?JPREFIX_BITS, SeqId:?SEQ_BITS>> || SeqId <- SeqIds]),
+    maybe_flush_journal(lists:foldl(fun (SeqId, StateN) ->
+                                            add_to_journal(SeqId, Kind, StateN)
+                                    end, State1, SeqIds)).
 
 %%----------------------------------------------------------------------------
 %% segment manipulation

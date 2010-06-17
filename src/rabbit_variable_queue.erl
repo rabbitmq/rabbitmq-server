@@ -718,7 +718,7 @@ read_from_msg_store(MSCState, IsPersistent, Guid) ->
 maybe_write_delivered(false, _SeqId, IndexState) ->
     IndexState;
 maybe_write_delivered(true, SeqId, IndexState) ->
-    rabbit_queue_index:deliver(SeqId, IndexState).
+    rabbit_queue_index:deliver([SeqId], IndexState).
 
 accumulate_ack(SeqId, IsPersistent, Guid, {SeqIdsAcc, Dict}) ->
     {case IsPersistent of
@@ -987,32 +987,32 @@ purge_betas_and_deltas(State = #vqstate { q3          = Q3,
     end.
 
 remove_queue_entries(Fold, Q, IndexState) ->
-    {GuidsByStore, SeqIds, IndexState1} =
-        Fold(fun remove_queue_entries1/2, {dict:new(), [], IndexState}, Q),
+    {GuidsByStore, Delivers, Acks} =
+        Fold(fun remove_queue_entries1/2, {dict:new(), [], []}, Q),
     ok = dict:fold(fun (MsgStore, Guids, ok) ->
                            rabbit_msg_store:remove(MsgStore, Guids)
                    end, ok, GuidsByStore),
-    rabbit_queue_index:ack(SeqIds, IndexState1).
+    rabbit_queue_index:ack(Acks,
+                           rabbit_queue_index:deliver(Delivers, IndexState)).
 
 remove_queue_entries1(
   #msg_status { guid = Guid, seq_id = SeqId,
                 is_delivered = IsDelivered, msg_on_disk = MsgOnDisk,
                 index_on_disk = IndexOnDisk, is_persistent = IsPersistent },
-  {GuidsByStore, SeqIdsAcc, IndexState}) ->
-    GuidsByStore1 = case MsgOnDisk of
-                        true  -> rabbit_misc:dict_cons(
-                                   find_msg_store(IsPersistent),
-                                   Guid, GuidsByStore);
-                        false -> GuidsByStore
-                    end,
-    SeqIdsAcc1 = case IndexOnDisk of
-                     true  -> [SeqId | SeqIdsAcc];
-                     false -> SeqIdsAcc
-                 end,
-    IndexState1 = maybe_write_delivered(
-                    IndexOnDisk andalso not IsDelivered,
-                    SeqId, IndexState),
-    {GuidsByStore1, SeqIdsAcc1, IndexState1}.
+  {GuidsByStore, Delivers, Acks}) ->
+    {case MsgOnDisk of
+         true  -> rabbit_misc:dict_cons(find_msg_store(IsPersistent), Guid,
+                                        GuidsByStore);
+         false -> GuidsByStore
+     end,
+     case IndexOnDisk andalso not IsDelivered of
+         true  -> [SeqId | Delivers];
+         false -> Delivers
+     end,
+     case IndexOnDisk of
+         true  -> [SeqId | Acks];
+         false -> Acks
+     end}.
 
 fetch_from_q3_to_q4(State = #vqstate {
                       q1                = Q1,
