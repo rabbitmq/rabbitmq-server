@@ -1311,10 +1311,23 @@ extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
 test_backing_queue() ->
     case application:get_env(rabbit, backing_queue_module) of
         {ok, rabbit_variable_queue} ->
+            {ok, FileSizeLimit} =
+                application:get_env(rabbit, msg_store_file_size_limit),
+            application:set_env(rabbit, msg_store_file_size_limit, 128,
+                                infinity),
+            {ok, MaxJournal} =
+                application:get_env(rabbit, queue_index_max_journal_entries),
+            application:set_env(rabbit, queue_index_max_journal_entries, 128,
+                                infinity),
             passed = test_msg_store(),
+            application:set_env(rabbit, msg_store_file_size_limit,
+                                FileSizeLimit, infinity),
             passed = test_queue_index(),
             passed = test_variable_queue(),
-            passed = test_queue_recover();
+            passed = test_queue_recover(),
+            application:set_env(rabbit, queue_index_max_journal_entries,
+                                MaxJournal, infinity),
+            passed;
         _ ->
             passed
     end.
