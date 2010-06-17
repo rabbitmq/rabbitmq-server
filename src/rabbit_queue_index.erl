@@ -304,7 +304,7 @@ next_segment_boundary(SeqId) ->
 
 bounds(State = #qistate { segments = Segments }) ->
     %% This is not particularly efficient, but only gets invoked on
-    %% queue initialisation and termination.
+    %% queue initialisation.
     SegNums = lists:sort(segment_nums(Segments)),
     %% Don't bother trying to figure out the lowest seq_id, merely the
     %% seq_id of the start of the lowest segment. That seq_id may not
