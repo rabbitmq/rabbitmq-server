@@ -104,8 +104,7 @@ scan(FileHdl, FileSize, Data, ReadOffset, Acc, ScanOffset) ->
             {Data2, Acc1, ScanOffset1} =
                 scan(<<Data/binary, Data1/binary>>, Acc, ScanOffset),
             ReadOffset1 = ReadOffset + size(Data1),
-            scan(FileHdl, FileSize, Data2, ReadOffset1, Acc1,
-                 ScanOffset1);
+            scan(FileHdl, FileSize, Data2, ReadOffset1, Acc1, ScanOffset1);
         _KO ->
             {ok, Acc, ScanOffset}
     end.

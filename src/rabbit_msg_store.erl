@@ -1331,8 +1331,7 @@ scan_file_for_valid_messages(Dir, FileName) ->
     end.
 
 scan_file_for_valid_messages_and_guids(Dir, FileName) ->
-    {ok, Messages, _FileSize} =
-        scan_file_for_valid_messages(Dir, FileName),
+    {ok, Messages, _FileSize} = scan_file_for_valid_messages(Dir, FileName),
     {ok, Messages, [Guid || {Guid, _TotalSize, _FileOffset} <- Messages]}.
 
 %% Takes the list in *ascending* order (i.e. eldest message
@@ -1680,8 +1679,7 @@ find_unremoved_messages_in_file(File,
                 end, {[], 0}, Messages).
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
-              Destination,
-              {_FileSummaryEts, _Dir, Index, IndexState}) ->
+              Destination, {_FileSummaryEts, _Dir, Index, IndexState}) ->
     Copy = fun ({BlockStart, BlockEnd}) ->
                    BSize = BlockEnd - BlockStart,
                    {ok, BlockStart} =

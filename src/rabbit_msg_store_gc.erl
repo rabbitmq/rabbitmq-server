@@ -68,8 +68,7 @@
 
 start_link(Dir, IndexState, IndexModule, FileSummaryEts) ->
     gen_server2:start_link(
-      ?MODULE,
-      [self(), Dir, IndexState, IndexModule, FileSummaryEts],
+      ?MODULE, [self(), Dir, IndexState, IndexModule, FileSummaryEts],
       [{timeout, infinity}]).
 
 gc(Server, Source, Destination) ->
