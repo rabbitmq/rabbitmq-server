@@ -395,20 +395,9 @@ delete_and_terminate(State) ->
     {_PurgeCount, State1} = purge(State),
     State2 = #vqstate { index_state         = IndexState,
                         msg_store_clients   = {{MSCStateP, PRef},
-                                               {MSCStateT, TRef}},
-                        transient_threshold = TransientThreshold } =
+                                               {MSCStateT, TRef}} } =
         remove_pending_ack(false, State1),
-    %% flushing here is good because it deletes all full segments,
-    %% leaving only partial segments around.
-    IndexState1 = rabbit_queue_index:flush(IndexState),
-    IndexState2 =
-        case rabbit_queue_index:bounds(IndexState1) of
-            {N, N, IndexState3} ->
-                IndexState3;
-            {DeltaSeqId, NextSeqId, IndexState3} ->
-                delete1(TransientThreshold, NextSeqId, DeltaSeqId, IndexState3)
-        end,
-    IndexState5 = rabbit_queue_index:delete_and_terminate(IndexState2),
+    IndexState1 = rabbit_queue_index:delete_and_terminate(IndexState),
     case MSCStateP of
         undefined -> ok;
         _         -> rabbit_msg_store:delete_client(
@@ -417,7 +406,7 @@ delete_and_terminate(State) ->
     end,
     rabbit_msg_store:delete_client(?TRANSIENT_MSG_STORE, TRef),
     rabbit_msg_store:client_terminate(MSCStateT),
-    a(State2 #vqstate { index_state       = IndexState5,
+    a(State2 #vqstate { index_state       = IndexState1,
                         msg_store_clients = undefined }).
 
 purge(State = #vqstate { q4 = Q4, index_state = IndexState, len = Len }) ->
@@ -962,21 +951,6 @@ tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFuns},
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
     [ Fun() || Fun <- lists:reverse(SFuns) ],
     State1 #vqstate { index_state = IndexState1, on_sync = {[], [], []} }.
-
-delete1(_TransientThreshold, NextSeqId, DeltaSeqId, IndexState)
-  when DeltaSeqId >= NextSeqId ->
-    IndexState;
-delete1(TransientThreshold, NextSeqId, DeltaSeqId, IndexState) ->
-    {List, Next, IndexState1} =
-        rabbit_queue_index:read(DeltaSeqId, NextSeqId, IndexState),
-    IndexState2 =
-        case List of
-            [] -> IndexState1;
-            _  -> {Q, IndexState3} = betas_from_index_entries(
-                                       List, TransientThreshold, IndexState1),
-                  remove_queue_entries(fun beta_fold/3, Q, IndexState3)
-        end,
-    delete1(TransientThreshold, NextSeqId, Next, IndexState2).
 
 purge_betas_and_deltas(State = #vqstate { q3          = Q3,
                                           index_state = IndexState }) ->
