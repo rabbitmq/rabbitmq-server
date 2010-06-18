@@ -178,12 +178,12 @@
                               })).
 -type(seq_id() :: integer()).
 -type(seg_dict() :: {dict(), [segment()]}).
--type(qistate() :: #qistate {  dir                 :: file_path(),
-                               segments            :: 'undefined' | seg_dict(),
-                               journal_handle      :: hdl(),
-                               dirty_count         :: integer(),
-                               max_journal_entries :: non_neg_integer()
-                               }).
+-type(qistate() :: #qistate { dir                 :: file_path(),
+                              segments            :: 'undefined' | seg_dict(),
+                              journal_handle      :: hdl(),
+                              dirty_count         :: integer(),
+                              max_journal_entries :: non_neg_integer()
+                             }).
 -type(startup_fun_state() ::
         {(fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A}).
 
