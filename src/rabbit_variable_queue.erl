@@ -103,8 +103,9 @@
 %% entries must be written to disk by the queue_index module. This can
 %% badly stall the queue. In order to avoid this, the proportion of
 %% gammas / (betas+gammas) must not be lower than (betas+gammas) /
-%% (alphas+betas+gammas). Thus as the queue grows, and the proportion
-%% of alphas shrink, the proportion of gammas will grow, thus at the
+%% (alphas+betas+gammas). As the queue grows or available memory
+%% shrinks, the latter ratio increases, requiring the conversion of
+%% more gammas to betas in order to maintain the invariant. At the
 %% point at which betas and gammas must be converted to deltas, there
 %% should be very few betas remaining, thus the transition is fast (no
 %% work needs to be done for the gamma -> delta transition).
@@ -835,25 +836,22 @@ beta_fold(Fun, Init, Q) ->
     bpqueue:foldr(fun (_Prefix, Value, Acc) -> Fun(Value, Acc) end, Init, Q).
 
 permitted_ram_index_count(#vqstate { len = 0 }) ->
-    undefined;
+    infinity;
 permitted_ram_index_count(#vqstate { len   = Len,
                                      q2    = Q2,
                                      q3    = Q3,
                                      delta = #delta { count = DeltaCount } }) ->
     AlphaBetaLen = Len - DeltaCount,
     case AlphaBetaLen == 0 of
-        true  -> undefined;
+        true  -> infinity;
         false -> BetaLen = bpqueue:len(Q2) + bpqueue:len(Q3),
-                 %% the fraction of the alphas+betas that are betas
-                 BetaFrac =  BetaLen / AlphaBetaLen,
-                 BetaLen - trunc(BetaFrac * BetaLen)
+                 BetaLen - trunc(BetaLen * BetaLen / AlphaBetaLen)
     end.
-
 
 should_force_index_to_disk(State =
                            #vqstate { ram_index_count = RamIndexCount }) ->
     case permitted_ram_index_count(State) of
-        undefined -> false;
+        infinity  -> false;
         Permitted -> RamIndexCount >= Permitted
     end.
 
@@ -1204,7 +1202,7 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
 
 limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount }) ->
     Permitted = permitted_ram_index_count(State),
-    if Permitted =/= undefined andalso RamIndexCount > Permitted ->
+    if Permitted =/= infinity andalso RamIndexCount > Permitted ->
             Reduction = lists:min([RamIndexCount - Permitted,
                                    ?RAM_INDEX_BATCH_SIZE]),
             case Reduction < ?RAM_INDEX_BATCH_SIZE of
