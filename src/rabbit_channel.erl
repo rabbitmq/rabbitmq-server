@@ -443,17 +443,11 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         rabbit_exchange:publish(
           Exchange,
           rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message)),
-    case RoutingRes of
-        routed ->
-            ok;
-        unroutable ->
-            %% FIXME: 312 should be replaced by the ?NO_ROUTE
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 312, <<"unroutable">>);
-        not_delivered ->
-            %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>)
+    if 
+        RoutingRes == routed -> ok;
+        true -> 
+            {_ShouldClose, Code, Text} = rabbit_framing:lookup_amqp_exception(RoutingRes),
+            ok = basic_return(Message, WriterPid, Code, Text)
     end,
     {noreply, case TxnKey of
                   none -> State;

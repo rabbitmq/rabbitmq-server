@@ -104,6 +104,6 @@ fold_deliveries({Pid, true},{_, Handled}) -> {true, [Pid|Handled]};
 fold_deliveries({_,  false},{_, Handled}) -> {true, Handled}.
 
 %% check_delivery(Mandatory, Immediate, {WasRouted, QPids})
-check_delivery(true, _   , {false, []}) -> {unroutable, []};
-check_delivery(_   , true, {_    , []}) -> {not_delivered, []};
+check_delivery(true, _   , {false, []}) -> {no_route, []};
+check_delivery(_   , true, {_    , []}) -> {no_consumers, []};
 check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
