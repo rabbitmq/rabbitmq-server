@@ -105,6 +105,8 @@
 %%   heartbeat timeout -> *throw*
 %% closing:
 %%   socket close -> *terminate*
+%%   receive connection.close -> send connection.close_ok,
+%%     *closing*
 %%   receive frame -> ignore, *closing*
 %%   handshake_timeout -> ignore, *closing*
 %%   heartbeat timeout -> *throw*
@@ -121,6 +123,8 @@
 %%      start terminate_connection timer, *closed*
 %% closed:
 %%   socket close -> *terminate*
+%%   receive connection.close -> send connection.close_ok,
+%%     *closed*
 %%   receive connection.close_ok -> self() ! terminate_connection,
 %%     *closed*
 %%   receive frame -> ignore, *closed*
