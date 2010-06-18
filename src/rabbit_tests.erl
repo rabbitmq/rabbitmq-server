@@ -1797,7 +1797,7 @@ test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
                    end,
             {ok, _TRef} = timer:send_after(1000, {duration, N1, Fun1}),
             {_Duration, VQ4} = rabbit_variable_queue:ram_duration(VQ3),
-            VQ5 = %% /37 otherwise the duration is just to high to stress things
+            VQ5 = %% /37 otherwise the duration is just too high to stress things
                 rabbit_variable_queue:set_ram_duration_target(N/37, VQ4),
             io:format("~p:~n~p~n~n", [N, rabbit_variable_queue:status(VQ5)]),
             test_variable_queue_dynamic_duration_change_f(Len, VQ5)

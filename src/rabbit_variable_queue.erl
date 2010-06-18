@@ -261,8 +261,8 @@
              persistent_count     :: non_neg_integer(),
 
              transient_threshold  :: non_neg_integer(),
-             duration_target      :: non_neg_integer(),
-             target_ram_msg_count :: non_neg_integer(),
+             duration_target      :: number() | 'infinity',
+             target_ram_msg_count :: non_neg_integer() | 'infinity',
              ram_msg_count        :: non_neg_integer(),
              ram_msg_count_prev   :: non_neg_integer(),
              ram_index_count      :: non_neg_integer(),
@@ -357,8 +357,8 @@ init(QueueName, IsDurable, _Recover) ->
       len                  = DeltaCount1,
       persistent_count     = DeltaCount1,
 
-      duration_target      = undefined,
-      target_ram_msg_count = undefined,
+      duration_target      = infinity,
+      target_ram_msg_count = infinity,
       ram_msg_count        = 0,
       ram_msg_count_prev   = 0,
       ram_index_count      = 0,
@@ -585,13 +585,12 @@ set_ram_duration_target(DurationTarget,
     Rate = AvgEgressRate + AvgIngressRate,
     TargetRamMsgCount1 =
         case DurationTarget of
-            infinity  -> undefined;
-            undefined -> undefined;
+            infinity  -> infinity;
             _         -> trunc(DurationTarget * Rate) %% msgs = sec * msgs/sec
         end,
     State1 = State #vqstate { target_ram_msg_count = TargetRamMsgCount1,
                               duration_target      = DurationTarget },
-    a(case TargetRamMsgCount1 == undefined orelse
+    a(case TargetRamMsgCount1 == infinity orelse
           TargetRamMsgCount1 >= TargetRamMsgCount of
           true  -> State1;
           false -> reduce_memory_use(State1)
@@ -1038,7 +1037,7 @@ fetch_from_q3_to_q4(State = #vqstate {
 reduce_memory_use(State = #vqstate {
                     ram_msg_count        = RamMsgCount,
                     target_ram_msg_count = TargetRamMsgCount })
-  when TargetRamMsgCount == undefined orelse TargetRamMsgCount >= RamMsgCount ->
+  when TargetRamMsgCount =:= infinity orelse TargetRamMsgCount >= RamMsgCount ->
     State;
 reduce_memory_use(State = #vqstate {
                     target_ram_msg_count = TargetRamMsgCount }) ->
@@ -1054,7 +1053,7 @@ reduce_memory_use(State = #vqstate {
 
 msg_storage_type(_SeqId, #vqstate { target_ram_msg_count = TargetRamMsgCount,
                                     ram_msg_count        = RamMsgCount })
-  when TargetRamMsgCount == undefined orelse TargetRamMsgCount > RamMsgCount ->
+  when TargetRamMsgCount =:= infinity orelse TargetRamMsgCount > RamMsgCount ->
     msg;
 msg_storage_type( SeqId, #vqstate { target_ram_msg_count = 0, q3 = Q3 }) ->
     case bpqueue:out(Q3) of
@@ -1324,7 +1323,7 @@ maybe_push_alphas_to_betas(_Generator, _Consumer, _Q,
                            State = #vqstate {
                              ram_msg_count        = RamMsgCount,
                              target_ram_msg_count = TargetRamMsgCount })
-  when TargetRamMsgCount == undefined orelse TargetRamMsgCount >= RamMsgCount ->
+  when TargetRamMsgCount =:= infinity orelse TargetRamMsgCount >= RamMsgCount ->
     State;
 maybe_push_alphas_to_betas(Generator, Consumer, Q, State) ->
     case Generator(Q) of
