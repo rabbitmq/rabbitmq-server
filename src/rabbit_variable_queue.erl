@@ -1235,8 +1235,8 @@ limit_q3_ram_index(Reduction, State) ->
     {Reduction, State}.
 
 limit_ram_index(MapFoldFilterFun, Q, Reduction,
-                State = #vqstate { ram_index_count = RamIndexCount,
-                                   index_state     = IndexState }) ->
+                State = #vqstate { index_state     = IndexState,
+                                   ram_index_count = RamIndexCount }) ->
     {Qa, {Reduction1, IndexState1}} =
         MapFoldFilterFun(
           fun erlang:'not'/1,
@@ -1348,8 +1348,8 @@ maybe_push_alphas_to_betas(Generator, Consumer, Q, State) ->
 push_betas_to_deltas(State = #vqstate { q2              = Q2,
                                         delta           = Delta,
                                         q3              = Q3,
-                                        ram_index_count = RamIndexCount,
-                                        index_state     = IndexState }) ->
+                                        index_state     = IndexState,
+                                        ram_index_count = RamIndexCount }) ->
     {Delta1, Q2a, RamIndexCount1, IndexState1} =
         push_betas_to_deltas(fun (Q2MinSeqId) -> Q2MinSeqId end,
                              fun bpqueue:out/1, Q2,
