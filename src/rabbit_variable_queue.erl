@@ -847,8 +847,8 @@ permitted_ram_index_count(#vqstate { len   = Len,
                  BetaLen - trunc(BetaLen * BetaLen / AlphaBetaLen)
     end.
 
-should_force_index_to_disk(State =
-                           #vqstate { ram_index_count = RamIndexCount }) ->
+should_force_index_to_disk(State = #vqstate {
+                             ram_index_count = RamIndexCount }) ->
     case permitted_ram_index_count(State) of
         infinity  -> false;
         Permitted -> RamIndexCount >= Permitted
