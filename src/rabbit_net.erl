@@ -66,7 +66,7 @@ async_recv(Sock, Length, Timeout) when is_record(Sock, ssl_socket) ->
     Pid = self(),
     Ref = make_ref(),
 
-    spawn(fun() -> Pid ! {inet_async, Sock, Ref,
+    spawn(fun () -> Pid ! {inet_async, Sock, Ref,
                     ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)}
         end),
 

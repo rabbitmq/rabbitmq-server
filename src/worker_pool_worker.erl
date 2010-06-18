@@ -35,6 +35,8 @@
 
 -export([start_link/1, submit/2, submit_async/2, run/1]).
 
+-export([set_maximum_since_use/2]).
+
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -46,6 +48,9 @@
 -spec(submit/2 :: (pid(), fun (() -> A) | {atom(), atom(), [any()]}) -> A).
 -spec(submit_async/2 ::
       (pid(), fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
+-spec(run/1 :: (fun (() -> A)) -> A;
+               ({atom(), atom(), [any()]}) -> any()).
+-spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 
 -endif.
 
@@ -65,7 +70,19 @@ submit(Pid, Fun) ->
 submit_async(Pid, Fun) ->
     gen_server2:cast(Pid, {submit_async, Fun}).
 
+set_maximum_since_use(Pid, Age) ->
+    gen_server2:pcast(Pid, 8, {set_maximum_since_use, Age}).
+
+run({M, F, A}) ->
+    apply(M, F, A);
+run(Fun) ->
+    Fun().
+
+%%----------------------------------------------------------------------------
+
 init([WId]) ->
+    ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
+                                             [self()]),
     ok = worker_pool:idle(WId),
     put(worker_pool_worker, true),
     {ok, WId, hibernate,
@@ -84,6 +101,10 @@ handle_cast({submit_async, Fun}, WId) ->
     ok = worker_pool:idle(WId),
     {noreply, WId, hibernate};
 
+handle_cast({set_maximum_since_use, Age}, WId) ->
+    ok = file_handle_cache:set_maximum_since_use(Age),
+    {noreply, WId, hibernate};
+
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
@@ -95,10 +116,3 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, State) ->
     State.
-
-%%----------------------------------------------------------------------------
-
-run({M, F, A}) ->
-    apply(M, F, A);
-run(Fun) ->
-    Fun().

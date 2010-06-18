@@ -42,8 +42,12 @@ if "!RABBITMQ_BASE!"=="" (
     set RABBITMQ_BASE=!APPDATA!\RabbitMQ
 )
 
+if "!COMPUTERNAME!"=="" (
+    set COMPUTERNAME=localhost
+)
+
 if "!RABBITMQ_NODENAME!"=="" (
-    set RABBITMQ_NODENAME=rabbit
+    set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
 )
 
 if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
@@ -145,6 +149,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -s rabbit ^
 +W w ^
 +A30 ^
++P 1048576 ^
 -kernel inet_default_listen_options "[{nodelay, true}]" ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 !RABBITMQ_LISTEN_ARG! ^

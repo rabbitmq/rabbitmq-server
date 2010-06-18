@@ -11,10 +11,10 @@ SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
 DOCS_DIR=docs
-INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
+INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit_framing_spec.hrl
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing.erl $(USAGES_ERL)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
-TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
+TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit_framing_spec.hrl $(BEAM_TARGETS)
 WEB_URL=http://stage.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
@@ -40,7 +40,7 @@ BASIC_PLT=basic.plt
 RABBIT_PLT=rabbit.plt
 
 ifndef USE_SPECS
-# our type specs rely on features / bug fixes in dialyzer that are
+# our type specs rely on features and bug fixes in dialyzer that are
 # only available in R13B01 upwards (R13B01 is eshell 5.7.2)
 #
 # NB: the test assumes that version number will only contain single digits
@@ -56,7 +56,7 @@ TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
 SIBLING_CODEGEN_DIR=../rabbitmq-codegen/
 AMQP_CODEGEN_DIR=$(shell [ -d $(SIBLING_CODEGEN_DIR) ] && echo $(SIBLING_CODEGEN_DIR) || echo codegen)
-AMQP_SPEC_JSON_PATH=$(AMQP_CODEGEN_DIR)/amqp-0.8.json
+AMQP_SPEC_JSON_FILES=$(AMQP_CODEGEN_DIR)/amqp-0.8.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
@@ -70,6 +70,12 @@ define usage_dep
   $(call usage_xml_to_erl, $(1)): $(1) $(DOCS_DIR)/usage.xsl
 endef
 
+ifneq "$(SBIN_DIR)" ""
+ifneq "$(TARGET_DIR)" ""
+SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
+endif
+endif
+
 all: $(TARGETS)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
@@ -81,11 +87,14 @@ $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 $(EBIN_DIR)/%.beam:
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 
-$(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
-	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_PATH) $@
+$(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES)
+	$(PYTHON) codegen.py header $(AMQP_SPEC_JSON_FILES) $@
 
-$(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_PATH)
-	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_PATH) $@
+$(INCLUDE_DIR)/rabbit_framing_spec.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES)
+	$(PYTHON) codegen.py spec $(AMQP_SPEC_JSON_FILES) $@
+
+$(SOURCE_DIR)/rabbit_framing.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES)
+	$(PYTHON) codegen.py body   $(AMQP_SPEC_JSON_FILES) $@
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
@@ -110,7 +119,7 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
-	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
+	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit_framing_spec.hrl $(SOURCE_DIR)/rabbit_framing.erl codegen.pyc
 	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
 	rm -f $(RABBIT_PLT)
 	rm -f $(DEPS_FILE)
@@ -164,7 +173,11 @@ stop-node:
 COVER_DIR=.
 
 start-cover: all
-	echo "cover:start(), rabbit_misc:enable_cover([\"$(COVER_DIR)\"])." | $(ERL_CALL)
+	echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL)
+	echo "rabbit_misc:enable_cover([\"$(COVER_DIR)\"])." | $(ERL_CALL)
+
+start-secondary-cover: all
+	echo "rabbit_misc:start_cover([\"hare\"])." | $(ERL_CALL)
 
 stop-cover: all
 	echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL)
@@ -230,13 +243,7 @@ $(SOURCE_DIR)/%_usage.erl:
 
 docs_all: $(MANPAGES) $(WEB_MANPAGES)
 
-install: SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
 install: all docs_all install_dirs
-	@[ -n "$(TARGET_DIR)" ] || (echo "Please set TARGET_DIR."; false)
-	@[ -n "$(SBIN_DIR)" ] || (echo "Please set SBIN_DIR."; false)
-	@[ -n "$(MAN_DIR)" ] || (echo "Please set MAN_DIR."; false)
-
-	mkdir -p $(TARGET_DIR)
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
@@ -252,8 +259,14 @@ install: all docs_all install_dirs
 	done
 
 install_dirs:
-	mkdir -p $(SBIN_DIR)
+	@ OK=true && \
+	  { [ -n "$(TARGET_DIR)" ] || { echo "Please set TARGET_DIR."; OK=false; }; } && \
+	  { [ -n "$(SBIN_DIR)" ] || { echo "Please set SBIN_DIR."; OK=false; }; } && \
+	  { [ -n "$(MAN_DIR)" ] || { echo "Please set MAN_DIR."; OK=false; }; } && $$OK
+
 	mkdir -p $(TARGET_DIR)/sbin
+	mkdir -p $(SBIN_DIR)
+	mkdir -p $(MAN_DIR)
 
 $(foreach XML, $(USAGES_XML), $(eval $(call usage_dep, $(XML))))
 

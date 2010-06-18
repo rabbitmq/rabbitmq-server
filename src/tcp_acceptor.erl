@@ -75,8 +75,15 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
         error_logger:info_msg("accepted TCP connection on ~s:~p from ~s:~p~n",
                               [inet_parse:ntoa(Address), Port,
                                inet_parse:ntoa(PeerAddress), PeerPort]),
+        %% In the event that somebody floods us with connections we can spew
+        %% the above message at error_logger faster than it can keep up.
+        %% So error_logger's mailbox grows unbounded until we eat all the
+        %% memory available and crash. So here's a meaningless synchronous call
+        %% to the underlying gen_event mechanism - when it returns the mailbox
+        %% is drained.
+        gen_event:which_handlers(error_logger),
         %% handle
-        apply(M, F, A ++ [Sock])
+        file_handle_cache:release_on_death(apply(M, F, A ++ [Sock]))
     catch {inet_error, Reason} ->
             gen_tcp:close(Sock),
             error_logger:error_msg("unable to accept TCP connection: ~p~n",
@@ -104,6 +111,7 @@ code_change(_OldVsn, State, _Extra) ->
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 accept(State = #state{sock=LSock}) ->
+    ok = file_handle_cache:obtain(),
     case prim_inet:async_accept(LSock, -1) of
         {ok, Ref} -> {noreply, State#state{ref=Ref}};
         Error     -> {stop, {cannot_accept, Error}, State}

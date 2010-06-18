@@ -26,7 +26,7 @@
           <arg choice="opt" rep="repeat"><replaceable>command options</replaceable></arg>
         </cmdsynopsis>
     </refsynopsisdiv>
-    
+
     <refsect1>
         <title>Description</title>
         <para>

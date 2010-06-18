@@ -51,7 +51,8 @@
 
 -record(exchange, {name, type, durable, auto_delete, arguments}).
 
--record(amqqueue, {name, durable, auto_delete, arguments, pid}).
+-record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
+                   arguments, pid}).
 
 %% mnesia doesn't like unary records, so we add a dummy 'value' field
 -record(route, {binding, value = const}).
@@ -87,7 +88,7 @@
 -type(file_path() :: string()).
 
 %% this is really an abstract type, but dialyzer does not support them
--type(guid() :: any()).
+-type(guid() :: binary()).
 -type(txn() :: guid()).
 -type(pkey() :: guid()).
 -type(r(Kind) ::
@@ -104,11 +105,12 @@
                   write     :: regexp(),
                   read      :: regexp()}).
 -type(amqqueue() ::
-      #amqqueue{name          :: queue_name(),
-                durable       :: boolean(),
-                auto_delete   :: boolean(),
-                arguments     :: amqp_table(),
-                pid           :: maybe(pid())}).
+      #amqqueue{name            :: queue_name(),
+                durable         :: boolean(),
+                auto_delete     :: boolean(),
+                exclusive_owner :: maybe(pid()),
+                arguments       :: amqp_table(),
+                pid             :: maybe(pid())}).
 -type(exchange() ::
       #exchange{name        :: exchange_name(),
                 type        :: exchange_type(),
@@ -176,6 +178,7 @@
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2010 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
+-define(ERTS_MINIMUM, "5.6.3").
 
 -define(MAX_WAIT, 16#ffffffff).
 

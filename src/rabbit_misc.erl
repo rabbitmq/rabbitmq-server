@@ -43,6 +43,7 @@
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
+-export([start_cover/1]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
@@ -97,6 +98,7 @@
              undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> ok_or_error()).
+-spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
 -spec(enable_cover/1 :: (file_path()) -> ok_or_error()).
 -spec(report_cover/1 :: (file_path()) -> 'ok').
@@ -228,6 +230,10 @@ enable_cover(Root) ->
         _ -> ok
     end.
 
+start_cover(NodesS) ->
+    {ok, _} = cover:start([makenode(N) || N <- NodesS]),
+    ok.
+
 report_cover() ->
     report_cover(".").
 
@@ -236,12 +242,12 @@ report_cover([Root]) when is_atom(Root) ->
 report_cover(Root) ->
     Dir = filename:join(Root, "cover"),
     ok = filelib:ensure_dir(filename:join(Dir,"junk")),
-    lists:foreach(fun(F) -> file:delete(F) end,
+    lists:foreach(fun (F) -> file:delete(F) end,
                   filelib:wildcard(filename:join(Dir, "*.html"))),
     {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
     {CT, NCT} =
         lists:foldl(
-          fun(M,{CovTot, NotCovTot}) ->
+          fun (M,{CovTot, NotCovTot}) ->
                   {ok, {M, {Cov, NotCov}}} = cover:analyze(M, module),
                   ok = report_coverage_percentage(SummaryFile,
                                                   Cov, NotCov, M),
@@ -361,7 +367,7 @@ upmap(F, L) ->
     Parent = self(),
     Ref = make_ref(),
     [receive {Ref, Result} -> Result end
-     || _ <- [spawn(fun() -> Parent ! {Ref, F(X)} end) || X <- L]].
+     || _ <- [spawn(fun () -> Parent ! {Ref, F(X)} end) || X <- L]].
 
 map_in_order(F, L) ->
     lists:reverse(
@@ -531,51 +537,25 @@ pid_to_string(Pid) when is_pid(Pid) ->
 
 %% inverse of above
 string_to_pid(Str) ->
-    ErrorFun = fun () -> throw({error, {invalid_pid_syntax, Str}}) end,
-    %% TODO: simplify this code by using the 're' module, once we drop
-    %% support for R11
-    %%
-    %% 1) sanity check
+    Err = {error, {invalid_pid_syntax, Str}},
     %% The \ before the trailing $ is only there to keep emacs
     %% font-lock from getting confused.
-    case regexp:first_match(Str, "^<.*\\.[0-9]+\\.[0-9]+>\$") of
-        {match, _, _} ->
-            %% 2) strip <>
-            Str1 = string:substr(Str, 2, string:len(Str) - 2),
-            %% 3) extract three constituent parts, taking care to
-            %% handle dots in the node part (hence the reverse and concat)
-            [SerStr, IdStr | Rest] = lists:reverse(string:tokens(Str1, ".")),
-            NodeStr = lists:concat(lists:reverse(Rest)),
-            %% 4) construct a triple term from the three parts
-            TripleStr = lists:flatten(io_lib:format("{~s,~s,~s}.",
-                                                    [NodeStr, IdStr, SerStr])),
-            %% 5) parse the triple
-            Tokens = case erl_scan:string(TripleStr) of
-                         {ok, Tokens1, _} -> Tokens1;
-                         {error, _, _}    -> ErrorFun()
-                     end,
-            Term = case erl_parse:parse_term(Tokens) of
-                       {ok, Term1} -> Term1;
-                       {error, _}  -> ErrorFun()
-                   end,
-            {Node, Id, Ser} =
-                case Term of
-                    {Node1, Id1, Ser1} when is_atom(Node1) andalso
-                                            is_integer(Id1) andalso
-                                            is_integer(Ser1) ->
-                        Term;
-                    _ ->
-                        ErrorFun()
-                end,
-            %% 6) turn the triple into a pid - see pid_to_string
-            <<131,NodeEnc/binary>> = term_to_binary(Node),
+    case re:run(Str, "^<(.*)\\.([0-9]+)\\.([0-9]+)>\$",
+                [{capture,all_but_first,list}]) of
+        {match, [NodeStr, IdStr, SerStr]} ->
+            %% the NodeStr atom might be quoted, so we have to parse
+            %% it rather than doing a simple list_to_atom
+            NodeAtom = case erl_scan:string(NodeStr) of
+                           {ok, [{atom, _, X}], _} -> X;
+                           {error, _, _} -> throw(Err)
+                       end,
+            <<131,NodeEnc/binary>> = term_to_binary(NodeAtom),
+            Id = list_to_integer(IdStr),
+            Ser = list_to_integer(SerStr),
             binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,0:8>>);
         nomatch ->
-            ErrorFun();
-        Error ->
-            %% invalid regexp - shouldn't happen
-            throw(Error)
-    end.
+            throw(Err)
+    end. 
 
 version_compare(A, B, lte) ->
     case version_compare(A, B) of
@@ -592,23 +572,27 @@ version_compare(A, B, gte) ->
 version_compare(A, B, Result) ->
     Result =:= version_compare(A, B).
 
-version_compare([], []) ->
+version_compare(A, A) ->
     eq;
-version_compare([], _ ) ->
+version_compare([], [$0 | B]) ->
+    version_compare([], dropdot(B));
+version_compare([], _) ->
     lt; %% 2.3 < 2.3.1
-version_compare(_ , []) ->
+version_compare([$0 | A], []) ->
+    version_compare(dropdot(A), []);
+version_compare(_, []) ->
     gt; %% 2.3.1 > 2.3
 version_compare(A,  B) ->
     {AStr, ATl} = lists:splitwith(fun (X) -> X =/= $. end, A),
     {BStr, BTl} = lists:splitwith(fun (X) -> X =/= $. end, B),
     ANum = list_to_integer(AStr),
     BNum = list_to_integer(BStr),
-    if ANum =:= BNum -> ATl1 = lists:dropwhile(fun (X) -> X =:= $. end, ATl),
-                        BTl1 = lists:dropwhile(fun (X) -> X =:= $. end, BTl),
-                        version_compare(ATl1, BTl1);
+    if ANum =:= BNum -> version_compare(dropdot(ATl), dropdot(BTl));
        ANum < BNum   -> lt;
        ANum > BNum   -> gt
     end.
+
+dropdot(A) -> lists:dropwhile(fun (X) -> X =:= $. end, A).
 
 recursive_delete(Files) ->
     lists:foldl(fun (Path,  ok                   ) -> recursive_delete1(Path);

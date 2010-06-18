@@ -51,6 +51,7 @@
         binary,
         {packet, raw}, % no packaging
         {reuseaddr, true}, % allow rebind without waiting
+        {backlog, 128}, % use the maximum listen(2) backlog value
         %% {nodelay, true}, % TCP_NODELAY - disable Nagle's alg.
         %% {delay_send, true},
         {exit_on_close, false}

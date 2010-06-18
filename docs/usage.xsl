@@ -11,7 +11,7 @@
 <xsl:output method="text"
               encoding="UTF-8"
               indent="no"/>
-<xsl:strip-space elements="*"/> 
+<xsl:strip-space elements="*"/>
 <xsl:preserve-space elements="cmdsynopsis arg" />
 
 <xsl:template match="/">
@@ -19,7 +19,7 @@
 -module(<xsl:value-of select="$modulename" />).
 -export([usage/0]).
 usage() -> %QUOTE%Usage:
-<xsl:value-of select="refentry/refsynopsisdiv/cmdsynopsis/command"/> 
+<xsl:value-of select="refentry/refsynopsisdiv/cmdsynopsis/command"/>
 <xsl:text> </xsl:text>
 <xsl:for-each select="refentry/refsynopsisdiv/cmdsynopsis/arg">
   <xsl:apply-templates select="." />
@@ -28,7 +28,7 @@ usage() -> %QUOTE%Usage:
 
 <xsl:text>&#10;</xsl:text>
 
-<!-- List options (any variable list in a section called "Options"). --> 
+<!-- List options (any variable list in a section called "Options"). -->
 <xsl:for-each select=".//*[title='Options']/variablelist">
   <xsl:if test="position() = 1">&#10;Options:&#10;</xsl:if>
   <xsl:for-each select="varlistentry">
@@ -40,13 +40,13 @@ usage() -> %QUOTE%Usage:
   </xsl:for-each>
 </xsl:for-each>
 
-<!-- Any paragraphs which have been marked as role="usage" (principally for global flags). --> 
+<!-- Any paragraphs which have been marked as role="usage" (principally for global flags). -->
 <xsl:text>&#10;</xsl:text>
 <xsl:for-each select=".//*[title='Options']//para[@role='usage']">
 <xsl:value-of select="normalize-space(.)"/><xsl:text>&#10;&#10;</xsl:text>
 </xsl:for-each>
 
-<!-- List commands (any first-level variable list in a section called "Commands"). --> 
+<!-- List commands (any first-level variable list in a section called "Commands"). -->
 <xsl:for-each select=".//*[title='Commands']/variablelist | .//*[title='Commands']/refsect2/variablelist">
   <xsl:if test="position() = 1">Commands:&#10;</xsl:if>
   <xsl:for-each select="varlistentry">
