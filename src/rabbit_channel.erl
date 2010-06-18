@@ -648,7 +648,6 @@ handle_method(#'basic.recover_async'{requeue = false},
     %% variant of this method
     {noreply, State};
 
-
 handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
     {noreply, State2 = #ch{writer_pid = WriterPid}} =
         handle_method(#'basic.recover_async'{requeue = Requeue},
@@ -656,6 +655,7 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
                       State),
     ok = rabbit_writer:send_command(WriterPid, #'basic.recover_ok'{}),
     {noreply, State2};
+
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
