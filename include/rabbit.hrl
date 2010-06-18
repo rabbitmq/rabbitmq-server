@@ -79,6 +79,7 @@
 
 -type(maybe(T) :: T | 'none').
 -type(erlang_node() :: atom()).
+-type(node_type() :: disc_only | disc | ram | unknown).
 -type(ssl_socket() :: #ssl_socket{}).
 -type(socket() :: port() | ssl_socket()).
 -type(thunk(T) :: fun(() -> T)).

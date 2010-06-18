@@ -100,7 +100,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
+-define(INFO_KEYS, [name, type, durable, auto_delete, arguments]).
 
 recover() ->
     Exs = rabbit_misc:table_fold(
