@@ -1364,7 +1364,7 @@ push_betas_to_deltas(State = #vqstate { q2              = Q2,
             empty ->
                 {?BLANK_DELTA, Q2, RamIndexCount, IndexState};
             {Q2MinSeqId, Q2MaxSeqId} ->
-                {Q2Count, Q2b, RamIndexCount2, IndexState2} =
+                {Len1, Q2b, RamIndexCount2, IndexState2} =
                     push_betas_to_deltas(
                       fun bpqueue:out/1, undefined, Q2, 0, RamIndexCount,
                       IndexState),
@@ -1373,52 +1373,50 @@ push_betas_to_deltas(State = #vqstate { q2              = Q2,
                 %% lowest of the betas that we transfer from q2 to
                 %% delta.
                 {#delta { start_seq_id = Q2MinSeqId,
-                          count        = Q2Count,
+                          count        = Len1,
                           end_seq_id   = Q2MaxSeqId + 1 },
                  Q2b, RamIndexCount2, IndexState2}
         end,
     true = bpqueue:is_empty(Q2a), %% ASSERTION
     Delta2 = #delta { start_seq_id = Delta2SeqId } =
         combine_deltas(Delta, Delta1),
-    State1 = State #vqstate { q2              = Q2a,
-                              delta           = Delta2,
-                              index_state     = IndexState1,
-                              ram_index_count = RamIndexCount1 },
-
-    case beta_bounds(Q3) of
-        empty ->
-            State1;
-        {Q3MinSeqId, Q3MaxSeqId} ->
-            Limit = rabbit_queue_index:next_segment_boundary(Q3MinSeqId),
-            %% ASSERTION
-            true = Delta2SeqId == undefined orelse Delta2SeqId > Q3MaxSeqId,
-            case Q3MaxSeqId < Limit of
-                true -> %% already only holding LTE one segment indices in q3
-                    State1;
-                false ->
-                    %% Q3MaxSeqId is low in the sense that it must be
-                    %% lower than the seq_id in delta2, in fact either
-                    %% delta2 has undefined as its seq_id or there
-                    %% does not exist a seq_id X s.t. X > Q3MaxSeqId
-                    %% and X < delta2's seq_id (would be +1 if it
-                    %% wasn't for the possibility of gaps in the
-                    %% seq_ids).  But Q3MaxSeqId is actually also the
-                    %% highest seq_id of the betas we transfer from q3
-                    %% to deltas.
-                    {Len2, Q3a, RamIndexCount3, IndexState3} =
-                        push_betas_to_deltas(
-                          fun bpqueue:out_r/1, Limit, Q3, 0, RamIndexCount1,
-                          IndexState1),
-                    Delta3 = #delta { start_seq_id = Limit,
-                                      count        = Len2,
-                                      end_seq_id   = Q3MaxSeqId + 1 },
-                    Delta4 = combine_deltas(Delta3, Delta2),
-                    State1 #vqstate { delta           = Delta4,
-                                      q3              = Q3a,
-                                      index_state     = IndexState3,
-                                      ram_index_count = RamIndexCount3 }
-            end
-    end.
+    {Delta3, Q3a, RamIndexCount3, IndexState3} =
+        case beta_bounds(Q3) of
+            empty ->
+                {?BLANK_DELTA, Q3, RamIndexCount1, IndexState1};
+            {Q3MinSeqId, Q3MaxSeqId} ->
+                Limit = rabbit_queue_index:next_segment_boundary(Q3MinSeqId),
+                %% ASSERTION
+                true = Delta2SeqId == undefined orelse Delta2SeqId > Q3MaxSeqId,
+                case Q3MaxSeqId < Limit of
+                    true ->
+                        %% already only holding LTE one segment indices in q3
+                        {?BLANK_DELTA, Q3, RamIndexCount1, IndexState1};
+                    false ->
+                        %% Q3MaxSeqId is low in the sense that it must
+                        %% be lower than the seq_id in delta2, in fact
+                        %% either delta2 has undefined as its seq_id
+                        %% or there does not exist a seq_id X s.t. X >
+                        %% Q3MaxSeqId and X < delta2's seq_id (would
+                        %% be +1 if it wasn't for the possibility of
+                        %% gaps in the seq_ids).  But Q3MaxSeqId is
+                        %% actually also the highest seq_id of the
+                        %% betas we transfer from q3 to deltas.
+                        {Len2, Q3b, RamIndexCount4, IndexState4} =
+                            push_betas_to_deltas(
+                              fun bpqueue:out_r/1, Limit, Q3, 0, RamIndexCount1,
+                              IndexState1),
+                        {#delta { start_seq_id = Limit,
+                                  count        = Len2,
+                                  end_seq_id   = Q3MaxSeqId + 1 },
+                         Q3b, RamIndexCount4, IndexState4}
+                end
+        end,
+    State #vqstate { q2              = Q2a,
+                     delta           = combine_deltas(Delta3, Delta2),
+                     q3              = Q3a,
+                     index_state     = IndexState3,
+                     ram_index_count = RamIndexCount3 }.
 
 push_betas_to_deltas(Generator, Limit, Q, Count, RamIndexCount, IndexState) ->
     case Generator(Q) of
