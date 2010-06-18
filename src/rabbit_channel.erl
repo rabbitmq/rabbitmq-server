@@ -444,13 +444,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         routed ->
             ok;
         unroutable ->
-            %% FIXME: 312 should be replaced by the ?NO_ROUTE
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 312, <<"unroutable">>);
+            ok = basic_return(Message, WriterPid, ?NO_ROUTE, <<"unroutable">>);
         not_delivered ->
-            %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>)
+            ok = basic_return(Message, WriterPid, ?NO_CONSUMERS, <<"not_delivered">>)
     end,
     {noreply, case TxnKey of
                   none -> State;
