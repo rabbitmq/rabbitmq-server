@@ -1367,7 +1367,7 @@ push_betas_to_deltas(State = #vqstate { q2              = Q2,
 
 push_betas_to_deltas(LimitFun, Generator, Q, RamIndexCount, IndexState) ->
     case bpqueue:out(Q) of
-        {empty, Q} ->
+        {empty, _Q} ->
             {?BLANK_DELTA, Q, RamIndexCount, IndexState};
         {{value, _IndexOnDisk1, #msg_status { seq_id = MinSeqId }}, _Qa} ->
             {{value, _IndexOnDisk2, #msg_status { seq_id = MaxSeqId }}, _Qb} =
@@ -1387,7 +1387,7 @@ push_betas_to_deltas(LimitFun, Generator, Q, RamIndexCount, IndexState) ->
 
 push_betas_to_deltas(Generator, Limit, Q, Count, RamIndexCount, IndexState) ->
     case Generator(Q) of
-        {empty, Q} ->
+        {empty, _Q} ->
             {Count, Q, RamIndexCount, IndexState};
         {{value, _IndexOnDisk, #msg_status { seq_id = SeqId }}, _Qa}
           when SeqId < Limit ->
