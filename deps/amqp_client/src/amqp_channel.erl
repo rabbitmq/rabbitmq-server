@@ -299,15 +299,21 @@ shutdown_with_reason(Reason, State) ->
 handle_method(Method, Content, #c_state{closing = Closing} = State) ->
     case {Method, Content} of
         %% Handle 'channel.close': send 'channel.close_ok' and stop channel
-        {#'channel.close'{}, none}
-          when Closing =:= just_channel ->
-            %% We're already closing, so just send back the ok.
-            do(#'channel.close_ok'{}, none, State),
-            {noreply, State};
         {#'channel.close'{reply_code = ReplyCode,
                           reply_text = ReplyText}, none} ->
-            do(#'channel.close_ok'{}, none, State),
-            {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
+            case Closing of
+                %% We're already closing, so just send back the ok.
+                just_channel ->
+                    do(#'channel.close_ok'{}, none, State),
+                    {noreply, State};
+                {connection, _Reason} ->
+                    do(#'channel.close_ok'{}, none, State),
+                    {noreply, State};
+                %% Close normally
+                _ ->
+                    do(#'channel.close_ok'{}, none, State),
+                    {stop, {server_initiated_close, ReplyCode, ReplyText}, State}
+            end;
         %% Handle 'channel.close_ok': stop channel
         {CloseOk = #'channel.close_ok'{}, none} ->
             {stop, normal, rpc_bottom_half(CloseOk, State)};
@@ -320,6 +326,11 @@ handle_method(Method, Content, #c_state{closing = Closing} = State) ->
                     ?LOG_INFO("Channel (~p): dropping method ~p from server "
                               "because channel is closing~n",
                               [self(), {Method, Content}]),
+                    {noreply, State};
+                {connection, Reason} ->
+                    ?LOG_INFO("Channel (~p): dropping method ~p from server "
+                              "because connection is closing (~p)~n",
+                              [self(), {Method, Content}, Reason]),
                     {noreply, State};
                 %% Standard handling of incoming method
                 _ ->
