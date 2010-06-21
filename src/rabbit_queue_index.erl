@@ -152,7 +152,7 @@
 
 %% ---- misc ----
 
--define(PUB, {__Guid, __IsPersistent}).
+-define(PUB, {_, _}). %% {Guid, IsPersistent}
 
 -define(READ_MODE, [binary, raw, read, {read_ahead, ?SEGMENT_TOTAL_SIZE}]).
 
