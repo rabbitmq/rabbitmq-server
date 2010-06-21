@@ -413,9 +413,6 @@ handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
     stop;
 
-handle_method(#'access.request'{},_, State) ->
-    {reply, #'access.request_ok'{ticket = 1}, State};
-
 handle_method(#'basic.publish'{}, _, #ch{flow = #flow{client = false}}) ->
     rabbit_misc:protocol_error(
       command_invalid,
@@ -447,7 +444,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         RoutingRes == routed -> ok;
         true -> 
             {_ShouldClose, Code, Text} = rabbit_framing:lookup_amqp_exception(RoutingRes),
-            ok = basic_return(Message, WriterPid, Code, Text)
+            ok = basic_return(Message, WriterPid, ?NO_ROUTE, <<"unroutable">>);
+            ok = basic_return(Message, WriterPid, ?NO_CONSUMERS, <<"not_delivered">>)
     end,
     {noreply, case TxnKey of
                   none -> State;
@@ -497,7 +495,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                    Content),
             {noreply, State1#ch{next_tag = DeliveryTag + 1}};
         empty ->
-            {reply, #'basic.get_empty'{cluster_id = <<>>}, State}
+            {reply, #'basic.get_empty'{deprecated_cluster_id = <<>>}, State}
     end;
 
 handle_method(#'basic.consume'{queue = QueueNameBin,
@@ -602,7 +600,7 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
                   end,
     {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
 
-handle_method(#'basic.recover'{requeue = true},
+handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{ transaction_id = none,
                               unacked_message_q = UAMQ }) ->
     ok = fold_per_queue(
@@ -614,10 +612,11 @@ handle_method(#'basic.recover'{requeue = true},
                    rabbit_amqqueue:requeue(
                      QPid, lists:reverse(MsgIds), self())
            end, ok, UAMQ),
-    %% No answer required, apparently!
+    %% No answer required - basic.recover is the newer, synchronous
+    %% variant of this method
     {noreply, State#ch{unacked_message_q = queue:new()}};
 
-handle_method(#'basic.recover'{requeue = false},
+handle_method(#'basic.recover_async'{requeue = false},
               _, State = #ch{ transaction_id = none,
                               writer_pid = WriterPid,
                               unacked_message_q = UAMQ }) ->
@@ -639,19 +638,28 @@ handle_method(#'basic.recover'{requeue = false},
                      WriterPid, false, ConsumerTag, DeliveryTag,
                      {QName, QPid, MsgId, true, Message})
            end, ok, UAMQ),
-    %% No answer required, apparently!
+    %% No answer required - basic.recover is the newer, synchronous
+    %% variant of this method
     {noreply, State};
 
-handle_method(#'basic.recover'{}, _, _State) ->
+handle_method(#'basic.recover_async'{}, _, _State) ->
     rabbit_misc:protocol_error(
       not_allowed, "attempt to recover a transactional channel",[]);
+
+handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
+    {noreply, State2 = #ch{writer_pid = WriterPid}} =
+        handle_method(#'basic.recover_async'{requeue = Requeue},
+                      Content,
+                      State),
+    ok = rabbit_writer:send_command(WriterPid, #'basic.recover_ok'{}),
+    {noreply, State2};
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
                                   durable = Durable,
-                                  auto_delete = AutoDelete,
-                                  internal = false,
+                                  deprecated_auto_delete = false, %% 0-9-1: true not supported
+                                  deprecated_internal = false, %% 0-9-1: true not supported
                                   nowait = NoWait,
                                   arguments = Args},
               _, State = #ch{ virtual_host = VHostPath }) ->
@@ -672,11 +680,9 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                 rabbit_exchange:declare(ExchangeName,
                                         CheckedType,
                                         Durable,
-                                        AutoDelete,
                                         Args)
         end,
-    ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable,
-                                            AutoDelete, Args),
+    ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable, Args),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
@@ -720,9 +726,9 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             end,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
-    Finish = fun (#amqqueue{name = QueueName,
-                            durable = Durable1,
-                            auto_delete = AutoDelete1} = Q)
+    Finish = fun (#amqqueue{name = QueueName, 
+                            durable = Durable1, 
+                            auto_delete = AutoDelete1} = Q) 
                    when Durable =:= Durable1, AutoDelete =:= AutoDelete1 ->
                      check_exclusive_access(Q, Owner, strict),
                      check_configure_permitted(QueueName, State),
@@ -738,10 +744,10 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                  %% non-equivalence trumps exclusivity arbitrarily
                  (#amqqueue{name = QueueName}) ->
                      rabbit_misc:protocol_error(
-                       precondition_failed,
+                       channel_error,
                        "parameters for ~s not equivalent",
                        [rabbit_misc:rs(QueueName)])
-             end,
+                 end,
     Q = case rabbit_amqqueue:with(
                rabbit_misc:r(VHostPath, queue, QueueNameBin),
                Finish) of

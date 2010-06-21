@@ -33,13 +33,13 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, declare/5, lookup/1, lookup_or_die/1,
+-export([recover/0, declare/4, lookup/1, lookup_or_die/1,
          list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          publish/2]).
 -export([add_binding/5, delete_binding/5, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
--export([assert_equivalence/5]).
+-export([assert_equivalence/4]).
 -export([assert_args_equivalence/2]).
 -export([check_type/1]).
 
@@ -63,11 +63,9 @@
 -type(inner_fun() :: fun((exchange(), queue()) -> any())).
 
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 :: (exchange_name(), exchange_type(), boolean(), boolean(),
-                    amqp_table()) -> exchange()).
+-spec(declare/4 :: (exchange_name(), exchange_type(), boolean(), amqp_table()) -> exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
--spec(assert_equivalence/5 :: (exchange(), atom(), boolean(), boolean(),
-                               amqp_table()) -> 'ok').
+-spec(assert_equivalence/4 :: (exchange(), atom(), boolean(), amqp_table()) -> 'ok').
 -spec(assert_args_equivalence/2 :: (exchange(), amqp_table()) -> 'ok').
 -spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
 -spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
@@ -100,7 +98,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(INFO_KEYS, [name, type, durable, auto_delete, arguments]).
+-define(INFO_KEYS, [name, type, durable, arguments].
 
 recover() ->
     Exs = rabbit_misc:table_fold(
@@ -135,11 +133,10 @@ recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
 recover_with_bindings([], [], []) ->
     ok.
 
-declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
+declare(ExchangeName, Type, Durable, Args) ->
     Exchange = #exchange{name = ExchangeName,
                          type = Type,
                          durable = Durable,
-                         auto_delete = AutoDelete,
                          arguments = Args},
     %% We want to upset things if it isn't ok; this is different from
     %% the other hooks invocations, where we tend to ignore the return
@@ -190,12 +187,11 @@ check_type(TypeBin) ->
     end.
 
 assert_equivalence(X = #exchange{ durable = Durable,
-                                  auto_delete = AutoDelete,
                                   type = Type},
-                   Type, Durable, AutoDelete,
+                   Type, Durable,
                    RequiredArgs) ->
     ok = (type_to_module(Type)):assert_args_equivalence(X, RequiredArgs);
-assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _AutoDelete,
+assert_equivalence(#exchange{ name = Name }, _Type, _Durable,
                    _Args) ->
     rabbit_misc:protocol_error(
       precondition_failed,
@@ -246,7 +242,6 @@ infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 i(name,        #exchange{name        = Name})       -> Name;
 i(type,        #exchange{type        = Type})       -> Type;
 i(durable,     #exchange{durable     = Durable})    -> Durable;
-i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
 i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
 i(Item, _) -> throw({bad_argument, Item}).
 
@@ -361,7 +356,6 @@ cleanup_deleted_queue_bindings(ExchangeName, Deleted, Bindings, Acc) ->
 cleanup_deleted_queue_bindings1(ExchangeName, Bindings) ->
     [X] = mnesia:read({rabbit_exchange, ExchangeName}),
     {maybe_auto_delete(X), Bindings}.
-
 
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
@@ -525,13 +519,9 @@ delete(ExchangeName, IfUnused) ->
             Error
     end.
 
-maybe_auto_delete(Exchange = #exchange{auto_delete = false}) ->
-    {no_delete, Exchange};
-maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
-    case conditional_delete(Exchange) of
-        {error, in_use}         -> {no_delete, Exchange};
-        {deleted, Exchange, []} -> {auto_deleted, Exchange}
-    end.
+%% TODO: remove this autodelete machinery altogether.
+maybe_auto_delete(Exchange) ->
+    {no_delete, Exchange}.
 
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     Match = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
