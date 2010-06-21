@@ -447,13 +447,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         routed ->
             ok;
         unroutable ->
-            %% FIXME: 312 should be replaced by the ?NO_ROUTE
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 312, <<"unroutable">>);
+            ok = basic_return(Message, WriterPid, no_route);
         not_delivered ->
-            %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>)
+            ok = basic_return(Message, WriterPid, no_consumers)
     end,
     {noreply, case TxnKey of
                   none -> State;
@@ -946,7 +942,8 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
 basic_return(#basic_message{exchange_name = ExchangeName,
                             routing_key   = RoutingKey,
                             content       = Content},
-             WriterPid, ReplyCode, ReplyText) ->
+             WriterPid, Reason) ->
+    {_Close, ReplyCode, ReplyText} = rabbit_framing:lookup_amqp_exception(Reason),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.return'{reply_code  = ReplyCode,
