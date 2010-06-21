@@ -490,10 +490,18 @@ handle_frame(Type, Channel, Payload, State) ->
                 closing ->
                     %% According to the spec, after sending a
                     %% channel.close we must ignore all frames except
+                    %% channel.close and channel.close_ok.  In the
+                    %% event of a channel.close, we should send back a
                     %% channel.close_ok.
                     case AnalyzedFrame of
                         {method, 'channel.close_ok', _} ->
                             erase({channel, Channel});
+                        {method, 'channel.close', _} ->
+                            %% We're already closing this channel, so
+                            %% there's no cleanup to do (notify
+                            %% queues, etc.)
+                            ok = rabbit_writer:send_command(State#v1.sock,
+                                                            #'channel.close_ok'{});
                         _ -> ok
                     end,
                     State;
