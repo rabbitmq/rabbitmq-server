@@ -77,21 +77,20 @@ def domains_merger(key, old, new):
         o[k] = v
     return [[k, v] for (k, v) in o.iteritems()]
 
-def constants_merger(key, old, new):
-    o = dict((v["name"], v) for v in old)
+def merge_dict_lists_by(dict_key, old, new, description):
+    old_index = set(v[dict_key] for v in old)
+    result = list(old) # shallow copy
     for v in new:
-        if o.has_key(v["name"]):
-            raise AmqpSpecFileMergeConflict(key, old, new)
-        o[v["name"]] = v
-    return list(o.values())
+        if v[dict_key] in old_index:
+            raise AmqpSpecFileMergeConflict(description, old, new)
+        result.append(v)
+    return result
+
+def constants_merger(key, old, new):
+    return merge_dict_lists_by("name", old, new, key)
 
 def methods_merger(classname, old, new):
-    o = dict((v["name"], v) for v in old)
-    for v in new:
-        if o.has_key(v["name"]):
-            raise AmqpSpecFileMergeConflict(("class-methods", classname), old, new)
-        o[v["name"]] = v
-    return list(o.values())
+    return merge_dict_lists_by("name", old, new, ("class-methods", classname))
 
 def properties_merger(classname, old, new):
     oldnames = set(v["name"] for v in old)
@@ -109,13 +108,15 @@ def class_merger(old, new):
     return old
 
 def classes_merger(key, old, new):
-    o = dict((v["name"], v) for v in old)
+    old_index = dict(zip((v["name"] for v in old), range(len(old))))
+    result = list(old) # shallow copy
     for v in new:
-        if o.has_key(v["name"]):
-            o[v["name"]] = class_merger(o[v["name"]], v)
+        if v["name"] in old_index:
+            pos = old_index[v["name"]]
+            result[pos] = class_merger(result[pos], v)
         else:
-            o[v["name"]] = v
-    return list(o.values())
+            result.append(v)
+    return result
 
 mergers = {
     "extension": (extension_info_merger, []),
