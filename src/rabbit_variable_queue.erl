@@ -1350,17 +1350,17 @@ push_betas_to_deltas(State = #vqstate { q2              = Q2,
                                         q3              = Q3,
                                         index_state     = IndexState,
                                         ram_index_count = RamIndexCount }) ->
-    {Delta1, Q2a, RamIndexCount1, IndexState1} =
+    {Delta2, Q2a, RamIndexCount2, IndexState2} =
         push_betas_to_deltas(fun (Q2MinSeqId) -> Q2MinSeqId end,
                              fun bpqueue:out/1, Q2,
                              RamIndexCount, IndexState),
-    {Delta2, Q3a, RamIndexCount3, IndexState3} =
+    {Delta3, Q3a, RamIndexCount3, IndexState3} =
         push_betas_to_deltas(fun rabbit_queue_index:next_segment_boundary/1,
                              fun bpqueue:out_r/1, Q3,
-                             RamIndexCount1, IndexState1),
-    Delta3 = combine_deltas(Delta2, combine_deltas(Delta, Delta1)),
+                             RamIndexCount2, IndexState2),
+    Delta4 = combine_deltas(Delta3, combine_deltas(Delta, Delta2)),
     State #vqstate { q2              = Q2a,
-                     delta           = Delta3,
+                     delta           = Delta4,
                      q3              = Q3a,
                      index_state     = IndexState3,
                      ram_index_count = RamIndexCount3 }.
