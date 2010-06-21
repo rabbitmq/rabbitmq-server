@@ -296,19 +296,17 @@ shutdown_with_reason(Reason, State) ->
 %% Handling of methods from the server
 %%---------------------------------------------------------------------------
 
-%% We're already closing, so just send back the ok.
-handle_method(#'channel.close'{}, none, #c_state{closing = just_channel} = State) ->
-    do(#'channel.close_ok'{}, none, State),
-    {noreply, State};
-handle_method(#'channel.close'{}, none, #c_state{closing = {connection, _Reason}} = State) ->
-    do(#'channel.close_ok'{}, none, State),
-    {noreply, State};
-
 %% Close normally
 handle_method(#'channel.close'{reply_code = ReplyCode,
-                               reply_text = ReplyText}, none, State) ->
+                               reply_text = ReplyText}, none,
+              #c_state{closing = false} = State) ->
     do(#'channel.close_ok'{}, none, State),
     {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
+
+%% We're already closing, so just send back the ok.
+handle_method(#'channel.close'{}, none, State) ->
+    do(#'channel.close_ok'{}, none, State),
+    {noreply, State};
 
 %% Handle 'channel.close_ok': stop channel
 handle_method(CloseOk = #'channel.close_ok'{}, none, State) ->
