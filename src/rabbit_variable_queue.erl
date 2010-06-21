@@ -1269,11 +1269,11 @@ maybe_deltas_to_betas(State = #vqstate {
             #delta { start_seq_id = DeltaSeqId,
                      count        = DeltaCount,
                      end_seq_id   = DeltaSeqIdEnd } = Delta,
-            DeltaSeqIdEnd1 =
+            DeltaSeqId1 =
                 lists:min([rabbit_queue_index:next_segment_boundary(DeltaSeqId),
                            DeltaSeqIdEnd]),
-            {List, DeltaSeqId1, IndexState1} =
-                rabbit_queue_index:read(DeltaSeqId, DeltaSeqIdEnd1, IndexState),
+            {List, IndexState1} =
+                rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexState),
             {Q3a, IndexState2} = betas_from_index_entries(
                                    List, TransientThreshold, IndexState1),
             State1 = State #vqstate { index_state = IndexState2 },

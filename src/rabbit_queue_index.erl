@@ -197,7 +197,7 @@
 -spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
-             {[{guid(), seq_id(), boolean(), boolean()}], seq_id(), qistate()}).
+             {[{guid(), seq_id(), boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
@@ -271,32 +271,17 @@ flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
 
 read(StartEnd, StartEnd, State) ->
-    {[], StartEnd, State};
+    {[], State};
 read(Start, End, State = #qistate { segments = Segments,
                                     dir = Dir }) when Start =< End ->
     %% Start is inclusive, End is exclusive.
-    {StartSeg, StartRelSeq} = seq_id_to_seg_and_rel_seq_id(Start),
-    {EndSeg, EndRelSeq}     = seq_id_to_seg_and_rel_seq_id(End),
-    Start1 = reconstruct_seq_id(StartSeg + 1, 0),
-    Next = case End =< Start1 of
-               true  -> End;
-               false -> Start1
-           end,
-    MaxRelSeq = case StartSeg =:= EndSeg of
-                    true  -> EndRelSeq;
-                    false -> ?SEGMENT_ENTRY_COUNT
-                end,
-    Segment = segment_find_or_new(StartSeg, Dir, Segments),
-    Messages = segment_entries_foldr(
-                 fun (RelSeq, {{Guid, IsPersistent}, IsDelivered, no_ack}, Acc)
-                     when StartRelSeq =< RelSeq andalso RelSeq < MaxRelSeq ->
-                         [ {Guid, reconstruct_seq_id(StartSeg, RelSeq),
-                            IsPersistent, IsDelivered == del} | Acc ];
-                     (_RelSeq, _Value, Acc) ->
-                         Acc
-                 end, [], Segment),
-    Segments1 = segment_store(Segment, Segments),
-    {Messages, Next, State #qistate { segments = Segments1 }}.
+    LowerB = {StartSeg, _StartRelSeq} = seq_id_to_seg_and_rel_seq_id(Start),
+    UpperB = {EndSeg,   _EndRelSeq}   = seq_id_to_seg_and_rel_seq_id(End - 1),
+    {Messages, Segments1} =
+        lists:foldr(fun (Seg, Acc) ->
+                            read_bounded_segment(Seg, LowerB, UpperB, Acc, Dir)
+                    end, {[], Segments}, lists:seq(StartSeg, EndSeg)),
+    {Messages, State #qistate { segments = Segments1 }}.
 
 next_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
@@ -757,6 +742,20 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
                         end)
          end,
     Hdl.
+
+read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
+                     {Messages, Segments}, Dir) ->
+    Segment = segment_find_or_new(Seg, Dir, Segments),
+    {segment_entries_foldr(
+       fun (RelSeq, {{Guid, IsPersistent}, IsDelivered, no_ack}, Acc)
+             when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
+                  (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
+               [ {Guid, reconstruct_seq_id(StartSeg, RelSeq),
+                  IsPersistent, IsDelivered == del} | Acc ];
+           (_RelSeq, _Value, Acc) ->
+               Acc
+       end, Messages, Segment),
+     segment_store(Segment, Segments)}.
 
 segment_entries_foldr(Fun, Init,
                       Segment = #segment { journal_entries = JEntries }) ->
