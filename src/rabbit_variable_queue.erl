@@ -1123,16 +1123,9 @@ publish(neither, MsgStatus, State) ->
                       end_seq_id   = SeqId + 1 },
     State1 #vqstate { delta = combine_deltas(Delta, Delta1) }.
 
-store_alpha_entry(MsgStatus, State = #vqstate {
-                               q1    = Q1,
-                               q2    = Q2,
-                               delta = #delta { count = DeltaCount },
-                               q3    = Q3,
-                               q4    = Q4 }) ->
-    case bpqueue:is_empty(Q2) andalso 0 == DeltaCount andalso
-        bpqueue:is_empty(Q3) of
-        true  -> true = queue:is_empty(Q1), %% ASSERTION
-                 State #vqstate { q4 = queue:in(MsgStatus, Q4) };
+store_alpha_entry(MsgStatus, State = #vqstate {q1 = Q1, q3 = Q3, q4 = Q4 }) ->
+    case bpqueue:is_empty(Q3) of
+        true  -> State #vqstate { q4 = queue:in(MsgStatus, Q4) };
         false -> maybe_push_q1_to_betas(
                    State #vqstate { q1 = queue:in(MsgStatus, Q1) })
     end.
