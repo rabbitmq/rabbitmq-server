@@ -1871,7 +1871,17 @@ test_queue_recover() ->
     ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
     ok = supervisor:delete_child(rabbit_sup, rabbit_amqqueue_sup),
     ok = rabbit_amqqueue:start(),
-    {ok, Count} = rabbit_amqqueue:with_or_die(
-                    QName,
-                    fun (Q1) -> rabbit_amqqueue:delete(Q1, false, false) end),
+    rabbit_amqqueue:with_or_die(
+      QName,
+      fun (Q1 = #amqqueue { pid = QPid1 }) ->
+              CountMinusOne = Count - 1,
+              {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
+                  rabbit_amqqueue:basic_get(Q1, self(), false),
+              exit(QPid1, shutdown),
+              VQ1 = rabbit_variable_queue:init(QName, true, true),
+              {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
+                  rabbit_variable_queue:fetch(true, VQ1),
+              _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
+              rabbit_amqqueue:internal_delete(QName)
+      end),
     passed.

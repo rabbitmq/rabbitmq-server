@@ -840,12 +840,8 @@ permitted_ram_index_count(#vqstate { len   = Len,
                                      q2    = Q2,
                                      q3    = Q3,
                                      delta = #delta { count = DeltaCount } }) ->
-    AlphaBetaLen = Len - DeltaCount,
-    case AlphaBetaLen == 0 of
-        true  -> infinity;
-        false -> BetaLen = bpqueue:len(Q2) + bpqueue:len(Q3),
-                 BetaLen - trunc(BetaLen * BetaLen / AlphaBetaLen)
-    end.
+    BetaLen = bpqueue:len(Q2) + bpqueue:len(Q3),
+    BetaLen - trunc(BetaLen * BetaLen / (Len - DeltaCount)).
 
 should_force_index_to_disk(State = #vqstate {
                              ram_index_count = RamIndexCount }) ->
