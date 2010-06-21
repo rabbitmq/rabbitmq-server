@@ -105,17 +105,15 @@ def class_merger(old, new):
     old["properties"] = properties_merger(old["name"],
                                           old.get("properties", []),
                                           new.get("properties", []))
-    return old
 
 def classes_merger(key, old, new):
-    old_index = dict(zip((v["name"] for v in old), xrange(len(old))))
+    old_dict = dict((v["name"], v) for v in old)
     result = list(old) # shallow copy
-    for v in new:
-        if v["name"] in old_index:
-            pos = old_index[v["name"]]
-            result[pos] = class_merger(result[pos], v)
+    for w in new:
+        if w["name"] in old_dict:
+            class_merger(old_dict[w["name"]], w)
         else:
-            result.append(v)
+            result.append(w)
     return result
 
 mergers = {
