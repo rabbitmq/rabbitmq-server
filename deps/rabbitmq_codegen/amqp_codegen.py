@@ -108,7 +108,7 @@ def class_merger(old, new):
     return old
 
 def classes_merger(key, old, new):
-    old_index = dict(zip((v["name"] for v in old), range(len(old))))
+    old_index = dict(zip((v["name"] for v in old), xrange(len(old))))
     result = list(old) # shallow copy
     for v in new:
         if v["name"] in old_index:
