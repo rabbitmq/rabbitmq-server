@@ -662,7 +662,11 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
 %%----------------------------------------------------------------------------
 
 a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
-                     len = Len, target_ram_msg_count = TargetRamMsgCount }) ->
+                     len                  = Len,
+                     persistent_count     = PersistentCount,
+                     target_ram_msg_count = TargetRamMsgCount,
+                     ram_msg_count        = RamMsgCount,
+                     ram_index_count      = RamIndexCount }) ->
     E1 = queue:is_empty(Q1),
     E2 = bpqueue:is_empty(Q2),
     ED = Delta#delta.count == 0,
@@ -676,6 +680,11 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     true = ED or not E3,
     true = (E1 and E2 and E4) or not TZ,
     true = LZ == (E3 and E4),
+
+    true = Len             >= 0,
+    true = PersistentCount >= 0,
+    true = RamMsgCount     >= 0,
+    true = RamIndexCount   >= 0,
 
     State.
 
