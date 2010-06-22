@@ -843,22 +843,6 @@ combine_deltas(#delta { start_seq_id = StartLow,
 beta_fold(Fun, Init, Q) ->
     bpqueue:foldr(fun (_Prefix, Value, Acc) -> Fun(Value, Acc) end, Init, Q).
 
-permitted_ram_index_count(#vqstate { len = 0 }) ->
-    infinity;
-permitted_ram_index_count(#vqstate { len   = Len,
-                                     q2    = Q2,
-                                     q3    = Q3,
-                                     delta = #delta { count = DeltaCount } }) ->
-    BetaLen = bpqueue:len(Q2) + bpqueue:len(Q3),
-    BetaLen - trunc(BetaLen * BetaLen / (Len - DeltaCount)).
-
-should_force_index_to_disk(State = #vqstate {
-                             ram_index_count = RamIndexCount }) ->
-    case permitted_ram_index_count(State) of
-        infinity  -> false;
-        Permitted -> RamIndexCount >= Permitted
-    end.
-
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
@@ -1040,19 +1024,6 @@ fetch_from_q3_to_q4(State = #vqstate {
             {loaded, State2}
     end.
 
-reduce_memory_use(State = #vqstate {
-                    ram_msg_count        = RamMsgCount,
-                    target_ram_msg_count = TargetRamMsgCount })
-  when TargetRamMsgCount =:= infinity orelse TargetRamMsgCount >= RamMsgCount ->
-    State;
-reduce_memory_use(State = #vqstate {
-                    target_ram_msg_count = TargetRamMsgCount }) ->
-    State1 = maybe_push_q4_to_betas(maybe_push_q1_to_betas(State)),
-    case TargetRamMsgCount of
-        0 -> push_betas_to_deltas(State1);
-        _ -> State1
-    end.
-
 %%----------------------------------------------------------------------------
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
@@ -1170,6 +1141,35 @@ limit_ram_index(MapFoldFilterFun, Q, {Reduction, IndexState}) ->
                   maybe_write_index_to_disk(true, MsgStatus, IndexStateN),
               {true, MsgStatus1, {N-1, IndexStateN1}}
       end, {Reduction, IndexState}, Q).
+
+should_force_index_to_disk(State = #vqstate {
+                             ram_index_count = RamIndexCount }) ->
+    case permitted_ram_index_count(State) of
+        infinity  -> false;
+        Permitted -> RamIndexCount >= Permitted
+    end.
+
+permitted_ram_index_count(#vqstate { len = 0 }) ->
+    infinity;
+permitted_ram_index_count(#vqstate { len   = Len,
+                                     q2    = Q2,
+                                     q3    = Q3,
+                                     delta = #delta { count = DeltaCount } }) ->
+    BetaLen = bpqueue:len(Q2) + bpqueue:len(Q3),
+    BetaLen - trunc(BetaLen * BetaLen / (Len - DeltaCount)).
+
+reduce_memory_use(State = #vqstate {
+                    ram_msg_count        = RamMsgCount,
+                    target_ram_msg_count = TargetRamMsgCount })
+  when TargetRamMsgCount =:= infinity orelse TargetRamMsgCount >= RamMsgCount ->
+    State;
+reduce_memory_use(State = #vqstate {
+                    target_ram_msg_count = TargetRamMsgCount }) ->
+    State1 = maybe_push_q4_to_betas(maybe_push_q1_to_betas(State)),
+    case TargetRamMsgCount of
+        0 -> push_betas_to_deltas(State1);
+        _ -> State1
+    end.
 
 maybe_deltas_to_betas(State = #vqstate { delta = ?BLANK_DELTA_PATTERN(X) }) ->
     State;
