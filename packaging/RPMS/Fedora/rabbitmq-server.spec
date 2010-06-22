@@ -128,6 +128,9 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Tue Jun 15 2010 Matthew Sackman <matthew@rabbitmq.com> 1.8.0-1
+- New Upstream Release
+
 * Mon Feb 15 2010 Matthew Sackman <matthew@lshift.net> 1.7.2-1
 - New Upstream Release
 

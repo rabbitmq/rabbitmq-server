@@ -90,7 +90,8 @@
 -spec(update/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), {atom(),atom(),[any()]}) -> 'ok').
 -spec(deregister/1 :: (pid()) -> 'ok').
--spec(report_ram_duration/2 :: (pid(), float() | 'infinity') -> number()).
+-spec(report_ram_duration/2 :: (pid(), float() | 'infinity') ->
+                                    number() | 'infinity').
 -spec(stop/0 :: () -> 'ok').
 
 -endif.
