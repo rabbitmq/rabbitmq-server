@@ -58,13 +58,13 @@
 <!-- Specific instructions to revert the DocBook HTML to be more like our ad-hoc XML schema -->
 
 <xsl:template match="div[@class='refsect1'] | div[@class='refnamediv'] | div[@class='refsynopsisdiv']">
-  <doc:section name="{@title}">
+  <doc:section name="{h2}">
     <xsl:apply-templates select="node()"/>
   </doc:section>
 </xsl:template>
 
 <xsl:template match="div[@class='refsect2']">
-  <doc:subsection name="{@title}">
+  <doc:subsection name="{h3}">
     <xsl:apply-templates select="node()"/>
   </doc:subsection>
 </xsl:template>
