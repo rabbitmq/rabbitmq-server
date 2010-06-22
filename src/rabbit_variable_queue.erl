@@ -1101,6 +1101,22 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
 %% Phase changes
 %%----------------------------------------------------------------------------
 
+reduce_memory_use(State = #vqstate {
+                    target_ram_msg_count = infinity }) ->
+    State;
+reduce_memory_use(State = #vqstate {
+                    ram_msg_count        = RamMsgCount,
+                    target_ram_msg_count = TargetRamMsgCount })
+  when TargetRamMsgCount >= RamMsgCount ->
+    limit_ram_index(State);
+reduce_memory_use(State = #vqstate {
+                    target_ram_msg_count = TargetRamMsgCount }) ->
+    State1 = maybe_push_q4_to_betas(maybe_push_q1_to_betas(State)),
+    case TargetRamMsgCount of
+        0 -> push_betas_to_deltas(State1);
+        _ -> limit_ram_index(State1)
+    end.
+
 limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount }) ->
     Permitted = permitted_ram_index_count(State),
     if Permitted =/= infinity andalso RamIndexCount > Permitted ->
@@ -1150,22 +1166,6 @@ permitted_ram_index_count(#vqstate { len   = Len,
                                      delta = #delta { count = DeltaCount } }) ->
     BetaLen = bpqueue:len(Q2) + bpqueue:len(Q3),
     BetaLen - trunc(BetaLen * BetaLen / (Len - DeltaCount)).
-
-reduce_memory_use(State = #vqstate {
-                    target_ram_msg_count = infinity }) ->
-    State;
-reduce_memory_use(State = #vqstate {
-                    ram_msg_count        = RamMsgCount,
-                    target_ram_msg_count = TargetRamMsgCount })
-  when TargetRamMsgCount >= RamMsgCount ->
-    limit_ram_index(State);
-reduce_memory_use(State = #vqstate {
-                    target_ram_msg_count = TargetRamMsgCount }) ->
-    State1 = maybe_push_q4_to_betas(maybe_push_q1_to_betas(State)),
-    case TargetRamMsgCount of
-        0 -> push_betas_to_deltas(State1);
-        _ -> limit_ram_index(State1)
-    end.
 
 maybe_deltas_to_betas(State = #vqstate { delta = ?BLANK_DELTA_PATTERN(X) }) ->
     State;
