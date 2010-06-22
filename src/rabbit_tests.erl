@@ -1874,14 +1874,22 @@ test_queue_recover() ->
     rabbit_amqqueue:with_or_die(
       QName,
       fun (Q1 = #amqqueue { pid = QPid1 }) ->
-              CountMinusOne = Count - 1,
-              {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
+              Count1 = Count - 1,
+              {ok, Count1, {QName, QPid1, _AckTag, true, _Msg}} =
                   rabbit_amqqueue:basic_get(Q1, self(), false),
               exit(QPid1, shutdown),
               VQ1 = rabbit_variable_queue:init(QName, true, true),
-              {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
-                  rabbit_variable_queue:fetch(true, VQ1),
-              _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
+              VQ2 = variable_queue_publish(false, Count, VQ1),
+              VQ3 = rabbit_variable_queue:set_ram_duration_target(0, VQ2),
+              {VQ4, _AckTags} = variable_queue_fetch(Count, true, true, Count + Count, VQ3),
+              {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false, Count, VQ4),
+              _VQ6 = rabbit_variable_queue:terminate(VQ5),
+              VQ7 = rabbit_variable_queue:init(QName, true, true),
+              {{_Msg1, true, _AckTag1, Count1}, VQ8} =
+                  rabbit_variable_queue:fetch(true, VQ7),
+              VQ9 = variable_queue_publish(false, 1, VQ8),
+              VQ10 = rabbit_variable_queue:set_ram_duration_target(0, VQ9),
+              _VQ11 = rabbit_variable_queue:delete_and_terminate(VQ10),
               rabbit_amqqueue:internal_delete(QName)
       end),
     passed.
