@@ -55,6 +55,7 @@ all_tests() ->
     passed = test_pg_local(),
     passed = test_unfold(),
     passed = test_parsing(),
+    passed = test_content_framing(),
     passed = test_topic_matching(),
     passed = test_log_management(),
     passed = test_app_management(),
@@ -351,6 +352,45 @@ test_field_values() ->
                            "I", 54321:32,                       % +  5 = 210
                            "S", 13:32, "A long string"          % + 18 = 228
        >>),
+    passed.
+
+%% Test that content frames don't exceed frame-max
+test_content_framing(FrameMax, Fragments) ->
+    [Header | Frames] =
+        rabbit_binary_generator:build_simple_content_frames(
+          1,
+          #content{class_id = 0, properties_bin = <<>>,
+                   payload_fragments_rev = Fragments},
+          FrameMax),
+    % header is formatted correctly and the size is the total of the
+    % fragments
+    <<_FrameHeader:7/binary, _ClassAndWeight:4/binary,
+     BodySize:64/unsigned, _Rest/binary>> = list_to_binary(Header),
+    BodySize = size(list_to_binary(Fragments)),
+    false = lists:any(
+              fun (ContentFrame) ->
+                      FrameBinary = list_to_binary(ContentFrame),
+                      % assert
+                      <<_TypeAndChannel:3/binary,
+                       Size:32/unsigned,
+                       _Payload:Size/binary,
+                       16#CE>> = FrameBinary,
+                      size(FrameBinary) > FrameMax
+              end,
+              Frames),
+    passed.
+
+test_content_framing() ->
+    % no content
+    passed = test_content_framing(4096, []),
+    passed = test_content_framing(4096, [<<>>]),
+    % easily fit in one frame
+    passed = test_content_framing(4096,   [<<"Easy">>]),
+    % exactly one frame (empty frame = 8 bytes)
+    passed = test_content_framing(11, [<<"One">>]),
+    % more than one frame
+    passed = test_content_framing(20, [<<"into more than one frame">>,
+                                       <<"This will have to go">>]),
     passed.
 
 test_topic_match(P, R) ->
