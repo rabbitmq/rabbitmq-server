@@ -1228,7 +1228,7 @@ maybe_push_q1_to_betas(State = #vqstate { q1 = Q1 }) ->
               State1 #vqstate { q1 = Q1a,
                                 q3 = bpqueue:in(IndexOnDisk, MsgStatus, Q3) };
           (MsgStatus = #msg_status { index_on_disk = IndexOnDisk },
-           Q1a, State1 = #vqstate { q2 = Q2, delta = #delta {} }) ->
+           Q1a, State1 = #vqstate { q2 = Q2 }) ->
               State1 #vqstate { q1 = Q1a,
                                 q2 = bpqueue:in(IndexOnDisk, MsgStatus, Q2) }
       end, Q1, State).
