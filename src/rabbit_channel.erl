@@ -663,8 +663,10 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
                                   durable = Durable,
-                                  deprecated_auto_delete = AutoDelete, % 0-9-1: deprecated but we still support it
-                                  deprecated_internal = false, %% 0-9-1: true not supported
+                                  %% 0-9-1: deprecated but we still support it
+                                  deprecated_auto_delete = AutoDelete,
+                                  %% 0-9-1: true not supported
+                                  deprecated_internal = false,
                                   nowait = NoWait,
                                   arguments = Args},
               _, State = #ch{ virtual_host = VHostPath }) ->
