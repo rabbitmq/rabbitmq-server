@@ -1903,4 +1903,15 @@ test_variable_queue_all_the_bits_not_covered_elsewhere() ->
     {VQ11, _AckTags2} = variable_queue_fetch(Count1, true, true, Count, VQ10),
     {VQ12, _AckTags3} = variable_queue_fetch(1, false, false, 1, VQ11),
     _VQ13 = rabbit_variable_queue:delete_and_terminate(VQ12),
+
+    VQa0 = fresh_variable_queue(),
+    VQa1 = rabbit_variable_queue:set_ram_duration_target(0, VQa0),
+    VQa2 = variable_queue_publish(false, 4, VQa1),
+    {VQa3, AckTags} = variable_queue_fetch(2, false, false, 4, VQa2),
+    VQa4 = rabbit_variable_queue:requeue(AckTags, VQa3),
+    VQa5 = rabbit_variable_queue:sync(VQa4),
+    _VQa6 = rabbit_variable_queue:terminate(VQa5),
+    VQa7 = rabbit_variable_queue:init(test_queue(), true, true),
+    {empty, VQa8} = rabbit_variable_queue:fetch(false, VQa7),
+    _VQa9 = rabbit_variable_queue:delete_and_terminate(VQa8),
     passed.
