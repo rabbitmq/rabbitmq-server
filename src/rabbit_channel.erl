@@ -447,13 +447,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         routed ->
             ok;
         unroutable ->
-            %% FIXME: 312 should be replaced by the ?NO_ROUTE
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 312, <<"unroutable">>);
+            ok = basic_return(Message, WriterPid, no_route);
         not_delivered ->
-            %% FIXME: 313 should be replaced by the ?NO_CONSUMERS
-            %% definition, when we move to >=0-9
-            ok = basic_return(Message, WriterPid, 313, <<"not_delivered">>)
+            ok = basic_return(Message, WriterPid, no_consumers)
     end,
     {noreply, case TxnKey of
                   none -> State;
@@ -608,7 +604,7 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
                   end,
     {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
 
-handle_method(#'basic.recover'{requeue = true},
+handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{ transaction_id = none,
                               unacked_message_q = UAMQ }) ->
     ok = fold_per_queue(
@@ -620,10 +616,11 @@ handle_method(#'basic.recover'{requeue = true},
                    rabbit_amqqueue:requeue(
                      QPid, lists:reverse(MsgIds), self())
            end, ok, UAMQ),
-    %% No answer required, apparently!
+    %% No answer required - basic.recover is the newer, synchronous
+    %% variant of this method
     {noreply, State#ch{unacked_message_q = queue:new()}};
 
-handle_method(#'basic.recover'{requeue = false},
+handle_method(#'basic.recover_async'{requeue = false},
               _, State = #ch{ transaction_id = none,
                               writer_pid = WriterPid,
                               unacked_message_q = UAMQ }) ->
@@ -645,12 +642,21 @@ handle_method(#'basic.recover'{requeue = false},
                      WriterPid, false, ConsumerTag, DeliveryTag,
                      {QName, QPid, MsgId, true, Message})
            end, ok, UAMQ),
-    %% No answer required, apparently!
+    %% No answer required - basic.recover is the newer, synchronous
+    %% variant of this method
     {noreply, State};
 
-handle_method(#'basic.recover'{}, _, _State) ->
+handle_method(#'basic.recover_async'{}, _, _State) ->
     rabbit_misc:protocol_error(
       not_allowed, "attempt to recover a transactional channel",[]);
+
+handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
+    {noreply, State2 = #ch{writer_pid = WriterPid}} =
+        handle_method(#'basic.recover_async'{requeue = Requeue},
+                      Content,
+                      State),
+    ok = rabbit_writer:send_command(WriterPid, #'basic.recover_ok'{}),
+    {noreply, State2};
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
@@ -946,7 +952,9 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
 basic_return(#basic_message{exchange_name = ExchangeName,
                             routing_key   = RoutingKey,
                             content       = Content},
-             WriterPid, ReplyCode, ReplyText) ->
+             WriterPid, Reason) ->
+    {_Close, ReplyCode, ReplyText} =
+        rabbit_framing:lookup_amqp_exception(Reason),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.return'{reply_code  = ReplyCode,
