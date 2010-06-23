@@ -73,9 +73,16 @@
 
 build_simple_method_frame(ChannelInt, MethodRecord) ->
     MethodFields = rabbit_framing:encode_method_fields(MethodRecord),
-    MethodName = rabbit_misc:method_record_type(MethodRecord),
+    MethodName = adjust_close(rabbit_misc:method_record_type(MethodRecord)),
     {ClassId, MethodId} = rabbit_framing:method_id(MethodName),
     create_frame(1, ChannelInt, [<<ClassId:16, MethodId:16>>, MethodFields]).
+
+adjust_close('connection.close') ->
+    'connection.close08';
+adjust_close('connection.close_ok') ->
+    'connection.close08_ok';
+adjust_close(MethodName) ->
+    MethodName.
 
 build_simple_content_frames(ChannelInt,
                             #content{class_id = ClassId,

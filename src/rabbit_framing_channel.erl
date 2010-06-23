@@ -74,13 +74,22 @@ read_frame(ChannelPid) ->
 
 mainloop(ChannelPid) ->
     {method, MethodName, FieldsBin} = read_frame(ChannelPid),
-    Method = rabbit_framing:decode_method_fields(MethodName, FieldsBin),
+    Method = decode_method_fields(MethodName, FieldsBin),
     case rabbit_framing:method_has_content(MethodName) of
         true  -> rabbit_channel:do(ChannelPid, Method,
                                    collect_content(ChannelPid, MethodName));
         false -> rabbit_channel:do(ChannelPid, Method)
     end,
     ?MODULE:mainloop(ChannelPid).
+
+%% Handle 0-8 version of basic.consume, which doesn't have a table on the end
+decode_method_fields('basic.consume', FieldsBin) ->
+    T = rabbit_binary_generator:generate_table([]),
+    TLen = size(T),
+    rabbit_framing:decode_method_fields(
+      'basic.consume', <<FieldsBin/binary, TLen:32/unsigned, T:TLen/binary>>);
+decode_method_fields(MethodName, FieldsBin) ->
+    rabbit_framing:decode_method_fields(MethodName, FieldsBin).
 
 collect_content(ChannelPid, MethodName) ->
     {ClassId, _MethodId} = rabbit_framing:method_id(MethodName),

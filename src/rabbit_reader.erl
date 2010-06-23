@@ -502,7 +502,9 @@ handle_frame(Type, Channel, Payload, State) ->
     end.
 
 analyze_frame(?FRAME_METHOD, <<ClassId:16, MethodId:16, MethodFields/binary>>) ->
-    {method, rabbit_framing:lookup_method_name({ClassId, MethodId}), MethodFields};
+    {method, adjust_close(rabbit_framing:lookup_method_name({ClassId,
+                                                             MethodId})),
+     MethodFields};
 analyze_frame(?FRAME_HEADER, <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>) ->
     {content_header, ClassId, Weight, BodySize, Properties};
 analyze_frame(?FRAME_BODY, Body) ->
@@ -511,6 +513,13 @@ analyze_frame(?FRAME_HEARTBEAT, <<>>) ->
     heartbeat;
 analyze_frame(_Type, _Body) ->
     error.
+
+adjust_close('connection.close08') ->
+    'connection.close';
+adjust_close('connection.close08_ok') ->
+    'connection.close_ok';
+adjust_close(MethodName) ->
+    MethodName.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     %%?LOGDEBUG("Got frame header: ~p/~p/~p~n", [Type, Channel, PayloadSize]),
