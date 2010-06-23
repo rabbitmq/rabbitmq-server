@@ -1,7 +1,7 @@
 {
     "name": "AMQP",
     "major-version": 0,
-    "minor-version": 9,
+    "minor-version": 8,
     "revision": 1,
     "port": 5672,
     "copyright": [
