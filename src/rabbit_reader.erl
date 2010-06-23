@@ -461,7 +461,6 @@ handle_frame(Type, 0, Payload, State) ->
     case analyze_frame(Type, Payload) of
         error     -> throw({unknown_frame, 0, Type, Payload});
         heartbeat -> State;
-        trace     -> State;
         {method, MethodName, FieldsBin} ->
             handle_method0(MethodName, FieldsBin, State);
         Other -> throw({unexpected_frame_on_channel0, Other})
@@ -470,7 +469,6 @@ handle_frame(Type, Channel, Payload, State) ->
     case analyze_frame(Type, Payload) of
         error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
-        trace         -> throw({unexpected_trace_frame, Channel});
         AnalyzedFrame ->
             %%?LOGDEBUG("Ch ~p Frame ~p~n", [Channel, AnalyzedFrame]),
             case get({channel, Channel}) of
@@ -509,8 +507,6 @@ analyze_frame(?FRAME_HEADER, <<ClassId:16, Weight:16, BodySize:64, Properties/bi
     {content_header, ClassId, Weight, BodySize, Properties};
 analyze_frame(?FRAME_BODY, Body) ->
     {content_body, Body};
-analyze_frame(?FRAME_TRACE, _Body) ->
-    trace;
 analyze_frame(?FRAME_HEARTBEAT, <<>>) ->
     heartbeat;
 analyze_frame(_Type, _Body) ->
@@ -626,35 +622,18 @@ handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
              connection = Connection#connection{
                             timeout_sec = ClientHeartbeat,
                             frame_max = FrameMax}};
-handle_method0(#'connection.open'{virtual_host = VHostPath,
-                                  insist = Insist},
+handle_method0(#'connection.open'{virtual_host = VHostPath},
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
                                           user = User},
                            sock = Sock}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
-    KnownHosts = format_listeners(rabbit_networking:active_listeners()),
-    Redirects = compute_redirects(Insist),
-    if Redirects == [] ->
-            ok = send_on_channel0(
-                   Sock,
-                   #'connection.open_ok'{known_hosts = KnownHosts}),
-            State#v1{connection_state = running,
-                     connection = NewConnection};
-       true ->
-            %% FIXME: 'host' is supposed to only contain one
-            %% address; but which one do we pick? This is
-            %% really a problem with the spec.
-            Host = format_listeners(Redirects),
-            rabbit_log:info("connection ~p redirecting to ~p~n",
-                            [self(), Host]),
-            ok = send_on_channel0(
-                   Sock,
-                   #'connection.redirect'{host = Host,
-                                          known_hosts = KnownHosts}),
-            close_connection(State#v1{connection = NewConnection})
-    end;
+    ok = send_on_channel0(
+           Sock,
+           #'connection.open_ok'{deprecated_known_hosts = <<>>}),
+    State#v1{connection_state = running,
+             connection = NewConnection};
 handle_method0(#'connection.close'{},
                State = #v1{connection_state = running}) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
@@ -672,21 +651,6 @@ handle_method0(_Method, #v1{connection_state = S}) ->
 
 send_on_channel0(Sock, Method) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method).
-
-format_listeners(Listeners) ->
-    list_to_binary(
-      rabbit_misc:intersperse(
-        $,,
-        [io_lib:format("~s:~w", [Host, Port]) ||
-            #listener{host = Host, port = Port} <- Listeners])).
-
-compute_redirects(true) -> [];
-compute_redirects(false) ->
-    Node = node(),
-    LNode = rabbit_load:pick(),
-    if Node == LNode -> [];
-       true -> rabbit_networking:node_listeners(LNode)
-    end.
 
 %%--------------------------------------------------------------------------
 

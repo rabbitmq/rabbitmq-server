@@ -499,7 +499,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                    Content),
             {noreply, State1#ch{next_tag = DeliveryTag + 1}};
         empty ->
-            {reply, #'basic.get_empty'{cluster_id = <<>>}, State}
+            {reply, #'basic.get_empty'{deprecated_cluster_id = <<>>}, State}
     end;
 
 handle_method(#'basic.consume'{queue = QueueNameBin,
@@ -656,8 +656,8 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
                                   durable = Durable,
-                                  auto_delete = AutoDelete,
-                                  internal = false,
+                                  deprecated_auto_delete = AutoDelete,
+                                  deprecated_internal = false,
                                   nowait = NoWait,
                                   arguments = Args},
               _, State = #ch{ virtual_host = VHostPath }) ->
