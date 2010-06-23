@@ -54,7 +54,7 @@
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
 -define(SILENT_CLOSE_DELAY, 3).
 %% set to zero once QPid fix their negotiation
--define(FRAME_MAX, 0).
+-define(FRAME_MAX, 131072).
 -define(CHANNEL_MAX, 0).
 
 %---------------------------------------------------------------------------
