@@ -62,6 +62,8 @@ ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
 ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
+NEED_MAKE := 3.81
+
 define usage_xml_to_erl
   $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, $(SOURCE_DIR)/rabbit_%_usage.erl, $(subst -,_,$(1))))
 endef
@@ -74,6 +76,11 @@ ifneq "$(SBIN_DIR)" ""
 ifneq "$(TARGET_DIR)" ""
 SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
 endif
+endif
+
+ifeq ($(filter $(NEED_MAKE),(firstword $(sort $(MAKE_VERSION) $(NEED_MAKE)))),)
+$(warning Versions of make prior to $(NEED_MAKE) are not supported)
+.DEFAULT_GOAL=all # Introduced in 3.81
 endif
 
 all: $(TARGETS)
@@ -268,7 +275,7 @@ install_dirs:
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(MAN_DIR)
 
-$(foreach XML, $(USAGES_XML), $(eval $(call usage_dep, $(XML))))
+$(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 
 # Note that all targets which depend on clean must have clean in their
 # name.  Also any target that doesn't depend on clean should not have
