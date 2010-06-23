@@ -54,7 +54,7 @@
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
 -define(SILENT_CLOSE_DELAY, 3).
 %% set to zero once QPid fix their negotiation
--define(FRAME_MAX, 131072).
+-define(FRAME_MAX, 0).
 -define(CHANNEL_MAX, 0).
 
 %---------------------------------------------------------------------------
@@ -620,13 +620,18 @@ handle_method0(#'connection.tune_ok'{channel_max = ChannelMax,
                State = #v1{connection_state = tuning,
                            connection = Connection,
                            sock = Sock}) ->
-    if (FrameMax =< ?FRAME_MIN_SIZE) or
+    if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
+            rabbit_misc:protocol_error(
+              not_allowed, "frame_max ~p smaller than ~p",
+              [FrameMax, ?FRAME_MIN_SIZE]);
        (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
             rabbit_misc:protocol_error(
-              not_allowed, "invalid frame_max", []);
+              not_allowed, "frame_max ~p larger than ~p",
+              [FrameMax, ?FRAME_MAX]);
        (?CHANNEL_MAX /= 0) and (ChannelMax > ?CHANNEL_MAX) ->
             rabbit_misc:protocol_error(
-              not_allowed, "invalid channel_max", []);
+              not_allowed, "channel_max ~p larger than ~p",
+              [ChannelMax, ?CHANNEL_MAX]);
        true ->
             rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
             State#v1{connection_state = opening,
