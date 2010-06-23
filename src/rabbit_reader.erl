@@ -624,12 +624,6 @@ handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
        (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
             rabbit_misc:protocol_error(
               not_allowed, "invalid frame_max", []);
-       %% If we have a channel_max limit that the client wishes to
-       %% exceed, die as per spec.  Not currently a problem, so we ignore
-       %% the client's channel_max parameter.
-       %%(?CHANNEL_MAX /= 0) and (ChannelMax > ?CHANNEL_MAX) ->
-       %%     rabbit_misc:protocol_error(
-       %%       not_allowed, "invalid channel_max");
        true ->
             rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
             State#v1{connection_state = opening,
