@@ -604,7 +604,7 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
                   end,
     {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
 
-handle_method(#'basic.recover'{requeue = true},
+handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{ transaction_id = none,
                               unacked_message_q = UAMQ }) ->
     ok = fold_per_queue(
@@ -616,10 +616,11 @@ handle_method(#'basic.recover'{requeue = true},
                    rabbit_amqqueue:requeue(
                      QPid, lists:reverse(MsgIds), self())
            end, ok, UAMQ),
-    %% No answer required, apparently!
+    %% No answer required - basic.recover is the newer, synchronous
+    %% variant of this method
     {noreply, State#ch{unacked_message_q = queue:new()}};
 
-handle_method(#'basic.recover'{requeue = false},
+handle_method(#'basic.recover_async'{requeue = false},
               _, State = #ch{ transaction_id = none,
                               writer_pid = WriterPid,
                               unacked_message_q = UAMQ }) ->
@@ -641,12 +642,21 @@ handle_method(#'basic.recover'{requeue = false},
                      WriterPid, false, ConsumerTag, DeliveryTag,
                      {QName, QPid, MsgId, true, Message})
            end, ok, UAMQ),
-    %% No answer required, apparently!
+    %% No answer required - basic.recover is the newer, synchronous
+    %% variant of this method
     {noreply, State};
 
-handle_method(#'basic.recover'{}, _, _State) ->
+handle_method(#'basic.recover_async'{}, _, _State) ->
     rabbit_misc:protocol_error(
       not_allowed, "attempt to recover a transactional channel",[]);
+
+handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
+    {noreply, State2 = #ch{writer_pid = WriterPid}} =
+        handle_method(#'basic.recover_async'{requeue = Requeue},
+                      Content,
+                      State),
+    ok = rabbit_writer:send_command(WriterPid, #'basic.recover_ok'{}),
+    {noreply, State2};
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
