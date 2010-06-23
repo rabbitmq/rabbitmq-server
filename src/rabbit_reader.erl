@@ -614,7 +614,7 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
              connection = Connection#connection{
                             user = User,
                             client_properties = ClientProperties}};
-handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
+handle_method0(#'connection.tune_ok'{channel_max = ChannelMax,
                                      frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
                State = #v1{connection_state = tuning,
@@ -624,6 +624,9 @@ handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
        (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
             rabbit_misc:protocol_error(
               not_allowed, "invalid frame_max", []);
+       (?CHANNEL_MAX /= 0) and (ChannelMax > ?CHANNEL_MAX) ->
+            rabbit_misc:protocol_error(
+              not_allowed, "invalid channel_max", []);
        true ->
             rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
             State#v1{connection_state = opening,
