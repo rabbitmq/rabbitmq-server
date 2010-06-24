@@ -59,12 +59,12 @@ def insert_base_types(d):
               'longlong', 'bit', 'table', 'timestamp']:
         d[t] = t
 
-class AmqpSpecFileMergeConflict(Exception): pass
-
+# In all mergers, old wins
 def default_spec_value_merger(key, old, new):
-    if old is None or old == new:
+    if old is None:
         return new
-    raise AmqpSpecFileMergeConflict(key, old, new)
+    else:
+        return old
 
 def extension_info_merger(key, old, new):
     return old + [new]
@@ -72,33 +72,26 @@ def extension_info_merger(key, old, new):
 def domains_merger(key, old, new):
     o = dict((k, v) for [k, v] in old)
     for [k, v] in new:
-        if o.has_key(k):
-            raise AmqpSpecFileMergeConflict(key, old, new)
-        o[k] = v
+        if not o.has_key(k):
+            o[k] = v
     return [[k, v] for (k, v) in o.iteritems()]
 
-def merge_dict_lists_by(dict_key, old, new, description):
+def merge_dict_lists_by(dict_key, old, new):
     old_index = set(v[dict_key] for v in old)
     result = list(old) # shallow copy
     for v in new:
-        if v[dict_key] in old_index:
-            raise AmqpSpecFileMergeConflict(description, old, new)
-        result.append(v)
+        if v[dict_key] not in old_index:
+            result.append(v)
     return result
 
 def constants_merger(key, old, new):
-    return merge_dict_lists_by("name", old, new, key)
+    return merge_dict_lists_by("name", old, new)
 
 def methods_merger(classname, old, new):
-    return merge_dict_lists_by("name", old, new, ("class-methods", classname))
+    return merge_dict_lists_by("name", old, new)
 
 def properties_merger(classname, old, new):
-    oldnames = set(v["name"] for v in old)
-    newnames = set(v["name"] for v in new)
-    clashes = oldnames.intersection(newnames)
-    if clashes:
-        raise AmqpSpecFileMergeConflict(("class-properties", classname), old, new)
-    return old + new
+    return merge_dict_lists_by("name", old, new)
 
 def class_merger(old, new):
     old["methods"] = methods_merger(old["name"], old["methods"], new["methods"])
@@ -140,6 +133,7 @@ class AmqpSpec:
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
+        self.revision = self.spec.has_key('revision') and self.spec['revision'] or '0'
         self.port =  self.spec['port']
 
         self.domains = {}
