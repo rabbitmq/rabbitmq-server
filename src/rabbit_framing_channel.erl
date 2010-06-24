@@ -82,7 +82,14 @@ mainloop(ChannelPid) ->
     end,
     ?MODULE:mainloop(ChannelPid).
 
-%% Handle 0-8 version of basic.consume, which doesn't have a table on the end
+%% Handle 0-8 version of channel.tune-ok. In 0-9-1 it gained a longstr
+%% "deprecated_channel_id".
+decode_method_fields('channel.tune_ok', FieldsBin) ->
+    Len = 0,
+    rabbit_framing:decode_method_fields(
+      'channel.tune_ok', <<FieldsBin/binary, Len:32/unsigned>>);
+%% Handle 0-8 version of basic.consume. In 0-9-1 it gained a table
+%% "filter".
 decode_method_fields('basic.consume', FieldsBin) ->
     T = rabbit_binary_generator:generate_table([]),
     TLen = size(T),
