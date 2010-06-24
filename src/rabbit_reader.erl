@@ -547,14 +547,14 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, Stat
 handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
              State = #v1{sock = Sock, connection = Connection}) ->
     case check_version({ProtocolMajor, ProtocolMinor},
-                       {?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR}) of
+                       {0, 8}) of
         true ->
             Protocol = amqp_0_8,
             ok = send_on_channel0(
                    Sock,
                    #'connection.start'{
-                     version_major = ?PROTOCOL_VERSION_MAJOR,
-                     version_minor = ?PROTOCOL_VERSION_MINOR,
+                     version_major = 0,
+                     version_minor = 8,
                      server_properties = server_properties(),
                      mechanisms = <<"PLAIN AMQPLAIN">>,
                      locales = <<"en_US">> },
@@ -570,9 +570,7 @@ handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
 
 handle_input(handshake, Other, #v1{sock = Sock}) ->
     ok = inet_op(fun () -> rabbit_net:send(
-                             Sock, <<"AMQP",1,1,
-                                    ?PROTOCOL_VERSION_MAJOR,
-                                    ?PROTOCOL_VERSION_MINOR>>) end),
+                             Sock, <<"AMQP",1,1,0,8>>) end),
     throw({bad_header, Other});
 
 handle_input(Callback, Data, _State) ->

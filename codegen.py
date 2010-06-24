@@ -410,8 +410,6 @@ def genHrl(spec):
     methods = spec.allMethods()
 
     printFileHeader()
-    print "-define(PROTOCOL_VERSION_MAJOR, %d)." % (spec.major)
-    print "-define(PROTOCOL_VERSION_MINOR, %d)." % (spec.minor)
     print "-define(PROTOCOL_PORT, %d)." % (spec.port)
 
     for (c,v,cls) in spec.constants:
