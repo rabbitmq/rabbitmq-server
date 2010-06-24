@@ -645,7 +645,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(
            Sock,
-           #'connection.open_ok'{known_hosts = <<>>},
+           #'connection.open_ok'{},
            Protocol),
     State#v1{connection_state = running,
              connection = NewConnection};
