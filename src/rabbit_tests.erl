@@ -1909,7 +1909,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere() ->
     VQa2 = variable_queue_publish(false, 4, VQa1),
     {VQa3, AckTags} = variable_queue_fetch(2, false, false, 4, VQa2),
     VQa4 = rabbit_variable_queue:requeue(AckTags, VQa3),
-    VQa5 = rabbit_variable_queue:sync(VQa4),
+    VQa5 = rabbit_variable_queue:idle_timeout(VQa4),
     _VQa6 = rabbit_variable_queue:terminate(VQa5),
     VQa7 = rabbit_variable_queue:init(test_queue(), true, true),
     {empty, VQa8} = rabbit_variable_queue:fetch(false, VQa7),
