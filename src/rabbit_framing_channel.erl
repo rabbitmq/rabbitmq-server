@@ -82,12 +82,12 @@ mainloop(ChannelPid, Protocol) ->
     end,
     ?MODULE:mainloop(ChannelPid, Protocol).
 
-%% Handle 0-8 version of channel.tune-ok. In 0-9-1 it gained a longstr
+%% Handle 0-8 version of channel.open-ok. In 0-9-1 it gained a longstr
 %% "deprecated_channel_id".
-decode_method_fields('channel.tune_ok', FieldsBin, protocol_08) ->
+decode_method_fields('channel.open_ok', FieldsBin, protocol_08) ->
     Len = 0,
     rabbit_framing:decode_method_fields(
-      'channel.tune_ok', <<FieldsBin/binary, Len:32/unsigned>>);
+      'channel.open_ok', <<FieldsBin/binary, Len:32/unsigned>>);
 %% Handle 0-8 version of basic.consume. In 0-9-1 it gained a table
 %% "filter".
 decode_method_fields('basic.consume', FieldsBin, protocol_08) ->
