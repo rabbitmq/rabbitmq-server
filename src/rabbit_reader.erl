@@ -53,6 +53,7 @@
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
 -define(SILENT_CLOSE_DELAY, 3).
+-define(FRAME_MAX, 131072). %% set to zero once QPid fix their negotiation
 
 %---------------------------------------------------------------------------
 
@@ -605,27 +606,33 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
     ok = send_on_channel0(
            Sock,
            #'connection.tune'{channel_max = 0,
-                              %% set to zero once QPid fix their negotiation
-                              frame_max = 131072,
+                              frame_max = ?FRAME_MAX,
                               heartbeat = 0}),
     State#v1{connection_state = tuning,
              connection = Connection#connection{
                             user = User,
                             client_properties = ClientProperties}};
-handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
-                                     frame_max = FrameMax,
+handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
                State = #v1{connection_state = tuning,
                            connection = Connection,
                            sock = Sock}) ->
-    %% if we have a channel_max limit that the client wishes to
-    %% exceed, die as per spec.  Not currently a problem, so we ignore
-    %% the client's channel_max parameter.
-    rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
-    State#v1{connection_state = opening,
-             connection = Connection#connection{
-                            timeout_sec = ClientHeartbeat,
-                            frame_max = FrameMax}};
+    if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
+            rabbit_misc:protocol_error(
+              not_allowed, "frame_max=~w < ~w min size",
+              [FrameMax, ?FRAME_MIN_SIZE]);
+       (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
+            rabbit_misc:protocol_error(
+              not_allowed, "frame_max=~w > ~w max size",
+              [FrameMax, ?FRAME_MAX]);
+       true ->
+            rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
+            State#v1{connection_state = opening,
+                     connection = Connection#connection{
+                                    timeout_sec = ClientHeartbeat,
+                                    frame_max = FrameMax}}
+    end;
+
 handle_method0(#'connection.open'{virtual_host = VHostPath,
                                   insist = Insist},
                State = #v1{connection_state = opening,
