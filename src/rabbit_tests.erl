@@ -1812,7 +1812,8 @@ test_variable_queue_partial_segments_delta_thing() ->
     VQ0 = fresh_variable_queue(),
     VQ1 = variable_queue_publish(true, SegmentSize + HalfSegment, VQ0),
     {_Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
-    VQ3 = rabbit_variable_queue:set_ram_duration_target(0, VQ2),
+    VQ3 = variable_queue_wait_for_shuffling_end(
+            rabbit_variable_queue:set_ram_duration_target(0, VQ2)),
     %% one segment in q3 as betas, and half a segment in delta
     S3 = rabbit_variable_queue:status(VQ3),
     io:format("~p~n", [S3]),
@@ -1821,7 +1822,8 @@ test_variable_queue_partial_segments_delta_thing() ->
     assert_prop(S3, q3, SegmentSize),
     assert_prop(S3, len, SegmentSize + HalfSegment),
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
-    VQ5 = variable_queue_publish(true, 1, VQ4),
+    VQ5 = variable_queue_wait_for_shuffling_end(
+            variable_queue_publish(true, 1, VQ4)),
     %% should have 1 alpha, but it's in the same segment as the deltas
     S5 = rabbit_variable_queue:status(VQ5),
     io:format("~p~n", [S5]),
@@ -1847,6 +1849,13 @@ test_variable_queue_partial_segments_delta_thing() ->
     rabbit_variable_queue:delete_and_terminate(VQ9),
 
     passed.
+
+variable_queue_wait_for_shuffling_end(VQ) ->
+    case rabbit_variable_queue:needs_idle_timeout(VQ) of
+        true  -> variable_queue_wait_for_shuffling_end(
+                  rabbit_variable_queue:idle_timeout(VQ));
+        false -> VQ
+    end.
 
 test_queue_recover() ->
     Count = 2*rabbit_queue_index:next_segment_boundary(0),

@@ -627,12 +627,14 @@ ram_duration(State = #vqstate { egress_rate        = Egress,
                                          out_counter        = 0,
                                          ram_msg_count_prev = RamMsgCount })}.
 
-needs_idle_timeout(State = #vqstate { on_sync = {_, _, []},
-                                      ram_index_count = RamIndexCount }) ->
+needs_idle_timeout(#vqstate { on_sync              = {_, _, SFuns},
+                              target_ram_msg_count = TargetRamMsgCount,
+                              ram_msg_count        = RamMsgCount })
+  when SFuns =/= [] orelse RamMsgCount > TargetRamMsgCount ->
+    true;
+needs_idle_timeout(State = #vqstate { ram_index_count      = RamIndexCount }) ->
     Permitted = permitted_ram_index_count(State),
-    Permitted =:= infinity orelse RamIndexCount =< Permitted;
-needs_idle_timeout(_) ->
-    true.
+    Permitted =/= infinity andalso RamIndexCount > Permitted.
 
 idle_timeout(State) -> a(reduce_memory_use(tx_commit_index(State))).
 
@@ -669,7 +671,6 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
 a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
                      len                  = Len,
                      persistent_count     = PersistentCount,
-                     target_ram_msg_count = TargetRamMsgCount,
                      ram_msg_count        = RamMsgCount,
                      ram_index_count      = RamIndexCount }) ->
     E1 = queue:is_empty(Q1),
