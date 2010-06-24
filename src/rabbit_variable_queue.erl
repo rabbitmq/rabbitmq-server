@@ -510,7 +510,7 @@ fetch(AckRequired, State = #vqstate { q4               = Q4,
     end.
 
 ack(AckTags, State) ->
-    a(ack(fun (_AckEntry, State1) -> State1 end, AckTags, State)).
+    a(ack(remove, fun (_AckEntry, State1) -> State1 end, AckTags, State)).
 
 tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent },
            State = #vqstate { durable           = IsDurable,
@@ -562,7 +562,8 @@ tx_commit(Txn, Fun, State = #vqstate { durable = IsDurable }) ->
 
 requeue(AckTags, State) ->
     a(reduce_memory_use(
-        ack(fun (#msg_status { msg = Msg }, State1) ->
+        ack(release,
+            fun (#msg_status { msg = Msg }, State1) ->
                     {_SeqId, State2} = publish(Msg, true, false, State1),
                     State2;
                 ({IsPersistent, Guid}, State1) ->
@@ -851,9 +852,10 @@ beta_fold(Fun, Init, Q) ->
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
-ack(_Fun, [], State) ->
+ack(_ReleaseOrRemove, _Fun, [], State) ->
     State;
-ack(Fun, AckTags, State) ->
+ack(ReleaseOrRemove, Fun, AckTags, State) when ReleaseOrRemove =:= remove orelse
+                                               ReleaseOrRemove =:= release ->
     {{SeqIds, GuidsByStore}, State1 = #vqstate { index_state      = IndexState,
                                                  persistent_count = PCount }} =
         lists:foldl(
@@ -871,7 +873,7 @@ ack(Fun, AckTags, State) ->
           end, {{[], dict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
     ok = dict:fold(fun (MsgStore, Guids, ok) ->
-                           rabbit_msg_store:release(MsgStore, Guids)
+                           rabbit_msg_store:ReleaseOrRemove(MsgStore, Guids)
                    end, ok, GuidsByStore),
     PCount1 = PCount - case dict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
                            error        -> 0;
