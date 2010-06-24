@@ -55,6 +55,8 @@
 -define(SILENT_CLOSE_DELAY, 3).
 %% set to zero once QPid fix their negotiation
 -define(FRAME_MAX, 131072).
+%% NB: when setting this to non-zero the section of code in the
+%% connection.tune_ok handler below needs to be uncommented
 -define(CHANNEL_MAX, 0).
 
 %---------------------------------------------------------------------------
@@ -628,10 +630,15 @@ handle_method0(#'connection.tune_ok'{channel_max = ChannelMax,
             rabbit_misc:protocol_error(
               not_allowed, "frame_max ~w larger than ~w",
               [FrameMax, ?FRAME_MAX]);
-       (?CHANNEL_MAX /= 0) and (ChannelMax > ?CHANNEL_MAX) ->
-            rabbit_misc:protocol_error(
-              not_allowed, "channel_max ~w larger than ~w",
-              [ChannelMax, ?CHANNEL_MAX]);
+       %% The following is commented out in order to suppress compiler
+       %% warnings about unreachable code. If CHANNEL_MAX is ever
+       %% changed to a value other than 0 this region should be
+       %% uncommented.
+       %%
+       %% (?CHANNEL_MAX /= 0) and (ChannelMax > ?CHANNEL_MAX) ->
+       %%      rabbit_misc:protocol_error(
+       %%        not_allowed, "channel_max ~w larger than ~w",
+       %%        [ChannelMax, ?CHANNEL_MAX]);
        true ->
             rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
             State#v1{connection_state = opening,
