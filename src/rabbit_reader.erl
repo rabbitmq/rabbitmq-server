@@ -619,11 +619,11 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                            sock = Sock}) ->
     if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
             rabbit_misc:protocol_error(
-              not_allowed, "frame_max ~w smaller than ~w",
+              not_allowed, "frame_max=~w < ~w min size",
               [FrameMax, ?FRAME_MIN_SIZE]);
        (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
             rabbit_misc:protocol_error(
-              not_allowed, "frame_max ~w larger than ~w",
+              not_allowed, "frame_max=~w > ~w max size",
               [FrameMax, ?FRAME_MAX]);
        true ->
             rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
