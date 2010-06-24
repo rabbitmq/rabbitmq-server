@@ -80,7 +80,7 @@ delivery(Mandatory, Immediate, Txn, Message) ->
               sender = self(), message = Message}.
 
 build_content(Properties, BodyBin) ->
-    %% TODO - is this ever used? If so remove hard coded amqp_0_9_1
+    %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
     {ClassId, _MethodId} =
         rabbit_framing:method_id('basic.publish', amqp_0_9_1),
     #content{class_id = ClassId,
@@ -93,7 +93,7 @@ from_content(Content) ->
              properties = Props,
              payload_fragments_rev = FragmentsRev} =
         rabbit_binary_parser:ensure_content_decoded(Content),
-    %% TODO - is this ever used? If so remove hard coded amqp_0_9_1
+    %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
     {ClassId, _MethodId} =
         rabbit_framing:method_id('basic.publish', amqp_0_9_1),
     {Props, list_to_binary(lists:reverse(FragmentsRev))}.
