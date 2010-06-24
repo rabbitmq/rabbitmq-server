@@ -53,11 +53,7 @@
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
 -define(SILENT_CLOSE_DELAY, 3).
-%% set to zero once QPid fix their negotiation
--define(FRAME_MAX, 131072).
-%% NB: when setting this to non-zero the section of code in the
-%% connection.tune_ok handler below needs to be uncommented
--define(CHANNEL_MAX, 0).
+-define(FRAME_MAX, 131072). %% set to zero once QPid fix their negotiation
 
 %---------------------------------------------------------------------------
 
@@ -609,15 +605,14 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
     User = rabbit_access_control:check_login(Mechanism, Response),
     ok = send_on_channel0(
            Sock,
-           #'connection.tune'{channel_max = ?CHANNEL_MAX,
+           #'connection.tune'{channel_max = 0,
                               frame_max = ?FRAME_MAX,
                               heartbeat = 0}),
     State#v1{connection_state = tuning,
              connection = Connection#connection{
                             user = User,
                             client_properties = ClientProperties}};
-handle_method0(#'connection.tune_ok'{channel_max = ChannelMax,
-                                     frame_max = FrameMax,
+handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
                State = #v1{connection_state = tuning,
                            connection = Connection,
@@ -630,15 +625,6 @@ handle_method0(#'connection.tune_ok'{channel_max = ChannelMax,
             rabbit_misc:protocol_error(
               not_allowed, "frame_max ~w larger than ~w",
               [FrameMax, ?FRAME_MAX]);
-       %% The following is commented out in order to suppress compiler
-       %% warnings about unreachable code. If CHANNEL_MAX is ever
-       %% changed to a value other than 0 this region should be
-       %% uncommented.
-       %%
-       %% (?CHANNEL_MAX /= 0) and (ChannelMax > ?CHANNEL_MAX) ->
-       %%      rabbit_misc:protocol_error(
-       %%        not_allowed, "channel_max ~w larger than ~w",
-       %%        [ChannelMax, ?CHANNEL_MAX]);
        true ->
             rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
             State#v1{connection_state = opening,
