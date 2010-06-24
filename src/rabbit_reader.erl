@@ -41,8 +41,6 @@
 
 -export([server_properties/0]).
 
--export([analyze_frame/2]).
-
 -import(gen_tcp).
 -import(fprof).
 -import(inet).
@@ -244,7 +242,8 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                       timeout_sec = ?HANDSHAKE_TIMEOUT,
                                       frame_max = ?FRAME_MIN_SIZE,
                                       vhost = none,
-                                      client_properties = none},
+                                      client_properties = none,
+                                      protocol = unknown},
                                     callback = uninitialized_callback,
                                     recv_ref = none,
                                     connection_state = pre_init,
@@ -432,7 +431,8 @@ wait_for_channel_termination(N, TimerRef) ->
     end.
 
 maybe_close(State = #v1{connection_state = closing,
-                        queue_collector = Collector}) ->
+                        queue_collector = Collector,
+                        connection = #connection{protocol = Protocol}}) ->
     case all_channels() of
         [] ->
             %% Spec says "Exclusive queues may only be accessed by the current
@@ -440,16 +440,19 @@ maybe_close(State = #v1{connection_state = closing,
             %% This does not strictly imply synchrony, but in practice it seems
             %% to be what people assume.
             rabbit_reader_queue_collector:delete_all(Collector),
-            ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}),
+            ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{},
+                                  Protocol),
             close_connection(State);
         _  -> State
     end;
 maybe_close(State) ->
     State.
 
-handle_frame(Type, 0, Payload, State = #v1{connection_state = CS})
+handle_frame(Type, 0, Payload,
+             State = #v1{connection_state = CS,
+                         connection = #connection{protocol = Protocol}})
   when CS =:= closing; CS =:= closed ->
-    case analyze_frame(Type, Payload) of
+    case analyze_frame(Type, Payload, Protocol) of
         {method, MethodName, FieldsBin} ->
             handle_method0(MethodName, FieldsBin, State);
         _Other -> State
@@ -457,16 +460,18 @@ handle_frame(Type, 0, Payload, State = #v1{connection_state = CS})
 handle_frame(_Type, _Channel, _Payload, State = #v1{connection_state = CS})
   when CS =:= closing; CS =:= closed ->
     State;
-handle_frame(Type, 0, Payload, State) ->
-    case analyze_frame(Type, Payload) of
+handle_frame(Type, 0, Payload,
+             State = #v1{connection = #connection{protocol = Protocol}}) ->
+    case analyze_frame(Type, Payload, Protocol) of
         error     -> throw({unknown_frame, 0, Type, Payload});
         heartbeat -> State;
         {method, MethodName, FieldsBin} ->
             handle_method0(MethodName, FieldsBin, State);
         Other -> throw({unexpected_frame_on_channel0, Other})
     end;
-handle_frame(Type, Channel, Payload, State) ->
-    case analyze_frame(Type, Payload) of
+handle_frame(Type, Channel, Payload,
+             State = #v1{connection = #connection{protocol = Protocol}}) ->
+    case analyze_frame(Type, Payload, Protocol) of
         error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
         AnalyzedFrame ->
@@ -501,24 +506,28 @@ handle_frame(Type, Channel, Payload, State) ->
             end
     end.
 
-analyze_frame(?FRAME_METHOD, <<ClassId:16, MethodId:16, MethodFields/binary>>) ->
-    {method, adjust_close(rabbit_framing:lookup_method_name({ClassId,
-                                                             MethodId})),
+analyze_frame(?FRAME_METHOD, <<ClassId:16, MethodId:16, MethodFields/binary>>,
+              Protocol) ->
+    {method, adjust_close(
+               rabbit_framing:lookup_method_name({ClassId, MethodId}),
+               Protocol),
      MethodFields};
-analyze_frame(?FRAME_HEADER, <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>) ->
+analyze_frame(?FRAME_HEADER,
+              <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>,
+              _Protocol) ->
     {content_header, ClassId, Weight, BodySize, Properties};
-analyze_frame(?FRAME_BODY, Body) ->
+analyze_frame(?FRAME_BODY, Body, _Protocol) ->
     {content_body, Body};
-analyze_frame(?FRAME_HEARTBEAT, <<>>) ->
+analyze_frame(?FRAME_HEARTBEAT, <<>>, _Protocol) ->
     heartbeat;
-analyze_frame(_Type, _Body) ->
+analyze_frame(_Type, _Body, _Protocol) ->
     error.
 
-adjust_close('connection.close08') ->
+adjust_close('connection.close08', protocol_08) ->
     'connection.close';
-adjust_close('connection.close08_ok') ->
+adjust_close('connection.close08_ok', protocol_08) ->
     'connection.close_ok';
-adjust_close(MethodName) ->
+adjust_close(MethodName, _Protocol) ->
     MethodName.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
@@ -540,6 +549,7 @@ handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
     case check_version({ProtocolMajor, ProtocolMinor},
                        {?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR}) of
         true ->
+            Protocol = protocol_08,
             ok = send_on_channel0(
                    Sock,
                    #'connection.start'{
@@ -547,9 +557,11 @@ handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
                      version_minor = ?PROTOCOL_VERSION_MINOR,
                      server_properties = server_properties(),
                      mechanisms = <<"PLAIN AMQPLAIN">>,
-                     locales = <<"en_US">> }),
+                     locales = <<"en_US">> },
+                  Protocol),
             {State#v1{connection = Connection#connection{
-                                     timeout_sec = ?NORMAL_TIMEOUT},
+                                     timeout_sec = ?NORMAL_TIMEOUT,
+                                     protocol = Protocol},
                       connection_state = starting},
              frame_header, 7};
         false ->
@@ -604,7 +616,8 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                                       response = Response,
                                       client_properties = ClientProperties},
                State = #v1{connection_state = starting,
-                           connection = Connection,
+                           connection = Connection =
+                               #connection{protocol = Protocol},
                            sock = Sock}) ->
     User = rabbit_access_control:check_login(Mechanism, Response),
     ok = send_on_channel0(
@@ -612,7 +625,8 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
            #'connection.tune'{channel_max = 0,
                               %% set to zero once QPid fix their negotiation
                               frame_max = 131072,
-                              heartbeat = 0}),
+                              heartbeat = 0},
+           Protocol),
     State#v1{connection_state = tuning,
              connection = Connection#connection{
                             user = User,
@@ -634,13 +648,15 @@ handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
 handle_method0(#'connection.open'{virtual_host = VHostPath},
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
-                                          user = User},
+                                          user = User,
+                                          protocol = Protocol},
                            sock = Sock}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(
            Sock,
-           #'connection.open_ok'{deprecated_known_hosts = <<>>}),
+           #'connection.open_ok'{deprecated_known_hosts = <<>>},
+           Protocol),
     State#v1{connection_state = running,
              connection = NewConnection};
 handle_method0(#'connection.close'{},
@@ -658,8 +674,8 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
-send_on_channel0(Sock, Method) ->
-    ok = rabbit_writer:internal_send_command(Sock, 0, Method).
+send_on_channel0(Sock, Method, Protocol) ->
+    ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
 
 %%--------------------------------------------------------------------------
 
@@ -711,16 +727,19 @@ i(Item, #v1{}) ->
 
 %%--------------------------------------------------------------------------
 
-send_to_new_channel(Channel, AnalyzedFrame,
-                    State = #v1{queue_collector = Collector}) ->
+send_to_new_channel(Channel, AnalyzedFrame, State =
+                        #v1{queue_collector = Collector,
+                            connection = #connection{protocol = Protocol}}) ->
     #v1{sock = Sock, connection = #connection{
                        frame_max = FrameMax,
                        user = #user{username = Username},
-                       vhost = VHost}} = State,
-    WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
+                       vhost = VHost,
+                       protocol = Protocol}} = State,
+    WriterPid = rabbit_writer:start(Sock, Channel, FrameMax, Protocol),
     ChPid = rabbit_framing_channel:start_link(
               fun rabbit_channel:start_link/6,
-              [Channel, self(), WriterPid, Username, VHost, Collector]),
+              [Channel, self(), WriterPid, Username, VHost, Collector],
+              Protocol),
     put({channel, Channel}, {chpid, ChPid}),
     put({chpid, ChPid}, {channel, Channel}),
     ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame).
@@ -736,7 +755,8 @@ handle_exception(State = #v1{connection_state = CS}, Channel, Reason) ->
     log_channel_error(CS, Channel, Reason),
     send_exception(State, Channel, Reason).
 
-send_exception(State, Channel, Reason) ->
+send_exception(State = #v1{connection = #connection{protocol = Protocol}},
+               Channel, Reason) ->
     {ShouldClose, CloseChannel, CloseMethod} = map_exception(Channel, Reason),
     NewState = case ShouldClose of
                    true  -> terminate_channels(),
@@ -744,7 +764,7 @@ send_exception(State, Channel, Reason) ->
                    false -> close_channel(Channel, State)
                end,
     ok = rabbit_writer:internal_send_command(
-           NewState#v1.sock, CloseChannel, CloseMethod),
+           NewState#v1.sock, CloseChannel, CloseMethod, Protocol),
     NewState.
 
 map_exception(Channel, Reason) ->

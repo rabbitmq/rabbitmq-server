@@ -32,20 +32,20 @@
 -module(rabbit_framing_channel).
 -include("rabbit.hrl").
 
--export([start_link/2, process/2, shutdown/1]).
+-export([start_link/3, process/2, shutdown/1]).
 
 %% internal
--export([mainloop/1]).
+-export([mainloop/2]).
 
 %%--------------------------------------------------------------------
 
-start_link(StartFun, StartArgs) ->
+start_link(StartFun, StartArgs, Protocol) ->
     spawn_link(
       fun () ->
               %% we trap exits so that a normal termination of the
               %% channel or reader process terminates us too.
               process_flag(trap_exit, true),
-              mainloop(apply(StartFun, StartArgs))
+              mainloop(apply(StartFun, StartArgs), Protocol)
       end).
 
 process(Pid, Frame) ->
@@ -72,30 +72,30 @@ read_frame(ChannelPid) ->
         Msg                    -> exit({unexpected_message, Msg})
     end.
 
-mainloop(ChannelPid) ->
+mainloop(ChannelPid, Protocol) ->
     {method, MethodName, FieldsBin} = read_frame(ChannelPid),
-    Method = decode_method_fields(MethodName, FieldsBin),
+    Method = decode_method_fields(MethodName, FieldsBin, Protocol),
     case rabbit_framing:method_has_content(MethodName) of
         true  -> rabbit_channel:do(ChannelPid, Method,
                                    collect_content(ChannelPid, MethodName));
         false -> rabbit_channel:do(ChannelPid, Method)
     end,
-    ?MODULE:mainloop(ChannelPid).
+    ?MODULE:mainloop(ChannelPid, Protocol).
 
 %% Handle 0-8 version of channel.tune-ok. In 0-9-1 it gained a longstr
 %% "deprecated_channel_id".
-decode_method_fields('channel.tune_ok', FieldsBin) ->
+decode_method_fields('channel.tune_ok', FieldsBin, protocol_08) ->
     Len = 0,
     rabbit_framing:decode_method_fields(
       'channel.tune_ok', <<FieldsBin/binary, Len:32/unsigned>>);
 %% Handle 0-8 version of basic.consume. In 0-9-1 it gained a table
 %% "filter".
-decode_method_fields('basic.consume', FieldsBin) ->
+decode_method_fields('basic.consume', FieldsBin, protocol_08) ->
     T = rabbit_binary_generator:generate_table([]),
     TLen = size(T),
     rabbit_framing:decode_method_fields(
       'basic.consume', <<FieldsBin/binary, TLen:32/unsigned, T:TLen/binary>>);
-decode_method_fields(MethodName, FieldsBin) ->
+decode_method_fields(MethodName, FieldsBin, _Protocol) ->
     rabbit_framing:decode_method_fields(MethodName, FieldsBin).
 
 collect_content(ChannelPid, MethodName) ->

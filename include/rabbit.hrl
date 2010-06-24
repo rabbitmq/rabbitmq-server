@@ -36,7 +36,8 @@
 
 -record(vhost, {virtual_host, dummy}).
 
--record(connection, {user, timeout_sec, frame_max, vhost, client_properties}).
+-record(connection, {user, timeout_sec, frame_max, vhost, client_properties,
+                     protocol}).
 
 -record(content,
         {class_id,
@@ -173,6 +174,7 @@
                   explanation :: string(),
                   method      :: atom()}).
 
+-type(protocol() :: atom()).
 -endif.
 
 %%----------------------------------------------------------------------------

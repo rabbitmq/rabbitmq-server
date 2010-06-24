@@ -41,7 +41,7 @@
 % See definition of check_empty_content_body_frame_size/0, an assertion called at startup.
 -define(EMPTY_CONTENT_BODY_FRAME_SIZE, 8).
 
--export([build_simple_method_frame/2,
+-export([build_simple_method_frame/3,
          build_simple_content_frames/3,
          build_heartbeat_frame/0]).
 -export([generate_table/1, encode_properties/2]).
@@ -56,8 +56,8 @@
 
 -type(frame() :: [binary()]).
 
--spec(build_simple_method_frame/2 ::
-      (channel_number(), amqp_method_record()) -> frame()).
+-spec(build_simple_method_frame/3 ::
+      (channel_number(), amqp_method_record(), protocol()) -> frame()).
 -spec(build_simple_content_frames/3 ::
       (channel_number(), content(), non_neg_integer()) -> [frame()]).
 -spec(build_heartbeat_frame/0 :: () -> frame()).
@@ -71,17 +71,18 @@
 
 %%----------------------------------------------------------------------------
 
-build_simple_method_frame(ChannelInt, MethodRecord) ->
+build_simple_method_frame(ChannelInt, MethodRecord, Protocol) ->
     MethodFields = rabbit_framing:encode_method_fields(MethodRecord),
-    MethodName = adjust_close(rabbit_misc:method_record_type(MethodRecord)),
+    MethodName = adjust_close(rabbit_misc:method_record_type(MethodRecord),
+                              Protocol),
     {ClassId, MethodId} = rabbit_framing:method_id(MethodName),
     create_frame(1, ChannelInt, [<<ClassId:16, MethodId:16>>, MethodFields]).
 
-adjust_close('connection.close') ->
+adjust_close('connection.close', protocol_08) ->
     'connection.close08';
-adjust_close('connection.close_ok') ->
+adjust_close('connection.close_ok', protocol_08) ->
     'connection.close08_ok';
-adjust_close(MethodName) ->
+adjust_close(MethodName, _Protocol) ->
     MethodName.
 
 build_simple_content_frames(ChannelInt,
