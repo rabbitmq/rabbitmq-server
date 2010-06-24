@@ -78,9 +78,9 @@ build_simple_method_frame(ChannelInt, MethodRecord, Protocol) ->
     {ClassId, MethodId} = rabbit_framing:method_id(MethodName),
     create_frame(1, ChannelInt, [<<ClassId:16, MethodId:16>>, MethodFields]).
 
-adjust_close('connection.close', protocol_08) ->
+adjust_close('connection.close', amqp_0_8) ->
     'connection.close08';
-adjust_close('connection.close_ok', protocol_08) ->
+adjust_close('connection.close_ok', amqp_0_8) ->
     'connection.close08_ok';
 adjust_close(MethodName, _Protocol) ->
     MethodName.

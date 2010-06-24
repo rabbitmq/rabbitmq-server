@@ -523,9 +523,9 @@ analyze_frame(?FRAME_HEARTBEAT, <<>>, _Protocol) ->
 analyze_frame(_Type, _Body, _Protocol) ->
     error.
 
-adjust_close('connection.close08', protocol_08) ->
+adjust_close('connection.close08', amqp_0_8) ->
     'connection.close';
-adjust_close('connection.close08_ok', protocol_08) ->
+adjust_close('connection.close08_ok', amqp_0_8) ->
     'connection.close_ok';
 adjust_close(MethodName, _Protocol) ->
     MethodName.
@@ -549,7 +549,7 @@ handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
     case check_version({ProtocolMajor, ProtocolMinor},
                        {?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR}) of
         true ->
-            Protocol = protocol_08,
+            Protocol = amqp_0_8,
             ok = send_on_channel0(
                    Sock,
                    #'connection.start'{
