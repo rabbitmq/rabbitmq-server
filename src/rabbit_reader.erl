@@ -508,9 +508,7 @@ handle_frame(Type, Channel, Payload,
 
 analyze_frame(?FRAME_METHOD, <<ClassId:16, MethodId:16, MethodFields/binary>>,
               Protocol) ->
-    {method, adjust_close(
-               rabbit_framing:lookup_method_name({ClassId, MethodId}),
-               Protocol),
+    {method, rabbit_framing:lookup_method_name({ClassId, MethodId}, Protocol),
      MethodFields};
 analyze_frame(?FRAME_HEADER,
               <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>,
@@ -522,13 +520,6 @@ analyze_frame(?FRAME_HEARTBEAT, <<>>, _Protocol) ->
     heartbeat;
 analyze_frame(_Type, _Body, _Protocol) ->
     error.
-
-adjust_close('connection.close08', amqp_0_8) ->
-    'connection.close';
-adjust_close('connection.close08_ok', amqp_0_8) ->
-    'connection.close_ok';
-adjust_close(MethodName, _Protocol) ->
-    MethodName.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     %%?LOGDEBUG("Got frame header: ~p/~p/~p~n", [Type, Channel, PayloadSize]),
@@ -589,10 +580,11 @@ check_version(ClientVersion, ServerVersion) ->
 
 %%--------------------------------------------------------------------------
 
-handle_method0(MethodName, FieldsBin, State) ->
+handle_method0(MethodName, FieldsBin,
+               State = #v1{connection = #connection{protocol = Protocol}}) ->
     try
         handle_method0(rabbit_framing:decode_method_fields(
-                         MethodName, FieldsBin),
+                         MethodName, FieldsBin, Protocol),
                        State)
     catch exit:Reason ->
             CompleteReason = case Reason of
@@ -653,7 +645,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(
            Sock,
-           #'connection.open_ok'{deprecated_known_hosts = <<>>},
+           #'connection.open_ok'{known_hosts = <<>>},
            Protocol),
     State#v1{connection_state = running,
              connection = NewConnection};
@@ -755,7 +747,8 @@ handle_exception(State = #v1{connection_state = CS}, Channel, Reason) ->
 
 send_exception(State = #v1{connection = #connection{protocol = Protocol}},
                Channel, Reason) ->
-    {ShouldClose, CloseChannel, CloseMethod} = map_exception(Channel, Reason),
+    {ShouldClose, CloseChannel, CloseMethod} =
+        map_exception(Channel, Reason, Protocol),
     NewState = case ShouldClose of
                    true  -> terminate_channels(),
                             close_connection(State);
@@ -765,14 +758,15 @@ send_exception(State = #v1{connection = #connection{protocol = Protocol}},
            NewState#v1.sock, CloseChannel, CloseMethod, Protocol),
     NewState.
 
-map_exception(Channel, Reason) ->
+map_exception(Channel, Reason, Protocol) ->
     {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
         lookup_amqp_exception(Reason),
     ShouldClose = SuggestedClose or (Channel == 0),
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
                               none -> {0, 0};
-                              _ -> rabbit_framing:method_id(FailedMethod)
+                              _ -> rabbit_framing:method_id(FailedMethod,
+                                                            Protocol)
                           end,
     {CloseChannel, CloseMethod} =
         case ShouldClose of

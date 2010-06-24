@@ -913,7 +913,7 @@ test_memory_pressure() ->
 
     %% if we publish at this point, the channel should die
     Content = #content{class_id = element(1, rabbit_framing:method_id(
-                                               'basic.publish')),
+                                               'basic.publish', amqp_0_9_1)),
                        properties = none,
                        properties_bin = <<>>,
                        payload_fragments_rev = []},

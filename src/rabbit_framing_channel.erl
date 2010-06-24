@@ -74,7 +74,8 @@ read_frame(ChannelPid) ->
 
 mainloop(ChannelPid, Protocol) ->
     {method, MethodName, FieldsBin} = read_frame(ChannelPid),
-    Method = decode_method_fields(MethodName, FieldsBin, Protocol),
+    Method = rabbit_framing:decode_method_fields(MethodName, FieldsBin,
+                                                 Protocol),
     case rabbit_framing:method_has_content(MethodName) of
         true  -> rabbit_channel:do(ChannelPid, Method,
                                    collect_content(ChannelPid, MethodName));
@@ -82,24 +83,9 @@ mainloop(ChannelPid, Protocol) ->
     end,
     ?MODULE:mainloop(ChannelPid, Protocol).
 
-%% Handle 0-8 version of channel.open-ok. In 0-9-1 it gained a longstr
-%% "deprecated_channel_id".
-decode_method_fields('channel.open_ok', FieldsBin, amqp_0_8) ->
-    Len = 0,
-    rabbit_framing:decode_method_fields(
-      'channel.open_ok', <<FieldsBin/binary, Len:32/unsigned>>);
-%% Handle 0-8 version of basic.consume. In 0-9-1 it gained a table
-%% "filter".
-decode_method_fields('basic.consume', FieldsBin, amqp_0_8) ->
-    T = rabbit_binary_generator:generate_table([]),
-    TLen = size(T),
-    rabbit_framing:decode_method_fields(
-      'basic.consume', <<FieldsBin/binary, TLen:32/unsigned, T:TLen/binary>>);
-decode_method_fields(MethodName, FieldsBin, _Protocol) ->
-    rabbit_framing:decode_method_fields(MethodName, FieldsBin).
-
 collect_content(ChannelPid, MethodName) ->
-    {ClassId, _MethodId} = rabbit_framing:method_id(MethodName),
+    %% Protocol does not matter as we only want the class ID to match
+    {ClassId, _MethodId} = rabbit_framing:method_id(MethodName, amqp_0_9_1),
     case read_frame(ChannelPid) of
         {content_header, HeaderClassId, 0, BodySize, PropertiesBin} ->
             if HeaderClassId == ClassId ->

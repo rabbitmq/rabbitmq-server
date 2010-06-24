@@ -72,18 +72,10 @@
 %%----------------------------------------------------------------------------
 
 build_simple_method_frame(ChannelInt, MethodRecord, Protocol) ->
-    MethodFields = rabbit_framing:encode_method_fields(MethodRecord),
-    MethodName = adjust_close(rabbit_misc:method_record_type(MethodRecord),
-                              Protocol),
-    {ClassId, MethodId} = rabbit_framing:method_id(MethodName),
+    MethodFields = rabbit_framing:encode_method_fields(MethodRecord, Protocol),
+    MethodName = rabbit_misc:method_record_type(MethodRecord),
+    {ClassId, MethodId} = rabbit_framing:method_id(MethodName, Protocol),
     create_frame(1, ChannelInt, [<<ClassId:16, MethodId:16>>, MethodFields]).
-
-adjust_close('connection.close', amqp_0_8) ->
-    'connection.close08';
-adjust_close('connection.close_ok', amqp_0_8) ->
-    'connection.close08_ok';
-adjust_close(MethodName, _Protocol) ->
-    MethodName.
 
 build_simple_content_frames(ChannelInt,
                             #content{class_id = ClassId,
