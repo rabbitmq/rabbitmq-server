@@ -33,7 +33,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([start/4, shutdown/1, mainloop/1]).
+-export([start/4, start_link/4, shutdown/1, mainloop/1]).
 -export([send_command/2, send_command/3, send_command_and_signal_back/3,
          send_command_and_signal_back/4, send_command_and_notify/5]).
 -export([internal_send_command/4, internal_send_command/6]).
@@ -49,6 +49,8 @@
 -ifdef(use_specs).
 
 -spec(start/4 ::
+        (socket(), channel_number(), non_neg_integer(), protocol()) -> pid()).
+-spec(start_link/4 ::
         (socket(), channel_number(), non_neg_integer(), protocol()) -> pid()).
 -spec(send_command/2 :: (pid(), amqp_method_record()) -> 'ok').
 -spec(send_command/3 :: (pid(), amqp_method_record(), content()) -> 'ok').
@@ -72,6 +74,12 @@ start(Sock, Channel, FrameMax, Protocol) ->
                                       channel = Channel,
                                       frame_max = FrameMax,
                                       protocol = Protocol}]).
+
+start_link(Sock, Channel, FrameMax, Protocol) ->
+    spawn_link(?MODULE, mainloop, [#wstate{sock = Sock,
+                                           channel = Channel,
+                                           frame_max = FrameMax,
+                                           protocol = Protocol}]).
 
 mainloop(State) ->
     receive

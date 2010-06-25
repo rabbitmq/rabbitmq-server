@@ -41,6 +41,8 @@
 
 -export([server_properties/0]).
 
+-export([analyze_frame/3]).
+
 -import(gen_tcp).
 -import(fprof).
 -import(inet).
