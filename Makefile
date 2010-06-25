@@ -62,9 +62,6 @@ ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
 ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
-# Versions prior to this are not supported
-NEED_MAKE := 3.80
-
 define usage_xml_to_erl
   $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, $(SOURCE_DIR)/rabbit_%_usage.erl, $(subst -,_,$(1))))
 endef
@@ -79,11 +76,16 @@ SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
 endif
 endif
 
-ifeq ($(filter $(NEED_MAKE),$(firstword $(sort $(NEED_MAKE) $(MAKE_VERSION)))),)
+# Versions prior to this are not supported
+NEED_MAKE := 3.80
+ifneq "$(NEED_MAKE)" "$(firstword $(sort $(NEED_MAKE) $(MAKE_VERSION)))"
 $(error Versions of make prior to $(NEED_MAKE) are not supported)
 endif
-ifeq ($(filter 3.81,$(firstword $(sort 3.81 $(MAKE_VERSION)))),)
-.DEFAULT_GOAL=all # Introduced in 3.81
+
+# .DEFAULT_GOAL introduced in 3.81
+DEFAULT_GOAL_MAKE := 3.81
+ifneq "$(DEFAULT_GOAL_MAKE)" "$(firstword $(sort $(DEFAULT_GOAL_MAKE) $(MAKE_VERSION)))"
+.DEFAULT_GOAL=all
 endif
 
 all: $(TARGETS)
