@@ -550,48 +550,60 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, Stat
             throw({bad_payload, PayloadAndMarker})
     end;
 
-handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
-             State = #v1{sock = Sock, connection = Connection}) ->
-    case check_version({ProtocolMajor, ProtocolMinor},
-                       {0, 8}) of
-        true ->
-            Protocol = amqp_0_8,
-            ok = send_on_channel0(
-                   Sock,
-                   #'connection.start'{
-                     version_major = 0,
-                     version_minor = 8,
-                     server_properties = server_properties(),
-                     mechanisms = <<"PLAIN AMQPLAIN">>,
-                     locales = <<"en_US">> },
-                  Protocol),
-            {State#v1{connection = Connection#connection{
-                                     timeout_sec = ?NORMAL_TIMEOUT,
-                                     protocol = Protocol},
-                      connection_state = starting},
-             frame_header, 7};
-        false ->
-            throw({bad_version, ProtocolMajor, ProtocolMinor})
-    end;
+%% The two rules pertaining to version negotiation:
+%%
+%% * If the server cannot support the protocol specified in the
+%% protocol header, it MUST respond with a valid protocol header and
+%% then close the socket connection.
+%%
+%% * The server MUST provide a protocol version that is lower than or
+%% equal to that requested by the client in the protocol header.
+%%
+%% We support 0-9-1, 0-9 and 0-8, so by the first rule, we must close
+%% the connection if we're sent anything else.  Then, we must send
+%% that version in the Connection.start method.
+handle_input(handshake, <<"AMQP",0,0,9,1>>, State) ->
+    protocol_negotiate(0, 9, 1, State);
+
+handle_input(handshake, <<"AMQP",1,1,0,9>>, State) ->
+    protocol_negotiate(0, 9, 0, State);
+
+%% the 0-8 spec, confusingly, defines the version as 8-0
+handle_input(handshake, <<"AMQP",1,1,8,0>>, State) ->
+    protocol_negotiate(0, 8, 0, State);
 
 handle_input(handshake, Other, #v1{sock = Sock}) ->
+    rabbit_log:warning("Received unsupported protocol header ~w", [Other]),
     ok = inet_op(fun () -> rabbit_net:send(
-                             Sock, <<"AMQP",1,1,0,8>>) end),
+                             Sock, <<"AMQP",0,0,9,1>>) end),
     throw({bad_header, Other});
 
 handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
 
-%% the 0-8 spec, confusingly, defines the version as 8-0
-adjust_version({8,0})   -> {0,8};
-adjust_version(Version) -> Version.
-check_version(ClientVersion, ServerVersion) ->
-    {ClientMajor, ClientMinor} = adjust_version(ClientVersion),
-    {ServerMajor, ServerMinor} = adjust_version(ServerVersion),
-    ClientMajor > ServerMajor
-        orelse
-          (ClientMajor == ServerMajor andalso
-           ClientMinor >= ServerMinor).
+%% Offer a protocol version to the client.  Connection.start only
+%% includes a major and minor version number, Luckily 0-9 and 0-9-1
+%% are similar enough that clients will be happy with either.
+protocol_negotiate(ProtocolMajor, ProtocolMinor, _ProtocolRevision,
+                   State = #v1{sock = Sock, connection = Connection}) ->
+    Protocol = case ProtocolMinor of
+                   8 -> amqp_0_8;
+                   _ -> amqp_0_9_1
+               end,
+    ok = send_on_channel0(
+           Sock,
+           #'connection.start'{
+             version_major = ProtocolMajor,
+             version_minor = ProtocolMinor,
+             server_properties = server_properties(),
+             mechanisms = <<"PLAIN AMQPLAIN">>,
+             locales = <<"en_US">> },
+          Protocol),
+    {State#v1{connection = Connection#connection{
+                             timeout_sec = ?NORMAL_TIMEOUT,
+                             protocol = Protocol},
+              connection_state = starting},
+     frame_header, 7}.
 
 %%--------------------------------------------------------------------------
 
