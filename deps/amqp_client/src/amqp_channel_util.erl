@@ -56,8 +56,10 @@ open_channel(ProposedNumber, MaxChannel, Driver, StartArgs, Channels) ->
 %%---------------------------------------------------------------------------
 
 start_channel_infrastructure(network, ChannelNumber, {Sock, MainReader}) ->
-    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [self()]),
-    WriterPid = rabbit_writer:start_link(Sock, ChannelNumber, ?FRAME_MIN_SIZE),
+    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [self()],
+                                                  ?PROTOCOL),
+    WriterPid = rabbit_writer:start_link(Sock, ChannelNumber, ?FRAME_MIN_SIZE,
+                                        ?PROTOCOL),
     case MainReader of
         none ->
             ok;
