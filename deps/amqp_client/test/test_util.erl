@@ -173,9 +173,9 @@ basic_return_test(Connection) ->
     timer:sleep(200),
     receive
         {BasicReturn = #'basic.return'{}, Content} ->
-            #'basic.return'{reply_text = ReplyText,
+            #'basic.return'{reply_code = ReplyCode,
                             exchange = X} = BasicReturn,
-            ?assertMatch(<<"unroutable">>, ReplyText),
+            ?assertMatch(?NO_ROUTE, ReplyCode),
             #amqp_msg{payload = Payload2} = Content,
             ?assertMatch(Payload, Payload2);
         WhatsThis ->
