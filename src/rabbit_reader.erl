@@ -53,6 +53,7 @@
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
 -define(SILENT_CLOSE_DELAY, 3).
+-define(FRAME_MAX, 131072). %% set to zero once QPid fix their negotiation
 
 %---------------------------------------------------------------------------
 
@@ -102,6 +103,8 @@
 %%   heartbeat timeout -> *throw*
 %% closing:
 %%   socket close -> *terminate*
+%%   receive connection.close -> send connection.close_ok,
+%%     *closing*
 %%   receive frame -> ignore, *closing*
 %%   handshake_timeout -> ignore, *closing*
 %%   heartbeat timeout -> *throw*
@@ -118,6 +121,8 @@
 %%      start terminate_connection timer, *closed*
 %% closed:
 %%   socket close -> *terminate*
+%%   receive connection.close -> send connection.close_ok,
+%%     *closed*
 %%   receive connection.close_ok -> self() ! terminate_connection,
 %%     *closed*
 %%   receive frame -> ignore, *closed*
@@ -490,10 +495,18 @@ handle_frame(Type, Channel, Payload,
                 closing ->
                     %% According to the spec, after sending a
                     %% channel.close we must ignore all frames except
+                    %% channel.close and channel.close_ok.  In the
+                    %% event of a channel.close, we should send back a
                     %% channel.close_ok.
                     case AnalyzedFrame of
                         {method, 'channel.close_ok', _} ->
                             erase({channel, Channel});
+                        {method, 'channel.close', _} ->
+                            %% We're already closing this channel, so
+                            %% there's no cleanup to do (notify
+                            %% queues, etc.)
+                            ok = rabbit_writer:send_command(State#v1.sock,
+                                                            #'channel.close_ok'{});
                         _ -> ok
                     end,
                     State;
@@ -615,29 +628,36 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
     ok = send_on_channel0(
            Sock,
            #'connection.tune'{channel_max = 0,
-                              %% set to zero once QPid fix their negotiation
-                              frame_max = 131072,
+                              frame_max = ?FRAME_MAX,
                               heartbeat = 0},
            Protocol),
     State#v1{connection_state = tuning,
              connection = Connection#connection{
                             user = User,
                             client_properties = ClientProperties}};
-handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
-                                     frame_max = FrameMax,
+handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
                State = #v1{connection_state = tuning,
                            connection = Connection,
                            sock = Sock}) ->
-    %% if we have a channel_max limit that the client wishes to
-    %% exceed, die as per spec.  Not currently a problem, so we ignore
-    %% the client's channel_max parameter.
-    rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
-    State#v1{connection_state = opening,
-             connection = Connection#connection{
-                            timeout_sec = ClientHeartbeat,
-                            frame_max = FrameMax}};
+    if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
+            rabbit_misc:protocol_error(
+              not_allowed, "frame_max=~w < ~w min size",
+              [FrameMax, ?FRAME_MIN_SIZE]);
+       (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
+            rabbit_misc:protocol_error(
+              not_allowed, "frame_max=~w > ~w max size",
+              [FrameMax, ?FRAME_MAX]);
+       true ->
+            rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
+            State#v1{connection_state = opening,
+                     connection = Connection#connection{
+                                    timeout_sec = ClientHeartbeat,
+                                    frame_max = FrameMax}}
+    end;
+
 handle_method0(#'connection.open'{virtual_host = VHostPath},
+
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
                                           user = User,
@@ -655,6 +675,14 @@ handle_method0(#'connection.close'{},
                State = #v1{connection_state = running}) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing});
+handle_method0(#'connection.close'{}, State = #v1{connection_state = CS,
+                                                  connection = #connection{
+                                                    protocol = Protocol}})
+  when CS =:= closing; CS =:= closed ->
+    %% We're already closed or closing, so we don't need to cleanup
+    %% anything.
+    ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}, Protocol),
+    State;
 handle_method0(#'connection.close_ok'{},
                State = #v1{connection_state = closed}) ->
     self() ! terminate_connection,

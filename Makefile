@@ -77,6 +77,18 @@ SCRIPTS_REL_PATH=$(shell ./calculate-relative $(TARGET_DIR)/sbin $(SBIN_DIR))
 endif
 endif
 
+# Versions prior to this are not supported
+NEED_MAKE := 3.80
+ifneq "$(NEED_MAKE)" "$(firstword $(sort $(NEED_MAKE) $(MAKE_VERSION)))"
+$(error Versions of make prior to $(NEED_MAKE) are not supported)
+endif
+
+# .DEFAULT_GOAL introduced in 3.81
+DEFAULT_GOAL_MAKE := 3.81
+ifneq "$(DEFAULT_GOAL_MAKE)" "$(firstword $(sort $(DEFAULT_GOAL_MAKE) $(MAKE_VERSION)))"
+.DEFAULT_GOAL=all
+endif
+
 all: $(TARGETS)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
@@ -272,7 +284,7 @@ install_dirs:
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(MAN_DIR)
 
-$(foreach XML, $(USAGES_XML), $(eval $(call usage_dep, $(XML))))
+$(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 
 # Note that all targets which depend on clean must have clean in their
 # name.  Also any target that doesn't depend on clean should not have
