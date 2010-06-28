@@ -726,42 +726,33 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             end,
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
-    Finish = fun (#amqqueue{name = QueueName,
-                            durable = Durable1,
-                            auto_delete = AutoDelete1} = Q)
-                   when Durable =:= Durable1, AutoDelete =:= AutoDelete1 ->
-                     check_exclusive_access(Q, Owner, strict),
-                     check_configure_permitted(QueueName, State),
-                     %% We need to notify the reader within the channel
-                     %% process so that we can be sure there are no
-                     %% outstanding exclusive queues being declared as the
-                     %% connection shuts down.
-                     case Owner of
-                         none -> ok;
-                         _    -> ok = rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
-                     end,
-                     Q;
-                 %% non-equivalence trumps exclusivity arbitrarily
-                 (#amqqueue{name = QueueName}) ->
-                     rabbit_misc:protocol_error(
-                       precondition_failed,
-                       "parameters for ~s not equivalent",
-                       [rabbit_misc:rs(QueueName)])
-             end,
-    Q = case rabbit_amqqueue:with(
-               rabbit_misc:r(VHostPath, queue, QueueNameBin),
-               Finish) of
-            {error, not_found} ->
-                ActualNameBin =
-                    case QueueNameBin of
+    ActualNameBin = case QueueNameBin of
                         <<>>  -> rabbit_guid:binstring_guid("amq.gen");
                         Other -> check_name('queue', Other)
                     end,
-                QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
-                Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
-                                               Args, Owner));
-            #amqqueue{} = Other ->
-                Other
+    QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
+    Q = case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
+                                     Args, Owner) of
+            #amqqueue{name = QueueName,
+                      durable = Durable1,
+                      auto_delete = AutoDelete1} = Q1
+              when Durable =:= Durable1, AutoDelete =:= AutoDelete1 ->
+                check_exclusive_access(Q1, Owner, strict),
+                check_configure_permitted(QueueName, State),
+                %% We need to notify the reader within the channel
+                %% process so that we can be sure there are no
+                %% outstanding exclusive queues being declared as the
+                %% connection shuts down.
+                case Owner of
+                    none -> ok;
+                    _    -> ok = rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q1)
+                end,
+                Q1;
+            %% non-equivalence trumps exclusivity arbitrarily
+            #amqqueue{name = QueueName} ->
+                rabbit_misc:protocol_error(
+                  precondition_failed, "parameters for ~s not equivalent",
+                  [rabbit_misc:rs(QueueName)])
         end,
     return_queue_declare_ok(State, NoWait, Q);
 
