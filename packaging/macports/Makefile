@@ -35,6 +35,7 @@ macports: dirs $(DEST)/Portfile
 	for f in rabbitmq-asroot-script-wrapper rabbitmq-script-wrapper ; do \
 	  cp $(COMMON_DIR)/$$f $(DEST)/files ; \
 	done
+	cp erlang-r14a-build-fix.diff $(DEST)/files
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|SHELL=/bin/sh su -m rabbitmq -c|' \
 	    $(DEST)/files/rabbitmq-script-wrapper
 	cp patch-org.macports.rabbitmq-server.plist.diff $(DEST)/files
