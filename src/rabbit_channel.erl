@@ -297,13 +297,11 @@ return_queue_declare_ok(Q = #amqqueue{name = #resource{name = ActualName}},
          end,
     NewState = State#ch{most_recently_declared_queue = ActualName},
     case NoWait of
-        true ->
-            {noreply, NewState};
-        false ->
-            Reply = #'queue.declare_ok'{queue = ActualName,
-                                        message_count = MessageCount,
-                                        consumer_count = ConsumerCount},
-            {reply, Reply, NewState}
+        true  -> {noreply, NewState};
+        false -> Reply = #'queue.declare_ok'{queue = ActualName,
+                                             message_count = MessageCount,
+                                             consumer_count = ConsumerCount},
+                 {reply, Reply, NewState}
     end.
 
 check_resource_access(Username, Resource, Perm) ->
