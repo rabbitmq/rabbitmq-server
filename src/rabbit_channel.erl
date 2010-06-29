@@ -751,7 +751,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             %% non-equivalence trumps exclusivity arbitrarily
             #amqqueue{name = QueueName} ->
                 rabbit_misc:protocol_error(
-                  precondition_failed, "parameters for ~s not equivalent",
+                  not_allowed, "parameters for ~s not equivalent",
                   [rabbit_misc:rs(QueueName)])
         end,
     return_queue_declare_ok(State, NoWait, Q);
