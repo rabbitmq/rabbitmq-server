@@ -736,17 +736,17 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                         Other -> check_name('queue', Other)
                     end,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
+    check_configure_permitted(QueueName, State),
     case rabbit_amqqueue:with(QueueName,
                               fun (Q) -> {rabbit_amqqueue:stat(Q), Q} end) of
-        {{ok, _ActualName, MessageCount1, ConsumerCount1},
+        {{ok, _ActualName, MessageCount, ConsumerCount},
          #amqqueue{name = QueueName, durable = Durable1,
                    auto_delete = AutoDelete1} = Q1}
           when Durable =:= Durable1, AutoDelete =:= AutoDelete1 ->
             check_exclusive_access(Q1, Owner, strict),
-            check_configure_permitted(QueueName, State),
-            return_queue_declare_ok(Q1, NoWait, MessageCount1, ConsumerCount1,
+            return_queue_declare_ok(Q1, NoWait, MessageCount, ConsumerCount,
                                     false, Owner, State);
-        {{ok, _ActualName, _MessageCount1, _ConsumerCount1},
+        {{ok, _ActualName, _MessageCount, _ConsumerCount},
          #amqqueue{name = QueueName}} ->
             rabbit_misc:protocol_error(
               precondition_failed, "parameters for ~s not equivalent",
@@ -770,11 +770,11 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
               _, State = #ch{virtual_host = VHostPath,
                              reader_pid   = ReaderPid}) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
+    check_configure_permitted(QueueName, State),
     {{ok, _ActualName, MessageCount, ConsumerCount},
      #amqqueue{name = QueueName} = Q} =
         rabbit_amqqueue:with_or_die(
           QueueName, fun (Q1) -> {rabbit_amqqueue:stat(Q1), Q1} end),
-    check_configure_permitted(QueueName, State),
     check_exclusive_access(Q, ReaderPid, lax),
     return_queue_declare_ok(Q, NoWait, MessageCount, ConsumerCount,
                             false, none, State);
