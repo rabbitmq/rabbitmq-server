@@ -120,6 +120,32 @@ command_serialization_test(Connection) ->
     latch_loop(?Latch),
     teardown(Connection, Channel).
 
+recover_after_cancel_test(Connection) ->
+    Channel = amqp_connection:open_channel(Connection),
+    {ok, Q} = setup_publish(Channel),
+    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
+    amqp_channel:register_default_consumer(Channel, self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = Tag} -> ok
+    after 2000 ->
+            Tag = foo, %% placate compiler
+            exit(did_not_receive_subscription_message)
+    end,
+    Expect = fun() ->
+                     receive
+                         {#'basic.deliver'{}, _} ->
+                             %% don't send ack
+                             ok
+                     after 2000 ->
+                             exit(did_not_receive_first_message)
+                     end
+             end,
+    Expect(),
+    amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
+    amqp_channel:call(Channel, #'basic.recover'{requeue = false}),
+    Expect(),
+    teardown(Connection, Channel).
+
 queue_unbind_test(Connection) ->
     X = <<"eggs">>, Q = <<"foobar">>, Key = <<"quay">>,
     Payload = <<"foobar">>,
