@@ -67,6 +67,9 @@ basic_ack_call_test() ->
 command_serialization_test() ->
     test_util:command_serialization_test(new_connection()).
 
+recover_after_cancel_test() ->
+    test_util:recover_after_cancel_test(new_connection()).
+
 queue_unbind_test() ->
     test_util:queue_unbind_test(new_connection()).
 

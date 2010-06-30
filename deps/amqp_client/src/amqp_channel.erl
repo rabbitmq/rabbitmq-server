@@ -42,6 +42,7 @@
 -export([close/1, close/3]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
+-export([register_default_consumer/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
 -define(TIMEOUT_CLOSE_OK, 3000).
@@ -58,7 +59,8 @@
                   return_handler_pid = none,
                   flow_control = false,
                   flow_handler_pid = none,
-                  consumers = dict:new()}).
+                  consumers = dict:new(),
+                  default_consumer = unknown}).
 
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
@@ -200,6 +202,34 @@ register_return_handler(Channel, ReturnHandler) ->
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
+%% @spec (Channel, Consumer) -> ok
+%% where
+%%      Channel = pid()
+%%      Consumer = pid()
+%% @doc Set the current default consumer.
+%% Under certain circumstances it is possible for a channel to receive a
+%% message delivery which does not match any consumer which is currently
+%% set up via basic.consume. This will occur after the following sequence
+%% of events:
+%%
+%% basic.consume with explicit acks
+%% %% some deliveries take place but are not acked
+%% basic.cancel
+%% basic.recover{requeue = false}
+%%
+%% Since requeue is specified to be false in the basic.recover, the spec
+%% states that the message must be redelivered to "the original recipient"
+%% - i.e. the same channel / consumer-tag. But the consumer is no longer
+%% active.
+%%
+%% In these circumstances, you can register a default consumer to handle
+%% such deliveries. If no default consumer is registered then the channel
+%% will exit on receiving such a delivery.
+%%
+%% Most people will not need to use this.
+register_default_consumer(Channel, Consumer) ->
+    gen_server:cast(Channel, {register_default_consumer, Consumer}).
+
 %%---------------------------------------------------------------------------
 %% RPC mechanism
 %%---------------------------------------------------------------------------
@@ -252,8 +282,17 @@ do(Method, Content, #c_state{writer_pid = Writer,
 
 resolve_consumer(_ConsumerTag, #c_state{consumers = []}) ->
     exit(no_consumers_registered);
-resolve_consumer(ConsumerTag, #c_state{consumers = Consumers}) ->
-    dict:fetch(ConsumerTag, Consumers).
+resolve_consumer(ConsumerTag, #c_state{consumers = Consumers,
+                                       default_consumer = DefaultConsumer}) ->
+    case dict:find(ConsumerTag, Consumers) of
+        {ok, Value} ->
+            Value;
+        error ->
+            case is_pid(DefaultConsumer) of
+                true  -> DefaultConsumer;
+                false -> exit(unexpected_delivery_and_no_default_consumer)
+            end
+    end.
 
 register_consumer(ConsumerTag, Consumer,
                   State = #c_state{consumers = Consumers0}) ->
@@ -490,6 +529,12 @@ handle_cast({register_return_handler, ReturnHandler}, State) ->
 handle_cast({register_flow_handler, FlowHandler}, State) ->
     link(FlowHandler),
     {noreply, State#c_state{flow_handler_pid = FlowHandler}};
+
+%% Registers a handler to process unexpected deliveries
+%% @private
+handle_cast({register_default_consumer, Consumer}, State) ->
+    link(Consumer),
+    {noreply, State#c_state{default_consumer = Consumer}};
 
 %% @private
 handle_cast({notify_sent, _Peer}, State) ->

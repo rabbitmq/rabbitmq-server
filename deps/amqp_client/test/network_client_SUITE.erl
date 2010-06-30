@@ -71,6 +71,9 @@ queue_unbind_test() ->
 command_serialization_test() ->
     test_util:command_serialization_test(new_connection()).
 
+recover_after_cancel_test() ->
+    test_util:recover_after_cancel_test(new_connection()).
+
 teardown_test() ->
     repeat(fun test_util:teardown_test/1, ?ITERATIONS).
 
