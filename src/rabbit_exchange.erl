@@ -438,11 +438,11 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
            end) of
         Err = {error, _}  ->
             Err;
-        {{Action, X = #exchange{ type = Type }}, B} ->
+        {{IsDeleted, X = #exchange{ type = Type }}, B} ->
             Module = type_to_module(Type),
-            case Action of
-                auto_delete -> Module:delete(X, [B]);
-                no_delete   -> Module:remove_bindings(X, [B])
+            case IsDeleted of
+                auto_deleted -> Module:delete(X, [B]);
+                no_delete    -> Module:remove_bindings(X, [B])
             end
     end.
 
