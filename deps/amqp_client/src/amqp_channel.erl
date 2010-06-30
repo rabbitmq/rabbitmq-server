@@ -223,8 +223,8 @@ register_flow_handler(Channel, FlowHandler) ->
 %% active.
 %%
 %% In these circumstances, you can register a default consumer to handle
-%% such deliveries. If no default consumer is registered the delivery is
-%% ignored.
+%% such deliveries. If no default consumer is registered then the channel
+%% will exit on receiving such a delivery.
 %%
 %% Most people will not need to use this.
 register_default_consumer(Channel, Consumer) ->
@@ -284,10 +284,10 @@ resolve_consumer(_ConsumerTag, #c_state{consumers = []}) ->
     exit(no_consumers_registered);
 resolve_consumer(ConsumerTag, #c_state{consumers = Consumers,
                                        default_consumer = DefaultConsumer}) ->
-    case dict:is_key(ConsumerTag, Consumers) of
-        true ->
-            dict:fetch(ConsumerTag, Consumers);
-        false ->
+    case dict:find(ConsumerTag, Consumers) of
+        {ok, Value} ->
+            Value;
+        error ->
             case is_pid(DefaultConsumer) of
                 true  -> DefaultConsumer;
                 false -> exit(unexpected_delivery_and_no_default_consumer)
@@ -414,12 +414,7 @@ handle_regular_method(#'channel.flow'{active = Active} = Flow, none,
 handle_regular_method(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver,
                       AmqpMsg, State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
-    case Consumer of
-        unknown ->
-            ok;
-        _ ->
-            Consumer ! {Deliver, AmqpMsg}
-    end,
+    Consumer ! {Deliver, AmqpMsg},
     {noreply, State};
 
 handle_regular_method(
