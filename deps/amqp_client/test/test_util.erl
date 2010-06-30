@@ -125,12 +125,12 @@ recover_after_cancel_test(Connection) ->
     {ok, Q} = setup_publish(Channel),
     amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
     amqp_channel:register_default_consumer(Channel, self()),
-    receive
-        #'basic.consume_ok'{consumer_tag = Tag} -> ok
-    after 2000 ->
-            Tag = foo, %% placate compiler
-            exit(did_not_receive_subscription_message)
-    end,
+    Tag = 
+        receive
+            #'basic.consume_ok'{consumer_tag = T} -> T
+        after 2000 ->
+                exit(did_not_receive_subscription_message)
+        end,
     Expect = fun() ->
                      receive
                          {#'basic.deliver'{}, _} ->
