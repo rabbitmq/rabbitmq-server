@@ -290,7 +290,7 @@ resolve_consumer(ConsumerTag, #c_state{consumers = Consumers,
         false ->
             case is_pid(DefaultConsumer) of
                 true  -> DefaultConsumer;
-                false -> unknown
+                false -> exit(unexpected_delivery_and_no_default_consumer)
             end
     end.
 
