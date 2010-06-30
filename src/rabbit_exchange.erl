@@ -335,7 +335,7 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                       Module = type_to_module(Type),
                       case IsDeleted of
                           auto_deleted -> Module:delete(X, Bs);
-                          no_delete    -> Module:remove_bindings(X, Bs)
+                          not_deleted  -> Module:remove_bindings(X, Bs)
                       end
               end, Cleanup)
     end.
@@ -442,7 +442,7 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
             Module = type_to_module(Type),
             case IsDeleted of
                 auto_deleted -> Module:delete(X, [B]);
-                no_delete    -> Module:remove_bindings(X, [B])
+                not_deleted  -> Module:remove_bindings(X, [B])
             end
     end.
 
@@ -526,10 +526,10 @@ delete(ExchangeName, IfUnused) ->
     end.
 
 maybe_auto_delete(Exchange = #exchange{auto_delete = false}) ->
-    {no_delete, Exchange};
+    {not_deleted, Exchange};
 maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
     case conditional_delete(Exchange) of
-        {error, in_use}         -> {no_delete, Exchange};
+        {error, in_use}         -> {not_deleted, Exchange};
         {deleted, Exchange, []} -> {auto_deleted, Exchange}
     end.
 
