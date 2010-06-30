@@ -103,6 +103,8 @@
 %%   heartbeat timeout -> *throw*
 %% closing:
 %%   socket close -> *terminate*
+%%   receive connection.close -> send connection.close_ok,
+%%     *closing*
 %%   receive frame -> ignore, *closing*
 %%   handshake_timeout -> ignore, *closing*
 %%   heartbeat timeout -> *throw*
@@ -119,6 +121,8 @@
 %%      start terminate_connection timer, *closed*
 %% closed:
 %%   socket close -> *terminate*
+%%   receive connection.close -> send connection.close_ok,
+%%     *closed*
 %%   receive connection.close_ok -> self() ! terminate_connection,
 %%     *closed*
 %%   receive frame -> ignore, *closed*
@@ -486,10 +490,18 @@ handle_frame(Type, Channel, Payload, State) ->
                 closing ->
                     %% According to the spec, after sending a
                     %% channel.close we must ignore all frames except
+                    %% channel.close and channel.close_ok.  In the
+                    %% event of a channel.close, we should send back a
                     %% channel.close_ok.
                     case AnalyzedFrame of
                         {method, 'channel.close_ok', _} ->
                             erase({channel, Channel});
+                        {method, 'channel.close', _} ->
+                            %% We're already closing this channel, so
+                            %% there's no cleanup to do (notify
+                            %% queues, etc.)
+                            ok = rabbit_writer:send_command(State#v1.sock,
+                                                            #'channel.close_ok'{});
                         _ -> ok
                     end,
                     State;
@@ -666,6 +678,12 @@ handle_method0(#'connection.close'{},
                State = #v1{connection_state = running}) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing});
+handle_method0(#'connection.close'{}, State = #v1{connection_state = CS})
+  when CS =:= closing; CS =:= closed ->
+    %% We're already closed or closing, so we don't need to cleanup
+    %% anything.
+    ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}),
+    State;
 handle_method0(#'connection.close_ok'{},
                State = #v1{connection_state = closed}) ->
     self() ! terminate_connection,
