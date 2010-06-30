@@ -112,10 +112,10 @@
                                             index_module       :: atom(),
                                             dir                :: file_path(),
                                             gc_pid             :: pid(),
-                                            file_handles_ets   :: tid(),
-                                            file_summary_ets   :: tid(),
-                                            dedup_cache_ets    :: tid(),
-                                            cur_file_cache_ets :: tid() }).
+                                            file_handles_ets   :: ets:tid(),
+                                            file_summary_ets   :: ets:tid(),
+                                            dedup_cache_ets    :: ets:tid(),
+                                            cur_file_cache_ets :: ets:tid() }).
 -type(startup_fun_state() ::
         {(fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A}).
 
@@ -140,7 +140,7 @@
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
 
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
-               {tid(), file_path(), atom(), any()}) ->
+               {ets:tid(), file_path(), atom(), any()}) ->
                    'concurrent_readers' | non_neg_integer()).
 
 -endif.

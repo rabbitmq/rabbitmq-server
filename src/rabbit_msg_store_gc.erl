@@ -55,7 +55,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/4 :: (file_path(), any(), atom(), tid()) ->
+-spec(start_link/4 :: (file_path(), any(), atom(), ets:tid()) ->
                            {'ok', pid()} | 'ignore' | {'error', any()}).
 -spec(gc/3 :: (pid(), non_neg_integer(), non_neg_integer()) -> 'ok').
 -spec(no_readers/2 :: (pid(), non_neg_integer()) -> 'ok').
