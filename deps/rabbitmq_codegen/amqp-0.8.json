@@ -289,18 +289,7 @@
 			 "synchronous" : true},
 			{"id": 41,
 			 "arguments": [{"type": "long", "name": "message-count"}],
-			 "name": "delete-ok"},
-			{"id": 50,
-			 "arguments": [{"type": "short", "name": "ticket", "default-value": 1},
-				       {"type": "shortstr", "name": "queue"},
-				       {"type": "shortstr", "name": "exchange"},
-				       {"type": "shortstr", "name": "routing-key", "default-value": ""},
-				       {"type": "table", "name": "arguments", "default-value": {}}],
-			 "name": "unbind",
-			 "synchronous" : true},
-			{"id": 51,
-			 "arguments": [],
-			 "name": "unbind-ok"}
+			 "name": "delete-ok"}
 			],
 	    "name": "queue"
 	},
@@ -386,7 +375,7 @@
 			 "name": "reject"},
 			{"id": 100,
 			 "arguments": [{"type": "bit", "name": "requeue", "default-value": false}],
-			 "name": "recover"}],
+			 "name": "recover-async"}],
 	    "name": "basic",
 	    "properties": [{"type": "shortstr", "name": "content-type"},
 			   {"type": "shortstr", "name": "content-encoding"},
