@@ -59,7 +59,6 @@
 
 -ifdef(use_specs).
 
--type(qstats() :: {'ok', non_neg_integer(), non_neg_integer()}).
 -type(qlen() :: {'ok', non_neg_integer()}).
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
 -type(ok_or_errors() ::
@@ -84,7 +83,8 @@
 -spec(consumers/1 :: (amqqueue()) -> [{pid(), ctag(), boolean()}]).
 -spec(consumers_all/1 ::
       (vhost()) -> [{queue_name(), pid(), ctag(), boolean()}]).
--spec(stat/1 :: (amqqueue()) -> qstats()).
+-spec(stat/1 ::
+        (amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}).
 -spec(delete/3 ::
       (amqqueue(), 'false', 'false') -> qlen();
       (amqqueue(), 'true' , 'false') -> qlen() | {'error', 'in_use'};
