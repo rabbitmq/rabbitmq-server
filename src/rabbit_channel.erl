@@ -705,13 +705,13 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
             return_ok(State, NoWait,  #'exchange.delete_ok'{})
     end;
 
-handle_method(Declare = #'queue.declare'{queue       = QueueNameBin,
-                                         passive     = false,
-                                         durable     = Durable,
-                                         exclusive   = ExclusiveDeclare,
-                                         auto_delete = AutoDelete,
-                                         nowait      = NoWait,
-                                         arguments   = Args},
+handle_method(#'queue.declare'{queue       = QueueNameBin,
+                               passive     = false,
+                               durable     = Durable,
+                               exclusive   = ExclusiveDeclare,
+                               auto_delete = AutoDelete,
+                               nowait      = NoWait,
+                               arguments   = Args} = Declare,
               _, State = #ch{virtual_host        = VHostPath,
                              reader_pid          = ReaderPid,
                              queue_collector_pid = CollectorPid}) ->
