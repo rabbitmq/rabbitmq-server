@@ -747,7 +747,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     %% the connection shuts down.
                     ok = case Owner of
                              none -> ok;
-                             _ -> rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
+                             _    -> rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
                          end,
                     return_queue_declare_ok(QueueName, NoWait, 0, 0, State);
                 {existing, _Q} ->
