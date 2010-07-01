@@ -359,7 +359,7 @@ test_content_framing(FrameMax, Fragments) ->
     [Header | Frames] =
         rabbit_binary_generator:build_simple_content_frames(
           1,
-          #content{class_id = 0, properties_bin = <<>>,
+          #content{class_id = 10, properties = none, properties_bin = <<>>,
                    payload_fragments_rev = Fragments},
           FrameMax),
     %% header is formatted correctly and the size is the total of the
