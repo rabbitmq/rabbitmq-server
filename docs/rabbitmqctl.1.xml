@@ -909,7 +909,7 @@
             </variablelist>
             <para>
               If no <command>connectioninfoitem</command>s are specified then  user, peer
-              address, peer port, connection state and protocol are displayed.
+              address, peer port and connection state are displayed.
             </para>
 
             <para role="example-prefix">
