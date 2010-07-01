@@ -37,7 +37,8 @@
          update_ram_duration/1, set_ram_duration_target/2,
          set_maximum_since_use/2]).
 -export([pseudo_queue/2]).
--export([lookup/1, with/2, with_or_die/2,
+-export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
+         check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, stat_all/0, deliver/2, requeue/3, ack/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1]).
@@ -70,6 +71,10 @@
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
+-spec(assert_equivalence/5 :: (amqqueue(), boolean(), boolean(), amqp_table(),
+                               maybe(pid)) -> ok).
+-spec(check_exclusive_access/2 :: (amqqueue(), pid()) -> 'ok').
+-spec(with_exclusive_access_or_die/3 :: (queue_name(), pid(), qfun(A)) -> A).
 -spec(list/1 :: (vhost()) -> [amqqueue()]).
 -spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (amqqueue()) -> [info()]).
@@ -212,6 +217,31 @@ with(Name, F) ->
     with(Name, F, fun () -> {error, not_found} end).
 with_or_die(Name, F) ->
     with(Name, F, fun () -> rabbit_misc:not_found(Name) end).
+
+assert_equivalence(#amqqueue{durable = Durable, auto_delete = AutoDelete} = Q,
+                   Durable, AutoDelete, _Args, Owner) ->
+    check_exclusive_access(Q, Owner, strict);
+assert_equivalence(#amqqueue{name = QueueName},
+                   _Durable, _AutoDelete, _Args, _Owner) ->
+    rabbit_misc:protocol_error(
+      precondition_failed, "parameters for ~s not equivalent",
+      [rabbit_misc:rs(QueueName)]).
+
+check_exclusive_access(Q, Owner) -> check_exclusive_access(Q, Owner, lax).
+
+check_exclusive_access(#amqqueue{exclusive_owner = Owner}, Owner, _MatchType) ->
+    ok;
+check_exclusive_access(#amqqueue{exclusive_owner = none}, _ReaderPid, lax) ->
+    ok;
+check_exclusive_access(#amqqueue{name = QueueName}, _ReaderPid, _MatchType) ->
+    rabbit_misc:protocol_error(
+      resource_locked,
+      "cannot obtain exclusive access to locked ~s",
+      [rabbit_misc:rs(QueueName)]).
+
+with_exclusive_access_or_die(Name, ReaderPid, F) ->
+    with_or_die(Name,
+                fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
