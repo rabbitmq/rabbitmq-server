@@ -753,7 +753,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 {existing, _Q} ->
                     %% must have been created between the stat and the
                     %% declare. Loop around again.
-                    handle_method(Declare, undefined, State)
+                    handle_method(Declare, none, State)
             end
     end;
 
