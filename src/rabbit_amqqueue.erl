@@ -66,7 +66,7 @@
 
 -spec(start/0 :: () -> 'ok').
 -spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(),
-                    maybe(pid())) -> amqqueue()).
+                    maybe(pid())) -> {'new' | 'existing', amqqueue()}).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
@@ -110,7 +110,7 @@
 -spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
 -spec(maybe_run_queue_via_backing_queue/2 :: (pid(), (fun ((A) -> A))) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
--spec(set_ram_duration_target/2 :: (pid(), number()) -> 'ok').
+-spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
@@ -395,7 +395,7 @@ delegate_call(Pid, Msg, Timeout) ->
     delegate:invoke(Pid, fun (P) -> gen_server2:call(P, Msg, Timeout) end).
 
 delegate_pcall(Pid, Pri, Msg, Timeout) ->
-    delegate:invoke(Pid, 
+    delegate:invoke(Pid,
                     fun (P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end).
 
 delegate_pcast(Pid, Pri, Msg) ->
