@@ -226,9 +226,10 @@ distclean: clean
 
 # xmlto can not read from standard input, so we mess with a tmp file.
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
-	xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	xmlto man -o $(DOCS_DIR) --stringparam man.indent.verbatims=0 $<.tmp && \
-	gzip -f $(DOCS_DIR)/`basename $< .xml`
+	xmlto --version | grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || opt='--stringparam man.indent.verbatims=0' ; \
+	    xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
+	    xmlto man -o $(DOCS_DIR) $$opt $<.tmp && \
+	    gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
 
 # Use tmp files rather than a pipeline so that we get meaningful errors
