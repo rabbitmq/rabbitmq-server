@@ -558,25 +558,21 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, Stat
 %%
 %% * The server MUST provide a protocol version that is lower than or
 %% equal to that requested by the client in the protocol header.
-%%
-%% We support 0-9-1, 0-9 and 0-8, so by the first rule, we must close
-%% the connection if we're sent anything else.  Then, we must send
-%% that version in the Connection.start method.
-handle_input(handshake, <<"AMQP",0,0,9,1>>, State) ->
-    protocol_negotiate(0, 9, 1, State);
+handle_input(handshake, <<"AMQP", 0, 0, 9, 1>>, State) ->
+    start_connection({0, 9, 1}, amqp_0_9_1, State);
 
-handle_input(handshake, <<"AMQP",1,1,0,9>>, State) ->
-    protocol_negotiate(0, 9, 0, State);
+handle_input(handshake, <<"AMQP", 1, 1, 0, 9>>, State) ->
+    start_connection({0, 9, 0}, amqp_0_9_1, State);
 
 %% the 0-8 spec, confusingly, defines the version as 8-0
-handle_input(handshake, <<"AMQP",1,1,8,0>>, State) ->
-    protocol_negotiate(0, 8, 0, State);
+handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
+    start_connection({0, 8, 0}, amqp_0_8, State);
+
+handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
+    refuse_connection(Sock, {bad_version, A, B, C, D});
 
 handle_input(handshake, Other, #v1{sock = Sock}) ->
-    rabbit_log:warning("Received unsupported protocol header ~w", [Other]),
-    ok = inet_op(fun () -> rabbit_net:send(
-                             Sock, <<"AMQP",0,0,9,1>>) end),
-    throw({bad_header, Other});
+    refuse_connection(Sock, {bad_header, Other});
 
 handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
@@ -584,12 +580,8 @@ handle_input(Callback, Data, _State) ->
 %% Offer a protocol version to the client.  Connection.start only
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
 %% are similar enough that clients will be happy with either.
-protocol_negotiate(ProtocolMajor, ProtocolMinor, _ProtocolRevision,
+start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision}, Protocol,
                    State = #v1{sock = Sock, connection = Connection}) ->
-    Protocol = case ProtocolMinor of
-                   8 -> amqp_0_8;
-                   _ -> amqp_0_9_1
-               end,
     ok = send_on_channel0(
            Sock,
            #'connection.start'{
@@ -604,6 +596,10 @@ protocol_negotiate(ProtocolMajor, ProtocolMinor, _ProtocolRevision,
                              protocol = Protocol},
               connection_state = starting},
      frame_header, 7}.
+
+refuse_connection(Sock, Exception) ->
+    ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
+    throw(Exception).
 
 %%--------------------------------------------------------------------------
 
