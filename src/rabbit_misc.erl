@@ -32,6 +32,7 @@
 -module(rabbit_misc).
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
+
 -include_lib("kernel/include/file.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
@@ -72,13 +73,22 @@
 -ifdef(use_specs).
 
 -type(ok_or_error() :: 'ok' | {'error', any()}).
+-type(amqp_error() ::
+      #amqp_error{name        :: atom(),
+                  explanation :: string(),
+                  method      :: atom()}).
+-type(not_found() :: {'error', 'not_found'}).
+-type(r(Kind) ::
+      #resource{virtual_host :: rabbit:vhost(),
+                kind         :: Kind,
+                name         :: rabbit:resource_name()}).
 
 -spec(method_record_type/1 :: (tuple()) -> atom()).
 -spec(polite_pause/0 :: () -> 'done').
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
 -spec(die/1 :: (atom()) -> no_return()).
 -spec(frame_error/2 :: (atom(), binary()) -> no_return()).
--spec(amqp_error/4 :: (atom(), string(), [any()], atom()) -> amqp_error()).
+-spec(amqp_error/4 :: (atom(), string(), [any()], atom()) -> rabbit_misc:amqp_error()).
 -spec(protocol_error/3 :: (atom(), string(), [any()]) -> no_return()).
 -spec(protocol_error/4 :: (atom(), string(), [any()], atom()) -> no_return()).
 -spec(not_found/1 :: (r(atom())) -> no_return()).
@@ -86,31 +96,32 @@
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (vhost() | r(atom()), K, resource_name()) ->
-             r(K) when is_subtype(K, atom())).
--spec(r/2 :: (vhost(), K) -> #resource{virtual_host :: vhost(),
-                                       kind         :: K,
-                                       name         :: '_'}
-                                 when is_subtype(K, atom())).
--spec(r_arg/4 :: (vhost() | r(atom()), K, amqp_table(), binary()) ->
-             undefined | r(K)  when is_subtype(K, atom())).
--spec(rs/1 :: (r(atom())) -> string()).
+-spec(r/3 :: (rabbit:vhost() | rabbit:r(atom()), K, rabbit:resource_name()) ->
+             rabbit:r(K) when is_subtype(K, atom())).
+-spec(r/2 :: (rabbit:vhost(), K) -> #resource{virtual_host :: rabbit:vhost(),
+                                              kind         :: K,
+                                              name         :: '_'}
+                                        when is_subtype(K, atom())).
+-spec(r_arg/4 :: (rabbit:vhost() | rabbit:r(atom()), K, rabbit_framing:amqp_table(), binary()) ->
+             undefined | rabbit:r(K)  when is_subtype(K, atom())).
+-spec(rs/1 :: (rabbit:r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
 -spec(enable_cover/1 :: (file:filename()) -> ok_or_error()).
 -spec(report_cover/1 :: (file:filename()) -> 'ok').
 -spec(throw_on_error/2 ::
-      (atom(), thunk({error, any()} | {ok, A} | A)) -> A).
--spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
+      (atom(), rabbit:thunk({error, any()} | {ok, A} | A)) -> A).
+-spec(with_exit_handler/2 :: (rabbit:thunk(A), rabbit:thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(with_user/2 :: (username(), thunk(A)) -> A).
--spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
--spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
--spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
+-spec(with_user/2 :: (rabbit_access_control:username(), rabbit:thunk(A)) -> A).
+-spec(with_vhost/2 :: (rabbit:vhost(), rabbit:thunk(A)) -> A).
+-spec(with_user_and_vhost/3 :: (rabbit_access_control:username(),
+                                rabbit:vhost(), rabbit:thunk(A)) -> A).
+-spec(execute_mnesia_transaction/1 :: (rabbit:thunk(A)) -> A).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
--spec(makenode/1 :: ({string(), string()} | string()) -> erlang_node()).
--spec(nodeparts/1 :: (erlang_node() | string()) -> {string(), string()}).
+-spec(makenode/1 :: ({string(), string()} | string()) -> rabbit:erlang_node()).
+-spec(nodeparts/1 :: (rabbit:erlang_node() | string()) -> {string(), string()}).
 -spec(cookie_hash/0 :: () -> string()).
 -spec(tcp_name/3 :: (atom(), inet:ip_address(), inet:ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
@@ -131,7 +142,7 @@
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> integer()).
 -spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue()) -> B).
--spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
+-spec(sort_field_table/1 :: (rabbit_framing:amqp_table()) -> rabbit_framing:amqp_table()).
 -spec(pid_to_string/1 :: (pid()) -> string()).
 -spec(string_to_pid/1 :: (string()) -> pid()).
 -spec(version_compare/2 :: (string(), string()) -> 'lt' | 'eq' | 'gt').

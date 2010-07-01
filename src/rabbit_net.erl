@@ -43,6 +43,8 @@
 	'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
 	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
 -type(error() :: {'error', any()}).
+-type(ssl_socket() :: #ssl_socket{}).
+-type(socket() :: inet:ip_port() | ssl_socket()).
 
 -spec(async_recv/3 :: (socket(), integer(), timeout()) -> {'ok', any()}).
 -spec(close/1 :: (socket()) -> 'ok' | error()).

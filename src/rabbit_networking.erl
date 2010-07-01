@@ -65,20 +65,26 @@
 
 -type(connection() :: pid()).
 
+-type(listener() ::
+      #listener{node     :: rabbit:erlang_node(),
+                protocol :: atom(),
+                host     :: inet:hostname(),
+                port     :: inet:ip_port()}).
+
 -spec(start/0 :: () -> 'ok').
 -spec(start_tcp_listener/2 :: (inet:hostname(), inet:ip_port()) -> 'ok').
--spec(start_ssl_listener/3 :: (inet:hostname(), inet:ip_port(), [info()]) -> 'ok').
+-spec(start_ssl_listener/3 :: (inet:hostname(), inet:ip_port(), [rabbit:info()]) -> 'ok').
 -spec(stop_tcp_listener/2 :: (inet:hostname(), inet:ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [listener()]).
--spec(node_listeners/1 :: (erlang_node()) -> [listener()]).
+-spec(node_listeners/1 :: (rabbit:erlang_node()) -> [listener()]).
 -spec(connections/0 :: () -> [connection()]).
--spec(connection_info_keys/0 :: () -> [info_key()]).
--spec(connection_info/1 :: (connection()) -> [info()]).
--spec(connection_info/2 :: (connection(), [info_key()]) -> [info()]).
--spec(connection_info_all/0 :: () -> [[info()]]).
--spec(connection_info_all/1 :: ([info_key()]) -> [[info()]]).
+-spec(connection_info_keys/0 :: () -> [rabbit:info_key()]).
+-spec(connection_info/1 :: (connection()) -> [rabbit:info()]).
+-spec(connection_info/2 :: (connection(), [rabbit:info_key()]) -> [rabbit:info()]).
+-spec(connection_info_all/0 :: () -> [[rabbit:info()]]).
+-spec(connection_info_all/1 :: ([rabbit:info_key()]) -> [[rabbit:info()]]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
--spec(on_node_down/1 :: (erlang_node()) -> 'ok').
+-spec(on_node_down/1 :: (rabbit:erlang_node()) -> 'ok').
 -spec(check_tcp_listener_address/3 :: (atom(), inet:hostname(), inet:ip_port()) ->
              {inet:ip_address(), atom()}).
 

@@ -58,27 +58,41 @@
 
 -ifdef(use_specs).
 
--type(qstats() :: {'ok', queue_name(), non_neg_integer(), non_neg_integer()}).
+
+-type(info_key() :: atom()).
+-type(info() :: {info_key(), any()}).
+
+-type(name() :: rabbit:r('queue')).
+-type(amqqueue() ::
+      #amqqueue{name            :: name(),
+                durable         :: boolean(),
+                auto_delete     :: boolean(),
+                exclusive_owner :: rabbit:maybe(pid()),
+                arguments       :: rabbit_framing:amqp_table(),
+                pid             :: rabbit:maybe(pid())}).
+
+-type(qstats() :: {'ok', name(), non_neg_integer(), non_neg_integer()}).
 -type(qlen() :: {'ok', non_neg_integer()}).
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
+-type(qmsg() :: {name(), pid(), rabbit:msg_id(), boolean(), rabbit:message()}).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -spec(start/0 :: () -> 'ok').
--spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(),
-                    maybe(pid())) -> {'new' | 'existing', amqqueue()}).
--spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
--spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
--spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
--spec(list/1 :: (vhost()) -> [amqqueue()]).
+-spec(declare/5 :: (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
+                    rabbit:maybe(pid())) -> {'new' | 'existing', amqqueue()}).
+-spec(lookup/1 :: (name()) -> {'ok', amqqueue()} | rabbit:not_found()).
+-spec(with/2 :: (name(), qfun(A)) -> A | rabbit:not_found()).
+-spec(with_or_die/2 :: (name(), qfun(A)) -> A).
+-spec(list/1 :: (rabbit:vhost()) -> [amqqueue()]).
 -spec(info_keys/0 :: () -> [info_key()]).
 -spec(info/1 :: (amqqueue()) -> [info()]).
 -spec(info/2 :: (amqqueue(), [info_key()]) -> [info()]).
--spec(info_all/1 :: (vhost()) -> [[info()]]).
--spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
--spec(consumers/1 :: (amqqueue()) -> [{pid(), ctag(), boolean()}]).
+-spec(info_all/1 :: (rabbit:vhost()) -> [[info()]]).
+-spec(info_all/2 :: (rabbit:vhost(), [info_key()]) -> [[info()]]).
+-spec(consumers/1 :: (amqqueue()) -> [{pid(), rabbit:ctag(), boolean()}]).
 -spec(consumers_all/1 ::
-      (vhost()) -> [{queue_name(), pid(), ctag(), boolean()}]).
+      (rabbit:vhost()) -> [{name(), pid(), rabbit:ctag(), boolean()}]).
 -spec(stat/1 :: (amqqueue()) -> qstats()).
 -spec(stat_all/0 :: () -> [qstats()]).
 -spec(delete/3 ::
@@ -89,30 +103,30 @@
                                             {'error', 'in_use'} |
                                             {'error', 'not_empty'}).
 -spec(purge/1 :: (amqqueue()) -> qlen()).
--spec(deliver/2 :: (pid(), delivery()) -> boolean()).
--spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
--spec(ack/4 :: (pid(), maybe(txn()), [msg_id()], pid()) -> 'ok').
--spec(commit_all/3 :: ([pid()], txn(), pid()) -> ok_or_errors()).
--spec(rollback_all/3 :: ([pid()], txn(), pid()) -> 'ok').
+-spec(deliver/2 :: (pid(), rabbit:delivery()) -> boolean()).
+-spec(requeue/3 :: (pid(), [rabbit:msg_id()],  pid()) -> 'ok').
+-spec(ack/4 :: (pid(), rabbit:maybe(rabbit:txn()), [rabbit:msg_id()], pid()) -> 'ok').
+-spec(commit_all/3 :: ([pid()], rabbit:txn(), pid()) -> ok_or_errors()).
+-spec(rollback_all/3 :: ([pid()], rabbit:txn(), pid()) -> 'ok').
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
              {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
-      (amqqueue(), boolean(), pid(), pid() | 'undefined', ctag(),
+      (amqqueue(), boolean(), pid(), pid() | 'undefined', rabbit:ctag(),
        boolean(), any()) ->
              'ok' | {'error', 'exclusive_consume_unavailable'}).
--spec(basic_cancel/4 :: (amqqueue(), pid(), ctag(), any()) -> 'ok').
+-spec(basic_cancel/4 :: (amqqueue(), pid(), rabbit:ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 :: (amqqueue(), boolean()) -> amqqueue() | 'not_found').
--spec(internal_delete/1 :: (queue_name()) -> 'ok' | not_found()).
+-spec(internal_delete/1 :: (name()) -> 'ok' | rabbit:not_found()).
 -spec(maybe_run_queue_via_backing_queue/2 :: (pid(), (fun ((A) -> A))) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
--spec(on_node_down/1 :: (erlang_node()) -> 'ok').
+-spec(on_node_down/1 :: (rabbit:erlang_node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
 
 -endif.

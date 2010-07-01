@@ -41,7 +41,10 @@
 
 -ifdef(use_specs).
 
--spec(deliver/2 :: ([pid()], delivery()) -> {routing_result(), [pid()]}).
+-type(routing_key() :: binary()).
+-type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
+
+-spec(deliver/2 :: ([pid()], rabbit:delivery()) -> {routing_result(), [pid()]}).
 
 -endif.
 

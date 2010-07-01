@@ -46,27 +46,37 @@
 -ifdef(use_specs).
 
 -type(permission_atom() :: 'configure' | 'read' | 'write').
+-type(username() :: binary()).
+-type(password() :: binary()).
+-type(user() ::
+      #user{username :: username(),
+            password :: password()}).
 
 -spec(check_login/2 :: (binary(), binary()) -> user()).
 -spec(user_pass_login/2 :: (username(), password()) -> user()).
--spec(check_vhost_access/2 :: (user(), vhost()) -> 'ok').
+-spec(check_vhost_access/2 :: (user(), rabbit:vhost()) -> 'ok').
 -spec(check_resource_access/3 ::
-      (username(), r(atom()), permission_atom()) -> 'ok').
+      (username(), rabbit:r(atom()), permission_atom()) -> 'ok').
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
 -spec(list_users/0 :: () -> [username()]).
--spec(lookup_user/1 :: (username()) -> {'ok', user()} | not_found()).
--spec(add_vhost/1 :: (vhost()) -> 'ok').
--spec(delete_vhost/1 :: (vhost()) -> 'ok').
--spec(list_vhosts/0 :: () -> [vhost()]).
+-spec(lookup_user/1 :: (username()) ->
+                            {'ok', user()} | rabbit:not_found()).
+-spec(add_vhost/1 :: (rabbit:vhost()) -> 'ok').
+-spec(delete_vhost/1 :: (rabbit:vhost()) -> 'ok').
+-spec(list_vhosts/0 :: () -> [rabbit:vhost()]).
 -spec(set_permissions/5 ::
-      (username(), vhost(), regexp(), regexp(), regexp()) -> 'ok').
--spec(clear_permissions/2 :: (username(), vhost()) -> 'ok').
+      (username(), rabbit:vhost(), rabbit:regexp(),
+       rabbit:regexp(), rabbit:regexp()
+      ) -> 'ok').
+-spec(clear_permissions/2 :: (username(), rabbit:vhost()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
-      (vhost()) -> [{username(), regexp(), regexp(), regexp()}]).
+      (rabbit:vhost()) -> [{username(), rabbit:regexp(),
+                            rabbit:regexp(), rabbit:regexp()}]).
 -spec(list_user_permissions/1 ::
-      (username()) -> [{vhost(), regexp(), regexp(), regexp()}]).
+      (username()) -> [{rabbit:vhost(), rabbit:regexp(),
+                        rabbit:regexp(), rabbit:regexp()}]).
 
 -endif.
 

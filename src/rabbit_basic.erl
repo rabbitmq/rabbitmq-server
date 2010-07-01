@@ -42,24 +42,27 @@
 
 -ifdef(use_specs).
 
--type(properties_input() :: (amqp_properties() | [{atom(), any()}])).
--type(publish_result() :: ({ok, routing_result(), [pid()]} | not_found())).
+-type(properties_input() :: (rabbit:amqp_properties() | [{atom(), any()}])).
+-type(publish_result() :: ({ok, rabbit_router:routing_result(), [pid()]}
+                           | rabbit:not_found())).
 
--spec(publish/1 :: (delivery()) -> publish_result()).
--spec(delivery/4 :: (boolean(), boolean(), maybe(txn()), message()) ->
-             delivery()).
--spec(message/4 :: (exchange_name(), routing_key(), properties_input(),
-                    binary()) -> (message() | {'error', any()})).
--spec(properties/1 :: (properties_input()) -> amqp_properties()).
--spec(publish/4 :: (exchange_name(), routing_key(), properties_input(),
-                    binary()) -> publish_result()).
--spec(publish/7 :: (exchange_name(), routing_key(), boolean(), boolean(),
-                    maybe(txn()), properties_input(), binary()) ->
-             publish_result()).
--spec(build_content/2 :: (amqp_properties(), binary()) -> content()).
--spec(from_content/1 :: (content()) -> {amqp_properties(), binary()}).
+-spec(publish/1 :: (rabbit:delivery()) -> publish_result()).
+-spec(delivery/4 :: (boolean(), boolean(), rabbit:maybe(rabbit:txn()),
+                     rabbit:message()) -> rabbit:delivery()).
+-spec(message/4 :: (rabbit:exchange_name(), rabbit_router:routing_key(),
+                    properties_input(), binary())
+                   -> (rabbit:message() | {'error', any()})).
+-spec(properties/1 :: (properties_input()) -> rabbit:amqp_properties()).
+-spec(publish/4 :: (rabbit:exchange_name(), rabbit_router:routing_key(),
+                    properties_input(), binary()) -> publish_result()).
+-spec(publish/7 :: (rabbit:exchange_name(), rabbit_router:routing_key(), boolean(), boolean(),
+                    rabbit:maybe(rabbit:txn()), properties_input(), binary()) ->
+                        publish_result()).
+-spec(build_content/2 :: (rabbit_framing:amqp_properties(), binary())
+                         -> rabbit:content()).
+-spec(from_content/1 :: (rabbit:content()) -> {rabbit_framing:amqp_properties(), binary()}).
 -spec(is_message_persistent/1 ::
-        (decoded_content()) -> (boolean() | {'invalid', non_neg_integer()})).
+        (rabbit:decoded_content()) -> (boolean() | {'invalid', non_neg_integer()})).
 
 -endif.
 

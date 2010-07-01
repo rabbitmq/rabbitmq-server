@@ -39,6 +39,12 @@
 
 -export([log_location/1]).
 
+-export_type([regexp/0, vhost/0, txn/0, resource_name/0, thunk/1,
+              maybe/1,
+              msg_id/0, ctag/0, erlang_node/0, message/0, basic_message/0,
+              delivery/0, content/0, decoded_content/0, encoded_content/0,
+              unencoded_content/0]).
+
 %%---------------------------------------------------------------------------
 %% Boot steps.
 -export([maybe_insert_default_data/0]).
@@ -183,6 +189,67 @@
 
 -ifdef(use_specs).
 
+-include("rabbit_framing_spec.hrl").
+
+-type(maybe(T) :: T | 'none').
+-type(erlang_node() :: atom()).
+-type(thunk(T) :: fun(() -> T)).
+-type(regexp() :: binary()).
+
+%% TODO: make this more precise by tying specific class_ids to
+%% specific properties
+-type(undecoded_content() ::
+      #content{class_id              :: rabbit_framing:amqp_class_id(),
+               properties            :: 'none',
+               properties_bin        :: binary(),
+               payload_fragments_rev :: [binary()]} |
+      #content{class_id              :: rabbit_framing:amqp_class_id(),
+               properties            :: amqp_properties(),
+               properties_bin        :: 'none',
+               payload_fragments_rev :: [binary()]}).
+-type(unencoded_content() :: undecoded_content()).
+-type(decoded_content() ::
+      #content{class_id              :: rabbit_framing:amqp_class_id(),
+               properties            :: amqp_properties(),
+               properties_bin        :: rabbit:maybe(binary()),
+               payload_fragments_rev :: [binary()]}).
+-type(encoded_content() ::
+      #content{class_id              :: rabbit_framing:amqp_class_id(),
+               properties            :: rabbit:maybe(amqp_properties()),
+               properties_bin        :: binary(),
+               payload_fragments_rev :: [binary()]}).
+-type(content() :: undecoded_content() | decoded_content()).
+-type(basic_message() ::
+      #basic_message{exchange_name  :: rabbit_exchange:name(),
+                     routing_key    :: rabbit_router:routing_key(),
+                     content        :: content(),
+                     guid           :: rabbit_guid:guid(),
+                     is_persistent  :: boolean()}).
+-type(message() :: basic_message()).
+-type(delivery() ::
+      #delivery{mandatory :: boolean(),
+                immediate :: boolean(),
+                txn       :: rabbit:maybe(rabbit:txn()),
+                sender    :: pid(),
+                message   :: message()}).
+
+%% this is really an abstract type, but dialyzer does not support them
+-type(txn() :: rabbit_guid:guid()).
+-type(permission() ::
+      #permission{configure :: regexp(),
+                  write     :: regexp(),
+                  read      :: regexp()}).
+-type(binding() ::
+      #binding{exchange_name    :: rabbit_exchange:name(),
+               queue_name       :: rabbit_amqqueue:name(),
+               key              :: binding_key()}).
+%% this really should be an abstract type
+-type(msg_id() :: non_neg_integer()).
+-type(listener() ::
+      #listener{node     :: erlang_node(),
+                protocol :: atom(),
+                host     :: inet:hostname(),
+                port     :: inet:ip_port()}).
 -type(log_location() :: 'tty' | 'undefined' | file:filename()).
 -type(file_suffix() :: binary()).
 
@@ -193,7 +260,7 @@
 -spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
-              {nodes, [{node_type(), [erlang_node()]}]} |
+              {nodes, [{rabbit_mnesia:node_type(), [erlang_node()]}]} |
               {running_nodes, [erlang_node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 

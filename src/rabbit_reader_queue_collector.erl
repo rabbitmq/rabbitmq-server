@@ -47,7 +47,7 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> {'ok', pid()}).
--spec(register_exclusive_queue/2 :: (pid(), amqqueue()) -> 'ok').
+-spec(register_exclusive_queue/2 :: (pid(), rabbit_amqqueue:amqqueue()) -> 'ok').
 -spec(delete_all/1 :: (pid()) -> 'ok').
 
 -endif.
