@@ -31,7 +31,6 @@
 
 -module(rabbit_net).
 -include("rabbit.hrl").
--include_lib("kernel/include/inet.hrl").
 
 -export([async_recv/3, close/1, controlling_process/2,
         getstat/2, peername/1, port_command/2,
@@ -51,9 +50,9 @@
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
 -spec(send/2 :: (socket(), binary() | iolist()) -> 'ok' | error()).
 -spec(peername/1 :: (socket()) ->
-        {'ok', {ip_address(), non_neg_integer()}} | error()).
+        {'ok', {inet:ip_address(), inet:ip_port()}} | error()).
 -spec(sockname/1 :: (socket()) ->
-        {'ok', {ip_address(), non_neg_integer()}} | error()).
+        {'ok', {inet:ip_address(), inet:ip_port()}} | error()).
 -spec(getstat/2 :: (socket(), [stat_option()]) ->
         {'ok', [{stat_option(), integer()}]} | error()).
 

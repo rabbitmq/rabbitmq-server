@@ -81,7 +81,7 @@
 -type(erlang_node() :: atom()).
 -type(node_type() :: disc_only | disc | ram | unknown).
 -type(ssl_socket() :: #ssl_socket{}).
--type(socket() :: port() | ssl_socket()).
+-type(socket() :: inet:ip_port() | ssl_socket()).
 -type(thunk(T) :: fun(() -> T)).
 -type(info_key() :: atom()).
 -type(info() :: {info_key(), any()}).
@@ -164,8 +164,8 @@
 -type(listener() ::
       #listener{node     :: erlang_node(),
                 protocol :: atom(),
-                host     :: string() | atom(),
-                port     :: non_neg_integer()}).
+                host     :: inet:hostname(),
+                port     :: inet:ip_port()}).
 -type(not_found() :: {'error', 'not_found'}).
 -type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
 -type(amqp_error() ::

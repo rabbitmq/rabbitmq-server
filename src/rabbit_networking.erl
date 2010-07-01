@@ -63,13 +63,12 @@
 
 -ifdef(use_specs).
 
--type(host() :: ip_address() | string() | atom()).
 -type(connection() :: pid()).
 
 -spec(start/0 :: () -> 'ok').
--spec(start_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
--spec(start_ssl_listener/3 :: (host(), ip_port(), [info()]) -> 'ok').
--spec(stop_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
+-spec(start_tcp_listener/2 :: (inet:hostname(), inet:ip_port()) -> 'ok').
+-spec(start_ssl_listener/3 :: (inet:hostname(), inet:ip_port(), [info()]) -> 'ok').
+-spec(stop_tcp_listener/2 :: (inet:hostname(), inet:ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [listener()]).
 -spec(node_listeners/1 :: (erlang_node()) -> [listener()]).
 -spec(connections/0 :: () -> [connection()]).
@@ -80,8 +79,8 @@
 -spec(connection_info_all/1 :: ([info_key()]) -> [[info()]]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
 -spec(on_node_down/1 :: (erlang_node()) -> 'ok').
--spec(check_tcp_listener_address/3 :: (atom(), host(), ip_port()) ->
-             {ip_address(), atom()}).
+-spec(check_tcp_listener_address/3 :: (atom(), inet:hostname(), inet:ip_port()) ->
+             {inet:ip_address(), atom()}).
 
 -endif.
 
