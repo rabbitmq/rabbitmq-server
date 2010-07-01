@@ -183,7 +183,7 @@
 
 -ifdef(use_specs).
 
--type(log_location() :: 'tty' | 'undefined' | string()).
+-type(log_location() :: 'tty' | 'undefined' | file:filename()).
 -type(file_suffix() :: binary()).
 
 -spec(prepare/0 :: () -> 'ok').

@@ -1,3 +1,4 @@
+
 %%   The contents of this file are subject to the Mozilla Public License
 %%   Version 1.1 (the "License"); you may not use this file except in
 %%   compliance with the License. You may obtain a copy of the License at
@@ -49,7 +50,7 @@
 
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [erlang_node()]}]} |
                          {'running_nodes', [erlang_node()]}]).
--spec(dir/0 :: () -> file_path()).
+-spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
