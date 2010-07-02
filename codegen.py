@@ -356,7 +356,7 @@ bitvalue(undefined) -> 0.
 -spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
 -spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
 -spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
--spec(version/0 :: () -> {integer, integer, integer}).
+-spec(version/0 :: () -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -endif. % use_specs
 """
     for m in methods: genLookupMethodName(m)
