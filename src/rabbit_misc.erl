@@ -86,7 +86,7 @@
                 kind         :: Kind,
                 name         :: resource_name()}).
 
--spec(method_record_type/1 :: (tuple()) -> atom()).
+-spec(method_record_type/1 :: (rabbit_framing:amqp_method_record()) -> atom()).
 -spec(polite_pause/0 :: () -> 'done').
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
 -spec(die/1 :: (atom()) -> no_return()).
@@ -126,8 +126,8 @@
                                 rabbit:vhost(), rabbit:thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (rabbit:thunk(A)) -> A).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
--spec(makenode/1 :: ({string(), string()} | string()) -> rabbit:erlang_node()).
--spec(nodeparts/1 :: (rabbit:erlang_node() | string()) -> {string(), string()}).
+-spec(makenode/1 :: ({string(), string()} | string()) -> node()).
+-spec(nodeparts/1 :: (node() | string()) -> {string(), string()}).
 -spec(cookie_hash/0 :: () -> string()).
 -spec(tcp_name/3 :: (atom(), inet:ip_address(), rabbit:ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).

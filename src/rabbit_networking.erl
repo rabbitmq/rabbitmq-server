@@ -66,7 +66,7 @@
 -type(connection() :: pid()).
 
 -type(listener() ::
-      #listener{node     :: rabbit:erlang_node(),
+      #listener{node     :: node(),
                 protocol :: atom(),
                 host     :: rabbit:hostname(),
                 port     :: rabbit:ip_port()}).
@@ -77,7 +77,7 @@
                               -> 'ok').
 -spec(stop_tcp_listener/2 :: (rabbit:hostname(), rabbit:ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [listener()]).
--spec(node_listeners/1 :: (rabbit:erlang_node()) -> [listener()]).
+-spec(node_listeners/1 :: (node()) -> [listener()]).
 -spec(connections/0 :: () -> [connection()]).
 -spec(connection_info_keys/0 :: () -> [rabbit:info_key()]).
 -spec(connection_info/1 :: (connection()) -> [rabbit:info()]).
@@ -85,7 +85,7 @@
 -spec(connection_info_all/0 :: () -> [[rabbit:info()]]).
 -spec(connection_info_all/1 :: ([rabbit:info_key()]) -> [[rabbit:info()]]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
--spec(on_node_down/1 :: (rabbit:erlang_node()) -> 'ok').
+-spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(check_tcp_listener_address/3 :: (atom(), rabbit:hostname(), rabbit:ip_port()) ->
              {inet:ip_address(), atom()}).
 

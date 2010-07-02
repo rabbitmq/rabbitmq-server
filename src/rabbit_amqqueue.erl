@@ -126,7 +126,7 @@
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
--spec(on_node_down/1 :: (rabbit:erlang_node()) -> 'ok').
+-spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> amqqueue()).
 
 -endif.

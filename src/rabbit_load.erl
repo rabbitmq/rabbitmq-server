@@ -40,11 +40,10 @@
 
 -ifdef(use_specs).
 
--type(erlang_node() :: atom()).
--type(load() :: {{non_neg_integer(), integer() | 'unknown'}, erlang_node()}).
+-type(load() :: {{non_neg_integer(), integer() | 'unknown'}, node()}).
 -spec(local_load/0 :: () -> load()).
 -spec(remote_loads/0 :: () -> [load()]).
--spec(pick/0 :: () -> erlang_node()).
+-spec(pick/0 :: () -> node()).
 
 -endif.
 

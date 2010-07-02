@@ -40,7 +40,7 @@
 -export([log_location/1]).
 
 -export_type([regexp/0, txn/0, thunk/1,maybe/1, info/0, info_key/0,
-              msg_id/0, erlang_node/0, message/0, basic_message/0,
+              msg_id/0, message/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, vhost/0, ctag/0,
               ip_port/0, hostname/0]).
@@ -191,7 +191,6 @@
 -ifdef(use_specs).
 
 -type(maybe(T) :: T | 'none').
--type(erlang_node() :: atom()).
 -type(thunk(T) :: fun(() -> T)).
 -type(regexp() :: binary()).
 -type(vhost() :: binary()).
@@ -251,8 +250,8 @@
 -spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
-              {nodes, [{rabbit_mnesia:node_type(), [erlang_node()]}]} |
-              {running_nodes, [erlang_node()]}]).
+              {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
+              {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -endif.

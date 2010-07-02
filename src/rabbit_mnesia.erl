@@ -51,13 +51,13 @@
 -ifdef(use_specs).
 
 -type(node_type() :: disc_only | disc | ram | unknown).
--spec(status/0 :: () -> [{'nodes', [{node_type(), [rabbit:erlang_node()]}]} |
-                         {'running_nodes', [rabbit:erlang_node()]}]).
+-spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
+                         {'running_nodes', [node()]}]).
 -spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
--spec(cluster/1 :: ([rabbit:erlang_node()]) -> 'ok').
+-spec(cluster/1 :: ([node()]) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(is_clustered/0 :: () -> boolean()).
