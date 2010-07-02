@@ -188,8 +188,6 @@
 
 -ifdef(use_specs).
 
--include("rabbit_framing_spec.hrl").
-
 -type(maybe(T) :: T | 'none').
 -type(erlang_node() :: atom()).
 -type(thunk(T) :: fun(() -> T)).
