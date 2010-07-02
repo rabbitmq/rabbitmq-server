@@ -39,7 +39,7 @@
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, stat_all/0, deliver/2, requeue/3, ack/4]).
+         stat/1, deliver/2, requeue/3, ack/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
@@ -59,7 +59,6 @@
 
 -ifdef(use_specs).
 
--type(qstats() :: {'ok', queue_name(), non_neg_integer(), non_neg_integer()}).
 -type(qlen() :: {'ok', non_neg_integer()}).
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
 -type(ok_or_errors() ::
@@ -84,8 +83,8 @@
 -spec(consumers/1 :: (amqqueue()) -> [{pid(), ctag(), boolean()}]).
 -spec(consumers_all/1 ::
       (vhost()) -> [{queue_name(), pid(), ctag(), boolean()}]).
--spec(stat/1 :: (amqqueue()) -> qstats()).
--spec(stat_all/0 :: () -> [qstats()]).
+-spec(stat/1 ::
+        (amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}).
 -spec(delete/3 ::
       (amqqueue(), 'false', 'false') -> qlen();
       (amqqueue(), 'true' , 'false') -> qlen() | {'error', 'in_use'};
@@ -276,9 +275,6 @@ consumers_all(VHostPath) ->
           end)).
 
 stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
-
-stat_all() ->
-    lists:map(fun stat/1, rabbit_misc:dirty_read_all(rabbit_queue)).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).

@@ -692,11 +692,10 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             end
     end;
 
-handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
-                                    backing_queue = BQ,
+handle_call(stat, _From, State = #q{backing_queue = BQ,
                                     backing_queue_state = BQS,
                                     active_consumers = ActiveConsumers}) ->
-    reply({ok, Name, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
+    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->

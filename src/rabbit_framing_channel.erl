@@ -76,30 +76,27 @@ mainloop(ChannelPid, Protocol) ->
     {method, MethodName, FieldsBin} = read_frame(ChannelPid),
     Method = Protocol:decode_method_fields(MethodName, FieldsBin),
     case Protocol:method_has_content(MethodName) of
-        true  -> rabbit_channel:do(ChannelPid, Method,
-                                   collect_content(ChannelPid, MethodName));
+        true  -> {ClassId, _MethodId} = Protocol:method_id(MethodName),
+                 rabbit_channel:do(ChannelPid, Method,
+                                   collect_content(ChannelPid, ClassId));
         false -> rabbit_channel:do(ChannelPid, Method)
     end,
     ?MODULE:mainloop(ChannelPid, Protocol).
 
-collect_content(ChannelPid, MethodName) ->
-    %% Protocol does not matter as we only want the class ID to match
-    {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id(MethodName),
+collect_content(ChannelPid, ClassId) ->
     case read_frame(ChannelPid) of
-        {content_header, HeaderClassId, 0, BodySize, PropertiesBin} ->
-            if HeaderClassId == ClassId ->
-                    Payload = collect_content_payload(ChannelPid, BodySize, []),
-                    #content{class_id = ClassId,
-                             properties = none,
-                             properties_bin = PropertiesBin,
-                             payload_fragments_rev = Payload};
-               true ->
-                    rabbit_misc:protocol_error(
-                      command_invalid,
-                      "expected content header for class ~w, "
-                      "got one for class ~w instead",
-                      [ClassId, HeaderClassId])
-            end;
+        {content_header, ClassId, 0, BodySize, PropertiesBin} ->
+            Payload = collect_content_payload(ChannelPid, BodySize, []),
+            #content{class_id = ClassId,
+                     properties = none,
+                     properties_bin = PropertiesBin,
+                     payload_fragments_rev = Payload};
+        {content_header, HeaderClassId, 0, _BodySize, _PropertiesBin} ->
+            rabbit_misc:protocol_error(
+              command_invalid,
+              "expected content header for class ~w, "
+              "got one for class ~w instead",
+              [ClassId, HeaderClassId]);
         _ ->
             rabbit_misc:protocol_error(
               command_invalid,

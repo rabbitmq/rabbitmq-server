@@ -718,7 +718,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                              Q, Durable, AutoDelete, Args, Owner),
                       rabbit_amqqueue:stat(Q)
            end) of
-        {ok, QueueName, MessageCount, ConsumerCount} ->
+        {ok, MessageCount, ConsumerCount} ->
             return_queue_declare_ok(QueueName, NoWait, MessageCount,
                                     ConsumerCount, State);
         {error, not_found} ->
@@ -748,7 +748,7 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
                              reader_pid   = ReaderPid}) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
     check_configure_permitted(QueueName, State),
-    {{ok, QueueName, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
+    {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
         rabbit_amqqueue:with_or_die(
           QueueName, fun (Q) -> {rabbit_amqqueue:stat(Q), Q} end),
     ok = rabbit_amqqueue:check_exclusive_access(Q, ReaderPid),
