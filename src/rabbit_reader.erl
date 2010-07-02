@@ -688,13 +688,14 @@ handle_method0(#'connection.close'{},
                State = #v1{connection_state = running}) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing});
-handle_method0(#'connection.close'{}, State = #v1{connection_state = CS,
-                                                  connection = #connection{
-                                                    protocol = Protocol}})
+handle_method0(#'connection.close'{},
+               State = #v1{connection_state = CS,
+                           connection = #connection{protocol = Protocol},
+                           sock = Sock})
   when CS =:= closing; CS =:= closed ->
     %% We're already closed or closing, so we don't need to cleanup
     %% anything.
-    ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}, Protocol),
+    ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
     State;
 handle_method0(#'connection.close_ok'{},
                State = #v1{connection_state = closed}) ->
