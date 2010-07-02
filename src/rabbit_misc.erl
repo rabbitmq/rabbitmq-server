@@ -129,7 +129,7 @@
 -spec(makenode/1 :: ({string(), string()} | string()) -> rabbit:erlang_node()).
 -spec(nodeparts/1 :: (rabbit:erlang_node() | string()) -> {string(), string()}).
 -spec(cookie_hash/0 :: () -> string()).
--spec(tcp_name/3 :: (atom(), inet:ip_address(), inet:ip_port()) -> atom()).
+-spec(tcp_name/3 :: (atom(), inet:ip_address(), rabbit:ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
