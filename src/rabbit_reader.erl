@@ -61,9 +61,9 @@
              queue_collector}).
 
 -define(INFO_KEYS,
-        [pid, address, port, peer_address, peer_port, protocol,
-         recv_oct, recv_cnt, send_oct, send_cnt, send_pend,
-         state, channels, user, vhost, timeout, frame_max, client_properties]).
+        [pid, address, port, peer_address, peer_port,
+         recv_oct, recv_cnt, send_oct, send_cnt, send_pend, state, channels,
+         protocol, user, vhost, timeout, frame_max, client_properties]).
 
 %% connection lifecycle
 %%
@@ -728,8 +728,6 @@ i(peer_address, #v1{sock = Sock}) ->
 i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
-i(protocol, #v1{connection = #connection{protocol_name = ProtocolName}}) ->
-    ProtocolName;
 i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= recv_cnt;
                                    SockStat =:= send_oct;
@@ -744,6 +742,8 @@ i(state, #v1{connection_state = S}) ->
     S;
 i(channels, #v1{}) ->
     length(all_channels());
+i(protocol, #v1{connection = #connection{protocol_name = ProtocolName}}) ->
+    ProtocolName;
 i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
     Username;
 i(user, #v1{connection = #connection{user = none}}) ->
