@@ -174,7 +174,7 @@ assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
     MethodFrame = rabbit_binary_generator:build_simple_method_frame(
                     Channel, MethodRecord, Protocol),
     ContentFrames = rabbit_binary_generator:build_simple_content_frames(
-                      Channel, Content, FrameMax),
+                      Channel, Content, FrameMax, Protocol),
     [MethodFrame | ContentFrames].
 
 tcp_send(Sock, Data) ->

@@ -42,11 +42,11 @@
 -define(EMPTY_CONTENT_BODY_FRAME_SIZE, 8).
 
 -export([build_simple_method_frame/3,
-         build_simple_content_frames/3,
+         build_simple_content_frames/4,
          build_heartbeat_frame/0]).
 -export([generate_table/1, encode_properties/2]).
 -export([check_empty_content_body_frame_size/0]).
--export([ensure_content_encoded/1, clear_encoded_content/1]).
+-export([ensure_content_encoded/2, clear_encoded_content/1]).
 
 -import(lists).
 
@@ -58,13 +58,14 @@
 
 -spec(build_simple_method_frame/3 ::
       (channel_number(), amqp_method_record(), protocol()) -> frame()).
--spec(build_simple_content_frames/3 ::
-      (channel_number(), content(), non_neg_integer()) -> [frame()]).
+-spec(build_simple_content_frames/4 ::
+      (channel_number(), content(), non_neg_integer(), protocol()) ->
+                                            [frame()]).
 -spec(build_heartbeat_frame/0 :: () -> frame()).
 -spec(generate_table/1 :: (amqp_table()) -> binary()).
 -spec(encode_properties/2 :: ([amqp_property_type()], [any()]) -> binary()).
 -spec(check_empty_content_body_frame_size/0 :: () -> 'ok').
--spec(ensure_content_encoded/1 :: (content()) -> encoded_content()).
+-spec(ensure_content_encoded/2 :: (content(), protocol()) -> encoded_content()).
 -spec(clear_encoded_content/1 :: (content()) -> unencoded_content()).
 
 -endif.
@@ -82,18 +83,18 @@ build_simple_content_frames(ChannelInt,
                                      properties = ContentProperties,
                                      properties_bin = ContentPropertiesBin,
                                      payload_fragments_rev = PayloadFragmentsRev},
-                            FrameMax) ->
+                            FrameMax, Protocol) ->
     {BodySize, ContentFrames} = build_content_frames(PayloadFragmentsRev, FrameMax, ChannelInt),
     HeaderFrame = create_frame(2, ChannelInt,
                                [<<ClassId:16, 0:16, BodySize:64>>,
-                                maybe_encode_properties(ContentProperties, ContentPropertiesBin)]),
+                                maybe_encode_properties(ContentProperties, ContentPropertiesBin, Protocol)]),
     [HeaderFrame | ContentFrames].
 
-maybe_encode_properties(_ContentProperties, ContentPropertiesBin)
+maybe_encode_properties(_ContentProperties, ContentPropertiesBin, _Protocol)
   when is_binary(ContentPropertiesBin) ->
     ContentPropertiesBin;
-maybe_encode_properties(ContentProperties, none) ->
-    rabbit_framing_amqp_0_9_1:encode_properties(ContentProperties).
+maybe_encode_properties(ContentProperties, none, Protocol) ->
+    Protocol:encode_properties(ContentProperties).
 
 build_content_frames(FragsRev, FrameMax, ChannelInt) ->
     BodyPayloadMax = if FrameMax == 0 ->
@@ -277,12 +278,11 @@ check_empty_content_body_frame_size() ->
                   ComputedSize, ?EMPTY_CONTENT_BODY_FRAME_SIZE})
     end.
 
-ensure_content_encoded(Content = #content{properties_bin = PropsBin})
+ensure_content_encoded(Content = #content{properties_bin = PropsBin}, _Protocol)
   when PropsBin =/= 'none' ->
     Content;
-ensure_content_encoded(Content = #content{properties = Props}) ->
-    Content #content{properties_bin =
-                     rabbit_framing_amqp_0_9_1:encode_properties(Props)}.
+ensure_content_encoded(Content = #content{properties = Props}, Protocol) ->
+    Content#content{properties_bin = Protocol:encode_properties(Props)}.
 
 clear_encoded_content(Content = #content{properties_bin = none}) ->
     Content;

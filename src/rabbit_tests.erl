@@ -361,7 +361,8 @@ test_content_framing(FrameMax, Fragments) ->
           1,
           #content{class_id = 0, properties_bin = <<>>,
                    payload_fragments_rev = Fragments},
-          FrameMax),
+          FrameMax,
+          rabbit_framing_amqp_0_9_1),
     %% header is formatted correctly and the size is the total of the
     %% fragments
     <<_FrameHeader:7/binary, _ClassAndWeight:4/binary,
