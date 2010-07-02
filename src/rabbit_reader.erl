@@ -439,7 +439,8 @@ wait_for_channel_termination(N, TimerRef) ->
 
 maybe_close(State = #v1{connection_state = closing,
                         queue_collector = Collector,
-                        connection = #connection{protocol = Protocol}}) ->
+                        connection = #connection{protocol = Protocol},
+                        sock = Sock}) ->
     case all_channels() of
         [] ->
             %% Spec says "Exclusive queues may only be accessed by the current
@@ -447,8 +448,7 @@ maybe_close(State = #v1{connection_state = closing,
             %% This does not strictly imply synchrony, but in practice it seems
             %% to be what people assume.
             rabbit_reader_queue_collector:delete_all(Collector),
-            ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{},
-                                  Protocol),
+            ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
             close_connection(State);
         _  -> State
     end;
@@ -521,10 +521,11 @@ handle_frame(Type, Channel, Payload,
             end
     end.
 
-analyze_frame(?FRAME_METHOD, <<ClassId:16, MethodId:16, MethodFields/binary>>,
+analyze_frame(?FRAME_METHOD,
+              <<ClassId:16, MethodId:16, MethodFields/binary>>,
               Protocol) ->
-    {method, Protocol:lookup_method_name({ClassId, MethodId}),
-     MethodFields};
+    MethodName = Protocol:lookup_method_name({ClassId, MethodId}),
+    {method, MethodName, MethodFields};
 analyze_frame(?FRAME_HEADER,
               <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>,
               _Protocol) ->
@@ -587,15 +588,12 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                    amqp_0_9_1 -> rabbit_framing_amqp_0_9_1;
                    amqp_0_8   -> rabbit_framing_amqp_0_8
                end,
-    ok = send_on_channel0(
-           Sock,
-           #'connection.start'{
-             version_major = ProtocolMajor,
-             version_minor = ProtocolMinor,
-             server_properties = server_properties(),
-             mechanisms = <<"PLAIN AMQPLAIN">>,
-             locales = <<"en_US">> },
-          Protocol),
+    Start = #'connection.start'{ version_major = ProtocolMajor,
+                                 version_minor = ProtocolMinor,
+                                 server_properties = server_properties(),
+                                 mechanisms = <<"PLAIN AMQPLAIN">>,
+                                 locales = <<"en_US">> },
+    ok = send_on_channel0(Sock, Start, Protocol),
     {State#v1{connection = Connection#connection{
                              timeout_sec = ?NORMAL_TIMEOUT,
                              protocol = Protocol,
@@ -638,12 +636,10 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                                #connection{protocol = Protocol},
                            sock = Sock}) ->
     User = rabbit_access_control:check_login(Mechanism, Response),
-    ok = send_on_channel0(
-           Sock,
-           #'connection.tune'{channel_max = 0,
+    Tune = #'connection.tune'{channel_max = 0,
                               frame_max = ?FRAME_MAX,
                               heartbeat = 0},
-           Protocol),
+    ok = send_on_channel0(Sock, Tune, Protocol),
     State#v1{connection_state = tuning,
              connection = Connection#connection{
                             user = User,
@@ -678,10 +674,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                            sock = Sock}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
-    ok = send_on_channel0(
-           Sock,
-           #'connection.open_ok'{},
-           Protocol),
+    ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
     State#v1{connection_state = running,
              connection = NewConnection};
 handle_method0(#'connection.close'{},
@@ -763,14 +756,14 @@ i(Item, #v1{}) ->
 
 %%--------------------------------------------------------------------------
 
-send_to_new_channel(Channel, AnalyzedFrame, State =
-                        #v1{queue_collector = Collector,
-                            connection = #connection{protocol = Protocol}}) ->
-    #v1{sock = Sock, connection = #connection{
-                       frame_max = FrameMax,
-                       user = #user{username = Username},
-                       vhost = VHost,
-                       protocol = Protocol}} = State,
+send_to_new_channel(Channel, AnalyzedFrame,
+                    State = #v1{connection = #connection{
+                                  frame_max = FrameMax,
+                                  user      = #user{username = Username},
+                                  vhost     = VHost,
+                                  protocol  = Protocol},
+                                sock = Sock,
+                                queue_collector = Collector}) ->
     WriterPid = rabbit_writer:start(Sock, Channel, FrameMax, Protocol),
     ChPid = rabbit_framing_channel:start_link(
               fun rabbit_channel:start_link/6,
