@@ -566,7 +566,7 @@ handle_input(handshake, <<"AMQP", 1, 1, 0, 9>>, State) ->
 
 %% the 0-8 spec, confusingly, defines the version as 8-0
 handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
-    start_connection({0, 8, 0}, amqp_0_8, State);
+    start_connection({8, 0, 0}, amqp_0_8, State);
 
 handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
     refuse_connection(Sock, {bad_version, A, B, C, D});
