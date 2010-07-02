@@ -15,7 +15,7 @@ INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl $(IN
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(INCLUDE_DIR)/rabbit_framing_spec.hrl $(BEAM_TARGETS)
-WEB_URL=http://stage.rabbitmq.com/
+WEB_URL=http://www.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
 USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-multi.1.xml
@@ -209,7 +209,7 @@ srcdist: distclean
 		>> $(TARGET_SRC_DIR)/INSTALL
 	cp README.in $(TARGET_SRC_DIR)/README
 	elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
-		>> $(TARGET_SRC_DIR)/BUILD
+		>> $(TARGET_SRC_DIR)/README
 	sed -i.save 's/%%VSN%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in && rm -f $(TARGET_SRC_DIR)/ebin/rabbit_app.in.save
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
@@ -230,9 +230,10 @@ distclean: clean
 
 # xmlto can not read from standard input, so we mess with a tmp file.
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
-	xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	xmlto man -o $(DOCS_DIR) --stringparam man.indent.verbatims=0 $<.tmp && \
-	gzip -f $(DOCS_DIR)/`basename $< .xml`
+	xmlto --version | grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || opt='--stringparam man.indent.verbatims=0' ; \
+	    xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
+	    xmlto man -o $(DOCS_DIR) $$opt $<.tmp && \
+	    gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
 
 # Use tmp files rather than a pipeline so that we get meaningful errors
