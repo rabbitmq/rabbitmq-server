@@ -156,7 +156,7 @@
                             ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean()).
 -spec(recursive_delete/1 :: ([file:filename()]) ->
              'ok' | {'error', {file:filename(), any()}}).
--spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
+-spec(dict_cons/3 :: (any(), any(), dict:dictionary()) -> dict:dictionary()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 
 -endif.
