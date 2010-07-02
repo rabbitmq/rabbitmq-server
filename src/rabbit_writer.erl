@@ -214,7 +214,7 @@ internal_send_command_async(Sock, Channel, MethodRecord, Protocol) ->
 internal_send_command_async(Sock, Channel, MethodRecord, Content, FrameMax,
                             Protocol) ->
     true = port_cmd(Sock, assemble_frames(Channel, MethodRecord,
-                                              Content, FrameMax, Protocol)),
+                                          Content, FrameMax, Protocol)),
     ok.
 
 port_cmd(Sock, Data) ->
