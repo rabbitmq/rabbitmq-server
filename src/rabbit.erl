@@ -41,8 +41,8 @@
 
 -export_type([regexp/0, txn/0, thunk/1,maybe/1, info/0, info_key/0,
               msg_id/0, erlang_node/0, message/0, basic_message/0,
-              delivery/0, content/0, decoded_content/0, encoded_content/0,
-              unencoded_content/0, vhost/0, ctag/0]).
+              delivery/0, content/0, decoded_content/0, undecoded_content/0,
+              unencoded_content/0, encoded_content/0, vhost/0, ctag/0]).
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
@@ -203,18 +203,18 @@
                properties_bin        :: binary(),
                payload_fragments_rev :: [binary()]} |
       #content{class_id              :: rabbit_framing:amqp_class_id(),
-               properties            :: rabbit_framing:amqp_properties(),
+               properties            :: rabbit_framing:amqp_property_record(),
                properties_bin        :: 'none',
                payload_fragments_rev :: [binary()]}).
 -type(unencoded_content() :: undecoded_content()).
 -type(decoded_content() ::
       #content{class_id              :: rabbit_framing:amqp_class_id(),
-               properties            :: rabbit_framing:amqp_properties(),
+               properties            :: rabbit_framing:amqp_property_record(),
                properties_bin        :: rabbit:maybe(binary()),
                payload_fragments_rev :: [binary()]}).
 -type(encoded_content() ::
       #content{class_id              :: rabbit_framing:amqp_class_id(),
-               properties            :: rabbit:maybe(rabbit_framing:amqp_properties()),
+               properties            :: rabbit:maybe(rabbit_framing:amqp_property_record()),
                properties_bin        :: binary(),
                payload_fragments_rev :: [binary()]}).
 -type(content() :: undecoded_content() | decoded_content()).

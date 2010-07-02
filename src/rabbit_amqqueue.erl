@@ -46,6 +46,8 @@
 -export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
+-export_type([amqqueue/0, name/0, qmsg/0]).
+
 -import(mnesia).
 -import(gen_server2).
 -import(lists).

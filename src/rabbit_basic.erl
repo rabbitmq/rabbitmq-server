@@ -42,7 +42,7 @@
 
 -ifdef(use_specs).
 
--type(properties_input() :: (rabbit_framing:amqp_properties() | [{atom(), any()}])).
+-type(properties_input() :: (rabbit_framing:amqp_property_record() | [{atom(), any()}])).
 -type(publish_result() :: ({ok, rabbit_router:routing_result(), [pid()]}
                            | rabbit_misc:not_found())).
 
@@ -52,16 +52,16 @@
 -spec(message/4 :: (rabbit_exchange:name(), rabbit_router:routing_key(),
                     properties_input(), binary())
                    -> (rabbit:message() | {'error', any()})).
--spec(properties/1 :: (properties_input()) -> rabbit_framing:amqp_properties()).
+-spec(properties/1 :: (properties_input()) -> rabbit_framing:amqp_property_record()).
 -spec(publish/4 :: (rabbit_exchange:name(), rabbit_router:routing_key(),
                     properties_input(), binary()) -> publish_result()).
 -spec(publish/7 :: (rabbit_exchange:name(), rabbit_router:routing_key(), boolean(), boolean(),
                     rabbit:maybe(rabbit:txn()), properties_input(), binary()) ->
                         publish_result()).
 -spec(build_content/2 ::
-        (rabbit_framing:amqp_properties(), binary()) -> rabbit:content()).
+        (rabbit_framing:amqp_property_record(), binary()) -> rabbit:content()).
 -spec(from_content/1 :: (rabbit:content())
-                        -> {rabbit_framing:amqp_properties(), binary()}).
+                        -> {rabbit_framing:amqp_property_record(), binary()}).
 -spec(is_message_persistent/1 ::
         (rabbit:decoded_content()) -> (boolean() | {'invalid', non_neg_integer()})).
 

@@ -114,7 +114,7 @@
 -spec(delete_transient_queue_bindings/1 :: (rabbit_amqqueue:name()) ->
              fun (() -> none())).
 -spec(delete/2 :: (name(), boolean()) ->
-             'ok' | rabbit:not_found() | {'error', 'in_use'}).
+             'ok' | rabbit_misc:not_found() | {'error', 'in_use'}).
 -spec(list_queue_bindings/1 ::
         (rabbit_amqqueue:name())
         -> [{name(), rabbit_router:routing_key(), rabbit_framing:amqp_table()}]).

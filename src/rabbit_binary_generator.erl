@@ -63,7 +63,7 @@
         (rabbit_channel:channel_number(), rabbit:content(), non_neg_integer())
         -> [frame()]).
 -spec(build_heartbeat_frame/0 :: () -> frame()).
--spec(generate_table/1 :: (rabbit:amqp_table()) -> binary()).
+-spec(generate_table/1 :: (rabbit_framing:amqp_table()) -> binary()).
 -spec(encode_properties/2 :: ([rabbit_framing:amqp_property_type()], [any()])
                              -> binary()).
 -spec(check_empty_content_body_frame_size/0 :: () -> 'ok').

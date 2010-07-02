@@ -74,7 +74,7 @@
       (rabbit:vhost()) -> [{username(), rabbit:regexp(),
                             rabbit:regexp(), rabbit:regexp()}]).
 -spec(list_user_permissions/1 ::
-      (username()) -> [{rabbit_framing:vhost(), rabbit:regexp(),
+      (username()) -> [{rabbit:vhost(), rabbit:regexp(),
                         rabbit:regexp(), rabbit:regexp()}]).
 
 -endif.

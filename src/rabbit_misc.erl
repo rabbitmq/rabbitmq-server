@@ -63,7 +63,7 @@
 -export([version_compare/2, version_compare/3]).
 -export([recursive_delete/1, dict_cons/3, unlink_and_capture_exit/1]).
 
--export_type([not_found/0, r/1]).
+-export_type([not_found/0, amqp_error/0, r/1]).
 
 -import(mnesia).
 -import(lists).
@@ -82,7 +82,7 @@
 -type(not_found() :: {'error', 'not_found'}).
 -type(resource_name() :: binary()).
 -type(r(Kind) ::
-      #resource{virtual_host :: rabbit_framing:vhost(),
+      #resource{virtual_host :: rabbit:vhost(),
                 kind         :: Kind,
                 name         :: resource_name()}).
 

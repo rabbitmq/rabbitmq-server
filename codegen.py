@@ -333,7 +333,8 @@ def genErl(spec):
 -export([amqp_exception/1]).
 
 -export_type([amqp_table/0, amqp_property_type/0, amqp_method_record/0,
-              amqp_method_name/0, amqp_method/0, amqp_class_id/0]).
+              amqp_method_name/0, amqp_method/0, amqp_class_id/0,
+              amqp_value/0, amqp_array/0]).
 
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
@@ -353,9 +354,7 @@ bitvalue(undefined) -> 0.
 -spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
 -spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
 -spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
--endif. % use_specs
 
--ifdef(use_specs).
 -type(amqp_field_type() ::
       'longstr' | 'signedint' | 'decimal' | 'timestamp' |
       'table' | 'byte' | 'double' | 'float' | 'long' |
@@ -363,10 +362,23 @@ bitvalue(undefined) -> 0.
 -type(amqp_property_type() ::
       'shortstr' | 'longstr' | 'octet' | 'shortint' | 'longint' |
       'longlongint' | 'timestamp' | 'bit' | 'table').
-%% we could make this more precise but ultimately are limited by
-%% dialyzer's lack of support for recursive types
--type(amqp_table() :: [{binary(), amqp_field_type(), any()}]).
--type(amqp_properties() :: tuple()).
+
+-type(amqp_table() :: [{binary(), amqp_field_type(), amqp_value()}]).
+-type(amqp_array() :: [{amqp_field_type(), amqp_value()}]).
+-type(amqp_value() :: binary() |    % longstr
+                      integer() |   % signedint
+                      {non_neg_integer(), non_neg_integer()} | % decimal
+                      amqp_table() |
+                      amqp_array() |
+                      byte() |      % byte
+                      float() |     % double
+                      integer() |   % long
+                      integer() |   % short
+                      boolean() |   % bool
+                      binary() |    % binary
+                      'undefined' | % void
+                      non_neg_integer() % timestamp
+     ).
 -endif. % use_specs
 """
     print "-ifdef(use_specs)."
