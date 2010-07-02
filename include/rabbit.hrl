@@ -173,9 +173,8 @@
       #amqp_error{name        :: atom(),
                   explanation :: string(),
                   method      :: atom()}).
-
 -type(protocol() :: atom()).
--type(protocol_name() :: atom()).
+
 -endif.
 
 %%----------------------------------------------------------------------------
