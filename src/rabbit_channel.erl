@@ -481,7 +481,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                    Content),
             {noreply, State1#ch{next_tag = DeliveryTag + 1}};
         empty ->
-            {reply, #'basic.get_empty'{cluster_id = <<>>}, State}
+            {reply, #'basic.get_empty'{}, State}
     end;
 
 handle_method(#'basic.consume'{queue = QueueNameBin,
