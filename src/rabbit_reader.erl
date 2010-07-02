@@ -807,8 +807,8 @@ map_exception(Channel, Reason) ->
     ShouldClose = SuggestedClose or (Channel == 0),
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
-                              none -> {0, 0};
-                              _ -> rabbit_framing:method_id(FailedMethod)
+                              none   -> {0, 0};
+                              _      -> rabbit_framing:method_id(FailedMethod)
                           end,
     {CloseChannel, CloseMethod} =
         case ShouldClose of
