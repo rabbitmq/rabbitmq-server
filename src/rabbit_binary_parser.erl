@@ -164,7 +164,7 @@ ensure_content_decoded(Content = #content{properties = Props})
     Content;
 ensure_content_decoded(Content = #content{properties_bin = PropBin})
   when is_binary(PropBin) ->
-    Content#content{properties = rabbit_framing:decode_properties(
+    Content#content{properties = rabbit_framing_amqp_0_9_1:decode_properties(
                                    Content#content.class_id, PropBin)}.
 
 clear_decoded_content(Content = #content{properties = none}) ->

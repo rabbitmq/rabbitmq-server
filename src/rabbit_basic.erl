@@ -82,7 +82,7 @@ delivery(Mandatory, Immediate, Txn, Message) ->
 build_content(Properties, BodyBin) ->
     %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
     {ClassId, _MethodId} =
-        rabbit_framing:method_id('basic.publish', amqp_0_9_1),
+        rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
     #content{class_id = ClassId,
              properties = Properties,
              properties_bin = none,
@@ -95,7 +95,7 @@ from_content(Content) ->
         rabbit_binary_parser:ensure_content_decoded(Content),
     %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
     {ClassId, _MethodId} =
-        rabbit_framing:method_id('basic.publish', amqp_0_9_1),
+        rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
     {Props, list_to_binary(lists:reverse(FragmentsRev))}.
 
 message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->

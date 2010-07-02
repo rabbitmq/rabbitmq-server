@@ -72,9 +72,9 @@
 %%----------------------------------------------------------------------------
 
 build_simple_method_frame(ChannelInt, MethodRecord, Protocol) ->
-    MethodFields = rabbit_framing:encode_method_fields(MethodRecord, Protocol),
+    MethodFields = Protocol:encode_method_fields(MethodRecord),
     MethodName = rabbit_misc:method_record_type(MethodRecord),
-    {ClassId, MethodId} = rabbit_framing:method_id(MethodName, Protocol),
+    {ClassId, MethodId} = Protocol:method_id(MethodName),
     create_frame(1, ChannelInt, [<<ClassId:16, MethodId:16>>, MethodFields]).
 
 build_simple_content_frames(ChannelInt,
@@ -93,7 +93,7 @@ maybe_encode_properties(_ContentProperties, ContentPropertiesBin)
   when is_binary(ContentPropertiesBin) ->
     ContentPropertiesBin;
 maybe_encode_properties(ContentProperties, none) ->
-    rabbit_framing:encode_properties(ContentProperties).
+    rabbit_framing_amqp_0_9_1:encode_properties(ContentProperties).
 
 build_content_frames(FragsRev, FrameMax, ChannelInt) ->
     BodyPayloadMax = if FrameMax == 0 ->
@@ -281,7 +281,8 @@ ensure_content_encoded(Content = #content{properties_bin = PropsBin})
   when PropsBin =/= 'none' ->
     Content;
 ensure_content_encoded(Content = #content{properties = Props}) ->
-    Content #content{properties_bin = rabbit_framing:encode_properties(Props)}.
+    Content #content{properties_bin =
+                     rabbit_framing_amqp_0_9_1:encode_properties(Props)}.
 
 clear_encoded_content(Content = #content{properties_bin = none}) ->
     Content;

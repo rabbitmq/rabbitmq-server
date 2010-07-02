@@ -930,7 +930,7 @@ basic_return(#basic_message{exchange_name = ExchangeName,
                             content       = Content},
              WriterPid, Reason) ->
     {_Close, ReplyCode, ReplyText} =
-        rabbit_framing:lookup_amqp_exception(Reason),
+        rabbit_framing_amqp_0_9_1:lookup_amqp_exception(Reason),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.return'{reply_code  = ReplyCode,

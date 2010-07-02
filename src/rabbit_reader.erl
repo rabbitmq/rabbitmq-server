@@ -523,7 +523,7 @@ handle_frame(Type, Channel, Payload,
 
 analyze_frame(?FRAME_METHOD, <<ClassId:16, MethodId:16, MethodFields/binary>>,
               Protocol) ->
-    {method, rabbit_framing:lookup_method_name({ClassId, MethodId}, Protocol),
+    {method, Protocol:lookup_method_name({ClassId, MethodId}),
      MethodFields};
 analyze_frame(?FRAME_HEADER,
               <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>,
@@ -580,8 +580,13 @@ handle_input(Callback, Data, _State) ->
 %% Offer a protocol version to the client.  Connection.start only
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
 %% are similar enough that clients will be happy with either.
-start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision}, Protocol,
-                   State = #v1{sock = Sock, connection = Connection}) ->
+start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
+                 ProtocolName,
+                 State = #v1{sock = Sock, connection = Connection}) ->
+    Protocol = case ProtocolName of
+                   amqp_0_9_1 -> rabbit_framing_amqp_0_9_1;
+                   amqp_0_8   -> rabbit_framing_amqp_0_8
+               end,
     ok = send_on_channel0(
            Sock,
            #'connection.start'{
@@ -593,7 +598,8 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision}, Protocol,
           Protocol),
     {State#v1{connection = Connection#connection{
                              timeout_sec = ?NORMAL_TIMEOUT,
-                             protocol = Protocol},
+                             protocol = Protocol,
+                             protocol_name = ProtocolName},
               connection_state = starting},
      frame_header, 7}.
 
@@ -606,8 +612,7 @@ refuse_connection(Sock, Exception) ->
 handle_method0(MethodName, FieldsBin,
                State = #v1{connection = #connection{protocol = Protocol}}) ->
     try
-        handle_method0(rabbit_framing:decode_method_fields(
-                         MethodName, FieldsBin, Protocol),
+        handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
                        State)
     catch exit:Reason ->
             CompleteReason = case Reason of
@@ -723,8 +728,8 @@ i(peer_address, #v1{sock = Sock}) ->
 i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
-i(protocol, #v1{connection = #connection{protocol = Protocol}}) ->
-    Protocol;
+i(protocol, #v1{connection = #connection{protocol_name = ProtocolName}}) ->
+    ProtocolName;
 i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= recv_cnt;
                                    SockStat =:= send_oct;
@@ -805,8 +810,7 @@ map_exception(Channel, Reason, Protocol) ->
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
                               none -> {0, 0};
-                              _ -> rabbit_framing:method_id(FailedMethod,
-                                                            Protocol)
+                              _ -> Protocol:method_id(FailedMethod)
                           end,
     {CloseChannel, CloseMethod} =
         case ShouldClose of
@@ -830,13 +834,14 @@ lookup_amqp_exception(#amqp_error{name        = precondition_failed,
 lookup_amqp_exception(#amqp_error{name        = Name,
                                   explanation = Expl,
                                   method      = Method}) ->
-    {ShouldClose, Code, Text} = rabbit_framing:lookup_amqp_exception(Name),
+    {ShouldClose, Code, Text} =
+        rabbit_framing_amqp_0_9_1:lookup_amqp_exception(Name),
     ExplBin = amqp_exception_explanation(Text, Expl),
     {ShouldClose, Code, ExplBin, Method};
 lookup_amqp_exception(Other) ->
     rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
     {ShouldClose, Code, Text} =
-        rabbit_framing:lookup_amqp_exception(internal_error),
+        rabbit_framing_0_9_1:lookup_amqp_exception(internal_error),
     {ShouldClose, Code, Text, none}.
 
 amqp_exception_explanation(Text, Expl) ->

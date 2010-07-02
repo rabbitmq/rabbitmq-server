@@ -74,9 +74,8 @@ read_frame(ChannelPid) ->
 
 mainloop(ChannelPid, Protocol) ->
     {method, MethodName, FieldsBin} = read_frame(ChannelPid),
-    Method = rabbit_framing:decode_method_fields(MethodName, FieldsBin,
-                                                 Protocol),
-    case rabbit_framing:method_has_content(MethodName) of
+    Method = Protocol:decode_method_fields(MethodName, FieldsBin),
+    case Protocol:method_has_content(MethodName) of
         true  -> rabbit_channel:do(ChannelPid, Method,
                                    collect_content(ChannelPid, MethodName));
         false -> rabbit_channel:do(ChannelPid, Method)
@@ -85,7 +84,7 @@ mainloop(ChannelPid, Protocol) ->
 
 collect_content(ChannelPid, MethodName) ->
     %% Protocol does not matter as we only want the class ID to match
-    {ClassId, _MethodId} = rabbit_framing:method_id(MethodName, amqp_0_9_1),
+    {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id(MethodName),
     case read_frame(ChannelPid) of
         {content_header, HeaderClassId, 0, BodySize, PropertiesBin} ->
             if HeaderClassId == ClassId ->

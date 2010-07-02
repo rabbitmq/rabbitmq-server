@@ -170,7 +170,7 @@ assemble_frames(Channel, MethodRecord, Protocol) ->
 assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, Content),
     MethodName = rabbit_misc:method_record_type(MethodRecord),
-    true = rabbit_framing:method_has_content(MethodName), % assertion
+    true = Protocol:method_has_content(MethodName), % assertion
     MethodFrame = rabbit_binary_generator:build_simple_method_frame(
                     Channel, MethodRecord, Protocol),
     ContentFrames = rabbit_binary_generator:build_simple_content_frames(
