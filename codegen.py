@@ -316,7 +316,7 @@ def genErl(spec):
 
     printFileHeader()
     module = "rabbit_framing_amqp_%d_%d" % (spec.major, spec.minor)
-    if spec.revision != '0':
+    if spec.revision != 0:
         module = "%s_%d" % (module, spec.revision)
     if module == "rabbit_framing_amqp_8_0":
         module = "rabbit_framing_amqp_0_8"
@@ -336,6 +336,7 @@ def genErl(spec):
 -export([encode_properties/1]).
 -export([lookup_amqp_exception/1]).
 -export([amqp_exception/1]).
+-export([version/0]).
 
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
@@ -355,6 +356,7 @@ bitvalue(undefined) -> 0.
 -spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
 -spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
 -spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
+-spec(version/0 :: () -> {integer, integer, integer}).
 -endif. % use_specs
 """
     for m in methods: genLookupMethodName(m)
@@ -395,6 +397,10 @@ bitvalue(undefined) -> 0.
 
     for(c,v,cls) in spec.constants: genAmqpException(c,v,cls)
     print "amqp_exception(_Code) -> undefined."
+
+    version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
+    if version == '{8, 0, 0}': version = '{0, 8, 0}'
+    print "version() -> %s." % (version)
 
 def genHrl(spec):
     def erlType(domain):

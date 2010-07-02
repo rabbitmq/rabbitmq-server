@@ -36,8 +36,8 @@
 
 -record(vhost, {virtual_host, dummy}).
 
--record(connection, {protocol, protocol_name, user, timeout_sec, frame_max,
-                     vhost, client_properties}).
+-record(connection, {protocol, user, timeout_sec, frame_max, vhost,
+                     client_properties}).
 
 -record(content,
         {class_id,

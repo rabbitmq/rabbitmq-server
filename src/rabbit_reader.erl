@@ -560,14 +560,14 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, Stat
 %% * The server MUST provide a protocol version that is lower than or
 %% equal to that requested by the client in the protocol header.
 handle_input(handshake, <<"AMQP", 0, 0, 9, 1>>, State) ->
-    start_connection({0, 9, 1}, amqp_0_9_1, State);
+    start_connection({0, 9, 1}, rabbit_framing_amqp_0_9_1, State);
 
 handle_input(handshake, <<"AMQP", 1, 1, 0, 9>>, State) ->
-    start_connection({0, 9, 0}, amqp_0_9_1, State);
+    start_connection({0, 9, 0}, rabbit_framing_amqp_0_9_1, State);
 
 %% the 0-8 spec, confusingly, defines the version as 8-0
 handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
-    start_connection({8, 0, 0}, amqp_0_8, State);
+    start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
 handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
     refuse_connection(Sock, {bad_version, A, B, C, D});
@@ -582,12 +582,8 @@ handle_input(Callback, Data, _State) ->
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
 %% are similar enough that clients will be happy with either.
 start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
-                 ProtocolName,
+                 Protocol,
                  State = #v1{sock = Sock, connection = Connection}) ->
-    Protocol = case ProtocolName of
-                   amqp_0_9_1 -> rabbit_framing_amqp_0_9_1;
-                   amqp_0_8   -> rabbit_framing_amqp_0_8
-               end,
     Start = #'connection.start'{ version_major = ProtocolMajor,
                                  version_minor = ProtocolMinor,
                                  server_properties = server_properties(),
@@ -596,8 +592,7 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
     ok = send_on_channel0(Sock, Start, Protocol),
     {State#v1{connection = Connection#connection{
                              timeout_sec = ?NORMAL_TIMEOUT,
-                             protocol = Protocol,
-                             protocol_name = ProtocolName},
+                             protocol = Protocol},
               connection_state = starting},
      frame_header, 7}.
 
@@ -736,8 +731,8 @@ i(state, #v1{connection_state = S}) ->
     S;
 i(channels, #v1{}) ->
     length(all_channels());
-i(protocol, #v1{connection = #connection{protocol_name = ProtocolName}}) ->
-    ProtocolName;
+i(protocol, #v1{connection = #connection{protocol = Protocol}}) ->
+    Protocol:version();
 i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
     Username;
 i(user, #v1{connection = #connection{user = none}}) ->
