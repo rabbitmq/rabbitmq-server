@@ -805,7 +805,7 @@ send_exception(State = #v1{connection = #connection{protocol = Protocol}},
 
 map_exception(Channel, Reason, Protocol) ->
     {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
-        lookup_amqp_exception(Reason),
+        lookup_amqp_exception(Reason, Protocol),
     ShouldClose = SuggestedClose or (Channel == 0),
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
@@ -827,12 +827,12 @@ map_exception(Channel, Reason, Protocol) ->
 
 lookup_amqp_exception(#amqp_error{name        = Name,
                                   explanation = Expl,
-                                  method      = Method}) ->
-    {ShouldClose, Code, Text} =
-        rabbit_framing_amqp_0_9_1:lookup_amqp_exception(Name),
+                                  method      = Method},
+                      Protocol) ->
+    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(Name),
     ExplBin = amqp_exception_explanation(Text, Expl),
     {ShouldClose, Code, ExplBin, Method};
-lookup_amqp_exception(Other) ->
+lookup_amqp_exception(Other, _Protocol) ->
     rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
     {ShouldClose, Code, Text} =
         rabbit_framing_0_9_1:lookup_amqp_exception(internal_error),
