@@ -757,13 +757,13 @@ i(Item, #v1{}) ->
 %%--------------------------------------------------------------------------
 
 send_to_new_channel(Channel, AnalyzedFrame,
-                    State = #v1{connection = #connection{
-                                  frame_max = FrameMax,
-                                  user      = #user{username = Username},
-                                  vhost     = VHost,
-                                  protocol  = Protocol},
-                                sock = Sock,
-                                queue_collector = Collector}) ->
+                    #v1{connection = #connection{
+                          frame_max = FrameMax,
+                          user      = #user{username = Username},
+                          vhost     = VHost,
+                          protocol  = Protocol},
+                        sock = Sock,
+                        queue_collector = Collector}) ->
     WriterPid = rabbit_writer:start(Sock, Channel, FrameMax, Protocol),
     ChPid = rabbit_framing_channel:start_link(
               fun rabbit_channel:start_link/6,
