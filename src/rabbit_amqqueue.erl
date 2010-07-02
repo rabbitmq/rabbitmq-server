@@ -80,17 +80,16 @@
 -spec(lookup/1 :: (name()) -> {'ok', amqqueue()} | rabbit_misc:not_found()).
 -spec(with/2 :: (name(), qfun(A)) -> A | rabbit_misc:not_found()).
 -spec(with_or_die/2 :: (name(), qfun(A)) -> A).
--spec(list/1 :: (rabbit_framing:vhost()) -> [amqqueue()]).
+-spec(list/1 :: (rabbit:vhost()) -> [amqqueue()]).
 -spec(info_keys/0 :: () -> [rabbit:info_key()]).
 -spec(info/1 :: (amqqueue()) -> [rabbit:info()]).
 -spec(info/2 :: (amqqueue(), [rabbit:info_key()]) -> [rabbit:info()]).
--spec(info_all/1 :: (rabbit_framing:vhost()) -> [[rabbit:info()]]).
--spec(info_all/2 :: (rabbit_framing:vhost(), [rabbit:info_key()])
+-spec(info_all/1 :: (rabbit:vhost()) -> [[rabbit:info()]]).
+-spec(info_all/2 :: (rabbit:vhost(), [rabbit:info_key()])
                     -> [[rabbit:info()]]).
--spec(consumers/1 ::
-        (amqqueue()) -> [{pid(), rabbit_framing:ctag(), boolean()}]).
--spec(consumers_all/1 :: (rabbit_framing:vhost())
-                         -> [{name(), pid(), rabbit_framing:ctag(), boolean()}]).
+-spec(consumers/1 :: (amqqueue()) -> [{pid(), rabbit:ctag(), boolean()}]).
+-spec(consumers_all/1 :: (rabbit:vhost())
+                         -> [{name(), pid(), rabbit:ctag(), boolean()}]).
 -spec(stat/1 :: (amqqueue()) -> qstats()).
 -spec(stat_all/0 :: () -> [qstats()]).
 -spec(delete/3 ::
@@ -112,10 +111,10 @@
 -spec(basic_get/3 :: (amqqueue(), pid(), boolean()) ->
              {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
-      (amqqueue(), boolean(), pid(), pid() | 'undefined', rabbit_framing:ctag(),
-       boolean(), any()) ->
-             'ok' | {'error', 'exclusive_consume_unavailable'}).
--spec(basic_cancel/4 :: (amqqueue(), pid(), rabbit_framing:ctag(), any()) -> 'ok').
+      (amqqueue(), boolean(), pid(), pid() | 'undefined',
+       rabbit:ctag(), boolean(), any())
+        -> 'ok' | {'error', 'exclusive_consume_unavailable'}).
+-spec(basic_cancel/4 :: (amqqueue(), pid(), rabbit:ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').

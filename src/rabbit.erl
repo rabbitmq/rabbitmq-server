@@ -42,7 +42,7 @@
 -export_type([regexp/0, txn/0, thunk/1,maybe/1, info/0, info_key/0,
               msg_id/0, erlang_node/0, message/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, encoded_content/0,
-              unencoded_content/0]).
+              unencoded_content/0, vhost/0, ctag/0]).
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
@@ -192,6 +192,8 @@
 -type(erlang_node() :: atom()).
 -type(thunk(T) :: fun(() -> T)).
 -type(regexp() :: binary()).
+-type(vhost() :: binary()).
+-type(ctag() :: binary()).
 
 %% TODO: make this more precise by tying specific class_ids to
 %% specific properties

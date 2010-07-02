@@ -78,14 +78,13 @@
 
 -spec(start_link/6 ::
       (channel_number(), pid(), pid(), rabbit_access_control:username(),
-       rabbit_framing:vhost(), pid()) -> pid()).
+       rabbit:vhost(), pid()) -> pid()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit:maybe(rabbit:content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), rabbit_framing:amqp_method()) -> 'ok').
--spec(deliver/4 ::
-        (pid(), rabbit_framing:ctag(), boolean(), rabbit_queue:qmsg()) -> 'ok').
+-spec(deliver/4 ::(pid(), rabbit:ctag(), boolean(), rabbit_queue:qmsg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(flow_timeout/2 :: (pid(), ref()) -> 'ok').

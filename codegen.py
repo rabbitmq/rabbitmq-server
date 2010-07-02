@@ -333,8 +333,7 @@ def genErl(spec):
 -export([amqp_exception/1]).
 
 -export_type([amqp_table/0, amqp_property_type/0, amqp_method_record/0,
-              amqp_method_name/0, amqp_method/0, vhost/0, ctag/0,
-              resource_name/0, amqp_properties/0, amqp_class_id/0]).
+              amqp_method_name/0, amqp_method/0, amqp_class_id/0]).
 
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
@@ -367,12 +366,7 @@ bitvalue(undefined) -> 0.
 %% we could make this more precise but ultimately are limited by
 %% dialyzer's lack of support for recursive types
 -type(amqp_table() :: [{binary(), amqp_field_type(), any()}]).
-%% TODO: make this more precise
 -type(amqp_properties() :: tuple()).
--type(resource_name() :: binary()).
--type(vhost() :: binary()).
--type(ctag() :: binary()).
-
 -endif. % use_specs
 """
     print "-ifdef(use_specs)."
