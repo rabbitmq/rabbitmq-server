@@ -39,9 +39,8 @@
 
 -export([log_location/1]).
 
--export_type([regexp/0, vhost/0, txn/0, resource_name/0, thunk/1,
-              maybe/1,
-              msg_id/0, ctag/0, erlang_node/0, message/0, basic_message/0,
+-export_type([regexp/0, txn/0, thunk/1,maybe/1, info/0, info_key/0,
+              msg_id/0, erlang_node/0, message/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, encoded_content/0,
               unencoded_content/0]).
 
@@ -204,18 +203,18 @@
                properties_bin        :: binary(),
                payload_fragments_rev :: [binary()]} |
       #content{class_id              :: rabbit_framing:amqp_class_id(),
-               properties            :: amqp_properties(),
+               properties            :: rabbit_framing:amqp_properties(),
                properties_bin        :: 'none',
                payload_fragments_rev :: [binary()]}).
 -type(unencoded_content() :: undecoded_content()).
 -type(decoded_content() ::
       #content{class_id              :: rabbit_framing:amqp_class_id(),
-               properties            :: amqp_properties(),
+               properties            :: rabbit_framing:amqp_properties(),
                properties_bin        :: rabbit:maybe(binary()),
                payload_fragments_rev :: [binary()]}).
 -type(encoded_content() ::
       #content{class_id              :: rabbit_framing:amqp_class_id(),
-               properties            :: rabbit:maybe(amqp_properties()),
+               properties            :: rabbit:maybe(rabbit_framing:amqp_properties()),
                properties_bin        :: binary(),
                payload_fragments_rev :: [binary()]}).
 -type(content() :: undecoded_content() | decoded_content()).
@@ -235,23 +234,13 @@
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(txn() :: rabbit_guid:guid()).
--type(permission() ::
-      #permission{configure :: regexp(),
-                  write     :: regexp(),
-                  read      :: regexp()}).
--type(binding() ::
-      #binding{exchange_name    :: rabbit_exchange:name(),
-               queue_name       :: rabbit_amqqueue:name(),
-               key              :: binding_key()}).
 %% this really should be an abstract type
 -type(msg_id() :: non_neg_integer()).
--type(listener() ::
-      #listener{node     :: erlang_node(),
-                protocol :: atom(),
-                host     :: inet:hostname(),
-                port     :: inet:ip_port()}).
 -type(log_location() :: 'tty' | 'undefined' | file:filename()).
 -type(file_suffix() :: binary()).
+
+-type(info_key() :: atom()).
+-type(info() :: {info_key(), any()}).
 
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').

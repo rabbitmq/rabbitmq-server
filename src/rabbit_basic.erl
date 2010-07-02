@@ -42,20 +42,22 @@
 
 -ifdef(use_specs).
 
--type(properties_input() :: (rabbit:amqp_properties() | [{atom(), any()}])).
+-type(properties_input() ::
+        (rabbit_framing:amqp_properties() | [{atom(), any()}])).
 -type(publish_result() :: ({ok, rabbit_router:routing_result(), [pid()]}
-                           | rabbit:not_found())).
+                           | rabbit_misc:not_found())).
 
 -spec(publish/1 :: (rabbit:delivery()) -> publish_result()).
 -spec(delivery/4 :: (boolean(), boolean(), rabbit:maybe(rabbit:txn()),
                      rabbit:message()) -> rabbit:delivery()).
--spec(message/4 :: (rabbit:exchange_name(), rabbit_router:routing_key(),
+-spec(message/4 :: (rabbit_exchange:name(), rabbit_router:routing_key(),
                     properties_input(), binary())
                    -> (rabbit:message() | {'error', any()})).
--spec(properties/1 :: (properties_input()) -> rabbit:amqp_properties()).
--spec(publish/4 :: (rabbit:exchange_name(), rabbit_router:routing_key(),
+-spec(properties/1 ::
+        (properties_input()) -> rabbit_framing:amqp_properties()).
+-spec(publish/4 :: (rabbit_exchange:name(), rabbit_router:routing_key(),
                     properties_input(), binary()) -> publish_result()).
--spec(publish/7 :: (rabbit:exchange_name(), rabbit_router:routing_key(), boolean(), boolean(),
+-spec(publish/7 :: (rabbit_exchange:name(), rabbit_router:routing_key(), boolean(), boolean(),
                     rabbit:maybe(rabbit:txn()), properties_input(), binary()) ->
                         publish_result()).
 -spec(build_content/2 :: (rabbit_framing:amqp_properties(), binary())

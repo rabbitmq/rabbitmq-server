@@ -333,7 +333,8 @@ def genErl(spec):
 -export([amqp_exception/1]).
 
 -export_type([amqp_table/0, amqp_property_type/0, amqp_method_record/0,
-              amqp_method_name/0, amqp_method/0]).
+              amqp_method_name/0, amqp_method/0, vhost/0, ctag/0,
+              resource_name/0, amqp_properties/0, amqp_class_id/0]).
 
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
@@ -371,7 +372,6 @@ bitvalue(undefined) -> 0.
 -type(resource_name() :: binary()).
 -type(vhost() :: binary()).
 -type(ctag() :: binary()).
--type(binding_key() :: binary()).
 
 -endif. % use_specs
 """
@@ -477,24 +477,13 @@ def genHrl(spec):
         print "-record('P_%s', {%s})." % (erlangize(c.name), fieldNameList(c.fields))
 
 
-def genSpec(spec):
-    methods = spec.allMethods()
-
-    printFileHeader()
-    print """% Hard-coded types
-"""
-
 def generateErl(specPath):
     genErl(AmqpSpec(specPath))
 
 def generateHrl(specPath):
     genHrl(AmqpSpec(specPath))
 
-def generateSpec(specPath):
-    genSpec(AmqpSpec(specPath))
-
 if __name__ == "__main__":
     do_main_dict({"header": generateHrl,
-                  "spec": generateSpec,
                   "body": generateErl})
 

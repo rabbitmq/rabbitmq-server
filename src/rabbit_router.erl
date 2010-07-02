@@ -36,6 +36,7 @@
 -export([deliver/2,
          match_bindings/2,
          match_routing_key/2]).
+-export_type([routing_key/0, routing_result/0]).
 
 %%----------------------------------------------------------------------------
 

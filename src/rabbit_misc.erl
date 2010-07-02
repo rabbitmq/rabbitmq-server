@@ -63,6 +63,8 @@
 -export([version_compare/2, version_compare/3]).
 -export([recursive_delete/1, dict_cons/3, unlink_and_capture_exit/1]).
 
+-export_type([not_found/0, r/1]).
+
 -import(mnesia).
 -import(lists).
 -import(cover).
@@ -79,16 +81,17 @@
                   method      :: atom()}).
 -type(not_found() :: {'error', 'not_found'}).
 -type(r(Kind) ::
-      #resource{virtual_host :: rabbit:vhost(),
+      #resource{virtual_host :: rabbit_framing:vhost(),
                 kind         :: Kind,
-                name         :: rabbit:resource_name()}).
+                name         :: rabbit_framing:resource_name()}).
 
 -spec(method_record_type/1 :: (tuple()) -> atom()).
 -spec(polite_pause/0 :: () -> 'done').
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
 -spec(die/1 :: (atom()) -> no_return()).
 -spec(frame_error/2 :: (atom(), binary()) -> no_return()).
--spec(amqp_error/4 :: (atom(), string(), [any()], atom()) -> rabbit_misc:amqp_error()).
+-spec(amqp_error/4 ::
+        (atom(), string(), [any()], atom()) -> rabbit_misc:amqp_error()).
 -spec(protocol_error/3 :: (atom(), string(), [any()]) -> no_return()).
 -spec(protocol_error/4 :: (atom(), string(), [any()], atom()) -> no_return()).
 -spec(not_found/1 :: (r(atom())) -> no_return()).
@@ -96,15 +99,18 @@
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (rabbit:vhost() | rabbit:r(atom()), K, rabbit:resource_name()) ->
-             rabbit:r(K) when is_subtype(K, atom())).
--spec(r/2 :: (rabbit:vhost(), K) -> #resource{virtual_host :: rabbit:vhost(),
+-spec(r/3 :: (rabbit_framing:vhost() | r(atom()), K,
+              rabbit_framing:resource_name()) ->
+                  r(K) when is_subtype(K, atom())).
+-spec(r/2 :: (rabbit_framing:vhost(), K)
+             -> #resource{virtual_host :: rabbit_framing:vhost(),
                                               kind         :: K,
                                               name         :: '_'}
                                         when is_subtype(K, atom())).
--spec(r_arg/4 :: (rabbit:vhost() | rabbit:r(atom()), K, rabbit_framing:amqp_table(), binary()) ->
-             undefined | rabbit:r(K)  when is_subtype(K, atom())).
--spec(rs/1 :: (rabbit:r(atom())) -> string()).
+-spec(r_arg/4 :: (rabbit_framing:vhost() | r(atom()), K,
+                  rabbit_framing:amqp_table(), binary())
+                 -> undefined | r(K)  when is_subtype(K, atom())).
+-spec(rs/1 :: (r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
@@ -115,9 +121,9 @@
 -spec(with_exit_handler/2 :: (rabbit:thunk(A), rabbit:thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (rabbit_access_control:username(), rabbit:thunk(A)) -> A).
--spec(with_vhost/2 :: (rabbit:vhost(), rabbit:thunk(A)) -> A).
+-spec(with_vhost/2 :: (rabbit_framing:vhost(), rabbit:thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (rabbit_access_control:username(),
-                                rabbit:vhost(), rabbit:thunk(A)) -> A).
+                                rabbit_framing:vhost(), rabbit:thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (rabbit:thunk(A)) -> A).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
 -spec(makenode/1 :: ({string(), string()} | string()) -> rabbit:erlang_node()).

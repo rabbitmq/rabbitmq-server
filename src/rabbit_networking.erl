@@ -73,7 +73,8 @@
 
 -spec(start/0 :: () -> 'ok').
 -spec(start_tcp_listener/2 :: (inet:hostname(), inet:ip_port()) -> 'ok').
--spec(start_ssl_listener/3 :: (inet:hostname(), inet:ip_port(), [rabbit:info()]) -> 'ok').
+-spec(start_ssl_listener/3 :: (inet:hostname(), inet:ip_port(), [rabbit:info()])
+                              -> 'ok').
 -spec(stop_tcp_listener/2 :: (inet:hostname(), inet:ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [listener()]).
 -spec(node_listeners/1 :: (rabbit:erlang_node()) -> [listener()]).

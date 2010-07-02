@@ -32,17 +32,17 @@
 
 -spec(description/0 :: () -> [{atom(), any()}]).
 -spec(publish/2 :: (rabbit_exchange:exchange(), rabbit:delivery())
-                   -> {rabbit:routing_result(), [pid()]}).
+                   -> {rabbit_router:routing_result(), [pid()]}).
 -spec(validate/1 :: (rabbit_exchange:exchange()) -> 'ok').
 -spec(create/1 :: (rabbit_exchange:exchange()) -> 'ok').
 -spec(recover/2 :: (rabbit_exchange:exchange(),
-                    list(rabbit:binding())) -> 'ok').
+                    [rabbit_exchange:binding()]) -> 'ok').
 -spec(delete/2 :: (rabbit_exchange:exchange(),
-                   list(rabbit:binding())) -> 'ok').
+                   [rabbit_exchange:binding()]) -> 'ok').
 -spec(add_binding/2 :: (rabbit_exchange:exchange(),
-                        rabbit:binding()) -> 'ok').
+                        rabbit_exchange:binding()) -> 'ok').
 -spec(remove_bindings/2 :: (rabbit_exchange:exchange(),
-                            list(rabbit:binding())) -> 'ok').
+                            [rabbit_exchange:binding()]) -> 'ok').
 -spec(assert_args_equivalence/2 :: (rabbit_exchange:exchange(),
                                     rabbit_framing:amqp_table()) -> 'ok').
 

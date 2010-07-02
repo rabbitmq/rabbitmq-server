@@ -44,6 +44,8 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2, handle_pre_hibernate/1]).
 
+-export_type([channel_number/0]).
+
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
@@ -76,13 +78,14 @@
 
 -spec(start_link/6 ::
       (channel_number(), pid(), pid(), rabbit_access_control:username(),
-       rabbit:vhost(), pid()) -> pid()).
+       rabbit_framing:vhost(), pid()) -> pid()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit:maybe(rabbit:content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), rabbit_framing:amqp_method()) -> 'ok').
--spec(deliver/4 :: (pid(), rabbit:ctag(), boolean(), rabbit_queue:qmsg()) -> 'ok').
+-spec(deliver/4 ::
+        (pid(), rabbit_framing:ctag(), boolean(), rabbit_queue:qmsg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(flow_timeout/2 :: (pid(), ref()) -> 'ok').
