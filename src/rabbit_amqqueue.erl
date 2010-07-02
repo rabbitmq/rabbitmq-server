@@ -72,7 +72,8 @@
 -type(qstats() :: {'ok', name(), non_neg_integer(), non_neg_integer()}).
 -type(qlen() :: {'ok', non_neg_integer()}).
 -type(qfun(A) :: fun ((amqqueue()) -> A)).
--type(qmsg() :: {name(), pid(), rabbit:msg_id(), boolean(), rabbit:message()}).
+-type(qmsg() :: {name(), pid(), msg_id(), boolean(), rabbit:message()}).
+-type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
@@ -103,8 +104,8 @@
                                             {'error', 'not_empty'}).
 -spec(purge/1 :: (amqqueue()) -> qlen()).
 -spec(deliver/2 :: (pid(), rabbit:delivery()) -> boolean()).
--spec(requeue/3 :: (pid(), [rabbit:msg_id()],  pid()) -> 'ok').
--spec(ack/4 :: (pid(), rabbit:maybe(rabbit:txn()), [rabbit:msg_id()], pid())
+-spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
+-spec(ack/4 :: (pid(), rabbit:maybe(rabbit:txn()), [msg_id()], pid())
                -> 'ok').
 -spec(commit_all/3 :: ([pid()], rabbit:txn(), pid()) -> ok_or_errors()).
 -spec(rollback_all/3 :: ([pid()], rabbit:txn(), pid()) -> 'ok').

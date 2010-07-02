@@ -52,6 +52,7 @@
 -type(user() ::
       #user{username :: username(),
             password :: password()}).
+-type(regexp() :: binary()).
 
 -spec(check_login/2 :: (binary(), binary()) -> user()).
 -spec(user_pass_login/2 :: (username(), password()) -> user()).
@@ -67,15 +68,13 @@
 -spec(add_vhost/1 :: (rabbit:vhost()) -> 'ok').
 -spec(delete_vhost/1 :: (rabbit:vhost()) -> 'ok').
 -spec(list_vhosts/0 :: () -> [rabbit:vhost()]).
--spec(set_permissions/5 ::(username(), rabbit:vhost(), rabbit:regexp(),
-                           rabbit:regexp(), rabbit:regexp()) -> 'ok').
+-spec(set_permissions/5 ::(username(), rabbit:vhost(), regexp(),
+                           regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (username(), rabbit:vhost()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
-      (rabbit:vhost()) -> [{username(), rabbit:regexp(),
-                            rabbit:regexp(), rabbit:regexp()}]).
+        (rabbit:vhost()) -> [{username(), regexp(), regexp(), regexp()}]).
 -spec(list_user_permissions/1 ::
-      (username()) -> [{rabbit:vhost(), rabbit:regexp(),
-                        rabbit:regexp(), rabbit:regexp()}]).
+        (username()) -> [{rabbit:vhost(), regexp(), regexp(), regexp()}]).
 
 -endif.
 

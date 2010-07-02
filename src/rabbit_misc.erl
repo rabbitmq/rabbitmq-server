@@ -76,25 +76,31 @@
 
 -type(ok_or_error() :: 'ok' | {'error', any()}).
 -type(amqp_error() ::
-      #amqp_error{name        :: atom(),
+      #amqp_error{name        :: rabbit_framing:amqp_exception(),
                   explanation :: string(),
-                  method      :: atom()}).
+                  method      :: rabbit_framing:amqp_method_name()}).
 -type(not_found() :: {'error', 'not_found'}).
 -type(resource_name() :: binary()).
 -type(r(Kind) ::
       #resource{virtual_host :: rabbit:vhost(),
                 kind         :: Kind,
                 name         :: resource_name()}).
+-type(thunk(T) :: fun(() -> T)).
 
--spec(method_record_type/1 :: (rabbit_framing:amqp_method_record()) -> atom()).
+-spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
+                              -> rabbit_framing:amqp_method_name()).
 -spec(polite_pause/0 :: () -> 'done').
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
--spec(die/1 :: (atom()) -> no_return()).
--spec(frame_error/2 :: (atom(), binary()) -> no_return()).
+-spec(die/1 :: (rabbit_framing:amqp_exception()) -> no_return()).
+-spec(frame_error/2 :: (rabbit_framing:amqp_method_name(), binary())
+                       -> no_return()).
 -spec(amqp_error/4 ::
-        (atom(), string(), [any()], atom()) -> rabbit_misc:amqp_error()).
--spec(protocol_error/3 :: (atom(), string(), [any()]) -> no_return()).
--spec(protocol_error/4 :: (atom(), string(), [any()], atom()) -> no_return()).
+        (rabbit_framing:amqp_exception(), string(), [any()],
+         rabbit_framing:amqp_method_name()) -> rabbit_misc:amqp_error()).
+-spec(protocol_error/3 :: (rabbit_framing:amqp_exception(), string(), [any()])
+                          -> no_return()).
+-spec(protocol_error/4 :: (rabbit_framing:amqp_exception(), string(), [any()],
+                           rabbit_framing:amqp_method_name()) -> no_return()).
 -spec(not_found/1 :: (r(atom())) -> no_return()).
 -spec(get_config/1 :: (atom()) -> {'ok', any()} | not_found()).
 -spec(get_config/2 :: (atom(), A) -> A).
@@ -116,15 +122,14 @@
 -spec(report_cover/0 :: () -> 'ok').
 -spec(enable_cover/1 :: (file:filename()) -> ok_or_error()).
 -spec(report_cover/1 :: (file:filename()) -> 'ok').
--spec(throw_on_error/2 ::
-      (atom(), rabbit:thunk({error, any()} | {ok, A} | A)) -> A).
--spec(with_exit_handler/2 :: (rabbit:thunk(A), rabbit:thunk(A)) -> A).
+-spec(throw_on_error/2 :: (atom(), thunk({error, any()} | {ok, A} | A)) -> A).
+-spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(with_user/2 :: (rabbit_access_control:username(), rabbit:thunk(A)) -> A).
--spec(with_vhost/2 :: (rabbit:vhost(), rabbit:thunk(A)) -> A).
+-spec(with_user/2 :: (rabbit_access_control:username(), thunk(A)) -> A).
+-spec(with_vhost/2 :: (rabbit:vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (rabbit_access_control:username(),
-                                rabbit:vhost(), rabbit:thunk(A)) -> A).
--spec(execute_mnesia_transaction/1 :: (rabbit:thunk(A)) -> A).
+                                rabbit:vhost(), thunk(A)) -> A).
+-spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
 -spec(makenode/1 :: ({string(), string()} | string()) -> node()).
 -spec(nodeparts/1 :: (node() | string()) -> {string(), string()}).

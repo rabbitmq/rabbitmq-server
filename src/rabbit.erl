@@ -39,8 +39,8 @@
 
 -export([log_location/1]).
 
--export_type([regexp/0, txn/0, thunk/1,maybe/1, info/0, info_key/0,
-              msg_id/0, message/0, basic_message/0,
+-export_type([txn/0, maybe/1, info/0, info_key/0,
+              message/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, vhost/0, ctag/0,
               ip_port/0, hostname/0]).
@@ -191,8 +191,6 @@
 -ifdef(use_specs).
 
 -type(maybe(T) :: T | 'none').
--type(thunk(T) :: fun(() -> T)).
--type(regexp() :: binary()).
 -type(vhost() :: binary()).
 -type(ctag() :: binary()).
 
@@ -236,7 +234,6 @@
 %% this is really an abstract type, but dialyzer does not support them
 -type(txn() :: rabbit_guid:guid()).
 %% this really should be an abstract type
--type(msg_id() :: non_neg_integer()).
 -type(log_location() :: 'tty' | 'undefined' | file:filename()).
 -type(file_suffix() :: binary()).
 
