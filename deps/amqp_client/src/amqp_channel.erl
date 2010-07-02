@@ -42,6 +42,7 @@
 -export([close/1, close/3]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
+-export([register_default_consumer/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
 -define(TIMEOUT_CLOSE_OK, 3000).
@@ -58,7 +59,8 @@
                   return_handler_pid = none,
                   flow_control = false,
                   flow_handler_pid = none,
-                  consumers = dict:new()}).
+                  consumers = dict:new(),
+                  default_consumer = unknown}).
 
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
@@ -200,6 +202,34 @@ register_return_handler(Channel, ReturnHandler) ->
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
+%% @spec (Channel, Consumer) -> ok
+%% where
+%%      Channel = pid()
+%%      Consumer = pid()
+%% @doc Set the current default consumer.
+%% Under certain circumstances it is possible for a channel to receive a
+%% message delivery which does not match any consumer which is currently
+%% set up via basic.consume. This will occur after the following sequence
+%% of events:
+%%
+%% basic.consume with explicit acks
+%% %% some deliveries take place but are not acked
+%% basic.cancel
+%% basic.recover{requeue = false}
+%%
+%% Since requeue is specified to be false in the basic.recover, the spec
+%% states that the message must be redelivered to "the original recipient"
+%% - i.e. the same channel / consumer-tag. But the consumer is no longer
+%% active.
+%%
+%% In these circumstances, you can register a default consumer to handle
+%% such deliveries. If no default consumer is registered then the channel
+%% will exit on receiving such a delivery.
+%%
+%% Most people will not need to use this.
+register_default_consumer(Channel, Consumer) ->
+    gen_server:cast(Channel, {register_default_consumer, Consumer}).
+
 %%---------------------------------------------------------------------------
 %% RPC mechanism
 %%---------------------------------------------------------------------------
@@ -252,8 +282,17 @@ do(Method, Content, #c_state{writer_pid = Writer,
 
 resolve_consumer(_ConsumerTag, #c_state{consumers = []}) ->
     exit(no_consumers_registered);
-resolve_consumer(ConsumerTag, #c_state{consumers = Consumers}) ->
-    dict:fetch(ConsumerTag, Consumers).
+resolve_consumer(ConsumerTag, #c_state{consumers = Consumers,
+                                       default_consumer = DefaultConsumer}) ->
+    case dict:find(ConsumerTag, Consumers) of
+        {ok, Value} ->
+            Value;
+        error ->
+            case is_pid(DefaultConsumer) of
+                true  -> DefaultConsumer;
+                false -> exit(unexpected_delivery_and_no_default_consumer)
+            end
+    end.
 
 register_consumer(ConsumerTag, Consumer,
                   State = #c_state{consumers = Consumers0}) ->
@@ -296,30 +335,39 @@ shutdown_with_reason(Reason, State) ->
 %% Handling of methods from the server
 %%---------------------------------------------------------------------------
 
+%% Close normally
+handle_method(#'channel.close'{reply_code = ReplyCode,
+                               reply_text = ReplyText}, none,
+              #c_state{closing = false} = State) ->
+    do(#'channel.close_ok'{}, none, State),
+    {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
+
+%% We're already closing, so just send back the ok.
+handle_method(#'channel.close'{}, none, State) ->
+    do(#'channel.close_ok'{}, none, State),
+    {noreply, State};
+
+%% Handle 'channel.close_ok': stop channel
+handle_method(CloseOk = #'channel.close_ok'{}, none, State) ->
+    {stop, normal, rpc_bottom_half(CloseOk, State)};
+
+%% Handle all other methods
 handle_method(Method, Content, #c_state{closing = Closing} = State) ->
-    case {Method, Content} of
-        %% Handle 'channel.close': send 'channel.close_ok' and stop channel
-        {#'channel.close'{reply_code = ReplyCode,
-                          reply_text = ReplyText}, none} ->
-            do(#'channel.close_ok'{}, none, State),
-            {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
-        %% Handle 'channel.close_ok': stop channel
-        {CloseOk = #'channel.close_ok'{}, none} ->
-            {stop, normal, rpc_bottom_half(CloseOk, State)};
+    case Closing of
+        %% Drop all incomming traffic if closing
+        just_channel ->
+            ?LOG_INFO("Channel (~p): dropping method ~p from server "
+                      "because channel is closing~n",
+                      [self(), {Method, Content}]),
+            {noreply, State};
+        {connection, Reason} ->
+            ?LOG_INFO("Channel (~p): dropping method ~p from server "
+                      "because connection is closing (~p)~n",
+                      [self(), {Method, Content}, Reason]),
+            {noreply, State};
+        %% Standard handling of incoming method
         _ ->
-            case Closing of
-                %% Drop all incomming traffic except 'channel.close' and
-                %% 'channel.close_ok' when channel is closing (has sent
-                %% 'channel.close')
-                just_channel ->
-                    ?LOG_INFO("Channel (~p): dropping method ~p from server "
-                              "because channel is closing~n",
-                              [self(), {Method, Content}]),
-                    {noreply, State};
-                %% Standard handling of incoming method
-                _ ->
-                    handle_regular_method(Method, amqp_msg(Content), State)
-            end
+            handle_regular_method(Method, amqp_msg(Content), State)
     end.
 
 handle_regular_method(
@@ -481,6 +529,12 @@ handle_cast({register_return_handler, ReturnHandler}, State) ->
 handle_cast({register_flow_handler, FlowHandler}, State) ->
     link(FlowHandler),
     {noreply, State#c_state{flow_handler_pid = FlowHandler}};
+
+%% Registers a handler to process unexpected deliveries
+%% @private
+handle_cast({register_default_consumer, Consumer}, State) ->
+    link(Consumer),
+    {noreply, State#c_state{default_consumer = Consumer}};
 
 %% @private
 handle_cast({notify_sent, _Peer}, State) ->
