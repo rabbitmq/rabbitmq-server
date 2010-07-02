@@ -199,7 +199,7 @@ parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
                                        V         -> setelement(Idx, R, V)
                                    end,
                             {NewR, Idx + 1}
-                    end, {rabbit_framing_0_8:method_record(Method), 2},
+                    end, {rabbit_framing_amqp_0_8:method_record(Method), 2},
                     FieldNames),
     return({Rest, [Res | Acc]});
 parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
