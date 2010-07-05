@@ -154,11 +154,16 @@ action(force_reset, Node, [], Inform) ->
     Inform("Forcefully resetting node ~p", [Node]),
     call(Node, {rabbit_mnesia, force_reset, []});
 
-action(cluster, Node, ClusterNodeSs, Inform) ->
+action(cluster, Node, Args, Inform) ->
+    {Force, ClusterNodeSs} =
+        case Args of
+            ["-f" | Rest] -> {true, Rest};
+            _             -> {false, Args}
+        end,
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
     Inform("Clustering node ~p with ~p",
               [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
+    rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes, Force]);
 
 action(status, Node, [], Inform) ->
     Inform("Status of node ~p", [Node]),
