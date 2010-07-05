@@ -953,7 +953,7 @@ test_memory_pressure() ->
     ok = test_memory_pressure_receive_flow(true),
 
     %% if we publish at this point, the channel should die
-    Content = rabbit_basic:build_content([], <<>>),
+    Content = rabbit_basic:build_content(#'P_basic'{}, <<>>),
     ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
     expect_normal_channel_termination(MRef0, Ch0),
 

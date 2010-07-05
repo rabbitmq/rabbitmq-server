@@ -334,7 +334,7 @@ def genErl(spec):
 
 -export_type([amqp_table/0, amqp_property_type/0, amqp_method_record/0,
               amqp_method_name/0, amqp_method/0, amqp_class_id/0,
-              amqp_value/0, amqp_array/0]).
+              amqp_value/0, amqp_array/0, amqp_exception/0, amqp_property_record/0]).
 
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
