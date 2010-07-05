@@ -88,23 +88,24 @@ def domains_merger(key, old, new, allow_overwrite):
 
     return [[k, v] for (k, v) in o.iteritems()]
 
-def merge_dict_lists_by(dict_key, old, new, allow_overwrite, check_fields, **kwargs):
-    old_index = dict((v[dict_key], v) for v in old)
+def merge_dict_lists_by(field, old, new, allow_overwrite, check_fields, **kwargs):
+    old_index = dict((item[field], item) for item in old)
     result = list(old) # shallow copy
-    for v in new:
-        key = v[dict_key]
-        if key in old_index.iterkeys():
+    for item in new:
+        key = item[field]
+        if old_index.has_key(key):
             if not allow_overwrite:
                 raise AmqpSpecFileMergeConflict(description, old, new)
+            old_item = old_index[key]
             for f in check_fields:
-                old_val = old_index[key].get(f, None)
-                new_val = v.get(f, None)
+                old_val = old_item.get(f, None)
+                new_val = item.get(f, None)
                 if old_val != new_val:
                     raise AmqpSpecFileMergeConflict(key, f, old_val, new_val)
             if kwargs.has_key("sub_merge"):
-                kwargs["sub_merge"](old_index[key], v)
+                kwargs["sub_merge"](old_item, item)
         else:
-            result.append(v)
+            result.append(item)
     return result
 
 def constants_merger(key, old, new, allow_overwrite):
