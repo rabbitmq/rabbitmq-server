@@ -255,3 +255,4 @@ all_tests
     network_client_SUITE, direct_client_SUITE and packaging tests. During the
     testing, this make target runs an instance of the broker, so make sure
     there is no other instance of RabbitMQ server running.
+
