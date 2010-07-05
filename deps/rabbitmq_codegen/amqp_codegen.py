@@ -63,20 +63,17 @@ def insert_base_types(d):
 class AmqpSpecFileMergeConflict(Exception): pass
 
 def default_spec_value_merger(key, old, new, allow_overwrite):
-    if old is None or old == new:
+    if old is None or old == new or allow_overwrite:
         return new
     else:
-        if allow_overwrite:
-            return old
-        else:
-            raise AmqpSpecFileMergeConflict(key, old, new)
+        raise AmqpSpecFileMergeConflict(key, old, new)
 
 def extension_info_merger(key, old, new, allow_overwrite):
     return old + [new]
 
 def domains_merger(key, old, new, allow_overwrite):
-    o = dict((k, v) for [k, v] in old)
-    for [k, v] in new:
+    o = dict((k, v) for [k, v] in new)
+    for [k, v] in old:
         if o.has_key(k):
             if not allow_overwrite:
                 raise AmqpSpecFileMergeConflict(key, old, new)
@@ -86,10 +83,10 @@ def domains_merger(key, old, new, allow_overwrite):
     return [[k, v] for (k, v) in o.iteritems()]
 
 def merge_dict_lists_by(dict_key, old, new, allow_overwrite):
-    old_index = set(v[dict_key] for v in old)
-    result = list(old) # shallow copy
-    for v in new:
-        if v[dict_key] in old_index:
+    new_index = set(v[dict_key] for v in new)
+    result = list(new) # shallow copy
+    for v in old:
+        if v[dict_key] in new_index:
             if not allow_overwrite:
                 raise AmqpSpecFileMergeConflict(description, old, new)
         else:
@@ -116,11 +113,11 @@ def class_merger(old, new, allow_overwrite):
                                           allow_overwrite)
 
 def classes_merger(key, old, new, allow_overwrite):
-    old_dict = dict((v["name"], v) for v in old)
-    result = list(old) # shallow copy
-    for w in new:
-        if w["name"] in old_dict:
-            class_merger(old_dict[w["name"]], w, allow_overwrite)
+    new_dict = dict((v["name"], v) for v in new)
+    result = list(new) # shallow copy
+    for w in old:
+        if w["name"] in new_dict:
+            class_merger(new_dict[w["name"]], w, allow_overwrite)
         else:
             result.append(w)
     return result
@@ -284,7 +281,6 @@ def do_main_dict(funcDict):
     parser = OptionParser()
     parser.add_option("--allow-overwrite", action="store_true", dest="allow_overwrite", default=False)
     (options, args) = parser.parse_args()
-    print args, len(args)
 
     if len(args) < 3:
         usage()
