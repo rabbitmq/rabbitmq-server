@@ -250,7 +250,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                       frame_max = ?FRAME_MIN_SIZE,
                                       vhost = none,
                                       client_properties = none,
-                                      protocol = unknown},
+                                      protocol = none},
                                     callback = uninitialized_callback,
                                     recv_ref = none,
                                     connection_state = pre_init,
@@ -731,6 +731,8 @@ i(state, #v1{connection_state = S}) ->
     S;
 i(channels, #v1{}) ->
     length(all_channels());
+i(protocol, #v1{connection = #connection{protocol = none}}) ->
+    none;
 i(protocol, #v1{connection = #connection{protocol = Protocol}}) ->
     Protocol:version();
 i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
