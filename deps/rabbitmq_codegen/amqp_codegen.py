@@ -33,6 +33,7 @@ from __future__ import nested_scopes
 import re
 import sys
 from os import remove
+from optparse import OptionParser
 
 try:
     try:
@@ -59,52 +60,67 @@ def insert_base_types(d):
               'longlong', 'bit', 'table', 'timestamp']:
         d[t] = t
 
-# In all mergers, old wins
-def default_spec_value_merger(key, old, new):
-    if old is None:
+class AmqpSpecFileMergeConflict(Exception): pass
+
+def default_spec_value_merger(key, old, new, allow_overwrite):
+    if old is None or old == new:
         return new
     else:
-        return old
+        if allow_overwrite:
+            return old
+        else:
+            raise AmqpSpecFileMergeConflict(key, old, new)
 
-def extension_info_merger(key, old, new):
+def extension_info_merger(key, old, new, allow_overwrite):
     return old + [new]
 
-def domains_merger(key, old, new):
+def domains_merger(key, old, new, allow_overwrite):
     o = dict((k, v) for [k, v] in old)
     for [k, v] in new:
-        if not o.has_key(k):
+        if o.has_key(k):
+            if not allow_overwrite:
+                raise AmqpSpecFileMergeConflict(key, old, new)
+        else:
             o[k] = v
+
     return [[k, v] for (k, v) in o.iteritems()]
 
-def merge_dict_lists_by(dict_key, old, new):
+def merge_dict_lists_by(dict_key, old, new, allow_overwrite):
     old_index = set(v[dict_key] for v in old)
     result = list(old) # shallow copy
     for v in new:
-        if v[dict_key] not in old_index:
+        if v[dict_key] in old_index:
+            if not allow_overwrite:
+                raise AmqpSpecFileMergeConflict(description, old, new)
+        else:
             result.append(v)
     return result
 
-def constants_merger(key, old, new):
-    return merge_dict_lists_by("name", old, new)
+def constants_merger(key, old, new, allow_overwrite):
+    return merge_dict_lists_by("name", old, new, allow_overwrite)
 
-def methods_merger(classname, old, new):
-    return merge_dict_lists_by("name", old, new)
+def methods_merger(classname, old, new, allow_overwrite):
+    return merge_dict_lists_by("name", old, new, allow_overwrite)
 
-def properties_merger(classname, old, new):
-    return merge_dict_lists_by("name", old, new)
+def properties_merger(classname, old, new, allow_overwrite):
+    return merge_dict_lists_by("name", old, new, allow_overwrite)
 
-def class_merger(old, new):
-    old["methods"] = methods_merger(old["name"], old["methods"], new["methods"])
+def class_merger(old, new, allow_overwrite):
+    old["methods"] = methods_merger(old["name"],
+                                    old["methods"],
+                                    new["methods"],
+                                    allow_overwrite)
     old["properties"] = properties_merger(old["name"],
                                           old.get("properties", []),
-                                          new.get("properties", []))
+                                          new.get("properties", []),
+                                          allow_overwrite)
 
-def classes_merger(key, old, new):
+def classes_merger(key, old, new, allow_overwrite):
     old_dict = dict((v["name"], v) for v in old)
     result = list(old) # shallow copy
     for w in new:
         if w["name"] in old_dict:
-            class_merger(old_dict[w["name"]], w)
+            class_merger(old_dict[w["name"]], w, allow_overwrite)
         else:
             result.append(w)
     return result
@@ -116,20 +132,24 @@ mergers = {
     "classes": (classes_merger, []),
 }
 
-def merge_load_specs(filenames):
+def merge_load_specs(filenames, allow_overwrite):
     handles = [file(filename) for filename in filenames]
     docs = [json.load(handle) for handle in handles]
     spec = {}
     for doc in docs:
         for (key, value) in doc.iteritems():
             (merger, default_value) = mergers.get(key, (default_spec_value_merger, None))
-            spec[key] = merger(key, spec.get(key, default_value), value)
+            spec[key] = merger(key, spec.get(key, default_value), value, allow_overwrite)
     for handle in handles: handle.close()
     return spec
         
 class AmqpSpec:
+    # Slight wart: use a class member rather than change the ctor signature
+    # to avoid breaking everyone else's code.
+    allow_overwrite = False
+
     def __init__(self, filenames):
-        self.spec = merge_load_specs(filenames)
+        self.spec = merge_load_specs(filenames, AmqpSpec.allow_overwrite)
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
@@ -261,12 +281,21 @@ def do_main_dict(funcDict):
             sys.stdout = stdout
             f.close()
 
-    if len(sys.argv) < 4:
+    parser = OptionParser()
+    parser.add_option("--allow-overwrite", action="store_true", dest="allow_overwrite", default=False)
+    (options, args) = parser.parse_args()
+    print args, len(args)
+
+    if len(args) < 3:
         usage()
         sys.exit(1)
     else:
-        if funcDict.has_key(sys.argv[1]):
-            execute(funcDict[sys.argv[1]], sys.argv[2:-1], sys.argv[-1])
+        function = args[0]
+        sources = args[1:-1]
+        dest = args[-1]
+        AmqpSpec.allow_overwrite = options.allow_overwrite
+        if funcDict.has_key(function):
+            execute(funcDict[function], sources, dest)
         else:
             usage()
             sys.exit(1)
