@@ -40,11 +40,12 @@
 -export([add_vhost/1, delete_vhost/1, list_vhosts/0]).
 -export([set_permissions/5, clear_permissions/2,
          list_vhost_permissions/1, list_user_permissions/1]).
--export_type([username/0]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-export_type([username/0]).
 
 -type(permission_atom() :: 'configure' | 'read' | 'write').
 -type(username() :: binary()).

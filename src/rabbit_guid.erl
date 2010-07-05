@@ -41,8 +41,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export_type([guid/0]).
-
 -define(SERVER, ?MODULE).
 -define(SERIAL_FILENAME, "rabbit_serial").
 
@@ -51,6 +49,8 @@
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-export_type([guid/0]).
 
 -type(guid() :: binary()).
 

@@ -63,8 +63,6 @@
 -export([version_compare/2, version_compare/3]).
 -export([recursive_delete/1, dict_cons/3, unlink_and_capture_exit/1]).
 
--export_type([not_found/0, amqp_error/0, r/1]).
-
 -import(mnesia).
 -import(lists).
 -import(cover).
@@ -73,6 +71,8 @@
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-export_type([not_found/0, amqp_error/0, r/1]).
 
 -type(ok_or_error() :: 'ok' | {'error', any()}).
 -type(amqp_error() ::

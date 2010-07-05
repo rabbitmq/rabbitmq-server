@@ -332,28 +332,13 @@ def genErl(spec):
 -export([lookup_amqp_exception/1]).
 -export([amqp_exception/1]).
 
--export_type([amqp_table/0, amqp_property_type/0, amqp_method_record/0,
+"""
+    print "%% Various types"
+    print "-ifdef(use_specs)."
+
+    print """-export_type([amqp_table/0, amqp_property_type/0, amqp_method_record/0,
               amqp_method_name/0, amqp_method/0, amqp_class_id/0,
               amqp_value/0, amqp_array/0, amqp_exception/0, amqp_property_record/0]).
-
-bitvalue(true) -> 1;
-bitvalue(false) -> 0;
-bitvalue(undefined) -> 0.
-
-%% Method signatures
--ifdef(use_specs).
--spec(lookup_method_name/1 :: (amqp_method()) -> amqp_method_name()).
--spec(method_id/1 :: (amqp_method_name()) -> amqp_method()).
--spec(method_has_content/1 :: (amqp_method_name()) -> boolean()).
--spec(is_method_synchronous/1 :: (amqp_method_record()) -> boolean()).
--spec(method_record/1 :: (amqp_method_name()) -> amqp_method_record()).
--spec(method_fieldnames/1 :: (amqp_method_name()) -> [amqp_method_field_name()]).
--spec(decode_method_fields/2 :: (amqp_method_name(), binary()) -> amqp_method_record()).
--spec(decode_properties/2 :: (non_neg_integer(), binary()) -> amqp_property_record()).
--spec(encode_method_fields/1 :: (amqp_method_record()) -> binary()).
--spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
--spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
--spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
 
 -type(amqp_field_type() ::
       'longstr' | 'signedint' | 'decimal' | 'timestamp' |
@@ -379,10 +364,8 @@ bitvalue(undefined) -> 0.
                       'undefined' | % void
                       non_neg_integer() % timestamp
      ).
--endif. % use_specs
 """
-    print "-ifdef(use_specs)."
-    print "%% Various types"
+
     print prettyType("amqp_method_name()",
                      [m.erlangName() for m in methods])
     print prettyType("amqp_method()",
@@ -409,6 +392,27 @@ bitvalue(undefined) -> 0.
                      ["%i" % ci for ci in classIds])
     print "-endif. % use_specs"
 
+    print """
+%% Method signatures
+-ifdef(use_specs).
+-spec(lookup_method_name/1 :: (amqp_method()) -> amqp_method_name()).
+-spec(method_id/1 :: (amqp_method_name()) -> amqp_method()).
+-spec(method_has_content/1 :: (amqp_method_name()) -> boolean()).
+-spec(is_method_synchronous/1 :: (amqp_method_record()) -> boolean()).
+-spec(method_record/1 :: (amqp_method_name()) -> amqp_method_record()).
+-spec(method_fieldnames/1 :: (amqp_method_name()) -> [amqp_method_field_name()]).
+-spec(decode_method_fields/2 :: (amqp_method_name(), binary()) -> amqp_method_record()).
+-spec(decode_properties/2 :: (non_neg_integer(), binary()) -> amqp_property_record()).
+-spec(encode_method_fields/1 :: (amqp_method_record()) -> binary()).
+-spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
+-spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
+-spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
+-endif. % use_specs
+
+bitvalue(true) -> 1;
+bitvalue(false) -> 0;
+bitvalue(undefined) -> 0.
+"""
     for m in methods: genLookupMethodName(m)
     print "lookup_method_name({_ClassId, _MethodId} = Id) -> exit({unknown_method_id, Id})."
 

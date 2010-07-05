@@ -43,8 +43,6 @@
 -export([assert_args_equivalence/2]).
 -export([check_type/1]).
 
--export_type([name/0, exchange/0, binding/0]).
-
 %% EXTENDED API
 -export([list_exchange_bindings/1]).
 -export([list_queue_bindings/1]).
@@ -57,6 +55,8 @@
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-export_type([name/0, exchange/0, binding/0]).
 
 -type(name() :: rabbit_misc:r('exchange')).
 -type(exchange() ::

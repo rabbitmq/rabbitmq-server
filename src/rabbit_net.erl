@@ -35,11 +35,12 @@
 -export([async_recv/3, close/1, controlling_process/2,
         getstat/2, peername/1, port_command/2,
         send/2, sockname/1]).
--export_type([socket/0]).
 
 %%---------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-export_type([socket/0]).
 
 -type(stat_option() ::
 	'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |

@@ -39,11 +39,6 @@
 
 -export([log_location/1]).
 
--export_type([txn/0, maybe/1, info/0, info_key/0, message/0, basic_message/0,
-              delivery/0, content/0, decoded_content/0, undecoded_content/0,
-              unencoded_content/0, encoded_content/0, vhost/0, ctag/0,
-              ip_port/0, hostname/0]).
-
 %%---------------------------------------------------------------------------
 %% Boot steps.
 -export([maybe_insert_default_data/0]).
@@ -188,6 +183,11 @@
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-export_type([txn/0, maybe/1, info/0, info_key/0, message/0, basic_message/0,
+              delivery/0, content/0, decoded_content/0, undecoded_content/0,
+              unencoded_content/0, encoded_content/0, vhost/0, ctag/0,
+              ip_port/0, hostname/0]).
 
 -type(maybe(T) :: T | 'none').
 -type(vhost() :: binary()).

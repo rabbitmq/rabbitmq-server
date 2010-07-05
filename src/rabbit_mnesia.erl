@@ -42,13 +42,13 @@
 %% other mnesia-using Erlang applications, such as ejabberd
 -export([create_tables/0]).
 
--export_type([node_type/0]).
-
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-export_type([node_type/0]).
 
 -type(node_type() :: disc_only | disc | ram | unknown).
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |

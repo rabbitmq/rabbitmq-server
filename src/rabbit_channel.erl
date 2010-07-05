@@ -44,8 +44,6 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2, handle_pre_hibernate/1]).
 
--export_type([channel_number/0]).
-
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
@@ -72,6 +70,8 @@
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-export_type([channel_number/0]).
 
 -type(ref() :: any()).
 -type(channel_number() :: non_neg_integer()).
