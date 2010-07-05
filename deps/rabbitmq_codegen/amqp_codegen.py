@@ -76,50 +76,34 @@ def extension_info_merger(key, old, new, allow_overwrite):
 
 def domains_merger(key, old, new, allow_overwrite):
     o = dict((k, v) for [k, v] in old)
-    n = dict((k, v) for [k, v] in new)
     for [k, v] in new:
         if o.has_key(k):
             if not allow_overwrite:
-                raise AmqpSpecFileMergeConflict(k, old, new)
-            if o[k] != n[k]:
-                raise AmqpSpecFileMergeConflict(k, o[k], n[k])
+                raise AmqpSpecFileMergeConflict(key, old, new)
         else:
             o[k] = v
 
     return [[k, v] for (k, v) in o.iteritems()]
 
-def merge_dict_lists_by(field, old, new, allow_overwrite, check_fields, **kwargs):
-    old_index = dict((item[field], item) for item in old)
+def merge_dict_lists_by(dict_key, old, new, allow_overwrite):
+    old_index = set(v[dict_key] for v in old)
     result = list(old) # shallow copy
-    for item in new:
-        key = item[field]
-        if old_index.has_key(key):
+    for v in new:
+        if v[dict_key] in old_index:
             if not allow_overwrite:
                 raise AmqpSpecFileMergeConflict(description, old, new)
-            old_item = old_index[key]
-            for f in check_fields:
-                old_val = old_item.get(f, None)
-                new_val = item.get(f, None)
-                if old_val != new_val:
-                    raise AmqpSpecFileMergeConflict(key, f, old_val, new_val)
-            if kwargs.has_key("sub_merge"):
-                kwargs["sub_merge"](old_item, item)
         else:
-            result.append(item)
+            result.append(v)
     return result
 
 def constants_merger(key, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, ["value"])
+    return merge_dict_lists_by("name", old, new, allow_overwrite)
 
 def methods_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, ["synchronous"],
-        sub_merge=lambda old, new: arguments_merger("name", old["arguments"], new["arguments"], allow_overwrite))
+    return merge_dict_lists_by("name", old, new, allow_overwrite)
 
 def properties_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, ["type"])
-
-def arguments_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, ["type"])
+    return merge_dict_lists_by("name", old, new, allow_overwrite)
 
 def class_merger(old, new, allow_overwrite):
     old["methods"] = methods_merger(old["name"],
@@ -300,6 +284,7 @@ def do_main_dict(funcDict):
     parser = OptionParser()
     parser.add_option("--allow-overwrite", action="store_true", dest="allow_overwrite", default=False)
     (options, args) = parser.parse_args()
+    print args, len(args)
 
     if len(args) < 3:
         usage()
