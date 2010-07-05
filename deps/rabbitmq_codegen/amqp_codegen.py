@@ -88,28 +88,37 @@ def domains_merger(key, old, new, allow_overwrite):
 
     return [[k, v] for (k, v) in o.iteritems()]
 
-def merge_dict_lists_by(dict_key, old, new, allow_overwrite, check_fields):
-    old_index = dict((v[dict_key], v) for v in old)
+def merge_dict_lists_by(field, old, new, allow_overwrite, check_fields, **kwargs):
+    old_index = dict((item[field], item) for item in old)
     result = list(old) # shallow copy
-    for v in new:
-        key = v[dict_key]
-        if key in old_index.iterkeys():
+    for item in new:
+        key = item[field]
+        if old_index.has_key(key):
             if not allow_overwrite:
                 raise AmqpSpecFileMergeConflict(description, old, new)
+            old_item = old_index[key]
             for f in check_fields:
-                if old_index[key][f] != v[f]:
-                    raise AmqpSpecFileMergeConflict(v[dict_key], old_index[key][f], v[f])
+                old_val = old_item.get(f, None)
+                new_val = item.get(f, None)
+                if old_val != new_val:
+                    raise AmqpSpecFileMergeConflict(key, f, old_val, new_val)
+            if kwargs.has_key("sub_merge"):
+                kwargs["sub_merge"](old_item, item)
         else:
-            result.append(v)
+            result.append(item)
     return result
 
 def constants_merger(key, old, new, allow_overwrite):
     return merge_dict_lists_by("name", old, new, allow_overwrite, ["value"])
 
 def methods_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, [])
+    return merge_dict_lists_by("name", old, new, allow_overwrite, ["synchronous"],
+        sub_merge=lambda old, new: arguments_merger("name", old["arguments"], new["arguments"], allow_overwrite))
 
 def properties_merger(classname, old, new, allow_overwrite):
+    return merge_dict_lists_by("name", old, new, allow_overwrite, ["type"])
+
+def arguments_merger(classname, old, new, allow_overwrite):
     return merge_dict_lists_by("name", old, new, allow_overwrite, ["type"])
 
 def class_merger(old, new, allow_overwrite):
