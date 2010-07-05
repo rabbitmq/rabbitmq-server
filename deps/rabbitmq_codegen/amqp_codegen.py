@@ -118,7 +118,7 @@ def properties_merger(classname, old, new, allow_overwrite):
     return merge_dict_lists_by("name", old, new, allow_overwrite, ["type"])
 
 def arguments_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, ["type", "default-value"])
+    return merge_dict_lists_by("name", old, new, allow_overwrite, ["type"])
 
 def class_merger(old, new, allow_overwrite):
     old["methods"] = methods_merger(old["name"],
