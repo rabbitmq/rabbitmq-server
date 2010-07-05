@@ -47,7 +47,7 @@
 	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
 -type(error() :: {'error', any()}).
 -type(ssl_socket() :: #ssl_socket{}).
--type(socket() :: rabbit:ip_port() | ssl_socket()).
+-type(socket() :: rabbit_networking:ip_port() | ssl_socket()).
 
 -spec(async_recv/3 :: (socket(), integer(), timeout()) -> {'ok', any()}).
 -spec(close/1 :: (socket()) -> 'ok' | error()).
@@ -55,9 +55,9 @@
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
 -spec(send/2 :: (socket(), binary() | iolist()) -> 'ok' | error()).
 -spec(peername/1 :: (socket()) ->
-        {'ok', {inet:ip_address(), rabbit:ip_port()}} | error()).
+        {'ok', {inet:ip_address(), rabbit_networking:ip_port()}} | error()).
 -spec(sockname/1 :: (socket()) ->
-        {'ok', {inet:ip_address(), rabbit:ip_port()}} | error()).
+        {'ok', {inet:ip_address(), rabbit_networking:ip_port()}} | error()).
 -spec(getstat/2 :: (socket(), [stat_option()]) ->
         {'ok', [{stat_option(), integer()}]} | error()).
 

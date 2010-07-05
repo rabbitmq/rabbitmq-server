@@ -78,22 +78,22 @@
 
 -spec(start_link/6 ::
       (channel_number(), pid(), pid(), rabbit_access_control:username(),
-       rabbit:vhost(), pid()) -> pid()).
+       rabbit_types:vhost(), pid()) -> pid()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
-               rabbit:maybe(rabbit:content())) -> 'ok').
+               rabbit_types:maybe(rabbit_types:content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), rabbit_framing:amqp_method()) -> 'ok').
--spec(deliver/4 ::(pid(), rabbit:ctag(), boolean(), rabbit_amqqueue:qmsg()) -> 'ok').
+-spec(deliver/4 ::(pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(flow_timeout/2 :: (pid(), ref()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
--spec(info_keys/0 :: () -> [rabbit:info_key()]).
--spec(info/1 :: (pid()) -> [rabbit:info()]).
--spec(info/2 :: (pid(), [rabbit:info_key()]) -> [rabbit:info()]).
--spec(info_all/0 :: () -> [[rabbit:info()]]).
--spec(info_all/1 :: ([rabbit:info_key()]) -> [[rabbit:info()]]).
+-spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
+-spec(info/1 :: (pid()) -> [rabbit_types:info()]).
+-spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
+-spec(info_all/0 :: () -> [[rabbit_types:info()]]).
+-spec(info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
 
 -endif.
 

@@ -1,0 +1,89 @@
+%%   The contents of this file are subject to the Mozilla Public License
+%%   Version 1.1 (the "License"); you may not use this file except in
+%%   compliance with the License. You may obtain a copy of the License at
+%%   http://www.mozilla.org/MPL/
+%%
+%%   Software distributed under the License is distributed on an "AS IS"
+%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%   License for the specific language governing rights and limitations
+%%   under the License.
+%%
+%%   The Original Code is RabbitMQ.
+%%
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
+%%
+%%   All Rights Reserved.
+%%
+%%   Contributor(s): ______________________________________.
+%%
+
+-module(rabbit_types).
+
+-include("rabbit.hrl").
+
+-ifdef(use_specs).
+
+-export_type([txn/0, maybe/1, info/0, info_key/0, message/0, basic_message/0,
+              delivery/0, content/0, decoded_content/0, undecoded_content/0,
+              unencoded_content/0, encoded_content/0, vhost/0, ctag/0]).
+
+-type(maybe(T) :: T | 'none').
+-type(vhost() :: binary()).
+-type(ctag() :: binary()).
+
+%% TODO: make this more precise by tying specific class_ids to
+%% specific properties
+-type(undecoded_content() ::
+      #content{class_id              :: rabbit_framing:amqp_class_id(),
+               properties            :: 'none',
+               properties_bin        :: binary(),
+               payload_fragments_rev :: [binary()]} |
+      #content{class_id              :: rabbit_framing:amqp_class_id(),
+               properties            :: rabbit_framing:amqp_property_record(),
+               properties_bin        :: 'none',
+               payload_fragments_rev :: [binary()]}).
+-type(unencoded_content() :: undecoded_content()).
+-type(decoded_content() ::
+      #content{class_id              :: rabbit_framing:amqp_class_id(),
+               properties            :: rabbit_framing:amqp_property_record(),
+               properties_bin        :: maybe(binary()),
+               payload_fragments_rev :: [binary()]}).
+-type(encoded_content() ::
+      #content{class_id              :: rabbit_framing:amqp_class_id(),
+               properties            :: maybe(rabbit_framing:amqp_property_record()),
+               properties_bin        :: binary(),
+               payload_fragments_rev :: [binary()]}).
+-type(content() :: undecoded_content() | decoded_content()).
+-type(basic_message() ::
+      #basic_message{exchange_name  :: rabbit_exchange:name(),
+                     routing_key    :: rabbit_router:routing_key(),
+                     content        :: content(),
+                     guid           :: rabbit_guid:guid(),
+                     is_persistent  :: boolean()}).
+-type(message() :: basic_message()).
+-type(delivery() ::
+      #delivery{mandatory :: boolean(),
+                immediate :: boolean(),
+                txn       :: maybe(txn()),
+                sender    :: pid(),
+                message   :: message()}).
+
+%% this is really an abstract type, but dialyzer does not support them
+-type(txn() :: rabbit_guid:guid()).
+
+-type(info_key() :: atom()).
+-type(info() :: {info_key(), any()}).
+
+-endif. % use_specs

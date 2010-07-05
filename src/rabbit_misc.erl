@@ -82,7 +82,7 @@
 -type(not_found() :: {'error', 'not_found'}).
 -type(resource_name() :: binary()).
 -type(r(Kind) ::
-      #resource{virtual_host :: rabbit:vhost(),
+      #resource{virtual_host :: rabbit_types:vhost(),
                 kind         :: Kind,
                 name         :: resource_name()}).
 -type(thunk(T) :: fun(() -> T)).
@@ -106,14 +106,14 @@
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (rabbit:vhost() | r(atom()), K, resource_name())
+-spec(r/3 :: (rabbit_types:vhost() | r(atom()), K, resource_name())
              -> r(K) when is_subtype(K, atom())).
--spec(r/2 :: (rabbit:vhost(), K)
-             -> #resource{virtual_host :: rabbit:vhost(),
+-spec(r/2 :: (rabbit_types:vhost(), K)
+             -> #resource{virtual_host :: rabbit_types:vhost(),
                                               kind         :: K,
                                               name         :: '_'}
                                         when is_subtype(K, atom())).
--spec(r_arg/4 :: (rabbit:vhost() | r(atom()), K,
+-spec(r_arg/4 :: (rabbit_types:vhost() | r(atom()), K,
                   rabbit_framing:amqp_table(), binary())
                  -> undefined | r(K)  when is_subtype(K, atom())).
 -spec(rs/1 :: (r(atom())) -> string()).
@@ -126,15 +126,15 @@
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (rabbit_access_control:username(), thunk(A)) -> A).
--spec(with_vhost/2 :: (rabbit:vhost(), thunk(A)) -> A).
+-spec(with_vhost/2 :: (rabbit_types:vhost(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 :: (rabbit_access_control:username(),
-                                rabbit:vhost(), thunk(A)) -> A).
+                                rabbit_types:vhost(), thunk(A)) -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
 -spec(makenode/1 :: ({string(), string()} | string()) -> node()).
 -spec(nodeparts/1 :: (node() | string()) -> {string(), string()}).
 -spec(cookie_hash/0 :: () -> string()).
--spec(tcp_name/3 :: (atom(), inet:ip_address(), rabbit:ip_port()) -> atom()).
+-spec(tcp_name/3 :: (atom(), inet:ip_address(), rabbit_networking:ip_port()) -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).

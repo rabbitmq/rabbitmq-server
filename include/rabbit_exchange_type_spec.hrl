@@ -31,7 +31,7 @@
 -ifdef(use_specs).
 
 -spec(description/0 :: () -> [{atom(), any()}]).
--spec(publish/2 :: (rabbit_exchange:exchange(), rabbit:delivery())
+-spec(publish/2 :: (rabbit_exchange:exchange(), rabbit_types:delivery())
                    -> {rabbit_router:routing_result(), [pid()]}).
 -spec(validate/1 :: (rabbit_exchange:exchange()) -> 'ok').
 -spec(create/1 :: (rabbit_exchange:exchange()) -> 'ok').

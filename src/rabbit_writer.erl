@@ -56,20 +56,20 @@
         -> pid()).
 -spec(send_command/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(send_command/3 ::
-        (pid(), rabbit_framing:amqp_method_record(), rabbit:content()) -> 'ok').
+        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content()) -> 'ok').
 -spec(send_command_and_signal_back/3 ::
         (pid(), rabbit_framing:amqp_method(), pid()) -> 'ok').
 -spec(send_command_and_signal_back/4 ::
-        (pid(), rabbit_framing:amqp_method(), rabbit:content(), pid()) -> 'ok').
+        (pid(), rabbit_framing:amqp_method(), rabbit_types:content(), pid()) -> 'ok').
 -spec(send_command_and_notify/5 ::
-        (pid(), pid(), pid(), rabbit_framing:amqp_method_record(), rabbit:content())
+        (pid(), pid(), pid(), rabbit_framing:amqp_method_record(), rabbit_types:content())
         -> 'ok').
 -spec(internal_send_command/3 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(), rabbit_framing:amqp_method_record())
         -> 'ok').
 -spec(internal_send_command/5 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(), rabbit_framing:amqp_method_record(),
-         rabbit:content(), non_neg_integer()) -> 'ok').
+         rabbit_types:content(), non_neg_integer()) -> 'ok').
 
 -endif.
 

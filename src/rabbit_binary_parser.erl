@@ -46,9 +46,9 @@
 -spec(parse_properties/2 ::
         ([rabbit_framing:amqp_property_type()], binary()) -> [any()]).
 -spec(ensure_content_decoded/1 ::
-        (rabbit:content()) -> rabbit:decoded_content()).
+        (rabbit_types:content()) -> rabbit_types:decoded_content()).
 -spec(clear_decoded_content/1 ::
-        (rabbit:content()) -> rabbit:undecoded_content()).
+        (rabbit_types:content()) -> rabbit_types:undecoded_content()).
 
 -endif.
 
