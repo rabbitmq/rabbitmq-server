@@ -63,63 +63,44 @@ def insert_base_types(d):
 class AmqpSpecFileMergeConflict(Exception): pass
 
 def default_spec_value_merger(key, old, new, allow_overwrite):
-    if old is None or old == new:
+    if old is None or old == new or allow_overwrite:
         return new
     else:
-        if allow_overwrite:
-            return old
-        else:
-            raise AmqpSpecFileMergeConflict(key, old, new)
+        raise AmqpSpecFileMergeConflict(key, old, new)
 
 def extension_info_merger(key, old, new, allow_overwrite):
     return old + [new]
 
 def domains_merger(key, old, new, allow_overwrite):
-    o = dict((k, v) for [k, v] in old)
-    n = dict((k, v) for [k, v] in new)
-    for [k, v] in new:
+    o = dict((k, v) for [k, v] in new)
+    for [k, v] in old:
         if o.has_key(k):
             if not allow_overwrite:
-                raise AmqpSpecFileMergeConflict(k, old, new)
-            if o[k] != n[k]:
-                raise AmqpSpecFileMergeConflict(k, o[k], n[k])
+                raise AmqpSpecFileMergeConflict(key, old, new)
         else:
             o[k] = v
 
     return [[k, v] for (k, v) in o.iteritems()]
 
-def merge_dict_lists_by(field, old, new, allow_overwrite, check_fields, **kwargs):
-    old_index = dict((item[field], item) for item in old)
-    result = list(old) # shallow copy
-    for item in new:
-        key = item[field]
-        if old_index.has_key(key):
+def merge_dict_lists_by(dict_key, old, new, allow_overwrite):
+    new_index = set(v[dict_key] for v in new)
+    result = list(new) # shallow copy
+    for v in old:
+        if v[dict_key] in new_index:
             if not allow_overwrite:
                 raise AmqpSpecFileMergeConflict(description, old, new)
-            old_item = old_index[key]
-            for f in check_fields:
-                old_val = old_item.get(f, None)
-                new_val = item.get(f, None)
-                if old_val != new_val:
-                    raise AmqpSpecFileMergeConflict(key, f, old_val, new_val)
-            if kwargs.has_key("sub_merge"):
-                kwargs["sub_merge"](old_item, item)
         else:
-            result.append(item)
+            result.append(v)
     return result
 
 def constants_merger(key, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, ["value"])
+    return merge_dict_lists_by("name", old, new, allow_overwrite)
 
 def methods_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, ["synchronous"],
-        sub_merge=lambda old, new: arguments_merger("name", old["arguments"], new["arguments"], allow_overwrite))
+    return merge_dict_lists_by("name", old, new, allow_overwrite)
 
 def properties_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, ["type"])
-
-def arguments_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, ["type"])
+    return merge_dict_lists_by("name", old, new, allow_overwrite)
 
 def class_merger(old, new, allow_overwrite):
     old["methods"] = methods_merger(old["name"],
@@ -132,11 +113,11 @@ def class_merger(old, new, allow_overwrite):
                                           allow_overwrite)
 
 def classes_merger(key, old, new, allow_overwrite):
-    old_dict = dict((v["name"], v) for v in old)
-    result = list(old) # shallow copy
-    for w in new:
-        if w["name"] in old_dict:
-            class_merger(old_dict[w["name"]], w, allow_overwrite)
+    new_dict = dict((v["name"], v) for v in new)
+    result = list(new) # shallow copy
+    for w in old:
+        if w["name"] in new_dict:
+            class_merger(new_dict[w["name"]], w, allow_overwrite)
         else:
             result.append(w)
     return result
