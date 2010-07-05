@@ -427,12 +427,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
           Exchange,
           rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message)),
     case RoutingRes of
-        routed ->
-            ok;
-        unroutable ->
-            ok = basic_return(Message, WriterPid, no_route);
-        not_delivered ->
-            ok = basic_return(Message, WriterPid, no_consumers)
+        routed        -> ok;
+        unroutable    -> ok = basic_return(Message, WriterPid, no_route);
+        not_delivered -> ok = basic_return(Message, WriterPid, no_consumers)
     end,
     {noreply, case TxnKey of
                   none -> State;

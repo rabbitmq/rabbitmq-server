@@ -798,8 +798,8 @@ map_exception(Channel, Reason, Protocol) ->
     ShouldClose = SuggestedClose or (Channel == 0),
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
-                              none -> {0, 0};
-                              _ -> Protocol:method_id(FailedMethod)
+                              none   -> {0, 0};
+                              _      -> Protocol:method_id(FailedMethod)
                           end,
     {CloseChannel, CloseMethod} =
         case ShouldClose of
