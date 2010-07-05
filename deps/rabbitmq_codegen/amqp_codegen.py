@@ -97,8 +97,10 @@ def merge_dict_lists_by(dict_key, old, new, allow_overwrite, check_fields):
             if not allow_overwrite:
                 raise AmqpSpecFileMergeConflict(description, old, new)
             for f in check_fields:
-                if old_index[key][f] != v[f]:
-                    raise AmqpSpecFileMergeConflict(v[dict_key], old_index[key][f], v[f])
+                old_val = old_index[key].get(f, None)
+                new_val = v.get(f, None)
+                if old_val != new_val:
+                    raise AmqpSpecFileMergeConflict(key, f, old_val, new_val)
         else:
             result.append(v)
     return result
@@ -107,7 +109,7 @@ def constants_merger(key, old, new, allow_overwrite):
     return merge_dict_lists_by("name", old, new, allow_overwrite, ["value"])
 
 def methods_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite, [])
+    return merge_dict_lists_by("name", old, new, allow_overwrite, ["synchronous"])
 
 def properties_merger(classname, old, new, allow_overwrite):
     return merge_dict_lists_by("name", old, new, allow_overwrite, ["type"])
