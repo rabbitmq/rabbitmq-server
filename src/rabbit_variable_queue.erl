@@ -1121,7 +1121,7 @@ reduce_memory_use(State = #vqstate {
                     ram_msg_count        = RamMsgCount,
                     target_ram_msg_count = TargetRamMsgCount }) ->
     Reduction = lists:min([RamMsgCount - TargetRamMsgCount, ?IO_BATCH_SIZE]),
-    {Reduction1, State1} = maybe_push_q1_to_betas(Reduction, State),
+    { Reduction1, State1} = maybe_push_q1_to_betas(Reduction,  State),
     {_Reduction2, State2} = maybe_push_q4_to_betas(Reduction1, State1),
     case TargetRamMsgCount of
         0 -> push_betas_to_deltas(State2);
@@ -1131,8 +1131,7 @@ reduce_memory_use(State = #vqstate {
 limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount }) ->
     Permitted = permitted_ram_index_count(State),
     if Permitted =/= infinity andalso RamIndexCount > Permitted ->
-            Reduction = lists:min([RamIndexCount - Permitted,
-                                   ?IO_BATCH_SIZE]),
+            Reduction = lists:min([RamIndexCount - Permitted, ?IO_BATCH_SIZE]),
             case Reduction < ?IO_BATCH_SIZE of
                 true  -> State;
                 false -> #vqstate { q2 = Q2, q3 = Q3,
