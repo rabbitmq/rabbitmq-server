@@ -350,10 +350,13 @@ blank_state(QueueName) ->
     StrName = queue_name_to_dir_name(QueueName),
     Dir = filename:join(queues_dir(), StrName),
     ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
-    #qistate { dir            = Dir,
-               segments       = segments_new(),
-               journal_handle = undefined,
-               dirty_count    = 0 }.
+    {ok, MaxJournal} =
+        application:get_env(rabbit, queue_index_max_journal_entries),
+    #qistate { dir                 = Dir,
+               segments            = segments_new(),
+               journal_handle      = undefined,
+               dirty_count         = 0,
+               max_journal_entries = MaxJournal }.
 
 detect_clean_shutdown(Dir) ->
     case file:delete(filename:join(Dir, ?CLEAN_FILENAME)) of
