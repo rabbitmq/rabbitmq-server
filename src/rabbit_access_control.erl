@@ -45,27 +45,24 @@
 
 -ifdef(use_specs).
 
--export_type([username/0]).
+-export_type([username/0, password/0]).
 
 -type(permission_atom() :: 'configure' | 'read' | 'write').
 -type(username() :: binary()).
 -type(password() :: binary()).
--type(user() ::
-      #user{username :: username(),
-            password :: password()}).
 -type(regexp() :: binary()).
 
--spec(check_login/2 :: (binary(), binary()) -> user()).
--spec(user_pass_login/2 :: (username(), password()) -> user()).
--spec(check_vhost_access/2 :: (user(), rabbit_types:vhost()) -> 'ok').
+-spec(check_login/2 :: (binary(), binary()) -> rabbit_types:user()).
+-spec(user_pass_login/2 :: (username(), password()) -> rabbit_types:user()).
+-spec(check_vhost_access/2 :: (rabbit_types:user(), rabbit_types:vhost()) -> 'ok').
 -spec(check_resource_access/3 ::
-        (username(), rabbit_misc:r(atom()), permission_atom()) -> 'ok').
+        (username(), rabbit_misc:types(atom()), permission_atom()) -> 'ok').
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
 -spec(list_users/0 :: () -> [username()]).
 -spec(lookup_user/1 :: (username()) ->
-                            {'ok', user()} | rabbit_misc:not_found()).
+                            {'ok', rabbit_types:user()} | rabbit_types:not_found()).
 -spec(add_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(delete_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(list_vhosts/0 :: () -> [rabbit_types:vhost()]).

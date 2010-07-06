@@ -44,7 +44,7 @@
 
 -type(properties_input() :: (rabbit_framing:amqp_property_record() | [{atom(), any()}])).
 -type(publish_result() :: ({ok, rabbit_router:routing_result(), [pid()]}
-                           | rabbit_misc:not_found())).
+                           | rabbit_types:not_found())).
 
 -spec(publish/1 :: (rabbit_types:delivery()) -> publish_result()).
 -spec(delivery/4 :: (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),

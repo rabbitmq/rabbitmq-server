@@ -40,14 +40,11 @@
 
 -ifdef(use_specs).
 
--export_type([socket/0]).
-
 -type(stat_option() ::
 	'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
 	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
 -type(error() :: {'error', any()}).
--type(ssl_socket() :: #ssl_socket{}).
--type(socket() :: rabbit_networking:ip_port() | ssl_socket()).
+-type(socket() :: rabbit_networking:ip_port() | rabbit_types:ssl_socket()).
 
 -spec(async_recv/3 :: (socket(), integer(), timeout()) -> {'ok', any()}).
 -spec(close/1 :: (socket()) -> 'ok' | error()).
