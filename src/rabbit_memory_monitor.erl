@@ -86,7 +86,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> 'ignore' | rabbit_types:error(any()) | {'ok', pid()}).
+-spec(start_link/0 :: () -> 'ignore' | rabbit_types:error(any()) | rabbit_types:ok(pid())).
 -spec(update/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), {atom(),atom(),[any()]}) -> 'ok').
 -spec(deregister/1 :: (pid()) -> 'ok').

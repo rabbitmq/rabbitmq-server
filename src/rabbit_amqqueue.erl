@@ -63,7 +63,7 @@
 
 -type(name() :: rabbit_types:r('queue')).
 
--type(qlen() :: {'ok', non_neg_integer()}).
+-type(qlen() :: rabbit_types:ok(non_neg_integer())).
 -type(qfun(A) :: fun ((rabbit_types:amqqueue()) -> A)).
 -type(qmsg() :: {name(), pid(), msg_id(), boolean(), rabbit_types:message()}).
 -type(msg_id() :: non_neg_integer()).
@@ -73,7 +73,7 @@
 -spec(start/0 :: () -> 'ok').
 -spec(declare/5 :: (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
                     rabbit_types:maybe(pid())) -> {'new' | 'existing', rabbit_types:amqqueue()}).
--spec(lookup/1 :: (name()) -> {'ok', rabbit_types:amqqueue()} | rabbit_types:error('not_found')).
+-spec(lookup/1 :: (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) | rabbit_types:error('not_found')).
 -spec(with/2 :: (name(), qfun(A)) -> A | rabbit_types:error('not_found')).
 -spec(with_or_die/2 :: (name(), qfun(A)) -> A).
 -spec(assert_equivalence/5 :: (rabbit_types:amqqueue(), boolean(), boolean(),

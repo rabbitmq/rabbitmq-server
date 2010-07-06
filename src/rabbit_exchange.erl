@@ -76,7 +76,7 @@
 -spec(assert_args_equivalence/2 ::
         (rabbit_types:exchange(), rabbit_framing:amqp_table()) -> 'ok').
 -spec(lookup/1 :: (name())
-                  -> {'ok', rabbit_types:exchange()} | rabbit_types:error('not_found')).
+                  -> rabbit_types:ok(rabbit_types:exchange()) | rabbit_types:error('not_found')).
 -spec(lookup_or_die/1 :: (name()) -> rabbit_types:exchange()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).

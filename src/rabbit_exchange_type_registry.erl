@@ -45,10 +45,10 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> 'ignore' | rabbit_types:error(term()) | {'ok', pid()}).
+-spec(start_link/0 :: () -> 'ignore' | rabbit_types:error(term()) | rabbit_types:ok(pid())).
 -spec(register/2 :: (binary(), atom()) -> 'ok').
 -spec(binary_to_type/1 :: (binary()) -> atom() | rabbit_types:error('not_found')).
--spec(lookup_module/1 :: (atom()) -> {'ok', atom()} | rabbit_types:error('not_found')).
+-spec(lookup_module/1 :: (atom()) -> rabbit_types:ok(atom()) | rabbit_types:error('not_found')).
 
 -endif.
 

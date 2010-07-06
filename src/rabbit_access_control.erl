@@ -62,7 +62,7 @@
 -spec(change_password/2 :: (username(), password()) -> 'ok').
 -spec(list_users/0 :: () -> [username()]).
 -spec(lookup_user/1 :: (username()) ->
-                            {'ok', rabbit_types:user()} | rabbit_types:error('not_found')).
+                            rabbit_types:ok(rabbit_types:user()) | rabbit_types:error('not_found')).
 -spec(add_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(delete_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(list_vhosts/0 :: () -> [rabbit_types:vhost()]).

@@ -93,10 +93,10 @@
 -spec(protocol_error/4 :: (rabbit_framing:amqp_exception(), string(), [any()],
                            rabbit_framing:amqp_method_name()) -> no_return()).
 -spec(not_found/1 :: (rabbit_types:r(atom())) -> no_return()).
--spec(get_config/1 :: (atom()) -> {'ok', any()} | rabbit_types:error('not_found')).
+-spec(get_config/1 :: (atom()) -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
--spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | rabbit_types:error('not_found')).
+-spec(dirty_read/1 :: ({atom(), any()}) -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
 -spec(r/3 :: (rabbit_types:vhost() | rabbit_types:r(atom()), K, resource_name())
              -> rabbit_types:r(K) when is_subtype(K, atom())).
 -spec(r/2 :: (rabbit_types:vhost(), K)
