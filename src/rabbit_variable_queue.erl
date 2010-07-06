@@ -1153,9 +1153,8 @@ limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount }) ->
             State
     end.
 
-limit_ram_index(_MapFoldFilterFun, Q, {Reduction, IndexState})
-  when Reduction == 0 ->
-    {Q, {Reduction, IndexState}};
+limit_ram_index(_MapFoldFilterFun, Q, {0, IndexState}) ->
+    {Q, {0, IndexState}};
 limit_ram_index(MapFoldFilterFun, Q, {Reduction, IndexState}) ->
     MapFoldFilterFun(
       fun erlang:'not'/1,
