@@ -1258,8 +1258,8 @@ maybe_push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
                            State = #vqstate {
                              ram_msg_count        = RamMsgCount,
                              target_ram_msg_count = TargetRamMsgCount })
-  when Quota =:= 0 orelse TargetRamMsgCount =:= infinity orelse
-       TargetRamMsgCount >= RamMsgCount ->
+  when Quota =:= 0 orelse
+       TargetRamMsgCount =:= infinity orelse TargetRamMsgCount >= RamMsgCount ->
     {Quota, State};
 maybe_push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
     case Generator(Q) of
