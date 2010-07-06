@@ -75,8 +75,8 @@
 -export_type([resource_name/0]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
--type(resource_name() :: binary()).
 -type(thunk(T) :: fun(() -> T)).
+-type(resource_name() :: binary()).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -97,13 +97,12 @@
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
--spec(r/3 :: (rabbit_types:vhost() | rabbit_types:r(atom()), K, resource_name())
-             -> rabbit_types:r(K) when is_subtype(K, atom())).
 -spec(r/2 :: (rabbit_types:vhost(), K)
-             -> #resource{virtual_host :: rabbit_types:vhost(),
-                                              kind         :: K,
-                                              name         :: '_'}
-                                        when is_subtype(K, atom())).
+             -> rabbit_types:r(rabbit_types:vhost(), K)
+                    when is_subtype(K, atom())).
+-spec(r/3 :: (rabbit_types:vhost() | rabbit_types:r(atom()), K, resource_name())
+             -> rabbit_types:r(rabbit_types:vhost(), K, resource_name())
+                    when is_subtype(K, atom())).
 -spec(r_arg/4 :: (rabbit_types:vhost() | rabbit_types:r(atom()), K,
                   rabbit_framing:amqp_table(), binary())
                  -> undefined | rabbit_types:r(K)  when is_subtype(K, atom())).
