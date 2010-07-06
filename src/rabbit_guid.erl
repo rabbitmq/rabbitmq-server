@@ -31,8 +31,6 @@
 
 -module(rabbit_guid).
 
--include("rabbit.hrl").
-
 -behaviour(gen_server).
 
 -export([start_link/0]).
