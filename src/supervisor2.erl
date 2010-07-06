@@ -614,6 +614,8 @@ shutdown(Pid, brutal_kill) ->
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
 		    {error, OtherReason}
 	    end;
+        normal_shutdown ->
+            ok;
 	{error, Reason} ->      
 	    {error, Reason}
     end;
@@ -635,6 +637,8 @@ shutdown(Pid, Time) ->
 			    {error, OtherReason}
 		    end
 	    end;
+        normal_shutdown ->
+            ok;
 	{error, Reason} ->      
 	    {error, Reason}
     end.
@@ -655,7 +659,12 @@ monitor_child(Pid) ->
 	{'EXIT', Pid, Reason} -> 
 	    receive 
 		{'DOWN', _, process, Pid, _} ->
-		    {error, Reason}
+                    case Reason of
+                        normal             -> normal_shutdown;
+                        shutdown           -> normal_shutdown;
+                        {shutdown, _Terms} -> normal_shutdown;
+                        _                  -> {error, Reason}
+                    end
 	    end
     after 0 -> 
 	    %% If a naughty child did unlink and the child dies before
