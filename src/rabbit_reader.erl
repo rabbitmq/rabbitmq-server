@@ -227,7 +227,7 @@ socket_op(Sock, Fun) ->
                                             [self(), Reason]),
                            rabbit_log:info("closing TCP connection ~p~n",
                                            [self()]),
-                           exit(normal)
+                           exit(shutdown)
     end.
 
 start_connection(Parent, Deb, Sock, SockTransform) ->
@@ -275,7 +275,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         rabbit_reader_queue_collector:shutdown(Collector),
         rabbit_misc:unlink_and_capture_exit(Collector)
     end,
-    done.
+    exit(shutdown).
 
 mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
     %%?LOGDEBUG("Reader mainloop: ~p bytes available, need ~p~n", [HaveBytes, WaitUntilNBytes]),
@@ -379,7 +379,7 @@ close_channel(Channel, State) ->
 handle_channel_exit(Channel, Reason, State) ->
     handle_exception(State, Channel, Reason).
 
-handle_dependent_exit(Pid, normal, State) ->
+handle_dependent_exit(Pid, shutdown, State) ->
     erase({chpid, Pid}),
     maybe_close(State);
 handle_dependent_exit(Pid, Reason, State) ->
@@ -399,7 +399,7 @@ channel_cleanup(Pid) ->
 all_channels() -> [Pid || {{chpid, Pid},_} <- get()].
 
 terminate_channels() ->
-    NChannels = length([exit(Pid, normal) || Pid <- all_channels()]),
+    NChannels = length([exit(Pid, shutdown) || Pid <- all_channels()]),
     if NChannels > 0 ->
             Timeout = 1000 * ?CHANNEL_TERMINATION_TIMEOUT * NChannels,
             TimerRef = erlang:send_after(Timeout, self(), cancel_wait),
@@ -423,7 +423,7 @@ wait_for_channel_termination(N, TimerRef) ->
                     exit({abnormal_dependent_exit, Pid, Reason});
                 Channel ->
                     case Reason of
-                        normal -> ok;
+                        shutdown -> ok;
                         _ ->
                             rabbit_log:error(
                               "connection ~p, channel ~p - "

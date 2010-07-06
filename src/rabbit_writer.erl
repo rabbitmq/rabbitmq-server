@@ -121,7 +121,7 @@ handle_message({inet_reply, _, ok}, State) ->
 handle_message({inet_reply, _, Status}, _State) ->
     exit({writer, send_failed, Status});
 handle_message(shutdown, _State) ->
-    exit(normal);
+    exit(shutdown);
 handle_message(Message, _State) ->
     exit({writer, message_not_understood, Message}).
 
