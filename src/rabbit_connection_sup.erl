@@ -29,21 +29,24 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(tcp_client_sup).
+-module(rabbit_connection_sup).
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
--export([start_link/1, start_link/2]).
+-export([start_link/0]).
 
 -export([init/1]).
 
-start_link(Callback) ->
-    supervisor2:start_link(?MODULE, Callback).
+-include("rabbit.hrl").
 
-start_link(SupName, Callback) ->
-    supervisor2:start_link(SupName, ?MODULE, Callback).
+start_link() ->
+    supervisor:start_link(?MODULE, []).
 
-init({M,F,A}) ->
-    {ok, {{simple_one_for_one_terminate, 10, 10},
-          [{tcp_client, {M,F,A},
-            temporary, infinity, supervisor, [M]}]}}.
+init([]) ->
+    {ok, {{one_for_all, 0, 1},
+          [{reader, {rabbit_reader, start_link, []},
+            permanent, ?MAX_WAIT, worker, [rabbit_reader]},
+           {collector, {rabbit_reader_queue_collector, start_link, []},
+            permanent, ?MAX_WAIT, worker, [rabbit_reader_queue_collector]}
+          ]}}.
+

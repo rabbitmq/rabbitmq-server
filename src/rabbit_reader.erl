@@ -37,7 +37,7 @@
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
--export([init/1, mainloop/3]).
+-export([init/1, mainloop/2]).
 
 -export([server_properties/0]).
 
@@ -57,7 +57,7 @@
 
 %---------------------------------------------------------------------------
 
--record(v1, {sock, connection, callback, recv_ref, connection_state,
+-record(v1, {parent, sock, connection, callback, recv_ref, connection_state,
              queue_collector}).
 
 -define(INFO_KEYS,
@@ -161,8 +161,8 @@ init(Parent) ->
             start_connection(Parent, Deb, Sock, SockTransform)
     end.
 
-system_continue(Parent, Deb, State) ->
-    ?MODULE:mainloop(Parent, Deb, State).
+system_continue(_Parent, Deb, State) ->
+    ?MODULE:mainloop(Deb, State).
 
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).
@@ -240,21 +240,24 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
-    {ok, Collector} = rabbit_reader_queue_collector:start_link(),
+    [Collector] =
+        [Pid || {collector, Pid, worker, [rabbit_reader_queue_collector]}
+                    <- supervisor:which_children(Parent)],
     try
-        mainloop(Parent, Deb, switch_callback(
-                                #v1{sock = ClientSock,
-                                    connection = #connection{
-                                      user = none,
-                                      timeout_sec = ?HANDSHAKE_TIMEOUT,
-                                      frame_max = ?FRAME_MIN_SIZE,
-                                      vhost = none,
-                                      client_properties = none},
-                                    callback = uninitialized_callback,
-                                    recv_ref = none,
-                                    connection_state = pre_init,
-                                    queue_collector = Collector},
-                                handshake, 8))
+        mainloop(Deb, switch_callback(
+                        #v1{parent           = Parent,
+                            sock             = ClientSock,
+                            connection       = #connection{
+                              user              = none,
+                              timeout_sec       = ?HANDSHAKE_TIMEOUT,
+                              frame_max         = ?FRAME_MIN_SIZE,
+                              vhost             = none,
+                              client_properties = none},
+                            callback         = uninitialized_callback,
+                            recv_ref         = none,
+                            connection_state = pre_init,
+                            queue_collector  = Collector},
+                        handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
                        fun rabbit_log:warning/2;
@@ -271,20 +274,18 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %% output to be sent, which results in unnecessary delays.
         %%
         %% gen_tcp:close(ClientSock),
-        teardown_profiling(ProfilingValue),
-        rabbit_reader_queue_collector:shutdown(Collector),
-        rabbit_misc:unlink_and_capture_exit(Collector)
+        teardown_profiling(ProfilingValue)
     end,
     exit(shutdown).
 
-mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
+mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
     %%?LOGDEBUG("Reader mainloop: ~p bytes available, need ~p~n", [HaveBytes, WaitUntilNBytes]),
     receive
         {inet_async, Sock, Ref, {ok, Data}} ->
             {State1, Callback1, Length1} =
                 handle_input(State#v1.callback, Data,
                              State#v1{recv_ref = none}),
-            mainloop(Parent, Deb,
+            mainloop(Deb,
                      switch_callback(State1, Callback1, Length1));
         {inet_async, Sock, Ref, {error, closed}} ->
             if State#v1.connection_state =:= closed ->
@@ -309,16 +310,16 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
         {channel_exit, _Chan, E = {writer, send_failed, _Error}} ->
             throw(E);
         {channel_exit, Channel, Reason} ->
-            mainloop(Parent, Deb, handle_channel_exit(Channel, Reason, State));
+            mainloop(Deb, handle_channel_exit(Channel, Reason, State));
         {'EXIT', Pid, Reason} ->
-            mainloop(Parent, Deb, handle_dependent_exit(Pid, Reason, State));
+            mainloop(Deb, handle_dependent_exit(Pid, Reason, State));
         terminate_connection ->
             State;
         handshake_timeout ->
             if State#v1.connection_state =:= running orelse
                State#v1.connection_state =:= closing orelse
                State#v1.connection_state =:= closed ->
-                    mainloop(Parent, Deb, State);
+                    mainloop(Deb, State);
                true ->
                     throw({handshake_timeout, State#v1.callback})
             end;
@@ -329,16 +330,16 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             gen_server:reply(From, ok),
             case ForceTermination of
                 force  -> ok;
-                normal -> mainloop(Parent, Deb, NewState)
+                normal -> mainloop(Deb, NewState)
             end;
         {'$gen_call', From, info} ->
             gen_server:reply(From, infos(?INFO_KEYS, State)),
-            mainloop(Parent, Deb, State);
+            mainloop(Deb, State);
         {'$gen_call', From, {info, Items}} ->
             gen_server:reply(From, try {ok, infos(Items, State)}
                                    catch Error -> {error, Error}
                                    end),
-            mainloop(Parent, Deb, State);
+            mainloop(Deb, State);
         {system, From, Request} ->
             sys:handle_system_msg(Request, From,
                                   Parent, ?MODULE, Deb, State);
@@ -626,7 +627,8 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                             client_properties = ClientProperties}};
 handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
-               State = #v1{connection_state = tuning,
+               State = #v1{parent = Parent,
+                           connection_state = tuning,
                            connection = Connection,
                            sock = Sock}) ->
     if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
@@ -638,7 +640,7 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
               not_allowed, "frame_max=~w > ~w max size",
               [FrameMax, ?FRAME_MAX]);
        true ->
-            rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
+            rabbit_heartbeat:start_heartbeat(Parent, Sock, ClientHeartbeat),
             State#v1{connection_state = opening,
                      connection = Connection#connection{
                                     timeout_sec = ClientHeartbeat,

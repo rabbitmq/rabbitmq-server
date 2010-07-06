@@ -91,7 +91,7 @@ handle_call(delete_all, _From,
     {reply, ok, State};
 
 handle_call(shutdown, _From, State) ->
-    {stop, normal, ok, State}.
+    {stop, shutdown, ok, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.

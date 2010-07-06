@@ -31,33 +31,53 @@
 
 -module(rabbit_heartbeat).
 
--export([start_heartbeat/2]).
+-include("rabbit.hrl").
 
-start_heartbeat(_Sock, 0) ->
+-export([start_heartbeat/3,
+         start_heartbeat_sender/2,
+         start_heartbeat_receiver/3]).
+
+start_heartbeat(_Sup, _Sock, 0) ->
     none;
-start_heartbeat(Sock, TimeoutSec) ->
+start_heartbeat(Sup, Sock, TimeoutSec) ->
     Parent = self(),
-    %% we check for incoming data every interval, and time out after
-    %% two checks with no change. As a result we will time out between
-    %% 2 and 3 intervals after the last data has been received.
-    spawn_link(fun () -> heartbeater(Sock, TimeoutSec * 1000,
-                                     recv_oct, 1,
-                                     fun () ->
-                                             Parent ! timeout,
-                                             stop
-                                     end,
-                                     erlang:monitor(process, Parent)) end),
+    {ok, _Sender} =
+        supervisor:start_child(
+          Sup, {heartbeat_sender,
+                {?MODULE, start_heartbeat_sender, [Sock, TimeoutSec]},
+                permanent, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+    {ok, _Receiver} =
+        supervisor:start_child(
+          Sup, {heartbeat_receiver,
+                {?MODULE, start_heartbeat_receiver, [Parent, Sock, TimeoutSec]},
+                permanent, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+    ok.
+
+start_heartbeat_sender(Sock, TimeoutSec) ->
     %% the 'div 2' is there so that we don't end up waiting for nearly
     %% 2 * TimeoutSec before sending a heartbeat in the boundary case
     %% where the last message was sent just after a heartbeat.
-    spawn_link(fun () -> heartbeater(Sock, TimeoutSec * 1000 div 2,
-                                     send_oct, 0,
-                                     fun () ->
-                                             catch rabbit_net:send(Sock, rabbit_binary_generator:build_heartbeat_frame()),
-                                             continue
-                                     end,
-                                     erlang:monitor(process, Parent)) end),
-    ok.
+    {ok, proc_lib:spawn_link(
+           fun () -> heartbeater(Sock, TimeoutSec * 1000 div 2,
+                                 send_oct, 0,
+                                 fun () ->
+                                         catch rabbit_net:send(Sock, rabbit_binary_generator:build_heartbeat_frame()),
+                                         continue
+                                 end)
+           end)}.
+
+start_heartbeat_receiver(Parent, Sock, TimeoutSec) ->
+    %% we check for incoming data every interval, and time out after
+    %% two checks with no change. As a result we will time out between
+    %% 2 and 3 intervals after the last data has been received.
+    {ok, proc_lib:spawn_link(
+           fun () -> heartbeater(Sock, TimeoutSec * 1000,
+                                 recv_oct, 1,
+                                 fun () ->
+                                         Parent ! timeout,
+                                         stop
+                                 end)
+           end)}.
 
 %% Y-combinator, posted by Vladimir Sekissov to the Erlang mailing list
 %% http://www.erlang.org/ml-archive/erlang-questions/200301/msg00053.html
@@ -65,12 +85,11 @@ y(X) ->
     F = fun (P) -> X(fun (A) -> (P(P))(A) end) end,
     F(F).
 
-heartbeater(Sock, TimeoutMillisec, StatName, Threshold, Handler, MonitorRef) ->
+heartbeater(Sock, TimeoutMillisec, StatName, Threshold, Handler) ->
     Heartbeat =
         fun (F) ->
                 fun ({StatVal, SameCount}) ->
                         receive
-                            {'DOWN', MonitorRef, process, _Object, _Info} -> ok;
                             Other -> exit({unexpected_message, Other})
                         after TimeoutMillisec ->
                                 case rabbit_net:getstat(Sock, [StatName]) of
