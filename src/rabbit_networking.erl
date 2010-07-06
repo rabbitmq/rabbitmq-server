@@ -201,12 +201,10 @@ on_node_down(Node) ->
 
 start_client(Sock, SockTransform) ->
     {ok, Child} = supervisor:start_child(rabbit_tcp_client_sup, []),
-    hd([begin
-            ok = rabbit_net:controlling_process(Sock, Reader),
-            Reader ! {go, Sock, SockTransform},
-            Reader
-        end || {reader, Reader, worker, [rabbit_reader]}
-                   <- supervisor:which_children(Child)]).
+    Reader = rabbit_connection_sup:reader(Child),
+    ok = rabbit_net:controlling_process(Sock, Reader),
+    Reader ! {go, Sock, SockTransform},
+    Reader.
 
 start_client(Sock) ->
     start_client(Sock, fun (S) -> {ok, S} end).
@@ -229,10 +227,9 @@ start_ssl_client(SslOpts, Sock) ->
       end).
 
 connections() ->
-    [Pid || {_, ConnSup, supervisor, _}
-                <- supervisor:which_children(rabbit_tcp_client_sup),
-            {reader, Pid, worker, [rabbit_reader]}
-                <- supervisor:which_children(ConnSup)].
+    [rabbit_connection_sup:reader(ConnSup) ||
+        {_, ConnSup, supervisor, _}
+            <- supervisor:which_children(rabbit_tcp_client_sup)].
 
 connection_info_keys() -> rabbit_reader:info_keys().
 

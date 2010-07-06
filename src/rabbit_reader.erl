@@ -767,15 +767,18 @@ i(Item, #v1{}) ->
 %%--------------------------------------------------------------------------
 
 send_to_new_channel(Channel, AnalyzedFrame,
-                    State = #v1{queue_collector = Collector}) ->
+                    State = #v1{queue_collector = Collector, parent = Parent}) ->
     #v1{sock = Sock, connection = #connection{
                        frame_max = FrameMax,
                        user = #user{username = Username},
                        vhost = VHost}} = State,
-    WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
-    ChPid = rabbit_framing_channel:start_link(
-              fun rabbit_channel:start_link/6,
-              [Channel, self(), WriterPid, Username, VHost, Collector]),
+    ChanSupSup = rabbit_connection_sup:channel_sup_sup(Parent),
+    {ok, ChanSup} = rabbit_channel_sup_sup:start_channel(
+                      ChanSupSup,
+                      [Sock, Channel, FrameMax, self(),
+                       Username, VHost, Collector]),
+    ChPid = rabbit_channel_sup:framing_channel(ChanSup),
+    link(ChPid),
     put({channel, Channel}, {chpid, ChPid}),
     put({chpid, ChPid}, {channel, Channel}),
     ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame).

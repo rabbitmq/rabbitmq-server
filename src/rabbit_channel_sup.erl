@@ -29,36 +29,38 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_connection_sup).
+-module(rabbit_channel_sup).
 
 -behaviour(supervisor2).
 
--export([start_link/0, stop/1, reader/1, channel_sup_sup/1]).
+-export([start_link/7, writer/1, framing_channel/1, channel/1]).
 
 -export([init/1]).
 
 -include("rabbit.hrl").
 
-start_link() ->
-    supervisor2:start_link(?MODULE, []).
+start_link(Sock, Channel, FrameMax, ReaderPid, Username, VHost, Collector) ->
+    supervisor2:start_link(?MODULE, [Sock, Channel, FrameMax, ReaderPid,
+                                     Username, VHost, Collector]).
 
-stop(Pid) ->
-    supervisor2:stop(Pid).
-
-init([]) ->
+init([Sock, Channel, FrameMax, ReaderPid, Username, VHost, Collector]) ->
     {ok, {{one_for_all, 0, 1},
-          [{reader, {rabbit_reader, start_link, []},
-            transient, ?MAX_WAIT, worker, [rabbit_reader]},
-           {collector, {rabbit_reader_queue_collector, start_link, []},
-            transient, ?MAX_WAIT, worker, [rabbit_reader_queue_collector]},
-           {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-            transient, infinity, supervisor, [rabbit_channel_sup_sup]}
+          [{channel, {rabbit_channel, start_link,
+                      [Channel, ReaderPid, Username, VHost, Collector]},
+            permanent, ?MAX_WAIT, worker, [rabbit_channel]},
+           {writer, {rabbit_writer, start_link, [Sock, Channel, FrameMax]},
+            permanent, ?MAX_WAIT, worker, [rabbit_writer]},
+           {framing_channel, {rabbit_framing_channel, start_link, []},
+            permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]}
           ]}}.
 
-reader(Pid) ->
-    hd(supervisor2:find_child(Pid, reader, worker, [rabbit_reader])).
+writer(Pid) ->
+    hd(supervisor2:find_child(Pid, writer, worker, [rabbit_writer])).
 
-channel_sup_sup(Pid) ->
-    hd(supervisor2:find_child(Pid, channel_sup_sup, supervisor,
-                              [rabbit_channel_sup_sup])).
+channel(Pid) ->
+    hd(supervisor2:find_child(Pid, channel, worker, [rabbit_channel])).
+
+framing_channel(Pid) ->
+    hd(supervisor2:find_child(Pid, framing_channel, worker,
+                              [rabbit_framing_channel])).
 

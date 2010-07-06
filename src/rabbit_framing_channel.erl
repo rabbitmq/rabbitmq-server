@@ -32,21 +32,17 @@
 -module(rabbit_framing_channel).
 -include("rabbit.hrl").
 
--export([start_link/2, process/2, shutdown/1]).
+-export([start_link/0, process/2, shutdown/1]).
 
 %% internal
 -export([mainloop/1]).
 
 %%--------------------------------------------------------------------
 
-start_link(StartFun, StartArgs) ->
-    spawn_link(
-      fun () ->
-              %% we trap exits so that a normal termination of the
-              %% channel or reader process terminates us too.
-              process_flag(trap_exit, true),
-              mainloop(apply(StartFun, StartArgs))
-      end).
+start_link() ->
+    Parent = self(),
+    {ok, proc_lib:spawn_link(
+           fun () -> mainloop(rabbit_channel_sup:channel(Parent)) end)}.
 
 process(Pid, Frame) ->
     Pid ! {frame, Frame},
@@ -60,12 +56,6 @@ shutdown(Pid) ->
 
 read_frame(ChannelPid) ->
     receive
-        %% converting the exit signal into one of our own ensures that
-        %% the reader sees the right pid (i.e. ours) when a channel
-        %% exits. Similarly in the other direction, though it is not
-        %% really relevant there since the channel is not specifically
-        %% watching out for reader exit signals.
-        {'EXIT', _Pid, Reason} -> exit(Reason);
         {frame, Frame}         -> Frame;
         terminate              -> rabbit_channel:shutdown(ChannelPid),
                                   read_frame(ChannelPid);

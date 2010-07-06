@@ -35,7 +35,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/6, do/2, do/3, shutdown/1]).
+-export([start_link/5, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 
@@ -44,7 +44,7 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2, handle_pre_hibernate/1]).
 
--record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
+-record(ch, {state, channel, parent_pid, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
@@ -73,8 +73,8 @@
 
 -type(ref() :: any()).
 
--spec(start_link/6 ::
-      (channel_number(), pid(), pid(), username(), vhost(), pid()) -> pid()).
+-spec(start_link/5 ::
+      (channel_number(), pid(), username(), vhost(), pid()) -> pid()).
 -spec(do/2 :: (pid(), amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), amqp_method_record(), maybe(content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
@@ -94,11 +94,18 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid) ->
-    {ok, Pid} = gen_server2:start_link(
-                  ?MODULE, [Channel, ReaderPid, WriterPid,
-                            Username, VHost, CollectorPid], []),
-    Pid.
+start_link(Channel, ReaderPid, Username, VHost, CollectorPid) ->
+    Parent = self(),
+    {ok, proc_lib:spawn_link(
+           fun () ->
+                   WriterPid = rabbit_channel_sup:writer(Parent),
+                   State = init([Channel, Parent, ReaderPid, WriterPid,
+                                 Username, VHost, CollectorPid]),
+                   gen_server2:enter_loop(
+                     ?MODULE, [], State, self(), hibernate,
+                     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
+                      ?DESIRED_HIBERNATE})
+           end)}.
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -146,30 +153,30 @@ info_all(Items) ->
 
 %%---------------------------------------------------------------------------
 
-init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
+init([Channel, ParentPid, ReaderPid, WriterPid, Username, VHost,
+      CollectorPid]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
     ok = pg_local:join(rabbit_channels, self()),
-    {ok, #ch{state                   = starting,
-             channel                 = Channel,
-             reader_pid              = ReaderPid,
-             writer_pid              = WriterPid,
-             limiter_pid             = undefined,
-             transaction_id          = none,
-             tx_participants         = sets:new(),
-             next_tag                = 1,
-             uncommitted_ack_q       = queue:new(),
-             unacked_message_q       = queue:new(),
-             username                = Username,
-             virtual_host            = VHost,
-             most_recently_declared_queue = <<>>,
-             consumer_mapping        = dict:new(),
-             blocking                = dict:new(),
-             queue_collector_pid     = CollectorPid,
-             flow                    = #flow{server = true, client = true,
-                                             pending = none}},
-     hibernate,
-     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+    #ch{state                   = starting,
+        channel                 = Channel,
+        parent_pid              = ParentPid,
+        reader_pid              = ReaderPid,
+        writer_pid              = WriterPid,
+        limiter_pid             = undefined,
+        transaction_id          = none,
+        tx_participants         = sets:new(),
+        next_tag                = 1,
+        uncommitted_ack_q       = queue:new(),
+        unacked_message_q       = queue:new(),
+        username                = Username,
+        virtual_host            = VHost,
+        most_recently_declared_queue = <<>>,
+        consumer_mapping        = dict:new(),
+        blocking                = dict:new(),
+        queue_collector_pid     = CollectorPid,
+        flow                    = #flow{server = true, client = true,
+                                        pending = none}}.
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
@@ -208,7 +215,8 @@ handle_cast({method, Method, Content}, State) ->
 handle_cast({flushed, QPid}, State) ->
     {noreply, queue_blocked(QPid, State)};
 
-handle_cast(terminate, State) ->
+handle_cast(terminate, State = #ch{parent_pid = ParentPid}) ->
+    supervisor2:stop(ParentPid),
     {stop, shutdown, State};
 
 handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
@@ -1021,8 +1029,13 @@ fold_per_queue(F, Acc0, UAQ) ->
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
 
-start_limiter(State = #ch{unacked_message_q = UAMQ}) ->
-    LPid = rabbit_limiter:start_link(self(), queue:len(UAMQ)),
+start_limiter(State = #ch{unacked_message_q = UAMQ, parent_pid = ParentPid}) ->
+    Me = self(),
+    {ok, LPid} =
+        supervisor2:start_child(
+          ParentPid,
+          {limiter, {rabbit_limiter, start_link, [Me, queue:len(UAMQ)]},
+           transient, ?MAX_WAIT, worker, [rabbit_limiter]}),
     ok = limit_queues(LPid, State),
     LPid.
 

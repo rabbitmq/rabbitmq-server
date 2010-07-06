@@ -164,7 +164,7 @@
 	 cast/2, pcast/3, reply/2,
 	 abcast/2, abcast/3,
 	 multi_call/2, multi_call/3, multi_call/4,
-	 enter_loop/3, enter_loop/4, enter_loop/5, wake_hib/7]).
+	 enter_loop/3, enter_loop/4, enter_loop/5, enter_loop/6, wake_hib/7]).
 
 -export([behaviour_info/1]).
 

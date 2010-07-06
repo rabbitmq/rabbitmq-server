@@ -48,8 +48,10 @@
 
 -ifdef(use_specs).
 
--spec(start/3 :: (socket(), channel_number(), non_neg_integer()) -> pid()).
--spec(start_link/3 :: (socket(), channel_number(), non_neg_integer()) -> pid()).
+-spec(start/3 :: (socket(), channel_number(), non_neg_integer()) ->
+                      {'ok', pid()}).
+-spec(start_link/3 :: (socket(), channel_number(), non_neg_integer()) ->
+                           {'ok', pid()}).
 -spec(send_command/2 :: (pid(), amqp_method_record()) -> 'ok').
 -spec(send_command/3 :: (pid(), amqp_method_record(), content()) -> 'ok').
 -spec(send_command_and_signal_back/3 :: (pid(), amqp_method(), pid()) -> 'ok').
@@ -68,14 +70,16 @@
 %%----------------------------------------------------------------------------
 
 start(Sock, Channel, FrameMax) ->
-    spawn(?MODULE, mainloop, [#wstate{sock = Sock,
-                                      channel = Channel,
-                                      frame_max = FrameMax}]).
+    {ok,
+     proc_lib:spawn(?MODULE, mainloop, [#wstate{sock = Sock,
+                                                channel = Channel,
+                                                frame_max = FrameMax}])}.
 
 start_link(Sock, Channel, FrameMax) ->
-    spawn_link(?MODULE, mainloop, [#wstate{sock = Sock,
-                                           channel = Channel,
-                                           frame_max = FrameMax}]).
+    {ok,
+     proc_lib:spawn_link(?MODULE, mainloop, [#wstate{sock = Sock,
+                                                     channel = Channel,
+                                                     frame_max = FrameMax}])}.
 
 mainloop(State) ->
     receive

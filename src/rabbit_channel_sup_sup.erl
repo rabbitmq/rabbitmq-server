@@ -29,36 +29,21 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_connection_sup).
+-module(rabbit_channel_sup_sup).
 
 -behaviour(supervisor2).
 
--export([start_link/0, stop/1, reader/1, channel_sup_sup/1]).
+-export([start_link/0, start_channel/2]).
 
 -export([init/1]).
-
--include("rabbit.hrl").
 
 start_link() ->
     supervisor2:start_link(?MODULE, []).
 
-stop(Pid) ->
-    supervisor2:stop(Pid).
-
 init([]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{reader, {rabbit_reader, start_link, []},
-            transient, ?MAX_WAIT, worker, [rabbit_reader]},
-           {collector, {rabbit_reader_queue_collector, start_link, []},
-            transient, ?MAX_WAIT, worker, [rabbit_reader_queue_collector]},
-           {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-            transient, infinity, supervisor, [rabbit_channel_sup_sup]}
-          ]}}.
+    {ok, {{simple_one_for_one_terminate, 0, 1},
+          [{channel_sup, {rabbit_channel_sup, start_link, []},
+            transient, infinity, supervisor, [rabbit_channel_sup]}]}}.
 
-reader(Pid) ->
-    hd(supervisor2:find_child(Pid, reader, worker, [rabbit_reader])).
-
-channel_sup_sup(Pid) ->
-    hd(supervisor2:find_child(Pid, channel_sup_sup, supervisor,
-                              [rabbit_channel_sup_sup])).
-
+start_channel(Pid, Args) ->
+    supervisor2:start_child(Pid, Args).
