@@ -32,7 +32,8 @@
 -module(rabbit_dialyzer).
 -include("rabbit.hrl").
 
--export([create_basic_plt/1, add_to_plt/2, dialyze_files/2, halt_with_code/1]).
+-export([create_basic_plt/1, add_to_plt/2, dialyze_files/2,
+         halt_with_code/1]).
 
 %%----------------------------------------------------------------------------
 

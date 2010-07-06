@@ -46,7 +46,8 @@
 -type(routing_key() :: binary()).
 -type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
 
--spec(deliver/2 :: ([pid()], rabbit_types:delivery()) -> {routing_result(), [pid()]}).
+-spec(deliver/2 ::
+        ([pid()], rabbit_types:delivery()) -> {routing_result(), [pid()]}).
 
 -endif.
 

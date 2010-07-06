@@ -87,53 +87,67 @@
                        -> no_return()).
 -spec(amqp_error/4 ::
         (rabbit_framing:amqp_exception(), string(), [any()],
-         rabbit_framing:amqp_method_name()) -> rabbit_types:amqp_error()).
+         rabbit_framing:amqp_method_name())
+        -> rabbit_types:amqp_error()).
 -spec(protocol_error/3 :: (rabbit_framing:amqp_exception(), string(), [any()])
                           -> no_return()).
--spec(protocol_error/4 :: (rabbit_framing:amqp_exception(), string(), [any()],
-                           rabbit_framing:amqp_method_name()) -> no_return()).
+-spec(protocol_error/4 ::
+        (rabbit_framing:amqp_exception(), string(), [any()],
+         rabbit_framing:amqp_method_name())
+        -> no_return()).
 -spec(not_found/1 :: (rabbit_types:r(atom())) -> no_return()).
--spec(get_config/1 :: (atom()) -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
+-spec(get_config/1 ::
+        (atom()) -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
--spec(dirty_read/1 :: ({atom(), any()}) -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
+-spec(dirty_read/1 ::
+        ({atom(), any()})
+        -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
 -spec(r/2 :: (rabbit_types:vhost(), K)
-             -> rabbit_types:r2(rabbit_types:vhost(), K)
+             -> rabbit_types:r2(rabbit_types:vhost(), K, '_')
                     when is_subtype(K, atom())).
--spec(r/3 :: (rabbit_types:vhost() | rabbit_types:r(atom()), K, resource_name())
-             -> rabbit_types:r3(rabbit_types:vhost(), K, resource_name())
-                    when is_subtype(K, atom())).
--spec(r_arg/4 :: (rabbit_types:vhost() | rabbit_types:r(atom()), K,
-                  rabbit_framing:amqp_table(), binary())
-                 -> undefined | rabbit_types:r(K)  when is_subtype(K, atom())).
+-spec(r/3 ::
+        (rabbit_types:vhost() | rabbit_types:r(atom()), K, resource_name())
+        -> rabbit_types:r3(rabbit_types:vhost(), K, resource_name())
+               when is_subtype(K, atom())).
+-spec(r_arg/4 ::
+        (rabbit_types:vhost() | rabbit_types:r(atom()), K,
+         rabbit_framing:amqp_table(), binary())
+        -> undefined | rabbit_types:r(K)
+               when is_subtype(K, atom())).
 -spec(rs/1 :: (rabbit_types:r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
 -spec(enable_cover/1 :: (file:filename()) -> ok_or_error()).
 -spec(report_cover/1 :: (file:filename()) -> 'ok').
--spec(throw_on_error/2 :: (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
+-spec(throw_on_error/2 ::
+        (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (rabbit_access_control:username(), thunk(A)) -> A).
 -spec(with_vhost/2 :: (rabbit_types:vhost(), thunk(A)) -> A).
--spec(with_user_and_vhost/3 :: (rabbit_access_control:username(),
-                                rabbit_types:vhost(), thunk(A)) -> A).
+-spec(with_user_and_vhost/3 ::
+        (rabbit_access_control:username(), rabbit_types:vhost(), thunk(A))
+        -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
 -spec(makenode/1 :: ({string(), string()} | string()) -> node()).
 -spec(nodeparts/1 :: (node() | string()) -> {string(), string()}).
 -spec(cookie_hash/0 :: () -> string()).
--spec(tcp_name/3 :: (atom(), inet:ip_address(), rabbit_networking:ip_port()) -> atom()).
+-spec(tcp_name/3 ::
+        (atom(), inet:ip_address(), rabbit_networking:ip_port())
+        -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(table_fold/3 :: (fun ((any(), A) -> A), A, atom()) -> A).
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
--spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
-             'ok' | 'aborted').
+-spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom())
+                             -> 'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
--spec(read_term_file/1 :: (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
+-spec(read_term_file/1 ::
+        (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
 -spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
@@ -143,14 +157,17 @@
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> integer()).
 -spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue()) -> B).
--spec(sort_field_table/1 :: (rabbit_framing:amqp_table()) -> rabbit_framing:amqp_table()).
+-spec(sort_field_table/1 ::
+        (rabbit_framing:amqp_table()) -> rabbit_framing:amqp_table()).
 -spec(pid_to_string/1 :: (pid()) -> string()).
 -spec(string_to_pid/1 :: (string()) -> pid()).
 -spec(version_compare/2 :: (string(), string()) -> 'lt' | 'eq' | 'gt').
--spec(version_compare/3 :: (string(), string(),
-                            ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean()).
--spec(recursive_delete/1 :: ([file:filename()]) ->
-             rabbit_types:ok_or_error({file:filename(), any()})).
+-spec(version_compare/3 ::
+        (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt'))
+        -> boolean()).
+-spec(recursive_delete/1 ::
+        ([file:filename()])
+        -> rabbit_types:ok_or_error({file:filename(), any()})).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 

@@ -38,8 +38,8 @@
 -export([start_link/0]).
 -export([guid/0, string_guid/1, binstring_guid/1]).
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 -define(SERVER, ?MODULE).
 -define(SERIAL_FILENAME, "rabbit_serial").
@@ -54,7 +54,8 @@
 
 -type(guid() :: binary()).
 
--spec(start_link/0 :: () -> rabbit_types:ok(pid()) | 'ignore' | rabbit_types:error(any())).
+-spec(start_link/0 ::
+        () -> rabbit_types:ok(pid()) | 'ignore' | rabbit_types:error(any())).
 -spec(guid/0 :: () -> guid()).
 -spec(string_guid/1 :: (any()) -> string()).
 -spec(binstring_guid/1 :: (any()) -> binary()).

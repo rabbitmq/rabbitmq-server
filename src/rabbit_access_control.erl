@@ -54,15 +54,17 @@
 
 -spec(check_login/2 :: (binary(), binary()) -> rabbit_types:user()).
 -spec(user_pass_login/2 :: (username(), password()) -> rabbit_types:user()).
--spec(check_vhost_access/2 :: (rabbit_types:user(), rabbit_types:vhost()) -> 'ok').
+-spec(check_vhost_access/2 ::
+        (rabbit_types:user(), rabbit_types:vhost()) -> 'ok').
 -spec(check_resource_access/3 ::
-        (username(), rabbit_misc:types(atom()), permission_atom()) -> 'ok').
+        (username(), rabbit_types:r(atom()), permission_atom()) -> 'ok').
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
 -spec(list_users/0 :: () -> [username()]).
--spec(lookup_user/1 :: (username()) ->
-                            rabbit_types:ok(rabbit_types:user()) | rabbit_types:error('not_found')).
+-spec(lookup_user/1 ::
+        (username()) -> rabbit_types:ok(rabbit_types:user())
+                            | rabbit_types:error('not_found')).
 -spec(add_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(delete_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(list_vhosts/0 :: () -> [rabbit_types:vhost()]).
@@ -70,9 +72,11 @@
                            regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (username(), rabbit_types:vhost()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
-        (rabbit_types:vhost()) -> [{username(), regexp(), regexp(), regexp()}]).
+        (rabbit_types:vhost())
+        -> [{username(), regexp(), regexp(), regexp()}]).
 -spec(list_user_permissions/1 ::
-        (username()) -> [{rabbit_types:vhost(), regexp(), regexp(), regexp()}]).
+        (username())
+        -> [{rabbit_types:vhost(), regexp(), regexp(), regexp()}]).
 
 -endif.
 

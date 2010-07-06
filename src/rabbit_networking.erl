@@ -74,14 +74,18 @@
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
 -spec(connections/0 :: () -> [rabbit_types:connection()]).
 -spec(connection_info_keys/0 :: () -> [rabbit_types:info_key()]).
--spec(connection_info/1 :: (rabbit_types:connection()) -> [rabbit_types:info()]).
--spec(connection_info/2 :: (rabbit_types:connection(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
+-spec(connection_info/1 ::
+        (rabbit_types:connection()) -> [rabbit_types:info()]).
+-spec(connection_info/2 ::
+        (rabbit_types:connection(), [rabbit_types:info_key()])
+        -> [rabbit_types:info()]).
 -spec(connection_info_all/0 :: () -> [[rabbit_types:info()]]).
--spec(connection_info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
+-spec(connection_info_all/1 ::
+        ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
--spec(check_tcp_listener_address/3 :: (atom(), hostname(), ip_port()) ->
-             {inet:ip_address(), atom()}).
+-spec(check_tcp_listener_address/3 ::
+        (atom(), hostname(), ip_port()) -> {inet:ip_address(), atom()}).
 
 -endif.
 

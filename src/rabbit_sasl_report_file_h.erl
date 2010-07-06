@@ -33,7 +33,8 @@
 
 -behaviour(gen_event).
 
--export([init/1, handle_event/2, handle_call/2, handle_info/2, terminate/2, code_change/3]).
+-export([init/1, handle_event/2, handle_call/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 %% rabbit_sasl_report_file_h is a wrapper around the sasl_report_file_h
 %% module because the original's init/1 does not match properly

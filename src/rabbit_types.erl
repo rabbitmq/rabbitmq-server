@@ -37,9 +37,10 @@
 
 -export_type([txn/0, maybe/1, info/0, info_key/0, message/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
-              unencoded_content/0, encoded_content/0, vhost/0, ctag/0, amqp_error/0,
-              r/1, r2/2, r3/3, ssl_socket/0, listener/0, binding/0, amqqueue/0,
-              exchange/0, connection/0, user/0, error/1, ok_or_error/1, ok/1]).
+              unencoded_content/0, encoded_content/0, vhost/0, ctag/0,
+              amqp_error/0, r/1, r2/2, r3/3, ssl_socket/0, listener/0,
+              binding/0, amqqueue/0, exchange/0, connection/0, user/0,
+              error/1, ok_or_error/1, ok/1]).
 
 -type(maybe(T) :: T | 'none').
 -type(vhost() :: binary()).
@@ -63,8 +64,8 @@
                properties_bin        :: maybe(binary()),
                payload_fragments_rev :: [binary()]}).
 -type(encoded_content() ::
-      #content{class_id              :: rabbit_framing:amqp_class_id(),
-               properties            :: maybe(rabbit_framing:amqp_property_record()),
+      #content{class_id       :: rabbit_framing:amqp_class_id(),
+               properties     :: maybe(rabbit_framing:amqp_property_record()),
                properties_bin        :: binary(),
                payload_fragments_rev :: [binary()]}).
 -type(content() :: undecoded_content() | decoded_content()).
@@ -93,20 +94,22 @@
                   explanation :: string(),
                   method      :: rabbit_framing:amqp_method_name()}).
 
--type(r(Kind) :: r2(vhost(), Kind)).
--type(r2(VirtualHost, Kind) :: r3(VirtualHost, Kind, rabbit_misc:resource_name())).
+-type(r(Kind) ::
+        r2(vhost(), Kind)).
+-type(r2(VirtualHost, Kind) ::
+        r3(VirtualHost, Kind, rabbit_misc:resource_name())).
 -type(r3(VirtualHost, Kind, Name) ::
-      #resource{virtual_host :: VirtualHost,
-                kind         :: Kind,
-                name         :: Name}).
+        #resource{virtual_host :: VirtualHost,
+                  kind         :: Kind,
+                  name         :: Name}).
 
 -type(ssl_socket() :: #ssl_socket{}).
 
 -type(listener() ::
       #listener{node     :: node(),
                 protocol :: atom(),
-                host     :: rabbit_net:hostname(),
-                port     :: rabbit_net:ip_port()}).
+                host     :: rabbit_networking:hostname(),
+                port     :: rabbit_networking:ip_port()}).
 
 -type(binding() ::
       #binding{exchange_name    :: rabbit_exchange:name(),

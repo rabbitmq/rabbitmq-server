@@ -33,7 +33,8 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0,
+         rotate_logs/1]).
 
 -export([start/2, stop/1]).
 
@@ -192,10 +193,10 @@
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
 -spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
--spec(status/0 :: () ->
-             [{running_applications, [{atom(), string(), string()}]} |
-              {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
-              {running_nodes, [node()]}]).
+-spec(status/0 ::
+        () -> [{running_applications, [{atom(), string(), string()}]} |
+               {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
+               {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -endif.

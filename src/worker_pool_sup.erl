@@ -41,9 +41,11 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> rabbit_types:ok(pid()) | 'ignore' | rabbit_types:error(any())).
+-spec(start_link/0 ::
+        () -> rabbit_types:ok(pid()) | 'ignore' | rabbit_types:error(any())).
 -spec(start_link/1 ::
-        (non_neg_integer()) -> rabbit_types:ok(pid()) | 'ignore' | rabbit_types:error(any())).
+        (non_neg_integer())
+        -> rabbit_types:ok(pid()) | 'ignore' | rabbit_types:error(any())).
 
 -endif.
 

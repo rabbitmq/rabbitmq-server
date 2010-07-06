@@ -29,6 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
+
 -module(rabbit_mnesia).
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
