@@ -44,12 +44,12 @@ start_heartbeat(Sup, Sock, TimeoutSec) ->
         supervisor:start_child(
           Sup, {heartbeat_sender,
                 {?MODULE, start_heartbeat_sender, [Sock, TimeoutSec]},
-                permanent, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+                transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
     {ok, _Receiver} =
         supervisor:start_child(
           Sup, {heartbeat_receiver,
                 {?MODULE, start_heartbeat_receiver, [Sock, TimeoutSec]},
-                permanent, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+                transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
     ok.
 
 start_heartbeat_sender(Sock, TimeoutSec) ->

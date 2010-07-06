@@ -36,7 +36,7 @@
 	 start_child/2, restart_child/2,
 	 delete_child/2, terminate_child/2,
 	 which_children/1,
-	 check_childspecs/1]).
+	 check_childspecs/1, stop/1]).
 
 -export([behaviour_info/1]).
 
@@ -118,6 +118,9 @@ check_childspecs(ChildSpecs) when is_list(ChildSpecs) ->
 	Error -> {error, Error}
     end;
 check_childspecs(X) -> {error, {badarg, X}}.
+
+stop(Supervisor) ->
+    gen_server:cast(Supervisor, stop).
 
 %%% ---------------------------------------------------
 %%% 
@@ -314,6 +317,8 @@ handle_call(which_children, _From, State) ->
 		  State#state.children),
     {reply, Resp, State}.
 
+handle_cast(stop, State) ->
+    {stop, shutdown, State};
 
 %%% Hopefully cause a function-clause as there is no API function
 %%% that utilizes cast.

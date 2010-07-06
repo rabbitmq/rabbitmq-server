@@ -31,22 +31,24 @@
 
 -module(rabbit_connection_sup).
 
--behaviour(supervisor).
+-behaviour(supervisor2).
 
--export([start_link/0]).
+-export([start_link/0, stop/1]).
 
 -export([init/1]).
 
 -include("rabbit.hrl").
 
 start_link() ->
-    supervisor:start_link(?MODULE, []).
+    supervisor2:start_link(?MODULE, []).
+
+stop(Pid) ->
+    supervisor2:stop(Pid).
 
 init([]) ->
     {ok, {{one_for_all, 0, 1},
           [{reader, {rabbit_reader, start_link, []},
-            permanent, ?MAX_WAIT, worker, [rabbit_reader]},
+            transient, ?MAX_WAIT, worker, [rabbit_reader]},
            {collector, {rabbit_reader_queue_collector, start_link, []},
-            permanent, ?MAX_WAIT, worker, [rabbit_reader_queue_collector]}
+            transient, ?MAX_WAIT, worker, [rabbit_reader_queue_collector]}
           ]}}.
-

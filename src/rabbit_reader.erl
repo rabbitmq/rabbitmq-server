@@ -274,9 +274,10 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %% output to be sent, which results in unnecessary delays.
         %%
         %% gen_tcp:close(ClientSock),
-        teardown_profiling(ProfilingValue)
-    end,
-    exit(shutdown).
+        teardown_profiling(ProfilingValue),
+        rabbit_connection_sup:stop(Parent),
+        exit(shutdown)
+    end.
 
 mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
     %%?LOGDEBUG("Reader mainloop: ~p bytes available, need ~p~n", [HaveBytes, WaitUntilNBytes]),
