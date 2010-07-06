@@ -640,7 +640,8 @@ needs_idle_timeout(State = #vqstate { target_ram_msg_count = TargetRamMsgCount,
                                       ram_msg_count        = RamMsgCount,
                                       ram_index_count      = RamIndexCount}) ->
     case reduction(RamMsgCount, TargetRamMsgCount) of
-        0 -> reduction(RamIndexCount, State) == ?IO_BATCH_SIZE;
+        0 -> Permitted = permitted_ram_index_count(State),
+             reduction(RamIndexCount, Permitted) == ?IO_BATCH_SIZE;
         _ -> true
     end.
 
