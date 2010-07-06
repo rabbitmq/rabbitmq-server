@@ -166,6 +166,7 @@ send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
 
 shutdown(W) ->
     W ! shutdown,
+    rabbit_misc:unlink_and_capture_exit(W),
     ok.
 
 %---------------------------------------------------------------------------
