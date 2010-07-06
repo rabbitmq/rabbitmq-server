@@ -359,7 +359,7 @@ test_content_framing(FrameMax, Fragments) ->
     [Header | Frames] =
         rabbit_binary_generator:build_simple_content_frames(
           1,
-          #content{class_id = 0, properties_bin = <<>>,
+          #content{class_id = 60, properties = none, properties_bin = <<>>,
                    payload_fragments_rev = Fragments},
           FrameMax),
     %% header is formatted correctly and the size is the total of the
@@ -953,7 +953,7 @@ test_memory_pressure() ->
     ok = test_memory_pressure_receive_flow(true),
 
     %% if we publish at this point, the channel should die
-    Content = rabbit_basic:build_content([], <<>>),
+    Content = rabbit_basic:build_content(#'P_basic'{}, <<>>),
     ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
     expect_normal_channel_termination(MRef0, Ch0),
 
