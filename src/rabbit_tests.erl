@@ -1620,7 +1620,7 @@ test_queue_index() ->
     MostOfASegment = trunc(SegmentSize*0.75),
     stop_msg_store(),
     ok = empty_test_queue(),
-    SeqIdsA = lists:seq(0,MostOfASegment-1),
+    SeqIdsA = lists:seq(0, MostOfASegment-1),
     SeqIdsB = lists:seq(MostOfASegment, 2*MostOfASegment),
     {0, _Terms, Qi0} = test_queue_init(),
     {0, 0, Qi1} = rabbit_queue_index:bounds(Qi0),
