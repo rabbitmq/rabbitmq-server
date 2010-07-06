@@ -323,8 +323,6 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
                true ->
                     throw({handshake_timeout, State#v1.callback})
             end;
-        timeout ->
-            throw({timeout, State#v1.connection_state});
         {'$gen_call', From, {shutdown, Explanation}} ->
             {ForceTermination, NewState} = terminate(Explanation, State),
             gen_server:reply(From, ok),

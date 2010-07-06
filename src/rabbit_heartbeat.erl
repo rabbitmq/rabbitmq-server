@@ -35,12 +35,11 @@
 
 -export([start_heartbeat/3,
          start_heartbeat_sender/2,
-         start_heartbeat_receiver/3]).
+         start_heartbeat_receiver/2]).
 
 start_heartbeat(_Sup, _Sock, 0) ->
     none;
 start_heartbeat(Sup, Sock, TimeoutSec) ->
-    Parent = self(),
     {ok, _Sender} =
         supervisor:start_child(
           Sup, {heartbeat_sender,
@@ -49,7 +48,7 @@ start_heartbeat(Sup, Sock, TimeoutSec) ->
     {ok, _Receiver} =
         supervisor:start_child(
           Sup, {heartbeat_receiver,
-                {?MODULE, start_heartbeat_receiver, [Parent, Sock, TimeoutSec]},
+                {?MODULE, start_heartbeat_receiver, [Sock, TimeoutSec]},
                 permanent, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
     ok.
 
@@ -66,17 +65,14 @@ start_heartbeat_sender(Sock, TimeoutSec) ->
                                  end)
            end)}.
 
-start_heartbeat_receiver(Parent, Sock, TimeoutSec) ->
+start_heartbeat_receiver(Sock, TimeoutSec) ->
     %% we check for incoming data every interval, and time out after
     %% two checks with no change. As a result we will time out between
     %% 2 and 3 intervals after the last data has been received.
     {ok, proc_lib:spawn_link(
            fun () -> heartbeater(Sock, TimeoutSec * 1000,
                                  recv_oct, 1,
-                                 fun () ->
-                                         Parent ! timeout,
-                                         stop
-                                 end)
+                                 fun () -> exit(timeout) end)
            end)}.
 
 %% Y-combinator, posted by Vladimir Sekissov to the Erlang mailing list
