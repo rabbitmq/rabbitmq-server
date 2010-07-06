@@ -32,8 +32,8 @@
 -module(rabbit_mnesia).
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
-         cluster/2, reset/0, force_reset/0, is_clustered/0,
-         empty_ram_only_tables/0]).
+         cluster/1, force_cluster/1, reset/0, force_reset/0,
+         is_clustered/0, empty_ram_only_tables/0]).
 
 -export([table_names/0]).
 
@@ -53,6 +53,8 @@
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
+-spec(cluster/1 :: ([erlang_node()]) -> 'ok').
+-spec(force_cluster/1 :: ([erlang_node()]) -> 'ok').
 -spec(cluster/2 :: ([erlang_node()], boolean()) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
@@ -91,6 +93,11 @@ init() ->
 is_db_empty() ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
               table_names()).
+
+cluster(ClusterNodes) ->
+    cluster(ClusterNodes, false).
+force_cluster(ClusterNodes) ->
+    cluster(ClusterNodes, true).
 
 %% Alter which disk nodes this node is clustered with. This can be a
 %% subset of all the disk nodes in the cluster but can (and should)
