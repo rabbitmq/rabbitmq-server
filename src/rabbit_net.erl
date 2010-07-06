@@ -47,10 +47,10 @@
 -type(socket() :: rabbit_networking:ip_port() | rabbit_types:ssl_socket()).
 
 -spec(async_recv/3 :: (socket(), integer(), timeout()) -> {'ok', any()}).
--spec(close/1 :: (socket()) -> 'ok' | error()).
--spec(controlling_process/2 :: (socket(), pid()) -> 'ok' | error()).
+-spec(close/1 :: (socket()) -> rabbit_types:ok_or_error(any())).
+-spec(controlling_process/2 :: (socket(), pid()) -> rabbit_types:ok_or_error(any())).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
--spec(send/2 :: (socket(), binary() | iolist()) -> 'ok' | error()).
+-spec(send/2 :: (socket(), binary() | iolist()) -> rabbit_types:ok_or_error(any())).
 -spec(peername/1 :: (socket()) ->
         {'ok', {inet:ip_address(), rabbit_networking:ip_port()}} | error()).
 -spec(sockname/1 :: (socket()) ->

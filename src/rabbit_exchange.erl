@@ -62,9 +62,9 @@
 -type(type() :: atom()).
 -type(binding_key() :: binary()).
 
--type(bind_res() :: 'ok' | rabbit_types:error('queue_not_found') |
-                           rabbit_types:error('exchange_not_found') |
-                           rabbit_types:error('exchange_and_queue_not_found')).
+-type(bind_res() :: rabbit_types:ok_or_error('queue_not_found' |
+                                             'exchange_not_found' |
+                                             'exchange_and_queue_not_found')).
 -type(inner_fun() :: fun((rabbit_types:exchange(), queue()) -> any())).
 
 -spec(recover/0 :: () -> 'ok').

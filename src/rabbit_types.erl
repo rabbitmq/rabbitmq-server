@@ -39,7 +39,7 @@
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, vhost/0, ctag/0, amqp_error/0,
               r/1, ssl_socket/0, listener/0, binding/0, amqqueue/0,
-              exchange/0, connection/0, user/0, error/1]).
+              exchange/0, connection/0, user/0, error/1, ok_or_error/1]).
 
 -type(maybe(T) :: T | 'none').
 -type(vhost() :: binary()).
@@ -132,5 +132,6 @@
             password :: rabbit_access_control:password()}).
 
 -type(error(A) :: {'error', A}).
+-type(ok_or_error(A) :: 'ok' | error(A)).
 
 -endif. % use_specs

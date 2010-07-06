@@ -74,7 +74,7 @@
 
 -export_type([resource_name/0]).
 
--type(ok_or_error() :: 'ok' | rabbit_types:error(any())).
+-type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(resource_name() :: binary()).
 -type(thunk(T) :: fun(() -> T)).
 
@@ -151,7 +151,7 @@
 -spec(version_compare/3 :: (string(), string(),
                             ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean()).
 -spec(recursive_delete/1 :: ([file:filename()]) ->
-             'ok' | {'error', {file:filename(), any()}}).
+             rabbit_types:ok_or_error({file:filename(), any()})).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 

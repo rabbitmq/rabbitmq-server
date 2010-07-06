@@ -191,7 +191,7 @@
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
--spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | rabbit_types:error(any())).
+-spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
 -spec(status/0 :: () ->
              [{running_applications, [{atom(), string(), string()}]} |
               {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |

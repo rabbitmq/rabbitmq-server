@@ -114,13 +114,13 @@
 -spec(basic_consume/7 ::
       (rabbit_types:amqqueue(), boolean(), pid(), pid() | 'undefined',
        rabbit_types:ctag(), boolean(), any())
-        -> 'ok' | rabbit_types:error('exclusive_consume_unavailable')).
+        -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 :: (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 :: (rabbit_types:amqqueue(), boolean()) -> rabbit_types:amqqueue() | 'not_found').
--spec(internal_delete/1 :: (name()) -> 'ok' | rabbit_types:error('not_found')).
+-spec(internal_delete/1 :: (name()) -> rabbit_types:ok_or_error('not_found')).
 -spec(maybe_run_queue_via_backing_queue/2 :: (pid(), (fun ((A) -> A))) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
