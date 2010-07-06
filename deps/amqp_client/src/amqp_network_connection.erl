@@ -419,6 +419,9 @@ network_handshake(State = #nc_state{channel0_writer_pid = Writer0,
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
                                   version_minor = ?PROTOCOL_VERSION_MINOR}) ->
     ok;
+check_version(#'connection.start'{version_major = 8,
+                                  version_minor = 0}) ->
+    exit({protocol_version_mismatch, 0, 8});
 check_version(#'connection.start'{version_major = Major,
                                   version_minor = Minor}) ->
     exit({protocol_version_mismatch, Major, Minor}).
