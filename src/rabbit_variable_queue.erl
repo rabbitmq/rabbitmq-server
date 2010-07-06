@@ -634,7 +634,7 @@ ram_duration(State = #vqstate { egress_rate        = Egress,
                                          out_counter        = 0,
                                          ram_msg_count_prev = RamMsgCount })}.
 
-needs_idle_timeout(#vqstate { on_sync = {_, _, SFuns}}) when SFuns =/= [] ->
+needs_idle_timeout(#vqstate { on_sync = {_, _, [_|_]}}) ->
     true;
 needs_idle_timeout(State = #vqstate { target_ram_msg_count = TargetRamMsgCount,
                                       ram_msg_count        = RamMsgCount,
