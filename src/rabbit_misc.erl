@@ -98,10 +98,10 @@
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 :: ({atom(), any()}) -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
 -spec(r/2 :: (rabbit_types:vhost(), K)
-             -> rabbit_types:r(rabbit_types:vhost(), K)
+             -> rabbit_types:r2(rabbit_types:vhost(), K)
                     when is_subtype(K, atom())).
 -spec(r/3 :: (rabbit_types:vhost() | rabbit_types:r(atom()), K, resource_name())
-             -> rabbit_types:r(rabbit_types:vhost(), K, resource_name())
+             -> rabbit_types:r3(rabbit_types:vhost(), K, resource_name())
                     when is_subtype(K, atom())).
 -spec(r_arg/4 :: (rabbit_types:vhost() | rabbit_types:r(atom()), K,
                   rabbit_framing:amqp_table(), binary())
