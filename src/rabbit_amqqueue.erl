@@ -223,7 +223,7 @@ assert_equivalence(#amqqueue{durable = Durable, auto_delete = AutoDelete} = Q,
 assert_equivalence(#amqqueue{name = QueueName},
                    _Durable, _AutoDelete, _Args, _Owner) ->
     rabbit_misc:protocol_error(
-      precondition_failed, "parameters for ~s not equivalent",
+      not_allowed, "parameters for ~s not equivalent",
       [rabbit_misc:rs(QueueName)]).
 
 check_exclusive_access(Q, Owner) -> check_exclusive_access(Q, Owner, lax).
