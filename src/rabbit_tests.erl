@@ -601,19 +601,19 @@ test_cluster_management() ->
 
     ok = control_action(reset, []),
     lists:foreach(fun (Arg) ->
-                          ok = control_action(cluster, ["-f" | Arg]),
+                          ok = control_action(force_cluster, Arg),
                           ok
                   end,
                   ClusteringSequence),
     lists:foreach(fun (Arg) ->
                           ok = control_action(reset, []),
-                          ok = control_action(cluster, ["-f" | Arg]),
+                          ok = control_action(force_cluster, Arg),
                           ok
                   end,
                   ClusteringSequence),
     ok = control_action(reset, []),
     lists:foreach(fun (Arg) ->
-                          ok = control_action(cluster, ["-f" | Arg]),
+                          ok = control_action(force_cluster, Arg),
                           ok = control_action(start_app, []),
                           ok = control_action(stop_app, []),
                           ok
@@ -621,7 +621,7 @@ test_cluster_management() ->
                   ClusteringSequence),
     lists:foreach(fun (Arg) ->
                           ok = control_action(reset, []),
-                          ok = control_action(cluster, ["-f" | Arg]),
+                          ok = control_action(force_cluster, Arg),
                           ok = control_action(start_app, []),
                           ok = control_action(stop_app, []),
                           ok
@@ -632,13 +632,13 @@ test_cluster_management() ->
     ok = control_action(reset, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
-    ok = control_action(cluster, ["-f", "invalid1@invalid",
-                                  "invalid2@invalid"]),
+    ok = control_action(force_cluster, ["invalid1@invalid",
+                                        "invalid2@invalid"]),
 
     %% join a non-existing cluster as a ram node
     ok = control_action(reset, []),
-    ok = control_action(cluster, ["-f", "invalid1@invalid",
-                                  "invalid2@invalid"]),
+    ok = control_action(force_cluster, ["invalid1@invalid",
+                                        "invalid2@invalid"]),
 
     SecondaryNode = rabbit_misc:makenode("hare"),
     case net_adm:ping(SecondaryNode) of

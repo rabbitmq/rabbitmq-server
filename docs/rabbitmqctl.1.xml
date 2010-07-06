@@ -271,23 +271,6 @@
 
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>force_cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>clusternode</term>
-                <listitem><para>Subset of the nodes of the cluster to which this node should be connected.</para></listitem>
-              </varlistentry>
-            </variablelist>
-            <para>
-              Instruct the node to become member of a cluster with the
-              specified nodes.  This will succeed even if the specified nodes
-              are offline.  For a more detailed description, see
-              <command>cluster</command>.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
           <term><cmdsynopsis><command>cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
@@ -349,6 +332,23 @@
               cluster with nodes <command>rabbit@tanto</command> and
               <command>hare@elena</command>. If the node is one of these then
               it becomes a disk node, otherwise a ram node.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>force_cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>clusternode</term>
+                <listitem><para>Subset of the nodes of the cluster to which this node should be connected.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instruct the node to become member of a cluster with the
+              specified nodes.  This will succeed even if the specified nodes
+              are offline.  For a more detailed description, see
+              <command>cluster</command>.
             </para>
           </listitem>
         </varlistentry>
