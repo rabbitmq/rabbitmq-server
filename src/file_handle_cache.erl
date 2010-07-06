@@ -182,7 +182,7 @@
 -ifdef(use_specs).
 
 -type(ref() :: any()).
--type(error() :: {'error', any()}).
+-type(error() :: rabbit_types:error(any())).
 -type(ok_or_error() :: ('ok' | error())).
 -type(val_or_error(T) :: ({'ok', T} | error())).
 -type(position() :: ('bof' | 'eof' | non_neg_integer() |

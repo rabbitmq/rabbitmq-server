@@ -74,7 +74,7 @@
       {ack, pmsg()}).
 
 -spec(start_link/1 :: ([rabbit_amqqueue:name()]) ->
-                           {'ok', pid()} | 'ignore' | {'error', any()}).
+                           {'ok', pid()} | 'ignore' | rabbit_types:error(any())).
 -spec(transaction/1 :: ([work_item()]) -> 'ok').
 -spec(extend_transaction/2 :: ({rabbit_types:txn(), rabbit_amqqueue:name()}, [work_item()]) -> 'ok').
 -spec(dirty_work/1 :: ([work_item()]) -> 'ok').

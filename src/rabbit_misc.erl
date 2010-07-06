@@ -74,7 +74,7 @@
 
 -export_type([resource_name/0]).
 
--type(ok_or_error() :: 'ok' | {'error', any()}).
+-type(ok_or_error() :: 'ok' | rabbit_types:error(any())).
 -type(resource_name() :: binary()).
 -type(thunk(T) :: fun(() -> T)).
 
@@ -93,10 +93,10 @@
 -spec(protocol_error/4 :: (rabbit_framing:amqp_exception(), string(), [any()],
                            rabbit_framing:amqp_method_name()) -> no_return()).
 -spec(not_found/1 :: (rabbit_types:r(atom())) -> no_return()).
--spec(get_config/1 :: (atom()) -> {'ok', any()} | rabbit_types:not_found()).
+-spec(get_config/1 :: (atom()) -> {'ok', any()} | rabbit_types:error('not_found')).
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
--spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | rabbit_types:not_found()).
+-spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | rabbit_types:error('not_found')).
 -spec(r/3 :: (rabbit_types:vhost() | rabbit_types:r(atom()), K, resource_name())
              -> rabbit_types:r(K) when is_subtype(K, atom())).
 -spec(r/2 :: (rabbit_types:vhost(), K)
@@ -113,7 +113,7 @@
 -spec(report_cover/0 :: () -> 'ok').
 -spec(enable_cover/1 :: (file:filename()) -> ok_or_error()).
 -spec(report_cover/1 :: (file:filename()) -> 'ok').
--spec(throw_on_error/2 :: (atom(), thunk({error, any()} | {ok, A} | A)) -> A).
+-spec(throw_on_error/2 :: (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (rabbit_access_control:username(), thunk(A)) -> A).
@@ -134,7 +134,7 @@
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
              'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
--spec(read_term_file/1 :: (file:filename()) -> {'ok', [any()]} | {'error', any()}).
+-spec(read_term_file/1 :: (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
 -spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').

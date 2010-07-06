@@ -45,8 +45,8 @@
 
 -type(name() :: term()).
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', term()}).
--spec(start/0 :: () -> {'ok', pid()} | {'error', term()}).
+-spec(start_link/0 :: () -> {'ok', pid()} | rabbit_types:error(term())).
+-spec(start/0 :: () -> {'ok', pid()} | rabbit_types:error(term())).
 -spec(join/2 :: (name(), pid()) -> 'ok').
 -spec(leave/2 :: (name(), pid()) -> 'ok').
 -spec(get_members/1 :: (name()) -> [pid()]).

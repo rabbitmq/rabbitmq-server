@@ -44,14 +44,14 @@
 
 -type(properties_input() :: (rabbit_framing:amqp_property_record() | [{atom(), any()}])).
 -type(publish_result() :: ({ok, rabbit_router:routing_result(), [pid()]}
-                           | rabbit_types:not_found())).
+                           | rabbit_types:error('not_found'))).
 
 -spec(publish/1 :: (rabbit_types:delivery()) -> publish_result()).
 -spec(delivery/4 :: (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
                      rabbit_types:message()) -> rabbit_types:delivery()).
 -spec(message/4 :: (rabbit_exchange:name(), rabbit_router:routing_key(),
                     properties_input(), binary())
-                   -> (rabbit_types:message() | {'error', any()})).
+                   -> (rabbit_types:message() | rabbit_types:error(any()))).
 -spec(properties/1 :: (properties_input()) -> rabbit_framing:amqp_property_record()).
 -spec(publish/4 :: (rabbit_exchange:name(), rabbit_router:routing_key(),
                     properties_input(), binary()) -> publish_result()).

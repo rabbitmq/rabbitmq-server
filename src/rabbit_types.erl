@@ -38,8 +38,8 @@
 -export_type([txn/0, maybe/1, info/0, info_key/0, message/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, vhost/0, ctag/0, amqp_error/0,
-              not_found/0, r/1, ssl_socket/0, listener/0, binding/0, amqqueue/0,
-              exchange/0, connection/0, user/0]).
+              r/1, ssl_socket/0, listener/0, binding/0, amqqueue/0,
+              exchange/0, connection/0, user/0, error/1]).
 
 -type(maybe(T) :: T | 'none').
 -type(vhost() :: binary()).
@@ -92,8 +92,6 @@
       #amqp_error{name        :: rabbit_framing:amqp_exception(),
                   explanation :: string(),
                   method      :: rabbit_framing:amqp_method_name()}).
--type(not_found() :: {'error', 'not_found'}).
-
 -type(r(Kind) ::
       #resource{virtual_host :: rabbit_types:vhost(),
                 kind         :: Kind,
@@ -132,5 +130,7 @@
 -type(user() ::
       #user{username :: rabbit_access_control:username(),
             password :: rabbit_access_control:password()}).
+
+-type(error(A) :: {'error', A}).
 
 -endif. % use_specs

@@ -62,10 +62,9 @@
 -type(type() :: atom()).
 -type(binding_key() :: binary()).
 
--type(bind_res() :: 'ok' | {'error',
-                            'queue_not_found' |
-                            'exchange_not_found' |
-                            'exchange_and_queue_not_found'}).
+-type(bind_res() :: 'ok' | rabbit_types:error('queue_not_found') |
+                           rabbit_types:error('exchange_not_found') |
+                           rabbit_types:error('exchange_and_queue_not_found')).
 -type(inner_fun() :: fun((rabbit_types:exchange(), queue()) -> any())).
 
 -spec(recover/0 :: () -> 'ok').
@@ -77,7 +76,7 @@
 -spec(assert_args_equivalence/2 ::
         (rabbit_types:exchange(), rabbit_framing:amqp_table()) -> 'ok').
 -spec(lookup/1 :: (name())
-                  -> {'ok', rabbit_types:exchange()} | rabbit_types:not_found()).
+                  -> {'ok', rabbit_types:exchange()} | rabbit_types:error('not_found')).
 -spec(lookup_or_die/1 :: (name()) -> rabbit_types:exchange()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
@@ -94,7 +93,7 @@
 -spec(delete_binding/5 ::
         (name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
          rabbit_framing:amqp_table(), inner_fun())
-        -> bind_res() | {'error', 'binding_not_found'}).
+        -> bind_res() | rabbit_types:error('binding_not_found')).
 -spec(list_bindings/1 :: (rabbit_types:vhost()) ->
              [{name(), rabbit_amqqueue:name(),
                rabbit_router:routing_key(), rabbit_framing:amqp_table()}]).
@@ -103,7 +102,7 @@
 -spec(delete_transient_queue_bindings/1 :: (rabbit_amqqueue:name()) ->
              fun (() -> none())).
 -spec(delete/2 :: (name(), boolean()) ->
-             'ok' | rabbit_types:not_found() | {'error', 'in_use'}).
+             'ok' | rabbit_types:error('not_found') | rabbit_types:error('in_use')).
 -spec(list_queue_bindings/1 ::
         (rabbit_amqqueue:name())
         -> [{name(), rabbit_router:routing_key(), rabbit_framing:amqp_table()}]).
