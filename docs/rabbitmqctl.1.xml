@@ -270,7 +270,7 @@
       <title>Cluster management</title>
 
       <variablelist>
-        <varlistentry>
+        <varlistentry id="cluster">
           <term><cmdsynopsis><command>cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
@@ -282,7 +282,7 @@
             <para>
               Instruct the node to become member of a cluster with the
               specified nodes.  To cluster with currently offline nodes,
-              use <command>force_cluster</command>.
+              use <link linkend="force_cluster"><command>force_cluster</command></link>.
             </para>
             <para>
               Cluster nodes can be of two types: disk or ram. Disk nodes
@@ -335,7 +335,7 @@
             </para>
           </listitem>
         </varlistentry>
-        <varlistentry>
+        <varlistentry id="force_cluster">
           <term><cmdsynopsis><command>force_cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
@@ -348,7 +348,7 @@
               Instruct the node to become member of a cluster with the
               specified nodes.  This will succeed even if the specified nodes
               are offline.  For a more detailed description, see
-              <command>cluster</command>.
+              <link linkend="cluster"><command>cluster</command>.</link>
             </para>
           </listitem>
         </varlistentry>
