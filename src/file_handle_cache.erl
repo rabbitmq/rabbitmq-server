@@ -182,18 +182,18 @@
 -ifdef(use_specs).
 
 -type(ref() :: any()).
--type(error() :: {'error', any()}).
--type(ok_or_error() :: ('ok' | error())).
--type(val_or_error(T) :: ({'ok', T} | error())).
+-type(ok_or_error() :: rabbit_types:ok_or_error(any())).
+-type(val_or_error(T) :: rabbit_types:ok_or_error2(T, any())).
 -type(position() :: ('bof' | 'eof' | non_neg_integer() |
-                     {('bof' |'eof'), non_neg_integer()} | {'cur', integer()})).
+                     {('bof' |'eof'), non_neg_integer()} |
+                     {'cur', integer()})).
 -type(offset() :: non_neg_integer()).
 
 -spec(register_callback/3 :: (atom(), atom(), [any()]) -> 'ok').
 -spec(open/3 ::
-      (string(), [any()],
-       [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')}]) ->
-             val_or_error(ref())).
+        (string(), [any()],
+         [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')}])
+        -> val_or_error(ref())).
 -spec(close/1 :: (ref()) -> ok_or_error()).
 -spec(read/2 :: (ref(), non_neg_integer()) ->
              val_or_error([char()] | binary()) | 'eof').

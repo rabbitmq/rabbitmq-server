@@ -138,11 +138,11 @@
 
 -ifdef(use_specs).
 
--spec(info_keys/0 :: () -> [info_key()]).
--spec(info/1 :: (pid()) -> [info()]).
--spec(info/2 :: (pid(), [info_key()]) -> [info()]).
+-spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
+-spec(info/1 :: (pid()) -> [rabbit_types:info()]).
+-spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
--spec(server_properties/0 :: () -> amqp_table()).
+-spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
 -endif.
 

@@ -232,7 +232,6 @@
 
 -ifdef(use_specs).
 
--type(bpqueue() :: any()).
 -type(seq_id()  :: non_neg_integer()).
 -type(ack()     :: seq_id() | 'blank_ack').
 
@@ -242,16 +241,16 @@
 
 -type(state() :: #vqstate {
              q1                   :: queue(),
-             q2                   :: bpqueue(),
+             q2                   :: bpqueue:bpqueue(),
              delta                :: delta(),
-             q3                   :: bpqueue(),
+             q3                   :: bpqueue:bpqueue(),
              q4                   :: queue(),
              next_seq_id          :: seq_id(),
-             pending_ack          :: dict(),
+             pending_ack          :: dict:dictionary(),
              index_state          :: any(),
              msg_store_clients    :: 'undefined' | {{any(), binary()},
                                                     {any(), binary()}},
-             on_sync              :: {[[ack()]], [[guid()]],
+             on_sync              :: {[[ack()]], [[rabbit_guid:guid()]],
                                       [fun (() -> any())]},
              durable              :: boolean(),
 

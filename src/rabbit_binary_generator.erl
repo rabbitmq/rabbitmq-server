@@ -57,15 +57,21 @@
 -type(frame() :: [binary()]).
 
 -spec(build_simple_method_frame/2 ::
-      (channel_number(), amqp_method_record()) -> frame()).
+        (rabbit_channel:channel_number(), rabbit_framing:amqp_method_record())
+        -> frame()).
 -spec(build_simple_content_frames/3 ::
-      (channel_number(), content(), non_neg_integer()) -> [frame()]).
+        (rabbit_channel:channel_number(), rabbit_types:content(),
+         non_neg_integer())
+        -> [frame()]).
 -spec(build_heartbeat_frame/0 :: () -> frame()).
--spec(generate_table/1 :: (amqp_table()) -> binary()).
--spec(encode_properties/2 :: ([amqp_property_type()], [any()]) -> binary()).
+-spec(generate_table/1 :: (rabbit_framing:amqp_table()) -> binary()).
+-spec(encode_properties/2 ::
+        ([rabbit_framing:amqp_property_type()], [any()]) -> binary()).
 -spec(check_empty_content_body_frame_size/0 :: () -> 'ok').
--spec(ensure_content_encoded/1 :: (content()) -> encoded_content()).
--spec(clear_encoded_content/1 :: (content()) -> unencoded_content()).
+-spec(ensure_content_encoded/1 ::
+        (rabbit_types:content()) -> rabbit_types:encoded_content()).
+-spec(clear_encoded_content/1 ::
+        (rabbit_types:content()) -> rabbit_types:unencoded_content()).
 
 -endif.
 

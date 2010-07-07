@@ -55,12 +55,14 @@
 -type(msg_size() :: non_neg_integer()).
 -type(file_size() :: non_neg_integer()).
 
--spec(append/3 :: (io_device(), guid(), msg()) ->
-             ({'ok', msg_size()} | {'error', any()})).
+-spec(append/3 :: (io_device(), rabbit_guid:guid(), msg()) ->
+                       rabbit_types:ok_or_error2(msg_size(), any())).
 -spec(read/2 :: (io_device(), msg_size()) ->
-             ({'ok', {guid(), msg()}} | {'error', any()})).
+                     rabbit_types:ok_or_error2({rabbit_guid:guid(), msg()},
+                                               any())).
 -spec(scan/2 :: (io_device(), file_size()) ->
-             {'ok', [{guid(), msg_size(), position()}], position()}).
+                     {'ok', [{rabbit_guid:guid(), msg_size(), position()}],
+                      position()}).
 
 -endif.
 
