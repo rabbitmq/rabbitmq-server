@@ -104,7 +104,7 @@
         ({atom(), any()})
         -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
 -spec(r/2 :: (rabbit_types:vhost(), K)
-             -> rabbit_types:r2(rabbit_types:vhost(), K, '_')
+             -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
                     when is_subtype(K, atom())).
 -spec(r/3 ::
         (rabbit_types:vhost() | rabbit_types:r(atom()), K, resource_name())
