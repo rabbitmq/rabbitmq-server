@@ -62,62 +62,66 @@ def insert_base_types(d):
 
 class AmqpSpecFileMergeConflict(Exception): pass
 
-def default_spec_value_merger(key, old, new, allow_overwrite):
-    if old is None or old == new or allow_overwrite:
+# If allow_accumulate is true, then we allow acc and new to conflict,
+# with whatever's already in acc winning and new being ignored. If
+# allow_accumulate is false, acc and new must not conflict.
+
+def default_spec_value_merger(key, acc, new, allow_accumulate):
+    if acc is None or acc == new or allow_accumulate:
         return new
     else:
-        raise AmqpSpecFileMergeConflict(key, old, new)
+        raise AmqpSpecFileMergeConflict(key, acc, new)
 
-def extension_info_merger(key, old, new, allow_overwrite):
-    return old + [new]
+def extension_info_merger(key, acc, new, allow_accumulate):
+    return acc + [new]
 
-def domains_merger(key, old, new, allow_overwrite):
-    o = dict((k, v) for [k, v] in new)
-    for [k, v] in old:
-        if o.has_key(k):
-            if not allow_overwrite:
-                raise AmqpSpecFileMergeConflict(key, old, new)
+def domains_merger(key, acc, new, allow_accumulate):
+    merged = dict((k, v) for [k, v] in new)
+    for [k, v] in acc:
+        if merged.has_key(k):
+            if not allow_accumulate:
+                raise AmqpSpecFileMergeConflict(key, acc, new)
         else:
-            o[k] = v
+            merged[k] = v
 
-    return [[k, v] for (k, v) in o.iteritems()]
+    return [[k, v] for (k, v) in merged.iteritems()]
 
-def merge_dict_lists_by(dict_key, old, new, allow_overwrite):
+def merge_dict_lists_by(dict_key, acc, new, allow_accumulate):
     new_index = set(v[dict_key] for v in new)
     result = list(new) # shallow copy
-    for v in old:
+    for v in acc:
         if v[dict_key] in new_index:
-            if not allow_overwrite:
-                raise AmqpSpecFileMergeConflict(description, old, new)
+            if not allow_accumulate:
+                raise AmqpSpecFileMergeConflict(description, acc, new)
         else:
             result.append(v)
     return result
 
-def constants_merger(key, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite)
+def constants_merger(key, acc, new, allow_accumulate):
+    return merge_dict_lists_by("name", acc, new, allow_accumulate)
 
-def methods_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite)
+def methods_merger(classname, acc, new, allow_accumulate):
+    return merge_dict_lists_by("name", acc, new, allow_accumulate)
 
-def properties_merger(classname, old, new, allow_overwrite):
-    return merge_dict_lists_by("name", old, new, allow_overwrite)
+def properties_merger(classname, acc, new, allow_accumulate):
+    return merge_dict_lists_by("name", acc, new, allow_accumulate)
 
-def class_merger(old, new, allow_overwrite):
-    old["methods"] = methods_merger(old["name"],
-                                    old["methods"],
+def class_merger(acc, new, allow_accumulate):
+    acc["methods"] = methods_merger(acc["name"],
+                                    acc["methods"],
                                     new["methods"],
-                                    allow_overwrite)
-    old["properties"] = properties_merger(old["name"],
-                                          old.get("properties", []),
+                                    allow_accumulate)
+    acc["properties"] = properties_merger(acc["name"],
+                                          acc.get("properties", []),
                                           new.get("properties", []),
-                                          allow_overwrite)
+                                          allow_accumulate)
 
-def classes_merger(key, old, new, allow_overwrite):
+def classes_merger(key, acc, new, allow_accumulate):
     new_dict = dict((v["name"], v) for v in new)
     result = list(new) # shallow copy
-    for w in old:
+    for w in acc:
         if w["name"] in new_dict:
-            class_merger(new_dict[w["name"]], w, allow_overwrite)
+            class_merger(new_dict[w["name"]], w, allow_accumulate)
         else:
             result.append(w)
     return result
@@ -129,24 +133,24 @@ mergers = {
     "classes": (classes_merger, []),
 }
 
-def merge_load_specs(filenames, allow_overwrite):
+def merge_load_specs(filenames, allow_accumulate):
     handles = [file(filename) for filename in filenames]
     docs = [json.load(handle) for handle in handles]
     spec = {}
     for doc in docs:
         for (key, value) in doc.iteritems():
             (merger, default_value) = mergers.get(key, (default_spec_value_merger, None))
-            spec[key] = merger(key, spec.get(key, default_value), value, allow_overwrite)
+            spec[key] = merger(key, spec.get(key, default_value), value, allow_accumulate)
     for handle in handles: handle.close()
     return spec
         
 class AmqpSpec:
     # Slight wart: use a class member rather than change the ctor signature
     # to avoid breaking everyone else's code.
-    allow_overwrite = False
+    allow_accumulate = False
 
     def __init__(self, filenames):
-        self.spec = merge_load_specs(filenames, AmqpSpec.allow_overwrite)
+        self.spec = merge_load_specs(filenames, AmqpSpec.allow_accumulate)
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
@@ -261,7 +265,7 @@ def do_main(header_fn, body_fn):
 def do_main_dict(funcDict):
     def usage():
         print >> sys.stderr , "Usage:"
-        print >> sys.stderr , "  %s <function> <path_to_amqp_spec.json> <path_to_output_file>" % (sys.argv[0])
+        print >> sys.stderr , "  %s <function> <path_to_amqp_spec.json>... <path_to_output_file>" % (sys.argv[0])
         print >> sys.stderr , " where <function> is one of %s" % ", ".join([k for k in funcDict.keys()])
 
     def execute(fn, amqp_specs, out_file):
@@ -279,7 +283,7 @@ def do_main_dict(funcDict):
             f.close()
 
     parser = OptionParser()
-    parser.add_option("--allow-overwrite", action="store_true", dest="allow_overwrite", default=False)
+    parser.add_option("--allow-accumulate", action="store_true", dest="allow_accumulate", default=False)
     (options, args) = parser.parse_args()
 
     if len(args) < 3:
@@ -289,7 +293,7 @@ def do_main_dict(funcDict):
         function = args[0]
         sources = args[1:-1]
         dest = args[-1]
-        AmqpSpec.allow_overwrite = options.allow_overwrite
+        AmqpSpec.allow_accumulate = options.allow_accumulate
         if funcDict.has_key(function):
             execute(funcDict[function], sources, dest)
         else:
