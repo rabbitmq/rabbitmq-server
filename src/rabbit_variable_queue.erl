@@ -1258,8 +1258,6 @@ push_alphas_to_betas(Quota, State) ->
     {_Quota2, State2} = maybe_push_q4_to_betas(Quota1, State1),
     State2.
 
-maybe_push_q1_to_betas(0, State) ->
-    {0, State};
 maybe_push_q1_to_betas(Quota, State = #vqstate { q1 = Q1 }) ->
     maybe_push_alphas_to_betas(
       fun queue:out/1,
@@ -1273,8 +1271,6 @@ maybe_push_q1_to_betas(Quota, State = #vqstate { q1 = Q1 }) ->
                                 q2 = bpqueue:in(IndexOnDisk, MsgStatus, Q2) }
       end, Quota, Q1, State).
 
-maybe_push_q4_to_betas(0, State) ->
-    {0, State};
 maybe_push_q4_to_betas(Quota, State = #vqstate { q4 = Q4 }) ->
     maybe_push_alphas_to_betas(
       fun queue:out_r/1,
