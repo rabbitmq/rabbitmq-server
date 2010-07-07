@@ -140,5 +140,6 @@
 -type(ok(A) :: {'ok', A}).
 -type(error(A) :: {'error', A}).
 -type(ok_or_error(A) :: 'ok' | error(A)).
+-type(ok_or_error2(A, B) :: ok(A) | error(B)).
 
 -endif. % use_specs

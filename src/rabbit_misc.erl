@@ -97,12 +97,11 @@
         -> no_return()).
 -spec(not_found/1 :: (rabbit_types:r(atom())) -> no_return()).
 -spec(get_config/1 ::
-        (atom()) -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
+        (atom()) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 ::
-        ({atom(), any()})
-        -> rabbit_types:ok(any()) | rabbit_types:error('not_found')).
+        ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(r/2 :: (rabbit_types:vhost(), K)
              -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
                     when is_subtype(K, atom())).

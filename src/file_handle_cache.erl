@@ -183,7 +183,7 @@
 
 -type(ref() :: any()).
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
--type(val_or_error(T) :: (rabbit_types:ok(T) | rabbit_types:error(any()))).
+-type(val_or_error(T) :: rabbit_types:ok_or_error2(T, any())).
 -type(position() :: ('bof' | 'eof' | non_neg_integer() |
                      {('bof' |'eof'), non_neg_integer()} |
                      {'cur', integer()})).

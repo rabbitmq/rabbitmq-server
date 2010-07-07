@@ -50,8 +50,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 ::
-        () -> rabbit_types:ok(pid()) | 'ignore' | rabbit_types:error(any())).
+-spec(start_link/0 :: () -> 'ignore' | rabbit_types:ok_or_error2(pid(), any())).
 -spec(debug/1 :: (string()) -> 'ok').
 -spec(debug/2 :: (string(), [any()]) -> 'ok').
 -spec(info/1 :: (string()) -> 'ok').
