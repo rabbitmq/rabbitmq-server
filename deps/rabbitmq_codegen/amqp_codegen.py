@@ -62,66 +62,66 @@ def insert_base_types(d):
 
 class AmqpSpecFileMergeConflict(Exception): pass
 
-# If allow_accumulate is true, then we allow acc and new to conflict,
+# If ignore_conflicts is true, then we allow acc and new to conflict,
 # with whatever's already in acc winning and new being ignored. If
-# allow_accumulate is false, acc and new must not conflict.
+# ignore_conflicts is false, acc and new must not conflict.
 
-def default_spec_value_merger(key, acc, new, allow_accumulate):
-    if acc is None or acc == new or allow_accumulate:
+def default_spec_value_merger(key, acc, new, ignore_conflicts):
+    if acc is None or acc == new or ignore_conflicts:
         return new
     else:
         raise AmqpSpecFileMergeConflict(key, acc, new)
 
-def extension_info_merger(key, acc, new, allow_accumulate):
+def extension_info_merger(key, acc, new, ignore_conflicts):
     return acc + [new]
 
-def domains_merger(key, acc, new, allow_accumulate):
+def domains_merger(key, acc, new, ignore_conflicts):
     merged = dict((k, v) for [k, v] in new)
     for [k, v] in acc:
         if merged.has_key(k):
-            if not allow_accumulate:
+            if not ignore_conflicts:
                 raise AmqpSpecFileMergeConflict(key, acc, new)
         else:
             merged[k] = v
 
     return [[k, v] for (k, v) in merged.iteritems()]
 
-def merge_dict_lists_by(dict_key, acc, new, allow_accumulate):
+def merge_dict_lists_by(dict_key, acc, new, ignore_conflicts):
     new_index = set(v[dict_key] for v in new)
     result = list(new) # shallow copy
     for v in acc:
         if v[dict_key] in new_index:
-            if not allow_accumulate:
+            if not ignore_conflicts:
                 raise AmqpSpecFileMergeConflict(description, acc, new)
         else:
             result.append(v)
     return result
 
-def constants_merger(key, acc, new, allow_accumulate):
-    return merge_dict_lists_by("name", acc, new, allow_accumulate)
+def constants_merger(key, acc, new, ignore_conflicts):
+    return merge_dict_lists_by("name", acc, new, ignore_conflicts)
 
-def methods_merger(classname, acc, new, allow_accumulate):
-    return merge_dict_lists_by("name", acc, new, allow_accumulate)
+def methods_merger(classname, acc, new, ignore_conflicts):
+    return merge_dict_lists_by("name", acc, new, ignore_conflicts)
 
-def properties_merger(classname, acc, new, allow_accumulate):
-    return merge_dict_lists_by("name", acc, new, allow_accumulate)
+def properties_merger(classname, acc, new, ignore_conflicts):
+    return merge_dict_lists_by("name", acc, new, ignore_conflicts)
 
-def class_merger(acc, new, allow_accumulate):
+def class_merger(acc, new, ignore_conflicts):
     acc["methods"] = methods_merger(acc["name"],
                                     acc["methods"],
                                     new["methods"],
-                                    allow_accumulate)
+                                    ignore_conflicts)
     acc["properties"] = properties_merger(acc["name"],
                                           acc.get("properties", []),
                                           new.get("properties", []),
-                                          allow_accumulate)
+                                          ignore_conflicts)
 
-def classes_merger(key, acc, new, allow_accumulate):
+def classes_merger(key, acc, new, ignore_conflicts):
     new_dict = dict((v["name"], v) for v in new)
     result = list(new) # shallow copy
     for w in acc:
         if w["name"] in new_dict:
-            class_merger(new_dict[w["name"]], w, allow_accumulate)
+            class_merger(new_dict[w["name"]], w, ignore_conflicts)
         else:
             result.append(w)
     return result
@@ -133,24 +133,24 @@ mergers = {
     "classes": (classes_merger, []),
 }
 
-def merge_load_specs(filenames, allow_accumulate):
+def merge_load_specs(filenames, ignore_conflicts):
     handles = [file(filename) for filename in filenames]
     docs = [json.load(handle) for handle in handles]
     spec = {}
     for doc in docs:
         for (key, value) in doc.iteritems():
             (merger, default_value) = mergers.get(key, (default_spec_value_merger, None))
-            spec[key] = merger(key, spec.get(key, default_value), value, allow_accumulate)
+            spec[key] = merger(key, spec.get(key, default_value), value, ignore_conflicts)
     for handle in handles: handle.close()
     return spec
         
 class AmqpSpec:
     # Slight wart: use a class member rather than change the ctor signature
     # to avoid breaking everyone else's code.
-    allow_accumulate = False
+    ignore_conflicts = False
 
     def __init__(self, filenames):
-        self.spec = merge_load_specs(filenames, AmqpSpec.allow_accumulate)
+        self.spec = merge_load_specs(filenames, AmqpSpec.ignore_conflicts)
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
@@ -283,7 +283,7 @@ def do_main_dict(funcDict):
             f.close()
 
     parser = OptionParser()
-    parser.add_option("--allow-accumulate", action="store_true", dest="allow_accumulate", default=False)
+    parser.add_option("--ignore-conflicts", action="store_true", dest="ignore_conflicts", default=False)
     (options, args) = parser.parse_args()
 
     if len(args) < 3:
@@ -293,7 +293,7 @@ def do_main_dict(funcDict):
         function = args[0]
         sources = args[1:-1]
         dest = args[-1]
-        AmqpSpec.allow_accumulate = options.allow_accumulate
+        AmqpSpec.ignore_conflicts = options.ignore_conflicts
         if funcDict.has_key(function):
             execute(funcDict[function], sources, dest)
         else:
