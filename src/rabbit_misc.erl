@@ -167,7 +167,7 @@
 -spec(recursive_delete/1 ::
         ([file:filename()])
         -> rabbit_types:ok_or_error({file:filename(), any()})).
--spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
+-spec(dict_cons/3 :: (any(), any(), dict:dictionary()) -> dict:dictionary()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 
 -endif.
