@@ -909,7 +909,7 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
-    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
+    case catch Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
              fun (_X, Q) ->
                      rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
              end) of
@@ -926,6 +926,11 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
               not_found, "no binding ~s between ~s and ~s",
               [RoutingKey, rabbit_misc:rs(ExchangeName),
                rabbit_misc:rs(QueueName)]);
+        %% When check_exclusive_access exits with a protocal error this gets
+        %% wrapped because rabbit_misc:execute_mnesia_transaction uses the
+        %% worker pool. Unwrap it and exit again.
+        {error, {amqp_error, _, _, _} = Error} ->
+            exit(Error);
         ok -> return_ok(State, NoWait, ReturnMethod)
     end.
 
