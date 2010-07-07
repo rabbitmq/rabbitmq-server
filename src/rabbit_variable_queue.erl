@@ -911,14 +911,14 @@ tx_commit_post_msg_store(IsTransientPubs, Pubs, AckTags, Fun,
                            on_sync     = OnSync = {SAcks, SPubs, SFuns},
                            pending_ack = PA,
                            durable     = IsDurable }) ->
-    %% If we are a non-durable queue, or (no persisent pubs, and no
+    %% If we are a non-durable queue, or (no persistent pubs, and no
     %% persistent acks) then we can skip the queue_index loop.
     case (not IsDurable) orelse
         (IsTransientPubs andalso
          lists:foldl(
            fun (AckTag,  true ) ->
                    case dict:find(AckTag, PA) of
-                       {ok, #msg_status {}}         -> true;
+                       {ok, #msg_status {}}        -> true;
                        {ok, {IsPersistent, _Guid}} -> not IsPersistent
                    end;
                (_AckTag, false) -> false
