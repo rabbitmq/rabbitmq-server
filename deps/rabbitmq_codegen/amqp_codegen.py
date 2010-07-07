@@ -76,8 +76,8 @@ def extension_info_merger(key, acc, new, ignore_conflicts):
     return acc + [new]
 
 def domains_merger(key, acc, new, ignore_conflicts):
-    merged = dict((k, v) for [k, v] in new)
-    for [k, v] in acc:
+    merged = dict((k, v) for [k, v] in acc)
+    for [k, v] in new:
         if merged.has_key(k):
             if not ignore_conflicts:
                 raise AmqpSpecFileMergeConflict(key, acc, new)
