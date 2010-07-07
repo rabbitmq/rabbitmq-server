@@ -30,17 +30,17 @@
 %%
 
 -module(rabbit_dialyzer).
--include("rabbit.hrl").
 
--export([create_basic_plt/1, add_to_plt/2, dialyze_files/2, halt_with_code/1]).
+-export([create_basic_plt/1, add_to_plt/2, dialyze_files/2,
+         halt_with_code/1]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(create_basic_plt/1 :: (file_path()) -> 'ok').
--spec(add_to_plt/2 :: (file_path(), string()) -> 'ok').
--spec(dialyze_files/2 :: (file_path(), string()) -> 'ok').
+-spec(create_basic_plt/1 :: (file:filename()) -> 'ok').
+-spec(add_to_plt/2 :: (file:filename(), string()) -> 'ok').
+-spec(dialyze_files/2 :: (file:filename(), string()) -> 'ok').
 -spec(halt_with_code/1 :: (atom()) -> no_return()).
 
 -endif.
