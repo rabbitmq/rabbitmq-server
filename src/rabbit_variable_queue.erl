@@ -1133,7 +1133,7 @@ limit_ram_index(State = #vqstate { ram_index_count = RamIndexCount }) ->
                 false -> #vqstate { q2 = Q2, q3 = Q3,
                                     index_state = IndexState } = State,
                          {Q2a, {Reduction1, IndexState1}} =
-                             limit_ram_index(fun bpqueue:map_fold_filter_l/4,
+                             limit_ram_index(fun bpqueue:map_fold_filter_r/4,
                                              Q2, {Reduction, IndexState}),
                          %% TODO: we shouldn't be writing index
                          %% entries for messages that can never end up
