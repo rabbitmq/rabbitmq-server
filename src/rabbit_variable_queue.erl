@@ -111,18 +111,22 @@
 %% should be very few betas remaining, thus the transition is fast (no
 %% work needs to be done for the gamma -> delta transition).
 %%
-%% The conversion of betas to gammas is done on all actions that can
-%% increase the message count, such as publish and requeue, and when
-%% the queue is asked to reduce its memory usage. The conversion is
-%% done in batches of exactly ?RAM_INDEX_BATCH_SIZE. This value should
-%% not be too small, otherwise the frequent operations on the queues
-%% of q2 and q3 will not be effectively amortised (switching the
-%% direction of queue access defeats amortisation), nor should it be
-%% too big, otherwise converting a batch stalls the queue for too
-%% long. Therefore, it must be just right. This approach is preferable
-%% to doing work on a new queue-duration because converting all the
-%% indicated betas to gammas at that point can be far too expensive,
-%% thus requiring batching and segmented work anyway.
+%% The conversion of betas to gammas is done in batches of exactly
+%% ?IO_BATCH_SIZE. This value should not be too small, otherwise the
+%% frequent operations on the queues of q2 and q3 will not be
+%% effectively amortised (switching the direction of queue access
+%% defeats amortisation), nor should it be too big, otherwise
+%% converting a batch stalls the queue for too long. Therefore, it
+%% must be just right.
+%%
+%% The conversion from alphas to betas is also chunked, but only to
+%% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
+%% any one time. This further smooths the effects of changes to the
+%% target_ram_index_count and ensures the queue remains responsive
+%% even when there is a large amount of IO work to do. The
+%% idle_timeout callback is utilised to ensure that conversions are
+%% done as promptly as possible whilst ensuring the queue remains
+%% responsive.
 %%
 %% In the queue we only keep track of messages that are pending
 %% delivery. This is fine for queue purging, but can be expensive for
