@@ -240,7 +240,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
-    {ok, Collector} = rabbit_reader_queue_collector:start_link(),
+    {ok, Collector} = rabbit_queue_collector:start_link(),
     try
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
@@ -272,7 +272,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %%
         %% gen_tcp:close(ClientSock),
         teardown_profiling(ProfilingValue),
-        rabbit_reader_queue_collector:shutdown(Collector),
+        rabbit_queue_collector:shutdown(Collector),
         rabbit_misc:unlink_and_capture_exit(Collector)
     end,
     done.
@@ -444,7 +444,7 @@ maybe_close(State = #v1{connection_state = closing,
             %% connection, and are deleted when that connection closes."
             %% This does not strictly imply synchrony, but in practice it seems
             %% to be what people assume.
-            rabbit_reader_queue_collector:delete_all(Collector),
+            rabbit_queue_collector:delete_all(Collector),
             ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}),
             close_connection(State);
         _  -> State
