@@ -179,7 +179,7 @@ noreply(NewState) ->
 next_state(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         ensure_rate_timer(State),
-    case BQ:needs_sync(BQS)of
+    case BQ:needs_idle_timeout(BQS)of
         true  -> {ensure_sync_timer(State1), 0};
         false -> {stop_sync_timer(State1), hibernate}
     end.
@@ -188,7 +188,7 @@ ensure_sync_timer(State = #q{sync_timer_ref = undefined, backing_queue = BQ}) ->
     {ok, TRef} = timer:apply_after(
                    ?SYNC_INTERVAL,
                    rabbit_amqqueue, maybe_run_queue_via_backing_queue,
-                   [self(), fun (BQS) -> BQ:sync(BQS) end]),
+                   [self(), fun (BQS) -> BQ:idle_timeout(BQS) end]),
     State#q{sync_timer_ref = TRef};
 ensure_sync_timer(State) ->
     State.
@@ -822,7 +822,7 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
 
 handle_info(timeout, State = #q{backing_queue = BQ}) ->
     noreply(maybe_run_queue_via_backing_queue(
-              fun (BQS) -> BQ:sync(BQS) end, State));
+              fun (BQS) -> BQ:idle_timeout(BQS) end, State));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};

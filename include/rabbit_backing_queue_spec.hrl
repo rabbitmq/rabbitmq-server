@@ -57,7 +57,7 @@
 -spec(set_ram_duration_target/2 ::
       (('undefined' | 'infinity' | number()), state()) -> state()).
 -spec(ram_duration/1 :: (state()) -> {number(), state()}).
--spec(needs_sync/1 :: (state()) -> boolean()).
--spec(sync/1 :: (state()) -> state()).
+-spec(needs_idle_timeout/1 :: (state()) -> boolean()).
+-spec(idle_timeout/1 :: (state()) -> state()).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
