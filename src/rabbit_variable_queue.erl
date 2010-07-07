@@ -122,7 +122,7 @@
 %% The conversion from alphas to betas is also chunked, but only to
 %% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
 %% any one time. This further smooths the effects of changes to the
-%% target_ram_index_count and ensures the queue remains responsive
+%% target_ram_msg_count and ensures the queue remains responsive
 %% even when there is a large amount of IO work to do. The
 %% idle_timeout callback is utilised to ensure that conversions are
 %% done as promptly as possible whilst ensuring the queue remains
