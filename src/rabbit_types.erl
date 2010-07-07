@@ -40,7 +40,7 @@
               unencoded_content/0, encoded_content/0, vhost/0, ctag/0,
               amqp_error/0, r/1, r2/2, r3/3, ssl_socket/0, listener/0,
               binding/0, amqqueue/0, exchange/0, connection/0, user/0,
-              error/1, ok_or_error/1, ok/1]).
+              error/1, ok_or_error/1, ok_or_error2/2, ok/1]).
 
 -type(maybe(T) :: T | 'none').
 -type(vhost() :: binary()).
