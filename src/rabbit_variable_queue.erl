@@ -915,14 +915,12 @@ tx_commit_post_msg_store(IsTransientPubs, Pubs, AckTags, Fun,
     %% persistent acks) then we can skip the queue_index loop.
     case (not IsDurable) orelse
         (IsTransientPubs andalso
-         lists:foldl(
-           fun (AckTag,  true ) ->
-                   case dict:find(AckTag, PA) of
-                       {ok, #msg_status {}}        -> true;
-                       {ok, {IsPersistent, _Guid}} -> not IsPersistent
-                   end;
-               (_AckTag, false) -> false
-           end, true, AckTags)) of
+         lists:all(fun (AckTag) ->
+                           case dict:find(AckTag, PA) of
+                               {ok, #msg_status {}}        -> true;
+                               {ok, {IsPersistent, _Guid}} -> not IsPersistent
+                           end
+                   end, AckTags)) of
         true  -> State1 = tx_commit_index(State #vqstate {
                                             on_sync = {[], [Pubs], [Fun]} }),
                  State1 #vqstate { on_sync = OnSync };
