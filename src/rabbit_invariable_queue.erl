@@ -48,9 +48,9 @@
 
 -ifdef(use_specs).
 
--type(ack() :: guid() | 'blank_ack').
+-type(ack() :: rabbit_guid:guid() | 'blank_ack').
 -type(state() :: #iv_state { queue       :: queue(),
-                             qname       :: queue_name(),
+                             qname       :: rabbit_amqqueue:name(),
                              len         :: non_neg_integer(),
                              pending_ack :: dict()
                            }).

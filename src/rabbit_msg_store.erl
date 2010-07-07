@@ -107,40 +107,43 @@
 
 -type(server() :: pid() | atom()).
 -type(file_num() :: non_neg_integer()).
--type(client_msstate() :: #client_msstate { file_handle_cache  :: dict(),
-                                            index_state        :: any(),
-                                            index_module       :: atom(),
-                                            dir                :: file_path(),
-                                            gc_pid             :: pid(),
-                                            file_handles_ets   :: ets:tid(),
-                                            file_summary_ets   :: ets:tid(),
-                                            dedup_cache_ets    :: ets:tid(),
-                                            cur_file_cache_ets :: ets:tid() }).
+-type(client_msstate() :: #client_msstate {
+                      file_handle_cache  :: dict:dictionary(),
+                      index_state        :: any(),
+                      index_module       :: atom(),
+                      dir                :: file:filename(),
+                      gc_pid             :: pid(),
+                      file_handles_ets   :: ets:tid(),
+                      file_summary_ets   :: ets:tid(),
+                      dedup_cache_ets    :: ets:tid(),
+                      cur_file_cache_ets :: ets:tid() }).
 -type(startup_fun_state() ::
-        {(fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A}).
+        {(fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A})),
+         A}).
 
 -spec(start_link/4 ::
-      (atom(), file_path(), [binary()] | 'undefined', startup_fun_state()) ->
-             {'ok', pid()} | 'ignore' | {'error', any()}).
--spec(write/4 :: (server(), guid(), msg(), client_msstate()) ->
-             {'ok', client_msstate()}).
--spec(read/3 :: (server(), guid(), client_msstate()) ->
-             {{'ok', msg()} | 'not_found', client_msstate()}).
--spec(contains/2 :: (server(), guid()) -> boolean()).
--spec(remove/2 :: (server(), [guid()]) -> 'ok').
--spec(release/2 :: (server(), [guid()]) -> 'ok').
--spec(sync/3 :: (server(), [guid()], fun (() -> any())) -> 'ok').
+        (atom(), file:filename(), [binary()] | 'undefined',
+         startup_fun_state()) ->
+                           'ignore' | rabbit_types:ok_or_error2(pid(), any())).
+-spec(write/4 :: (server(), rabbit_guid:guid(), msg(), client_msstate()) ->
+                      rabbit_types:ok(client_msstate())).
+-spec(read/3 :: (server(), rabbit_guid:guid(), client_msstate()) ->
+                     {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
+-spec(contains/2 :: (server(), rabbit_guid:guid()) -> boolean()).
+-spec(remove/2 :: (server(), [rabbit_guid:guid()]) -> 'ok').
+-spec(release/2 :: (server(), [rabbit_guid:guid()]) -> 'ok').
+-spec(sync/3 :: (server(), [rabbit_guid:guid()], fun (() -> any())) -> 'ok').
 -spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) ->
-             'ok').
+                        'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(client_init/2 :: (server(), binary()) -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(delete_client/2 :: (server(), binary()) -> 'ok').
--spec(clean/2 :: (atom(), file_path()) -> 'ok').
+-spec(clean/2 :: (atom(), file:filename()) -> 'ok').
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
 
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
-               {ets:tid(), file_path(), atom(), any()}) ->
+               {ets:tid(), file:filename(), atom(), any()}) ->
                    'concurrent_readers' | non_neg_integer()).
 
 -endif.

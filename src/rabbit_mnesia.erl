@@ -29,6 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
+
 -module(rabbit_mnesia).
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
@@ -47,13 +48,16 @@
 
 -ifdef(use_specs).
 
--spec(status/0 :: () -> [{'nodes', [{node_type(), [erlang_node()]}]} |
-                         {'running_nodes', [erlang_node()]}]).
--spec(dir/0 :: () -> file_path()).
+-export_type([node_type/0]).
+
+-type(node_type() :: disc_only | disc | ram | unknown).
+-spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
+                         {'running_nodes', [node()]}]).
+-spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
--spec(cluster/1 :: ([erlang_node()]) -> 'ok').
+-spec(cluster/1 :: ([node()]) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(is_clustered/0 :: () -> boolean()).

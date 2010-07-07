@@ -50,6 +50,8 @@
 
 -ifdef(use_specs).
 
+-export_type([bpqueue/0]).
+
 -type(bpqueue() :: {non_neg_integer(), queue()}).
 -type(prefix() :: any()).
 -type(value() :: any()).

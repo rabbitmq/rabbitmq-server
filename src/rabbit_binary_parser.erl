@@ -42,10 +42,13 @@
 
 -ifdef(use_specs).
 
--spec(parse_table/1 :: (binary()) -> amqp_table()).
--spec(parse_properties/2 :: ([amqp_property_type()], binary()) -> [any()]).
--spec(ensure_content_decoded/1 :: (content()) -> decoded_content()).
--spec(clear_decoded_content/1 :: (content()) -> undecoded_content()).
+-spec(parse_table/1 :: (binary()) -> rabbit_framing:amqp_table()).
+-spec(parse_properties/2 ::
+        ([rabbit_framing:amqp_property_type()], binary()) -> [any()]).
+-spec(ensure_content_decoded/1 ::
+        (rabbit_types:content()) -> rabbit_types:decoded_content()).
+-spec(clear_decoded_content/1 ::
+        (rabbit_types:content()) -> rabbit_types:undecoded_content()).
 
 -endif.
 

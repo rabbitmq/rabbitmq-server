@@ -172,36 +172,41 @@
 -type(hdl() :: ('undefined' | any())).
 -type(segment() :: ('undefined' |
                     #segment { num             :: non_neg_integer(),
-                               path            :: file_path(),
+                               path            :: file:filename(),
                                journal_entries :: array(),
                                unacked         :: non_neg_integer()
                               })).
 -type(seq_id() :: integer()).
--type(seg_dict() :: {dict(), [segment()]}).
--type(qistate() :: #qistate { dir                 :: file_path(),
+-type(seg_dict() :: {dict:dictionary(), [segment()]}).
+-type(qistate() :: #qistate { dir                 :: file:filename(),
                               segments            :: 'undefined' | seg_dict(),
                               journal_handle      :: hdl(),
                               dirty_count         :: integer(),
                               max_journal_entries :: non_neg_integer()
                              }).
 -type(startup_fun_state() ::
-        {(fun ((A) -> 'finished' | {guid(), non_neg_integer(), A})), A}).
+        {(fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A})),
+         A}).
 
--spec(init/3 :: (queue_name(), boolean(), fun ((guid()) -> boolean())) ->
+-spec(init/3 :: (rabbit_amqqueue:name(), boolean(),
+                 fun ((rabbit_guid:guid()) -> boolean())) ->
              {'undefined' | non_neg_integer(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
--spec(publish/4 :: (guid(), seq_id(), boolean(), qistate()) -> qistate()).
+-spec(publish/4 :: (rabbit_guid:guid(), seq_id(), boolean(), qistate()) ->
+                        qistate()).
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
-             {[{guid(), seq_id(), boolean(), boolean()}], qistate()}).
+                     {[{rabbit_guid:guid(), seq_id(), boolean(), boolean()}],
+                      qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(recover/1 :: ([queue_name()]) -> {[[any()]], startup_fun_state()}).
+-spec(recover/1 ::
+        ([rabbit_amqqueue:name()]) -> {[[any()]], startup_fun_state()}).
 
 -endif.
 
