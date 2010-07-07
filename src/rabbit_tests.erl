@@ -1346,7 +1346,7 @@ test_backing_queue() ->
         {ok, rabbit_variable_queue} ->
             {ok, FileSizeLimit} =
                 application:get_env(rabbit, msg_store_file_size_limit),
-            application:set_env(rabbit, msg_store_file_size_limit, 128,
+            application:set_env(rabbit, msg_store_file_size_limit, 512,
                                 infinity),
             {ok, MaxJournal} =
                 application:get_env(rabbit, queue_index_max_journal_entries),
