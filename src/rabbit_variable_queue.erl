@@ -660,7 +660,8 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
                   ram_index_count      = RamIndexCount,
                   avg_egress_rate      = AvgEgressRate,
                   avg_ingress_rate     = AvgIngressRate,
-                  next_seq_id          = NextSeqId }) ->
+                  next_seq_id          = NextSeqId,
+                  persistent_count     = PersistentCount }) ->
     [ {q1                   , queue:len(Q1)},
       {q2                   , bpqueue:len(Q2)},
       {delta                , Delta},
@@ -673,7 +674,8 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
       {ram_index_count      , RamIndexCount},
       {avg_egress_rate      , AvgEgressRate},
       {avg_ingress_rate     , AvgIngressRate},
-      {next_seq_id          , NextSeqId} ].
+      {next_seq_id          , NextSeqId},
+      {persistent_count     , PersistentCount} ].
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
