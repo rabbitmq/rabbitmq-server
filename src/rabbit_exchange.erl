@@ -428,25 +428,25 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                    %% in general, we want to fail on that in preference to
                    %% anything else
                    case InnerFun(X, Q) of
-                       {error, _} = E -> E;
-                       _ ->
+                       ok ->
                            case mnesia:read({rabbit_route, B}) of
                                [] ->
-                                   sync_binding(B,
-                                                X#exchange.durable andalso
-                                                Q#amqqueue.durable,
-                                                fun mnesia:write/3),
+                                   ok = sync_binding(B,
+                                                     X#exchange.durable andalso
+                                                     Q#amqqueue.durable,
+                                                     fun mnesia:write/3),
                                    {new, X, B};
                                [_R] ->
                                    {existing, X, B}
-                           end
+                           end;
+                       {error, _} = E -> E
                    end
            end) of
         {new, Exchange = #exchange{ type = Type }, Binding} ->
             (type_to_module(Type)):add_binding(Exchange, Binding);
         {existing, _, _} ->
             ok;
-        Err = {error, _}  ->
+        {error, _} = Err ->
             Err
     end.
 
@@ -459,16 +459,18 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                        [] -> {error, binding_not_found};
                        _  ->
                            case InnerFun(X, Q) of
-                               {error, _} = E -> E;
-                               _ ->
+                               ok ->
                                    ok =
-                                       sync_binding(B, Q#amqqueue.durable,
+                                       sync_binding(B,
+                                                    X#exchange.durable andalso
+                                                    Q#amqqueue.durable,
                                                     fun mnesia:delete_object/3),
-                                   {maybe_auto_delete(X), B}
+                                   {maybe_auto_delete(X), B};
+                               {error, _} = E -> E
                            end
                    end
            end) of
-        Err = {error, _}  ->
+        {error, _} = Err ->
             Err;
         {{IsDeleted, X = #exchange{ type = Type }}, B} ->
             Module = type_to_module(Type),
