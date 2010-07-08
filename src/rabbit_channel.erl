@@ -930,8 +930,7 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
               [RoutingKey, rabbit_misc:rs(ExchangeName),
                rabbit_misc:rs(QueueName)]);
         %% When check_exclusive_access exits with a protocal error this gets
-        %% wrapped because rabbit_misc:execute_mnesia_transaction uses the
-        %% worker pool. Unwrap it and exit again.
+        %% wrapped by mnesia. Unwrap it and exit again.
         {error, {amqp_error, _, _, _} = Error} ->
             exit(Error);
         ok -> return_ok(State, NoWait, ReturnMethod)
