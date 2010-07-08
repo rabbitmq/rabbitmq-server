@@ -427,16 +427,19 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                    %% this argument is used to check queue exclusivity;
                    %% in general, we want to fail on that in preference to
                    %% anything else
-                   InnerFun(X, Q),
-                   case mnesia:read({rabbit_route, B}) of
-                       [] ->
-                           sync_binding(B,
-                                        X#exchange.durable andalso
-                                        Q#amqqueue.durable,
-                                        fun mnesia:write/3),
-                           {new, X, B};
-                       [_R] ->
-                           {existing, X, B}
+                   case InnerFun(X, Q) of
+                       {error, _} = E -> E;
+                       _ ->
+                           case mnesia:read({rabbit_route, B}) of
+                               [] ->
+                                   sync_binding(B,
+                                                X#exchange.durable andalso
+                                                Q#amqqueue.durable,
+                                                fun mnesia:write/3),
+                                   {new, X, B};
+                               [_R] ->
+                                   {existing, X, B}
+                           end
                    end
            end) of
         {new, Exchange = #exchange{ type = Type }, Binding} ->
@@ -454,10 +457,15 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                    case mnesia:match_object(rabbit_route, #route{binding = B},
                                             write) of
                        [] -> {error, binding_not_found};
-                       _  -> InnerFun(X, Q),
-                             ok = sync_binding(B, Q#amqqueue.durable,
-                                               fun mnesia:delete_object/3),
-                             {maybe_auto_delete(X), B}
+                       _  ->
+                           case InnerFun(X, Q) of
+                               {error, _} = E -> E;
+                               _ ->
+                                   ok =
+                                       sync_binding(B, Q#amqqueue.durable,
+                                                    fun mnesia:delete_object/3),
+                                   {maybe_auto_delete(X), B}
+                           end
                    end
            end) of
         Err = {error, _}  ->
