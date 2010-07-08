@@ -64,8 +64,9 @@
 -type(bind_res() :: rabbit_types:ok_or_error('queue_not_found' |
                                              'exchange_not_found' |
                                              'exchange_and_queue_not_found')).
--type(inner_fun() :: fun((rabbit_types:exchange(), queue()) ->
-                                rabbit_types:ok_or_error('amqp_error'))).
+-type(inner_fun() ::
+        fun((rabbit_types:exchange(), queue()) ->
+                   rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/5 ::
@@ -440,7 +441,8 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                                [_R] ->
                                    {existing, X, B}
                            end;
-                       {error, _} = E -> E
+                       {error, _} = E ->
+                           E
                    end
            end) of
         {new, Exchange = #exchange{ type = Type }, Binding} ->
@@ -457,7 +459,8 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
            fun (X, Q, B) ->
                    case mnesia:match_object(rabbit_route, #route{binding = B},
                                             write) of
-                       [] -> {error, binding_not_found};
+                       [] ->
+                           {error, binding_not_found};
                        _  ->
                            case InnerFun(X, Q) of
                                ok ->
@@ -467,7 +470,8 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                                                     Q#amqqueue.durable,
                                                     fun mnesia:delete_object/3),
                                    {maybe_auto_delete(X), B};
-                               {error, _} = E -> E
+                               {error, _} = E ->
+                                   E
                            end
                    end
            end) of
