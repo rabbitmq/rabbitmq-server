@@ -823,11 +823,6 @@ betas_from_index_entries(List, TransientThreshold, IndexState) ->
      rabbit_queue_index:ack(Acks,
                             rabbit_queue_index:deliver(Delivers, IndexState))}.
 
-ensure_binary_properties(Msg = #basic_message { content = Content }) ->
-    Msg #basic_message {
-      content = rabbit_binary_parser:clear_decoded_content(
-                  rabbit_binary_generator:ensure_content_encoded(Content)) }.
-
 %% the first arg is the older delta
 combine_deltas(?BLANK_DELTA_PATTERN(X), ?BLANK_DELTA_PATTERN(Y)) ->
     ?BLANK_DELTA;
@@ -1075,8 +1070,11 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
         with_msg_store_state(
           MSCState, IsPersistent,
           fun (MsgStore, MSCState2) ->
-                  rabbit_msg_store:write(
-                    MsgStore, Guid, ensure_binary_properties(Msg), MSCState2)
+                  Msg1 = Msg #basic_message {
+                           %% don't persist any recoverable decoded properties
+                           content = rabbit_binary_parser:clear_decoded_content(
+                                       Msg #basic_message.content)},
+                  rabbit_msg_store:write(MsgStore, Guid, Msg1, MSCState2)
           end),
     {MsgStatus #msg_status { msg_on_disk = true }, MSCState1};
 maybe_write_msg_to_disk(_Force, MsgStatus, MSCState) ->
