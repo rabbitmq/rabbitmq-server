@@ -930,7 +930,7 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                rabbit_misc:rs(QueueName)]);
         %% When check_exclusive_access exits with a protocol error this gets
         %% wrapped by mnesia. Unwrap it and exit again.
-        {error, {amqp_error, _, _, _} = Error} ->
+        {error, #amqp_error{} = Error} ->
             exit(Error);
         ok -> return_ok(State, NoWait, ReturnMethod)
     end.
