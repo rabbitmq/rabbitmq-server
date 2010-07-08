@@ -64,7 +64,8 @@
 -type(bind_res() :: rabbit_types:ok_or_error('queue_not_found' |
                                              'exchange_not_found' |
                                              'exchange_and_queue_not_found')).
--type(inner_fun() :: fun((rabbit_types:exchange(), queue()) -> any())).
+-type(inner_fun() :: fun((rabbit_types:exchange(), queue()) ->
+                                rabbit_types:ok_or_error('amqp_error'))).
 
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/5 ::
