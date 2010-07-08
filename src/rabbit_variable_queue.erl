@@ -117,7 +117,8 @@
 %% effectively amortised (switching the direction of queue access
 %% defeats amortisation), nor should it be too big, otherwise
 %% converting a batch stalls the queue for too long. Therefore, it
-%% must be just right.
+%% must be just right. ram_index_count is used here and is the number
+%% of betas.
 %%
 %% The conversion from alphas to betas is also chunked, but only to
 %% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
