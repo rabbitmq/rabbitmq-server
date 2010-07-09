@@ -350,6 +350,12 @@
               are offline.  For a more detailed description, see
               <link linkend="cluster"><command>cluster</command>.</link>
             </para>
+            <para>
+              Note that this variant of the cluster command just
+              ignores the current status of the specified nodes.
+              Clustering may still fail for a variety of other
+              reasons.
+            </para>
           </listitem>
         </varlistentry>
       </variablelist>
