@@ -73,24 +73,22 @@ read_frame(ChannelPid) ->
     end.
 
 mainloop(ChannelPid) ->
-    Decoded = read_frame(ChannelPid),
-    case Decoded of
+    case read_frame(ChannelPid) of
         {method, MethodName, FieldsBin} ->
             Method = rabbit_framing:decode_method_fields(MethodName, FieldsBin),
             case rabbit_framing:method_has_content(MethodName) of
-                true  -> {ClassId, _MethodId} = 
+                true  -> {ClassId, _MethodId} =
                              rabbit_framing:method_id(MethodName),
-                         rabbit_channel:do(ChannelPid, Method,
-                                           collect_content(ChannelPid, 
-                                                           ClassId));
+                         Content = collect_content(ChannelPid, ClassId),
+                         rabbit_channel:do(ChannelPid, Method, Content);
                 false -> rabbit_channel:do(ChannelPid, Method)
             end,
             ?MODULE:mainloop(ChannelPid);
         _ ->
             rabbit_misc:protocol_error(
               unexpected_frame,
-              "expected method frame, got ~p instead",
-              [Decoded])
+              "expected method frame, got non method frame instead",
+              [])
     end.
 
 collect_content(ChannelPid, ClassId) ->
