@@ -36,7 +36,8 @@
 
 -record(vhost, {virtual_host, dummy}).
 
--record(connection, {user, timeout_sec, frame_max, vhost, client_properties}).
+-record(connection, {user, timeout_sec, frame_max, vhost, client_properties,
+                     protocol}).
 
 -record(content,
         {class_id,
@@ -172,12 +173,14 @@
                   explanation :: string(),
                   method      :: atom()}).
 
+-type(protocol() :: atom()).
 -endif.
 
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2010 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
+-define(PROTOCOL_VERSION, "AMQP 0-9-1 / 0-9 / 0-8").
 -define(ERTS_MINIMUM, "5.6.3").
 
 -define(MAX_WAIT, 16#ffffffff).
