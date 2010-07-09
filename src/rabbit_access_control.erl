@@ -174,10 +174,9 @@ check_resource_access(Username,
               [#user_permission{permission = P}] ->
                   case re:run(
                          binary_to_list(Name),
-                         binary_to_list(element(permission_index(Permission), P)),
-                         [{return, list}]) of
-                      {match, _, _} -> true;
-                      nomatch       -> false
+                         binary_to_list(element(permission_index(Permission), P))) of
+                      {match, _} -> true;
+                      nomatch    -> false
                   end
           end,
     if Res  -> ok;
