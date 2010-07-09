@@ -85,10 +85,9 @@ mainloop(ChannelPid) ->
             end,
             ?MODULE:mainloop(ChannelPid);
         _ ->
-            rabbit_misc:protocol_error(
-              unexpected_frame,
-              "expected method frame, got non method frame instead",
-              [])
+            unexpected_frame("expected method frame, "
+                             "got non method frame instead",
+                             [])
     end.
 
 collect_content(ChannelPid, ClassId) ->
@@ -100,17 +99,13 @@ collect_content(ChannelPid, ClassId) ->
                      properties_bin = PropertiesBin,
                      payload_fragments_rev = Payload};
         {content_header, HeaderClassId, 0, _BodySize, _PropertiesBin} ->
-            rabbit_misc:protocol_error(
-              unexpected_frame,
-              "expected content header for class ~w, "
-              "got one for class ~w instead",
-              [ClassId, HeaderClassId]);
+            unexpected_frame("expected content header for class ~w, "
+                             "got one for class ~w instead",
+                             [ClassId, HeaderClassId]);
         _ ->
-            rabbit_misc:protocol_error(
-              unexpected_frame,
-              "expected content header for class ~w, "
-              "got non content header frame instead",
-              [ClassId])
+            unexpected_frame("expected content header for class ~w, "
+                             "got non content header frame instead",
+                             [ClassId])
     end.
 
 collect_content_payload(_ChannelPid, 0, Acc) ->
@@ -122,8 +117,10 @@ collect_content_payload(ChannelPid, RemainingByteCount, Acc) ->
                                     RemainingByteCount - size(FragmentBin),
                                     [FragmentBin | Acc]);
         _ ->
-            rabbit_misc:protocol_error(
-              unexpected_frame,
-              "expected content body, got non content body frame instead",
-              [])
+            unexpected_frame("expected content body, "
+                             "got non content body frame instead",
+                             [])
     end.
+
+unexpected_frame(ExplanationFormat, Params) ->
+    rabbit_misc:protocol_error(unexpected_frame, ExplanationFormat, Params).
