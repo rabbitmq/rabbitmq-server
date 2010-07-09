@@ -6,4 +6,3 @@ clean:
 
 distclean: clean
 	find . -regex '.*\(~\|#\|\.swp\)' -exec rm {} \;
-
