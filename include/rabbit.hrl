@@ -45,6 +45,7 @@
          properties_bin, %% either 'none', or an encoded properties binary
          %% Note: at most one of properties and properties_bin can be
          %% 'none' at once.
+         protocol, %% The protocol under which properties_bin was encoded
          payload_fragments_rev %% list of binaries, in reverse order (!)
          }).
 

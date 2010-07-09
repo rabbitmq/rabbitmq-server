@@ -78,18 +78,20 @@ mainloop(ChannelPid, Protocol) ->
     case Protocol:method_has_content(MethodName) of
         true  -> {ClassId, _MethodId} = Protocol:method_id(MethodName),
                  rabbit_channel:do(ChannelPid, Method,
-                                   collect_content(ChannelPid, ClassId));
+                                   collect_content(ChannelPid, ClassId,
+                                                   Protocol));
         false -> rabbit_channel:do(ChannelPid, Method)
     end,
     ?MODULE:mainloop(ChannelPid, Protocol).
 
-collect_content(ChannelPid, ClassId) ->
+collect_content(ChannelPid, ClassId, Protocol) ->
     case read_frame(ChannelPid) of
         {content_header, ClassId, 0, BodySize, PropertiesBin} ->
             Payload = collect_content_payload(ChannelPid, BodySize, []),
             #content{class_id = ClassId,
                      properties = none,
                      properties_bin = PropertiesBin,
+                     protocol = Protocol,
                      payload_fragments_rev = Payload};
         {content_header, HeaderClassId, 0, _BodySize, _PropertiesBin} ->
             rabbit_misc:protocol_error(

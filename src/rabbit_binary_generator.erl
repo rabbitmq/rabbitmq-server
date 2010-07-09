@@ -82,18 +82,25 @@ build_simple_content_frames(ChannelInt,
                             #content{class_id = ClassId,
                                      properties = ContentProperties,
                                      properties_bin = ContentPropertiesBin,
+                                     protocol = ContentProtocol,
                                      payload_fragments_rev = PayloadFragmentsRev},
                             FrameMax, Protocol) ->
     {BodySize, ContentFrames} = build_content_frames(PayloadFragmentsRev, FrameMax, ChannelInt),
     HeaderFrame = create_frame(2, ChannelInt,
                                [<<ClassId:16, 0:16, BodySize:64>>,
-                                maybe_encode_properties(ContentProperties, ContentPropertiesBin, Protocol)]),
+                                maybe_encode_properties(ContentProperties,
+                                                        ContentPropertiesBin,
+                                                        ContentProtocol,
+                                                        Protocol)]),
     [HeaderFrame | ContentFrames].
 
-maybe_encode_properties(_ContentProperties, ContentPropertiesBin, _Protocol)
+maybe_encode_properties(_ContentProperties,
+                        ContentPropertiesBin,
+                        Protocol,
+                        Protocol)
   when is_binary(ContentPropertiesBin) ->
     ContentPropertiesBin;
-maybe_encode_properties(ContentProperties, none, Protocol) ->
+maybe_encode_properties(ContentProperties, none, _ContentProtocol, Protocol) ->
     Protocol:encode_properties(ContentProperties).
 
 build_content_frames(FragsRev, FrameMax, ChannelInt) ->
@@ -278,13 +285,14 @@ check_empty_content_body_frame_size() ->
                   ComputedSize, ?EMPTY_CONTENT_BODY_FRAME_SIZE})
     end.
 
-ensure_content_encoded(Content = #content{properties_bin = PropsBin}, _Protocol)
-  when PropsBin =/= 'none' ->
+ensure_content_encoded(Content = #content{protocol = Protocol}, Protocol) ->
     Content;
 ensure_content_encoded(Content = #content{properties = Props}, Protocol) ->
-    Content#content{properties_bin = Protocol:encode_properties(Props)}.
+    Content#content{properties_bin = Protocol:encode_properties(Props),
+                    protocol = Protocol}.
 
-clear_encoded_content(Content = #content{properties_bin = none}) ->
+clear_encoded_content(Content = #content{properties_bin = none,
+                                         protocol = none}) ->
     Content;
 clear_encoded_content(Content = #content{properties = none}) ->
     %% Only clear when we can rebuild the properties_bin later in
@@ -292,4 +300,4 @@ clear_encoded_content(Content = #content{properties = none}) ->
     %% one of properties and properties_bin can be 'none'
     Content;
 clear_encoded_content(Content = #content{}) ->
-    Content#content{properties_bin = none}.
+    Content#content{properties_bin = none, protocol = none}.
