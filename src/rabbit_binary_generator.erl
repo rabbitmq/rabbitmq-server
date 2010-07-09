@@ -292,7 +292,9 @@ check_empty_content_body_frame_size() ->
                   ComputedSize, ?EMPTY_CONTENT_BODY_FRAME_SIZE})
     end.
 
-ensure_content_encoded(Content = #content{protocol = Protocol}, Protocol) ->
+ensure_content_encoded(Content = #content{properties_bin = PropsBin,
+                                          protocol = Protocol}, Protocol)
+  when PropsBin =/= 'none' ->
     Content;
 ensure_content_encoded(Content = #content{properties = Props}, Protocol) ->
     Content#content{properties_bin = Protocol:encode_properties(Props),
