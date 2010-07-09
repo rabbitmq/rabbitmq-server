@@ -172,9 +172,10 @@ check_resource_access(Username,
               [] ->
                   false;
               [#user_permission{permission = P}] ->
-                  case regexp:match(
+                  case re:run(
                          binary_to_list(Name),
-                         binary_to_list(element(permission_index(Permission), P))) of
+                         binary_to_list(element(permission_index(Permission), P)),
+                         [{return, list}]) of
                       {match, _, _} -> true;
                       nomatch       -> false
                   end
@@ -301,7 +302,7 @@ list_vhosts() ->
 
 validate_regexp(RegexpBin) ->
     Regexp = binary_to_list(RegexpBin),
-    case regexp:parse(Regexp) of
+    case re:compile(Regexp) of
         {ok, _}         -> ok;
         {error, Reason} -> throw({error, {invalid_regexp, Regexp, Reason}})
     end.

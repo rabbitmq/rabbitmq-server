@@ -55,8 +55,14 @@ create_basic_plt(BasicPltPath) ->
     dialyzer_cl:start(OptsRecord),
     ok.
 
+splitIntoFilenames(FilesString) ->
+    lists:dropwhile(fun([]) -> true;
+                       (_)  -> false
+                    end,
+                    re:split(FilesString, " ", [{return, list}, trim])).
+
 add_to_plt(PltPath, FilesString) ->
-    {ok, Files} = regexp:split(FilesString, " "),
+    Files = splitIntoFilenames(FilesString),
     DialyzerWarnings = dialyzer:run([{analysis_type, plt_add},
                                      {init_plt, PltPath},
                                      {output_plt, PltPath},
@@ -65,7 +71,7 @@ add_to_plt(PltPath, FilesString) ->
     ok.
 
 dialyze_files(PltPath, ModifiedFiles) ->
-    {ok, Files} = regexp:split(ModifiedFiles, " "),
+    Files = splitIntoFilenames(ModifiedFiles),
     DialyzerWarnings = dialyzer:run([{init_plt, PltPath},
                                      {files, Files}]),
     case DialyzerWarnings of
