@@ -597,19 +597,19 @@ test_cluster_management() ->
 
     ok = control_action(reset, []),
     lists:foreach(fun (Arg) ->
-                          ok = control_action(cluster, Arg),
+                          ok = control_action(force_cluster, Arg),
                           ok
                   end,
                   ClusteringSequence),
     lists:foreach(fun (Arg) ->
                           ok = control_action(reset, []),
-                          ok = control_action(cluster, Arg),
+                          ok = control_action(force_cluster, Arg),
                           ok
                   end,
                   ClusteringSequence),
     ok = control_action(reset, []),
     lists:foreach(fun (Arg) ->
-                          ok = control_action(cluster, Arg),
+                          ok = control_action(force_cluster, Arg),
                           ok = control_action(start_app, []),
                           ok = control_action(stop_app, []),
                           ok
@@ -617,7 +617,7 @@ test_cluster_management() ->
                   ClusteringSequence),
     lists:foreach(fun (Arg) ->
                           ok = control_action(reset, []),
-                          ok = control_action(cluster, Arg),
+                          ok = control_action(force_cluster, Arg),
                           ok = control_action(start_app, []),
                           ok = control_action(stop_app, []),
                           ok
@@ -628,13 +628,13 @@ test_cluster_management() ->
     ok = control_action(reset, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
-    ok = control_action(cluster, ["invalid1@invalid",
-                                  "invalid2@invalid"]),
+    ok = control_action(force_cluster, ["invalid1@invalid",
+                                        "invalid2@invalid"]),
 
     %% join a non-existing cluster as a ram node
     ok = control_action(reset, []),
-    ok = control_action(cluster, ["invalid1@invalid",
-                                  "invalid2@invalid"]),
+    ok = control_action(force_cluster, ["invalid1@invalid",
+                                        "invalid2@invalid"]),
 
     SecondaryNode = rabbit_misc:makenode("hare"),
     case net_adm:ping(SecondaryNode) of
@@ -659,18 +659,26 @@ test_cluster_management2(SecondaryNode) ->
 
     %% join cluster as a ram node
     ok = control_action(reset, []),
-    ok = control_action(cluster, [SecondaryNodeS, "invalid1@invalid"]),
+    ok = control_action(force_cluster, [SecondaryNodeS, "invalid1@invalid"]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
 
     %% change cluster config while remaining in same cluster
-    ok = control_action(cluster, ["invalid2@invalid", SecondaryNodeS]),
+    ok = control_action(force_cluster, ["invalid2@invalid", SecondaryNodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
 
     %% join non-existing cluster as a ram node
-    ok = control_action(cluster, ["invalid1@invalid",
-                                  "invalid2@invalid"]),
+    ok = control_action(force_cluster, ["invalid1@invalid",
+                                        "invalid2@invalid"]),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+
+    %% join empty cluster as a ram node
+    ok = control_action(cluster, []),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+
     %% turn ram node into disk node
     ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
@@ -678,8 +686,8 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
 
     %% convert a disk node into a ram node
-    ok = control_action(cluster, ["invalid1@invalid",
-                                  "invalid2@invalid"]),
+    ok = control_action(force_cluster, ["invalid1@invalid",
+                                        "invalid2@invalid"]),
 
     %% turn a disk node into a ram node
     ok = control_action(reset, []),
