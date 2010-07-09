@@ -284,7 +284,7 @@ delete_cluster_nodes_config() ->
 %% specified cluster nodes.  If Force is false, don't allow
 %% connections to offline nodes.
 init_db(ClusterNodes, Force) ->
-    ProperClusterNodes = ClusterNodes -- [node()],
+    ProperClusterNodes = lists:usort(ClusterNodes -- [node()]),
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
             case Force of
