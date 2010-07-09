@@ -85,30 +85,17 @@ build_simple_method_frame(ChannelInt, MethodRecord, Protocol) ->
     {ClassId, MethodId} = Protocol:method_id(MethodName),
     create_frame(1, ChannelInt, [<<ClassId:16, MethodId:16>>, MethodFields]).
 
-build_simple_content_frames(ChannelInt,
-                            #content{class_id = ClassId,
-                                     properties = ContentProperties,
-                                     properties_bin = ContentPropertiesBin,
-                                     protocol = ContentProtocol,
-                                     payload_fragments_rev = PayloadFragmentsRev},
-                            FrameMax, Protocol) ->
-    {BodySize, ContentFrames} = build_content_frames(PayloadFragmentsRev, FrameMax, ChannelInt),
+build_simple_content_frames(ChannelInt, Content, FrameMax, Protocol) ->
+    #content{class_id = ClassId,
+             properties_bin = ContentPropertiesBin,
+             payload_fragments_rev = PayloadFragmentsRev} =
+        ensure_content_encoded(Content, Protocol),
+    {BodySize, ContentFrames} =
+        build_content_frames(PayloadFragmentsRev, FrameMax, ChannelInt),
     HeaderFrame = create_frame(2, ChannelInt,
                                [<<ClassId:16, 0:16, BodySize:64>>,
-                                maybe_encode_properties(ContentProperties,
-                                                        ContentPropertiesBin,
-                                                        ContentProtocol,
-                                                        Protocol)]),
+                                ContentPropertiesBin]),
     [HeaderFrame | ContentFrames].
-
-maybe_encode_properties(_ContentProperties,
-                        ContentPropertiesBin,
-                        Protocol,
-                        Protocol)
-  when is_binary(ContentPropertiesBin) ->
-    ContentPropertiesBin;
-maybe_encode_properties(ContentProperties, none, _ContentProtocol, Protocol) ->
-    Protocol:encode_properties(ContentProperties).
 
 build_content_frames(FragsRev, FrameMax, ChannelInt) ->
     BodyPayloadMax = if FrameMax == 0 ->
