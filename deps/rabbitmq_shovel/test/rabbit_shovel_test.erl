@@ -31,9 +31,11 @@
 -define(TIMEOUT,     1000).
 
 test() ->
-    %% various ways of breaking the config
-    {error, {no_shovels_configured, _}} = application:start(rabbit_shovel),
+    %% shovel can be started with zero shovels configured
+    ok = application:start(rabbit_shovel),
+    ok = application:stop(rabbit_shovel),
 
+    %% various ways of breaking the config
     require_list_of_shovel_configurations =
         test_broken_shovel_configs(invalid_config),
 
