@@ -323,8 +323,8 @@ def genErl(spec):
     print "-module(%s)." % module
     print """-include("rabbit_framing.hrl").
 
+-export([version/0]).
 -export([lookup_method_name/1]).
-
 -export([method_id/1]).
 -export([method_has_content/1]).
 -export([is_method_synchronous/1]).
@@ -336,7 +336,6 @@ def genErl(spec):
 -export([encode_properties/1]).
 -export([lookup_amqp_exception/1]).
 -export([amqp_exception/1]).
--export([version/0]).
 
 """
     print "%% Various types"
@@ -401,6 +400,7 @@ def genErl(spec):
     print """
 %% Method signatures
 -ifdef(use_specs).
+-spec(version/0 :: () -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -spec(lookup_method_name/1 :: (amqp_method()) -> amqp_method_name()).
 -spec(method_id/1 :: (amqp_method_name()) -> amqp_method()).
 -spec(method_has_content/1 :: (amqp_method_name()) -> boolean()).
@@ -413,13 +413,16 @@ def genErl(spec):
 -spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
 -spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
 -spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
--spec(version/0 :: () -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -endif. % use_specs
 
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
 bitvalue(undefined) -> 0.
 """
+    version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
+    if version == '{8, 0, 0}': version = '{0, 8, 0}'
+    print "version() -> %s." % (version)
+
     for m in methods: genLookupMethodName(m)
     print "lookup_method_name({_ClassId, _MethodId} = Id) -> exit({unknown_method_id, Id})."
 
@@ -458,10 +461,6 @@ bitvalue(undefined) -> 0.
 
     for(c,v,cls) in spec.constants: genAmqpException(c,v,cls)
     print "amqp_exception(_Code) -> undefined."
-
-    version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
-    if version == '{8, 0, 0}': version = '{0, 8, 0}'
-    print "version() -> %s." % (version)
 
 def genHrl(spec):
     def erlType(domain):
