@@ -63,25 +63,29 @@
 
 -ifdef(use_specs).
 
--type(host() :: ip_address() | string() | atom()).
--type(connection() :: pid()).
+-export_type([ip_port/0, hostname/0]).
 
 -spec(start/0 :: () -> 'ok').
--spec(start_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
--spec(start_ssl_listener/3 :: (host(), ip_port(), [info()]) -> 'ok').
--spec(stop_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
--spec(active_listeners/0 :: () -> [listener()]).
--spec(node_listeners/1 :: (erlang_node()) -> [listener()]).
--spec(connections/0 :: () -> [connection()]).
--spec(connection_info_keys/0 :: () -> [info_key()]).
--spec(connection_info/1 :: (connection()) -> [info()]).
--spec(connection_info/2 :: (connection(), [info_key()]) -> [info()]).
--spec(connection_info_all/0 :: () -> [[info()]]).
--spec(connection_info_all/1 :: ([info_key()]) -> [[info()]]).
+-spec(start_tcp_listener/2 :: (hostname(), ip_port()) -> 'ok').
+-spec(start_ssl_listener/3 :: (hostname(), ip_port(), [rabbit_types:info()])
+                              -> 'ok').
+-spec(stop_tcp_listener/2 :: (hostname(), ip_port()) -> 'ok').
+-spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
+-spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
+-spec(connections/0 :: () -> [rabbit_types:connection()]).
+-spec(connection_info_keys/0 :: () -> [rabbit_types:info_key()]).
+-spec(connection_info/1 ::
+        (rabbit_types:connection()) -> [rabbit_types:info()]).
+-spec(connection_info/2 ::
+        (rabbit_types:connection(), [rabbit_types:info_key()])
+        -> [rabbit_types:info()]).
+-spec(connection_info_all/0 :: () -> [[rabbit_types:info()]]).
+-spec(connection_info_all/1 ::
+        ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
--spec(on_node_down/1 :: (erlang_node()) -> 'ok').
--spec(check_tcp_listener_address/3 :: (atom(), host(), ip_port()) ->
-             {ip_address(), atom()}).
+-spec(on_node_down/1 :: (node()) -> 'ok').
+-spec(check_tcp_listener_address/3 ::
+        (atom(), hostname(), ip_port()) -> {inet:ip_address(), atom()}).
 
 -endif.
 

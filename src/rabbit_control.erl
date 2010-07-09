@@ -44,7 +44,7 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
--spec(action/4 :: (atom(), erlang_node(), [string()],
+-spec(action/4 :: (atom(), node(), [string()],
                    fun ((string(), [any()]) -> 'ok')) -> 'ok').
 -spec(usage/0 :: () -> no_return()).
 
