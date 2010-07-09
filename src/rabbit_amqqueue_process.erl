@@ -35,7 +35,7 @@
 
 -behaviour(gen_server2).
 
--define(UNSENT_MESSAGE_LIMIT,        100).
+-define(UNSENT_MESSAGE_LIMIT,          100).
 -define(SYNC_INTERVAL,                 5). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 

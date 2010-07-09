@@ -49,21 +49,36 @@
 -ifdef(use_specs).
 
 -spec(start/4 ::
-        (socket(), channel_number(), non_neg_integer(), protocol()) -> pid()).
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), rabbit_types:protocol())
+        -> pid()).
 -spec(start_link/4 ::
-        (socket(), channel_number(), non_neg_integer(), protocol()) -> pid()).
--spec(send_command/2 :: (pid(), amqp_method_record()) -> 'ok').
--spec(send_command/3 :: (pid(), amqp_method_record(), content()) -> 'ok').
--spec(send_command_and_signal_back/3 :: (pid(), amqp_method(), pid()) -> 'ok').
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), rabbit_types:protocol())
+        -> pid()).
+-spec(send_command/2 ::
+        (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
+-spec(send_command/3 ::
+        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content())
+        -> 'ok').
+-spec(send_command_and_signal_back/3 ::
+        (pid(), rabbit_framing:amqp_method(), pid()) -> 'ok').
 -spec(send_command_and_signal_back/4 ::
-      (pid(), amqp_method(), content(), pid()) -> 'ok').
+        (pid(), rabbit_framing:amqp_method(), rabbit_types:content(), pid())
+        -> 'ok').
 -spec(send_command_and_notify/5 ::
-      (pid(), pid(), pid(), amqp_method_record(), content()) -> 'ok').
+        (pid(), pid(), pid(), rabbit_framing:amqp_method_record(),
+         rabbit_types:content())
+        -> 'ok').
 -spec(internal_send_command/4 ::
-      (socket(), channel_number(), amqp_method_record(), protocol()) -> 'ok').
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         rabbit_framing:amqp_method_record(), rabbit_types:protocol())
+        -> 'ok').
 -spec(internal_send_command/6 ::
-      (socket(), channel_number(), amqp_method_record(),
-       content(), non_neg_integer(), protocol()) -> 'ok').
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         rabbit_framing:amqp_method_record(), rabbit_types:content(),
+         non_neg_integer(), rabbit_types:protocol())
+        -> 'ok').
 
 -endif.
 
@@ -158,6 +173,7 @@ send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
 
 shutdown(W) ->
     W ! shutdown,
+    rabbit_misc:unlink_and_capture_exit(W),
     ok.
 
 %---------------------------------------------------------------------------
