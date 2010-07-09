@@ -86,7 +86,7 @@ build_content(Properties, BodyBin) ->
     #content{class_id = ClassId,
              properties = Properties,
              properties_bin = none,
-             protocol = rabbit_framing_amqp_0_9_1,
+             protocol = none,
              payload_fragments_rev = [BodyBin]}.
 
 from_content(Content) ->
