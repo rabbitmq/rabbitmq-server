@@ -4,7 +4,6 @@
   {modules, [
              rabbit_writer,
              rabbit_reader,
-             rabbit_framing,
              rabbit_framing_amqp_0_8,
              rabbit_framing_amqp_0_9_1,
              rabbit_framing_channel,
