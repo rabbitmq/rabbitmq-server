@@ -385,7 +385,7 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
                                   U#user.username, list_to_binary(VirtualHost),
                                   CollectorPid),
     {ok, #'channel.open_ok'{}, State1} =
-        simple_method_sync_rpc(#'channel.open'{out_of_band = <<"">>},
+        simple_method_sync_rpc(#'channel.open'{},
                                State#state{channel = ChPid,
                                            collector = CollectorPid}),
     SessionId = rabbit_guid:string_guid("session"),
