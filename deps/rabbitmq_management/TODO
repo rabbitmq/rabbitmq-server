@@ -1,0 +1,4 @@
+To do:
+
+  * instead of polling, we shall push updates to rabbit_status process
+

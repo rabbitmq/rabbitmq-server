@@ -1,0 +1,144 @@
+<%? [Pid, Datetime, BoundTo,
+    Connections, Queues,
+    ProcUsed, ProcTotal, ProcWarn,
+    FdUsed, FdTotal, FdWarn,
+    MemUsed, MemTotal, MemWarn, MemEts, MemBinary]
+      = Data  %>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+<head>
+<!-- Design copied from HAProxy status page -->
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta http-equiv="Content-Style-Type" content="text/css" />
+<title>RabbitMQ Statistics Report</title>
+<style type="text/css"><!--
+    body { font-family: helvetica, arial; font-size: 12px; font-weight: normal; color: black; background: white;}
+
+    table { border-collapse: collapse; border-width: 1px; border-style: none none none solid; border-color: black;}
+    table th, table td {
+        border-width: 1px;
+        border-style: solid solid solid solid;
+        border-color: gray;
+        padding: 2px;
+    }
+    table th {text-align:center;}
+    table td {text-align:right;}
+    td.empty {text-align:center; color: grey;}
+
+
+    label {font-weight: bold;}
+    .titre  {background: #1EB0B0;color: #000000;font-weight: bold;}
+    .pxname {width:125px; background: #a00020;color: #ffff40;}
+
+    table.warns {border-width: 0px; border-color: white;}
+    table.warns td {border-width: 0px; text-align:left;}
+    tr.red {background: #F62817; color:white; font-weight: bolder;}
+    tr.yellow {background: yellow;}
+    tr.green {background: lightgreen;}
+-->
+</style>
+</head><body>
+<h1>RabbitMQ statistics report on <% Datetime %></h1>
+
+<table class="warns">
+ <tr><td><label>node = </label><% node() %> </td></tr>
+ <tr><td><label>pid = </label><% Pid %> </td></tr>
+ <tr><td><label>bound to = </label><% BoundTo %> </td></tr>
+ <tr class="<% FdWarn %>"><td><label>file descriptors (used/available)= </label><% FdUsed %> / <% FdTotal %> </td></tr>
+ <tr class="<% ProcWarn %>"><td><label>erlang processes (used/available) = </label><% ProcUsed %> / <% ProcTotal %> </td></tr>
+ <tr class="<% MemWarn %>"><td><label>memory (used/available) = </label><% {memory, MemUsed} %> / <% {memory, MemTotal} %> </td></tr>
+ <tr><td><label>ets memory = </label><% {memory, MemEts} %> </td></tr>
+ <tr><td><label>binary memory = </label><% {memory, MemBinary} %></td></tr>
+</table>
+
+<br/>
+  <table><thead><tr class="titre"><th class="pxname">
+  Connections
+  </th></tr></thead></table>
+<table>
+ <thead>
+  <tr class="titre">
+   <th colspan="4">Overview</th>
+   <th colspan="4">Network</th>
+  </tr>
+  <tr class="titre">
+   <th>Vhost</th><th>Username</th>
+   <th>State</th><th>Timeout</th>
+   <th>Peer address</th><th>Recv</th><th>Sent</th><th>Pending</th>
+  </tr>
+ </thead>
+ <tbody>
+   <% [print_conn(Conn) || Conn <- Connections]  %>
+   <% [print_empty_conn() || L <- [0], L == length(Connections) ] %>
+ </tbody>
+</table>
+
+
+<br/>
+  <table><thead><tr class="titre"><th class="pxname">
+  Queues
+  </th></tr></thead></table>
+<table>
+ <thead>
+  <tr class="titre">
+    <th colspan="4">Overview</th>
+    <th colspan="3">Messages</th>
+    <th colspan="2">Transactions</th>
+    <th colspan="3">Parameters</th>
+  </tr>
+  <tr class="titre">
+   <th>Vhost</th><th>Name</th><th>Consumers</th>
+   <th>Memory</th>
+   <th>Count</th><th>Msg ready</th><th>Msg unack</th>
+   <th>Count</th><th>Acks uncommited</th>
+   <th>Durable</th><th>Auto delete</th><th>Arguments</th>
+  </tr>
+ </thead>
+ <tbody>
+  <% [print_queue(Queue) || Queue <- Queues] %>
+  <% [print_empty_queue() || L <- [0], L == length(Queues) ] %>
+ </tbody>
+</body>
+</html>
+
+
+
+<%@ print_conn %>
+<%?  [Pid, Address, Port, Peer_address, Peer_port,
+        Recv_oct, Recv_cnt, Send_oct, Send_cnt, Send_pend,
+        State, Channels, User, Vhost, Timeout, Grame_max] =  Data %>
+  <tr>
+   <td><% {escape, Vhost} %></td><td><% {escape, User} %></td>
+   <td><% State %></td><td><% Timeout %></td>
+   <td><% {"~s:~p", [Peer_address, Peer_port]} %></td>
+            <td><% {memory, Recv_oct} %></td>
+            <td><% {memory, Send_oct} %></td>
+            <td><% {memory, Send_pend} %></td>
+  </tr>
+
+<%@ print_empty_conn %>
+  <tr>
+     <td colspan="8" class="empty">... no connections ...</td>
+  </tr>
+
+
+<%@ print_queue %>
+<%? [Vhost, Name, Durable, Auto_delete, Arguments, Pid, Messages_ready,
+    Messages_unacknowledged, Messages_uncommitted, Messages,
+    Acks_uncommitted, Consumers, Transactions, Memory] = Data %>
+  <tr>
+   <td><% {escape, Vhost} %></td><td><% {escape, Name} %></td><td><% Consumers %></td>
+   <td><% {memory, Memory} %></td>
+   <td><% Messages %></td><td><% Messages_ready %></td><td><% Messages_unacknowledged %></td>
+   <td><% Transactions %></td><td><% Acks_uncommitted %></td>
+   <td><% Durable %></td><td><% Auto_delete %></td><td><% {escape, Arguments} %></td>
+  </tr>
+
+<%@ print_empty_queue %>
+  <tr>
+     <td colspan="12" class="empty">... no queues ...</td>
+  </tr>
+
+<%@ finito %>
+    noop
+

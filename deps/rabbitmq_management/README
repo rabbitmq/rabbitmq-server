@@ -1,0 +1,30 @@
+This is a normal RabbitMQ plugin. For detailed installation instructions
+go to:
+        http://www.rabbitmq.com/admin-guide.html#installing-plugins
+
+A summary:
+
+    hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella/
+    cd rabbitmq-public-umbrella
+    make co
+    make 
+    hg clone http://hg.rabbitmq.com/rabbitmq-status/
+    cd rabbitmq-status
+    make
+
+After that in the directory 'rabbitmq-public-umbrella/rabbitmq-status' you 
+should be able to see ready plugins:
+
+    $ ls  dist/
+    amqp_client.ez  mochiweb.ez  rabbit_common.ez  rabbitmq-mochiweb.ez
+    rabbit_status.ez
+
+
+To install them to a local RabbitMQ instance you need to copy some of *.ez 
+files into your rabbit plugins directory and activate them, for example:
+
+    mkdir /usr/lib/rabbitmq/lib/rabbitmq_server-1.7.0/plugins
+    cp rabbitmq-mochiweb.ez mochiweb.ez rabbit_status.ez \
+        /usr/lib/rabbitmq/lib/rabbitmq_server-1.7.0/plugins
+    rabbitmq-activate-plugins
+
