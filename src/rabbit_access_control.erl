@@ -306,7 +306,12 @@ validate_regexp(RegexpBin) ->
         {error, Reason} -> throw({error, {invalid_regexp, Regexp, Reason}})
     end.
 
-set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
+set_permissions(Username, VHostPath, ConfigurePerm0, WritePerm0, ReadPerm0) ->
+    [ConfigurePerm, WritePerm, ReadPerm] =
+        lists:map(fun(<<"">>) -> <<"$^">>;
+                     (RE) -> RE
+                  end,
+                  [ConfigurePerm0, WritePerm0, ReadPerm0]),
     lists:map(fun validate_regexp/1, [ConfigurePerm, WritePerm, ReadPerm]),
     rabbit_misc:execute_mnesia_transaction(
       rabbit_misc:with_user_and_vhost(
