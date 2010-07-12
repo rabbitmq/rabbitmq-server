@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_status_app).
+-module(rabbit_management_app).
 
 -behaviour(application).
 
@@ -26,10 +26,10 @@
 
 
 start(_Type, _StartArgs) ->
-    Res = rabbit_status_sup:start_link(),
+    Res = rabbit_management_sup:start_link(),
     rabbit_mochiweb:register_global_handler(
                 fun(Req) ->
-                    rabbit_status_web:handle_request_unauth(Req)
+                    rabbit_management_web:handle_request_unauth(Req)
                 end),
     Res.
 

@@ -1,13 +1,13 @@
-{application, rabbit_status,
+{application, rabbit_management,
  [{description, "RabbitMQ Status Page"},
   {vsn, "0.01"},
   {modules, [
-    rabbit_status,
-    rabbit_status_app,
-    rabbit_status_sup,
-    rabbit_status_web
+    rabbit_management,
+    rabbit_management_app,
+    rabbit_management_sup,
+    rabbit_management_web
   ]},
   {registered, []},
-  {mod, {rabbit_status_app, []}},
+  {mod, {rabbit_management_app, []}},
   {env, []},
   {applications, [kernel, stdlib, rabbit, rabbit_mochiweb]}]}.

@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_status_web).
+-module(rabbit_management_web).
 
 -behaviour(gen_server).
 

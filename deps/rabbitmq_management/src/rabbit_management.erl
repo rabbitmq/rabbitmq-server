@@ -18,19 +18,12 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_status_sup).
+-module(rabbit_management).
 
--behaviour(supervisor).
+-export([start/0, stop/0]).
 
--export([init/1]).
--export([start_link/0]).
+start() ->
+    application:start(rabbit_management).
 
-init([]) ->
-    Status = {rabbit_status_web,
-             {rabbit_status_web, start_link, []},
-              permanent, 5000, worker, dynamic},
-
-    {ok, {{one_for_one, 10, 10}, [Status]}}.
-
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+stop() ->
+    application:stop(rabbit_management).
