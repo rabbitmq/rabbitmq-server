@@ -3,4 +3,5 @@ syntax: regexp
 ^build/
 ^dist/
 .*\.beam
+^priv/www/js/templates.js$
 

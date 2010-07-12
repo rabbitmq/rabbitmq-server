@@ -4,7 +4,7 @@ $(document).ready(function() {
 
 function update() {
     with_req('/json/', function(text) {
-            $(format(template(), JSON.parse(text))).appendTo("#main");
+            $(format(template_main(), JSON.parse(text))).appendTo("#main");
     });
 }
 
@@ -31,17 +31,4 @@ function with_req(path, fun) {
         }
     };
     req.send(null);
-}
-
-function template() {
-    return '<table class="warns"> \
- <tr><td><label>node = </label>{node}</td></tr> \
- <tr><td><label>pid = </label>{pid}</td></tr> \
- <tr><td><label>bound to = </label>{bound_to} </td></tr> \
- <tr class="{fd_warn}"><td><label>file descriptors (used/available)= </label>{fd_used} / {fd_total} </td></tr> \
- <tr class="{proc_warn}"><td><label>erlang processes (used/available) = </label>{proc_used} / {proc_total} </td></tr> \
- <tr class="{mem_warn}"><td><label>memory (used/available) = </label>{mem_used} / {mem_total} </td></tr> \
- <tr><td><label>ets memory = </label>{mem_ets} </td></tr> \
- <tr><td><label>binary memory = </label>{mem_binary}</td></tr> \
-</table>';
 }
