@@ -4,6 +4,7 @@ DEPS=rabbitmq-mochiweb rabbitmq-server rabbitmq-erlang-client
 TEST_APPS=mochiweb rabbit_mochiweb rabbit_management
 TEST_ARGS=-rabbit_mochiweb port 55672
 START_RABBIT_IN_TESTS=true
+EXTRA_PACKAGE_DIRS=priv
 
 GENERATED_SOURCES=template
 

@@ -27,10 +27,10 @@
 
 start(_Type, _StartArgs) ->
     Res = rabbit_management_sup:start_link(),
+    rabbit_mochiweb:register_context_handler("json/",
+      fun rabbit_management_web:handle_request_unauth/1),
     rabbit_mochiweb:register_global_handler(
-                fun(Req) ->
-                    rabbit_management_web:handle_request_unauth(Req)
-                end),
+      rabbit_mochiweb:static_context_handler("", ?MODULE, "priv/www")),
     Res.
 
 stop(_State) ->

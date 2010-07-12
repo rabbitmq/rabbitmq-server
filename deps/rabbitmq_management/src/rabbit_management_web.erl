@@ -117,7 +117,8 @@ handle_json_request(Req, Context) ->
             = Context,
 
     Json = {struct,
-            [{pid, list_to_binary(os:getpid())},
+            [{node, node()},
+             {pid, list_to_binary(os:getpid())},
              {datetime, list_to_binary(Datetime)},
              {bound_to, list_to_binary(BoundTo)},
              {connections, [{struct,RConn} || RConn <- RConns]},
@@ -128,6 +129,9 @@ handle_json_request(Req, Context) ->
              {mem_total, MemTotal},
              {proc_used, ProcUsed},
              {proc_total, ProcTotal},
+             {fd_warn, get_warning_level(FdUsed, FdTotal)},
+             {mem_warn, get_warning_level(MemUsed, MemTotal)},
+             {proc_warn, get_warning_level(ProcUsed, ProcTotal)},
              {mem_ets, erlang:memory(ets)},
              {mem_binary, erlang:memory(binary)}
             ]},

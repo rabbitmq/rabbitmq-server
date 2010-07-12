@@ -1,0 +1,23 @@
+body { font-family: helvetica, arial; font-size: 12px; font-weight: normal; color: black; background: white;}
+
+table { border-collapse: collapse; border-width: 1px; border-style: none none none solid; border-color: black;}
+table th, table td {
+    border-width: 1px;
+    border-style: solid solid solid solid;
+    border-color: gray;
+    padding: 2px;
+}
+table th {text-align:center;}
+table td {text-align:right;}
+td.empty {text-align:center; color: grey;}
+
+
+label {font-weight: bold;}
+.titre  {background: #1EB0B0;color: #000000;font-weight: bold;}
+.pxname {width:125px; background: #a00020;color: #ffff40;}
+
+table.warns {border-width: 0px; border-color: white;}
+table.warns td {border-width: 0px; text-align:left;}
+tr.red {background: #F62817; color:white; font-weight: bolder;}
+tr.yellow {background: yellow;}
+tr.green {background: lightgreen;}
