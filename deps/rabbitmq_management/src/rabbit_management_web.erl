@@ -29,7 +29,7 @@
 -export([handle_request_unauth/1]).
 -export([update/0]).
 
--export([handle_http_request/2, handle_json_request/2]).
+-export([handle_json_request/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -100,8 +100,6 @@ send_auth_request(Req) ->
 
 handle_request(Req) ->
     case Req:get(path) of
-        "/"      -> apply_context(handle_http_request, Req);
-        "/json"  -> apply_context(handle_json_request, Req);
         "/json/" -> apply_context(handle_json_request, Req);
         _ ->  Req:respond({404, [{"Content-Type", "text/html; charset=utf-8"}],
                                     <<"404 Not found.">>})
@@ -137,7 +135,6 @@ handle_json_request(Req, Context) ->
             ]},
     Resp = mochijson2:encode(Json),
     Req:respond({200, [
-                {"Refresh", status_render:print("~p", trunc(?REFRESH_RATIO/1000))},
                 {"Content-Type", "application/json; charset=utf-8"}
             ], Resp}).
 
@@ -158,36 +155,6 @@ apply_context(Fun, Req) ->
 			       {"Content-Type", "text/plain; charset=utf-8"}
 			      ], <<"408 Request Timeout.\n">>})
     end.
-
-
-handle_http_request(Req, Context) ->
-    [Datetime, BoundTo,
-     RConns, RQueues,
-     FdUsed, FdTotal,
-     MemUsed, MemTotal,
-     ProcUsed, ProcTotal ] = Context,
-
-    FdWarn = get_warning_level(FdUsed, FdTotal),
-    MemWarn = get_warning_level(MemUsed, MemTotal),
-    ProcWarn = get_warning_level(ProcUsed, ProcTotal),
-
-    Resp0 = template:render([os:getpid(),
-                            Datetime, BoundTo,
-                            [[ V || {_K, V} <- RConn] || RConn <- RConns],
-                            [[ V || {_K, V} <- RQueue] || RQueue <- RQueues],
-                            ProcUsed, ProcTotal, ProcWarn,
-                            FdUsed, FdTotal, FdWarn,
-                            status_render:format_info(memory, MemUsed),
-                            status_render:format_info(memory, MemTotal),
-                            MemWarn,
-                            status_render:format_info(memory, erlang:memory(ets)),
-                            status_render:format_info(memory, erlang:memory(binary))]),
-    Resp1 = [status_render:widget_to_binary(A) || A <- Resp0],
-    Req:respond({200, [
-                {"Refresh", status_render:print("~p", trunc(?REFRESH_RATIO/1000))},
-                {"Content-Type", "text/html; charset=utf-8"}
-            ], iolist_to_binary(Resp1)}).
-
 
 %%--------------------------------------------------------------------
 

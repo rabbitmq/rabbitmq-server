@@ -6,9 +6,9 @@
  <tr><td><label>bound to = </label>{bound_to} </td></tr>
  <tr class="{fd_warn}"><td><label>file descriptors (used/available)= </label>{fd_used} / {fd_total} </td></tr>
  <tr class="{proc_warn}"><td><label>erlang processes (used/available) = </label>{proc_used} / {proc_total} </td></tr>
- <tr class="{mem_warn}"><td><label>memory (used/available) = </label>{mem_used} / {mem_total} </td></tr>
- <tr><td><label>ets memory = </label>{mem_ets} </td></tr>
- <tr><td><label>binary memory = </label>{mem_binary}</td></tr>
+ <tr class="{mem_warn}"><td><label>memory (used/available) = </label>{mem_used|bytes} / {mem_total|bytes} </td></tr>
+ <tr><td><label>ets memory = </label>{mem_ets|bytes} </td></tr>
+ <tr><td><label>binary memory = </label>{mem_binary|bytes}</td></tr>
 </table>
 
 <h1>Connections</h1>
@@ -32,8 +32,8 @@
     <td>{vhost}</td><td>{user}</td>
     <td>{state}</td><td>{timeout}</td>
     <td>{peer_address}:{peer_port}</td>
-    <td>{recv_oct}</td>
-    <td>{send_oct}</td>
+    <td>{recv_oct|bytes}</td>
+    <td>{send_oct|bytes}</td>
     <td>{send_pend}</td>
   </tr>
   {.end}
@@ -66,7 +66,7 @@
   {.repeated section @}
   <tr>
    <td>{vhost}</td><td>{name}</td><td>{consumers}</td>
-   <td>{memory}</td>
+   <td>{memory|bytes}</td>
    <td>{messages}</td><td>{messages_ready}</td><td>{messages_unacknowledged}</td>
    <td>{transactions}</td><td>{acks_uncommitted}</td>
    <td>{durable}</td><td>{auto_delete}</td><td>{arguments}</td>

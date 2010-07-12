@@ -20,7 +20,7 @@
 %%
 -module(status_render).
 
--export([render_conns/0, render_queues/0, widget_to_binary/1]).
+-export([render_conns/0, render_queues/0]).
 -export([escape/1, format_info_item/2, format_info/2, print/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -48,30 +48,6 @@ render_queues() ->
                                                   || {Vhost, Queue} <- Queues].
 
 
-widget_to_binary(A) ->
-    case A of
-        B when is_binary(B) -> B;
-        F when is_float(F) -> print("~.3f", [F]);
-        N when is_number(N) -> print("~p", [N]);
-        L when is_list(L) ->
-                case io_lib:printable_list(L) of
-                    true -> L;
-                    false -> lists:map(fun (C) -> widget_to_binary(C) end, L)
-                end;
-        {escape, Body} when is_binary(Body) orelse is_list(Body) ->
-                print("~s", [Body]);
-        {escape, Body} ->
-                print("~w", Body);
-        {memory, Mem} when is_number(Mem) ->
-                print("~pMB", [trunc(Mem/1048576)]);
-        {memory, Mem} ->
-                print("~p", [Mem]);
-        {Form, Body} when is_list(Body) ->
-                print(Form, Body);
-        {Form, Body} ->
-                print(Form, [Body]);
-        P -> print("~p", [P])           %% shouldn't be used, better to escape.
-    end.
 
 print(Fmt, Val) when is_list(Val) ->
     escape(lists:flatten(io_lib:format(Fmt, Val)));
