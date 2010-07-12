@@ -21,3 +21,17 @@ table.warns td {border-width: 0px; text-align:left;}
 tr.red {background: #F62817; color:white; font-weight: bolder;}
 tr.yellow {background: yellow;}
 tr.green {background: lightgreen;}
+
+p.status-ok {
+    color: #888;
+}
+
+p.status-warning {
+    color: black;
+    background-color: #ff8;
+}
+
+p.status-error {
+    color: white;
+    background-color: #f00;
+}

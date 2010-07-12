@@ -7,10 +7,16 @@ var timer;
 
 function update() {
     with_req('/json/', function(text) {
-            var html = format(template_main(), JSON.parse(text));
-            $("#main").empty();
-            $(html).appendTo("#main");
+            var json = JSON.parse(text);
+            var html = format(template_main(), json);
+            replace_content('main', html);
+            update_status('ok', json['datetime']);
     });
+}
+
+function replace_content(id, html) {
+    $("#" + id).empty();
+    $(html).appendTo("#" + id);
 }
 
 function format(template, json) {
@@ -41,6 +47,20 @@ function format_bytes(bytes) {
     return (power == 0 ? num : num.toFixed(1)) + powers[power];
 }
 
+function update_status(status, datetime) {
+    var text;
+    if (status == 'ok')
+        text = "Last update: " + datetime;
+    else if (status == 'timeout')
+        text = "Warning: server reported busy at " + datetime;
+    else if (status == 'error')
+        text = "Error: could not connect to server at " + datetime;
+
+    var html = format('<p class="status-{status}">{text}</p>', {status: status,
+                                                                text: text});
+    replace_content('status', html);
+}
+
 function with_req(path, fun) {
     var json;
     var req = new XMLHttpRequest();
@@ -50,8 +70,11 @@ function with_req(path, fun) {
             if (req.status == 200) {
                 fun(req.responseText);
             }
+            else if (req.status == 408) {
+                update_status('timeout', new Date());
+            }
             else if (req.status == 0) {
-                clearInterval(timer);
+                update_status('error', new Date());
             }
             else {
                 alert("Got response code " + req.status);
