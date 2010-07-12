@@ -1,37 +1,28 @@
-body { font-family: helvetica, arial; font-size: 12px; font-weight: normal; color: black; background: white;}
+body { font: 12px/17px Verdana,sans-serif; color: #666; padding: 8px 35px;}
+#logo { width: 204px; height: 37px; background: url(/img/rabbitmqlogo.png); }
+#strap { float: right; }
+#menu ul { height: 2em; padding: 0;}
+#menu li { float: left; list-style-type: none; padding: 0 2em 0 0; }
+#menu { border-bottom: 1px solid #FF8C00; }
+#main { clear: both; }
+a { color: #666; font-weight: bold; text-decoration: none;}
+#status { border-top:1px solid #E4E4E4; }
+h1 { color: #FF6600; font-size: 14px; line-height: 14px; }
 
-table { border-collapse: collapse; border-width: 1px; border-style: none none none solid; border-color: black;}
-table th, table td {
-    border-width: 1px;
-    border-style: solid solid solid solid;
-    border-color: gray;
-    padding: 2px;
-}
-table th {text-align:center;}
-table td {text-align:right;}
-td.empty {text-align:center; color: grey;}
-
+table { border-collapse: collapse; border-width: 1px; margin-bottom: 2em; border-bottom: 1px solid #bbb; }
+table th, table td { font: 12px/17px Verdana,sans-serif; border-left: 1px solid #bbb; border-right: 1px solid #bbb; padding: 4px; }
+table th { text-align:center; color: #666; font-weight: bold; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
+table td { text-align:right; }
 
 label {font-weight: bold;}
-.titre  {background: #1EB0B0;color: #000000;font-weight: bold;}
-.pxname {width:125px; background: #a00020;color: #ffff40;}
 
 table.warns {border-width: 0px; border-color: white;}
 table.warns td {border-width: 0px; text-align:left;}
+
 tr.red {background: #F62817; color:white; font-weight: bolder;}
 tr.yellow {background: yellow;}
 tr.green {background: lightgreen;}
 
-p.status-ok {
-    color: #888;
-}
-
-p.status-warning {
-    color: black;
-    background-color: #ff8;
-}
-
-p.status-error {
-    color: white;
-    background-color: #f00;
-}
+p.status-ok { color: #888; }
+p.status-warning { color: black; background-color: #ff8; }
+p.status-error { color: white; background-color: #f00; }

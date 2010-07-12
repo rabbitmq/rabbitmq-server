@@ -13,6 +13,7 @@ EXTRA_TARGETS=$(JAVASCRIPT_DIR)/templates.js \
     $(wildcard $(JAVASCRIPT_DIR)/*.js) \
     $(wildcard $(WEB_DIR)/*.html) \
     $(wildcard $(WEB_DIR)/css/*.css) \
+    $(wildcard $(WEB_DIR)/img/*.png) \
 
 include ../include.mk
 
