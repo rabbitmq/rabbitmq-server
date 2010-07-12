@@ -51,14 +51,12 @@
   <tr class="titre">
     <th colspan="4">Overview</th>
     <th colspan="3">Messages</th>
-    <th colspan="2">Transactions</th>
     <th colspan="3">Parameters</th>
   </tr>
   <tr class="titre">
    <th>Vhost</th><th>Name</th><th>Consumers</th>
    <th>Memory</th>
    <th>Count</th><th>Msg ready</th><th>Msg unack</th>
-   <th>Count</th><th>Acks uncommited</th>
    <th>Durable</th><th>Auto delete</th><th>Arguments</th>
   </tr>
  </thead>
@@ -68,7 +66,6 @@
    <td>{vhost}</td><td>{name}</td><td>{consumers}</td>
    <td>{memory|bytes}</td>
    <td>{messages}</td><td>{messages_ready}</td><td>{messages_unacknowledged}</td>
-   <td>{transactions}</td><td>{acks_uncommitted}</td>
    <td>{durable}</td><td>{auto_delete}</td><td>{arguments}</td>
   </tr>
   {.end}

@@ -37,8 +37,7 @@ render_conns() ->
 
 render_queues() ->
     QueueKeys = [name, durable, auto_delete, arguments, pid, messages_ready,
-                 messages_unacknowledged, messages_uncommitted, messages,
-                 acks_uncommitted, consumers, transactions, memory],
+                 messages_unacknowledged, messages, consumers, memory],
 
     Queues = lists:flatten([
                     [{Vhost, Queue} || Queue <- rabbit_amqqueue:info_all(Vhost)]
