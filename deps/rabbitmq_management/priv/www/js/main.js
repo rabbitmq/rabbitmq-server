@@ -1,16 +1,29 @@
 $(document).ready(function() {
-    update();
-    timer = setInterval("update()", 5000);
+    var url = this.location.toString();
+    url = url.indexOf('#') == -1 ? '#overview' : url;
+    apply_url(url);
+    timer = setInterval('update()', 5000);
 });
 
+var current_page;
 var timer;
+
+function apply_url(url) {
+    current_page = url.split('#', 2)[1];
+    update();
+}
 
 function update() {
     with_req('/json/', function(text) {
             var json = JSON.parse(text);
-            var html = format(template_main(), json);
+            var template = eval('template_' + current_page + '();');
+            var html = format(template, json);
             replace_content('main', html);
             update_status('ok', json['datetime']);
+            $('a').removeClass('selected').unbind().click(function() {
+                apply_url(this.href);
+            });
+            $('a[href="#' + current_page + '"]').addClass('selected');
     });
 }
 
@@ -83,4 +96,9 @@ function with_req(path, fun) {
         }
     };
     req.send(null);
+}
+
+
+function debug(str) {
+    $('<p>' + str + '</p>').appendTo('#debug');
 }

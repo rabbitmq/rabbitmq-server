@@ -1,0 +1,32 @@
+<h1>Connections</h1>
+
+{.section connections}
+<table class="list">
+ <thead>
+  <tr class="titre">
+   <th colspan="4">Overview</th>
+   <th colspan="4">Network</th>
+  </tr>
+  <tr class="titre">
+   <th>Vhost</th><th>Username</th>
+   <th>State</th><th>Timeout</th>
+   <th>Peer address</th><th>Recv</th><th>Sent</th><th>Pending</th>
+  </tr>
+ </thead>
+ <tbody>
+  {.repeated section @}
+  <tr>
+    <td>{vhost}</td><td>{user}</td>
+    <td>{state}</td><td>{timeout}</td>
+    <td>{peer_address}:{peer_port}</td>
+    <td>{recv_oct|bytes}</td>
+    <td>{send_oct|bytes}</td>
+    <td>{send_pend}</td>
+  </tr>
+  {.end}
+ </tbody>
+</table>
+{.or}
+  <p>... no connections ...</p>
+{.end}
+

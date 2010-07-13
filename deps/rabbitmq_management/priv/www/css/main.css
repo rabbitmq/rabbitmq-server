@@ -1,27 +1,32 @@
-body { font: 12px/17px Verdana,sans-serif; color: #666; padding: 8px 35px;}
+body { font: 12px/17px Verdana,sans-serif; color: #444; padding: 8px 35px; }
 #logo { width: 204px; height: 37px; background: url(/img/rabbitmqlogo.png); }
 #strap { float: right; }
-#menu ul { height: 2em; padding: 0;}
+#menu ul { height: 2em; padding: 0; }
 #menu li { float: left; list-style-type: none; padding: 0 2em 0 0; }
+#menu li a { padding: 0.5em; }
 #menu { border-bottom: 1px solid #FF8C00; }
 #main { clear: both; }
-a { color: #666; font-weight: bold; text-decoration: none;}
+a { color: #444; font-weight: bold; text-decoration: none; }
+a.selected { background-color: #F60; color:white; }
 #status { border-top:1px solid #E4E4E4; }
-h1 { color: #FF6600; font-size: 14px; line-height: 14px; }
+h1 { color: #F60; font-size: 14px; line-height: 14px; }
 
-table { border-collapse: collapse; border-width: 1px; margin-bottom: 2em; border-bottom: 1px solid #bbb; }
-table th, table td { font: 12px/17px Verdana,sans-serif; border-left: 1px solid #bbb; border-right: 1px solid #bbb; padding: 4px; }
-table th { text-align:center; color: #666; font-weight: bold; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
-table td { text-align:right; }
+table { border-collapse: collapse; margin-bottom: 2em; }
+table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; }
 
-label {font-weight: bold;}
+table.list { border-width: 1px; border-bottom: 1px solid #bbb; }
+table.list th, table.list td { border-left: 1px solid #bbb; border-right: 1px solid #bbb; }
+table.list th { text-align: center; font-weight: bold; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
+table.list td { text-align: right; }
 
-table.warns {border-width: 0px; border-color: white;}
-table.warns td {border-width: 0px; text-align:left;}
+sub { display: block; color: #888; }
 
-tr.red {background: #F62817; color:white; font-weight: bolder;}
-tr.yellow {background: yellow;}
-tr.green {background: lightgreen;}
+table.warns td { text-align: left; }
+table.warns th { text-align: right; font-weight: bold; }
+
+td.red {background: #F62817; color:white; font-weight: bolder;}
+td.yellow {background: yellow;}
+td.green {background: lightgreen;}
 
 p.status-ok { color: #888; }
 p.status-warning { color: black; background-color: #ff8; }
