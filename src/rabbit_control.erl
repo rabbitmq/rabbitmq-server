@@ -359,8 +359,6 @@ rpc_call(Node, Mod, Fun, Args) ->
 
 escape(Bin) when is_binary(Bin) ->
     escape(binary_to_list(Bin));
-escape("") ->
-    [$", $"];
 escape(L) when is_list(L) ->
     escape_char(lists:reverse(L), []).
 
