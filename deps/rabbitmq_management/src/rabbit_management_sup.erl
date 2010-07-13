@@ -26,8 +26,8 @@
 -export([start_link/0]).
 
 init([]) ->
-    Status = {rabbit_management_web,
-             {rabbit_management_web, start_link, []},
+    Status = {rabbit_management_cache,
+             {rabbit_management_cache, start_link, []},
               permanent, 5000, worker, dynamic},
 
     {ok, {{one_for_one, 10, 10}, [Status]}}.

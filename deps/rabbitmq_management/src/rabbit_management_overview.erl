@@ -22,12 +22,10 @@
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
--export([handle_json_request/1]).
+-export([handle/1]).
 
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
-
--define(REFRESH_RATIO, 15000).
 
 %%--------------------------------------------------------------------
 
@@ -38,28 +36,14 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    apply_m_context(handle_json_request, ReqData, Context).
+    rabbit_management_util:apply_m_context(fun handle/1, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    Unauthorized = {"Basic realm=\"RabbitMQ Management Console\"",
-                    ReqData, Context},
-    case wrq:get_req_header("authorization", ReqData) of
-        "Basic " ++ Base64 ->
-            Str = base64:mime_decode_to_string(Base64),
-            [User, Pass] = string:tokens(Str, ":"),
-            case rabbit_access_control:lookup_user(list_to_binary(User)) of
-                {ok, U}  -> case list_to_binary(Pass) == U#user.password of
-                                true ->  {true, ReqData, Context};
-                                false -> Unauthorized
-                            end;
-                {error, _} -> Unauthorized
-            end;
-        _ -> Unauthorized
-    end.
+    rabbit_management_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
-handle_json_request(MContext) ->
+handle(MContext) ->
     [Datetime, BoundTo,
         RConns, RQueues,
         FdUsed, FdTotal,
@@ -98,20 +82,4 @@ get_warning_level(Used, Total) ->
                 true         -> green
             end;
         true -> none
-    end.
-
-apply_m_context(Fun, ReqData, Context) ->
-    Res = try
-	      {ok, rabbit_management_web:get_context()}
-	  catch
-	      exit:{timeout, _} ->
-		  {timeout, undefined}
-	  end,
-    case Res of
-	{ok, MContext} ->
-	    {apply(?MODULE, Fun, [MContext]), ReqData, Context};
-	{timeout, _} ->
-            {{halt, 408},
-             wrq:append_to_response_body( <<"408 Request Timeout.\n">>),
-             Context}
     end.
