@@ -38,7 +38,7 @@
 -export([add_user/2, delete_user/1, change_password/2, list_users/0,
          lookup_user/1]).
 -export([add_vhost/1, delete_vhost/1, list_vhosts/0]).
--export([set_permissions/5, clear_permissions/2,
+-export([set_permissions/5, set_permissions_all/5, clear_permissions/2,
          list_vhost_permissions/1, list_user_permissions/1]).
 
 %%----------------------------------------------------------------------------
@@ -149,6 +149,7 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
               [VHostPath, Username])
     end.
 
+permission_index(check_all) -> #permission.check_all;
 permission_index(configure) -> #permission.configure;
 permission_index(write)     -> #permission.write;
 permission_index(read)      -> #permission.read.
@@ -306,7 +307,8 @@ validate_regexp(RegexpBin) ->
         {error, Reason} -> throw({error, {invalid_regexp, Regexp, Reason}})
     end.
 
-set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
+set_permissions_internal(Username, VHostPath, CheckAll, ConfigurePerm,
+                         WritePerm, ReadPerm) ->
     lists:map(fun validate_regexp/1, [ConfigurePerm, WritePerm, ReadPerm]),
     rabbit_misc:execute_mnesia_transaction(
       rabbit_misc:with_user_and_vhost(
@@ -317,11 +319,20 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
                                             username = Username,
                                             virtual_host = VHostPath},
                                           permission = #permission{
+                                            check_all = CheckAll,
                                             configure = ConfigurePerm,
                                             write = WritePerm,
                                             read = ReadPerm}},
                          write)
         end)).
+
+set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
+    set_permissions_internal(Username, VHostPath, 'false', ConfigurePerm,
+                             WritePerm, ReadPerm).
+
+set_permissions_all(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
+    set_permissions_internal(Username, VHostPath, 'true', ConfigurePerm,
+                             WritePerm, ReadPerm).
 
 clear_permissions(Username, VHostPath) ->
     rabbit_misc:execute_mnesia_transaction(

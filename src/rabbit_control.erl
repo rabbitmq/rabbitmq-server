@@ -276,6 +276,12 @@ action(set_permissions, Node, VHost, [Username, CPerm, WPerm, RPerm], Inform) ->
     call(Node, {rabbit_access_control, set_permissions,
                 [Username, VHost, CPerm, WPerm, RPerm]});
 
+action(set_permissions_all, Node, VHost, [Username, CPerm, WPerm, RPerm], Inform) ->
+    Inform("Setting permissions for all resources for user ~p in vhost ~p",
+           [Username, VHost]),
+    call(Node, {rabbit_access_control, set_permissions_all,
+                [Username, VHost, CPerm, WPerm, RPerm]});
+
 action(clear_permissions, Node, VHost, [Username], Inform) ->
     Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
     call(Node, {rabbit_access_control, clear_permissions, [Username, VHost]});
