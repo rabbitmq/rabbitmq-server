@@ -8,23 +8,25 @@ A summary:
     cd rabbitmq-public-umbrella
     make co
     make 
-    hg clone http://hg.rabbitmq.com/rabbitmq-status/
-    cd rabbitmq-status
+    hg clone http://hg.rabbitmq.com/rabbitmq-management/
+    cd rabbitmq-management
     make
 
 After that in the directory 'rabbitmq-public-umbrella/rabbitmq-status' you 
 should be able to see ready plugins:
 
     $ ls  dist/
-    amqp_client.ez  mochiweb.ez  rabbit_common.ez  rabbitmq-mochiweb.ez
-    rabbit_status.ez
+    amqp_client.ez  mochiweb.ez  rabbit_common.ez      rabbitmq-mochiweb.ez
+    mochiweb.ez                  rabbit_management     webmachine.ez
+    mochiweb-for-management.ez   rabbit_management.ez
 
 
 To install them to a local RabbitMQ instance you need to copy some of *.ez 
 files into your rabbit plugins directory and activate them, for example:
 
     mkdir /usr/lib/rabbitmq/lib/rabbitmq_server-1.7.0/plugins
-    cp rabbitmq-mochiweb.ez mochiweb.ez rabbit_status.ez \
+    cp rabbitmq-mochiweb.ez mochiweb-for-management.ez \
+       webmachine.ez rabbit_management.ez \
         /usr/lib/rabbitmq/lib/rabbitmq_server-1.7.0/plugins
     rabbitmq-activate-plugins
 

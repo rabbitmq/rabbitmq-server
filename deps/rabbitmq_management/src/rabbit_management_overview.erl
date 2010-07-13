@@ -8,7 +8,7 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Status Plugin.
+%%   The Original Code is RabbitMQ Management Console.
 %%
 %%   The Initial Developers of the Original Code are LShift Ltd.
 %%
