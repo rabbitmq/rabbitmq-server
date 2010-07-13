@@ -290,7 +290,7 @@ internal_delete_vhost(VHostPath) ->
                           ok = rabbit_exchange:delete(Name, false)
                   end,
                   rabbit_exchange:list(VHostPath)),
-    lists:foreach(fun ({Username, _, _, _}) ->
+    lists:foreach(fun ({Username, _, _, _, _}) ->
                           ok = clear_permissions(Username, VHostPath)
                   end,
                   list_vhost_permissions(VHostPath)),
