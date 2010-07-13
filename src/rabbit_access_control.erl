@@ -149,7 +149,7 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
               [VHostPath, Username])
     end.
 
-permission_index(check_all) -> #permission.check_all;
+permission_index(check)     -> #permission.check;
 permission_index(configure) -> #permission.configure;
 permission_index(write)     -> #permission.write;
 permission_index(read)      -> #permission.read.
@@ -162,7 +162,7 @@ check_resource_access(Username,
                           Permission);
 check_resource_access(_Username,
                       #resource{name = <<"amq.gen",_/binary>>},
-                      #permission{check_all = 'false'}) ->
+                      #permission{check = 'check_user_named'}) ->
     ok;
 check_resource_access(Username,
                       R = #resource{virtual_host = VHostPath, name = Name},
@@ -307,7 +307,7 @@ validate_regexp(RegexpBin) ->
         {error, Reason} -> throw({error, {invalid_regexp, Regexp, Reason}})
     end.
 
-set_permissions_internal(Username, VHostPath, CheckAll, ConfigurePerm,
+set_permissions_internal(Username, VHostPath, Check, ConfigurePerm,
                          WritePerm, ReadPerm) ->
     lists:map(fun validate_regexp/1, [ConfigurePerm, WritePerm, ReadPerm]),
     rabbit_misc:execute_mnesia_transaction(
@@ -319,7 +319,7 @@ set_permissions_internal(Username, VHostPath, CheckAll, ConfigurePerm,
                                             username = Username,
                                             virtual_host = VHostPath},
                                           permission = #permission{
-                                            check_all = CheckAll,
+                                            check = Check,
                                             configure = ConfigurePerm,
                                             write = WritePerm,
                                             read = ReadPerm}},
@@ -327,11 +327,11 @@ set_permissions_internal(Username, VHostPath, CheckAll, ConfigurePerm,
         end)).
 
 set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
-    set_permissions_internal(Username, VHostPath, 'false', ConfigurePerm,
+    set_permissions_internal(Username, VHostPath, 'check_user_named', ConfigurePerm,
                              WritePerm, ReadPerm).
 
 set_permissions_all(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
-    set_permissions_internal(Username, VHostPath, 'true', ConfigurePerm,
+    set_permissions_internal(Username, VHostPath, 'check_all_resources', ConfigurePerm,
                              WritePerm, ReadPerm).
 
 clear_permissions(Username, VHostPath) ->
@@ -345,22 +345,23 @@ clear_permissions(Username, VHostPath) ->
         end)).
 
 list_vhost_permissions(VHostPath) ->
-    [{Username, ConfigurePerm, WritePerm, ReadPerm} ||
-        {Username, _, ConfigurePerm, WritePerm, ReadPerm} <-
+    [{Username, ConfigurePerm, WritePerm, ReadPerm, Check} ||
+        {Username, _, ConfigurePerm, WritePerm, ReadPerm, Check} <-
             list_permissions(rabbit_misc:with_vhost(
                                VHostPath, match_user_vhost('_', VHostPath)))].
 
 list_user_permissions(Username) ->
-    [{VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
-        {_, VHostPath, ConfigurePerm, WritePerm, ReadPerm} <-
+    [{VHostPath, ConfigurePerm, WritePerm, ReadPerm, Check} ||
+        {_, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Check} <-
             list_permissions(rabbit_misc:with_user(
                                Username, match_user_vhost(Username, '_')))].
 
 list_permissions(QueryThunk) ->
-    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
+    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Check} ||
         #user_permission{user_vhost = #user_vhost{username = Username,
                                                   virtual_host = VHostPath},
                          permission = #permission{
+                           check = Check,
                            configure = ConfigurePerm,
                            write = WritePerm,
                            read = ReadPerm}} <-

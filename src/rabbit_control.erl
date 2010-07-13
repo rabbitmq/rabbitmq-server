@@ -363,6 +363,8 @@ rpc_call(Node, Mod, Fun, Args) ->
 %% characters.  We don't escape characters above 127, since they may
 %% form part of UTF-8 strings.
 
+escape(Atom) when is_atom(Atom) ->
+    escape(atom_to_list(Atom));
 escape(Bin) when is_binary(Bin) ->
     escape(binary_to_list(Bin));
 escape(L) when is_list(L) ->
