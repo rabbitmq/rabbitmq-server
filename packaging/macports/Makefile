@@ -61,4 +61,4 @@ macports: dirs $(DEST)/Portfile
 	fi
 
 clean:
-	rm -rf $(DEST) checksums.sed
+	rm -rf $(MACPORTS_DIR) checksums.sed
