@@ -172,9 +172,13 @@ check_resource_access(Username,
               [] ->
                   false;
               [#user_permission{permission = P}] ->
+                  PermRegexp = case element(permission_index(Permission), P) of
+                                   <<"">> -> <<$^, $$>>;
+                                   RE     -> RE
+                               end,
                   case regexp:match(
                          binary_to_list(Name),
-                         binary_to_list(element(permission_index(Permission), P))) of
+                         binary_to_list(PermRegexp)) of
                       {match, _, _} -> true;
                       nomatch       -> false
                   end
@@ -307,11 +311,7 @@ validate_regexp(RegexpBin) ->
     end.
 
 set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
-    [ConfigurePerm1, WritePerm1, ReadPerm1] =
-        lists:map(fun(<<"">>) -> <<$^, $$>>;
-                     (Regexp) -> ok = validate_regexp(Regexp),
-                                 Regexp
-                  end, [ConfigurePerm, WritePerm, ReadPerm]),
+    lists:map(fun validate_regexp/1, [ConfigurePerm, WritePerm, ReadPerm]),
     rabbit_misc:execute_mnesia_transaction(
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath,
@@ -321,9 +321,9 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
                                             username = Username,
                                             virtual_host = VHostPath},
                                           permission = #permission{
-                                            configure = ConfigurePerm1,
-                                            write = WritePerm1,
-                                            read = ReadPerm1}},
+                                            configure = ConfigurePerm,
+                                            write = WritePerm,
+                                            read = ReadPerm}},
                          write)
         end)).
 
