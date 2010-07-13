@@ -14,7 +14,7 @@ function apply_url(url) {
 }
 
 function update() {
-    with_req('/json/', function(text) {
+    with_req('/json/' + current_page, function(text) {
             var json = JSON.parse(text);
             var template = eval('template_' + current_page + '();');
             var html = format(template, json);

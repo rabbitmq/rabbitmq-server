@@ -52,7 +52,7 @@ apply_m_context(Fun, ReqData, Context) ->
 	  end,
     case Res of
 	{ok, MContext} ->
-	    {Fun(MContext), ReqData, Context};
+	    {mochijson2:encode(Fun(MContext)), ReqData, Context};
 	{timeout, _} ->
             {{halt, 408},
              wrq:append_to_response_body( <<"408 Request Timeout.\n">>),
