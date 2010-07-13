@@ -1,7 +1,10 @@
 PACKAGE=rabbit_management
 DEPS=rabbitmq-mochiweb rabbitmq-server rabbitmq-erlang-client
+# NB: when rabbitmq-mochiweb depends on a newer version of mochiweb we can remove it as a dep here.
+INTERNAL_DEPS=webmachine mochiweb-for-management
+RUNTIME_DEPS=webmachine mochiweb-for-management
 
-TEST_APPS=mochiweb rabbit_mochiweb rabbit_management
+TEST_APPS=mochiweb-for-management rabbit_mochiweb rabbit_management
 TEST_ARGS=-rabbit_mochiweb port 55672
 START_RABBIT_IN_TESTS=true
 EXTRA_PACKAGE_DIRS=priv

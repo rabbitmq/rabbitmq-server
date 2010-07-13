@@ -24,11 +24,14 @@
 
 -export([start/2, stop/1]).
 
-
 start(_Type, _StartArgs) ->
     Res = rabbit_management_sup:start_link(),
-    rabbit_mochiweb:register_context_handler("json/",
-      fun rabbit_management_web:handle_request_unauth/1),
+    {ok, Dispatch} = file:consult(filename:join(
+                                    [filename:dirname(code:which(?MODULE)),
+                                     "..", "priv", "dispatch.conf"])),
+    application:set_env(webmachine, dispatch_list, Dispatch),
+    rabbit_mochiweb:register_context_handler("json",
+                                             fun webmachine_mochiweb:loop/1),
     rabbit_mochiweb:register_global_handler(
       rabbit_mochiweb:static_context_handler("", ?MODULE, "priv/www")),
     Res.

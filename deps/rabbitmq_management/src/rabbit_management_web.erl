@@ -26,10 +26,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([handle_request_unauth/1]).
--export([update/0]).
-
--export([handle_json_request/2]).
+-export([update/0, get_context/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -72,92 +69,6 @@ update() ->
 
 %%--------------------------------------------------------------------
 
-handle_request_unauth(Req) ->
-    case Req:get_header_value("Authorization") of
-        undefined ->
-            send_auth_request(Req);
-        AuthHeader ->
-            {_Type, [_Space|Auth]} = lists:splitwith(fun (A) -> A =/= 32 end,
-                                                    AuthHeader),
-            {User, [_Colon|Pass]} = lists:splitwith(fun (A) -> A =/= $: end,
-                                                base64:decode_to_string(Auth)),
-
-            case rabbit_access_control:lookup_user(list_to_binary(User)) of
-                {ok, U}  -> case list_to_binary(Pass) == U#user.password of
-                                true -> handle_request(Req);
-                                false -> send_auth_request(Req)
-                            end;
-                {error, _} -> send_auth_request(Req)
-            end
-    end.
-
-send_auth_request(Req) ->
-    Req:respond({401, [
-        {"WWW-Authenticate", "Basic realm=\"RabbitMQ Status Page\""},
-        {"Content-Type", "text/html"}
-        ], "401 Unauthorised.\n"}).
-
-
-handle_request(Req) ->
-    case Req:get(path) of
-        "/json/" -> apply_context(handle_json_request, Req);
-        _ ->  Req:respond({404, [{"Content-Type", "text/html; charset=utf-8"}],
-                                    <<"404 Not found.">>})
-    end.
-
-
-handle_json_request(Req, Context) ->
-    [Datetime, BoundTo,
-        RConns, RQueues,
-        FdUsed, FdTotal,
-        MemUsed, MemTotal,
-        ProcUsed, ProcTotal ]
-            = Context,
-
-    Json = {struct,
-            [{node, node()},
-             {pid, list_to_binary(os:getpid())},
-             {datetime, list_to_binary(Datetime)},
-             {bound_to, list_to_binary(BoundTo)},
-             {connections, [{struct,RConn} || RConn <- RConns]},
-             {queues, [{struct,RQueue} || RQueue <- RQueues]},
-             {fd_used, FdUsed},
-             {fd_total, FdTotal},
-             {mem_used, MemUsed},
-             {mem_total, MemTotal},
-             {proc_used, ProcUsed},
-             {proc_total, ProcTotal},
-             {fd_warn, get_warning_level(FdUsed, FdTotal)},
-             {mem_warn, get_warning_level(MemUsed, MemTotal)},
-             {proc_warn, get_warning_level(ProcUsed, ProcTotal)},
-             {mem_ets, erlang:memory(ets)},
-             {mem_binary, erlang:memory(binary)}
-            ]},
-    Resp = mochijson2:encode(Json),
-    Req:respond({200, [
-                {"Content-Type", "application/json; charset=utf-8"}
-            ], Resp}).
-
-
-apply_context(Fun, Req) ->
-    Res = try
-	      {ok, get_context()}
-	  catch
-	      exit:{timeout, _} ->
-		  {timeout, undefined}
-	  end,
-    case Res of
-	{ok, Context} ->
-	    apply(?MODULE, Fun, [Req, Context]);
-	{timeout, _} ->
-	    Req:respond({408, [{"Refresh", status_render:print(
-					     "~p", trunc(?REFRESH_RATIO/1000))},
-			       {"Content-Type", "text/plain; charset=utf-8"}
-			      ], <<"408 Request Timeout.\n">>})
-    end.
-
-%%--------------------------------------------------------------------
-
 get_total_fd_ulimit() ->
     {MaxFds, _} = string:to_integer(os:cmd("ulimit -n")),
     MaxFds.
@@ -195,19 +106,6 @@ get_used_fd(_) ->
 get_total_memory() ->
     vm_memory_monitor:get_vm_memory_high_watermark() *
 	vm_memory_monitor:get_total_memory().
-
-
-get_warning_level(Used, Total) ->
-    if
-        is_number(Used) andalso is_number(Total) ->
-            Ratio = Used/Total,
-            if
-                Ratio > 0.75 -> red;
-                Ratio > 0.50 -> yellow;
-                true         -> green
-            end;
-        true -> none
-    end.
 
 
 %%--------------------------------------------------------------------

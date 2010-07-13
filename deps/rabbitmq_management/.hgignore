@@ -4,4 +4,9 @@ syntax: regexp
 ^dist/
 .*\.beam
 ^priv/www/js/templates.js$
-
+^deps/webmachine/webmachine
+^deps/webmachine/ebin
+^deps/webmachine/include
+^deps/mochiweb-for-management/mochiweb-for-management
+^deps/mochiweb-for-management/ebin
+^deps/mochiweb-for-management/include
