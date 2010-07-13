@@ -308,7 +308,7 @@ validate_regexp(RegexpBin) ->
 
 set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
     [ConfigurePerm1, WritePerm1, ReadPerm1] =
-        lists:map(fun(<<"">>) -> <<"$^">>;
+        lists:map(fun(<<"">>) -> <<$^, $$>>;
                      (Regexp) -> ok = validate_regexp(Regexp),
                                  Regexp
                   end, [ConfigurePerm, WritePerm, ReadPerm]),
