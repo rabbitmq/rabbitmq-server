@@ -35,7 +35,7 @@
 
 -behaviour(gen_server2).
 
--define(UNSENT_MESSAGE_LIMIT,        100).
+-define(UNSENT_MESSAGE_LIMIT,          100).
 -define(SYNC_INTERVAL,                 5). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
@@ -50,7 +50,6 @@
 
 % Queue's state
 -record(q, {q,
-            owner,
             exclusive_consumer,
             has_had_consumers,
             backing_queue,
@@ -104,7 +103,6 @@ init(Q) ->
     {ok, BQ} = application:get_env(backing_queue_module),
 
     {ok, #q{q = Q#amqqueue{pid = self()},
-            owner = none,
             exclusive_consumer = none,
             has_had_consumers = false,
             backing_queue = BQ,
@@ -133,6 +131,23 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
+
+declare(Recover, From,
+        State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
+                   backing_queue = BQ, backing_queue_state = undefined}) ->
+    case rabbit_amqqueue:internal_declare(Q, Recover) of
+        not_found -> {stop, normal, not_found, State};
+        Q         -> gen_server2:reply(From, {new, Q}),
+                     ok = file_handle_cache:register_callback(
+                            rabbit_amqqueue, set_maximum_since_use,
+                            [self()]),
+                     ok = rabbit_memory_monitor:register(
+                            self(), {rabbit_amqqueue,
+                                     set_ram_duration_target, [self()]}),
+                     BQS = BQ:init(QName, IsDurable, Recover),
+                     noreply(State#q{backing_queue_state = BQS});
+        Q1        -> {stop, normal, {existing, Q1}, State}
+    end.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
@@ -433,10 +448,6 @@ cancel_holder(ChPid, ConsumerTag, {ChPid, ConsumerTag}) ->
 cancel_holder(_ChPid, _ConsumerTag, Holder) ->
     Holder.
 
-check_queue_owner(none,           _)         -> ok;
-check_queue_owner({ReaderPid, _}, ReaderPid) -> ok;
-check_queue_owner({_,         _}, _)         -> mismatch.
-
 check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume, _State) ->
     in_use;
 check_exclusive_access(none, false, _State) ->
@@ -488,10 +499,10 @@ i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
 i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
 i(pid, _) ->
     self();
-i(owner_pid, #q{owner = none}) ->
+i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
     '';
-i(owner_pid, #q{owner = {ReaderPid, _MonitorRef}}) ->
-    ReaderPid;
+i(owner_pid, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
+    ExclusiveOwner;
 i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
     '';
 i(exclusive_consumer_pid, #q{exclusive_consumer = {ChPid, _ConsumerTag}}) ->
@@ -520,25 +531,24 @@ i(Item, _) ->
 %---------------------------------------------------------------------------
 
 handle_call({init, Recover}, From,
-            State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
-                       backing_queue = BQ, backing_queue_state = undefined}) ->
-    %% TODO: If we're exclusively owned && our owner isn't alive &&
-    %% Recover then we should BQ:init and then {stop, normal,
-    %% not_found, State}, relying on terminate to delete the queue.
-    case rabbit_amqqueue:internal_declare(Q, Recover) of
-        not_found ->
-            {stop, normal, not_found, State};
-        Q ->
-            gen_server2:reply(From, Q),
-            ok = file_handle_cache:register_callback(
-                   rabbit_amqqueue, set_maximum_since_use, [self()]),
-            ok = rabbit_memory_monitor:register(
-                   self(),
-                   {rabbit_amqqueue, set_ram_duration_target, [self()]}),
-            noreply(State#q{backing_queue_state =
-                                BQ:init(QName, IsDurable, Recover)});
-        Q1 ->
-            {stop, normal, Q1, State}
+            State = #q{q = #amqqueue{exclusive_owner = none}}) ->
+    declare(Recover, From, State);
+
+handle_call({init, Recover}, From,
+            State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
+    case rpc:call(node(Owner), erlang, is_process_alive, [Owner]) of
+        true -> erlang:monitor(process, Owner),
+                declare(Recover, From, State);
+        _    -> #q{q = #amqqueue{name = QName, durable = IsDurable},
+                   backing_queue = BQ, backing_queue_state = undefined} = State,
+                case Recover of
+                    true -> ok;
+                    _    -> rabbit_log:warning(
+                              "Queue ~p exclusive owner went away~n", [QName])
+                end,
+                BQS = BQ:init(QName, IsDurable, Recover),
+                %% Rely on terminate to delete the queue.
+                {stop, normal, not_found, State#q{backing_queue_state = BQS}}
     end;
 
 handle_call(info, _From, State) ->
@@ -613,51 +623,44 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             reply({ok, Remaining, Msg}, State#q{backing_queue_state = BQS1})
     end;
 
-handle_call({basic_consume, NoAck, ReaderPid, ChPid, LimiterPid,
+handle_call({basic_consume, NoAck, ChPid, LimiterPid,
              ConsumerTag, ExclusiveConsume, OkMsg},
-            _From, State = #q{owner = Owner,
-                              exclusive_consumer = ExistingHolder}) ->
-    case check_queue_owner(Owner, ReaderPid) of
-        mismatch ->
-            reply({error, queue_owned_by_another_connection}, State);
+            _From, State = #q{exclusive_consumer = ExistingHolder}) ->
+    case check_exclusive_access(ExistingHolder, ExclusiveConsume,
+                                State) of
+        in_use ->
+            reply({error, exclusive_consume_unavailable}, State);
         ok ->
-            case check_exclusive_access(ExistingHolder, ExclusiveConsume,
-                                        State) of
-                in_use ->
-                    reply({error, exclusive_consume_unavailable}, State);
-                ok ->
-                    C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
-                    Consumer = #consumer{tag = ConsumerTag,
-                                         ack_required = not NoAck},
-                    store_ch_record(C#cr{consumer_count = ConsumerCount +1,
-                                         limiter_pid = LimiterPid}),
-                    case ConsumerCount of
-                        0 -> ok = rabbit_limiter:register(LimiterPid, self());
-                        _ -> ok
-                    end,
-                    ExclusiveConsumer = case ExclusiveConsume of
-                                            true  -> {ChPid, ConsumerTag};
-                                            false -> ExistingHolder
-                                        end,
-                    State1 = State#q{has_had_consumers = true,
-                                     exclusive_consumer = ExclusiveConsumer},
-                    ok = maybe_send_reply(ChPid, OkMsg),
-                    State2 =
-                        case is_ch_blocked(C) of
-                            true  -> State1#q{
-                                       blocked_consumers =
-                                       add_consumer(
-                                         ChPid, Consumer,
-                                         State1#q.blocked_consumers)};
-                            false -> run_message_queue(
-                                       State1#q{
-                                         active_consumers =
-                                         add_consumer(
-                                           ChPid, Consumer,
-                                           State1#q.active_consumers)})
-                        end,
-                    reply(ok, State2)
-            end
+            C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
+            Consumer = #consumer{tag = ConsumerTag,
+                                 ack_required = not NoAck},
+            store_ch_record(C#cr{consumer_count = ConsumerCount +1,
+                                 limiter_pid = LimiterPid}),
+            ok = case ConsumerCount of
+                     0 -> rabbit_limiter:register(LimiterPid, self());
+                     _ -> ok
+                 end,
+            ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
+                                   true             -> ExistingHolder
+                                end,
+            State1 = State#q{has_had_consumers = true,
+                             exclusive_consumer = ExclusiveConsumer},
+            ok = maybe_send_reply(ChPid, OkMsg),
+            State2 =
+                case is_ch_blocked(C) of
+                    true  -> State1#q{
+                               blocked_consumers =
+                               add_consumer(
+                                 ChPid, Consumer,
+                                 State1#q.blocked_consumers)};
+                    false -> run_message_queue(
+                               State1#q{
+                                 active_consumers =
+                                 add_consumer(
+                                   ChPid, Consumer,
+                                   State1#q.active_consumers)})
+                end,
+            reply(ok, State2)
     end;
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
@@ -689,11 +692,10 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             end
     end;
 
-handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
-                                    backing_queue = BQ,
+handle_call(stat, _From, State = #q{backing_queue = BQ,
                                     backing_queue_state = BQS,
                                     active_consumers = ActiveConsumers}) ->
-    reply({ok, Name, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
+    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
@@ -713,27 +715,17 @@ handle_call(purge, _From, State = #q{backing_queue = BQ,
     {Count, BQS1} = BQ:purge(BQS),
     reply({ok, Count}, State#q{backing_queue_state = BQS1});
 
-handle_call({claim_queue, ReaderPid}, _From,
-            State = #q{owner = Owner, exclusive_consumer = Holder}) ->
-    case Owner of
-        none ->
-            case check_exclusive_access(Holder, true, State) of
-                in_use ->
-                    %% FIXME: Is this really the right answer? What if
-                    %% an active consumer's reader is actually the
-                    %% claiming pid? Should that be allowed? In order
-                    %% to check, we'd need to hold not just the ch
-                    %% pid for each consumer, but also its reader
-                    %% pid...
-                    reply(locked, State);
-                ok ->
-                    MonitorRef = erlang:monitor(process, ReaderPid),
-                    reply(ok, State#q{owner = {ReaderPid, MonitorRef}})
-            end;
-        {ReaderPid, _MonitorRef} ->
-            reply(ok, State);
-        _ ->
-            reply(locked, State)
+handle_call({requeue, AckTags, ChPid}, From, State) ->
+    gen_server2:reply(From, ok),
+    case lookup_ch(ChPid) of
+        not_found ->
+            rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
+                               [ChPid]),
+            noreply(State);
+        C = #cr{acktags = ChAckTags} ->
+            ChAckTags1 = subtract_acks(ChAckTags, AckTags),
+            store_ch_record(C#cr{acktags = ChAckTags1}),
+            noreply(requeue_and_run(AckTags, State))
     end;
 
 handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
@@ -762,18 +754,6 @@ handle_cast({ack, Txn, AckTags, ChPid},
 
 handle_cast({rollback, Txn, ChPid}, State) ->
     noreply(rollback_transaction(Txn, ChPid, State));
-
-handle_cast({requeue, AckTags, ChPid}, State) ->
-    case lookup_ch(ChPid) of
-        not_found ->
-            rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
-                               [ChPid]),
-            noreply(State);
-        C = #cr{acktags = ChAckTags} ->
-            ChAckTags1 = subtract_acks(ChAckTags, AckTags),
-            store_ch_record(C#cr{acktags = ChAckTags1}),
-            noreply(requeue_and_run(AckTags, State))
-    end;
 
 handle_cast({unblock, ChPid}, State) ->
     noreply(
@@ -825,19 +805,15 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State).
 
-handle_info({'DOWN', MonitorRef, process, DownPid, _Reason},
-            State = #q{owner = {DownPid, MonitorRef}}) ->
-    %% We know here that there are no consumers on this queue that are
-    %% owned by other pids than the one that just went down, so since
-    %% exclusive in some sense implies autodelete, we delete the queue
-    %% here. The other way of implementing the "exclusive implies
-    %% autodelete" feature is to actually set autodelete when an
-    %% exclusive declaration is seen, but this has the problem that
-    %% the python tests rely on the queue not going away after a
-    %% basic.cancel when the queue was declared exclusive and
-    %% nonautodelete.
-    NewState = State#q{owner = none},
-    {stop, normal, NewState};
+handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
+            State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
+    %% Exclusively owned queues must disappear with their owner.  In
+    %% the case of clean shutdown we delete the queue synchronously in
+    %% the reader - although not required by the spec this seems to
+    %% match what people expect (see bug 21824). However we need this
+    %% monitor-and-async- delete in case the connection goes away
+    %% unexpectedly.
+    {stop, normal, State};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     case handle_ch_down(DownPid, State) of
         {ok, NewState}   -> noreply(NewState);

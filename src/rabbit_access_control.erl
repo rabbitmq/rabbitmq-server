@@ -45,28 +45,38 @@
 
 -ifdef(use_specs).
 
--type(permission_atom() :: 'configure' | 'read' | 'write').
+-export_type([username/0, password/0]).
 
--spec(check_login/2 :: (binary(), binary()) -> user()).
--spec(user_pass_login/2 :: (username(), password()) -> user()).
--spec(check_vhost_access/2 :: (user(), vhost()) -> 'ok').
+-type(permission_atom() :: 'configure' | 'read' | 'write').
+-type(username() :: binary()).
+-type(password() :: binary()).
+-type(regexp() :: binary()).
+
+-spec(check_login/2 :: (binary(), binary()) -> rabbit_types:user()).
+-spec(user_pass_login/2 :: (username(), password()) -> rabbit_types:user()).
+-spec(check_vhost_access/2 ::
+        (rabbit_types:user(), rabbit_types:vhost()) -> 'ok').
 -spec(check_resource_access/3 ::
-      (username(), r(atom()), permission_atom()) -> 'ok').
+        (username(), rabbit_types:r(atom()), permission_atom()) -> 'ok').
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
 -spec(list_users/0 :: () -> [username()]).
--spec(lookup_user/1 :: (username()) -> {'ok', user()} | not_found()).
--spec(add_vhost/1 :: (vhost()) -> 'ok').
--spec(delete_vhost/1 :: (vhost()) -> 'ok').
--spec(list_vhosts/0 :: () -> [vhost()]).
--spec(set_permissions/5 ::
-      (username(), vhost(), regexp(), regexp(), regexp()) -> 'ok').
--spec(clear_permissions/2 :: (username(), vhost()) -> 'ok').
+-spec(lookup_user/1 ::
+        (username()) -> rabbit_types:ok(rabbit_types:user())
+                            | rabbit_types:error('not_found')).
+-spec(add_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
+-spec(delete_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
+-spec(list_vhosts/0 :: () -> [rabbit_types:vhost()]).
+-spec(set_permissions/5 ::(username(), rabbit_types:vhost(), regexp(),
+                           regexp(), regexp()) -> 'ok').
+-spec(clear_permissions/2 :: (username(), rabbit_types:vhost()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
-      (vhost()) -> [{username(), regexp(), regexp(), regexp()}]).
+        (rabbit_types:vhost())
+        -> [{username(), regexp(), regexp(), regexp()}]).
 -spec(list_user_permissions/1 ::
-      (username()) -> [{vhost(), regexp(), regexp(), regexp()}]).
+        (username())
+        -> [{rabbit_types:vhost(), regexp(), regexp(), regexp()}]).
 
 -endif.
 
@@ -162,9 +172,14 @@ check_resource_access(Username,
               [] ->
                   false;
               [#user_permission{permission = P}] ->
+                  PermRegexp = case element(permission_index(Permission), P) of
+                                   %% <<"^$">> breaks Emacs' erlang mode
+                                   <<"">> -> <<$^, $$>>;
+                                   RE     -> RE
+                               end,
                   case regexp:match(
                          binary_to_list(Name),
-                         binary_to_list(element(permission_index(Permission), P))) of
+                         binary_to_list(PermRegexp)) of
                       {match, _, _} -> true;
                       nomatch       -> false
                   end

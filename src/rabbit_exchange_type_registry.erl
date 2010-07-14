@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -35,8 +35,8 @@
 
 -export([start_link/0]).
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 -export([register/2, binary_to_type/1, lookup_module/1]).
 
@@ -45,10 +45,13 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> 'ignore' | {'error', term()} | {'ok', pid()}).
+-spec(start_link/0 ::
+        () -> 'ignore' | rabbit_types:ok_or_error2(pid(), term())).
 -spec(register/2 :: (binary(), atom()) -> 'ok').
--spec(binary_to_type/1 :: (binary()) -> atom() | {'error', 'not_found'}).
--spec(lookup_module/1 :: (atom()) -> {'ok', atom()} | {'error', 'not_found'}).
+-spec(binary_to_type/1 ::
+        (binary()) -> atom() | rabbit_types:error('not_found')).
+-spec(lookup_module/1 ::
+        (atom()) -> rabbit_types:ok_or_error2(atom(), 'not_found')).
 
 -endif.
 

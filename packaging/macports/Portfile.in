@@ -4,9 +4,8 @@
 PortSystem 1.0
 name		rabbitmq-server
 version		@VERSION@
-revision	1
 categories	net 
-maintainers	rabbitmq.com:tonyg
+maintainers	paperplanes.de:meyer rabbitmq.com:tonyg openmaintainer
 platforms	darwin
 description	The RabbitMQ AMQP Server
 long_description	\
@@ -23,8 +22,8 @@ checksums \
     sha1 @sha1@ \
     rmd160 @rmd160@
 
-depends_build   port:erlang port:xmlto port:libxslt
-depends_run     port:erlang
+depends_lib	port:erlang
+depends_build	port:xmlto port:libxslt
 
 platform darwin 7 {
     depends_build-append port:py25-simplejson
@@ -98,6 +97,8 @@ post-destroot {
     xinstall -m 555 ${filespath}/rabbitmq-asroot-script-wrapper \
                 ${wrappersbin}/rabbitmq-activate-plugins
 
+    reinplace -E "s:MACPORTS_PREFIX/bin:${prefix}/bin:" \
+                ${wrappersbin}/rabbitmq-multi
     reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:" \
                 ${wrappersbin}/rabbitmq-multi
     reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:" \

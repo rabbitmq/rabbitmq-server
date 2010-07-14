@@ -58,15 +58,21 @@
 -type(frame() :: [binary()]).
 
 -spec(build_simple_method_frame/2 ::
-      (channel_number(), amqp_method()) -> frame()).
+        (rabbit_channel:channel_number(), rabbit_framing:amqp_method_record())
+        -> frame()).
 -spec(build_simple_content_frames/3 ::
-      (channel_number(), content(), non_neg_integer()) -> [frame()]).
+        (rabbit_channel:channel_number(), rabbit_types:content(),
+         non_neg_integer())
+        -> [frame()]).
 -spec(build_heartbeat_frame/0 :: () -> frame()).
--spec(generate_table/1 :: (amqp_table()) -> binary()).
--spec(encode_properties/2 :: ([amqp_property_type()], [any()]) -> binary()).
+-spec(generate_table/1 :: (rabbit_framing:amqp_table()) -> binary()).
+-spec(encode_properties/2 ::
+        ([rabbit_framing:amqp_property_type()], [any()]) -> binary()).
 -spec(check_empty_content_body_frame_size/0 :: () -> 'ok').
--spec(ensure_content_encoded/1 :: (content()) -> encoded_content()).
--spec(clear_encoded_content/1 :: (content()) -> unencoded_content()).
+-spec(ensure_content_encoded/1 ::
+        (rabbit_types:content()) -> rabbit_types:encoded_content()).
+-spec(clear_encoded_content/1 ::
+        (rabbit_types:content()) -> rabbit_types:unencoded_content()).
 -spec(map_exception/2 :: (non_neg_integer(), amqp_error()) ->
         {bool(), non_neg_integer(), amqp_method()}).
 
@@ -121,10 +127,11 @@ build_content_frames(SizeAcc, FramesAcc, FragSizeRem, FragAcc,
                      [Frag | Frags], BodyPayloadMax, ChannelInt) ->
     Size = size(Frag),
     {NewFragSizeRem, NewFragAcc, NewFrags} =
-        case Size =< FragSizeRem of
-            true  -> {FragSizeRem - Size, [Frag | FragAcc], Frags};
-            false -> <<Head:FragSizeRem/binary, Tail/binary>> = Frag,
-                     {0, [Head | FragAcc], [Tail | Frags]}
+        if Size == 0           -> {FragSizeRem, FragAcc, Frags};
+           Size =< FragSizeRem -> {FragSizeRem - Size, [Frag | FragAcc], Frags};
+           true                -> <<Head:FragSizeRem/binary, Tail/binary>> =
+                                      Frag,
+                                  {0, [Head | FragAcc], [Tail | Frags]}
         end,
     build_content_frames(SizeAcc, FramesAcc, NewFragSizeRem, NewFragAcc,
                          NewFrags, BodyPayloadMax, ChannelInt).

@@ -18,6 +18,13 @@ set -e
 # for details, see http://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
+remove_plugin_traces() {
+    # Remove traces of plugins
+    rm -rf @RABBIT_LIB@/priv @RABBIT_LIB@/plugins
+    for ext in rel script boot ; do
+        rm -f @RABBIT_LIB@/ebin/rabbit.$ext
+    done
+}
 
 case "$1" in
     purge)
@@ -34,11 +41,7 @@ case "$1" in
         if [ -d /etc/rabbitmq ]; then
                 rm -r /etc/rabbitmq
         fi
-        # Remove traces of plugins
-        rm -rf @RABBIT_LIB@/priv @RABBIT_LIB@/plugins
-        for ext in rel script boot ; do
-                rm -f @RABBIT_LIB@/ebin/rabbit.$ext
-        done
+	remove_plugin_traces
         if getent passwd rabbitmq >/dev/null; then
                 # Stop epmd if run by the rabbitmq user
                 pkill -u rabbitmq epmd || :
@@ -50,7 +53,11 @@ case "$1" in
         fi
     ;;
 
-    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    remove|upgrade)
+	remove_plugin_traces
+    ;;
+
+    failed-upgrade|abort-install|abort-upgrade|disappear)
     ;;
 
     *)

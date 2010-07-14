@@ -52,10 +52,13 @@
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
+-define(SILENT_CLOSE_DELAY, 3).
+-define(FRAME_MAX, 131072). %% set to zero once QPid fix their negotiation
 
 %---------------------------------------------------------------------------
 
--record(v1, {sock, connection, callback, recv_ref, connection_state}).
+-record(v1, {sock, connection, callback, recv_ref, connection_state,
+             queue_collector}).
 
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
@@ -100,6 +103,8 @@
 %%   heartbeat timeout -> *throw*
 %% closing:
 %%   socket close -> *terminate*
+%%   receive connection.close -> send connection.close_ok,
+%%     *closing*
 %%   receive frame -> ignore, *closing*
 %%   handshake_timeout -> ignore, *closing*
 %%   heartbeat timeout -> *throw*
@@ -116,6 +121,8 @@
 %%      start terminate_connection timer, *closed*
 %% closed:
 %%   socket close -> *terminate*
+%%   receive connection.close -> send connection.close_ok,
+%%     *closed*
 %%   receive connection.close_ok -> self() ! terminate_connection,
 %%     *closed*
 %%   receive frame -> ignore, *closed*
@@ -131,11 +138,11 @@
 
 -ifdef(use_specs).
 
--spec(info_keys/0 :: () -> [info_key()]).
--spec(info/1 :: (pid()) -> [info()]).
--spec(info/2 :: (pid(), [info_key()]) -> [info()]).
+-spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
+-spec(info/1 :: (pid()) -> [rabbit_types:info()]).
+-spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
--spec(server_properties/0 :: () -> amqp_table()).
+-spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
 -endif.
 
@@ -233,6 +240,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
+    {ok, Collector} = rabbit_queue_collector:start_link(),
     try
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
@@ -244,7 +252,8 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                       client_properties = none},
                                     callback = uninitialized_callback,
                                     recv_ref = none,
-                                    connection_state = pre_init},
+                                    connection_state = pre_init,
+                                    queue_collector = Collector},
                                 handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -262,7 +271,9 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %% output to be sent, which results in unnecessary delays.
         %%
         %% gen_tcp:close(ClientSock),
-        teardown_profiling(ProfilingValue)
+        teardown_profiling(ProfilingValue),
+        rabbit_queue_collector:shutdown(Collector),
+        rabbit_misc:unlink_and_capture_exit(Collector)
     end,
     done.
 
@@ -425,11 +436,17 @@ wait_for_channel_termination(N, TimerRef) ->
             exit(channel_termination_timeout)
     end.
 
-maybe_close(State = #v1{connection_state = closing}) ->
+maybe_close(State = #v1{connection_state = closing,
+                        queue_collector = Collector}) ->
     case all_channels() of
-        [] -> ok = send_on_channel0(
-                     State#v1.sock, #'connection.close_ok'{}),
-              close_connection(State);
+        [] ->
+            %% Spec says "Exclusive queues may only be accessed by the current
+            %% connection, and are deleted when that connection closes."
+            %% This does not strictly imply synchrony, but in practice it seems
+            %% to be what people assume.
+            rabbit_queue_collector:delete_all(Collector),
+            ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}),
+            close_connection(State);
         _  -> State
     end;
 maybe_close(State) ->
@@ -473,10 +490,18 @@ handle_frame(Type, Channel, Payload, State) ->
                 closing ->
                     %% According to the spec, after sending a
                     %% channel.close we must ignore all frames except
+                    %% channel.close and channel.close_ok.  In the
+                    %% event of a channel.close, we should send back a
                     %% channel.close_ok.
                     case AnalyzedFrame of
                         {method, 'channel.close_ok', _} ->
                             erase({channel, Channel});
+                        {method, 'channel.close', _} ->
+                            %% We're already closing this channel, so
+                            %% there's no cleanup to do (notify
+                            %% queues, etc.)
+                            ok = rabbit_writer:send_command(State#v1.sock,
+                                                            #'channel.close_ok'{});
                         _ -> ok
                     end,
                     State;
@@ -575,7 +600,11 @@ handle_method0(MethodName, FieldsBin, State) ->
                              end,
             case State#v1.connection_state of
                 running -> send_exception(State, 0, CompleteReason);
-                Other   -> throw({channel0_error, Other, CompleteReason})
+                %% We don't trust the client at this point - force
+                %% them to wait for a bit so they can't DOS us with
+                %% repeated failed logins etc.
+                Other   -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
+                           throw({channel0_error, Other, CompleteReason})
             end
     end.
 
@@ -589,27 +618,33 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
     ok = send_on_channel0(
            Sock,
            #'connection.tune'{channel_max = 0,
-                              %% set to zero once QPid fix their negotiation
-                              frame_max = 131072,
+                              frame_max = ?FRAME_MAX,
                               heartbeat = 0}),
     State#v1{connection_state = tuning,
              connection = Connection#connection{
                             user = User,
                             client_properties = ClientProperties}};
-handle_method0(#'connection.tune_ok'{channel_max = _ChannelMax,
-                                     frame_max = FrameMax,
+handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
                State = #v1{connection_state = tuning,
                            connection = Connection,
                            sock = Sock}) ->
-    %% if we have a channel_max limit that the client wishes to
-    %% exceed, die as per spec.  Not currently a problem, so we ignore
-    %% the client's channel_max parameter.
-    rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
-    State#v1{connection_state = opening,
-             connection = Connection#connection{
-                            timeout_sec = ClientHeartbeat,
-                            frame_max = FrameMax}};
+    if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
+            rabbit_misc:protocol_error(
+              not_allowed, "frame_max=~w < ~w min size",
+              [FrameMax, ?FRAME_MIN_SIZE]);
+       (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
+            rabbit_misc:protocol_error(
+              not_allowed, "frame_max=~w > ~w max size",
+              [FrameMax, ?FRAME_MAX]);
+       true ->
+            rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
+            State#v1{connection_state = opening,
+                     connection = Connection#connection{
+                                    timeout_sec = ClientHeartbeat,
+                                    frame_max = FrameMax}}
+    end;
+
 handle_method0(#'connection.open'{virtual_host = VHostPath,
                                   insist = Insist},
                State = #v1{connection_state = opening,
@@ -643,6 +678,14 @@ handle_method0(#'connection.close'{},
                State = #v1{connection_state = running}) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing});
+handle_method0(#'connection.close'{},
+               State = #v1{connection_state = CS,
+                           sock = Sock})
+  when CS =:= closing; CS =:= closed ->
+    %% We're already closed or closing, so we don't need to cleanup
+    %% anything.
+    ok = send_on_channel0(Sock, #'connection.close_ok'{}),
+    State;
 handle_method0(#'connection.close_ok'{},
                State = #v1{connection_state = closed}) ->
     self() ! terminate_connection,
@@ -722,15 +765,16 @@ i(Item, #v1{}) ->
 
 %%--------------------------------------------------------------------------
 
-send_to_new_channel(Channel, AnalyzedFrame, State) ->
+send_to_new_channel(Channel, AnalyzedFrame,
+                    State = #v1{queue_collector = Collector}) ->
     #v1{sock = Sock, connection = #connection{
                        frame_max = FrameMax,
                        user = #user{username = Username},
                        vhost = VHost}} = State,
     WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
     ChPid = rabbit_framing_channel:start_link(
-              fun rabbit_channel:start_link/5,
-              [Channel, self(), WriterPid, Username, VHost]),
+              fun rabbit_channel:start_link/6,
+              [Channel, self(), WriterPid, Username, VHost, Collector]),
     put({channel, Channel}, {chpid, ChPid}),
     put({chpid, ChPid}, {channel, Channel}),
     ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame).

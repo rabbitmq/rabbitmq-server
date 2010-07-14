@@ -44,7 +44,7 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
--spec(action/4 :: (atom(), erlang_node(), [string()],
+-spec(action/4 :: (atom(), node(), [string()],
                    fun ((string(), [any()]) -> 'ok')) -> 'ok').
 -spec(usage/0 :: () -> no_return()).
 
@@ -59,8 +59,8 @@ start() ->
         parse_args(FullCommand, #params{quiet = false,
                                         node = rabbit_misc:makenode(NodeStr)}),
     Inform = case Quiet of
-                 true  -> fun(_Format, _Args1) -> ok end;
-                 false -> fun(Format, Args1) ->
+                 true  -> fun (_Format, _Args1) -> ok end;
+                 false -> fun (Format, Args1) ->
                                   io:format(Format ++ " ...~n", Args1)
                          end
              end,
@@ -159,6 +159,12 @@ action(cluster, Node, ClusterNodeSs, Inform) ->
     Inform("Clustering node ~p with ~p",
               [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
+
+action(force_cluster, Node, ClusterNodeSs, Inform) ->
+    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
+    Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
+              [Node, ClusterNodes]),
+    rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
 
 action(status, Node, [], Inform) ->
     Inform("Status of node ~p", [Node]),

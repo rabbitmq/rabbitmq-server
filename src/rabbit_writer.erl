@@ -48,20 +48,37 @@
 
 -ifdef(use_specs).
 
--spec(start/3 :: (socket(), channel_number(), non_neg_integer()) -> pid()).
--spec(start_link/3 :: (socket(), channel_number(), non_neg_integer()) -> pid()).
--spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
--spec(send_command/3 :: (pid(), amqp_method(), content()) -> 'ok').
--spec(send_command_and_signal_back/3 :: (pid(), amqp_method(), pid()) -> 'ok').
+-spec(start/3 ::
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer())
+        -> pid()).
+-spec(start_link/3 ::
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer())
+        -> pid()).
+-spec(send_command/2 ::
+        (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
+-spec(send_command/3 ::
+        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content())
+        -> 'ok').
+-spec(send_command_and_signal_back/3 ::
+        (pid(), rabbit_framing:amqp_method(), pid()) -> 'ok').
 -spec(send_command_and_signal_back/4 ::
-      (pid(), amqp_method(), content(), pid()) -> 'ok').
+        (pid(), rabbit_framing:amqp_method(), rabbit_types:content(), pid())
+        -> 'ok').
 -spec(send_command_and_notify/5 ::
-      (pid(), pid(), pid(), amqp_method(), content()) -> 'ok').
+        (pid(), pid(), pid(), rabbit_framing:amqp_method_record(),
+         rabbit_types:content())
+        -> 'ok').
 -spec(internal_send_command/3 ::
-      (socket(), channel_number(), amqp_method()) -> 'ok').
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         rabbit_framing:amqp_method_record())
+        -> 'ok').
 -spec(internal_send_command/5 ::
-      (socket(), channel_number(), amqp_method(),
-       content(), non_neg_integer()) -> 'ok').
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         rabbit_framing:amqp_method_record(), rabbit_types:content(),
+         non_neg_integer())
+        -> 'ok').
 
 -endif.
 
@@ -149,6 +166,7 @@ send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
 
 shutdown(W) ->
     W ! shutdown,
+    rabbit_misc:unlink_and_capture_exit(W),
     ok.
 
 %---------------------------------------------------------------------------

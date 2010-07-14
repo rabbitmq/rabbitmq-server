@@ -18,11 +18,11 @@
 %%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
 %%   Technologies LLC, and Rabbit Technologies Ltd.
 %%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2009 LShift
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
 %%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2009 Cohesive Financial Technologies
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
 %%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2009 Rabbit Technologies Ltd.
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
@@ -31,12 +31,19 @@
 -ifdef(use_specs).
 
 -spec(description/0 :: () -> [{atom(), any()}]).
--spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
--spec(validate/1 :: (exchange()) -> 'ok').
--spec(create/1 :: (exchange()) -> 'ok').
--spec(recover/2 :: (exchange(), list(binding())) -> 'ok').
--spec(delete/2 :: (exchange(), list(binding())) -> 'ok').
--spec(add_binding/2 :: (exchange(), binding()) -> 'ok').
--spec(remove_bindings/2 :: (exchange(), list(binding())) -> 'ok').
+-spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
+                   -> {rabbit_router:routing_result(), [pid()]}).
+-spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').
+-spec(create/1 :: (rabbit_types:exchange()) -> 'ok').
+-spec(recover/2 :: (rabbit_types:exchange(),
+                    [rabbit_types:binding()]) -> 'ok').
+-spec(delete/2 :: (rabbit_types:exchange(),
+                   [rabbit_types:binding()]) -> 'ok').
+-spec(add_binding/2 :: (rabbit_types:exchange(),
+                        rabbit_types:binding()) -> 'ok').
+-spec(remove_bindings/2 :: (rabbit_types:exchange(),
+                            [rabbit_types:binding()]) -> 'ok').
+-spec(assert_args_equivalence/2 :: (rabbit_types:exchange(),
+                                    rabbit_framing:amqp_table()) -> 'ok').
 
 -endif.
