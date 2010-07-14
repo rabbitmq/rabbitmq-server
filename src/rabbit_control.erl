@@ -272,16 +272,16 @@ action(Command, Node, Args, Inform) ->
     action(Command, Node, VHost, RemainingArgs, Inform).
 
 action(set_permissions, Node, VHost, Args, Inform) ->
-    {Check, [Username, CPerm, WPerm, RPerm]} =
+    {Scope, [Username, CPerm, WPerm, RPerm]} =
         case Args of
-            [[$- | Flag] | RemainingArgs] ->
-                {Flag, RemainingArgs};
+            ["-s", ScopeArg | RemainingArgs] ->
+                {ScopeArg, RemainingArgs};
             RemainingArgs ->
-                {"check_user_named", RemainingArgs}
+                {"client", RemainingArgs}
         end,
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
     call(Node, {rabbit_access_control, set_permissions,
-                [Check, Username, VHost, CPerm, WPerm, RPerm]});
+                [Scope, Username, VHost, CPerm, WPerm, RPerm]});
 
 action(clear_permissions, Node, VHost, [Username], Inform) ->
     Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),

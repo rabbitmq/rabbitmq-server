@@ -51,7 +51,7 @@
 -type(username() :: binary()).
 -type(password() :: binary()).
 -type(regexp() :: binary()).
--type(check_flag() :: binary()).
+-type(scope() :: binary()).
 
 -spec(check_login/2 :: (binary(), binary()) -> rabbit_types:user()).
 -spec(user_pass_login/2 :: (username(), password()) -> rabbit_types:user()).
@@ -71,7 +71,7 @@
 -spec(list_vhosts/0 :: () -> [rabbit_types:vhost()]).
 -spec(set_permissions/5 ::(username(), rabbit_types:vhost(), regexp(),
                            regexp(), regexp()) -> 'ok').
--spec(set_permissions/6 ::(check_flag(), username(), rabbit_types:vhost(),
+-spec(set_permissions/6 ::(scope(), username(), rabbit_types:vhost(),
                            regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (username(), rabbit_types:vhost()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
@@ -152,7 +152,7 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
               [VHostPath, Username])
     end.
 
-permission_index(check)     -> #permission.check;
+permission_index(scope)     -> #permission.scope;
 permission_index(configure) -> #permission.configure;
 permission_index(write)     -> #permission.write;
 permission_index(read)      -> #permission.read.
@@ -165,7 +165,7 @@ check_resource_access(Username,
                           Permission);
 check_resource_access(_Username,
                       #resource{name = <<"amq.gen",_/binary>>},
-                      #permission{check = 'check_user_named'}) ->
+                      #permission{scope = 'client'}) ->
     ok;
 check_resource_access(Username,
                       R = #resource{virtual_host = VHostPath, name = Name},
@@ -311,15 +311,15 @@ validate_regexp(RegexpBin) ->
     end.
 
 set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
-    set_permissions(<<"check_user_named">>, Username, VHostPath, ConfigurePerm,
+    set_permissions(<<"client">>, Username, VHostPath, ConfigurePerm,
                     WritePerm, ReadPerm).
 
-set_permissions(Check, Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
+set_permissions(Scope, Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
     lists:map(fun validate_regexp/1, [ConfigurePerm, WritePerm, ReadPerm]),
-    Check1 = case Check of
-                 <<"check_user_named">> -> check_user_named;
-                 <<"check_all_resources">> -> check_all_resources;
-                 _ -> throw({error, {invalid_check_flag, Check}})
+    Scope1 = case Scope of
+                 <<"client">> -> client;
+                 <<"all">> -> all;
+                 _ -> throw({error, {invalid_scope, Scope}})
              end,
     rabbit_misc:execute_mnesia_transaction(
       rabbit_misc:with_user_and_vhost(
@@ -330,7 +330,7 @@ set_permissions(Check, Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) 
                                             username = Username,
                                             virtual_host = VHostPath},
                                           permission = #permission{
-                                            check = Check1,
+                                            scope = Scope1,
                                             configure = ConfigurePerm,
                                             write = WritePerm,
                                             read = ReadPerm}},
@@ -349,23 +349,23 @@ clear_permissions(Username, VHostPath) ->
         end)).
 
 list_vhost_permissions(VHostPath) ->
-    [{Username, ConfigurePerm, WritePerm, ReadPerm, Check} ||
-        {Username, _, ConfigurePerm, WritePerm, ReadPerm, Check} <-
+    [{Username, ConfigurePerm, WritePerm, ReadPerm, Scope} ||
+        {Username, _, ConfigurePerm, WritePerm, ReadPerm, Scope} <-
             list_permissions(rabbit_misc:with_vhost(
                                VHostPath, match_user_vhost('_', VHostPath)))].
 
 list_user_permissions(Username) ->
-    [{VHostPath, ConfigurePerm, WritePerm, ReadPerm, Check} ||
-        {_, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Check} <-
+    [{VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} ||
+        {_, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} <-
             list_permissions(rabbit_misc:with_user(
                                Username, match_user_vhost(Username, '_')))].
 
 list_permissions(QueryThunk) ->
-    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Check} ||
+    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} ||
         #user_permission{user_vhost = #user_vhost{username = Username,
                                                   virtual_host = VHostPath},
                          permission = #permission{
-                           check = Check,
+                           scope = Scope,
                            configure = ConfigurePerm,
                            write = WritePerm,
                            read = ReadPerm}} <-

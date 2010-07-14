@@ -547,7 +547,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt">-<replaceable>check</replaceable></arg> <arg choice="req"><replaceable>user</replaceable></arg> <arg choice="req"><replaceable>conf</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt">-s <replaceable>scope</replaceable></arg> <arg choice="req"><replaceable>user</replaceable></arg> <arg choice="req"><replaceable>conf</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -555,11 +555,10 @@
                 <listitem><para>The name of the virtual host to which to grant the user access, defaulting to <command>/</command>.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>check</term>
-                <listitem><para>Which resources should permissions be
-                checked for?  Either
-                <command>check_user_named</command> (the default) or
-                <command>check_all_resources</command>.</para></listitem>
+                <term>scope</term>
+                <listitem><para>Scope of the permissions: either
+                <command>client</command> (the default) or
+                <command>all</command>.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>user</term>
