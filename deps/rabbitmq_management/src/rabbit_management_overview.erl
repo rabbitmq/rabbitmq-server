@@ -22,8 +22,6 @@
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
--export([handle/1]).
-
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -36,38 +34,34 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_management_util:apply_m_context(fun handle/1, ReqData, Context).
+    Keys = [datetime, bound_to, fd_used, fd_total,
+            mem_used, mem_total, proc_used, proc_total],
+    rabbit_management_util:apply_cache_info(
+      Keys, ReqData, Context,
+      fun(I) ->
+              {struct,
+               [{node, node()},
+                {pid, list_to_binary(os:getpid())},
+                {datetime, list_to_binary(I(datetime))},
+                {bound_to, list_to_binary(I(bound_to))},
+                {fd_used, I(fd_used)},
+                {fd_total, I(fd_total)},
+                {mem_used, I(mem_used)},
+                {mem_total, I(mem_total)},
+                {proc_used, I(proc_used)},
+                {proc_total, I(proc_total)},
+                {fd_warn, get_warning_level(I(fd_used), I(fd_total))},
+                {mem_warn, get_warning_level(I(mem_used), I(mem_total))},
+                {proc_warn, get_warning_level(I(proc_used), I(proc_total))},
+                {mem_ets, erlang:memory(ets)},
+                {mem_binary, erlang:memory(binary)}
+               ]}
+      end).
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
-
-handle(MContext) ->
-    [Datetime, BoundTo,
-        _RConns, _RQueues,
-        FdUsed, FdTotal,
-        MemUsed, MemTotal,
-        ProcUsed, ProcTotal ]
-            = MContext,
-
-    {struct,
-     [{node, node()},
-      {pid, list_to_binary(os:getpid())},
-      {datetime, list_to_binary(Datetime)},
-      {bound_to, list_to_binary(BoundTo)},
-      {fd_used, FdUsed},
-      {fd_total, FdTotal},
-      {mem_used, MemUsed},
-      {mem_total, MemTotal},
-      {proc_used, ProcUsed},
-      {proc_total, ProcTotal},
-      {fd_warn, get_warning_level(FdUsed, FdTotal)},
-      {mem_warn, get_warning_level(MemUsed, MemTotal)},
-      {proc_warn, get_warning_level(ProcUsed, ProcTotal)},
-      {mem_ets, erlang:memory(ets)},
-      {mem_binary, erlang:memory(binary)}
-     ]}.
 
 get_warning_level(Used, Total) ->
     if

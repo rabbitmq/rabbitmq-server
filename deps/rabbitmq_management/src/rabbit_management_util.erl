@@ -20,7 +20,7 @@
 %%
 -module(rabbit_management_util).
 
--export([is_authorized/2, apply_m_context/3]).
+-export([is_authorized/2, apply_cache_info/4]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -43,16 +43,17 @@ is_authorized(ReqData, Context) ->
         _ -> Unauthorized
     end.
 
-apply_m_context(Fun, ReqData, Context) ->
+apply_cache_info(Keys, ReqData, Context, Fun) ->
     Res = try
-	      {ok, rabbit_management_cache:get_context()}
+	      {ok, rabbit_management_cache:info(Keys)}
 	  catch
 	      exit:{timeout, _} ->
 		  {timeout, undefined}
 	  end,
     case Res of
-	{ok, MContext} ->
-	    {mochijson2:encode(Fun(MContext)), ReqData, Context};
+	{ok, Items} ->
+            Get = fun(K) -> proplists:get_value(K, Items) end,
+	    {mochijson2:encode(Fun(Get)), ReqData, Context};
 	{timeout, _} ->
             {{halt, 408},
              wrq:append_to_response_body( <<"408 Request Timeout.\n">>),

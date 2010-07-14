@@ -26,7 +26,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([update/0, get_context/0]).
+-export([update/0, info/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -49,25 +49,25 @@
         proc_total
         }).
 
-
 %%--------------------------------------------------------------------
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-get_context(Timeout) ->
-    gen_server2:call(?MODULE, get_context, Timeout).
+info(Items, Timeout) ->
+    gen_server2:call(?MODULE, {info, Items}, Timeout).
 
 % By default, let's not wait too long. If that takes more than 1 second,
 % it's better to quickly return 408 "request timeout" rather than hang.
-get_context() ->
-    get_context(1000).
+info(Items) ->
+    info(Items, 1000).
 
 update() ->
     gen_server2:cast(?MODULE, update).
 
-
 %%--------------------------------------------------------------------
+
+%% TODO Windows?
 
 get_total_fd_ulimit() ->
     {MaxFds, _} = string:to_integer(os:cmd("ulimit -n")),
@@ -110,6 +110,21 @@ get_total_memory() ->
 
 %%--------------------------------------------------------------------
 
+infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+
+i(datetime,    #state{datetime = DateTime})       -> DateTime;
+i(bound_to,    #state{bound_to = BoundTo})        -> BoundTo;
+i(connections, #state{connections = Connections}) -> Connections;
+i(queues,      #state{queues = Queues})           -> Queues;
+i(fd_used,     #state{fd_used = FdUsed})          -> FdUsed;
+i(fd_total,    #state{fd_total = FdTotal})        -> FdTotal;
+i(mem_used,    #state{mem_used = MemUsed})        -> MemUsed;
+i(mem_total,   #state{mem_total = MemTotal})      -> MemTotal;
+i(proc_used,   #state{proc_used = ProcUsed})      -> ProcUsed;
+i(proc_total,  #state{proc_total = ProcTotal})    -> ProcTotal.
+
+%%--------------------------------------------------------------------
+
 init([]) ->
     {ok, Binds} = application:get_env(rabbit, tcp_listeners),
     BoundTo = lists:flatten( [ status_render:print("~s:~p ", [Addr,Port])
@@ -123,23 +138,13 @@ init([]) ->
     {ok, internal_update(State)}.
 
 
-handle_call(get_context, _From, State0) ->
+handle_call({info, Items}, _From, State0) ->
     State = case now_ms() - State0#state.time_ms > ?REFRESH_RATIO of
         true  -> internal_update(State0);
         false -> State0
     end,
 
-    Context = [ State#state.datetime,
-                State#state.bound_to,
-                State#state.connections,
-                State#state.queues,
-                State#state.fd_used,
-                State#state.fd_total,
-                State#state.mem_used,
-                State#state.mem_total,
-                State#state.proc_used,
-                State#state.proc_total ],
-    {reply, Context, State};
+    {reply, infos(Items, State), State};
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
@@ -156,8 +161,10 @@ handle_info(_I, State) ->
     {noreply, State}.
 
 terminate(_, _) -> ok.
+
 code_change(_, State, _) -> {ok, State}.
 
+%%--------------------------------------------------------------------
 
 internal_update(State) ->
     State#state{

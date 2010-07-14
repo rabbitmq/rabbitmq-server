@@ -22,8 +22,6 @@
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
--export([handle/1]).
-
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -36,24 +34,17 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_management_util:apply_m_context(fun handle/1, ReqData, Context).
+    Keys = [datetime, queues],
+    rabbit_management_util:apply_cache_info(
+      Keys, ReqData, Context,
+      fun(I) ->
+              {struct,
+               [{node, node()},
+                {pid, list_to_binary(os:getpid())},
+                {datetime, list_to_binary(I(datetime))},
+                {queues, [{struct, Q} || Q <- I(queues)]}
+               ]}
+      end).
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).
-
-%%--------------------------------------------------------------------
-
-handle(MContext) ->
-    [Datetime, _BoundTo,
-        _RConns, RQueues,
-        _FdUsed, _FdTotal,
-        _MemUsed, _MemTotal,
-        _ProcUsed, _ProcTotal ]
-            = MContext,
-
-    {struct,
-     [{node, node()},
-      {pid, list_to_binary(os:getpid())},
-      {datetime, list_to_binary(Datetime)},
-      {queues, [{struct,RQueue} || RQueue <- RQueues]}
-     ]}.
