@@ -38,7 +38,7 @@
 -export([add_user/2, delete_user/1, change_password/2, list_users/0,
          lookup_user/1]).
 -export([add_vhost/1, delete_vhost/1, list_vhosts/0]).
--export([set_permissions/5, set_permissions_all/5, clear_permissions/2,
+-export([set_permissions/5, set_permissions/6, clear_permissions/2,
          list_vhost_permissions/1, list_user_permissions/1]).
 
 %%----------------------------------------------------------------------------
@@ -51,6 +51,7 @@
 -type(username() :: binary()).
 -type(password() :: binary()).
 -type(regexp() :: binary()).
+-type(check_flag() :: binary()).
 
 -spec(check_login/2 :: (binary(), binary()) -> rabbit_types:user()).
 -spec(user_pass_login/2 :: (username(), password()) -> rabbit_types:user()).
@@ -70,6 +71,8 @@
 -spec(list_vhosts/0 :: () -> [rabbit_types:vhost()]).
 -spec(set_permissions/5 ::(username(), rabbit_types:vhost(), regexp(),
                            regexp(), regexp()) -> 'ok').
+-spec(set_permissions/6 ::(check_flag(), username(), rabbit_types:vhost(),
+                           regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (username(), rabbit_types:vhost()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
         (rabbit_types:vhost())
@@ -307,9 +310,17 @@ validate_regexp(RegexpBin) ->
         {error, Reason} -> throw({error, {invalid_regexp, Regexp, Reason}})
     end.
 
-set_permissions_internal(Username, VHostPath, Check, ConfigurePerm,
-                         WritePerm, ReadPerm) ->
+set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
+    set_permissions(<<"check_user_named">>, Username, VHostPath, ConfigurePerm,
+                    WritePerm, ReadPerm).
+
+set_permissions(Check, Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
     lists:map(fun validate_regexp/1, [ConfigurePerm, WritePerm, ReadPerm]),
+    Check1 = case Check of
+                 <<"check_user_named">> -> check_user_named;
+                 <<"check_all_resources">> -> check_all_resources;
+                 _ -> throw({error, {invalid_check_flag, Check}})
+             end,
     rabbit_misc:execute_mnesia_transaction(
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath,
@@ -319,20 +330,13 @@ set_permissions_internal(Username, VHostPath, Check, ConfigurePerm,
                                             username = Username,
                                             virtual_host = VHostPath},
                                           permission = #permission{
-                                            check = Check,
+                                            check = Check1,
                                             configure = ConfigurePerm,
                                             write = WritePerm,
                                             read = ReadPerm}},
                          write)
         end)).
 
-set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
-    set_permissions_internal(Username, VHostPath, 'check_user_named', ConfigurePerm,
-                             WritePerm, ReadPerm).
-
-set_permissions_all(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
-    set_permissions_internal(Username, VHostPath, 'check_all_resources', ConfigurePerm,
-                             WritePerm, ReadPerm).
 
 clear_permissions(Username, VHostPath) ->
     rabbit_misc:execute_mnesia_transaction(

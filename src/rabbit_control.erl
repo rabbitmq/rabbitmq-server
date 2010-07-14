@@ -271,16 +271,17 @@ action(Command, Node, Args, Inform) ->
     {VHost, RemainingArgs} = parse_vhost_flag(Args),
     action(Command, Node, VHost, RemainingArgs, Inform).
 
-action(set_permissions, Node, VHost, [Username, CPerm, WPerm, RPerm], Inform) ->
+action(set_permissions, Node, VHost, Args, Inform) ->
+    {Check, [Username, CPerm, WPerm, RPerm]} =
+        case Args of
+            [[$- | Flag] | RemainingArgs] ->
+                {Flag, RemainingArgs};
+            RemainingArgs ->
+                {"check_user_named", RemainingArgs}
+        end,
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
     call(Node, {rabbit_access_control, set_permissions,
-                [Username, VHost, CPerm, WPerm, RPerm]});
-
-action(set_permissions_all, Node, VHost, [Username, CPerm, WPerm, RPerm], Inform) ->
-    Inform("Setting permissions for all resources for user ~p in vhost ~p",
-           [Username, VHost]),
-    call(Node, {rabbit_access_control, set_permissions_all,
-                [Username, VHost, CPerm, WPerm, RPerm]});
+                [Check, Username, VHost, CPerm, WPerm, RPerm]});
 
 action(clear_permissions, Node, VHost, [Username], Inform) ->
     Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
