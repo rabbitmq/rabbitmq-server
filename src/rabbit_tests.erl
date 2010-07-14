@@ -747,6 +747,8 @@ test_user_management() ->
         control_action(list_permissions, ["-p", "/testhost"]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
+    {error, {invalid_check_flag, _}} =
+        control_action(set_permissions, ["-check_mate", "guest", "foo", ".*", ".*"]),
 
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
@@ -766,6 +768,13 @@ test_user_management() ->
                                           "foo", ".*", ".*", ".*"]),
     ok = control_action(set_permissions, ["-p", "/testhost",
                                           "foo", ".*", ".*", ".*"]),
+    ok = control_action(set_permissions, ["-p", "/testhost",
+                                          "-check_user_named",
+                                          "foo", ".*", ".*", ".*"]),
+    ok = control_action(set_permissions, ["-p", "/testhost",
+                                          "-check_all_resources",
+                                          "foo", ".*", ".*", ".*"]),
+    ok = control_action(list_permissions, ["-p", "/testhost"]),
     ok = control_action(list_permissions, ["-p", "/testhost"]),
     ok = control_action(list_user_permissions, ["foo"]),
 
