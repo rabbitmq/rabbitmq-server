@@ -30,6 +30,10 @@ start(_Type, _StartArgs) ->
                                     [filename:dirname(code:which(?MODULE)),
                                      "..", "priv", "dispatch.conf"])),
     application:set_env(webmachine, dispatch_list, Dispatch),
+    application:set_env(webmachine, error_handler, webmachine_error_handler),
+    %% This would do access.log type stuff. Needs configuring though.
+    %% application:set_env(webmachine, webmachine_logger_module,
+    %%                     webmachine_logger),
     rabbit_mochiweb:register_context_handler("json",
                                              fun webmachine_mochiweb:loop/1),
     rabbit_mochiweb:register_global_handler(
