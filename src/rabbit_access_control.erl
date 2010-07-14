@@ -173,7 +173,7 @@ check_resource_access(Username,
                   false;
               [#user_permission{permission = P}] ->
                   PermRegexp = case element(permission_index(Permission), P) of
-                                   <<"">> -> <<$^, $$>>;
+                                   <<"">> -> <<$^, $$>>; % <<"^$">> breaks erlang mode
                                    RE     -> RE
                                end,
                   case regexp:match(
