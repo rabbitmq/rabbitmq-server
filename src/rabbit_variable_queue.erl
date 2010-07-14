@@ -488,10 +488,10 @@ fetch(AckRequired, State = #vqstate { q4               = Q4,
             Rem = fun () -> ok = rabbit_msg_store:remove(MsgStore, [Guid]) end,
             Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
             IndexState2 =
-                case {MsgOnDisk, IndexOnDisk, AckRequired, IsPersistent} of
-                    {true, false, false,     _} -> Rem(), IndexState1;
-                    {true,  true, false,     _} -> Rem(), Ack();
-                    {true,  true,  true, false} -> Ack();
+                case {AckRequired, MsgOnDisk, IndexOnDisk, IsPersistent} of
+                    {false, true, false,     _} -> Rem(), IndexState1;
+                    {false, true,  true,     _} -> Rem(), Ack();
+                    { true, true,  true, false} -> Ack();
                     _                           -> IndexState1
                 end,
 
