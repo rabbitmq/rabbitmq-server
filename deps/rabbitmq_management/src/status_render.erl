@@ -29,22 +29,17 @@
 %%--------------------------------------------------------------------
 
 render_conns() ->
-    ConnKeys = [pid, address, port, peer_address, peer_port, recv_oct, recv_cnt,
-                send_oct, send_cnt, send_pend, state,
-                channels, user, vhost, timeout, frame_max],
     Conns = rabbit_networking:connection_info_all(),
-    [[{Key, format_info_item(Key, Conn)} || Key <- ConnKeys] || Conn <- Conns].
+    [[{Key, format_info_item(Key, Value)} || {Key, Value} <- Conn]
+     || Conn <- Conns].
 
 render_queues() ->
-    QueueKeys = [name, durable, auto_delete, arguments, pid, messages_ready,
-                 messages_unacknowledged, messages, consumers, memory],
-
     Queues = lists:flatten([
                     [{Vhost, Queue} || Queue <- rabbit_amqqueue:info_all(Vhost)]
                         || Vhost <- rabbit_access_control:list_vhosts()]),
     [[{vhost, format_info(vhost, Vhost)}] ++
-             [{Key, format_info_item(Key, Queue)} || Key <- QueueKeys]
-                                                  || {Vhost, Queue} <- Queues].
+         [{Key, format_info_item(Key, Value)} || {Key, Value} <- Queue]
+     || {Vhost, Queue} <- Queues].
 
 
 
@@ -61,8 +56,8 @@ print_no_escape(Fmt, Val) when is_list(Val) ->
 escape(A) ->
     mochiweb_html:escape(A).
 
-format_info_item(Key, Items) ->
-    format_info(Key, proplists:get_value(Key, Items)).
+format_info_item(Key, Value) ->
+    format_info(Key, Value).
 
 
 format_info(Key, Value) ->
