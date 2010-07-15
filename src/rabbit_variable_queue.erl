@@ -1086,7 +1086,7 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
                            MsgStoreFun(MsgStore, Guids)
                    end, ok, GuidsByStore),
     PCount1 = PCount - case dict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
-                           error        -> 0;
+                           error       -> 0;
                            {ok, Guids} -> length(Guids)
                        end,
     State1 #vqstate { index_state      = IndexState1,
