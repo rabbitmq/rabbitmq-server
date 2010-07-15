@@ -366,9 +366,9 @@ init(QueueName, IsDurable, _Recover) ->
       out_counter          = 0,
       in_counter           = 0,
       egress_rate          = {Now, 0},
-      avg_egress_rate      = 0,
+      avg_egress_rate      = 0.0,
       ingress_rate         = {Now, DeltaCount1},
-      avg_ingress_rate     = 0,
+      avg_ingress_rate     = 0.0,
       rate_timestamp       = Now
      },
     a(maybe_deltas_to_betas(State)).
