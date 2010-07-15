@@ -64,7 +64,9 @@
 -type(bind_res() :: rabbit_types:ok_or_error('queue_not_found' |
                                              'exchange_not_found' |
                                              'exchange_and_queue_not_found')).
--type(inner_fun() :: fun((rabbit_types:exchange(), queue()) -> any())).
+-type(inner_fun() ::
+        fun((rabbit_types:exchange(), queue()) ->
+                   rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 
 -spec(recover/0 :: () -> 'ok').
 -spec(declare/5 ::
@@ -427,23 +429,27 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                    %% this argument is used to check queue exclusivity;
                    %% in general, we want to fail on that in preference to
                    %% anything else
-                   InnerFun(X, Q),
-                   case mnesia:read({rabbit_route, B}) of
-                       [] ->
-                           sync_binding(B,
-                                        X#exchange.durable andalso
-                                        Q#amqqueue.durable,
-                                        fun mnesia:write/3),
-                           {new, X, B};
-                       [_R] ->
-                           {existing, X, B}
+                   case InnerFun(X, Q) of
+                       ok ->
+                           case mnesia:read({rabbit_route, B}) of
+                               [] ->
+                                   ok = sync_binding(B,
+                                                     X#exchange.durable andalso
+                                                     Q#amqqueue.durable,
+                                                     fun mnesia:write/3),
+                                   {new, X, B};
+                               [_R] ->
+                                   {existing, X, B}
+                           end;
+                       {error, _} = E ->
+                           E
                    end
            end) of
         {new, Exchange = #exchange{ type = Type }, Binding} ->
             (type_to_module(Type)):add_binding(Exchange, Binding);
         {existing, _, _} ->
             ok;
-        Err = {error, _}  ->
+        {error, _} = Err ->
             Err
     end.
 
@@ -453,14 +459,23 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
            fun (X, Q, B) ->
                    case mnesia:match_object(rabbit_route, #route{binding = B},
                                             write) of
-                       [] -> {error, binding_not_found};
-                       _  -> InnerFun(X, Q),
-                             ok = sync_binding(B, Q#amqqueue.durable,
-                                               fun mnesia:delete_object/3),
-                             {maybe_auto_delete(X), B}
+                       [] ->
+                           {error, binding_not_found};
+                       _  ->
+                           case InnerFun(X, Q) of
+                               ok ->
+                                   ok =
+                                       sync_binding(B,
+                                                    X#exchange.durable andalso
+                                                    Q#amqqueue.durable,
+                                                    fun mnesia:delete_object/3),
+                                   {maybe_auto_delete(X), B};
+                               {error, _} = E ->
+                                   E
+                           end
                    end
            end) of
-        Err = {error, _}  ->
+        {error, _} = Err ->
             Err;
         {{IsDeleted, X = #exchange{ type = Type }}, B} ->
             Module = type_to_module(Type),

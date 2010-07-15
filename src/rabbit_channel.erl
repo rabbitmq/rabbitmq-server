@@ -911,7 +911,9 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     check_read_permitted(ExchangeName, State),
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
              fun (_X, Q) ->
-                     rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
+                     try rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
+                     catch exit:Reason -> {error, Reason}
+                     end
              end) of
         {error, exchange_not_found} ->
             rabbit_misc:not_found(ExchangeName);
@@ -926,6 +928,8 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
               not_found, "no binding ~s between ~s and ~s",
               [RoutingKey, rabbit_misc:rs(ExchangeName),
                rabbit_misc:rs(QueueName)]);
+        {error, #amqp_error{} = Error} ->
+            rabbit_misc:protocol_error(Error);
         ok -> return_ok(State, NoWait, ReturnMethod)
     end.
 

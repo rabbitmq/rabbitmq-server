@@ -37,7 +37,7 @@
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4,
-         protocol_error/3, protocol_error/4]).
+         protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
@@ -95,6 +95,7 @@
         (rabbit_framing:amqp_exception(), string(), [any()],
          rabbit_framing:amqp_method_name())
         -> no_return()).
+-spec(protocol_error/1 :: (rabbit_types:amqp_error()) -> no_return()).
 -spec(not_found/1 :: (rabbit_types:r(atom())) -> no_return()).
 -spec(get_config/1 ::
         (atom()) -> rabbit_types:ok_or_error2(any(), 'not_found')).
@@ -199,7 +200,10 @@ protocol_error(Name, ExplanationFormat, Params) ->
     protocol_error(Name, ExplanationFormat, Params, none).
 
 protocol_error(Name, ExplanationFormat, Params, Method) ->
-    exit(amqp_error(Name, ExplanationFormat, Params, Method)).
+    protocol_error(amqp_error(Name, ExplanationFormat, Params, Method)).
+
+protocol_error(#amqp_error{} = Error) ->
+    exit(Error).
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
