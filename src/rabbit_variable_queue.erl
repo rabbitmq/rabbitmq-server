@@ -602,7 +602,8 @@ set_ram_duration_target(DurationTarget,
     State1 = State #vqstate { target_ram_msg_count = TargetRamMsgCount1,
                               duration_target      = DurationTarget },
     a(case TargetRamMsgCount1 == infinity orelse
-          TargetRamMsgCount1 >= TargetRamMsgCount of
+          (TargetRamMsgCount =/= infinity andalso
+           TargetRamMsgCount1 >= TargetRamMsgCount) of
           true  -> State1;
           false -> reduce_memory_use(State1)
       end).
