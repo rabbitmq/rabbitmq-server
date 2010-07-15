@@ -915,51 +915,6 @@ remove_queue_entries1(
          false -> Acks
      end}.
 
-fetch_from_q3_to_q4(State = #vqstate {
-                      q1                = Q1,
-                      q2                = Q2,
-                      delta             = #delta { count = DeltaCount },
-                      q3                = Q3,
-                      q4                = Q4,
-                      ram_msg_count     = RamMsgCount,
-                      ram_index_count   = RamIndexCount,
-                      msg_store_clients = MSCState }) ->
-    case bpqueue:out(Q3) of
-        {empty, _Q3} ->
-            {empty, State};
-        {{value, IndexOnDisk, MsgStatus = #msg_status {
-                                msg = undefined, guid = Guid,
-                                is_persistent = IsPersistent }}, Q3a} ->
-            {{ok, Msg = #basic_message {}}, MSCState1} =
-                read_from_msg_store(MSCState, IsPersistent, Guid),
-            Q4a = queue:in(MsgStatus #msg_status { msg = Msg }, Q4),
-            RamIndexCount1 = RamIndexCount - one_if(not IndexOnDisk),
-            true = RamIndexCount1 >= 0, %% ASSERTION
-            State1 = State #vqstate { q3                = Q3a,
-                                      q4                = Q4a,
-                                      ram_msg_count     = RamMsgCount + 1,
-                                      ram_index_count   = RamIndexCount1,
-                                      msg_store_clients = MSCState1 },
-            State2 =
-                case {bpqueue:is_empty(Q3a), 0 == DeltaCount} of
-                    {true, true} ->
-                        %% q3 is now empty, it wasn't before; delta is
-                        %% still empty. So q2 must be empty, and q1
-                        %% can now be joined onto q4
-                        true = bpqueue:is_empty(Q2), %% ASSERTION
-                        State1 #vqstate { q1 = queue:new(),
-                                          q4 = queue:join(Q4a, Q1) };
-                    {true, false} ->
-                        maybe_deltas_to_betas(State1);
-                    {false, _} ->
-                        %% q3 still isn't empty, we've not touched
-                        %% delta, so the invariants between q1, q2,
-                        %% delta and q3 are maintained
-                        State1
-                end,
-            {loaded, State2}
-    end.
-
 %%----------------------------------------------------------------------------
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
@@ -1193,6 +1148,51 @@ chunk_size(Current, Permitted)
     0;
 chunk_size(Current, Permitted) ->
     lists:min([Current - Permitted, ?IO_BATCH_SIZE]).
+
+fetch_from_q3_to_q4(State = #vqstate {
+                      q1                = Q1,
+                      q2                = Q2,
+                      delta             = #delta { count = DeltaCount },
+                      q3                = Q3,
+                      q4                = Q4,
+                      ram_msg_count     = RamMsgCount,
+                      ram_index_count   = RamIndexCount,
+                      msg_store_clients = MSCState }) ->
+    case bpqueue:out(Q3) of
+        {empty, _Q3} ->
+            {empty, State};
+        {{value, IndexOnDisk, MsgStatus = #msg_status {
+                                msg = undefined, guid = Guid,
+                                is_persistent = IsPersistent }}, Q3a} ->
+            {{ok, Msg = #basic_message {}}, MSCState1} =
+                read_from_msg_store(MSCState, IsPersistent, Guid),
+            Q4a = queue:in(MsgStatus #msg_status { msg = Msg }, Q4),
+            RamIndexCount1 = RamIndexCount - one_if(not IndexOnDisk),
+            true = RamIndexCount1 >= 0, %% ASSERTION
+            State1 = State #vqstate { q3                = Q3a,
+                                      q4                = Q4a,
+                                      ram_msg_count     = RamMsgCount + 1,
+                                      ram_index_count   = RamIndexCount1,
+                                      msg_store_clients = MSCState1 },
+            State2 =
+                case {bpqueue:is_empty(Q3a), 0 == DeltaCount} of
+                    {true, true} ->
+                        %% q3 is now empty, it wasn't before; delta is
+                        %% still empty. So q2 must be empty, and q1
+                        %% can now be joined onto q4
+                        true = bpqueue:is_empty(Q2), %% ASSERTION
+                        State1 #vqstate { q1 = queue:new(),
+                                          q4 = queue:join(Q4a, Q1) };
+                    {true, false} ->
+                        maybe_deltas_to_betas(State1);
+                    {false, _} ->
+                        %% q3 still isn't empty, we've not touched
+                        %% delta, so the invariants between q1, q2,
+                        %% delta and q3 are maintained
+                        State1
+                end,
+            {loaded, State2}
+    end.
 
 maybe_deltas_to_betas(State = #vqstate { delta = ?BLANK_DELTA_PATTERN(X) }) ->
     State;
