@@ -20,18 +20,36 @@
 %%
 -module(status_render).
 
--export([render_conns/0, render_queues/0]).
+-export([render_conns/2, render_queues/0]).
 -export([escape/1, format_info_item/2, format_info/2, print/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
-
 %%--------------------------------------------------------------------
 
-render_conns() ->
+render_conns(OldConnsList, Millis) ->
     Conns = rabbit_networking:connection_info_all(),
-    [[{Key, format_info_item(Key, Value)} || {Key, Value} <- Conn]
-     || Conn <- Conns].
+    %% TODO get rid of this binary to pid evil
+    OldConns = dict:from_list([{list_to_pid(binary_to_list(pget(pid, C))), C}
+                                           || C <- OldConnsList]),
+    [[{recv_rate, rate(Conn, OldConns, recv_oct, Millis)},
+      {send_rate, rate(Conn, OldConns, send_oct, Millis)}] ++
+         [{Key, format_info_item(Key, Value)} || {Key, Value} <- Conn]
+          || Conn <- Conns].
+
+rate(Conn, OldConns, Key, Millis) ->
+    case Millis of
+        undefined ->
+            0;
+        _ ->
+            Diff = case dict:find(pget(pid, Conn), OldConns) of
+                       {ok, OldConn} ->
+                           pget(Key, Conn) - pget(Key, OldConn);
+                       error ->
+                           pget(Key, Conn)
+                   end,
+            Diff / ((rabbit_management_util:now_ms() - Millis) / 1000)
+    end.
 
 render_queues() ->
     Queues = lists:flatten([
@@ -75,3 +93,5 @@ format_info(Key, Value) ->
             print_no_escape("~w", [Value])
     end.
 
+pget(K, V) ->
+    proplists:get_value(K, V).

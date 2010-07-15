@@ -10,7 +10,7 @@
   <tr class="titre">
    <th>Vhost</th><th>Username</th>
    <th>State</th><th>Timeout</th>
-   <th>Peer address</th><th>Recv</th><th>Sent</th><th>Pending</th>
+   <th>Peer address</th><th>Receiving</th><th>Sending</th><th>Pending</th>
   </tr>
  </thead>
  <tbody>
@@ -19,8 +19,8 @@
     <td>{vhost}</td><td>{user}</td>
     <td>{state}</td><td>{timeout}</td>
     <td>{peer_address}:{peer_port}</td>
-    <td>{recv_oct|bytes}</td>
-    <td>{send_oct|bytes}</td>
+    <td>{recv_rate|bytes}/s<sub>({recv_oct|bytes} total)</sub></td>
+    <td>{send_rate|bytes}/s<sub>({send_oct|bytes} total)</sub></td>
     <td>{send_pend}</td>
   </tr>
   {.end}

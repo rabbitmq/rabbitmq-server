@@ -20,7 +20,7 @@
 %%
 -module(rabbit_management_util).
 
--export([is_authorized/2, apply_cache_info/4]).
+-export([is_authorized/2, apply_cache_info/4, now_ms/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -59,3 +59,7 @@ apply_cache_info(Keys, ReqData, Context, Fun) ->
              wrq:append_to_response_body( <<"408 Request Timeout.\n">>),
              Context}
     end.
+
+now_ms() ->
+    {MegaSecs, Secs, MicroSecs} = now(),
+    trunc(MegaSecs*1000000000 + Secs*1000 + MicroSecs/1000).

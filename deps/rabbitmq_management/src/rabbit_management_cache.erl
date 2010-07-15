@@ -30,7 +30,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(REFRESH_RATIO, 15000).
+-define(REFRESH_RATIO, 5000).
 
 
 %%--------------------------------------------------------------------
@@ -130,16 +130,18 @@ init([]) ->
     BoundTo = lists:flatten( [ status_render:print("~s:~p ", [Addr,Port])
                                                 || {Addr, Port} <- Binds ] ),
     State = #state{
-            fd_total = get_total_fd(),
-            mem_total = get_total_memory(),
-            proc_total = erlang:system_info(process_limit),
-            bound_to = BoundTo
-        },
+      fd_total = get_total_fd(),
+      mem_total = get_total_memory(),
+      proc_total = erlang:system_info(process_limit),
+      bound_to = BoundTo,
+      connections = []
+     },
     {ok, internal_update(State)}.
 
 
 handle_call({info, Items}, _From, State0) ->
-    State = case now_ms() - State0#state.time_ms > ?REFRESH_RATIO of
+    State = case rabbit_management_util:now_ms() - State0#state.time_ms >
+                ?REFRESH_RATIO of
         true  -> internal_update(State0);
         false -> State0
     end,
@@ -168,9 +170,10 @@ code_change(_, State, _) -> {ok, State}.
 
 internal_update(State) ->
     State#state{
-        time_ms = now_ms(),
+        time_ms = rabbit_management_util:now_ms(),
         datetime = httpd_util:rfc1123_date(erlang:universaltime()),
-        connections = status_render:render_conns(),
+        connections = status_render:render_conns(State#state.connections,
+                                                 State#state.time_ms),
         queues = status_render:render_queues(),
         fd_used = get_used_fd(),
         mem_used = erlang:memory(total),
@@ -178,6 +181,3 @@ internal_update(State) ->
     }.
 
 
-now_ms() ->
-    {MegaSecs, Secs, MicroSecs} = now(),
-    trunc(MegaSecs*1000000000 + Secs*1000 + MicroSecs/1000).
