@@ -755,11 +755,6 @@ store_tx(Txn, Tx) -> put({txn, Txn}, Tx).
 
 erase_tx(Txn) -> erase({txn, Txn}).
 
-update_rate(Now, Then, Count, {OThen, OCount}) ->
-    %% form the avg over the current period and the previous
-    Avg = 1000000 * ((Count + OCount) / timer:now_diff(Now, OThen)),
-    {Avg, {Then, Count}}.
-
 persistent_guids(Pubs) ->
     [Guid || #basic_message { guid = Guid, is_persistent = true } <- Pubs].
 
@@ -819,6 +814,11 @@ combine_deltas(#delta { start_seq_id = StartLow,
 
 beta_fold(Fun, Init, Q) ->
     bpqueue:foldr(fun (_Prefix, Value, Acc) -> Fun(Value, Acc) end, Init, Q).
+
+update_rate(Now, Then, Count, {OThen, OCount}) ->
+    %% form the avg over the current period and the previous
+    Avg = 1000000 * ((Count + OCount) / timer:now_diff(Now, OThen)),
+    {Avg, {Then, Count}}.
 
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
