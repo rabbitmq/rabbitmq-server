@@ -318,12 +318,12 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
     set_permissions(<<"client">>, Username, VHostPath, ConfigurePerm,
                     WritePerm, ReadPerm).
 
-set_permissions(Scope, Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
+set_permissions(ScopeBin, Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
     lists:map(fun validate_regexp/1, [ConfigurePerm, WritePerm, ReadPerm]),
-    Scope1 = case Scope of
+    Scope = case ScopeBin of
                  <<"client">> -> client;
-                 <<"all">> -> all;
-                 _ -> throw({error, {invalid_scope, Scope}})
+                 <<"all">>    -> all;
+                 _            -> throw({error, {invalid_scope, ScopeBin}})
              end,
     rabbit_misc:execute_mnesia_transaction(
       rabbit_misc:with_user_and_vhost(
@@ -334,7 +334,7 @@ set_permissions(Scope, Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) 
                                             username = Username,
                                             virtual_host = VHostPath},
                                           permission = #permission{
-                                            scope = Scope1,
+                                            scope = Scope,
                                             configure = ConfigurePerm,
                                             write = WritePerm,
                                             read = ReadPerm}},
