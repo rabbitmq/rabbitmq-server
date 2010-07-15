@@ -816,9 +816,8 @@ beta_fold(Fun, Init, Q) ->
     bpqueue:foldr(fun (_Prefix, Value, Acc) -> Fun(Value, Acc) end, Init, Q).
 
 update_rate(Now, Then, Count, {OThen, OCount}) ->
-    %% form the avg over the current period and the previous
-    Avg = 1000000 * ((Count + OCount) / timer:now_diff(Now, OThen)),
-    {Avg, {Then, Count}}.
+    %% avg over the current period and the previous
+    {1000000.0 * (Count + OCount) / timer:now_diff(Now, OThen), {Then, Count}}.
 
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
