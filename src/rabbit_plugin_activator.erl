@@ -92,7 +92,7 @@ start() ->
 
     %% Compile the script
     ScriptFile = RootName ++ ".script",
-    case systools:make_script(RootName, [local, silent]) of
+    case systools:make_script(RootName, [local, silent, exref]) of
         {ok, Module, Warnings} ->
             %% This gets lots of spurious no-source warnings when we
             %% have .ez files, so we want to supress them to prevent
