@@ -237,6 +237,7 @@
 
 -ifdef(use_specs).
 
+-type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
 -type(ack()     :: seq_id() | 'blank_ack').
 
@@ -270,13 +271,11 @@
              ram_index_count      :: non_neg_integer(),
              out_counter          :: non_neg_integer(),
              in_counter           :: non_neg_integer(),
-             egress_rate          :: {{integer(), integer(), integer()},
-                                      non_neg_integer()},
+             egress_rate          :: {timestamp(), non_neg_integer()},
              avg_egress_rate      :: float(),
-             ingress_rate         :: {{integer(), integer(), integer()},
-                                      non_neg_integer()},
+             ingress_rate         :: {timestamp(), non_neg_integer()},
              avg_ingress_rate     :: float(),
-             rate_timestamp       :: {integer(), integer(), integer()}
+             rate_timestamp       :: timestamp()
             }).
 
 -include("rabbit_backing_queue_spec.hrl").
