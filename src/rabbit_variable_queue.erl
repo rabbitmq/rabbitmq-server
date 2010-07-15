@@ -1052,20 +1052,15 @@ record_pending_ack(#msg_status { guid = Guid, seq_id = SeqId,
 remove_pending_ack(KeepPersistent,
                    State = #vqstate { pending_ack = PA,
                                       index_state = IndexState }) ->
-    {{SeqIds, GuidsByStore}, PA1} =
-        dict:fold(
-          fun (SeqId, {IsPersistent, Guid}, {Acc, PA2}) ->
-                  {accumulate_ack(SeqId, IsPersistent, Guid, Acc),
-                   case KeepPersistent andalso IsPersistent of
-                       true  -> PA2;
-                       false -> dict:erase(SeqId, PA2)
-                   end};
-              (SeqId, #msg_status {}, {Acc, PA2}) ->
-                  {Acc, dict:erase(SeqId, PA2)}
-          end, {{[], dict:new()}, PA}, PA),
+    {SeqIds, GuidsByStore} =
+        dict:fold(fun (SeqId, {IsPersistent, Guid}, Acc) ->
+                          accumulate_ack(SeqId, IsPersistent, Guid, Acc);
+                      (_SeqId, #msg_status {}, Acc) ->
+                          Acc
+                  end, {[], dict:new()}, PA),
+    State1 = State #vqstate { pending_ack = dict:new() },
     case KeepPersistent of
-        true  -> State1 = State #vqstate { pending_ack = PA1 },
-                 case dict:find(?TRANSIENT_MSG_STORE, GuidsByStore) of
+        true  -> case dict:find(?TRANSIENT_MSG_STORE, GuidsByStore) of
                      error       -> State1;
                      {ok, Guids} -> ok = rabbit_msg_store:remove(
                                            ?TRANSIENT_MSG_STORE, Guids),
@@ -1075,8 +1070,7 @@ remove_pending_ack(KeepPersistent,
                  ok = dict:fold(fun (MsgStore, Guids, ok) ->
                                         rabbit_msg_store:remove(MsgStore, Guids)
                                 end, ok, GuidsByStore),
-                 State #vqstate { pending_ack = dict:new(),
-                                  index_state = IndexState1 }
+                 State1 #vqstate { index_state = IndexState1 }
     end.
 
 ack(_MsgStoreFun, _Fun, [], State) ->
