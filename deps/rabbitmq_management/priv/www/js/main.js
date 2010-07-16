@@ -45,6 +45,10 @@ function format(template, json) {
 function more_formatters(name) {
     if (name == 'bytes')
         return format_bytes;
+    else if (name == 'boolean')
+        return format_boolean;
+    else if (name == 'exclusive')
+        return format_exclusive;
     else
         return null;
 }
@@ -58,6 +62,15 @@ function format_bytes(bytes) {
     [num, power] = f(bytes, 0);
     var powers = ['B', 'kB', 'MB', 'GB', 'TB'];
     return (power == 0 ? num : num.toFixed(1)) + powers[power];
+}
+
+function format_boolean(b) {
+    return b ? "&#9679;" : "&#9675;";
+}
+
+// TODO I think this proves jsontemplate has got to go
+function format_exclusive(s) {
+    return format_boolean(s.length > 0);
 }
 
 function update_status(status, datetime) {

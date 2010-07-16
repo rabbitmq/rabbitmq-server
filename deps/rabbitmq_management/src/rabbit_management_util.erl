@@ -20,7 +20,7 @@
 %%
 -module(rabbit_management_util).
 
--export([is_authorized/2, apply_cache_info/4, now_ms/0]).
+-export([is_authorized/2, apply_cache_info/4, now_ms/0, http_date/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -63,3 +63,6 @@ apply_cache_info(Keys, ReqData, Context, Fun) ->
 now_ms() ->
     {MegaSecs, Secs, MicroSecs} = now(),
     trunc(MegaSecs*1000000000 + Secs*1000 + MicroSecs/1000).
+
+http_date() ->
+    httpd_util:rfc1123_date(erlang:universaltime()).

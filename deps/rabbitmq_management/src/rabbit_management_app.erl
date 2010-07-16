@@ -25,7 +25,17 @@
 -export([start/2, stop/1]).
 
 start(_Type, _StartArgs) ->
+    case application:get_env(rabbit_mochiweb, port) of
+        undefined ->
+            exit(mochiweb_port_not_configured);
+        {ok, Port} ->
+            S = io_lib:format("~s (on port ~p)",
+                              ["management console", Port]),
+            io:format("starting ~-60s ...", [S])
+    end,
     Res = rabbit_management_sup:start_link(),
+    %% TODO is this supervised correctly?
+    rabbit_management_stats:start(),
     {ok, Dispatch} = file:consult(filename:join(
                                     [filename:dirname(code:which(?MODULE)),
                                      "..", "priv", "dispatch.conf"])),
@@ -38,6 +48,7 @@ start(_Type, _StartArgs) ->
                                              fun webmachine_mochiweb:loop/1),
     rabbit_mochiweb:register_global_handler(
       rabbit_mochiweb:static_context_handler("", ?MODULE, "priv/www")),
+    io:format("done~n"),
     Res.
 
 stop(_State) ->

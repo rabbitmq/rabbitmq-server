@@ -30,3 +30,7 @@ files into your rabbit plugins directory and activate them, for example:
         /usr/lib/rabbitmq/lib/rabbitmq_server-1.7.0/plugins
     rabbitmq-activate-plugins
 
+**********************************************************************
+** For the time being you need rabbitmq-server from branch bug21387 **
+**********************************************************************
+

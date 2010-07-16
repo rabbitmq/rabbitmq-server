@@ -20,8 +20,8 @@
 %%
 -module(status_render).
 
--export([render_conns/2, render_queues/0]).
--export([escape/1, format_info_item/2, format_info/2, print/2]).
+-export([render_conns/2]).
+-export([format_info_item/2, format_info/2, print/2, format_pid/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -51,28 +51,18 @@ rate(Conn, OldConns, Key, Millis) ->
             Diff / ((rabbit_management_util:now_ms() - Millis) / 1000)
     end.
 
-render_queues() ->
-    Queues = lists:flatten([
-                    [{Vhost, Queue} || Queue <- rabbit_amqqueue:info_all(Vhost)]
-                        || Vhost <- rabbit_access_control:list_vhosts()]),
-    [[{vhost, format_info(vhost, Vhost)}] ++
-         [{Key, format_info_item(Key, Value)} || {Key, Value} <- Queue]
-     || {Vhost, Queue} <- Queues].
-
 
 
 print(Fmt, Val) when is_list(Val) ->
-    escape(lists:flatten(io_lib:format(Fmt, Val)));
+    list_to_binary(lists:flatten(io_lib:format(Fmt, Val)));
 print(Fmt, Val) ->
     print(Fmt, [Val]).
 
-print_no_escape(Fmt, Val) when is_list(Val) ->
-    list_to_binary(lists:flatten(io_lib:format(Fmt, Val))).
+format_pid(Pid) when is_pid(Pid) ->
+    list_to_binary(io_lib:format("~w", [Pid]));
+format_pid('') ->
+    <<"">>.
 
-
-
-escape(A) ->
-    mochiweb_html:escape(A).
 
 format_info_item(Key, Value) ->
     format_info(Key, Value).
@@ -90,7 +80,7 @@ format_info(Key, Value) ->
         Value when is_binary(Value) ->  %% vhost, username
             Value;
         Value ->                        %% queue arguments
-            print_no_escape("~w", [Value])
+            print("~w", [Value])
     end.
 
 pget(K, V) ->

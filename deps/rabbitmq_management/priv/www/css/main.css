@@ -17,16 +17,18 @@ table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; }
 table.list { border-width: 1px; border-bottom: 1px solid #bbb; }
 table.list th, table.list td { border-left: 1px solid #bbb; border-right: 1px solid #bbb; }
 table.list th { text-align: center; font-weight: bold; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
-table.list td { text-align: right; }
 
 sub { display: block; color: #888; }
 
-table.warns td { text-align: left; }
 table.warns th { text-align: right; font-weight: bold; }
 
 td.red {background: #F62817; color:white; font-weight: bolder;}
 td.yellow {background: yellow;}
 td.green {background: lightgreen;}
+
+td.l {text-align: left;}
+td.c {text-align: center;}
+td.r {text-align: right;}
 
 p.status-ok { color: #888; }
 p.status-warning { color: black; background-color: #ff8; }
