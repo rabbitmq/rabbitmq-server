@@ -70,6 +70,10 @@
 -record(delivery, {mandatory, immediate, txn, sender, message}).
 -record(amqp_error, {name, explanation, method = none}).
 
+-record(event_queue_stats, {q_pid, messages_ready, messages_unacknowledged,
+                            consumers, memory, exclusive_consumer_pid,
+                            exclusive_consumer_tag, backing_queue_status}).
+
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2010 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").

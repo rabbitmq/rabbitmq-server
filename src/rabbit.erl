@@ -89,6 +89,13 @@
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
+-rabbit_boot_step({rabbit_event,
+                   [{description, "statistics event handler"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [gen_event, [{local, rabbit_event}]]}},
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
+
 -rabbit_boot_step({kernel_ready,
                    [{description, "kernel ready"},
                     {requires,    external_infrastructure}]}).
