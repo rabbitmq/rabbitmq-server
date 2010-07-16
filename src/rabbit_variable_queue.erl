@@ -854,8 +854,10 @@ tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun,
         true  -> State #vqstate { on_sync = { [AckTags | SAcks],
                                               [Pubs | SPubs],
                                               [Fun | SFuns] }};
-        false -> State1 = tx_commit_index(State #vqstate {
-                                            on_sync = {[], [Pubs], [Fun]} }),
+        false -> State1 = tx_commit_index(
+                            State #vqstate { on_sync = { [AckTags],
+                                                         [Pubs],
+                                                         [Fun]} }),
                  State1 #vqstate { on_sync = OnSync }
     end.
 
