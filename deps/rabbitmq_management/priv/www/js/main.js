@@ -16,8 +16,7 @@ function apply_url(url) {
 function update() {
     with_req('/json/' + current_page, function(text) {
             var json = JSON.parse(text);
-            var template = eval('template_' + current_page + '();');
-            var html = format(template, json);
+            var html = format(current_page, json);
             replace_content('main', html);
             update_status('ok', json['datetime']);
             $('a').removeClass('selected').unbind().click(function() {
@@ -34,26 +33,15 @@ function replace_content(id, html) {
 
 function format(template, json) {
     try {
-        var tmpl = jsontemplate.Template(template,
-                                         {more_formatters: more_formatters});
-        return tmpl.expand(json);
+        var tmpl = new EJS({url: '/js/tmpl/' + template + '.ejs'});
+        return tmpl.render(json);
     } catch (err) {
+        clearInterval(timer);
         alert(err['name'] + ": " + err['message']);
     }
 }
 
-function more_formatters(name) {
-    if (name == 'bytes')
-        return format_bytes;
-    else if (name == 'boolean')
-        return format_boolean;
-    else if (name == 'exclusive')
-        return format_exclusive;
-    else
-        return null;
-}
-
-function format_bytes(bytes) {
+function fmt_bytes(bytes) {
     function f(n, p) {
         if (n > 1024) return f(n / 1024, p + 1);
         else return [n, p];
@@ -64,13 +52,8 @@ function format_bytes(bytes) {
     return (power == 0 ? num : num.toFixed(1)) + powers[power];
 }
 
-function format_boolean(b) {
+function fmt_boolean(b) {
     return b ? "&#9679;" : "&#9675;";
-}
-
-// TODO I think this proves jsontemplate has got to go
-function format_exclusive(s) {
-    return format_boolean(s.length > 0);
 }
 
 function update_status(status, datetime) {
@@ -82,8 +65,7 @@ function update_status(status, datetime) {
     else if (status == 'error')
         text = "Error: could not connect to server at " + datetime;
 
-    var html = format('<p class="status-{status}">{text}</p>', {status: status,
-                                                                text: text});
+    var html = format('status', {status: status, text: text});
     replace_content('status', html);
 }
 

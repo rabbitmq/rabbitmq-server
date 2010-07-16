@@ -1,0 +1,12 @@
+<h1>Overview</h1>
+
+<table class="warns">
+ <tr><th>node</th><td><%= node %></td></tr>
+ <tr><th>pid</th><td><%= pid %></td></tr>
+ <tr><th>bound to</th><td><%= bound_to %></td></tr>
+ <tr><th>file descriptors</th><td class="<%= fd_warn %>"><%= fd_used %> / <%= fd_total %> <sub>(used/available)</span></td></tr>
+ <tr><th>erlang processes</th><td class="<%= proc_warn %>"><%= proc_used %> / <%= proc_total %> <sub>(used/available)</td></tr>
+ <tr><th>memory</th><td class="<%= mem_warn %>"><%= fmt_bytes(mem_used) %> / <%= fmt_bytes(mem_total) %> <sub>(used/available)</td></tr>
+ <tr><th>ets memory</th><td><%= fmt_bytes(mem_ets) %></td></tr>
+ <tr><th>binary memory</th><td><%= fmt_bytes(mem_binary) %></td></tr>
+</table>

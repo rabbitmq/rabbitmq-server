@@ -3,7 +3,6 @@ syntax: regexp
 ^build/
 ^dist/
 .*\.beam
-^priv/www/js/templates.js$
 ^deps/webmachine/webmachine
 ^deps/webmachine/ebin
 ^deps/webmachine/include
