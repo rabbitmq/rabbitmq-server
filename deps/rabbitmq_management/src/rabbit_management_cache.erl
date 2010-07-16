@@ -40,7 +40,6 @@
         datetime,
         bound_to,
         connections,
-        queues,
         fd_used,
         fd_total,
         mem_used,
@@ -115,7 +114,6 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 i(datetime,    #state{datetime = DateTime})       -> DateTime;
 i(bound_to,    #state{bound_to = BoundTo})        -> BoundTo;
 i(connections, #state{connections = Connections}) -> Connections;
-i(queues,      #state{queues = Queues})           -> Queues;
 i(fd_used,     #state{fd_used = FdUsed})          -> FdUsed;
 i(fd_total,    #state{fd_total = FdTotal})        -> FdTotal;
 i(mem_used,    #state{mem_used = MemUsed})        -> MemUsed;
@@ -171,10 +169,9 @@ code_change(_, State, _) -> {ok, State}.
 internal_update(State) ->
     State#state{
         time_ms = rabbit_management_util:now_ms(),
-        datetime = httpd_util:rfc1123_date(erlang:universaltime()),
+        datetime = rabbit_management_util:http_date(),
         connections = status_render:render_conns(State#state.connections,
                                                  State#state.time_ms),
-        queues = status_render:render_queues(),
         fd_used = get_used_fd(),
         mem_used = erlang:memory(total),
         proc_used = erlang:system_info(process_count)

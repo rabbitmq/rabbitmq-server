@@ -26,6 +26,8 @@
 
 start(_Type, _StartArgs) ->
     Res = rabbit_management_sup:start_link(),
+    %% TODO is this supervised correctly?
+    rabbit_management_stats:start(),
     {ok, Dispatch} = file:consult(filename:join(
                                     [filename:dirname(code:which(?MODULE)),
                                      "..", "priv", "dispatch.conf"])),
