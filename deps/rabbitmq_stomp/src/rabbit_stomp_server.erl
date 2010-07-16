@@ -163,7 +163,7 @@ handle_exit(_Who, normal, _State = #state{collector = CollectorPid}) ->
     %% as reader and writer) are fine
     case CollectorPid of
         none -> ok;
-        _ -> ok = rabbit_reader_queue_collector:delete_all(CollectorPid)
+        _ -> ok = rabbit_queue_collector:delete_all(CollectorPid)
     end,
     done;
 handle_exit(_Who, AmqpError = #amqp_error{}, State) ->
@@ -379,7 +379,7 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
                                               list_to_binary(Passcode)),
     ok = rabbit_access_control:check_vhost_access(U,
                                                   list_to_binary(VirtualHost)),
-    {ok, CollectorPid} = rabbit_reader_queue_collector:start_link(),
+    {ok, CollectorPid} = rabbit_queue_collector:start_link(),
     ChPid = 
         rabbit_channel:start_link(?MODULE, self(), self(),
                                   U#user.username, list_to_binary(VirtualHost),
