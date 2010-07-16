@@ -17,7 +17,7 @@
  </thead>
  <tbody>
   <% for (var i = 0; i < queues.length; i++) { %>
-  <tr>
+  <tr<%= alt_rows(i)%>>
    <td><%= queues[i].vhost %></td>
    <td><%= queues[i].name %></td>
    <td class="r"><%= queues[i].consumers %></td>

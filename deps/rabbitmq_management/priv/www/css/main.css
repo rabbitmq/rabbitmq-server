@@ -22,6 +22,8 @@ sub { display: block; color: #888; }
 
 table.warns th { text-align: right; font-weight: bold; }
 
+tr.alt td {background:#eee;}
+
 td.red {background: #F62817; color:white; font-weight: bolder;}
 td.yellow {background: yellow;}
 td.green {background: lightgreen;}

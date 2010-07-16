@@ -50,9 +50,6 @@ to_json(ReqData, Context) ->
                 {mem_total, I(mem_total)},
                 {proc_used, I(proc_used)},
                 {proc_total, I(proc_total)},
-                {fd_warn, get_warning_level(I(fd_used), I(fd_total))},
-                {mem_warn, get_warning_level(I(mem_used), I(mem_total))},
-                {proc_warn, get_warning_level(I(proc_used), I(proc_total))},
                 {mem_ets, erlang:memory(ets)},
                 {mem_binary, erlang:memory(binary)}
                ]}
@@ -60,17 +57,3 @@ to_json(ReqData, Context) ->
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).
-
-%%--------------------------------------------------------------------
-
-get_warning_level(Used, Total) ->
-    if
-        is_number(Used) andalso is_number(Total) ->
-            Ratio = Used/Total,
-            if
-                Ratio > 0.75 -> red;
-                Ratio > 0.50 -> yellow;
-                true         -> green
-            end;
-        true -> none
-    end.

@@ -15,7 +15,7 @@
  </thead>
  <tbody>
   <% for (var i = 0; i < connections.length; i++) { %>
-  <tr>
+  <tr<%= alt_rows(i)%>>
     <td><%= connections[i].vhost %></td>
     <td><%= connections[i].user %></td>
     <td><%= connections[i].state %></td>

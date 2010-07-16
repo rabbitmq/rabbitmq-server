@@ -56,6 +56,16 @@ function fmt_boolean(b) {
     return b ? "&#9679;" : "&#9675;";
 }
 
+function fmt_color(r) {
+    if (r > 0.75) return 'red';
+    else if (r > 0.5) return 'yellow';
+    else return 'green';
+}
+
+function alt_rows(i) {
+    return (i % 2 == 0) ? ' class="alt"' : '';
+}
+
 function update_status(status, datetime) {
     var text;
     if (status == 'ok')
