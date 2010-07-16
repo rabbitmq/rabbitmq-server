@@ -49,7 +49,7 @@ function fmt_bytes(bytes) {
 
     [num, power] = f(bytes, 0);
     var powers = ['B', 'kB', 'MB', 'GB', 'TB'];
-    return (power == 0 ? num : num.toFixed(1)) + powers[power];
+    return (power == 0 ? num.toFixed(0) : num.toFixed(1)) + powers[power];
 }
 
 function fmt_boolean(b) {

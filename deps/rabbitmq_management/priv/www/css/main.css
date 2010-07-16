@@ -1,5 +1,5 @@
 body { font: 12px/17px Verdana,sans-serif; color: #444; padding: 8px 35px; }
-#logo { width: 204px; height: 37px; background: url(/img/rabbitmqlogo.png); }
+#logo { width: 204px; height: 37px; margin-bottom: 25px; background: url(/img/rabbitmqlogo.png); }
 #strap { float: right; }
 #menu ul { height: 2em; padding: 0; }
 #menu li { float: left; list-style-type: none; padding: 0 2em 0 0; }
@@ -25,6 +25,7 @@ table.warns th { text-align: right; font-weight: bold; }
 tr.alt td {background:#eee;}
 
 td.red {background: #F62817; color:white; font-weight: bolder;}
+td.red * {color:white;}
 td.yellow {background: yellow;}
 td.green {background: lightgreen;}
 
