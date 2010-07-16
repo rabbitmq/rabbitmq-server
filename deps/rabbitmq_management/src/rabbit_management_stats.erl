@@ -53,7 +53,7 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({queue_stats, Stats}, State = #state{queue_stats = Table}) ->
-    ets:insert(Table, {Stats#event_queue_stats.q_pid, Stats}),
+    ets:insert(Table, {Stats#event_queue_stats.qpid, Stats}),
     {ok, State};
 
 handle_event(Event, State) ->
