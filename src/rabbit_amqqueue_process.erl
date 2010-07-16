@@ -38,7 +38,7 @@
 -define(UNSENT_MESSAGE_LIMIT,          100).
 -define(SYNC_INTERVAL,                 5). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
--define(STATISTICS_UPDATE_INTERVAL,    5000).
+-define(STATISTICS_UPDATE_INTERVAL,    5000000). %% microseconds
 
 -export([start_link/1, info_keys/0]).
 
@@ -113,7 +113,7 @@ init(Q) ->
             blocked_consumers = queue:new(),
             sync_timer_ref = undefined,
             rate_timer_ref = undefined,
-            last_statistics_update = 0}, hibernate,
+            last_statistics_update = {0,0,0}}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -535,21 +535,19 @@ i(Item, _) ->
 %---------------------------------------------------------------------------
 
 maybe_emit_stats(State = #q{last_statistics_update = LastUpdate}) ->
-    {MegaSecs, Secs, MicroSecs} = os:timestamp(),
-    Now = MegaSecs * 1000000 + Secs * 1000 + MicroSecs / 1000,
-    case Now - LastUpdate > ?STATISTICS_UPDATE_INTERVAL of
+    Now = os:timestamp(),
+    case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
         true ->
-            S = {queue_stats, #event_queue_stats{
-                   qpid = self(),
-                   messages_ready = i(messages_ready, State),
-                   messages_unacknowledged = i(messages_unacknowledged, State),
-                   consumers = i(consumers, State),
-                   memory = i(memory, State),
-                   exclusive_consumer_tag = i(exclusive_consumer_tag, State),
-                   exclusive_consumer_pid = i(exclusive_consumer_pid, State),
-                   backing_queue_status = i(backing_queue_status, State)
-                  }},
-            rabbit_event:notify(S),
+            rabbit_event:notify(#event_queue_stats{
+              qpid = self(),
+              messages_ready = i(messages_ready, State),
+              messages_unacknowledged = i(messages_unacknowledged, State),
+              consumers = i(consumers, State),
+              memory = i(memory, State),
+              exclusive_consumer_tag = i(exclusive_consumer_tag, State),
+              exclusive_consumer_pid = i(exclusive_consumer_pid, State),
+              backing_queue_status = i(backing_queue_status, State)
+             }),
             State#q{last_statistics_update = Now};
         _ ->
             State
