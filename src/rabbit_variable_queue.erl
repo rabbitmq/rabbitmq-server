@@ -563,7 +563,7 @@ tx_commit(Txn, Fun, State = #vqstate { durable = IsDurable }) ->
                       IsTransientPubs, PubsOrdered, AckTags1, Fun, State);
            false -> ok = rabbit_msg_store:sync(
                            ?PERSISTENT_MSG_STORE, PersistentGuids,
-                           msg_store_callback(PersistentGuids, IsTransientPubs,
+                           msg_store_callback(PersistentGuids,
                                               PubsOrdered, AckTags1, Fun)),
                     State
        end)}.
@@ -823,12 +823,11 @@ update_rate(Now, Then, Count, {OThen, OCount}) ->
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
-msg_store_callback(PersistentGuids, IsTransientPubs, Pubs, AckTags, Fun) ->
+msg_store_callback(PersistentGuids, Pubs, AckTags, Fun) ->
     Self = self(),
     F = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
                     Self, fun (StateN) -> tx_commit_post_msg_store(
-                                            IsTransientPubs, Pubs,
-                                            AckTags, Fun, StateN)
+                                            false, Pubs, AckTags, Fun, StateN)
                           end)
         end,
     fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
