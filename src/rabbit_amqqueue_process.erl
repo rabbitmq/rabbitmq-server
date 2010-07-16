@@ -540,7 +540,7 @@ maybe_emit_stats(State = #q{last_statistics_update = LastUpdate}) ->
     case Now - LastUpdate > ?STATISTICS_UPDATE_INTERVAL of
         true ->
             S = {queue_stats, #event_queue_stats{
-                   q_pid = self(),
+                   qpid = self(),
                    messages_ready = i(messages_ready, State),
                    messages_unacknowledged = i(messages_unacknowledged, State),
                    consumers = i(consumers, State),

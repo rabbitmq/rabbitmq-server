@@ -70,7 +70,7 @@
 -record(delivery, {mandatory, immediate, txn, sender, message}).
 -record(amqp_error, {name, explanation, method = none}).
 
--record(event_queue_stats, {q_pid, messages_ready, messages_unacknowledged,
+-record(event_queue_stats, {qpid, messages_ready, messages_unacknowledged,
                             consumers, memory, exclusive_consumer_pid,
                             exclusive_consumer_tag, backing_queue_status}).
 
