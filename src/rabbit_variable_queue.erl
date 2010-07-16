@@ -549,23 +549,21 @@ tx_rollback(Txn, State = #vqstate { durable = IsDurable }) ->
     {lists:flatten(AckTags), a(State)}.
 
 tx_commit(Txn, Fun, State = #vqstate { durable = IsDurable }) ->
-    %% If we are a non-durable queue, or we have no persistent pubs,
-    %% we can skip the msg_store loop.
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
     PubsOrdered = lists:reverse(Pubs),
     AckTags1 = lists:flatten(AckTags),
     PersistentGuids = persistent_guids(PubsOrdered),
-    IsTransientPubs = [] == PersistentGuids,
+    HasPersistentPubs = PersistentGuids =/= [],
     {AckTags1,
-     a(case (not IsDurable) orelse IsTransientPubs of
-           true  -> tx_commit_post_msg_store(
-                      IsTransientPubs, PubsOrdered, AckTags1, Fun, State);
-           false -> ok = rabbit_msg_store:sync(
+     a(case IsDurable andalso HasPersistentPubs of
+           true  -> ok = rabbit_msg_store:sync(
                            ?PERSISTENT_MSG_STORE, PersistentGuids,
                            msg_store_callback(PersistentGuids,
                                               PubsOrdered, AckTags1, Fun)),
-                    State
+                    State;
+           false -> tx_commit_post_msg_store(
+                      HasPersistentPubs, PubsOrdered, AckTags1, Fun, State)
        end)}.
 
 requeue(AckTags, State) ->
@@ -827,7 +825,7 @@ msg_store_callback(PersistentGuids, Pubs, AckTags, Fun) ->
     Self = self(),
     F = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
                     Self, fun (StateN) -> tx_commit_post_msg_store(
-                                            false, Pubs, AckTags, Fun, StateN)
+                                            true, Pubs, AckTags, Fun, StateN)
                           end)
         end,
     fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
@@ -838,27 +836,25 @@ msg_store_callback(PersistentGuids, Pubs, AckTags, Fun) ->
                     end)
     end.
 
-tx_commit_post_msg_store(IsTransientPubs, Pubs, AckTags, Fun,
+tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun,
                          State = #vqstate {
                            on_sync     = OnSync = {SAcks, SPubs, SFuns},
                            pending_ack = PA,
                            durable     = IsDurable }) ->
-    %% If we are a non-durable queue, or (no persistent pubs, and no
-    %% persistent acks) then we can skip the queue_index loop.
-    case (not IsDurable) orelse
-        (IsTransientPubs andalso
-         lists:all(fun (AckTag) ->
+    case IsDurable andalso
+        (HasPersistentPubs orelse
+         lists:any(fun (AckTag) ->
                            case dict:find(AckTag, PA) of
-                               {ok, #msg_status {}}        -> true;
-                               {ok, {IsPersistent, _Guid}} -> not IsPersistent
+                               {ok, #msg_status {}}        -> false;
+                               {ok, {IsPersistent, _Guid}} -> IsPersistent
                            end
                    end, AckTags)) of
-        true  -> State1 = tx_commit_index(State #vqstate {
-                                            on_sync = {[], [Pubs], [Fun]} }),
-                 State1 #vqstate { on_sync = OnSync };
-        false -> State #vqstate { on_sync = { [AckTags | SAcks],
+        true  -> State #vqstate { on_sync = { [AckTags | SAcks],
                                               [Pubs | SPubs],
-                                              [Fun | SFuns] }}
+                                              [Fun | SFuns] }};
+        false -> State1 = tx_commit_index(State #vqstate {
+                                            on_sync = {[], [Pubs], [Fun]} }),
+                 State1 #vqstate { on_sync = OnSync }
     end.
 
 tx_commit_index(State = #vqstate { on_sync = {_, _, []} }) ->
