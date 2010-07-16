@@ -52,7 +52,8 @@ handle_call({get_queue_stats, QPids}, State = #state{queue_stats = Table}) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event({queue_stats, Stats}, State = #state{queue_stats = Table}) ->
+handle_event(Stats = #event_queue_stats{},
+             State = #state{queue_stats = Table}) ->
     ets:insert(Table, {Stats#event_queue_stats.qpid, Stats}),
     {ok, State};
 
