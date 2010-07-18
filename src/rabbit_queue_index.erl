@@ -126,6 +126,11 @@
 
 -define(SEGMENT_EXTENSION, ".idx").
 
+%% TODO: The segment size would be configurable, but deriving all the
+%% other values is quite hairy and quite possibly noticably less
+%% efficient, depending on how clever the compiler is when it comes to
+%% binary generation/matching with constant vs variable lengths.
+
 -define(REL_SEQ_BITS, 14).
 -define(SEGMENT_ENTRY_COUNT, 16384). %% trunc(math:pow(2,?REL_SEQ_BITS))).
 
