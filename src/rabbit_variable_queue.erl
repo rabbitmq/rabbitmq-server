@@ -308,14 +308,13 @@ start(DurableQueues) ->
                                  Refs, StartFunState]).
 
 init(QueueName, IsDurable, _Recover) ->
-    MsgStoreRecovered =
-        rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
-    ContainsCheckFun =
-        fun (Guid) ->
-                rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
-        end,
     {DeltaCount, Terms, IndexState} =
-        rabbit_queue_index:init(QueueName, MsgStoreRecovered, ContainsCheckFun),
+        rabbit_queue_index:init(
+          QueueName,
+          rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
+          fun (Guid) ->
+                  rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
+          end),
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
     {PRef, TRef, Terms1} =
