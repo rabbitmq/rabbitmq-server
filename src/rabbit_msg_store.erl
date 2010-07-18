@@ -34,7 +34,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
-         sync/3, client_init/2, client_terminate/1, delete_client/2, clean/2,
+         sync/3, client_init/2, client_terminate/1, delete_client/2,
          successfully_recovered_state/1]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
@@ -139,7 +139,6 @@
 -spec(client_init/2 :: (server(), binary()) -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(delete_client/2 :: (server(), binary()) -> 'ok').
--spec(clean/2 :: (atom(), file:filename()) -> 'ok').
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
 
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
@@ -384,10 +383,6 @@ delete_client(Server, Ref) ->
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
 
-clean(Server, BaseDir) ->
-    Dir = filename:join(BaseDir, atom_to_list(Server)),
-    ok = rabbit_misc:recursive_delete([Dir]).
-
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
 %%----------------------------------------------------------------------------
@@ -506,7 +501,6 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
                                              [self()]),
 
     Dir = filename:join(BaseDir, atom_to_list(Server)),
-    ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
 
     {ok, IndexModule} = application:get_env(msg_store_index_module),
     rabbit_log:info("~w: using ~p to provide index~n", [Server, IndexModule]),
@@ -1125,7 +1119,12 @@ index_delete_by_file(File, #msstate { index_module = Index,
 %% shutdown and recovery
 %%----------------------------------------------------------------------------
 
+recover_index_and_client_refs(IndexModule, undefined, Dir, _Server) ->
+    ok = rabbit_misc:recursive_delete([Dir]),
+    ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+    {false, IndexModule:new(Dir), sets:new()};
 recover_index_and_client_refs(IndexModule, ClientRefs, Dir, Server) ->
+    ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
     Fresh = fun (ErrorMsg, ErrorArgs) ->
                     rabbit_log:warning("~w: " ++ ErrorMsg ++
                                        "~nrebuilding indices from scratch~n",
@@ -1138,8 +1137,7 @@ recover_index_and_client_refs(IndexModule, ClientRefs, Dir, Server) ->
         {true, Terms} ->
             RecClientRefs  = proplists:get_value(client_refs, Terms, []),
             RecIndexModule = proplists:get_value(index_module, Terms),
-            case (ClientRefs =/= undefined andalso
-                  lists:sort(ClientRefs) =:= lists:sort(RecClientRefs)
+            case (lists:sort(ClientRefs) =:= lists:sort(RecClientRefs)
                   andalso IndexModule =:= RecIndexModule) of
                 true  -> case IndexModule:recover(Dir) of
                              {ok, IndexState1} ->

@@ -294,7 +294,6 @@
 %%----------------------------------------------------------------------------
 
 start(DurableQueues) ->
-    ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
     {AllTerms, StartFunState} = rabbit_queue_index:recover(DurableQueues),
     Refs = [Ref || Terms <- AllTerms,
                    begin

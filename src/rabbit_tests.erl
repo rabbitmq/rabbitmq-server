@@ -1374,17 +1374,13 @@ test_backing_queue() ->
     end.
 
 start_msg_store_empty() ->
-    start_msg_store(fun (ok) -> finished end, ok).
+    start_msg_store(undefined, {fun (ok) -> finished end, ok}).
 
-start_msg_store(MsgRefDeltaGen, MsgRefDeltaGenInit) ->
+start_msg_store(ClientRefs, StartupFunState) ->
     ok = rabbit_sup:start_child(
            ?PERSISTENT_MSG_STORE, rabbit_msg_store,
-           [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(), undefined,
-            {MsgRefDeltaGen, MsgRefDeltaGenInit}]),
-    start_transient_msg_store().
-
-start_transient_msg_store() ->
-    ok = rabbit_msg_store:clean(?TRANSIENT_MSG_STORE, rabbit_mnesia:dir()),
+           [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(), ClientRefs,
+            StartupFunState]),
     ok = rabbit_sup:start_child(
            ?TRANSIENT_MSG_STORE, rabbit_msg_store,
            [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(), undefined,
@@ -1502,13 +1498,13 @@ test_msg_store() ->
     ok = rabbit_msg_store:client_terminate(MSCState7),
     %% stop and restart, preserving every other msg in 2nd half
     ok = stop_msg_store(),
-    ok = start_msg_store(fun ([]) -> finished;
-                             ([Guid|GuidsTail])
-                             when length(GuidsTail) rem 2 == 0 ->
-                                 {Guid, 1, GuidsTail};
-                             ([Guid|GuidsTail]) ->
-                                 {Guid, 0, GuidsTail}
-                         end, Guids2ndHalf),
+    ok = start_msg_store([], {fun ([]) -> finished;
+                                  ([Guid|GuidsTail])
+                                    when length(GuidsTail) rem 2 == 0 ->
+                                      {Guid, 1, GuidsTail};
+                                  ([Guid|GuidsTail]) ->
+                                      {Guid, 0, GuidsTail}
+                              end, Guids2ndHalf}),
     %% check we have the right msgs left
     lists:foldl(
       fun (Guid, Bool) ->
