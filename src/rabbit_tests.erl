@@ -1598,8 +1598,8 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                                                            Guid, MSCStateN),
                   {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc], MSCStateM}
           end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref)}, SeqIds),
-    ok = rabbit_msg_store:delete_client(MsgStore, Ref),
-    ok = rabbit_msg_store:client_terminate(MSCStateEnd),
+    ok = rabbit_msg_store:client_delete_and_terminate(
+           MSCStateEnd, MsgStore, Ref),
     {A, B}.
 
 verify_read_with_published(_Delivered, _Persistent, [], _) ->

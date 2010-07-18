@@ -34,8 +34,8 @@
 -behaviour(gen_server2).
 
 -export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
-         sync/3, client_init/2, client_terminate/1, delete_client/2,
-         successfully_recovered_state/1]).
+         sync/3, client_init/2, client_terminate/1,
+         client_delete_and_terminate/3, successfully_recovered_state/1]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
 
@@ -138,7 +138,8 @@
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(client_init/2 :: (server(), binary()) -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
--spec(delete_client/2 :: (server(), binary()) -> 'ok').
+-spec(client_delete_and_terminate/3 ::
+        (client_msstate(), server(), binary()) -> 'ok').
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
 
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
@@ -377,7 +378,8 @@ client_terminate(CState) ->
     close_all_handles(CState),
     ok.
 
-delete_client(Server, Ref) ->
+client_delete_and_terminate(CState, Server, Ref) ->
+    ok = client_terminate(CState),
     ok = gen_server2:call(Server, {delete_client, Ref}, infinity).
 
 successfully_recovered_state(Server) ->

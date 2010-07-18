@@ -403,12 +403,12 @@ delete_and_terminate(State) ->
     IndexState1 = rabbit_queue_index:delete_and_terminate(IndexState),
     case MSCStateP of
         undefined -> ok;
-        _         -> rabbit_msg_store:delete_client(
-                       ?PERSISTENT_MSG_STORE, PRef),
+        _         -> rabbit_msg_store:client_delete_and_terminate(
+                       MSCStateP, ?PERSISTENT_MSG_STORE, PRef),
                      rabbit_msg_store:client_terminate(MSCStateP)
     end,
-    rabbit_msg_store:delete_client(?TRANSIENT_MSG_STORE, TRef),
-    rabbit_msg_store:client_terminate(MSCStateT),
+    rabbit_msg_store:client_delete_and_terminate(
+      MSCStateT, ?TRANSIENT_MSG_STORE, TRef),
     a(State2 #vqstate { index_state       = IndexState1,
                         msg_store_clients = undefined }).
 
