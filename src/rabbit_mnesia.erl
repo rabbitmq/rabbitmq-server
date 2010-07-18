@@ -253,20 +253,9 @@ read_cluster_nodes_config() ->
     case rabbit_misc:read_term_file(FileName) of
         {ok, [ClusterNodes]} -> ClusterNodes;
         {error, enoent} ->
-            case application:get_env(cluster_config) of
+            case application:get_env(rabbit, cluster_nodes) of
                 undefined -> [];
-                {ok, DefaultFileName} ->
-                    case file:consult(DefaultFileName) of
-                        {ok, [ClusterNodes]} -> ClusterNodes;
-                        {error, enoent} ->
-                            error_logger:warning_msg(
-                              "default cluster config file ~p does not exist~n",
-                              [DefaultFileName]),
-                            [];
-                        {error, Reason} ->
-                            throw({error, {cannot_read_cluster_nodes_config,
-                                           DefaultFileName, Reason}})
-                    end
+                {ok, ClusterNodes} -> ClusterNodes
             end;
         {error, Reason} ->
             throw({error, {cannot_read_cluster_nodes_config,
