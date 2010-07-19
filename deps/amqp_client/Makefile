@@ -35,6 +35,9 @@ BROKER_HEADERS=$(wildcard $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl)
 BROKER_SOURCES=$(wildcard $(BROKER_DIR)/$(SOURCE_DIR)/*.erl)
 BROKER_DEPS=$(BROKER_HEADERS) $(BROKER_SOURCES)
 
+INFILES=$(shell find . -name '*.app.in')
+INTARGETS=$(patsubst %.in, %, $(INFILES))
+
 include common.mk
 
 run_in_broker: compile $(BROKER_DEPS) $(EBIN_DIR)/$(PACKAGE).app
@@ -46,6 +49,24 @@ clean: common_clean
 
 %.app: %.app.in
 	sed -e 's:%%VSN%%:$(VERSION):g' < $< > $@
+
+###############################################################################
+##  Dialyzer
+###############################################################################
+
+RABBIT_PLT=$(BROKER_DIR)/rabbit.plt
+
+dialyze: $(RABBIT_PLT) $(TARGETS) $(TEST_TARGETS)
+	$(LIBS_PATH) erl -noshell -pa $(LOAD_PATH) -eval \
+        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(RABBIT_PLT)\", \"$(TARGETS) $(TEST_TARGETS)\"))."
+
+.PHONY: $(RABBIT_PLT)
+$(RABBIT_PLT):
+	$(MAKE) -C $(BROKER_DIR) create-plt
+
+###############################################################################
+##  Documentation
+###############################################################################
 
 doc: $(DOC_DIR)/index.html
 
@@ -74,9 +95,9 @@ test_common_package: common_package package prepare_tests
 	$(MAKE) stop_test_broker_node && \
 	$$OK
 
-compile_tests: $(TEST_DIR) $(EBIN_DIR)/$(PACKAGE).app
+compile_tests: $(TEST_TARGETS) $(EBIN_DIR)/$(PACKAGE).app
 
-$(TEST_DIR)/%.beam: $(TEST_DIR)
+$(TEST_TARGETS): $(TEST_DIR)
 
 .PHONY: $(TEST_DIR)
 $(TEST_DIR): $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
