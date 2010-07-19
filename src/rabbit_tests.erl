@@ -1420,6 +1420,11 @@ msg_store_remove(Ids) ->
                                                 [guid_bin(Guid)])
                 end, ok, Ids).
 
+foreach_with_msg_store_client(Store, Ref, Fun, L) ->
+    rabbit_msg_store:client_terminate(
+      lists:foldl(fun (Guid, MSCState) -> Fun(Guid, Store, MSCState) end,
+                  rabbit_msg_store:client_init(Store, Ref), L)).
+
 test_msg_store() ->
     stop_msg_store(),
     ok = start_msg_store_empty(),
@@ -1518,21 +1523,21 @@ test_msg_store() ->
     BigCount = trunc(100 * FileSize / (PayloadSizeBits div 8)),
     GuidsBig = [guid_bin(X) || X <- lists:seq(1, BigCount)],
     Payload = << 0:PayloadSizeBits >>,
-    ok = rabbit_msg_store:client_terminate(
-           lists:foldl(
-             fun (Guid, MSCStateN) ->
-                     {ok, MSCStateM} =
-                         rabbit_msg_store:write(?PERSISTENT_MSG_STORE, Guid, Payload, MSCStateN),
-                     MSCStateM
-             end, rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref), GuidsBig)),
+    ok = foreach_with_msg_store_client(
+           ?PERSISTENT_MSG_STORE, Ref,
+           fun (Guid, Store, MSCStateM) ->
+                   {ok, MSCStateN} =
+                       rabbit_msg_store:write(Store, Guid, Payload, MSCStateM),
+                   MSCStateN
+           end, GuidsBig),
     %% now read them to ensure we hit the fast client-side reading
-    ok = rabbit_msg_store:client_terminate(
-           lists:foldl(
-             fun (Guid, MSCStateM) ->
-                     {{ok, Payload}, MSCStateN} =
-                         rabbit_msg_store:read(?PERSISTENT_MSG_STORE, Guid, MSCStateM),
-                     MSCStateN
-             end, rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref), GuidsBig)),
+    ok = foreach_with_msg_store_client(
+           ?PERSISTENT_MSG_STORE, Ref,
+           fun (Guid, Store, MSCStateM) ->
+                   {{ok, Payload}, MSCStateN} =
+                       rabbit_msg_store:read(Store, Guid, MSCStateM),
+                   MSCStateN
+           end, GuidsBig),
     %% .., then 3s by 1...
     ok = msg_store_remove(lists:seq(BigCount, 1, -3)),
     %% .., then remove 3s by 2, from the young end first. This hits
