@@ -129,12 +129,11 @@
 %% done as promptly as possible whilst ensuring the queue remains
 %% responsive.
 %%
-%% In the queue we only keep track of messages that are pending
-%% delivery. This is fine for queue purging, but can be expensive for
-%% queue deletion: for queue deletion we must scan all the way through
-%% all remaining segments in the queue index (we start by doing a
-%% purge) and delete messages from the msg_store that we find in the
-%% queue index.
+%% In the queue we keep track of both messages that are pending
+%% delivery and messages that are pending acks. This ensures that
+%% purging (deleting the former) and deletion (deleting the former and
+%% the latter) are both cheap and do require any scanning through qi
+%% segments.
 %%
 %% Notes on Clean Shutdown
 %% (This documents behaviour in variable_queue, queue_index and
@@ -149,6 +148,13 @@
 %% queue_index adds to these terms the details of its segments and
 %% stores the terms in the queue directory.
 %%
+%% Two message stores are used. One is created for persistent messages
+%% to durable queues that must survive restarts, and the other is used
+%% for all other messages that just happen to need to be written to
+%% disk. On start up we can therefore nuke the transient message
+%% store, and be sure that the messages in the persistent store are
+%% all that we need.
+%%
 %% The references to the msg_stores are there so that the msg_store
 %% knows to only trust its saved state if all of the queues it was
 %% previously talking to come up cleanly. Likewise, the queues
@@ -162,10 +168,12 @@
 %% startup, stores the next_seq_id reported by the queue_index as the
 %% transient_threshold. From that point on, whenever it's reading a
 %% message off disk via the queue_index, if the seq_id is below this
-%% threshold and the message is transient then it drops the
-%% message. This avoids the expensive operation of scanning the entire
-%% queue on startup in order to delete transient messages that were
-%% only pushed to disk to save memory.
+%% threshold and the message is transient then it drops the message
+%% (the message itself won't exist on disk because it would have been
+%% stored in the transient msg_store which would have had its saved
+%% state nuked on startup). This avoids the expensive operation of
+%% scanning the entire queue on startup in order to delete transient
+%% messages that were only pushed to disk to save memory.
 %%
 %%----------------------------------------------------------------------------
 
