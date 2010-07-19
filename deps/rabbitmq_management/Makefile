@@ -1,4 +1,4 @@
-PACKAGE=rabbit_management
+PACKAGE=rabbitmq-management
 DEPS=rabbitmq-mochiweb rabbitmq-server rabbitmq-erlang-client
 # NB: when rabbitmq-mochiweb depends on a newer version of mochiweb we can remove it as a dep here.
 INTERNAL_DEPS=webmachine mochiweb-for-management
