@@ -35,7 +35,7 @@
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
          update_ram_duration/1, set_ram_duration_target/2,
-         set_maximum_since_use/2]).
+         set_maximum_since_use/2, maybe_expire/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
@@ -146,6 +146,7 @@
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(maybe_expire/1 :: (pid()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> rabbit_types:amqqueue()).
 
@@ -183,6 +184,20 @@ recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
     [Q || Q <- Qs, gen_server2:call(Q#amqqueue.pid, {init, true}) == Q].
 
+handle_error(QueueName, expires_not_of_type_long) ->
+    rabbit_misc:protocol_error(
+      precondition_failed,
+      "~s: Argument x-expires must be of type long.",
+      [rabbit_misc:rs(QueueName)]);
+handle_error(QueueName, expires_zero_or_less) ->
+    rabbit_misc:protocol_error(
+      precondition_failed,
+      "~s: Argument x-expires must be more than zero.",
+      [rabbit_misc:rs(QueueName)]);
+handle_error(QueueName, Error) ->
+    rabbit_misc:protocol_error(
+      internal_error, "Queue ~s: ~w", [rabbit_misc:rs(QueueName), Error]).
+
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
@@ -191,8 +206,9 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                       exclusive_owner = Owner,
                                       pid = none}),
     case gen_server2:call(Q#amqqueue.pid, {init, false}) of
-        not_found -> rabbit_misc:not_found(QueueName);
-        Q1        -> Q1
+        {error, Error} -> handle_error(QueueName, Error);
+        not_found      -> rabbit_misc:not_found(QueueName);
+        Q1             -> Q1
     end.
 
 internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->
@@ -227,8 +243,10 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok.
 
 start_queue_process(Q) ->
-    {ok, Pid} = rabbit_amqqueue_sup:start_child([Q]),
-    Q#amqqueue{pid = Pid}.
+    case rabbit_amqqueue_sup:start_child([Q]) of
+        {ok, Pid}      -> Q#amqqueue{pid = Pid};
+        {error, Error} -> handle_error(Q#amqqueue.name, Error)
+    end.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
     Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
@@ -251,8 +269,12 @@ with(Name, F) ->
 with_or_die(Name, F) ->
     with(Name, F, fun () -> rabbit_misc:not_found(Name) end).
 
-assert_equivalence(#amqqueue{durable = Durable, auto_delete = AutoDelete} = Q,
-                   Durable, AutoDelete, _Args, Owner) ->
+assert_equivalence(#amqqueue{name = Name,
+                             durable = Durable,
+                             auto_delete = AutoDelete,
+                             arguments = Args1} = Q,
+                   Durable, AutoDelete, Args, Owner) ->
+    check_argument_equivalent(Args1, Args, <<"x-expires">>, Name),
     check_exclusive_access(Q, Owner, strict);
 assert_equivalence(#amqqueue{name = QueueName},
                    _Durable, _AutoDelete, _Args, _Owner) ->
@@ -275,6 +297,25 @@ check_exclusive_access(#amqqueue{name = QueueName}, _ReaderPid, _MatchType) ->
 with_exclusive_access_or_die(Name, ReaderPid, F) ->
     with_or_die(Name,
                 fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
+
+check_argument_equivalent(Prev, Now, Key, QueueName) ->
+    {AType, AVal} = rabbit_misc:table_lookup(Now, Key),
+    {BType, BVal} = rabbit_misc:table_lookup(Prev, Key),
+    if AType =:= BType
+             -> ok;
+        true -> rabbit_misc:protocol_error(
+                  precondition_failed,
+                  "argument types for ~s not equivalent: ~s=~w (was ~w)",
+                  [rabbit_misc:rs(QueueName), Key, AType, BType])
+    end,
+
+    if AVal == BVal
+             -> ok;
+        true -> rabbit_misc:protocol_error(
+                  precondition_failed,
+                  "arguments for ~s not equivalent: ~s=~w (was ~w)",
+                  [rabbit_misc:rs(QueueName), Key, AVal, BVal])
+    end.
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
@@ -415,6 +456,9 @@ set_ram_duration_target(QPid, Duration) ->
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:pcast(QPid, 8, {set_maximum_since_use, Age}).
+
+maybe_expire(QPid) ->
+    gen_server2:pcast(QPid, 8, maybe_expire).
 
 on_node_down(Node) ->
     [Hook() ||
