@@ -46,16 +46,14 @@ to_json(ReqData, Context) ->
                          {queues, [{struct, I} || I <- QInfos]}
                         ]}), ReqData, Context}.
 
-format(#amqqueue{name = Name, durable = Durable,
+format(#amqqueue{name = Name,
+                 durable = Durable,
                  auto_delete = AutoDelete,
-                      exclusive_owner = ExclusiveOwner,
-                      arguments = Arguments, pid = QPid},
-            #event_queue_stats{messages_ready = MsgsReady,
-                               messages_unacknowledged = MsgsUnacked,
-                               consumers = Consumers, memory = Memory,
-                               exclusive_consumer_pid = ECPid,
-                               exclusive_consumer_tag = ECTag,
-                               backing_queue_status = BQStatus}) ->
+                 exclusive_owner = ExclusiveOwner,
+                 arguments = Arguments,
+                 pid = QPid}, Stats) ->
+    MsgsReady = proplists:get_value(messages_ready, Stats),
+    MsgsUnacked = proplists:get_value(messages_unacknowledged, Stats),
     [{vhost, Name#resource.virtual_host},
      {name, Name#resource.name},
      {durable, Durable},
@@ -63,14 +61,17 @@ format(#amqqueue{name = Name, durable = Durable,
      {exclusive_owner, status_render:format_pid(ExclusiveOwner)},
      {arguments, Arguments},
      {pid, status_render:format_pid(QPid)},
-     {exclusive_consumer_pid, status_render:format_pid(ECPid)},
-     {exclusive_consumer_tag, ECTag},
+     {exclusive_consumer_pid,
+      status_render:format_pid(
+        proplists:get_value(exclusive_consumer_pid, Stats))},
+     {exclusive_consumer_tag,
+      proplists:get_value(exclusive_consumer_tag, Stats)},
      {messages_ready, MsgsReady},
      {messages_unacknowledged, MsgsUnacked},
      {messages, MsgsReady + MsgsUnacked},
-     {consumers, Consumers},
-     {memory, Memory},
-     {backing_queue_status, BQStatus}
+     {consumers, proplists:get_value(consumers, Stats)},
+     {memory, proplists:get_value(memory, Stats)},
+     {backing_queue_status, proplists:get_value(backing_queue_status, Stats)}
     ].
 
 is_authorized(ReqData, Context) ->

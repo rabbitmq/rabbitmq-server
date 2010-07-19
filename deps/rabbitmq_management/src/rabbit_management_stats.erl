@@ -52,13 +52,13 @@ handle_call({get_queue_stats, QPids}, State = #state{queue_stats = Table}) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event(Stats = #event_queue_stats{},
+handle_event(#event{type = queue_stats, props = Stats},
              State = #state{queue_stats = Table}) ->
-    ets:insert(Table, {Stats#event_queue_stats.qpid, Stats}),
+    ets:insert(Table, {proplists:get_value(qpid, Stats), Stats}),
     {ok, State};
 
 handle_event(Event, State) ->
-    %% io:format("Got event ~p~n", [Event]),
+    io:format("Got event ~p~n", [Event]),
     {ok, State}.
 
 handle_info(_Info, State) ->
