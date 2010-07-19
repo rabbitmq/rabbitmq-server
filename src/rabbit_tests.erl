@@ -205,6 +205,7 @@ priority_queue_out_all(Q) ->
         {empty, _}       -> [];
         {{value, V}, Q1} -> [V | priority_queue_out_all(Q1)]
     end.
+
 test_priority_queue(Q) ->
     {priority_queue:is_queue(Q),
      priority_queue:is_empty(Q),
