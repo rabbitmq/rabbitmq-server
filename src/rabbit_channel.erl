@@ -48,7 +48,8 @@
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
-             consumer_mapping, blocking, queue_collector_pid, flow}).
+             consumer_mapping, blocking, queue_collector_pid, flow,
+             exchange_statistics, queue_statistics, last_statistics_update}).
 
 -record(flow, {server, client, pending}).
 
@@ -157,6 +158,11 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
     ok = pg_local:join(rabbit_channels, self()),
+    rabbit_event:notify(#event_channel_created{channel_pid    = self(),
+                                               connection_pid = ReaderPid,
+                                               channel        = Channel,
+                                               user           = Username,
+                                               vhost          = VHost}),
     {ok, #ch{state                   = starting,
              channel                 = Channel,
              reader_pid              = ReaderPid,
@@ -174,7 +180,10 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
              blocking                = dict:new(),
              queue_collector_pid     = CollectorPid,
              flow                    = #flow{server = true, client = true,
-                                             pending = none}},
+                                             pending = none},
+             exchange_statistics     = dict:new(),
+             queue_statistics        = dict:new(),
+             last_statistics_update = {0,0,0}},
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -225,7 +234,13 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
                         next_tag = DeliveryTag}) ->
     State1 = lock_message(AckRequired, {DeliveryTag, ConsumerTag, Msg}, State),
     ok = internal_deliver(WriterPid, true, ConsumerTag, DeliveryTag, Msg),
-    noreply(State1#ch{next_tag = DeliveryTag + 1});
+    {_QName, QPid, _MsgId, _Redelivered, _Msg} = Msg,
+    State2 = incr_queue_stats([{QPid, 1}],
+                              case AckRequired of
+                                  true  -> deliver;
+                                  false -> deliver_no_ack
+                              end, State1),
+    noreply(State2#ch{next_tag = DeliveryTag + 1});
 
 handle_cast({conserve_memory, true}, State = #ch{state = starting}) ->
     noreply(State);
@@ -276,9 +291,13 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
+reply(Reply, NewState) ->
+    NewState1 = maybe_emit_stats(NewState),
+    {reply, Reply, NewState1, hibernate}.
 
-noreply(NewState) -> {noreply, NewState, hibernate}.
+noreply(NewState) ->
+    NewState1 = maybe_emit_stats(NewState),
+    {noreply, NewState1, hibernate}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -437,9 +456,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         unroutable    -> ok = basic_return(Message, WriterPid, no_route);
         not_delivered -> ok = basic_return(Message, WriterPid, no_consumers)
     end,
+    State1 = incr_exchange_stats(ExchangeName, State),
     {noreply, case TxnKey of
-                  none -> State;
-                  _    -> add_tx_participants(DeliveredQPids, State)
+                  none -> State1;
+                  _    -> add_tx_participants(DeliveredQPids, State1)
               end};
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
@@ -447,16 +467,18 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
               _, State = #ch{transaction_id = TxnKey,
                              unacked_message_q = UAMQ}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
-    Participants = ack(TxnKey, Acked),
+    QsCounts = ack(TxnKey, Acked),
+    Participants = [QPid || {QPid, _} <- QsCounts],
+    State1 = incr_queue_stats(QsCounts, ack, State),
     {noreply, case TxnKey of
                   none -> ok = notify_limiter(State#ch.limiter_pid, Acked),
-                          State#ch{unacked_message_q = Remaining};
+                          State1#ch{unacked_message_q = Remaining};
                   _    -> NewUAQ = queue:join(State#ch.uncommitted_ack_q,
                                               Acked),
                           add_tx_participants(
                             Participants,
-                            State#ch{unacked_message_q = Remaining,
-                                     uncommitted_ack_q = NewUAQ})
+                            State1#ch{unacked_message_q = Remaining,
+                                      uncommitted_ack_q = NewUAQ})
               end};
 
 handle_method(#'basic.get'{queue = QueueNameBin,
@@ -470,11 +492,16 @@ handle_method(#'basic.get'{queue = QueueNameBin,
            QueueName, ReaderPid,
            fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
         {ok, MessageCount,
-         Msg = {_QName, _QPid, _MsgId, Redelivered,
+         Msg = {_QName, QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,
                                routing_key = RoutingKey,
                                content = Content}}} ->
             State1 = lock_message(not(NoAck), {DeliveryTag, none, Msg}, State),
+            State2 = incr_queue_stats([{QPid, 1}],
+                                      case NoAck of
+                                          true  -> get_no_ack;
+                                          false -> get
+                                      end, State1),
             ok = rabbit_writer:send_command(
                    WriterPid,
                    #'basic.get_ok'{delivery_tag = DeliveryTag,
@@ -483,7 +510,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                    routing_key = RoutingKey,
                                    message_count = MessageCount},
                    Content),
-            {noreply, State1#ch{next_tag = DeliveryTag + 1}};
+            {noreply, State2#ch{next_tag = DeliveryTag + 1}};
         empty ->
             {reply, #'basic.get_empty'{}, State}
     end;
@@ -978,7 +1005,7 @@ ack(TxnKey, UAQ) ->
     fold_per_queue(
       fun (QPid, MsgIds, L) ->
               ok = rabbit_amqqueue:ack(QPid, TxnKey, MsgIds, self()),
-              [QPid | L]
+              [{QPid, length(MsgIds)} | L]
       end, [], UAQ).
 
 make_tx_id() -> rabbit_guid:guid().
@@ -1105,6 +1132,7 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
 
 terminate(#ch{writer_pid = WriterPid, limiter_pid = LimiterPid}) ->
     pg_local:leave(rabbit_channels, self()),
+    rabbit_event:notify(#event_channel_closed{channel_pid = self()}),
     rabbit_writer:shutdown(WriterPid),
     rabbit_limiter:shutdown(LimiterPid).
 
@@ -1127,3 +1155,40 @@ i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
     rabbit_limiter:get_limit(LimiterPid);
 i(Item, _) ->
     throw({bad_argument, Item}).
+
+incr_exchange_stats(ExchangeName, State = #ch{exchange_statistics = Stats}) ->
+    Stats1 = dict:update(ExchangeName, fun(Old) -> Old + 1 end, 0, Stats),
+    State#ch{exchange_statistics = Stats1}.
+
+incr_queue_stats(Counts, Key, State = #ch{queue_statistics = Stats}) ->
+    Stats1 = lists:foldl(
+               fun ({QPid, Incr}, Stats0) ->
+                       dict:update(QPid,
+                                   fun(D) ->
+                                           Count = case orddict:find(Key, D) of
+                                                       error   -> 0;
+                                                       {ok, C} -> C
+                                                   end,
+                                           orddict:store(Key, Count + Incr, D)
+                                   end,
+                                   [],
+                                   Stats0)
+               end, Stats, Counts),
+    State#ch{queue_statistics = Stats1}.
+
+maybe_emit_stats(State = #ch{exchange_statistics = ExchangeStatistics,
+                             queue_statistics = QueueStatistics,
+                             last_statistics_update = LastUpdate}) ->
+    Now = os:timestamp(),
+    case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
+        true ->
+            rabbit_event:notify(
+              #event_channel_stats{channel_pid = self(),
+                                   per_exchange_statistics =
+                                       dict:to_list(ExchangeStatistics),
+                                   per_queue_statistics =
+                                       dict:to_list(QueueStatistics)}),
+            State#ch{last_statistics_update = Now};
+        _ ->
+            State
+    end.

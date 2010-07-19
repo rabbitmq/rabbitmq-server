@@ -58,7 +58,7 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {sock, connection, callback, recv_ref, connection_state,
-             queue_collector}).
+             queue_collector, last_statistics_update}).
 
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
@@ -253,7 +253,8 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                     callback = uninitialized_callback,
                                     recv_ref = none,
                                     connection_state = pre_init,
-                                    queue_collector = Collector},
+                                    queue_collector = Collector,
+                                    last_statistics_update = {0,0,0}},
                                 handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -273,12 +274,14 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %% gen_tcp:close(ClientSock),
         teardown_profiling(ProfilingValue),
         rabbit_queue_collector:shutdown(Collector),
-        rabbit_misc:unlink_and_capture_exit(Collector)
+        rabbit_misc:unlink_and_capture_exit(Collector),
+        rabbit_event:notify(#event_connection_closed{connection_pid = self()})
     end,
     done.
 
-mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
+mainloop(Parent, Deb, State_ = #v1{sock= Sock, recv_ref = Ref}) ->
     %%?LOGDEBUG("Reader mainloop: ~p bytes available, need ~p~n", [HaveBytes, WaitUntilNBytes]),
+    State = maybe_emit_stats(State_),
     receive
         {inet_async, Sock, Ref, {ok, Data}} ->
             {State1, Callback1, Length1} =
@@ -649,7 +652,8 @@ handle_method0(#'connection.open'{virtual_host = VHostPath,
                                   insist = Insist},
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
-                                          user = User},
+                                          user = User,
+                                          vhost = VHost},
                            sock = Sock}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
@@ -659,6 +663,19 @@ handle_method0(#'connection.open'{virtual_host = VHostPath,
             ok = send_on_channel0(
                    Sock,
                    #'connection.open_ok'{known_hosts = KnownHosts}),
+            rabbit_event:notify(
+              #event_connection_created{connection_pid = self(),
+                                        address        = i(address, State),
+                                        port           = i(port, State),
+                                        peer_address   = i(peer_address, State),
+                                        peer_port      = i(peer_port, State),
+                                        user           = User,
+                                        vhost          = VHost,
+                                        timeout        = i(timeout, State),
+                                        frame_max      = i(frame_max, State),
+                                        client_properties =
+                                            i(client_properties, State)
+                                       }),
             State#v1{connection_state = running,
                      connection = NewConnection};
        true ->
@@ -846,4 +863,22 @@ amqp_exception_explanation(Text, Expl) ->
     CompleteTextBin = <<Text/binary, " - ", ExplBin/binary>>,
     if size(CompleteTextBin) > 255 -> <<CompleteTextBin:252/binary, "...">>;
        true                        -> CompleteTextBin
+    end.
+
+maybe_emit_stats(State = #v1{last_statistics_update = LastUpdate}) ->
+    Now = os:timestamp(),
+    case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
+        true ->
+            rabbit_event:notify(
+              #event_connection_stats{connection_pid = self(),
+                                      state          = i(state, State),
+                                      channels       = i(channels, State),
+                                      recv_oct       = i(recv_oct, State),
+                                      recv_cnt       = i(recv_cnt, State),
+                                      send_oct       = i(send_oct, State),
+                                      send_cnt       = i(send_cnt, State),
+                                      send_pend      = i(send_pend, State)}),
+            State#v1{last_statistics_update = Now};
+        _ ->
+            State
     end.

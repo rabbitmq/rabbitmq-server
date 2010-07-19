@@ -38,7 +38,6 @@
 -define(UNSENT_MESSAGE_LIMIT,          100).
 -define(SYNC_INTERVAL,                 5). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
--define(STATISTICS_UPDATE_INTERVAL,    5000000). %% microseconds
 
 -export([start_link/1, info_keys/0]).
 
