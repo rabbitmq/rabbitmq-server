@@ -220,7 +220,7 @@
 
 -record(tx, { pending_messages, pending_acks }).
 
--record(sync, { persistent_acks, acks, pubs, funs }).
+-record(sync, { acks_persistent, acks_all, pubs, funs }).
 
 %% When we discover, on publish, that we should write some indices to
 %% disk for some betas, the RAM_INDEX_BATCH_SIZE sets the number of
@@ -247,8 +247,8 @@
                           count        :: non_neg_integer (),
                           end_seq_id   :: non_neg_integer() }).
 
--type(sync() :: #sync { persistent_acks :: [[seq_id()]],
-                        acks            :: [[seq_id()]],
+-type(sync() :: #sync { acks_persistent :: [[seq_id()]],
+                        acks_all        :: [[seq_id()]],
                         pubs            :: [[rabbit_guid:guid()]],
                         funs            :: [fun (() -> any())] }).
 
@@ -295,8 +295,8 @@
                                          count        = 0,
                                          end_seq_id   = Z }).
 
--define(BLANK_SYNC, #sync { persistent_acks = [],
-                            acks            = [],
+-define(BLANK_SYNC, #sync { acks_persistent = [],
+                            acks_all        = [],
                             pubs            = [],
                             funs            = [] }).
 
@@ -850,8 +850,8 @@ msg_store_callback(PersistentGuids, Pubs, AckTags, Fun) ->
 tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun,
                          State = #vqstate {
                            on_sync     = OnSync = #sync {
-                                           persistent_acks = SPAcks,
-                                           acks            = SAcks,
+                                           acks_persistent = SPAcks,
+                                           acks_all        = SAcks,
                                            pubs            = SPubs,
                                            funs            = SFuns },
                            pending_ack = PA,
@@ -867,14 +867,14 @@ tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun,
         end,
     case IsDurable andalso (HasPersistentPubs orelse PersistentAcks =/= []) of
         true  -> State #vqstate { on_sync = #sync {
-                                    persistent_acks = [PersistentAcks | SPAcks],
-                                    acks            = [AckTags | SAcks],
+                                    acks_persistent = [PersistentAcks | SPAcks],
+                                    acks_all        = [AckTags | SAcks],
                                     pubs            = [Pubs | SPubs],
                                     funs            = [Fun | SFuns] }};
         false -> State1 = tx_commit_index(
                             State #vqstate { on_sync = #sync {
-                                               persistent_acks = [],
-                                               acks            = [AckTags],
+                                               acks_persistent = [],
+                                               acks_all        = [AckTags],
                                                pubs            = [Pubs],
                                                funs            = [Fun] } }),
                  State1 #vqstate { on_sync = OnSync }
@@ -883,8 +883,8 @@ tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun,
 tx_commit_index(State = #vqstate { on_sync = ?BLANK_SYNC }) ->
     State;
 tx_commit_index(State = #vqstate { on_sync = #sync {
-                                     persistent_acks = SPAcks,
-                                     acks            = SAcks,
+                                     acks_persistent = SPAcks,
+                                     acks_all        = SAcks,
                                      pubs            = SPubs,
                                      funs            = SFuns },
                                    durable = IsDurable }) ->
