@@ -47,9 +47,8 @@ TMPDIR := /tmp
 endif
 
 EBIN_DIR=ebin
-export BROKER_DIR=../rabbitmq-server
+BROKER_DIR=../rabbitmq-server
 export INCLUDE_DIR=include
-export INCLUDE_SERV_DIR=$(BROKER_DIR)/include
 TEST_DIR=test
 SOURCE_DIR=src
 DIST_DIR=dist
@@ -70,21 +69,14 @@ DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
 
 PACKAGE=amqp_client
 PACKAGE_NAME=$(PACKAGE).ez
-COMMON_PACKAGE=rabbit_common
-COMMON_PACKAGE_NAME=$(COMMON_PACKAGE).ez
-
-COMPILE_DEPS=$(DEPS_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)/rabbit.hrl \
-             $(DEPS_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)/rabbit_framing.hrl \
-             $(DEPS_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+export COMMON_PACKAGE_DIR=rabbit_common
+COMMON_PACKAGE_EZ=$(COMMON_PACKAGE_DIR).ez
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
 TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
-
-BROKER_HEADERS=$(wildcard $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl)
-BROKER_SOURCES=$(wildcard $(BROKER_DIR)/$(SOURCE_DIR)/*.erl)
 
 LIBS_PATH=ERL_LIBS=$(DEPS_DIR):$(DIST_DIR)$(ERL_LIBS)
 LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR) $(ERL_PATH)
@@ -127,51 +119,34 @@ ALL_SSL_COVERAGE := true
 SSL_BROKER_ARGS :=
 endif
 
-RABBIT_PLT=$(BROKER_DIR)/rabbit.plt
-
-.PHONY: all compile compile_tests run run_in_broker dialyze $(RABBIT_PLT) \
-	prepare_tests all_tests test_suites test_suites_coverage run_test_broker
-	start_test_broker_node stop_test_broker_node test_network test_direct
-	test_network_coverage test_direct_coverage test_common_package clean \
-	source_tarball package boot_broker unboot_broker
-
 all: package
 
 common_clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f erl_crash.dump
-	rm -fr $(DOC_DIR)
+	rm -rf $(DEPS_DIR)
+	rm -rf $(DOC_DIR)
 	$(MAKE) -C $(TEST_DIR) clean
 
 compile: $(TARGETS)
 
-compile_tests: $(TEST_DIR) $(COMPILE_DEPS) $(EBIN_DIR)/$(PACKAGE).app
-	$(MAKE) -C $(TEST_DIR)
-
 run: compile $(EBIN_DIR)/$(PACKAGE).app
 	$(LIBS_PATH) erl -pa $(LOAD_PATH)
-
-run_in_broker: compile $(BROKER_DIR) $(EBIN_DIR)/$(PACKAGE).app
-	$(MAKE) RABBITMQ_SERVER_START_ARGS='$(PA_LOAD_PATH)' -C $(BROKER_DIR) run
-
-dialyze: $(RABBIT_PLT) $(TARGETS) compile_tests
-	$(LIBS_PATH) erl -noshell -pa $(LOAD_PATH) -eval \
-        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(RABBIT_PLT)\", \"$(TARGETS) $(TEST_TARGETS)\"))."
-
-doc: $(DOC_DIR)/index.html
 
 ###############################################################################
 ##  Packaging
 ###############################################################################
 
-$(DIST_DIR)/$(PACKAGE_NAME): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app
+$(DIST_DIR)/$(PACKAGE_NAME): $(DIST_DIR)/$(PACKAGE) | $(DIST_DIR)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
+
+$(DIST_DIR)/$(PACKAGE): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
 	rm -rf $(DIST_DIR)/$(PACKAGE)
 	mkdir -p $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
 	cp -r $(EBIN_DIR)/*.beam $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
 	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE)/$(INCLUDE_DIR)
 	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE)/$(INCLUDE_DIR)
-	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
 
 package: $(DIST_DIR)/$(PACKAGE_NAME)
 
@@ -179,31 +154,13 @@ package: $(DIST_DIR)/$(PACKAGE_NAME)
 ##  Internal targets
 ###############################################################################
 
-$(COMPILE_DEPS): $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
-	mkdir -p $(DEPS_DIR)
-	unzip -o -d $(DEPS_DIR) $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+$(DEPS_DIR)/$(COMMON_PACKAGE_DIR): $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DEPS_DIR)
+	rm -rf $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
+	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
+	unzip -o $< -d $(DEPS_DIR)
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(COMPILE_DEPS)
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
 	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
-
-$(TEST_DIR)/%.beam: compile_tests
-
-$(BROKER_DIR):
-	test -e $(BROKER_DIR)
-	$(MAKE_BROKER)
-
-$(DIST_DIR):
-	mkdir -p $@
 
 $(DEPS_DIR):
 	mkdir -p $@
-
-$(RABBIT_PLT):
-	$(MAKE) -C $(BROKER_DIR) create-plt
-
-$(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
-	mkdir -p $(DOC_DIR)
-	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
-
-$(DOC_DIR)/index.html: $(COMPILE_DEPS) $(DOC_DIR)/overview.edoc $(SOURCES)
-	$(LIBS_PATH) erl -noshell -eval 'edoc:application(amqp_client, ".", [{preprocess, true}])' -run init stop
