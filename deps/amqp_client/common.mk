@@ -119,9 +119,7 @@ ALL_SSL_COVERAGE := true
 SSL_BROKER_ARGS :=
 endif
 
-PLT=$(HOME)/.dialyzer_plt
-DIALYZER_CALL=dialyzer --plt $(PLT)
-
+RABBIT_PLT=$(BROKER_DIR)/rabbit.plt
 
 all: package
 
@@ -137,11 +135,9 @@ compile: $(TARGETS)
 run: compile $(EBIN_DIR)/$(PACKAGE).app
 	$(LIBS_PATH) erl -pa $(LOAD_PATH)
 
-dialyze: $(TARGETS)
-	$(DIALYZER_CALL) -c $^
-
-dialyze_all: $(TARGETS) $(TEST_TARGETS)
-	$(DIALYZER_CALL) -c $^
+dialyze: $(RABBIT_PLT) $(TARGETS) compile_tests
+	$(LIBS_PATH) erl -noshell -pa $(LOAD_PATH) -eval \
+        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(RABBIT_PLT)\", \"$(TARGETS) $(TEST_TARGETS)\"))."
 
 ###############################################################################
 ##  Packaging
@@ -174,3 +170,6 @@ $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE
 
 $(DEPS_DIR):
 	mkdir -p $@
+
+$(RABBIT_PLT):
+	$(MAKE) -C $(BROKER_DIR) create-plt
