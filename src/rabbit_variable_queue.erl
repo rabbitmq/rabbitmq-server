@@ -41,6 +41,9 @@
 
 -export([start/1]).
 
+%% exported for testing only
+-export([start_msg_store/2, stop_msg_store/0]).
+
 %%----------------------------------------------------------------------------
 %% Definitions:
 
@@ -344,17 +347,25 @@
 
 start(DurableQueues) ->
     {AllTerms, StartFunState} = rabbit_queue_index:recover(DurableQueues),
-    Refs = [Ref || Terms <- AllTerms,
-                   begin
-                       Ref = proplists:get_value(persistent_ref, Terms),
-                       Ref =/= undefined
-                   end],
+    start_msg_store(
+      [Ref || Terms <- AllTerms,
+              begin
+                  Ref = proplists:get_value(persistent_ref, Terms),
+                  Ref =/= undefined
+              end],
+      StartFunState).
+
+start_msg_store(Refs, StartFunState) ->
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
                                 [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
                                  undefined,  {fun (ok) -> finished end, ok}]),
     ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store,
                                 [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
                                  Refs, StartFunState]).
+
+stop_msg_store() ->
+    ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
+    ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
 init(QueueName, IsDurable, _Recover) ->
     {DeltaCount, Terms, IndexState} =
