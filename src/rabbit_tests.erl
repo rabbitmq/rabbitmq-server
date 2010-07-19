@@ -1400,25 +1400,21 @@ msg_store_sync(Guids) ->
     end.
 
 msg_store_read(Guids, MSCState) ->
-    lists:foldl(
-      fun (Guid, MSCStateM) ->
-              {{ok, Guid}, MSCStateN} = rabbit_msg_store:read(
-                                           ?PERSISTENT_MSG_STORE, Guid, MSCStateM),
-              MSCStateN
-      end,
-      MSCState, Guids).
+    lists:foldl(fun (Guid, MSCStateM) ->
+                        {{ok, Guid}, MSCStateN} = rabbit_msg_store:read(
+                                                    ?PERSISTENT_MSG_STORE,
+                                                    Guid, MSCStateM),
+                        MSCStateN
+                end, MSCState, Guids).
 
 msg_store_write(Guids, MSCState) ->
-    lists:foldl(
-      fun (Guid, {ok, MSCStateN}) ->
-              rabbit_msg_store:write(?PERSISTENT_MSG_STORE, Guid, Guid, MSCStateN) end,
-      {ok, MSCState}, Guids).
+    lists:foldl(fun (Guid, {ok, MSCStateN}) ->
+                        rabbit_msg_store:write(?PERSISTENT_MSG_STORE,
+                                               Guid, Guid, MSCStateN)
+                end, {ok, MSCState}, Guids).
 
-msg_store_remove(Ids) ->
-    lists:foldl(fun (Guid, ok) ->
-                        rabbit_msg_store:remove(?PERSISTENT_MSG_STORE,
-                                                [guid_bin(Guid)])
-                end, ok, Ids).
+msg_store_remove(Guids) ->
+    rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids).
 
 foreach_with_msg_store_client(Store, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
@@ -1539,13 +1535,13 @@ test_msg_store() ->
                    MSCStateN
            end, GuidsBig),
     %% .., then 3s by 1...
-    ok = msg_store_remove(lists:seq(BigCount, 1, -3)),
+    ok = msg_store_remove([guid_bin(X) || X <- lists:seq(BigCount, 1, -3)]),
     %% .., then remove 3s by 2, from the young end first. This hits
     %% GC (under 50% good data left, but no empty files. Must GC).
-    ok = msg_store_remove(lists:seq(BigCount-1, 1, -3)),
+    ok = msg_store_remove([guid_bin(X) || X <- lists:seq(BigCount-1, 1, -3)]),
     %% .., then remove 3s by 3, from the young end first. This hits
     %% GC...
-    ok = msg_store_remove(lists:seq(BigCount-2, 1, -3)),
+    ok = msg_store_remove([guid_bin(X) || X <- lists:seq(BigCount-2, 1, -3)]),
     %% ensure empty
     false = msg_store_contains(false, GuidsBig),
     %% restart empty
