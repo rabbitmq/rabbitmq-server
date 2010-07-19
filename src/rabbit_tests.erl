@@ -300,9 +300,9 @@ bpqueue_test(In, Out, List, Fold, MapFoldFilter) ->
     {empty, _Q} = Out(Q),
 
     ok = Fold(fun (Prefix, Value, ok) -> {error, Prefix, Value} end, ok, Q),
-    {LHS, RHS} = MapFoldFilter(fun(_P)     -> throw(explosion) end,
-                               fun(_V, _N) -> throw(explosion) end, 0, Q),
-    {[], 0} = {bpqueue:to_list(LHS), RHS},
+    {Q1M, 0} = MapFoldFilter(fun(_P)     -> throw(explosion) end,
+                             fun(_V, _N) -> throw(explosion) end, 0, Q),
+    [] = bpqueue:to_list(Q1M),
 
     Q1 = In(bar, 3, In(foo, 2, In(foo, 1, Q))),
     false = bpqueue:is_empty(Q1),
