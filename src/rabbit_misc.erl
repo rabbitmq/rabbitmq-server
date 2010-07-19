@@ -41,7 +41,7 @@
 -export([not_found/1]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
--export([table_lookup/2, table_lookup/3]).
+-export([table_lookup/2]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
@@ -106,11 +106,7 @@
         ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(table_lookup/2 ::
         (rabbit_framing:amqp_table(), binary())
-         -> {undefined, undefined} | {rabbit_framing:amqp_field_type(), any()}).
--spec(table_lookup/3 ::
-        (rabbit_framing:amqp_table(), binary(),
-         rabbit_framing:amqp_field_type())
-         -> undefined | any()).
+         -> 'undefined' | {rabbit_framing:amqp_field_type(), any()}).
 -spec(r/2 :: (rabbit_types:vhost(), K)
              -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
                     when is_subtype(K, atom())).
@@ -236,16 +232,10 @@ dirty_read(ReadSpec) ->
         []       -> {error, not_found}
     end.
 
-table_lookup(Table, Key, Type) ->
-    case lists:keysearch(Key, 1, Table) of
-        {value, {_, Type, ValueBin}} -> ValueBin;
-        _                            -> undefined
-    end.
-
 table_lookup(Table, Key) ->
     case lists:keysearch(Key, 1, Table) of
         {value, {_, TypeBin, ValueBin}} -> {TypeBin, ValueBin};
-        false                           -> {undefined, undefined}
+        false                           -> undefined
     end.
 
 r(#resource{virtual_host = VHostPath}, Kind, Name)
@@ -260,9 +250,9 @@ r(VHostPath, Kind) when is_binary(VHostPath) ->
 r_arg(#resource{virtual_host = VHostPath}, Kind, Table, Key) ->
     r_arg(VHostPath, Kind, Table, Key);
 r_arg(VHostPath, Kind, Table, Key) ->
-    case table_lookup(Table, Key, longstr) of
-        undefined -> undefined;
-        NameBin   -> r(VHostPath, Kind, NameBin)
+    case table_lookup(Table, Key) of
+        {longstr, NameBin} -> r(VHostPath, Kind, NameBin);
+        undefined          -> undefined
     end.
 
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->

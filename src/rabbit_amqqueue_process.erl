@@ -100,20 +100,20 @@ info_keys() -> ?INFO_KEYS.
 
 -define(EXPIRES_TYPE, long).
 
-check_argument_expires(?EXPIRES_TYPE, Expires) when not is_integer(Expires) ->
+check_argument_expires({?EXPIRES_TYPE, Expires}) when not is_integer(Expires) ->
     {error, expires_not_of_type_long};
-check_argument_expires(?EXPIRES_TYPE, Expires) when Expires =< 0 ->
+check_argument_expires({?EXPIRES_TYPE, Expires}) when Expires =< 0 ->
     {error, expires_zero_or_less};
-check_argument_expires(undefined, undefined) ->
-    {ok, undefined};
-check_argument_expires(?EXPIRES_TYPE, Expires) ->
+check_argument_expires({?EXPIRES_TYPE, Expires}) ->
     {ok, Expires};
-check_argument_expires(_, _) ->
+check_argument_expires(undefined) ->
+    {ok, undefined};
+check_argument_expires(_) ->
     {error, expires_not_of_type_long}.
 
 init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
-    {Type, Expires} = rabbit_misc:table_lookup(Arguments, <<"x-expires">>),
-    case check_argument_expires(Type, Expires) of
+    case check_argument_expires(
+           rabbit_misc:table_lookup(Arguments, <<"x-expires">>)) of
         {error, Error} -> {error, Error};
         {ok, Expires}  -> start_expiry_timer(State, Expires)
     end.
