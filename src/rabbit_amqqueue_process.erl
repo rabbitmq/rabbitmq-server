@@ -85,13 +85,15 @@
          backing_queue_status
         ]).
 
--define(INFO_KEYS,
+-define(CREATION_EVENT_KEYS,
         [name,
          durable,
          auto_delete,
          arguments,
-         owner_pid] ++
-            ?STATISTICS_KEYS).
+         owner_pid
+        ]).
+
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS).
 
 %%----------------------------------------------------------------------------
 
@@ -150,6 +152,10 @@ declare(Recover, From,
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
                      BQS = BQ:init(QName, IsDurable, Recover),
+                     rabbit_event:notify(
+                       queue_created,
+                       [{Item, i(Item, State)} ||
+                           Item <- [pid|?CREATION_EVENT_KEYS]]),
                      noreply(State#q{backing_queue_state = BQS});
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
@@ -168,6 +174,7 @@ terminate_shutdown(Fun, State) ->
                                           BQ:tx_rollback(Txn, BQSN),
                                       BQSN1
                               end, BQS, all_ch_record()),
+                     rabbit_event:notify(queue_deleted, [{pid, self()}]),
                      State1#q{backing_queue_state = Fun(BQS1)}
     end.
 
