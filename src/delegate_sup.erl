@@ -43,7 +43,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(start_link/0 :: () -> rabbit_types:ok_or_error2(pid(), any()) | 'ignore').
 
 -endif.
 

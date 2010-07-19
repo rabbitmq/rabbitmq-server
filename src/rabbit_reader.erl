@@ -138,11 +138,11 @@
 
 -ifdef(use_specs).
 
--spec(info_keys/0 :: () -> [info_key()]).
--spec(info/1 :: (pid()) -> [info()]).
--spec(info/2 :: (pid(), [info_key()]) -> [info()]).
+-spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
+-spec(info/1 :: (pid()) -> [rabbit_types:info()]).
+-spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
--spec(server_properties/0 :: () -> amqp_table()).
+-spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
 -endif.
 
@@ -241,7 +241,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
     [Collector] =
-        [Pid || {collector, Pid, worker, [rabbit_reader_queue_collector]}
+        [Pid || {collector, Pid, worker, [rabbit_queue_collector]}
                     <- supervisor:which_children(Parent)],
     try
         mainloop(Deb, switch_callback(
@@ -444,7 +444,7 @@ maybe_close(State = #v1{connection_state = closing,
             %% connection, and are deleted when that connection closes."
             %% This does not strictly imply synchrony, but in practice it seems
             %% to be what people assume.
-            rabbit_reader_queue_collector:delete_all(Collector),
+            rabbit_queue_collector:delete_all(Collector),
             ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}),
             close_connection(State);
         _  -> State

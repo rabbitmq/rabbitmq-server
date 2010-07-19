@@ -41,8 +41,8 @@
 
 -export([flow_timeout/2]).
 
--export([init/1, terminate/2, code_change/3,
-         handle_call/3, handle_cast/2, handle_info/2, handle_pre_hibernate/1]).
+-export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
+         handle_info/2, handle_pre_hibernate/1]).
 
 -record(ch, {state, channel, parent_pid, reader_pid, writer_pid, limiter_pid,
              transaction_id, tx_participants, next_tag,
@@ -71,24 +71,31 @@
 
 -ifdef(use_specs).
 
+-export_type([channel_number/0]).
+
 -type(ref() :: any()).
+-type(channel_number() :: non_neg_integer()).
 
 -spec(start_link/5 ::
-      (channel_number(), pid(), username(), vhost(), pid()) -> pid()).
--spec(do/2 :: (pid(), amqp_method_record()) -> 'ok').
--spec(do/3 :: (pid(), amqp_method_record(), maybe(content())) -> 'ok').
+      (channel_number(), pid(), rabbit_access_control:username(),
+       rabbit_types:vhost(), pid()) -> {'ok', pid()}).
+-spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
+-spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
+               rabbit_types:maybe(rabbit_types:content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
--spec(send_command/2 :: (pid(), amqp_method()) -> 'ok').
--spec(deliver/4 :: (pid(), ctag(), boolean(), qmsg()) -> 'ok').
+-spec(send_command/2 :: (pid(), rabbit_framing:amqp_method()) -> 'ok').
+-spec(deliver/4 ::
+        (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
+        -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(flow_timeout/2 :: (pid(), ref()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
--spec(info_keys/0 :: () -> [info_key()]).
--spec(info/1 :: (pid()) -> [info()]).
--spec(info/2 :: (pid(), [info_key()]) -> [info()]).
--spec(info_all/0 :: () -> [[info()]]).
--spec(info_all/1 :: ([info_key()]) -> [[info()]]).
+-spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
+-spec(info/1 :: (pid()) -> [rabbit_types:info()]).
+-spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
+-spec(info_all/0 :: () -> [[rabbit_types:info()]]).
+-spec(info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
 
 -endif.
 
@@ -738,7 +745,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     %% the connection shuts down.
                     ok = case Owner of
                              none -> ok;
-                             _    -> rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
+                             _    -> rabbit_queue_collector:register(CollectorPid, Q)
                          end,
                     return_queue_declare_ok(QueueName, NoWait, 0, 0, State);
                 {existing, _Q} ->
@@ -914,7 +921,9 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     check_read_permitted(ExchangeName, State),
     case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
              fun (_X, Q) ->
-                     rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
+                     try rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
+                     catch exit:Reason -> {error, Reason}
+                     end
              end) of
         {error, exchange_not_found} ->
             rabbit_misc:not_found(ExchangeName);
@@ -929,6 +938,8 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
               not_found, "no binding ~s between ~s and ~s",
               [RoutingKey, rabbit_misc:rs(ExchangeName),
                rabbit_misc:rs(QueueName)]);
+        {error, #amqp_error{} = Error} ->
+            rabbit_misc:protocol_error(Error);
         ok -> return_ok(State, NoWait, ReturnMethod)
     end.
 

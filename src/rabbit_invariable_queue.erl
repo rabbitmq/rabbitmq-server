@@ -34,8 +34,8 @@
 -export([init/3, terminate/1, delete_and_terminate/1, purge/1, publish/2,
          publish_delivered/3, fetch/2, ack/2, tx_publish/3, tx_ack/3,
          tx_rollback/2, tx_commit/3, requeue/2, len/1, is_empty/1,
-         set_ram_duration_target/2, ram_duration/1, needs_sync/1, sync/1,
-         handle_pre_hibernate/1, status/1]).
+         set_ram_duration_target/2, ram_duration/1, needs_idle_timeout/1,
+         idle_timeout/1, handle_pre_hibernate/1, status/1]).
 
 -export([start/1]).
 
@@ -48,11 +48,11 @@
 
 -ifdef(use_specs).
 
--type(ack() :: guid() | 'blank_ack').
+-type(ack() :: rabbit_guid:guid() | 'blank_ack').
 -type(state() :: #iv_state { queue       :: queue(),
-                             qname       :: queue_name(),
+                             qname       :: rabbit_amqqueue:name(),
                              len         :: non_neg_integer(),
-                             pending_ack :: dict()
+                             pending_ack :: dict:dictionary()
                            }).
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -197,9 +197,9 @@ set_ram_duration_target(_DurationTarget, State) -> State.
 
 ram_duration(State) -> {0, State}.
 
-needs_sync(_State) -> false.
+needs_idle_timeout(_State) -> false.
 
-sync(State) -> State.
+idle_timeout(State) -> State.
 
 handle_pre_hibernate(State) -> State.
 
@@ -242,8 +242,7 @@ do_if_persistent(F, Txn, QName) ->
 persist_message(QName, true, Txn, Msg = #basic_message {
                                     is_persistent = true }) ->
     Msg1 = Msg #basic_message {
-             %% don't persist any recoverable decoded properties,
-             %% rebuild from properties_bin on restore
+             %% don't persist any recoverable decoded properties
              content = rabbit_binary_parser:clear_decoded_content(
                          Msg #basic_message.content)},
     persist_work(Txn, QName,
