@@ -73,13 +73,8 @@
              txn,
              unsent_message_count}).
 
--define(INFO_KEYS,
-        [name,
-         durable,
-         auto_delete,
-         arguments,
-         pid,
-         owner_pid,
+-define(STATISTICS_KEYS,
+        [pid,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
          messages_ready,
@@ -89,6 +84,14 @@
          memory,
          backing_queue_status
         ]).
+
+-define(INFO_KEYS,
+        [name,
+         durable,
+         auto_delete,
+         arguments,
+         owner_pid] ++
+            ?STATISTICS_KEYS).
 
 %%----------------------------------------------------------------------------
 
@@ -539,14 +542,7 @@ maybe_emit_stats(State = #q{last_statistics_update = LastUpdate}) ->
         true ->
             rabbit_event:notify(
               queue_stats,
-              [{qpid,                    self()},
-               {messages_ready,          i(messages_ready, State)},
-               {messages_unacknowledged, i(messages_unacknowledged, State)},
-               {consumers,               i(consumers, State)},
-               {memory,                  i(memory, State)},
-               {exclusive_consumer_tag,  i(exclusive_consumer_tag, State)},
-               {exclusive_consumer_pid,  i(exclusive_consumer_pid, State)},
-               {backing_queue_status,    i(backing_queue_status, State)}]),
+              [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]),
             State#q{last_statistics_update = Now};
         _ ->
             State

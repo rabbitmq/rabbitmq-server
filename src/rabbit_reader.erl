@@ -60,10 +60,13 @@
 -record(v1, {sock, connection, callback, recv_ref, connection_state,
              queue_collector, last_statistics_update}).
 
--define(INFO_KEYS,
-        [pid, address, port, peer_address, peer_port,
-         recv_oct, recv_cnt, send_oct, send_cnt, send_pend,
-         state, channels, user, vhost, timeout, frame_max, client_properties]).
+-define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
+                          send_pend, state, channels]).
+
+-define(CREATION_EVENT_KEYS, [address, port, peer_address, peer_port,
+                    user, vhost, timeout, frame_max, client_properties]).
+
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS).
 
 %% connection lifecycle
 %%
@@ -275,7 +278,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         teardown_profiling(ProfilingValue),
         rabbit_queue_collector:shutdown(Collector),
         rabbit_misc:unlink_and_capture_exit(Collector),
-        rabbit_event:notify(connection_closed, [{connection_pid, self()}])
+        rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
     done.
 
@@ -652,8 +655,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath,
                                   insist = Insist},
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
-                                          user = User,
-                                          vhost = VHost},
+                                          user = User},
                            sock = Sock}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
@@ -665,16 +667,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath,
                    #'connection.open_ok'{known_hosts = KnownHosts}),
             rabbit_event:notify(
               connection_created,
-              [{connection_pid,    self()},
-               {address,           i(address, State)},
-               {port,              i(port, State)},
-               {peer_address,      i(peer_address, State)},
-               {peer_port,         i(peer_port, State)},
-               {user,              User},
-               {vhost,             VHost},
-               {timeout,           i(timeout, State)},
-               {frame_max,         i(frame_max, State)},
-               {client_properties, i(client_properties, State)}]),
+              [{Item, i(Item, State)} || Item <- [pid|?CREATION_EVENT_KEYS]]),
             State#v1{connection_state = running,
                      connection = NewConnection};
        true ->
@@ -870,14 +863,7 @@ maybe_emit_stats(State = #v1{last_statistics_update = LastUpdate}) ->
         true ->
             rabbit_event:notify(
               connection_stats,
-              [{connection_pid,  self()},
-               {state,           i(state, State)},
-               {channels,        i(channels, State)},
-               {recv_oct,        i(recv_oct, State)},
-               {recv_cnt,        i(recv_cnt, State)},
-               {send_oct,        i(send_oct, State)},
-               {send_cnt,        i(send_cnt, State)},
-               {send_pend,       i(send_pend, State)}]),
+              [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]),
             State#v1{last_statistics_update = Now};
         _ ->
             State

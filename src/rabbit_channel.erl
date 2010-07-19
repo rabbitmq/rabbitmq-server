@@ -158,7 +158,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
     ok = pg_local:join(rabbit_channels, self()),
-    rabbit_event:notify(channel_created, [{channel_pid,     self()},
+    rabbit_event:notify(channel_created, [{pid,             self()},
                                           {connection_pid,  ReaderPid},
                                           {channel,         Channel},
                                           {user,            Username},
@@ -1134,7 +1134,7 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
 
 terminate(#ch{writer_pid = WriterPid, limiter_pid = LimiterPid}) ->
     pg_local:leave(rabbit_channels, self()),
-    rabbit_event:notify(channel_closed, [{channel_pid, self()}]),
+    rabbit_event:notify(channel_closed, [{pid, self()}]),
     rabbit_writer:shutdown(WriterPid),
     rabbit_limiter:shutdown(LimiterPid).
 
@@ -1190,7 +1190,7 @@ maybe_emit_stats(State = #ch{exchange_statistics = ExchangeStatistics,
         true ->
             rabbit_event:notify(
               channel_stats,
-              [{channel_pid, self()},
+              [{pid, self()},
                {per_exchange_statistics, dict:to_list(ExchangeStatistics)},
                {per_queue_statistics, dict:to_list(QueueStatistics)}]),
             State#ch{last_statistics_update = Now};
