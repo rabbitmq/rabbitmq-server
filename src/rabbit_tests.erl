@@ -1398,10 +1398,10 @@ msg_store_write(Guids, MSCState) ->
 msg_store_remove(Guids) ->
     rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids).
 
-foreach_with_msg_store_client(Store, Ref, Fun, L) ->
+foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
-      lists:foldl(fun (Guid, MSCState) -> Fun(Guid, Store, MSCState) end,
-                  rabbit_msg_store:client_init(Store, Ref), L)).
+      lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MsgStore, MSCState) end,
+                  rabbit_msg_store:client_init(MsgStore, Ref), L)).
 
 test_msg_store() ->
     restart_msg_store_empty(),
@@ -1501,17 +1501,17 @@ test_msg_store() ->
     Payload = << 0:PayloadSizeBits >>,
     ok = foreach_with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
-           fun (Guid, Store, MSCStateM) ->
-                   {ok, MSCStateN} =
-                       rabbit_msg_store:write(Store, Guid, Payload, MSCStateM),
+           fun (Guid, MsgStore, MSCStateM) ->
+                   {ok, MSCStateN} = rabbit_msg_store:write(
+                                       MsgStore, Guid, Payload, MSCStateM),
                    MSCStateN
            end, GuidsBig),
     %% now read them to ensure we hit the fast client-side reading
     ok = foreach_with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
-           fun (Guid, Store, MSCStateM) ->
-                   {{ok, Payload}, MSCStateN} =
-                       rabbit_msg_store:read(Store, Guid, MSCStateM),
+           fun (Guid, MsgStore, MSCStateM) ->
+                   {{ok, Payload}, MSCStateN} = rabbit_msg_store:read(
+                                                  MsgStore, Guid, MSCStateM),
                    MSCStateN
            end, GuidsBig),
     %% .., then 3s by 1...
@@ -1718,11 +1718,10 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
               rabbit_variable_queue:publish(
                 rabbit_basic:message(
                   rabbit_misc:r(<<>>, exchange, <<>>),
-                  <<>>, #'P_basic'{delivery_mode =
-                                       case IsPersistent of
-                                           true  -> 2;
-                                           false -> 1
-                                       end}, <<>>), VQN)
+                  <<>>, #'P_basic'{delivery_mode = case IsPersistent of
+                                                       true  -> 2;
+                                                       false -> 1
+                                                   end}, <<>>), VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
