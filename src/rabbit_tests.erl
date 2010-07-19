@@ -1550,8 +1550,8 @@ restart_test_queue(Qi) ->
 empty_test_queue() ->
     rabbit_variable_queue:stop_msg_store(),
     ok = rabbit_variable_queue:start([]),
-    {0, _Terms, Qi1} = init_test_queue(),
-    _Qi2 = rabbit_queue_index:delete_and_terminate(Qi1),
+    {0, _Terms, Qi} = init_test_queue(),
+    _ = rabbit_queue_index:delete_and_terminate(Qi),
     ok.
 
 with_empty_test_queue(Fun) ->
@@ -1595,6 +1595,7 @@ test_queue_index() ->
     SeqIdsA = lists:seq(0, MostOfASegment-1),
     SeqIdsB = lists:seq(MostOfASegment, 2*MostOfASegment),
     SeqIdsC = lists:seq(0, trunc(SegmentSize/2)),
+    SeqIdsD = lists:seq(0, SegmentSize*4),
 
     with_empty_test_queue(
       fun (Qi0) ->
@@ -1626,83 +1627,84 @@ test_queue_index() ->
               {0, 0, Qi18} = rabbit_queue_index:bounds(Qi17),
               %% should get length back as 0 because all persistent
               %% msgs have been acked
-              {0, _Terms3, Qi20} = restart_test_queue(Qi18),
-              Qi20
+              {0, _Terms3, Qi19} = restart_test_queue(Qi18),
+              Qi19
       end),
 
     %% These next bits are just to hit the auto deletion of segment files.
     %% First, partials:
     %% a) partial pub+del+ack, then move to new segment
     with_empty_test_queue(
-      fun (Qi22) ->
-              {Qi23, _SeqIdsGuidsC} = queue_index_publish(SeqIdsC, false, Qi22),
-              Qi24 = rabbit_queue_index:deliver(SeqIdsC, Qi23),
-              Qi25 = rabbit_queue_index:ack(SeqIdsC, Qi24),
-              Qi26 = rabbit_queue_index:flush(Qi25),
-              {Qi27, _SeqIdsGuidsC1} = queue_index_publish([SegmentSize],
-                                                           false, Qi26),
-              Qi27
+      fun (Qi0) ->
+              {Qi1, _SeqIdsGuidsC} = queue_index_publish(SeqIdsC,
+                                                         false, Qi0),
+              Qi2 = rabbit_queue_index:deliver(SeqIdsC, Qi1),
+              Qi3 = rabbit_queue_index:ack(SeqIdsC, Qi2),
+              Qi4 = rabbit_queue_index:flush(Qi3),
+              {Qi5, _SeqIdsGuidsC1} = queue_index_publish([SegmentSize],
+                                                          false, Qi4),
+              Qi5
       end),
 
     %% b) partial pub+del, then move to new segment, then ack all in old segment
     with_empty_test_queue(
-      fun (Qi29) ->
-              {Qi30, _SeqIdsGuidsC2} = queue_index_publish(SeqIdsC,
-                                                           false, Qi29),
-              Qi31 = rabbit_queue_index:deliver(SeqIdsC, Qi30),
-              {Qi32, _SeqIdsGuidsC3} = queue_index_publish([SegmentSize],
-                                                           false, Qi31),
-              Qi33 = rabbit_queue_index:ack(SeqIdsC, Qi32),
-              rabbit_queue_index:flush(Qi33)
+      fun (Qi0) ->
+              {Qi1, _SeqIdsGuidsC2} = queue_index_publish(SeqIdsC,
+                                                          false, Qi0),
+              Qi2 = rabbit_queue_index:deliver(SeqIdsC, Qi1),
+              {Qi3, _SeqIdsGuidsC3} = queue_index_publish([SegmentSize],
+                                                          false, Qi2),
+              Qi4 = rabbit_queue_index:ack(SeqIdsC, Qi3),
+              rabbit_queue_index:flush(Qi4)
       end),
 
     %% c) just fill up several segments of all pubs, then +dels, then +acks
     with_empty_test_queue(
-      fun (Qi36) ->
-              SeqIdsD = lists:seq(0,SegmentSize*4),
-              {Qi37, _SeqIdsGuidsD} = queue_index_publish(SeqIdsD, false, Qi36),
-              Qi38 = rabbit_queue_index:deliver(SeqIdsD, Qi37),
-              Qi39 = rabbit_queue_index:ack(SeqIdsD, Qi38),
-              rabbit_queue_index:flush(Qi39)
+      fun (Qi0) ->
+              {Qi1, _SeqIdsGuidsD} = queue_index_publish(SeqIdsD,
+                                                          false, Qi0),
+              Qi2 = rabbit_queue_index:deliver(SeqIdsD, Qi1),
+              Qi3 = rabbit_queue_index:ack(SeqIdsD, Qi2),
+              rabbit_queue_index:flush(Qi3)
       end),
 
     %% d) get messages in all states to a segment, then flush, then do
     %% the same again, don't flush and read. This will hit all
     %% possibilities in combining the segment with the journal.
     with_empty_test_queue(
-      fun (Qi42) ->
-              {Qi43, [Seven,Five,Four|_]} = queue_index_publish([0,1,2,4,5,7],
-                                                                false, Qi42),
-              Qi44 = rabbit_queue_index:deliver([0,1,4], Qi43),
-              Qi45 = rabbit_queue_index:ack([0], Qi44),
-              Qi46 = rabbit_queue_index:flush(Qi45),
-              {Qi47, [Eight,Six|_]} = queue_index_publish([3,6,8], false, Qi46),
-              Qi48 = rabbit_queue_index:deliver([2,3,5,6], Qi47),
-              Qi49 = rabbit_queue_index:ack([1,2,3], Qi48),
-              {[], Qi50} = rabbit_queue_index:read(0, 4, Qi49),
-              {ReadD, Qi51} = rabbit_queue_index:read(4, 7, Qi50),
+      fun (Qi0) ->
+              {Qi1, [Seven,Five,Four|_]} = queue_index_publish([0,1,2,4,5,7],
+                                                               false, Qi0),
+              Qi2 = rabbit_queue_index:deliver([0,1,4], Qi1),
+              Qi3 = rabbit_queue_index:ack([0], Qi2),
+              Qi4 = rabbit_queue_index:flush(Qi3),
+              {Qi5, [Eight,Six|_]} = queue_index_publish([3,6,8], false, Qi4),
+              Qi6 = rabbit_queue_index:deliver([2,3,5,6], Qi5),
+              Qi7 = rabbit_queue_index:ack([1,2,3], Qi6),
+              {[], Qi8} = rabbit_queue_index:read(0, 4, Qi7),
+              {ReadD, Qi9} = rabbit_queue_index:read(4, 7, Qi8),
               ok = verify_read_with_published(true, false, ReadD,
                                               [Four, Five, Six]),
-              {ReadE, Qi52} = rabbit_queue_index:read(7, 9, Qi51),
+              {ReadE, Qi10} = rabbit_queue_index:read(7, 9, Qi9),
               ok = verify_read_with_published(false, false, ReadE,
                                               [Seven, Eight]),
-              Qi52
+              Qi10
       end),
 
     %% e) as for (d), but use terminate instead of read, which will
     %% exercise journal_minus_segment, not segment_plus_journal.
     with_empty_test_queue(
-      fun (Qi54) ->
-              {Qi55, _SeqIdsGuidsE} = queue_index_publish([0,1,2,4,5,7],
-                                                          true, Qi54),
-              Qi56 = rabbit_queue_index:deliver([0,1,4], Qi55),
-              Qi57 = rabbit_queue_index:ack([0], Qi56),
-              {5, _Terms9, Qi59} = restart_test_queue(Qi57),
-              {Qi60, _SeqIdsGuidsF} = queue_index_publish([3,6,8], true, Qi59),
-              Qi61 = rabbit_queue_index:deliver([2,3,5,6], Qi60),
-              Qi62 = rabbit_queue_index:ack([1,2,3], Qi61),
-              {5, _Terms10, Qi64} = restart_test_queue(Qi62),
-              Qi64
+      fun (Qi0) ->
+              {Qi1, _SeqIdsGuidsE} = queue_index_publish([0,1,2,4,5,7],
+                                                         true, Qi0),
+              Qi2 = rabbit_queue_index:deliver([0,1,4], Qi1),
+              Qi3 = rabbit_queue_index:ack([0], Qi2),
+              {5, _Terms9, Qi4} = restart_test_queue(Qi3),
+              {Qi5, _SeqIdsGuidsF} = queue_index_publish([3,6,8], true, Qi4),
+              Qi6 = rabbit_queue_index:deliver([2,3,5,6], Qi5),
+              Qi7 = rabbit_queue_index:ack([1,2,3], Qi6),
+              {5, _Terms10, Qi8} = restart_test_queue(Qi7),
+              Qi8
       end),
 
     rabbit_variable_queue:stop_msg_store(),
