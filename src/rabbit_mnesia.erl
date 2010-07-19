@@ -253,7 +253,7 @@ read_cluster_nodes_config() ->
     case rabbit_misc:read_term_file(FileName) of
         {ok, [ClusterNodes]} -> ClusterNodes;
         {error, enoent} ->
-            case application:get_env(rabbit, cluster_nodes) of
+            case application:get_env(cluster_nodes) of
                 undefined -> [];
                 {ok, ClusterNodes} -> ClusterNodes
             end;
