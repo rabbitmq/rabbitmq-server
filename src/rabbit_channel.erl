@@ -269,7 +269,9 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
-    {noreply, queue_blocked(QPid, State)}.
+    State1 = queue_blocked(QPid, State),
+    State2 = erase_stats(QPid, State1),
+    {noreply, State2}.
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
@@ -1163,6 +1165,10 @@ incr_exchange_stats(ExchangeName, State = #ch{exchange_statistics = Stats}) ->
 incr_queue_stats(Counts, Key, State = #ch{queue_statistics = Stats}) ->
     Stats1 = lists:foldl(
                fun ({QPid, Incr}, Stats0) ->
+                       case dict:is_key(QPid, Stats0) of
+                           false -> erlang:monitor(process, QPid);
+                           _     -> ok
+                       end,
                        dict:update(QPid,
                                    fun(D) ->
                                            Count = case orddict:find(Key, D) of
@@ -1192,3 +1198,6 @@ maybe_emit_stats(State = #ch{exchange_statistics = ExchangeStatistics,
         _ ->
             State
     end.
+
+erase_stats(QPid, State = #ch{queue_statistics = QueueStatistics}) ->
+    State#ch{queue_statistics = dict:erase(QPid, QueueStatistics)}.
