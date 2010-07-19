@@ -99,6 +99,36 @@
 %% demanded as the queue is read from. Thus only publishes to the
 %% queue will take up available spare capacity.
 %%
+%% When we report our duration to the memory monitor, we calculate
+%% average ingress and egress rates over the last two samples, and
+%% then calculate our duration based on the sum of the ingress and
+%% egress rates. More than two samples could be used, but it's a
+%% balance between responding quickly enough to changes in
+%% producers/consumers versus ignoring temporary blips. The problem
+%% with temporary blips is that with just a few queues, they can have
+%% substantial impact on the calculation of the average duration and
+%% hence cause unnecessary I/O. Another alternative is to increase the
+%% amqqueue_process:RAM_DURATION_UPDATE_PERIOD to beyond 5
+%% seconds. However, that then runs the risk of being too slow to
+%% inform the memory monitor of changes. Thus a 5 second interval,
+%% plus a rolling average over the last two samples seems to work
+%% well in practice.
+%%
+%% The sum of the ingress and egress rates is used because the egress
+%% rate alone is not sufficient. Adding in the ingress rate means that
+%% queues which are being flooded by messages are given more memory,
+%% resulting in them being able to process the messages faster (by
+%% doing less I/O, or at least deferring it) and thus helping keep
+%% their mailboxes empty and thus the queue as a whole is more
+%% responsive. If such a queue also has fast but previously idle
+%% consumers, the consumer can then start to be driven as fast as it
+%% can go, whereas if only egress rate was being used, the incoming
+%% messages may have to be written to disk and then read back in,
+%% resulting in the hard disk being a bottleneck in driving the
+%% consumers. Generally, we want to give Rabbit every chance of
+%% getting rid of messages as fast as possible and remaining
+%% responsive, and using only the egress rate impacts that goal.
+%%
 %% If a queue is full of transient messages, then the transition from
 %% betas to deltas will be potentially very expensive as millions of
 %% entries must be written to disk by the queue_index module. This can
