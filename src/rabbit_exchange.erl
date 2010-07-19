@@ -444,7 +444,8 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                                      binding_created,
                                      [{exchange_name, ExchangeName},
                                       {queue_name, QueueName},
-                                      {routing_key, RoutingKey}]),
+                                      {routing_key, RoutingKey},
+                                      {arguments, Arguments}]),
                                    {new, X, B};
                                [_R] ->
                                    {existing, X, B}
