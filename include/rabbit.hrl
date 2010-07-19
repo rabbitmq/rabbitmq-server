@@ -70,27 +70,7 @@
 -record(delivery, {mandatory, immediate, txn, sender, message}).
 -record(amqp_error, {name, explanation, method = none}).
 
-
--record(event_connection_stats, {connection_pid, state, channels,
-                                 recv_oct, recv_cnt,
-                                 send_oct, send_cnt, send_pend}).
-
--record(event_channel_stats, {channel_pid, per_exchange_statistics,
-                              per_queue_statistics}).
-
--record(event_queue_stats, {qpid, messages_ready, messages_unacknowledged,
-                            consumers, memory, exclusive_consumer_pid,
-                            exclusive_consumer_tag, backing_queue_status}).
-
--record(event_connection_created, {connection_pid, address, port,
-                                   peer_address, peer_port, user, vhost,
-                                   timeout, frame_max, client_properties}).
--record(event_connection_closed, {connection_pid}).
--record(event_channel_created, {channel_pid, connection_pid, channel, user,
-                                vhost}).
--record(event_channel_closed, {channel_pid}).
-
-
+-record(event, {type, props, timestamp}).
 
 %%----------------------------------------------------------------------------
 

@@ -31,9 +31,13 @@
 
 -module(rabbit_event).
 
--export([notify/1]).
+-include("rabbit.hrl").
+
+-export([notify/2]).
 
 %%----------------------------------------------------------------------------
 
-notify(Event) ->
-    gen_event:notify(rabbit_event, Event).
+notify(Type, Props) ->
+    gen_event:notify(rabbit_event, #event{type = Type,
+                                          props = Props,
+                                          timestamp = os:timestamp()}).

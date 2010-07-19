@@ -275,7 +275,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         teardown_profiling(ProfilingValue),
         rabbit_queue_collector:shutdown(Collector),
         rabbit_misc:unlink_and_capture_exit(Collector),
-        rabbit_event:notify(#event_connection_closed{connection_pid = self()})
+        rabbit_event:notify(connection_closed, [{connection_pid, self()}])
     end,
     done.
 
@@ -664,18 +664,17 @@ handle_method0(#'connection.open'{virtual_host = VHostPath,
                    Sock,
                    #'connection.open_ok'{known_hosts = KnownHosts}),
             rabbit_event:notify(
-              #event_connection_created{connection_pid = self(),
-                                        address        = i(address, State),
-                                        port           = i(port, State),
-                                        peer_address   = i(peer_address, State),
-                                        peer_port      = i(peer_port, State),
-                                        user           = User,
-                                        vhost          = VHost,
-                                        timeout        = i(timeout, State),
-                                        frame_max      = i(frame_max, State),
-                                        client_properties =
-                                            i(client_properties, State)
-                                       }),
+              connection_created,
+              [{connection_pid,    self()},
+               {address,           i(address, State)},
+               {port,              i(port, State)},
+               {peer_address,      i(peer_address, State)},
+               {peer_port,         i(peer_port, State)},
+               {user,              User},
+               {vhost,             VHost},
+               {timeout,           i(timeout, State)},
+               {frame_max,         i(frame_max, State)},
+               {client_properties, i(client_properties, State)}]),
             State#v1{connection_state = running,
                      connection = NewConnection};
        true ->
@@ -870,14 +869,15 @@ maybe_emit_stats(State = #v1{last_statistics_update = LastUpdate}) ->
     case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
         true ->
             rabbit_event:notify(
-              #event_connection_stats{connection_pid = self(),
-                                      state          = i(state, State),
-                                      channels       = i(channels, State),
-                                      recv_oct       = i(recv_oct, State),
-                                      recv_cnt       = i(recv_cnt, State),
-                                      send_oct       = i(send_oct, State),
-                                      send_cnt       = i(send_cnt, State),
-                                      send_pend      = i(send_pend, State)}),
+              connection_stats,
+              [{connection_pid,  self()},
+               {state,           i(state, State)},
+               {channels,        i(channels, State)},
+               {recv_oct,        i(recv_oct, State)},
+               {recv_cnt,        i(recv_cnt, State)},
+               {send_oct,        i(send_oct, State)},
+               {send_cnt,        i(send_cnt, State)},
+               {send_pend,       i(send_pend, State)}]),
             State#v1{last_statistics_update = Now};
         _ ->
             State

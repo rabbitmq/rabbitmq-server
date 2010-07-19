@@ -537,16 +537,16 @@ maybe_emit_stats(State = #q{last_statistics_update = LastUpdate}) ->
     Now = os:timestamp(),
     case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
         true ->
-            rabbit_event:notify(#event_queue_stats{
-              qpid                    = self(),
-              messages_ready          = i(messages_ready, State),
-              messages_unacknowledged = i(messages_unacknowledged, State),
-              consumers               = i(consumers, State),
-              memory                  = i(memory, State),
-              exclusive_consumer_tag  = i(exclusive_consumer_tag, State),
-              exclusive_consumer_pid  = i(exclusive_consumer_pid, State),
-              backing_queue_status    = i(backing_queue_status, State)
-             }),
+            rabbit_event:notify(
+              queue_stats,
+              [{qpid,                    self()},
+               {messages_ready,          i(messages_ready, State)},
+               {messages_unacknowledged, i(messages_unacknowledged, State)},
+               {consumers,               i(consumers, State)},
+               {memory,                  i(memory, State)},
+               {exclusive_consumer_tag,  i(exclusive_consumer_tag, State)},
+               {exclusive_consumer_pid,  i(exclusive_consumer_pid, State)},
+               {backing_queue_status,    i(backing_queue_status, State)}]),
             State#q{last_statistics_update = Now};
         _ ->
             State
