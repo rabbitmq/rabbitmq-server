@@ -1797,8 +1797,8 @@ test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
                    end,
             {ok, _TRef} = timer:send_after(1000, {duration, N1, Fun1}),
             {_Duration, VQ4} = rabbit_variable_queue:ram_duration(VQ3),
-            VQ5 = %% /37 otherwise the duration is just too high to stress things
-                rabbit_variable_queue:set_ram_duration_target(N/37, VQ4),
+            %% /37 otherwise the duration is just too high to stress things
+            VQ5 = rabbit_variable_queue:set_ram_duration_target(N/37, VQ4),
             io:format("~p:~n~p~n~n", [N, rabbit_variable_queue:status(VQ5)]),
             test_variable_queue_dynamic_duration_change_f(Len, VQ5)
     after 0 ->
@@ -1853,6 +1853,35 @@ variable_queue_wait_for_shuffling_end(VQ) ->
         false -> VQ
     end.
 
+test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
+    Count = 2*rabbit_queue_index:next_segment_boundary(0),
+    VQ1 = variable_queue_publish(true, Count, VQ0),
+    VQ2 = variable_queue_publish(false, Count, VQ1),
+    VQ3 = rabbit_variable_queue:set_ram_duration_target(0, VQ2),
+    {VQ4, _AckTags} =
+        variable_queue_fetch(Count, true, false, Count + Count, VQ3),
+    {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false, Count, VQ4),
+    _VQ6 = rabbit_variable_queue:terminate(VQ5),
+    VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
+    {{_Msg1, true, _AckTag1, Count1}, VQ8} =
+        rabbit_variable_queue:fetch(true, VQ7),
+    VQ9 = variable_queue_publish(false, 1, VQ8),
+    VQ10 = rabbit_variable_queue:set_ram_duration_target(0, VQ9),
+    {VQ11, _AckTags2} = variable_queue_fetch(Count1, true, true, Count, VQ10),
+    {VQ12, _AckTags3} = variable_queue_fetch(1, false, false, 1, VQ11),
+    VQ12.
+
+test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
+    VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
+    VQ2 = variable_queue_publish(false, 4, VQ1),
+    {VQ3, AckTags} = variable_queue_fetch(2, false, false, 4, VQ2),
+    VQ4 = rabbit_variable_queue:requeue(AckTags, VQ3),
+    VQ5 = rabbit_variable_queue:idle_timeout(VQ4),
+    _VQ6 = rabbit_variable_queue:terminate(VQ5),
+    VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
+    {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
+    VQ8.
+
 test_queue_recover() ->
     Count = 2*rabbit_queue_index:next_segment_boundary(0),
     TxID = rabbit_guid:guid(),
@@ -1887,32 +1916,3 @@ test_queue_recover() ->
               rabbit_amqqueue:internal_delete(QName)
       end),
     passed.
-
-test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
-    Count = 2*rabbit_queue_index:next_segment_boundary(0),
-    VQ1 = variable_queue_publish(true, Count, VQ0),
-    VQ2 = variable_queue_publish(false, Count, VQ1),
-    VQ3 = rabbit_variable_queue:set_ram_duration_target(0, VQ2),
-    {VQ4, _AckTags} =
-        variable_queue_fetch(Count, true, false, Count + Count, VQ3),
-    {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false, Count, VQ4),
-    _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
-    {{_Msg1, true, _AckTag1, Count1}, VQ8} =
-        rabbit_variable_queue:fetch(true, VQ7),
-    VQ9 = variable_queue_publish(false, 1, VQ8),
-    VQ10 = rabbit_variable_queue:set_ram_duration_target(0, VQ9),
-    {VQ11, _AckTags2} = variable_queue_fetch(Count1, true, true, Count, VQ10),
-    {VQ12, _AckTags3} = variable_queue_fetch(1, false, false, 1, VQ11),
-    VQ12.
-
-test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
-    VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
-    VQ2 = variable_queue_publish(false, 4, VQ1),
-    {VQ3, AckTags} = variable_queue_fetch(2, false, false, 4, VQ2),
-    VQ4 = rabbit_variable_queue:requeue(AckTags, VQ3),
-    VQ5 = rabbit_variable_queue:idle_timeout(VQ4),
-    _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
-    {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
-    VQ8.
