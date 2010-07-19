@@ -54,7 +54,7 @@ handle_call(_Request, State) ->
 
 handle_event(#event{type = queue_stats, props = Stats},
              State = #state{queue_stats = Table}) ->
-    ets:insert(Table, {proplists:get_value(qpid, Stats), Stats}),
+    ets:insert(Table, {proplists:get_value(pid, Stats), Stats}),
     {ok, State};
 
 handle_event(Event, State) ->
