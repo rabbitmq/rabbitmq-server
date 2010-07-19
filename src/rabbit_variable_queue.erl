@@ -555,13 +555,13 @@ tx_rollback(Txn, State = #vqstate { durable = IsDurable }) ->
                                               persistent_guids(Pubs));
              false -> ok
          end,
-    {lists:flatten(AckTags), a(State)}.
+    {lists:append(AckTags), a(State)}.
 
 tx_commit(Txn, Fun, State = #vqstate { durable = IsDurable }) ->
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
     PubsOrdered = lists:reverse(Pubs),
-    AckTags1 = lists:flatten(AckTags),
+    AckTags1 = lists:append(AckTags),
     PersistentGuids = persistent_guids(PubsOrdered),
     HasPersistentPubs = PersistentGuids =/= [],
     {AckTags1,
@@ -859,9 +859,9 @@ tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun,
     PersistentAcks =
         case IsDurable of
             true  -> [AckTag || AckTag <- AckTags,
-                                case dict:find(AckTag, PA) of
-                                    {ok, #msg_status {}}        -> false;
-                                    {ok, {IsPersistent, _Guid}} -> IsPersistent
+                                case dict:fetch(AckTag, PA) of
+                                    #msg_status {}        -> false;
+                                    {IsPersistent, _Guid} -> IsPersistent
                                 end];
             false -> []
         end,
@@ -888,9 +888,9 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
                                      pubs            = SPubs,
                                      funs            = SFuns },
                                    durable = IsDurable }) ->
-    PAcks = lists:flatten(SPAcks),
-    Acks  = lists:flatten(SAcks),
-    Pubs  = lists:flatten(lists:reverse(SPubs)),
+    PAcks = lists:append(SPAcks),
+    Acks  = lists:append(SAcks),
+    Pubs  = lists:append(lists:reverse(SPubs)),
     {SeqIds, State1 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun (Msg = #basic_message { is_persistent = IsPersistent },
