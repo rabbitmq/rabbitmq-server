@@ -217,26 +217,17 @@ test_bpqueue() ->
     Q = bpqueue:new(),
     true = bpqueue:is_empty(Q),
     0 = bpqueue:len(Q),
+    [] = bpqueue:to_list(Q),
 
-    Q1 = bpqueue:in(bar, 3, bpqueue:in(foo, 2, bpqueue:in(foo, 1, Q))),
-    false = bpqueue:is_empty(Q1),
-    3 = bpqueue:len(Q1),
-    [{foo, [1, 2]}, {bar, [3]}] = bpqueue:to_list(Q1),
-
-    Q2 = bpqueue:in_r(bar, 3, bpqueue:in_r(foo, 2, bpqueue:in_r(foo, 1, Q))),
-    false = bpqueue:is_empty(Q2),
-    3 = bpqueue:len(Q2),
-    [{bar, [3]}, {foo, [2, 1]}] = bpqueue:to_list(Q2),
-
-    {empty, _Q} = bpqueue:out(Q),
-    {{value, foo, 1}, Q3} = bpqueue:out(Q1),
-    {{value, foo, 2}, Q4} = bpqueue:out(Q3),
-    {{value, bar, 3}, _Q5} = bpqueue:out(Q4),
-
-    {empty, _Q} = bpqueue:out_r(Q),
-    {{value, foo, 1}, Q6} = bpqueue:out_r(Q2),
-    {{value, foo, 2}, Q7} = bpqueue:out_r(Q6),
-    {{value, bar, 3}, _Q8} = bpqueue:out_r(Q7),
+    Q1 = bpqueue_test(fun bpqueue:in/3, fun bpqueue:out/1,
+                      fun bpqueue:to_list/1,
+                      fun bpqueue:foldl/3, fun bpqueue:map_fold_filter_l/4),
+    Q2 = bpqueue_test(fun bpqueue:in_r/3, fun bpqueue:out_r/1,
+                      fun (QR) -> lists:reverse(
+                                    [{P, lists:reverse(L)} ||
+                                        {P, L} <- bpqueue:to_list(QR)])
+                      end,
+                      fun bpqueue:foldr/3, fun bpqueue:map_fold_filter_r/4),
 
     [{foo, [1, 2]}, {bar, [3]}] = bpqueue:to_list(bpqueue:join(Q, Q1)),
     [{bar, [3]}, {foo, [2, 1]}] = bpqueue:to_list(bpqueue:join(Q2, Q)),
@@ -260,45 +251,8 @@ test_bpqueue() ->
           end,
           {0, []}, bpqueue:from_list([{0,[d]}, {1,[c]}, {2,[b]}, {3,[a]}])),
 
-    ok = bpqueue:foldl(fun (Prefix, Value, ok) -> {error, Prefix, Value} end,
-                       ok, Q),
-    ok = bpqueue:foldr(fun (Prefix, Value, ok) -> {error, Prefix, Value} end,
-                       ok, Q),
-
-    [] = bpqueue:to_list(Q),
-
     [{bar,3}, {foo,2}, {foo,1}] =
         bpqueue:foldr(fun (P, V, I) -> [{P,V} | I] end, [], Q2),
-
-    F1 = fun (Qn) ->
-                 bpqueue:map_fold_filter_l(
-                   fun (foo) -> true;
-                       (_) -> false
-                   end,
-                   fun (2, _Num) -> stop;
-                       (V, Num)  -> {bar, -V, V - Num} end,
-                   0, Qn)
-         end,
-
-    F2 = fun (Qn) ->
-                 bpqueue:map_fold_filter_r(
-                   fun (foo) -> true;
-                       (_) -> false
-                   end,
-                   fun (2, _Num) -> stop;
-                       (V, Num)  -> {bar, -V, V - Num} end,
-                   0, Qn)
-         end,
-
-    {Q9, 1} = F1(Q1),
-    [{bar, [-1]}, {foo, [2]}, {bar, [3]}] = bpqueue:to_list(Q9),
-    {Q10, 0} = F2(Q1),
-    [{foo, [1, 2]}, {bar, [3]}] = bpqueue:to_list(Q10),
-
-    {Q11, 0} = F1(Q),
-    [] = bpqueue:to_list(Q11),
-    {Q12, 0} = F2(Q),
-    [] = bpqueue:to_list(Q12),
 
     BPQL = [{foo,[1,2,2]}, {bar,[3,4,5]}, {foo,[5,6,7]}],
     BPQ = bpqueue:from_list(BPQL),
@@ -308,13 +262,6 @@ test_bpqueue() ->
     {BPQL, 0} = bpqueue_mffl([foo,bar], {none, [1]}, BPQ),
     {BPQL, 0} = bpqueue_mffl([bar], {none, [3]}, BPQ),
     {BPQL, 0} = bpqueue_mffr([bar], {foo, [5]}, BPQ),
-    Queue_to_list = fun ({LHS, RHS}) -> {bpqueue:to_list(LHS), RHS} end,
-    {[], 0} = Queue_to_list(bpqueue:map_fold_filter_l(
-                              fun(_P)-> throw(explosion) end,
-                              fun(_V, _N) -> throw(explosion) end, 0, Q)),
-    {[], 0} = Queue_to_list(bpqueue:map_fold_filter_r(
-                              fun(_P)-> throw(explosion) end,
-                              fun(_V, _N) -> throw(explosion) end, 0, Q)),
 
     %% process 1 item
     {[{foo,[-1,2,2]}, {bar,[3,4,5]}, {foo,[5,6,7]}], 1} =
@@ -347,6 +294,39 @@ test_bpqueue() ->
         bpqueue_mffr([foo], {foo, [2]}, BPQ),
 
     passed.
+
+bpqueue_test(In, Out, List, Fold, MapFoldFilter) ->
+    Q = bpqueue:new(),
+    {empty, _Q} = Out(Q),
+
+    ok = Fold(fun (Prefix, Value, ok) -> {error, Prefix, Value} end, ok, Q),
+    {LHS, RHS} = MapFoldFilter(fun(_P)     -> throw(explosion) end,
+                               fun(_V, _N) -> throw(explosion) end, 0, Q),
+    {[], 0} = {bpqueue:to_list(LHS), RHS},
+
+    Q1 = In(bar, 3, In(foo, 2, In(foo, 1, Q))),
+    false = bpqueue:is_empty(Q1),
+    3 = bpqueue:len(Q1),
+    [{foo, [1, 2]}, {bar, [3]}] = List(Q1),
+
+    {{value, foo, 1}, Q3}  = Out(Q1),
+    {{value, foo, 2}, Q4}  = Out(Q3),
+    {{value, bar, 3}, _Q5} = Out(Q4),
+
+    F = fun (QN) ->
+                MapFoldFilter(fun (foo) -> true;
+                                  (_)   -> false
+                              end,
+                              fun (2, _Num) -> stop;
+                                  (V, Num)  -> {bar, -V, V - Num} end,
+                              0, QN)
+        end,
+    {Q6, 0} = F(Q),
+    [] = bpqueue:to_list(Q6),
+    {Q7, 1} = F(Q1),
+    [{bar, [-1]}, {foo, [2]}, {bar, [3]}] = List(Q7),
+
+    Q1.
 
 bpqueue_mffl(FF1A, FF2A, BPQ) ->
     bpqueue_mff(fun bpqueue:map_fold_filter_l/4, FF1A, FF2A, BPQ).
