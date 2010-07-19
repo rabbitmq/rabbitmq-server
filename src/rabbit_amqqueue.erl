@@ -31,7 +31,7 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, declare/5, delete/3, purge/1]).
+-export([start/0, stop/0, declare/5, delete/3, purge/1]).
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
          update_ram_duration/1, set_ram_duration_target/2,
@@ -71,6 +71,7 @@
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -spec(start/0 :: () -> 'ok').
+-spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
@@ -163,6 +164,10 @@ start() ->
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
     _RealDurableQueues = recover_durable_queues(DurableQueues),
     ok.
+
+stop() ->
+    ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
+    ok = supervisor:delete_child(rabbit_sup, rabbit_amqqueue_sup).
 
 find_durable_queues() ->
     Node = node(),
