@@ -34,7 +34,7 @@
 -behaviour(supervisor).
 
 -export([start_link/0, start_child/1, start_child/2, start_child/3,
-         start_restartable_child/1, start_restartable_child/2]).
+         start_restartable_child/1, start_restartable_child/2, stop_child/1]).
 
 -export([init/1]).
 
@@ -68,6 +68,12 @@ start_restartable_child(Mod, Args) ->
                         [Name, {Mod, start_link, Args}]},
                  transient, infinity, supervisor, [rabbit_restartable_sup]}),
     ok.
+
+stop_child(ChildId) ->
+    case supervisor:terminate_child(?SERVER, ChildId) of
+        ok -> supervisor:delete_child(?SERVER, ChildId);
+        E  -> E
+    end.
 
 init([]) ->
     {ok, {{one_for_all, 0, 1}, []}}.
