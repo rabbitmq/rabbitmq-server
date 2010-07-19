@@ -56,17 +56,20 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(FLOW_OK_TIMEOUT, 10000). %% 10 seconds
 
--define(INFO_KEYS,
+-define(STATISTICS_KEYS,
         [pid,
-         connection,
-         number,
-         user,
-         vhost,
          transactional,
          consumer_count,
          messages_unacknowledged,
          acks_uncommitted,
          prefetch_count]).
+
+-define(INFO_KEYS,
+        [connection,
+         number,
+         user,
+         vhost]
+        ++ ?STATISTICS_KEYS).
 
 %%----------------------------------------------------------------------------
 
@@ -1190,9 +1193,9 @@ maybe_emit_stats(State = #ch{exchange_statistics = ExchangeStatistics,
         true ->
             rabbit_event:notify(
               channel_stats,
-              [{pid, self()},
-               {per_exchange_statistics, dict:to_list(ExchangeStatistics)},
-               {per_queue_statistics, dict:to_list(QueueStatistics)}]),
+              [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS] ++
+                  [{per_exchange_statistics, dict:to_list(ExchangeStatistics)},
+                   {per_queue_statistics, dict:to_list(QueueStatistics)}]),
             State#ch{last_statistics_update = Now};
         _ ->
             State
