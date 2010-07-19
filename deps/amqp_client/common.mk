@@ -127,15 +127,13 @@ ALL_SSL_COVERAGE := true
 SSL_BROKER_ARGS :=
 endif
 
-PLT=$(HOME)/.dialyzer_plt
-DIALYZER_CALL=dialyzer --plt $(PLT)
+RABBIT_PLT=$(BROKER_DIR)/rabbit.plt
 
-.PHONY: all compile compile_tests run run_in_broker dialyzer dialyze_all \
-	add_broker_to_plt prepare_tests all_tests test_suites \
-	test_suites_coverage run_test_broker start_test_broker_node \
-	stop_test_broker_node test_network test_direct test_network_coverage \
-	test_direct_coverage test_common_package clean source_tarball package \
-	boot_broker unboot_broker
+.PHONY: all compile compile_tests run run_in_broker dialyze $(RABBIT_PLT) \
+	prepare_tests all_tests test_suites test_suites_coverage run_test_broker
+	start_test_broker_node stop_test_broker_node test_network test_direct
+	test_network_coverage test_direct_coverage test_common_package clean \
+	source_tarball package boot_broker unboot_broker
 
 all: package
 
@@ -156,21 +154,9 @@ run: compile $(EBIN_DIR)/$(PACKAGE).app
 run_in_broker: compile $(BROKER_DIR) $(EBIN_DIR)/$(PACKAGE).app
 	$(MAKE) RABBITMQ_SERVER_START_ARGS='$(PA_LOAD_PATH)' -C $(BROKER_DIR) run
 
-dialyze: $(TARGETS)
-	$(DIALYZER_CALL) -c $^
-
-dialyze_all: $(TARGETS) $(TEST_TARGETS)
-	$(DIALYZER_CALL) -c $^
-
-add_broker_to_plt: $(BROKER_DIR)/ebin
-	$(DIALYZER_CALL) --add_to_plt -r $<
-
-$(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
-	mkdir -p $(DOC_DIR)
-	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
-
-$(DOC_DIR)/index.html: $(COMPILE_DEPS) $(DOC_DIR)/overview.edoc $(SOURCES)
-	$(LIBS_PATH) erl -noshell -eval 'edoc:application(amqp_client, ".", [{preprocess, true}])' -run init stop
+dialyze: $(RABBIT_PLT) $(TARGETS) compile_tests
+	$(LIBS_PATH) erl -noshell -pa $(LOAD_PATH) -eval \
+        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(RABBIT_PLT)\", \"$(TARGETS) $(TEST_TARGETS)\"))."
 
 doc: $(DOC_DIR)/index.html
 
@@ -212,3 +198,12 @@ $(DIST_DIR):
 $(DEPS_DIR):
 	mkdir -p $@
 
+$(RABBIT_PLT):
+	$(MAKE) -C $(BROKER_DIR) create-plt
+
+$(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
+	mkdir -p $(DOC_DIR)
+	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
+
+$(DOC_DIR)/index.html: $(COMPILE_DEPS) $(DOC_DIR)/overview.edoc $(SOURCES)
+	$(LIBS_PATH) erl -noshell -eval 'edoc:application(amqp_client, ".", [{preprocess, true}])' -run init stop
