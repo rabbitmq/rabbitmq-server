@@ -1554,13 +1554,10 @@ empty_test_queue() ->
     _Qi2 = rabbit_queue_index:delete_and_terminate(Qi1),
     ok.
 
-init_empty_test_queue() ->
+with_empty_test_queue(Fun) ->
     ok = empty_test_queue(),
     {0, _Terms, Qi} = init_test_queue(),
-    Qi.
-
-with_empty_test_queue(Fun) ->
-    rabbit_queue_index:delete_and_terminate(Fun(init_empty_test_queue())).
+    rabbit_queue_index:delete_and_terminate(Fun(Qi)).
 
 queue_index_publish(SeqIds, Persistent, Qi) ->
     Ref = rabbit_guid:guid(),
@@ -1597,38 +1594,42 @@ test_queue_index() ->
     MostOfASegment = trunc(SegmentSize*0.75),
     SeqIdsA = lists:seq(0, MostOfASegment-1),
     SeqIdsB = lists:seq(MostOfASegment, 2*MostOfASegment),
-    Qi0 = init_empty_test_queue(),
-    {0, 0, Qi1} = rabbit_queue_index:bounds(Qi0),
-    {Qi2, SeqIdsGuidsA} = queue_index_publish(SeqIdsA, false, Qi1),
-    {0, SegmentSize, Qi3} = rabbit_queue_index:bounds(Qi2),
-    {ReadA, Qi4} = rabbit_queue_index:read(0, SegmentSize, Qi3),
-    ok = verify_read_with_published(false, false, ReadA,
-                                    lists:reverse(SeqIdsGuidsA)),
-    %% should get length back as 0, as all the msgs were transient
-    {0, _Terms1, Qi6} = restart_test_queue(Qi4),
-    {0, 0, Qi7} = rabbit_queue_index:bounds(Qi6),
-    {Qi8, SeqIdsGuidsB} = queue_index_publish(SeqIdsB, true, Qi7),
-    {0, TwoSegs, Qi9} = rabbit_queue_index:bounds(Qi8),
-    {ReadB, Qi10} = rabbit_queue_index:read(0, SegmentSize, Qi9),
-    ok = verify_read_with_published(false, true, ReadB,
-                                    lists:reverse(SeqIdsGuidsB)),
-    %% should get length back as MostOfASegment
-    LenB = length(SeqIdsB),
-    {LenB, _Terms2, Qi12} = restart_test_queue(Qi10),
-    {0, TwoSegs, Qi13} = rabbit_queue_index:bounds(Qi12),
-    Qi14 = rabbit_queue_index:deliver(SeqIdsB, Qi13),
-    {ReadC, Qi15} = rabbit_queue_index:read(0, SegmentSize, Qi14),
-    ok = verify_read_with_published(true, true, ReadC,
-                                    lists:reverse(SeqIdsGuidsB)),
-    Qi16 = rabbit_queue_index:ack(SeqIdsB, Qi15),
-    Qi17 = rabbit_queue_index:flush(Qi16),
-    %% Everything will have gone now because #pubs == #acks
-    {0, 0, Qi18} = rabbit_queue_index:bounds(Qi17),
-    %% should get length back as 0 because all persistent msgs have been acked
-    {0, _Terms3, Qi20} = restart_test_queue(Qi18),
-    _Qi21 = rabbit_queue_index:delete_and_terminate(Qi20),
+    SeqIdsC = lists:seq(0, trunc(SegmentSize/2)),
 
-    SeqIdsC = lists:seq(0,trunc(SegmentSize/2)),
+    with_empty_test_queue(
+      fun (Qi0) ->
+              {0, 0, Qi1} = rabbit_queue_index:bounds(Qi0),
+              {Qi2, SeqIdsGuidsA} = queue_index_publish(SeqIdsA, false, Qi1),
+              {0, SegmentSize, Qi3} = rabbit_queue_index:bounds(Qi2),
+              {ReadA, Qi4} = rabbit_queue_index:read(0, SegmentSize, Qi3),
+              ok = verify_read_with_published(false, false, ReadA,
+                                              lists:reverse(SeqIdsGuidsA)),
+              %% should get length back as 0, as all the msgs were transient
+              {0, _Terms1, Qi6} = restart_test_queue(Qi4),
+              {0, 0, Qi7} = rabbit_queue_index:bounds(Qi6),
+              {Qi8, SeqIdsGuidsB} = queue_index_publish(SeqIdsB, true, Qi7),
+              {0, TwoSegs, Qi9} = rabbit_queue_index:bounds(Qi8),
+              {ReadB, Qi10} = rabbit_queue_index:read(0, SegmentSize, Qi9),
+              ok = verify_read_with_published(false, true, ReadB,
+                                              lists:reverse(SeqIdsGuidsB)),
+              %% should get length back as MostOfASegment
+              LenB = length(SeqIdsB),
+              {LenB, _Terms2, Qi12} = restart_test_queue(Qi10),
+              {0, TwoSegs, Qi13} = rabbit_queue_index:bounds(Qi12),
+              Qi14 = rabbit_queue_index:deliver(SeqIdsB, Qi13),
+              {ReadC, Qi15} = rabbit_queue_index:read(0, SegmentSize, Qi14),
+              ok = verify_read_with_published(true, true, ReadC,
+                                              lists:reverse(SeqIdsGuidsB)),
+              Qi16 = rabbit_queue_index:ack(SeqIdsB, Qi15),
+              Qi17 = rabbit_queue_index:flush(Qi16),
+              %% Everything will have gone now because #pubs == #acks
+              {0, 0, Qi18} = rabbit_queue_index:bounds(Qi17),
+              %% should get length back as 0 because all persistent
+              %% msgs have been acked
+              {0, _Terms3, Qi20} = restart_test_queue(Qi18),
+              Qi20
+      end),
+
     %% These next bits are just to hit the auto deletion of segment files.
     %% First, partials:
     %% a) partial pub+del+ack, then move to new segment
