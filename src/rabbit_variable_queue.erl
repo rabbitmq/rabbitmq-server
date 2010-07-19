@@ -716,6 +716,9 @@ m(MsgStatus = #msg_status { msg           = Msg,
 one_if(true ) -> 1;
 one_if(false) -> 0.
 
+cons_if(true,   E, L) -> [E | L];
+cons_if(false, _E, L) -> L.
+
 msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = Guid }) ->
     #msg_status { seq_id = SeqId, guid = Guid, msg = Msg,
                   is_persistent = IsPersistent, is_delivered = false,
@@ -763,10 +766,7 @@ betas_from_index_entries(List, TransientThreshold, IndexState) ->
                {Filtered1, Delivers1, Acks1}) ->
                   case SeqId < TransientThreshold andalso not IsPersistent of
                       true  -> {Filtered1,
-                                case IsDelivered of
-                                    true  -> Delivers1;
-                                    false -> [SeqId | Delivers1]
-                                end,
+                                cons_if(not IsDelivered, SeqId, Delivers1),
                                 [SeqId | Acks1]};
                       false -> {[m(#msg_status { msg           = undefined,
                                                  guid          = Guid,
@@ -871,10 +871,7 @@ tx_commit_index(State = #vqstate { on_sync = {SAcks, SPubs, SFuns},
                {SeqIdsAcc, State2}) ->
                   IsPersistent1 = IsDurable andalso IsPersistent,
                   {SeqId, State3} = publish(Msg, false, IsPersistent1, State2),
-                  {case IsPersistent1 of
-                       true  -> [SeqId | SeqIdsAcc];
-                       false -> SeqIdsAcc
-                   end, State3}
+                  {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State3}
           end, {Acks, ack(Acks, State)}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
     [ Fun() || Fun <- lists:reverse(SFuns) ],
@@ -912,14 +909,8 @@ remove_queue_entries1(
                                         GuidsByStore);
          false -> GuidsByStore
      end,
-     case IndexOnDisk andalso not IsDelivered of
-         true  -> [SeqId | Delivers];
-         false -> Delivers
-     end,
-     case IndexOnDisk of
-         true  -> [SeqId | Acks];
-         false -> Acks
-     end}.
+     cons_if(IndexOnDisk andalso not IsDelivered, SeqId, Delivers),
+     cons_if(IndexOnDisk, SeqId, Acks)}.
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for publishing
@@ -1058,10 +1049,8 @@ accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      index_on_disk = false }, Acc) ->
     Acc;
 accumulate_ack(SeqId, {IsPersistent, Guid}, {SeqIdsAcc, Dict}) ->
-    {case IsPersistent of
-         true  -> [SeqId | SeqIdsAcc];
-         false -> SeqIdsAcc
-     end, rabbit_misc:dict_cons(find_msg_store(IsPersistent), Guid, Dict)}.
+    {cons_if(IsPersistent, SeqId, SeqIdsAcc),
+     rabbit_misc:dict_cons(find_msg_store(IsPersistent), Guid, Dict)}.
 
 %%----------------------------------------------------------------------------
 %% Phase changes
