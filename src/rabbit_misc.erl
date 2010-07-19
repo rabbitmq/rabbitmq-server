@@ -581,7 +581,7 @@ string_to_pid(Str) ->
             binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,0:8>>);
         nomatch ->
             throw(Err)
-    end. 
+    end.
 
 version_compare(A, B, lte) ->
     case version_compare(A, B) of

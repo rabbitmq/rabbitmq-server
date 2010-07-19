@@ -174,9 +174,10 @@ check_resource_access(Username,
               [#user_permission{permission = P}] ->
                   case re:run(
                          Name,
-                         element(permission_index(Permission), P)) of
-                      {match, _} -> true;
-                      nomatch    -> false
+                         element(permission_index(Permission), P),
+                         [{capture, none}]) of
+                      match    -> true;
+                      nomatch  -> false
                   end
           end,
     if Res  -> ok;

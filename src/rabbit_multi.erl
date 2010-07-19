@@ -309,9 +309,9 @@ is_dead(Pid) ->
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
                                           PidS ++ "\""),
-                             case re:run(Res, "erl\\.exe") of
-                                 {match, _} -> false;
-                                 _          -> true
+                             case re:run(Res, "erl\\.exe", [{capture, none}]) of
+                                 match -> false;
+                                 _     -> true
                              end
                      end}]).
 
