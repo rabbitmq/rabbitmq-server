@@ -1346,7 +1346,7 @@ handle_hook(HookName, Handler, Args) ->
     A = atom_to_list(HookName) ++ "_" ++ atom_to_list(Handler) ++ "_fired",
     put(list_to_atom(A), Args).
 bad_handle_hook(_, _, _) ->
-    bad:bad().
+    exit(bad_handle_hook_called).
 extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
     handle_hook(Hookname, Handler, {Args, Extra1, Extra2}).
 
