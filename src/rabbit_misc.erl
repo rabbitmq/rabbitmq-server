@@ -38,7 +38,7 @@
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4,
          protocol_error/3, protocol_error/4, protocol_error/1]).
--export([not_found/1]).
+-export([not_found/1, assert_args_equivalence/4]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
 -export([table_lookup/2]).
@@ -98,6 +98,10 @@
         -> no_return()).
 -spec(protocol_error/1 :: (rabbit_types:amqp_error()) -> no_return()).
 -spec(not_found/1 :: (rabbit_types:r(atom())) -> no_return()).
+-spec(assert_args_equivalence/4 :: (rabbit_framing:amqp_table(),
+                                    rabbit_framing:amqp_table(),
+                                    rabbit_types:r(any()), [binary()]) ->
+                                        'ok' | no_return()).
 -spec(get_config/1 ::
         (atom()) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(get_config/2 :: (atom(), A) -> A).
@@ -210,6 +214,20 @@ protocol_error(#amqp_error{} = Error) ->
     exit(Error).
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
+
+assert_args_equivalence(Orig, New, Name, Keys) ->
+    [assert_args_equivalence1(Orig, New, Name, Key) || Key <- Keys],
+    ok.
+
+assert_args_equivalence1(Orig, New, Name, Key) ->
+    case {table_lookup(Orig, Key), table_lookup(New, Key)} of
+        {Same, Same}  -> ok;
+        {Orig1, New1} -> protocol_error(
+                           not_allowed,
+                           "cannot redeclare ~s with inequivalent args for ~s: "
+                           "required ~w, received ~w",
+                           [rabbit_misc:rs(Name), Key, New1, Orig1])
+    end.
 
 get_config(Key) ->
     case dirty_read({rabbit_config, Key}) of

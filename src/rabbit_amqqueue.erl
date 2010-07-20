@@ -83,8 +83,8 @@
 -spec(with_or_die/2 :: (name(), qfun(A)) -> A).
 -spec(assert_equivalence/5 ::
         (rabbit_types:amqqueue(), boolean(), boolean(),
-         rabbit_framing:amqp_table(), rabbit_types:maybe(pid))
-        -> ok).
+         rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
+        -> 'ok' | no_return()).
 -spec(check_exclusive_access/2 :: (rabbit_types:amqqueue(), pid()) -> 'ok').
 -spec(with_exclusive_access_or_die/3 :: (name(), pid(), qfun(A)) -> A).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
@@ -256,15 +256,13 @@ with(Name, F) ->
 with_or_die(Name, F) ->
     with(Name, F, fun () -> rabbit_misc:not_found(Name) end).
 
-assert_equivalence(#amqqueue{name        = Name,
-                             durable     = Durable,
-                             auto_delete = AutoDelete,
-                             arguments   = Args1} = Q,
-                   Durable, AutoDelete, Args, Owner) ->
-    check_argument_equivalent(Args1, Args, <<"x-expires">>, Name),
+assert_equivalence(#amqqueue{durable     = Durable,
+                             auto_delete = AutoDelete} = Q,
+                   Durable, AutoDelete, RequiredArgs, Owner) ->
+    assert_args_equivalence(Q, RequiredArgs),
     check_exclusive_access(Q, Owner, strict);
 assert_equivalence(#amqqueue{name = QueueName},
-                   _Durable, _AutoDelete, _Args, _Owner) ->
+                   _Durable, _AutoDelete, _RequiredArgs, _Owner) ->
     rabbit_misc:protocol_error(
       not_allowed, "parameters for ~s not equivalent",
       [rabbit_misc:rs(QueueName)]).
@@ -285,15 +283,10 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
     with_or_die(Name,
                 fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
 
-check_argument_equivalent(Prev, Now, Key, QueueName) ->
-    case {rabbit_misc:table_lookup(Now, Key),
-          rabbit_misc:table_lookup(Prev, Key)} of
-        {Same, Same} -> ok;
-        {New,  Old}  -> rabbit_misc:protocol_error(
-                          precondition_failed,
-                          "arguments for ~s not equivalent: ~s=~w (was ~w)",
-                          [rabbit_misc:rs(QueueName), Key, New, Old])
-    end.
+assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
+                       RequiredArgs) ->
+    rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
+                                        [<<"x-expires">>]).
 
 list(VHostPath) ->
     mnesia:dirty_match_object(

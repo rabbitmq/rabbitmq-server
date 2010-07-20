@@ -135,7 +135,7 @@ init(Q) ->
                rate_timer_ref = undefined,
                expiry_timer_ref = undefined},
 
-     case init_expires(State) of
+    case init_expires(State) of
          {error, Error} -> {stop, Error};
          NewState       -> {ok, NewState, hibernate,
                                {backoff, ?HIBERNATE_AFTER_MIN,
