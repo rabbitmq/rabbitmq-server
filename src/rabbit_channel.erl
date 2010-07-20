@@ -1161,30 +1161,30 @@ i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-incr_exchange_stats(Counts, Item, State = #ch{exchange_stats = Stats}) ->
-    State#ch{exchange_stats = incr_stats(Counts, Item, Stats)}.
+incr_exchange_stats(XCounts, Item, State = #ch{exchange_stats = Stats}) ->
+    State#ch{exchange_stats = incr_stats(XCounts, Item, Stats)}.
 
-incr_queue_stats(Counts, Item, State = #ch{queue_stats = Stats}) ->
-    State#ch{queue_stats = incr_stats(Counts, Item, Stats)}.
+incr_queue_stats(QCounts, Item, State = #ch{queue_stats = Stats}) ->
+    State#ch{queue_stats = incr_stats(QCounts, Item, Stats)}.
 
-incr_stats(Counts, Item, Stats) ->
+incr_stats(QXCounts, Item, Stats) ->
     Stats1 = lists:foldl(
-               fun ({Key, Incr}, Stats0) ->
-                       case is_pid(Key) andalso not dict:is_key(Key, Stats0) of
-                           true -> erlang:monitor(process, Key);
+               fun ({QX, Inc}, Stats0) ->
+                       case is_pid(QX) andalso not dict:is_key(QX, Stats) of
+                           true -> erlang:monitor(process, QX);
                            _    -> ok
                        end,
-                       dict:update(Key,
+                       dict:update(QX,
                                    fun(D) ->
                                            Count = case orddict:find(Item, D) of
                                                        error   -> 0;
                                                        {ok, C} -> C
                                                    end,
-                                           orddict:store(Item, Count + Incr, D)
+                                           orddict:store(Item, Count + Inc, D)
                                    end,
                                    [],
                                    Stats0)
-               end, Stats, Counts),
+               end, Stats, QXCounts),
     Stats1.
 
 maybe_emit_stats(State = #ch{exchange_stats = ExchangeStats,
