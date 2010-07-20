@@ -87,6 +87,8 @@ post-destroot {
     xinstall -m 555 ${filespath}/rabbitmq-asroot-script-wrapper \
                 ${wrappersbin}/rabbitmq-activate-plugins
 
+    reinplace -E "s:MACPORTS_PREFIX/bin:${prefix}/bin:" \
+                ${wrappersbin}/rabbitmq-multi
     reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:" \
                 ${wrappersbin}/rabbitmq-multi
     reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:" \

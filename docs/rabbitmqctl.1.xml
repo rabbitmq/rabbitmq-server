@@ -627,10 +627,12 @@
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_permissions -p /myvhost</screen>
             <para role="example">
-              This command instructs the RabbitMQ broker to list all the
-              users which have been granted access to the virtual host
-              called <command>/myvhost</command>, and the permissions they
-              have for operations on resources in that virtual host.
+              This command instructs the RabbitMQ broker to list all
+              the users which have been granted access to the virtual
+              host called <command>/myvhost</command>, and the
+              permissions they have for operations on resources in
+              that virtual host.  Note that an empty string means no
+              permissions granted.
             </para>
           </listitem>
         </varlistentry>
