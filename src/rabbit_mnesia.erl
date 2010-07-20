@@ -77,7 +77,7 @@ status() ->
                                                 {disc,      disc_copies},
                                                 {ram,       ram_copies}],
                             begin
-                                Nodes = mnesia:table_info(schema, CopyType),
+                                Nodes = nodes_of_type(CopyType),
                                 Nodes =/= []
                             end];
                  no -> case mnesia:system_info(db_nodes) of
@@ -144,6 +144,15 @@ empty_ram_only_tables() ->
 
 %%--------------------------------------------------------------------
 
+nodes_of_type(Type) ->
+    %% This function should return the nodes of a certain type (ram,
+    %% disc or disc_only) in the current cluster.  The type of nodes
+    %% is determined when the cluster is initially configured.
+    %% Specifically, we check whether a certain table, which we know
+    %% will be written to disk on a disc node, is stored on disk or in
+    %% RAM.
+    mnesia:table_info(rabbit_durable_exchange, Type).
+
 table_definitions() ->
     [{rabbit_user,
       [{record_name, user},
@@ -175,10 +184,10 @@ table_definitions() ->
       [{record_name, reverse_route},
        {attributes, record_info(fields, reverse_route)},
        {type, ordered_set}]},
-     {rabbit_durable_exchange,
-      [{record_name, exchange},
-       {attributes, record_info(fields, exchange)},
-       {disc_copies, [node()]}]},
+     {rabbit_durable_exchange,                  % if you change this entry,
+      [{record_name, exchange},                 % consider the implications
+       {attributes, record_info(fields, exchange)}, % on nodes_of_type/1
+       {disc_copies, [node()]}]}, % <--- this line is particularly important
      {rabbit_exchange,
       [{record_name, exchange},
        {attributes, record_info(fields, exchange)}]},
