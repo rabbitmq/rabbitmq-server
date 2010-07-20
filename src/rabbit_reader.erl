@@ -58,7 +58,7 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {sock, connection, callback, recv_ref, connection_state,
-             queue_collector, last_statistics_update}).
+             queue_collector, last_stats_update}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
@@ -257,7 +257,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                     recv_ref = none,
                                     connection_state = pre_init,
                                     queue_collector = Collector,
-                                    last_statistics_update = {0,0,0}},
+                                    last_stats_update = {0,0,0}},
                                 handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -857,14 +857,14 @@ amqp_exception_explanation(Text, Expl) ->
        true                        -> CompleteTextBin
     end.
 
-maybe_emit_stats(State = #v1{last_statistics_update = LastUpdate}) ->
+maybe_emit_stats(State = #v1{last_stats_update = LastUpdate}) ->
     Now = os:timestamp(),
     case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
         true ->
             rabbit_event:notify(
               connection_stats,
               [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]),
-            State#v1{last_statistics_update = Now};
+            State#v1{last_stats_update = Now};
         _ ->
             State
     end.

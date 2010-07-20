@@ -49,7 +49,7 @@
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, flow,
-             exchange_statistics, queue_statistics, last_statistics_update}).
+             exchange_stats, queue_stats, last_stats_update}).
 
 -record(flow, {server, client, pending}).
 
@@ -184,9 +184,9 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
              queue_collector_pid     = CollectorPid,
              flow                    = #flow{server = true, client = true,
                                              pending = none},
-             exchange_statistics     = dict:new(),
-             queue_statistics        = dict:new(),
-             last_statistics_update = {0,0,0}},
+             exchange_stats     = dict:new(),
+             queue_stats        = dict:new(),
+             last_stats_update = {0,0,0}},
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -1161,11 +1161,11 @@ i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-incr_exchange_stats(Counts, Item, State = #ch{exchange_statistics = Stats}) ->
-    State#ch{exchange_statistics = incr_stats(Counts, Item, Stats)}.
+incr_exchange_stats(Counts, Item, State = #ch{exchange_stats = Stats}) ->
+    State#ch{exchange_stats = incr_stats(Counts, Item, Stats)}.
 
-incr_queue_stats(Counts, Item, State = #ch{queue_statistics = Stats}) ->
-    State#ch{queue_statistics = incr_stats(Counts, Item, Stats)}.
+incr_queue_stats(Counts, Item, State = #ch{queue_stats = Stats}) ->
+    State#ch{queue_stats = incr_stats(Counts, Item, Stats)}.
 
 incr_stats(Counts, Item, Stats) ->
     Stats1 = lists:foldl(
@@ -1187,21 +1187,21 @@ incr_stats(Counts, Item, Stats) ->
                end, Stats, Counts),
     Stats1.
 
-maybe_emit_stats(State = #ch{exchange_statistics = ExchangeStatistics,
-                             queue_statistics = QueueStatistics,
-                             last_statistics_update = LastUpdate}) ->
+maybe_emit_stats(State = #ch{exchange_stats = ExchangeStats,
+                             queue_stats = QueueStats,
+                             last_stats_update = LastUpdate}) ->
     Now = os:timestamp(),
     case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
         true ->
             rabbit_event:notify(
               channel_stats,
               [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS] ++
-                  [{per_exchange_statistics, dict:to_list(ExchangeStatistics)},
-                   {per_queue_statistics, dict:to_list(QueueStatistics)}]),
-            State#ch{last_statistics_update = Now};
+                  [{per_exchange_stats, dict:to_list(ExchangeStats)},
+                   {per_queue_stats, dict:to_list(QueueStats)}]),
+            State#ch{last_stats_update = Now};
         _ ->
             State
     end.
 
-erase_stats(QPid, State = #ch{queue_statistics = QueueStatistics}) ->
-    State#ch{queue_statistics = dict:erase(QPid, QueueStatistics)}.
+erase_stats(QPid, State = #ch{queue_stats = QueueStats}) ->
+    State#ch{queue_stats = dict:erase(QPid, QueueStats)}.

@@ -58,7 +58,7 @@
             blocked_consumers,
             sync_timer_ref,
             rate_timer_ref,
-            last_statistics_update
+            last_stats_update
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -117,7 +117,7 @@ init(Q) ->
             blocked_consumers = queue:new(),
             sync_timer_ref = undefined,
             rate_timer_ref = undefined,
-            last_statistics_update = {0,0,0}}, hibernate,
+            last_stats_update = {0,0,0}}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -543,14 +543,14 @@ i(Item, _) ->
 
 %---------------------------------------------------------------------------
 
-maybe_emit_stats(State = #q{last_statistics_update = LastUpdate}) ->
+maybe_emit_stats(State = #q{last_stats_update = LastUpdate}) ->
     Now = os:timestamp(),
     case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
         true ->
             rabbit_event:notify(
               queue_stats,
               [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]),
-            State#q{last_statistics_update = Now};
+            State#q{last_stats_update = Now};
         _ ->
             State
     end.
