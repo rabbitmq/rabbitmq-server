@@ -33,7 +33,7 @@
 -include("rabbit.hrl").
 
 -export([async_recv/3, close/1, controlling_process/2,
-        getstat/2, peername/1, port_command/2,
+        getstat/2, peername/1, peercert/1, port_command/2,
         send/2, sockname/1]).
 
 %%---------------------------------------------------------------------------
@@ -60,6 +60,9 @@
         (socket())
         -> rabbit_types:ok({inet:ip_address(), rabbit_networking:ip_port()}) |
            error()).
+-spec(peercert/1 ::
+        (rabbit_types:ssl_socket()) -> rabbit_types:ok(any()) | error()).
+        %% any() should be x509_certificate()
 -spec(sockname/1 ::
         (socket())
         -> rabbit_types:ok({inet:ip_address(), rabbit_networking:ip_port()}) |
@@ -115,6 +118,12 @@ peername(Sock) when is_record(Sock, ssl_socket) ->
 
 peername(Sock) when is_port(Sock) ->
     inet:peername(Sock).
+
+
+peercert(Sock) when is_record(Sock, ssl_socket) ->
+    public_key:pkix_decode_cert(ssl:peercert(Sock#ssl_socket.ssl), plain);
+peercert(_) ->
+    nossl.
 
 
 port_command(Sock, Data) when is_record(Sock, ssl_socket) ->

@@ -61,7 +61,7 @@
              queue_collector}).
 
 -define(INFO_KEYS,
-        [pid, address, port, peer_address, peer_port,
+        [pid, address, port, peer_address, peer_port, peer_certificate,
          recv_oct, recv_cnt, send_oct, send_cnt, send_pend,
          state, channels, user, vhost, timeout, frame_max, client_properties]).
 
@@ -730,6 +730,11 @@ i(port, #v1{sock = Sock}) ->
 i(peer_address, #v1{sock = Sock}) ->
     {ok, {A, _}} = rabbit_net:peername(Sock),
     A;
+i(peer_certificate, #v1{sock = Sock}) ->
+    case rabbit_net:peercert(Sock) of
+        {ok, Cert} -> Cert;
+        nossl      -> nossl
+    end;
 i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
