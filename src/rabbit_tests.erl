@@ -1736,16 +1736,17 @@ variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
 assert_prop(List, Prop, Value) ->
     Value = proplists:get_value(Prop, List).
 
+assert_props(List, PropVals) ->
+    [assert_prop(List, Prop, Value) || {Prop, Value} <- PropVals].
+
 with_fresh_variable_queue(Fun) ->
     ok = empty_test_queue(),
     VQ = rabbit_variable_queue:init(test_queue(), true, false),
     S0 = rabbit_variable_queue:status(VQ),
-    assert_prop(S0, len, 0),
-    assert_prop(S0, q1, 0),
-    assert_prop(S0, q2, 0),
-    assert_prop(S0, delta, {delta, undefined, 0, undefined}),
-    assert_prop(S0, q3, 0),
-    assert_prop(S0, q4, 0),
+    assert_props(S0, [{q1, 0}, {q2, 0},
+                      {delta, {delta, undefined, 0, undefined}},
+                      {q3, 0}, {q4, 0},
+                      {len, 0}]),
     _ = rabbit_variable_queue:delete_and_terminate(Fun(VQ)),
     passed.
     
@@ -1759,32 +1760,31 @@ test_variable_queue() ->
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
-    %% start by sending in a couple of segments worth
-    Len1 = 2*SegmentSize,
-    VQ1 = variable_queue_publish(false, Len1, VQ0),
 
-    VQ2 = squeeze_and_relax_queue(Len1, VQ1),
+    %% start by sending in a couple of segments worth
+    Len = 2*SegmentSize,
+    VQ1 = variable_queue_publish(false, Len, VQ0),
+
+    %% squeeze and relax queue
+    Churn = Len div 32,
+    VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
+    {Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
+    VQ7 = lists:foldl(
+            fun (Duration1, VQ4) ->
+                    {_Duration, VQ5} = rabbit_variable_queue:ram_duration(VQ4),
+                    io:format("~p:~n~p~n",
+                              [Duration1, rabbit_variable_queue:status(VQ5)]),
+                    VQ6 = rabbit_variable_queue:set_ram_duration_target(
+                            Duration1, VQ5),
+                    publish_fetch_and_ack(Churn, Len, VQ6)
+            end, VQ3, [Duration / 4, 0, Duration / 4, infinity]),
 
     %% drain
-    {VQ3, AckTags} = variable_queue_fetch(Len1, false, false, Len1, VQ2),
-    VQ4 = rabbit_variable_queue:ack(AckTags, VQ3),
-    {empty, VQ5} = rabbit_variable_queue:fetch(true, VQ4),
+    {VQ8, AckTags} = variable_queue_fetch(Len, false, false, Len, VQ7),
+    VQ9 = rabbit_variable_queue:ack(AckTags, VQ8),
+    {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
 
-    VQ5.
-
-squeeze_and_relax_queue(Len, VQ0) ->
-    Churn = Len div 32,
-    VQ1 = publish_fetch_and_ack(Churn, Len, VQ0),
-    {Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
-    lists:foldl(
-      fun (Duration1, VQ3) ->
-              {_Duration, VQ4} = rabbit_variable_queue:ram_duration(VQ3),
-              io:format("~p:~n~p~n",
-                        [Duration1, rabbit_variable_queue:status(VQ4)]),
-              VQ5 = rabbit_variable_queue:set_ram_duration_target(
-                      Duration1, VQ4),
-              publish_fetch_and_ack(Churn, Len, VQ5)
-      end, VQ2, [Duration / 4, 0, Duration / 4, infinity]).
+    VQ10.
 
 publish_fetch_and_ack(0, _Len, VQ0) ->
     VQ0;
@@ -1803,30 +1803,30 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
     %% one segment in q3 as betas, and half a segment in delta
     S3 = rabbit_variable_queue:status(VQ3),
     io:format("~p~n", [S3]),
-    assert_prop(S3, delta, {delta, SegmentSize, HalfSegment,
-                            SegmentSize + HalfSegment}),
-    assert_prop(S3, q3, SegmentSize),
-    assert_prop(S3, len, SegmentSize + HalfSegment),
+    assert_props(S3, [{delta, {delta, SegmentSize, HalfSegment,
+                               SegmentSize + HalfSegment}},
+                      {q3, SegmentSize},
+                      {len, SegmentSize + HalfSegment}]),
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
     VQ5 = variable_queue_wait_for_shuffling_end(
             variable_queue_publish(true, 1, VQ4)),
     %% should have 1 alpha, but it's in the same segment as the deltas
     S5 = rabbit_variable_queue:status(VQ5),
     io:format("~p~n", [S5]),
-    assert_prop(S5, q1, 1),
-    assert_prop(S5, delta, {delta, SegmentSize, HalfSegment,
-                            SegmentSize + HalfSegment}),
-    assert_prop(S5, q3, SegmentSize),
-    assert_prop(S5, len, SegmentSize + HalfSegment + 1),
+    assert_props(S5, [{q1, 1},
+                      {delta, {delta, SegmentSize, HalfSegment,
+                               SegmentSize + HalfSegment}},
+                      {q3, SegmentSize},
+                      {len, SegmentSize + HalfSegment + 1}]),
     {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
                                           SegmentSize + HalfSegment + 1, VQ5),
     %% the half segment should now be in q3 as betas
     S6 = rabbit_variable_queue:status(VQ6),
     io:format("~p~n", [S6]),
-    assert_prop(S6, delta, {delta, undefined, 0, undefined}),
-    assert_prop(S6, q1, 1),
-    assert_prop(S6, q3, HalfSegment),
-    assert_prop(S6, len, HalfSegment + 1),
+    assert_props(S6, [{q1, 1},
+                      {delta, {delta, undefined, 0, undefined}},
+                      {q3, HalfSegment},
+                      {len, HalfSegment + 1}]),
     {VQ7, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ6),
     VQ8 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ7),
