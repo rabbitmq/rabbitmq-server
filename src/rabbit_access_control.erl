@@ -172,9 +172,14 @@ check_resource_access(Username,
               [] ->
                   false;
               [#user_permission{permission = P}] ->
+                  PermRegexp = case element(permission_index(Permission), P) of
+                                   %% <<"^$">> breaks Emacs' erlang mode
+                                   <<"">> -> <<$^, $$>>;
+                                   RE     -> RE
+                               end,
                   case regexp:match(
                          binary_to_list(Name),
-                         binary_to_list(element(permission_index(Permission), P))) of
+                         binary_to_list(PermRegexp)) of
                       {match, _, _} -> true;
                       nomatch       -> false
                   end

@@ -34,8 +34,8 @@
 -export([init/3, terminate/1, delete_and_terminate/1, purge/1, publish/2,
          publish_delivered/3, fetch/2, ack/2, tx_publish/3, tx_ack/3,
          tx_rollback/2, tx_commit/3, requeue/2, len/1, is_empty/1,
-         set_ram_duration_target/2, ram_duration/1, needs_sync/1, sync/1,
-         handle_pre_hibernate/1, status/1]).
+         set_ram_duration_target/2, ram_duration/1, needs_idle_timeout/1,
+         idle_timeout/1, handle_pre_hibernate/1, status/1]).
 
 -export([start/1]).
 
@@ -197,9 +197,9 @@ set_ram_duration_target(_DurationTarget, State) -> State.
 
 ram_duration(State) -> {0, State}.
 
-needs_sync(_State) -> false.
+needs_idle_timeout(_State) -> false.
 
-sync(State) -> State.
+idle_timeout(State) -> State.
 
 handle_pre_hibernate(State) -> State.
 
