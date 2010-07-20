@@ -62,7 +62,7 @@ init(AmqpParams = #amqp_params{username = User,
     rabbit_access_control:check_vhost_access(#user{username = User,
                                                    password = Pass},
                                              VHost),
-    {ok, Collector} = rabbit_reader_queue_collector:start_link(),
+    {ok, Collector} = rabbit_queue_collector:start_link(),
     ServerProperties = rabbit_reader:server_properties(),
     {ok, #dc_state{params = AmqpParams,
                    queue_collector = Collector,
@@ -191,8 +191,8 @@ set_closing_state(ChannelCloseType, NewClosing,
 %% after the connection broadcasts a connection_closing message to all channels
 all_channels_closed_event(#dc_state{closing = Closing,
                                     queue_collector = Collector} = State) ->
-    rabbit_reader_queue_collector:delete_all(Collector),
-    rabbit_reader_queue_collector:shutdown(Collector),
+    rabbit_queue_collector:delete_all(Collector),
+    rabbit_queue_collector:shutdown(Collector),
     rabbit_misc:unlink_and_capture_exit(Collector),
     case Closing#dc_closing.from of
         none -> ok;

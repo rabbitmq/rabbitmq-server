@@ -28,21 +28,54 @@ DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
 VERSION=0.0.0
-SOURCE_PACKAGE_NAME=$(PACKAGE)-$(VERSION)-src
+SOURCE_PACKAGE_DIR=$(PACKAGE)-$(VERSION)-src
+SOURCE_PACKAGE_TAR_GZ=$(SOURCE_PACKAGE_DIR).tar.gz
+
+BROKER_HEADERS=$(wildcard $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl)
+BROKER_SOURCES=$(wildcard $(BROKER_DIR)/$(SOURCE_DIR)/*.erl)
+BROKER_DEPS=$(BROKER_HEADERS) $(BROKER_SOURCES)
 
 INFILES=$(shell find . -name '*.app.in')
 INTARGETS=$(patsubst %.in, %, $(INFILES))
 
-.PHONY: common_package
-
 include common.mk
+
+run_in_broker: compile $(BROKER_DEPS) $(EBIN_DIR)/$(PACKAGE).app
+	$(MAKE) RABBITMQ_SERVER_START_ARGS='$(PA_LOAD_PATH)' -C $(BROKER_DIR) run
 
 clean: common_clean
 	rm -f $(INTARGETS)
-	rm -fr $(DIST_DIR)
+	rm -rf $(DIST_DIR)
 
 %.app: %.app.in
 	sed -e 's:%%VSN%%:$(VERSION):g' < $< > $@
+
+###############################################################################
+##  Dialyzer
+###############################################################################
+
+RABBIT_PLT=$(BROKER_DIR)/rabbit.plt
+
+dialyze: $(RABBIT_PLT) $(TARGETS) $(TEST_TARGETS)
+	$(LIBS_PATH) erl -noshell -pa $(LOAD_PATH) -eval \
+        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(RABBIT_PLT)\", \"$(TARGETS) $(TEST_TARGETS)\"))."
+
+.PHONY: $(RABBIT_PLT)
+$(RABBIT_PLT):
+	$(MAKE) -C $(BROKER_DIR) create-plt
+
+###############################################################################
+##  Documentation
+###############################################################################
+
+doc: $(DOC_DIR)/index.html
+
+$(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
+	mkdir -p $(DOC_DIR)
+	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
+
+$(DOC_DIR)/index.html: $(DEPS_DIR)/$(COMMON_PACKAGE_DIR) $(DOC_DIR)/overview.edoc $(SOURCES)
+	$(LIBS_PATH) erl -noshell -eval 'edoc:application(amqp_client, ".", [{preprocess, true}])' -run init stop
 
 ###############################################################################
 ##  Testing
@@ -62,39 +95,52 @@ test_common_package: common_package package prepare_tests
 	$(MAKE) stop_test_broker_node && \
 	$$OK
 
+compile_tests: $(TEST_TARGETS) $(EBIN_DIR)/$(PACKAGE).app
+
+$(TEST_TARGETS): $(TEST_DIR)
+
+.PHONY: $(TEST_DIR)
+$(TEST_DIR): $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
+	$(MAKE) -C $(TEST_DIR)
+
 ###############################################################################
 ##  Packaging
 ###############################################################################
 
 COPY=cp -pR
 
-common_package: $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
+common_package: $(DIST_DIR)/$(COMMON_PACKAGE_EZ)
 
-$(DIST_DIR)/$(COMMON_PACKAGE_NAME): $(BROKER_SOURCES) $(BROKER_HEADERS) $(COMMON_PACKAGE).app
+$(DIST_DIR)/$(COMMON_PACKAGE_EZ): $(DIST_DIR)/$(COMMON_PACKAGE_DIR) | $(DIST_DIR)
+	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_EZ) $(COMMON_PACKAGE_DIR))
+
+$(DIST_DIR)/$(COMMON_PACKAGE_DIR): $(BROKER_DEPS) $(COMMON_PACKAGE_DIR).app | $(DIST_DIR)
 	$(MAKE) -C $(BROKER_DIR)
-	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
-	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
-	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR)
+	rm -rf $(DIST_DIR)/$(COMMON_PACKAGE_DIR)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(INCLUDE_DIR)
+	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(EBIN_DIR)
+	cp $(COMMON_PACKAGE_DIR).app $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(EBIN_DIR)/
 	$(foreach DEP, $(DEPS), \
-        ( cp $(BROKER_DIR)/$(EBIN_DIR)/$(DEP).beam \
-          $(DIST_DIR)/$(COMMON_PACKAGE)/$(EBIN_DIR) \
-        );)
-	cp $(BROKER_DIR)/$(INCLUDE_DIR)/*.hrl $(DIST_DIR)/$(COMMON_PACKAGE)/$(INCLUDE_DIR)
-	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_NAME) $(COMMON_PACKAGE))
+	    ( cp $(BROKER_DIR)/ebin/$(DEP).beam $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(EBIN_DIR)/ \
+	    );)
+	cp $(BROKER_DIR)/include/*.hrl $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(INCLUDE_DIR)/
 
-source_tarball: clean $(DIST_DIR)/$(COMMON_PACKAGE_NAME)
-	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(DIST_DIR)
-	$(COPY) $(DIST_DIR)/$(COMMON_PACKAGE_NAME) $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(DIST_DIR)/
-	$(COPY) README $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/
-	$(COPY) common.mk $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/
-	$(COPY) Makefile.in $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/Makefile
-	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(SOURCE_DIR)
-	$(COPY) $(SOURCE_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(SOURCE_DIR)/
-	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(EBIN_DIR)
-	$(COPY) $(EBIN_DIR)/*.app $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(EBIN_DIR)/
-	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(INCLUDE_DIR)
-	$(COPY) $(INCLUDE_DIR)/*.hrl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(INCLUDE_DIR)/
-	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)
-	$(COPY) $(TEST_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)/
-	$(COPY) $(TEST_DIR)/Makefile $(DIST_DIR)/$(SOURCE_PACKAGE_NAME)/$(TEST_DIR)/
-	cd $(DIST_DIR) ; tar cvzf $(SOURCE_PACKAGE_NAME).tar.gz $(SOURCE_PACKAGE_NAME)
+source_tarball: clean $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DIST_DIR)
+	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)
+	$(COPY) $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)/
+	$(COPY) README $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
+	$(COPY) common.mk $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
+	$(COPY) Makefile.in $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/Makefile
+	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(SOURCE_DIR)
+	$(COPY) $(SOURCE_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(SOURCE_DIR)/
+	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(EBIN_DIR)
+	$(COPY) $(EBIN_DIR)/*.app $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(EBIN_DIR)/
+	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(INCLUDE_DIR)
+	$(COPY) $(INCLUDE_DIR)/*.hrl $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(INCLUDE_DIR)/
+	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(TEST_DIR)
+	$(COPY) $(TEST_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(TEST_DIR)/
+	$(COPY) $(TEST_DIR)/Makefile $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(TEST_DIR)/
+	cd $(DIST_DIR) ; tar cvzf $(SOURCE_PACKAGE_TAR_GZ) $(SOURCE_PACKAGE_DIR)
+
+$(DIST_DIR):
+	mkdir -p $@
