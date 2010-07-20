@@ -1796,43 +1796,45 @@ publish_fetch_and_ack(N, Len, VQ0) ->
 test_variable_queue_partial_segments_delta_thing(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
     HalfSegment = SegmentSize div 2,
-    VQ1 = variable_queue_publish(true, SegmentSize + HalfSegment, VQ0),
+    OneAndAHalfSegment = SegmentSize + HalfSegment,
+    VQ1 = variable_queue_publish(true, OneAndAHalfSegment, VQ0),
     {_Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
-    VQ3 = variable_queue_wait_for_shuffling_end(
-            rabbit_variable_queue:set_ram_duration_target(0, VQ2)),
-    %% one segment in q3 as betas, and half a segment in delta
-    S3 = rabbit_variable_queue:status(VQ3),
-    io:format("~p~n", [S3]),
-    assert_props(S3, [{delta, {delta, SegmentSize, HalfSegment,
-                               SegmentSize + HalfSegment}},
-                      {q3, SegmentSize},
-                      {len, SegmentSize + HalfSegment}]),
+    VQ3 = check_variable_queue_status(
+            rabbit_variable_queue:set_ram_duration_target(0, VQ2),
+            %% one segment in q3 as betas, and half a segment in delta
+            [{delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
+             {q3, SegmentSize},
+             {len, SegmentSize + HalfSegment}]),
+    %% one alpha, but it's in the same segment as the deltas
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
-    VQ5 = variable_queue_wait_for_shuffling_end(
-            variable_queue_publish(true, 1, VQ4)),
-    %% should have 1 alpha, but it's in the same segment as the deltas
-    S5 = rabbit_variable_queue:status(VQ5),
-    io:format("~p~n", [S5]),
-    assert_props(S5, [{q1, 1},
-                      {delta, {delta, SegmentSize, HalfSegment,
-                               SegmentSize + HalfSegment}},
-                      {q3, SegmentSize},
-                      {len, SegmentSize + HalfSegment + 1}]),
+    VQ5 = check_variable_queue_status(
+            variable_queue_publish(true, 1, VQ4),
+            [{q1, 1},
+             {delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
+             {q3, SegmentSize},
+             {len, SegmentSize + HalfSegment + 1}]),
     {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
                                           SegmentSize + HalfSegment + 1, VQ5),
-    %% the half segment should now be in q3 as betas
-    S6 = rabbit_variable_queue:status(VQ6),
-    io:format("~p~n", [S6]),
-    assert_props(S6, [{q1, 1},
-                      {delta, {delta, undefined, 0, undefined}},
-                      {q3, HalfSegment},
-                      {len, HalfSegment + 1}]),
-    {VQ7, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
-                                           HalfSegment + 1, VQ6),
-    VQ8 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ7),
+    VQ7 = check_variable_queue_status(
+            VQ6,
+            %% the half segment should now be in q3 as betas
+            [{q1, 1},
+             {delta, {delta, undefined, 0, undefined}},
+             {q3, HalfSegment},
+             {len, HalfSegment + 1}]),
+    {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
+                                           HalfSegment + 1, VQ7),
+    VQ9 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
     %% should be empty now
-    {empty, VQ9} = rabbit_variable_queue:fetch(true, VQ8),
-    VQ9.
+    {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
+    VQ10.
+
+check_variable_queue_status(VQ0, Props) ->
+    VQ1 = variable_queue_wait_for_shuffling_end(VQ0),
+    S = rabbit_variable_queue:status(VQ1),
+    io:format("~p~n", [S]),
+    assert_props(S, Props),
+    VQ1.
 
 variable_queue_wait_for_shuffling_end(VQ) ->
     case rabbit_variable_queue:needs_idle_timeout(VQ) of
