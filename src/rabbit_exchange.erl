@@ -33,9 +33,8 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, declare/5, lookup/1, lookup_or_die/1,
-         list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         publish/2]).
+-export([recover/0, declare/5, lookup/1, lookup_or_die/1, list/1, info_keys/0,
+         info/1, info/2, info_all/1, info_all/2, publish/2]).
 -export([add_binding/5, delete_binding/5, list_bindings/1]).
 -export([delete/2]).
 -export([delete_queue_bindings/1, delete_transient_queue_bindings/1]).
@@ -56,45 +55,72 @@
 
 -ifdef(use_specs).
 
--type(bind_res() :: 'ok' | {'error',
-                            'queue_not_found' |
-                            'exchange_not_found' |
-                            'exchange_and_queue_not_found'}).
--type(inner_fun() :: fun((exchange(), queue()) -> any())).
+-export_type([name/0, type/0, binding_key/0]).
+
+-type(name() :: rabbit_types:r('exchange')).
+-type(type() :: atom()).
+-type(binding_key() :: binary()).
+
+-type(bind_res() :: rabbit_types:ok_or_error('queue_not_found' |
+                                             'exchange_not_found' |
+                                             'exchange_and_queue_not_found')).
+-type(inner_fun() ::
+        fun((rabbit_types:exchange(), queue()) ->
+                   rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 :: (exchange_name(), exchange_type(), boolean(), boolean(),
-                    amqp_table()) -> exchange()).
+-spec(declare/5 ::
+        (name(), type(), boolean(), boolean(), rabbit_framing:amqp_table())
+        -> rabbit_types:exchange()).
 -spec(check_type/1 :: (binary()) -> atom()).
--spec(assert_equivalence/5 :: (exchange(), atom(), boolean(), boolean(),
-                               amqp_table()) -> 'ok').
--spec(assert_args_equivalence/2 :: (exchange(), amqp_table()) -> 'ok').
--spec(lookup/1 :: (exchange_name()) -> {'ok', exchange()} | not_found()).
--spec(lookup_or_die/1 :: (exchange_name()) -> exchange()).
--spec(list/1 :: (vhost()) -> [exchange()]).
--spec(info_keys/0 :: () -> [info_key()]).
--spec(info/1 :: (exchange()) -> [info()]).
--spec(info/2 :: (exchange(), [info_key()]) -> [info()]).
--spec(info_all/1 :: (vhost()) -> [[info()]]).
--spec(info_all/2 :: (vhost(), [info_key()]) -> [[info()]]).
--spec(publish/2 :: (exchange(), delivery()) -> {routing_result(), [pid()]}).
+-spec(assert_equivalence/5 ::
+        (rabbit_types:exchange(), atom(), boolean(), boolean(),
+         rabbit_framing:amqp_table())
+        -> 'ok').
+-spec(assert_args_equivalence/2 ::
+        (rabbit_types:exchange(), rabbit_framing:amqp_table()) -> 'ok').
+-spec(lookup/1 ::
+        (name()) -> rabbit_types:ok(rabbit_types:exchange()) |
+                    rabbit_types:error('not_found')).
+-spec(lookup_or_die/1 :: (name()) -> rabbit_types:exchange()).
+-spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
+-spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
+-spec(info/1 :: (rabbit_types:exchange()) -> [rabbit_types:info()]).
+-spec(info/2 ::
+        (rabbit_types:exchange(), [rabbit_types:info_key()])
+        -> [rabbit_types:info()]).
+-spec(info_all/1 :: (rabbit_types:vhost()) -> [[rabbit_types:info()]]).
+-spec(info_all/2 ::(rabbit_types:vhost(), [rabbit_types:info_key()])
+                    -> [[rabbit_types:info()]]).
+-spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
+                   -> {rabbit_router:routing_result(), [pid()]}).
 -spec(add_binding/5 ::
-      (exchange_name(), queue_name(), routing_key(), amqp_table(), inner_fun()) ->
-             bind_res()).
+        (name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
+         rabbit_framing:amqp_table(), inner_fun())
+        -> bind_res()).
 -spec(delete_binding/5 ::
-      (exchange_name(), queue_name(), routing_key(), amqp_table(), inner_fun()) ->
-             bind_res() | {'error', 'binding_not_found'}).
--spec(list_bindings/1 :: (vhost()) ->
-             [{exchange_name(), queue_name(), routing_key(), amqp_table()}]).
--spec(delete_queue_bindings/1 :: (queue_name()) -> fun (() -> none())).
--spec(delete_transient_queue_bindings/1 :: (queue_name()) -> 
-             fun (() -> none())).
--spec(delete/2 :: (exchange_name(), boolean()) ->
-             'ok' | not_found() | {'error', 'in_use'}).
--spec(list_queue_bindings/1 :: (queue_name()) ->
-              [{exchange_name(), routing_key(), amqp_table()}]).
--spec(list_exchange_bindings/1 :: (exchange_name()) ->
-              [{queue_name(), routing_key(), amqp_table()}]).
+        (name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
+         rabbit_framing:amqp_table(), inner_fun())
+        -> bind_res() | rabbit_types:error('binding_not_found')).
+-spec(list_bindings/1 ::
+        (rabbit_types:vhost())
+        -> [{name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
+             rabbit_framing:amqp_table()}]).
+-spec(delete_queue_bindings/1 ::
+        (rabbit_amqqueue:name()) -> fun (() -> none())).
+-spec(delete_transient_queue_bindings/1 ::
+        (rabbit_amqqueue:name()) -> fun (() -> none())).
+-spec(delete/2 ::
+        (name(), boolean())-> 'ok' |
+                              rabbit_types:error('not_found') |
+                              rabbit_types:error('in_use')).
+-spec(list_queue_bindings/1 ::
+        (rabbit_amqqueue:name())
+        -> [{name(), rabbit_router:routing_key(),
+             rabbit_framing:amqp_table()}]).
+-spec(list_exchange_bindings/1 ::
+        (name()) -> [{rabbit_amqqueue:name(), rabbit_router:routing_key(),
+                      rabbit_framing:amqp_table()}]).
 
 -endif.
 
@@ -198,7 +224,7 @@ assert_equivalence(X = #exchange{ durable = Durable,
 assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _AutoDelete,
                    _Args) ->
     rabbit_misc:protocol_error(
-      precondition_failed,
+      not_allowed,
       "cannot redeclare ~s with different type, durable or autodelete value",
       [rabbit_misc:rs(Name)]).
 
@@ -215,7 +241,7 @@ assert_args_equivalence(#exchange{ name = Name,
     Ae2 = alternate_exchange_value(Args),
     if Ae1==Ae2 -> ok;
        true     -> rabbit_misc:protocol_error(
-                     precondition_failed,
+                     not_allowed,
                      "cannot redeclare ~s with inequivalent args",
                      [rabbit_misc:rs(Name)])
     end.
@@ -335,7 +361,7 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                       Module = type_to_module(Type),
                       case IsDeleted of
                           auto_deleted -> Module:delete(X, Bs);
-                          no_delete    -> Module:remove_bindings(X, Bs)
+                          not_deleted  -> Module:remove_bindings(X, Bs)
                       end
               end, Cleanup)
     end.
@@ -402,23 +428,27 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                    %% this argument is used to check queue exclusivity;
                    %% in general, we want to fail on that in preference to
                    %% anything else
-                   InnerFun(X, Q),
-                   case mnesia:read({rabbit_route, B}) of
-                       [] ->
-                           sync_binding(B,
-                                        X#exchange.durable andalso
-                                        Q#amqqueue.durable,
-                                        fun mnesia:write/3),
-                           {new, X, B};
-                       [_R] ->
-                           {existing, X, B}
+                   case InnerFun(X, Q) of
+                       ok ->
+                           case mnesia:read({rabbit_route, B}) of
+                               [] ->
+                                   ok = sync_binding(B,
+                                                     X#exchange.durable andalso
+                                                     Q#amqqueue.durable,
+                                                     fun mnesia:write/3),
+                                   {new, X, B};
+                               [_R] ->
+                                   {existing, X, B}
+                           end;
+                       {error, _} = E ->
+                           E
                    end
            end) of
         {new, Exchange = #exchange{ type = Type }, Binding} ->
             (type_to_module(Type)):add_binding(Exchange, Binding);
         {existing, _, _} ->
             ok;
-        Err = {error, _}  ->
+        {error, _} = Err ->
             Err
     end.
 
@@ -428,20 +458,29 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
            fun (X, Q, B) ->
                    case mnesia:match_object(rabbit_route, #route{binding = B},
                                             write) of
-                       [] -> {error, binding_not_found};
-                       _  -> InnerFun(X, Q),
-                             ok = sync_binding(B, Q#amqqueue.durable,
-                                               fun mnesia:delete_object/3),
-                             {maybe_auto_delete(X), B}
+                       [] ->
+                           {error, binding_not_found};
+                       _  ->
+                           case InnerFun(X, Q) of
+                               ok ->
+                                   ok =
+                                       sync_binding(B,
+                                                    X#exchange.durable andalso
+                                                    Q#amqqueue.durable,
+                                                    fun mnesia:delete_object/3),
+                                   {maybe_auto_delete(X), B};
+                               {error, _} = E ->
+                                   E
+                           end
                    end
            end) of
-        Err = {error, _}  ->
+        {error, _} = Err ->
             Err;
-        {{Action, X = #exchange{ type = Type }}, B} ->
+        {{IsDeleted, X = #exchange{ type = Type }}, B} ->
             Module = type_to_module(Type),
-            case Action of
-                auto_delete -> Module:delete(X, [B]);
-                no_delete   -> Module:remove_bindings(X, [B])
+            case IsDeleted of
+                auto_deleted -> Module:delete(X, [B]);
+                not_deleted  -> Module:remove_bindings(X, [B])
             end
     end.
 
@@ -525,10 +564,10 @@ delete(ExchangeName, IfUnused) ->
     end.
 
 maybe_auto_delete(Exchange = #exchange{auto_delete = false}) ->
-    {no_delete, Exchange};
+    {not_deleted, Exchange};
 maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
     case conditional_delete(Exchange) of
-        {error, in_use}         -> {no_delete, Exchange};
+        {error, in_use}         -> {not_deleted, Exchange};
         {deleted, Exchange, []} -> {auto_deleted, Exchange}
     end.
 

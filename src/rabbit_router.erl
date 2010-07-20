@@ -41,7 +41,13 @@
 
 -ifdef(use_specs).
 
--spec(deliver/2 :: ([pid()], delivery()) -> {routing_result(), [pid()]}).
+-export_type([routing_key/0, routing_result/0]).
+
+-type(routing_key() :: binary()).
+-type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
+
+-spec(deliver/2 ::
+        ([pid()], rabbit_types:delivery()) -> {routing_result(), [pid()]}).
 
 -endif.
 
@@ -90,13 +96,13 @@ match_routing_key(Name, RoutingKey) ->
     lookup_qpids(mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
 
 lookup_qpids(Queues) ->
-    sets:fold(
+    lists:foldl(
       fun (Key, Acc) ->
               case mnesia:dirty_read({rabbit_queue, Key}) of
                   [#amqqueue{pid = QPid}] -> [QPid | Acc];
                   []                      -> Acc
               end
-      end, [], sets:from_list(Queues)).
+      end, [], lists:usort(Queues)).
 
 %%--------------------------------------------------------------------
 

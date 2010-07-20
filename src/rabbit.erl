@@ -33,7 +33,8 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0,
+         rotate_logs/1]).
 
 -export([start/2, stop/1]).
 
@@ -183,18 +184,19 @@
 
 -ifdef(use_specs).
 
--type(log_location() :: 'tty' | 'undefined' | string()).
 -type(file_suffix() :: binary()).
+%% this really should be an abstract type
+-type(log_location() :: 'tty' | 'undefined' | file:filename()).
 
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
--spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
--spec(status/0 :: () ->
-             [{running_applications, [{atom(), string(), string()}]} |
-              {nodes, [{node_type(), [erlang_node()]}]} |
-              {running_nodes, [erlang_node()]}]).
+-spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
+-spec(status/0 ::
+        () -> [{running_applications, [{atom(), string(), string()}]} |
+               {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
+               {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -endif.
@@ -424,10 +426,9 @@ print_banner() ->
               "| ~s  +---+   |~n"
               "|                   |~n"
               "+-------------------+~n"
-              "AMQP ~p-~p-~p~n~s~n~s~n~n",
+              "~s~n~s~n~s~n~n",
               [Product, string:right([$v|Version], ProductLen),
-               ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
-               ?PROTOCOL_VERSION_REVISION,
+               ?PROTOCOL_VERSION,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     Settings = [{"node",           node()},
                 {"app descriptor", app_location()},

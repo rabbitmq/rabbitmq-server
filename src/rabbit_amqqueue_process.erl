@@ -35,7 +35,7 @@
 
 -behaviour(gen_server2).
 
--define(UNSENT_MESSAGE_LIMIT,        100).
+-define(UNSENT_MESSAGE_LIMIT,          100).
 -define(SYNC_INTERVAL,                 5). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
@@ -137,7 +137,7 @@ declare(Recover, From,
                    backing_queue = BQ, backing_queue_state = undefined}) ->
     case rabbit_amqqueue:internal_declare(Q, Recover) of
         not_found -> {stop, normal, not_found, State};
-        Q         -> gen_server2:reply(From, Q),
+        Q         -> gen_server2:reply(From, {new, Q}),
                      ok = file_handle_cache:register_callback(
                             rabbit_amqqueue, set_maximum_since_use,
                             [self()]),
@@ -146,7 +146,7 @@ declare(Recover, From,
                                      set_ram_duration_target, [self()]}),
                      BQS = BQ:init(QName, IsDurable, Recover),
                      noreply(State#q{backing_queue_state = BQS});
-        Q1        -> {stop, normal, Q1, State}
+        Q1        -> {stop, normal, {existing, Q1}, State}
     end.
 
 terminate_shutdown(Fun, State) ->
@@ -692,11 +692,10 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             end
     end;
 
-handle_call(stat, _From, State = #q{q = #amqqueue{name = Name},
-                                    backing_queue = BQ,
+handle_call(stat, _From, State = #q{backing_queue = BQ,
                                     backing_queue_state = BQS,
                                     active_consumers = ActiveConsumers}) ->
-    reply({ok, Name, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
+    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->

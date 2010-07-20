@@ -355,42 +355,40 @@ test_field_values() ->
     passed.
 
 %% Test that content frames don't exceed frame-max
-test_content_framing(FrameMax, Fragments) ->
+test_content_framing(FrameMax, BodyBin) ->
     [Header | Frames] =
         rabbit_binary_generator:build_simple_content_frames(
           1,
-          #content{class_id = 0, properties_bin = <<>>,
-                   payload_fragments_rev = Fragments},
-          FrameMax),
-    % header is formatted correctly and the size is the total of the
-    % fragments
+          rabbit_binary_generator:ensure_content_encoded(
+            rabbit_basic:build_content(#'P_basic'{}, BodyBin),
+            rabbit_framing_amqp_0_9_1),
+          FrameMax,
+          rabbit_framing_amqp_0_9_1),
+    %% header is formatted correctly and the size is the total of the
+    %% fragments
     <<_FrameHeader:7/binary, _ClassAndWeight:4/binary,
-     BodySize:64/unsigned, _Rest/binary>> = list_to_binary(Header),
-    BodySize = size(list_to_binary(Fragments)),
-    false = lists:any(
-              fun (ContentFrame) ->
-                      FrameBinary = list_to_binary(ContentFrame),
-                      % assert
-                      <<_TypeAndChannel:3/binary,
-                       Size:32/unsigned,
-                       _Payload:Size/binary,
-                       16#CE>> = FrameBinary,
-                      size(FrameBinary) > FrameMax
-              end,
-              Frames),
+      BodySize:64/unsigned, _Rest/binary>> = list_to_binary(Header),
+    BodySize = size(BodyBin),
+    true = lists:all(
+             fun (ContentFrame) ->
+                     FrameBinary = list_to_binary(ContentFrame),
+                     %% assert
+                     <<_TypeAndChannel:3/binary,
+                       Size:32/unsigned, _Payload:Size/binary, 16#CE>> =
+                         FrameBinary,
+                     size(FrameBinary) =< FrameMax
+             end, Frames),
     passed.
 
 test_content_framing() ->
-    % no content
-    passed = test_content_framing(4096, []),
-    passed = test_content_framing(4096, [<<>>]),
-    % easily fit in one frame
-    passed = test_content_framing(4096,   [<<"Easy">>]),
-    % exactly one frame (empty frame = 8 bytes)
-    passed = test_content_framing(11, [<<"One">>]),
-    % more than one frame
-    passed = test_content_framing(20, [<<"into more than one frame">>,
-                                       <<"This will have to go">>]),
+    %% no content
+    passed = test_content_framing(4096, <<>>),
+    %% easily fit in one frame
+    passed = test_content_framing(4096, <<"Easy">>),
+    %% exactly one frame (empty frame = 8 bytes)
+    passed = test_content_framing(11, <<"One">>),
+    %% more than one frame
+    passed = test_content_framing(11, <<"More than one frame">>),
     passed.
 
 test_topic_match(P, R) ->
@@ -792,13 +790,15 @@ test_server_status() ->
     Writer = spawn(fun () -> receive shutdown -> ok end end),
     Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
                                    self()),
-    [Q, Q2] = [#amqqueue{} = rabbit_amqqueue:declare(
+    [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
+                        {new, Queue = #amqqueue{}} <-
+                            [rabbit_amqqueue:declare(
                                rabbit_misc:r(<<"/">>, queue, Name),
-                               false, false, [], none) ||
-                  Name <- [<<"foo">>, <<"bar">>]],
+                               false, false, [], none)]],
 
     ok = rabbit_amqqueue:basic_consume(Q, true, Ch, undefined,
                                        <<"ctag">>, true, undefined),
+
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
 
@@ -951,11 +951,7 @@ test_memory_pressure() ->
     ok = test_memory_pressure_receive_flow(true),
 
     %% if we publish at this point, the channel should die
-    Content = #content{class_id = element(1, rabbit_framing:method_id(
-                                               'basic.publish')),
-                       properties = none,
-                       properties_bin = <<>>,
-                       payload_fragments_rev = []},
+    Content = rabbit_basic:build_content(#'P_basic'{}, <<>>),
     ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
     expect_normal_channel_termination(MRef0, Ch0),
 

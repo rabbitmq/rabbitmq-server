@@ -862,6 +862,10 @@
                 <listitem><para>Number of channels using the connection.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>protocol</term>
+                <listitem><para>Version of the AMQP protocol in use (currently one of <command>{0,9,1}</command> or <command>{0,8,0}</command>). Note that if a client requests an AMQP 0-9 connection, we treat it as AMQP 0-9-1.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>user</term>
                 <listitem><para>Username associated with the connection.</para></listitem>
               </varlistentry>
