@@ -459,7 +459,7 @@ handle_call({call, Method, AmqpMsg}, From, State) ->
             {reply, {error, use_subscribe}, State};
         {_, ok} ->
             Content = build_content(AmqpMsg),
-            case rabbit_framing:is_method_synchronous(Method) of
+            case ?PROTOCOL:is_method_synchronous(Method) of
                 true  -> {noreply, rpc_top_half(Method, Content, From, State)};
                 false -> do(Method, Content, State),
                          {reply, ok, State}
@@ -503,7 +503,7 @@ handle_cast({cast, Method, AmqpMsg} = Cast, State) ->
             {noreply, State};
         {_, ok} ->
             Content = build_content(AmqpMsg),
-            case rabbit_framing:is_method_synchronous(Method) of
+            case ?PROTOCOL:is_method_synchronous(Method) of
                 true  -> ?LOG_WARN("Channel (~p): casting synchronous method "
                                    "~p.~n"
                                    "The reply will be ignored!~n",
@@ -614,7 +614,7 @@ handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName,
                                                  explanation = Expl} = Error},
             State = #c_state{number = Number}) ->
     ?LOG_WARN("Channel ~p closing: server sent error ~p~n", [Number, Error]),
-    {_, Code, _} = rabbit_framing:lookup_amqp_exception(ErrorName),
+    {_, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
     {stop, {server_initiated_close, Code, Expl}, State};
 
 %%---------------------------------------------------------------------------
