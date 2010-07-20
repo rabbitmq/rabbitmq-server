@@ -1762,47 +1762,44 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
     %% start by sending in a couple of segments worth
     Len1 = 2*SegmentSize,
     VQ1 = variable_queue_publish(false, Len1, VQ0),
-    {_Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
-    {ok, _TRef} = timer:send_after(1000, {duration, 60,
-                                          fun (V) -> (V*0.75)-1 end}),
-    VQ3 = test_variable_queue_dynamic_duration_change_f(Len1, VQ2),
-    {VQ4, AckTags} = variable_queue_fetch(Len1, false, false, Len1, VQ3),
-    VQ5 = rabbit_variable_queue:ack(AckTags, VQ4),
-    {empty, VQ6} = rabbit_variable_queue:fetch(true, VQ5),
+
+    VQ2 = squeeze_and_relax_queue(Len1, VQ1),
+
+    %% drain
+    {VQ3, AckTags} = variable_queue_fetch(Len1, false, false, Len1, VQ2),
+    VQ4 = rabbit_variable_queue:ack(AckTags, VQ3),
+    {empty, VQ5} = rabbit_variable_queue:fetch(true, VQ4),
 
     %% just publish and fetch some persistent msgs, this hits the the
     %% partial segment path in queue_index due to the period when
     %% duration was 0 and the entire queue was delta.
-    VQ7 = variable_queue_publish(true, 20, VQ6),
-    {VQ8, AckTags1} = variable_queue_fetch(20, true, false, 20, VQ7),
-    VQ9 = rabbit_variable_queue:ack(AckTags1, VQ8),
-    VQ10 = rabbit_variable_queue:handle_pre_hibernate(VQ9),
-    {empty, VQ11} = rabbit_variable_queue:fetch(true, VQ10),
-    VQ11.
+    VQ6 = variable_queue_publish(true, 20, VQ5),
+    {VQ7, AckTags1} = variable_queue_fetch(20, true, false, 20, VQ6),
+    VQ8 = rabbit_variable_queue:ack(AckTags1, VQ7),
+    VQ9 = rabbit_variable_queue:handle_pre_hibernate(VQ8),
+    {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
+    VQ10.
 
-test_variable_queue_dynamic_duration_change_f(Len, VQ0) ->
+squeeze_and_relax_queue(Len, VQ0) ->
+    Churn = Len div 32,
+    VQ1 = publish_fetch_and_ack(Churn, Len, VQ0),
+    {Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
+    lists:foldl(
+      fun (Duration1, VQ3) ->
+              {_Duration, VQ4} = rabbit_variable_queue:ram_duration(VQ3),
+              io:format("~p:~n~p~n",
+                        [Duration1, rabbit_variable_queue:status(VQ4)]),
+              VQ5 = rabbit_variable_queue:set_ram_duration_target(
+                      Duration1, VQ4),
+              publish_fetch_and_ack(Churn, Len, VQ5)
+      end, VQ2, [Duration / 4, 0, Duration / 4, infinity]).
+
+publish_fetch_and_ack(0, _Len, VQ0) ->
+    VQ0;
+publish_fetch_and_ack(N, Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
-    VQ3 = rabbit_variable_queue:ack([AckTag], VQ2),
-    receive
-        {duration, _, stop} ->
-            VQ3;
-        {duration, N, Fun} ->
-            N1 = lists:max([Fun(N), 0]),
-            Fun1 = case N1 of
-                       0               -> fun (V) -> (V+1)/0.75 end;
-                       _ when N1 > 400 -> stop;
-                       _               -> Fun
-                   end,
-            {ok, _TRef} = timer:send_after(1000, {duration, N1, Fun1}),
-            {_Duration, VQ4} = rabbit_variable_queue:ram_duration(VQ3),
-            %% /37 otherwise the duration is just too high to stress things
-            VQ5 = rabbit_variable_queue:set_ram_duration_target(N/37, VQ4),
-            io:format("~p:~n~p~n~n", [N, rabbit_variable_queue:status(VQ5)]),
-            test_variable_queue_dynamic_duration_change_f(Len, VQ5)
-    after 0 ->
-            test_variable_queue_dynamic_duration_change_f(Len, VQ3)
-    end.
+    publish_fetch_and_ack(N-1, Len, rabbit_variable_queue:ack([AckTag], VQ2)).
 
 test_variable_queue_partial_segments_delta_thing(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
