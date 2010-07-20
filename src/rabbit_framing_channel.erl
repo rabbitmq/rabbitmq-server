@@ -73,16 +73,25 @@ read_frame(ChannelPid) ->
     end.
 
 mainloop(ChannelPid, Protocol) ->
-    {method, MethodName, FieldsBin} = read_frame(ChannelPid),
-    Method = Protocol:decode_method_fields(MethodName, FieldsBin),
-    case Protocol:method_has_content(MethodName) of
-        true  -> {ClassId, _MethodId} = Protocol:method_id(MethodName),
-                 rabbit_channel:do(ChannelPid, Method,
-                                   collect_content(ChannelPid, ClassId,
-                                                   Protocol));
-        false -> rabbit_channel:do(ChannelPid, Method)
-    end,
-    ?MODULE:mainloop(ChannelPid, Protocol).
+    Decoded = read_frame(ChannelPid),
+    case Decoded of
+        {method, MethodName, FieldsBin} ->
+            Method = Protocol:decode_method_fields(MethodName, FieldsBin),
+            case Protocol:method_has_content(MethodName) of
+                true  -> {ClassId, _MethodId} = Protocol:method_id(MethodName),
+                         rabbit_channel:do(ChannelPid, Method,
+                                           collect_content(ChannelPid,
+                                                           ClassId,
+                                                           Protocol));
+                false -> rabbit_channel:do(ChannelPid, Method)
+            end,
+            ?MODULE:mainloop(ChannelPid, Protocol);
+        _ ->
+            rabbit_misc:protocol_error(
+              unexpected_frame,
+              "expected method frame, got ~p instead",
+              [Decoded])
+    end.
 
 collect_content(ChannelPid, ClassId, Protocol) ->
     case read_frame(ChannelPid) of
@@ -95,13 +104,13 @@ collect_content(ChannelPid, ClassId, Protocol) ->
                      payload_fragments_rev = Payload};
         {content_header, HeaderClassId, 0, _BodySize, _PropertiesBin} ->
             rabbit_misc:protocol_error(
-              command_invalid,
+              unexpected_frame,
               "expected content header for class ~w, "
               "got one for class ~w instead",
               [ClassId, HeaderClassId]);
         _ ->
             rabbit_misc:protocol_error(
-              command_invalid,
+              unexpected_frame,
               "expected content header for class ~w, "
               "got non content header frame instead",
               [ClassId])
@@ -117,7 +126,7 @@ collect_content_payload(ChannelPid, RemainingByteCount, Acc) ->
                                     [FragmentBin | Acc]);
         _ ->
             rabbit_misc:protocol_error(
-              command_invalid,
+              unexpected_frame,
               "expected content body, got non content body frame instead",
               [])
     end.
