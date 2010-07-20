@@ -19,7 +19,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 -module(rabbit_shovel_sup).
--behaviour(supervisor3).
+-behaviour(supervisor2).
 
 -export([start_link/0, init/1]).
 
@@ -29,7 +29,7 @@
 start_link() ->
     case parse_configuration(application:get_env(shovels)) of
         {ok, Configurations} ->
-            supervisor3:start_link({local, ?MODULE}, ?MODULE, [Configurations]);
+            supervisor2:start_link({local, ?MODULE}, ?MODULE, [Configurations]);
         {error, Reason} ->
             {error, Reason}
     end.
