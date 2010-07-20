@@ -103,7 +103,6 @@ start() ->
                                     end],
             case ProbablyBadNews of
                 [_] ->
-                    io:format("~p~n", [ProbablyBadNews]),
                     error("generation of boot script file ~s failed:~n~s",
                           [ScriptFile, rabbit_format_error(
                                          [{error, W} || W <- ProbablyBadNews])]);
@@ -154,14 +153,14 @@ stop() ->
     ok.
 
 rabbit_format_error([E | Es]) ->
-    rabbit_format_error(E),
-    rabbit_format_error(Es);
+    [rabbit_format_error(E) | rabbit_format_error(Es)];
 rabbit_format_error([]) ->
-    ok;
+    [];
 rabbit_format_error({error, {exref_undef, Fs}}) ->
-    [io:format("*ERROR* Undefined function ~p~n", [F]) || F <- Fs];
+    [io_lib:format("*ERROR* Undefined function ~p:~p/~p~n",
+                   [M, F, A]) || {M, F, A} <- Fs];
 rabbit_format_error({error, E}) ->
-    io:format("*ERROR* ~p~n", [E]).
+    io_lib:format("*ERROR* ~p~n", [E]).
 
 
 get_env(Key, Default) ->
