@@ -94,6 +94,21 @@ start() ->
     ScriptFile = RootName ++ ".script",
     case systools:make_script(RootName, [local, silent, exref]) of
         {ok, Module, Warnings} ->
+            %% These are unrecoverable warnings.  Even if make_script
+            %% doesn't think they're errors, we treat them as such.
+            ProbablyBadNews = [W || {warning, W} <- Warnings,
+                                    case W of
+                                        {exref_undef, _} -> true;
+                                        _                -> false
+                                    end],
+            case ProbablyBadNews of
+                [_] ->
+                    io:format("~p~n", [ProbablyBadNews]),
+                    error("generation of boot script file ~s failed:~n~s",
+                          [ScriptFile, rabbit_format_error(
+                                         [{error, W} || W <- ProbablyBadNews])]);
+                _ -> ok
+            end,
             %% This gets lots of spurious no-source warnings when we
             %% have .ez files, so we want to supress them to prevent
             %% hiding real issues. On Ubuntu, we also get warnings
@@ -137,6 +152,17 @@ start() ->
 
 stop() ->
     ok.
+
+rabbit_format_error([E | Es]) ->
+    rabbit_format_error(E),
+    rabbit_format_error(Es);
+rabbit_format_error([]) ->
+    ok;
+rabbit_format_error({error, {exref_undef, Fs}}) ->
+    [io:format("*ERROR* Undefined function ~p~n", [F]) || F <- Fs];
+rabbit_format_error({error, E}) ->
+    io:format("*ERROR* ~p~n", [E]).
+
 
 get_env(Key, Default) ->
     case application:get_env(rabbit, Key) of
