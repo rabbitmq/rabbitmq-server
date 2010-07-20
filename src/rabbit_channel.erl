@@ -402,6 +402,9 @@ handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
     stop;
 
+handle_method(#'access.request'{},_, State) ->
+    {reply, #'access.request_ok'{ticket = 1}, State};
+
 handle_method(#'basic.publish'{}, _, #ch{flow = #flow{client = false}}) ->
     rabbit_misc:protocol_error(
       command_invalid,
