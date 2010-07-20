@@ -1770,15 +1770,7 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
     VQ4 = rabbit_variable_queue:ack(AckTags, VQ3),
     {empty, VQ5} = rabbit_variable_queue:fetch(true, VQ4),
 
-    %% just publish and fetch some persistent msgs, this hits the the
-    %% partial segment path in queue_index due to the period when
-    %% duration was 0 and the entire queue was delta.
-    VQ6 = variable_queue_publish(true, 20, VQ5),
-    {VQ7, AckTags1} = variable_queue_fetch(20, true, false, 20, VQ6),
-    VQ8 = rabbit_variable_queue:ack(AckTags1, VQ7),
-    VQ9 = rabbit_variable_queue:handle_pre_hibernate(VQ8),
-    {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
-    VQ10.
+    VQ5.
 
 squeeze_and_relax_queue(Len, VQ0) ->
     Churn = Len div 32,
