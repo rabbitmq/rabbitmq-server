@@ -96,11 +96,7 @@ start() ->
         {ok, Module, Warnings} ->
             %% These are unrecoverable warnings.  Even if make_script
             %% doesn't think they're errors, we treat them as such.
-            ProbablyBadNews = [W || {warning, W} <- Warnings,
-                                    case W of
-                                        {exref_undef, _} -> true;
-                                        _                -> false
-                                    end],
+            ProbablyBadNews = [W || {warning, W = {exref_undef, _}} <- Warnings],
             case ProbablyBadNews of
                 [_] ->
                     error("generation of boot script file ~s failed:~n~s",
@@ -152,10 +148,8 @@ start() ->
 stop() ->
     ok.
 
-rabbit_format_error([E | Es]) ->
-    [rabbit_format_error(E) | rabbit_format_error(Es)];
-rabbit_format_error([]) ->
-    [];
+rabbit_format_error(Es) when is_list(Es) ->
+    [rabbit_format_error(E) || E <- Es];
 rabbit_format_error({error, {exref_undef, Fs}}) ->
     [io_lib:format("*ERROR* Undefined function ~p:~p/~p~n",
                    [M, F, A]) || {M, F, A} <- Fs];
