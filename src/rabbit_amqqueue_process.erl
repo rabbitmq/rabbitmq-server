@@ -59,7 +59,8 @@
             expires,
             sync_timer_ref,
             rate_timer_ref,
-            expiry_timer_ref}).
+            expiry_timer_ref
+           }).
 
 -record(consumer, {tag, ack_required}).
 
@@ -124,15 +125,15 @@ init(Q) ->
     {ok, BQ} = application:get_env(backing_queue_module),
 
     State = #q{q = Q#amqqueue{pid = self()},
-            exclusive_consumer = none,
-            has_had_consumers = false,
-            backing_queue = BQ,
-            backing_queue_state = undefined,
-            active_consumers = queue:new(),
-            blocked_consumers = queue:new(),
-            sync_timer_ref = undefined,
-            rate_timer_ref = undefined,
-            expiry_timer_ref = undefined},
+               exclusive_consumer = none,
+               has_had_consumers = false,
+               backing_queue = BQ,
+               backing_queue_state = undefined,
+               active_consumers = queue:new(),
+               blocked_consumers = queue:new(),
+               sync_timer_ref = undefined,
+               rate_timer_ref = undefined,
+               expiry_timer_ref = undefined},
 
      case init_expires(State) of
          {error, Error} -> {stop, Error};
@@ -258,9 +259,7 @@ start_expiry_timer(State = #q{expires = Expires}) ->
     ?LOGDEBUG("~p: Starting expire timer: ~p~n", [State#q.q, Expires]),
     NewState = stop_expiry_timer(State),
     {ok, TRef} = timer:apply_after(
-                    Expires,
-                    rabbit_amqqueue, maybe_expire,
-                    [self()]),
+                   Expires, rabbit_amqqueue, maybe_expire, [self()]),
     NewState#q{expiry_timer_ref = TRef}.
 
 start_expiry_timer(State, Expires) ->

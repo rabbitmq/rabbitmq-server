@@ -288,13 +288,11 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
 check_argument_equivalent(Prev, Now, Key, QueueName) ->
     case {rabbit_misc:table_lookup(Now, Key),
           rabbit_misc:table_lookup(Prev, Key)} of
-        {Same, Same} ->
-            ok;
-        {New, Old} ->
-            rabbit_misc:protocol_error(
-                  precondition_failed,
-                  "arguments for ~s not equivalent: ~s=~w (was ~w)",
-                  [rabbit_misc:rs(QueueName), Key, New, Old])
+        {Same, Same} -> ok;
+        {New,  Old}  -> rabbit_misc:protocol_error(
+                          precondition_failed,
+                          "arguments for ~s not equivalent: ~s=~w (was ~w)",
+                          [rabbit_misc:rs(QueueName), Key, New, Old])
     end.
 
 list(VHostPath) ->
