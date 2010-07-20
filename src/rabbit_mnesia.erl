@@ -184,10 +184,12 @@ table_definitions() ->
       [{record_name, reverse_route},
        {attributes, record_info(fields, reverse_route)},
        {type, ordered_set}]},
-     {rabbit_durable_exchange,                  % if you change this entry,
-      [{record_name, exchange},                 % consider the implications
-       {attributes, record_info(fields, exchange)}, % on nodes_of_type/1
-       {disc_copies, [node()]}]}, % <--- this line is particularly important
+     %% Consider the implications to nodes_of_type/1 before altering
+     %% the next entry.
+     {rabbit_durable_exchange,
+      [{record_name, exchange},
+       {attributes, record_info(fields, exchange)},
+       {disc_copies, [node()]}]},
      {rabbit_exchange,
       [{record_name, exchange},
        {attributes, record_info(fields, exchange)}]},
