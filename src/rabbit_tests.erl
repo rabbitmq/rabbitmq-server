@@ -1844,13 +1844,14 @@ variable_queue_wait_for_shuffling_end(VQ) ->
     end.
 
 test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
-    Count = 2*rabbit_queue_index:next_segment_boundary(0),
+    Count = 2 * rabbit_queue_index:next_segment_boundary(0),
     VQ1 = variable_queue_publish(true, Count, VQ0),
     VQ2 = variable_queue_publish(false, Count, VQ1),
     VQ3 = rabbit_variable_queue:set_ram_duration_target(0, VQ2),
-    {VQ4, _AckTags} =
-        variable_queue_fetch(Count, true, false, Count + Count, VQ3),
-    {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false, Count, VQ4),
+    {VQ4, _AckTags}  = variable_queue_fetch(Count, true, false,
+                                            Count + Count, VQ3),
+    {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false,
+                                            Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
     VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
     {{_Msg1, true, _AckTag1, Count1}, VQ8} =
@@ -1873,7 +1874,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     VQ8.
 
 test_queue_recover() ->
-    Count = 2*rabbit_queue_index:next_segment_boundary(0),
+    Count = 2 * rabbit_queue_index:next_segment_boundary(0),
     TxID = rabbit_guid:guid(),
     {new, #amqqueue { pid = QPid, name = QName }} =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
