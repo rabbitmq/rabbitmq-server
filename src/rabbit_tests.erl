@@ -1543,12 +1543,12 @@ init_test_queue() ->
 
 restart_test_queue(Qi) ->
     _ = rabbit_queue_index:terminate([], Qi),
-    rabbit_variable_queue:stop_msg_store(),
+    ok = rabbit_variable_queue:stop(),
     ok = rabbit_variable_queue:start([test_queue()]),
     init_test_queue().
 
 empty_test_queue() ->
-    rabbit_variable_queue:stop_msg_store(),
+    ok = rabbit_variable_queue:stop(),
     ok = rabbit_variable_queue:start([]),
     {0, _Terms, Qi} = init_test_queue(),
     _ = rabbit_queue_index:delete_and_terminate(Qi),
@@ -1707,7 +1707,7 @@ test_queue_index() ->
               Qi8
       end),
 
-    rabbit_variable_queue:stop_msg_store(),
+    ok = rabbit_variable_queue:stop(),
     ok = rabbit_variable_queue:start([]),
 
     passed.
