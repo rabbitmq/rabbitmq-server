@@ -35,7 +35,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/5, do/2, do/3, shutdown/1]).
+-export([start_link/5, start_link/6, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 
@@ -78,7 +78,10 @@
 
 -spec(start_link/5 ::
       (channel_number(), pid(), rabbit_access_control:username(),
-       rabbit_types:vhost(), pid()) -> {'ok', pid()}).
+       rabbit_types:vhost(), pid()) -> rabbit_types:ok(pid())).
+-spec(start_link/6 ::
+      (channel_number(), pid(), pid(), rabbit_access_control:username(),
+       rabbit_types:vhost(), pid()) -> rabbit_types:ok(pid())).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -106,13 +109,15 @@ start_link(Channel, ReaderPid, Username, VHost, CollectorPid) ->
     {ok, proc_lib:spawn_link(
            fun () ->
                    WriterPid = rabbit_channel_sup:writer(Parent),
-                   State = init([Channel, Parent, ReaderPid, WriterPid,
-                                 Username, VHost, CollectorPid]),
-                   gen_server2:enter_loop(
-                     ?MODULE, [], State, self(), hibernate,
-                     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
-                      ?DESIRED_HIBERNATE})
+                   init_and_go([Channel, Parent, ReaderPid, WriterPid,
+                                 Username, VHost, CollectorPid])
            end)}.
+
+start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid) ->
+    Parent = self(),
+    {ok, proc_lib:spawn_link(
+           fun () -> init_and_go([Channel, Parent, ReaderPid, WriterPid,
+                                  Username, VHost, CollectorPid]) end)}.
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -184,6 +189,11 @@ init([Channel, ParentPid, ReaderPid, WriterPid, Username, VHost,
         queue_collector_pid     = CollectorPid,
         flow                    = #flow{server = true, client = true,
                                         pending = none}}.
+
+init_and_go(InitArgs) ->
+    gen_server2:enter_loop(?MODULE, [], init(InitArgs), self(), hibernate,
+                           {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
+                            ?DESIRED_HIBERNATE}).
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);

@@ -794,8 +794,8 @@ test_user_management() ->
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
-                                   self()),
+    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
+                                         self()),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -926,8 +926,8 @@ test_memory_pressure_sync(Ch, Writer) ->
 test_memory_pressure_spawn() ->
     Me = self(),
     Writer = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
-                                   self()),
+    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
+                                         self()),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
@@ -990,8 +990,8 @@ test_memory_pressure() ->
     alarm_handler:set_alarm({vm_memory_high_watermark, []}),
     Me = self(),
     Writer4 = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    Ch4 = rabbit_channel:start_link(1, self(), Writer4, <<"user">>, <<"/">>,
-                                    self()),
+    {ok, Ch4} = rabbit_channel:start_link(1, self(), Writer4, <<"user">>,
+                                          <<"/">>, self()),
     ok = rabbit_channel:do(Ch4, #'channel.open'{}),
     Writer4 ! sync,
     receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,

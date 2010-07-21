@@ -95,10 +95,8 @@ heartbeater(Sock, TimeoutMillisec, StatName, Threshold, Handler) ->
                                            SameCount < Threshold ->
                                                 F({NewStatVal, SameCount + 1});
                                            true ->
-                                                case Handler() of
-                                                    stop     -> ok;
-                                                    continue -> F({NewStatVal, 0})
-                                                end
+                                                continue = Handler(),
+                                                F({NewStatVal, 0})
                                         end;
                                     {error, einval} ->
                                         %% the socket is dead, most

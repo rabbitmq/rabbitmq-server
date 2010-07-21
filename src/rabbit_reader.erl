@@ -144,6 +144,14 @@
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
+%% These specs only exists to add no_return() to keep dialyzer happy
+-spec(init/1 :: (pid()) -> no_return()).
+-spec(start_connection/4 ::
+        (pid(), any(), rabbit_networking:socket(),
+         fun ((rabbit_networking:socket()) ->
+                     rabbit_types:ok_or_error2(
+                       rabbit_networking:socket(), any()))) -> no_return()).
+
 -endif.
 
 %%--------------------------------------------------------------------------

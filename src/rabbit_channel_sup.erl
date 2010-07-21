@@ -33,26 +33,31 @@
 
 -behaviour(supervisor2).
 
--export([start_link/7, writer/1, framing_channel/1, channel/1]).
+-export([start_link/7, stop/1, writer/1, framing_channel/1, channel/1]).
 
 -export([init/1]).
 
 -include("rabbit.hrl").
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/7 ::
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), pid(), rabbit_access_control:username(),
+         rabbit_types:vhost(), pid()) ->
+                           ignore | rabbit_types:ok_or_error2(pid(), any())).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(Sock, Channel, FrameMax, ReaderPid, Username, VHost, Collector) ->
     supervisor2:start_link(?MODULE, [Sock, Channel, FrameMax, ReaderPid,
                                      Username, VHost, Collector]).
-
-init([Sock, Channel, FrameMax, ReaderPid, Username, VHost, Collector]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{channel, {rabbit_channel, start_link,
-                      [Channel, ReaderPid, Username, VHost, Collector]},
-            permanent, ?MAX_WAIT, worker, [rabbit_channel]},
-           {writer, {rabbit_writer, start_link, [Sock, Channel, FrameMax]},
-            permanent, ?MAX_WAIT, worker, [rabbit_writer]},
-           {framing_channel, {rabbit_framing_channel, start_link, []},
-            permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]}
-          ]}}.
+stop(Pid) ->
+    supervisor2:stop(Pid).
 
 writer(Pid) ->
     hd(supervisor2:find_child(Pid, writer, worker, [rabbit_writer])).
@@ -64,3 +69,15 @@ framing_channel(Pid) ->
     hd(supervisor2:find_child(Pid, framing_channel, worker,
                               [rabbit_framing_channel])).
 
+%%----------------------------------------------------------------------------
+
+init([Sock, Channel, FrameMax, ReaderPid, Username, VHost, Collector]) ->
+    {ok, {{one_for_all, 0, 1},
+          [{channel, {rabbit_channel, start_link,
+                      [Channel, ReaderPid, Username, VHost, Collector]},
+            permanent, ?MAX_WAIT, worker, [rabbit_channel]},
+           {writer, {rabbit_writer, start_link, [Sock, Channel, FrameMax]},
+            permanent, ?MAX_WAIT, worker, [rabbit_writer]},
+           {framing_channel, {rabbit_framing_channel, start_link, []},
+            permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]}
+          ]}}.
