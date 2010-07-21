@@ -40,7 +40,9 @@
 %%--------------------------------------------------------------------
 
 start_link() ->
-    start_link(rabbit_channel_sup:channel(self())).
+    Parent = self(),
+    {ok, proc_lib:spawn_link(
+           fun () -> mainloop(rabbit_channel_sup:channel(Parent)) end)}.
 
 start_link(ChannelPid) ->
     {ok, proc_lib:spawn_link(fun() -> mainloop(ChannelPid) end)}.
