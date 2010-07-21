@@ -27,47 +27,70 @@
 
 -include("amqp_client.hrl").
 
--export([start/2]).
+-behaviour(gen_server).
+
+-export([start_link/1, register_framing_channel/3, start_heartbeat/2]).
+-export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
+         handle_info/2]).
 
 -record(mr_state, {sock,
                    message = none, %% none | {Type, Channel, Length}
                    framing_channels = amqp_channel_util:new_channel_dict()}).
 
-start(Sock, Framing0Pid) ->
-    spawn_link(
-        fun() ->
-            State0 = #mr_state{sock = Sock},
-            State1 = register_framing_channel(0, Framing0Pid, none, State0),
-            {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
-            main_loop(State1)
-        end).
+%%---------------------------------------------------------------------------
+%% Interface
+%%---------------------------------------------------------------------------
 
-main_loop(State = #mr_state{sock = Sock}) ->
-    receive
-        {inet_async, Sock, _, _} = InetAsync ->
-            main_loop(handle_inet_async(InetAsync, State));
-        {heartbeat, Heartbeat} ->
-            rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
-            main_loop(State);
-        {register_framing_channel, Number, Pid, Caller} ->
-            main_loop(register_framing_channel(Number, Pid, Caller, State));
-        timeout ->
-            ?LOG_WARN("Main reader (~p) received timeout from heartbeat, "
-                      "exiting~n", [self()]),
-            exit(connection_timeout);
-        socket_closing_timeout ->
-            ?LOG_WARN("Main reader (~p) received socket_closing_timeout, "
-                      "exiting~n", [self()]),
-            exit(socket_closing_timeout);
-        close ->
-            close(State);
-        {'DOWN', _MonitorRef, process, _Pid, _Info} = Down ->
-            main_loop(handle_down(Down, State));
-        Other ->
-            ?LOG_WARN("Main reader (~p) closing: unexpected message ~p",
-                      [self(), Other]),
-            exit({unexpected_message, Other})
-    end.
+start_link(Args) ->
+    gen_server:start_link(?MODULE, Args, []).
+
+register_framing_channel(MainReaderPid, Number, FramingPid) ->
+    gen_server:call(MainReaderPid,
+                    {register_framing_channel, Number, FramingPid}, infinity).
+
+start_heartbeat(MainReaderPid, Heartbeat) ->
+    gen_server:cast(MainReaderPid, {heartbeat, Heartbeat}).
+
+%%---------------------------------------------------------------------------
+%% gen_server callbacks
+%%---------------------------------------------------------------------------
+
+init({Sock, Framing0Pid}) ->
+    State0 = #mr_state{sock = Sock},
+    State1 = handle_register_framing_channel(0, Framing0Pid, State0),
+    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
+    {ok, State1}.
+
+terminate(normal, #mr_state{sock = Sock}) ->
+    rabbit_net:close(Sock),
+    ok;
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    State.
+
+handle_call({register_framing_channel, Number, Pid}, From, State) ->
+    {reply, ok, handle_register_framing_channel(Number, Pid, State)}.
+
+handle_cast({heartbeat, Heartbeat}, State = #mr_state{sock = Sock}) ->
+    rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
+    {noreply, State}.
+
+handle_info({inet_async, _, _, _} = InetAsync, State) ->
+    handle_inet_async(InetAsync, State);
+handle_info({'DOWN', _, _, _, _} = Down, State) ->
+    handle_down(Down, State);
+handle_info(timeout, State) ->
+    {stop, connection_timeout, State};
+handle_info(socket_closing_timeout, State) ->
+    {stop, socket_closing_timeout, State};
+handle_info(close, State) ->
+    {stop, normal, State}.
+
+%%---------------------------------------------------------------------------
+%% Internal plumbing
+%%---------------------------------------------------------------------------
 
 handle_inet_async({inet_async, Sock, _, Msg},
                   State = #mr_state{sock = Sock,
@@ -79,19 +102,18 @@ handle_inet_async({inet_async, Sock, _, Msg},
     case Msg of
         {ok, <<Payload:Length/binary, ?FRAME_END>>} ->
             case handle_frame(Type, Channel, Payload, State) of
-                closed_ok -> close(State);
+                closed_ok -> {stop, normal, State};
                 _         -> {ok, _Ref} =
                                  rabbit_net:async_recv(Sock, 7, infinity),
-                             State#mr_state{message = none}
+                             {noreply, State#mr_state{message = none}}
             end;
         {ok, <<NewType:8, NewChannel:16, NewLength:32>>} ->
             {ok, _Ref} = rabbit_net:async_recv(Sock, NewLength + 1, infinity),
-            State#mr_state{message = {NewType, NewChannel, NewLength}};
+            {noreply, State#mr_state{message={NewType, NewChannel, NewLength}}};
         {error, closed} ->
-            exit(socket_closed);
+            {stop, socket_closed, State};
         {error, Reason} ->
-            ?LOG_WARN("Socket error: ~p~n", [Reason]),
-            exit({socket_error, Reason})
+            {stop, {socket_error, Reason}, State}
     end.
 
 handle_frame(Type, Channel, Payload, State) ->
@@ -122,14 +144,10 @@ pass_frame(Channel, Frame, #mr_state{framing_channels = Channels}) ->
             rabbit_framing_channel:process(FramingPid, Frame)
     end.
 
-register_framing_channel(Number, Pid, Caller,
-                         State = #mr_state{framing_channels = Channels}) ->
+handle_register_framing_channel(
+            Number, Pid, State = #mr_state{framing_channels = Channels}) ->
     NewChannels = amqp_channel_util:register_channel(Number, Pid, Channels),
     erlang:monitor(process, Pid),
-    case Caller of
-        none -> ok;
-        _    -> Caller ! registered_framing_channel
-    end,
     State#mr_state{framing_channels = NewChannels}.
 
 handle_down({'DOWN', _MonitorRef, process, Pid, Info},
@@ -138,13 +156,7 @@ handle_down({'DOWN', _MonitorRef, process, Pid, Info},
         true ->
             NewChannels =
                 amqp_channel_util:unregister_channel_pid(Pid, Channels),
-            State#mr_state{framing_channels = NewChannels};
+            {noreply, State#mr_state{framing_channels = NewChannels}};
         false ->
-            ?LOG_WARN("Reader received unexpected DOWN signal from (~p)."
-                      "Info: ~p~n", [Pid, Info]),
-            exit({unexpected_down, Pid, Info})
+            {stop, {unexpected_down, Pid, Info}, State}
     end.
-
-close(#mr_state{sock = Sock}) ->
-    rabbit_net:close(Sock),
-    exit(normal).

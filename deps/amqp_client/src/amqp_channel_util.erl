@@ -59,22 +59,12 @@ start_channel_infrastructure(network, ChannelNumber, {Sock, MainReader}) ->
     FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [self()]),
     WriterPid = rabbit_writer:start_link(Sock, ChannelNumber, ?FRAME_MIN_SIZE),
     case MainReader of
-        none ->
-            ok;
-        _ ->
-            MainReader ! {register_framing_channel, ChannelNumber, FramingPid,
-                          self()},
-            MonitorRef = erlang:monitor(process, MainReader),
-            receive
-                registered_framing_channel ->
-                    erlang:demonitor(MonitorRef), ok;
-                {'DOWN', MonitorRef, process, MainReader, _Info} ->
-                    erlang:error(main_reader_died_while_registering_framing)
-            end
+        none -> ok;
+        _    -> amqp_main_reader:register_framing_channel(
+                        MainReader, ChannelNumber, FramingPid)
     end,
     {FramingPid, WriterPid};
-start_channel_infrastructure(
-        direct, ChannelNumber, {User, VHost, Collector}) ->
+start_channel_infrastructure(direct, ChannelNumber, {User, VHost, Collector}) ->
     Peer = rabbit_channel:start_link(ChannelNumber, self(), self(), User, VHost,
                                      Collector),
     {Peer, Peer}.
