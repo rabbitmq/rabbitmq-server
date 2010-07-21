@@ -1805,10 +1805,10 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
             [{delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
              {q3, SegmentSize},
              {len, SegmentSize + HalfSegment}]),
-    %% one alpha, but it's in the same segment as the deltas
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
     VQ5 = check_variable_queue_status(
             variable_queue_publish(true, 1, VQ4),
+            %% one alpha, but it's in the same segment as the deltas
             [{q1, 1},
              {delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
              {q3, SegmentSize},
