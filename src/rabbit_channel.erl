@@ -50,7 +50,7 @@
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, flow,
-             queue_exchange_stats, stats_timer_ref}).
+             stats_timer_ref}).
 
 -record(flow, {server, client, pending}).
 
@@ -189,7 +189,6 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
              queue_collector_pid     = CollectorPid,
              flow                    = #flow{server = true, client = true,
                                              pending = none},
-             queue_exchange_stats    = dict:new(),
              stats_timer_ref         = undefined},
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -314,8 +313,7 @@ noreply(NewState) ->
 
 ensure_stats_timer(State = #ch{stats_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
-                                   rabbit_channel, emit_stats,
-                                   [self()]),
+                                   rabbit_channel, emit_stats, [self()]),
     State#ch{stats_timer_ref = TRef};
 ensure_stats_timer(State) ->
     State.
@@ -498,9 +496,9 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
               _, State = #ch{transaction_id = TxnKey,
                              unacked_message_q = UAMQ}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
-    QsIncs = ack(TxnKey, Acked),
-    Participants = [QPid || {QPid, _} <- QsIncs],
-    incr_stats(QsIncs, ack),
+    QIncs = ack(TxnKey, Acked),
+    Participants = [QPid || {QPid, _} <- QIncs],
+    incr_stats(QIncs, ack),
     {noreply, case TxnKey of
                   none -> ok = notify_limiter(State#ch.limiter_pid, Acked),
                           State#ch{unacked_message_q = Remaining};

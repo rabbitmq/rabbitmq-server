@@ -602,8 +602,7 @@ check_version(ClientVersion, ServerVersion) ->
 
 ensure_stats_timer(State = #v1{stats_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
-                                   rabbit_reader, emit_stats,
-                                   [self()]),
+                                   rabbit_reader, emit_stats, [self()]),
     State#v1{stats_timer_ref = TRef};
 ensure_stats_timer(State) ->
     State.
