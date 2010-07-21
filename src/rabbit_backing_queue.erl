@@ -42,6 +42,11 @@ behaviour_info(callbacks) ->
      %% shared resources.
      {start, 1},
 
+     %% Called to tear down any state/resources. NB: Implementations
+     %% should not depend on this function being called on shutdown
+     %% and instead should hook into the rabbit supervision hierarchy.
+     {stop, 0},
+
      %% Initialise the backing queue and its state.
      {init, 3},
 

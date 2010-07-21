@@ -38,6 +38,7 @@
 -type(ack_required() :: boolean()).
 
 -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
+-spec(stop/0 :: () -> 'ok').
 -spec(init/3 :: (rabbit_amqqueue:name(), is_durable(), attempt_recovery()) -> state()).
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
