@@ -233,7 +233,7 @@ handle_cast({flushed, QPid}, State) ->
     {noreply, queue_blocked(QPid, State)};
 
 handle_cast(terminate, State = #ch{parent_pid = ParentPid}) ->
-    supervisor2:stop(ParentPid),
+    rabbit_channel_sup:stop(ParentPid),
     {stop, shutdown, State};
 
 handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
