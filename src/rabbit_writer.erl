@@ -33,7 +33,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([start/3, start_link/3, shutdown/1, mainloop/1]).
+-export([start/3, start_link/3, flush/1, mainloop/1]).
 -export([send_command/2, send_command/3, send_command_and_signal_back/3,
          send_command_and_signal_back/4, send_command_and_notify/5]).
 -export([internal_send_command/3, internal_send_command/5]).
@@ -77,6 +77,7 @@
          rabbit_framing:amqp_method_record(), rabbit_types:content(),
          non_neg_integer())
         -> 'ok').
+-spec(flush/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -137,8 +138,9 @@ handle_message({inet_reply, _, ok}, State) ->
     State;
 handle_message({inet_reply, _, Status}, _State) ->
     exit({writer, send_failed, Status});
-handle_message(shutdown, _State) ->
-    exit(shutdown);
+handle_message({flush, Pid, Ref}, State) ->
+    Pid ! Ref,
+    State;
 handle_message(Message, _State) ->
     exit({writer, message_not_understood, Message}).
 
@@ -164,10 +166,10 @@ send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
     W ! {send_command_and_notify, Q, ChPid, MethodRecord, Content},
     ok.
 
-shutdown(W) ->
-    W ! shutdown,
-    rabbit_misc:unlink_and_capture_exit(W),
-    ok.
+flush(W) ->
+    Ref = make_ref(),
+    W ! {flush, self(), Ref},
+    receive Ref -> ok end.
 
 %---------------------------------------------------------------------------
 

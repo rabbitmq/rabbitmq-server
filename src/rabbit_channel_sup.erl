@@ -73,11 +73,11 @@ framing_channel(Pid) ->
 
 init([Sock, Channel, FrameMax, ReaderPid, Username, VHost, Collector]) ->
     {ok, {{one_for_all, 0, 1},
-          [{channel, {rabbit_channel, start_link,
-                      [Channel, ReaderPid, Username, VHost, Collector]},
-            permanent, ?MAX_WAIT, worker, [rabbit_channel]},
+          [{framing_channel, {rabbit_framing_channel, start_link, []},
+            permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]},
            {writer, {rabbit_writer, start_link, [Sock, Channel, FrameMax]},
             permanent, ?MAX_WAIT, worker, [rabbit_writer]},
-           {framing_channel, {rabbit_framing_channel, start_link, []},
-            permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]}
+           {channel, {rabbit_channel, start_link,
+                      [Channel, ReaderPid, Username, VHost, Collector]},
+            permanent, ?MAX_WAIT, worker, [rabbit_channel]}
           ]}}.

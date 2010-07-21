@@ -283,7 +283,6 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %%
         %% gen_tcp:close(ClientSock),
         teardown_profiling(ProfilingValue),
-        rabbit_connection_sup:stop(Parent),
         exit(shutdown)
     end.
 

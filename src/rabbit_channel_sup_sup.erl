@@ -43,7 +43,7 @@ start_link() ->
 init([]) ->
     {ok, {{simple_one_for_one_terminate, 0, 1},
           [{channel_sup, {rabbit_channel_sup, start_link, []},
-            transient, infinity, supervisor, [rabbit_channel_sup]}]}}.
+            temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.
 
 start_channel(Pid, Args) ->
     supervisor2:start_child(Pid, Args).

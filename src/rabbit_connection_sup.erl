@@ -48,11 +48,11 @@ stop(Pid) ->
 init([]) ->
     {ok, {{one_for_all, 0, 1},
           [{reader, {rabbit_reader, start_link, []},
-            transient, ?MAX_WAIT, worker, [rabbit_reader]},
+            permanent, ?MAX_WAIT, worker, [rabbit_reader]},
            {collector, {rabbit_queue_collector, start_link, []},
-            transient, ?MAX_WAIT, worker, [rabbit_queue_collector]},
+            permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]},
            {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-            transient, infinity, supervisor, [rabbit_channel_sup_sup]}
+            permanent, infinity, supervisor, [rabbit_channel_sup_sup]}
           ]}}.
 
 reader(Pid) ->

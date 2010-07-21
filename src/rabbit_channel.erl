@@ -232,8 +232,7 @@ handle_cast({method, Method, Content}, State) ->
 handle_cast({flushed, QPid}, State) ->
     {noreply, queue_blocked(QPid, State)};
 
-handle_cast(terminate, State = #ch{parent_pid = ParentPid}) ->
-    rabbit_channel_sup:stop(ParentPid),
+handle_cast(terminate, State) ->
     {stop, shutdown, State};
 
 handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
@@ -1130,8 +1129,8 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
 
 terminate(#ch{writer_pid = WriterPid, limiter_pid = LimiterPid}) ->
     pg_local:leave(rabbit_channels, self()),
-    rabbit_writer:shutdown(WriterPid),
-    rabbit_limiter:shutdown(LimiterPid).
+    rabbit_limiter:shutdown(LimiterPid),
+    rabbit_writer:flush(WriterPid).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
