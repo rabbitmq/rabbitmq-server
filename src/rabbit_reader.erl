@@ -188,7 +188,7 @@ info(Pid, Items) ->
     end.
 
 emit_stats(Pid) ->
-    gen_server2:cast(Pid, emit_stats).
+    gen_server:cast(Pid, emit_stats).
 
 setup_profiling() ->
     Value = rabbit_misc:get_config(profiling_enabled, false),
