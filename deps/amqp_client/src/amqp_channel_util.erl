@@ -28,7 +28,7 @@
 -include("amqp_client.hrl").
 
 -export([open_channel/5]).
--export([start_channel_infrastructure/3, terminate_channel_infrastructure/2]).
+-export([start_channel_infrastructure/4]).
 -export([do/4]).
 -export([new_channel_dict/0, is_channel_dict_empty/1, num_channels/1,
          register_channel/3, unregister_channel_number/2,
@@ -41,23 +41,35 @@
 %% Opening channels
 %%---------------------------------------------------------------------------
 
-%% Spawns a new channel process linked to the calling process and registers it
-%% in the given Channels dict
+%% Spawns a new channel supervision tree linked to the calling process and
+%% registers the channel in the given Channels dict
 open_channel(ProposedNumber, MaxChannel, Driver, StartArgs, Channels) ->
     ChannelNumber = channel_number(ProposedNumber, Channels, MaxChannel),
-    {ok, ChannelPid} = gen_server:start_link(
-        amqp_channel, {self(), ChannelNumber, Driver, StartArgs}, []),
+    ChannelArgs = {self(), ChannelNumber, Driver},
+    {ok, ChannelSupPid} = supervisor:start_link(amqp_channel_sup, ChannelArgs),
+    {amqp_channel, ChannelPid, _, _} =
+        hd(supervisor:which_children(ChannelSupPid)),
+    ok = amqp_channel:start_infrastructure(ChannelPid, StartArgs),
     #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
     NewChannels = register_channel(ChannelNumber, ChannelPid, Channels),
     {ChannelPid, NewChannels}.
 
 %%---------------------------------------------------------------------------
-%% Starting and terminating channel infrastructure
+%% Starting channel infrastructure
 %%---------------------------------------------------------------------------
 
-start_channel_infrastructure(network, ChannelNumber, {Sock, MainReader}) ->
-    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [self()]),
-    WriterPid = rabbit_writer:start_link(Sock, ChannelNumber, ?FRAME_MIN_SIZE),
+start_channel_infrastructure(network, SupRef, ChannelNumber,
+                             _StartArgs = {Sock, MainReader}) ->
+    FramingChildSpec =
+        {framing,
+         {rabbit_framing_channel, start_link, [self()]},
+         transient, ?MAX_WAIT, worker, [rabbit_framing_channel]},
+    FramingPid = amqp_channel_sup:start_child(SupRef, FramingChildSpec),
+    WriterChildSpec =
+        {writer,
+         {rabbit_writer, start_link, [Sock, ChannelNumber, ?FRAME_MIN_SIZE]},
+         transient, ?MAX_WAIT, worker, [rabbit_writer]},
+    WriterPid = amqp_channel_sup:start_child(SupRef, WriterChildSpec),
     case MainReader of
         none ->
             ok;
@@ -73,19 +85,15 @@ start_channel_infrastructure(network, ChannelNumber, {Sock, MainReader}) ->
             end
     end,
     {FramingPid, WriterPid};
-start_channel_infrastructure(
-        direct, ChannelNumber, {User, VHost, Collector}) ->
-    Peer = rabbit_channel:start_link(ChannelNumber, self(), self(), User, VHost,
-                                     Collector),
+start_channel_infrastructure(direct, SupRef, ChannelNumber,
+                             _StartArgs = {User, VHost, Collector}) ->
+    RabbitChannelChildSpec =
+        {rabbit_channel,
+         {rabbit_channel, start_link,
+          [ChannelNumber, self(), self(), User, VHost, Collector]},
+         transient, ?MAX_WAIT, worker, [rabbit_channel]},
+    Peer = amqp_channel_sup:start_child(SupRef, RabbitChannelChildSpec),
     {Peer, Peer}.
-
-terminate_channel_infrastructure(network, {FramingPid, WriterPid}) ->
-    rabbit_framing_channel:shutdown(FramingPid),
-    rabbit_writer:shutdown(WriterPid),
-    ok;
-terminate_channel_infrastructure(direct, {Peer, Peer})->
-    gen_server2:cast(Peer, terminate),
-    ok.
 
 %%---------------------------------------------------------------------------
 %% Do
@@ -159,9 +167,13 @@ unregister_channel(Number, Pid, {TreeNP, DictPN}) ->
     DictPN1 = dict:erase(Pid, DictPN),
     {TreeNP1, DictPN1}.
 
-%% Get channel pid, given its number. Assumes number is registered
+%% Get channel pid, given its number. Returns undefined if channel number
+%% is not registered.
 resolve_channel_number(Number, _Channels = {TreeNP, _}) ->
-    gb_trees:get(Number, TreeNP).
+    case gb_trees:lookup(Number, TreeNP) of
+        {value, Pid} -> Pid;
+        none         -> undefined
+    end.
 
 %% Get channel number, given its pid. Assumes pid is registered
 resolve_channel_pid(Pid, _Channels = {_, DictPN}) ->

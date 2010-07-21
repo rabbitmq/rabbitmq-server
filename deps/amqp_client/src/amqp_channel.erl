@@ -35,6 +35,7 @@
 
 -behaviour(gen_server).
 
+-export([start_link/1, start_infrastructure/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
@@ -49,6 +50,7 @@
 
 -record(c_state, {number,
                   parent_connection,
+                  sup_ref,
                   reader_pid,
                   writer_pid,
                   driver,
@@ -236,7 +238,6 @@ register_default_consumer(Channel, Consumer) ->
 
 rpc_top_half(Method, Content, From, 
              State0 = #c_state{rpc_requests = RequestQueue}) ->
-    % Enqueue the incoming RPC request to serialize RPC dispatching
     State1 = State0#c_state{
         rpc_requests = queue:in({From, Method, Content}, RequestQueue)},
     IsFirstElement = queue:is_empty(RequestQueue),
@@ -439,17 +440,29 @@ handle_regular_method(Method, Content, State) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-init({ParentConnection, ChannelNumber, Driver, StartArgs}) ->
-    process_flag(trap_exit, true),
-    {ReaderPid, WriterPid} =
-        amqp_channel_util:start_channel_infrastructure(Driver, ChannelNumber,
-                                                       StartArgs),
+start_link(Args) ->
+    gen_server:start_link(?MODULE, Args, []).
+
+%% @private
+start_infrastructure(Channel, StartArgs) ->
+    gen_server:call(Channel, {start_infrastructure, StartArgs}, infinity).
+
+%% @private
+init({SupRef, _ChannelArgs = {ParentConnection, ChannelNumber, Driver}}) ->
     InitialState = #c_state{parent_connection = ParentConnection,
+                            sup_ref = SupRef,
                             number = ChannelNumber,
-                            driver = Driver,
-                            reader_pid = ReaderPid,
-                            writer_pid = WriterPid},
+                            driver = Driver},
     {ok, InitialState}.
+
+handle_start_infrastructure(StartArgs,
+                            State = #c_state{driver = Driver,
+                                             sup_ref = SupRef,
+                                             number = ChannelNumber}) ->
+    {ReaderPid, WriterPid} = amqp_channel_util:start_channel_infrastructure(
+                                 Driver, SupRef, ChannelNumber, StartArgs),
+    {reply, ok, State#c_state{reader_pid = ReaderPid,
+                              writer_pid = WriterPid}}.
 
 %% Standard implementation of the call/{2,3} command
 %% @private
@@ -491,7 +504,11 @@ handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer}
             {noreply, rpc_top_half(NewMethod, none, From, NewState)};
         BlockReply ->
             {reply, BlockReply, State}
-    end.
+    end;
+
+%% @private
+handle_call({start_infrastructure, StartArgs}, _From, State) ->
+    handle_start_infrastructure(StartArgs, State).
 
 %% Standard implementation of the cast/{2,3} command
 %% @private
@@ -678,11 +695,8 @@ handle_info({'EXIT', Pid, Reason}, State = #c_state{number = ChannelNumber}) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-terminate(_Reason, #c_state{driver = Driver,
-                           reader_pid = ReaderPid,
-                           writer_pid = WriterPid}) ->
-    amqp_channel_util:terminate_channel_infrastructure(
-        Driver, {ReaderPid, WriterPid}).
+terminate(_Reason, _State) ->
+    ok.
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
