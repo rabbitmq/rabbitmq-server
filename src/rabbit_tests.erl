@@ -1890,7 +1890,6 @@ test_queue_recover() ->
     receive {'DOWN', MRef, process, QPid, _Info} -> ok
     after 10000 -> exit(timeout_waiting_for_queue_death)
     end,
-    rabbit_variable_queue:stop_msg_store(),
     rabbit_amqqueue:stop(),
     ok = rabbit_amqqueue:start(),
     rabbit_amqqueue:with_or_die(
