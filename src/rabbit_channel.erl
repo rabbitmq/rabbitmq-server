@@ -1169,7 +1169,7 @@ incr_stats(QXCounts, Item, State = #ch{queue_exchange_stats = Stats}) ->
                                   {Q, _X} -> Q;
                                   Q       -> Q
                               end,
-                       case dict:is_key(QPid, Stats) of
+                       case dict:is_key(QPid, Stats0) of
                            false -> erlang:monitor(process, QPid);
                            _     -> ok
                        end,
