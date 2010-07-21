@@ -39,7 +39,7 @@
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
          status/1]).
 
--export([start/1]).
+-export([start/1, stop/0]).
 
 %% exported for testing only
 -export([start_msg_store/2, stop_msg_store/0]).
@@ -354,6 +354,8 @@ start(DurableQueues) ->
                   Ref =/= undefined
               end],
       StartFunState).
+
+stop() -> stop_msg_store().
 
 start_msg_store(Refs, StartFunState) ->
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
