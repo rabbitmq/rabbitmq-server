@@ -39,6 +39,7 @@
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
+         check_declare_arguments/2,
          stat/1, deliver/2, requeue/3, ack/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1]).
@@ -54,6 +55,8 @@
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
+
+-define(EXPIRES_TYPE, long).
 
 %%----------------------------------------------------------------------------
 
@@ -86,6 +89,8 @@
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
         -> 'ok' | no_return()).
 -spec(check_exclusive_access/2 :: (rabbit_types:amqqueue(), pid()) -> 'ok').
+-spec(check_declare_arguments/2 :: (name(), rabbit_framing:amqp_table()) ->
+                                        'ok' | no_return()).
 -spec(with_exclusive_access_or_die/3 :: (name(), pid(), qfun(A)) -> A).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
@@ -228,12 +233,8 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok.
 
 start_queue_process(Q) ->
-    case rabbit_amqqueue_sup:start_child([Q]) of
-        {ok, Pid}      -> Q#amqqueue{pid = Pid};
-        {error, Error} -> rabbit_misc:protocol_error(
-                            internal_error, "Queue ~s: ~w",
-                            [rabbit_misc:rs(Q#amqqueue.name), Error])
-    end.
+    {ok, Pid} = rabbit_amqqueue_sup:start_child([Q]),
+    Q#amqqueue{pid = Pid}.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
     Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
@@ -287,6 +288,30 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                        RequiredArgs) ->
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
                                         [<<"x-expires">>]).
+
+check_declare_arguments(QueueName, Args) ->
+    [case Fun(Args) of
+         ok             -> ok;
+         {error, Error} -> rabbit_misc:protocol_error(
+                             precondition_failed,
+                             "Invalid arguments in declaration of queue ~s: "
+                             "~w (arguments: ~w)",
+                             [rabbit_misc:rs(QueueName), Error, Args])
+     end || Fun <- [fun check_expires_argument/1]],
+    ok.
+
+check_expires_argument(Args) ->
+    check_expires_argument1(rabbit_misc:table_lookup(Args, <<"x-expires">>)).
+
+check_expires_argument1(undefined) ->
+    ok;
+check_expires_argument1({?EXPIRES_TYPE, Expires})
+  when is_integer(Expires) andalso Expires > 0 ->
+    ok;
+check_expires_argument1({?EXPIRES_TYPE, _Expires}) ->
+    {error, expires_zero_or_less};
+check_expires_argument1(_) ->
+    {error, expires_not_of_type_long}.
 
 list(VHostPath) ->
     mnesia:dirty_match_object(

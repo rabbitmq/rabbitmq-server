@@ -99,26 +99,6 @@ info_keys() -> ?INFO_KEYS.
 
 %%----------------------------------------------------------------------------
 
--define(EXPIRES_TYPE, long).
-
-check_argument_expires({?EXPIRES_TYPE, Expires}) when not is_integer(Expires) ->
-    {error, expires_not_of_type_long};
-check_argument_expires({?EXPIRES_TYPE, Expires}) when Expires =< 0 ->
-    {error, expires_zero_or_less};
-check_argument_expires({?EXPIRES_TYPE, Expires}) ->
-    {ok, Expires};
-check_argument_expires(undefined) ->
-    {ok, undefined};
-check_argument_expires(_) ->
-    {error, expires_not_of_type_long}.
-
-init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
-    case check_argument_expires(
-           rabbit_misc:table_lookup(Arguments, <<"x-expires">>)) of
-        {error, Error} -> {error, Error};
-        {ok, Expires}  -> start_expiry_timer(State, Expires)
-    end.
-
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
@@ -135,12 +115,8 @@ init(Q) ->
                rate_timer_ref = undefined,
                expiry_timer_ref = undefined},
 
-    case init_expires(State) of
-         {error, Error} -> {stop, Error};
-         NewState       -> {ok, NewState, hibernate,
-                               {backoff, ?HIBERNATE_AFTER_MIN,
-                                   ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}
-    end.
+    {ok, init_expires(State), hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);
@@ -160,6 +136,12 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
+
+init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
+    case rabbit_misc:table_lookup(Arguments, <<"x-expires">>) of
+        {long, Expires} -> start_expiry_timer(State, Expires);
+        undefined       -> State
+    end.
 
 declare(Recover, From,
         State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
