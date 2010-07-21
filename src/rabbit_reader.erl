@@ -43,6 +43,8 @@
 
 -export([analyze_frame/2]).
 
+-export([emit_stats/1]).
+
 -import(gen_tcp).
 -import(fprof).
 -import(inet).
@@ -58,7 +60,7 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {sock, connection, callback, recv_ref, connection_state,
-             queue_collector, last_stats_update}).
+             queue_collector, stats_timer_ref}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
@@ -144,6 +146,7 @@
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
 -spec(info/1 :: (pid()) -> [rabbit_types:info()]).
 -spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
+-spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
@@ -183,6 +186,9 @@ info(Pid, Items) ->
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
+
+emit_stats(Pid) ->
+    gen_server2:cast(Pid, emit_stats).
 
 setup_profiling() ->
     Value = rabbit_misc:get_config(profiling_enabled, false),
@@ -257,7 +263,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                     recv_ref = none,
                                     connection_state = pre_init,
                                     queue_collector = Collector,
-                                    last_stats_update = {0,0,0}},
+                                    stats_timer_ref = undefined},
                                 handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -282,9 +288,8 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     end,
     done.
 
-mainloop(Parent, Deb, State_ = #v1{sock= Sock, recv_ref = Ref}) ->
+mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
     %%?LOGDEBUG("Reader mainloop: ~p bytes available, need ~p~n", [HaveBytes, WaitUntilNBytes]),
-    State = maybe_emit_stats(State_),
     receive
         {inet_async, Sock, Ref, {ok, Data}} ->
             {State1, Callback1, Length1} =
@@ -345,6 +350,9 @@ mainloop(Parent, Deb, State_ = #v1{sock= Sock, recv_ref = Ref}) ->
                                    catch Error -> {error, Error}
                                    end),
             mainloop(Parent, Deb, State);
+        {'$gen_cast', emit_stats} ->
+            internal_emit_stats(State),
+            mainloop(Parent, Deb, State#v1{stats_timer_ref = undefined});
         {system, From, Request} ->
             sys:handle_system_msg(Request, From,
                                   Parent, ?MODULE, Deb, State);
@@ -537,7 +545,8 @@ analyze_frame(_Type, _Body) ->
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     %%?LOGDEBUG("Got frame header: ~p/~p/~p~n", [Type, Channel, PayloadSize]),
-    {State, {frame_payload, Type, Channel, PayloadSize}, PayloadSize + 1};
+    {ensure_stats_timer(State), {frame_payload, Type, Channel, PayloadSize},
+     PayloadSize + 1};
 
 handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, State) ->
     case PayloadAndMarker of
@@ -590,6 +599,14 @@ check_version(ClientVersion, ServerVersion) ->
         orelse
           (ClientMajor == ServerMajor andalso
            ClientMinor >= ServerMinor).
+
+ensure_stats_timer(State = #v1{stats_timer_ref = undefined}) ->
+    {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
+                                   rabbit_reader, emit_stats,
+                                   [self()]),
+    State#v1{stats_timer_ref = TRef};
+ensure_stats_timer(State) ->
+    State.
 
 %%--------------------------------------------------------------------------
 
@@ -857,14 +874,6 @@ amqp_exception_explanation(Text, Expl) ->
        true                        -> CompleteTextBin
     end.
 
-maybe_emit_stats(State = #v1{last_stats_update = LastUpdate}) ->
-    Now = os:timestamp(),
-    case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
-        true ->
-            rabbit_event:notify(
-              connection_stats,
-              [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]),
-            State#v1{last_stats_update = Now};
-        _ ->
-            State
-    end.
+internal_emit_stats(State) ->
+    rabbit_event:notify(connection_stats,
+                        [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]).

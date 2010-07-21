@@ -82,7 +82,7 @@
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
--define(STATISTICS_UPDATE_INTERVAL, 5000000). %% microseconds
+-define(STATS_INTERVAL,             5000).
 
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).

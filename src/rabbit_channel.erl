@@ -38,6 +38,7 @@
 -export([start_link/6, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
+-export([emit_stats/1]).
 
 -export([flow_timeout/2]).
 
@@ -49,7 +50,7 @@
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, flow,
-             queue_exchange_stats, last_stats_update}).
+             queue_exchange_stats, stats_timer_ref}).
 
 -record(flow, {server, client, pending}).
 
@@ -100,6 +101,7 @@
 -spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
 -spec(info_all/0 :: () -> [[rabbit_types:info()]]).
 -spec(info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
+-spec(emit_stats/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -155,6 +157,9 @@ info_all() ->
 info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
+emit_stats(Pid) ->
+    gen_server2:cast(Pid, emit_stats).
+
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
@@ -185,7 +190,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
              flow                    = #flow{server = true, client = true,
                                              pending = none},
              queue_exchange_stats    = dict:new(),
-             last_stats_update = {0,0,0}},
+             stats_timer_ref         = undefined},
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -262,7 +267,11 @@ handle_cast({flow_timeout, Ref},
                        "timeout waiting for channel.flow_ok{active=~w}",
                        [not Flow], none), State)};
 handle_cast({flow_timeout, _Ref}, State) ->
-    {noreply, State}.
+    {noreply, State};
+
+handle_cast(emit_stats, State) ->
+    internal_emit_stats(State),
+    noreply(State#ch{stats_timer_ref = undefined}).
 
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #ch{writer_pid = WriterPid}) ->
@@ -277,7 +286,7 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
-    {hibernate, State}.
+    {hibernate, stop_stats_timer(State)}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -296,12 +305,28 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------------------------------------------------------
 
 reply(Reply, NewState) ->
-    NewState1 = maybe_emit_stats(NewState),
+    NewState1 = ensure_stats_timer(NewState),
     {reply, Reply, NewState1, hibernate}.
 
 noreply(NewState) ->
-    NewState1 = maybe_emit_stats(NewState),
+    NewState1 = ensure_stats_timer(NewState),
     {noreply, NewState1, hibernate}.
+
+ensure_stats_timer(State = #ch{stats_timer_ref = undefined}) ->
+    {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
+                                   rabbit_channel, emit_stats,
+                                   [self()]),
+    State#ch{stats_timer_ref = TRef};
+ensure_stats_timer(State) ->
+    State.
+
+stop_stats_timer(State = #ch{stats_timer_ref = undefined}) ->
+    internal_emit_stats(State),
+    State;
+stop_stats_timer(State = #ch{stats_timer_ref = TRef}) ->
+    {ok, cancel} = timer:cancel(TRef),
+    internal_emit_stats(State),
+    State#ch{stats_timer_ref = undefined}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -1186,19 +1211,11 @@ incr_stats(QXCounts, Item, State = #ch{queue_exchange_stats = Stats}) ->
                end, Stats, QXCounts),
      State#ch{queue_exchange_stats = Stats1}.
 
-maybe_emit_stats(State = #ch{queue_exchange_stats = QueueExchangeStats,
-                             last_stats_update = LastUpdate}) ->
-    Now = os:timestamp(),
-    case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
-        true ->
-            rabbit_event:notify(
-              channel_stats,
-              [{queue_exchange_stats, dict:to_list(QueueExchangeStats)} |
-               [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]]),
-            State#ch{last_stats_update = Now};
-        _ ->
-            State
-    end.
+internal_emit_stats(State = #ch{queue_exchange_stats = QueueExchangeStats}) ->
+    rabbit_event:notify(
+      channel_stats,
+      [{queue_exchange_stats, dict:to_list(QueueExchangeStats)} |
+       [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]]).
 
 erase_queue_stats(QPid, State = #ch{queue_exchange_stats = Stats}) ->
     Stats1 = dict:erase(QPid, Stats),

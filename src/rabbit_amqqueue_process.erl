@@ -58,7 +58,7 @@
             blocked_consumers,
             sync_timer_ref,
             rate_timer_ref,
-            last_stats_update
+            stats_timer_ref
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -117,7 +117,7 @@ init(Q) ->
             blocked_consumers = queue:new(),
             sync_timer_ref = undefined,
             rate_timer_ref = undefined,
-            last_stats_update = {0,0,0}}, hibernate,
+            stats_timer_ref = undefined}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -191,7 +191,7 @@ noreply(NewState) ->
 next_state(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         ensure_rate_timer(State),
-    State2 = maybe_emit_stats(State1),
+    State2 = ensure_stats_timer(State1),
     case BQ:needs_sync(BQS)of
         true  -> {ensure_sync_timer(State2), 0};
         false -> {stop_sync_timer(State2), hibernate}
@@ -230,6 +230,23 @@ stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
     State#q{rate_timer_ref = undefined}.
+
+ensure_stats_timer(State = #q{stats_timer_ref = undefined, q = Q}) ->
+    {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
+                                   rabbit_amqqueue, emit_stats,
+                                   [Q]),
+    State#q{stats_timer_ref = TRef};
+ensure_stats_timer(State) ->
+    State.
+
+stop_stats_timer(State = #q{stats_timer_ref = undefined}) ->
+    emit_stats(State),
+    State;
+stop_stats_timer(State = #q{stats_timer_ref = TRef}) ->
+    {ok, cancel} = timer:cancel(TRef),
+    emit_stats(State),
+    State#q{stats_timer_ref = undefined}.
+
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -541,19 +558,10 @@ i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-%---------------------------------------------------------------------------
+emit_stats(State) ->
+    rabbit_event:notify(queue_stats,
+                        [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]).
 
-maybe_emit_stats(State = #q{last_stats_update = LastUpdate}) ->
-    Now = os:timestamp(),
-    case timer:now_diff(Now, LastUpdate) > ?STATISTICS_UPDATE_INTERVAL of
-        true ->
-            rabbit_event:notify(
-              queue_stats,
-              [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]),
-            State#q{last_stats_update = Now};
-        _ ->
-            State
-    end.
 %---------------------------------------------------------------------------
 
 handle_call({init, Recover}, From,
@@ -829,7 +837,11 @@ handle_cast({set_ram_duration_target, Duration},
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State).
+    noreply(State);
+
+handle_cast(emit_stats, State) ->
+    emit_stats(State),
+    noreply(State#q{stats_timer_ref = undefined}).
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
@@ -866,4 +878,5 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), infinity),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    {hibernate, stop_rate_timer(State#q{backing_queue_state = BQS2})}.
+    {hibernate, stop_stats_timer(
+                  stop_rate_timer(State#q{backing_queue_state = BQS2}))}.
