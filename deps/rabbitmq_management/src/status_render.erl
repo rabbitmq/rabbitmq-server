@@ -20,38 +20,11 @@
 %%
 -module(status_render).
 
--export([render_conns/2]).
--export([format_info_item/2, format_info/2, print/2, format_pid/1]).
+-export([print/2, format_pid/1, format_ip/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
-
-render_conns(OldConnsList, Millis) ->
-    Conns = rabbit_networking:connection_info_all(),
-    %% TODO get rid of this binary to pid evil
-    OldConns = dict:from_list([{list_to_pid(binary_to_list(pget(pid, C))), C}
-                                           || C <- OldConnsList]),
-    [[{recv_rate, rate(Conn, OldConns, recv_oct, Millis)},
-      {send_rate, rate(Conn, OldConns, send_oct, Millis)}] ++
-         [{Key, format_info_item(Key, Value)} || {Key, Value} <- Conn]
-          || Conn <- Conns].
-
-rate(Conn, OldConns, Key, Millis) ->
-    case Millis of
-        undefined ->
-            0;
-        _ ->
-            Diff = case dict:find(pget(pid, Conn), OldConns) of
-                       {ok, OldConn} ->
-                           pget(Key, Conn) - pget(Key, OldConn);
-                       error ->
-                           pget(Key, Conn)
-                   end,
-            Diff / ((rabbit_management_util:now_ms() - Millis) / 1000)
-    end.
-
-
 
 print(Fmt, Val) when is_list(Val) ->
     list_to_binary(lists:flatten(io_lib:format(Fmt, Val)));
@@ -65,25 +38,7 @@ format_pid('') ->
 format_pid(unknown) ->
     unknown.
 
-
-format_info_item(Key, Value) ->
-    format_info(Key, Value).
-
-
-format_info(Key, Value) ->
-    case Value of
-        #resource{name = Name} ->       %% queue name
-            Name;
-        Value when (Key =:= address orelse Key =:= peer_address) andalso
-                   is_tuple(Value) ->
-            list_to_binary(inet_parse:ntoa(Value));
-        Value when is_number(Value) ->  %% memory stats, counters
-            Value;
-        Value when is_binary(Value) ->  %% vhost, username
-            Value;
-        Value ->                        %% queue arguments
-            print("~w", [Value])
-    end.
-
-pget(K, V) ->
-    proplists:get_value(K, V).
+format_ip(unknown) ->
+    unknown;
+format_ip(IP) ->
+    list_to_binary(inet_parse:ntoa(IP)).

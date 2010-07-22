@@ -34,17 +34,39 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Keys = [datetime, connections],
-    rabbit_management_util:apply_cache_info(
-      Keys, ReqData, Context,
-      fun(I) ->
-              {struct,
-               [{node, node()},
-                {pid, list_to_binary(os:getpid())},
-                {datetime, list_to_binary(I(datetime))},
-                {connections, [{struct, C} || C <- I(connections)]}
-               ]}
-      end).
+    Conns = [format(Conn) ||
+                Conn <- rabbit_management_stats:get_connection_stats()],
+    {mochijson2:encode({struct,
+                        [{node, node()},
+                         {pid, list_to_binary(os:getpid())},
+                         {datetime, list_to_binary(
+                                      rabbit_management_util:http_date())},
+                         {connections, [{struct, C} || C <- Conns]}
+                        ]}), ReqData, Context}.
+
+format(Conn) ->
+    [{pid,status_render:format_pid(
+            rabbit_management_stats:pget(pid, Conn))},
+     {address,status_render:format_ip(
+                rabbit_management_stats:pget(address, Conn))},
+     {port,rabbit_management_stats:pget(port, Conn)},
+     {peer_address,status_render:format_ip(
+                     rabbit_management_stats:pget(peer_address, Conn))},
+     {peer_port,rabbit_management_stats:pget(peer_port, Conn)},
+     {user,rabbit_management_stats:pget(user, Conn)},
+     {vhost,rabbit_management_stats:pget(vhost, Conn)},
+     {timeout,rabbit_management_stats:pget(timeout, Conn)},
+     {frame_max,rabbit_management_stats:pget(frame_max, Conn)},
+ %%    {client_properties,rabbit_management_stats:pget(client_properties, Conn)},
+     {recv_oct,rabbit_management_stats:pget(recv_oct, Conn)},
+     {recv_cnt,rabbit_management_stats:pget(recv_cnt, Conn)},
+     {send_oct,rabbit_management_stats:pget(send_oct, Conn)},
+     {send_cnt,rabbit_management_stats:pget(send_cnt, Conn)},
+     {send_pend,rabbit_management_stats:pget(send_pend, Conn)},
+     {recv_rate,rabbit_management_stats:pget(recv_rate, Conn)},
+     {send_rate,rabbit_management_stats:pget(send_rate, Conn)},
+     {state,rabbit_management_stats:pget(state, Conn)},
+     {channels,rabbit_management_stats:pget(channels, Conn)}].
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).
