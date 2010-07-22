@@ -1246,8 +1246,5 @@ store(Type, QX, Measure, Val, Stats) ->
 
 erase_queue_stats(QPid, #ch{stats_table = Table}) ->
     erase({monitoring, QPid}),
-    [ets:delete(Table, K) ||
-        {K, _V} <- ets:match(Table, {{queue_stats, QPid, '_'}, '_'})],
-    [ets:delete(Table, K) ||
-        {K, _V} <-
-            ets:match(Table, {{queue_exchange_stats, {QPid, '_'}, '_'}, '_'})].
+    ets:match_delete(Table, {{queue_stats, QPid, '_'}, '_'}),
+    ets:match_delete(Table, {{queue_exchange_stats, {QPid, '_'}, '_'}, '_'}).
