@@ -559,7 +559,7 @@
                 <listitem><para>Scope of the permissions: either
                 <command>client</command> (the default) or
                 <command>all</command>.  This determines whether
-                permissisons are checked for server-generated resource
+                permissions are checked for server-generated resource
                 names (<command>all</command>) or only for
                 client-specified resource names
                 (<command>client</command>).</para></listitem>
