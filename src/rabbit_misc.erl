@@ -61,7 +61,8 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1, dict_cons/3, unlink_and_capture_exit/1]).
+-export([recursive_delete/1, dict_cons/3, orddict_cons/3,
+         unlink_and_capture_exit/1]).
 
 -import(mnesia).
 -import(lists).
@@ -168,7 +169,10 @@
 -spec(recursive_delete/1 ::
         ([file:filename()])
         -> rabbit_types:ok_or_error({file:filename(), any()})).
--spec(dict_cons/3 :: (any(), any(), dict:dictionary()) -> dict:dictionary()).
+-spec(dict_cons/3 :: (any(), any(), dict:dictionary()) ->
+                          dict:dictionary()).
+-spec(orddict_cons/3 :: (any(), any(), orddict:dictionary()) ->
+                             orddict:dictionary()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 
 -endif.
@@ -660,6 +664,9 @@ recursive_delete1(Path) ->
 
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
+
+orddict_cons(Key, Value, Dict) ->
+    orddict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
 
 unlink_and_capture_exit(Pid) ->
     unlink(Pid),
