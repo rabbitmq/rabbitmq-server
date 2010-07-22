@@ -19,6 +19,7 @@ table.list th, table.list td { border-left: 1px solid #bbb; border-right: 1px so
 table.list th { text-align: center; font-weight: bold; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
 
 sub { display: block; color: #888; }
+.unknown {color: #888;}
 
 table.warns th { text-align: right; font-weight: bold; }
 

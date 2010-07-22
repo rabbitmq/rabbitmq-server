@@ -20,11 +20,11 @@
   <tr<%= alt_rows(i)%>>
    <td><%= queues[i].vhost %></td>
    <td><%= queues[i].name %></td>
-   <td class="r"><%= queues[i].consumers %></td>
+   <td class="r"><%= fmt_string(queues[i].consumers) %></td>
    <td class="r"><%= fmt_bytes(queues[i].memory) %></td>
-   <td class="r"><%= queues[i].messages_ready %></td>
-   <td class="r"><%= queues[i].messages_unacknowledged %></td>
-   <td class="r"><%= queues[i].messages %></td>
+   <td class="r"><%= fmt_string(queues[i].messages_ready) %></td>
+   <td class="r"><%= fmt_string(queues[i].messages_unacknowledged) %></td>
+   <td class="r"><%= fmt_string(queues[i].messages) %></td>
    <td class="c"><%= fmt_boolean(queues[i].durable) %></td>
    <td class="c"><%= fmt_boolean(queues[i].auto_delete) %></td>
    <td class="c"><%= fmt_boolean(queues[i].exclusive_owner.length > 0) %></td>

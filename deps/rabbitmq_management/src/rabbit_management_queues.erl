@@ -52,8 +52,8 @@ format(#amqqueue{name = Name,
                  exclusive_owner = ExclusiveOwner,
                  arguments = Arguments,
                  pid = QPid}, Stats) ->
-    MsgsReady = proplists:get_value(messages_ready, Stats),
-    MsgsUnacked = proplists:get_value(messages_unacknowledged, Stats),
+    MsgsReady = rabbit_management_stats:pget(messages_ready, Stats),
+    MsgsUnacked = rabbit_management_stats:pget(messages_unacknowledged, Stats),
     [{vhost, Name#resource.virtual_host},
      {name, Name#resource.name},
      {durable, Durable},
@@ -63,15 +63,16 @@ format(#amqqueue{name = Name,
      {pid, status_render:format_pid(QPid)},
      {exclusive_consumer_pid,
       status_render:format_pid(
-        proplists:get_value(exclusive_consumer_pid, Stats))},
+        rabbit_management_stats:pget(exclusive_consumer_pid, Stats))},
      {exclusive_consumer_tag,
-      proplists:get_value(exclusive_consumer_tag, Stats)},
+      rabbit_management_stats:pget(exclusive_consumer_tag, Stats)},
      {messages_ready, MsgsReady},
      {messages_unacknowledged, MsgsUnacked},
-     {messages, MsgsReady + MsgsUnacked},
-     {consumers, proplists:get_value(consumers, Stats)},
-     {memory, proplists:get_value(memory, Stats)},
-     {backing_queue_status, proplists:get_value(backing_queue_status, Stats)}
+     {messages, rabbit_management_stats:add(MsgsReady, MsgsUnacked)},
+     {consumers, rabbit_management_stats:pget(consumers, Stats)},
+     {memory, rabbit_management_stats:pget(memory, Stats)},
+     {backing_queue_status,
+      rabbit_management_stats:pget(backing_queue_status, Stats)}
     ].
 
 is_authorized(ReqData, Context) ->

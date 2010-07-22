@@ -61,7 +61,9 @@ print(Fmt, Val) ->
 format_pid(Pid) when is_pid(Pid) ->
     list_to_binary(io_lib:format("~w", [Pid]));
 format_pid('') ->
-    <<"">>.
+    <<"">>;
+format_pid(unknown) ->
+    unknown.
 
 
 format_info_item(Key, Value) ->

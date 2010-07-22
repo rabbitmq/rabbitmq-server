@@ -26,7 +26,7 @@
 
 -export([start/0]).
 
--export([get_queue_stats/1]).
+-export([get_queue_stats/1, pget/2, add/2]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -41,13 +41,30 @@ start() ->
 get_queue_stats(QPids) ->
     gen_event:call(rabbit_event, ?MODULE, {get_queue_stats, QPids}, infinity).
 
+pget(Key, List) ->
+    case proplists:get_value(Key, List) of
+        undefined -> unknown;
+        Val -> Val
+    end.
+
+add(unknown, _) -> unknown;
+add(_, unknown) -> unknown;
+add(A, B)       -> A + B.
+
+%%----------------------------------------------------------------------------
+
+lookup_element(Table, Key, Pos) ->
+    try ets:lookup_element(Table, Key, Pos)
+    catch error:badarg -> []
+    end.
+
 %%----------------------------------------------------------------------------
 
 init([]) ->
     {ok, #state{queue_stats = ets:new(anon, [private])}}.
 
 handle_call({get_queue_stats, QPids}, State = #state{queue_stats = Table}) ->
-    {ok, [ets:lookup_element(Table, QPid, 2) || QPid <- QPids], State};
+    {ok, [lookup_element(Table, QPid, 2) || QPid <- QPids], State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
