@@ -385,7 +385,7 @@ do_handshake(State0 = #nc_state{sock = Sock}) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
     {Framing0Pid, Writer0Pid} =
         amqp_channel_util:start_channel_infrastructure(network, 0, {Sock, none}),
-    {ok, MainReaderPid} = amqp_main_reader:start_link({Sock, Framing0Pid}),
+    {ok, MainReaderPid} = amqp_main_reader:start_link(Sock, Framing0Pid),
     State1 = State0#nc_state{channel0_framing_pid = Framing0Pid,
                              channel0_writer_pid = Writer0Pid,
                              main_reader_pid = MainReaderPid},

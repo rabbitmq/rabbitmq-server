@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, register_framing_channel/3, start_heartbeat/2]).
+-export([start_link/2, register_framing_channel/3, start_heartbeat/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -41,8 +41,8 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Args) ->
-    gen_server:start_link(?MODULE, Args, []).
+start_link(Sock, Framing0Pid) ->
+    gen_server:start_link(?MODULE, [Sock, Framing0Pid], []).
 
 register_framing_channel(MainReaderPid, Number, FramingPid) ->
     gen_server:call(MainReaderPid,
@@ -55,22 +55,27 @@ start_heartbeat(MainReaderPid, Heartbeat) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init({Sock, Framing0Pid}) ->
+init([Sock, Framing0Pid]) ->
     State0 = #mr_state{sock = Sock},
     State1 = handle_register_framing_channel(0, Framing0Pid, State0),
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
     {ok, State1}.
 
-terminate(normal, #mr_state{sock = Sock}) ->
-    rabbit_net:close(Sock),
-    ok;
-terminate(_Reason, _State) ->
-    ok.
+terminate(Reason, #mr_state{sock = Sock}) ->
+    Nice = case Reason of
+               normal        -> true;
+               shutdown      -> true;
+               {shutdown, _} -> true;
+               _             -> false
+           end,
+    if Nice -> rabbit_net:close(Sock), ok;
+       true -> ok
+    end.
 
 code_change(_OldVsn, State, _Extra) ->
     State.
 
-handle_call({register_framing_channel, Number, Pid}, From, State) ->
+handle_call({register_framing_channel, Number, Pid}, _From, State) ->
     {reply, ok, handle_register_framing_channel(Number, Pid, State)}.
 
 handle_cast({heartbeat, Heartbeat}, State = #mr_state{sock = Sock}) ->
