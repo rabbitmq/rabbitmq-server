@@ -88,7 +88,7 @@ all_args() ->
     ncl_args() ++ dcl_args() ++ cl_args() ++ m_args().
 
 ncl_args() ->
-    [{amqp_main_reader, start, return_ms()},
+    [{amqp_main_reader, start_link, return_ms()},
      {amqp_network_connection, set_closing_state, []},
      {amqp_network_connection, all_channels_closed_event, []},
      {amqp_network_connection, handshake, []},
