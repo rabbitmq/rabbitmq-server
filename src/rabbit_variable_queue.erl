@@ -971,10 +971,10 @@ purge_betas_and_deltas(State = #vqstate { q3          = Q3,
 
 remove_queue_entries(Fold, Q, IndexState) ->
     {GuidsByStore, Delivers, Acks} =
-        Fold(fun remove_queue_entries1/2, {dict:new(), [], []}, Q),
-    ok = dict:fold(fun (MsgStore, Guids, ok) ->
-                           rabbit_msg_store:remove(MsgStore, Guids)
-                   end, ok, GuidsByStore),
+        Fold(fun remove_queue_entries1/2, {orddict:new(), [], []}, Q),
+    ok = orddict:fold(fun (MsgStore, Guids, ok) ->
+                              rabbit_msg_store:remove(MsgStore, Guids)
+                      end, ok, GuidsByStore),
     rabbit_queue_index:ack(Acks,
                            rabbit_queue_index:deliver(Delivers, IndexState)).
 
@@ -984,8 +984,8 @@ remove_queue_entries1(
                 index_on_disk = IndexOnDisk, is_persistent = IsPersistent },
   {GuidsByStore, Delivers, Acks}) ->
     {case MsgOnDisk of
-         true  -> rabbit_misc:dict_cons(find_msg_store(IsPersistent), Guid,
-                                        GuidsByStore);
+         true  -> rabbit_misc:orddict_cons(find_msg_store(IsPersistent), Guid,
+                                           GuidsByStore);
          false -> GuidsByStore
      end,
      cons_if(IndexOnDisk andalso not IsDelivered, SeqId, Delivers),
@@ -1084,19 +1084,20 @@ remove_pending_ack(KeepPersistent,
                    State = #vqstate { pending_ack = PA,
                                       index_state = IndexState }) ->
     {SeqIds, GuidsByStore} = dict:fold(fun accumulate_ack/3,
-                                       {[], dict:new()}, PA),
+                                       {[], orddict:new()}, PA),
     State1 = State #vqstate { pending_ack = dict:new() },
     case KeepPersistent of
-        true  -> case dict:find(?TRANSIENT_MSG_STORE, GuidsByStore) of
+        true  -> case orddict:find(?TRANSIENT_MSG_STORE, GuidsByStore) of
                      error       -> State1;
                      {ok, Guids} -> ok = rabbit_msg_store:remove(
                                            ?TRANSIENT_MSG_STORE, Guids),
                                     State1
                  end;
         false -> IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
-                 ok = dict:fold(fun (MsgStore, Guids, ok) ->
-                                        rabbit_msg_store:remove(MsgStore, Guids)
-                                end, ok, GuidsByStore),
+                 ok = orddict:fold(
+                        fun (MsgStore, Guids, ok) ->
+                                rabbit_msg_store:remove(MsgStore, Guids)
+                        end, ok, GuidsByStore),
                  State1 #vqstate { index_state = IndexState1 }
     end.
 
@@ -1111,12 +1112,12 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
                   {accumulate_ack(SeqId, AckEntry, Acc),
                    Fun(AckEntry, State2 #vqstate {
                                    pending_ack = dict:erase(SeqId, PA) })}
-          end, {{[], dict:new()}, State}, AckTags),
+          end, {{[], orddict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
-    ok = dict:fold(fun (MsgStore, Guids, ok) ->
-                           MsgStoreFun(MsgStore, Guids)
-                   end, ok, GuidsByStore),
-    PCount1 = PCount - case dict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
+    ok = orddict:fold(fun (MsgStore, Guids, ok) ->
+                              MsgStoreFun(MsgStore, Guids)
+                      end, ok, GuidsByStore),
+    PCount1 = PCount - case orddict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
                            error       -> 0;
                            {ok, Guids} -> length(Guids)
                        end,
@@ -1129,7 +1130,7 @@ accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
     Acc;
 accumulate_ack(SeqId, {IsPersistent, Guid}, {SeqIdsAcc, Dict}) ->
     {cons_if(IsPersistent, SeqId, SeqIdsAcc),
-     rabbit_misc:dict_cons(find_msg_store(IsPersistent), Guid, Dict)}.
+     rabbit_misc:orddict_cons(find_msg_store(IsPersistent), Guid, Dict)}.
 
 %%----------------------------------------------------------------------------
 %% Phase changes
