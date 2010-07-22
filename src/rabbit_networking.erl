@@ -235,16 +235,11 @@ connections() ->
 
 connection_info_keys() -> rabbit_reader:info_keys().
 
-connection_info(Pid) ->
-    Info = rabbit_reader:info(Pid),
-    io:format("Got info: ~p~n", [Info]),
-    Info.
+connection_info(Pid) -> rabbit_reader:info(Pid).
 connection_info(Pid, Items) -> rabbit_reader:info(Pid, Items).
 
 connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
-connection_info_all(Items) ->
-    io:format("The Items are ~p~n", [Items]),
-    cmap(fun (Q) -> connection_info(Q, Items) end).
+connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
 close_connection(Pid, Explanation) ->
     case lists:any(fun ({_, ChildPid, _, _}) -> ChildPid =:= Pid end,

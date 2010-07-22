@@ -33,6 +33,8 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
+-include_lib("public_key/include/public_key.hrl").
+
 -export([start_link/0, info_keys/0, info/1, info/2, shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
@@ -61,9 +63,10 @@
              queue_collector}).
 
 -define(INFO_KEYS,
-        [pid, address, port, peer_address, peer_port, peer_certificate,
+        [pid, address, port, peer_address, peer_port,
          recv_oct, recv_cnt, send_oct, send_cnt, send_pend,
-         state, channels, user, vhost, timeout, frame_max, client_properties]).
+         state, channels, user, vhost, timeout, frame_max, client_properties,
+         ssl_subject, ssl_fingerprint, ssl_ca]).
 
 %% connection lifecycle
 %%
@@ -730,11 +733,13 @@ i(port, #v1{sock = Sock}) ->
 i(peer_address, #v1{sock = Sock}) ->
     {ok, {A, _}} = rabbit_net:peername(Sock),
     A;
-i(peer_certificate, #v1{sock = Sock}) ->
-    case rabbit_net:peercert(Sock) of
-        {ok, Cert} -> Cert;
-        nossl      -> nossl
-    end;
+i(ssl_subject, #v1{sock = Sock}) ->
+    get_ssl_info(fun (Cert) ->
+                         TBSCert = Cert#'OTPCertificate'.tbsCertificate,
+                         Subj = TBSCert#'OTPTBSCertificate'.subject,
+                         {ok, Subj}
+                 end,
+                 Sock);
 i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
@@ -767,6 +772,16 @@ i(client_properties, #v1{connection = #connection{
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
+
+get_ssl_info(F, Sock) ->
+    io:format("Peer cert: ~p~n", [rabbit_net:peercert(Sock)]),
+    case rabbit_net:peercert(Sock) of
+        nossl               -> nossl;
+        no_peer_certificate -> no_peer_certificate;
+        {ok, Cert}          ->
+            io:format("Some information: ~p~n", [F(Cert)]),
+            F(Cert)
+    end.
 
 %%--------------------------------------------------------------------------
 

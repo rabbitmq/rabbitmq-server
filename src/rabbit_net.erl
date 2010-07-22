@@ -121,7 +121,10 @@ peername(Sock) when is_port(Sock) ->
 
 
 peercert(Sock) when is_record(Sock, ssl_socket) ->
-    public_key:pkix_decode_cert(ssl:peercert(Sock#ssl_socket.ssl), plain);
+    case ssl:peercert(Sock#ssl_socket.ssl) of
+        {ok, Cert}           -> public_key:pkix_decode_cert(Cert, otp);
+        {error, no_peercert} -> no_peer_certificate
+    end;
 peercert(_) ->
     nossl.
 
