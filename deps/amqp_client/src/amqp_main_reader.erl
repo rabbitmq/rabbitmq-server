@@ -68,9 +68,10 @@ terminate(Reason, #mr_state{sock = Sock}) ->
                {shutdown, _} -> true;
                _             -> false
            end,
-    if Nice -> rabbit_net:close(Sock), ok;
-       true -> ok
-    end.
+    ok = case Nice of
+             true  -> rabbit_net:close(Sock);
+             false -> ok
+         end.
 
 code_change(_OldVsn, State, _Extra) ->
     State.
