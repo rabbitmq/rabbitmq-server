@@ -38,6 +38,13 @@
 %%----------------------------------------------------------------------------
 
 notify(Type, Props) ->
-    gen_event:notify(rabbit_event, #event{type = Type,
-                                          props = Props,
-                                          timestamp = os:timestamp()}).
+    try
+        gen_event:notify(rabbit_event, #event{type = Type,
+                                              props = Props,
+                                              timestamp = os:timestamp()})
+    catch error:badarg ->
+            %% badarg means rabbit_event is no longer registered. We never
+            %% unregister it so the great likelihood is that we're shutting
+            %% down the broker but some events were backed up. Ignore it.
+            ok
+    end.
