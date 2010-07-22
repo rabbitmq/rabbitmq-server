@@ -57,7 +57,7 @@ start_heartbeat(MainReaderPid, Heartbeat) ->
 
 init([Sock, Framing0Pid]) ->
     State0 = #mr_state{sock = Sock},
-    State1 = handle_register_framing_channel(0, Framing0Pid, State0),
+    State1 = internal_register_framing_channel(0, Framing0Pid, State0),
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
     {ok, State1}.
 
@@ -76,7 +76,7 @@ code_change(_OldVsn, State, _Extra) ->
     State.
 
 handle_call({register_framing_channel, Number, Pid}, _From, State) ->
-    {reply, ok, handle_register_framing_channel(Number, Pid, State)}.
+    {reply, ok, internal_register_framing_channel(Number, Pid, State)}.
 
 handle_cast({heartbeat, Heartbeat}, State = #mr_state{sock = Sock}) ->
     rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
@@ -149,12 +149,6 @@ pass_frame(Channel, Frame, #mr_state{framing_channels = Channels}) ->
             rabbit_framing_channel:process(FramingPid, Frame)
     end.
 
-handle_register_framing_channel(
-            Number, Pid, State = #mr_state{framing_channels = Channels}) ->
-    NewChannels = amqp_channel_util:register_channel(Number, Pid, Channels),
-    erlang:monitor(process, Pid),
-    State#mr_state{framing_channels = NewChannels}.
-
 handle_down({'DOWN', _MonitorRef, process, Pid, Info},
             State = #mr_state{framing_channels = Channels}) ->
     case amqp_channel_util:is_channel_pid_registered(Pid, Channels) of
@@ -165,3 +159,10 @@ handle_down({'DOWN', _MonitorRef, process, Pid, Info},
         false ->
             {stop, {unexpected_down, Pid, Info}, State}
     end.
+
+internal_register_framing_channel(
+            Number, Pid, State = #mr_state{framing_channels = Channels}) ->
+    NewChannels = amqp_channel_util:register_channel(Number, Pid, Channels),
+    erlang:monitor(process, Pid),
+    State#mr_state{framing_channels = NewChannels}.
+
