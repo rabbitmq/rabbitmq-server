@@ -50,6 +50,8 @@ pget(Key, List) ->
         Val -> Val
     end.
 
+id(List) -> pget(pid, List).
+
 add(unknown, _) -> unknown;
 add(_, unknown) -> unknown;
 add(A, B)       -> A + B.
@@ -64,14 +66,19 @@ lookup_element(Table, Key, Pos) ->
     catch error:badarg -> []
     end.
 
-rate(Conn, Table, Key, Timestamp) ->
-    Old = lookup_element(Table, {pget(pid, Conn), stats}),
-    OldTS = lookup_element(Table, {pget(pid, Conn), stats}, 3),
+rates(Table, Stats, Timestamp, Keys) ->
+    Stats ++
+        [{list_to_atom(atom_to_list(Key) ++ "_rate"),
+          rate(Table, Stats, Timestamp, Key)} || Key <- Keys].
+
+rate(Table, Stats, Timestamp, Key) ->
+    Old = lookup_element(Table, {id(Stats), stats}),
+    OldTS = lookup_element(Table, {id(Stats), stats}, 3),
     case OldTS of
         [] ->
             unknown;
         _ ->
-            Diff = pget(Key, Conn) - pget(Key, Old),
+            Diff = pget(Key, Stats) - pget(Key, Old),
             Diff / (timer:now_diff(Timestamp, OldTS) / 1000000)
     end.
 
@@ -93,7 +100,7 @@ handle_call(_Request, State) ->
 
 handle_event(#event{type = queue_stats, props = Stats},
              State = #state{queue_stats = Table}) ->
-    ets:insert(Table, {pget(pid, Stats), Stats}),
+    ets:insert(Table, {id(Stats), Stats}),
     {ok, State};
 
 handle_event(#event{type = queue_deleted, props = [{pid, Pid}]},
@@ -103,18 +110,16 @@ handle_event(#event{type = queue_deleted, props = [{pid, Pid}]},
 
 handle_event(#event{type = connection_created, props = Stats},
              State = #state{connection_stats = Table}) ->
-    ets:insert(Table, {{pget(pid, Stats), create}, Stats}),
+    ets:insert(Table, {{id(Stats), create}, Stats}),
     {ok, State};
 
 handle_event(#event{type = connection_stats, props = Stats,
                     timestamp = Timestamp},
              State = #state{connection_stats = Table}) ->
     ets:insert(Table,
-               {{pget(pid, Stats), stats},
-                [{recv_rate, rate(Stats, Table, recv_oct, Timestamp)},
-                 {send_rate, rate(Stats, Table, send_oct, Timestamp)}] ++
-                    Stats,
-               Timestamp}),
+               {{id(Stats), stats},
+                rates(Table, Stats, Timestamp, [recv_oct, send_oct]),
+                Timestamp}),
     {ok, State};
 
 handle_event(#event{type = connection_closed, props = [{pid, Pid}]},

@@ -1,12 +1,12 @@
-UNKNOWN_REPR = '<span class="unknown">(?)</span>';
+UNKNOWN_REPR = '<span class="unknown">?</span>';
 
 function fmt_string(str) {
-    if (str == 'unknown') return UNKNOWN_REPR;
+    if (str == undefined) return UNKNOWN_REPR;
     return str;
 }
 
 function fmt_bytes(bytes) {
-    if (bytes == 'unknown') return UNKNOWN_REPR;
+    if (bytes == undefined) return UNKNOWN_REPR;
 
     function f(n, p) {
         if (n > 1024) return f(n / 1024, p + 1);
@@ -19,13 +19,13 @@ function fmt_bytes(bytes) {
 }
 
 function fmt_boolean(b) {
-    if (b == 'unknown') return UNKNOWN_REPR;
+    if (b == undefined) return UNKNOWN_REPR;
 
     return b ? "&#9679;" : "&#9675;";
 }
 
 function fmt_color(r) {
-    if (r == 'unknown') return '';
+    if (r == undefined) return '';
 
     if (r > 0.75) return 'red';
     else if (r > 0.5) return 'yellow';

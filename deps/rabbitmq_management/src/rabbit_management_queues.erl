@@ -37,14 +37,9 @@ to_json(ReqData, Context) ->
     Qs = mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}),
     QStats = lists:zip(Qs,rabbit_management_stats:get_queue_stats(
                             [Q#amqqueue.pid || Q <- Qs])),
-    QInfos = [format(Q, Stats) || {Q, Stats} <- QStats],
-    {mochijson2:encode({struct,
-                        [{node, node()},
-                         {pid, list_to_binary(os:getpid())},
-                         {datetime, list_to_binary(
-                                      rabbit_management_util:http_date())},
-                         {queues, [{struct, I} || I <- QInfos]}
-                        ]}), ReqData, Context}.
+    {rabbit_management_format:encode(
+       [{queues, [{struct, format(Q, Stats)} ||
+                     {Q, Stats} <- QStats]}]), ReqData, Context}.
 
 format(#amqqueue{name = Name,
                  durable = Durable,

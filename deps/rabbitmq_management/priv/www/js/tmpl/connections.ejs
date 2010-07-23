@@ -21,8 +21,8 @@
     <td><%= connections[i].state %></td>
     <td><%= connections[i].timeout %></td>
     <td><%= connections[i].peer_address %>:<%= connections[i].peer_port %></td>
-    <td><%= fmt_bytes(connections[i].recv_rate) %>/s<sub>(<%= fmt_bytes(connections[i].recv_oct) %> total)</sub></td>
-    <td><%= fmt_bytes(connections[i].send_rate) %>/s<sub>(<%= fmt_bytes(connections[i].send_oct) %> total)</sub></td>
+    <td><%= fmt_bytes(connections[i].recv_oct_rate) %>/s<sub>(<%= fmt_bytes(connections[i].recv_oct) %> total)</sub></td>
+    <td><%= fmt_bytes(connections[i].send_oct_rate) %>/s<sub>(<%= fmt_bytes(connections[i].send_oct) %> total)</sub></td>
     <td><%= connections[i].send_pend %></td>
   </tr>
   <% } %>

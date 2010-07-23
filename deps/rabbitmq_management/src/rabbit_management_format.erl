@@ -20,14 +20,23 @@
 %%
 -module(rabbit_management_format).
 
--export([format/2, print/2, pid/1, ip/1, table/1]).
+-export([encode/1, format/2, print/2, pid/1, ip/1, table/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
 
+encode(Facts) ->
+    mochijson2:encode({struct,
+                       [{node, node()},
+                        {pid, list_to_binary(os:getpid())},
+                        {datetime, list_to_binary(
+                                     rabbit_management_util:http_date())}
+                       ] ++ Facts}).
+
 format(Stats, Fs) ->
-    [format_item(Stat, Fs) || Stat <- Stats].
+    [format_item({Name, Value}, Fs) ||
+        {Name, Value} <- Stats, Value =/= unknown].
 
 format_item(Stat, []) ->
     Stat;

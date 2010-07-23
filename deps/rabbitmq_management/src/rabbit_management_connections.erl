@@ -34,15 +34,9 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Conns = [format(Conn) ||
-                Conn <- rabbit_management_stats:get_connection_stats()],
-    {mochijson2:encode({struct,
-                        [{node, node()},
-                         {pid, list_to_binary(os:getpid())},
-                         {datetime, list_to_binary(
-                                      rabbit_management_util:http_date())},
-                         {connections, [{struct, C} || C <- Conns]}
-                        ]}), ReqData, Context}.
+    Conns = rabbit_management_stats:get_connection_stats(),
+    {rabbit_management_format:encode(
+       [{connections, [{struct, format(C)} || C <- Conns]}]), ReqData, Context}.
 
 format(Conn) ->
     rabbit_management_format:format(
