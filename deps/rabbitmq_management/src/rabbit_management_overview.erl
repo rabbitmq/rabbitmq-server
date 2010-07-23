@@ -34,26 +34,12 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Keys = [datetime, bound_to, fd_used, fd_total,
-            mem_used, mem_total, proc_used, proc_total],
-    rabbit_management_util:apply_cache_info(
-      Keys, ReqData, Context,
-      fun(I) ->
-              {struct,
-               [{node, node()},
-                {pid, list_to_binary(os:getpid())},
-                {datetime, list_to_binary(I(datetime))},
-                {bound_to, list_to_binary(I(bound_to))},
-                {fd_used, I(fd_used)},
-                {fd_total, I(fd_total)},
-                {mem_used, I(mem_used)},
-                {mem_total, I(mem_total)},
-                {proc_used, I(proc_used)},
-                {proc_total, I(proc_total)},
-                {mem_ets, erlang:memory(ets)},
-                {mem_binary, erlang:memory(binary)}
-               ]}
-      end).
+    OSStats = rabbit_management_cache:info(),
+    {rabbit_management_format:encode(
+       OSStats ++
+           [{mem_ets, erlang:memory(ets)},
+            {mem_binary, erlang:memory(binary)}]),
+       ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).

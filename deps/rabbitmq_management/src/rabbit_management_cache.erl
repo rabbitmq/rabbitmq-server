@@ -30,17 +30,18 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([update/0, info/1]).
+-export([update/0, info/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
+-define(KEYS, [bound_to, fd_used, fd_total,
+               mem_used, mem_total, proc_used, proc_total]).
 
 %%--------------------------------------------------------------------
 
 -record(state, {
         time_ms,
-        datetime,
         bound_to,
         fd_used,
         fd_total,
@@ -55,13 +56,8 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-info(Items, Timeout) ->
-    gen_server2:call(?MODULE, {info, Items}, Timeout).
-
-% By default, let's not wait too long. If that takes more than 1 second,
-% it's better to quickly return 408 "request timeout" rather than hang.
-info(Items) ->
-    info(Items, 1000).
+info() ->
+    gen_server2:call(?MODULE, {info, ?KEYS}, infinity).
 
 update() ->
     gen_server2:cast(?MODULE, update).
@@ -113,7 +109,6 @@ get_total_memory() ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(datetime,    #state{datetime = DateTime})       -> DateTime;
 i(bound_to,    #state{bound_to = BoundTo})        -> BoundTo;
 i(fd_used,     #state{fd_used = FdUsed})          -> FdUsed;
 i(fd_total,    #state{fd_total = FdTotal})        -> FdTotal;
@@ -170,10 +165,7 @@ code_change(_, State, _) -> {ok, State}.
 internal_update(State) ->
     State#state{
         time_ms = rabbit_management_util:now_ms(),
-        datetime = rabbit_management_util:http_date(),
         fd_used = get_used_fd(),
         mem_used = erlang:memory(total),
         proc_used = erlang:system_info(process_count)
     }.
-
-
