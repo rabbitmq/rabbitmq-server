@@ -1,4 +1,4 @@
-body { font: 12px/17px Verdana,sans-serif; color: #444; padding: 8px 35px; }
+body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
 #logo { width: 204px; height: 37px; margin-bottom: 25px; background: url(/img/rabbitmqlogo.png); }
 #strap { float: right; }
 #menu ul { height: 2em; padding: 0; }
@@ -6,10 +6,11 @@ body { font: 12px/17px Verdana,sans-serif; color: #444; padding: 8px 35px; }
 #menu li a { padding: 0.5em; }
 #menu { border-bottom: 1px solid #FF8C00; }
 #main { clear: both; }
-a { color: #444; font-weight: bold; text-decoration: none; }
-a.selected { background-color: #F60; color:white; }
+#menu a { color: #444; font-weight: bold; text-decoration: none; }
+#main a { color: #444; }
+#menu a.selected { background-color: #F60; color:white; }
 #status { border-top:1px solid #E4E4E4; }
-h1 { color: #F60; font-size: 14px; line-height: 14px; }
+h1 { color: #F60; font-size: 2em; }
 
 table { border-collapse: collapse; margin-bottom: 2em; }
 table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; }
@@ -21,7 +22,7 @@ table.list th { text-align: center; font-weight: bold; border-top: 1px solid #bb
 sub { display: block; color: #888; }
 .unknown {color: #888;}
 
-table.warns th { text-align: right; font-weight: bold; }
+table.facts th { text-align: right; font-weight: bold; }
 
 tr.alt td {background:#eee;}
 
@@ -37,3 +38,8 @@ td.r {text-align: right;}
 p.status-ok { color: #888; }
 p.status-warning { color: black; background-color: #ff8; }
 p.status-error { color: white; background-color: #f00; }
+
+.highlight {width: 150px; font-size: 150%; float: right; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 20px 0; color: #888;}
+.highlight strong {font-size: 2em; display: block; color: #444; font-weight: normal;}
+
+h2 { color: #F60; font-size: 1.5em; }

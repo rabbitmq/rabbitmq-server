@@ -16,7 +16,8 @@ function apply_url(url) {
 function update() {
     with_req('/json/' + current_page, function(text) {
             var json = JSON.parse(text);
-            var html = format(current_page, json);
+            var template = current_page.split('/', 1);
+            var html = format(template, json);
             replace_content('main', html);
             update_status('ok', json['datetime']);
             $('a').removeClass('selected').unbind().click(function() {
@@ -68,6 +69,10 @@ function with_req(path, fun) {
             }
             else if (req.status == 0) {
                 update_status('error', new Date());
+            }
+            else if (req.status == 404) {
+                var html = format('404', {});
+                replace_content('main', html);
             }
             else {
                 alert("Got response code " + req.status);

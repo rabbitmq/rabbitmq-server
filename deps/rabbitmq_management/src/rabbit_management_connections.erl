@@ -20,7 +20,8 @@
 %%
 -module(rabbit_management_connections).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/1, resource_exists/2, to_json/2, content_types_provided/2,
+         is_authorized/2]).
 
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -33,10 +34,33 @@ init(_Config) -> {ok, undefined}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
+id(ReqData) ->
+    case dict:find(connection, wrq:path_info(ReqData)) of
+        error    -> error;
+        {ok, Id} -> list_to_binary(mochiweb_util:unquote(Id))
+    end.
+
+resource_exists(ReqData, Context) ->
+    case id(ReqData) of
+        error ->
+            {true, ReqData, Context};
+        Id ->
+            case rabbit_management_stats:get_connection(Id) of
+                error -> {false, ReqData, Context};
+                _Conn -> {true, ReqData, Context}
+            end
+    end.
+
 to_json(ReqData, Context) ->
-    Conns = rabbit_management_stats:get_connection_stats(),
-    {rabbit_management_format:encode(
-       [{connections, [{struct, format(C)} || C <- Conns]}]), ReqData, Context}.
+    Res = case id(ReqData) of
+              error ->
+                  Conns = rabbit_management_stats:get_connections(),
+                  {connections, [{struct, format(C)} || C <- Conns]};
+              Id ->
+                  Conn = rabbit_management_stats:get_connection(Id),
+                  {connection, {struct, format(Conn)}}
+          end,
+    {rabbit_management_format:encode([Res]), ReqData, Context}.
 
 format(Conn) ->
     rabbit_management_format:format(

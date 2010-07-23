@@ -1,0 +1,25 @@
+<h1>Connection <%= connection.peer_address %>:<%= connection.peer_port %></h1>
+
+<div class="highlight">
+  Receiving
+  <strong><%= fmt_bytes(connection.recv_oct_rate) %>/s</strong>
+  (<%= fmt_bytes(connection.recv_oct) %> total)
+</div>
+
+<div class="highlight">
+  <span>Sending</span>
+  <strong><%= fmt_bytes(connection.send_oct_rate) %>/s</strong>
+  (<%= fmt_bytes(connection.send_oct) %> total)
+</div>
+
+<h2>Overview</h2>
+<table class="facts">
+ <tr><th>Channels</th><td><%= connection.channels %></td></tr>
+ <tr><th>Vhost</th><td><%= connection.vhost %></td></tr>
+ <tr><th>Username</th><td><%= connection.user %></td></tr>
+ <tr><th>State</th><td><%= connection.state %></td></tr>
+ <tr><th>Timeout</th><td><%= connection.timeout %></td></tr>
+</table>
+
+<h2>Client Library</h2>
+<%= format('table', {'table': connection.client_properties}) %>

@@ -26,7 +26,8 @@
 
 -export([start/0]).
 
--export([get_queue_stats/1, get_connection_stats/0, pget/2, add/2]).
+-export([get_queue_stats/1, get_connections/0, get_connection/1]).
+-export([pget/2, add/2]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -41,8 +42,11 @@ start() ->
 get_queue_stats(QPids) ->
     gen_event:call(rabbit_event, ?MODULE, {get_queue_stats, QPids}, infinity).
 
-get_connection_stats() ->
-    gen_event:call(rabbit_event, ?MODULE, get_connection_stats, infinity).
+get_connections() ->
+    gen_event:call(rabbit_event, ?MODULE, get_connections, infinity).
+
+get_connection(Id) ->
+    gen_event:call(rabbit_event, ?MODULE, {get_connection, Id}, infinity).
 
 pget(Key, List) ->
     case proplists:get_value(Key, List) of
@@ -50,7 +54,8 @@ pget(Key, List) ->
         Val -> Val
     end.
 
-id(List) -> pget(pid, List).
+id(Pid) when is_pid(Pid) -> list_to_binary(pid_to_list(Pid));
+id(List) -> rabbit_management_format:pid(pget(pid, List)).
 
 add(unknown, _) -> unknown;
 add(_, unknown) -> unknown;
@@ -65,6 +70,9 @@ lookup_element(Table, Key, Pos) ->
     try ets:lookup_element(Table, Key, Pos)
     catch error:badarg -> []
     end.
+
+result_or_error([]) -> error;
+result_or_error(S)  -> S.
 
 rates(Table, Stats, Timestamp, Keys) ->
     Stats ++
@@ -89,11 +97,15 @@ init([]) ->
                 connection_stats = ets:new(anon, [private])}}.
 
 handle_call({get_queue_stats, QPids}, State = #state{queue_stats = Table}) ->
-    {ok, [lookup_element(Table, QPid) || QPid <- QPids], State};
+    {ok, [lookup_element(Table, id(QPid)) || QPid <- QPids], State};
 
-handle_call(get_connection_stats, State = #state{connection_stats = Table}) ->
+handle_call(get_connections, State = #state{connection_stats = Table}) ->
     {ok, [Stats ++ lookup_element(Table, {Pid, stats}) ||
              {{Pid, create}, Stats} <- ets:tab2list(Table)], State};
+
+handle_call({get_connection, Id}, State = #state{connection_stats = Table}) ->
+    {ok, result_or_error(lookup_element(Table, {Id, create}) ++
+                             lookup_element(Table, {Id, stats})), State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
