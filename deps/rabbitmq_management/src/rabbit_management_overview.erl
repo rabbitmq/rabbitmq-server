@@ -35,8 +35,9 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     OSStats = rabbit_management_cache:info(),
+    Overview = rabbit_management_stats:get_overview(),
     {rabbit_management_format:encode(
-       OSStats ++
+       OSStats ++ Overview ++
            [{mem_ets, erlang:memory(ets)},
             {mem_binary, erlang:memory(binary)}]),
        ReqData, Context}.

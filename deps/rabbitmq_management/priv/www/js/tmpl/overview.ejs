@@ -1,5 +1,17 @@
 <h1>Overview</h1>
 
+<div class="highlight">
+  Receiving
+  <strong><%= fmt_bytes(recv_oct_rate) %>/s</strong>
+  (<%= fmt_bytes(recv_oct) %> total)
+</div>
+
+<div class="highlight">
+  <span>Sending</span>
+  <strong><%= fmt_bytes(send_oct_rate) %>/s</strong>
+  (<%= fmt_bytes(send_oct) %> total)
+</div>
+
 <table class="facts">
  <tr><th>node</th><td><%= node %></td></tr>
  <tr><th>pid</th><td><%= pid %></td></tr>

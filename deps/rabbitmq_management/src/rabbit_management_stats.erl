@@ -26,7 +26,9 @@
 
 -export([start/0]).
 
--export([get_queue_stats/1, get_connections/0, get_connection/1]).
+-export([get_queue_stats/1, get_connections/0, get_connection/1,
+         get_overview/0]).
+
 -export([pget/2, add/2]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
@@ -48,11 +50,14 @@ get_connections() ->
 get_connection(Id) ->
     gen_event:call(rabbit_event, ?MODULE, {get_connection, Id}, infinity).
 
+get_overview() ->
+    gen_event:call(rabbit_event, ?MODULE, get_overview, infinity).
+
 pget(Key, List) ->
-    case proplists:get_value(Key, List) of
-        undefined -> unknown;
-        Val -> Val
-    end.
+    pget(Key, List, unknown).
+
+pget(Key, List, Default) ->
+    proplists:get_value(Key, List, Default).
 
 id(Pid) when is_pid(Pid) -> list_to_binary(pid_to_list(Pid));
 id(List) -> rabbit_management_format:pid(pget(pid, List)).
@@ -75,9 +80,11 @@ result_or_error([]) -> error;
 result_or_error(S)  -> S.
 
 rates(Table, Stats, Timestamp, Keys) ->
-    Stats ++
-        [{list_to_atom(atom_to_list(Key) ++ "_rate"),
-          rate(Table, Stats, Timestamp, Key)} || Key <- Keys].
+    Stats ++ lists:filter(
+               fun (unknown) -> false;
+                   (_)       -> true
+               end,
+               [rate(Table, Stats, Timestamp, Key) || Key <- Keys]).
 
 rate(Table, Stats, Timestamp, Key) ->
     Old = lookup_element(Table, {id(Stats), stats}),
@@ -87,8 +94,16 @@ rate(Table, Stats, Timestamp, Key) ->
             unknown;
         _ ->
             Diff = pget(Key, Stats) - pget(Key, Old),
-            Diff / (timer:now_diff(Timestamp, OldTS) / 1000000)
+            {list_to_atom(atom_to_list(Key) ++ "_rate"),
+             Diff / (timer:now_diff(Timestamp, OldTS) / 1000000)}
     end.
+
+sum(Table, Keys) ->
+    lists:foldl(fun (Stats, Acc) ->
+                        [{Key, Val + pget(Key, Stats, 0)} || {Key, Val} <- Acc]
+                end,
+                [{Key, 0} || Key <- Keys],
+                [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
 
 %%----------------------------------------------------------------------------
 
@@ -106,6 +121,9 @@ handle_call(get_connections, State = #state{connection_stats = Table}) ->
 handle_call({get_connection, Id}, State = #state{connection_stats = Table}) ->
     {ok, result_or_error(lookup_element(Table, {Id, create}) ++
                              lookup_element(Table, {Id, stats})), State};
+
+handle_call(get_overview, State = #state{connection_stats = Table}) ->
+    {ok, sum(Table, [recv_oct, send_oct, recv_oct_rate, send_oct_rate]), State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
