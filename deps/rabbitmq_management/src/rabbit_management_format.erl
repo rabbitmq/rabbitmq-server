@@ -18,27 +18,46 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(status_render).
+-module(rabbit_management_format).
 
--export([print/2, format_pid/1, format_ip/1]).
+-export([format/2, print/2, pid/1, ip/1, table/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
+
+format(Stats, Fs) ->
+    [format_item(Stat, Fs) || Stat <- Stats].
+
+format_item(Stat, []) ->
+    Stat;
+format_item(Stat, [F|Fs]) ->
+    format_item(format_item0(Stat, F), Fs).
+
+format_item0({Name, Value}, {Fun, Names}) ->
+    case lists:member(Name, Names) of
+        true -> {Name, Fun(Value)};
+        _    -> {Name, Value}
+    end.
 
 print(Fmt, Val) when is_list(Val) ->
     list_to_binary(lists:flatten(io_lib:format(Fmt, Val)));
 print(Fmt, Val) ->
     print(Fmt, [Val]).
 
-format_pid(Pid) when is_pid(Pid) ->
+pid(Pid) when is_pid(Pid) ->
     list_to_binary(io_lib:format("~w", [Pid]));
-format_pid('') ->
+pid('') ->
     <<"">>;
-format_pid(unknown) ->
+pid(unknown) ->
     unknown.
 
-format_ip(unknown) ->
+ip(unknown) ->
     unknown;
-format_ip(IP) ->
+ip(IP) ->
     list_to_binary(inet_parse:ntoa(IP)).
+
+table(unknown) ->
+    unknown;
+table(Table) ->
+    {struct, [{Name, Value} || {Name, _Type, Value} <- Table]}.

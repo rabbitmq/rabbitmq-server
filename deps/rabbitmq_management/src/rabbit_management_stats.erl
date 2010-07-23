@@ -123,7 +123,7 @@ handle_event(#event{type = connection_closed, props = [{pid, Pid}]},
     ets:delete(Table, {Pid, stats}),
     {ok, State};
 
-handle_event(Event, State) ->
+handle_event(_Event, State) ->
     %% io:format("Got event ~p~n", [Event]),
     {ok, State}.
 

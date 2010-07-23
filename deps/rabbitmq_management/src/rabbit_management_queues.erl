@@ -54,26 +54,17 @@ format(#amqqueue{name = Name,
                  pid = QPid}, Stats) ->
     MsgsReady = rabbit_management_stats:pget(messages_ready, Stats),
     MsgsUnacked = rabbit_management_stats:pget(messages_unacknowledged, Stats),
-    [{vhost, Name#resource.virtual_host},
-     {name, Name#resource.name},
-     {durable, Durable},
-     {auto_delete, AutoDelete},
-     {exclusive_owner, status_render:format_pid(ExclusiveOwner)},
-     {arguments, Arguments},
-     {pid, status_render:format_pid(QPid)},
-     {exclusive_consumer_pid,
-      status_render:format_pid(
-        rabbit_management_stats:pget(exclusive_consumer_pid, Stats))},
-     {exclusive_consumer_tag,
-      rabbit_management_stats:pget(exclusive_consumer_tag, Stats)},
-     {messages_ready, MsgsReady},
-     {messages_unacknowledged, MsgsUnacked},
-     {messages, rabbit_management_stats:add(MsgsReady, MsgsUnacked)},
-     {consumers, rabbit_management_stats:pget(consumers, Stats)},
-     {memory, rabbit_management_stats:pget(memory, Stats)},
-     {backing_queue_status,
-      rabbit_management_stats:pget(backing_queue_status, Stats)}
-    ].
+    rabbit_management_format:format(
+    [{vhost,            Name#resource.virtual_host},
+     {name,             Name#resource.name},
+     {durable,          Durable},
+     {auto_delete,      AutoDelete},
+     {exclusive_owner,  ExclusiveOwner},
+     {arguments,        Arguments},
+     {pid,              QPid},
+     {messages, rabbit_management_stats:add(MsgsReady, MsgsUnacked)}] ++ Stats,
+     [{fun rabbit_management_format:pid/1,
+       [pid, exclusive_owner, exclusive_consumer_pid]}]).
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).

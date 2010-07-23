@@ -18,6 +18,10 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
+
+%% TODO this is vestigal from the status plugin. Do we need a caching
+%% mechanism for the os-level info this returns?
+
 -module(rabbit_management_cache).
 
 -behaviour(gen_server).
@@ -31,7 +35,6 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
-
 
 %%--------------------------------------------------------------------
 
@@ -123,8 +126,9 @@ i(proc_total,  #state{proc_total = ProcTotal})    -> ProcTotal.
 
 init([]) ->
     {ok, Binds} = application:get_env(rabbit, tcp_listeners),
-    BoundTo = lists:flatten( [ status_render:print("~s:~p ", [Addr,Port])
-                                                || {Addr, Port} <- Binds ] ),
+    BoundTo = lists:flatten(
+                [ rabbit_management_format:print("~s:~p ", [Addr,Port])
+                  || {Addr, Port} <- Binds ] ),
     State = #state{
       fd_total = get_total_fd(),
       mem_total = get_total_memory(),

@@ -45,28 +45,11 @@ to_json(ReqData, Context) ->
                         ]}), ReqData, Context}.
 
 format(Conn) ->
-    [{pid,status_render:format_pid(
-            rabbit_management_stats:pget(pid, Conn))},
-     {address,status_render:format_ip(
-                rabbit_management_stats:pget(address, Conn))},
-     {port,rabbit_management_stats:pget(port, Conn)},
-     {peer_address,status_render:format_ip(
-                     rabbit_management_stats:pget(peer_address, Conn))},
-     {peer_port,rabbit_management_stats:pget(peer_port, Conn)},
-     {user,rabbit_management_stats:pget(user, Conn)},
-     {vhost,rabbit_management_stats:pget(vhost, Conn)},
-     {timeout,rabbit_management_stats:pget(timeout, Conn)},
-     {frame_max,rabbit_management_stats:pget(frame_max, Conn)},
- %%    {client_properties,rabbit_management_stats:pget(client_properties, Conn)},
-     {recv_oct,rabbit_management_stats:pget(recv_oct, Conn)},
-     {recv_cnt,rabbit_management_stats:pget(recv_cnt, Conn)},
-     {send_oct,rabbit_management_stats:pget(send_oct, Conn)},
-     {send_cnt,rabbit_management_stats:pget(send_cnt, Conn)},
-     {send_pend,rabbit_management_stats:pget(send_pend, Conn)},
-     {recv_rate,rabbit_management_stats:pget(recv_rate, Conn)},
-     {send_rate,rabbit_management_stats:pget(send_rate, Conn)},
-     {state,rabbit_management_stats:pget(state, Conn)},
-     {channels,rabbit_management_stats:pget(channels, Conn)}].
+    rabbit_management_format:format(
+      Conn,
+      [{fun rabbit_management_format:pid/1,   [pid]},
+       {fun rabbit_management_format:ip/1,    [address, peer_address]},
+       {fun rabbit_management_format:table/1, [client_properties]}]).
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).
