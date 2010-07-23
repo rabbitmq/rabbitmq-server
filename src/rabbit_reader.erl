@@ -681,11 +681,12 @@ handle_method0(#'connection.open'{virtual_host = VHostPath,
             ok = send_on_channel0(
                    Sock,
                    #'connection.open_ok'{known_hosts = KnownHosts}),
+            State1 = State#v1{connection_state = running,
+                              connection = NewConnection},
             rabbit_event:notify(
               connection_created,
-              [{Item, i(Item, State)} || Item <- [pid|?CREATION_EVENT_KEYS]]),
-            State#v1{connection_state = running,
-                     connection = NewConnection};
+              [{Item, i(Item, State1)} || Item <- [pid|?CREATION_EVENT_KEYS]]),
+            State1;
        true ->
             %% FIXME: 'host' is supposed to only contain one
             %% address; but which one do we pick? This is
