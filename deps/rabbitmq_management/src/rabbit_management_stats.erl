@@ -119,8 +119,8 @@ handle_event(#event{type = connection_stats, props = Stats,
 
 handle_event(#event{type = connection_closed, props = [{pid, Pid}]},
              State = #state{connection_stats = Table}) ->
-    ets:delete(Table, {create, Pid}),
-    ets:delete(Table, {stats, Pid}),
+    ets:delete(Table, {Pid, create}),
+    ets:delete(Table, {Pid, stats}),
     {ok, State};
 
 handle_event(Event, State) ->
