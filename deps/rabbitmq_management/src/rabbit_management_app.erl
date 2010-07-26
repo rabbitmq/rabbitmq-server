@@ -33,6 +33,7 @@ start(_Type, _StartArgs) ->
                               ["management console", Port]),
             io:format("starting ~-60s ...", [S])
     end,
+    application:set_env(rabbit, collect_statistics, fine),
     Res = rabbit_management_sup:start_link(),
     %% TODO is this supervised correctly?
     rabbit_management_stats:start(),
