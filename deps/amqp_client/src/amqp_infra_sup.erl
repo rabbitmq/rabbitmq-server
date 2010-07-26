@@ -44,17 +44,15 @@ start_child(Sup, Child) ->
 
 start_children(Sup, Children) ->
     Res = lists:map(fun(Child) -> start_child(Sup, Child) end, Children),
-    try [Pid || {ok, Pid} <- Res] of
-        Pids -> {all_ok, Pids}
-    catch
-        _ -> Res
+    try [Pid || {ok, Pid} <- Res] of     Pids -> {all_ok, Pids}
+                                  catch  _:_  -> Res
     end.
 
 child(Sup, ChildName) ->
     Found = [Pid || {ChildName1, Pid, _, _} <- supervisor:which_children(Sup),
              ChildName1 =:= ChildName],
-    case Found of []     -> undefined;
-                  [Pid]  -> Pid
+    case Found of [Pid]  -> Pid;
+                  []     -> undefined
     end.
 
 %%---------------------------------------------------------------------------
@@ -62,8 +60,7 @@ child(Sup, ChildName) ->
 %%---------------------------------------------------------------------------
 
 init(InitialChildren) ->
-    {ok, {{one_for_all, 0, 1},
-          lists:map(fun child_spec/1, InitialChildren)}}.
+    {ok, {{one_for_all, 0, 1}, lists:map(fun child_spec/1, InitialChildren)}}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing

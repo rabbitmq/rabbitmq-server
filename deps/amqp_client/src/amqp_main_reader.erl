@@ -91,9 +91,8 @@ handle_info(socket_closing_timeout, State) ->
 
 handle_inet_async({inet_async, Sock, _, Msg},
                   State = #state{sock = Sock, message = CurMessage}) ->
-    {Type, Channel, Length} = case CurMessage of
-                                  {T, C, L} -> {T, C, L};
-                                  none      -> {none, none, none}
+    {Type, Channel, Length} = case CurMessage of {T, C, L} -> {T, C, L};
+                                                 none      -> {none, none, none}
                               end,
     case Msg of
         {ok, <<Payload:Length/binary, ?FRAME_END>>} ->
@@ -143,12 +142,10 @@ pass_frame(Channel, Frame, #state{framing_channels = Channels}) ->
 handle_down({'DOWN', _MonitorRef, process, Pid, Info},
             State = #state{framing_channels = Channels}) ->
     case amqp_channel_util:is_channel_pid_registered(Pid, Channels) of
-        true ->
-            NewChannels =
-                amqp_channel_util:unregister_channel_pid(Pid, Channels),
-            {noreply, State#state{framing_channels = NewChannels}};
-        false ->
-            {stop, {unexpected_down, Pid, Info}, State}
+        true  -> NewChannels =
+                     amqp_channel_util:unregister_channel_pid(Pid, Channels),
+                 {noreply, State#state{framing_channels = NewChannels}};
+        false -> {stop, {unexpected_down, Pid, Info}, State}
     end.
 
 internal_register_framing_channel(

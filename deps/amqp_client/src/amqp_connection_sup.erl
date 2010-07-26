@@ -35,20 +35,18 @@ start_link(Type, AmqpParams) ->
     Module = case Type of direct  -> amqp_direct_connection;
                           network -> amqp_network_connection
              end,
-    ConnChild = {worker, connection,
-                 {Module, start_link, [AmqpParams]}},
+    ConnChild = {worker, connection, {Module, start_link, [AmqpParams]}},
     ChannelSupSupChild = {supervisor, channel_sup_sup,
                           {amqp_channel_sup_sup, start_link, []}},
     {ok, Sup} = amqp_infra_sup:start_link([ConnChild, ChannelSupSupChild]),
     Connection = amqp_infra_sup:child(Sup, connection),
     unlink(Sup),
     MonitorRef = erlang:monitor(process, Connection),
-    try Module:do_post_init(Connection) of
-        ok -> link(Sup),
-              erlang:demonitor(MonitorRef),
-              {ok, Sup}
-    catch
-        _:_ -> receive {'DOWN', MonitorRef, process, Connection, Reason} ->
-                   {error, {auth_failure_likely, Reason}}
-               end
+    catch Module:do_post_init(Connection),
+    receive {'DOWN', MonitorRef, process, Connection, Reason} ->
+        {error, {auth_failure_likely, Reason}}
+    after 0 ->
+        erlang:demonitor(MonitorRef),
+        link(Sup),
+        {ok, Sup}
     end.
