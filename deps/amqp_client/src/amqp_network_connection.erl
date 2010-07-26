@@ -379,10 +379,8 @@ start_infrastructure(#state{sup = Sup, sock = Sock}) ->
     {ok, _} = amqp_infra_sup:start_child(Sup, MainReaderChild),
     ok.
 
-start_heartbeat(#state{sup = Sup, heartbeat = Heartbeat}) ->
-    MainReader = amqp_infra_sup:child(Sup, main_reader),
-    MainReader ! {heartbeat, Heartbeat},
-    ok.
+start_heartbeat(#state{sup = Sup, sock = Sock, heartbeat = Heartbeat}) ->
+    rabbit_heartbeat:start_heartbeat(Sup, Sock, Heartbeat).
 
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
                                   version_minor = ?PROTOCOL_VERSION_MINOR}) ->

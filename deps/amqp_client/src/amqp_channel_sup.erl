@@ -40,20 +40,11 @@ start_link(ChannelNumber, Driver, InfraArgs) ->
                             Driver, ChannelPid, ChannelNumber, InfraArgs),
     {all_ok, _} = amqp_infra_sup:start_children(Sup, InfraChildren),
     case Driver of
-        direct ->
-            ok;
-        network ->
-            [_Sock, MainReader] = InfraArgs,
-            FramingPid = amqp_infra_sup:child(Sup, framing),
-            MainReader ! {register_framing_channel, ChannelNumber, FramingPid,
-                          self()},
-            MonitorRef = erlang:monitor(process, MainReader),
-            receive
-                registered_framing_channel ->
-                    erlang:demonitor(MonitorRef), ok;
-                {'DOWN', MonitorRef, process, MainReader, _Info} ->
-                    erlang:error(main_reader_died_while_registering_framing)
-            end
+        direct  -> ok;
+        network -> [_Sock, MainReader] = InfraArgs,
+                   FramingPid = amqp_infra_sup:child(Sup, framing),
+                   amqp_main_reader:register_framing_channel(
+                           MainReader, ChannelNumber, FramingPid)
     end,
     #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
     {ok, Sup}.
