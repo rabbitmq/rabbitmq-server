@@ -314,6 +314,7 @@ ensure_stats_timer(State = #ch{stats_level = none}) ->
     State;
 
 ensure_stats_timer(State = #ch{stats_timer_ref = undefined}) ->
+    internal_emit_stats(State),
     {ok, TRef} = timer:apply_interval(?STATS_INTERVAL,
                                       rabbit_channel, emit_stats, [self()]),
     State#ch{stats_timer_ref = TRef};

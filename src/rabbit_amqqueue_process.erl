@@ -239,6 +239,7 @@ ensure_stats_timer(State = #q{stats_level = none}) ->
 ensure_stats_timer(State = #q{stats_timer_ref = undefined, q = Q}) ->
     {ok, TRef} = timer:apply_interval(?STATS_INTERVAL,
                                       rabbit_amqqueue, emit_stats, [Q]),
+    emit_stats(State),
     State#q{stats_timer_ref = TRef};
 ensure_stats_timer(State) ->
     State.
