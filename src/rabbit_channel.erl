@@ -158,7 +158,7 @@ info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
 emit_stats(Pid) ->
-    gen_server2:pcast(Pid, 8, emit_stats).
+    gen_server2:pcast(Pid, 7, emit_stats).
 
 %%---------------------------------------------------------------------------
 

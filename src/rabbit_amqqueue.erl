@@ -315,7 +315,7 @@ consumers_all(VHostPath) ->
 stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 
 emit_stats(#amqqueue{pid = QPid}) -> 
-    delegate_pcast(QPid, 8, emit_stats).
+    delegate_pcast(QPid, 7, emit_stats).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
@@ -411,7 +411,7 @@ internal_delete(QueueName) ->
     end.
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
-    gen_server2:pcall(QPid, 7, {maybe_run_queue_via_backing_queue, Fun},
+    gen_server2:pcall(QPid, 6, {maybe_run_queue_via_backing_queue, Fun},
                       infinity).
 
 update_ram_duration(QPid) ->
