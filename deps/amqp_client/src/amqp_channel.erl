@@ -254,7 +254,7 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
     end.
 
 do_rpc(State = #state{rpc_requests = RequestQueue,
-                        closing = Closing}) ->
+                      closing = Closing}) ->
     case queue:peek(RequestQueue) of
         {value, {_From, Method = #'channel.close'{}, Content}} ->
             do(Method, Content, State),
@@ -562,7 +562,7 @@ handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     {noreply, State};
 
 %% This is used in the direct case to fake a response from the writer, when
-%% rabbit_channel calls flush on it
+%% rabbit_channel sends a flush message to it
 %% @private
 handle_info({flush, Caller, Ref}, State) ->
     Caller ! Ref,

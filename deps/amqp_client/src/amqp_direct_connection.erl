@@ -246,7 +246,7 @@ post_init(State = #state{sup = Sup,
                                                virtual_host = VHost}}) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
         true  -> ok;
-        false -> throw(broker_not_found_in_vm)
+        false -> exit(broker_not_found_in_vm)
     end,
     rabbit_access_control:user_pass_login(User, Pass),
     rabbit_access_control:check_vhost_access(
