@@ -103,10 +103,12 @@ channel_death_test() ->
 %%---------------------------------------------------------------------------
 
 new_connection() ->
-    amqp_connection:start_direct().
+    {ok, Pid} = amqp_connection:start_link(direct),
+    [{supervisor, Sup}] = amqp_connection:info(Pid, [supervisor]),
+    unlink(Sup),
+    Pid.
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().
-

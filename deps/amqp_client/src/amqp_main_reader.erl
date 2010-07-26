@@ -27,28 +27,30 @@
 
 -include("amqp_client.hrl").
 
--export([start/3]).
+-export([start_link/2]).
 
--record(mr_state, {sock,
+-record(mr_state, {sup,
+                   sock,
                    message = none, %% none | {Type, Channel, Length}
-                   framing_channels = amqp_channel_util:new_channel_dict(),
-                   sup_ref}).
+                   framing_channels = amqp_channel_util:new_channel_dict()}).
 
-start(SupRef, Sock, Framing0Pid) ->
-    spawn_link(
+start_link(Sock, Framing0Pid) ->
+    Sup = self(),
+    Pid = proc_lib:spawn_link(
         fun() ->
-            State0 = #mr_state{sock = Sock, sup_ref = SupRef},
+            State0 = #mr_state{sock = Sock, sup = Sup},
             State1 = register_framing_channel(0, Framing0Pid, none, State0),
             {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
             main_loop(State1)
-        end).
+        end),
+    {ok, Pid}.
 
-main_loop(State = #mr_state{sock = Sock, sup_ref = SupRef}) ->
+main_loop(State = #mr_state{sock = Sock, sup = Sup}) ->
     receive
         {inet_async, Sock, _, _} = InetAsync ->
             main_loop(handle_inet_async(InetAsync, State));
         {heartbeat, Heartbeat} ->
-            rabbit_heartbeat:start_heartbeat(SupRef, Sock, Heartbeat),
+            rabbit_heartbeat:start_heartbeat(Sup, Sock, Heartbeat),
             main_loop(State);
         {register_framing_channel, Number, Pid, Caller} ->
             main_loop(register_framing_channel(Number, Pid, Caller, State));

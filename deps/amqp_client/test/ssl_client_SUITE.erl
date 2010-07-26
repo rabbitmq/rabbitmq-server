@@ -70,7 +70,7 @@ rpc_test() ->
 %% Negative Tests
 
 non_existent_exchange_test() -> 
-  negative_test_util:non_existent_exchange_test(new_connection()).
+    negative_test_util:non_existent_exchange_test(new_connection()).
 
 hard_error_test() ->
     negative_test_util:hard_error_test(new_connection()).
@@ -87,7 +87,10 @@ new_connection() ->
                       {keyfile, CertsDir ++ "/client/key.pem"},
                       {verify, verify_peer},
                       {fail_if_no_peer_cert, true}]},
-    amqp_connection:start_network(Params).
+    {ok, Pid} = amqp_connection:start_link(Params),
+    [{supervisor, Sup}] = amqp_connection:info(Pid, [supervisor]),
+    unlink(Sup),
+    Pid.
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

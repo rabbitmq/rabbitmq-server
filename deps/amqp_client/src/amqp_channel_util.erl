@@ -27,8 +27,9 @@
 
 -include("amqp_client.hrl").
 
--export([open_channel/5]).
--export([start_channel_infrastructure/4]).
+-export([open_channel/6]).
+-export([channel_infrastructure_children/4,
+         terminate_channel_infrastructure/2]).
 -export([do/4]).
 -export([new_channel_dict/0, is_channel_dict_empty/1, num_channels/1,
          register_channel/3, unregister_channel_number/2,
@@ -41,82 +42,63 @@
 %% Opening channels
 %%---------------------------------------------------------------------------
 
-%% Spawns a new channel supervision tree linked to the calling process and
-%% registers the channel in the given Channels dict
-open_channel(ProposedNumber, MaxChannel, Driver, StartArgs, Channels) ->
+%% Spawns a new channel supervision tree linked under the given connection
+%% supervisor and registers the channel in the given Channels dict
+open_channel(Sup, ProposedNumber, MaxChannel, Driver, InfraArgs, Channels) ->
     ChannelNumber = channel_number(ProposedNumber, Channels, MaxChannel),
-    ChannelArgs = {self(), ChannelNumber, Driver},
-    {ok, ChannelSupPid} = supervisor:start_link(amqp_channel_sup, ChannelArgs),
-    {amqp_channel, ChannelPid, _, _} =
-        hd(supervisor:which_children(ChannelSupPid)),
-    ok = amqp_channel:start_infrastructure(ChannelPid, StartArgs),
-    #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
+    ChannelSupSup = amqp_infra_sup:child(Sup, channel_sup_sup),
+    {ok, ChannelSup} = amqp_channel_sup_sup:start_channel_sup(
+                               ChannelSupSup, ChannelNumber, Driver, InfraArgs),
+    ChannelPid = amqp_infra_sup:child(ChannelSup, channel),
+    erlang:monitor(process, ChannelPid),
     NewChannels = register_channel(ChannelNumber, ChannelPid, Channels),
     {ChannelPid, NewChannels}.
 
-%%---------------------------------------------------------------------------
-%% Starting channel infrastructure
-%%---------------------------------------------------------------------------
-
-start_channel_infrastructure(network, SupRef, ChannelNumber,
-                             _StartArgs = {Sock, MainReader}) ->
-    FramingChildSpec =
-        {framing,
-         {rabbit_framing_channel, start_link, [self()]},
-         transient, ?MAX_WAIT, worker, [rabbit_framing_channel]},
-    FramingPid = amqp_channel_sup:start_child(SupRef, FramingChildSpec),
-    WriterChildSpec =
-        {writer,
-         {rabbit_writer, start_link, [Sock, ChannelNumber, ?FRAME_MIN_SIZE]},
-         transient, ?MAX_WAIT, worker, [rabbit_writer]},
-    WriterPid = amqp_channel_sup:start_child(SupRef, WriterChildSpec),
-    case MainReader of
-        none ->
-            ok;
-        _ ->
-            MainReader ! {register_framing_channel, ChannelNumber, FramingPid,
-                          self()},
-            MonitorRef = erlang:monitor(process, MainReader),
-            receive
-                registered_framing_channel ->
-                    erlang:demonitor(MonitorRef), ok;
-                {'DOWN', MonitorRef, process, MainReader, _Info} ->
-                    erlang:error(main_reader_died_while_registering_framing)
-            end
-    end,
-    {FramingPid, WriterPid};
-start_channel_infrastructure(direct, SupRef, ChannelNumber,
-                             _StartArgs = {User, VHost, Collector}) ->
-    RabbitChannelChildSpec =
-        {rabbit_channel,
+channel_infrastructure_children(network, ChannelPid, ChannelNumber,
+                                [Sock, _MainReader]) ->
+    FramingChild =
+        {worker, framing, {rabbit_framing_channel, start_link, [ChannelPid]}},
+    WriterChild =
+        {worker, writer,
+         {rabbit_writer, start_link, [Sock, ChannelNumber, ?FRAME_MIN_SIZE]}},
+    [FramingChild, WriterChild];
+channel_infrastructure_children(direct, ChannelPid, ChannelNumber,
+                                [User, VHost, Collector]) ->
+    RabbitChannelChild =
+        {worker, rabbit_channel,
          {rabbit_channel, start_link,
-          [ChannelNumber, self(), self(), User, VHost, Collector]},
-         transient, ?MAX_WAIT, worker, [rabbit_channel]},
-    Peer = amqp_channel_sup:start_child(SupRef, RabbitChannelChildSpec),
-    {Peer, Peer}.
+          [ChannelNumber, ChannelPid, ChannelPid, User, VHost, Collector]}},
+    [RabbitChannelChild].
+
+terminate_channel_infrastructure(network, Sup) ->
+    Writer = amqp_infra_sup:child(Sup, writer),
+    rabbit_writer:flush(Writer),
+    ok;
+terminate_channel_infrastructure(direct, Sup) ->
+    RChannel = amqp_infra_sup:child(Sup, rabbit_channel),
+    rabbit_channel:shutdown(RChannel),
+    ok.
 
 %%---------------------------------------------------------------------------
 %% Do
 %%---------------------------------------------------------------------------
 
-do(network, Writer, Method, Content) ->
+do(network, Sup, Method, Content) ->
+    Writer = amqp_infra_sup:child(Sup, writer),
     case Content of
         none -> rabbit_writer:send_command_and_signal_back(Writer, Method,
                                                            self());
         _    -> rabbit_writer:send_command_and_signal_back(Writer, Method,
                                                            Content, self())
     end,
-    receive_writer_send_command_signal(Writer);
-do(direct, Writer, Method, Content) ->
-    case Content of
-        none -> rabbit_channel:do(Writer, Method);
-        _    -> rabbit_channel:do(Writer, Method, Content)
-    end.
-
-receive_writer_send_command_signal(Writer) ->
     receive
-        rabbit_writer_send_command_signal   -> ok;
-        WriterExitMsg = {'EXIT', Writer, _} -> self() ! WriterExitMsg
+        rabbit_writer_send_command_signal -> ok
+    end;
+do(direct, Sup, Method, Content) ->
+    RabbitChannel = amqp_infra_sup:child(Sup, rabbit_channel),
+    case Content of
+        none -> rabbit_channel:do(RabbitChannel, Method);
+        _    -> rabbit_channel:do(RabbitChannel, Method, Content)
     end.
 
 %%---------------------------------------------------------------------------
@@ -241,7 +223,7 @@ handle_exit(Pid, Reason, Channels, Closing) ->
     case is_channel_pid_registered(Pid, Channels) of
         true  -> handle_channel_exit(Pid, Reason, Closing);
         false -> ?LOG_WARN("Connection (~p) closing: received unexpected "
-                           "exit signal from (~p). Reason: ~p~n",
+                           "down signal from (~p). Reason: ~p~n",
                            [self(), Pid, Reason]),
                  other
     end.

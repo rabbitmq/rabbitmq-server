@@ -87,8 +87,7 @@ pub_and_close_test_() ->
         end}.
 
 channel_tune_negotiation_test() ->
-    amqp_connection:close(amqp_connection:start_network(
-                            #amqp_params{ channel_max = 10 })).
+    amqp_connection:close(new_connection(#amqp_params{ channel_max = 10 })).
 
 %%---------------------------------------------------------------------------
 %% Negative Tests
@@ -132,9 +131,17 @@ shortstr_overflow_field_test() ->
 repeat(Fun, Times) ->
     [ Fun(new_connection()) || _ <- lists:seq(1, Times)].
 
+new_connection(Params) ->
+    {ok, Pid} = amqp_connection:start_link(network, Params),
+    [{supervisor, Sup}] = amqp_connection:info(Pid, [supervisor]),
+    unlink(Sup),
+    Pid.
 
 new_connection() ->
-    amqp_connection:start_network().
+    {ok, Pid} = amqp_connection:start_link(network),
+    [{supervisor, Sup}] = amqp_connection:info(Pid, [supervisor]),
+    unlink(Sup),
+    Pid.
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

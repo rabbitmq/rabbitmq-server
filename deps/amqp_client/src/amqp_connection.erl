@@ -33,13 +33,12 @@
 -include("amqp_client.hrl").
 
 -export([open_channel/1, open_channel/2]).
--export([start_direct/0, start_direct/1, start_direct_link/0, start_direct_link/1]).
--export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
+-export([start_link/1, start_link/2]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
 
 -define(COMMON_INFO_KEYS,
-        [server_properties, is_closing, amqp_params, num_channels]).
+        [server_properties, is_closing, amqp_params, supervisor, num_channels]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -64,93 +63,34 @@
 %% AMQP Connection API Methods
 %%---------------------------------------------------------------------------
 
-%% @spec () -> [Connection]
+%% @spec (Type) -> {ok, Connection} | {error, Error}
 %% where
+%%     Type = network | direct
 %%     Connection = pid()
-%% @doc Starts a direct connection to a RabbitMQ server, assuming that
-%% the server is running in the same process space, and with a default
-%% set of amqp_params. If a different vhost or credential set is required,
-%% start_direct/1 should be used.
-start_direct() ->
-    start_direct(#amqp_params{}).
+%% @doc Starts a connection to an AMQP server. Use network type to connect
+%% to a remote AMQP server - default connection settings are used, meaning that
+%% the server is expected to be at localhost:5672, with a vhost of "/"
+%% authorising a user guest/guest. Use direct type for a direct connection to
+%% a RabbitMQ server, assuming that the server is running in the same process
+%% space, and with a default set of amqp_params. If a different host, port,
+%% vhost or credential set is required, start_link/2 should be used. The
+%% resulting process's supervisor is linked to the invoking process.
+start_link(Type) ->
+    start_link(Type, #amqp_params{}).
 
-%% @spec (amqp_params()) -> [Connection]
+%% @spec (Type, amqp_params()) -> {ok, Connection} | {error, Error}
 %% where
+%%      Type = network | direct
 %%      Connection = pid()
-%% @doc Starts a direct connection to a RabbitMQ server, assuming that
-%% the server is running in the same process space.
-start_direct(Params) ->
-    start_direct_internal(Params, false).
-
-%% @spec () -> [Connection]
-%% where
-%%     Connection = pid()
-%% @doc Starts a direct connection to a RabbitMQ server, assuming that
-%% the server is running in the same process space, and with a default
-%% set of amqp_params. If a different vhost or credential set is required,
-%% start_direct_link/1 should be used. The resulting
-%% process is linked to the invoking process.
-start_direct_link() ->
-    start_direct_link(#amqp_params{}).
-
-%% @spec (amqp_params()) -> [Connection]
-%% where
-%%      Connection = pid()
-%% @doc Starts a direct connection to a RabbitMQ server, assuming that
-%% the server is running in the same process space. The resulting process
-%% is linked to the invoking process.
-start_direct_link(Params) ->
-    start_direct_internal(Params, true).
-
-start_direct_internal(#amqp_params{} = Params, ProcLink) ->
-    {ok, Pid} = start_internal(Params, amqp_direct_connection, ProcLink),
-    Pid.
-
-%% @spec () -> [Connection]
-%% where
-%%      Connection = pid()
-%% @doc Starts a networked conection to a remote AMQP server. Default
-%% connection settings are used, meaning that the server is expected
-%% to be at localhost:5672, with a vhost of "/" authorising a user
-%% guest/guest.
-start_network() ->
-    start_network(#amqp_params{}).
-
-%% @spec (amqp_params()) -> [Connection]
-%% where
-%%      Connection = pid()
-%% @doc Starts a networked conection to a remote AMQP server.
-start_network(Params) ->
-    start_network_internal(Params, false).
-
-%% @spec () -> [Connection]
-%% where
-%%      Connection = pid()
-%% @doc Starts a networked conection to a remote AMQP server. Default
-%% connection settings are used, meaning that the server is expected
-%% to be at localhost:5672, with a vhost of "/" authorising a user
-%% guest/guest. The resulting process is linked to the invoking process.
-start_network_link() ->
-    start_network_link(#amqp_params{}).
-
-%% @spec (amqp_params()) -> [Connection]
-%% where
-%%      Connection = pid()
-%% @doc Starts a networked connection to a remote AMQP server. The resulting 
-%% process is linked to the invoking process.
-start_network_link(Params) ->
-    start_network_internal(Params, true).
-
-start_network_internal(#amqp_params{} = AmqpParams, ProcLink) ->
-    case start_internal(AmqpParams, amqp_network_connection, ProcLink) of
-        {ok, Pid} -> Pid;
-        Bad       -> throw({error, {auth_failure_likely, Bad}})
+%% @doc Starts a connection to an AMQP server. Use network type to connect
+%% to a remote AMQP server or direct type for a direct connection to
+%% a RabbitMQ server, assuming that the server is running in the same process
+%% space.The resulting process's supervisor is linked to the invoking process.
+start_link(Type, AmqpParams) ->
+    case amqp_connection_sup:start_link(Type, AmqpParams) of
+        {ok, Sup}          -> {ok, amqp_infra_sup:child(Sup, connection)};
+        {error, _} = Error -> Error
     end.
-
-start_internal(Params, Module, _Link = true) when is_atom(Module) ->
-    gen_server:start_link(Module, Params, []);
-start_internal(Params, Module, _Link = false) when is_atom(Module) ->
-    gen_server:start(Module, Params, []).
 
 %%---------------------------------------------------------------------------
 %% Commands
@@ -212,6 +152,7 @@ close(ConnectionPid, Code, Text) ->
 %%          and false otherwise
 %%      amqp_params - returns the #amqp_params{} structure used to start the
 %%          connection
+%%      supervisor - returns the pid of the supervisor of the connection
 %%      num_channels - returns the number of channels currently open under the
 %%          connection (excluding channel 0)
 %%      max_channel - returns the max_channel value negotiated with the server

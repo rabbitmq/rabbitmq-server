@@ -79,7 +79,7 @@ channel_writer_death_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
     Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
     Message = #amqp_msg{props = <<>>, payload = <<>>},
-    ok = amqp_channel:call(Channel, Publish, Message),
+    ?assertExit(_, amqp_channel:call(Channel, Publish, Message)),
     timer:sleep(300),
     ?assertNot(is_process_alive(Channel)),
     ?assertNot(is_process_alive(Connection)),
@@ -107,7 +107,7 @@ shortstr_overflow_property_test(Connection) ->
     Publish = #'basic.publish'{exchange = X, routing_key = Key},
     PBasic = #'P_basic'{content_type = SentString},
     AmqpMsg = #amqp_msg{payload = Payload, props = PBasic},
-    amqp_channel:call(Channel, Publish, AmqpMsg),
+    ?assertExit(_, amqp_channel:call(Channel, Publish, AmqpMsg)),
     timer:sleep(300),
     ?assertNot(is_process_alive(Channel)),
     ?assertNot(is_process_alive(Connection)),
@@ -132,18 +132,23 @@ shortstr_overflow_field_test(Connection) ->
 non_existent_user_test() ->
     Params = #amqp_params{username = test_util:uuid(),
                           password = test_util:uuid()},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    assert_fail_start_with_params(Params).
 
 invalid_password_test() ->
     Params = #amqp_params{username = <<"guest">>,
                           password = test_util:uuid()},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    assert_fail_start_with_params(Params).
 
 non_existent_vhost_test() ->
     Params = #amqp_params{virtual_host = test_util:uuid()},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    assert_fail_start_with_params(Params).
 
 no_permission_test() ->
     Params = #amqp_params{username = <<"test_user_no_perm">>,
                           password = <<"test_user_no_perm">>},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    assert_fail_start_with_params(Params).
+
+assert_fail_start_with_params(Params) ->
+    {error, {auth_failure_likely, _}} =
+        amqp_connection:start_link(network, Params),
+    ok.

@@ -27,28 +27,33 @@
 
 -include("amqp_client.hrl").
 
--behaviour(supervisor).
-
--export([start_child/2]).
--export([init/1]).
+-export([start_link/3]).
 
 %%---------------------------------------------------------------------------
 
-start_child(SupRef, ChildSpec) ->
-    case supervisor:start_child(SupRef, ChildSpec) of
-        {ok, Child} when is_pid(Child) ->
-            Child;
-        {error, Reason} ->
-            erlang:error({could_not_start_channel_infrastructure, Reason})
-    end.
-
-%%---------------------------------------------------------------------------
-%% supervisor callbacks
-%%---------------------------------------------------------------------------
-
-init(ChannelArgs) ->
-    ChChildSpec =
-        {amqp_channel,
-         {amqp_channel, start_link, [{self(), ChannelArgs}]},
-         transient, ?MAX_WAIT, worker, [gen_server]},
-    {ok, {{one_for_all, 0, 1}, [ChChildSpec]}}.
+start_link(ChannelNumber, Driver, InfraArgs) ->
+    ChChild =
+        {worker, channel, {amqp_channel, start_link, [ChannelNumber, Driver]}},
+    {ok, Sup} = amqp_infra_sup:start_link([ChChild]),
+    ChannelPid = amqp_infra_sup:child(Sup, channel),
+    InfraChildren = amqp_channel_util:channel_infrastructure_children(
+                            Driver, ChannelPid, ChannelNumber, InfraArgs),
+    {all_ok, _} = amqp_infra_sup:start_children(Sup, InfraChildren),
+    case Driver of
+        direct ->
+            ok;
+        network ->
+            [_Sock, MainReader] = InfraArgs,
+            FramingPid = amqp_infra_sup:child(Sup, framing),
+            MainReader ! {register_framing_channel, ChannelNumber, FramingPid,
+                          self()},
+            MonitorRef = erlang:monitor(process, MainReader),
+            receive
+                registered_framing_channel ->
+                    erlang:demonitor(MonitorRef), ok;
+                {'DOWN', MonitorRef, process, MainReader, _Info} ->
+                    erlang:error(main_reader_died_while_registering_framing)
+            end
+    end,
+    #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
+    {ok, Sup}.
