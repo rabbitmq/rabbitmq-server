@@ -237,9 +237,8 @@ stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
 ensure_stats_timer(State = #q{stats_level = none}) ->
     State;
 ensure_stats_timer(State = #q{stats_timer_ref = undefined, q = Q}) ->
-    {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
-                                   rabbit_amqqueue, emit_stats,
-                                   [Q]),
+    {ok, TRef} = timer:apply_interval(?STATS_INTERVAL,
+                                      rabbit_amqqueue, emit_stats, [Q]),
     State#q{stats_timer_ref = TRef};
 ensure_stats_timer(State) ->
     State.

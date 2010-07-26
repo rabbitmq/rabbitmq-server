@@ -66,7 +66,8 @@
                           send_pend, state, channels]).
 
 -define(CREATION_EVENT_KEYS, [address, port, peer_address, peer_port,
-                    user, vhost, timeout, frame_max, client_properties]).
+                              user, vhost, timeout, frame_max,
+                              client_properties]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS).
 

@@ -281,9 +281,8 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
-    State1 = queue_blocked(QPid, State),
     erase_queue_stats(QPid),
-    {noreply, State1}.
+    {noreply, queue_blocked(QPid, State)}.
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
@@ -306,19 +305,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------------------------------------------------------
 
 reply(Reply, NewState) ->
-    NewState1 = ensure_stats_timer(NewState),
-    {reply, Reply, NewState1, hibernate}.
+    {reply, Reply, ensure_stats_timer(NewState), hibernate}.
 
 noreply(NewState) ->
-    NewState1 = ensure_stats_timer(NewState),
-    {noreply, NewState1, hibernate}.
+    {noreply, ensure_stats_timer(NewState), hibernate}.
 
 ensure_stats_timer(State = #ch{stats_level = none}) ->
     State;
 
 ensure_stats_timer(State = #ch{stats_timer_ref = undefined}) ->
-    {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
-                                   rabbit_channel, emit_stats, [self()]),
+    {ok, TRef} = timer:apply_interval(?STATS_INTERVAL,
+                                      rabbit_channel, emit_stats, [self()]),
     State#ch{stats_timer_ref = TRef};
 ensure_stats_timer(State) ->
     State.
