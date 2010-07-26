@@ -848,7 +848,7 @@ handle_cast({set_maximum_since_use, Age}, State) ->
 
 handle_cast(emit_stats, State) ->
     emit_stats(State),
-    noreply(State#q{stats_timer_ref = undefined}).
+    noreply(State).
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->

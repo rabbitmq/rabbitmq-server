@@ -272,7 +272,7 @@ handle_cast({flow_timeout, _Ref}, State) ->
 
 handle_cast(emit_stats, State) ->
     internal_emit_stats(State),
-    noreply(State#ch{stats_timer_ref = undefined}).
+    noreply(State).
 
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #ch{writer_pid = WriterPid}) ->
