@@ -60,7 +60,7 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {sock, connection, callback, recv_ref, connection_state,
-             queue_collector, stats_timer_ref}).
+             queue_collector, stats_timer_ref, stats_level}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
@@ -250,6 +250,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
     {ok, Collector} = rabbit_queue_collector:start_link(),
+    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     try
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
@@ -263,7 +264,8 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                     recv_ref = none,
                                     connection_state = pre_init,
                                     queue_collector = Collector,
-                                    stats_timer_ref = undefined},
+                                    stats_timer_ref = undefined,
+                                    stats_level = StatsLevel},
                                 handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -600,6 +602,8 @@ check_version(ClientVersion, ServerVersion) ->
           (ClientMajor == ServerMajor andalso
            ClientMinor >= ServerMinor).
 
+ensure_stats_timer(State = #v1{stats_level = none}) ->
+    State;
 ensure_stats_timer(State = #v1{stats_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
                                    rabbit_reader, emit_stats, [self()]),

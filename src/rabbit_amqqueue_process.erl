@@ -58,7 +58,8 @@
             blocked_consumers,
             sync_timer_ref,
             rate_timer_ref,
-            stats_timer_ref
+            stats_timer_ref,
+            stats_level
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -107,6 +108,7 @@ init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
     {ok, BQ} = application:get_env(backing_queue_module),
+    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
 
     {ok, #q{q = Q#amqqueue{pid = self()},
             exclusive_consumer = none,
@@ -117,7 +119,8 @@ init(Q) ->
             blocked_consumers = queue:new(),
             sync_timer_ref = undefined,
             rate_timer_ref = undefined,
-            stats_timer_ref = undefined}, hibernate,
+            stats_timer_ref = undefined,
+            stats_level = StatsLevel}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -231,6 +234,8 @@ stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
     State#q{rate_timer_ref = undefined}.
 
+ensure_stats_timer(State = #q{stats_level = none}) ->
+    State;
 ensure_stats_timer(State = #q{stats_timer_ref = undefined, q = Q}) ->
     {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
                                    rabbit_amqqueue, emit_stats,
@@ -239,6 +244,8 @@ ensure_stats_timer(State = #q{stats_timer_ref = undefined, q = Q}) ->
 ensure_stats_timer(State) ->
     State.
 
+stop_stats_timer(State = #q{stats_level = none}) ->
+    State;
 stop_stats_timer(State = #q{stats_timer_ref = undefined}) ->
     emit_stats(State),
     State;

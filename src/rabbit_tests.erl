@@ -1189,6 +1189,8 @@ test_statistics_receive_event(Ch, Retries, Matcher) ->
     end.
 
 test_statistics() ->
+    application:set_env(rabbit, collect_statistics, fine),
+
     %% ATM this just tests the queue / exchange stats in channels. That's
     %% by far the most complex code though.
     
