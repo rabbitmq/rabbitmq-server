@@ -33,7 +33,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/0, stop/1, reader/1, channel_sup_sup/1]).
+-export([start_link/0, reader/1, channel_sup_sup/1]).
 
 -export([init/1]).
 
@@ -41,9 +41,6 @@
 
 start_link() ->
     supervisor2:start_link(?MODULE, []).
-
-stop(Pid) ->
-    supervisor2:stop(Pid).
 
 init([]) ->
     {ok, {{one_for_all, 0, 1},

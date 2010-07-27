@@ -8,6 +8,10 @@
 %% simple_one_for_one, except that children *are* explicitly
 %% terminated as per the shutdown component of the child_spec.
 %%
+%% 3) When the MaxR (intensity) == 0, errors that would otherwise be
+%% reported concerning child death, or the reaching of max restart
+%% intensity are elided.
+%%
 %% All modifications are (C) 2010 LShift Ltd.
 %%
 %% %CopyrightBegin%
@@ -490,7 +494,7 @@ restart_child(Pid, Reason, State) ->
     end.
 
 do_restart(permanent, Reason, Child, State) ->
-    report_error(child_terminated, Reason, Child, State#state.name),
+    report_error(child_terminated, Reason, Child, State),
     restart(Child, State);
 do_restart(_, normal, Child, State) ->
     NState = state_del_child(Child, State),
@@ -499,10 +503,10 @@ do_restart(_, shutdown, Child, State) ->
     NState = state_del_child(Child, State),
     {ok, NState};
 do_restart(transient, Reason, Child, State) ->
-    report_error(child_terminated, Reason, Child, State#state.name),
+    report_error(child_terminated, Reason, Child, State),
     restart(Child, State);
 do_restart(temporary, Reason, Child, State) ->
-    report_error(child_terminated, Reason, Child, State#state.name),
+    report_error(child_terminated, Reason, Child, State),
     NState = state_del_child(Child, State),
     {ok, NState}.
 
@@ -511,8 +515,8 @@ restart(Child, State) ->
 	{ok, NState} ->
 	    restart(NState#state.strategy, Child, NState);
 	{terminate, NState} ->
-	    report_error(shutdown, reached_max_restart_intensity,
-			 Child, State#state.name),
+            report_error(shutdown, reached_max_restart_intensity,
+                         Child, State),
 	    {shutdown, remove_child(Child, NState)}
     end.
 
@@ -913,6 +917,10 @@ difference({_, TimeS, _}, {_, CurS, _}) ->
 %%% Error and progress reporting.
 %%% ------------------------------------------------------
 
+report_error(_Error, _Reason, _Child, #state{intensity = 0}) ->
+    ok;
+report_error(Error, Reason, Child, #state{name=Name}) ->
+    report_error(Error, Reason, Child, Name);
 report_error(Error, Reason, Child, SupName) ->
     ErrorMsg = [{supervisor, SupName},
 		{errorContext, Error},
