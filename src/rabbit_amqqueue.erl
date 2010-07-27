@@ -39,7 +39,7 @@
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, requeue/3, ack/4]).
+         stat/1, deliver/2, requeue/3, ack/4, reject/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
@@ -122,6 +122,7 @@
 -spec(ack/4 ::
         (pid(), rabbit_types:maybe(rabbit_types:txn()), [msg_id()], pid())
         -> 'ok').
+-spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
 -spec(commit_all/3 :: ([pid()], rabbit_types:txn(), pid()) -> ok_or_errors()).
 -spec(rollback_all/3 :: ([pid()], rabbit_types:txn(), pid()) -> 'ok').
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
@@ -334,6 +335,9 @@ requeue(QPid, MsgIds, ChPid) ->
 
 ack(QPid, Txn, MsgIds, ChPid) ->
     delegate_pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
+
+reject(QPid, MsgIds, Requeue, ChPid) ->
+    delegate_pcast(QPid, 7, {reject, MsgIds, Requeue, ChPid}).
 
 commit_all(QPids, Txn, ChPid) ->
     safe_delegate_call_ok(
