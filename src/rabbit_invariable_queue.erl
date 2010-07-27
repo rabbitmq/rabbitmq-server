@@ -37,7 +37,7 @@
          set_ram_duration_target/2, ram_duration/1, needs_idle_timeout/1,
          idle_timeout/1, handle_pre_hibernate/1, status/1]).
 
--export([start/1]).
+-export([start/1, stop/0]).
 
 -behaviour(rabbit_backing_queue).
 
@@ -60,6 +60,9 @@
 
 start(DurableQueues) ->
     ok = rabbit_sup:start_child(rabbit_persister, [DurableQueues]).
+
+stop() ->
+    ok = rabbit_sup:stop_child(rabbit_persister).
 
 init(QName, IsDurable, Recover) ->
     Q = queue:from_list(case IsDurable andalso Recover of

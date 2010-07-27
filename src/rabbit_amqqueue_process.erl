@@ -719,8 +719,6 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
     case lookup_ch(ChPid) of
         not_found ->
-            rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
-                               [ChPid]),
             noreply(State);
         C = #cr{acktags = ChAckTags} ->
             ChAckTags1 = subtract_acks(ChAckTags, AckTags),
