@@ -60,6 +60,7 @@ all_tests() ->
     passed = test_bpqueue(),
     passed = test_pg_local(),
     passed = test_unfold(),
+    passed = test_supervisor_delayed_restart(),
     passed = test_parsing(),
     passed = test_content_framing(),
     passed = test_topic_matching(),
@@ -1339,6 +1340,9 @@ bad_handle_hook(_, _, _) ->
     exit(bad_handle_hook_called).
 extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
     handle_hook(Hookname, Handler, {Args, Extra1, Extra2}).
+
+test_supervisor_delayed_restart() ->
+    test_sup:test_supervisor_delayed_restart().
 
 test_backing_queue() ->
     case application:get_env(rabbit, backing_queue_module) of
