@@ -726,7 +726,6 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             return_queue_declare_ok(QueueName, NoWait, MessageCount,
                                     ConsumerCount, State);
         {error, not_found} ->
-            rabbit_amqqueue:check_declare_arguments(QueueName, Args),
             case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
                                          Args, Owner) of
                 {new, Q = #amqqueue{}} ->

@@ -39,7 +39,6 @@
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         check_declare_arguments/2,
          stat/1, deliver/2, requeue/3, ack/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1]).
@@ -89,8 +88,6 @@
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
         -> 'ok' | no_return()).
 -spec(check_exclusive_access/2 :: (rabbit_types:amqqueue(), pid()) -> 'ok').
--spec(check_declare_arguments/2 :: (name(), rabbit_framing:amqp_table()) ->
-                                        'ok' | no_return()).
 -spec(with_exclusive_access_or_die/3 :: (name(), pid(), qfun(A)) -> A).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
@@ -192,6 +189,7 @@ recover_durable_queues(DurableQueues) ->
     [Q || Q <- Qs, gen_server2:call(Q#amqqueue.pid, {init, true}) == Q].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
+    ok = check_declare_arguments(QueueName, Args),
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
@@ -292,27 +290,24 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                                         [<<"x-expires">>]).
 
 check_declare_arguments(QueueName, Args) ->
-    [case Fun(Args) of
+    [case Fun(rabbit_misc:table_lookup(Args, Key)) of
          ok             -> ok;
          {error, Error} -> rabbit_misc:protocol_error(
                              precondition_failed,
                              "Invalid arguments in declaration of queue ~s: "
-                             "~w (arguments: ~w)",
-                             [rabbit_misc:rs(QueueName), Error, Args])
-     end || Fun <- [fun check_expires_argument/1]],
+                             "~w (on argument: ~w)",
+                             [rabbit_misc:rs(QueueName), Error, Key])
+     end || {Key, Fun} <- [{<<"x-expires">>, fun check_expires_argument/1}]],
     ok.
 
-check_expires_argument(Args) ->
-    check_expires_argument1(rabbit_misc:table_lookup(Args, <<"x-expires">>)).
-
-check_expires_argument1(undefined) ->
+check_expires_argument(undefined) ->
     ok;
-check_expires_argument1({?EXPIRES_TYPE, Expires})
+check_expires_argument({?EXPIRES_TYPE, Expires})
   when is_integer(Expires) andalso Expires > 0 ->
     ok;
-check_expires_argument1({?EXPIRES_TYPE, _Expires}) ->
+check_expires_argument({?EXPIRES_TYPE, _Expires}) ->
     {error, expires_zero_or_less};
-check_expires_argument1(_) ->
+check_expires_argument(_) ->
     {error, expires_not_of_type_long}.
 
 list(VHostPath) ->

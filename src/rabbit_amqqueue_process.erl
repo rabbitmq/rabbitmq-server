@@ -104,18 +104,16 @@ init(Q) ->
     process_flag(trap_exit, true),
     {ok, BQ} = application:get_env(backing_queue_module),
 
-    State = #q{q = Q#amqqueue{pid = self()},
-               exclusive_consumer = none,
-               has_had_consumers = false,
-               backing_queue = BQ,
-               backing_queue_state = undefined,
-               active_consumers = queue:new(),
-               blocked_consumers = queue:new(),
-               sync_timer_ref = undefined,
-               rate_timer_ref = undefined,
-               expiry_timer_ref = undefined},
-
-    {ok, init_expires(State), hibernate,
+    {ok, #q{q                   = Q#amqqueue{pid = self()},
+            exclusive_consumer  = none,
+            has_had_consumers   = false,
+            backing_queue       = BQ,
+            backing_queue_state = undefined,
+            active_consumers    = queue:new(),
+            blocked_consumers   = queue:new(),
+            sync_timer_ref      = undefined,
+            rate_timer_ref      = undefined,
+            expiry_timer_ref    = undefined}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -156,7 +154,7 @@ declare(Recover, From,
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
                      BQS = BQ:init(QName, IsDurable, Recover),
-                     noreply(State#q{backing_queue_state = BQS});
+                     noreply(init_expires(State#q{backing_queue_state = BQS}));
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
 
