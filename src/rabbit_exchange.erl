@@ -77,7 +77,8 @@
          rabbit_framing:amqp_table())
         -> 'ok' | no_return()).
 -spec(assert_args_equivalence/2 ::
-        (rabbit_types:exchange(), rabbit_framing:amqp_table()) -> 'ok' | no_return()).
+        (rabbit_types:exchange(), rabbit_framing:amqp_table()) ->
+                                        'ok' | no_return()).
 -spec(lookup/1 ::
         (name()) -> rabbit_types:ok(rabbit_types:exchange()) |
                     rabbit_types:error('not_found')).
