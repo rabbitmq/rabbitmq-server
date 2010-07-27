@@ -173,7 +173,9 @@ start() ->
 
 stop() ->
     ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
-    ok = supervisor:delete_child(rabbit_sup, rabbit_amqqueue_sup).
+    ok = supervisor:delete_child(rabbit_sup, rabbit_amqqueue_sup),
+    {ok, BQ} = application:get_env(rabbit, backing_queue_module),
+    ok = BQ:stop().
 
 find_durable_queues() ->
     Node = node(),
